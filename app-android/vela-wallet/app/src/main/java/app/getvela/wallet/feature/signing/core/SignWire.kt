@@ -552,6 +552,11 @@ data class SignRequestView(
 
 @Serializable
 data class SignView(
+    /** Round 5/6: the landing was closed by the person — the sheet stops following it (`landing_closed`). */
+    val landing_closed: Boolean = false,
+    /** send-11: the passkey prompt closed without a signature — how, for the line under the confirm. */
+    @Serializable(with = app.getvela.wallet.feature.send.core.SendPasskeyNoteFailSoft::class)
+    val passkey_note: app.getvela.wallet.feature.send.core.SendPasskeyNote? = null,
     val surface: SignSurface = SignSurface.Hidden,
     val request: SignRequestView? = null,
     val is_signing: Boolean = false,

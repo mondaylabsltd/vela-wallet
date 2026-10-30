@@ -304,6 +304,8 @@ data class NetEndpointView(
     /** The placeholder — what this endpoint is when nobody has overridden it. */
     val default_value: String,
     val health: NetServiceHealth,
+    /** The value was refused (not https, not an allowed local address). */
+    val refused: Boolean = false,
 )
 
 @Serializable

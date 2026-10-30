@@ -511,6 +511,24 @@ data class SendMultisigRef(val threshold: Int = 0, val owners: Int = 0)
 @Serializable
 data class SendProposed(val chain_id: Int, val safe_tx_hash: String)
 
+/** `AmountIssue`: why the typed amount cannot be read. */
+@Serializable
+sealed class AmountIssue {
+    @Serializable
+    @SerialName("unreadable")
+    data object Unreadable : AmountIssue()
+
+    @Serializable
+    @SerialName("too_many_decimals")
+    data class TooManyDecimals(val decimals: Int) : AmountIssue()
+
+    @Serializable
+    @SerialName("too_large")
+    data object TooLarge : AmountIssue()
+}
+
+object AmountIssueFailSoft : app.getvela.wallet.core.crux.FailSoftSerializer<AmountIssue>(AmountIssue.serializer())
+
 object SendPasskeyNoteFailSoft : app.getvela.wallet.core.crux.FailSoftSerializer<SendPasskeyNote>(SendPasskeyNote.serializer())
 object SendRecipientWarningFailSoft :
     app.getvela.wallet.core.crux.FailSoftSerializer<SendRecipientWarning>(SendRecipientWarning.serializer())
@@ -744,6 +762,10 @@ data class SendReceiptCoin(
 
 @Serializable
 data class SendReceiptView(
+    /** "Send again" may be offered (round 4). */
+    val can_send_again: Boolean = false,
+    /** A may-have-been-sent outcome is still unknown past its wait (round 3). */
+    val still_unknown: Boolean = false,
     val status: SendReceiptStatus,
     val hold_reason: SendHoldReason? = null,
     /**
@@ -884,6 +906,11 @@ data class SendView(
      */
     val fee_coin: SendFeeCoin? = null,
     val amount_warning: SendAmountWarning? = null,
+    /** Why the typed figure cannot be read (unreadable, too many decimals, too large). */
+    @Serializable(with = AmountIssueFailSoft::class)
+    val amount_issue: AmountIssue? = null,
+    /** The recipient is mixed case and not its EIP-55 checksum — a typo or a forged copy. */
+    val recipient_checksum_mismatch: Boolean = false,
     val same_asset_fee_issue: SendFeeIssueView? = null,
     val can_continue: Boolean = false,
     val can_confirm: Boolean = false,

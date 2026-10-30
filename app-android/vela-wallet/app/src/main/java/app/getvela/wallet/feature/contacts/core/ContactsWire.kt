@@ -17,6 +17,8 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class ContactsView(
+    /** A write did not land (set-22): the book is kept in memory, not on this device. */
+    val save_failed: Boolean = false,
     val loaded: Boolean = false,
     /**
      * The unified book: saved ⊕ history-derived, tombstone-suppressed, sorted

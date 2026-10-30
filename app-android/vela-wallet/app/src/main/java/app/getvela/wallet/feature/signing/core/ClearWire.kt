@@ -330,6 +330,8 @@ data class ClearSiweFields(
 
 @Serializable
 data class ClearMessageView(
+    /** The message carries invisible characters. */
+    val has_invisible_chars: Boolean = false,
     val payload: String,
     val is_hex: Boolean = false,
     val decoded_text: String? = null,
@@ -342,6 +344,12 @@ data class ClearMessageView(
 
 @Serializable
 data class ClearSigningView(
+    /** cs-13: the target has no code — a name or descriptor is not applied to it. */
+    val no_code: Boolean = false,
+    /** The reading could not be made: the person may sign anyway, said as that. */
+    val sign_anyway: Boolean = false,
+    /** The request carries invisible characters (a disguised look-alike). */
+    val has_invisible_chars: Boolean = false,
     val resolving: Boolean = false,
     val resolved: Boolean = false,
     val result: ClearSignResult? = null,
