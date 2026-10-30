@@ -283,8 +283,20 @@ final class BalanceExecutor {
             // what could not be loaded, never its RPC — so the home says
             // that, and the list offers no "Fix" for an endpoint that works.
             "registry_chain_ids": registryChains,
+            // Owner decision 2026-10-28: the failed chains read through the
+            // person's own node alone ("Can't reach your node for …"), and the
+            // chains public nodes served because theirs is not answering — the
+            // pool's lists, as the rate-limited ones are.
+            "own_node_chain_ids": Self.ownNodeChains(failed: failedChains, unreached: pool.ownNodeUnreachedChains),
+            "fallback_chain_ids": pool.fallbackChains,
             "now_ms": Date().timeIntervalSince1970 * 1000,
         ])
+    }
+
+    /// The failed chains the pool read through the person's own node alone.
+    static func ownNodeChains(failed: [Int], unreached: [Int]) -> [Int] {
+        let own = Set(unreached)
+        return failed.filter(own.contains)
     }
 
     /// One chain's read over its registry document (spec 082 RE9): the

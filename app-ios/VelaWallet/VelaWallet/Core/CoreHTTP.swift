@@ -248,18 +248,43 @@ enum CoreHTTP {
 
     // MARK: - The one request, the one send
 
-    /// Refuses anything that is not `https`.
+    /// Refuses anything that is not `https` — but for the core's one
+    /// exception, a node on this computer (`isLocalhostHttp`).
     ///
     /// Not a policy invented here: the core models `not_https` as its own
     /// endpoint state, and a wallet that would talk to a plaintext RPC is a
-    /// wallet whose balances anyone on the network can rewrite.
+    /// wallet whose balances anyone on the network can rewrite. The core
+    /// itself accepts `http://localhost` / `127.0.0.1` / `[::1]` (a person's
+    /// own dev node, the fork harness) and the web and Android send to it; a
+    /// transport stricter than the core turned "Only use my node" on a local
+    /// node into "can't reach your node", for ever.
     private static func request(_ url: String, timeout: TimeInterval) -> URLRequest? {
         guard let parsed = URL(string: url),
-              parsed.scheme?.lowercased() == "https"
+              parsed.scheme?.lowercased() == "https" || isLocalhostHttp(url)
         else { return nil }
         var request = URLRequest(url: parsed)
         request.timeoutInterval = timeout
         return request
+    }
+
+    /// The core's HTTPS exception (`network_admin::is_localhost_http`),
+    /// mirrored until uniffi exports it:
+    /// `/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/`, anchored
+    /// on the FULL host label — `http://127.0.0.1.evil.com` is NOT localhost.
+    nonisolated static func isLocalhostHttp(_ url: String) -> Bool {
+        let lower = url.lowercased()
+        guard lower.hasPrefix("http://") else { return false }
+        var rest = Substring(lower.dropFirst("http://".count))
+        guard let host = ["localhost", "127.0.0.1", "[::1]"].first(where: { rest.hasPrefix($0) })
+        else { return false }
+        rest = rest.dropFirst(host.count)
+        if rest.hasPrefix(":") {
+            rest = rest.dropFirst()
+            let digits = rest.prefix(while: { $0.isASCII && $0.isNumber })
+            guard !digits.isEmpty else { return false }
+            rest = rest.dropFirst(digits.count)
+        }
+        return rest.isEmpty || rest.hasPrefix("/")
     }
 
     private static func perform(_ request: URLRequest) async -> Probe {
