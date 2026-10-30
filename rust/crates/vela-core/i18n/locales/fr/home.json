@@ -170,6 +170,7 @@
         "share": "Partager",
         "reject": "Rejeter",
         "withdraw": "Retirer",
+        "dontPropose": "Ne pas proposer",
         "rejectHint": "Rejeter propose une annulation au même numéro ; elle exige aussi {{threshold}} approbations, et la première exécutée l’emporte.",
         "cancelPending": "Une annulation de cette transaction attend une approbation.",
         "executing": "Exécution…",

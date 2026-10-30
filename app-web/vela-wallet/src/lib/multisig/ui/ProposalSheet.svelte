@@ -1448,9 +1448,10 @@
 			<p class="site">{fillTemplate(m.proposal.siteAsks, { host: site })}</p>
 		{/if}
 		<header class="what">
-			{#if !reading}
+			{#if !reading && !(change && memberReading?.changes.length === 1)}
 				<!-- r5reg-15: a call read by the signing sheet's machines heads itself
-				     ("Send −0.05 USDC"): its verb is not said twice above it. -->
+				     ("Send −0.05 USDC"): its verb is not said twice above it. S4 (r7): nor
+				     is a lone member change, which its own list names ("Add Carol (…)"). -->
 				<p class="title">{shownTitle || '…'}</p>
 			{/if}
 			{#if recipient && !(reading && item.review.action?.kind === 'transfer')}
@@ -1593,7 +1594,13 @@
 		</header>
 
 		{#if fullReview && tech}
-			<ReviewTech {m} review={fullReview} {tech} advice={adviceModel} />
+			<ReviewTech
+				{m}
+				review={fullReview}
+				{tech}
+				advice={adviceModel}
+				executed={item.status === 'done'}
+			/>
 		{/if}
 
 		{#if gate.kind === 'refused'}
@@ -1912,9 +1919,10 @@
 			{/if}
 			<!-- r4D-19: in the desktop's capped dialog the actions stay in view. -->
 			<div class="two" class:actions={wide} data-testid="proposal-actions">
-				<!-- r4D-13: a site's request is declined; the person's own proposal is withdrawn. -->
+				<!-- r4D-13: a site's request is declined; S4 (r7): the person's own, not
+				     proposed yet, is simply not proposed — nothing to withdraw. -->
 				<Button variant="secondary" shape="rounded" disabled={busy} onclick={decline}
-					>{prebuilt ? m.proposal.withdraw : m.external.decline}</Button
+					>{prebuilt ? m.proposal.dontPropose : m.external.decline}</Button
 				>
 				{#if item.review.action !== null && !readOnly && !signBlocked}
 					<Button

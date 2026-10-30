@@ -169,6 +169,7 @@
         "share": "共有",
         "reject": "拒否",
         "withdraw": "取り下げる",
+        "dontPropose": "提案しない",
         "rejectHint": "拒否すると、同じ番号で取り消し取引を提案します。これにも {{threshold}} 人の承認が必要で、先に実行された方が有効になります。",
         "cancelPending": "この取引の取り消しが承認待ちです。",
         "executing": "実行中…",

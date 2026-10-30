@@ -169,6 +169,7 @@
         "share": "分享",
         "reject": "拒绝",
         "withdraw": "撤回",
+        "dontPropose": "不发起",
         "rejectHint": "拒绝会在同一序号上发起一笔作废交易，同样需要 {{threshold}} 位批准，先执行的那笔生效。",
         "cancelPending": "这笔交易的作废交易正在等待批准。",
         "executing": "正在执行…",

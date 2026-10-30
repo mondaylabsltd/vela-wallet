@@ -130,6 +130,8 @@ export interface MultisigMessages {
 		reject: string;
 		/** r4D-13: the person's own proposal, on its review before its passkey: withdrawn, not declined. */
 		withdraw: string;
+		/** S4 (r7): the person's own proposal, not proposed yet: "Don't propose". */
+		dontPropose: string;
 		rejectHint: string;
 		cancelPending: string;
 		executing: string;
@@ -959,6 +961,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		share: '',
 		reject: '',
 		withdraw: '',
+		dontPropose: '',
 		rejectHint: '',
 		cancelPending: '',
 		executing: '',

@@ -170,6 +170,7 @@
         "share": "Compartir",
         "reject": "Rechazar",
         "withdraw": "Retirar",
+        "dontPropose": "No proponer",
         "rejectHint": "Rechazar propone una cancelación con el mismo número; también necesita {{threshold}} aprobaciones, y gana la que se ejecute primero.",
         "cancelPending": "Una cancelación de esta transacción espera aprobación.",
         "executing": "Ejecutando…",

@@ -169,6 +169,7 @@
         "share": "공유",
         "reject": "거부",
         "withdraw": "철회",
+        "dontPropose": "제안하지 않기",
         "rejectHint": "거부하면 같은 번호로 취소 거래를 제안합니다. 취소에도 {{threshold}}명의 승인이 필요하며, 먼저 실행된 쪽이 적용됩니다.",
         "cancelPending": "이 거래의 취소가 승인을 기다리고 있습니다.",
         "executing": "실행 중…",

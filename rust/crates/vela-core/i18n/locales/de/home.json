@@ -169,6 +169,7 @@
         "share": "Teilen",
         "reject": "Ablehnen",
         "withdraw": "Zurückziehen",
+        "dontPropose": "Nicht vorschlagen",
         "rejectHint": "Ablehnen schlägt eine Stornierung mit derselben Nummer vor; auch sie braucht {{threshold}} Genehmigungen, und die zuerst ausgeführte gilt.",
         "cancelPending": "Eine Stornierung dieser Transaktion wartet auf Genehmigung.",
         "executing": "Wird ausgeführt…",

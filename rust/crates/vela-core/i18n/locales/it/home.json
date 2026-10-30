@@ -170,6 +170,7 @@
         "share": "Condividi",
         "reject": "Rifiuta",
         "withdraw": "Ritira",
+        "dontPropose": "Non proporre",
         "rejectHint": "Rifiutare propone un annullamento con lo stesso numero; anche questo richiede {{threshold}} approvazioni, e vale quella eseguita per prima.",
         "cancelPending": "Un annullamento di questa transazione è in attesa di approvazione.",
         "executing": "Esecuzione…",

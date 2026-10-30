@@ -169,6 +169,7 @@
         "share": "Bagikan",
         "reject": "Tolak",
         "withdraw": "Tarik",
+        "dontPropose": "Jangan ajukan",
         "rejectHint": "Menolak berarti mengusulkan pembatalan dengan nomor yang sama; pembatalan juga perlu {{threshold}} persetujuan, dan yang dieksekusi lebih dulu yang berlaku.",
         "cancelPending": "Pembatalan transaksi ini sedang menunggu persetujuan.",
         "executing": "Mengeksekusi…",

@@ -169,6 +169,7 @@
         "share": "Chia sẻ",
         "reject": "Từ chối",
         "withdraw": "Rút lại",
+        "dontPropose": "Không đề xuất",
         "rejectHint": "Từ chối là đề xuất hủy với cùng số thứ tự; việc hủy cũng cần {{threshold}} lượt duyệt, và giao dịch nào được thực thi trước sẽ có hiệu lực.",
         "cancelPending": "Một yêu cầu hủy giao dịch này đang chờ duyệt.",
         "executing": "Đang thực thi…",

@@ -169,6 +169,7 @@
         "share": "Share",
         "reject": "Reject",
         "withdraw": "Withdraw",
+        "dontPropose": "Don’t propose",
         "rejectHint": "Rejecting proposes a cancellation at the same number; it needs {{threshold}} approvals too, and whichever is executed first wins.",
         "cancelPending": "A cancellation of this transaction is waiting for approval.",
         "executing": "Executing…",

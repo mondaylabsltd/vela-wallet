@@ -2157,9 +2157,9 @@ describe('round 6: the review’s words and where its actions stand', () => {
 	it('r4D-13: the person’s own proposal is withdrawn, not declined (a site’s request still is)', async () => {
 		const screen = show({ prebuilt: own(), safeTxHash: '' });
 		await settle();
-		expect(buttons()).toContain('proposal.withdraw');
+		expect(buttons()).toContain('proposal.dontPropose');
 		expect(buttons()).not.toContain('external.decline');
-		press('proposal.withdraw');
+		press('proposal.dontPropose');
 		expect(fake.calls).toEqual(['withdraw']);
 		await screen.unmount();
 	});
