@@ -160,6 +160,10 @@ final class UserOpSpine {
         /// The chain head read before the first POST (ruling 8); `nil` when
         /// the chain could not say.
         let submitBlock: UInt64?
+        /// The EntryPoint nonce the op was signed with (round 3, send-5): what
+        /// lets the tracker read the account's nonce while a may-have-been-
+        /// sent op is in doubt (`submit_facts`).
+        var nonce: String? = nil
     }
 
     struct Refused: Error {
@@ -247,6 +251,7 @@ final class UserOpSpine {
         signingStarted()
         let signed = try await ceremony(
             account: account, pinned: pinned, keys: keys, challenge: challenge,
+            method: asked?.method ?? "",
             buildRequest: { accountName, offered, keyRoute in
                 // A message carries no calls and no operation: the page reads
                 // the site's own params.
@@ -450,6 +455,7 @@ final class UserOpSpine {
         let assembled = draft
         let answer = try await ceremony(
             account: account, pinned: pinned, keys: keys, challenge: challenge,
+            method: asked?.method ?? "",
             buildRequest: { accountName, offered, keyRoute in
                 // The ASSEMBLED operation — the one the digest covers — and
                 // the calls before its fee leg, which the core appends last.
@@ -515,9 +521,9 @@ final class UserOpSpine {
             chainId: chainId, opJson: signedJson, localHash: localHash, tier: quoted.tier
         ) {
         case .accepted(let hash):
-            return Submitted(userOpHash: hash, maybeSent: false, submitBlock: submitBlock)
+            return Submitted(userOpHash: hash, maybeSent: false, submitBlock: submitBlock, nonce: nonce)
         case .maybeSent(let hash):
-            return Submitted(userOpHash: hash, maybeSent: true, submitBlock: submitBlock)
+            return Submitted(userOpHash: hash, maybeSent: true, submitBlock: submitBlock, nonce: nonce)
         case .notSent(nil):
             throw Refused(failure: .notSent)
         case .notSent(.relayerUnavailable?):
@@ -551,6 +557,7 @@ final class UserOpSpine {
         pinned: WalletKeyRecord,
         keys: [WalletKeyRecord],
         challenge: Data,
+        method: String,
         buildRequest: (_ accountName: String?, _ offered: [WalletKeyRecord], _ keyRouteJson: String?) throws -> String?
     ) async throws -> (assertion: WebAuthnAssertion, credentialIdHex: String) {
         // The plan is the CORE's: the key the account signed in with, where
@@ -562,10 +569,28 @@ final class UserOpSpine {
             // (`venue_blocked`), never retried.
             throw Refused(failure: .venueBlocked(blocked))
         }
-        guard let plan, let page = plan.venue.pageUrl else {
+        // R7 (owner 2026-10-30): where THIS request goes is the core's route
+        // for the account and the method — the page everywhere, on every
+        // surface — never this shell's reading of the venue.
+        let route = await route(account: account, method: method)
+        let page: String
+        switch route {
+        case .blocked(let block):
+            throw Refused(failure: .venueBlocked(block))
+        case .page(let url):
+            page = url
+        case .inVela:
+            let assertion = try await assert(account: account, pinned: pinned, key: plan?.key, challenge: challenge)
+            return (Self.webAuthn(assertion), assertion.credentialIdHex)
+        case nil:
+            // No route: a record this build cannot read, or a method no venue
+            // signs. An account whose venue is a page is refused rather than
+            // signed in the app behind its back; any other signs as before.
+            guard plan?.venue.pageUrl == nil else { throw Refused(failure: .trustedSigner(.unavailable)) }
             let assertion = try await assert(account: account, pinned: pinned, key: plan?.key, challenge: challenge)
             return (Self.webAuthn(assertion), assertion.credentialIdHex)
         }
+        guard let plan else { throw Refused(failure: .trustedSigner(.unavailable)) }
         guard let trustedSigner else {
             throw Refused(failure: .trustedSigner(.unavailable))
         }
@@ -613,6 +638,13 @@ final class UserOpSpine {
     /// cannot disagree. `nil` for an account with no readable record.
     func plan(account: String) async -> SigningPlanWire? {
         await accounts.accountJson(of: account).flatMap(SigningPlanWire.of(accountJson:))
+    }
+
+    /// Where one request of `method` by this account goes (R7, the core's
+    /// `signing_route`). `nil` for an account with no readable record or a
+    /// method no venue signs.
+    func route(account: String, method: String) async -> SigningRouteWire? {
+        await accounts.accountJson(of: account).flatMap { SigningRouteWire.of(accountJson: $0, method: method) }
     }
 
     /// What the page is told: a site's request as it asked, or — `asked`

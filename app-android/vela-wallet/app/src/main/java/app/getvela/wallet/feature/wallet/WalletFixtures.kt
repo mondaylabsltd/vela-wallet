@@ -460,6 +460,19 @@ object WalletFixtures {
             WalletScreenState.H15 -> liveFirstRead(base, strings, state)
             WalletScreenState.H16 -> liveFirstRead(base, strings, state)
             WalletScreenState.H17 -> liveFirstRead(base, strings, state)
+            // ob-2 (P2.4): a wallet saved here whose registration has not
+            // landed, after a while of failing — the header's line with its
+            // retry, through the live builder (the web's `syncLine`).
+            WalletScreenState.H18 -> base.copy(
+                header = base.header.copy(
+                    sync = WalletLive.syncLine(
+                        listOf(app.getvela.wallet.feature.onboarding.core.SessionUnsynced(name = base.header.name, address = base.header.identiconSeed, retrying = true)),
+                        base.header.identiconSeed,
+                        strings,
+                        failedRounds = 2,
+                    ),
+                ),
+            )
         }
     }
 

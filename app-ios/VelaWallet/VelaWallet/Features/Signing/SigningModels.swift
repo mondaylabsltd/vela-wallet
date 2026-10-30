@@ -107,6 +107,11 @@ enum SigningBlock: Identifiable {
     case party(label: String, name: String, address: String? = nil, badge: PartyBadge? = nil)
     case rows([SigningRow])
     case warning(tone: SigningTone, text: String)
+    /// cs-14: one small line saying where a reading came from — Vela's own
+    /// read, a description (not a guarantee), a shape — or what the contract
+    /// is called and by whom. Quieter than a warning: a fact about the
+    /// reading, in its tone, with no box.
+    case source(text: String, tone: SigningTone)
     case positive(String)
     /// Message, hex, typed-data JSON or calldata — always monospace.
     case code(lines: [String], note: String? = nil)
@@ -125,6 +130,7 @@ enum SigningBlock: Identifiable {
         case .party(let label, let name, _, _): "party-\(label)-\(name)"
         case .rows(let rows): "rows-\(rows.first?.label ?? "")"
         case .warning(_, let text): "warning-\(text.prefix(24))"
+        case .source(let text, _): "source-\(text.prefix(32))"
         case .positive(let text): "positive-\(text.prefix(24))"
         case .code(let lines, _): "code-\(lines.first ?? "")"
         case .card(let title, _, _): "card-\(title ?? "")"

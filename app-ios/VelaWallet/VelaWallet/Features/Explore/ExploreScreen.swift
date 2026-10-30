@@ -93,6 +93,7 @@ struct ExploreScreen: View {
     var addNetwork: AddNetworkSheetModel?
     var onAddNetworkApprove: () -> Void = {}
     var onAddNetworkRetry: () -> Void = {}
+    var onAddNetworkApproveUnverified: () -> Void = {}
     /// Any way out of that sheet; the core decides what it answers.
     var onAddNetworkDismiss: () -> Void = {}
     /// How this Explore visit began (DESIGN N) — the core's landing question,
@@ -1160,6 +1161,7 @@ struct ExploreScreen: View {
                     AddNetworkPanelView(
                         model: addNetwork,
                         onApprove: onAddNetworkApprove,
+                        onApproveUnverified: onAddNetworkApproveUnverified,
                         onRetry: onAddNetworkRetry,
                         onDismiss: {
                             addNetworkOpen = false

@@ -354,6 +354,19 @@ final class SettingsStore {
         core.dispatch(CoreJSON.string(["type": "dapp_add_approved", "now_iso": Self.nowISO]))
     }
 
+    /// dapp-13: "Add unverified network", after its explicit confirmation —
+    /// the core saves only where `can_add_unverified` held.
+    func dappAddApprovedUnverified() {
+        core.dispatch(CoreJSON.string(["type": "dapp_add_approved_unverified", "now_iso": Self.nowISO]))
+    }
+
+    /// "Only use my node" on a network's page (owner decision 2026-10-28).
+    /// Saved with the network's config; it binds the pool only while the RPC
+    /// is the person's own — the core's rule, not this shell's.
+    func onlyMineChanged(chainId: Int, on: Bool) {
+        core.dispatch(CoreJSON.string(["type": "only_mine_changed", "chain_id": chainId, "on": on]))
+    }
+
     /// The sheet closed, by any button — the core decides what that answers.
     func dappAddDeclined() {
         core.dispatch(CoreJSON.string(["type": "dapp_add_declined"]))
@@ -389,7 +402,7 @@ final class SettingsStore {
         core.dispatch(CoreJSON.string(event))
     }
 
-    // MARK: - The endpoints and providers pages (spec 056 US2)
+    // MARK: - The endpoints page (spec 056 US2)
     //
     // Eleven events the executor has answered since 050 and nothing has ever
     // sent. Two whole settings pages were drawn over live operations with no
@@ -405,8 +418,8 @@ final class SettingsStore {
     // looking exactly as if it had. Nothing caught it because the parity
     // scripts compared only the `"type"` string.
     //
-    // So every one of them below now goes through `NetEndpointFieldWire` /
-    // `NetProviderIdWire`, which ARE the core's names — the same values the
+    // So every one of them below now goes through `NetEndpointFieldWire`,
+    // which IS the core's names — the same values the
     // live page labels its fields with, so a tap round-trips by construction
     // rather than by two files agreeing.
 
@@ -421,6 +434,37 @@ final class SettingsStore {
             "chain_id": chainId,
             "now_iso": Self.nowISO,
         ])
+    }
+
+    /// Send's "Add this network" (round 4): add the chain by id, and say how
+    /// it went as the send machine's `SendAddNetworkOutcome` — the web's
+    /// `addCustomNetworkByChainId`. A check that could not be made is not a
+    /// refusal (`error`: nothing is said against the network); a stop the
+    /// check raised is `not_compatible`, its words left on the wizard.
+    func addNetworkForSend(chainId: Int, waitMs: Double = 30_000) async -> [String: Any] {
+        openNetworks()
+        let started = Date()
+        while !isLoaded, Date().timeIntervalSince(started) * 1000 < waitMs {
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+        func listed() -> Bool { networkAdmin?.networks.contains { $0.chainId == chainId } == true }
+        addByChainId(chainId)
+        while Date().timeIntervalSince(started) * 1000 < waitMs {
+            if let wizard = networkAdmin?.wizard {
+                if wizard.phase == .error, let error = wizard.error {
+                    switch error {
+                    case .notFound: return ["type": "not_found"]
+                    case .alreadyAdded:
+                        return listed() ? ["type": "added"] : ["type": "not_compatible", "detail": NSNull()]
+                    case .checkFailed: return ["type": "error"]
+                    default: return ["type": "not_compatible", "detail": NSNull()]
+                    }
+                }
+                if wizard.phase == .idle, listed() { return ["type": "added"] }
+            }
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+        return ["type": "error"]
     }
 
     /// ST12 opened. The core probes all four fields.
@@ -454,30 +498,6 @@ final class SettingsStore {
 
     func resetEndpoints() { dispatch(["type": "reset_endpoints_to_defaults"]) }
 
-    /// ST11 opened. The core seeds the drafts from the saved keys and tests
-    /// every configured provider.
-    func openProviders() { dispatch(["type": "providers_opened"]) }
-
-    func editProviderKey(id: String, value: String) {
-        guard let provider = Self.providerId(id) else { return }
-        editProviderKey(provider: provider, value: value)
-    }
-
-    func editProviderKey(provider: NetProviderIdWire, value: String) {
-        dispatch(["type": "provider_key_edited", "provider": provider.rawValue, "value": value])
-    }
-
-    func blurProviderKey(id: String) {
-        guard let provider = Self.providerId(id) else { return }
-        dispatch(["type": "provider_key_blurred", "provider": provider.rawValue])
-    }
-
-    /// 测试 — the core asks the provider whether the key works.
-    func testProvider(id: String) {
-        guard let provider = Self.providerId(id) else { return }
-        dispatch(["type": "provider_test_requested", "provider": provider.rawValue])
-    }
-
     /// One per-network RPC override, as it is typed and when it is left.
     ///
     /// The core keeps a draft per FIELD, so which field is being typed into
@@ -502,14 +522,6 @@ final class SettingsStore {
             return nil
         }
         return field
-    }
-
-    private static func providerId(_ id: String) -> NetProviderIdWire? {
-        guard let provider = NetProviderIdWire(rawValue: id) else {
-            print("[vela-wallet] network_admin: no RPC provider called `\(id)`")
-            return nil
-        }
-        return provider
     }
 
     func blurOverride(chainId: Int) {

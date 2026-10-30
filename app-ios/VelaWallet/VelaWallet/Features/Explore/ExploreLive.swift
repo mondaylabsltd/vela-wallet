@@ -504,7 +504,10 @@ enum ExploreLive {
         if let host = view.explorerHost { rows.append((loc.t("addToken.labelExplorer"), host)) }
         let verdict = view.phase == .ready || view.phase == .notCompatible
         var checks: [CheckItemModel] = []
-        if verdict, let compat = view.compat, compat.rpcFailure == nil {
+        // A Vela network out of the person's list (owner decision
+        // 2026-10-29): supported, and nothing was checked — no rows that
+        // would say it was.
+        if verdict, view.velaNetwork != true, let compat = view.compat, compat.rpcFailure == nil {
             checks = compat.contracts.map { CheckItemModel(label: $0.name, ok: $0.deployed) }
                 + [CheckItemModel(label: loc.t("settingsModals.addNetwork.checkSigner"), ok: compat.p256Available == true)]
         }
@@ -514,6 +517,9 @@ enum ExploreLive {
         case .checking:
             pill = StatusPillModel(tone: .neutral, label: loc.t("settingsModals.addNetwork.checkingCompatibility"))
             note = nil
+        case .ready where view.velaNetwork == true:
+            pill = StatusPillModel(tone: .ok, label: loc.t("settingsModals.addNetwork.velaNetwork"))
+            note = loc.t("settingsModals.addNetwork.velaNetworkHint")
         case .ready:
             pill = StatusPillModel(tone: .ok, label: loc.t("settingsModals.addNetwork.compatible"))
             note = (view.compat?.multiKeyReady == false) ? loc.t("settingsModals.addNetwork.singleKeyOnly") : nil
@@ -526,7 +532,10 @@ enum ExploreLive {
             note = loc.t(view.compat?.hintKey ?? "settingsModals.addNetwork.incompatibleHint")
         case .checkFailed:
             pill = StatusPillModel(tone: .warn, label: loc.t("settingsModals.addNetwork.unableToVerify"))
-            note = nil
+            // Why, in plain words: nothing Vela may ask, or no answer from it.
+            note = view.compat?.rpcFailure == .allProbesFailed && view.rpcHost != nil
+                ? loc.t("connect.browser.addWhyUnreachable", vars: ["host": view.rpcHost ?? ""])
+                : loc.t("connect.browser.addWhyNoRpc")
         case .wrongRpc:
             pill = nil
             note = loc.t("assets.rpcFixWrongChain", vars: [
@@ -543,12 +552,23 @@ enum ExploreLive {
             lead: loc.t("connect.browser.addLead", vars: ["host": view.host]),
             site: site(host: view.host, name: view.host, origin: view.origin),
             rows: rows.map { AddNetworkSheetModel.Row(label: $0.0, value: $0.1) },
-            fromSite: view.fromSite ? loc.t("connect.browser.addFromSite") : nil,
+            fromSite: view.fromSite
+                ? loc.t("connect.browser.addFromSite")
+                : view.rpcFromSite == true ? loc.t("connect.browser.addRpcFromSite") : nil,
             pill: pill,
             checksTitle: checks.isEmpty ? nil : loc.t("settingsModals.addNetwork.compatibilityCheck"),
             checks: checks,
             note: note,
             add: view.canAdd ? loc.t("settingsModals.addNetwork.addNetworkBtn") : nil,
+            unverified: view.canAddUnverified == true
+                ? AddNetworkSheetModel.Unverified(
+                    open: loc.t("connect.browser.addUnverified"),
+                    warning: loc.t("connect.browser.addUnverifiedWarning", vars: [
+                        "host": view.rpcHost ?? "", "chainId": chain,
+                    ]),
+                    confirm: loc.t("connect.browser.addUnverifiedConfirm")
+                )
+                : nil,
             retry: view.phase == .checkFailed ? loc.t("settingsModals.addNetwork.retry") : nil,
             // Only where the core gives the tool somewhere to go: a gap
             // somebody can fill, on the page for THIS chain.

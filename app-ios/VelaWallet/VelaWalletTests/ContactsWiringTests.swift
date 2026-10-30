@@ -21,7 +21,7 @@ import VelaCore
 struct ContactsWiringTests {
 
     private let loc = Loc(overrideTag: "zh", preferredLanguages: [])
-    private let alice = "0x9F3cA71b04E82f5C55d9B21aE00734F8Dd8021aE"
+    private let alice = "0x9F3cA71B04e82F5c55d9B21ae00734f8dd8021aE"
 
     private func view(from dispatchResult: String) throws -> [String: Any] {
         try CoreJSON.object(dispatchResult)["view"] as? [String: Any] ?? [:]

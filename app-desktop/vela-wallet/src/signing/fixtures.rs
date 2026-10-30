@@ -1063,6 +1063,23 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
                         text: intent.clone(),
                         tone: Tone::Success,
                     },
+                    // P2.3 (cs-14): where the reading came from, and the
+                    // registry on the card's face with who named it.
+                    Block::Sentence {
+                        text: s.certain_words("readByVela", &[]),
+                        tone: Tone::Neutral,
+                    },
+                    Block::Sentence {
+                        text: s.certain_words(
+                            "contractNamed",
+                            &[
+                                ("address", "0x94fd…1ea9"),
+                                ("name", "Vela passkey registry"),
+                                ("source", &s.certain_words("sourceList", &[])),
+                            ],
+                        ),
+                        tone: Tone::Neutral,
+                    },
                     Block::Rows(vec![
                         row(term(ClearTerm::LabelNetwork), "Ethereum"),
                         mono_row(term(ClearTerm::LabelAddress), "0x88cCA0…266894"),

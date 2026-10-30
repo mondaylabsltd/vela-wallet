@@ -17,6 +17,7 @@ use gpui::{
 
 use crate::icons::{Icon, IconCache};
 use crate::theme::{self, SETTINGS_NAV_ROW_H, Theme, WALLET_CONTROL_H};
+use crate::ui::Accessible as _;
 use crate::wallet::components::icon_img;
 
 use super::fixtures::{Pill, StorageGroup, Tone};
@@ -161,6 +162,7 @@ pub fn settings_nav_row(
     // that is the text colour only — the raised wash is the SELECTED look.
     let row = div()
         .id(id)
+        .a11y_tab(label.clone(), selected)
         .group("settings-nav-row")
         // Grows with its label rather than cutting it (see the label below).
         .min_h(px(SETTINGS_NAV_ROW_H))
@@ -246,6 +248,9 @@ pub fn community_row(
     let raised = theme.bg_raised;
     div()
         .id(id)
+        .a11y_button(crate::ui::a11y::sentence(
+            std::iter::once(name.as_ref()).chain(handle.iter().map(AsRef::as_ref)),
+        ))
         .min_h(px(SETTINGS_NAV_ROW_H))
         .px(px(COMMUNITY_PAD_X))
         .py(px(6.))
@@ -813,6 +818,12 @@ pub fn network_row(
     // control's words and its press. `None` draws no control.
     on_move: Option<(gpui::SharedString, crate::contacts::components::MenuAction)>,
 ) -> Stateful<Div> {
+    // N-D1: the row is read as its name, what it says under it, and its badge.
+    let row_words = crate::ui::a11y::sentence([
+        name.as_ref(),
+        meta.as_ref(),
+        badge.map_or("", |pill| pill.label.as_ref()),
+    ]);
     let mut name_row = div().flex().items_center().gap(px(8.)).child(
         div()
             .text_size(theme::text_row_title())
@@ -835,6 +846,8 @@ pub fn network_row(
 
     let mut row = div()
         .id(id)
+        .a11y_item(row_words)
+        .aria_expanded(expanded)
         .flex()
         .items_center()
         .gap(px(12.))
@@ -1383,8 +1396,11 @@ pub fn toggle_row(
                 .shadow(crate::ui::dialog::shadow_lg()),
         );
     let hover = theme.bg_sunken;
+    // N-D1: a switch, named by its title, on or off.
+    let name = title.clone();
     let row = div()
         .id(id)
+        .a11y_toggle(name, on)
         .flex()
         .items_center()
         .gap(px(12.))

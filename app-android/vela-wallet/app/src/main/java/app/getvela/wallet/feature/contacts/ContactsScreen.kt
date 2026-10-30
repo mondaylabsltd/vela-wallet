@@ -60,6 +60,8 @@ data class ContactsActions(
     /** Spec 045 US5: the form's two fields (typed text, not an action id). */
     val onFormName: (String) -> Unit = {},
     val onFormAddress: (String) -> Unit = {},
+    /** P2.5: the form's note, as typed. */
+    val onFormNote: (String) -> Unit = {},
 )
 
 /**
@@ -107,6 +109,7 @@ private fun ContactsRouteContent(
             onDismiss = { actions.onAction("contacts.form.cancel") },
             onName = actions.onFormName,
             onAddress = actions.onFormAddress,
+            onNote = actions.onFormNote,
             onSave = { actions.onAction("contacts.form.save") },
         )
     }

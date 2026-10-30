@@ -174,6 +174,13 @@ fn schedule_sync(cx: &mut App) {
     .detach();
 }
 
+/// ob-2: how many of the widening retries have run without the outbox
+/// emptying — the header line's "syncing…" turns to "not synced yet" with
+/// Retry after a few (`wallet::live::sync_line`).
+pub fn sync_rounds() -> usize {
+    SYNC_ROUNDS.load(Ordering::Relaxed)
+}
+
 /// ob-2: try the outbox again now. Also what a screen naming unsynced
 /// wallets may call; the core ignores it when nothing is owed.
 pub fn sync_pending(cx: &mut App) {

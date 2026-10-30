@@ -33,6 +33,8 @@ struct WalletScreen: View {
     /// ⚠ Sign-out is currently the ONLY thing behind it. A real settings screen
     /// is a later feature; an unreachable wallet is not something to wait for it.
     var onSelectTab: (WalletTab) -> Void = { _ in }
+    /// ob-2: the header's "Retry now" on a stalled sync.
+    var onSyncRetry: (() -> Void)?
     /// Spec 021: the dock, the two section actions and the rows are the
     /// entries into Receive / Send / Scan / Activity / Assets. Absent in the
     /// gallery, where this screen is a picture.
@@ -166,7 +168,8 @@ struct WalletScreen: View {
                 model: model.header,
                 onIdenticon: { viewingIdenticon = true },
                 identiconLabel: loc.t("componentsUi.identiconViewer.a11yOpen"),
-                onName: onOpenAccounts
+                onName: onOpenAccounts,
+                onSyncRetry: onSyncRetry
             )
             .layoutPriority(1)
             if let space, let onSpace {

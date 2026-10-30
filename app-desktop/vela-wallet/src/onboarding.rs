@@ -633,6 +633,7 @@ impl OnboardingPage {
                 return;
             }
             FlowEvent::ClearOwnPage => CreateEvent::SigningPageChosen { url: None },
+            FlowEvent::CancelPending => CreateEvent::CancelPending,
         };
 
         // The name field keeps focus across a keystroke-driven re-render.

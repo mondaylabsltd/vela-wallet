@@ -221,6 +221,93 @@ pub fn block_with_actions(
     block_inner(theme, icons, item, actions, field, Some(window))
 }
 
+/// What one block of the sheet is read as (N-D1): its words as the eye
+/// reads them, in order — the intent, an amount with its sign, coin and
+/// worth, who is involved, the rows' labels and values, a warning, the
+/// simulation's verdict. Never more than is drawn: a hidden figure is not
+/// read out.
+#[must_use]
+pub fn block_words(item: &Block) -> SharedString {
+    fn amount(line: &crate::signing::fixtures::AmountLine) -> String {
+        let figure = format!("{}{} {}", line.sign, line.value, line.symbol);
+        crate::ui::a11y::sentence([
+            line.caption.as_ref().map_or("", |c| c.as_ref()),
+            figure.trim(),
+            line.fiat.as_ref().map_or("", |f| f.as_ref()),
+        ])
+        .to_string()
+    }
+    fn rows(rows: &[crate::signing::fixtures::Row]) -> Vec<String> {
+        rows.iter()
+            .map(|(label, value, _, _)| format!("{label} {value}"))
+            .collect()
+    }
+    let parts: Vec<String> = match item {
+        Block::Intent { text, .. }
+        | Block::Sentence { text, .. }
+        | Block::Warning { text, .. }
+        | Block::Positive(text) => vec![text.to_string()],
+        Block::Amount { line, note, .. } => vec![
+            amount(line),
+            note.as_ref().map(ToString::to_string).unwrap_or_default(),
+        ],
+        Block::Swap { pay, receive } => vec![amount(pay), amount(receive)],
+        Block::Nft { id, collection } => vec![collection.to_string(), id.to_string()],
+        Block::Allowance {
+            label, value, note, ..
+        } => vec![
+            label.to_string(),
+            value.to_string(),
+            note.as_ref().map(ToString::to_string).unwrap_or_default(),
+        ],
+        Block::Party {
+            label,
+            name,
+            address,
+            badge,
+        } => vec![
+            label.to_string(),
+            name.to_string(),
+            address
+                .as_ref()
+                .map(ToString::to_string)
+                .unwrap_or_default(),
+            badge
+                .as_ref()
+                .map(|(b, _)| b.to_string())
+                .unwrap_or_default(),
+        ],
+        Block::Rows(list) => rows(list),
+        Block::Code { lines, note } => lines
+            .iter()
+            .map(ToString::to_string)
+            .chain(note.as_ref().map(ToString::to_string))
+            .collect(),
+        Block::Card {
+            title, rows: list, ..
+        } => title
+            .as_ref()
+            .map(ToString::to_string)
+            .into_iter()
+            .chain(rows(list))
+            .collect(),
+        Block::Balances {
+            title,
+            rows: list,
+            note,
+            ..
+        } => std::iter::once(title.to_string())
+            .chain(
+                list.iter()
+                    .map(|(label, value, _)| format!("{label} {value}")),
+            )
+            .chain(note.as_ref().map(ToString::to_string))
+            .collect(),
+        Block::Verdict { inner, .. } => inner.iter().map(|b| block_words(b).to_string()).collect(),
+    };
+    crate::ui::a11y::sentence(parts.iter().map(String::as_str))
+}
+
 pub fn block(theme: &Theme, icons: &mut IconCache, item: &Block) -> Div {
     block_inner(theme, icons, item, Vec::new(), None, None)
 }

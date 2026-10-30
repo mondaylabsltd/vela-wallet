@@ -3,6 +3,7 @@
 //! i18n (spec 007 FR-009).
 
 use crate::theme::{self, BTN_H_PRIMARY, BTN_H_SECONDARY, OPACITY_DISABLED, Theme};
+use crate::ui::a11y::Accessible as _;
 use crate::ui::spinner;
 use gpui::{
     AnyElement, App, ClickEvent, Div, ElementId, FontWeight, InteractiveElement, IntoElement,
@@ -99,9 +100,14 @@ pub fn vela_button_state(
     // The height is a MINIMUM: long-locale labels wrap inside a
     // width-constrained, centered block and grow the row instead of
     // escaping the button (the radius is fixed, so growth is safe).
-    let label_block = div().w_full().min_w(px(0.)).text_center().child(label);
+    let label_block = div()
+        .w_full()
+        .min_w(px(0.))
+        .text_center()
+        .child(label.clone());
     let base = div()
         .id(id)
+        .a11y_button(label)
         .min_h(px(height))
         .w_full()
         .flex_none()
@@ -154,9 +160,10 @@ pub fn welcome_cta_state(
     theme: &Theme,
     on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
 ) -> Stateful<Div> {
-    let label_block = div().min_w(px(0.)).text_center().child(label);
+    let label_block = div().min_w(px(0.)).text_center().child(label.clone());
     let base = div()
         .id(id)
+        .a11y_button(label)
         .flex_none()
         .min_w(px(theme::CTA_MIN_W))
         .min_h(px(theme::CTA_H))

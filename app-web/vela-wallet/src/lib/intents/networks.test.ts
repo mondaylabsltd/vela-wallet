@@ -38,14 +38,16 @@ vi.mock('$lib/settings/core/network-admin.svelte', () => ({
 						explorer_url: 'https://scan.arc.example',
 						rpc_chain_mismatch: ledger.mismatch ? {} : null,
 						rpc_save_deferred: false
-					}
+					},
+					{ id: 'plume', chain_id: 98866, is_custom: false, optional: true },
+					{ id: 'ethereum', chain_id: 1, is_custom: false, optional: false }
 				]
 			};
 		}
 	}
 }));
 
-const { setNetworkEndpoint } = await import('./networks');
+const { removeNetwork, setNetworkEndpoint } = await import('./networks');
 
 beforeEach(() => {
 	Object.assign(ledger, {
@@ -75,5 +77,12 @@ describe('changing a network’s RPC (spec 103)', () => {
 		expect(ledger.saved, 'nothing written').toBe('https://rpc.arc.example');
 		expect(ledger.draft, 'the card shows what is in effect again').toBe('https://rpc.arc.example');
 		expect(ledger.mismatch).toBe(false);
+	});
+});
+
+describe('removing a network', () => {
+	it('names the row of a Vela network shown on the person’s word', async () => {
+		await removeNetwork(98866);
+		expect(ledger.events).toEqual([{ type: 'delete_confirmed', id: 'plume' }]);
 	});
 });

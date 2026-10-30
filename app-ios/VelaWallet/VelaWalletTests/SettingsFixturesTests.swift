@@ -25,8 +25,8 @@ struct SettingsFixturesTests {
         let states = SettingsStateId.allCases
         let st = states.filter { $0.rawValue.hasPrefix("st") }.count
         let sr = states.filter { $0.rawValue.hasPrefix("sr") }.count
-        #expect(states.count == 29)
-        #expect(st == 22)
+        #expect(states.count == 28, "ST11 went with the provider keys (2026-10-29)")
+        #expect(st == 21)
         #expect(sr == 7)
     }
 
@@ -50,7 +50,7 @@ struct SettingsFixturesTests {
     @Test func eachSubPageMockOpensItsOwnPage() {
         let pairs: [(SettingsStateId, SettingsPage)] = [
             (.st9, .networks), (.st9b, .networkDetail), (.st10, .addNetwork),
-            (.st11, .rpcProviders), (.st12, .endpoints), (.st13, .storage), (.st14, .about),
+            (.st12, .endpoints), (.st13, .storage), (.st14, .about),
         ]
         for (state, page) in pairs {
             #expect(SettingsFixtures.build(state, loc: loc).page == page)

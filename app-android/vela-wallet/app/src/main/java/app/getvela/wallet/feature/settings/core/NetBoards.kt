@@ -117,9 +117,105 @@ object NetBoards {
             Stop.NoRpcEndpoint, Stop.WizardCompatible, Stop.WizardUnverified, Stop.WizardNoP256, Stop.WizardMissingContracts ->
                 send(NetEvent.ChainSelected(chain_id = CHAIN_ID, keep_custom_rpc = false))
         }
-        // Read the way the live host reads it (`CoreHost.commit`): through
-        // `JSONObject`, which writes the core's whole `f64`s ("20.0", a
-        // latency) as the integers this mirror declares them.
-        return Wire.json.decodeFromString(NetView.serializer(), org.json.JSONObject(script.viewJson()).toString())
+        return read(script)
     }
+
+    // -- the network ledger: shown networks, own nodes, the endpoints --------
+
+    /** The ledger boards' own-node networks: Gnosis with "Only use my node" on, Arbitrum with it off. */
+    const val OWN_ONLY_CHAIN = 100L
+    const val OWN_CHAIN = 42_161L
+    private const val OWN_ONLY_RPC = "https://gnosis.mynode.example"
+    private const val OWN_RPC = "https://arbitrum.mynode.example"
+
+    /** The opt-in Vela network the board's person showed (Stable); the others stay out of the list. */
+    const val SHOWN_OPT_IN = 988L
+
+    /** What the ledger board's device holds, as `read_store` answers it. */
+    private fun ledgerStore() = NetShellResult.StoreLoaded(
+        network_configs = listOf(
+            NetNetworkConfig(OWN_ONLY_CHAIN, OWN_ONLY_RPC, "", "", only_mine = true),
+            NetNetworkConfig(OWN_CHAIN, OWN_RPC, "", "", only_mine = false),
+        ),
+        multisig_service = true,
+        shown_networks = NetShownNetworks(version = 1, shown = listOf(SHOWN_OPT_IN)),
+    )
+
+    /**
+     * The network list, a network's detail or the endpoints page as the REAL
+     * machine writes them for a device that showed one opt-in Vela network,
+     * runs two networks on nodes of its own, and keeps the multisig service
+     * among its endpoints. [expand]: the network whose detail is open (its
+     * own node does not answer the probe). [endpoints]: the endpoints page
+     * opened, every service answering as a board shows them — one fast, one
+     * that is not the service it claims, one refused for its address, the
+     * rates slow, the multisig service fine.
+     */
+    fun ledger(expand: Long? = null, endpoints: Boolean = false): NetView {
+        val script = CoreScript(NetworkAdminCore().asBridge()) { operation ->
+            val result: NetShellResult? = when (operation.optString("type")) {
+                "read_store" -> ledgerStore()
+                // The person's node does not answer: no chain id came back.
+                "probe_rpc" -> NetShellResult.Probed(operation.optString("url"), reported_chain_id = null, latency_ms = 0)
+                "probe_reachable" -> NetShellResult.Reachable(operation.optString("url"), ok = true, latency_ms = 90)
+                "fetch_service_health" -> {
+                    val field = Wire.json.decodeFromString(NetEndpointField.serializer(), "\"${operation.optString("field")}\"")
+                    when (field) {
+                        NetEndpointField.EthereumData -> NetShellResult.ServiceHealth(field, NetHealthBody.Identity("ethereum-data", "ok"), 62)
+                        // Answers, as something else: not the passkey index it claims to be.
+                        NetEndpointField.PasskeyIndex -> NetShellResult.ServiceHealth(field, NetHealthBody.Identity("some-other-service", "ok"), 88)
+                        NetEndpointField.BundlerService -> NetShellResult.ServiceHealth(field, NetHealthBody.HttpError(503), 120)
+                        NetEndpointField.GenesisService -> NetShellResult.ServiceHealth(field, NetHealthBody.Identity("safe-genesis-registry", null), 140)
+                        NetEndpointField.FiatRates -> null
+                    }
+                }
+                "fetch_fiat_rates" -> NetShellResult.FiatRates(NetHealthBody.Rates(160), 1_200)
+                "write_network_configs", "write_service_endpoints", "write_shown_networks", "write_custom_networks" -> NetShellResult.Written
+                "invalidate_pools" -> NetShellResult.Invalidated
+                else -> null
+            }
+            result?.let { Wire.json.encodeToString(NetShellResult.serializer(), it) }
+        }
+        fun send(event: NetEvent) = script.dispatch(Wire.json.encodeToString(NetEvent.serializer(), event))
+        send(NetEvent.Started)
+        expand?.let { send(NetEvent.OverrideExpanded(it)) }
+        if (endpoints) {
+            send(NetEvent.EndpointsOpened)
+            // A plain-http relay is refused: nothing is saved, the field says why.
+            send(NetEvent.EndpointEdited(NetEndpointField.BundlerService, "http://relay.example.com"))
+            send(NetEvent.EndpointBlurred(NetEndpointField.BundlerService))
+        }
+        return read(script)
+    }
+
+    /**
+     * Add network on the same device: [query] typed (a hidden Vela network's
+     * name finds it, tagged as Vela's own), and — with [pick] — that network
+     * picked: shown again as the Vela network it is, nothing to check.
+     */
+    fun velaWizard(query: String, pick: Long? = null): NetView {
+        val script = CoreScript(NetworkAdminCore().asBridge()) { operation ->
+            val result: NetShellResult? = when (operation.optString("type")) {
+                "read_store" -> ledgerStore()
+                "start_search_debounce" -> NetShellResult.DebounceElapsed
+                "fetch_search_index" -> NetShellResult.SearchIndex(emptyList())
+                "fetch_chain_info" -> NetShellResult.ChainInfo(operation.optLong("chain_id"), null)
+                else -> null
+            }
+            result?.let { Wire.json.encodeToString(NetShellResult.serializer(), it) }
+        }
+        fun send(event: NetEvent) = script.dispatch(Wire.json.encodeToString(NetEvent.serializer(), event))
+        send(NetEvent.Started)
+        send(NetEvent.SearchInput(query))
+        pick?.let { send(NetEvent.ChainSelected(chain_id = it, keep_custom_rpc = false)) }
+        return read(script)
+    }
+
+    /**
+     * Read the way the live host reads it (`CoreHost.commit`): through
+     * `JSONObject`, which writes the core's whole `f64`s ("20.0", a latency)
+     * as the integers this mirror declares them.
+     */
+    private fun read(script: CoreScript): NetView =
+        Wire.json.decodeFromString(NetView.serializer(), org.json.JSONObject(script.viewJson()).toString())
 }

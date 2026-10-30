@@ -417,6 +417,8 @@ struct SigningSheet: View {
             SigningRowsView(rows: rows)
         case .warning(let tone, let text):
             SigningWarning(tone: tone, text: text)
+        case .source(let text, let tone):
+            SigningSourceLine(text: text, tone: tone)
         case .positive(let text):
             SigningPositive(text: text)
         case .code(let lines, let note):

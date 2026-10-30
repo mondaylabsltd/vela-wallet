@@ -465,7 +465,6 @@ struct WireParityI1Tests {
         raw.removeValue(forKey: "providers")
         raw["hidden_vela_chain_ids"] = [988]
         let view = try CoreJSON.decode(NetViewWire.self, from: raw)
-        #expect(view.providers.isEmpty)
         #expect(view.hiddenVelaChainIds == [988])
         let row = try CoreJSON.decode(NetNetworkRowWire.self, from: [
             "id": "1", "chain_id": 1, "display_name": "Ethereum", "native_symbol": "ETH",

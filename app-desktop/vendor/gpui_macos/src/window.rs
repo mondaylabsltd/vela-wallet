@@ -1156,6 +1156,14 @@ impl MacWindow {
 impl Drop for MacWindow {
     fn drop(&mut self) {
         let mut this = self.0.lock();
+        // Backport of zed PR #64143 (0eda7703f6c8, N-D1): the AccessKit
+        // adapter keeps the content view alive, and the content view (the
+        // GPUIView) keeps this window's state alive — a cycle
+        // MacWindowState -> adapter -> content view -> GPUIView ->
+        // MacWindowState that clearing the delegate and the frame source
+        // cannot break. Drop the adapter first, so the native view, its
+        // CAMetalLayer and the renderer's command queue go with the window.
+        drop(this.accesskit_adapter.take());
         this.renderer.destroy();
         let window = this.native_window;
         let sheet_parent = this.sheet_parent.take();

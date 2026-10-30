@@ -523,6 +523,36 @@ pub struct FlowStrings {
     /// sent and nothing went wrong: said calmly, never in the failure's red.
     pub not_sent_title: SharedString,
     pub not_sent_body: SharedString,
+    /// The failed submit's "Try again" (`send.txRetryBtn`,
+    /// `SendEvent::RetryAfterError`), and its "Review again" after another
+    /// transaction spent the nonce first (send-15).
+    pub tx_retry: SharedString,
+    /// send-15: "Not sent" over "Another transaction from this account went
+    /// first — nothing was sent."
+    pub status_not_sent: SharedString,
+    pub went_first: SharedString,
+    /// Round 7: the account's signing page did not sign, said as what
+    /// happened there — never "couldn't be submitted".
+    pub page_unanswered: SharedString,
+    pub page_mismatch: SharedString,
+    pub page_refused: SharedString,
+    pub page_not_opened: SharedString,
+    /// send-11: the passkey prompt signed nothing — said calmly over the
+    /// confirm (`SendView::passkey_note`).
+    pub passkey_closed: SharedString,
+    pub passkey_timed_out: SharedString,
+    /// send-18: the confirm waits a bounded while for the recipient's check
+    /// (`SendView::risk_checking`).
+    pub risk_checking: SharedString,
+    /// send-2: the recipient's mixed case is not its EIP-55 checksum.
+    pub recipient_checksum: SharedString,
+    /// send-13: a valid recipient that is probably not what was meant —
+    /// warned, never refused (`SendView::recipient_warning`).
+    pub recipient_zero_address: SharedString,
+    pub recipient_self: SharedString,
+    /// r5reg-3: `{{to}}`, `{{symbol}}`, `{{from}}` — the Max filled again from
+    /// a newer fee quote (`SendView::max_moved`).
+    pub max_moved: String,
     /// Every sentence a refusal can be told in (`TrackEntryView.refusal_key`,
     /// `SendReceiptView.refusal_key`), by corpus key — the core chooses.
     pub refusals: Vec<(&'static str, SharedString)>,
@@ -1174,6 +1204,20 @@ impl FlowStrings {
             try_again: s("common.tryAgain"),
             not_sent_title: s(vela_core::app::sign_confirm::NOT_SENT_TITLE_KEY),
             not_sent_body: s(vela_core::app::sign_confirm::NOT_SENT_BODY_KEY),
+            tx_retry: s("send.txRetryBtn"),
+            status_not_sent: s("componentsTx.receipt.statusNotSent"),
+            went_first: s("componentsUi.signing.wentFirst"),
+            page_unanswered: s("componentsUi.signing.trustedSignerUnanswered"),
+            page_mismatch: s("componentsUi.signing.trustedSignerMismatch"),
+            page_refused: s("componentsUi.signing.trustedSignerRefused"),
+            page_not_opened: s("componentsUi.signing.integrity.couldNotCheck"),
+            passkey_closed: s("componentsUi.signing.passkeyClosed"),
+            passkey_timed_out: s("componentsUi.signing.passkeyTimedOut"),
+            risk_checking: s("send.riskChecking"),
+            recipient_checksum: s("send.recipientChecksum"),
+            recipient_zero_address: s("send.recipientZeroAddress"),
+            recipient_self: s("send.recipientSelf"),
+            max_moved: loc.t("send.maxMoved").to_string(),
             refusals: refusal_sentences(loc),
             venue_blocks: crate::signing::trusted_signer::VenueBlockWords::resolve(loc),
             first_time_tag: s("componentsUi.signing.firstTimeTag"),

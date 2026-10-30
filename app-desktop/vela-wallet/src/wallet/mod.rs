@@ -85,6 +85,12 @@ pub struct WalletStrings {
     pub detail_title: SharedString,
     /// Template carrying `{{amount}}`.
     pub detail_total: String,
+    /// home-11: the breakdown's summary when nothing held can be priced.
+    pub detail_all_unpriced: SharedString,
+    /// ob-2: the header line under a wallet no other device can find yet —
+    /// "syncing…", then "not synced yet" with Retry (`SessionView.unsynced`).
+    pub sync_syncing: SharedString,
+    pub sync_stalled: SharedString,
     pub detail_networks_label: SharedString,
     pub detail_networks_note: SharedString,
     pub detail_retrying: SharedString,
@@ -234,17 +240,25 @@ impl WalletStrings {
             unreachable_fix: s("assets.rpcFix"),
             detail_title: s("home.balanceDetailTitle"),
             detail_total: raw("assets.switcherTotal"),
+            detail_all_unpriced: s("home.allUnpriced"),
+            sync_syncing: s("home.syncingLine"),
+            sync_stalled: s("home.syncStalledLine"),
             detail_networks_label: s("home.balanceDetailNetworksLabel"),
             detail_networks_note: s("home.balanceDetailNetworksNote"),
             detail_retrying: s("home.balanceDetailStatusRetrying"),
             detail_statuses: {
                 use vela_core::app::balance_dashboard::{
-                    STATUS_RPC_UNAVAILABLE, STATUS_TOKEN_LIST_UNAVAILABLE,
+                    STATUS_PUBLIC_NODES, STATUS_RPC_UNAVAILABLE, STATUS_TOKEN_LIST_UNAVAILABLE,
                 };
-                [STATUS_RPC_UNAVAILABLE, STATUS_TOKEN_LIST_UNAVAILABLE]
-                    .into_iter()
-                    .map(|key| (key, s(key)))
-                    .collect()
+                [
+                    STATUS_RPC_UNAVAILABLE,
+                    STATUS_TOKEN_LIST_UNAVAILABLE,
+                    // Owner decision 2026-10-28: read through public nodes.
+                    STATUS_PUBLIC_NODES,
+                ]
+                .into_iter()
+                .map(|key| (key, s(key)))
+                .collect()
             },
             detail_retry: s("home.balanceDetailRetry"),
             detail_updated: s("home.balanceDetailUpdatedLabel"),

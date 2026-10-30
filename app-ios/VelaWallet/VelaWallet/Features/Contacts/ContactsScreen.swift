@@ -46,6 +46,7 @@ struct ContactsScreen: View {
     /// is a picture.
     var formName: Binding<String>?
     var formAddress: Binding<String>?
+    var formNote: Binding<String>?
     var onSaveForm: () -> Void = {}
     var onCancelForm: () -> Void = {}
 
@@ -119,6 +120,7 @@ struct ContactsScreen: View {
                     model: form,
                     nameText: formName,
                     addressText: formAddress,
+                    noteText: formNote,
                     onSave: onSaveForm,
                     onCancel: { dismissSheet() }
                 )

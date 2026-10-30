@@ -480,6 +480,12 @@ struct SendNoticeModel {
     /// that names no network (a blank disc said nothing).
     let mark: TokenMarkModel?
     let text: String
+    /// Round 4: the lock's way out — "Add this network" for the chain it
+    /// names (`add_network_tapped`). `nil` draws no button.
+    var action: String? = nil
+    var actionChainId: Int? = nil
+    /// The add is under way (`adding_network`): the button waits.
+    var busy: Bool = false
 }
 
 struct SendSelectionModel {
@@ -928,6 +934,16 @@ struct SendConfirmModel {
     /// signs. The core resolves it only while this page is up
     /// (`confirm_probes`), so the form never has it to show. `nil` on a split.
     var recipientTag: String?
+    /// Round 3 (send-18): the recipient check did not finish, or could not
+    /// read the account's history — said neutrally, with "Check again"
+    /// (`retry_risk_check`). Never a first-time tag built on a failed read.
+    var recipientCheck: RecipientCheckModel? = nil
+    /// r5reg-3: a Max filled again from a newer quote after it was shown —
+    /// "Max is now … (it was …)", under the amount.
+    var maxNote: String? = nil
+    /// send-11: the passkey prompt signed nothing — said calmly over the
+    /// confirm, which is the way to try again.
+    var passkeyNote: String? = nil
     var cta: String
     /// Spec 102: this account reviews and signs on a trusted page — the
     /// page, the key, its integrity line — and the CTA goes there.
@@ -1162,4 +1178,11 @@ struct FlowScreenModel {
     var sheet: WalletFlowSheet?
     /// 1 or 1.35 — threaded through `walletTextScale`, as spec 015's H7x is.
     var textScale: CGFloat = 1
+}
+
+/// The recipient check that the confirm opened without (round 3): what is
+/// unknown, and the way to ask again.
+struct RecipientCheckModel: Equatable {
+    let text: String
+    let retry: String
 }

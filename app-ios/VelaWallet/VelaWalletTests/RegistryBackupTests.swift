@@ -233,7 +233,7 @@ struct RegistryBackupTests {
         #expect(drawn?.title == "在以太坊备份账户记录")
         #expect(drawn?.subtitle == "未备份（可选）")
         #expect(SettingsLive.ethereumBackupRow(await check("not_copyable"), loc: zh)?.subtitle
-                == "这个较早创建的钱包无法复制")
+                == "这个较早创建的账户无法备份")
     }
 
     private func key(
@@ -266,12 +266,13 @@ struct RegistryBackupTests {
         #expect(block?.rows.map(\.holder) == ["Apple Passwords", "Security key", "Phone or tablet"])
         #expect(block?.rows.map { $0.pills.map(\.text) } == [["Cloud-synced"], ["Device-bound"], ["Cloud-synced"]])
         #expect(block?.rows.first?.details.map(\.label) == ["Public key", "Transport"])
-        // What a copy is, said whole: what is already public (the name and
-        // every key's name among it), that it is a transaction the person
-        // pays for, and that it moves no money and recovers nothing.
+        // What a copy is, said whole, in the corpus's current words
+        // (`settingsModals.backup.explain`): what it is a copy of (the public
+        // record a new device finds the account by), that it is a fee the
+        // person pays, and that it backs up no passkey and moves no money.
         let explain = block?.backupExplain ?? ""
-        for said in ["its address and name", "credential ID", "pay its network fee",
-                     "can't move money or bring back a lost passkey"] {
+        for said in ["public record on Gnosis", "one Ethereum network fee",
+                     "doesn't back up your passkeys", "can't move funds"] {
             #expect(explain.contains(said), "the explanation no longer says \"\(said)\"")
         }
         #expect(!explain.contains("Only public keys"), "the old under-statement is back")

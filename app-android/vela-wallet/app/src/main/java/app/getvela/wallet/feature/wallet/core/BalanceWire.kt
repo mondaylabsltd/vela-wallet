@@ -208,6 +208,34 @@ sealed class BalanceEvent {
     @SerialName("account_changed")
     data class AccountChanged(val address: String) : BalanceEvent()
 
+    /**
+     * P2.4 (perf-10): the signed-in account, for a screen that draws no
+     * balance of its own (settings, the address book) — set and its cached
+     * total read, no network asked until something shows the balance.
+     */
+    @Serializable
+    @SerialName("account_noted")
+    data class AccountNoted(val address: String) : BalanceEvent()
+
+    /**
+     * P2.4 (home-1, home-3): the rows the home showed when it last settled for
+     * this account and space ([HoldingsCache]) — the Assets list opens on them,
+     * each chain's own answer replaces them. Said once, after `account_changed`
+     * or `space_changed`.
+     */
+    @Serializable
+    @SerialName("holdings_restored")
+    data class HoldingsRestored(val address: String, val tokens: List<BalanceToken>) : BalanceEvent()
+
+    /**
+     * P2.4 (spec 105, home-7): the networks in front changed space — the core
+     * starts the account over (cache read again, a forced read), so nothing the
+     * other space failed or held is said here.
+     */
+    @Serializable
+    @SerialName("space_changed")
+    data object SpaceChanged : BalanceEvent()
+
     @Serializable
     @SerialName("refresh_requested")
     data class RefreshRequested(val force: Boolean, val pull: Boolean) : BalanceEvent()

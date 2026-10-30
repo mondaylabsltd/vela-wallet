@@ -136,10 +136,10 @@ enum DeviceStorage {
     /// 抹除此设备: delete every key the core calls erasable, then look again.
     ///
     /// **A scan, never a list.** The store is enumerated and each key is asked
-    /// `storageIsErasableKey`: everything of ours goes except the one record
-    /// the core keeps (`vela.pendingUploads` — a passkey public key the index
-    /// has never confirmed, whose deletion would make that key unfindable on
-    /// every device).
+    /// `storageIsErasableKey`: everything of ours goes (owner, 2026-10-28) —
+    /// the public-key outbox (`vela.pendingUploads`) too. What that would
+    /// lose is the confirmation's to say: it names the accounts whose public
+    /// record has not synced yet (`SessionView.unsynced`).
     ///
     /// Returns what SURVIVED — empty is an erase that happened. A caller that
     /// sent the person to the first run over a non-empty answer would be

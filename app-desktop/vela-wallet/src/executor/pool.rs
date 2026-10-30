@@ -97,6 +97,11 @@ enum Request {
     Failed { reply: Sender<Vec<u32>> },
     /// The chains whose first pass reached no endpoint (spec 082 RF1).
     Unreached { reply: Sender<Vec<u32>> },
+    /// The own-node lists (owner decision 2026-10-28): the chains whose own
+    /// node is not answering and whose reads public nodes served
+    /// (`RpcPoolView.fallback_chains`), and the "Only use my node" chains
+    /// that cannot be read (`RpcPoolView.own_node_unreached_chains`).
+    OwnNode { reply: Sender<OwnNodeChains> },
     /// How many routed calls the pool thread still holds: a test's proof
     /// that an answered hedge leaves nothing behind (083 H6).
     #[cfg(test)]
@@ -349,6 +354,34 @@ pub fn unreached_chains() -> Vec<u32> {
         .is_some_and(|tx| tx.send(Message::Ask(Request::Unreached { reply })).is_ok());
     if !sent {
         return Vec::new();
+    }
+    answer.recv().unwrap_or_default()
+}
+
+/// The pool's own-node lists, as one answer ([`own_node_chains`]).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct OwnNodeChains {
+    /// Chains whose person's own RPC is not answering and whose reads public
+    /// nodes are serving for now (`RpcPoolView.fallback_chains`).
+    pub fallback: Vec<u32>,
+    /// "Only use my node" chains that cannot be read right now
+    /// (`RpcPoolView.own_node_unreached_chains`): nothing went to another
+    /// node, so the person's node is the whole story.
+    pub own_node_unreached: Vec<u32>,
+}
+
+/// The web's `getFallbackChains` / `getOwnNodeUnreachedChains`, from the
+/// in-process pool's view — no core accessor is needed: this shell holds the
+/// machine. **Blocks** on the pool thread, briefly: answered from the view,
+/// never from the network.
+pub fn own_node_chains() -> OwnNodeChains {
+    let (reply, answer) = channel();
+    let sent = sender()
+        .lock()
+        .ok()
+        .is_some_and(|tx| tx.send(Message::Ask(Request::OwnNode { reply })).is_ok());
+    if !sent {
+        return OwnNodeChains::default();
     }
     answer.recv().unwrap_or_default()
 }
@@ -743,6 +776,13 @@ fn run(rx: &std::sync::mpsc::Receiver<Message>, workers: &Sender<Message>) {
             }
             Request::Unreached { reply } => {
                 let _ = reply.send(host.view().unreached_chains);
+            }
+            Request::OwnNode { reply } => {
+                let view = host.view();
+                let _ = reply.send(OwnNodeChains {
+                    fallback: view.fallback_chains,
+                    own_node_unreached: view.own_node_unreached_chains,
+                });
             }
             #[cfg(test)]
             Request::Open { reply } => {
@@ -1513,7 +1553,9 @@ fn post(
         return (RpcTransportOutcome::NonJson, None);
     }
 
-    let error = body.get("error").map(|error| vela_core::app::rpc_pool::RpcErrorInfo {
+    let error = body
+        .get("error")
+        .map(|error| vela_core::app::rpc_pool::RpcErrorInfo {
             code: error
                 .get("code")
                 .and_then(Value::as_i64)

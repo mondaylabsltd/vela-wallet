@@ -33,7 +33,6 @@ import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
 import app.getvela.wallet.core.designsystem.tokens.VelaFontWeight
 import app.getvela.wallet.core.designsystem.tokens.VelaIconSize
 import app.getvela.wallet.core.designsystem.tokens.VelaLeading
-import app.getvela.wallet.core.designsystem.tokens.VelaOnAccent
 import app.getvela.wallet.core.designsystem.tokens.VelaRadius
 import app.getvela.wallet.core.designsystem.tokens.VelaSizing
 import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
@@ -85,10 +84,12 @@ fun VelaAckRow(
                 .padding(top = VelaSpacing.xs)
                 .size(VelaSizing.checkboxBox)
                 .clip(boxShape)
-                .background(if (checked) colors.accentBase else colors.bgRaised)
+                // A check is a selected state: neutral ink, never the
+                // accent (web `.ack input { accent-color: fg.base }`).
+                .background(if (checked) colors.fgBase else colors.bgRaised)
                 .border(
                     width = VelaBorder.hairline,
-                    color = if (checked) colors.accentBase else colors.borderStrong,
+                    color = if (checked) colors.fgBase else colors.borderStrong,
                     shape = boxShape,
                 ),
             contentAlignment = Alignment.Center,
@@ -97,7 +98,7 @@ fun VelaAckRow(
                 Icon(
                     imageVector = VelaIcons.Check,
                     contentDescription = null,
-                    tint = VelaOnAccent,
+                    tint = colors.fgInverse,
                     modifier = Modifier.size(VelaIconSize.sm),
                 )
             }

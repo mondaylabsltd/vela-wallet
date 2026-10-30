@@ -169,7 +169,6 @@ struct ScreenModelStackTests {
             )
             model = SettingsLive.withPreferences(prefs, on: model, loc: loc)
             model = SettingsLive.withEraseFailure(["vela.contacts"], on: model, loc: loc)
-            model = SettingsLive.withProviderTests(on: model, loc: loc)
             model.page = .about
             model = SettingsLive.withStorage(report, on: model, loc: loc)
             model = SettingsLive.withConnections(sites, on: model, loc: loc)

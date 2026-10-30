@@ -192,10 +192,7 @@ mod imp {
     }
 
     pub fn listen() {
-        if !listen_on(
-            &pipe_name(),
-            crate::executor::trusted_signer::deliver_callback,
-        ) {
+        if !listen_on(&pipe_name(), crate::open_link::deliver) {
             // Another copy of the wallet holds it — or somebody who should not.
             // Either way this copy answers only its own cold starts.
             eprintln!("[vela-wallet] sign-result relay: the pipe is already owned; not listening");
@@ -375,7 +372,7 @@ mod imp {
             );
             return;
         };
-        if !listen_on(&dir, crate::executor::trusted_signer::deliver_callback) {
+        if !listen_on(&dir, crate::open_link::deliver) {
             // Another copy of the wallet holds it. This copy answers only its
             // own cold starts.
             eprintln!(

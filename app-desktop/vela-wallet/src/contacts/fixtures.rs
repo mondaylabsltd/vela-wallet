@@ -209,6 +209,9 @@ pub struct ContactDetailModel {
     /// Nothing has passed between us: the section says so instead of
     /// offering to show "all" of nothing (078 C-04).
     pub activity_empty: bool,
+    /// Round 3: the person's own note on this contact, when there is one —
+    /// lines kept, as the web's detail draws it.
+    pub note: Option<SharedString>,
 }
 
 pub fn contact_detail(s: &ContactsStrings, c: &ContactFixture) -> ContactDetailModel {
@@ -223,6 +226,7 @@ pub fn contact_detail(s: &ContactsStrings, c: &ContactFixture) -> ContactDetailM
             Vec::new()
         },
         activity_empty: !c.has_activity,
+        note: None,
     }
 }
 

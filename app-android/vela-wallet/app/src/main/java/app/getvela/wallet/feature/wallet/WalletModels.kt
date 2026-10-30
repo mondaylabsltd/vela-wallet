@@ -45,7 +45,7 @@ import androidx.compose.ui.graphics.Color
  * and three networks did not answer — "Can't reach 3 networks right now".
  * One place, three lines: nothing under the hero moves between them.
  */
-enum class WalletScreenState { H1, H1S, H2, H3, H4, H5, H6, H7, H7X, H8, H9, H10, H11, H12, H13, H13B, H14, H15, H16, H17 }
+enum class WalletScreenState { H1, H1S, H2, H3, H4, H5, H6, H7, H7X, H8, H9, H10, H11, H12, H13, H13B, H14, H15, H16, H17, H18 }
 
 @Immutable
 data class WalletHeaderModel(
@@ -61,7 +61,21 @@ data class WalletHeaderModel(
     val space: String? = null,
     /** The testnet space is in front: the label is drawn amber. */
     val testnet: Boolean = false,
+    /**
+     * ob-2 (P2.4): this wallet was saved here and is not findable elsewhere yet
+     * (`SessionView.unsynced`) — "Syncing…", then "Not synced yet" with a retry.
+     */
+    val sync: WalletSyncLineModel? = null,
 )
+
+/**
+ * The line under a wallet saved here that has not synced yet (the web's
+ * `syncLine`). [stalled]: it has failed a while (or cannot finish on its
+ * own) — drawn in full ink; [retry]: the words of "try now", when the person
+ * may ask.
+ */
+@Immutable
+data class WalletSyncLineModel(val text: String, val stalled: Boolean, val retry: String? = null)
 
 @Immutable
 sealed interface NetworkPillModel {

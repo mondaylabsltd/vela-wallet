@@ -124,10 +124,17 @@ struct NetNetworkRowWire: Decodable, Equatable {
     /// One of Vela's networks shown only once the person shows it (owner
     /// decision 2026-10-29). Decoded for Phase 2; absent reads as `false`.
     var optIn: Bool = false
-    /// The person set an RPC of their own here, and "Only use my node" is on
-    /// (owner decision 2026-10-28). Decoded for Phase 2.
+    /// The saved RPC is the person's own — an override that is not the
+    /// network's shipped endpoint (owner decision 2026-10-28). Only such a
+    /// network offers "Only use my node".
     var ownRpc: Bool = false
+    /// "Only use my node" is on, as saved; it binds the pool only while
+    /// `ownRpc` holds.
     var onlyMine: Bool = false
+    /// The RPC / explorer in the open card is not an address the wallet may
+    /// use (set-6): not probed, and a blur writes nothing. The shell says why.
+    var rpcUrlRefused: Bool = false
+    var explorerUrlRefused: Bool = false
 }
 
 /// Decoded by hand, in an extension so the memberwise initialiser stays:
@@ -136,7 +143,7 @@ extension NetNetworkRowWire {
     private enum CodingKeys: String, CodingKey {
         case id, chainId, displayName, nativeSymbol, isCustom, rpcUrl, explorerUrl, bundlerUrl
         case rpcHealth, explorerHealth, rpcChainMismatch, rpcSaveDeferred, isTestnet
-        case optIn = "optional", ownRpc, onlyMine
+        case optIn = "optional", ownRpc, onlyMine, rpcUrlRefused, explorerUrlRefused
     }
 
     init(from decoder: Decoder) throws {
@@ -157,7 +164,9 @@ extension NetNetworkRowWire {
             isTestnet: try c.decodeIfPresent(Bool.self, forKey: .isTestnet) ?? false,
             optIn: try c.decodeIfPresent(Bool.self, forKey: .optIn) ?? false,
             ownRpc: try c.decodeIfPresent(Bool.self, forKey: .ownRpc) ?? false,
-            onlyMine: try c.decodeIfPresent(Bool.self, forKey: .onlyMine) ?? false
+            onlyMine: try c.decodeIfPresent(Bool.self, forKey: .onlyMine) ?? false,
+            rpcUrlRefused: try c.decodeIfPresent(Bool.self, forKey: .rpcUrlRefused) ?? false,
+            explorerUrlRefused: try c.decodeIfPresent(Bool.self, forKey: .explorerUrlRefused) ?? false
         )
     }
 }
@@ -174,6 +183,9 @@ struct NetChainIndexEntryWire: Decodable, Equatable {
     let shortName: String
     let nativeCurrencySymbol: String
     let hasLogo: Bool
+    /// One of Vela's own networks, out of the person's lists — the core put
+    /// it there, never the chain index ("show again", owner 2026-10-29).
+    var vela: Bool? = nil
 }
 
 struct NetChainInfoWire: Decodable, Equatable {
@@ -314,6 +326,10 @@ struct NetWizardViewWire: Decodable, Equatable {
     /// The space the network goes to (spec 105): a testnet unless the person
     /// chose mainnet. Absent from an older view: a testnet, the core's default.
     var testnet: Bool = true
+    /// The candidate is one of Vela's own networks out of the person's list:
+    /// nothing was checked — Vela supports it — and adding it shows it again,
+    /// settings and all.
+    var velaNetwork: Bool = false
 }
 
 /// Decoded by hand, in an extension so the memberwise initialiser stays: a
@@ -324,7 +340,7 @@ struct NetWizardViewWire: Decodable, Equatable {
 extension NetWizardViewWire {
     private enum CodingKeys: String, CodingKey {
         case phase, query, customRpc, suggestions, chainInfo, compat, error, errorKey
-        case rpcField, rpcFieldLabelKey, canAdd, testnet
+        case rpcField, rpcFieldLabelKey, canAdd, testnet, velaNetwork
     }
 
     init(from decoder: Decoder) throws {
@@ -342,12 +358,13 @@ extension NetWizardViewWire {
                 .flatMap(NetRpcFieldWire.init(rawValue:)) ?? .none,
             rpcFieldLabelKey: try c.decodeIfPresent(String.self, forKey: .rpcFieldLabelKey),
             canAdd: try c.decode(Bool.self, forKey: .canAdd),
-            testnet: try c.decodeIfPresent(Bool.self, forKey: .testnet) ?? true
+            testnet: try c.decodeIfPresent(Bool.self, forKey: .testnet) ?? true,
+            velaNetwork: try c.decodeIfPresent(Bool.self, forKey: .velaNetwork) ?? false
         )
     }
 }
 
-// MARK: - Endpoints and providers
+// MARK: - Endpoints
 
 /// The four service endpoints, spelled as the core's `NetEndpointField` —
 /// the same raw values go back out in `endpoint_edited` / `endpoint_blurred`.
@@ -356,6 +373,15 @@ enum NetEndpointFieldWire: String, Decodable, CaseIterable {
     case passkeyIndex = "passkey_index"
     case bundlerService = "bundler_service"
     case fiatRates = "fiat_rates"
+    /// The multisig service — in the view only for a shell with multisig
+    /// accounts (`store_loaded.multisig_service`); read so a view that
+    /// carries it still decodes.
+    case genesisService = "genesis_service"
+
+    /// The fields this shell's view carries: the multisig service only once
+    /// this shell has multisig accounts (its `store_loaded` says
+    /// `multisig_service: false` until then — the core's rule).
+    static let withoutMultisig: [NetEndpointFieldWire] = allCases.filter { $0 != .genesisService }
 }
 
 struct NetEndpointViewWire: Decodable, Equatable {
@@ -363,33 +389,6 @@ struct NetEndpointViewWire: Decodable, Equatable {
     let value: String
     let defaultValue: String
     let health: NetServiceHealthWire
-}
-
-/// `NetProviderId` — the view's spelling and the events' `provider`.
-enum NetProviderIdWire: String, Decodable, CaseIterable {
-    case alchemy, drpc, ankr
-}
-
-struct NetProviderNetRowWire: Decodable, Equatable {
-    let chainId: Int
-    let ok: Bool
-    let latencyMs: Double
-}
-
-struct NetProviderTestViewWire: Decodable, Equatable {
-    let done: Bool
-    let results: [NetProviderNetRowWire]
-    let okCount: Int
-    let total: Int
-}
-
-struct NetProviderViewWire: Decodable, Equatable {
-    let provider: NetProviderIdWire
-    let key: String
-    /// Distinct from `key.isEmpty`: a cleared key is REMOVED from storage, so
-    /// this is the core's answer about whether the provider is configured.
-    let hasKey: Bool
-    let test: NetProviderTestViewWire?
 }
 
 // MARK: - display_currency
@@ -430,25 +429,20 @@ struct NetViewWire: Decodable, Equatable {
     let networks: [NetNetworkRowWire]
     let wizard: NetWizardViewWire
     let endpoints: [NetEndpointViewWire]
-    /// The provider-key cards. Round 6 retired provider keys into per-network
-    /// overrides (`retire_provider_keys`) and the core's view no longer names
-    /// any: absent reads as none, so the view still decodes (Phase 2 takes
-    /// the panel out).
-    var providers: [NetProviderViewWire] = []
     let lastAddedChainId: Int?
     /// Spec 100: the add-network sheet a page opened.
     var dappAdd: NetDappAddViewWire? = nil
     /// Vela's networks the person's lists leave out ("More networks", owner
-    /// decision 2026-10-29). Decoded for Phase 2; absent reads as none.
+    /// decision 2026-10-29), in list order; absent reads as none.
     var hiddenVelaChainIds: [Int] = []
 }
 
 /// Decoded by hand, in an extension so the memberwise initialiser stays:
-/// a field the core has since dropped (`providers`) or added
-/// (`hidden_vela_chain_ids`) must never cost the whole view.
+/// a field the core has added (`hidden_vela_chain_ids`) must never cost the
+/// whole view, and one it dropped (the retired `providers`) is not read.
 extension NetViewWire {
     private enum CodingKeys: String, CodingKey {
-        case loaded, networks, wizard, endpoints, providers, lastAddedChainId, dappAdd
+        case loaded, networks, wizard, endpoints, lastAddedChainId, dappAdd
         case hiddenVelaChainIds
     }
 
@@ -459,7 +453,6 @@ extension NetViewWire {
             networks: try c.decode([NetNetworkRowWire].self, forKey: .networks),
             wizard: try c.decode(NetWizardViewWire.self, forKey: .wizard),
             endpoints: try c.decode([NetEndpointViewWire].self, forKey: .endpoints),
-            providers: try c.decodeIfPresent([NetProviderViewWire].self, forKey: .providers) ?? [],
             lastAddedChainId: try c.decodeIfPresent(Int.self, forKey: .lastAddedChainId),
             dappAdd: try c.decodeIfPresent(NetDappAddViewWire.self, forKey: .dappAdd),
             hiddenVelaChainIds: try c.decodeIfPresent([Int].self, forKey: .hiddenVelaChainIds) ?? []
@@ -496,6 +489,15 @@ struct NetDappAddViewWire: Decodable, Equatable {
     let reportedChainId: Int?
     let compat: NetCompatibilityWire?
     let canAdd: Bool
+    /// `check_failed` with an RPC that never answered for another chain: the
+    /// person may add it unverified, on an explicit confirmation
+    /// (`dapp_add_approved_unverified`, dapp-13).
+    var canAddUnverified: Bool? = nil
+    /// A Vela network out of the person's lists: supported, nothing checked,
+    /// and Add Network shows it again.
+    var velaNetwork: Bool? = nil
+    /// The RPC tried is the page's, though the catalog names the chain.
+    var rpcFromSite: Bool? = nil
 }
 
 // MARK: - fee_tier_pref (spec 069)

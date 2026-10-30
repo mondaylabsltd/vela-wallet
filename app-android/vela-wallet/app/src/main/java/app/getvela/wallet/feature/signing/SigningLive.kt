@@ -13,6 +13,8 @@ import app.getvela.wallet.feature.signing.core.ClearBatchCall
 import app.getvela.wallet.feature.signing.core.ClearBatchView
 import app.getvela.wallet.feature.signing.core.ClearConfirm
 import app.getvela.wallet.feature.signing.core.ClearDangerClass
+import app.getvela.wallet.feature.signing.core.ClearLineSource
+import app.getvela.wallet.feature.signing.core.ClearMessageLine
 import app.getvela.wallet.feature.signing.core.ClearMessageView
 import app.getvela.wallet.feature.signing.core.ClearNativeValue
 import app.getvela.wallet.feature.signing.core.ClearProvenance
@@ -97,6 +99,18 @@ object SigningLive {
         val numberPreset: String = app.getvela.wallet.core.format.Formats.current.resolvedNumber().wire,
         /** The screen's clock, ms since the epoch: the core's landing pace is read at it (spec 099 R6). */
         val nowMs: () -> Double = { System.currentTimeMillis().toDouble() },
+        /** The descriptor service's host — what a fetched description's line names (cs-14). */
+        val descriptorHost: String = "",
+        /** dapp-15: the verdict on the sheet may be checked again ([SigningController.simAgainOffered]). */
+        val simAgain: Boolean = false,
+        /** dapp-15: a new check is out; the verdict shown is the last one ([SigningController.simRechecking]). */
+        val simRechecking: Boolean = false,
+        /**
+         * An AI agent's word on this request (the web's `AgentAdviceCard`):
+         * the core's `intent_advice`, read with its standing against the
+         * review on screen. `null`: no agent linked, or none has spoken.
+         */
+        val advice: AdviceModel? = null,
     )
 
     /**
@@ -354,8 +368,8 @@ object SigningLive {
         val own = sign.request?.first_party == true
         // PR 3: what stands in the verdict's place is the simulation's
         // outcome as the core's wait for it allows ([verdictShown]).
-        val verdict = verdictShown(sim, sign)
-        val sims = simBlocks(verdict, ctx)
+        val verdict = verdictShown(sim, sign, ctx.simRechecking)
+        val sims = withRecheck(simBlocks(verdict, ctx), verdict, sign, ctx)
         // Issue #314: on the wallet's own request a simulation that moves
         // nothing only confirms what the wallet itself wrote — a technical
         // fact, folded with the others, not a bordered card weighing as much as
@@ -446,11 +460,17 @@ object SigningLive {
             confirmEnabled = !refused && confirm.enabled && (handoff == null || handoff.line.opens),
             // Spec 099 R7: a shut confirm says why, in the core's line for the
             // part that is shut — none under a refusal, which has no confirm.
-            confirmBlockLine = confirm.key?.takeIf { !refused && !confirm.enabled }?.let { s.t(it) },
+            confirmBlockLine = confirm.key?.takeIf { !refused && !confirm.enabled }?.let { key ->
+                // cs-17: a grant-all waits for "Allow all" or "Revoke", not an amount.
+                if (key.endsWith(".approvalChoice") && guard.detected?.is_boolean_grant == true) s.c("chooseGrant") else s.t(key)
+            },
             panelTitle = s.s("signatureRequest"),
             closeLabel = s.t(I18nKeys.Flow.CLOSE),
             receipt = if (refused) null else receipt(sign, blocks, ctx),
             requestKey = request.id,
+            // Spec 103: the agent's card — not over a refusal, and not on the
+            // hand-off card, where the page is the authority.
+            advice = ctx.advice?.takeIf { !refused && handoff == null },
         )
     }
 
@@ -469,14 +489,30 @@ object SigningLive {
             add(SigningBlock.Warning(SigningTone.Danger, s.a("permitCantCap")))
         }
         GuardSurface.ApprovalEditor -> buildList {
-            guard.editor?.let { editor -> add(allowanceBlock(editor, guard.meta, guard.increase_total, guard.decimals_unverified, guard.expired, s)) }
+            guard.editor?.let { editor ->
+                add(
+                    allowanceBlock(
+                        editor, guard.meta, guard.increase_total, guard.decimals_unverified, guard.expired, s,
+                        boolean = guard.detected?.is_boolean_grant == true,
+                    ),
+                )
+            }
             guard.detected?.let { add(SigningBlock.Party(s.a("spenderLabel"), ExploreLive.shortAddress(it.spender), it.spender)) }
             // Kept as the site asked (2026-09-26) — allowed, never unsaid; the core decides when (094 S8).
             if (guard.unlimited_warning) add(SigningBlock.Warning(SigningTone.Danger, s.s("unlimitedWarning")))
         }
         GuardSurface.Batch -> buildList {
             guard.batch?.legs?.forEachIndexed { index, leg ->
-                leg.editor?.let { editor -> add(allowanceBlock(editor, leg.meta, null, false, false, s, prefix = "#${index + 1} ", leg = index)) }
+                leg.editor?.let { editor ->
+                    add(
+                        allowanceBlock(
+                            editor, leg.meta, null, false, false, s, prefix = "#${index + 1} ", leg = index,
+                            // A grant-all leg (setApprovalForAll inside a batch): allow
+                            // all or revoke, on its own leg (`leg_grant_deliberately_chosen`).
+                            boolean = leg.approval?.is_boolean_grant == true,
+                        ),
+                    )
+                }
                 leg.approval?.let { add(SigningBlock.Party(s.a("spenderLabel"), ExploreLive.shortAddress(it.spender), it.spender)) }
             }
             if (guard.unlimited_warning) add(SigningBlock.Warning(SigningTone.Danger, s.s("unlimitedWarning")))
@@ -492,15 +528,37 @@ object SigningLive {
         s: VelaStrings,
         prefix: String = "",
         leg: Int? = null,
+        /** cs-17: a grant-all (setApprovalForAll) — no amount to cap; allow all or revoke. */
+        boolean: Boolean = false,
     ): SigningBlock.Allowance {
         fun chip(id: String, label: String, mode: GuardEditorMode, offered: Boolean) = AllowanceChip(
             id = id, label = label,
             state = when {
-                !offered -> AllowanceChip.ChipState.Disabled
                 editor.mode == mode -> AllowanceChip.ChipState.Selected
+                !offered -> AllowanceChip.ChipState.Disabled
                 else -> AllowanceChip.ChipState.Idle
             },
         )
+        if (boolean) {
+            // The web's `allowanceBlock(…, { boolean })`: the core waits for the
+            // deliberate "Allow all" (`grant_deliberately_chosen`, or the leg's
+            // `leg_grant_deliberately_chosen`) or "Revoke" — never a default.
+            val picked = editor.choice
+            return SigningBlock.Allowance(
+                leg = leg,
+                label = prefix + s.s("labelApproved"),
+                value = when (picked) {
+                    GuardChoice.Grant -> s.c("chipGrantAll")
+                    GuardChoice.Revoke -> s.a("revoke")
+                    else -> "—"
+                },
+                valueTone = if (picked == GuardChoice.Grant) SigningTone.Danger else SigningTone.Neutral,
+                chips = listOf(
+                    chip(GRANT_CHIP, s.c("chipGrantAll"), GuardEditorMode.Grant, true),
+                    chip("revoke", s.a("revoke"), GuardEditorMode.Revoke, editor.revoke_offered),
+                ),
+            )
+        }
         val chips = listOf(
             // An unlimited request opens HERE — the site's own bytes, kept
             // (Permit2 bundles revert when the wallet re-encodes the approve).
@@ -743,7 +801,27 @@ object SigningLive {
         // Spec 102: the venue cannot be used here — nothing was signed, and
         // the core says why (`venue_block`); not retryable.
         SignErrorKind.VenueBlocked,
+        // Round 7 (r7-2, r7-7): the account's trusted signing page did not
+        // sign — said as what happened there, never "couldn't be submitted".
+        SignErrorKind.PageUnanswered,
+        SignErrorKind.PageMismatch,
+        SignErrorKind.PageRefused,
+        SignErrorKind.PageNotOpened,
     )
+
+    /**
+     * Round 7: the page's failure, by the core's kind — the web's
+     * `SIGNER_REASON_KEYS` for `page_*`: not answering (try again), an
+     * answer that is not this request's (nothing was sent), its own refusal,
+     * a check that did not pass. `null` for every other kind.
+     */
+    fun pageFailureKey(kind: SignErrorKind?): String? = when (kind) {
+        SignErrorKind.PageUnanswered -> "componentsUi.signing.trustedSignerUnanswered"
+        SignErrorKind.PageMismatch -> "componentsUi.signing.trustedSignerMismatch"
+        SignErrorKind.PageRefused -> "componentsUi.signing.trustedSignerRefused"
+        SignErrorKind.PageNotOpened -> "componentsUi.signing.integrity.couldNotCheck"
+        else -> null
+    }
 
     /** The landing's clock for one operation: [waiting] — the relay has not sent it; [eta] — the count, when there is one. */
     private class LandingClock(val waiting: Boolean, val eta: ReceiptEtaModel?)
@@ -1037,6 +1115,8 @@ object SigningLive {
         // (`venueBlockLine`), in the person's language.
         sign.error?.kind == SignErrorKind.VenueBlocked ->
             sign.error.venue_block?.words { key, vars -> s.t(key, vars) }?.ifBlank { null } ?: s.t("send.txErrorGeneric")
+        // Round 7: the signing page did not sign — what happened there.
+        pageFailureKey(sign.error?.kind) != null -> s.t(pageFailureKey(sign.error?.kind)!!)
         else -> s.t("send.txErrorGeneric")
     }
 
@@ -1156,13 +1236,131 @@ object SigningLive {
 
     private fun resultBlocks(result: ClearSignResult, native: ClearNativeValue?, ctx: Context): List<SigningBlock> = buildList {
         val s = ctx.strings
-        add(SigningBlock.Intent(result.intent, toneOf(result.risk)))
+        add(SigningBlock.Intent(readingIntent(result, s), toneOf(result.risk)))
+        // cs-14: where the reading came from, under the intent.
+        add(provenanceBlock(result, ctx))
         addAll(warnings(result, s))
+        // cs-1…cs-4: what the certain decode says against the reading.
+        addAll(certainLines(result, s))
         // Spec 096 F4: the coin the call sends leads the rows, in a batch
         // call's own words, when the reading does not say it itself.
         val coin = native?.let { listOf(coinRow(it, ctx)) }.orEmpty()
         val rows = coin + result.fields.filter { !it.detail }.map { rowOf(it, s) }
         if (rows.isNotEmpty()) add(SigningBlock.Rows(rows))
+        // cs-8/cs-14: the contract, on the face, and who named it.
+        contractBlock(result, ctx)?.let(::add)
+    }
+
+    private fun VelaStrings.c(key: String) = t("componentsUi.signing.certain.$key")
+    private fun VelaStrings.c(key: String, vars: Map<String, String>) = t("componentsUi.signing.certain.$key", vars)
+
+    /**
+     * The headline of a reading (the web's): a name from the public 4-byte
+     * database is no headline (cs-7) — "Contract call"; an approve-all Vela
+     * read itself names the collection; otherwise the reading's intent.
+     */
+    internal fun readingIntent(result: ClearSignResult, s: VelaStrings): String {
+        val reading = result.reading
+        return when {
+            reading.selector_name != null -> s.s("intentContractCall")
+            result.intent_term == "intentApproveAllNfts" && reading.source == ClearLineSource.Vela ->
+                s.c("approveAllYour", mapOf("collection" to collectionOf(result)))
+            else -> result.intent
+        }
+    }
+
+    /** An approve-all's collection: a list's name; else its own `name()` beside its short address; else the address. */
+    private fun collectionOf(result: ClearSignResult): String {
+        result.contract_name?.let { return it }
+        val short = result.contract_address?.let(ExploreLive::shortAddress).orEmpty()
+        return result.reading.collection_name?.let { "$it ($short)" } ?: short
+    }
+
+    /** The descriptor service's host, as the "· host · unauthenticated" line names it. */
+    private fun hostOf(ctx: Context): String = ctx.descriptorHost
+
+    /** Who a line is from, as the sheet's markers say it; `null` for Vela's own reading. */
+    private fun sourceName(source: ClearLineSource?, ctx: Context): String? = when (source ?: ClearLineSource.Vela) {
+        ClearLineSource.Vela -> null
+        ClearLineSource.BuiltIn -> ctx.strings.c("sourceBuiltIn")
+        ClearLineSource.Fetched -> ctx.strings.c("sourceFetched", mapOf("host" to hostOf(ctx)))
+        ClearLineSource.SelectorDb -> ctx.strings.c("sourceSelectorDb")
+        ClearLineSource.Shape -> ctx.strings.c("sourceShape")
+    }
+
+    /**
+     * cs-14 (the web's `provenanceBlock`): the one small line under the
+     * intent that says where the reading came from — what Vela read from the
+     * bytes, or whose description it is, which is not a guarantee; a name
+     * from the public database is a caution in itself (cs-7).
+     */
+    internal fun provenanceBlock(result: ClearSignResult, ctx: Context): SigningBlock {
+        val s = ctx.strings
+        val reading = result.reading
+        val owner = reading.descriptor_owner?.takeIf { it.isNotBlank() }
+        return when (reading.source) {
+            ClearLineSource.Vela -> SigningBlock.Source(
+                s.c(if (result.sign_type == ClearSignType.Signature) "readByVelaSignature" else "readByVela"),
+            )
+            ClearLineSource.BuiltIn -> SigningBlock.Source(
+                owner?.let { s.c("describedBuiltIn", mapOf("owner" to it)) } ?: s.c("describedBuiltInPlain"),
+            )
+            ClearLineSource.Fetched -> SigningBlock.Source(
+                owner?.let { s.c("describedFetched", mapOf("owner" to it, "host" to hostOf(ctx))) }
+                    ?: s.c("describedFetchedPlain", mapOf("host" to hostOf(ctx))),
+            )
+            ClearLineSource.Shape -> SigningBlock.Source(s.c("shapeOnly", mapOf("intent" to result.intent)))
+            ClearLineSource.SelectorDb -> SigningBlock.Warning(
+                SigningTone.Caution,
+                s.c("selectorName", mapOf("name" to reading.selector_name.orEmpty())),
+            )
+        }
+    }
+
+    /**
+     * The lines the certain decode raises about a reading (cs-1…cs-4; the
+     * web's `certainLines`): what a description said against it, an output
+     * paid to a stranger, a dust minimum, and each token whose name is only
+     * its own contract's word. [prefix] marks a batch leg ("#3 ").
+     */
+    internal fun certainLines(result: ClearSignResult, s: VelaStrings, prefix: String = ""): List<SigningBlock> = buildList {
+        result.reading.contradictions.forEach { words ->
+            add(SigningBlock.Warning(SigningTone.Danger, prefix + s.c("contradiction", mapOf("words" to words))))
+        }
+        if (result.reading.goes_elsewhere) add(SigningBlock.Warning(SigningTone.Danger, prefix + s.c("elsewhere")))
+        if (result.reading.dust_minimum) add(SigningBlock.Warning(SigningTone.Caution, prefix + s.c("dustMinimum")))
+        val seen = HashSet<String>()
+        result.fields.forEach { field ->
+            val token = field.token_address
+            if (!field.token_named_by_contract || token == null || !seen.add(token.lowercase())) return@forEach
+            val symbol = field.value.split(" (").first().trim().split(' ').last()
+            add(
+                SigningBlock.Source(
+                    prefix + s.c("tokenByContract", mapOf("symbol" to symbol, "address" to ExploreLive.shortAddress(token))),
+                    SigningTone.Caution,
+                ),
+            )
+        }
+    }
+
+    /**
+     * The contract on the card's face (cs-8, cs-14; the web's
+     * `contractBlock`): its address, and its name with who called it so — or
+     * that nobody named it.
+     */
+    internal fun contractBlock(result: ClearSignResult, ctx: Context): SigningBlock? {
+        val address = result.contract_address?.takeIf { it.isNotBlank() } ?: return null
+        val s = ctx.strings
+        val short = ExploreLive.shortAddress(address)
+        val name = result.contract_name?.takeIf { it.isNotBlank() }
+            ?: return SigningBlock.Source(s.c("contractUnnamed", mapOf("address" to short)))
+        val namedBy = result.reading.contract_named_by
+        val source = when {
+            namedBy == ClearLineSource.Fetched -> s.c("sourceFetched", mapOf("host" to hostOf(ctx)))
+            namedBy != null && namedBy != ClearLineSource.BuiltIn -> sourceName(namedBy, ctx)
+            else -> null
+        } ?: s.c("sourceList")
+        return SigningBlock.Source(s.c("contractNamed", mapOf("address" to short, "name" to name, "source" to source)))
     }
 
     /** "Amount −0.003 BNB" — the core's `native_value`, as a batch call's coin row reads, in the fee row's coin (RC5). */
@@ -1202,14 +1400,44 @@ object SigningLive {
         mono = field.address != null && field.value.startsWith("0x"),
     )
 
+    /**
+     * The message as the core drew it (`ClearMessageView.display_lines`, the
+     * web's `messageLine`): each line its text, a hidden character's
+     * `⟨U+…⟩` marker muted, and a folded run of empty lines as one muted line
+     * that counts them ("… 12 blank lines …"). `null` when the core drew
+     * nothing (a core from before the lines).
+     */
+    fun messageCode(message: ClearMessageView, s: VelaStrings): SigningBlock.Code? {
+        if (message.display_lines.isEmpty()) return null
+        val runs = message.display_lines.map { line ->
+            when (line) {
+                is ClearMessageLine.Blank -> listOf(CodeRun(s.s("blankLines", mapOf("lines" to line.count.toString())), muted = true))
+                is ClearMessageLine.Text -> line.runs.map { CodeRun(it.text, muted = it.marker) }
+            }
+        }
+        return SigningBlock.Code(
+            lines = runs.map { line -> line.joinToString("") { it.text } },
+            runs = runs.takeIf { lines -> lines.any { line -> line.any { it.muted } } },
+        )
+    }
+
     private fun messageBlocks(message: ClearMessageView, s: VelaStrings, origin: String? = null): List<SigningBlock> = buildList {
         val signingIn = message.siwe != null
         val danger = message.danger_class == ClearDangerClass.EthSign || message.danger_class == ClearDangerClass.SiwePhish
         add(SigningBlock.Intent(if (signingIn) s.s("signInIntent") else s.s("signMessage"), if (danger) SigningTone.Danger else SigningTone.Neutral))
         if (message.danger_class == ClearDangerClass.EthSign) add(SigningBlock.Sentence(s.s("ethSignBody"), SigningTone.Danger))
-        message.decoded_text?.takeIf { it.isNotEmpty() }?.let { add(SigningBlock.Sentence(it, SigningTone.Neutral)) }
-        message.binary_preview?.let { add(SigningBlock.Code(listOf(it))) }
+        val drawn = messageCode(message, s)
+        if (drawn != null) {
+            add(drawn)
+        } else {
+            // A core older than `display_lines`: the text as it read.
+            message.decoded_text?.takeIf { it.isNotEmpty() }?.let { add(SigningBlock.Sentence(it, SigningTone.Neutral)) }
+            message.binary_preview?.let { add(SigningBlock.Code(listOf(it))) }
+        }
         if (message.non_printable) add(SigningBlock.Warning(SigningTone.Caution, s.s("hexMessageWarning")))
+        // cs-11: a hidden or direction-changing character — each is a marker
+        // in the lines above, and the sheet says so (the web's `warnHiddenChars`).
+        if (message.has_invisible_chars) add(SigningBlock.Warning(SigningTone.Danger, s.s("hiddenChars")))
         message.siwe?.let { siwe ->
             val rows = buildList {
                 add(SigningRow(s.s("siweDomain"), siwe.domain_host ?: siwe.domain))
@@ -1250,8 +1478,10 @@ object SigningLive {
      * Nothing here shuts or opens the confirm: that is the gate's
      * ([confirmState]), which reads the same view.
      */
-    internal fun verdictShown(sim: SigningController.SimOutcome?, sign: SignView): SigningController.SimOutcome? = when {
+    internal fun verdictShown(sim: SigningController.SimOutcome?, sign: SignView, rechecking: Boolean = false): SigningController.SimOutcome? = when {
         sim == null -> null
+        // dapp-15: asked again — the last verdict, stale, until the new one lands.
+        rechecking && sim != SigningController.SimOutcome.Pending -> sim
         sign.sim_checking -> SigningController.SimOutcome.Pending
         sim == SigningController.SimOutcome.Pending ->
             sign.sim_waited_out_key?.let { key -> SigningController.SimOutcome.Notice(ClearRisk.Caution, key) } ?: sim
@@ -1268,8 +1498,32 @@ object SigningLive {
      * draws that place over a body of its own. Empty with no simulation.
      */
     internal fun verdictPlace(sim: SigningController.SimOutcome?, sign: SignView, ctx: Context): List<SigningBlock> {
-        val verdict = verdictShown(sim, sign) ?: return emptyList()
-        return listOf(heldPlace(simBlocks(verdict, ctx).singleOrNull(), ctx))
+        val verdict = verdictShown(sim, sign, ctx.simRechecking) ?: return emptyList()
+        return listOf(heldPlace(withRecheck(simBlocks(verdict, ctx), verdict, sign, ctx).singleOrNull(), ctx))
+    }
+
+    /**
+     * dapp-15 (the web's `withRecheck`): a could-not-check line whose node
+     * nobody reached (the notice's `recheck`, the core's) offers "Check
+     * again" — and while a new check is out, the line it is about to replace
+     * stays, marked "Checking again…", rather than reading as the current
+     * verdict or vanishing. Not while the core still holds the confirm or
+     * says its wait ran out: the line the person reads is the core's step's.
+     */
+    internal fun withRecheck(
+        blocks: List<SigningBlock>,
+        verdict: SigningController.SimOutcome?,
+        sign: SignView,
+        ctx: Context,
+    ): List<SigningBlock> {
+        val notice = verdict as? SigningController.SimOutcome.Notice ?: return blocks
+        if (notice.risk != ClearRisk.Caution) return blocks
+        val recheck = when {
+            ctx.simRechecking -> SigningBlock.Recheck(ctx.strings.s("simRechecking"), checking = true)
+            !notice.recheck || !ctx.simAgain || sign.sim_checking || sign.sim_waited_out_key != null -> return blocks
+            else -> SigningBlock.Recheck(ctx.strings.s("simRecheck"), checking = false)
+        }
+        return blocks.map { block -> if (block is SigningBlock.Warning) block.copy(recheck = recheck) else block }
     }
 
     /**
@@ -1528,6 +1782,9 @@ object SigningLive {
 
     /** The fee list's id for the chain's own coin (the web's `'native'`). */
     const val NATIVE_FEE_ID = "native"
+
+    /** cs-17: a grant-all's "Allow all" chip — the deliberate tap the guard waits for. */
+    const val GRANT_CHIP = "grant"
 
     /** The confirm's words, the action alone: the core's intent id, in the corpus's words (the desktop's `confirm_label`). */
     fun confirmLabel(clear: ClearSigningView, s: VelaStrings): String = when (val confirm = clear.confirm) {

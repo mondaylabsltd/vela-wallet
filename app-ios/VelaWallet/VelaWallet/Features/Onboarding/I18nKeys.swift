@@ -367,8 +367,6 @@ enum I18nKeys {
             // Advanced.
         static let networksTitle = "settings.advanced.networksTitle"
         static let networksSubtitle = "settings.advanced.networksSubtitle"
-        static let rpcProvidersTitle = "settings.advanced.rpcProvidersTitle"
-        static let rpcProvidersSubtitle = "settings.advanced.rpcProvidersSubtitle"
         static let addNetworkTitle = "settings.advanced.addNetworkTitle"
         static let addNetworkSubtitle = "settings.advanced.addNetworkSubtitle"
         static let endpointsTitle = "settings.advanced.endpointsTitle"
@@ -381,8 +379,6 @@ enum I18nKeys {
         static let networkSaveHint = "settings.networks.saveHint"
         /// Spec 098 §5.1: the relay is sent this network's RPC, key and all.
         static let networkRelayNotice = "settingsModals.network.relayNotice"
-        /// Spec 098 §5.1: …and the RPC built from a provider key.
-        static let providersRelayNotice = "settingsModals.rpcProviders.relayNotice"
         static let networkOnline = "settings.networks.online"
         static let networkSlow = "settings.networks.slow"
             // Ethereum backup of the founding keys (spec 062).
@@ -469,13 +465,6 @@ enum I18nKeys {
         static let addNoRpcEndpoint = "settingsModals.addNetwork.noRpcEndpoint"
         static let addNoP256Hint = "settingsModals.addNetwork.noP256Hint"
 
-            // RPC providers.
-        static let providersDescription = "settingsModals.rpcProviders.description"
-        static let providerGetKey = "settingsModals.rpcProviders.getKey"
-        static let providerCheckKey = "settingsModals.rpcProviders.checkKey"
-        static let providerNotSet = "settingsModals.rpcProviders.notSet"
-        static let providerConnected = "activity.connected"
-        static let providerSupports = "settingsModals.rpcProviders.supportsCount"
 
             // Service endpoints.
         static let endpointsDescription = "settingsModals.endpoints.description"

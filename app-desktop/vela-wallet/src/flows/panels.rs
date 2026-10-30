@@ -15,6 +15,7 @@ use gpui::prelude::FluentBuilder as _;
 use crate::icons::{Icon, IconCache};
 use crate::identicon::IdenticonCache;
 use crate::theme::{self, Theme};
+use crate::ui::Accessible as _;
 use crate::wallet::components::{
     activity_row, asset_row, empty_state, icon_img, skeleton_row, token_icon_logos,
 };
@@ -1836,6 +1837,8 @@ pub(crate) fn cta_button(
     state: CtaState,
     action: Option<Click>,
 ) -> Div {
+    // N-D1: the CTA is named by what it says, whatever its state.
+    let name = label.clone();
     let face = match state {
         CtaState::Enabled => accent_button(theme, label),
         // The web's `loading` (078 F-09): full emphasis, the words kept for
@@ -1863,7 +1866,7 @@ pub(crate) fn cta_button(
         // fades as one layer (078 T066) — see `disabled_accent_button`.
         CtaState::Disabled => disabled_accent_button(theme, label),
     };
-    let control = div().id(id).child(face);
+    let control = div().id(id).a11y_button(name).child(face);
     let control = match action.filter(|_| state == CtaState::Enabled) {
         Some(action) => control
             .cursor_pointer()

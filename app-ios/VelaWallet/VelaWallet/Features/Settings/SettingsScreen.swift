@@ -19,17 +19,14 @@
 import SwiftUI
 import UIKit
 
-/// The endpoints and providers pages' live half (spec 056 US2). Eleven events
-/// the executor has answered since 050 and nothing had ever sent.
+/// The endpoints page's live half (spec 056 US2). The provider-key page went
+/// with the feature (owner decision 2026-10-29): its keys were retired into
+/// per-network overrides (`retire_provider_keys`).
 struct SettingsEndpointActions {
     var onEditEndpoint: (String, String) -> Void = { _, _ in }
     var onBlurEndpoint: (String) -> Void = { _ in }
     var onResetEndpoints: () -> Void = {}
-    var onEditProvider: (String, String) -> Void = { _, _ in }
-    var onBlurProvider: (String) -> Void = { _ in }
-    var onTestProvider: (String) -> Void = { _ in }
     var onOpenEndpoints: () -> Void = {}
-    var onOpenProviders: () -> Void = {}
 }
 
 /// The two appearance controls' live half.
@@ -257,7 +254,6 @@ struct SettingsScreen: View {
             .task(id: page) {
                 switch page {
                 case .endpoints: endpointActions?.onOpenEndpoints()
-                case .rpcProviders: endpointActions?.onOpenProviders()
                 case .signingPages: signingActions?.onPagesShown()
                 default: break
                 }
@@ -388,7 +384,6 @@ struct SettingsScreen: View {
         case .networks: (model.networksTitle, model.networksSubtitle)
         case .networkDetail: (networkDetail.title, networkDetail.subtitle)
         case .addNetwork: (model.addNetwork.title, model.addNetwork.subtitle)
-        case .rpcProviders: (model.rpcProviders.title, model.rpcProviders.subtitle)
         case .endpoints: (model.endpoints.title, nil)
         case .storage: (model.storage.title, model.storage.subtitle)
         case .about: (model.about.title, nil)
@@ -413,8 +408,6 @@ struct SettingsScreen: View {
             // from ITS values, not the last one's half-typed URL.
             .id(selectedNetwork)
         case .addNetwork: AddNetworkBody(panel: model.addNetwork, actions: networkActions)
-        case .rpcProviders:
-            RpcProvidersBody(panel: model.rpcProviders, actions: endpointActions, onOpenLink: onOpenLink)
         case .endpoints:
             EndpointsBody(
                 panel: model.endpoints,
@@ -651,7 +644,6 @@ struct SettingsScreen: View {
         switch id {
         case "contacts": onOpenContacts()
         case "networks": page = .networks
-        case "rpc-providers": page = .rpcProviders
         case "add-network": openAddNetwork()
         case "endpoints": page = .endpoints
         case "storage": page = .storage
@@ -816,6 +808,21 @@ private struct NetworkDetailBody: View {
             }
             field(detail.rpc)
             if let callout = detail.callout { SettingsCallout(callout: callout) }
+            // The pool's word on the person's node, beside the field it is
+            // about (owner decision 2026-10-28).
+            if let node = detail.nodeCallout { SettingsCallout(callout: node) }
+            // "Only use my node" — only where the RPC is the person's own.
+            if let only = detail.onlyMine {
+                SettingsSwitchRow(
+                    title: only.title,
+                    detail: only.detail,
+                    isOn: only.on,
+                    onChange: actions.isLive ? chainId.map { chainId in
+                        { on in actions.onOnlyMine(chainId, on) }
+                    } : nil
+                )
+                .accessibilityIdentifier("only-mine")
+            }
             field(detail.explorer)
         }
     }
@@ -998,8 +1005,11 @@ struct SettingsNetworkActions {
     /// commit — on Return or on leaving the field (spec 072).
     var onEditOverride: (Int, String, String) -> Void = { _, _, _ in }
     var onCommitOverride: (Int) -> Void = { _ in }
-    /// A custom network's bin, once the person has said yes.
+    /// A custom network's bin — or a Vela network's, which takes it out of the
+    /// list — once the person has said yes.
     var onRemoveNetwork: (String) -> Void = { _ in }
+    /// "Only use my node" switched, on that network's page.
+    var onOnlyMine: (Int, Bool) -> Void = { _, _ in }
     /// The wizard is opening — it starts empty.
     var onOpenAddNetwork: () -> Void = {}
     var onSearch: (String) -> Void = { _ in }
@@ -1016,92 +1026,6 @@ struct SettingsNetworkActions {
     var onAddSpace: (Bool) -> Void = { _ in }
     /// `false` for fixtures — the fields render as `Text`, exactly as drawn.
     var isLive = false
-}
-
-private struct RpcProvidersBody: View {
-    @Environment(\.theme) private var theme
-    let panel: RpcProvidersModel
-    /// The live half. Absent in the gallery, where the page is a picture of
-    /// keys somebody already entered.
-    var actions: SettingsEndpointActions?
-    var onOpenLink: ((String) -> Void)?
-
-    /// What is being typed, per provider. Local for the reason every field in
-    /// this app is: a field bound straight to a machine loses characters on the
-    /// round trip.
-    @State private var drafts: [String: String] = [:]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Tokens.Space.s32) {
-            Text(panel.description)
-                .typeRole(Typography.flowCaption)
-                .foregroundStyle(theme.fgMuted)
-                // Same as the endpoints page: a provider key is saved on blur,
-                // so tapping the page has to blur.
-                .contentShape(Rectangle())
-                .onTapGesture { SettingsFocus.release() }
-            ForEach(panel.providers) { provider in
-                VStack(alignment: .leading, spacing: Tokens.Space.s12) {
-                    HStack {
-                        Text(provider.name)
-                            .typeRole(Typography.title)
-                            .foregroundStyle(theme.fgBase)
-                        Spacer()
-                        StatusPill(pill: provider.badge)
-                    }
-                    SettingsUrlField(
-                        field: provider.field,
-                        text: actions.map { _ in binding(for: provider.field) },
-                        onCommit: { actions?.onBlurProvider(provider.field.id) },
-                        commitsOnBlur: true,
-                        onAction: actions.map { a in { a.onTestProvider(provider.field.id) } }
-                    )
-                    if let support = provider.support {
-                        Text(support)
-                            .typeRole(Typography.label)
-                            .foregroundStyle(theme.fgSubtle)
-                    }
-                    if let link = provider.link {
-                        // It said "Get an API key →" in link blue and went
-                        // nowhere. Android has opened this URL since 046.
-                        if let url = provider.linkUrl.flatMap(URL.init(string:)) {
-                            Button { UIApplication.shared.open(url) } label: {
-                                Text(link)
-                                    .typeRole(Typography.label)
-                                    .foregroundStyle(theme.infoBase)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityAddTraits(.isLink)
-                        } else {
-                            Text(link)
-                                .typeRole(Typography.label)
-                                .foregroundStyle(theme.infoBase)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /// The field's own action: no key yet → the provider's page to get one;
-    /// a key → test it.
-    private func action(for provider: ProviderCardModel) -> (() -> Void)? {
-        guard let actions else { return nil }
-        if let url = provider.linkUrl {
-            return onOpenLink.map { open in { open(url) } }
-        }
-        return { actions.onTestProvider(provider.field.id) }
-    }
-
-    private func binding(for field: UrlFieldModel) -> Binding<String> {
-        Binding(
-            get: { drafts[field.id] ?? field.value },
-            set: { value in
-                drafts[field.id] = value
-                actions?.onEditProvider(field.id, value)
-            }
-        )
-    }
 }
 
 /// Blur whatever is being typed into, so the field commits.

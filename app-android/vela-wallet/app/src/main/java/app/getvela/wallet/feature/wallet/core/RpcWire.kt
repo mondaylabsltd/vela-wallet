@@ -174,6 +174,15 @@ data class RpcPoolView(
     val own_only_chains: List<Int> = emptyList(),
     /** Of those, the chains whose own node did not answer — never routed around (the person said so). */
     val own_node_unreached_chains: List<Int> = emptyList(),
+    /**
+     * Per routed call (by call id), the endpoints its current pass has still
+     * to try, in the order the core will try them — the endpoint it waits on
+     * already off the list. It is where a hedged read's early ask goes (the
+     * web's `rpc-pool-executor.ts`, the desktop's spec 083 H6), past the
+     * core's cooldowns and back-offs. The web draws it nowhere; it is decoded
+     * so this view is the core's whole view. This shell does not hedge yet.
+     */
+    val pending_urls: Map<String, List<String>> = emptyMap(),
 )
 
 // -- what the shell sends ----------------------------------------------------

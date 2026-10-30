@@ -83,6 +83,57 @@ struct ClearSignFieldWire: Decodable, Equatable {
     /// leaf under `componentsUi.signing`). See `SigningLive.localizedTerms`.
     var labelTerm: String? = nil
     var valueTerm: String? = nil
+    /// Who labelled this row (cs-14): `vela` | `built_in` | `fetched` |
+    /// `selector_db` | `shape`. Absent from an older core: Vela's own.
+    var source: String? = nil
+    /// The address IS this account (cs-2): said "This account".
+    var thisAccount: Bool? = nil
+    /// The token's name is only its own contract's word (cs-4).
+    var tokenNamedByContract: Bool? = nil
+}
+
+/// `ClearReading` — what the certain decode graded a result as (cs-1…cs-18):
+/// where the reading came from, what a description said against it, and the
+/// facts the sheet raises. Absent from an older core: the ungraded reading
+/// (the web's `UNGRADED_READING`), which says nothing new.
+struct ClearReadingWire: Decodable, Equatable {
+    var source: String = "vela"
+    var descriptorOwner: String?
+    var descriptorPath: String?
+    var contractNamedBy: String?
+    var contradictions: [String] = []
+    var selectorName: String?
+    var goesElsewhere = false
+    var dustMinimum = false
+    var allowance = false
+    var allowanceAdds = false
+    var shapeIntent: String?
+    var collectionName: String?
+
+    static let ungraded = ClearReadingWire()
+
+    init() {}
+
+    private enum CodingKeys: String, CodingKey {
+        case source, descriptorOwner, descriptorPath, contractNamedBy, contradictions, selectorName
+        case goesElsewhere, dustMinimum, allowance, allowanceAdds, shapeIntent, collectionName
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        source = (try? c.decodeIfPresent(String.self, forKey: .source)) ?? "vela"
+        descriptorOwner = try? c.decodeIfPresent(String.self, forKey: .descriptorOwner)
+        descriptorPath = try? c.decodeIfPresent(String.self, forKey: .descriptorPath)
+        contractNamedBy = try? c.decodeIfPresent(String.self, forKey: .contractNamedBy)
+        contradictions = (try? c.decodeIfPresent([String].self, forKey: .contradictions)) ?? []
+        selectorName = try? c.decodeIfPresent(String.self, forKey: .selectorName)
+        goesElsewhere = (try? c.decodeIfPresent(Bool.self, forKey: .goesElsewhere)) ?? false
+        dustMinimum = (try? c.decodeIfPresent(Bool.self, forKey: .dustMinimum)) ?? false
+        allowance = (try? c.decodeIfPresent(Bool.self, forKey: .allowance)) ?? false
+        allowanceAdds = (try? c.decodeIfPresent(Bool.self, forKey: .allowanceAdds)) ?? false
+        shapeIntent = try? c.decodeIfPresent(String.self, forKey: .shapeIntent)
+        collectionName = try? c.decodeIfPresent(String.self, forKey: .collectionName)
+    }
 }
 
 /// Where a description came from (spec 081 FR-008) — the ground `verified`
@@ -128,6 +179,8 @@ struct ClearSignResultWire: Decodable, Equatable {
     /// Spec 096 F5: the call signs an order whose amounts live off chain (a
     /// CoW pre-signature); the sheet says so (`warnOrderTerms`).
     var termsOffChain: Bool? = nil
+    /// The certain decode's grading (cs-1…cs-18). Absent: ungraded.
+    var reading: ClearReadingWire? = nil
 }
 
 /// Spec 096 F4: the chain's own coin a lone call sends, exact.

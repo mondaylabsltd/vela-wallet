@@ -1,6 +1,7 @@
 //! Reusable visual components. Everything here takes `&Theme` plus resolved
 //! strings — no i18n, no page state, no window management.
 
+pub mod a11y;
 mod ack_row;
 mod button;
 pub mod dialog;
@@ -17,6 +18,7 @@ mod spinner;
 mod status_badge;
 mod step_slider;
 
+pub use a11y::Accessible;
 pub use ack_row::ack_row;
 pub use button::{
     ButtonState, ButtonVariant, vela_button, vela_button_opts, vela_button_state, welcome_cta,

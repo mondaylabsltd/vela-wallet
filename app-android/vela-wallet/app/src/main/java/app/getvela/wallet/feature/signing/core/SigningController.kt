@@ -101,6 +101,8 @@ class SigningController(
      * The app sleeps; a test hands in a clock it can stop.
      */
     simVerdictTimer: suspend (ms: Long) -> Unit = { kotlinx.coroutines.delay(it) },
+    /** dapp-15: how often a node that could not be reached is asked whether it is back (the web's `NODE_BACK_POLL_MS`). */
+    private val nodeBackPollMs: Long = 5_000L,
 ) {
     /** The machine's signer rows (`AccountsChanged`): the one wallet this request was opened for. */
     private val signers = listOf(wallet)
@@ -243,6 +245,11 @@ class SigningController(
      */
     private fun signCommitted(view: SignView) {
         view.tracker_withdraw?.let(::feedWithdraw)
+        // Closed after approving, and the operation's hand-off arrived since:
+        // its landing is closed before any surface raises it (the web's
+        // answer-time `landingClosed`). Off the commit, never inside it.
+        val closing = view.tracker_handoff?.takeIf { closedAfterApproval && !view.landing_closed }
+        if (closing != null) scope.launch { closeLanding(closing.user_op_hash) }
         view.tracker_handoff?.let { handoff ->
             val fresh = synchronized(handoffLock) {
                 (handoffKey(handoff) !in handedKeys).also { if (it) pendingHandoff = handoff }
@@ -310,6 +317,13 @@ class SigningController(
         suspend fun simulate(chainId: Int, params: List<Any?>): RpcResult? = null
 
         /**
+         * dapp-15: whether the chain answers a plain read (`eth_blockNumber`)
+         * — asked only while the verdict says no node was reached, so the
+         * check runs again by itself once the chain is back.
+         */
+        suspend fun nodeAnswers(chainId: Int): Boolean = false
+
+        /**
          * The core's deltas, judged by the trust machine — its judged view,
          * whole: the judgments and the line it says when nothing moves
          * (`no_change_key`). `null` = could not judge.
@@ -332,7 +346,12 @@ class SigningController(
          * zeros: which case it is, and which sentence, are the core's.
          */
         data class Ready(val judgments: List<TrustSimJudgment>, val noChangeKey: String? = null) : SimOutcome()
-        data class Notice(val risk: ClearRisk, val key: String, val reason: String? = null) : SimOutcome()
+        /**
+         * [recheck] (dapp-15): no node answered — the line is about the
+         * network, not the transaction, so the check is asked again once the
+         * chain answers, and on the person's "Check again".
+         */
+        data class Notice(val risk: ClearRisk, val key: String, val reason: String? = null, val recheck: Boolean = false) : SimOutcome()
 
         /**
          * The simulation is out and has not answered: the sheet keeps its
@@ -538,7 +557,8 @@ class SigningController(
     fun open(request: IncomingRequest) {
         _request.value = request
         scope.launch {
-            _handoff.value = runCatching { spine.handoffFor(wallet.address) }.getOrNull()
+            // R7: the card for THIS request's method — where the core routes it.
+            _handoff.value = runCatching { spine.handoffFor(wallet.address, request.method) }.getOrNull()
         }
         // Each request starts at the stored default: a pick is one-shot.
         speedControl.reset()
@@ -593,27 +613,7 @@ class SigningController(
             // really goes out. From this to `SimSettled` (or its own four
             // seconds) the core holds the confirm; nothing in this shell
             // shuts the confirm on the simulation, or runs a clock for it.
-            if (simParams != null) dispatchSign(SignEvent.SimStarted(request.id))
-            // UNDISPATCHED: it starts now, in this step, and runs to its
-            // first real wait (the node). So an end that needs no wait — no
-            // payload to send, a host with no simulator — is on the sheet,
-            // and told to the core, before this function returns: whatever
-            // was said of the simulation is said in ONE step, and a tap that
-            // follows is never dropped behind a wait that was not on.
-            scope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
-                val outcome = try {
-                    // No simulator on this host: nothing to wait for, the place is given back.
-                    simulated(request.chainId, simParams, feeCalls)
-                } catch (error: Throwable) {
-                    // A reading that threw — or was cancelled with the request
-                    // still open — is not a verdict: "could not check". And
-                    // the wait still ends, below: no way out of the
-                    // simulation leaves the confirm held by it.
-                    if (error !is kotlinx.coroutines.CancellationException) VelaLog.failure("signing.sim", "the simulation's reading failed", error)
-                    SimDeltas.couldNotCheck()
-                }
-                simSettled(request.id, outcome)
-            }
+            simulateOnSheet(request, simParams, feeCalls, again = false)
             // A quote on the sheet is priced again by the fee core itself, once
             // a block (`requote_interval_ms`) and at once when that fails —
             // `stale` is only ever up while it does — and a quote that failed
@@ -689,7 +689,99 @@ class SigningController(
     private fun simSettled(id: String, outcome: SimOutcome?) {
         if (_request.value?.id != id) return
         _sim.value = outcome
+        _simRechecking.value = false
         dispatchSign(SignEvent.SimSettled(id))
+    }
+
+    /**
+     * Run [request]'s simulation and put its verdict on the sheet. The core
+     * is told of every run (`SimStarted` / `SimSettled`): a second run holds
+     * the confirm again for its own short wait, so nobody signs over a
+     * verdict about to change. A verdict about the NETWORK (dapp-15, the
+     * notice's `recheck` — no node answered) is asked again by itself once
+     * the chain answers a plain read, and on the person's "Check again"
+     * ([simAgain]); the web's `simulateOnSheet`.
+     */
+    private fun simulateOnSheet(request: IncomingRequest, simParams: List<Any?>?, feeCalls: List<FeeCall>, again: Boolean) {
+        nodeWatch?.cancel()
+        nodeWatch = null
+        _simAgain.value = false
+        // Again: the last verdict stays on the sheet, marked stale, until the
+        // new one lands — never back to an empty place.
+        if (again) _simRechecking.value = true else _sim.value = SimOutcome.Pending
+        // PR 3: the confirm waits for this verdict, and the wait is the
+        // core's (`sign_request`): it is told HERE, in the step that
+        // opens the request and sends the simulation — after
+        // `RequestArrived`, before anything is drawn — and only when one
+        // really goes out. From this to `SimSettled` (or its own four
+        // seconds) the core holds the confirm; nothing in this shell
+        // shuts the confirm on the simulation, or runs a clock for it.
+        if (simParams != null) dispatchSign(SignEvent.SimStarted(request.id))
+        // UNDISPATCHED: it starts now, in this step, and runs to its
+        // first real wait (the node). So an end that needs no wait — no
+        // payload to send, a host with no simulator — is on the sheet,
+        // and told to the core, before this function returns: whatever
+        // was said of the simulation is said in ONE step, and a tap that
+        // follows is never dropped behind a wait that was not on.
+        scope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+            val outcome = try {
+                // No simulator on this host: nothing to wait for, the place is given back.
+                simulated(request.chainId, simParams, feeCalls)
+            } catch (error: Throwable) {
+                // A reading that threw — or was cancelled with the request
+                // still open — is not a verdict: "could not check". And
+                // the wait still ends, below: no way out of the
+                // simulation leaves the confirm held by it.
+                if (error !is kotlinx.coroutines.CancellationException) VelaLog.failure("signing.sim", "the simulation's reading failed", error)
+                SimDeltas.couldNotCheck()
+            }
+            simSettled(request.id, outcome)
+            if (simParams == null || (outcome as? SimOutcome.Notice)?.recheck != true || _request.value?.id != request.id) return@launch
+            simRerun = { simulateOnSheet(request, simParams, feeCalls, again = true) }
+            _simAgain.value = true
+            nodeWatch = scope.launch {
+                while (true) {
+                    kotlinx.coroutines.delay(nodeBackPollMs)
+                    if (_request.value?.id != request.id || _closed.value) return@launch
+                    val back = runCatching { ports.nodeAnswers(request.chainId) }.getOrDefault(false)
+                    if (back) {
+                        VelaLog.event("signing.sim", "the chain answers again: checked again", "chain" to request.chainId)
+                        simAgain()
+                        return@launch
+                    }
+                }
+            }
+        }
+    }
+
+    /** dapp-15: the run "Check again" starts — `null` when there is nothing to check again. */
+    @Volatile
+    private var simRerun: (() -> Unit)? = null
+
+    /** The watch that asks whether a node that could not be reached is back. */
+    @Volatile
+    private var nodeWatch: kotlinx.coroutines.Job? = null
+
+    private val _simAgain = MutableStateFlow(false)
+
+    /** dapp-15: the verdict on the sheet may be checked again ("Check again"). */
+    val simAgainOffered: StateFlow<Boolean> = _simAgain
+
+    private val _simRechecking = MutableStateFlow(false)
+
+    /** dapp-15: a new check is out; the verdict on the sheet is the last one, stale. */
+    val simRechecking: StateFlow<Boolean> = _simRechecking
+
+    /**
+     * dapp-15: "Check again" on a could-not-check line whose node nobody
+     * reached — the simulation runs again; ignored while one is out or when
+     * the verdict is not about the network.
+     */
+    fun simAgain() {
+        if (_simRechecking.value) return
+        val rerun = simRerun ?: return
+        simRerun = null
+        rerun()
     }
 
     @Volatile
@@ -720,7 +812,7 @@ class SigningController(
         // One request, one controller: its fee sessions end with it — their
         // re-pricing and the core's re-asks after a failure — and so does its
         // ear on the tracker.
-        scope.launch { closed.first { it }; speedControl.dispose(); following?.cancel() }
+        scope.launch { closed.first { it }; speedControl.dispose(); following?.cancel(); nodeWatch?.cancel() }
     }
 
     fun approve() = dispatchSign(SignEvent.ApproveTapped(approveOpts(fee.value, clear.value, guard.value, _sim.value)))
@@ -746,7 +838,34 @@ class SigningController(
         val now = sign.value
         if (now.is_signing || now.is_submitting || now.pending_op_hash != null) closedAfterApproval = true
         dispatchSign(SignEvent.SwipeDismissed)
+        // The ✕ after approving closes the landing too: the operation goes
+        // on, and nothing of it is raised again (the web's `closedInFlight`).
+        if (closedAfterApproval) now.tracker_handoff?.let { closeLanding(it.user_op_hash, now.landing_closed) }
     }
+
+    /** The operation whose landing this controller last told the core was closed. */
+    @Volatile
+    private var landingClosedFor: String? = null
+
+    /**
+     * Round 3/5: the person closed the landing raised for [userOpHash] — its
+     * ✕ after approving. Told to the core (`landing_closed`), which keeps it
+     * in the view ([SignView.landing_closed]) for as long as the hand-off
+     * names that operation, so nothing raises the finished transaction again.
+     * Once per operation.
+     */
+    fun closeLanding(userOpHash: String, alreadyClosed: Boolean = false) {
+        if (alreadyClosed || landingClosedFor.equals(userOpHash, ignoreCase = true)) return
+        landingClosedFor = userOpHash
+        dispatchSign(SignEvent.LandingClosed(userOpHash))
+    }
+
+    /**
+     * Whether the ending of this request stays off screen: the person closed
+     * it after approving, as this controller saw it or as the core keeps it
+     * (`landing_closed`).
+     */
+    val landingClosed: Boolean get() = closedAfterApproval || sign.value.landing_closed
 
     /**
      * Spec 079: the person closed the sheet after approving. The operation goes
@@ -765,7 +884,70 @@ class SigningController(
     fun guardRevoke() = guardHost.dispatch(GuardEvent.RevokeChosen, GuardEvent.serializer())
     fun guardGrant() = guardHost.dispatch(GuardEvent.GrantDeliberatelyChosen, GuardEvent.serializer())
 
+    /** The descriptor service's host — what a fetched description's line names (cs-14). */
+    val descriptorHost: String
+        get() = runCatching { java.net.URI(ports.dataBase()).host }.getOrNull().orEmpty()
+
+    // -- the agent's opinion (spec 103) ----------------------------------------------
+
+    private val _advice = MutableStateFlow<app.getvela.wallet.feature.signing.SigningAdvice.Accepted?>(null)
+
+    /** The AI agent's opinion on THIS request, as the core accepted it — it goes with the request. */
+    val advice: StateFlow<app.getvela.wallet.feature.signing.SigningAdvice.Accepted?> = _advice
+
+    /** The review on this sheet now, as the agent reads it (`vela_review`) — JSON. */
+    fun review(): String? = app.getvela.wallet.feature.signing.SigningAdvice.currentReview(signJson.value, wallet.address)
+
+    /**
+     * `vela_advise` on this sheet: the agent's arguments ([argsJson]),
+     * judged by the core against [worldJson] and the review on screen (its
+     * digest and fee). An accepted opinion is held for this request and drawn
+     * in its own card; a refusal says why, and nothing changes.
+     */
+    fun advise(worldJson: String, argsJson: String): app.getvela.wallet.feature.signing.SigningAdvice.Answer {
+        val review = review()
+        val answer = app.getvela.wallet.feature.signing.SigningAdvice.accept(
+            worldJson,
+            app.getvela.wallet.feature.signing.SigningAdvice.digestOf(review),
+            app.getvela.wallet.feature.signing.SigningAdvice.reviewFee(review),
+            argsJson,
+        )
+        if (answer is app.getvela.wallet.feature.signing.SigningAdvice.Answer.Ok) _advice.value = answer.advice
+        return answer
+    }
+
+    /** cs-17: one batch leg's deliberate "Allow all" — the core's consent for THAT leg alone. */
+    fun guardLegGrant(index: Int) = guardHost.dispatch(GuardEvent.LegGrantDeliberatelyChosen(index), GuardEvent.serializer())
+
+    /**
+     * A chip the drawn editor emitted — the single approval's ([leg] `null`)
+     * or batch leg [leg]'s — in the guard's vocabulary ([chipEvent]); a chip
+     * id the guard has no event for is dropped.
+     */
+    fun guardChip(id: String, leg: Int? = null) {
+        chipEvent(id, leg)?.let { guardHost.dispatch(it, GuardEvent.serializer()) }
+    }
+
     companion object {
+        /**
+         * The web's `guardChip`: a grant-all's "Allow all" is the deliberate
+         * tap (`grant_deliberately_chosen`, or `leg_grant_deliberately_chosen`
+         * for a batch leg); every other chip picks its preset — a batch leg's
+         * card talks to its OWN leg, since the core ignores the single
+         * approval's `preset_selected` on a batch.
+         */
+        fun chipEvent(id: String, leg: Int?): GuardEvent? {
+            if (id == "grant") return if (leg == null) GuardEvent.GrantDeliberatelyChosen else GuardEvent.LegGrantDeliberatelyChosen(leg)
+            val mode = when (id) {
+                "requested" -> GuardEditorMode.Requested
+                "balance" -> GuardEditorMode.Balance
+                "custom" -> GuardEditorMode.Custom
+                "revoke" -> GuardEditorMode.Revoke
+                else -> return null
+            }
+            return if (leg == null) GuardEvent.PresetSelected(mode) else GuardEvent.LegPresetSelected(leg, mode)
+        }
+
         /**
          * The tracker's entry as the core is told it: its status and tx hash,
          * and — PR 2 note 9 — why the relay refused it (`refusal`), so the

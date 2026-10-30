@@ -48,22 +48,21 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 
 # wasm-opt for the shipped module (rust/scripts/build-web.mjs runs
-# `wasm-pack build --release`). wasm-pack's default is `-O`, which binaryen
-# treats as `-Os`. Measured on this crate with wasm-pack's binaryen 117
-# (2026-10-30, 7.70 MB `-Os` build; brotli = q11, 2^24 window, as
-# app-web/vela-wallet/scripts/wasm-brotli.mjs ships it):
+# `wasm-pack build --release`). `-Os` is what wasm-pack's default `-O` already
+# meant (binaryen 117: byte-identical output); it is spelled out so the choice
+# is visible and the measurements behind it stay next to it. Measured
+# 2026-10-30 on this crate; brotli = q11, 2^24 window, as
+# app-web/vela-wallet/scripts/wasm-brotli.mjs ships it; CPU time in Node:
 #
-#   -O / -Os     7,700,713 raw   1,811,221 br
-#   -Oz          7,429,898 raw   1,815,573 br   (-271 KB raw, +4.4 KB br)
-#   -Oz -Os      7,426,095 raw   1,811,668 br   (-275 KB raw, +0.4 KB br)
+#             raw         br          cold start: compile + first calls
+#   -Os       7,700,713   1,811,221   ~93 ms
+#   -Oz       7,429,898   1,815,573   ~100 ms
+#   -Oz -Os   7,426,095   1,811,668   ~105 ms
 #
-# `-Oz`'s tighter inlining leaves code brotli packs slightly worse; the
-# following `-Os` pass recovers that, so the pair takes the raw saving at no
-# wire cost. No measurable speed change (keccak / ABI decode / Safe address /
-# P-256 recovery / i18n / a Crux dispatch, CPU time). Size optimisation only:
-# no pass that assumes traps never happen (`-tnh`) or that low memory is
-# unused, so the module behaves exactly as before. Features come from the
-# module's own `target_features` section.
+# `-Oz` is 3.6% smaller raw but the same on the wire, the same to compile, and
+# 5-15% slower on a cold page's first calls (the I18n engine's first lookup
+# doubles). The download is the brotli'd bytes, so raw alone buys nothing a
+# reader feels; `-Os` stays. Hot-call speed is the same on all three.
 #
 # rustc's `opt-level` stays the workspace's "z". Against it (same source,
 # `-Os` here): "s" builds 9,781,884 raw / 2,094,292 br (+25% / +14%) and "3"
@@ -71,4 +70,4 @@ serde_json = { workspace = true }
 # microseconds per call (a Crux dispatch 38 -> 25 µs, keccak 20 -> 14 µs,
 # P-256 recovery 6.3 -> 5.4 ms) — against 257 KB more on every cold load.
 [package.metadata.wasm-pack.profile.release]
-wasm-opt = ["-Oz", "-Os"]
+wasm-opt = ["-Os"]

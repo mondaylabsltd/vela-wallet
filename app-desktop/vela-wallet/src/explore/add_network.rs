@@ -35,6 +35,12 @@ pub struct AddNetworkSheet {
     pub add: Option<SharedString>,
     /// Retry after "unable to verify".
     pub retry: Option<SharedString>,
+    /// dapp-13: after "unable to verify", "Add without verifying" — and,
+    /// once opened, the warning and its explicit confirm
+    /// (`NetEvent::DappAddApprovedUnverified`). Only where the core allows
+    /// it (`can_add_unverified`): an RPC that never answered for another
+    /// chain. `(open, warning, confirm)`.
+    pub unverified: Option<(SharedString, SharedString, SharedString)>,
     /// "Open Chain Setup Tool" and where it goes — the core's `setup_url`
     /// (`…/chain-setup?chain=<id>`), only for a refused chain whose missing
     /// contracts can be deployed. Never for one with no P-256 verifier:
@@ -82,6 +88,19 @@ pub fn sheet(view: &NetDappAddView, loc: &Loc) -> AddNetworkSheet {
         checks: false,
         add: None,
         retry: None,
+        unverified: view.can_add_unverified.then(|| {
+            (
+                loc.t("connect.browser.addUnverified"),
+                loc.t_texts(
+                    "connect.browser.addUnverifiedWarning",
+                    &[
+                        ("host", view.rpc_host.as_deref().unwrap_or_default()),
+                        ("chainId", &chain),
+                    ],
+                ),
+                loc.t("connect.browser.addUnverifiedConfirm"),
+            )
+        }),
         setup_tool: None,
         dismiss: cancel.clone(),
     };

@@ -57,7 +57,14 @@ internal class AgentPerform(private val wallet: AgentWallet, private val agent: 
             "sign_out" -> DONE.also { wallet.session.signOut() }
             "set_preference" -> setPreference(action.optJSONObject("preference") ?: JSONObject())
             "save_contact" -> DONE.also {
-                wallet.contacts.save(ContactSaveInput(address = text("address"), name = text("name")))
+                // Absent keeps the note; given (an empty one clears it), it is the note (web `perform.ts`).
+                wallet.contacts.save(
+                    ContactSaveInput(
+                        address = text("address"),
+                        name = text("name"),
+                        note = if (action.has("note") && !action.isNull("note")) text("note") else null,
+                    ),
+                )
             }
             "delete_contact" -> DONE.also { wallet.contacts.delete(action.optString("address")) }
             "save_group" -> DONE.also {
@@ -111,10 +118,16 @@ internal class AgentPerform(private val wallet: AgentWallet, private val agent: 
             "add_network" -> addNetwork(chainId, text("rpc_url").takeIf { !action.isNull("rpc_url") && it.isNotEmpty() })
             "set_network_endpoint" -> setNetworkEndpoint(chainId, action.optString("field"), text("url"))
             "remove_network" -> DONE.also {
+                // The row that can go: one the person added, or a Vela network
+                // shown on their word — which the core takes out of the lists,
+                // its settings kept (`delete_confirmed` on its id).
                 val row = networks().optJSONArray("networks").objects()
-                    .firstOrNull { it.optLong("chain_id") == chainId && it.optBoolean("is_custom") }
+                    .firstOrNull { it.optLong("chain_id") == chainId && (it.optBoolean("is_custom") || it.optBoolean("optional")) }
                 wallet.settings.deleteNetwork(row?.optString("id") ?: "custom-$chainId")
             }
+            // "Only use my node", as its switch sends it (the core offers it
+            // only where the RPC is the person's own, and refuses the rest).
+            "set_only_my_node" -> DONE.also { wallet.settings.setOnlyMine(chainId, action.optBoolean("on")) }
             "set_service_endpoint" -> setServiceEndpoint(action.optString("field"), text("url"))
             "reset_service_endpoints" -> DONE.also { wallet.settings.resetEndpoints() }
             // -- Explore (spec 107): the browser's own calls, as its controls make them.

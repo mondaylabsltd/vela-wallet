@@ -131,6 +131,16 @@ pub fn detail(
             .map(|item| crate::wallet::live::activity_row(item, wallet, hidden))
             .collect(),
         activity_empty,
+        // The saved record's note, trimmed; none for a blank one (the web's
+        // `contact.note.trim() !== ''`).
+        note: view
+            .contacts
+            .iter()
+            .find(|saved| saved.address.eq_ignore_ascii_case(&address))
+            .and_then(|saved| saved.note.as_deref())
+            .map(str::trim)
+            .filter(|note| !note.is_empty())
+            .map(|note| SharedString::from(note.to_owned())),
     })
 }
 
