@@ -1134,6 +1134,7 @@ pub struct WalletPage {
     group_form_focus: gpui::FocusHandle,
     contact_form_name_focus: gpui::FocusHandle,
     contact_form_address_focus: gpui::FocusHandle,
+    contact_form_note_focus: gpui::FocusHandle,
     /// D3, live: WHICH holding the asset strip opened, as an index into the
     /// core's sorted `tokens`.
     ///
@@ -1911,6 +1912,7 @@ impl WalletPage {
             group_form_focus: cx.focus_handle(),
             contact_form_name_focus: cx.focus_handle(),
             contact_form_address_focus: cx.focus_handle(),
+            contact_form_note_focus: cx.focus_handle(),
             locale: gpui::SharedString::from(loc.language().to_owned()),
             explore,
             signing,
@@ -2794,6 +2796,7 @@ impl WalletPage {
             .on_key_down({
                 let name = name_focus.clone();
                 let address = address_focus.clone();
+                let note = self.contact_form_note_focus.clone();
                 let editing = form.editing;
                 move |event: &gpui::KeyDownEvent, window, cx| {
                     let ks = &event.keystroke;
@@ -2804,23 +2807,23 @@ impl WalletPage {
                     {
                         return;
                     }
-                    // An edited contact's address is fixed and not a field, so
-                    // there is nowhere for Tab to go.
-                    if editing {
-                        return;
-                    }
-                    // Two fields, so Tab is a toggle: pressing it twice is
-                    // where you started, and there is no separate backward
-                    // move to bind. ⇧Tab is the same toggle when it arrives —
-                    // which on this gpui it does not: a keystroke with no
-                    // `key_char` (⇧Tab has none) goes to the input context
-                    // first and is swallowed there, so the app never sees it
+                    // The form's fields in order — name, the address (not a
+                    // field on an edit: it is fixed), the note — and Tab goes
+                    // round them. ⇧Tab would go back, when it arrives — which
+                    // on this gpui it does not: a keystroke with no `key_char`
+                    // (⇧Tab has none) goes to the input context first and is
+                    // swallowed there, so the app never sees it
                     // (`gpui_macos/window.rs::handle_key_event`).
-                    if name.is_focused(window) {
-                        address.focus(window, cx);
+                    let order: Vec<&gpui::FocusHandle> = if editing {
+                        vec![&name, &note]
                     } else {
-                        name.focus(window, cx);
-                    }
+                        vec![&name, &address, &note]
+                    };
+                    let at = order
+                        .iter()
+                        .position(|handle| handle.is_focused(window))
+                        .map_or(0, |at| (at + 1) % order.len());
+                    order[at].focus(window, cx);
                     cx.stop_propagation();
                 }
             })
@@ -2895,6 +2898,42 @@ impl WalletPage {
             ));
         }
 
+        // Round 3: the note — optional, only the person sees it, lines kept
+        // (the web's `<textarea>`), at most the core's 280 characters.
+        card = card.child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(6.))
+                .child(
+                    div()
+                        .text_size(theme::text_label())
+                        .text_color(theme.fg_muted)
+                        .child(s.note_label.clone()),
+                )
+                .child(crate::ui::text_area(
+                    "contact-form-note",
+                    theme,
+                    &form.note,
+                    s.note_placeholder.clone(),
+                    3,
+                    false,
+                    &self.contact_form_note_focus,
+                    window,
+                    {
+                        let page = cx.entity();
+                        move |text: String, _: &mut Window, cx: &mut gpui::App| {
+                            page.update(cx, |this: &mut Self, cx| {
+                                if let Some(form) = this.contact_form.as_mut() {
+                                    form.note = text.chars().take(NOTE_MAX_CHARS).collect();
+                                }
+                                cx.notify();
+                            });
+                        }
+                    },
+                )),
+        );
+
         let save = self.form_save(
             theme,
             "contact-form-save",
@@ -2913,7 +2952,9 @@ impl WalletPage {
                     Action::SaveContact {
                         address: form.address,
                         name: form.name.trim().to_owned(),
-                        note: None,
+                        // Always said, as the web's form says it: an
+                        // emptied note is cleared, not kept.
+                        note: Some(clean_note(&form.note)),
                     },
                     cx,
                     move |_, cx| {
@@ -2946,6 +2987,7 @@ impl WalletPage {
             address: contact.address.clone(),
             name: contact.name.clone().unwrap_or_default(),
             unsaved: contact.source == vela_core::app::contacts::ContactSource::Auto,
+            note: contact.note.clone().unwrap_or_default(),
         });
         self.menu = None;
         window.focus(&self.contact_form_name_focus, cx);
@@ -3876,6 +3918,43 @@ impl WalletPage {
 
     // -- column 1: sidebar ---------------------------------------------------
 
+    /// One of the four sections, as the sidebar's row (or ⌘1–⌘4, N-D2)
+    /// opens it. A section this build does not offer is not opened.
+    pub(crate) fn go_to_section(&mut self, destination: Section, cx: &mut Context<Self>) {
+        if !destination.available() {
+            return;
+        }
+        if destination != Section::Settings {
+            // Leaving 设置 leaves the accounts panel with it.
+            self.close_switcher(cx);
+        }
+        // RJ18: a signing column left for another section is
+        // hidden, not closed; it comes back with Explore.
+        if self.panel == PanelId::Signing {
+            self.signing_hidden = true;
+        }
+        let kept = self.signing_hidden && self.signing_to_show();
+        let from = self.section;
+        self.section = destination;
+        self.panel = panel_after_switch(destination, kept);
+        if self.panel == PanelId::Signing {
+            self.signing_hidden = false;
+        }
+        self.menu = None;
+        if destination == Section::Explore {
+            self.land_in_explore(from, cx);
+        }
+        // A visit refreshes the send history the suggestions come from — a
+        // send may have landed since — re-reading that alone and never
+        // unloading the book (the web's `history_changed` on the page).
+        if destination == Section::Contacts && from != Section::Contacts {
+            resident::resident::<Contacts>(cx).update(cx, |book, cx| {
+                book.dispatch(vela_core::app::contacts::Event::HistoryChanged, cx);
+            });
+        }
+        cx.notify();
+    }
+
     fn sidebar(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
         let s = &self.strings;
         // Sunken in both themes, as the web's `.sidebar` is — dark sunken is
@@ -3916,27 +3995,7 @@ impl WalletPage {
             );
             nav_col = nav_col.child(match destination {
                 Some(destination) => row.on_click(cx.listener(move |this, _, _, cx| {
-                    if destination != Section::Settings {
-                        // Leaving 设置 leaves the accounts panel with it.
-                        this.close_switcher(cx);
-                    }
-                    // RJ18: a signing column left for another section is
-                    // hidden, not closed; it comes back with Explore.
-                    if this.panel == PanelId::Signing {
-                        this.signing_hidden = true;
-                    }
-                    let kept = this.signing_hidden && this.signing_to_show();
-                    let from = this.section;
-                    this.section = destination;
-                    this.panel = panel_after_switch(destination, kept);
-                    if this.panel == PanelId::Signing {
-                        this.signing_hidden = false;
-                    }
-                    this.menu = None;
-                    if destination == Section::Explore {
-                        this.land_in_explore(from, cx);
-                    }
-                    cx.notify();
+                    this.go_to_section(destination, cx);
                 })),
                 None => row,
             });
@@ -6106,6 +6165,27 @@ impl WalletPage {
                 model.address_full.clone(),
                 copy_address,
             ))
+            // Round 3: the person's note on this contact — its label and the
+            // text, lines kept, only when there is one (the web's detail).
+            .children(model.note.clone().map(|note| {
+                div()
+                    .id("contact-note")
+                    .flex()
+                    .flex_col()
+                    .gap(px(4.))
+                    .child(
+                        div()
+                            .text_size(theme::text_label())
+                            .text_color(theme.fg_subtle)
+                            .child(self.contacts.note_label.clone()),
+                    )
+                    .child(
+                        div()
+                            .text_size(theme::text_body())
+                            .text_color(theme.fg_base)
+                            .child(crate::ui::prose(note)),
+                    )
+            }))
             .child(div().h(px(1.)).bg(theme.divider))
             .child(activity)
             .child(footer)
@@ -6760,6 +6840,12 @@ impl WalletPage {
         let Some(account) = money::active_account() else {
             return;
         };
+        // The picker's suggestions come from the send history, which may
+        // have grown since the book was read: re-read that alone (the web's
+        // `openSend`, `history_changed`).
+        resident::resident::<Contacts>(cx).update(cx, |book, cx| {
+            book.dispatch(vela_core::app::contacts::Event::HistoryChanged, cx);
+        });
         let display = self.send_display(cx);
         let window_handle = self.window_handle;
         let host = cx.new(|cx| SendHost::open(account, params, display, window_handle, cx));
@@ -23300,6 +23386,33 @@ struct PickDialog {
     query: String,
 }
 
+/// The longest note a contact may carry — the core's
+/// (`intents::NOTE_MAX_CHARS`), which refuses a longer one.
+const NOTE_MAX_CHARS: usize = 280;
+
+/// A typed note as it is saved (the web's `cleanNote`): lines and tabs kept,
+/// the control and bidirectional characters the core refuses left out,
+/// trimmed.
+fn clean_note(note: &str) -> String {
+    note.chars()
+        .filter(|c| {
+            *c == '\n'
+                || *c == '\t'
+                || !(c.is_control()
+                    || matches!(
+                        *c,
+                        '\u{061c}'
+                            | '\u{200e}'
+                            | '\u{200f}'
+                            | '\u{202a}'..='\u{202e}'
+                            | '\u{2066}'..='\u{2069}'
+                    ))
+        })
+        .collect::<String>()
+        .trim()
+        .to_owned()
+}
+
 /// The add/edit contact sheet's draft.
 #[derive(Clone, Default)]
 struct ContactForm {
@@ -23310,6 +23423,9 @@ struct ContactForm {
     /// The row is the core's history suggestion (`ContactSource::Auto`):
     /// saving is what makes it a contact, and the title says so.
     unsaved: bool,
+    /// Round 3: the note as typed, `""` for none — saved through the
+    /// intents as the web saves it (`cleanNote`: lines kept, trimmed).
+    note: String,
 }
 
 /// One allowance card that is a control on the live sheet: what each of its
