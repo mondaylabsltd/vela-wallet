@@ -34,8 +34,6 @@ import kotlinx.serialization.Serializable
 enum class RpcSource {
     @SerialName("user") User,
 
-    @SerialName("provider") Provider,
-
     @SerialName("default") Default,
 
     @SerialName("public") Public,
@@ -170,6 +168,12 @@ data class RpcPoolView(
      * RPC banner keeps reading [failed_chains] only.
      */
     val unreached_chains: List<Int> = emptyList(),
+    /** Chains answered only by a fallback endpoint this session (the home's "using a backup" line). */
+    val fallback_chains: List<Int> = emptyList(),
+    /** Chains where "Only use my node" is in force. */
+    val own_only_chains: List<Int> = emptyList(),
+    /** Of those, the chains whose own node did not answer — never routed around (the person said so). */
+    val own_node_unreached_chains: List<Int> = emptyList(),
 )
 
 // -- what the shell sends ----------------------------------------------------
@@ -283,6 +287,13 @@ sealed class RpcShellResult {
         val chain_id: Int,
         val rpc_endpoints: List<RpcEndpointSeed> = emptyList(),
         val bundler_endpoints: List<RpcEndpointSeed> = emptyList(),
+        /**
+         * The person's "Only use my node" for this chain, as saved with its
+         * network config — a fact of config; what it means (and that it means
+         * nothing without an endpoint of theirs) is the core's
+         * (`rpc_pool::own_only_pool`).
+         */
+        val own_only: Boolean = false,
         val now_ms: Double,
     ) : RpcShellResult()
 

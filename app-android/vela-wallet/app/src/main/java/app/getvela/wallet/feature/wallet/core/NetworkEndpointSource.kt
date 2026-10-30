@@ -79,11 +79,12 @@ class NetworkEndpointSource(
             rpc = listOfNotNull(
                 own?.let { url ->
                     // A custom network's URL is one the person typed, which is
-                    // the highest tier the core knows. A built-in's is the
-                    // default we ship.
+                    // the highest tier the core knows — and so is a built-in's
+                    // RPC the person set themselves (`own_rpc`), the endpoint
+                    // "Only use my node" keeps. Otherwise it is the default we ship.
                     RpcEndpointSeed(
                         url = url,
-                        source = if (row.is_custom) RpcSource.User else RpcSource.Default,
+                        source = if (row.is_custom || row.own_rpc) RpcSource.User else RpcSource.Default,
                     )
                 },
             ) + public.map { RpcEndpointSeed(url = it, source = RpcSource.Public) },
@@ -91,6 +92,7 @@ class NetworkEndpointSource(
                 row.bundler_url.takeIf { it.isNotBlank() }
                     ?.let { RpcEndpointSeed(url = it, source = RpcSource.Builtin) },
             ),
+            ownOnly = row.only_mine,
         )
     }
 }

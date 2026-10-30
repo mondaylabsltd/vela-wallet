@@ -182,6 +182,11 @@ class BalanceExecutor(
             read_chain_ids = holdings.read,
             internal_chain_ids = holdings.internal,
             registry_chain_ids = holdings.registry,
+            // The pool's verdicts again (the web's `getOwnNodeUnreachedChains`
+            // / `getFallbackChains`): a failed chain whose own node is the one
+            // that did not answer, and the chains read through a fallback.
+            own_node_chain_ids = holdings.failed.filter { it in pool.view.value.own_node_unreached_chains },
+            fallback_chain_ids = pool.view.value.fallback_chains,
             now_ms = now(),
         )
     }
