@@ -3073,6 +3073,14 @@ struct RootView: View {
                     // draw: a tap handled after another review took its
                     // place confirms nothing.
                     onConfirm: { [drawn = send.view?.reviewDigest] in confirmTransfer(review: drawn) },
+                    // Round 4 (send-5): nothing was sent — back to the confirm
+                    // with a fresh quote, nonce and signature.
+                    onReceiptRetry: {
+                        send.sendAgain()
+                        fees.refresh()
+                    },
+                    onRiskRetry: { send.retryRiskCheck() },
+                    onAddNetworkTapped: { chainId in send.addNetworkTapped(chainId: chainId) },
                     onReceiptDone: {
                         // One button, two meanings, the core's rule: a prompt
                         // that is up is cancelled at its checkpoint; anything

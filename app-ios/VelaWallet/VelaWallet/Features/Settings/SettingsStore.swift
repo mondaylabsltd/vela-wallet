@@ -436,6 +436,37 @@ final class SettingsStore {
         ])
     }
 
+    /// Send's "Add this network" (round 4): add the chain by id, and say how
+    /// it went as the send machine's `SendAddNetworkOutcome` — the web's
+    /// `addCustomNetworkByChainId`. A check that could not be made is not a
+    /// refusal (`error`: nothing is said against the network); a stop the
+    /// check raised is `not_compatible`, its words left on the wizard.
+    func addNetworkForSend(chainId: Int, waitMs: Double = 30_000) async -> [String: Any] {
+        openNetworks()
+        let started = Date()
+        while !isLoaded, Date().timeIntervalSince(started) * 1000 < waitMs {
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+        func listed() -> Bool { networkAdmin?.networks.contains { $0.chainId == chainId } == true }
+        addByChainId(chainId)
+        while Date().timeIntervalSince(started) * 1000 < waitMs {
+            if let wizard = networkAdmin?.wizard {
+                if wizard.phase == .error, let error = wizard.error {
+                    switch error {
+                    case .notFound: return ["type": "not_found"]
+                    case .alreadyAdded:
+                        return listed() ? ["type": "added"] : ["type": "not_compatible", "detail": NSNull()]
+                    case .checkFailed: return ["type": "error"]
+                    default: return ["type": "not_compatible", "detail": NSNull()]
+                    }
+                }
+                if wizard.phase == .idle, listed() { return ["type": "added"] }
+            }
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+        return ["type": "error"]
+    }
+
     /// ST12 opened. The core probes all four fields.
     func openEndpoints() { dispatch(["type": "endpoints_opened"]) }
 

@@ -353,10 +353,18 @@ final class AppGraph {
                 refreshBalances: { [weak wallet] in wallet?.refresh(pull: false) },
                 // The rows changed on disk — written ahead, admitted or taken
                 // back (spec 082 RJ1): the feed reads the store again.
-                recordsPersisted: { [weak activityStore] in activityStore?.reconciled() }
+                recordsPersisted: { [weak activityStore] in activityStore?.reconciled() },
+                // Send's "Add this network" (round 4, F6/F27): the networks
+                // machine adds the chain by id, as Settings' scan path does,
+                // and its answer is the send machine's outcome.
+                addNetwork: { [weak settingsStore] chainId in
+                    await settingsStore?.addNetworkForSend(chainId: chainId) ?? ["type": "error"]
+                }
             )
         )
+        sendExecutor.installChainAnswers()
         let sendStore = SendStore(executor: sendExecutor)
+        sendStore.onChainAnswered = { [weak feeStore] in feeStore?.refresh() }
         self.send = sendStore
         // The tracker's verdict, back to the SEND machine — the other half of
         // this wallet watching the same operation.

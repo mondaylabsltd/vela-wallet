@@ -50,6 +50,14 @@ final class SendStore {
     /// The passkey's ceremony moved — `started` (its prompt is up) or
     /// `signed` — for the agent's transfers to follow (spec 104).
     var onCeremony: ((String) -> Void)?
+    /// r5reg-3: the network answered again after a submit it did not answer
+    /// (`chain_answered`) — the app re-asks the fee, as the web does.
+    var onChainAnswered: (() -> Void)?
+    /// How often a network that did not answer is asked again (the web's
+    /// `watchChainRecovery`: every 5 s). A test seam.
+    var chainRecoveryEveryMs: Double = 5_000
+    /// The watch over that network, while the confirm says it did not answer.
+    private var chainRecovery: (chainId: Int, task: Task<Void, Never>)?
     /// The display currency the open journey's machine was last told —
     /// at `open`, then at every change after it (`displayStands`). `nil`
     /// with no journey open.
@@ -114,6 +122,11 @@ final class SendStore {
         // round. Display-only: the core takes it only while that load is out.
         executor.ports.tokensPartial = { [weak self] tokens in
             self?.dispatch(["type": "tokens_partial", "tokens": tokens])
+        }
+        // r5reg-3: the reads before the passkey are slow — the confirm says
+        // for how long, and whether the network is busy (`submit_slow`).
+        executor.ports.submitSlow = { [weak self] elapsedMs, busy in
+            self?.dispatch(["type": "submit_slow", "elapsed_ms": elapsedMs.rounded(), "busy": busy])
         }
         // Leaving re-arms `Open`, and it is the CORE's leaving that counts —
         // not a view disappearing. SwiftUI tears a view down and rebuilds it
@@ -445,6 +458,21 @@ final class SendStore {
     /// when there is nothing to re-check. Drawn by Phase 2's confirm line.
     func retryRiskCheck() { dispatch(["type": "retry_risk_check"]) }
 
+    /// Round 4: "Send again" / "Review again" on a receipt that says nothing
+    /// was sent — back to the confirm with a fresh quote, nonce and signature.
+    /// The caller re-asks the fee (`FeeStore.refresh`), as the web does.
+    func sendAgain() { dispatch(["type": "send_again"]) }
+
+    /// r5reg-3: the network that did not answer before the passkey answers
+    /// now — the confirm's error clears and Try again is worth pressing. The
+    /// caller re-asks the fee.
+    func chainAnswered(chainId: Int) { dispatch(["type": "chain_answered", "chain_id": chainId]) }
+
+    /// Send's lock: "Add this network" for a coin whose network the wallet
+    /// does not have (`add_network_tapped`). The core asks the shell to add
+    /// it (`add_network`) and re-runs what it was doing.
+    func addNetworkTapped(chainId: Int) { dispatch(["type": "add_network_tapped", "chain_id": chainId]) }
+
     // MARK: - The TRACKER's verdict, back to the send machine (spec 056)
     //
     // The receipt screen and the tracker are two machines watching one
@@ -477,11 +505,44 @@ final class SendStore {
     private func commit(_ next: SendViewWire) {
         let before = view?.userOpHash
         view = next
+        watchChainRecovery(next)
         guard let op = next.userOpHash, !op.isEmpty,
               op.caseInsensitiveCompare(before ?? "") != .orderedSame,
               let lastTracker
         else { return }
         trackerChanged(lastTracker)
+    }
+
+    /// r5reg-3: while the confirm says the network did not answer
+    /// (`chain_busy` / `chain_unreachable`), ask it again every few seconds;
+    /// on its first answer the core hears `chain_answered` and the fee is
+    /// asked again. Any other state stops the watch.
+    private func watchChainRecovery(_ next: SendViewWire) {
+        let waiting = next.txStatus == "error"
+            && (next.txError == "chain_busy" || next.txError == "chain_unreachable")
+        let chainId = (next.multiSelectMode ? next.multiChainId : nil) ?? next.selectedToken?.chainId
+        guard waiting, let chainId else {
+            chainRecovery?.task.cancel()
+            chainRecovery = nil
+            return
+        }
+        if chainRecovery?.chainId == chainId { return }
+        chainRecovery?.task.cancel()
+        let every = chainRecoveryEveryMs
+        let task = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: UInt64(every * 1_000_000))
+                guard !Task.isCancelled, let self else { return }
+                if await self.executor.chainAnswers(chainId) {
+                    guard !Task.isCancelled else { return }
+                    self.chainRecovery = nil
+                    self.chainAnswered(chainId: chainId)
+                    self.onChainAnswered?()
+                    return
+                }
+            }
+        }
+        chainRecovery = (chainId, task)
     }
 
     /// The TRACKER's view, as the receipt's verdict (spec 082): the core's

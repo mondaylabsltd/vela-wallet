@@ -369,7 +369,12 @@ enum SendLive {
             return SendNoticeModel(
                 mark: networkMark(chainId, networks: networks),
                 text: "\(loc.t("send.lock.netTitle")) · "
-                    + loc.t("send.lock.netBody", vars: ["chainId": String(chainId)])
+                    + loc.t("send.lock.netBody", vars: ["chainId": String(chainId)]),
+                // Round 4 (F6/F27): the way out of the lock — the core asks
+                // the shell to add the chain and runs on from there.
+                action: loc.t("send.lock.addNetwork"),
+                actionChainId: chainId,
+                busy: view.addingNetwork
             )
         case .token:
             return SendNoticeModel(
@@ -1087,7 +1092,11 @@ enum SendLive {
         // The fee machine's failure (PR 2 note 1): the row's figure and
         // reason, the same one state the form's row and the footer read —
         // only when it answered this send's chain (PR 2 polish).
-        let failure = formFailure(fee, view: view)
+        // The fee being signed stays on screen (round 5): while the passkey is
+        // up or the op is on its way, a newer quote or a failure of the fee
+        // machine's next question is not the figure that was agreed to.
+        let frozen = view.txStatus == "signing" || view.txStatus == "submitting"
+        let failure = frozen ? nil : formFailure(fee, view: view)
         let failureChain = networkChainId.flatMap { networks.meta($0)?.displayName } ?? chain
 
         var facts = [
@@ -1120,7 +1129,7 @@ enum SendLive {
                 // retry" only when a tap is the one way), kept through the
                 // core's re-ask — never "Estimating…" and back.
                 value: failure?.figure(loc)
-                    ?? (view.fee ?? fee?.fee).map {
+                    ?? (frozen ? view.fee ?? fee?.fee : view.fee ?? fee?.fee).map {
                         "~\(feeLine($0, view: view, fee: fee, display: display, networks: networks))"
                     }
                     ?? (view.estimatingGas || view.feeBusy || (fee?.busy ?? false)
@@ -1232,9 +1241,13 @@ enum SendLive {
                     loc.t("componentsUi.relayUnreachable.retryBtn")
                 } else if view.treasuryBootstrap != nil {
                     loc.t("componentsUi.treasuryBootstrap.retryBtn")
-                } else if view.txError != nil, view.txError != "venue_blocked" {
-                    // A venue that cannot be used here is not retried: the
-                    // same attempt would be refused the same way.
+                } else if view.txError == "nonce_used" {
+                    // A fresh quote, nonce and signature (send-15).
+                    loc.t("send.txReviewAgain")
+                } else if let error = view.txError, error != "venue_blocked", error != "page_refused" {
+                    // A venue that cannot be used here is not retried, nor a
+                    // request the page's own rules refused: the same attempt
+                    // would be refused the same way.
                     loc.t("send.txRetryBtn")
                 } else if view.txStatus == "signing" {
                     loc.t("componentsUi.funding.cancel")
@@ -1254,8 +1267,12 @@ enum SendLive {
             // recipient).
             recipientTag: view.recipientIsTokenContract == true
                 ? loc.t("send.recipientTokenContract")
-                : !view.splitMode && view.recipientRisk?.firstTime == true
-                    ? loc.t("componentsUi.signing.firstTimeTag") : nil,
+                : recipientCaution(view, loc: loc)
+                    ?? (!view.splitMode && view.recipientRisk?.firstTime == true
+                        ? loc.t("componentsUi.signing.firstTimeTag") : nil),
+            recipientCheck: recipientCheck(view, loc: loc),
+            maxNote: maxMovedNote(view, loc: loc),
+            passkeyNote: passkeyNote(view, loc: loc),
             cta: live.cta,
             heldNote: heldNote(view, fee: fee, loc: loc)
         )
@@ -1273,8 +1290,24 @@ enum SendLive {
     /// transaction's line is not said again under the button. A failure of
     /// another chain's question says nothing here (PR 2 polish).
     static func heldNote(_ view: SendViewWire, fee: FeeViewWire?, loc: Loc) -> String? {
+        // A submit that did not go is the notice, and the line says nothing
+        // beside it (the web's `confirmHolds`).
+        if view.txStatus == "error", view.txError != nil { return nil }
+        // Round 3 (send-15): another copy of the wallet is sending from this
+        // account on this network; this one goes next, by itself.
+        if view.queuedBehindTab == true { return loc.t("send.queuedBehindTab") }
+        // r5reg-3: the reads before the passkey are slow — the network, by
+        // name, busy or not answering, and for how long. Nothing is signed.
+        if let slow = view.submitSlow {
+            return loc.t(slow.busy ? "send.submitSlowBusy" : "send.submitSlow", vars: [
+                "network": networkName(view), "seconds": String(slow.seconds),
+            ])
+        }
         if let held = view.previousPending, view.txError != "previous_pending" { return loc.t(held.key) }
-        return formFailure(fee, view: view).map { loc.t($0.footerKey) }
+        if let failure = formFailure(fee, view: view) { return loc.t(failure.footerKey) }
+        // The recipient check is still running (round 3): said, not hidden.
+        if view.riskChecking == true { return loc.t("send.riskChecking") }
+        return nil
     }
 
     /// A split's payees, one row each: the amount from the core's drafts, who
@@ -1295,7 +1328,14 @@ enum SendLive {
                 identiconSeed: isAddress(address) ? address : "",
                 label: name ?? short,
                 value: "\(trim(row.amount)) \(symbol)",
-                detail: payee.flatMap { name == nil ? nil : payeeDetail($0, short: short, loc: loc) },
+                // The first-transfer tell, per row, as a single send's
+                // confirm says it (send-20) — beside who it is.
+                detail: {
+                    let who = payee.flatMap { name == nil ? nil : payeeDetail($0, short: short, loc: loc) }
+                    let first = payee?.firstTime == true ? loc.t("componentsUi.signing.firstTimeTag") : nil
+                    let lines = [who, first].compactMap { $0 }
+                    return lines.isEmpty ? nil : lines.joined(separator: " · ")
+                }(),
                 mono: name == nil
             )
         }
@@ -1351,8 +1391,71 @@ enum SendLive {
         // nothing was sent and nothing went wrong; Try again sends once it
         // has landed. Said calmly, under "Not sent yet" (PR 2 polish).
         case "previous_pending": return loc.t(I18nKeys.CoreRound.notSentBody)
+        // send-15: another transaction of this account spent the nonce
+        // first. Nothing was sent: "Not sent", calmly, and Review again.
+        case "nonce_used": return loc.t("componentsUi.signing.wentFirst")
+        // r5reg-3: the reads before the passkey did not get through — the
+        // network's failure, by its name, never the passkey's.
+        case "chain_busy":
+            return loc.t("send.txErrorChainBusy", vars: ["network": networkName(view)])
+        case "chain_unreachable":
+            return loc.t("send.txErrorChainUnreachable", vars: ["network": networkName(view)])
+        // Round 7: the account's signing page did not sign — said as what
+        // happened there, never "couldn't be submitted".
+        case "page_unanswered": return loc.t("componentsUi.signing.trustedSignerUnanswered")
+        case "page_mismatch": return loc.t("componentsUi.signing.trustedSignerMismatch")
+        case "page_not_opened": return loc.t("componentsUi.signing.integrity.couldNotCheck")
+        case "page_refused": return loc.t("componentsUi.signing.trustedSignerRefused")
         default: return view.txStatus == "signing" ? loc.t("send.txPreparingBiometric") : nil
         }
+    }
+
+    /// send-11: the passkey prompt signed nothing — "closed" or "timed out",
+    /// calmly. Only while no submit error stands (that one is the notice).
+    static func passkeyNote(_ view: SendViewWire, loc: Loc) -> String? {
+        guard view.txError == nil || view.txStatus != "error" else { return nil }
+        switch view.passkeyNote {
+        case "timed_out": return loc.t("componentsUi.signing.passkeyTimedOut")
+        case "cancelled": return loc.t("componentsUi.signing.passkeyClosed")
+        default: return nil
+        }
+    }
+
+    /// The network a send moves money on, by name — a sweep's locked chain,
+    /// else the token's.
+    static func networkName(_ view: SendViewWire, networks: WalletNetworks = .builtin) -> String {
+        let chainId = (view.multiSelectMode ? view.multiChainId : nil) ?? view.selectedToken?.chainId
+        return chainId.flatMap { networks.meta($0)?.displayName } ?? view.selectedToken?.network ?? ""
+    }
+
+    /// r5reg-3: "Max is now 0.156382 USDC (it was 0.156387): …" — or nothing.
+    static func maxMovedNote(_ view: SendViewWire, loc: Loc) -> String? {
+        guard let moved = view.maxMoved else { return nil }
+        return loc.t("send.maxMoved", vars: [
+            "from": moved.from, "to": moved.to, "symbol": view.selectedToken?.symbol ?? "",
+        ])
+    }
+
+    /// send-13: an address that is still probably not the one meant — its
+    /// casing disagrees with itself, it is the zero address, or it is this
+    /// account's own.
+    static func recipientCaution(_ view: SendViewWire, loc: Loc) -> String? {
+        if view.recipientChecksumMismatch == true { return loc.t("send.recipientChecksum") }
+        switch view.recipientWarning {
+        case "zero_address": return loc.t("send.recipientZeroAddress")
+        case "own_address": return loc.t("send.recipientSelf")
+        default: return nil
+        }
+    }
+
+    /// Round 3 (send-18): the check the confirm opened without — it did not
+    /// finish, or the history could not be read — with "Check again".
+    static func recipientCheck(_ view: SendViewWire, loc: Loc) -> RecipientCheckModel? {
+        guard view.riskUnfinished == true else { return nil }
+        return RecipientCheckModel(
+            text: loc.t(view.riskHistoryUnread == true ? "send.riskHistoryUnread" : "send.riskUnfinished"),
+            retry: loc.t("send.riskRetry")
+        )
     }
 
     /// The notice's title, when it has one: "Not sent yet" over a submit the
@@ -1360,8 +1463,12 @@ enum SendLive {
     /// still holds the nonce (PR 2 polish) — no failure word, no red. `nil`
     /// for every other notice, which is one line.
     static func confirmNoticeTitle(_ view: SendViewWire, loc: Loc) -> String? {
-        guard stopNotice(view, loc: loc) == nil, view.txError == "previous_pending" else { return nil }
-        return loc.t(I18nKeys.CoreRound.notSentTitle)
+        guard stopNotice(view, loc: loc) == nil else { return nil }
+        switch view.txError {
+        case "previous_pending": return loc.t(I18nKeys.CoreRound.notSentTitle)
+        case "nonce_used": return loc.t("componentsTx.receipt.statusNotSent")
+        default: return nil
+        }
     }
 
     /// The form's button gate: the core's `can_continue`, the whole of it.
@@ -1709,6 +1816,14 @@ enum SendLive {
                     : loc.t("send.txCloseBackground")
             }(),
             ctaAccent: stage == .confirmed || stage == .failed || stage == .notSent,
+            // The receipt's way on (send-5): offered by the core only over a
+            // payment proven never sent — back to the confirm as the person
+            // left it. "Review again" when another send used the nonce
+            // (send-15).
+            retry: view.receipt?.canSendAgain == true
+                ? loc.t(view.receipt?.refusalKey == "componentsUi.signing.wentFirst"
+                        ? "send.txReviewAgain" : "send.txSendAgain")
+                : nil,
             ctaCancels: stage == .submitting && view.txStatus == "signing",
             eta: eta,
             breakdownTitle: parts.title,

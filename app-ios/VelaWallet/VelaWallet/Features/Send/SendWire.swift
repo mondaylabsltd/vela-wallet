@@ -227,6 +227,9 @@ struct SendPayeeWire: Decodable, Equatable {
     let name: String?
     /// Present exactly when `name` is.
     let nameSource: SendNameSourceWire?
+    /// Nothing was ever sent to this address from this account (send-20) —
+    /// the split confirm's per-row tell. Absent reads as not judged.
+    var firstTime: Bool? = nil
 }
 
 /// What the recipient is. `nil` on either field means **not judged** — never

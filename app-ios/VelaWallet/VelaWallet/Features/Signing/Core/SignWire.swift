@@ -92,6 +92,13 @@ enum SignErrorKind: String, Decodable {
     /// device can reach its keys. Never retried; the notice's `venueBlock`
     /// says why.
     case venueBlocked = "venue_blocked"
+    /// Round 7: the account's trusted signing page did not sign, and not by
+    /// the person's choice — it never answered, its answer was not this
+    /// request's, its own rules refused, or its check did not admit it.
+    case pageUnanswered = "page_unanswered"
+    case pageMismatch = "page_mismatch"
+    case pageRefused = "page_refused"
+    case pageNotOpened = "page_not_opened"
 
     /// A kind this build has never heard of reads as a failed submission —
     /// the generic failure, never a view that cannot be drawn.
@@ -107,6 +114,12 @@ enum SignErrorKind: String, Decodable {
         case .signerUnavailable: "componentsUi.browserStatus.reason.signerUnavailable"
         case .signerNotDiscoverable: "componentsUi.browserStatus.reason.signerNotDiscoverable"
         case .signerFailed: "componentsUi.browserStatus.reason.signerFailed"
+        // Said as what happened on the page, never "couldn't be submitted"
+        // (the web's SIGNER_REASON_KEYS, r7-2 / r7-7).
+        case .pageUnanswered: "componentsUi.signing.trustedSignerUnanswered"
+        case .pageMismatch: "componentsUi.signing.trustedSignerMismatch"
+        case .pageRefused: "componentsUi.signing.trustedSignerRefused"
+        case .pageNotOpened: "componentsUi.signing.integrity.couldNotCheck"
         default: nil
         }
     }
