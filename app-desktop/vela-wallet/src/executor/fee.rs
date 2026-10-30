@@ -80,7 +80,16 @@ impl Machine for FeePolicy {
                 Answer::Blocking(Box::new(move || FeeShellResult::InBandQuotes {
                     // Every row the relay published, UNFILTERED — which rows
                     // the picker shows is the core's rule.
-                    quotes: relay::in_band_quotes(chain_id, &account),
+                    //
+                    // Issue 682: read once per answer, the native price the
+                    // balances already hold rides on the native row whenever
+                    // the relay priced nothing.
+                    quotes: relay::in_band_quotes(chain_id, &account).map(|quotes| {
+                        relay::with_native_floor_price(
+                            quotes,
+                            relay::cached_native_price_usd(&account, chain_id),
+                        )
+                    }),
                 }))
             }
 
