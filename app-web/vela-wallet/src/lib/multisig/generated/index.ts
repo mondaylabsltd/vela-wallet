@@ -72,6 +72,7 @@ export * from './MultisigRecovery';
 export * from './MultisigRenamePlan';
 export * from './MultisigReplacePreview';
 export * from './MultisigRuleChip';
+export * from './MultisigSendPurpose';
 export * from './MultisigShellResult';
 export * from './MultisigSignerRow';
 export * from './MultisigStanding';

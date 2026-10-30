@@ -83,6 +83,31 @@ pub enum PasskeyPurpose {
 /// `record`). Quantities hex.
 pub type SentCall = Call;
 
+/// What a [`MultisigOperation::SendCalls`] is for, so the shell can say so
+/// on the sender's signing page and pick its pipeline — never told from
+/// what else rides along.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "MultisigSendPurpose"))]
+pub enum SendPurpose {
+    /// The executor's own user operation running `tx` on `multisig`
+    /// (`vela_multisigExecute`, r7-1/r7-3): ONE operation, no approval of
+    /// its own asked first. Its trusted page reads what runs from the
+    /// operation's bytes; this says what they do not carry — the
+    /// transaction, the multisig, its name and how many approvals it needs.
+    Execute {
+        multisig: String,
+        name: Option<String>,
+        #[cfg_attr(feature = "bindings", ts(type = "number"))]
+        threshold: u64,
+        #[cfg_attr(feature = "bindings", ts(type = "unknown"))]
+        tx: Box<SafeTx>,
+    },
+    /// The Ethereum backup's `record` call for `multisig`: the signing
+    /// sheet, as any first-party transaction.
+    Record { multisig: String },
+}
+
 /// An operation a multisig machine asks of its shell. Every one is answered
 /// by exactly one [`MultisigShellResult`].
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -152,6 +177,9 @@ pub enum MultisigOperation {
         calls: Vec<SentCall>,
         #[cfg_attr(feature = "bindings", ts(type = "unknown"))]
         fee: Option<Value>,
+        /// What it is for ([`SendPurpose`]); absent from an older machine.
+        #[serde(default)]
+        purpose: Option<SendPurpose>,
     },
     /// Quote what `from` sending `calls` costs and whether it can pay
     /// (`preflight`): the shell's fee pipeline, nothing sent.

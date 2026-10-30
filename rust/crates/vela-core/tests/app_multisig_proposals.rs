@@ -720,6 +720,90 @@ fn executed_and_followed_until_it_landed() {
     assert_eq!(item.status, ProposalStatus::Done);
 }
 
+/// r7-3: an executor that signs on its trusted page signs ONE operation —
+/// no approval of its own is asked first — and the shell is told what runs
+/// (`SendPurpose::Execute`: the transaction, the multisig, its name, its
+/// rule), so the page draws it. It approved by sending it, and that is what
+/// this device remembers.
+#[test]
+fn a_page_executor_signs_one_operation_and_its_page_is_told_what_runs() {
+    use vela_core::app::multisig_shell::{ApprovalRoute, SendPurpose};
+    let (mut world, mut sut, account) = setup(&[0, 1]);
+    let state = propose(
+        &mut sut,
+        &mut world,
+        transfer("1"),
+        Some(fixture(1).address),
+    );
+    let hash = hash_of(&state);
+    let mut locals = world.locals.clone();
+    locals[0].route = ApprovalRoute::Page;
+    world.locals = locals.clone();
+    run(
+        &mut sut,
+        &mut world,
+        Event::LocalAccounts { accounts: locals },
+    );
+    let owners = [fixture(0).address, fixture(1).address, fixture(2).address];
+    let mut after = DeployedSafe::clean(&owners.iter().map(String::as_str).collect::<Vec<_>>(), 2);
+    after.nonce = 1;
+    world.on_send = Some(Landing {
+        chain: 100,
+        safe: account.address.clone(),
+        after,
+        safe_tx_hash: hash.clone(),
+        tx_hash: format!("0x{}", "cd".repeat(32)),
+        user_op_hash: format!("0x{}", "ab".repeat(32)),
+    });
+    let passkeys = world.passkeys.len();
+    run(
+        &mut sut,
+        &mut world,
+        Event::Execute {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+            executor: fixture(0).address,
+        },
+    );
+    assert_eq!(
+        world.passkeys.len(),
+        passkeys,
+        "no approval of its own before its operation"
+    );
+    assert_eq!(world.sent.len(), 1, "one user operation");
+    let Some(Some(SendPurpose::Execute {
+        multisig,
+        name,
+        threshold,
+        tx,
+    })) = world.purposes.first().cloned()
+    else {
+        panic!("{:?}", world.purposes);
+    };
+    assert_eq!(multisig, account.address);
+    assert_eq!(name.as_deref(), Some("Quiet Harbor"));
+    assert_eq!(threshold, 2);
+    let item = sut
+        .view()
+        .items
+        .into_iter()
+        .find(|i| i.safe_tx_hash == hash)
+        .unwrap();
+    assert_eq!(*tx, item.tx);
+    let verdict = sut.view().executions[&format!("100:{hash}")].clone();
+    assert_eq!(verdict["kind"], "executed", "{verdict}");
+    let kept: Value =
+        serde_json::from_str(&world.store[vela_core::app::multisig_presence::EXECUTED_KEY])
+            .unwrap();
+    let facts = kept.as_object().unwrap().values().next().unwrap().clone();
+    assert_eq!(facts["executorApproved"], true, "{facts}");
+    assert_eq!(
+        facts["approvers"].as_array().unwrap().len(),
+        2,
+        "the proposer's and the executor's: {facts}"
+    );
+}
+
 /// r4-5: spending more than the multisig holds fails in its own words,
 /// before any fee or passkey.
 #[test]

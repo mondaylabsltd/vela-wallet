@@ -55,8 +55,8 @@ use super::multisig_gather;
 use super::multisig_shell::{
     self as shell, keys, local_owners, lock, same_address, AccountUpdate, ApprovalRoute, Chain,
     ChainMembers, Io, LocalAccount, MultisigAccount, MultisigEffect, MultisigOperation,
-    MultisigShellResult, Notice, PasskeyPurpose, Proposal, Service, ServiceFail, Shared,
-    StoredApproval, Submission, SubmitAnswer,
+    MultisigShellResult, Notice, PasskeyPurpose, Proposal, SendPurpose, Service, ServiceFail,
+    Shared, StoredApproval, Submission, SubmitAnswer,
 };
 use super::multisig_signers::{self as signers, SignerKind, SignerRead};
 use crate::multisig::{self, Action, Approval, Call, SafeTx};
@@ -3180,7 +3180,12 @@ async fn execute(
     let shown = lock(st).preview_plans.get(&key).cloned();
     let preview = match shown {
         Some(p) => p,
-        None => preview_execution(io, st, &input).await,
+        None => {
+            // Looked at now: kept, so what it carried is what is remembered.
+            let p = preview_execution(io, st, &input).await;
+            lock(st).preview_plans.insert(key.clone(), p.clone());
+            p
+        }
     };
     let Preview::Priced { planned, fee, .. } = &preview else {
         return ActionState::Stopped {
@@ -3202,21 +3207,11 @@ async fn execute(
     {
         return s;
     }
-    // An executor that signs on a page approves there first (its approval
-    // must be one it read on the page); the gate above is not asked again.
-    if input.executor.route == ApprovalRoute::Page
-        && input
-            .item
-            .can_approve
-            .iter()
-            .any(|o| same_address(o, &input.executor.address))
-    {
-        let approved =
-            approve_authorized(io, st, &input.account, &input.item, &input.executor).await;
-        if !matches!(approved, ActionState::Done { .. }) {
-            return approved;
-        }
-    }
+    // r7-3: one signature, the executor's own operation — on its page when
+    // it signs on one (the shell hands the page the operation and
+    // `SendPurpose::Execute`). It counts as its approval as `msg.sender`
+    // where one is missing; no approval of its own is asked first, which
+    // would be a second trip to the page for nothing the chain needs.
     // The deploy gate, right before the deployment's calls are sent.
     if !input.members.deployed {
         if let Err(PlanFail::Refused(a)) = verified_deploy_facts(io, &input).await {
@@ -3232,6 +3227,12 @@ async fn execute(
             from: input.executor.address.clone(),
             calls: planned.calls.clone(),
             fee: Some(fee.clone()),
+            purpose: Some(SendPurpose::Execute {
+                multisig: input.account.address.clone(),
+                name: input.account.genesis.name.clone(),
+                threshold: input.members.threshold,
+                tx: Box::new(input.item.tx.clone()),
+            }),
         })
         .await;
     let (user_op_hash, maybe_sent, own) = match sent {

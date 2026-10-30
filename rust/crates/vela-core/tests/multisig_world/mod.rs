@@ -12,6 +12,7 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use serde_json::{json, Value};
 use vela_core::app::multisig_shell::{
     LocalAccount, MultisigOperation as Op, MultisigShellResult as Res, Notice, OwnerKey,
+    SendPurpose,
 };
 use vela_core::app::SplitEffect;
 use vela_core::multisig;
@@ -353,6 +354,8 @@ pub struct World {
     pub passkeys: Vec<(String, String)>,
     pub risks_asked: Vec<Value>,
     pub sent: Vec<(u64, String, Vec<Value>)>,
+    /// What each sent user operation was for, in order.
+    pub purposes: Vec<Option<SendPurpose>>,
     pub send_answer: Option<Res>,
     pub quote_answer: Option<Res>,
     pub notices: Vec<Notice>,
@@ -409,6 +412,7 @@ impl Default for World {
             passkeys: Vec::new(),
             risks_asked: Vec::new(),
             sent: Vec::new(),
+            purposes: Vec::new(),
             send_answer: None,
             quote_answer: None,
             notices: Vec::new(),
@@ -886,8 +890,10 @@ impl World {
                 chain_id,
                 from,
                 calls,
+                purpose,
                 ..
             } => {
+                self.purposes.push(purpose.clone());
                 if let Some(landing) = self.on_send.take() {
                     self.land(landing);
                 }

@@ -672,30 +672,42 @@ pub async fn remember_execution(
         return;
     };
     let executor = input.executor.address.clone();
-    let mut approvals: Vec<String> = input
-        .item
-        .approvals
-        .iter()
-        .filter(|a| a.counts)
-        .map(|a| a.owner.clone())
-        .collect();
-    let owner = input
-        .members
-        .owners
-        .iter()
-        .any(|o| same_address(o, &executor));
-    let approved = approvals.iter().any(|a| same_address(a, &executor));
-    // A member executor approves by sending it — or, signing on its page,
-    // with a signature it gave first.
-    let page = input.executor.route == ApprovalRoute::Page;
-    if owner && !approved && page {
-        approvals.push(executor.clone());
-    }
+    // r7-3: what its calls carried (`planExecution`'s `carries`), never
+    // every approval the mailbox holds — one it did not carry did not count;
+    // and the executor itself only when it approved by sending it.
+    let key = format!(
+        "{}:{}",
+        input.chain_id,
+        input.item.safe_tx_hash.to_ascii_lowercase()
+    );
+    let planned = match lock(st).preview_plans.get(&key) {
+        Some(Preview::Priced { planned, .. }) => Some(planned.clone()),
+        _ => None,
+    };
+    let (approvals, executor_approves) = match planned {
+        Some(p) => (p.carries, p.executor_approves),
+        None => {
+            let counted: Vec<String> = input
+                .item
+                .approvals
+                .iter()
+                .filter(|a| a.counts)
+                .map(|a| a.owner.clone())
+                .collect();
+            let owner = input
+                .members
+                .owners
+                .iter()
+                .any(|o| same_address(o, &executor));
+            let approved = counted.iter().any(|a| same_address(a, &executor));
+            (counted, owner && !approved)
+        }
+    };
     let now = io.now().await;
     let facts = facts_of_execution(
         &approvals,
         &executor,
-        owner && !approved && !page,
+        executor_approves,
         input.members.threshold,
         now,
     );
