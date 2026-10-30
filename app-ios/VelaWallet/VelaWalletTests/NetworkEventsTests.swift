@@ -104,10 +104,6 @@ struct NetworkEventsTests {
         world.settings.networkAdmin?.endpoints.first { $0.field == field }
     }
 
-    private func provider(_ world: World, _ id: NetProviderIdWire) -> NetProviderViewWire? {
-        world.settings.networkAdmin?.providers.first { $0.provider == id }
-    }
-
     private func row(_ world: World, chainId: Int) -> NetNetworkRowWire? {
         world.settings.networkAdmin?.networks.first { $0.chainId == chainId }
     }
@@ -167,44 +163,23 @@ struct NetworkEventsTests {
         #expect(world.shelf.readObject(VelaStore.Key.serviceEndpoints)["bundlerServiceURL"] as? String != "https://relay.example.org")
     }
 
-    // MARK: - RPC providers
+    // MARK: - Provider keys, retired (owner decision 2026-10-29)
 
-    /// `provider_key_edited` / `_blurred` / `provider_test_requested` carry
-    /// `provider`. The blur saves the key; the test runs against it.
-    @Test func aProviderKeyIsShownSavedAndTested() async {
-        let world = await world()
-
-        world.settings.openProviders()
-        world.settings.editProviderKey(provider: .alchemy, value: "k3y")
-        #expect(provider(world, .alchemy)?.key == "k3y", "the keystroke never reached the core")
-
-        world.settings.blurProviderKey(id: NetProviderIdWire.alchemy.rawValue)
-        await settle(world.settings) { (world.shelf.readObject(VelaStore.Key.rpcProviders)["alchemy"] as? String) == "k3y" }
-        #expect((world.shelf.readObject(VelaStore.Key.rpcProviders)["alchemy"] as? String) == "k3y")
-        #expect(provider(world, .alchemy)?.hasKey == true)
-
-        world.settings.testProvider(id: NetProviderIdWire.alchemy.rawValue)
-        await settle(world.settings) { provider(world, .alchemy)?.test?.done == true }
-        let test = provider(world, .alchemy)?.test
-        #expect(test?.done == true, "the test never ran")
-        #expect((test?.total ?? 0) > 0)
-    }
-
-    /// A key saved before — by this device or another — is what the page
-    /// shows once it opens, and focusing another field does not remove it
-    /// (the core's FR-001, reached through this shell's own events).
-    @Test func aSavedKeySurvivesTheProvidersPage() async {
+    /// There is no provider-key page any more: a key saved before — by this
+    /// device or another — becomes the network's own RPC the first time the
+    /// stores are read (`retire_provider_keys`), and the shelf lets go of it.
+    /// The view names no provider, and the network shows the key's endpoint.
+    @Test func aSavedProviderKeyBecomesTheNetworksOwnRpc() async {
         let world = await world(seed: { shelf in
             shelf.writeObject(VelaStore.Key.rpcProviders, ["drpc": "saved-key"])
         })
-        world.settings.openProviders()
-        #expect(provider(world, .drpc)?.key == "saved-key")
-
-        // Another provider's field touched and left.
-        world.settings.editProviderKey(provider: .ankr, value: "a")
-        world.settings.blurProviderKey(id: NetProviderIdWire.ankr.rawValue)
-        await settle(world.settings) { world.shelf.readObject(VelaStore.Key.rpcProviders)["ankr"] != nil }
-        #expect((world.shelf.readObject(VelaStore.Key.rpcProviders)["drpc"] as? String) == "saved-key")
+        await settle(world.settings) { !world.shelf.hasKey(VelaStore.Key.rpcProviders) }
+        #expect(!world.shelf.hasKey(VelaStore.Key.rpcProviders), "the retired keys are still on the shelf")
+        let overrides = world.shelf.readList(VelaStore.Key.networkConfig)
+            .compactMap { $0["rpcURL"] as? String }
+        #expect(overrides.contains { $0.contains("dkey=saved-key") }, "the key was dropped, not retired: \(overrides)")
+        #expect(row(world, chainId: 1)?.rpcUrl.contains("saved-key") == true)
+        #expect(row(world, chainId: 1)?.ownRpc == true, "the retired key's RPC is the person's own")
     }
 
     // MARK: - A network's own RPC and explorer

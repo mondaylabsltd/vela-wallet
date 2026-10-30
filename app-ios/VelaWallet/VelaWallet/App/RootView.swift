@@ -3476,13 +3476,7 @@ struct RootView: View {
                 },
                 onBlurEndpoint: { id in NetEndpointFieldWire(rawValue: id).map { settings.blurEndpoint(field: $0) } },
                 onResetEndpoints: { agent.person(["type": "reset_service_endpoints"]) },
-                onEditProvider: { id, value in
-                    NetProviderIdWire(rawValue: id).map { settings.editProviderKey(provider: $0, value: value) }
-                },
-                onBlurProvider: { id in NetProviderIdWire(rawValue: id).map { settings.blurProviderKey(id: $0.rawValue) } },
-                onTestProvider: { id in NetProviderIdWire(rawValue: id).map { settings.testProvider(id: $0.rawValue) } },
-                onOpenEndpoints: { settings.openEndpoints() },
-                onOpenProviders: { settings.openProviders() }
+                onOpenEndpoints: { settings.openEndpoints() }
             ),
             onOpenAccounts: { openAccountSwitcher() },
             // What a tap on the row does is the core's (`BackupRow.action`):
@@ -3621,12 +3615,10 @@ struct RootView: View {
         var model = base
         if let view = settings.networkAdmin, view.loaded {
             model = SettingsLive.withNetworks(view, on: model, loc: loc, space: space.current)
-            // The last two pages drawn over live machinery (spec 081 FR-001):
             // 端点 offered a dead host as the person's passkey index with an
-            // invented latency beside it, and 供应商 prefilled a mock API key.
-            // Both are the same machine's view; neither had a projection.
+            // invented latency beside it (spec 081 FR-001): the same machine's
+            // view, projected.
             model = SettingsLive.withEndpoints(view, on: model, loc: loc)
-            model = SettingsLive.withProviders(view, on: model, loc: loc)
         }
         if let view = settings.currency {
             model = SettingsLive.withCurrency(view, on: model, loc: loc)
@@ -3680,7 +3672,6 @@ struct RootView: View {
         // surface they touch is one this page draws.
         model = SettingsLive.withPreferences(preferences, on: model, loc: loc)
         model = SettingsLive.withEraseFailure(eraseFailed, on: model, loc: loc)
-        model = SettingsLive.withProviderTests(on: model, loc: loc)
         // Somebody was sent here for one page in particular. `SettingsScreen`
         // seeds its own state from this once, at init, and owns it from then
         // on; the pending value is cleared when the screen appears so the next
@@ -4089,7 +4080,6 @@ struct RootView: View {
     private static func settingsPage(_ name: String?) -> SettingsPage? {
         switch name {
         case "networks": .networks
-        case "rpc-providers": .rpcProviders
         case "endpoints": .endpoints
         case "storage": .storage
         case "about": .about

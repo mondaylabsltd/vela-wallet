@@ -152,8 +152,6 @@ struct AgentPerform {
             }
             graph.settings.deleteNetwork(id: row?["id"].string ?? "custom-\(chainId)")
             return Self.done
-        case "set_provider_key":
-            setProviderKey(provider: action["provider"] as? String ?? "", key: text("key"))
             return Self.done
         case "set_service_endpoint":
             setServiceEndpoint(field: action["field"] as? String ?? "", url: text("url"))
@@ -406,22 +404,6 @@ struct AgentPerform {
             return Self.refused("that RPC answers for another chain; the network keeps the RPC it had")
         }
         return Self.done
-    }
-
-    /// RPC providers: open the page (it seeds the drafts), type the key, leave
-    /// it. A key already in its field is only left — opening the page again
-    /// would reseed every draft.
-    private func setProviderKey(provider: String, key: String) {
-        guard let wire = NetProviderIdWire(rawValue: provider) else { return }
-        let settings = graph.settings
-        let typed = networks()["providers"].list.contains {
-            $0["provider"].string == provider && $0["key"].string == key
-        }
-        if !typed {
-            settings.openProviders()
-            settings.editProviderKey(provider: wire, value: key)
-        }
-        settings.blurProviderKey(id: provider)
     }
 
     /// Service endpoints: open the page, type the URL, leave it — or only

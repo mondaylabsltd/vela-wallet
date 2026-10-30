@@ -136,66 +136,6 @@ enum SettingsLive {
         return copy
     }
 
-    /// The RPC providers page, from the same machine.
-    ///
-    /// Sibling of the above and shipped with it for one reason: the events
-    /// behind this page now reach the core, and the drawing prefills Alchemy's
-    /// box with `alch_k3y...9fQ2`. A person who typed one character after that
-    /// would have sent the mock key and half of their own to be saved.
-    ///
-    /// Whether a provider is configured is `has_key`, which is not
-    /// `key.isEmpty`: a cleared key is REMOVED from storage, and the core is
-    /// the one that knows the difference.
-    static func withProviders(
-        _ view: NetViewWire,
-        on model: SettingsScreenModel,
-        loc: Loc
-    ) -> SettingsScreenModel {
-        let k = I18nKeys.SettingsUi.self
-        let notSet = loc.t(k.providerNotSet)
-        var copy = model
-        copy.rpcProviders = RpcProvidersModel(
-            title: model.rpcProviders.title,
-            subtitle: model.rpcProviders.subtitle,
-            description: model.rpcProviders.description,
-            providers: view.providers.enumerated().compactMap { index, provider in
-                // The drawn card supplies nothing but its shape; every word on
-                // it below is either the core's or the corpus's.
-                guard let card = model.rpcProviders.providers[safe: index]
-                    ?? model.rpcProviders.providers.first
-                else { return nil }
-                return ProviderCardModel(
-                    id: provider.provider.rawValue,
-                    name: providerName(provider.provider),
-                    badge: provider.hasKey
-                        ? StatusPillModel(tone: .ok, label: loc.t(k.providerConnected))
-                        : StatusPillModel(tone: .neutral, label: notSet),
-                    field: UrlFieldModel(
-                        id: provider.provider.rawValue,
-                        label: card.field.label,
-                        value: provider.key,
-                        placeholder: provider.hasKey ? nil : notSet,
-                        action: loc.t(provider.hasKey ? k.providerCheckKey : k.providerGetKey)
-                    ),
-                    // The count the test actually reached, and only once it has
-                    // finished. The drawing said "supports 12" on a phone that
-                    // had never asked.
-                    support: provider.test.flatMap { test in
-                        test.done
-                            ? loc.t(k.providerSupports, vars: [
-                                "count": String(test.okCount), "total": String(test.total),
-                            ])
-                            : nil
-                    },
-                    link: provider.hasKey ? nil : "\(loc.t(k.providerGetKey)) →",
-                    linkUrl: provider.hasKey ? nil : providerKeyUrl(provider.provider),
-                    test: card.test
-                )
-            }
-        )
-        return copy
-    }
-
     /// The drawn label for one endpoint field.
     ///
     /// Named per field rather than taken by position: the core's order and the
@@ -219,25 +159,6 @@ enum SettingsLive {
         case .passkeyIndex: k.endpointPasskeyHint
         case .bundlerService: k.endpointRelayHint
         case .fiatRates: k.endpointFiatHint
-        }
-    }
-
-    /// Where a provider hands out keys. The same three URLs Android opens
-    /// (`SettingsLive.kt:609`), kept as a `switch` so a new provider cannot be
-    /// added without somebody deciding where its link goes.
-    static func providerKeyUrl(_ provider: NetProviderIdWire) -> String {
-        switch provider {
-        case .alchemy: "https://dashboard.alchemy.com/"
-        case .drpc: "https://drpc.org/"
-        case .ankr: "https://www.ankr.com/rpc/"
-        }
-    }
-
-    private static func providerName(_ provider: NetProviderIdWire) -> String {
-        switch provider {
-        case .alchemy: "Alchemy"
-        case .drpc: "dRPC"
-        case .ankr: "Ankr"
         }
     }
 
@@ -458,29 +379,6 @@ enum SettingsLive {
 
     static func themeChoice(segment id: String) -> ThemeChoice? {
         id == "auto" ? .system : ThemeChoice(rawValue: id)
-    }
-
-    /// 测试 on every provider card, live only.
-    ///
-    /// The DRAWN panel has no such control: the gallery cannot ask a provider
-    /// anything, so a button there would be a picture of an action. The live
-    /// page can, and the core has had `provider_test_requested` since 050 with
-    /// nothing to send it.
-    static func withProviderTests(
-        on model: SettingsScreenModel, loc: Loc
-    ) -> SettingsScreenModel {
-        var copy = model
-        copy.rpcProviders = RpcProvidersModel(
-            title: model.rpcProviders.title,
-            subtitle: model.rpcProviders.subtitle,
-            description: model.rpcProviders.description,
-            providers: model.rpcProviders.providers.map { provider in
-                var changed = provider
-                changed.test = loc.t("settingsModals.rpcProviders.test")
-                return changed
-            }
-        )
-        return copy
     }
 
     /// The row id the screen routes to the host (spec 062).

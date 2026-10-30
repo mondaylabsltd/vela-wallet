@@ -85,16 +85,6 @@ struct SettingsEndpointsTests {
         store.networkAdmin?.endpoints.first { $0.field == field }
     }
 
-    private func provider(
-        _ id: NetProviderIdWire, in store: SettingsStore
-    ) -> NetProviderViewWire? {
-        store.networkAdmin?.providers.first { $0.provider == id }
-    }
-
-    // MARK: - The events the drawn controls raise
-
-    /// **The regression itself.** A keystroke in the passkey-index box has to
-    /// arrive as a change the core made, not as a well-formed dictionary.
     @Test func typingAnEndpointChangesWhatTheCoreHolds() async {
         let (store, _) = await booted()
         let before = endpoint(.passkeyIndex, in: store)?.value
@@ -161,21 +151,6 @@ struct SettingsEndpointsTests {
         #expect(row?.value == row?.defaultValue, "reset did not reach the core")
         #expect(row?.value.contains("p256-index-rs") == false,
                 "the default is the retired index host: \(row?.value ?? "")")
-    }
-
-    /// A provider key is a different event with the same defect — `provider`,
-    /// not `id` — and the same proof: the core's own card changes.
-    @Test func typingAProviderKeyChangesWhatTheCoreHolds() async {
-        let (store, _) = await booted()
-        store.openProviders()
-        await settle(store, until: { self.provider(.alchemy, in: store) != nil })
-
-        store.editProviderKey(id: NetProviderIdWire.alchemy.rawValue, value: "test-key")
-        await settle(store, until: { self.provider(.alchemy, in: store)?.key == "test-key" })
-
-        #expect(provider(.alchemy, in: store)?.key == "test-key",
-                "the provider event never reached `update`")
-        #expect(provider(.drpc, in: store)?.key == "", "the wrong provider was edited")
     }
 
     /// The core refuses the shape iOS used to send, and accepts the one it
@@ -274,28 +249,19 @@ struct SettingsEndpointsTests {
         #expect(page.endpoints.fields[1].label == drawn.endpoints.fields[1].label)
     }
 
-    /// A provider with no key is shown as having none, and the card carries the
-    /// core's id so a keystroke can name it.
-    @Test func theProviderCardsCarryTheCoresAnswerNotTheDrawings() {
-        let drawn = SettingsFixtures.build(.st11, loc: loc)
-        let page = SettingsLive.withProviders(view(), on: drawn, loc: loc)
-        #expect(page.rpcProviders.providers.map(\.id) == ["alchemy", "drpc", "ankr"])
-        // The mock key the drawing prefills Alchemy's box with is gone: these
-        // boxes are now editable AND live, and a keystroke after a mock key
-        // would have sent the mock key to be saved.
-        #expect(page.rpcProviders.providers.map(\.field.value) == ["live-key", "", "ankr-key"])
-        #expect(page.rpcProviders.providers[0].badge.tone == .ok)
-        // `has_key` is the core's word, not `key.isEmpty`: an unfinished test
-        // must not be reported as a supported-network count either.
-        #expect(page.rpcProviders.providers[1].badge.tone == .neutral)
-        #expect(page.rpcProviders.providers[1].support == nil)
-        #expect(page.rpcProviders.providers[2].support?.isEmpty == false)
+    /// The provider-key page went with the feature (owner decision
+    /// 2026-10-29) — the web's own fixture says the same: a network's own RPC
+    /// is the one setting.
+    @Test func thereIsNoProvidersRowOrPage() {
+        let drawn = SettingsFixtures.build(.st1b, loc: loc)
+        let ids = drawn.sections.flatMap(\.rows).map(\.id)
+        #expect(ids.contains("networks"))
+        #expect(!ids.contains("rpc-providers"))
     }
 
     // MARK: - A view to draw from
 
-    /// The four endpoints in one of each health, and three providers in one of
-    /// each configured state.
+    /// The four endpoints in one of each health.
     private func view() -> NetViewWire {
         NetViewWire(
             loaded: true,
@@ -315,17 +281,6 @@ struct SettingsEndpointsTests {
                 NetEndpointViewWire(field: .fiatRates, value: "",
                                     defaultValue: "https://rates.example",
                                     health: .unreachable(httpStatus: nil, latencyMs: nil)),
-            ],
-            providers: [
-                NetProviderViewWire(provider: .alchemy, key: "live-key", hasKey: true, test: nil),
-                NetProviderViewWire(
-                    provider: .drpc, key: "", hasKey: false,
-                    test: NetProviderTestViewWire(done: false, results: [], okCount: 0, total: 4)
-                ),
-                NetProviderViewWire(
-                    provider: .ankr, key: "ankr-key", hasKey: true,
-                    test: NetProviderTestViewWire(done: true, results: [], okCount: 3, total: 4)
-                ),
             ],
             lastAddedChainId: nil
         )

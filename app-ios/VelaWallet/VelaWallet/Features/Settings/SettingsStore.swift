@@ -389,7 +389,7 @@ final class SettingsStore {
         core.dispatch(CoreJSON.string(event))
     }
 
-    // MARK: - The endpoints and providers pages (spec 056 US2)
+    // MARK: - The endpoints page (spec 056 US2)
     //
     // Eleven events the executor has answered since 050 and nothing has ever
     // sent. Two whole settings pages were drawn over live operations with no
@@ -405,8 +405,8 @@ final class SettingsStore {
     // looking exactly as if it had. Nothing caught it because the parity
     // scripts compared only the `"type"` string.
     //
-    // So every one of them below now goes through `NetEndpointFieldWire` /
-    // `NetProviderIdWire`, which ARE the core's names — the same values the
+    // So every one of them below now goes through `NetEndpointFieldWire`,
+    // which IS the core's names — the same values the
     // live page labels its fields with, so a tap round-trips by construction
     // rather than by two files agreeing.
 
@@ -454,30 +454,6 @@ final class SettingsStore {
 
     func resetEndpoints() { dispatch(["type": "reset_endpoints_to_defaults"]) }
 
-    /// ST11 opened. The core seeds the drafts from the saved keys and tests
-    /// every configured provider.
-    func openProviders() { dispatch(["type": "providers_opened"]) }
-
-    func editProviderKey(id: String, value: String) {
-        guard let provider = Self.providerId(id) else { return }
-        editProviderKey(provider: provider, value: value)
-    }
-
-    func editProviderKey(provider: NetProviderIdWire, value: String) {
-        dispatch(["type": "provider_key_edited", "provider": provider.rawValue, "value": value])
-    }
-
-    func blurProviderKey(id: String) {
-        guard let provider = Self.providerId(id) else { return }
-        dispatch(["type": "provider_key_blurred", "provider": provider.rawValue])
-    }
-
-    /// 测试 — the core asks the provider whether the key works.
-    func testProvider(id: String) {
-        guard let provider = Self.providerId(id) else { return }
-        dispatch(["type": "provider_test_requested", "provider": provider.rawValue])
-    }
-
     /// One per-network RPC override, as it is typed and when it is left.
     ///
     /// The core keeps a draft per FIELD, so which field is being typed into
@@ -502,14 +478,6 @@ final class SettingsStore {
             return nil
         }
         return field
-    }
-
-    private static func providerId(_ id: String) -> NetProviderIdWire? {
-        guard let provider = NetProviderIdWire(rawValue: id) else {
-            print("[vela-wallet] network_admin: no RPC provider called `\(id)`")
-            return nil
-        }
-        return provider
     }
 
     func blurOverride(chainId: Int) {

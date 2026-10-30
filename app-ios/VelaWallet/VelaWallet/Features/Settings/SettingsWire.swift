@@ -347,7 +347,7 @@ extension NetWizardViewWire {
     }
 }
 
-// MARK: - Endpoints and providers
+// MARK: - Endpoints
 
 /// The four service endpoints, spelled as the core's `NetEndpointField` —
 /// the same raw values go back out in `endpoint_edited` / `endpoint_blurred`.
@@ -363,33 +363,6 @@ struct NetEndpointViewWire: Decodable, Equatable {
     let value: String
     let defaultValue: String
     let health: NetServiceHealthWire
-}
-
-/// `NetProviderId` — the view's spelling and the events' `provider`.
-enum NetProviderIdWire: String, Decodable, CaseIterable {
-    case alchemy, drpc, ankr
-}
-
-struct NetProviderNetRowWire: Decodable, Equatable {
-    let chainId: Int
-    let ok: Bool
-    let latencyMs: Double
-}
-
-struct NetProviderTestViewWire: Decodable, Equatable {
-    let done: Bool
-    let results: [NetProviderNetRowWire]
-    let okCount: Int
-    let total: Int
-}
-
-struct NetProviderViewWire: Decodable, Equatable {
-    let provider: NetProviderIdWire
-    let key: String
-    /// Distinct from `key.isEmpty`: a cleared key is REMOVED from storage, so
-    /// this is the core's answer about whether the provider is configured.
-    let hasKey: Bool
-    let test: NetProviderTestViewWire?
 }
 
 // MARK: - display_currency
@@ -430,25 +403,20 @@ struct NetViewWire: Decodable, Equatable {
     let networks: [NetNetworkRowWire]
     let wizard: NetWizardViewWire
     let endpoints: [NetEndpointViewWire]
-    /// The provider-key cards. Round 6 retired provider keys into per-network
-    /// overrides (`retire_provider_keys`) and the core's view no longer names
-    /// any: absent reads as none, so the view still decodes (Phase 2 takes
-    /// the panel out).
-    var providers: [NetProviderViewWire] = []
     let lastAddedChainId: Int?
     /// Spec 100: the add-network sheet a page opened.
     var dappAdd: NetDappAddViewWire? = nil
     /// Vela's networks the person's lists leave out ("More networks", owner
-    /// decision 2026-10-29). Decoded for Phase 2; absent reads as none.
+    /// decision 2026-10-29), in list order; absent reads as none.
     var hiddenVelaChainIds: [Int] = []
 }
 
 /// Decoded by hand, in an extension so the memberwise initialiser stays:
-/// a field the core has since dropped (`providers`) or added
-/// (`hidden_vela_chain_ids`) must never cost the whole view.
+/// a field the core has added (`hidden_vela_chain_ids`) must never cost the
+/// whole view, and one it dropped (the retired `providers`) is not read.
 extension NetViewWire {
     private enum CodingKeys: String, CodingKey {
-        case loaded, networks, wizard, endpoints, providers, lastAddedChainId, dappAdd
+        case loaded, networks, wizard, endpoints, lastAddedChainId, dappAdd
         case hiddenVelaChainIds
     }
 
@@ -459,7 +427,6 @@ extension NetViewWire {
             networks: try c.decode([NetNetworkRowWire].self, forKey: .networks),
             wizard: try c.decode(NetWizardViewWire.self, forKey: .wizard),
             endpoints: try c.decode([NetEndpointViewWire].self, forKey: .endpoints),
-            providers: try c.decodeIfPresent([NetProviderViewWire].self, forKey: .providers) ?? [],
             lastAddedChainId: try c.decodeIfPresent(Int.self, forKey: .lastAddedChainId),
             dappAdd: try c.decodeIfPresent(NetDappAddViewWire.self, forKey: .dappAdd),
             hiddenVelaChainIds: try c.decodeIfPresent([Int].self, forKey: .hiddenVelaChainIds) ?? []
