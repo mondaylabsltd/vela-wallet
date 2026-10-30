@@ -44,7 +44,7 @@ use crate::resident::{self, Answer, Machine};
 use crate::session;
 
 /// `vela.transactionHistory` — the shared local store.
-const TX_KEY: &str = "vela.transactionHistory";
+pub(crate) const TX_KEY: &str = "vela.transactionHistory";
 
 /// One stored row → one feed record.
 ///

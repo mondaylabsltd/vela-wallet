@@ -65,6 +65,115 @@ pub fn apply() {
     }
 }
 
+/// `VELA_PERF_ACTIVITY=<n>` (Phase 4): the signed-in account's history
+/// topped up to `n` transfers — sends and receipts, a few hours apart, on
+/// Base — so the perf harness scrolls a History as long as a busy wallet's
+/// without a wallet that made one. Rows it wrote before are counted, never
+/// doubled; rows the person made are left alone. Every row carries its
+/// verified time, so the feed reads no chain to repair one. Runs after the
+/// parallel space's wallets are seeded: it needs the account they write.
+///
+/// With it, when the account has none, the hero's last-known total and the
+/// Assets rows it was read from (`vela.balanceCache`, `vela.holdingsCache`):
+/// what a wallet that has been opened before paints its home from, whether
+/// or not the network answers this launch.
+pub fn seed_activity() {
+    let Some(want) = crate::dev_env::var!("VELA_PERF_ACTIVITY")
+        .and_then(|n| n.trim().parse::<usize>().ok())
+        .filter(|n| *n > 0)
+    else {
+        return;
+    };
+    let accounts = storage::load_accounts().unwrap_or_default();
+    let Some(account) = accounts
+        .get(storage::load_active_index())
+        .or_else(|| accounts.first())
+    else {
+        vlog!("dev_seed", "VELA_PERF_ACTIVITY skipped: no account");
+        return;
+    };
+    let address = account.address.clone();
+    seed_last_known(&address);
+    let now_s = crate::executor::now_ms() / 1000.0;
+    let result = storage::update_list(crate::executor::activity_feed::TX_KEY, |rows| {
+        let have = rows
+            .iter()
+            .filter(|row| {
+                row.get("id")
+                    .and_then(Value::as_str)
+                    .is_some_and(|id| id.starts_with("perf-"))
+            })
+            .count();
+        for i in have..want {
+            rows.push(perf_row(i, &address, now_s));
+        }
+        want > have
+    });
+    match result {
+        Ok(true) => vlog!(
+            "dev_seed",
+            "VELA_PERF_ACTIVITY: {want} rows for this profile"
+        ),
+        Ok(false) => {}
+        Err(error) => vlog!(
+            "dev_seed",
+            "VELA_PERF_ACTIVITY could not be seeded: {error}"
+        ),
+    }
+}
+
+/// The hero's last total and its rows, for [`seed_activity`].
+fn seed_last_known(address: &str) {
+    use crate::executor::balance_dashboard as dashboard;
+    use vela_core::app::balance_dashboard::BalanceToken;
+    let now = crate::executor::now_ms();
+    if dashboard::load_holdings(address, "mainnet", now).is_empty() {
+        let token =
+            |chain_id: u32, symbol: &str, balance: &str, decimals: u32, price: f64| BalanceToken {
+                chain_id,
+                symbol: symbol.to_owned(),
+                name: symbol.to_owned(),
+                balance: balance.to_owned(),
+                decimals,
+                token_address: None,
+                price_usd: Some(price),
+                spam: false,
+            };
+        let tokens = [
+            token(8453, "ETH", "0.42", 18, 3000.0),
+            token(100, "xDAI", "25.5", 18, 1.0),
+            token(1, "ETH", "0.05", 18, 3000.0),
+        ];
+        dashboard::save_holdings(address, "mainnet", &tokens, now);
+    }
+    if dashboard::cached_usd(address, now).is_none() {
+        dashboard::write_cached_usd(address, 1_435.5, now);
+    }
+}
+
+/// One seeded transfer, in the store's own shape (`activity_feed::to_record`).
+fn perf_row(i: usize, me: &str, now_s: f64) -> Value {
+    const OTHER: &str = "0x9F3cA71b04E82f5C55d9B21aE00734F8Dd8021aE";
+    let incoming = i.is_multiple_of(3);
+    #[allow(clippy::cast_precision_loss, reason = "a row index")]
+    let at = now_s - 600.0 - i as f64 * 3.0 * 3600.0;
+    serde_json::json!({
+        "id": format!("perf-{i:04}"),
+        "txHash": format!("0x{:064x}", i + 1),
+        "userOpHash": format!("0x{:064x}", i + 0x10_000),
+        "from": if incoming { OTHER } else { me },
+        "to": if incoming { me } else { OTHER },
+        "value": format!("{}.{:02}", 1 + i % 97, i % 100),
+        "symbol": "USDC",
+        "decimals": 6,
+        "chainId": 8453,
+        "timestamp": at,
+        "status": "confirmed",
+        "type": if incoming { "receive" } else { "send" },
+        "timeVerified": true,
+    })
+}
+
 fn write(key: &str, value: Value) {
     match storage::write_value(key, value) {
         Ok(()) => vlog!("dev_seed", "{key} seeded for this profile"),

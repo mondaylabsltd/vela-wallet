@@ -74,11 +74,14 @@ where
     }
 
     pub fn view(&self) -> A::ViewModel {
+        let _span = crate::perf::span("view", crate::perf::short_type_name::<A>());
         self.core.view()
     }
 
     /// Send an event; returns what the core now needs performed.
     pub fn dispatch(&mut self, event: A::Event) -> Vec<Pending<<A::Effect as SplitEffect>::Op>> {
+        // Phase 4: the core's own time per event, per machine (`VELA_PERF`).
+        let _span = crate::perf::span("dispatch", crate::perf::short_type_name::<A>());
         let effects = self.core.process_event(event);
         self.collect(effects)
     }
@@ -93,6 +96,7 @@ where
             // Rule 2. A late answer to a question nobody is still asking.
             return Vec::new();
         };
+        let _span = crate::perf::span("resolve", crate::perf::short_type_name::<A>());
         match self.core.resolve(&mut request, result) {
             Ok(effects) => self.collect(effects),
             // Rule 3.

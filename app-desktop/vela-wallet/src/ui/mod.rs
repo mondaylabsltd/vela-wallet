@@ -18,6 +18,7 @@ mod smooth_scroll;
 mod spinner;
 mod status_badge;
 mod step_slider;
+mod windowed;
 
 pub use a11y::Accessible;
 pub use ack_row::ack_row;
@@ -41,3 +42,4 @@ pub use spinner::spinner;
 pub(crate) use status_badge::glyph as badge_glyph;
 pub use status_badge::status_badge;
 pub use step_slider::{StepSlider, step_slider_picture};
+pub use windowed::Windowed;

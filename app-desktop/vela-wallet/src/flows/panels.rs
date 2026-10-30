@@ -75,6 +75,10 @@ pub struct PanelActions {
     pub open_tx: Option<Click>,
     /// DA1L, live: one listener per row, in the order the groups render.
     pub open_tx_rows: Vec<Click>,
+    /// DA1L, live: the History drawn a window at a time inside the panel's
+    /// scrolling body (Phase 4, `ui::windowed`) — its measurements, and the
+    /// body's scroll. `None` draws every row, as the gallery does.
+    pub windowed: Option<(crate::ui::Windowed, gpui::ScrollHandle)>,
     /// DSD1L: a row opens the send form for that token.
     pub open_send_form: Option<Click>,
     /// DSD2L: the fee row and the recipient picker.
@@ -433,9 +437,14 @@ pub fn render(
             actions.save_image,
             actions.include_network,
         ),
-        FlowBody::History(model) => {
-            history(model, theme, icons, actions.open_tx, actions.open_tx_rows)
-        }
+        FlowBody::History(model) => history(
+            model,
+            theme,
+            icons,
+            actions.open_tx,
+            actions.open_tx_rows,
+            actions.windowed,
+        ),
         FlowBody::TxDetail(model) => tx_detail(
             model,
             theme,
@@ -846,8 +855,9 @@ fn history(
     icons: &mut IconCache,
     mut open_tx: Option<Click>,
     per_row: Vec<Click>,
+    windowed: Option<(crate::ui::Windowed, gpui::ScrollHandle)>,
 ) -> Div {
-    let mut col = div().flex().flex_col();
+    let col = div().flex().flex_col();
     if model.loading {
         return col
             .child(skeleton_row(theme))
@@ -866,34 +876,64 @@ fn history(
                 .child(crate::ui::prose(text.clone())),
         );
     }
-    let groups = &model.groups;
-    // Row order here IS the order the page bound its listeners in, because both
-    // walk the same groups. A live panel binds one per row; the fixture binds
-    // one and gives it to the first.
-    let mut per_row = per_row.into_iter();
+    // Every heading and row, in drawn order: a day's heading, then its rows.
+    // Row order here IS the order the page bound its listeners in, because
+    // both walk the same groups. A live panel binds one per row; the fixture
+    // binds one and gives it to the first.
+    enum Entry {
+        Heading(usize),
+        Row {
+            group: usize,
+            row: usize,
+            index: usize,
+        },
+    }
+    let mut entries = Vec::new();
+    let mut keys: Vec<gpui::SharedString> = Vec::new();
     let mut index = 0usize;
-    for group in groups {
-        col = col.child(
-            div()
+    for (g, group) in model.groups.iter().enumerate() {
+        entries.push(Entry::Heading(g));
+        keys.push(format!("day:{}", group.label).into());
+        for r in 0..group.rows.len() {
+            entries.push(Entry::Row {
+                group: g,
+                row: r,
+                index,
+            });
+            keys.push(format!("row:{index}").into());
+            index += 1;
+        }
+    }
+    let mut per_row: Vec<Option<Click>> = per_row.into_iter().map(Some).collect();
+    let mut item = |i: usize| -> gpui::AnyElement {
+        match entries[i] {
+            Entry::Heading(g) => div()
                 .pt(px(12.))
                 .pb(px(4.))
                 .text_size(theme::text_row_sub())
                 .text_color(theme.fg_subtle)
-                .child(group.label.clone()),
-        );
-        for row in &group.rows {
-            let action = per_row
-                .next()
-                .or_else(|| if index == 0 { open_tx.take() } else { None });
-            col = col.child(clickable(
-                ElementId::from(("history", index)),
-                action,
-                activity_row(theme, icons, row),
-            ));
-            index += 1;
+                .child(model.groups[g].label.clone())
+                .into_any_element(),
+            Entry::Row { group, row, index } => {
+                let action = per_row
+                    .get_mut(index)
+                    .and_then(Option::take)
+                    .or_else(|| if index == 0 { open_tx.take() } else { None });
+                clickable(
+                    ElementId::from(("history", index)),
+                    action,
+                    activity_row(theme, icons, &model.groups[group].rows[row]),
+                )
+                .into_any_element()
+            }
         }
+    };
+    match windowed {
+        // Phase 4: only the rows near the view are built, laid out and
+        // painted — a 200-row History scrolled at 80 fps drawn whole.
+        Some((window, scroll)) => window.column(&scroll, &keys, item),
+        None => col.children((0..keys.len()).map(&mut item)),
     }
-    col
 }
 
 fn tx_detail(
