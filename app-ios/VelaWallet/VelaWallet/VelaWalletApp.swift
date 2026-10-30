@@ -9,6 +9,9 @@ import SwiftUI
 @main
 struct VelaWalletApp: App {
     private let loc = Loc()
+    /// The quick actions' delegate (native parity N-I2): SwiftUI's scene
+    /// hands over neither a cold launch's shortcut item nor a live one.
+    @UIApplicationDelegateAdaptor(VelaAppDelegate.self) private var appDelegate
 
     init() {
         // The parallel space's seam, installed before any view exists. The

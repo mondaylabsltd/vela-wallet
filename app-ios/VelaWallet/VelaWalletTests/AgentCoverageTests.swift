@@ -131,6 +131,7 @@ private let CALLS: [String: Place] = [
     "browser.snapshot": .view("a tab's picture for the tab strip"),
     "browser.start": .machine(BOOT),
     "browser.startConnections": .machine(BOOT),
+    "camera.deliver": .none(CAMERA),
     "camera.flip": .none(CAMERA),
     "camera.start": .none(CAMERA),
     "camera.stop": .none(CAMERA),

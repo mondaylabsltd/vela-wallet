@@ -24,6 +24,25 @@
 	<array>
 		<string>webcredentials:getvela.app</string>
 		<string>applinks:getvela.app</string>
+		<!--
+		  Native parity N-I3: the web wallet's own host, where every link the
+		  wallet makes lives — a proposal (`/<locale>/wallet#ms=…`), an invite
+		  (`#msa=…`), the connect page (`/<locale>/connect#…`) and a payment
+		  (`/pay?…`). Its apple-app-site-association must be hosted on
+		  wallet.getvela.app (app-ios/universal-links/), or iOS opens these in
+		  Safari as before — the web keeps working either way.
+		-->
+		<string>applinks:wallet.getvela.app</string>
+	</array>
+
+	<!--
+	  The widgets (native parity N-I2): the app writes the hero's last figure
+	  into this group's container and the widget extension only reads it
+	  (`WidgetSnapshotStore`). No key and nothing secret is ever written here.
+	-->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.app.getvela.VelaWallet</string>
 	</array>
 
 	<!--

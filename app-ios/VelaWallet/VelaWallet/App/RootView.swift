@@ -72,6 +72,9 @@ struct RootView: View {
     @State private var receiveNetwork = 0
     /// The identicon viewer, hosted once for the whole app.
     @State private var identiconViewer: IdenticonSubject?
+    /// A multisig link the app was opened with (native parity N-I3), as the
+    /// core read it — shown in its sheet once the launch is over.
+    @State private var multisigLink: PendingMultisigLink?
     /// Bumped when storage is cleared, so the measured page re-reads the store.
     @State private var storageTick = 0
     /// The settings page a screen elsewhere is sending somebody to. Cleared
@@ -371,10 +374,54 @@ struct RootView: View {
         if GalleryMode.isEnabled {
             OnboardingGalleryScreen(loc: loc)
         } else {
-            appBody
+            nativeDoors(appBody)
         }
         #else
-        appBody
+        nativeDoors(appBody)
+        #endif
+    }
+
+    /// Native parity Phase 3: the doors from outside the app (N-I2), the
+    /// links it claims (N-I3), the widgets' snapshot and the landing's
+    /// haptic — apart from `appBody`'s chain, which the type checker can
+    /// no longer take in one expression.
+    private func nativeDoors(_ content: some View) -> some View {
+        content
+        // Native parity N-I3: a multisig link, as the core read it — shown
+        // once the launch is over, never under the animation.
+        .sheet(item: Binding(
+            get: { launching ? nil : multisigLink },
+            set: { if $0 == nil { multisigLink = nil } }
+        )) { pending in
+            multisigLinkSheet(pending)
+        }
+        // Native parity N-I2: a door from outside — a quick action, a
+        // widget, a Shortcut — opened when the wallet can open it.
+        .onChange(of: AppEntryInbox.shared.pending, initial: true) { _, _ in openPendingEntry() }
+        .onChange(of: session.view.allowedRoute, initial: true) { _, _ in
+            openPendingEntry()
+            refreshQuickActions()
+        }
+        .onChange(of: launching) { _, _ in openPendingEntry() }
+        .onChange(of: signing == nil) { _, _ in openPendingEntry() }
+        .onChange(of: loc.resolvedLanguage) { _, _ in refreshQuickActions() }
+        // The widgets draw what the hero drew, and nothing once nobody is
+        // signed in.
+        .onChange(of: widgetSnapshot, initial: true) { _, snapshot in
+            if PageOverride.page == nil { WidgetPublisher.publish(snapshot) }
+        }
+        // A signature that landed is an outcome, and the finger hears it —
+        // once, as the tick lands (the send's own success is the core's
+        // `haptic` effect).
+        .velaHaptic(trigger: signingEnding?.id) { old, new in
+            old == nil && new != nil ? .success : nil
+        }
+        #if DEBUG
+            // `VELA_OPEN_LINK` (native parity N-I3): a UI test's universal
+            // link, through the same handler iOS hands one to.
+            .task {
+                if let link = DevLaunchInputs.launchLink { openLink(link) }
+            }
         #endif
     }
 
@@ -605,19 +652,112 @@ struct RootView: View {
         // callback nothing is waiting for is dropped here in silence. Every
         // other URL is routed exactly as before.
         if TrustedSignerCallbacks.deliver(url) { return }
-        switch PayLink.parse(url.absoluteString) {
-        case .pay:
-            guard let event = PayLink.parse(url.absoluteString)?.linkOpened else { return }
-            // The CORE validates. Seven strings and whether they add up to a
-            // request this wallet can honour is 600 lines that already exist.
-            paymentRequest.linkOpened(event)
-        case .open(let page):
-            // Spec 088 FR-004: a link from outside only ASKS. The sheet shows
-            // the host the core named; nothing loads before the person says yes.
-            browser.askToOpen(page)
+        // Native parity N-I3: every link the app claims, read by the core
+        // (`AppLink`) — a door, a payment, a multisig link.
+        switch AppLink.read(url) {
+        case .entry(let entry):
+            // A widget's button: the same inbox a quick action fills.
+            AppEntryInbox.shared.deliver(entry)
+        case .pay(let link):
+            switch link {
+            case .pay:
+                guard let event = link.linkOpened else { return }
+                // The CORE validates. Seven strings and whether they add up to a
+                // request this wallet can honour is 600 lines that already exist.
+                paymentRequest.linkOpened(event)
+            case .open(let page):
+                // Spec 088 FR-004: a link from outside only ASKS. The sheet shows
+                // the host the core named; nothing loads before the person says yes.
+                browser.askToOpen(page)
+            }
+        case .some(let link):
+            // A multisig link: what the core read in it, and the web wallet
+            // to act on it in (`MultisigLinkSheet`).
+            multisigLink = PendingMultisigLink(link: link)
         case nil:
             break
         }
+    }
+
+    /// The multisig link's sheet, from what the core read.
+    @ViewBuilder
+    private func multisigLinkSheet(_ pending: PendingMultisigLink) -> some View {
+        if let model = MultisigLinkModel.of(pending.link, loc: loc, chainName: { chainId in
+            walletNetworks.chains.first { $0.chainId == chainId }?.displayName
+                ?? ChainCatalog.meta(chainId)?.displayName
+        }) {
+            MultisigLinkSheet(
+                model: model,
+                onOpen: {
+                    VelaHaptic.press.play()
+                    multisigLink = nil
+                    // The system browser: the web wallet, where the same link
+                    // opens the same transaction. iOS does not hand a link
+                    // back to the app that opened it.
+                    UIApplication.shared.open(model.url)
+                },
+                onCopy: { velaCopy(model.url.absoluteString) },
+                onClose: { multisigLink = nil }
+            )
+            .themed(scheme)
+        }
+    }
+
+    // MARK: - Doors from outside (native parity N-I2)
+
+    /// Open the door waiting in the inbox, when the wallet can: somebody is
+    /// signed in, the launch is over, and no signature is being asked for.
+    private func openPendingEntry() {
+        guard AppEntryInbox.canOpen(
+            signedIn: session.view.allowedRoute == .wallet,
+            launching: launching,
+            signing: signing != nil,
+            pageOverride: PageOverride.page != nil
+        ), let entry = AppEntryInbox.shared.take() else { return }
+        // Whatever was on top goes, as the agent's "home" does: the person
+        // asked for this screen from outside the app.
+        identiconViewer = nil
+        multisigLink = nil
+        homeSwitcherOpen = false
+        flows.close()
+        section = .wallet
+        switch entry {
+        case .send: enterFlow(.send)
+        case .receive: enterFlow(.receive)
+        case .scan: enterFlow(.scan)
+        }
+    }
+
+    /// The Home Screen's quick actions, in the language the app speaks, and
+    /// none while nobody is signed in.
+    private func refreshQuickActions() {
+        UIApplication.shared.shortcutItems = QuickActions.items(
+            signedIn: session.view.allowedRoute == .wallet,
+            title: { loc.t($0.titleKey) }
+        )
+    }
+
+    /// The hero, as the widgets draw it — `nil` while nobody is signed in,
+    /// so a Lock Screen keeps no figure for a wallet that is gone.
+    private var widgetSnapshot: WidgetSnapshot? {
+        guard session.view.allowedRoute == .wallet, PageOverride.page == nil,
+              let view = wallet.balance
+        else { return nil }
+        let display = WalletLive.Display.from(settings.currency ?? .unread, language: loc.resolvedLanguage)
+        // The hero's own words; the figure, its state and its line are the
+        // core's view's, as the home draws them.
+        let fallback = BalanceModel(
+            label: loc.t("home.totalBalance"), currency: "", state: .loading,
+            a11yHide: loc.t("home.a11yHideBalance"), a11yShow: loc.t("home.a11yShowBalance")
+        )
+        let hero = WalletLive.balance(
+            view, display: display, fallback: fallback, loc: loc, networks: walletNetworks,
+            noValue: space.testnet ? loc.t("networkSpace.noValue") : nil
+        )
+        return WidgetPublisher.snapshot(
+            balance: hero, asOfMs: view.lastRefreshedAtMs,
+            accountName: session.view.activeName, loc: loc
+        )
     }
 
     /// A `/pay` link the core accepted, as a send with the fields already in.
@@ -3211,7 +3351,7 @@ struct RootView: View {
     /// preview layer attached to a session with no frames is a black rectangle
     /// where the drawn placeholder belongs.
     private func scanInputs() -> ScanInputs {
-        let live: AVCaptureSession? = (camera.refusal == nil && camera.running)
+        let live: AVCaptureSession? = (camera.refusal == nil && camera.running && !camera.usesDataScanner)
             ? camera.session : nil
         var inputs = ScanInputs(
             session: live,
@@ -3222,6 +3362,10 @@ struct RootView: View {
         // A gallery / board / dev session: the drawn viewfinder, never a
         // camera (PR 3 note 7).
         inputs.fixture = camera.fixtureOnly
+        // Native parity N-I2: VisionKit reads the codes where the phone has it.
+        if camera.refusal == nil, camera.running, camera.usesDataScanner {
+            inputs.dataScanner = { text in camera.deliver(text) }
+        }
         if camera.refusal == .denied {
             inputs.refusalAction = (
                 label: loc.t("componentsUi.scanner.grantPermission"),
