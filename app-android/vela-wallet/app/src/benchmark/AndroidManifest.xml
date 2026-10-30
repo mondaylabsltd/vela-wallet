@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Native parity Phase 4: the benchmark build types only (`benchmarkRelease`,
+  `nonMinifiedRelease` — never `release`, which scripts/check-release-apk.sh
+  checks). A release-shaped build reads no debug extras and has no parallel
+  space, so the journeys need another way to a signed-in home: this activity
+  writes a view-only fixture wallet (no key anybody holds) into the store.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <activity
+            android:name="app.getvela.wallet.bench.BenchSeedActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
+        <activity
+            android:name="app.getvela.wallet.bench.BenchSignActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+    </application>
+</manifest>

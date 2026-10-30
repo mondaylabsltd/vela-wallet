@@ -4,6 +4,10 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+    // Native parity Phase 4: consumes the profile :baselineprofile generates and
+    // adds the release-shaped `benchmarkRelease` / `nonMinifiedRelease` build
+    // types the journeys run against (docs/android/performance.md).
+    alias(libs.plugins.androidx.baselineprofile)
 }
 
 // Repo root (this module lives at <repo>/app-android/vela-wallet/app).
@@ -207,6 +211,20 @@ android {
         getByName("debug") {
             kotlin.srcDir(velaRepoRoot.resolve("rust/bindings/kotlin-dev"))
         }
+        // Phase 4: the baseline-profile plugin's build types are release with
+        // another name — so they take release's own sources (the no-op
+        // parallel-space and launch-input bindings), plus the one thing a
+        // journey needs that release must never carry: a door to put a fixture
+        // wallet in the store (src/benchmark, see BenchSeedActivity; its
+        // manifest is added per variant below — the plugin's build types do
+        // not pick up a src/<type>/AndroidManifest.xml).
+        // check-release-apk.sh fails a release package that carries it.
+        for (benchmarkType in listOf("benchmarkRelease", "nonMinifiedRelease")) {
+            maybeCreate(benchmarkType).apply {
+                kotlin.srcDir("src/release/java")
+                kotlin.srcDir("src/benchmark/java")
+            }
+        }
     }
 
     testOptions {
@@ -254,6 +272,31 @@ android {
             )
                 .withPathSensitivity(PathSensitivity.NONE)
                 .withPropertyName("velaHostEngineLib")
+        }
+    }
+}
+
+// Native parity Phase 4. The profile is generated on a device by
+// `:app:generateBaselineProfile` (never during an ordinary build — it needs an
+// emulator) and checked in under src/main/generated/baselineProfiles, so every
+// variant, release included, ships it; Play installs it from the bundle's dex
+// metadata and androidx.profileinstaller does for a sideloaded APK.
+baselineProfile {
+    automaticGenerationDuringBuild = false
+    saveInSrc = true
+    mergeIntoMain = true
+}
+
+// The benchmark build types are signed with the debug key so a device will
+// install them; they are never uploaded (the release check above stays on
+// `preReleaseBuild` alone).
+android.buildTypes.matching { it.name == "benchmarkRelease" || it.name == "nonMinifiedRelease" }.configureEach {
+    signingConfig = android.signingConfigs.getByName("debug")
+}
+androidComponents {
+    onVariants(selector().all()) { variant ->
+        if (variant.buildType == "benchmarkRelease" || variant.buildType == "nonMinifiedRelease") {
+            variant.sources.manifests.addStaticManifestFile("src/benchmark/AndroidManifest.xml")
         }
     }
 }
@@ -428,6 +471,9 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.androidx.core.splashscreen)
+    // Phase 4: installs the shipped baseline profile where Play does not (sideloads, benchmarks).
+    implementation(libs.androidx.profileinstaller)
+    baselineProfile(project(":baselineprofile"))
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)

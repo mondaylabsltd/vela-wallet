@@ -195,7 +195,7 @@ private fun QuietIndicatorRow(text: String, dot: Color) {
         Box(
             modifier = Modifier
                 .size(WalletMetrics.liveDotSize)
-                .alpha(rememberPulseAlpha())
+                .pulsing()
                 .background(dot, CircleShape),
         )
         Text(

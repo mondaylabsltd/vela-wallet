@@ -128,6 +128,11 @@ struct WalletScreen: View {
             .presentationDetents([.large])
         }
         .onAppear { sheetShown = model.sheet != nil }
+        // The end of "cold start to cached home" (`PerfMarks`): the first
+        // time the hero states anything — a cached total, a masked one, zero.
+        .onChange(of: model.balance.state != .loading, initial: true) { _, drawn in
+            if drawn { PerfMarks.homePainted() }
+        }
     }
 
     /// The hero, tappable when somebody owns the state behind it.
@@ -191,6 +196,7 @@ struct WalletScreen: View {
                     { flow(isActivity ? .activity : .assets) }
                 }
             )
+            .accessibilityIdentifier(isActivity ? "home.section.activity" : "home.section.assets")
             switch section.mode {
             case .rows:
                 if isActivity {

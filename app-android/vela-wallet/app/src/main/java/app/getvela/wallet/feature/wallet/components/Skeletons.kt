@@ -15,7 +15,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaRadius
 import app.getvela.wallet.core.designsystem.tokens.VelaSizing
@@ -29,7 +28,7 @@ import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 fun SkeletonBlock(modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
-            .alpha(rememberPulseAlpha())
+            .pulsing()
             .background(VelaTheme.colors.bgSunken, RoundedCornerShape(VelaRadius.md)),
     )
 }
@@ -49,7 +48,7 @@ private fun SkeletonCircle() {
     Box(
         modifier = Modifier
             .size(WalletMetrics.avatarSize)
-            .alpha(rememberPulseAlpha())
+            .pulsing()
             .background(VelaTheme.colors.bgSunken, CircleShape),
     )
 }

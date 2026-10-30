@@ -108,6 +108,10 @@
            pass is not a gate; one that passes by accident of ordering is
            worse. `-only-testing` still reaches every one of these on a device,
            which is where they were written to run — and where 050–058 ran them.
+
+           PerfTests (native parity Phase 4) are measurements of a RELEASE build
+           on a seeded wallet, not gates: they run in their own scheme,
+           VelaWalletPerf, through app-ios/scripts/perf/run-perf.sh.
          -->
          <TestableReference
             skipped = "NO">
@@ -193,6 +197,9 @@
                </Test>
                <Test
                   Identifier = "PR4DeviceTests">
+               </Test>
+               <Test
+                  Identifier = "PerfTests">
                </Test>
             </SkippedTests>
          </TestableReference>

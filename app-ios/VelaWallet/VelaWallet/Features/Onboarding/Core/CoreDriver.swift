@@ -66,6 +66,17 @@ final class CoreDriver {
     /// instead of leaving it waiting). Consulted when `toFailure` has none.
     var neutralAnswer: (([String: Any]) -> String?)?
 
+    /// A dispatch whose view is byte-for-byte the last one hands over its
+    /// effects alone: the view is neither parsed nor committed (native parity
+    /// Phase 4). Off by default — `CoreStore` turns it on for a store whose
+    /// `onView` only mirrors the view (`skipsUnchanged`).
+    var skipsUnchangedView = false
+    /// Top-level view fields left out of that comparison (`CoreStore`'s
+    /// `ignoringKeys`).
+    var ignoredViewKeys: [String] = []
+    /// The last view's bytes, as the core wrote them, less `ignoredViewKeys`.
+    private var lastViewBytes: [UInt8]?
+
     private var running: [UInt64: Task<Void, Never>] = [:]
     private var disposed = false
 
@@ -100,6 +111,7 @@ final class CoreDriver {
     /// Emit the core's current view without sending anything.
     func start() {
         do {
+            lastViewBytes = nil
             commit(try CoreJSON.object(bridge.view()))
         } catch {
             onFault(error)
@@ -109,7 +121,7 @@ final class CoreDriver {
     /// Send one event, as the JSON the core's `Event` deserializes from.
     func dispatch(_ eventJson: String) {
         do {
-            apply(try CoreJSON.object(bridge.dispatch(eventJson: eventJson)))
+            try applyText(bridge.dispatch(eventJson: eventJson))
         } catch {
             onFault(error)
         }
@@ -125,8 +137,35 @@ final class CoreDriver {
 
     // MARK: - The loop
 
-    private func apply(_ result: [String: Any]) {
-        commit(result["view"] as? [String: Any] ?? [:])
+    /// One answer from the core, as text. Its view — always the first field
+    /// (`DispatchResult`) — is compared by its bytes with the last one first:
+    /// the core hands its whole view back with every answer, and parsing a
+    /// 200-row feed again to learn that one name was not found was most of
+    /// what a launch spent on the main thread (native parity Phase 4).
+    private func applyText(_ text: String) throws {
+        // Each answer's Foundation objects go when it has been applied. The
+        // main queue drains its pool once per run-loop pass, and a launch's
+        // hundreds of answers in one pass held every parsed view at once
+        // (native parity Phase 4).
+        try autoreleasepool { try applyTextInPool(text) }
+    }
+
+    private func applyTextInPool(_ text: String) throws {
+        guard skipsUnchangedView, let split = ViewBytes.split(text, ignoring: ignoredViewKeys) else {
+            lastViewBytes = nil
+            apply(try CoreJSON.object(text))
+            return
+        }
+        if let last = lastViewBytes, last == split.comparable {
+            apply(try CoreJSON.object(split.rest), view: false)
+            return
+        }
+        lastViewBytes = split.comparable
+        apply(try CoreJSON.object(text))
+    }
+
+    private func apply(_ result: [String: Any], view: Bool = true) {
+        if view { commit(result["view"] as? [String: Any] ?? [:]) }
 
         for raw in result["cancelled_effect_ids"] as? [Any] ?? [] {
             guard let id = (raw as? NSNumber)?.uint64Value else { continue }
@@ -169,7 +208,7 @@ final class CoreDriver {
     private func resolve(id: UInt64, operation: [String: Any], resultJson: String) {
         guard !disposed else { return }
         do {
-            apply(try CoreJSON.object(bridge.resolveEffect(effectId: id, resultJson: resultJson)))
+            try applyText(bridge.resolveEffect(effectId: id, resultJson: resultJson))
         } catch {
             // The core REFUSED this answer — a result it cannot deserialise,
             // usually because the shell and the machine disagree about a shape.
@@ -185,9 +224,7 @@ final class CoreDriver {
             onFault(error)
             guard let failure = toFailure?(id, error) ?? neutralAnswer?(operation) else { return }
             do {
-                apply(try CoreJSON.object(
-                    bridge.resolveEffect(effectId: id, resultJson: failure)
-                ))
+                try applyText(bridge.resolveEffect(effectId: id, resultJson: failure))
             } catch {
                 print("[vela-wallet] core: the failure answer was refused too — \(error)")
                 onFault(error)

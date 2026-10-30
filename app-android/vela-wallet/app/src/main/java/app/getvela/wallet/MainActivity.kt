@@ -24,6 +24,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -295,6 +298,9 @@ class MainActivity : ComponentActivity() {
         // The gallery skips the launch animation for deterministic walkthroughs.
         val coldStart = savedInstanceState == null && !launchAnimationDisabled() && !galleryRequested()
         super.onCreate(savedInstanceState)
+        // Phase 4: how long the launch animation covers the app, for the
+        // startup benchmark (`TraceSectionMetric`); ended in its onFinished.
+        if (coldStart) android.os.Trace.beginAsyncSection(LAUNCH_ANIMATION_TRACE, 0)
         // F0.5, debug builds only (the release binding is a no-op): the
         // harness's endpoints / RPCs / relay from the launch line. When they
         // changed the store, the process starts again to read them.
@@ -500,7 +506,15 @@ class MainActivity : ComponentActivity() {
                     // One continuous surface. Both the launch screen and Welcome
                     // sit on this exact colour, which is what lets them
                     // cross-dissolve without a washed-out middle (FR-012).
-                    Box(modifier = Modifier.fillMaxSize().background(colors.bgBase)) {
+                    // Phase 4: test tags are resource ids to UiAutomator, so the
+                    // macrobenchmark journeys find the home, the history list and
+                    // the signing sheet by name in any language.
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .semantics { testTagsAsResourceId = true }
+                            .background(colors.bgBase),
+                    ) {
                         if (galleryRequested()) {
                             // Spec 014: dev-only state gallery replaces the NavHost;
                             // it manages its own in-gallery theme toggle. Spec 015's
@@ -534,9 +548,11 @@ class MainActivity : ComponentActivity() {
                                     reduceMotion = reduceMotion(),
                                     backgroundColor = colors.bgBase,
                                     onProgress = { pageAlpha = it },
+                                    modifier = Modifier.testTag(LAUNCH_ANIMATION_TAG),
                                     onFinished = {
                                         pageAlpha = 1f
                                         launching = false
+                                        android.os.Trace.endAsyncSection(LAUNCH_ANIMATION_TRACE, 0)
                                     },
                                 )
                             }
@@ -642,6 +658,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+
+/** The launch overlay's tag: a journey waits for it to go before it taps (Phase 4). */
+const val LAUNCH_ANIMATION_TAG = "launch-animation"
+
+/** Process start's launch animation, as an async trace section (Phase 4's startup benchmark reads it). */
+private const val LAUNCH_ANIMATION_TRACE = "vela.launchAnimation"
 
 /** Identity-per-language wrapper; delegates every lookup to the live runtime. */
 private class LanguageSnapshot(delegate: VelaStrings) : VelaStrings by delegate

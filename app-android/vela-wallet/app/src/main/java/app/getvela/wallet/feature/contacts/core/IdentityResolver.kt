@@ -276,13 +276,31 @@ class IdentityResolver(
         fun namehash(name: String): String {
             var node = ByteArray(32)
             if (name.isNotEmpty()) {
-                name.split('.').asReversed().forEach { label ->
-                    val labelHash = keccak256(label.toByteArray(Charsets.UTF_8))
+                val labels = name.split('.')
+                // Phase 4: the node of every PROPER suffix ("addr.reverse",
+                // "reverse", "eth") is kept, so a reverse lookup hashes only
+                // its own label — 2 core calls instead of 6, for each of a
+                // history's counterparties. Proper suffixes only: the full
+                // names (one per address) are not kept, so this stays small.
+                var from = labels.size
+                for (start in 1 until labels.size) {
+                    suffixNodes[labels.subList(start, labels.size).joinToString(".")]?.let { cached ->
+                        node = cached
+                        from = start
+                    }
+                    if (from != labels.size) break
+                }
+                for (index in from - 1 downTo 0) {
+                    val labelHash = keccak256(labels[index].toByteArray(Charsets.UTF_8))
                     node = keccak256(node + labelHash)
+                    if (index > 0) suffixNodes.putIfAbsent(labels.subList(index, labels.size).joinToString("."), node)
                 }
             }
             return "0x" + node.joinToString("") { "%02x".format(it) }
         }
+
+        /** Proper-suffix nodes [namehash] has computed (see there). */
+        private val suffixNodes = java.util.concurrent.ConcurrentHashMap<String, ByteArray>()
 
         /**
          * An ABI `string` return, bounded and validated. A name is drawn next

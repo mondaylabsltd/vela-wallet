@@ -53,10 +53,26 @@ final class CoreStore<View: Decodable> {
     /// `signConfirmState` over the four signing views). Set with `view`,
     /// after it decoded, so the two never describe different moments; before
     /// the first commit it is the machine's own idle view.
-    private(set) var json: String?
+    ///
+    /// Written out when it is READ, not at every commit (native parity
+    /// Phase 4): the readers are occasional — the agent's world, a signing
+    /// card — and a machine that commits on every pool answer re-serialized
+    /// its whole view each time for nobody.
+    var json: String? {
+        if let jsonText { return jsonText }
+        guard keepsJson, let lastView else { return nil }
+        let text = CoreJSON.string(lastView)
+        jsonText = text
+        return text
+    }
+    private var jsonText: String?
+    /// The last committed view as the core wrote it, parsed.
+    private var lastView: [String: Any]?
 
     private let driver: CoreDriver
     private let keepsJson: Bool
+    private let skipsUnchanged: Bool
+    private let ignoredKeys: [String]
     private let onView: (View) -> Void
     private let onFault: (Error) -> Void
     private var booted = false
@@ -76,15 +92,26 @@ final class CoreStore<View: Decodable> {
     ///     result the core refused — see `CoreDriver.neutralAnswer`. `nil`
     ///     leaves the fault reported and nothing else.
     ///   - keepsJson: also keep each committed view as JSON text (`json`).
+    ///   - skipsUnchanged: a view equal to the last one committed is not
+    ///     decoded again and `onView` is not called for it (native parity
+    ///     Phase 4). Only for a store whose `onView` merely mirrors the view —
+    ///     one that resumes waiters or counts commits must hear every one.
+    ///   - ignoringKeys: top-level view fields this shell never reads, left
+    ///     out of that comparison — the pool's `pending_urls`, which moves at
+    ///     every step of every call for a hedging shell this one is not.
     init(
         bridge: CoreBridge,
         perform: @escaping @MainActor ([String: Any]) async -> String,
         onView: @escaping (View) -> Void = { _ in },
         onFault: @escaping (Error) -> Void = { _ in },
         neutralAnswer: (([String: Any]) -> String?)? = nil,
-        keepsJson: Bool = false
+        keepsJson: Bool = false,
+        skipsUnchanged: Bool = false,
+        ignoringKeys: [String] = []
     ) {
         self.keepsJson = keepsJson
+        self.skipsUnchanged = skipsUnchanged
+        self.ignoredKeys = ignoringKeys
         self.onView = onView
         self.onFault = onFault
         // `self` is captured after full initialisation, so the closures cannot
@@ -98,9 +125,13 @@ final class CoreStore<View: Decodable> {
             onFault: { error in fault(error) }
         )
         driver.neutralAnswer = neutralAnswer
+        // Byte-equal views — less the fields this shell never reads — are
+        // skipped before they are even parsed.
+        driver.skipsUnchangedView = skipsUnchanged
+        driver.ignoredViewKeys = ignoringKeys
         // Before its first event a machine's view is its own idle one — what
         // a core function reading the views whole is handed until then.
-        if keepsJson { json = try? bridge.view() }
+        if keepsJson { jsonText = try? bridge.view() }
         commit = { [weak self] json in self?.commit(json) }
         fault = { [weak self] error in self?.onFault(error) }
     }
@@ -150,11 +181,28 @@ final class CoreStore<View: Decodable> {
     /// Delete it when the toolchain is fixed, and let the guard tell you.
     nonisolated deinit {}
 
+    private static func same(_ a: [String: Any], _ b: [String: Any], ignoring keys: [String]) -> Bool {
+        guard !keys.isEmpty else { return NSDictionary(dictionary: a).isEqual(to: b) }
+        var a = a, b = b
+        for key in keys {
+            a.removeValue(forKey: key)
+            b.removeValue(forKey: key)
+        }
+        return NSDictionary(dictionary: a).isEqual(to: b)
+    }
+
     private func commit(_ json: [String: Any]) {
+        // The core hands its whole view back with every answer; most answers
+        // (a pool call settled, a name not found) leave it as it was. Equal
+        // to the last one: nothing to decode, nothing to tell.
+        if skipsUnchanged, view != nil, let lastView, Self.same(lastView, json, ignoring: ignoredKeys) {
+            return
+        }
         do {
             let decoded = try CoreJSON.decode(View.self, from: json)
             view = decoded
-            if keepsJson { self.json = CoreJSON.string(json) }
+            lastView = json
+            jsonText = nil
             onView(decoded)
         } catch {
             // A view this app cannot read means the core and this client

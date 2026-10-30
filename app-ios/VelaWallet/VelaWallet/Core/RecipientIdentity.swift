@@ -99,6 +99,19 @@ final class RecipientIdentity {
     private let chainCall: ChainCall
     private let walletChains: @MainActor () -> Set<Int>
     private var memo: [String: Identity] = [:]
+    /// The feed's lookups, one per address at a time.
+    private let flights = SingleFlight<String, Identity?>()
+    /// At most this many of the FEED's addresses looked up on the network at
+    /// once (native parity Phase 4). A history of 200 counterparties asked
+    /// all of them at launch — hundreds of pool calls in flight, each step of
+    /// each one handing back the pool's whole view — and the main thread
+    /// spent seconds on it, and the process a few hundred megabytes, while
+    /// the home was already drawn. The rest wait their turn; none is dropped,
+    /// a name already known answers at once, and a lookup somebody is waiting
+    /// on (Send's recipient, the address book) never queues behind them.
+    static let concurrentLookups = 4
+    private var lookupsOut = 0
+    private var lookupQueue: [CheckedContinuation<Void, Never>] = []
 
     /// `verifyStep` is `verifiedNameStep` from the core, held as a closure so a
     /// test can script a verdict without the network — the seam
@@ -155,7 +168,10 @@ final class RecipientIdentity {
     }
 
     /// A display identity for `address`, or `nil` when nobody could name it.
-    func resolve(_ address: String) async -> Identity? {
+    ///
+    /// `queued`: a background lookup (the activity feed's rows) that takes
+    /// its turn behind `concurrentLookups` others.
+    func resolve(_ address: String, queued: Bool = false) async -> Identity? {
         let key = address.lowercased()
         guard key.count == 42, key.hasPrefix("0x") else { return nil }
         // The zero address is a mint/burn counterparty (EIP-7708 native
@@ -169,6 +185,35 @@ final class RecipientIdentity {
             return cached
         }
 
+        guard queued else { return await lookUp(address, key: key) }
+        return await flights.run(key) { [weak self] in
+            guard let self else { return nil }
+            await self.takeLookupTurn()
+            defer { self.endLookupTurn() }
+            return await self.lookUp(address, key: key)
+        }
+    }
+
+    private func takeLookupTurn() async {
+        if lookupsOut < Self.concurrentLookups {
+            lookupsOut += 1
+            return
+        }
+        await withCheckedContinuation { lookupQueue.append($0) }
+    }
+
+    /// The turn passes straight to the next waiter, so the count stays put.
+    private func endLookupTurn() {
+        if lookupQueue.isEmpty {
+            lookupsOut -= 1
+        } else {
+            lookupQueue.removeFirst().resume()
+        }
+    }
+
+    /// The network half of `resolve`: the passkey index, then every naming
+    /// service in parallel.
+    private func lookUp(_ address: String, key: String) async -> Identity? {
         if let name = await passkeyName(address), !name.isEmpty {
             return remember(key, Identity(name: name, source: "passkey"))
         }
