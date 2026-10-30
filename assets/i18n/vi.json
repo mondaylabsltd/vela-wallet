@@ -1517,6 +1517,7 @@
    "trustedSignerRefused": "Trang ký từ chối ký yêu cầu này. Lý do có trên trang.",
    "trustedSignerMismatch": "Phản hồi của trang không khớp với yêu cầu này nên chưa gửi gì.",
    "trustedSignerTimeout": "Trang ký không phản hồi kịp.",
+   "trustedSignerUnanswered": "Trang ký không phản hồi — hãy thử lại.",
    "trustedSignerReopen": "Mở lại trang",
    "handoffTitle": "Xem lại và ký trên trang ký tin cậy",
    "confirmWithLabel": "Xác nhận bằng",
@@ -1907,6 +1908,7 @@
     "signerUnavailable": "Không dùng được passkey ở đây",
     "signerNotDiscoverable": "Passkey này không ký được ở đây",
     "signerFailed": "Xác thực passkey thất bại",
+    "signingPage": "Trang ký đã không ký",
     "badRpc": "Trang web không đưa RPC dùng được cho mạng này"
    },
    "requests": "Yêu cầu gần đây",

@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-pl6z1nTxeYou+lKolJR/aLnwch+Y4iuuAFHT1d/zFEE='; style-src 'sha256-UEbMxBqoN5BMFcqEZ3oYgtitb8Zd2vXFVy1cYhg25h8='; img-src data:; font-src data:; base-uri 'none'; form-action 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-+HMh1YmrQzOlPe50T4UqL3+ho0/PWeSucPs4Dn34t2Q='; style-src 'sha256-+NrH9/fqK08U9EhxZCSgXYzB0WgRnfRlljXqLondTgs='; img-src data:; font-src data:; base-uri 'none'; form-action 'none'" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Vela</title>
     <style>
@@ -582,6 +582,9 @@ body {
   color: var(--color-fg-base);
   overflow-wrap: anywhere;
 }
+
+/* A multisig execution's own line, before what the transaction does. */
+.sentence-lead { font-weight: var(--weight-semibold); }
 
 /* --- rows: the app's label / value rows (KeyValueRows) -------------------- */
 
@@ -1695,6 +1698,31 @@ window.VelaCS.i18n.register('en', {
   'refuse.msBatchZero': "A call in this batch goes to the zero address, which the batch contract reads as the multisig itself. Not signing.",
   'refuse.msRegistryCoins': "This sends coins to the genesis registry, which takes none. Not signing.",
   'refuse.msRenameUnreadable': "This renames the multisig to a name that cannot be shown in full. Not signing.",
+  // A multisig execution (round 7, r7-1) and the page’s done / withdrawn cards (r7-5).
+  'intent.msExecute': "Execute a multisig transaction",
+  'button.msExecute': "Execute",
+  'sentence.msExecute': "Executes multisig transaction #{nonce}:",
+  'sentence.msExecuteNoNonce': "Executes a multisig transaction:",
+  'sentence.msSends': "The multisig sends {amount} to {to}.",
+  'sentence.msExecCancel': "Nothing is sent: this only uses up the multisig’s transaction number.",
+  'sentence.msExecSetsUp': "It also sets up the multisig on {chain}: {count} members, {threshold} approvals needed.",
+  'sentence.msExecActivates': "It also activates {account}’s Vela account — the multisig checks that member’s approval through it.",
+  'field.approvals': "Approvals",
+  'value.approvalsOf': "{count} of {threshold}",
+  'field.approvedBy': "Approved by",
+  'value.msWalletSignature': "A wallet’s signature — the multisig checks whose",
+  'field.activates': "Activates",
+  'warn.msExecNoNonce': "The app didn’t say which number this transaction runs at, so its hashes can’t be shown. What it does is read from the bytes above.",
+  'ui.msHashesExecNote': "Computed by this page from the transaction above, at the number the app names. Match them with the hashes the members approved.",
+  'refuse.msExecShape': "The multisig execution in this operation isn’t encoded the way Vela encodes one, so this page can’t read it exactly. Not signing.",
+  'refuse.msExecExtra': "This operation carries a call besides the multisig execution and the setup it needs. Not signing.",
+  'refuse.msExecDeploy': "This operation deploys something this page can’t verify: neither the multisig as Vela creates one, nor the Vela account of a member who approved. Not signing.",
+  'refuse.msExecMismatch': "The app names one multisig, but the operation executes on another. Not signing.",
+  'refuse.msExecThreshold': "The app says this multisig needs {claimed} approvals, but the setup in this operation says {actual}. Not signing.",
+  'ui.doneTitle': "Done",
+  'ui.withdrawnTitle': "Withdrawn",
+  'ui.walletWithdrew': "The wallet stopped waiting for this request, so nothing is signed here. You can close this page.",
+  'ui.answerNotTaken': "The wallet didn’t take this page’s answer, so nothing was sent. Go back to the wallet.",
 });
 
 // 简体中文。每一句签名提示的措辞都在这里，改词不用碰逻辑。
@@ -2074,6 +2102,31 @@ window.VelaCS.i18n.register('zh', {
   'refuse.msBatchZero': "批量里有一个调用发往零地址，批量合约会把它当作多签自己。不签。",
   'refuse.msRegistryCoins': "这会向创世登记合约转币，而它不收任何币。不签。",
   'refuse.msRenameUnreadable': "这会把多签改成一个无法完整显示的名字。不签。",
+  // A multisig execution (round 7, r7-1) and the page’s done / withdrawn cards (r7-5).
+  'intent.msExecute': "执行一笔多签交易",
+  'button.msExecute': "执行",
+  'sentence.msExecute': "执行多签交易 #{nonce}：",
+  'sentence.msExecuteNoNonce': "执行一笔多签交易：",
+  'sentence.msSends': "多签向 {to} 发送 {amount}。",
+  'sentence.msExecCancel': "不发送任何东西：只是用掉多签的这个交易序号。",
+  'sentence.msExecSetsUp': "同时在 {chain} 上创建这个多签：{count} 位成员，需要 {threshold} 个批准。",
+  'sentence.msExecActivates': "同时激活 {account} 的 Vela 账户——多签要通过它核对这位成员的批准。",
+  'field.approvals': "批准",
+  'value.approvalsOf': "{count} / {threshold}",
+  'field.approvedBy': "批准人",
+  'value.msWalletSignature': "某个钱包的签名——是谁的由多签核对",
+  'field.activates': "激活",
+  'warn.msExecNoNonce': "App 没有说这笔交易按哪个序号执行，所以无法显示它的哈希。它做什么，已从上面的字节读出。",
+  'ui.msHashesExecNote': "由本页按 App 给的序号，从上面的交易算出。请和成员们批准的哈希核对。",
+  'refuse.msExecShape': "这个操作里的多签执行不是按 Vela 的方式编码的，本页无法准确读出。不签。",
+  'refuse.msExecExtra': "这个操作在多签执行及其所需的创建之外，还带了别的调用。不签。",
+  'refuse.msExecDeploy': "这个操作部署了本页无法核实的东西：既不是 Vela 创建的这个多签，也不是已批准成员的 Vela 账户。不签。",
+  'refuse.msExecMismatch': "App 说的是一个多签，操作执行的却是另一个。不签。",
+  'refuse.msExecThreshold': "App 说这个多签需要 {claimed} 个批准，但这个操作里的创建参数说是 {actual} 个。不签。",
+  'ui.doneTitle': "完成",
+  'ui.withdrawnTitle': "已撤回",
+  'ui.walletWithdrew': "钱包已不再等待这个请求，这里不会签任何东西。可以关掉这一页了。",
+  'ui.answerNotTaken': "钱包没有接受这一页的回答，所以什么都没有发出。请回到钱包。",
 });
 
 // 繁體中文（台灣）。每一句簽署提示的措辭都在這裡，改字不用動到邏輯。
@@ -2432,6 +2485,31 @@ window.VelaCS.i18n.register('zh-TW', {
   'refuse.msBatchZero': "批次裡有一個呼叫發往零地址，批次合約會把它當作多簽自己。不簽。",
   'refuse.msRegistryCoins': "這會向創世登記合約轉幣，而它不收任何幣。不簽。",
   'refuse.msRenameUnreadable': "這會把多簽改成一個無法完整顯示的名字。不簽。",
+  // A multisig execution (round 7, r7-1) and the page’s done / withdrawn cards (r7-5).
+  'intent.msExecute': "執行一筆多簽交易",
+  'button.msExecute': "執行",
+  'sentence.msExecute': "執行多簽交易 #{nonce}：",
+  'sentence.msExecuteNoNonce': "執行一筆多簽交易：",
+  'sentence.msSends': "多簽向 {to} 發送 {amount}。",
+  'sentence.msExecCancel': "不發送任何東西：只是用掉多簽的這個交易序號。",
+  'sentence.msExecSetsUp': "同時在 {chain} 上建立這個多簽：{count} 位成員，需要 {threshold} 個核准。",
+  'sentence.msExecActivates': "同時啟用 {account} 的 Vela 帳戶——多簽要透過它核對這位成員的核准。",
+  'field.approvals': "核准",
+  'value.approvalsOf': "{count} / {threshold}",
+  'field.approvedBy': "核准人",
+  'value.msWalletSignature': "某個錢包的簽名——是誰的由多簽核對",
+  'field.activates': "啟用",
+  'warn.msExecNoNonce': "App 沒有說這筆交易按哪個序號執行，所以無法顯示它的雜湊。它做什麼，已從上面的位元組讀出。",
+  'ui.msHashesExecNote': "由本頁按 App 給的序號，從上面的交易算出。請和成員們核准的雜湊核對。",
+  'refuse.msExecShape': "這個操作裡的多簽執行不是按 Vela 的方式編碼的，本頁無法準確讀出。不簽。",
+  'refuse.msExecExtra': "這個操作在多簽執行及其所需的建立之外，還帶了別的呼叫。不簽。",
+  'refuse.msExecDeploy': "這個操作部署了本頁無法核實的東西：既不是 Vela 建立的這個多簽，也不是已核准成員的 Vela 帳戶。不簽。",
+  'refuse.msExecMismatch': "App 說的是一個多簽，操作執行的卻是另一個。不簽。",
+  'refuse.msExecThreshold': "App 說這個多簽需要 {claimed} 個核准，但這個操作裡的建立參數說是 {actual} 個。不簽。",
+  'ui.doneTitle': "完成",
+  'ui.withdrawnTitle': "已撤回",
+  'ui.walletWithdrew': "錢包已不再等待這個請求，這裡不會簽任何東西。你可以關閉這一頁了。",
+  'ui.answerNotTaken': "錢包沒有接受這一頁的回答，所以什麼都沒有送出。請回到錢包。",
 });
 
 // 繁體中文（香港）。每一句簽署提示的措辭都在這裏，改字不用動到邏輯。
@@ -2790,6 +2868,31 @@ window.VelaCS.i18n.register('zh-HK', {
   'refuse.msBatchZero': "批量入面有一個調用發去零地址，批量合約會當佢係多簽自己。唔簽。",
   'refuse.msRegistryCoins': "呢個會向創世登記合約轉幣，而佢唔收任何幣。唔簽。",
   'refuse.msRenameUnreadable': "呢個會將多簽改成一個無法完整顯示嘅名字。唔簽。",
+  // A multisig execution (round 7, r7-1) and the page’s done / withdrawn cards (r7-5).
+  'intent.msExecute': "執行一筆多簽交易",
+  'button.msExecute': "執行",
+  'sentence.msExecute': "執行多簽交易 #{nonce}：",
+  'sentence.msExecuteNoNonce': "執行一筆多簽交易：",
+  'sentence.msSends': "多簽向 {to} 發送 {amount}。",
+  'sentence.msExecCancel': "唔會發送任何嘢：只係用咗多簽呢個交易序號。",
+  'sentence.msExecSetsUp': "同時喺 {chain} 上建立呢個多簽：{count} 位成員，需要 {threshold} 個批准。",
+  'sentence.msExecActivates': "同時啟用 {account} 嘅 Vela 帳戶——多簽要透過佢核對呢位成員嘅批准。",
+  'field.approvals': "批准",
+  'value.approvalsOf': "{count} / {threshold}",
+  'field.approvedBy': "批准人",
+  'value.msWalletSignature': "某個錢包嘅簽名——係邊個嘅由多簽核對",
+  'field.activates': "啟用",
+  'warn.msExecNoNonce': "App 冇講呢筆交易按邊個序號執行，所以顯示唔到佢嘅雜湊。佢做咩，已經由上面嘅位元組讀出。",
+  'ui.msHashesExecNote': "由本頁按 App 畀嘅序號，由上面嘅交易計出。請同成員批准嘅雜湊核對。",
+  'refuse.msExecShape': "呢個操作入面嘅多簽執行唔係按 Vela 嘅方式編碼，本頁讀唔準。唔簽。",
+  'refuse.msExecExtra': "呢個操作喺多簽執行同佢需要嘅建立之外，仲帶咗其他調用。唔簽。",
+  'refuse.msExecDeploy': "呢個操作部署咗本頁核實唔到嘅嘢：既唔係 Vela 建立嘅呢個多簽，亦唔係已批准成員嘅 Vela 帳戶。唔簽。",
+  'refuse.msExecMismatch': "App 講嘅係一個多簽，操作執行嘅卻係另一個。唔簽。",
+  'refuse.msExecThreshold': "App 話呢個多簽需要 {claimed} 個批准，但呢個操作入面嘅建立參數話係 {actual} 個。唔簽。",
+  'ui.doneTitle': "完成",
+  'ui.withdrawnTitle': "已撤回",
+  'ui.walletWithdrew': "錢包已經唔再等呢個請求，呢度唔會簽任何嘢。你可以關閉呢一頁。",
+  'ui.answerNotTaken': "錢包冇接受呢一頁嘅回答，所以乜都冇發出。請返去錢包。",
 });
 
 // 日本語。署名ページに表示される文言はすべてここにあります。言い回しを変えるのにロジックに触れる必要はありません。
@@ -3146,6 +3249,31 @@ window.VelaCS.i18n.register('ja', {
   'refuse.msBatchZero': "このバッチの呼び出しの 1 つがゼロアドレス宛てで、バッチ用コントラクトはそれをマルチシグ自身として扱います。署名しません。",
   'refuse.msRegistryCoins': "これはジェネシス登録コントラクトにコインを送りますが、そこは何も受け取りません。署名しません。",
   'refuse.msRenameUnreadable': "これはマルチシグの名前を、全体を表示できない名前に変えます。署名しません。",
+  // A multisig execution (round 7, r7-1) and the page’s done / withdrawn cards (r7-5).
+  'intent.msExecute': "マルチシグ取引を実行",
+  'button.msExecute': "実行する",
+  'sentence.msExecute': "マルチシグ取引 #{nonce} を実行します：",
+  'sentence.msExecuteNoNonce': "マルチシグ取引を実行します：",
+  'sentence.msSends': "マルチシグが {to} に {amount} を送ります。",
+  'sentence.msExecCancel': "何も送られません。マルチシグの取引番号を使い切るだけです。",
+  'sentence.msExecSetsUp': "あわせて {chain} 上にこのマルチシグを作成します：メンバー {count} 人、必要な承認は {threshold} 件。",
+  'sentence.msExecActivates': "あわせて {account} の Vela アカウントを有効にします — マルチシグはこのアカウントを通じてそのメンバーの承認を確認します。",
+  'field.approvals': "承認",
+  'value.approvalsOf': "{threshold} 件中 {count} 件",
+  'field.approvedBy': "承認者",
+  'value.msWalletSignature': "ウォレットの署名 — 誰の署名かはマルチシグが確認します",
+  'field.activates': "有効にする",
+  'warn.msExecNoNonce': "アプリがこの取引の実行番号を示していないため、ハッシュを表示できません。内容は上のバイトから読み取っています。",
+  'ui.msHashesExecNote': "このページが上の取引から、アプリの示す番号で計算しました。メンバーが承認したハッシュと照合してください。",
+  'refuse.msExecShape': "この操作のマルチシグ実行は Vela の方式でエンコードされておらず、このページでは正確に読み取れません。署名しません。",
+  'refuse.msExecExtra': "この操作には、マルチシグの実行とそれに必要な作成以外の呼び出しが含まれています。署名しません。",
+  'refuse.msExecDeploy': "この操作は、このページで確認できないものをデプロイします：Vela が作成するこのマルチシグでも、承認したメンバーの Vela アカウントでもありません。署名しません。",
+  'refuse.msExecMismatch': "アプリが示すマルチシグと、操作が実行するマルチシグが異なります。署名しません。",
+  'refuse.msExecThreshold': "アプリはこのマルチシグに必要な承認を {claimed} 件としていますが、この操作の作成設定では {actual} 件です。署名しません。",
+  'ui.doneTitle': "完了",
+  'ui.withdrawnTitle': "取り下げ済み",
+  'ui.walletWithdrew': "ウォレットはこのリクエストを待つのをやめました。ここでは何も署名されません。このページは閉じてかまいません。",
+  'ui.answerNotTaken': "ウォレットはこのページの応答を受け取らなかったため、何も送信されていません。ウォレットに戻ってください。",
 });
 
 // 한국어. 서명 페이지에 표시되는 모든 문구가 여기에 있습니다. 표현을 바꿀 때 로직은 건드리지 않아도 됩니다.
@@ -3502,6 +3630,31 @@ window.VelaCS.i18n.register('ko', {
   'refuse.msBatchZero': "이 배치의 호출 하나가 영(0) 주소로 가며, 배치 컨트랙트는 이를 멀티시그 자신으로 읽습니다. 서명하지 않습니다.",
   'refuse.msRegistryCoins': "이것은 제네시스 레지스트리에 코인을 보내지만, 그곳은 아무것도 받지 않습니다. 서명하지 않습니다.",
   'refuse.msRenameUnreadable': "이것은 멀티시그 이름을 전부 보여줄 수 없는 이름으로 바꿉니다. 서명하지 않습니다.",
+  // A multisig execution (round 7, r7-1) and the page’s done / withdrawn cards (r7-5).
+  'intent.msExecute': "멀티시그 거래 실행",
+  'button.msExecute': "실행",
+  'sentence.msExecute': "멀티시그 거래 #{nonce}을(를) 실행합니다:",
+  'sentence.msExecuteNoNonce': "멀티시그 거래를 실행합니다:",
+  'sentence.msSends': "멀티시그가 {to}에게 {amount}을(를) 보냅니다.",
+  'sentence.msExecCancel': "아무것도 보내지 않습니다. 멀티시그의 거래 번호만 소진합니다.",
+  'sentence.msExecSetsUp': "또한 {chain}에 이 멀티시그를 만듭니다: 멤버 {count}명, 필요한 승인 {threshold}개.",
+  'sentence.msExecActivates': "또한 {account}의 Vela 계정을 활성화합니다 — 멀티시그는 이 계정을 통해 해당 멤버의 승인을 확인합니다.",
+  'field.approvals': "승인",
+  'value.approvalsOf': "{threshold}개 중 {count}개",
+  'field.approvedBy': "승인한 사람",
+  'value.msWalletSignature': "지갑의 서명 — 누구의 것인지는 멀티시그가 확인합니다",
+  'field.activates': "활성화",
+  'warn.msExecNoNonce': "앱이 이 거래가 몇 번으로 실행되는지 알려 주지 않아 해시를 표시할 수 없습니다. 무엇을 하는지는 위의 바이트에서 읽었습니다.",
+  'ui.msHashesExecNote': "이 페이지가 위의 거래에서 앱이 알려 준 번호로 계산했습니다. 멤버들이 승인한 해시와 대조하세요.",
+  'refuse.msExecShape': "이 작업의 멀티시그 실행은 Vela 방식으로 인코딩되어 있지 않아 이 페이지가 정확히 읽을 수 없습니다. 서명하지 않습니다.",
+  'refuse.msExecExtra': "이 작업에는 멀티시그 실행과 그에 필요한 생성 외에 다른 호출이 들어 있습니다. 서명하지 않습니다.",
+  'refuse.msExecDeploy': "이 작업은 이 페이지가 확인할 수 없는 것을 배포합니다: Vela가 만드는 이 멀티시그도, 승인한 멤버의 Vela 계정도 아닙니다. 서명하지 않습니다.",
+  'refuse.msExecMismatch': "앱이 말하는 멀티시그와 작업이 실행하는 멀티시그가 다릅니다. 서명하지 않습니다.",
+  'refuse.msExecThreshold': "앱은 이 멀티시그에 승인 {claimed}개가 필요하다고 하지만, 이 작업의 생성 설정은 {actual}개입니다. 서명하지 않습니다.",
+  'ui.doneTitle': "완료",
+  'ui.withdrawnTitle': "철회됨",
+  'ui.walletWithdrew': "지갑이 이 요청을 더 이상 기다리지 않으므로 여기서는 아무것도 서명되지 않습니다. 이 페이지를 닫아도 됩니다.",
+  'ui.answerNotTaken': "지갑이 이 페이지의 응답을 받지 않았으므로 아무것도 보내지 않았습니다. 지갑으로 돌아가세요.",
 });
 
 // Tiếng Việt. Mọi câu chữ của trang ký nằm ở đây; đổi chữ không cần đụng tới logic.
@@ -3858,6 +4011,31 @@ window.VelaCS.i18n.register('vi', {
   'refuse.msBatchZero': "Một lệnh gọi trong lô gửi tới địa chỉ 0, mà hợp đồng gộp hiểu là chính ví đa chữ ký. Không ký.",
   'refuse.msRegistryCoins': "Việc này gửi tiền tới hợp đồng đăng ký genesis, nơi không nhận gì cả. Không ký.",
   'refuse.msRenameUnreadable': "Việc này đổi tên ví đa chữ ký thành một tên không thể hiển thị đầy đủ. Không ký.",
+  // A multisig execution (round 7, r7-1) and the page’s done / withdrawn cards (r7-5).
+  'intent.msExecute': "Thực hiện một giao dịch đa chữ ký",
+  'button.msExecute': "Thực hiện",
+  'sentence.msExecute': "Thực hiện giao dịch đa chữ ký #{nonce}:",
+  'sentence.msExecuteNoNonce': "Thực hiện một giao dịch đa chữ ký:",
+  'sentence.msSends': "Ví đa chữ ký gửi {amount} đến {to}.",
+  'sentence.msExecCancel': "Không gửi gì cả: việc này chỉ dùng hết số thứ tự giao dịch của ví đa chữ ký.",
+  'sentence.msExecSetsUp': "Đồng thời tạo ví đa chữ ký trên {chain}: {count} thành viên, cần {threshold} phê duyệt.",
+  'sentence.msExecActivates': "Đồng thời kích hoạt tài khoản Vela của {account} — ví đa chữ ký kiểm tra phê duyệt của thành viên đó qua tài khoản này.",
+  'field.approvals': "Phê duyệt",
+  'value.approvalsOf': "{count} trên {threshold}",
+  'field.approvedBy': "Phê duyệt bởi",
+  'value.msWalletSignature': "Chữ ký của một ví — ví đa chữ ký kiểm tra là của ai",
+  'field.activates': "Kích hoạt",
+  'warn.msExecNoNonce': "Ứng dụng không cho biết giao dịch này chạy ở số thứ tự nào, nên không thể hiển thị các mã băm. Nội dung đã được đọc từ các byte ở trên.",
+  'ui.msHashesExecNote': "Trang này tính từ giao dịch ở trên, theo số thứ tự ứng dụng đưa ra. Hãy đối chiếu với các mã băm mà thành viên đã phê duyệt.",
+  'refuse.msExecShape': "Lệnh thực hiện đa chữ ký trong thao tác này không được mã hóa theo cách của Vela, nên trang này không đọc chính xác được. Không ký.",
+  'refuse.msExecExtra': "Thao tác này có một lệnh gọi ngoài việc thực hiện đa chữ ký và phần khởi tạo cần thiết. Không ký.",
+  'refuse.msExecDeploy': "Thao tác này triển khai thứ mà trang này không xác minh được: không phải ví đa chữ ký do Vela tạo, cũng không phải tài khoản Vela của thành viên đã phê duyệt. Không ký.",
+  'refuse.msExecMismatch': "Ứng dụng nêu một ví đa chữ ký, nhưng thao tác lại thực hiện trên ví khác. Không ký.",
+  'refuse.msExecThreshold': "Ứng dụng nói ví đa chữ ký này cần {claimed} phê duyệt, nhưng phần khởi tạo trong thao tác này nói {actual}. Không ký.",
+  'ui.doneTitle': "Xong",
+  'ui.withdrawnTitle': "Đã rút lại",
+  'ui.walletWithdrew': "Ví đã ngừng chờ yêu cầu này, nên không có gì được ký ở đây. Bạn có thể đóng trang này.",
+  'ui.answerNotTaken': "Ví không nhận câu trả lời của trang này, nên chưa gửi gì. Hãy quay lại ví.",
 });
 
 // Bahasa Indonesia. Semua kalimat halaman tanda tangan ada di sini; mengganti kata tidak perlu menyentuh logika.
@@ -4214,6 +4392,31 @@ window.VelaCS.i18n.register('id', {
   'refuse.msBatchZero': "Satu panggilan dalam batch ini menuju alamat nol, yang dibaca kontrak batch sebagai multisig itu sendiri. Tidak menandatangani.",
   'refuse.msRegistryCoins': "Ini mengirim koin ke registri genesis, yang tidak menerima apa pun. Tidak menandatangani.",
   'refuse.msRenameUnreadable': "Ini mengganti nama multisig dengan nama yang tidak dapat ditampilkan utuh. Tidak menandatangani.",
+  // A multisig execution (round 7, r7-1) and the page’s done / withdrawn cards (r7-5).
+  'intent.msExecute': "Jalankan transaksi multisig",
+  'button.msExecute': "Jalankan",
+  'sentence.msExecute': "Menjalankan transaksi multisig #{nonce}:",
+  'sentence.msExecuteNoNonce': "Menjalankan transaksi multisig:",
+  'sentence.msSends': "Multisig mengirim {amount} ke {to}.",
+  'sentence.msExecCancel': "Tidak ada yang dikirim: ini hanya memakai nomor transaksi multisig.",
+  'sentence.msExecSetsUp': "Ini juga membuat multisig di {chain}: {count} anggota, perlu {threshold} persetujuan.",
+  'sentence.msExecActivates': "Ini juga mengaktifkan akun Vela milik {account} — multisig memeriksa persetujuan anggota itu melaluinya.",
+  'field.approvals': "Persetujuan",
+  'value.approvalsOf': "{count} dari {threshold}",
+  'field.approvedBy': "Disetujui oleh",
+  'value.msWalletSignature': "Tanda tangan sebuah dompet — multisig memeriksa milik siapa",
+  'field.activates': "Mengaktifkan",
+  'warn.msExecNoNonce': "Aplikasi tidak menyebut nomor transaksi ini dijalankan, jadi hash-nya tidak dapat ditampilkan. Apa yang dilakukannya dibaca dari byte di atas.",
+  'ui.msHashesExecNote': "Dihitung oleh halaman ini dari transaksi di atas, pada nomor yang disebut aplikasi. Cocokkan dengan hash yang disetujui para anggota.",
+  'refuse.msExecShape': "Eksekusi multisig dalam operasi ini tidak dikodekan seperti cara Vela, jadi halaman ini tidak dapat membacanya dengan tepat. Tidak menandatangani.",
+  'refuse.msExecExtra': "Operasi ini membawa panggilan selain eksekusi multisig dan penyiapan yang diperlukannya. Tidak menandatangani.",
+  'refuse.msExecDeploy': "Operasi ini men-deploy sesuatu yang tidak dapat diverifikasi halaman ini: bukan multisig seperti yang dibuat Vela, bukan pula akun Vela anggota yang menyetujui. Tidak menandatangani.",
+  'refuse.msExecMismatch': "Aplikasi menyebut satu multisig, tetapi operasi dijalankan pada multisig lain. Tidak menandatangani.",
+  'refuse.msExecThreshold': "Aplikasi mengatakan multisig ini perlu {claimed} persetujuan, tetapi penyiapan dalam operasi ini menyebut {actual}. Tidak menandatangani.",
+  'ui.doneTitle': "Selesai",
+  'ui.withdrawnTitle': "Ditarik",
+  'ui.walletWithdrew': "Dompet tidak lagi menunggu permintaan ini, jadi tidak ada yang ditandatangani di sini. Anda bisa menutup halaman ini.",
+  'ui.answerNotTaken': "Dompet tidak menerima jawaban halaman ini, jadi tidak ada yang dikirim. Kembali ke dompet.",
 });
 
 // Türkçe. İmza sayfasının tüm cümleleri burada; bir sözcüğü değiştirmek için mantığa dokunmak gerekmez.
@@ -4570,6 +4773,31 @@ window.VelaCS.i18n.register('tr', {
   'refuse.msBatchZero': "Bu toplu işlemdeki bir çağrı sıfır adrese gidiyor; toplu işlem sözleşmesi bunu çoklu imzanın kendisi olarak okur. İmzalanmıyor.",
   'refuse.msRegistryCoins': "Bu, hiçbir şey kabul etmeyen genesis kayıt sözleşmesine coin gönderir. İmzalanmıyor.",
   'refuse.msRenameUnreadable': "Bu, çoklu imzayı tamamen gösterilemeyen bir adla yeniden adlandırır. İmzalanmıyor.",
+  // A multisig execution (round 7, r7-1) and the page’s done / withdrawn cards (r7-5).
+  'intent.msExecute': "Çoklu imza işlemini yürüt",
+  'button.msExecute': "Yürüt",
+  'sentence.msExecute': "Çoklu imza işlemi #{nonce} yürütülüyor:",
+  'sentence.msExecuteNoNonce': "Bir çoklu imza işlemi yürütülüyor:",
+  'sentence.msSends': "Çoklu imza {to} adresine {amount} gönderir.",
+  'sentence.msExecCancel': "Hiçbir şey gönderilmez: bu yalnızca çoklu imzanın işlem numarasını kullanır.",
+  'sentence.msExecSetsUp': "Ayrıca çoklu imzayı {chain} üzerinde kurar: {count} üye, {threshold} onay gerekir.",
+  'sentence.msExecActivates': "Ayrıca {account} adresinin Vela hesabını etkinleştirir — çoklu imza o üyenin onayını bu hesap üzerinden kontrol eder.",
+  'field.approvals': "Onaylar",
+  'value.approvalsOf': "{threshold} onaydan {count}",
+  'field.approvedBy': "Onaylayan",
+  'value.msWalletSignature': "Bir cüzdanın imzası — kimin olduğunu çoklu imza kontrol eder",
+  'field.activates': "Etkinleştirir",
+  'warn.msExecNoNonce': "Uygulama bu işlemin hangi numarada çalışacağını söylemedi, bu yüzden özetleri gösterilemiyor. Ne yaptığı yukarıdaki baytlardan okundu.",
+  'ui.msHashesExecNote': "Bu sayfa tarafından yukarıdaki işlemden, uygulamanın verdiği numarayla hesaplandı. Üyelerin onayladığı özetlerle karşılaştırın.",
+  'refuse.msExecShape': "Bu işlemdeki çoklu imza yürütmesi Vela'nın kodladığı biçimde değil, bu sayfa onu tam olarak okuyamıyor. İmzalanmıyor.",
+  'refuse.msExecExtra': "Bu işlem, çoklu imza yürütmesi ve gerektirdiği kurulum dışında bir çağrı içeriyor. İmzalanmıyor.",
+  'refuse.msExecDeploy': "Bu işlem, bu sayfanın doğrulayamadığı bir şey dağıtıyor: ne Vela'nın oluşturduğu biçimde bu çoklu imza ne de onaylayan bir üyenin Vela hesabı. İmzalanmıyor.",
+  'refuse.msExecMismatch': "Uygulama bir çoklu imzayı adlandırıyor, ama işlem başka birinde yürütülüyor. İmzalanmıyor.",
+  'refuse.msExecThreshold': "Uygulama bu çoklu imzanın {claimed} onay gerektirdiğini söylüyor, ama bu işlemdeki kurulum {actual} diyor. İmzalanmıyor.",
+  'ui.doneTitle': "Tamam",
+  'ui.withdrawnTitle': "Geri çekildi",
+  'ui.walletWithdrew': "Cüzdan bu isteği beklemeyi bıraktı, bu yüzden burada hiçbir şey imzalanmıyor. Bu sayfayı kapatabilirsiniz.",
+  'ui.answerNotTaken': "Cüzdan bu sayfanın yanıtını almadı, bu yüzden hiçbir şey gönderilmedi. Cüzdana dönün.",
 });
 
 // Español (México). Cada frase de la página de firma vive aquí; cambiar una palabra no toca la lógica.
@@ -4926,6 +5154,31 @@ window.VelaCS.i18n.register('es-MX', {
   'refuse.msBatchZero': "Una llamada de este lote va a la dirección cero, que el contrato de lotes lee como la propia multifirma. No se firma.",
   'refuse.msRegistryCoins': "Esto envía monedas al registro génesis, que no acepta ninguna. No se firma.",
   'refuse.msRenameUnreadable': "Esto renombra la multifirma con un nombre que no se puede mostrar completo. No se firma.",
+  // A multisig execution (round 7, r7-1) and the page’s done / withdrawn cards (r7-5).
+  'intent.msExecute': "Ejecutar una transacción multifirma",
+  'button.msExecute': "Ejecutar",
+  'sentence.msExecute': "Ejecuta la transacción multifirma #{nonce}:",
+  'sentence.msExecuteNoNonce': "Ejecuta una transacción multifirma:",
+  'sentence.msSends': "La multifirma envía {amount} a {to}.",
+  'sentence.msExecCancel': "No se envía nada: solo se agota el número de transacción de la multifirma.",
+  'sentence.msExecSetsUp': "También crea la multifirma en {chain}: {count} miembros, se necesitan {threshold} aprobaciones.",
+  'sentence.msExecActivates': "También activa la cuenta Vela de {account} — la multifirma comprueba la aprobación de ese miembro a través de ella.",
+  'field.approvals': "Aprobaciones",
+  'value.approvalsOf': "{count} de {threshold}",
+  'field.approvedBy': "Aprobada por",
+  'value.msWalletSignature': "La firma de una billetera — la multifirma comprueba de quién",
+  'field.activates': "Activa",
+  'warn.msExecNoNonce': "La app no dijo con qué número se ejecuta esta transacción, así que no se pueden mostrar sus hashes. Lo que hace se lee de los bytes de arriba.",
+  'ui.msHashesExecNote': "Calculados por esta página a partir de la transacción de arriba, con el número que da la app. Compáralos con los hashes que aprobaron los miembros.",
+  'refuse.msExecShape': "La ejecución multifirma de esta operación no está codificada como la codifica Vela, así que esta página no puede leerla con exactitud. No se firma.",
+  'refuse.msExecExtra': "Esta operación lleva una llamada además de la ejecución multifirma y la configuración que necesita. No se firma.",
+  'refuse.msExecDeploy': "Esta operación despliega algo que esta página no puede verificar: ni la multifirma como la crea Vela, ni la cuenta Vela de un miembro que aprobó. No se firma.",
+  'refuse.msExecMismatch': "La app nombra una multifirma, pero la operación se ejecuta en otra. No se firma.",
+  'refuse.msExecThreshold': "La app dice que esta multifirma necesita {claimed} aprobaciones, pero la configuración de esta operación dice {actual}. No se firma.",
+  'ui.doneTitle': "Listo",
+  'ui.withdrawnTitle': "Retirada",
+  'ui.walletWithdrew': "La billetera dejó de esperar esta solicitud, así que aquí no se firma nada. Puedes cerrar esta página.",
+  'ui.answerNotTaken': "La billetera no aceptó la respuesta de esta página, así que no se envió nada. Vuelve a la billetera.",
 });
 
 // Português (Brasil). Cada frase da página de assinatura mora aqui; trocar uma palavra não mexe na lógica.
@@ -5282,6 +5535,31 @@ window.VelaCS.i18n.register('pt-BR', {
   'refuse.msBatchZero': "Uma chamada deste lote vai para o endereço zero, que o contrato de lotes lê como o próprio multisig. Não vou assinar.",
   'refuse.msRegistryCoins': "Isto envia moedas ao registro gênese, que não aceita nenhuma. Não vou assinar.",
   'refuse.msRenameUnreadable': "Isto renomeia o multisig com um nome que não pode ser mostrado por inteiro. Não vou assinar.",
+  // A multisig execution (round 7, r7-1) and the page’s done / withdrawn cards (r7-5).
+  'intent.msExecute': "Executar uma transação multisig",
+  'button.msExecute': "Executar",
+  'sentence.msExecute': "Executa a transação multisig #{nonce}:",
+  'sentence.msExecuteNoNonce': "Executa uma transação multisig:",
+  'sentence.msSends': "O multisig envia {amount} para {to}.",
+  'sentence.msExecCancel': "Nada é enviado: isto apenas consome o número de transação do multisig.",
+  'sentence.msExecSetsUp': "Também cria o multisig na {chain}: {count} membros, {threshold} aprovações necessárias.",
+  'sentence.msExecActivates': "Também ativa a conta Vela de {account} — o multisig confere a aprovação desse membro por meio dela.",
+  'field.approvals': "Aprovações",
+  'value.approvalsOf': "{count} de {threshold}",
+  'field.approvedBy': "Aprovada por",
+  'value.msWalletSignature': "A assinatura de uma carteira — o multisig confere de quem",
+  'field.activates': "Ativa",
+  'warn.msExecNoNonce': "O app não disse em qual número esta transação é executada, então os hashes não podem ser mostrados. O que ela faz foi lido dos bytes acima.",
+  'ui.msHashesExecNote': "Calculados por esta página a partir da transação acima, no número que o app informa. Compare com os hashes que os membros aprovaram.",
+  'refuse.msExecShape': "A execução multisig nesta operação não está codificada do jeito que a Vela codifica, então esta página não consegue lê-la com exatidão. Não vou assinar.",
+  'refuse.msExecExtra': "Esta operação traz uma chamada além da execução multisig e da configuração de que ela precisa. Não vou assinar.",
+  'refuse.msExecDeploy': "Esta operação implanta algo que esta página não consegue verificar: nem o multisig como a Vela o cria, nem a conta Vela de um membro que aprovou. Não vou assinar.",
+  'refuse.msExecMismatch': "O app cita um multisig, mas a operação executa em outro. Não vou assinar.",
+  'refuse.msExecThreshold': "O app diz que este multisig precisa de {claimed} aprovações, mas a configuração nesta operação diz {actual}. Não vou assinar.",
+  'ui.doneTitle': "Concluído",
+  'ui.withdrawnTitle': "Retirada",
+  'ui.walletWithdrew': "A carteira parou de esperar por esta solicitação, então nada é assinado aqui. Você pode fechar esta página.",
+  'ui.answerNotTaken': "A carteira não aceitou a resposta desta página, então nada foi enviado. Volte para a carteira.",
 });
 
 // Français. Chaque phrase de la page de signature est ici ; changer un mot ne touche pas à la logique.
@@ -5640,6 +5918,31 @@ window.VelaCS.i18n.register('fr', {
   'refuse.msBatchZero': "Un appel de ce lot va à l’adresse zéro, que le contrat de lots lit comme le multisig lui-même. Pas de signature.",
   'refuse.msRegistryCoins': "Ceci envoie des jetons au registre genesis, qui n’en accepte aucun. Pas de signature.",
   'refuse.msRenameUnreadable': "Ceci renomme le multisig avec un nom qui ne peut pas être affiché en entier. Pas de signature.",
+  // A multisig execution (round 7, r7-1) and the page’s done / withdrawn cards (r7-5).
+  'intent.msExecute': "Exécuter une transaction multisig",
+  'button.msExecute': "Exécuter",
+  'sentence.msExecute': "Exécute la transaction multisig n° {nonce} :",
+  'sentence.msExecuteNoNonce': "Exécute une transaction multisig :",
+  'sentence.msSends': "Le multisig envoie {amount} à {to}.",
+  'sentence.msExecCancel': "Rien n’est envoyé : cela consomme seulement le numéro de transaction du multisig.",
+  'sentence.msExecSetsUp': "Crée aussi le multisig sur {chain} : {count} membres, {threshold} approbations requises.",
+  'sentence.msExecActivates': "Active aussi le compte Vela de {account} — le multisig vérifie l’approbation de ce membre par ce compte.",
+  'field.approvals': "Approbations",
+  'value.approvalsOf': "{count} sur {threshold}",
+  'field.approvedBy': "Approuvée par",
+  'value.msWalletSignature': "La signature d’un portefeuille — le multisig vérifie de qui",
+  'field.activates': "Active",
+  'warn.msExecNoNonce': "L’app n’a pas indiqué à quel numéro cette transaction s’exécute, ses hachages ne peuvent donc pas être affichés. Ce qu’elle fait est lu dans les octets ci-dessus.",
+  'ui.msHashesExecNote': "Calculés par cette page à partir de la transaction ci-dessus, au numéro indiqué par l’app. Comparez-les aux hachages approuvés par les membres.",
+  'refuse.msExecShape': "L’exécution multisig de cette opération n’est pas encodée comme Vela l’encode, cette page ne peut donc pas la lire exactement. Pas de signature.",
+  'refuse.msExecExtra': "Cette opération contient un appel en plus de l’exécution multisig et de la configuration dont elle a besoin. Pas de signature.",
+  'refuse.msExecDeploy': "Cette opération déploie quelque chose que cette page ne peut pas vérifier : ni le multisig tel que Vela le crée, ni le compte Vela d’un membre qui a approuvé. Pas de signature.",
+  'refuse.msExecMismatch': "L’app nomme un multisig, mais l’opération s’exécute sur un autre. Pas de signature.",
+  'refuse.msExecThreshold': "L’app dit que ce multisig exige {claimed} approbations, mais la configuration de cette opération en indique {actual}. Pas de signature.",
+  'ui.doneTitle': "Terminé",
+  'ui.withdrawnTitle': "Retirée",
+  'ui.walletWithdrew': "Le portefeuille a cessé d’attendre cette demande, rien n’est donc signé ici. Vous pouvez fermer cette page.",
+  'ui.answerNotTaken': "Le portefeuille n’a pas accepté la réponse de cette page, rien n’a donc été envoyé. Revenez au portefeuille.",
 });
 
 // Deutsch. Jede Formulierung der Signaturseite steht hier; ein Wort zu ändern berührt keine Logik.
@@ -5998,6 +6301,31 @@ window.VelaCS.i18n.register('de', {
   'refuse.msBatchZero': "Ein Aufruf in diesem Batch geht an die Nulladresse, die der Batch-Vertrag als das Multisig selbst liest. Keine Signatur.",
   'refuse.msRegistryCoins': "Das sendet Coins an das Genesis-Register, das keine annimmt. Keine Signatur.",
   'refuse.msRenameUnreadable': "Das benennt das Multisig in einen Namen um, der nicht vollständig angezeigt werden kann. Keine Signatur.",
+  // A multisig execution (round 7, r7-1) and the page’s done / withdrawn cards (r7-5).
+  'intent.msExecute': "Eine Multisig-Transaktion ausführen",
+  'button.msExecute': "Ausführen",
+  'sentence.msExecute': "Führt die Multisig-Transaktion Nr. {nonce} aus:",
+  'sentence.msExecuteNoNonce': "Führt eine Multisig-Transaktion aus:",
+  'sentence.msSends': "Das Multisig sendet {amount} an {to}.",
+  'sentence.msExecCancel': "Es wird nichts gesendet: Das verbraucht nur die Transaktionsnummer des Multisigs.",
+  'sentence.msExecSetsUp': "Richtet außerdem das Multisig auf {chain} ein: {count} Mitglieder, {threshold} Freigaben benötigt.",
+  'sentence.msExecActivates': "Aktiviert außerdem das Vela-Konto von {account} — darüber prüft das Multisig die Freigabe dieses Mitglieds.",
+  'field.approvals': "Freigaben",
+  'value.approvalsOf': "{count} von {threshold}",
+  'field.approvedBy': "Freigegeben von",
+  'value.msWalletSignature': "Die Signatur einer Wallet — wessen, prüft das Multisig",
+  'field.activates': "Aktiviert",
+  'warn.msExecNoNonce': "Die App hat nicht gesagt, unter welcher Nummer diese Transaktion läuft, daher können ihre Hashes nicht angezeigt werden. Was sie tut, ist aus den Bytes oben gelesen.",
+  'ui.msHashesExecNote': "Von dieser Seite aus der Transaktion oben berechnet, unter der Nummer, die die App nennt. Gleichen Sie sie mit den Hashes ab, die die Mitglieder freigegeben haben.",
+  'refuse.msExecShape': "Die Multisig-Ausführung in diesem Vorgang ist nicht so kodiert, wie Vela sie kodiert, daher kann diese Seite sie nicht genau lesen. Keine Signatur.",
+  'refuse.msExecExtra': "Dieser Vorgang enthält einen Aufruf außer der Multisig-Ausführung und der Einrichtung, die sie braucht. Keine Signatur.",
+  'refuse.msExecDeploy': "Dieser Vorgang stellt etwas bereit, das diese Seite nicht prüfen kann: weder das Multisig, wie Vela es erstellt, noch das Vela-Konto eines Mitglieds, das freigegeben hat. Keine Signatur.",
+  'refuse.msExecMismatch': "Die App nennt ein Multisig, der Vorgang wird aber auf einem anderen ausgeführt. Keine Signatur.",
+  'refuse.msExecThreshold': "Die App sagt, dieses Multisig braucht {claimed} Freigaben, die Einrichtung in diesem Vorgang sagt aber {actual}. Keine Signatur.",
+  'ui.doneTitle': "Fertig",
+  'ui.withdrawnTitle': "Zurückgezogen",
+  'ui.walletWithdrew': "Die Wallet wartet nicht mehr auf diese Anfrage, daher wird hier nichts signiert. Du kannst diese Seite schließen.",
+  'ui.answerNotTaken': "Die Wallet hat die Antwort dieser Seite nicht angenommen, daher wurde nichts gesendet. Geh zurück zur Wallet.",
 });
 
 // Русский. Все формулировки страницы подписи собраны здесь; правка слов не затрагивает логику.
@@ -6356,6 +6684,31 @@ window.VelaCS.i18n.register('ru', {
   'refuse.msBatchZero': "Один из вызовов пакета идёт на нулевой адрес, который пакетный контракт считает самой мультиподписью. Не подписываю.",
   'refuse.msRegistryCoins': "Это отправляет монеты в реестр genesis, который ничего не принимает. Не подписываю.",
   'refuse.msRenameUnreadable': "Это переименовывает мультиподпись в название, которое нельзя показать целиком. Не подписываю.",
+  // A multisig execution (round 7, r7-1) and the page’s done / withdrawn cards (r7-5).
+  'intent.msExecute': "Исполнить транзакцию мультиподписи",
+  'button.msExecute': "Исполнить",
+  'sentence.msExecute': "Исполняет транзакцию мультиподписи № {nonce}:",
+  'sentence.msExecuteNoNonce': "Исполняет транзакцию мультиподписи:",
+  'sentence.msSends': "Мультиподпись отправляет {amount} на {to}.",
+  'sentence.msExecCancel': "Ничего не отправляется: расходуется только номер транзакции мультиподписи.",
+  'sentence.msExecSetsUp': "Также создаёт мультиподпись в {chain}: участников — {count}, нужно одобрений — {threshold}.",
+  'sentence.msExecActivates': "Также активирует аккаунт Vela участника {account} — через него мультиподпись проверяет одобрение этого участника.",
+  'field.approvals': "Одобрения",
+  'value.approvalsOf': "{count} из {threshold}",
+  'field.approvedBy': "Одобрил",
+  'value.msWalletSignature': "Подпись кошелька — чья, проверяет мультиподпись",
+  'field.activates': "Активирует",
+  'warn.msExecNoNonce': "Приложение не сообщило, под каким номером выполняется эта транзакция, поэтому её хеши показать нельзя. Что она делает, прочитано из байтов выше.",
+  'ui.msHashesExecNote': "Вычислены этой страницей из транзакции выше, под номером, который называет приложение. Сверьте их с хешами, которые одобрили участники.",
+  'refuse.msExecShape': "Исполнение мультиподписи в этой операции закодировано не так, как его кодирует Vela, поэтому эта страница не может прочитать его точно. Не подписываю.",
+  'refuse.msExecExtra': "В этой операции есть вызов помимо исполнения мультиподписи и нужной ему настройки. Не подписываю.",
+  'refuse.msExecDeploy': "Эта операция развёртывает то, что эта страница не может проверить: это ни мультиподпись в том виде, в каком её создаёт Vela, ни аккаунт Vela одобрившего участника. Не подписываю.",
+  'refuse.msExecMismatch': "Приложение называет одну мультиподпись, а операция исполняется на другой. Не подписываю.",
+  'refuse.msExecThreshold': "Приложение говорит, что этой мультиподписи нужно одобрений: {claimed}, а настройка в этой операции говорит: {actual}. Не подписываю.",
+  'ui.doneTitle': "Готово",
+  'ui.withdrawnTitle': "Отозван",
+  'ui.walletWithdrew': "Кошелёк перестал ждать этот запрос, поэтому здесь ничего не подписывается. Эту страницу можно закрыть.",
+  'ui.answerNotTaken': "Кошелёк не принял ответ этой страницы, поэтому ничего не отправлено. Вернитесь в кошелёк.",
 });
 
 // Italiano. Ogni frase della pagina di firma vive qui; cambiare una parola non tocca la logica.
@@ -6712,13 +7065,40 @@ window.VelaCS.i18n.register('it', {
   'refuse.msBatchZero': "Una chiamata di questo batch va all’indirizzo zero, che il contratto batch legge come il multisig stesso. Non firmo.",
   'refuse.msRegistryCoins': "Questo invia monete al registro genesis, che non ne accetta. Non firmo.",
   'refuse.msRenameUnreadable': "Questo rinomina il multisig con un nome che non può essere mostrato per intero. Non firmo.",
+  // A multisig execution (round 7, r7-1) and the page’s done / withdrawn cards (r7-5).
+  'intent.msExecute': "Esegui una transazione multisig",
+  'button.msExecute': "Esegui",
+  'sentence.msExecute': "Esegue la transazione multisig n. {nonce}:",
+  'sentence.msExecuteNoNonce': "Esegue una transazione multisig:",
+  'sentence.msSends': "Il multisig invia {amount} a {to}.",
+  'sentence.msExecCancel': "Non viene inviato nulla: si consuma solo il numero di transazione del multisig.",
+  'sentence.msExecSetsUp': "Crea anche il multisig su {chain}: {count} membri, {threshold} approvazioni necessarie.",
+  'sentence.msExecActivates': "Attiva anche l’account Vela di {account} — il multisig verifica l’approvazione di quel membro tramite esso.",
+  'field.approvals': "Approvazioni",
+  'value.approvalsOf': "{count} su {threshold}",
+  'field.approvedBy': "Approvata da",
+  'value.msWalletSignature': "La firma di un wallet — il multisig verifica di chi",
+  'field.activates': "Attiva",
+  'warn.msExecNoNonce': "L’app non ha indicato con quale numero viene eseguita questa transazione, quindi i suoi hash non possono essere mostrati. Cosa fa è letto dai byte qui sopra.",
+  'ui.msHashesExecNote': "Calcolati da questa pagina dalla transazione qui sopra, al numero indicato dall’app. Confrontali con gli hash approvati dai membri.",
+  'refuse.msExecShape': "L’esecuzione multisig in questa operazione non è codificata come la codifica Vela, quindi questa pagina non può leggerla con esattezza. Non firmo.",
+  'refuse.msExecExtra': "Questa operazione contiene una chiamata oltre all’esecuzione multisig e alla configurazione che le serve. Non firmo.",
+  'refuse.msExecDeploy': "Questa operazione distribuisce qualcosa che questa pagina non può verificare: né il multisig come lo crea Vela, né l’account Vela di un membro che ha approvato. Non firmo.",
+  'refuse.msExecMismatch': "L’app indica un multisig, ma l’operazione viene eseguita su un altro. Non firmo.",
+  'refuse.msExecThreshold': "L’app dice che questo multisig richiede {claimed} approvazioni, ma la configurazione in questa operazione dice {actual}. Non firmo.",
+  'ui.doneTitle': "Fatto",
+  'ui.withdrawnTitle': "Ritirata",
+  'ui.walletWithdrew': "Il wallet ha smesso di attendere questa richiesta, quindi qui non viene firmato nulla. Puoi chiudere questa pagina.",
+  'ui.answerNotTaken': "Il wallet non ha accettato la risposta di questa pagina, quindi non è stato inviato nulla. Torna al wallet.",
 });
 
 // @generated by samples/gen-catalog.mjs from vela-core — do not edit.
 //
 // 33 built-in networks (app/network_admin.rs BUILTIN_CHAINS) and
 // 108 tokens (app/token_registry/table.rs): the networks Vela ships and the
-// tokens it offers on them, exactly as the apps name them. lib/registry.js
+// tokens it offers on them, exactly as the apps name them, then the
+// 3 ERC-20 interfaces onto a chain's own coin (app/manage_tokens.rs
+// native_alias_token). lib/registry.js
 // reads these rows; nothing in a request can add to them or change them.
 // Regenerate with `bun samples/gen-catalog.mjs`.
 window.VelaCS = window.VelaCS || {};
@@ -6869,6 +7249,10 @@ window.VelaCS.catalog = {
     [98866,'0xda6087e69c51e7d31b6dbad276a3c44703dfdcad','USDT',6],
     [1440000,'0x7c21a90e3ecd3215d16c3bbe76a491f8f792d4bf','WXRP',18],
     [1440000,'0xa16148c6ac9ede0d82f0c52899e22a575284f131','USDC',6],
+    // the chain's own coin behind an ERC-20 interface: its symbol, 6 decimals
+    [988,'0x779ded0c9e1022225f8e0630b35a9b54be713736','USDT0',6],
+    [5042,'0x3600000000000000000000000000000000000000','USDC',6],
+    [5042002,'0x3600000000000000000000000000000000000000','USDC',6],
   ],
 };
 
@@ -9540,6 +9924,7 @@ window.VelaCS = window.VelaCS || {};
     'intent.proofVerify': 'button.confirm', 'intent.proofRecover': 'button.confirm',
     'intent.memberProof': 'button.confirm',
     'intent.msReject': 'button.msReject',
+    'intent.msExecute': 'button.msExecute',
   };
 
   function confirmKey(view) {
@@ -10345,6 +10730,160 @@ window.VelaCS = window.VelaCS || {};
     return finished;
   }
 
+  // --- an executor's operation (round 7, r7-1) ------------------------------
+  //
+  // The wallet's own operation that executes a multisig transaction: read
+  // leg by leg in lib/multisig.js (`execution`) — the SafeTx inside
+  // `execTransaction` by the approval's rules, the deploys it needs verified
+  // from their setups — and drawn as what it is: "Execute a multisig
+  // transaction", the transaction's own reading (its amount, its recipient,
+  // its member change…), the approvals it carries, its hashes, and what it
+  // sets up on the way. The app's words — the multisig's name, the number
+  // the transaction runs at, how many approvals it needs when this operation
+  // does not set the multisig up — are drawn as the app's.
+
+  /** The app's account of the execution (`context.multisig`, vela-core `approval::execution_context`). */
+  function executionClaim(ctx) {
+    var claim = ctx.multisig && typeof ctx.multisig === 'object' && !Array.isArray(ctx.multisig) ? ctx.multisig : {};
+    var threshold = typeof claim.threshold === 'number' && Number.isSafeInteger(claim.threshold) && claim.threshold > 0
+      ? BigInt(claim.threshold) : null;
+    return {
+      address: typeof claim.address === 'string' && ADDRESS.test(claim.address) ? claim.address : null,
+      name: typeof claim.name === 'string' && claim.name.trim() ? claim.name.trim().slice(0, 64) : null,
+      nonce: typeof claim.nonce === 'string' ? ns.multisig.quantity(claim.nonce) : null,
+      safeTxHash: typeof claim.safeTxHash === 'string' && /^0x[0-9a-fA-F]{64}$/.test(claim.safeTxHash)
+        ? claim.safeTxHash.toLowerCase() : null,
+      threshold: threshold,
+    };
+  }
+
+  function resolveExecution(reading, ctx, view) {
+    view.badge = 'tag.multisig';
+    provenance(view, 'read');
+    if (reading.refusal) {
+      view.intentKey = 'intent.msExecute';
+      view.hero = null;
+      refuseWith(view, reading.refusal);
+      return view;
+    }
+    var claim = executionClaim(ctx);
+    var multisig = reading.multisig;
+    var tx = Object.assign({}, reading.tx, { nonce: claim.nonce });
+    // The transaction's own reading is the multisig's: "this multisig" is
+    // the one the operation executes on, never the executor.
+    var inner = Object.assign({}, ctx, { selfAccount: multisig, selfTag: 'tag.thisMultisig' });
+    if (claim.address && claim.address.toLowerCase() !== multisig.toLowerCase()) {
+      refuseWith(view, 'refuse.msExecMismatch');
+    }
+
+    var action = ns.multisig.read(multisig, tx);
+    var call = { to: tx.to, value: hexValue(tx.value), data: tx.data };
+    if (action.refusal) {
+      refuseWith(view, action.refusal, action.params);
+    } else if (action.action.kind === 'cancel') {
+      view.sentence = text('sentence.msExecCancel');
+    } else if (action.action.kind === 'batch') {
+      view.legs = action.action.calls.map(function (leg, i) {
+        var legView = baseView({ origin: '' }, inner);
+        multisigAction(leg.action, { to: leg.to, value: hexValue(leg.value), data: leg.data }, inner, legView, true);
+        return { index: i + 1, view: legView };
+      });
+      view.sentence = text('sentence.msBatch', { count: action.action.calls.length });
+      view.legs.forEach(function (leg) { raise(view, leg.view.risk); });
+      view.refuse = view.refuse || view.legs.some(function (leg) { return leg.view.refuse; });
+      liftLegWarnings(view);
+    } else {
+      var drawn = baseView({ origin: '' }, inner);
+      multisigAction(action.action, call, inner, drawn, false);
+      // What the multisig does, on this card: its hero, rows, warnings and
+      // risk — said as the multisig's ("The multisig sends …").
+      view.hero = drawn.hero;
+      view.fields = view.fields.concat(drawn.fields);
+      view.warnings = view.warnings.concat(drawn.warnings);
+      view.tech = drawn.tech;
+      view.level = drawn.level;
+      raise(view, drawn.risk);
+      if (drawn.refuse) view.refuse = true;
+      view.sentence = drawn.sentence && drawn.sentence.key === 'sentence.transfer'
+        ? text('sentence.msSends', drawn.sentence.params) : drawn.sentence;
+    }
+    view.intentKey = 'intent.msExecute';
+    view.lead = claim.nonce === null
+      ? text('sentence.msExecuteNoNonce')
+      : text('sentence.msExecute', { nonce: claim.nonce.toString() });
+
+    // The multisig, at which number, with which hashes. The number is the
+    // app's: `execTransaction` carries none (the multisig uses its own).
+    var safeIdentity = identify(multisig, ctx, {});
+    safeIdentity.contractName = claim.name ? visible(claim.name, view) : null;
+    safeIdentity.tag = claim.name ? 'tag.nameByApp' : null;
+    view.fields.unshift({ label: 'field.multisig', identity: safeIdentity });
+    if (claim.nonce !== null) {
+      var hashes = ns.multisig.hashes(ctx.chainId, multisig, tx);
+      var matches = claim.safeTxHash === null || claim.safeTxHash === hashes.safeTxHash;
+      if (!matches) {
+        // The app describes one transaction and the operation runs another.
+        view.refuse = true;
+        view.risk = 'hard-danger';
+        view.warnings.unshift({
+          tone: 'danger', key: 'refuse.msHashMismatch',
+          params: { claimed: claim.safeTxHash, computed: hashes.safeTxHash },
+        });
+      }
+      view.multisig = {
+        address: multisig, name: safeIdentity.contractName, nonce: claim.nonce.toString(),
+        hashes: hashes, hashMatches: matches, noteKey: 'ui.msHashesExecNote',
+      };
+      view.fields.push({ label: 'field.nonce', value: claim.nonce.toString(), mono: true, tagKey: 'tag.byApp' });
+    } else {
+      view.warnings.push({ tone: 'caution', key: 'warn.msExecNoNonce' });
+    }
+
+    // The approvals it carries, counted from its signature bytes; how many
+    // it needs is a fact when this operation sets the multisig up.
+    var count = reading.approvals.length;
+    var actual = reading.deploy ? reading.deploy.threshold : null;
+    if (actual !== null && claim.threshold !== null && actual !== claim.threshold) {
+      refuseWith(view, 'refuse.msExecThreshold', { claimed: claim.threshold.toString(), actual: actual.toString() });
+    }
+    var needed = actual !== null ? actual : claim.threshold;
+    view.fields.push({
+      label: 'field.approvals',
+      value: needed === null ? String(count) : text('value.approvalsOf', { count: count, threshold: needed.toString() }),
+      emphasis: true,
+      tagKey: actual === null && needed !== null ? 'tag.byApp' : undefined,
+    });
+    reading.approvals.forEach(function (approval) {
+      view.fields.push(approval.owner
+        ? { label: 'field.approvedBy', identity: memberIdentity(approval.owner, ctx) }
+        : { label: 'field.approvedBy', valueKey: 'value.msWalletSignature' });
+    });
+
+    // What it sets up on the way.
+    view.notes = [];
+    if (reading.deploy) {
+      view.notes.push(text('sentence.msExecSetsUp', {
+        chain: view.chain || String(ctx.chainId), count: reading.deploy.owners.length,
+        threshold: reading.deploy.threshold.toString(),
+      }));
+      reading.deploy.owners.forEach(function (owner) {
+        view.fields.push({ label: 'field.member', identity: memberIdentity(owner, ctx) });
+      });
+    }
+    reading.activates.forEach(function (account) {
+      var who = memberIdentity(account, ctx);
+      view.notes.push(text('sentence.msExecActivates', { account: who.short }));
+      view.fields.push({ label: 'field.activates', identity: who });
+    });
+
+    if (!view.tech) {
+      view.tech = techFor('execTransaction · SafeTx', null, tx.data, {
+        addresses: [{ roleKey: 'field.multisig', name: shortAddress(multisig), address: multisig }],
+      });
+    }
+    return view;
+  }
+
   /**
    * What every signature card ends with, whatever it signs: the answer must
    * reach the wallet (R7), the keys must be readable, and the key route and
@@ -10402,8 +10941,16 @@ window.VelaCS = window.VelaCS || {};
     if (ceremony) return resolveCeremony(ceremony, requested, ctx, view);
     var intent = operationSubject(requested, ctx, view);
     view.method = intent.method;
+    // The wallet's own operation that executes a multisig transaction (r7-1):
+    // read whole, or refused — never a batch of blind calls.
+    var shownCalls = intent.method === 'eth_sendTransaction' ? [intent.params[0] || {}]
+      : intent.method === 'wallet_sendCalls' ? ((intent.params[0] || {}).calls || []) : [];
+    var execution = ctx.operation && ctx.operation.userOp && !requested.origin && ns.multisig
+      ? ns.multisig.execution(shownCalls, ctx.operation.userOp.sender) : null;
 
-    if (intent.method === 'eth_sendTransaction') {
+    if (execution) {
+      resolveExecution(execution, ctx, view);
+    } else if (intent.method === 'eth_sendTransaction') {
       resolveCall(intent.params[0], ctx, view, false);
     } else if (intent.method === 'wallet_sendCalls') {
       var payload = intent.params[0];
@@ -10446,11 +10993,15 @@ window.VelaCS = window.VelaCS || {};
     // slipped in a leg of its own is exactly what this page is here to catch.
     var account = (ctx.operation && ctx.operation.userOp && ctx.operation.userOp.sender) ||
       ctx.account || null;
-    var calls = intent.method === 'eth_sendTransaction' ? [intent.params[0] || {}]
-      : intent.method === 'wallet_sendCalls' ? ((intent.params[0] || {}).calls || [])
-      : [];
+    var calls = shownCalls;
     for (var c = 0; c < calls.length; c++) {
-      var fn = takeover(calls[c], account, 0);
+      // An execution's `execTransaction` was read by the multisig's own rules
+      // (MultiSendCallOnly is the one delegatecall they allow, as the core's
+      // review does): only its target is checked here — the account calling
+      // itself — not what runs inside it.
+      var executes = execution && !execution.refusal && calls[c].to &&
+        String(calls[c].to).toLowerCase() === execution.multisig.toLowerCase();
+      var fn = takeover(calls[c], account, executes ? MAX_NESTING : 0);
       if (fn) { refuseTakeover(fn, view); break; }
     }
     if (intent.method && intent.method.indexOf('signTypedData') >= 0 && isSafeTx(intent)) {
@@ -10684,7 +11235,7 @@ window.VelaCS = window.VelaCS || {};
       row.appendChild(el('code', 'ms-hash-value', pair[1]));
       box.appendChild(row);
     });
-    box.appendChild(el('p', 'ms-hashes-note', t(m.hashMatches ? 'ui.msHashesNote' : 'ui.msHashesMismatch')));
+    box.appendChild(el('p', 'ms-hashes-note', t(m.hashMatches ? (m.noteKey || 'ui.msHashesNote') : 'ui.msHashesMismatch')));
     return box;
   }
 
@@ -10787,8 +11338,9 @@ window.VelaCS = window.VelaCS || {};
       if (field.amount.symbolClaimed) value.appendChild(el('span', 'tag coin-claimed', t('tag.coinByApp')));
       if (field.amount.fiat) value.appendChild(fiatLine('row-sub', field.amount.fiat));
     } else {
+      // A value in words is a `{key, params}` of resolve.js, never prose.
       value.appendChild(el('span', [field.emphasis ? 'strong' : '', field.mono ? 'mono' : ''].join(' ').trim(),
-        field.valueKey ? t(field.valueKey) : field.value));
+        field.valueKey ? t(field.valueKey) : field.value && typeof field.value === 'object' ? t(field.value) : field.value));
       if (field.expired) value.appendChild(el('span', 'tag tag-bad', t('tag.expired')));
       // Whose figure it is, when it is not this page's (an allowance the app
       // says the spender has now).
@@ -11243,9 +11795,15 @@ window.VelaCS = window.VelaCS || {};
     if (who) blocks.appendChild(who);
     warningsOf(view, true).forEach(function (w) { blocks.appendChild(warningBanner(w)); });
 
+    // A multisig execution's own line ("Executes multisig transaction #3:")
+    // comes before what the transaction does.
+    if (view.lead) blocks.appendChild(el('p', 'sentence sentence-lead', t(view.lead)));
     var h = hero(view);
     if (h) blocks.appendChild(h);
     if (view.sentence) blocks.appendChild(el('p', 'sentence', t(view.sentence)));
+    // What the operation also does on the way (sets the multisig up,
+    // activates a member's account).
+    (view.notes || []).forEach(function (note) { blocks.appendChild(el('p', 'sentence', t(note))); });
 
     view.legs.forEach(function (leg) { blocks.appendChild(legCard(leg)); });
 
@@ -11982,6 +12540,387 @@ window.VelaCS = window.VelaCS || {};
     };
   }
 
+  // --- an executor's operation (round 7, r7-1) --------------------------------
+  //
+  // Executing a multisig transaction is the executor's OWN user operation
+  // (vela-core `execution_calls`): deploy the multisig and every approving
+  // member's Vela account that has no code on the chain yet — both
+  // permissionless, from their geneses — then `execTransaction` on the
+  // multisig. Signed blind, that is the Bybit signature: the SafeTx inside
+  // `execTransaction` is what moves the multisig's money, and a deploy's
+  // setup decides who controls what it deploys. So every leg is read here
+  // from its bytes, or the operation is refused:
+  //
+  //  · `execTransaction`: the SafeTx decoded (the core's encoding only) and
+  //    read by the same rules as a member's approval (`read` — the core's
+  //    `review`, refusals included); the approvals it carries counted from
+  //    the signature bytes. Its safeTxHash is recomputed by resolve.js at
+  //    the nonce the app names: `execTransaction` carries no nonce — the
+  //    multisig supplies its own — so the number is the app's word, while
+  //    what runs is read from the bytes whatever the number;
+  //  · a deploy of the multisig: `createProxyWithNonce` on Safe's v1.4.1
+  //    factory, the L2 singleton, and a setup that is EXACTLY the one Vela
+  //    creates a multisig with (`multisig_genesis`: the members, the
+  //    threshold, the CompatibilityFallbackHandler, no hook, no payment) —
+  //    re-encoded here and compared byte for byte — whose CREATE2 address is
+  //    the multisig the operation executes on;
+  //  · a deploy of a member's Vela account: the same factory and singleton,
+  //    a setup that is exactly a Vela account's (`vela_account_genesis`,
+  //    re-encoded from the keys it configures), salted as Vela salts it,
+  //    deriving the address of a member whose approval the execution carries.
+  //
+  // Anything else in the operation — another call, a second execution, a
+  // deploy this page cannot place — is refused, not drawn. A multisig created
+  // elsewhere (a Safe{Wallet} genesis) and deployed by its first execution is
+  // refused too: this page cannot vouch for a setup it does not write.
+
+  var SAFE_PROXY_FACTORY = '0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67';
+  var SAFE_SINGLETON = '0x29fcB43b46531BcA003ddC8FCB67FFE91900C762';
+  var COMPATIBILITY_FALLBACK_HANDLER = '0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99';
+  var SAFE_4337_MODULE = '0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226';
+  var SAFE_MODULE_SETUP = '0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47';
+  var WEBAUTHN_SIGNER = '0x94a4F6affBd8975951142c3999aEAB7ecee555c2';
+  var WEBAUTHN_SIGNER_FACTORY = '0x1d31F259eE307358a26dFb23EB365939E8641195';
+  var WEBAUTHN_SIGNER_SINGLETON = '0x4E27b51350e6c2083EE19011120F50DAfEc5CA50';
+  /** Safe's MultiSend, which a Vela account's setup delegatecalls (vela-core `safe::MULTI_SEND`). */
+  var VELA_MULTI_SEND = '0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526';
+  /** The RIP-7212 precompile a Vela account's passkey verifier uses (`WEBAUTHN_VERIFIERS_HEX`). */
+  var WEBAUTHN_VERIFIERS = 0x100n;
+  /** vela-core `safe::MAX_MULTI_KEYS`. */
+  var MAX_ACCOUNT_KEYS = 7;
+  /** vela-core `multisig::MAX_OWNERS`. */
+  var MAX_OWNERS = 20;
+  var SENTINEL = '0x0000000000000000000000000000000000000001';
+
+  /** Safe v1.4.1's `proxyCreationCode()` (vela-core `safe::PROXY_CREATION_CODE`). */
+  var PROXY_CREATION_CODE = '608060405234801561001057600080fd5b506040516101e63803806101e68339818101604052602081101561003357600080fd5b8101908080519060200190929190505050600073ffffffffffffffffffffffffffffffffffffffff168173ffffffffffffffffffffffffffffffffffffffff1614156100ca576040517f08c379a00000000000000000000000000000000000000000000000000000000081526004018080602001828103825260228152602001806101c46022913960400191505060405180910390fd5b806000806101000a81548173ffffffffffffffffffffffffffffffffffffffff021916908373ffffffffffffffffffffffffffffffffffffffff1602179055505060ab806101196000396000f3fe608060405273ffffffffffffffffffffffffffffffffffffffff600054167fa619486e0000000000000000000000000000000000000000000000000000000060003514156050578060005260206000f35b3660008037600080366000845af43d6000803e60008114156070573d6000fd5b3d6000f3fea264697066735822122003d1488ee65e08fa41e58e888a9865554c535f2c77126a82cb4c0f917f31441364736f6c63430007060033496e76616c69642073696e676c65746f6e20616464726573732070726f7669646564';
+  /** A further key's signer proxy creation code (vela-core `safe::WEBAUTHN_SIGNER_PROXY_CREATION_CODE`). */
+  var WEBAUTHN_SIGNER_PROXY_CREATION_CODE = '610100346100ad57601f6101b538819003918201601f19168301916001600160401b038311848410176100b2578084926080946040528339810103126100ad578051906001600160a01b03821682036100ad5760208101516040820151606090920151926001600160b01b03841684036100ad5760805260a05260c05260e05260405160ec90816100c98239608051816082015260a05181604d015260c051816027015260e0518160010152f35b600080fd5b634e487b7160e01b600052604160045260246000fdfe7f000000000000000000000000000000000000000000000000000000000000000060b63601527f000000000000000000000000000000000000000000000000000000000000000060a03601527f000000000000000000000000000000000000000000000000000000000000000036608001523660006080376000806056360160807f00000000000000000000000000000000000000000000000000000000000000005af43d600060803e60b1573d6080fd5b3d6080f3fea26469706673582212201660515548d15702d720bbc046b457ca85e941a4559ab9f9518488e4c82e5ee964736f6c634300081a0033';
+
+  var EXEC_TRANSACTION = selector('execTransaction(address,uint256,bytes,uint8,uint256,uint256,uint256,address,address,bytes)');
+  var CREATE_PROXY = selector('createProxyWithNonce(address,bytes,uint256)');
+  var SETUP = selector('setup(address[],uint256,address,bytes,address,address,uint256,address)');
+  var ENABLE_MODULES = selector('enableModules(address[])');
+  var CONFIGURE = selector('configure((uint256,uint256,uint176))');
+  var CREATE_SIGNER = selector('createSigner(uint256,uint256,uint176)');
+
+  function padded(n) {
+    return n + ((32 - (n % 32)) % 32);
+  }
+
+  /** ABI `bytes` tail: its length word, the bytes, zero padding. */
+  function bytesTail(bytes) {
+    var out = new Uint8Array(32 + padded(bytes.length));
+    out.set(word(bytes.length), 0);
+    out.set(bytes, 32);
+    return out;
+  }
+
+  /** `bytes` whose length word is at `at`, canonically: inside `data`, zero padding. */
+  function bytesAt(data, at) {
+    var len = wordAt(data, at);
+    if (len === null || len > BigInt(data.length)) return null;
+    var n = Number(len);
+    var end = at + 32 + padded(n);
+    if (end > data.length) return null;
+    for (var i = at + 32 + n; i < end; i++) if (data[i] !== 0) return null;
+    return { bytes: data.subarray(at + 32, at + 32 + n), end: end };
+  }
+
+  /** A word that holds an address: its high twelve bytes zero. */
+  function addressWordAt(data, at) {
+    var v = wordAt(data, at);
+    if (v === null || v >> 160n !== 0n) return null;
+    return checksum('0x' + v.toString(16).padStart(40, '0'));
+  }
+
+  function bytesEqual(a, b) {
+    if (a.length !== b.length) return false;
+    for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+    return true;
+  }
+
+  function create2(deployer, salt, initCodeHash) {
+    var hash = keccak.hash(concat([new Uint8Array([0xff]), fromHex(deployer), salt, initCodeHash]));
+    return checksum(toHex(hash.subarray(12)));
+  }
+
+  /** What `createProxyWithNonce(singleton, initializer, saltNonce)` deploys to on Safe's v1.4.1 factory. */
+  function proxyAddress(singleton, initializer, saltNonce) {
+    var initCodeHash = keccak.hash(concat([fromHex(PROXY_CREATION_CODE), addressWord(singleton)]));
+    var salt = keccak.hash(concat([keccak.hash(initializer), word(saltNonce)]));
+    return create2(SAFE_PROXY_FACTORY, salt, initCodeHash);
+  }
+
+  /**
+   * `execTransaction(...)` calldata, read as vela-core `exec_transaction_data`
+   * writes it — the ten head words, the data, the signatures, nothing after
+   * — or null. `{tx, signatures}`: `tx` in `parseTx`'s shape, without the
+   * nonce `execTransaction` does not carry.
+   */
+  function readExecCall(data) {
+    if (selectorOf(data) !== EXEC_TRANSACTION) return null;
+    var body = data.subarray(4);
+    var to = addressWordAt(body, 0);
+    var gasToken = addressWordAt(body, 7 * 32);
+    var refundReceiver = addressWordAt(body, 8 * 32);
+    var operation = wordAt(body, 3 * 32);
+    if (!to || !gasToken || !refundReceiver || operation === null || operation > 255n) return null;
+    if (wordAt(body, 2 * 32) !== 320n) return null;
+    var inner = bytesAt(body, 320);
+    if (!inner || inner.bytes.length > MAX_DATA_BYTES) return null;
+    if (wordAt(body, 9 * 32) !== BigInt(inner.end)) return null;
+    var signatures = bytesAt(body, inner.end);
+    if (!signatures || signatures.end !== body.length) return null;
+    return {
+      tx: {
+        to: to,
+        value: wordAt(body, 32),
+        data: toHex(inner.bytes),
+        operation: Number(operation),
+        safeTxGas: wordAt(body, 4 * 32),
+        baseGas: wordAt(body, 5 * 32),
+        gasPrice: wordAt(body, 6 * 32),
+        gasToken: gasToken,
+        refundReceiver: refundReceiver,
+      },
+      signatures: signatures.bytes,
+    };
+  }
+
+  /**
+   * The approvals in `execTransaction`'s signature bytes, as the Safe reads
+   * them (`checkNSignatures`): 65-byte entries `r ‖ s ‖ v`, then the
+   * contract signatures' tails (vela-core `assemble_signatures`). `v = 0` —
+   * a contract's signature (a Vela account's passkey, EIP-1271), `r` the
+   * owner; `v = 1` — approved by sending it, or on chain (`approveHash`), `r`
+   * the owner; 27/28 (31/32 in the `eth_sign` form) — a plain wallet's ECDSA
+   * signature, whose owner only recovering it tells (the multisig does).
+   * Null when the bytes are not entries this page can count.
+   */
+  function readSignatures(sigs) {
+    var head = sigs.length;
+    var entries = [];
+    for (var i = 0; (i + 1) * 65 <= head; i++) {
+      var at = i * 65;
+      var v = sigs[at + 64];
+      if (v === 0 || v === 1) {
+        var r = wordAt(sigs, at);
+        if (r === null || r >> 160n !== 0n) return null;
+        var owner = checksum('0x' + r.toString(16).padStart(40, '0'));
+        if (v === 0) {
+          var offset = wordAt(sigs, at + 32);
+          if (offset === null || offset >= BigInt(sigs.length)) return null;
+          // A contract signature's tail starts after every head entry.
+          if (Number(offset) < head) head = Number(offset);
+          entries.push({ kind: 'contract', owner: owner });
+        } else {
+          entries.push({ kind: 'sender', owner: owner });
+        }
+      } else if (v === 27 || v === 28 || v === 31 || v === 32) {
+        entries.push({ kind: 'ecdsa', owner: null });
+      } else {
+        return null;
+      }
+    }
+    if (!entries.length || entries.length * 65 !== head) return null;
+    return entries;
+  }
+
+  /** `createProxyWithNonce(singleton, initializer, saltNonce)` calldata as vela-core `deploy_call` writes it, or null. */
+  function readDeployCall(data) {
+    if (selectorOf(data) !== CREATE_PROXY) return null;
+    var body = data.subarray(4);
+    var singleton = addressWordAt(body, 0);
+    if (!singleton || wordAt(body, 32) !== 0x60n) return null;
+    var saltNonce = wordAt(body, 64);
+    var initializer = bytesAt(body, 96);
+    if (saltNonce === null || !initializer || initializer.end !== body.length) return null;
+    return { singleton: singleton, saltNonce: saltNonce, initializer: initializer.bytes };
+  }
+
+  /** `setup(...)` as vela-core encodes it (`encode_setup_full`), with no payment. */
+  function encodeSetup(owners, threshold, to, data, fallbackHandler) {
+    return concat([
+      fromHex(SETUP),
+      word(0x100),
+      word(threshold),
+      addressWord(to),
+      word(0x100 + 32 + owners.length * 32),
+      addressWord(fallbackHandler),
+      addressWord(ZERO),
+      word(0),
+      addressWord(ZERO),
+      word(owners.length),
+    ].concat(owners.map(addressWord)).concat([bytesTail(data)]));
+  }
+
+  /** The owners and threshold a `setup` call names, or null (vela-core `genesis_members`). */
+  function setupMembers(initializer) {
+    if (selectorOf(initializer) !== SETUP) return null;
+    var body = initializer.subarray(4);
+    var offset = wordAt(body, 0);
+    var threshold = wordAt(body, 32);
+    if (offset !== 0x100n || threshold === null) return null;
+    var count = wordAt(body, 0x100);
+    if (count === null || count > BigInt(MAX_OWNERS)) return null;
+    var owners = [];
+    for (var i = 0; i < Number(count); i++) {
+      var owner = addressWordAt(body, 0x120 + i * 32);
+      if (!owner) return null;
+      owners.push(owner);
+    }
+    return { owners: owners, threshold: threshold };
+  }
+
+  /**
+   * A deploy of a multisig as Vela creates one (vela-core `multisig_genesis`):
+   * `{owners, threshold, address}`, or null. The setup is re-encoded from the
+   * members it names and must be byte for byte the one deployed — no setup
+   * hook (`to`, `data`), no payment, the CompatibilityFallbackHandler — with
+   * members a multisig can have (distinct, not zero, not the sentinel) and a
+   * threshold between one and their number.
+   */
+  function readMultisigDeploy(deploy) {
+    if (!same(deploy.singleton, SAFE_SINGLETON)) return null;
+    var members = setupMembers(deploy.initializer);
+    if (!members || !members.owners.length) return null;
+    var seen = {};
+    for (var i = 0; i < members.owners.length; i++) {
+      var o = members.owners[i].toLowerCase();
+      if (o === ZERO || o === SENTINEL || seen[o]) return null;
+      seen[o] = true;
+    }
+    if (members.threshold < 1n || members.threshold > BigInt(members.owners.length)) return null;
+    var expected = encodeSetup(members.owners, members.threshold, ZERO, new Uint8Array(0),
+      COMPATIBILITY_FALLBACK_HANDLER);
+    if (!bytesEqual(expected, deploy.initializer)) return null;
+    return {
+      owners: members.owners,
+      threshold: members.threshold,
+      address: proxyAddress(deploy.singleton, deploy.initializer, deploy.saltNonce),
+    };
+  }
+
+  /** One MultiSend leg as vela-core packs it (`encode_multisend_tx`): op ‖ to ‖ 0 ‖ length ‖ data. */
+  function packLeg(to, data, operation) {
+    return concat([new Uint8Array([operation]), fromHex(to), word(0), word(data.length), data]);
+  }
+
+  function signerArgs(x, y) {
+    return concat([word(x), word(y), word(WEBAUTHN_VERIFIERS)]);
+  }
+
+  /** vela-core `compute_webauthn_signer_address`: a further key's own signer. */
+  function webauthnSigner(x, y) {
+    var initCode = concat([fromHex(WEBAUTHN_SIGNER_PROXY_CREATION_CODE),
+      addressWord(WEBAUTHN_SIGNER_SINGLETON), signerArgs(x, y)]);
+    return create2(WEBAUTHN_SIGNER_FACTORY, new Uint8Array(32), keccak.hash(initCode));
+  }
+
+  /** vela-core `encode_setup_data`: a Vela account's setup from its keys, `keys[0]` first. */
+  function velaAccountSetup(keys) {
+    var enable = concat([fromHex(ENABLE_MODULES), word(0x20), word(1), addressWord(SAFE_4337_MODULE)]);
+    var configure = concat([fromHex(CONFIGURE), signerArgs(keys[0].x, keys[0].y)]);
+    var legs = [packLeg(SAFE_MODULE_SETUP, enable, 1), packLeg(WEBAUTHN_SIGNER, configure, 1)];
+    var owners = [WEBAUTHN_SIGNER];
+    keys.slice(1).forEach(function (key) {
+      owners.push(webauthnSigner(key.x, key.y));
+      legs.push(packLeg(WEBAUTHN_SIGNER_FACTORY, concat([fromHex(CREATE_SIGNER), signerArgs(key.x, key.y)]), 0));
+    });
+    var multiSend = concat([fromHex(MULTI_SEND), word(0x20), bytesTail(concat(legs))]);
+    return encodeSetup(owners, 1n, VELA_MULTI_SEND, multiSend, SAFE_4337_MODULE);
+  }
+
+  // Where a Vela account's keys sit in its setup's MultiSend: the first leg
+  // (`enableModules([module])`, 85 + 100 bytes), then `configure(x, y, …)`
+  // and one `createSigner(x, y, …)` per further key — each 85 + 100 bytes,
+  // its x at 85 + 4 into the leg.
+  var ACCOUNT_LEG = 85 + 100;
+  var KEY_IN_LEG = 85 + 4;
+
+  /**
+   * A deploy of a Vela account (vela-core `vela_account_genesis`): its
+   * address, or null. The keys are read from the setup's own MultiSend, the
+   * setup is re-encoded from them and must be the one deployed, and the salt
+   * nonce must be the hash of the keys, as Vela derives it.
+   */
+  function readAccountDeploy(deploy) {
+    if (!same(deploy.singleton, SAFE_SINGLETON)) return null;
+    var init = deploy.initializer;
+    var members = setupMembers(init);
+    if (!members || members.owners.length < 1 || members.owners.length > MAX_ACCOUNT_KEYS) return null;
+    var multiSend = bytesAt(init, 4 + 0x120 + members.owners.length * 32);
+    if (!multiSend || selectorOf(multiSend.bytes) !== MULTI_SEND) return null;
+    var packedBytes = bytesAt(multiSend.bytes, 36);
+    if (!packedBytes || packedBytes.bytes.length !== ACCOUNT_LEG * (1 + members.owners.length)) return null;
+    var packed = packedBytes.bytes;
+    var keys = [];
+    for (var k = 0; k < members.owners.length; k++) {
+      var at = ACCOUNT_LEG * (k + 1) + KEY_IN_LEG;
+      keys.push({ x: wordAt(packed, at), y: wordAt(packed, at + 32) });
+    }
+    if (!bytesEqual(velaAccountSetup(keys), init)) return null;
+    var xy = concat(keys.map(function (key) { return concat([word(key.x), word(key.y)]); }));
+    if (BigInt(toHex(keccak.hash(xy))) !== deploy.saltNonce) return null;
+    return { address: proxyAddress(deploy.singleton, init, deploy.saltNonce) };
+  }
+
+  function zeroValue(call) {
+    var v = call.value === undefined || call.value === null ? '0x0' : String(call.value);
+    return quantity(v) === 0n;
+  }
+
+  /**
+   * An executor's operation, read. `calls` are the operation's legs before
+   * its fee leg (`{to, value, data, operation}`, lib/safeop.js), `executor`
+   * the account whose operation it is (`userOp.sender`). Null when no leg
+   * calls `execTransaction`: the operation is no execution. Otherwise
+   * `{multisig, tx, approvals, deploy, activates}` — `deploy` the multisig's
+   * own setup (`{owners, threshold}`) when this operation deploys it,
+   * `activates` the members' accounts it deploys — or `{refusal}` (an i18n
+   * key) for an execution this page cannot read in full.
+   */
+  function execution(calls, executor) {
+    var execs = calls.filter(function (call) {
+      return typeof call.data === 'string' && HEX_BYTES.test(call.data) &&
+        selectorOf(fromHex(call.data)) === EXEC_TRANSACTION;
+    });
+    if (!execs.length) return null;
+    if (execs.length > 1) return { refusal: 'refuse.msExecExtra' };
+    var exec = execs[0];
+    if (!ADDRESS.test(exec.to || '') || !zeroValue(exec) || Number(exec.operation || 0) !== 0) {
+      return { refusal: 'refuse.msExecShape' };
+    }
+    var call = readExecCall(fromHex(exec.data));
+    var approvals = call && readSignatures(call.signatures);
+    if (!approvals || (executor && same(exec.to, executor))) return { refusal: 'refuse.msExecShape' };
+    var multisig = checksum(exec.to);
+    var out = { multisig: multisig, tx: call.tx, approvals: approvals, deploy: null, activates: [] };
+    var contractOwners = approvals.filter(function (a) { return a.kind === 'contract'; })
+      .map(function (a) { return a.owner.toLowerCase(); });
+    for (var i = 0; i < calls.length; i++) {
+      var leg = calls[i];
+      if (leg === exec) continue;
+      var deploy = same(leg.to || '', SAFE_PROXY_FACTORY) && zeroValue(leg) && Number(leg.operation || 0) === 0 &&
+        typeof leg.data === 'string' && HEX_BYTES.test(leg.data) ? readDeployCall(fromHex(leg.data)) : null;
+      if (!deploy) return { refusal: 'refuse.msExecExtra' };
+      var asMultisig = readMultisigDeploy(deploy);
+      if (asMultisig && same(asMultisig.address, multisig) && !out.deploy) {
+        out.deploy = { owners: asMultisig.owners, threshold: asMultisig.threshold };
+        continue;
+      }
+      var account = readAccountDeploy(deploy);
+      if (account && contractOwners.indexOf(account.address.toLowerCase()) >= 0 &&
+        out.activates.indexOf(account.address) < 0) {
+        out.activates.push(account.address);
+        continue;
+      }
+      return { refusal: 'refuse.msExecDeploy' };
+    }
+    return out;
+  }
+
   ns.multisig = {
     METHOD: 'vela_multisigApprove',
     MULTI_SEND_CALL_ONLY: MULTI_SEND_CALL_ONLY,
@@ -11993,9 +12932,11 @@ window.VelaCS = window.VelaCS || {};
     hashes: hashes,
     approvalChallenge: approvalChallenge,
     read: read,
+    execution: execution,
     validName: validName,
     checksum: checksum,
     toHex: toHex,
+    quantity: quantity,
   };
 })(window.VelaCS);
 
@@ -12845,6 +13786,7 @@ window.VelaCS = window.VelaCS || {};
     this.ended = false;
     this.endReason = null;   // 'bye' | 'closed' | 'idle' | 'single' | 'error'
     this.endDetail = null;   // for 'error': an i18n key
+    this.why = null;         // the wallet's own reason for a bye: 'withdrawn'
     this.answered = 0;
     this.received = 0;
     this.inFlight = null;    // the request on screen, until it is answered
@@ -12915,22 +13857,27 @@ window.VelaCS = window.VelaCS || {};
     return new Promise(function (resolve) { self.waiters.push(resolve); });
   };
 
-  /** The request on screen can no longer be answered (its wallet went away). */
-  Session.prototype.lose = function () {
+  /**
+   * The request on screen can no longer be answered: its wallet went away —
+   * or, `why` = 'withdrawn', the wallet said it gave up on it (round 7,
+   * r7-5: it stopped waiting, or would not take the answer).
+   */
+  Session.prototype.lose = function (why) {
     var request = this.inFlight;
     if (!request || request.answered) return;
     request.gone = true;
     this.inFlight = null;
-    this.emit('onGone', request);
+    this.emit('onGone', request, why || null);
   };
 
-  /** The channel is over. */
-  Session.prototype.finish = function (reason, detail) {
+  /** The channel is over. `why`: the wallet's own reason, when it gave one. */
+  Session.prototype.finish = function (reason, detail, why) {
     if (this.ended) return;
-    this.lose();
+    this.lose(why);
     this.ended = true;
     this.endReason = reason;
     this.endDetail = detail || null;
+    this.why = why || null;
     clearTimeout(this.idleTimer);
     var waiters = this.waiters;
     this.waiters = [];
@@ -12964,7 +13911,10 @@ window.VelaCS = window.VelaCS || {};
       // and the first must come from the window that opened this page.
       if (peer ? event.source !== peer.source || event.origin !== peer.origin : event.source !== opener) return;
       if (data.vela === 'bye') {
-        if (peer) session.finish('bye');
+        // 'withdrawn': the wallet gave up on the request on screen (it ran
+        // out of time, was cancelled, or would not take the answer) — the
+        // card must stop offering to sign it.
+        if (peer) session.finish('bye', null, data.reason === 'withdrawn' ? 'withdrawn' : null);
         return;
       }
       if (data.vela !== 'intent') return;
@@ -13292,6 +14242,7 @@ window.VelaCS = window.VelaCS || {};
   var current = null;      // the request on screen, until answered
   var waitingState = null; // what the waiting card says between requests
   var lastGone = false;    // the request on screen lost its wallet
+  var lastWithdrawn = false; // …because the wallet said it gave up on it (r7-5)
 
   ns.i18n.setLocale(ns.i18n.detect(new URLSearchParams(location.search).get('lang')));
   document.title = t('ui.pageName');
@@ -13661,6 +14612,7 @@ window.VelaCS = window.VelaCS || {};
   function show(request) {
     current = request;
     lastGone = false;
+    lastWithdrawn = false;
     window.__refused = false;
     window.__slider = null;
     state.received = session.received;
@@ -13713,6 +14665,11 @@ window.VelaCS = window.VelaCS || {};
     });
   }
 
+  /** How long the done card shows before a finished page closes itself (a test shortens it). */
+  function closeAfterMs() {
+    return typeof window.__velaCloseMs === 'number' ? window.__velaCloseMs : 1500;
+  }
+
   // The session is over. Say why, in the page's own words.
   function ended() {
     state.endReason = session.endReason;
@@ -13739,17 +14696,32 @@ window.VelaCS = window.VelaCS || {};
     // bye, or the channel closed. A card whose wallet went away, or a
     // refusal, keeps its reasons on screen.
     if (lastGone) {
-      say('ui.walletGone');
+      // The withdrawn card says it already; the status line stays quiet.
+      if (!lastWithdrawn) say('ui.walletGone');
       return;
     }
     if (window.__refused) {
       say('ui.sessionOver');
       return;
     }
-    if (session.answered) {
-      say('ui.sessionDone');
-      waiting({ titleKey: 'ui.sessionEnded', noteKey: 'ui.sessionDone' });
+    if (session.why === 'withdrawn') {
+      // The wallet gave up after this page answered: it did not take the
+      // answer (r7-5) — never "Done".
+      say('');
+      waiting({ titleKey: 'ui.withdrawnTitle', noteKey: 'ui.answerNotTaken' });
       slot.firstChild.classList.add('sheet-ended');
+      return;
+    }
+    if (session.answered) {
+      // Done, said once (round 7): the card says it, the status line is
+      // quiet, and nothing about it is drawn as a failure.
+      say('');
+      waiting({ titleKey: 'ui.doneTitle', noteKey: 'ui.sessionDone' });
+      // The wallet has the answer and said goodbye: a page it opened closes
+      // itself, rather than leaving a finished tab behind (the extension
+      // opened one per signature). A browser lets a script close only a
+      // window a script opened; anywhere else the card stays, and says so.
+      if (reason === 'bye') setTimeout(function () { try { window.close(); } catch (e) { /* stays */ } }, closeAfterMs());
       return;
     }
     // Nothing was answered: the wallet stopped waiting (or never came).
@@ -13784,14 +14756,24 @@ window.VelaCS = window.VelaCS || {};
       onWaiting: function () { say('ui.waitingWallet'); },
       // The wallet stopped waiting for the request on screen: signing now
       // would sign into nothing, so the button goes.
-      onGone: function (request) {
+      onGone: function (request, why) {
         if (request !== current) return;
         current = null;
         lastGone = true;
         off(slot.querySelector('.confirm'));
         window.__slider = null;
-        say('ui.walletGone');
-        phase('gone');
+        if (why === 'withdrawn') {
+          // The wallet gave up on this request (r7-5): the card goes, so
+          // nothing here offers to sign what nobody is waiting for.
+          lastWithdrawn = true;
+          say('');
+          waiting({ titleKey: 'ui.withdrawnTitle', noteKey: 'ui.walletWithdrew' });
+          slot.firstChild.classList.add('sheet-ended');
+          phase('withdrawn');
+        } else {
+          say('ui.walletGone');
+          phase('gone');
+        }
         // The session may carry on; listen again. `lose()` runs before a
         // session is marked ended, so wait a tick.
         setTimeout(loop, 0);

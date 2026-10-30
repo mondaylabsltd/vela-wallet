@@ -2,7 +2,9 @@
 //
 // 33 built-in networks (app/network_admin.rs BUILTIN_CHAINS) and
 // 108 tokens (app/token_registry/table.rs): the networks Vela ships and the
-// tokens it offers on them, exactly as the apps name them. lib/registry.js
+// tokens it offers on them, exactly as the apps name them, then the
+// 3 ERC-20 interfaces onto a chain's own coin (app/manage_tokens.rs
+// native_alias_token). lib/registry.js
 // reads these rows; nothing in a request can add to them or change them.
 // Regenerate with `bun samples/gen-catalog.mjs`.
 window.VelaCS = window.VelaCS || {};
@@ -153,5 +155,9 @@ window.VelaCS.catalog = {
     [98866,'0xda6087e69c51e7d31b6dbad276a3c44703dfdcad','USDT',6],
     [1440000,'0x7c21a90e3ecd3215d16c3bbe76a491f8f792d4bf','WXRP',18],
     [1440000,'0xa16148c6ac9ede0d82f0c52899e22a575284f131','USDC',6],
+    // the chain's own coin behind an ERC-20 interface: its symbol, 6 decimals
+    [988,'0x779ded0c9e1022225f8e0630b35a9b54be713736','USDT0',6],
+    [5042,'0x3600000000000000000000000000000000000000','USDC',6],
+    [5042002,'0x3600000000000000000000000000000000000000','USDC',6],
   ],
 };

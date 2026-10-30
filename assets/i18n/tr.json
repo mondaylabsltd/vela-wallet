@@ -1517,6 +1517,7 @@
    "trustedSignerRefused": "İmza sayfası bu isteği imzalamadı. Nedeni sayfada yazıyor.",
    "trustedSignerMismatch": "Sayfanın yanıtı bu istekle eşleşmiyor, bu yüzden hiçbir şey gönderilmedi.",
    "trustedSignerTimeout": "İmza sayfası zamanında yanıt vermedi.",
+   "trustedSignerUnanswered": "İmza sayfası yanıt vermiyor — tekrar deneyin.",
    "trustedSignerReopen": "Sayfayı yeniden aç",
    "handoffTitle": "Güvenilir bir imza sayfasında inceleyin ve imzalayın",
    "confirmWithLabel": "Onay yöntemi",
@@ -1907,6 +1908,7 @@
     "signerUnavailable": "Burada passkey kullanılamaz",
     "signerNotDiscoverable": "Bu passkey burada imzalayamaz",
     "signerFailed": "Passkey istemi başarısız oldu",
+    "signingPage": "İmza sayfası imzalamadı",
     "badRpc": "Site bu ağ için kullanılabilir bir RPC vermedi"
    },
    "requests": "Son istekler",

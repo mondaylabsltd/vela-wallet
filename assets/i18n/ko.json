@@ -1517,6 +1517,7 @@
    "trustedSignerRefused": "서명 페이지가 이 요청에 서명하지 않았습니다. 이유는 페이지에 나와 있습니다.",
    "trustedSignerMismatch": "페이지의 응답이 이 요청과 일치하지 않아 아무것도 보내지 않았습니다.",
    "trustedSignerTimeout": "서명 페이지가 제때 응답하지 않았습니다.",
+   "trustedSignerUnanswered": "서명 페이지가 응답하지 않습니다. 다시 시도하세요.",
    "trustedSignerReopen": "페이지 다시 열기",
    "handoffTitle": "신뢰할 수 있는 서명 페이지에서 검토하고 서명하세요",
    "confirmWithLabel": "확인 방법",
@@ -1907,6 +1908,7 @@
     "signerUnavailable": "여기서는 패스키를 쓸 수 없습니다",
     "signerNotDiscoverable": "이 패스키로는 여기서 서명할 수 없습니다",
     "signerFailed": "패스키 인증에 실패했습니다",
+    "signingPage": "서명 페이지에서 서명되지 않았습니다",
     "badRpc": "사이트가 이 네트워크에 쓸 수 있는 RPC를 주지 않았습니다"
    },
    "requests": "최근 요청",

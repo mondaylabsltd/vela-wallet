@@ -1569,6 +1569,7 @@
    "trustedSignerRefused": "The signing page wouldn't sign this request. It says why.",
    "trustedSignerMismatch": "The page's answer doesn't match this request, so nothing was sent.",
    "trustedSignerTimeout": "The signing page didn't answer in time.",
+   "trustedSignerUnanswered": "The signing page isn't answering — try again.",
    "trustedSignerReopen": "Open the page again",
    "handoffTitle": "Review and sign on a trusted signing page",
    "confirmWithLabel": "Confirm with",
@@ -1907,6 +1908,7 @@
     "signerUnavailable": "Passkeys can't be used here",
     "signerNotDiscoverable": "This passkey can't sign here",
     "signerFailed": "The passkey prompt failed",
+    "signingPage": "The signing page didn't sign it",
     "badRpc": "The site gave no usable RPC for this network"
    },
    "requests": "Recent requests",
