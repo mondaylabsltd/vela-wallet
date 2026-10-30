@@ -1038,6 +1038,8 @@ pub struct WalletPage {
     /// History's rows, measured, for drawing it a window at a time
     /// (`ui::windowed`, Phase 4).
     history_window: crate::ui::Windowed,
+    /// History's rows as last built, and what they were built from (Phase 4).
+    history_model: Option<(HistoryKey, flow_fixtures::HistoryPanel)>,
     panel_scroll_subject: String,
     /// The landed simulation verdict the signing column last drew: whose it
     /// was (the request's id, or the drawn scenario) and what it said. One
@@ -1951,6 +1953,7 @@ impl WalletPage {
             panel_scroll: crate::ui::SmoothScroll::new(),
             perf_scroll: None,
             history_window: crate::ui::Windowed::new(),
+            history_model: None,
             panel_scroll_subject: String::new(),
             verdict_seen: None,
             verdict_reveal: std::rc::Rc::default(),
@@ -7678,15 +7681,35 @@ impl WalletPage {
             FlowPanel::Da1 => {
                 // Privacy is the feed's own flag, told from the balance's
                 // first (`feed_view`).
-                let balance = crate::network_space::balance_view(cx);
+                let balance_unknown = resident::resident::<BalanceDashboard>(cx)
+                    .read(cx)
+                    .shared()
+                    .balance_unknown;
                 let feed = self.feed_view(cx);
-                flow_fixtures::FlowBody::History(flows_live::history_panel(
-                    &feed,
-                    balance.balance_unknown,
-                    &self.flow_strings,
-                    &self.strings,
-                    feed.hidden,
-                ))
+                let key = HistoryKey {
+                    feed,
+                    balance_unknown,
+                    language: self.loc.language().to_owned(),
+                    day_ms: crate::executor::day_start_ms(crate::executor::now_ms()),
+                };
+                // Phase 4: the rows are built once per feed the core hands
+                // over, not once per frame — a scroll redraws the panel 120
+                // times a second over the same 200 transfers.
+                let panel = match &self.history_model {
+                    Some((cached, panel)) if cached.same(&key) => panel.clone(),
+                    _ => {
+                        let panel = flows_live::history_panel(
+                            &key.feed,
+                            balance_unknown,
+                            &self.flow_strings,
+                            &self.strings,
+                            key.feed.hidden,
+                        );
+                        self.history_model = Some((key, panel.clone()));
+                        panel
+                    }
+                };
+                flow_fixtures::FlowBody::History(panel)
             }
             FlowPanel::Dr1 => flow_fixtures::FlowBody::Receive(flows_live::receive_list(
                 &identity.address,
@@ -22463,6 +22486,25 @@ impl WalletPage {
             .with_priority(1)
             .into_any_element(),
         )
+    }
+}
+
+/// What History's rows are built from: the core's feed (the same view, by
+/// identity — the core hands over a new one whenever anything in it moves),
+/// the hero's ruling, the language and the day "Today" is.
+struct HistoryKey {
+    feed: std::rc::Rc<vela_core::app::activity_feed::FeedView>,
+    balance_unknown: bool,
+    language: String,
+    day_ms: f64,
+}
+
+impl HistoryKey {
+    fn same(&self, other: &Self) -> bool {
+        std::rc::Rc::ptr_eq(&self.feed, &other.feed)
+            && self.balance_unknown == other.balance_unknown
+            && self.language == other.language
+            && self.day_ms.total_cmp(&other.day_ms).is_eq()
     }
 }
 
