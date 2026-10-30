@@ -150,7 +150,18 @@ final class PerfTests: XCTestCase {
     // MARK: - Confirm → passkey
 
     func testConfirmToPasskey() throws {
-        try requireSeed(makeApp())
+        let probe = makeApp()
+        try requireSeed(probe)
+        // The send needs a network and a balance that covers it. Without
+        // them there is nothing to measure here: skipped, never failed — the
+        // shell's own share is measured hermetically by
+        // `SendReceiptFollowsTrackerTests.theConfirmReachesThePromptOnAnInstantNetwork`.
+        do {
+            _ = try reachConfirm(probe)
+        } catch {
+            throw XCTSkip("Confirm not reachable here: \(error)")
+        }
+        probe.terminate()
         let raised = XCTOSSignpostMetric(subsystem: Self.subsystem, category: Self.category, name: "ConfirmToPasskey")
         let options = XCTMeasureOptions()
         options.iterationCount = 3
@@ -203,13 +214,16 @@ final class PerfTests: XCTestCase {
             app.buttons["keyboard.done"].firstMatch.tap()
         }
         let next = app.buttons["Continue"].firstMatch
-        expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: next)
-        waitForExpectations(timeout: 60)
+        guard enabled(next) else { throw NotReached(description: "Continue never enabled (balance?)") }
         next.tap()
         let confirm = app.buttons["Confirm & Send"].firstMatch
         guard confirm.waitForExistence(timeout: 60) else { throw NotReached(description: "no confirm") }
-        expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: confirm)
-        waitForExpectations(timeout: 60)
+        guard enabled(confirm) else { throw NotReached(description: "Confirm & Send never enabled (fee?)") }
         return confirm
+    }
+
+    private func enabled(_ element: XCUIElement, timeout: TimeInterval = 60) -> Bool {
+        let wait = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isEnabled == true"), object: element)
+        return XCTWaiter().wait(for: [wait], timeout: timeout) == .completed
     }
 }

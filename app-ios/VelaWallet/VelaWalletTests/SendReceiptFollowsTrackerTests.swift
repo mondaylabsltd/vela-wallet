@@ -160,6 +160,86 @@ struct SendReceiptFollowsTrackerTests {
         #expect(send.view?.fee != nil)
     }
 
+    /// Native parity Phase 4 — Confirm → prompt, the SHELL's share: every
+    /// read before the prompt (deployment, nonce, the relay's estimate, the
+    /// head) answered at once, so what is left is this app's own work — the
+    /// send machine, the draft, the hash, the route. Printed for the perf
+    /// report; the bound is a regression guard, not the 300 ms target (which
+    /// is the network's to spend on a phone).
+    @Test func theConfirmReachesThePromptOnAnInstantNetwork() async throws {
+        let scripted = ScriptedRelayPort()
+        scripted.rpc["eth_getCode"] = .ok("0x")
+        scripted.rpc["eth_blockNumber"] = .ok("0x2e3b9d9")
+        scripted.rpc["eth_gasPrice"] = .ok("0x3b9aca00")
+        scripted.rpc["eth_getBlockByNumber"] = .ok(["baseFeePerGas": "0x3b9aca00"] as [String: Any])
+        scripted.rpc["eth_maxPriorityFeePerGas"] = .ok("0x1")
+        let tier: [String: Any] = [
+            "maxFeePerGas": "0x77359400", "maxPriorityFeePerGas": "0x1",
+            "networkFeePerGas": "0x3b9aca00", "relayerFeePerGas": "0x3b9aca00",
+        ]
+        scripted.rpc["pimlico_getUserOperationGasPrice"] = .ok(
+            ["slow": tier, "standard": tier, "fast": tier] as [String: Any]
+        )
+        scripted.rpc["vela_getInBandGasQuote"] = .ok([[
+            "recipient": feeRecipient, "asset": "native", "feeToken": NSNull(), "decimals": 18,
+            "symbol": "XDAI", "balance": "0xde0b6b3a7640000", "usdPrice": "1", "usdBalance": "1",
+        ] as [String: Any]])
+        scripted.rpc["eth_estimateUserOperationGas"] = .ok([
+            "verificationGasLimit": "0x30d40", "callGasLimit": "0x30d40", "preVerificationGas": "0xc350",
+        ] as [String: Any])
+
+        let relay = RelayClient(port: WriteAheadProbePort(scripted), now: { 0 }, retryDelayMs: 0)
+        let accounts = ScriptedAccounts()
+        accounts.keyList = fixture.keys
+        accounts.recordJson = fixture.pageRecordJson
+        let spine = UserOpSpine(relay: relay, accounts: accounts, signer: { CountingSigner() })
+        // The prompt: its moment is the measurement, and a cancel ends the
+        // attempt there — nothing signed, nothing posted.
+        var raised: ContinuousClock.Instant?
+        spine.trustedSigner = ScriptedTrustedSigner { _ in
+            raised = .now
+            return .cancelled
+        }
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        defaults.set("[\(fixture.pageRecordJson)]", forKey: VelaStore.Key.accounts)
+        let store = VelaStore(defaults: defaults)
+        let accountStore = AccountStore(defaults: defaults)
+        let pool = RpcPool(store: store, accounts: accountStore, offline: true)
+        let held = try balance()
+        let nets = try networks()
+        let executor = SendExecutor(
+            store: store, relay: relay, pool: pool, spine: spine, accounts: accounts,
+            fees: FeeStore(relay: relay, accounts: accounts, settleDeadline: nil, timers: .stopped),
+            identity: RecipientIdentity(store: store, pool: pool, accounts: accountStore),
+            metadata: TokenMetadata(store: store, pool: pool), accountStore: accountStore,
+            balances: { held }, networks: { nets },
+            ports: SendExecutor.Ports(trackSubmitted: { _ in }),
+            clearanceWaitMs: 600_000
+        )
+        let send = SendStore(executor: executor)
+        send.open(
+            accountId: fixture.credentialHex, address: fixture.account, name: "Mine",
+            displayCode: "USD", displayRate: 1, fiatDecimals: 2
+        )
+        await Wait.until { !(send.view?.tokens.isEmpty ?? true) }
+        send.selectToken(id: try #require(send.view?.tokens.first?.id))
+        await Wait.until { send.view?.stage == .enterDetails }
+        send.setRecipient(payee)
+        send.setAmount("0.001")
+        await Wait.until { send.view?.canContinue == true }
+        send.advance()
+        await Wait.until { send.view?.stage == .confirm && send.view?.canConfirm == true }
+
+        let confirmed = ContinuousClock.now
+        send.slideConfirm()
+        await Wait.until { raised != nil }
+        let at = try #require(raised, "the prompt was never raised")
+        let ms = Double((at - confirmed).components.attoseconds) / 1e15
+            + Double((at - confirmed).components.seconds) * 1000
+        print("[perf] confirm → prompt, every read answered at once: \(String(format: "%.1f", ms)) ms")
+        #expect(ms < 1000, "the shell alone took \(ms) ms to reach the prompt")
+    }
+
     /// The Send's receipt reads "may have been sent" only while nobody knows
     /// better. Here the tracker found the landed op while the relay's reply
     /// was being lost: once the lost reply names the op to the receipt, the
