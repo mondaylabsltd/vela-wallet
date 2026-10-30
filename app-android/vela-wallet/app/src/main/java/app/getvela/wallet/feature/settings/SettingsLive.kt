@@ -40,6 +40,7 @@ import app.getvela.wallet.feature.settings.core.NetRpcField
 import app.getvela.wallet.feature.settings.core.NetView
 import app.getvela.wallet.feature.settings.core.NetWizardErrorKind
 import app.getvela.wallet.feature.settings.core.NetWizardPhase
+import app.getvela.wallet.feature.settings.core.VelaNetworkNames
 import app.getvela.wallet.feature.wallet.core.BalanceView
 
 /**
@@ -295,6 +296,13 @@ object SettingsLive {
                 pageSectionBody = lineOf(onPage),
                 manage = s.t("settings.signing.title"),
                 trust = s.t("settings.signing.pageTrust"),
+                // The page everywhere (owner, 2026-10-30): the choice is a real
+                // one here, so the screen says what a signing page protects
+                // against and what it does not — the web's `pageNotes`.
+                pageNotes = listOf(
+                    s.t(I18nKeys.SettingsUi.VENUE_PAGE_PROTECTS),
+                    s.t(I18nKeys.SettingsUi.VENUE_PAGE_LIMIT, mapOf("domain" to account.signingDomain)),
+                ).filter { it.isNotBlank() },
             ),
         )
     }
@@ -440,7 +448,7 @@ object SettingsLive {
         // RPC" there had no RPC box for "this" to mean. This file used to
         // decide both, each by its own condition.
         val rpcField = wizard.rpc_field != NetRpcField.None
-        return model.copy(
+        val built = model.copy(
             addNetwork = model.addNetwork.copy(
                 query = wizard.query,
                 results = if (wizard.query.isBlank()) {
@@ -462,6 +470,9 @@ object SettingsLive {
                                 I18nKeys.SettingsUi.CHAIN_ID,
                                 mapOf("chainId" to entry.chain_id.toString()),
                             ) + " · " + entry.native_currency_symbol,
+                            // One of Vela's own networks, out of the list —
+                            // said as what it is (the web's `suggestionRow`).
+                            tag = if (entry.vela) strings.t(I18nKeys.SettingsUi.ADD_VELA_NETWORK) else null,
                         )
                     }
                 },
@@ -585,6 +596,30 @@ object SettingsLive {
                 space = if (spaceChoice && wizard.can_add) spaceChoice(wizard.testnet, strings) else null,
             ),
         )
+        // A Vela network out of the person's list (`vela_network`): nothing
+        // was checked — Vela supports it — and adding it shows it again,
+        // settings and all, in the space it is. No verdict pill, no checks,
+        // no RPC field, no space to choose (the web's `addNetworkBody`).
+        if (!(checked && wizard.vela_network && info != null)) return built
+        val add = built.addNetwork
+        return built.copy(
+            addNetwork = add.copy(
+                candidate = add.candidate?.copy(
+                    badge = StatusPillModel(SettingsTone.Ok, strings.t(I18nKeys.SettingsUi.ADD_VELA_NETWORK)),
+                    tag = null,
+                ),
+                checks = emptyList(),
+                checksTitle = null,
+                customRpc = null,
+                callout = CalloutModel(CalloutTone.Info, strings.t(I18nKeys.SettingsUi.ADD_VELA_NETWORK_HINT)),
+                calloutAsksForRpc = false,
+                primary = strings.t(I18nKeys.SettingsUi.ADD_BUTTON).takeIf { wizard.can_add },
+                secondary = null,
+                secondaryUrl = null,
+                recheck = null,
+                space = null,
+            ),
+        )
     }
 
     /** Spec 105: the wizard's two-way choice, testnet first (the default for a network nobody vouched for). */
@@ -600,13 +635,114 @@ object SettingsLive {
         )
     }
 
-    /** Spec 105: the network list's heading, and the switch beside it. */
-    fun spaceHeading(space: NetworkSpace, strings: VelaStrings): NetworkSpaceHeadingModel = NetworkSpaceHeadingModel(
-        heading = strings.t(if (space.testnet) I18nKeys.NetworkSpace.HEADING_TESTNET else I18nKeys.NetworkSpace.HEADING_MAINNET),
-        hint = strings.t(if (space.testnet) I18nKeys.NetworkSpace.TESTNET_HINT else I18nKeys.NetworkSpace.MAINNET_HINT),
-        switchLabel = strings.t(if (space.testnet) I18nKeys.NetworkSpace.TO_MAINNET else I18nKeys.NetworkSpace.TO_TESTNET),
-        testnet = space.testnet,
+    /**
+     * Spec 105: the network list's heading, and the switch beside it. [more]:
+     * the line naming the Vela networks out of the list (owner decision
+     * 2026-10-29), said under the MAINNET heading — where they would be (the
+     * web's `liveSpaceHeading`).
+     */
+    fun spaceHeading(space: NetworkSpace, strings: VelaStrings, more: String? = null): NetworkSpaceHeadingModel {
+        val hint = strings.t(if (space.testnet) I18nKeys.NetworkSpace.TESTNET_HINT else I18nKeys.NetworkSpace.MAINNET_HINT)
+        return NetworkSpaceHeadingModel(
+            heading = strings.t(if (space.testnet) I18nKeys.NetworkSpace.HEADING_TESTNET else I18nKeys.NetworkSpace.HEADING_MAINNET),
+            hint = if (!space.testnet && more != null) "$hint $more" else hint,
+            switchLabel = strings.t(if (space.testnet) I18nKeys.NetworkSpace.TO_MAINNET else I18nKeys.NetworkSpace.TO_TESTNET),
+            testnet = space.testnet,
+        )
+    }
+
+    /**
+     * The RPC pool's word on the person's own nodes (owner decision
+     * 2026-10-28, `RpcPoolView`): the chains public nodes serve because the
+     * person's node is not answering, and the chains read through their node
+     * alone that cannot be reached. The web's `LiveOwnNodes`.
+     */
+    data class OwnNodes(val fallback: List<Long> = emptyList(), val unreached: List<Long> = emptyList()) {
+        companion object {
+            fun of(pool: app.getvela.wallet.feature.wallet.core.RpcPoolView): OwnNodes = OwnNodes(
+                fallback = pool.fallback_chains.map { it.toLong() },
+                unreached = pool.own_node_unreached_chains.map { it.toLong() },
+            )
+        }
+    }
+
+    /** A network's own-node notice, or none — the pool's two lists, worded (the web's `ownNodeNotice`). */
+    fun ownNodeNotice(row: NetNetworkRow, nodes: OwnNodes?, strings: VelaStrings): NetworkNoticeModel? = when {
+        nodes == null || !row.own_rpc -> null
+        row.chain_id in nodes.unreached -> NetworkNoticeModel(
+            SettingsTone.Error,
+            strings.t(I18nKeys.SettingsUi.OWN_NODE_UNREACHABLE, mapOf("name" to row.display_name)),
+        )
+        row.chain_id in nodes.fallback -> NetworkNoticeModel(SettingsTone.Warn, strings.t(I18nKeys.SettingsUi.NETWORK_FALLBACK))
+        else -> null
+    }
+
+    /**
+     * "Also supported, not in your list: Stable, MegaETH…" — the Vela networks
+     * the core says are out of the person's list, by the core's names; none,
+     * no line (the web's `moreNetworks`).
+     */
+    fun moreNetworks(view: NetView, strings: VelaStrings, names: (List<Long>) -> Map<Long, String> = VelaNetworkNames::of): String? {
+        val hidden = view.hidden_vela_chain_ids
+        if (hidden.isEmpty()) return null
+        val named = names(hidden)
+        return strings.t(
+            I18nKeys.SettingsUi.NETWORK_MORE,
+            mapOf(
+                "names" to hidden.joinToString(", ") { id ->
+                    named[id] ?: strings.t(I18nKeys.SettingsUi.CHAIN_ID, mapOf("chainId" to id.toString()))
+                },
+            ),
+        )
+    }
+
+    /**
+     * The remove question for the row [id] (the web's `removeNetworkQuestion`):
+     * titled with the network's name; a Vela network shown on the person's
+     * word is asked about in its own words — it leaves the list, its settings
+     * stay. [SettingsScreenModel.removeNetworkSheet] as it is for a row it
+     * does not list.
+     */
+    fun removeNetworkQuestion(model: SettingsScreenModel, id: String?): ConfirmSheetModel {
+        val row = model.networks.firstOrNull { it.id == id } ?: return model.removeNetworkSheet
+        return model.removeNetworkSheet.copy(title = row.name, body = row.removeBody ?: model.removeNetworkSheet.body)
+    }
+
+    /** What each endpoint is called and what it is for — the web's `ENDPOINT_COPY`. */
+    private fun endpointCopy(field: NetEndpointField): Pair<String, String> = when (field) {
+        NetEndpointField.EthereumData -> I18nKeys.SettingsUi.ENDPOINT_CHAIN_DATA to I18nKeys.SettingsUi.ENDPOINT_CHAIN_DATA_HINT
+        NetEndpointField.PasskeyIndex -> I18nKeys.SettingsUi.ENDPOINT_PASSKEY to I18nKeys.SettingsUi.ENDPOINT_PASSKEY_HINT
+        NetEndpointField.BundlerService -> I18nKeys.SettingsUi.ENDPOINT_RELAY to I18nKeys.SettingsUi.ENDPOINT_RELAY_HINT
+        NetEndpointField.FiatRates -> I18nKeys.SettingsUi.ENDPOINT_FIAT to I18nKeys.SettingsUi.ENDPOINT_FIAT_HINT
+        NetEndpointField.GenesisService -> I18nKeys.SettingsUi.ENDPOINT_GENESIS to I18nKeys.SettingsUi.ENDPOINT_GENESIS_HINT
+    }
+
+    /**
+     * The endpoints page from the core's view (the web's `liveEndpoints`):
+     * every service the core lists — the multisig service with them — each
+     * named, with what it is for, its probe's word, and, when the address was
+     * refused, that nothing was saved (outlined until it is edited).
+     */
+    fun endpoints(base: EndpointsModel, view: NetView, strings: VelaStrings): EndpointsModel = base.copy(
+        fields = view.endpoints.map { endpoint ->
+            val (label, purpose) = endpointCopy(endpoint.field)
+            UrlFieldModel(
+                id = endpoint.field.name,
+                label = strings.t(label),
+                value = endpoint.value,
+                // The default is the placeholder: an unset endpoint shows
+                // what it WOULD use, greyed, not an empty box.
+                placeholder = endpoint.default_value,
+                hint = strings.t(if (endpoint.refused) I18nKeys.SettingsUi.HEALTH_URL_REFUSED else purpose),
+                badge = servicePill(endpoint.health, strings),
+                tone = if (endpoint.refused) SettingsTone.Error else null,
+            )
+        },
+        guide = strings.t(I18nKeys.SettingsUi.ENDPOINTS_GUIDE),
     )
+
+    /** Where "Self-hosting guide →" goes (the web's `EndpointsPanel`, spec 081 FR-004). */
+    const val SELF_HOSTING_GUIDE_URL = "https://getvela.app/docs/self-hosting"
 
     fun withNetworks(
         model: SettingsScreenModel,
@@ -618,6 +754,10 @@ object SettingsLive {
          * carries the move to the other one. `null`, every network (the gallery).
          */
         space: NetworkSpace? = null,
+        /** The pool's word on the person's own nodes (`RpcPoolView`); `null`, none said. */
+        nodes: OwnNodes? = null,
+        /** The core's names for the Vela networks out of the list (a seam for tests). */
+        names: (List<Long>) -> Map<Long, String> = VelaNetworkNames::of,
     ): SettingsScreenModel {
         if (!view.loaded) return model
         val shown = space?.let { s -> view.networks.filter { it.is_testnet == s.testnet } } ?: view.networks
@@ -643,7 +783,7 @@ object SettingsLive {
                     },
                 )
             },
-            networksSpace = space?.let { spaceHeading(it, strings) },
+            networksSpace = space?.let { spaceHeading(it, strings, more = moreNetworks(view, strings, names)) },
             networks = shown.map { row ->
                 NetworkRowModel(
                     id = row.id,
@@ -666,27 +806,20 @@ object SettingsLive {
                     } else {
                         null
                     },
-                    removable = row.is_custom,
+                    // Owner decision 2026-10-29: a Vela network shown on the
+                    // person's word can be taken out of the list again; its
+                    // settings stay (the web's `liveNetworkRows`).
+                    removable = row.is_custom || row.optional,
+                    removeBody = if (row.optional && !row.is_custom) strings.t(I18nKeys.SettingsUi.NETWORK_HIDE_BODY) else null,
                     move = if (space != null && row.is_custom) {
                         strings.t(if (space.testnet) I18nKeys.NetworkSpace.MOVE_TO_MAINNET else I18nKeys.NetworkSpace.MOVE_TO_TESTNET)
                     } else {
                         null
                     },
+                    notice = ownNodeNotice(row, nodes, strings),
                 )
             },
-            endpoints = model.endpoints.copy(
-                fields = view.endpoints.map { endpoint ->
-                    UrlFieldModel(
-                        id = endpoint.field.name,
-                        label = endpointLabel(endpoint.field, model),
-                        value = endpoint.value,
-                        // The default is the placeholder: an unset endpoint
-                        // shows what it WOULD use, greyed, not an empty box.
-                        placeholder = endpoint.default_value,
-                        badge = servicePill(endpoint.health, strings),
-                    )
-                },
-            ),
+            endpoints = endpoints(model.endpoints, view, strings),
             // Retired (`retire_provider_keys`): no provider cards are live.
             rpcProviders = model.rpcProviders.copy(providers = emptyList()),
         )
@@ -706,12 +839,6 @@ object SettingsLive {
         0xFFCF5C7A, 0xFF4A9BD1, 0xFF9B6CD1, 0xFF3FA37A,
     )
 
-    /** The label the drawn endpoints page already uses, in field order. */
-    private fun endpointLabel(field: NetEndpointField, model: SettingsScreenModel): String {
-        val drawn = model.endpoints.fields
-        val index = NetEndpointField.entries.indexOf(field)
-        return drawn.getOrNull(index)?.label ?: field.name
-    }
 
 
     /**
@@ -1039,36 +1166,76 @@ object SettingsLive {
      * RPC and explorer overrides as the core holds them. Before this the page
      * showed the fixture's Ethereum whichever row was tapped.
      */
-    fun networkDetail(fallback: NetworkDetailModel, row: NetNetworkRow, strings: VelaStrings): NetworkDetailModel = fallback.copy(
-        title = row.display_name,
-        subtitle = strings.t(I18nKeys.SettingsUi.CHAIN_ID, mapOf("chainId" to row.chain_id.toString())) + " · " + row.native_symbol,
-        mark = ChainMarkModel(row.display_name.take(1).uppercase(), markColour(row.chain_id), Marks.chainLogoUrl(row.chain_id.toInt())),
-        name = row.display_name,
-        note = strings.t(if (row.is_custom) I18nKeys.SettingsUi.NETWORK_CUSTOM else I18nKeys.SettingsUi.NETWORK_BUILTIN_NOTE),
-        // What the probes measured (the web's `liveNetworkDetail`): the header
-        // pill is the RPC's, quiet "online" until one answered — the fixture
-        // drew a latency nobody measured.
-        badge = healthPill(row.rpc_health, strings)
-            ?: StatusPillModel(SettingsTone.Neutral, strings.t(I18nKeys.SettingsUi.NETWORK_ONLINE)),
-        rpc = fallback.rpc.copy(
-            value = row.rpc_url,
-            badge = healthPill(row.rpc_health, strings),
-            tone = if (row.rpc_chain_mismatch != null) SettingsTone.Error else null,
-        ),
-        explorer = fallback.explorer.copy(value = row.explorer_url, badge = healthPill(row.explorer_health, strings)),
-        // An RPC that answers for another chain is the one fault a latency
-        // pill cannot show: it is fast, and it is wrong.
-        callout = row.rpc_chain_mismatch?.let { mismatch ->
-            CalloutModel(
-                CalloutTone.Danger,
-                strings.t(
-                    I18nKeys.SettingsUi.RPC_CHAIN_MISMATCH,
-                    mapOf("reported" to mismatch.reported_chain_id.toString(), "expected" to mismatch.expected_chain_id.toString()),
-                ),
-            )
-        },
-        chainId = row.chain_id,
-    )
+    fun networkDetail(
+        fallback: NetworkDetailModel,
+        row: NetNetworkRow,
+        strings: VelaStrings,
+        /** The pool's word on the person's own node (`RpcPoolView`); `null`, none said. */
+        nodes: OwnNodes? = null,
+    ): NetworkDetailModel {
+        val mismatch = row.rpc_chain_mismatch
+        // set-6: a refusal is never drawn beside a green latency pill. The
+        // node answered, but what the field holds was NOT saved — the pill
+        // says so, and the callout says why (the web's `refusedPill`).
+        val refusedPill = StatusPillModel(SettingsTone.Error, strings.t(I18nKeys.SettingsUi.HEALTH_HTTPS_REQUIRED))
+        val rpcBadge = when {
+            row.rpc_url_refused -> refusedPill
+            mismatch != null -> StatusPillModel(SettingsTone.Error, strings.t(I18nKeys.SettingsUi.HEALTH_INVALID))
+            else -> healthPill(row.rpc_health, strings)
+        }
+        val notice = ownNodeNotice(row, nodes, strings)
+        return fallback.copy(
+            title = row.display_name,
+            subtitle = strings.t(I18nKeys.SettingsUi.CHAIN_ID, mapOf("chainId" to row.chain_id.toString())) + " · " + row.native_symbol,
+            mark = ChainMarkModel(row.display_name.take(1).uppercase(), markColour(row.chain_id), Marks.chainLogoUrl(row.chain_id.toInt())),
+            name = row.display_name,
+            note = strings.t(if (row.is_custom) I18nKeys.SettingsUi.NETWORK_CUSTOM else I18nKeys.SettingsUi.NETWORK_BUILTIN_NOTE),
+            // What the probes measured (the web's `liveNetworkDetail`): the header
+            // pill is the RPC's, quiet "online" until one answered — the fixture
+            // drew a latency nobody measured.
+            badge = rpcBadge ?: StatusPillModel(SettingsTone.Neutral, strings.t(I18nKeys.SettingsUi.NETWORK_ONLINE)),
+            rpc = fallback.rpc.copy(
+                value = row.rpc_url,
+                badge = rpcBadge,
+                tone = if (mismatch != null || row.rpc_url_refused) SettingsTone.Error else null,
+            ),
+            explorer = fallback.explorer.copy(
+                value = row.explorer_url,
+                badge = if (row.explorer_url_refused) refusedPill else healthPill(row.explorer_health, strings),
+                tone = if (row.explorer_url_refused) SettingsTone.Error else null,
+            ),
+            // A refused address first (nothing was saved), then an RPC that
+            // answers for another chain — the one fault a latency pill cannot
+            // show: it is fast, and it is wrong.
+            callout = when {
+                row.rpc_url_refused || row.explorer_url_refused ->
+                    CalloutModel(CalloutTone.Danger, strings.t(I18nKeys.SettingsUi.HEALTH_URL_REFUSED))
+                mismatch != null -> CalloutModel(
+                    CalloutTone.Danger,
+                    strings.t(
+                        I18nKeys.SettingsUi.RPC_CHAIN_MISMATCH,
+                        mapOf("reported" to mismatch.reported_chain_id.toString(), "expected" to mismatch.expected_chain_id.toString()),
+                    ),
+                )
+                else -> null
+            },
+            chainId = row.chain_id,
+            // Owner decision 2026-10-28: offered only where the RPC is the
+            // person's own; what it means for the pool is the core's.
+            onlyMine = if (row.own_rpc) {
+                OnlyMineModel(
+                    title = strings.t(I18nKeys.SettingsUi.NETWORK_ONLY_MINE),
+                    subtitle = strings.t(I18nKeys.SettingsUi.NETWORK_ONLY_MINE_HINT),
+                    on = row.only_mine,
+                )
+            } else {
+                null
+            },
+            nodeCallout = notice?.let {
+                CalloutModel(if (it.tone == SettingsTone.Error) CalloutTone.Danger else CalloutTone.Warning, it.text)
+            },
+        )
+    }
 
     /**
      * SR6 (spec 092): the list the home's "can't reach" line opens — every

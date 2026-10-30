@@ -1089,12 +1089,16 @@ object SettingsFixtures {
         SettingsScreenState.ST8 -> Shape(SettingsPage.Home, SettingsOverlay.TimeFormat)
         SettingsScreenState.ST9 -> Shape(SettingsPage.Networks, SettingsOverlay.None)
         SettingsScreenState.ST9B -> Shape(SettingsPage.NetworkDetail, SettingsOverlay.None)
+        SettingsScreenState.ST9C -> Shape(SettingsPage.Networks, SettingsOverlay.None)
+        SettingsScreenState.ST9D, SettingsScreenState.ST9E -> Shape(SettingsPage.NetworkDetail, SettingsOverlay.None)
+        SettingsScreenState.ST9F -> Shape(SettingsPage.Networks, SettingsOverlay.RemoveNetwork)
         SettingsScreenState.ST10, SettingsScreenState.ST10B, SettingsScreenState.ST10C, SettingsScreenState.ST10D,
         SettingsScreenState.ST10E, SettingsScreenState.ST10F, SettingsScreenState.ST10G,
-        SettingsScreenState.ST10H, SettingsScreenState.ST10I, SettingsScreenState.ST10J ->
+        SettingsScreenState.ST10H, SettingsScreenState.ST10I, SettingsScreenState.ST10J,
+        SettingsScreenState.ST10K, SettingsScreenState.ST10L ->
             Shape(SettingsPage.AddNetwork, SettingsOverlay.None)
         SettingsScreenState.ST11 -> Shape(SettingsPage.RpcProviders, SettingsOverlay.None)
-        SettingsScreenState.ST12 -> Shape(SettingsPage.Endpoints, SettingsOverlay.None)
+        SettingsScreenState.ST12, SettingsScreenState.ST12B -> Shape(SettingsPage.Endpoints, SettingsOverlay.None)
         SettingsScreenState.ST13 -> Shape(SettingsPage.Storage, SettingsOverlay.None)
         SettingsScreenState.ST13B ->
             Shape(SettingsPage.Storage, SettingsOverlay.ClearCaches, backdrop = "storage")
@@ -1274,7 +1278,55 @@ object SettingsFixtures {
     }
 
     fun buildState(state: SettingsScreenState, s: VelaStrings): SettingsScreenModel =
-        withWizardStop(withKeys(withSigning(baseState(state, s), state, s), state, s), state, s)
+        withLedger(withWizardStop(withKeys(withSigning(baseState(state, s), state, s), state, s), state, s), state, s)
+
+    /**
+     * The pool's word on the ledger boards' own nodes: Gnosis is read through
+     * its node alone and that node cannot be reached; Arbitrum's node is
+     * silent and public nodes serve it for now.
+     */
+    val LEDGER_NODES = SettingsLive.OwnNodes(
+        fallback = listOf(app.getvela.wallet.feature.settings.core.NetBoards.OWN_CHAIN),
+        unreached = listOf(app.getvela.wallet.feature.settings.core.NetBoards.OWN_ONLY_CHAIN),
+    )
+
+    /**
+     * ST9C–ST9F, ST10K/L, ST12B: the real `network_admin` machine's ledger
+     * (`NetBoards.ledger` / `velaWizard`) through the live builders a session
+     * draws with, in the mainnet space. Nothing here words a row.
+     */
+    private fun withLedger(model: SettingsScreenModel, state: SettingsScreenState, s: VelaStrings): SettingsScreenModel {
+        val boards = app.getvela.wallet.feature.settings.core.NetBoards
+        val mainnet = app.getvela.wallet.feature.settings.core.NetworkSpace.Mainnet
+        fun list(view: app.getvela.wallet.feature.settings.core.NetView) =
+            SettingsLive.withNetworks(model, view, s, space = mainnet, nodes = LEDGER_NODES)
+        fun detail(chainId: Long): SettingsScreenModel {
+            val view = boards.ledger(expand = chainId)
+            val listed = list(view)
+            val row = view.networks.first { it.chain_id == chainId }
+            return listed.copy(networkDetail = SettingsLive.networkDetail(listed.networkDetail, row, s, LEDGER_NODES))
+        }
+        return when (state) {
+            SettingsScreenState.ST9C -> list(boards.ledger())
+            SettingsScreenState.ST9D -> detail(boards.OWN_ONLY_CHAIN)
+            SettingsScreenState.ST9E -> detail(boards.OWN_CHAIN)
+            SettingsScreenState.ST9F -> {
+                val listed = list(boards.ledger())
+                val shown = listed.networks.first { row -> row.id == "stable" }
+                listed.copy(removeNetworkSheet = SettingsLive.removeNetworkQuestion(listed, shown.id))
+            }
+            SettingsScreenState.ST10K -> SettingsLive.withWizard(
+                model.copy(addNetwork = addNetwork(s, "search").copy(results = emptyList())),
+                boards.velaWizard("Mega"), s, spaceChoice = true,
+            )
+            SettingsScreenState.ST10L -> SettingsLive.withWizard(
+                model.copy(addNetwork = addNetwork(s, "search").copy(results = emptyList())),
+                boards.velaWizard("Mega", pick = 4_326L), s, spaceChoice = true,
+            )
+            SettingsScreenState.ST12B -> list(boards.ledger(endpoints = true))
+            else -> model
+        }
+    }
 
     /** Which of the wizard's stops a board draws; `null` on every other board. */
     fun wizardStop(state: SettingsScreenState): NetBoards.Stop? = when (state) {

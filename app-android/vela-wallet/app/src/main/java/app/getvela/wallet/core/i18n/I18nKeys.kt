@@ -1104,6 +1104,21 @@ object I18nKeys {
         const val ENDPOINTS_RESET_BODY = "settingsModals.endpoints.resetBody"
         const val ENDPOINTS_RESET_CONFIRM = "settingsModals.endpoints.resetConfirm"
         const val ENDPOINTS_RESET_CANCEL = "settingsModals.endpoints.resetCancel"
+        // Phase 2 settings parity (the web's `liveEndpoints`, `liveNetworkRows`, `liveNetworkDetail`, `venueModel`).
+        const val ENDPOINT_GENESIS = "settingsModals.endpoints.genesisLabel"
+        const val ENDPOINT_GENESIS_HINT = "settingsModals.endpoints.genesisHint"
+        const val ENDPOINTS_GUIDE = "settingsModals.endpoints.selfHostGuide"
+        const val HEALTH_URL_REFUSED = "settingsModals.health.urlRefused"
+        const val NETWORK_FALLBACK = "settingsModals.network.fallback"
+        const val NETWORK_ONLY_MINE = "settingsModals.network.onlyMine"
+        const val NETWORK_ONLY_MINE_HINT = "settingsModals.network.onlyMineHint"
+        const val NETWORK_HIDE_BODY = "settingsModals.network.hideBody"
+        const val NETWORK_MORE = "settingsModals.network.moreNetworks"
+        const val OWN_NODE_UNREACHABLE = "assets.ownNodeUnreachable"
+        const val ADD_VELA_NETWORK = "settingsModals.addNetwork.velaNetwork"
+        const val ADD_VELA_NETWORK_HINT = "settingsModals.addNetwork.velaNetworkHint"
+        const val VENUE_PAGE_PROTECTS = "settings.venue.pageProtects"
+        const val VENUE_PAGE_LIMIT = "settings.venue.pageLimit"
 
         // Device storage.
         const val STORAGE_TITLE = "settings.storage.title"

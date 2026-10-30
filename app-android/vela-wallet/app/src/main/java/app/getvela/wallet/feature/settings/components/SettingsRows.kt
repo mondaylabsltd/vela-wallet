@@ -64,6 +64,7 @@ import app.getvela.wallet.feature.settings.RowTone
 import app.getvela.wallet.feature.settings.RowTrailing
 import app.getvela.wallet.feature.settings.SelectRowModel
 import app.getvela.wallet.feature.settings.SettingsRowModel
+import app.getvela.wallet.feature.settings.SettingsTone
 import app.getvela.wallet.feature.settings.StorageGroupModel
 import app.getvela.wallet.feature.settings.StorageSegmentModel
 
@@ -508,6 +509,16 @@ fun VelaNetworkRow(
                     fontFamily = VelaMonoFontFamily,
                     fontSize = VelaTextSize.sm,
                 )
+                // The pool's word on the person's own node (the web's
+                // `NetworkRow` notice): public nodes for now, or not readable.
+                if (row.notice != null) {
+                    Text(
+                        text = row.notice.text,
+                        color = if (row.notice.tone == SettingsTone.Error) colors.errorBase else colors.warningBase,
+                        fontFamily = VelaFontFamily,
+                        fontSize = VelaTextSize.sm,
+                    )
+                }
                 // Under the chain id, not beside the bin: a link, and the
                 // row's width belongs to the name.
                 if (row.move != null) {

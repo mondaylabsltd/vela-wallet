@@ -273,7 +273,12 @@ class SettingsLiveTest {
             detail.callout!!.text,
         )
         assertEquals(SettingsTone.Error, detail.rpc.tone)
-        assertTrue(detail.badge.label.endsWith("40ms"))
+        // Fast, and wrong: never a green latency beside the mismatch — the
+        // pill says "invalid", on the field and in the header (the web's
+        // `liveNetworkDetail`).
+        assertEquals(strings.t(I18nKeys.SettingsUi.HEALTH_INVALID), detail.badge.label)
+        assertEquals(SettingsTone.Error, detail.badge.tone)
+        assertEquals(SettingsTone.Error, detail.rpc.badge!!.tone)
     }
 
     /** The balance-by-network sheet, from the balance core's view. */

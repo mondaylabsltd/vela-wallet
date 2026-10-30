@@ -2543,7 +2543,7 @@ fun VelaNavHost(
                     // Spec 105: the network list is the space in front's, under its
                     // heading; the add wizard asks which space a network goes to.
                     var m = SettingsLive.withWizard(
-                        SettingsLive.withNetworks(SettingsLive.withCurrency(model, currency), networks, strings, space = space),
+                        SettingsLive.withNetworks(SettingsLive.withCurrency(model, currency), networks, strings, space = space, nodes = SettingsLive.OwnNodes.of(poolView)),
                         networks,
                         strings,
                         spaceChoice = true,
@@ -2582,7 +2582,7 @@ fun VelaNavHost(
                     // Spec 048: the network detail is THIS network's, not the fixture's.
                     openNetworkId?.let { id ->
                         networks.networks.firstOrNull { it.id == id }?.let { row ->
-                            m = m.copy(networkDetail = SettingsLive.networkDetail(m.networkDetail, row, strings))
+                            m = m.copy(networkDetail = SettingsLive.networkDetail(m.networkDetail, row, strings, SettingsLive.OwnNodes.of(poolView)))
                         }
                     }
                     // Spec 048: a page another route asked for (the add-token 原生代币 tab). Kept
@@ -2775,6 +2775,8 @@ fun VelaNavHost(
                                 ?.let { settings.expandOverride(it.chain_id) }
                         },
                         onResetEndpoints = { agent.person(intent("reset_service_endpoints")) },
+                        // "Only use my node": the switch sends the core's event, as the web's does.
+                        onOnlyMine = { chainId, on -> settings.setOnlyMine(chainId, on) },
                         onEndpointsOpened = { settings.openEndpoints() },
                         // Spec 102: the account's venue — by address, refused by the
                         // core (nothing written) when it cannot reach the keys.
