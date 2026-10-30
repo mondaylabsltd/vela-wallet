@@ -18,7 +18,10 @@ use vela_core::app::multisig_proposals::{
 use vela_core::app::multisig_shell::{AccountUpdate, MultisigAccount, Notice};
 use vela_core::app::multisig_signers::SignerKind;
 use vela_core::multisig::{self, Transfer};
-use world::{fixture, genesis, settle, DeployedSafe, Landing, World, HANDLER_141, SERVICE};
+use world::{
+    fixture, genesis, settle, settle_reads_first, DeployedSafe, Landing, World, HANDLER_141,
+    SERVICE,
+};
 
 type Sut = DomainDriver<MultisigProposals>;
 
@@ -35,7 +38,8 @@ fn start(world: &World, networks: Vec<u64>) -> Event {
 
 fn run(sut: &mut Sut, world: &mut World, event: Event) {
     sut.dispatch(event);
-    let answered = settle(sut, world, 20_000);
+    // A shell's clock: a bound (the look's cap) runs out after the reads it bounds.
+    let answered = settle_reads_first(sut, world, 20_000);
     assert!(answered < 20_000, "the machine never settled");
 }
 
@@ -1274,6 +1278,112 @@ fn a_stale_look_is_taken_again_before_execute() {
     execute_landed(&mut world, &mut sut, &account, &hash, &a);
     assert!(looks(&world) > before, "looked again");
     assert_eq!(world.sent.len(), 1);
+}
+
+/// W9 (`preflight.check`): the sheet asks for a look as often as it likes;
+/// the core looks again only once the last one is stale — never two
+/// answers to the same question.
+#[test]
+fn a_fresh_look_is_not_taken_again() {
+    use vela_core::app::multisig_proposals::PREVIEW_FRESH_MS;
+    let (mut world, mut sut, _account) = setup(&[0, 1]);
+    let hash = approved_twice(&mut world, &mut sut);
+    let a = fixture(0).address;
+    let looks = |w: &World| {
+        w.rpc_log
+            .iter()
+            .filter(|(_, m, p)| {
+                m == "eth_getBalance" && p[0].as_str().is_some_and(|x| x.eq_ignore_ascii_case(&a))
+            })
+            .count()
+    };
+    preview_of(&mut sut, &mut world, &hash, &a);
+    // The world answers the look's cap even after the look won the race; a
+    // shell abandons that wait — no time passes for it.
+    world.now -= vela_core::app::multisig_proposals::PREVIEW_CAP_MS as f64;
+    let once = looks(&world);
+    assert!(once > 0);
+    preview_of(&mut sut, &mut world, &hash, &a);
+    assert_eq!(looks(&world), once, "a fresh look stands");
+    world.now += PREVIEW_FRESH_MS + 1.0;
+    preview_of(&mut sut, &mut world, &hash, &a);
+    assert!(looks(&world) > once, "a stale one is taken again");
+}
+
+/// Round 5 (`PREVIEW_CAP_MS`): a look that does not answer within the cap
+/// says `unchecked` — never a guess, never a button disabled for minutes.
+#[test]
+fn a_look_that_never_answers_says_unchecked() {
+    let (mut world, mut sut, _account) = setup(&[0, 1]);
+    let hash = approved_twice(&mut world, &mut sut);
+    let a = fixture(0).address;
+    sut.dispatch(Event::Preview {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor: a.clone(),
+    });
+    // The shell's clock runs out first: the clock and every wait are
+    // answered, no read is.
+    use vela_core::app::multisig_shell::MultisigOperation as Op;
+    for _ in 0..50 {
+        let outstanding = sut.outstanding();
+        let Some(op) = outstanding
+            .iter()
+            .find(|op| matches!(op, Op::Wait { .. } | Op::Now))
+            .cloned()
+        else {
+            break;
+        };
+        let res = world.answer(&op);
+        sut.resolve_matching(|o| *o == op, res);
+    }
+    let preview = sut.view().previews[&look_key(&hash, &a)].clone();
+    assert_eq!(preview["kind"], "unchecked", "{preview}");
+}
+
+/// r4-5, W9: the home's "Can't run now" is the machine's — a poll looks at
+/// each ready transaction by each executor here, and its standing carries
+/// the look's own detail (what the multisig holds, what it needs).
+#[test]
+fn a_ready_one_that_would_fail_says_why_on_the_home() {
+    use vela_core::app::multisig_presence::{ReadyBlock, Standing};
+    let (mut world, mut sut, account) = setup(&[0, 1]);
+    let hash = hash_of(&propose(&mut sut, &mut world, transfer("1000"), None));
+    run(
+        &mut sut,
+        &mut world,
+        Event::Approve {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+            owner: fixture(1).address,
+        },
+    );
+    world
+        .balances
+        .insert((100, account.address.to_ascii_lowercase()), 5);
+    run(&mut sut, &mut world, Event::Tick);
+    let standing = sut.view().standings[&format!("100:{hash}")].clone();
+    let Standing::Blocked {
+        block: ReadyBlock::Fails { why },
+    } = standing
+    else {
+        panic!("{standing:?}");
+    };
+    assert_eq!(why["kind"], "short", "{why}");
+    assert_eq!(why["have"], "5");
+    assert_eq!(why["need"], "1000");
+    // r7: funded, it is noticed on a poll a sheet's pace later — not after
+    // the home's minute.
+    world
+        .balances
+        .insert((100, account.address.to_ascii_lowercase()), 5_000);
+    world.now += vela_core::app::multisig_proposals::PREVIEW_FRESH_MS + 1.0;
+    run(&mut sut, &mut world, Event::Tick);
+    assert_eq!(
+        sut.view().standings[&format!("100:{hash}")],
+        Standing::Ready,
+        "funded, it can run"
+    );
 }
 
 /// C3: the frozen facts the timeline reads are in the view.

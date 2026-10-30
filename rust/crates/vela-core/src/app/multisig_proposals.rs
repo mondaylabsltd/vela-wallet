@@ -84,6 +84,16 @@ pub const REVIEW_FRESH_MS: f64 = 30_000.0;
 /// A priced look this recent is what Execute signs (`PREVIEW_FRESH_MS`);
 /// an older one, or one that did not price it, is taken again first.
 pub const PREVIEW_FRESH_MS: f64 = 15_000.0;
+/// A look that could not price the fee (or was not checked) is taken again sooner.
+pub const UNPRICED_FRESH_MS: f64 = 5_000.0;
+/// Round 5: the longest one look is waited for. "Approve and execute" once
+/// stayed disabled four minutes on a look that never answered; past this
+/// the look says `unchecked` — approving goes ahead, and Execute looks
+/// again before its passkey.
+pub const PREVIEW_CAP_MS: u64 = 15_000;
+/// How long the home lets a ready transaction's look stand (its "Can't run
+/// now"): looked at again on the poll after this.
+pub const HOME_FRESH_MS: f64 = 60_000.0;
 const RECENT_CAP: usize = 16;
 /// An on-chain "no" is asked again after this.
 pub const ONCHAIN_RECHECK_MS: f64 = 30_000.0;
@@ -926,6 +936,8 @@ pub struct State {
     previews: BTreeMap<String, Value>,
     /// Each executor's last look ([`preview_key`]): when it was taken, what it said.
     preview_plans: BTreeMap<String, (f64, Preview)>,
+    /// The looks under way ([`preview_key`]): never two at once.
+    looking: BTreeSet<String>,
     verdicts: BTreeMap<String, Value>,
     /// The executions being watched ([`exec_key`]): each flight followed once.
     watching: BTreeSet<String>,
@@ -1184,7 +1196,8 @@ impl App for MultisigProposals {
                 render()
             }
             Event::Tick => flow(model, |io, st| async move {
-                refresh(&io, &st, true, false).await
+                refresh(&io, &st, true, false).await;
+                look_at_ready(&io, &st).await;
             }),
             Event::Refresh { fresh } => flow(model, move |io, st| async move {
                 refresh(&io, &st, false, fresh).await
@@ -1359,9 +1372,7 @@ impl App for MultisigProposals {
                 let Some(input) = execution_input(&st, chain_id, &safe_tx_hash, &executor) else {
                     return;
                 };
-                if look_now(&io, &st, &input).await == Preview::Spent {
-                    settle_spent(&io, &st, &input).await;
-                }
+                look_if_stale(&io, &st, &input, PREVIEW_FRESH_MS).await;
             }),
             Event::Execute {
                 chain_id,
@@ -3366,6 +3377,106 @@ async fn look_now(io: &Io<Event>, st: &Shared<State>, input: &ExecutionInput) ->
     s.previews.insert(key.clone(), preview.to_value());
     s.preview_plans.insert(key, (at, preview.clone()));
     preview
+}
+
+/// Look at `input` unless its executor's last look is fresh (`fresh_ms`;
+/// an unpriced or unchecked one [`UNPRICED_FRESH_MS`] at most) or one is
+/// under way (`preflight.check`): one look per execution and executor, never
+/// a second answer to the same question. A look that does not answer within
+/// [`PREVIEW_CAP_MS`] says `unchecked` (never a guess); a number found used
+/// is settled as another member's execution (`settleSpent`).
+pub(crate) async fn look_if_stale(
+    io: &Io<Event>,
+    st: &Shared<State>,
+    input: &ExecutionInput,
+    fresh_ms: f64,
+) {
+    let key = preview_key(
+        input.chain_id,
+        &input.item.safe_tx_hash,
+        &input.executor.address,
+    );
+    let now = io.now().await;
+    {
+        let mut s = lock(st);
+        if s.looking.contains(&key) {
+            return;
+        }
+        let fresh = s.preview_plans.get(&key).is_some_and(|(at, p)| {
+            // r7: a look that stops it (nobody can pay, it would fail) is
+            // asked again at the sheet's pace even on the home — an
+            // executor funded is noticed on the next poll, not a minute on.
+            let fresh = match p {
+                Preview::Unpriced | Preview::Unchecked => fresh_ms.min(UNPRICED_FRESH_MS),
+                Preview::Fails(_) | Preview::Priced { can_pay: false, .. } => {
+                    fresh_ms.min(PREVIEW_FRESH_MS)
+                }
+                _ => fresh_ms,
+            };
+            // A look taken at other approvals is not this execution's.
+            let same = s
+                .more
+                .looks
+                .get(&key)
+                .is_some_and(|(approved, _)| *approved == input.item.approved);
+            same && now - at < fresh
+        });
+        if fresh {
+            return;
+        }
+        s.looking.insert(key.clone());
+    }
+    let read = Box::pin(preview_execution(io, st, input));
+    let cap = Box::pin(io.wait(PREVIEW_CAP_MS));
+    let preview = match future::select(read, cap).await {
+        future::Either::Left((preview, _)) => preview,
+        future::Either::Right(_) => Preview::Unchecked,
+    };
+    let at = io.now().await;
+    {
+        let mut s = lock(st);
+        s.looking.remove(&key);
+        flows::keep_look(&mut s, input, &preview);
+        s.previews.insert(key.clone(), preview.to_value());
+        s.preview_plans.insert(key, (at, preview.clone()));
+    }
+    if preview == Preview::Spent {
+        settle_spent(io, st, input).await;
+    }
+}
+
+/// The home's "Can't run now" (r4-5): each ready transaction of the followed
+/// multisig is looked at by each executor here — again once its look is
+/// older than [`HOME_FRESH_MS`] — so `standings` says why one cannot run,
+/// with the look's own detail.
+async fn look_at_ready(io: &Io<Event>, st: &Shared<State>) {
+    let inputs: Vec<ExecutionInput> = {
+        let s = lock(st);
+        let ready: Vec<(u64, String, Vec<String>)> = s
+            .items()
+            .iter()
+            .filter(|i| {
+                i.status == ProposalStatus::Ready && !i.executing && i.cancelled_by.is_none()
+            })
+            .map(|i| (i.chain_id, i.safe_tx_hash.clone(), i.can_execute.clone()))
+            .collect();
+        drop(s);
+        ready
+            .into_iter()
+            .flat_map(|(chain_id, hash, executors)| {
+                executors
+                    .into_iter()
+                    .filter_map(|e| execution_input(st, chain_id, &hash, &e))
+                    .collect::<Vec<_>>()
+            })
+            .collect()
+    };
+    future::join_all(
+        inputs
+            .iter()
+            .map(|input| look_if_stale(io, st, input, HOME_FRESH_MS)),
+    )
+    .await;
 }
 
 /// r5reg-21 (`settleSpent`): a look found its number used — another member

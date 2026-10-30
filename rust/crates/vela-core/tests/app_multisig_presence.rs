@@ -134,15 +134,32 @@ fn a_ready_one_nobody_here_can_pay_for_is_not_ready() {
 /// otherwise nothing is said.
 #[test]
 fn why_a_ready_one_cannot_run() {
-    let fails = Some(Look::Fails);
+    let short = serde_json::json!({"kind": "short", "token": null, "have": "1", "need": "5"});
+    let fails = Some(Look::Fails(short.clone()));
     let broke = Some(Look::Priced { can_pay: false });
     let pays = Some(Look::Priced { can_pay: true });
-    assert_eq!(block_of(&[pays, fails]), Some(ReadyBlock::Fails));
-    assert_eq!(block_of(&[broke, broke]), Some(ReadyBlock::NobodyPays));
-    assert_eq!(block_of(&[broke, pays]), None);
+    // W9: the row's "Can't run now" says the look's own detail.
+    assert_eq!(
+        block_of(&[pays.clone(), fails]),
+        Some(ReadyBlock::Fails { why: short.clone() })
+    );
+    assert_eq!(
+        block_of(&[broke.clone(), broke.clone()]),
+        Some(ReadyBlock::NobodyPays)
+    );
+    assert_eq!(block_of(&[broke.clone(), pays]), None);
     assert_eq!(block_of(&[broke, None]), None, "a look still out");
     assert_eq!(block_of(&[Some(Look::Other)]), None);
     assert_eq!(block_of(&[]), None);
+    // The detail crosses the wire whole, under its kind.
+    assert_eq!(
+        serde_json::to_value(ReadyBlock::Fails { why: short.clone() }).unwrap(),
+        serde_json::json!({"kind": "fails", "why": short})
+    );
+    assert_eq!(
+        serde_json::to_value(ReadyBlock::NobodyPays).unwrap(),
+        serde_json::json!({"kind": "nobodyPays"})
+    );
 }
 
 // -- a waiting row's one word, and the group's note (activity*.test.ts) -------------------
