@@ -1,7 +1,6 @@
 package app.getvela.wallet.feature.signing
 
 import app.getvela.wallet.core.designsystem.components.VelaModalSheet
-import app.getvela.wallet.core.designsystem.components.VelaPrimaryButton
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.background
@@ -468,7 +467,8 @@ fun SigningSheetContent(
                 // button, saying the action alone ("确认兑换", "签名", "复制钱包记录").
                 // Shut (dimmed) only while the core says so; once approved, the
                 // receipt takes the form's place, so busy never looks shut.
-                VelaPrimaryButton(
+                // The value button: signing is the action the accent exists for.
+                app.getvela.wallet.core.designsystem.components.VelaValueButton(
                     text = pinned,
                     onClick = onConfirm,
                     enabled = model.confirmEnabled,

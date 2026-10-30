@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -364,6 +365,7 @@ class MainActivity : ComponentActivity() {
         receiptRequested()?.let { container.pendingReceipt.value = it }
         debugOpenUrl(intent)?.let { container.browser.open(it, fromOutside = true) }
         routeDeepLink(intent, container)
+        routeLaunch(intent, container)
         // Spec 078 round 3: a stand-in report endpoint for the device pass, so
         // checking 发送 never files a real issue — debug builds only (and the
         // debug network config lets cleartext reach 127.0.0.1 alone).
@@ -371,6 +373,18 @@ class MainActivity : ComponentActivity() {
         if (BuildConfig.DEBUG) app.getvela.wallet.core.diagnostics.BugReport.forceDocumentPicker = intent?.getBooleanExtra("vela.forceDocumentPicker", false) == true
         if (BuildConfig.DEBUG) app.getvela.wallet.core.diagnostics.BugReport.debugPrepareDelayMs = intent?.getLongExtra("vela.screenshotDelayMs", 0L) ?: 0L
         // Spec 047 US4: a forced crash for the device pass — debug builds only.
+        // Phase 3 device pass: ask the launcher to place the balance widget
+        // (its own "Add to home screen" dialog answers) — debug builds only.
+        if (BuildConfig.DEBUG && intent?.getBooleanExtra("vela.pinWidget", false) == true) {
+            val widgets = getSystemService(android.appwidget.AppWidgetManager::class.java)
+            if (widgets?.isRequestPinAppWidgetSupported == true) {
+                widgets.requestPinAppWidget(
+                    android.content.ComponentName(this, app.getvela.wallet.core.widget.VelaBalanceWidgetReceiver::class.java),
+                    null,
+                    null,
+                )
+            }
+        }
         if (BuildConfig.DEBUG && intent?.getBooleanExtra("vela.testPanic", false) == true) {
             android.os.Handler(mainLooper).postDelayed({ throw IllegalStateException("vela.testPanic") }, 2_000)
         }
@@ -415,13 +429,22 @@ class MainActivity : ComponentActivity() {
             val splashDark = (view.view.background as? android.graphics.drawable.ColorDrawable)
                 ?.let { painted -> android.graphics.Color.luminance(painted.color) < 0.5f }
                 ?: systemDark
+            // Phase 3, edge to edge: removing the splash re-applies the
+            // window theme's system-bar colours (core-splashscreen's
+            // `applyThemesSystemBarAppearance`) — an opaque black status bar
+            // over the app, measured on API 34. The bars are set again, for
+            // the app's own appearance, once the splash is gone.
             if (appDark == splashDark) {
                 view.remove()
+                edgeToEdge(appDark)
             } else {
                 view.view.animate()
                     .alpha(0f)
                     .setDuration(VelaLaunch.exitCrossfadeMs.toLong())
-                    .withEndAction { view.remove() }
+                    .withEndAction {
+                        view.remove()
+                        edgeToEdge(appDark)
+                    }
                     .start()
             }
         }
@@ -438,11 +461,15 @@ class MainActivity : ComponentActivity() {
             // enableEdgeToEdge's defaults key bar-icon appearance off the SYSTEM uiMode
             // only; the FR-006 override must re-style the bars for the EFFECTIVE theme.
             DisposableEffect(darkTheme) {
-                enableEdgeToEdge(
-                    statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { darkTheme },
-                    navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { darkTheme },
-                )
+                edgeToEdge(darkTheme)
                 onDispose {}
+            }
+
+            // Phase 3: the launcher's Send / Receive / Scan, in the app's language…
+            LaunchedEffect(i18nState.language) {
+                app.getvela.wallet.core.platform.LauncherShortcuts.publish(this@MainActivity, container.i18nRuntime)
+                // …and the home-screen widget's words.
+                app.getvela.wallet.core.widget.VelaBalanceWidget.refresh(applicationContext)
             }
 
             // New provider identity per resolved language: every t() reader recomposes,
@@ -520,14 +547,63 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Drawn behind both system bars, their icons dark on the light palette and
+     * light on the dark one — the APP's appearance (FR-006), not the system's,
+     * which is all `enableEdgeToEdge()`'s defaults read.
+     */
+    private fun edgeToEdge(dark: Boolean) {
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark },
+            navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark },
+        )
+    }
+
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         val container = (application as VelaWalletApplication).container
         debugOpenUrl(intent)?.let { container.browser.open(it, fromOutside = true) }
         routeDeepLink(intent, container)
+        routeLaunch(intent, container)
         // Spec 070: the page in front's renderer dies on purpose — debug builds only.
         if (BuildConfig.DEBUG && intent.getBooleanExtra("vela.crashRenderer", false)) container.browser.debugCrashRenderer()
+    }
+
+    /**
+     * A web-wallet link this build does not act on (a multisig link, an
+     * outside signer's connect page): the person's browser opens it, in a
+     * named browser — never the chooser, and never back into this app.
+     */
+    internal fun openInBrowser(url: String, container: AppContainer) {
+        val opened = container.trustedSignerTab?.open(url) == true
+        if (!opened) container.browser.askToOpen(url)
+    }
+
+    /**
+     * Phase 3: a launcher shortcut, the Scan tile, or text shared into Vela —
+     * read by [app.getvela.wallet.core.platform.LaunchEntry], handed to the
+     * wallet route, which enters the flow once a wallet is in front. Shared
+     * text goes where the core rules on it: a pay link to `LinkOpened`, an
+     * address or an `ethereum:` request to Send's `scan_resolved`.
+     */
+    private fun routeLaunch(intent: android.content.Intent?, container: AppContainer) {
+        intent ?: return
+        val ask = app.getvela.wallet.core.platform.LaunchEntry.read(
+            action = intent.action,
+            type = intent.type,
+            sharedText = intent.getStringExtra(android.content.Intent.EXTRA_TEXT),
+        )
+        app.getvela.wallet.core.diagnostics.VelaLog.event("launch", "intent", "action" to intent.action, "ask" to ask?.javaClass?.simpleName)
+        when (ask) {
+            is app.getvela.wallet.core.platform.LaunchEntry.Ask.Open -> container.pendingLaunch.value = ask.flow
+            is app.getvela.wallet.core.platform.LaunchEntry.Ask.PayLinkShared -> container.pendingPayLink.value = android.net.Uri.parse(ask.url)
+            is app.getvela.wallet.core.platform.LaunchEntry.Ask.PaymentShared -> container.pendingShare.value = ask.text
+            is app.getvela.wallet.core.platform.LaunchEntry.Ask.WebLinkShared -> openInBrowser(ask.url, container)
+            null -> Unit
+        }
+        // Read once: a configuration change replays the same intent.
+        if (ask != null) setIntent(android.content.Intent(intent).setAction(android.content.Intent.ACTION_MAIN).also { it.removeExtra(android.content.Intent.EXTRA_TEXT) })
     }
 
     /**
@@ -541,6 +617,23 @@ class MainActivity : ComponentActivity() {
         if (data.scheme == app.getvela.wallet.feature.agent.ClientMcpLink.SCHEME) {
             container.agent.clientmcp.returned(data.toString())
             return
+        }
+        // Phase 3: the verified App Links — read with the core's link codec.
+        when (val route = app.getvela.wallet.feature.wallet.core.AppLinks.classify(data.toString())) {
+            is app.getvela.wallet.feature.wallet.core.AppLinks.Route.Pay -> {
+                container.pendingPayLink.value = data
+                return
+            }
+            is app.getvela.wallet.feature.wallet.core.AppLinks.Route.Web -> {
+                // Multisig is not in the phone app yet: the web wallet opens
+                // it as it always has, in a named browser — never the chooser,
+                // and never back into this app, which claims the link.
+                app.getvela.wallet.core.diagnostics.VelaLog.event("applink", "to the web", "kind" to route.kind.name)
+                openInBrowser(route.url, container)
+                return
+            }
+            app.getvela.wallet.feature.wallet.core.AppLinks.Route.Home -> return
+            null -> Unit
         }
         when (val link = PayLink.parse(data.toString())) {
             is PayLink.Open -> container.browser.askToOpen(link.url)

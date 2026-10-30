@@ -130,7 +130,7 @@ fun AddressBar(
                         editing = false
                         if (draft.text.isNotBlank()) onSubmitUrl?.invoke(draft.text)
                     }),
-                    cursorBrush = SolidColor(colors.accentBase),
+                    cursorBrush = SolidColor(colors.fgBase),
                     // A URL is literal text: "…/address/0x14fB…" was typed "0×14fB…".
                     textStyle = TextStyle(color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.lg, fontFeatureSettings = VelaFontFeatures),
                     modifier = Modifier
@@ -240,7 +240,7 @@ fun AddressBar(
                     Modifier
                         .fillMaxWidth(browser.progress.coerceIn(5, 100) / 100f)
                         .fillMaxHeight()
-                        .background(colors.accentBase),
+                        .background(colors.fgBase),
                 )
             }
         }

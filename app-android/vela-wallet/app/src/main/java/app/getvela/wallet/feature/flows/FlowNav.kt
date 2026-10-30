@@ -85,6 +85,9 @@ class FlowNavState internal constructor() {
     val top: FlowState? get() = stack.lastOrNull()
     val isOpen: Boolean get() = stack.isNotEmpty()
 
+    /** How many levels are open (Phase 3: which way a change of level went). */
+    val depth: Int get() = stack.size
+
     fun enter(entry: WalletFlowEntry, id: String? = null) {
         VelaLog.event("flows", "enter", "entry" to entry.name, "id" to id?.take(24))
         stack = ENTRIES.getValue(entry)

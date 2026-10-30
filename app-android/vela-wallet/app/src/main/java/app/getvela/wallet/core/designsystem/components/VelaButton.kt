@@ -34,6 +34,7 @@ import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
 import app.getvela.wallet.core.designsystem.tokens.VelaFontWeight
 import app.getvela.wallet.core.designsystem.tokens.VelaIconSize
 import app.getvela.wallet.core.designsystem.tokens.VelaMotion
+import app.getvela.wallet.core.designsystem.tokens.VelaAccentFill
 import app.getvela.wallet.core.designsystem.tokens.VelaOnAccent
 import app.getvela.wallet.core.designsystem.tokens.VelaOpacity
 import app.getvela.wallet.core.designsystem.tokens.VelaRadius
@@ -45,13 +46,21 @@ import app.getvela.wallet.core.designsystem.tokens.VelaTextSize
  * Vela CTA buttons: pill shape (DV-002), 52dp control height, spring press-scale
  * (design-system interactive-feedback rule) on top of the Material ripple.
  * Disabled (spec 014, mock A1) = the whole surface + label at
- * [VelaOpacity.disabled] — dimmed accent, never a gray fill.
+ * [VelaOpacity.disabled] — dimmed, never a gray fill.
  *
  * [loading] is the third state, and it is NOT disabled: the action is running
  * and this button is what the person is waiting on. It keeps full emphasis and
  * turns a spinner where its label was (docs/design-system.md — "Loading state:
  * ActivityIndicator replacing text"), because a dimmed button reads as
  * "unavailable", which is the one thing "working" must never look like.
+ *
+ * Which button (web `Button.svelte`, owner decision 2026-10 vis-6):
+ * - [VelaPrimaryButton] — the screen's main action in the NEUTRAL inverse ink
+ *   (fg.base fill, fg.inverse label): Continue, Create, Done, Copy address, Connect…
+ * - [VelaValueButton] — the one accent button: the action that moves value or
+ *   signs (Confirm & Send, Sign / Approve, Propose and approve, Execute). A person
+ *   learns that the orange button is the one that spends.
+ * - [VelaSecondaryButton], [VelaDangerButton] — the outline, and the destroyers.
  */
 @Composable
 fun VelaPrimaryButton(
@@ -63,6 +72,39 @@ fun VelaPrimaryButton(
     /** While [loading]: the spinner BESIDE the label ("Sending…") instead of in its place. */
     busyLabel: Boolean = false,
 ) {
+    val colors = VelaTheme.colors
+    FilledButton(text, onClick, modifier, enabled, loading, busyLabel, fill = colors.fgBase, ink = colors.fgInverse)
+}
+
+/**
+ * The accent CTA — ONLY for the action that moves value or signs. Its fill is
+ * [VelaAccentFill], accent.base one step darker (the web's r4D-11
+ * `--color-accent-fill`), so the white label is 4.5:1 or more in both themes.
+ */
+@Composable
+fun VelaValueButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    loading: Boolean = false,
+    /** While [loading]: the spinner BESIDE the label ("Sending…") instead of in its place. */
+    busyLabel: Boolean = false,
+) {
+    FilledButton(text, onClick, modifier, enabled, loading, busyLabel, fill = VelaAccentFill, ink = VelaOnAccent)
+}
+
+@Composable
+private fun FilledButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier,
+    enabled: Boolean,
+    loading: Boolean,
+    busyLabel: Boolean,
+    fill: androidx.compose.ui.graphics.Color,
+    ink: androidx.compose.ui.graphics.Color,
+) {
     VelaButtonSurface(
         onClick = onClick,
         modifier = modifier,
@@ -70,14 +112,14 @@ fun VelaPrimaryButton(
         loading = loading,
     ) { pressModifier ->
         Box(
-            modifier = pressModifier.background(VelaTheme.colors.accentBase),
+            modifier = pressModifier.background(fill),
             contentAlignment = Alignment.Center,
         ) {
             if (loading && busyLabel) {
-                BusyLabel(text = text, color = VelaOnAccent)
+                BusyLabel(text = text, color = ink)
             } else {
-                ButtonLabel(text = text, color = VelaOnAccent, loading = loading)
-                ButtonSpinner(color = VelaOnAccent, visible = loading)
+                ButtonLabel(text = text, color = ink, loading = loading)
+                ButtonSpinner(color = ink, visible = loading)
             }
         }
     }

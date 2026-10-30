@@ -211,7 +211,7 @@ fun SiteRow(site: SiteModel, onOpen: (String) -> Unit, modifier: Modifier = Modi
         site.meta?.takeIf { it.isNotEmpty() }?.let {
             Text(
                 text = it,
-                color = colors.accentBase,
+                color = colors.fgMuted,
                 fontFamily = VelaFontFamily,
                 fontSize = VelaTextSize.base,
             )
@@ -275,7 +275,7 @@ fun ExploreSearchField(
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Go),
                     keyboardActions = androidx.compose.foundation.text.KeyboardActions(onGo = { onSubmit(text) }),
 
-                    cursorBrush = SolidColor(colors.accentBase),
+                    cursorBrush = SolidColor(colors.fgBase),
                     textStyle = TextStyle(
                         color = colors.fgBase,
                         fontFamily = VelaFontFamily,

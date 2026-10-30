@@ -227,7 +227,7 @@ private fun FormField(
                         onValueChange(next)
                     },
                     textStyle = style,
-                    cursorBrush = SolidColor(colors.accentBase),
+                    cursorBrush = SolidColor(colors.fgBase),
                     minLines = minLines,
                     maxLines = maxLines,
                     modifier = Modifier

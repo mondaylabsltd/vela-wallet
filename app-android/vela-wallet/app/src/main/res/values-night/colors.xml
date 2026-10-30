@@ -12,4 +12,7 @@
          starting window can only track the OS, and FR-023's crossfade is
          what softens a theme set opposite to it. -->
     <color name="vela_splash_bg">#141412</color>
+    <!-- Launcher shortcut icons (native parity Phase 3): color.bg.raised / color.fg.base (dark). -->
+    <color name="vela_shortcut_bg">#1E1E1B</color>
+    <color name="vela_shortcut_fg">#E8E6E1</color>
 </resources>

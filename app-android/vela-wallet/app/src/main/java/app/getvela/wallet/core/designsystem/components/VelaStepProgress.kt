@@ -38,7 +38,7 @@ fun VelaStepProgress(
                     .weight(1f)
                     .height(VelaSizing.progressBar)
                     .clip(RoundedCornerShape(VelaRadius.full))
-                    .background(if (index < step) colors.accentBase else colors.borderBase),
+                    .background(if (index < step) colors.fgBase else colors.borderBase),
             )
         }
     }
@@ -66,7 +66,7 @@ fun VelaStepProgress(
                 .fillMaxWidth(fraction)
                 .fillMaxHeight()
                 .clip(RoundedCornerShape(VelaRadius.full))
-                .background(colors.accentBase),
+                .background(colors.fgBase),
         )
     }
 }

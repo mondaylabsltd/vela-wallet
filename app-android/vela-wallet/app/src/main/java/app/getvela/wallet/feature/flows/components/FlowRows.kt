@@ -425,7 +425,7 @@ fun RecipientCard(
                         },
                         singleLine = true,
                         textStyle = addressStyle,
-                        cursorBrush = SolidColor(colors.accentBase),
+                        cursorBrush = SolidColor(colors.fgBase),
                         modifier = Modifier.fillMaxWidth().semantics { contentDescription = "recipient-address-${recipient.ordinal}" },
                         decorationBox = { inner ->
                             if (typedAddress.isEmpty()) {
@@ -501,7 +501,7 @@ fun RecipientCard(
                     },
                     singleLine = true,
                     textStyle = amountStyle,
-                    cursorBrush = SolidColor(colors.accentBase),
+                    cursorBrush = SolidColor(colors.fgBase),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier
                         .width(96.dp)
@@ -614,7 +614,7 @@ fun FeeTokenRow(
                 Icon(
                     imageVector = VelaIcons.Check,
                     contentDescription = null,
-                    tint = colors.accentBase,
+                    tint = colors.fgBase,
                     modifier = Modifier.size(VelaIconSize.md),
                 )
             }

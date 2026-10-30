@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.settings
 
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -246,7 +247,8 @@ internal fun VenuePageBody(
         )
         Text(
             text = model.manage,
-            color = colors.accentBase,
+            color = colors.fgBase,
+            textDecoration = TextDecoration.Underline,
             fontFamily = VelaFontFamily,
             fontWeight = VelaFontWeight.semibold,
             fontSize = VelaTextSize.sm,
@@ -275,7 +277,7 @@ private fun InVelaChoice(choice: VenueChoiceModel, onPick: (String) -> Unit) {
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs)) {
             Text(
                 text = choice.title,
-                color = if (choice.selected) colors.accentBase else colors.fgBase,
+                color = colors.fgBase,
                 fontFamily = VelaFontFamily,
                 fontWeight = VelaFontWeight.semibold,
                 fontSize = VelaTextSize.lg,

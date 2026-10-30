@@ -120,7 +120,9 @@ fun ContactRow(
             SwipeAction(
                 icon = VelaIcons.ArrowUpRight,
                 label = swipeSendLabel,
-                background = VelaTheme.colors.accentBase,
+                // Opens Send; it moves nothing itself, so ink, not the accent.
+                background = VelaTheme.colors.fgBase,
+                content = VelaTheme.colors.fgInverse,
                 onClick = onSwipeSend,
             )
             SwipeAction(
@@ -208,6 +210,7 @@ private fun SwipeAction(
     label: String,
     background: Color,
     onClick: () -> Unit,
+    content: Color = VelaOnAccent,
 ) {
     Column(
         modifier = Modifier
@@ -221,13 +224,13 @@ private fun SwipeAction(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = VelaOnAccent,
+            tint = content,
             modifier = Modifier.size(VelaIconSize.lg),
         )
         Spacer(modifier = Modifier.height(VelaSpacing.sm))
         Text(
             text = label,
-            color = VelaOnAccent,
+            color = content,
             fontFamily = VelaFontFamily,
             fontWeight = VelaFontWeight.medium,
             fontSize = VelaTextSize.sm,

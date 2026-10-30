@@ -158,13 +158,13 @@ fun ContactDetailScreen(
                         Icon(
                             imageVector = VelaIcons.Star,
                             contentDescription = null,
-                            tint = if (favourite.on) colors.accentBase else colors.fgSubtle,
+                            tint = if (favourite.on) colors.fgBase else colors.fgSubtle,
                             modifier = Modifier.size(VelaIconSize.sm),
                         )
                         Spacer(modifier = Modifier.width(VelaSpacing.xs))
                         Text(
                             text = favourite.label,
-                            color = if (favourite.on) colors.accentBase else colors.fgMuted,
+                            color = if (favourite.on) colors.fgBase else colors.fgMuted,
                             fontFamily = VelaFontFamily,
                             fontSize = VelaTextSize.sm,
                         )

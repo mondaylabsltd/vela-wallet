@@ -162,7 +162,7 @@ class AgentCoverageTest {
             "send.cancelSigning" to Place.Step("cancel_transfer"),
             "send.cancelSweep" to Place.Later(SWEEP),
             "send.changeToken" to Place.Step("prepare_transfer"),
-            "send.chooseFeeToken" to Place.Later(FEE_TOKEN),
+            "send.pickFeeCoin" to Place.Later(FEE_TOKEN),
             "send.closeBatch" to Place.View(IMPORTER),
             "send.closeContactPicker" to Place.View(PICKER),
             "send.closeScanner" to Place.None(CAMERA),

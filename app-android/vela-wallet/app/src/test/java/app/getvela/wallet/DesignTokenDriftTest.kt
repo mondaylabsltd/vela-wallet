@@ -112,6 +112,19 @@ class DesignTokenDriftTest {
         assertEquals(Color(0xFFFFFFFF), VelaOnAccent)
     }
 
+    /**
+     * The value button's fill (Phase 3: accent only on value-moving actions):
+     * the web's `--color-accent-fill` (r4D-11, a web addition outside the
+     * export), the same in every mode it is declared for.
+     */
+    @Test
+    fun accentFillIsTheWebValueButtons() {
+        val css = File(System.getProperty("vela.repo.root"), "app-web/vela-wallet/src/lib/tokens/tokens.css").readText()
+        val fills = Regex("--color-accent-fill:\\s*#([0-9A-Fa-f]{6})").findAll(css).map { it.groupValues[1].uppercase() }.toSet()
+        assertEquals("one accent fill in every mode: $fills", 1, fills.size)
+        assertEquals(Color(0xFF000000 or fills.single().toLong(16)), app.getvela.wallet.core.designsystem.tokens.VelaAccentFill)
+    }
+
     @Test
     fun spacingMatchesExport() {
         assertDp(token("core", "space", "0"), VelaSpacing.none)

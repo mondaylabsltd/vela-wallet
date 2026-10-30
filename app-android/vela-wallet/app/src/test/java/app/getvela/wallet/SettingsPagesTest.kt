@@ -65,7 +65,7 @@ class SettingsPagesTest {
 
     @Test
     fun `the system Back and the page's own back both follow SettingsPage_back`() {
-        assertTrue("Back is answered inside Settings on a pushed page", screen.any { it == "BackHandler(enabled = page.back != null) { page.back?.let { page = it } }" })
+        assertTrue("Back is answered inside Settings on a pushed page", screen.any { it == "app.getvela.wallet.core.designsystem.motion.VelaBackHandler(enabled = page.back != null, state = pageBack) { page.back?.let { page = it } }" })
         assertTrue("the ‹ takes the same step", screen.any { it == "onBack = { page.back?.let { page = it } }," })
     }
 }

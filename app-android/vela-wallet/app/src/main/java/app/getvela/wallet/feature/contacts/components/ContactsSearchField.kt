@@ -99,7 +99,7 @@ fun ContactsSearchField(
                     fontSize = VelaTextSize.base,
                     fontFeatureSettings = VelaFontFeatures,
                 ),
-                cursorBrush = SolidColor(colors.accentBase),
+                cursorBrush = SolidColor(colors.fgBase),
                 keyboardOptions = KeyboardOptions(
                     // A name, an ENS label or an address — none of which want a
                     // capital first letter supplied by the keyboard.
