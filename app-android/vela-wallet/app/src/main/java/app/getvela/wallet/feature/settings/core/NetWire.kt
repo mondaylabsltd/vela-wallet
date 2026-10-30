@@ -105,7 +105,7 @@ data class NetServiceEndpoints(
     val passkey_index_url: String,
     val bundler_service_url: String,
     val fiat_rates_url: String,
-    /** The multisig service (web only; see [NetEndpointField.GenesisService]). */
+    /** The multisig service ([NetEndpointField.GenesisService]) — stored as `genesisServiceURL`, as the web does. */
     val genesis_service_url: String = "https://safe-genesis.getvela.app",
 )
 
@@ -144,9 +144,10 @@ enum class NetEndpointField {
     @SerialName("fiat_rates") FiatRates,
 
     /**
-     * The multisig service — the web's alone (multisig accounts live there):
-     * this shell reports `multisig_service = false`, so the core never shows,
-     * probes or asks for it here. Mirrored so the wire stays one vocabulary.
+     * The multisig service (the Safe Genesis Registry's API). This shell
+     * reports `multisig_service = true`, as the web does, so the core lists,
+     * probes and resets it with the other four: where a person points it is
+     * a device setting, whichever surface ends up reading it.
      */
     @SerialName("genesis_service") GenesisService,
 }
@@ -398,6 +399,12 @@ data class NetChainIndexEntry(
     val short_name: String,
     val native_currency_symbol: String,
     val has_logo: Boolean,
+    /**
+     * One of Vela's own networks, out of the person's lists — the core put
+     * it at the top of the search, never the chain index. Picking it shows
+     * it again, as the Vela network it is.
+     */
+    val vela: Boolean = false,
 )
 
 @Serializable
@@ -717,7 +724,11 @@ sealed class NetShellResult {
         val network_configs: List<NetNetworkConfig> = emptyList(),
         val endpoints: NetStoredEndpoints = NetStoredEndpoints(),
         val provider_keys: NetProviderKeys = NetProviderKeys(),
-        /** No multisig accounts here: the multisig service is not an endpoint. */
+        /**
+         * The multisig service is one of this shell's endpoints (shown,
+         * probed, reset). The executor says `true`, as the web does; the
+         * default is the core's absent.
+         */
         val multisig_service: Boolean = false,
         /** `vela.shownNetworks`, as settled; absent: none stored or unreadable — every network is shown. */
         val shown_networks: NetShownNetworks? = null,
