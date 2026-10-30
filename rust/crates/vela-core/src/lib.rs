@@ -43,6 +43,9 @@ mod identicon_features;
 pub mod identicon_raster;
 pub mod l10n;
 pub mod multisig;
+/// The multisig's links — the proposal link, the invite, the connect page's —
+/// and the Activity row ids, amounts and approvals line around them. Pure.
+pub mod multisig_link;
 pub mod multisig_reading;
 /// The one review every member signs from, the state-diff guard and the
 /// signing gate (docs/multisig-vault-design.md §3.6). Reads simulations with
