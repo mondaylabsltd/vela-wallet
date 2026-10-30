@@ -31,13 +31,13 @@ resolve_effect(id, result)    -> the same shape
 view()                        -> the current view
 ```
 
-| Machine | uniffi / wasm class | Event | View |
-| --- | --- | --- | --- |
-| Accounts | `MultisigAccountsCore` | `MultisigAccountsEvent` | `MultisigAccountsView` |
-| Proposals | `MultisigProposalsCore` | `MultisigProposalsEvent` | `MultisigProposalsView` |
-| Members | `MultisigMembersCore` | `MultisigMembersEvent` | `MultisigMembersView` |
-| Outside page | `MultisigOutsidePageCore` | `OutsidePageEvent` | `OutsidePageView` |
-| Outside session | `MultisigOutsideSessionCore` | `OutsideSessionEvent` | `OutsideSessionView` |
+| Machine         | uniffi / wasm class          | Event                    | View                    |
+| --------------- | ---------------------------- | ------------------------ | ----------------------- |
+| Accounts        | `MultisigAccountsCore`       | `MultisigAccountsEvent`  | `MultisigAccountsView`  |
+| Proposals       | `MultisigProposalsCore`      | `MultisigProposalsEvent` | `MultisigProposalsView` |
+| Members         | `MultisigMembersCore`        | `MultisigMembersEvent`   | `MultisigMembersView`   |
+| Outside page    | `MultisigOutsidePageCore`    | `OutsidePageEvent`       | `OutsidePageView`       |
+| Outside session | `MultisigOutsideSessionCore` | `OutsideSessionEvent`    | `OutsideSessionView`    |
 
 Effect ids only grow; an answer to an id the machine no longer waits for
 changes nothing (no error). `Render` effects are dropped: the view comes back
@@ -45,64 +45,64 @@ with every call. Each operation gets exactly ONE `MultisigShellResult`.
 
 ### 1.1 Operations (`MultisigOperation`, tag `type`)
 
-| Operation | Fields | Answers |
-| --- | --- | --- |
-| `http` | method, url, body?, timeout_ms | `http_answered {status, retry_after?, body}` / `http_unreachable {detail}` — never retried by the shell |
-| `rpc` | chain_id, method, params, bound_ms? | `rpc_result {result}` / `rpc_error {code?, message}` / `rpc_unanswered {detail}` (also when `bound_ms` passes) |
-| `load_store` | keys[] | `store_loaded {entries: {key: string or null}}` / `store_failed` |
-| `write_store` | key, value? (null removes) | `store_written` / `store_failed` |
-| `wait` | ms | `waited` (a wait the machine stopped waiting for may be dropped) |
-| `now` / `random` | — / bytes | `now {now_ms}` / `random {hex}` |
-| `passkey` | owner, chain_id, challenge, purpose (`approve {multisig, safe_tx_hash, name?, tx}` or `record {multisig}`) | `asserted {credential_id, authenticator_data, client_data_json, signature}` / `page_approved {approval}` (the trusted signing page) / `passkey_cancelled` / `passkey_failed {detail}` |
-| `ask_risk` | chain_id, safe, findings[] | `risk_answered {signs}` — a shell that cannot ask answers `false` |
-| `send_calls` | chain_id, from, calls[], fee?, purpose? | `calls_sent {user_op_hash, tx_hash?}` / `calls_failed {detail, maybe_sent}` / `calls_cancelled` |
-| `quote_calls` | chain_id, from, calls[] | `quoted {quote}` / `quote_failed {detail}` |
-| `simulate` / `recipient_risk` / `user_op_status` | see the type | `simulated {reply?}` / `recipient_facts {is_contract?, first_time?}` / `user_op_status {status?, tx_hash?}` |
-| `peer_open` / `peer_send` / `peer_receive` / `peer_close` | PeerConnect rooms | `peer_opened {room, invite?, pairing?}` / `ack` / `peer_message {message}` or `peer_closed {reason}` / `ack` |
-| `wallet_request` | method, params (EIP-1193, the injected wallet) | `wallet_answered {result}` / `wallet_refused {code?, message}` |
-| `notice` | notice: `MultisigNotice` | `ack` — the shell routes it (1.2) |
+| Operation                                                 | Fields                                                                                                     | Answers                                                                                                                                                                               |
+| --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `http`                                                    | method, url, body?, timeout_ms                                                                             | `http_answered {status, retry_after?, body}` / `http_unreachable {detail}` — never retried by the shell                                                                               |
+| `rpc`                                                     | chain_id, method, params, bound_ms?                                                                        | `rpc_result {result}` / `rpc_error {code?, message}` / `rpc_unanswered {detail}` (also when `bound_ms` passes)                                                                        |
+| `load_store`                                              | keys[]                                                                                                     | `store_loaded {entries: {key: string or null}}` / `store_failed`                                                                                                                      |
+| `write_store`                                             | key, value? (null removes)                                                                                 | `store_written` / `store_failed`                                                                                                                                                      |
+| `wait`                                                    | ms                                                                                                         | `waited` (a wait the machine stopped waiting for may be dropped)                                                                                                                      |
+| `now` / `random`                                          | — / bytes                                                                                                  | `now {now_ms}` / `random {hex}`                                                                                                                                                       |
+| `passkey`                                                 | owner, chain_id, challenge, purpose (`approve {multisig, safe_tx_hash, name?, tx}` or `record {multisig}`) | `asserted {credential_id, authenticator_data, client_data_json, signature}` / `page_approved {approval}` (the trusted signing page) / `passkey_cancelled` / `passkey_failed {detail}` |
+| `ask_risk`                                                | chain_id, safe, findings[]                                                                                 | `risk_answered {signs}` — a shell that cannot ask answers `false`                                                                                                                     |
+| `send_calls`                                              | chain_id, from, calls[], fee?, purpose?                                                                    | `calls_sent {user_op_hash, tx_hash?}` / `calls_failed {detail, maybe_sent}` / `calls_cancelled`                                                                                       |
+| `quote_calls`                                             | chain_id, from, calls[]                                                                                    | `quoted {quote}` / `quote_failed {detail}`                                                                                                                                            |
+| `simulate` / `recipient_risk` / `user_op_status`          | see the type                                                                                               | `simulated {reply?}` / `recipient_facts {is_contract?, first_time?}` / `user_op_status {status?, tx_hash?}`                                                                           |
+| `peer_open` / `peer_send` / `peer_receive` / `peer_close` | PeerConnect rooms                                                                                          | `peer_opened {room, invite?, pairing?}` / `ack` / `peer_message {message}` or `peer_closed {reason}` / `ack`                                                                          |
+| `wallet_request`                                          | method, params (EIP-1193, the injected wallet)                                                             | `wallet_answered {result}` / `wallet_refused {code?, message}`                                                                                                                        |
+| `notice`                                                  | notice: `MultisigNotice`                                                                                   | `ack` — the shell routes it (1.2)                                                                                                                                                     |
 
 A failure the shell can only describe is answered with the operation's
 failure shape (`operationFailure` in `shell/handler.ts` is the table).
 
 ### 1.2 Notices (`MultisigNotice`, tag `kind`) — the one router
 
-| Notice | From | Route to |
-| --- | --- | --- |
-| `account {address, update}` — `use_chain`, `findings_on`, `recorded_name`, `name_members` | proposals, members | accounts `apply {address, update}` |
-| `activity_rows {rows}` | proposals | the shell's transaction store, after wording each planned row (2.2) |
-| `mailbox_took {safe}` | proposals, outside page | whoever shows that safe: proposals `refresh {fresh: true}` |
-| `activated {address?}` | accounts | the shell (which account is shown) |
-| `open_proposal {address, chain_id, safe_tx_hash, preview?}` | accounts (a link) | the shell opens the sheet; proposals `open_linked` |
-| `outside_sign {request}` | proposals | start an outside session; its outcome back as proposals `outside_answered` |
+| Notice                                                                                    | From                    | Route to                                                                   |
+| ----------------------------------------------------------------------------------------- | ----------------------- | -------------------------------------------------------------------------- |
+| `account {address, update}` — `use_chain`, `findings_on`, `recorded_name`, `name_members` | proposals, members      | accounts `apply {address, update}`                                         |
+| `activity_rows {rows}`                                                                    | proposals               | the shell's transaction store, after wording each planned row (2.2)        |
+| `mailbox_took {safe}`                                                                     | proposals, outside page | whoever shows that safe: proposals `refresh {fresh: true}`                 |
+| `activated {address?}`                                                                    | accounts                | the shell (which account is shown)                                         |
+| `open_proposal {address, chain_id, safe_tx_hash, preview?}`                               | accounts (a link)       | the shell opens the sheet; proposals `open_linked`                         |
+| `outside_sign {request}`                                                                  | proposals               | start an outside session; its outcome back as proposals `outside_answered` |
 
 ### 1.3 Storage keys (the machine owns the record, the shell stores it)
 
 Any key-value store; the names are the web's `localStorage` keys.
 
-| Key | Owner |
-| --- | --- |
-| `vela.multisigAccounts`, `vela.activeMultisig`, `vela.multisigPendingProofs`, `vela.multisigDiscovered` | accounts |
-| `vela.multisigPendingLink` (W9: a link waiting for a network this device lacks, one day) | accounts |
-| `vela.multisigCreateDraft` (W9: the create form, until created or discarded) | accounts |
-| `vela.multisigInviteShared` (W9: the invite was handed on, per multisig) | accounts |
-| `vela.multisigKeptLink` (a link opened before any Vela account, one day) | accounts (also written by the web's welcome page, which loads no core) |
-| `vela.multisigDeployed` | shared (`Chain`) |
-| `vela.multisigOutbox`, `vela.multisigWaiting`, `vela.multisigExecutions`, `vela.multisigLastActor`, `vela.multisigExecuting`, `vela.multisig.executed` | proposals |
-| `vela.connect.unsent.v1`, `vela.connect.sessions.v1` | outside page |
-| `vela.multisig.externalWallets.v1` | outside session |
+| Key                                                                                                                                                    | Owner                                                                  |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| `vela.multisigAccounts`, `vela.activeMultisig`, `vela.multisigPendingProofs`, `vela.multisigDiscovered`                                                | accounts                                                               |
+| `vela.multisigPendingLink` (W9: a link waiting for a network this device lacks, one day)                                                               | accounts                                                               |
+| `vela.multisigCreateDraft` (W9: the create form, until created or discarded)                                                                           | accounts                                                               |
+| `vela.multisigInviteShared` (W9: the invite was handed on, per multisig)                                                                               | accounts                                                               |
+| `vela.multisigKeptLink` (a link opened before any Vela account, one day)                                                                               | accounts (also written by the web's welcome page, which loads no core) |
+| `vela.multisigDeployed`                                                                                                                                | shared (`Chain`)                                                       |
+| `vela.multisigOutbox`, `vela.multisigWaiting`, `vela.multisigExecutions`, `vela.multisigLastActor`, `vela.multisigExecuting`, `vela.multisig.executed` | proposals                                                              |
+| `vela.connect.unsent.v1`, `vela.connect.sessions.v1`                                                                                                   | outside page                                                           |
+| `vela.multisig.externalWallets.v1`                                                                                                                     | outside session                                                        |
 
 ### 1.4 Timers the shell drives (the machine says when; the shell only ticks)
 
-| Event | When |
-| --- | --- |
-| accounts `tick` | every 60 s, on `online`, focus, page shown |
-| accounts `check_records` | once a session |
-| proposals `tick` | every `view.pace_ms` while the multisig is shown and the page visible (12 s; 4 s while a sheet holds it) |
-| proposals `refresh` | page shown again, back online |
-| proposals `others_tick` | every 60 s while a page is visible |
-| proposals `preview` | an open sheet asks every few seconds per executor; the machine decides whether the last look is stale (W9) |
-| outside page `refresh` / session `mailbox_tick` | 12 s / 8 s |
+| Event                                           | When                                                                                                       |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| accounts `tick`                                 | every 60 s, on `online`, focus, page shown                                                                 |
+| accounts `check_records`                        | once a session                                                                                             |
+| proposals `tick`                                | every `view.pace_ms` while the multisig is shown and the page visible (12 s; 4 s while a sheet holds it)   |
+| proposals `refresh`                             | page shown again, back online                                                                              |
+| proposals `others_tick`                         | every 60 s while a page is visible                                                                         |
+| proposals `preview`                             | an open sheet asks every few seconds per executor; the machine decides whether the last look is stale (W9) |
+| outside page `refresh` / session `mailbox_tick` | 12 s / 8 s                                                                                                 |
 
 ## 2. The machines
 
@@ -121,7 +121,7 @@ member kinds, and who can act for it per network (§3.5).
 
 - **Facts:** `start {service_url, accounts, networks}`, `local_accounts`,
   `networks` (also re-opens a link waiting for its network), `space
-  {chain_ids}`, `reload` (store changed elsewhere), `service {url}`.
+{chain_ids}`, `reload` (store changed elsewhere), `service {url}`.
 - **Background:** `tick` (records not landed), `check_records`,
   `recheck_record {address}`, `recheck` (who can act, per network),
   `discover {address, chain_ids}`.
@@ -131,7 +131,7 @@ member kinds, and who can act for it per network (§3.5).
   `checking_on`, `account.findings` (that chain's). A sheet never re-reads the
   chain itself.
 - **Create:** `new_draft` (a fresh salt; a kept draft stays), `draft {owners,
-  threshold, name}`, `check_networks {chain_ids}`, `create {choice}` (one
+threshold, name}`, `check_networks {chain_ids}`, `create {choice}` (one
   passkey); W9 `keep_draft {draft}` / `discard_draft` — the form is kept
   (`create.kept`, stored) until created or discarded; `create.other_space`
   names this device's networks of the other space (r7-9).
@@ -168,10 +168,10 @@ executed, watched.
   `retry`, `online`, `watch` / `unwatch` (a sheet holds the faster pace),
   `accounts` + `others_tick` (presence of the multisigs not shown).
 - **Review and propose:** `review {chain_id, safe_tx_hash, blind}`, `draft
-  {chain_id, proposal}` (`transfers`, `rename`, `member_change`, `calls`,
+{chain_id, proposal}` (`transfers`, `rename`, `member_change`, `calls`,
   `cancel`), `confirm_draft {as_member?}`, `withdraw`.
 - **Approve and execute:** `approve`, `preview {chain_id, safe_tx_hash,
-  executor}`, `execute`, `send_again`.
+executor}`, `execute`, `send_again`.
 - **W9 — the look is the machine's:** `preview` is a request, not an order:
   the machine looks only when the executor's last look is stale
   (`PREVIEW_FRESH_MS` 15 s; unpriced or unchecked 5 s), never two at once, and
@@ -277,3 +277,47 @@ door — uniffi `multisig_link_call(method, args_json)`, wasm
 
 The link codec itself (proposal, invite and connect links, row ids, units) is
 the same door; `multisig_link.rs` lists its methods.
+
+## 4. The outside page after W9 (r7-11, r4C-12)
+
+- `OutsideTxView.title` (`OutsideTxTitle`): what the transaction is, as
+  facts the shell words — `transfer` (to, amount in base units, `token`
+  facts: symbol, decimals, read by the core), `batch` (total, transfersOnly,
+  each transfer), `cancel`, `addOwner`, `removeOwner`, `swapOwner`,
+  `changeThreshold`, `rename`, `call` (to, value), `unsupported` (refusal).
+  `OutsideTxView.name` is the multisig's name. The page draws the title, then
+  `tx.review` (the same `MultisigReview` as the member's sheet: blocks, the
+  member change rule “Approvals: 2 of 3 → 2 of 4” from
+  `review.memberChanges`, hashes, the advice) — never a reading of its own.
+- `OutsidePageView.requestReview`: the review of the transaction Vela asks
+  this page to sign (a paired request), drawn the same way.
+- `OutsidePageView.rows` (`OutsideActivityRow`: id, at, `label`, `outcome`,
+  bad): the list on the page, each row decided by the core — `label`
+  (`OutsideRowLabel`: approve or approveTo with the title facts, reject,
+  execute — an `execTransaction` is matched to its SafeTx in the core —
+  signTx, sendTx, switchChain, other) and `outcome` (`OutsideRowOutcome`:
+  waiting, inWallet, done, signedHash, sent, switched, withdrawn, declined,
+  walletDeclined, failed with its problem, notSent). The shell maps each kind
+  to its words, nothing else.
+
+## 5. What W9 moved into the core (for a native lane catching up)
+
+| Was the web's                                                                                    | Now                                                                                                         |
+| ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| `preflight.svelte.ts` (looks, their pace and cap, “Can't run now”)                               | proposals: `preview` paced by the machine, `tick` looks at ready ones, `standings` carry the failure detail |
+| Activity's group note and row words                                                              | proposals `waiting_note`, `standings`                                                                       |
+| `presence.othersWaiting`                                                                         | proposals `others_waiting`                                                                                  |
+| `membersAnywhere`                                                                                | proposals `members_anywhere`                                                                                |
+| the sheet's split of members (Vela / outside / unsure / contract)                                | proposals `signers[…]` `in_vela`, `outside`, `either`, `contract`, `enough`                                 |
+| `records.ts` (which rows an execution writes)                                                    | `activity_rows` rows' `rows` plan (`execution_rows`)                                                        |
+| `recheck.ts`, `judge.ts`, `authority.ts` (the sheet's own chain read)                            | accounts `check_on`, row `checked_on` / `checking_on` / findings                                            |
+| `execute.ts`, `service.ts` requests and outage, `owners.ts` signing                              | proposals (execution), `multisig_shell::Service` / `Outage`, the `passkey` operation                        |
+| `names.svelte.ts`, `likely-networks.ts`, `relay.ts` decisions, `readableCalls` / `reviewedCalls` | `names.*`, `networks.*`, `relay.*`, `calls.*` through the link door                                         |
+| `TxReview.svelte`'s own decoding; the connect page's row labels                                  | `OutsideTxView.title` + `review`, `OutsidePageView.rows`, `requestReview`                                   |
+| a link waiting for a network (memory only, lost on reload)                                       | accounts, stored as `vela.multisigPendingLink`; `drop_link`                                                 |
+| the create form (lost when the sheet closed)                                                     | accounts `keep_draft` / `discard_draft`, `create.kept`, `create.other_space`                                |
+
+What stays in a shell: drawing; its words (i18n keys from the corpus);
+performing operations (HTTP, RPC, storage, passkeys, rooms, the injected
+wallet); token metadata for wording an amount; the timers of 1.4; and the
+router of 1.2.
