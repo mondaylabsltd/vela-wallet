@@ -252,8 +252,8 @@ mod tests {
         // The ends are the ends.
         assert!(ease_out(0.).abs() < 1e-5);
         assert!((ease_out(1.) - 1.).abs() < 1e-5);
-        // cubic-bezier(0,0,.58,1) at x = .5 is y ≈ .6935 (WebKit's UnitBezier).
-        assert!((ease_out(0.5) - 0.6935).abs() < 2e-3, "{}", ease_out(0.5));
+        // cubic-bezier(0,0,.58,1) at x = .5 is y ≈ .68464 (bisected independently).
+        assert!((ease_out(0.5) - 0.684_64).abs() < 1e-4, "{}", ease_out(0.5));
         // Out: fast first, never past the end, never backwards.
         let mut last = 0.;
         for step in 1..=100 {

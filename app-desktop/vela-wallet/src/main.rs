@@ -24,6 +24,7 @@ mod gallery;
 mod hardware;
 mod icons;
 mod identicon;
+mod inbound;
 mod intro;
 mod intro_art;
 mod loc;
@@ -45,7 +46,11 @@ mod session;
 mod settings;
 mod signing;
 mod theme;
+mod tray;
 mod ui;
+// N-D3: the signed-update check, OFF until the owner's key is compiled in.
+#[allow(dead_code, reason = "off until the README \"Updates\" steps are followed")]
+mod updater;
 mod wallet;
 #[cfg(not(target_os = "linux"))]
 mod webview;
@@ -113,6 +118,8 @@ impl Render for Root {
                 root.bg(theme::Theme::of(theme::ThemeMode::detect(window)).bg_base)
             }
             SessionRoute::Onboarding => {
+                // Signed out: no wallet's figure stays in the menu bar.
+                tray::hide();
                 // Dropped on the way out, so a second sign-in starts from a
                 // fresh machine rather than resuming a finished one.
                 self.wallet = None;
@@ -528,8 +535,38 @@ fn main() {
         app_menu::install(cx);
         // N-D3: ⌘Q skips the window's close hook; the window state is
         // written on the way out either way.
-        cx.on_app_quit(|_| async { window_state::flush() }).detach();
+        cx.on_app_quit(|_| async {
+            window_state::flush();
+            tray::hide();
+        })
+        .detach();
         open_main_window(cx);
+
+        // N-D3: the menu-bar extra's presses (Windows: the tray icon's) —
+        // each the press of the control it names, in the window.
+        if let Some(mut presses) = tray::take_commands() {
+            cx.spawn(async move |cx| {
+                use futures::StreamExt as _;
+                while let Some(press) = presses.next().await {
+                    cx.update(|cx| {
+                        cx.activate(true);
+                        if let Some(window) = cx.windows().first().copied() {
+                            let _ = window.update(cx, |_, window, _| window.activate_window());
+                        }
+                        match press {
+                            tray::TrayCommand::Open => {}
+                            tray::TrayCommand::Send => {
+                                app_menu::run_on_page(app_menu::Command::Send, cx);
+                            }
+                            tray::TrayCommand::Receive => {
+                                app_menu::run_on_page(app_menu::Command::Receive, cx);
+                            }
+                        }
+                    });
+                }
+            })
+            .detach();
+        }
 
         // Payment links the OS handed over (`open_link`): Send opens on each,
         // prefilled, on the wallet's page. On a cold start the page is still

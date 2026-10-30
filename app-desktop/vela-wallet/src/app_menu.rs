@@ -204,6 +204,11 @@ pub fn wallet_key_bindings(mac: bool) -> Vec<KeyBinding> {
 
 /// Run `command` on the wallet's page, in its window — when there is one: a
 /// shortcut pressed on onboarding has nothing to act on.
+/// A command from outside the window's own keys (the menu-bar extra).
+pub(crate) fn run_on_page(command: Command, cx: &mut App) {
+    on_page(command, cx);
+}
+
 fn on_page(command: Command, cx: &mut App) {
     let Some(page) = crate::agent::page(cx) else {
         return;
@@ -214,6 +219,25 @@ fn on_page(command: Command, cx: &mut App) {
     window
         .update(cx, |_, window, cx| {
             let _ = page.update(cx, |page, cx| page.run_command(command, window, cx));
+        })
+        .ok();
+}
+
+/// The clipboard's text, to the wallet page — only when no field took the
+/// paste (that is when this action reaches the app).
+fn paste_onto_page(cx: &mut App) {
+    let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) else {
+        return;
+    };
+    let Some(page) = crate::agent::page(cx) else {
+        return;
+    };
+    let Some(window) = cx.active_window().or_else(|| cx.windows().first().copied()) else {
+        return;
+    };
+    window
+        .update(cx, |_, window, cx| {
+            let _ = page.update(cx, |page, cx| page.take_inbound(&text, window, cx));
         })
         .ok();
 }
@@ -388,7 +412,9 @@ pub fn register(cx: &mut App) {
     // report an action without a handler; nothing to do.
     cx.on_action(|_: &Cut, _| {});
     cx.on_action(|_: &Copy, _| {});
-    cx.on_action(|_: &Paste, _| {});
+    // N-D3: a Paste no field took is a link or an address pasted onto the
+    // window — the wallet reads it (`WalletPage::take_inbound`).
+    cx.on_action(|_: &Paste, cx| paste_onto_page(cx));
     cx.on_action(|_: &SelectAll, _| {});
 }
 
