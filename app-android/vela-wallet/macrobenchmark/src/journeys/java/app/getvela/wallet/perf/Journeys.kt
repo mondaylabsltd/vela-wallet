@@ -72,7 +72,8 @@ object Journeys {
     }
 
     fun MacrobenchmarkScope.closeSigningSheet() {
-        device.pressBack()
+        // The sheet's own Close (BACK does not dismiss a signing request).
+        device.findObject(By.res("signing-close"))?.click() ?: device.pressBack()
         device.wait(Until.gone(By.res("signing-confirm")), WAIT_MS)
     }
 
