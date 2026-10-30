@@ -87,6 +87,14 @@ async fn answer(
     let result = match name.as_str() {
         "vela_state" => Ok(Reply::Json(cx.update(state))),
         "vela_review" => Ok(Reply::Json(cx.update(review))),
+        // P2.3: the agent's opinion on the request on the sheet — the core
+        // judges it, the sheet draws it in its own card.
+        "vela_advise" => Ok(Reply::Json(cx.update(|cx| {
+            let operations = transfers::list(cx);
+            let world = world::world(cx, &operations, super::enabled(cx));
+            let review = review(cx);
+            super::advisor::advise(&args, world, &review, cx)
+        }))),
         "vela_wait" => Ok(wait(&args, &gone, cx).await),
         _ => match name.strip_prefix("vela_") {
             Some(kind) => Ok(match shared::action(kind, args) {
@@ -119,6 +127,12 @@ fn state(cx: &mut App) -> Value {
         .map(shared::book_json)
         .unwrap_or_else(|| (json!([]), json!([])));
     intent_rules::agent_state(&world, &page, &approvals, &activity)
+}
+
+/// The review on the sheet now, as `vela_review` answers it — for the
+/// advisor's card ([`super::advisor::refresh`]).
+pub(crate) fn current_review(cx: &mut App) -> Value {
+    review(cx)
 }
 
 /// `vela_review`: what the person is being asked to sign, with the note that

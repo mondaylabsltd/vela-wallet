@@ -1491,6 +1491,11 @@ impl WalletPage {
         }
         let mut page = Self::with_section(section, false, window, cx);
         page.identity = Some(identity);
+        // `VELA_PALETTE=<query>` (developer builds): the command palette open,
+        // narrowed by `<query>` — a keystroke a screenshot pass cannot press.
+        if let Some(query) = crate::dev_env::var!("VELA_PALETTE") {
+            page.palette = Some(palette::Palette { query, selected: 0 });
+        }
         // Money in flight outlives every screen: the tracker runs from the
         // moment somebody is signed in, not from the moment a send opens.
         crate::executor::tracker::start(cx);
@@ -19504,6 +19509,17 @@ impl WalletPage {
             }
         }
 
+        // P2.3 (spec 103): the person's AI agent's opinion, in its own card
+        // under the blocks — never a word of Vela's, greyed once it no longer
+        // stands for this request or its fee. Its standing is read off the
+        // review, which reads this page: after this frame, not inside it.
+        if !model.first_party && crate::agent::advisor::held(cx) {
+            cx.defer(crate::agent::advisor::refresh);
+            if let Some(card) = crate::agent::advisor::card(&self.loc, cx) {
+                column = column.child(advice_card(theme, card));
+            }
+        }
+
         // The disclosure. It was a chevron and a sentence with no listener —
         // the only route from the decoded summary to what is actually being
         // signed, and it did not go there. What it opens is the REQUEST, not a
@@ -23464,6 +23480,80 @@ struct PickDialog {
     subject: PickSubject,
     checked: Vec<String>,
     query: String,
+}
+
+/// The AI agent's opinion card (P2.3, the web's `AgentAdviceCard`): its own
+/// bordered card, the verdict in its tone, the summary, the points, the
+/// source hosts, the fee it was given for, and the footer that says it is an
+/// opinion that changes nothing — dimmed, with why, once it no longer stands.
+fn advice_card(theme: &Theme, card: crate::agent::advisor::AdviceCard) -> gpui::Stateful<Div> {
+    use crate::signing::Tone;
+    let verdict_ink = match card.tone {
+        Tone::Danger => theme.error_base,
+        Tone::Caution => theme.warning_base,
+        _ => theme.fg_base,
+    };
+    let words = crate::ui::a11y::sentence(
+        [
+            card.title.as_ref(),
+            card.verdict.as_ref(),
+            card.summary.as_ref(),
+        ]
+        .into_iter()
+        .chain(card.stale.as_ref().map(|s| s.as_ref())),
+    );
+    let small = |text: SharedString, ink: gpui::Hsla| {
+        div()
+            .text_size(theme::text_label())
+            .text_color(ink)
+            .child(crate::ui::prose(text))
+    };
+    div()
+        .id("agent-advice")
+        .role(gpui::Role::Group)
+        .aria_label(words)
+        .flex()
+        .flex_col()
+        .gap(px(6.))
+        .p(px(12.))
+        .rounded(px(12.))
+        .border_1()
+        .border_color(theme.divider)
+        .when(card.stale.is_some(), |el| el.opacity(0.55))
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .justify_between()
+                .gap(px(8.))
+                .child(small(card.title.clone(), theme.fg_subtle))
+                .child(
+                    div()
+                        .text_size(theme::text_label())
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .text_color(verdict_ink)
+                        .child(card.verdict.clone()),
+                ),
+        )
+        .child(
+            div()
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_base)
+                .child(crate::ui::prose(card.summary.clone())),
+        )
+        .children(
+            card.points
+                .iter()
+                .map(|point| small(SharedString::from(format!("• {point}")), theme.fg_muted)),
+        )
+        .children(card.sources.clone().map(|s| small(s, theme.fg_subtle)))
+        .children(
+            card.fee_when_given
+                .clone()
+                .map(|s| small(s, theme.fg_subtle)),
+        )
+        .children(card.stale.clone().map(|s| small(s, theme.warning_base)))
+        .child(small(card.footer.clone(), theme.fg_subtle))
 }
 
 /// One block of the signing sheet, as the accessibility tree reads it (N-D1):
