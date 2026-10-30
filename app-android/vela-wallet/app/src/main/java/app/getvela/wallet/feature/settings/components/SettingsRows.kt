@@ -18,7 +18,6 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.ui.semantics.Role
-import app.getvela.wallet.core.designsystem.tokens.VelaOnAccent
 import app.getvela.wallet.core.platform.VelaHaptic
 import app.getvela.wallet.core.platform.rememberVelaHaptic
 import androidx.compose.foundation.layout.Arrangement
@@ -285,9 +284,11 @@ fun VelaSwitchRow(
                 onCheckedChange = null,
                 interactionSource = interaction,
                 colors = SwitchDefaults.colors(
-                    checkedThumbColor = VelaOnAccent,
-                    checkedTrackColor = colors.accentBase,
-                    checkedBorderColor = colors.accentBase,
+                    // On is neutral ink (web `Switch.svelte` `.on`): a
+                    // setting moves no value, so it never wears the accent.
+                    checkedThumbColor = colors.bgBase,
+                    checkedTrackColor = colors.fgBase,
+                    checkedBorderColor = colors.fgBase,
                     uncheckedThumbColor = colors.fgSubtle,
                     uncheckedTrackColor = colors.bgSunken,
                     uncheckedBorderColor = colors.borderStrong,
@@ -399,12 +400,13 @@ fun VelaSelectRow(
                     )
                 }
             }
-            // The chosen row is stated twice — accent text and a check —
+            // The chosen row is stated twice — semibold ink and a check —
             // because the check alone disappears at the note's type size.
+            // Neutral, never the accent: a selected state moves no value.
             Column(modifier = if (row.detail != null) Modifier.weight(1f) else Modifier) {
                 Text(
                     text = row.label,
-                    color = if (row.selected) colors.accentBase else colors.fgBase,
+                    color = colors.fgBase,
                     fontFamily = if (row.mono) VelaMonoFontFamily else VelaFontFamily,
                     fontWeight = if (row.selected) VelaFontWeight.semibold else VelaFontWeight.regular,
                     fontSize = VelaTextSize.lg,
@@ -440,7 +442,7 @@ fun VelaSelectRow(
                 Icon(
                     imageVector = VelaIcons.Check,
                     contentDescription = null,
-                    tint = colors.accentBase,
+                    tint = colors.fgBase,
                     modifier = Modifier.size(VelaIconSize.md),
                 )
             }

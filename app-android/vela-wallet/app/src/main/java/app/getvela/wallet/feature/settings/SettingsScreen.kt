@@ -66,7 +66,6 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import android.net.Uri
 import androidx.compose.foundation.border
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import app.getvela.wallet.core.designsystem.tokens.VelaRadius
 import app.getvela.wallet.core.designsystem.tokens.VelaBorder
@@ -1936,7 +1935,13 @@ private fun ConfirmSheetBody(
         Spacer(modifier = Modifier.height(VelaSpacing.xl))
     }
     if (sheet.ack != null) {
-        AckRow(text = sheet.ack, checked = acknowledged, onChange = { acknowledged = it })
+        // The design system's acknowledgement row (spec 014), neutral ink.
+        app.getvela.wallet.core.designsystem.components.VelaAckRow(
+            checked = acknowledged,
+            onCheckedChange = { acknowledged = it },
+            text = androidx.compose.ui.text.AnnotatedString(sheet.ack),
+            modifier = Modifier.testTag(CONFIRM_ACK_TAG),
+        )
         Spacer(modifier = Modifier.height(VelaSpacing.xl))
     }
     val blocked = sheet.ack != null && !acknowledged
@@ -1949,37 +1954,6 @@ private fun ConfirmSheetBody(
     }
     Spacer(modifier = Modifier.height(VelaSpacing.lg))
     VelaSecondaryButton(sheet.cancel, onClick = onCancel, modifier = Modifier.fillMaxWidth())
-}
-
-/**
- * ob-2 (P2.4): "I understand…" — a checkbox row the confirm waits for. A
- * check is a selected state: neutral ink, never the accent (web `.ack`).
- */
-@Composable
-private fun AckRow(text: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    val colors = VelaTheme.colors
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag(CONFIRM_ACK_TAG)
-            .toggleable(value = checked, role = Role.Checkbox, onValueChange = onChange)
-            .padding(vertical = VelaSpacing.sm),
-        verticalAlignment = Alignment.Top,
-        horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md),
-    ) {
-        Box(
-            modifier = Modifier
-                .size(VelaSpacing.xl)
-                .background(if (checked) colors.fgBase else colors.bgBase, RoundedCornerShape(VelaRadius.sm))
-                .border(VelaBorder.hairline, if (checked) colors.fgBase else colors.borderStrong, RoundedCornerShape(VelaRadius.sm)),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (checked) {
-                Icon(VelaIcons.Check, contentDescription = null, tint = colors.fgInverse, modifier = Modifier.size(VelaSpacing.lg))
-            }
-        }
-        Text(text = text, color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.base)
-    }
 }
 
 /** The confirm sheet's acknowledgement row (ob-2). */
