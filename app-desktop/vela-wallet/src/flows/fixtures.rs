@@ -877,6 +877,9 @@ pub struct SendConfirm {
     /// (`confirm_probes`), so the form never has it to show. Live only;
     /// `None` on a split.
     pub recipient_tag: Option<SharedString>,
+    /// Live only (round 3): the recipient's check could not finish, or the
+    /// history could not be read — the neutral line and its "Check again".
+    pub recipient_check: Option<(SharedString, SharedString)>,
     /// Live only: why the confirm is disarmed, when something disarmed it.
     pub notice: Option<SendNotice>,
     pub cta: SharedString,
@@ -920,6 +923,10 @@ pub struct SendReceipt {
     pub breakdown: Vec<BreakdownRow>,
     pub hash: Option<(SharedString, SharedString)>,
     pub cta: SharedString,
+    /// send-5: "Send again" (or "Review again" when another send used the
+    /// nonce) — offered by the core only over a payment proven never sent
+    /// (`SendReceiptView::can_send_again`). Live only.
+    pub send_again: Option<SharedString>,
 }
 
 #[derive(Clone)]
@@ -1753,6 +1760,7 @@ fn send_confirm(s: &FlowStrings) -> SendConfirm {
         ],
         breakdown: Vec::new(),
         recipient_tag: None,
+        recipient_check: None,
         notice: None,
         cta: s.confirm_send.clone(),
         cta_state: CtaState::Enabled,
@@ -1784,6 +1792,7 @@ fn send_receipt(s: &FlowStrings) -> SendReceipt {
         ],
         hash: Some((s.tx_hash.clone(), TX_HASH_RECEIVED.into())),
         cta: s.tx_close_background.clone(),
+        send_again: None,
     }
 }
 

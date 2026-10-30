@@ -359,13 +359,29 @@ impl Machine for TxTracker {
             // The web's nonce probe after a reply lost at submit (round 3,
             // send-5): not read here yet — "no answer" is the honest one, and
             // the core then keeps the relay's own grace, as before.
-            TrackOperation::ReadNonce { user_op_hash, .. } => {
-                Answer::Now(TrackShellResult::NonceRead {
-                    user_op_hash: user_op_hash.clone(),
-                    now_ms: now_ms(),
-                    nonce: None,
-                    head_block: None,
-                })
+            // Round 3 (send-5): while an op is in doubt the account's nonce
+            // is read AT the chain's head, and the head named with it — the
+            // core decides what an unchanged or a moved nonce proves.
+            TrackOperation::ReadNonce {
+                chain_id,
+                entry_point,
+                sender,
+                user_op_hash,
+            } => {
+                let (chain_id, entry_point, sender) = (*chain_id, entry_point.clone(), sender.clone());
+                let user_op_hash = user_op_hash.to_lowercase();
+                Answer::Blocking(Box::new(move || {
+                    let read = crate::executor::chain::head_block(chain_id).and_then(|head| {
+                        crate::executor::chain::nonce_at(&entry_point, &sender, chain_id, head)
+                            .map(|nonce| (nonce, head))
+                    });
+                    TrackShellResult::NonceRead {
+                        user_op_hash,
+                        now_ms: now_ms(),
+                        nonce: read.as_ref().map(|(nonce, _)| nonce.clone()),
+                        head_block: read.map(|(_, head)| head),
+                    }
+                }))
             }
 
             // The single auto-add entry point: the AUTHENTIC logs of the
@@ -641,6 +657,24 @@ pub fn submitted(handoff: Handoff, cx: &mut App) {
                 submit_block: handoff.submit_block,
                 admitted: handoff.admitted,
                 sender: handoff.sender,
+            },
+            cx,
+        );
+    });
+}
+
+/// What a submit knew of a may-have-been-sent op that its hand-off does not
+/// carry (round 3, send-5): the nonce it signed — so the tracker reads the
+/// account's nonce while the op is in doubt instead of waiting out the
+/// relay's grace (the web's `noteSubmitFacts`). Sent after the
+/// [`submitted`] that named its records.
+pub fn submit_facts(user_op_hash: &str, nonce: String, relay_refusal: Option<String>, cx: &mut App) {
+    resident::resident::<TxTracker>(cx).update(cx, |resident, cx| {
+        resident.dispatch(
+            Event::SubmitFacts {
+                user_op_hash: user_op_hash.to_owned(),
+                nonce: Some(nonce),
+                relay_refusal,
             },
             cx,
         );

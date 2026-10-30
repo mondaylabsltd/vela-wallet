@@ -152,6 +152,10 @@ pub struct Submitted {
     /// The chain head read before the first POST, where the tracker's
     /// relay-independent landing check starts (ruling 8). Best effort.
     pub submit_block: Option<u64>,
+    /// The nonce it signed, as on the wire — only for an op that may have
+    /// been sent (round 3, send-5): the tracker reads the account's nonce
+    /// while it is in doubt (`tx_tracker::Event::SubmitFacts`).
+    pub nonce: Option<String>,
 }
 
 /// The ceremony's two edges (spec 082 RA9): the prompt opened, and it came
@@ -1062,6 +1066,13 @@ fn sign_and_submit(
         // attempt reuses nonce N and can never become a second payment.
         |accepted| note_submitted(chain_id, safe, accepted, &op.nonce),
     )
+    // The nonce it signed travels with an op that may have been sent.
+    .map(|mut submitted| {
+        if submitted.maybe_sent {
+            submitted.nonce = Some(op.nonce.to_string());
+        }
+        submitted
+    })
 }
 
 /// The last steps before the bytes leave, in the order the money rules set:
@@ -1103,12 +1114,14 @@ fn clear_and_post(
                 user_op_hash,
                 maybe_sent: false,
                 submit_block,
+                nonce: None,
             })
         }
         SubmitVerdict::MaybeSent { user_op_hash } => Ok(Submitted {
             user_op_hash,
             maybe_sent: true,
             submit_block,
+            nonce: None,
         }),
         SubmitVerdict::NotSent { rejection } => Err(match rejection {
             None => SubmitFailure::NotSent,
@@ -1582,6 +1595,7 @@ mod tests {
                 user_op_hash: LOCAL.to_owned(),
                 maybe_sent: false,
                 submit_block: Some(48_487_620),
+                nonce: None,
             })
         );
 

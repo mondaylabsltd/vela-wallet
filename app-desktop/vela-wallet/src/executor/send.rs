@@ -46,7 +46,7 @@ use crate::diag::vlog;
 use crate::executor::passkey::{self, Ceremony};
 use crate::executor::trusted_signer::{self, Ask};
 use crate::executor::user_op::{self, QuotedFee, SignFn, Signer};
-use crate::executor::{abi, balances, identity, pool, relay, storage};
+use crate::executor::{abi, balances, identity, pool, prepare_bound, relay, storage};
 
 /// `vela.transactionHistory` — the shared local store.
 const TX_KEY: &str = "vela.transactionHistory";
@@ -823,7 +823,28 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
             };
             let ctx = ctx.clone();
             SendAnswer::Streaming(Box::new(move |sink| {
+                // r5reg-3: from here to the passkey the network's reads are
+                // bounded and said — how long, and whether its nodes are busy
+                // — and a wait that gives up is the network's, never the
+                // passkey's. Only where this device's passkey signs: a
+                // trusted page's own hand-off is its own wait.
+                let gate = Arc::new(prepare_bound::Gate::default());
+                let bounded = ctx.handoff().is_none();
+                let busy = move || pool::rate_limited_chains().contains(&chain_id);
+                let watch = bounded.then(|| {
+                    let sink = sink.clone();
+                    prepare_bound::watch(Arc::clone(&gate), busy, move |elapsed_ms, busy| {
+                        sink.send(vela_core::app::send::Event::SubmitSlow { elapsed_ms, busy });
+                    })
+                });
                 let mut sign = |challenge: &[u8]| {
+                    // A wait that was given up never opens a passkey: nothing
+                    // is signed behind the person's back.
+                    if !gate.open() {
+                        return Err(passkey::PasskeyFailure::other(
+                            "the network did not answer in time; nothing was signed",
+                        ));
+                    }
                     // The prompt is opening: the core moves to `signing` here,
                     // exactly where `setTxStatus('signing')` sat.
                     ctx.signing_started.store(true, Ordering::SeqCst);
@@ -849,7 +870,7 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
                         });
                     })
                 };
-                match user_op::submit(
+                let outcome = user_op::submit(
                     chain_id,
                     &account,
                     &calls,
@@ -866,18 +887,34 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
                     // The person's own payment: no page can withdraw it.
                     &user_op::always_asked,
                     &before_post,
-                ) {
+                );
+                if let Some(watch) = watch {
+                    watch.finish();
+                }
+                match outcome {
                     // Accepted, or may have been sent (spec 082 RA4): either
                     // way it is recorded and tracked — a lost reply is never
                     // "failed, try again".
-                    Ok(submitted) => SendShellResult::Submitted {
+                    Ok(submitted) => {
+                        if let Some(nonce) = submitted.nonce.clone() {
+                            note_signed_nonce(&submitted.user_op_hash, nonce);
+                        }
+                        SendShellResult::Submitted {
                         user_op_hash: submitted.user_op_hash,
                         now_ms: now_ms(),
                         maybe_sent: submitted.maybe_sent,
                         submit_block: submitted.submit_block,
-                    },
+                    }
+                    }
                     Err(failure) => SendShellResult::SubmitFailed {
-                        failure: failure.into(),
+                        failure: if bounded {
+                            let failing = pool::failed_chains().contains(&chain_id)
+                                || pool::unreached_chains().contains(&chain_id)
+                                || busy();
+                            prepare_bound::classify(failure, &gate, failing, busy())
+                        } else {
+                            failure.into()
+                        },
                     },
                 }
             }))

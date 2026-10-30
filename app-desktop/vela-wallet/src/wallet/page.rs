@@ -7695,6 +7695,8 @@ impl WalletPage {
             notice_report: None,
             handoff_recheck: None,
             handoff_trust: None,
+            risk_retry: None,
+            send_again: None,
             pick_group_rows: Vec::new(),
             split_amount_fields: Vec::new(),
             split_address_fields: Vec::new(),
@@ -8316,6 +8318,9 @@ impl WalletPage {
                     actions.advance = Some(to_batch(BatchEvent::Apply));
                 }
                 FlowPanel::Dsd3 => {
+                    // Round 3: the recipient check, asked again — its history
+                    // read failed, or it did not finish in its wait.
+                    actions.risk_retry = Some(to_host(SendEvent::RetryRiskCheck));
                     // The person's confirm is `submit_transfer`, through the
                     // intents (spec 103): their own send is adopted as an
                     // operation at its review, and confirmed there — naming
@@ -8354,7 +8359,21 @@ impl WalletPage {
                         ));
                     }
                 }
-                FlowPanel::Dsd4 => actions.advance = Some(to_host(SendEvent::Done)),
+                FlowPanel::Dsd4 => {
+                    actions.advance = Some(to_host(SendEvent::Done));
+                    // send-5: back to the confirm over a payment proven never
+                    // sent — and the fee asked again with it, for a new
+                    // quote and a new signature (the web's `sendAgain`).
+                    let host = host.clone();
+                    actions.send_again = Some(Box::new(
+                        move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                            host.update(cx, |host, cx| {
+                                host.dispatch(SendEvent::SendAgain, cx);
+                                host.refresh_fee(cx);
+                            });
+                        },
+                    ));
+                }
                 _ => {}
             }
         }
