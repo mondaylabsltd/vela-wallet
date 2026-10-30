@@ -937,7 +937,7 @@ class AppContainer(private val app: Application) {
                         answer(payload)
                         // Closed by the person after approving: the answer still
                         // goes, the ending does not reappear (spec 079).
-                        signingAftercare.value = if (controller.closedAfterApproval) {
+                        signingAftercare.value = if (controller.landingClosed) {
                             null
                         } else {
                             SigningAftercare.of(
@@ -985,6 +985,10 @@ class AppContainer(private val app: Application) {
                     // The pool's answer as it came; the core reads it (`simOutcome`, RG6).
                     override suspend fun simulate(chainId: Int, params: List<Any?>): RpcResult =
                         pool.call(chainId, "eth_simulateV1", params)
+                    // dapp-15: is the chain answering a plain read again?
+                    override suspend fun nodeAnswers(chainId: Int): Boolean =
+                        (pool.call(chainId, "eth_blockNumber", emptyList()) as? RpcResult.Body)
+                            ?.json?.optString("result")?.startsWith("0x") == true
                     override suspend fun judgeDeltas(chainId: Int, wallet: String, deltas: List<app.getvela.wallet.feature.wallet.core.TrustAssetDelta>): app.getvela.wallet.feature.wallet.core.TrustSimView? =
                         this@AppContainer.wallet.judgeSimDeltas(wallet, chainId, deltas)
                     // cs-13: the raw code as the chain gave it; an error or no answer is `null`.

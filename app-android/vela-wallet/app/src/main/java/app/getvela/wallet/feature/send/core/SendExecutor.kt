@@ -577,6 +577,12 @@ class SendExecutor(
                 is UserOpSpine.Failure.Signer -> SendSubmitFailure.Other(failure.message)
                 // Spec 102: this account cannot sign here — the confirm screen says why, translated.
                 is UserOpSpine.Failure.VenueBlocked -> SendSubmitFailure.VenueBlocked(failure.block)
+                // Spec 102 (2026-10-30): declined on the account's signing
+                // page — the confirm stays open for another try, as a closed
+                // passkey prompt (the web's `PageDeclinedError` → `passkey_cancelled`).
+                UserOpSpine.Failure.PageDeclined -> SendSubmitFailure.PasskeyCancelled
+                // Round 7: the page did not sign, by the core's name for why.
+                is UserOpSpine.Failure.PageFailed -> SendSubmitFailure.PageFailed(failure.failure)
                 // The account's previous transaction still holds the nonce
                 // (the relay's `nonce_in_flight`): the core's own words for it,
                 // with Try again — never "other".

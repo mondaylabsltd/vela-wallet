@@ -72,6 +72,7 @@ class SigningFixturesTest {
                 is SigningBlock.Rows -> block.rows.forEach { out += listOf(it.label, it.value) }
                 is SigningBlock.Warning -> out += block.text
                 is SigningBlock.Positive -> out += block.text
+                is SigningBlock.Source -> out += block.text
                 is SigningBlock.Code -> out += listOfNotNull(block.note)
                 is SigningBlock.Card -> {
                     block.title?.let { out += it }
@@ -114,7 +115,7 @@ class SigningFixturesTest {
         // CS65–CS67: a verdict taller than the place, shown whole,
         // CS68: two unverified tokens, by their directions alone (PR 3), and
         // CS69/CS70: the confirm waiting for the verdict, and waited out.
-        assertEquals(68, SigningScreenState.entries.size)
+        assertEquals(76, SigningScreenState.entries.size)
         for (state in SigningScreenState.entries) {
             val model = SigningFixtures.build(state, zhStrings())
             assertEquals(state, model.state)

@@ -783,9 +783,12 @@ class SendController(
      * attempt says why).
      */
     suspend fun handoffFor(address: String): UserOpSpine.Handoff? {
-        val plan = app.getvela.wallet.feature.signing.trustedsigner.SigningPlan.of(accountPort.accountJson(address))
-            ?: return null
-        val page = plan.page?.takeIf { plan.blocked == null } ?: return null
+        val record = accountPort.accountJson(address)
+        val plan = app.getvela.wallet.feature.signing.trustedsigner.SigningPlan.of(record) ?: return null
+        if (plan.blocked != null) return null
+        // R7: the wallet's own send (`""`) goes where the core routes it.
+        val route = app.getvela.wallet.feature.signing.trustedsigner.SigningRoute.of(record, "")
+        val page = (route as? app.getvela.wallet.feature.signing.trustedsigner.SigningRoute.Page)?.url ?: return null
         return UserOpSpine.Handoff(page, plan.keyLabel)
     }
 

@@ -1260,6 +1260,28 @@ class SendLiveTest {
         assertEquals(recipient, done.recipient!!.identiconSeed)
     }
 
+    /**
+     * R7 / round 7: the account's trusted signing page did not sign the send
+     * — said as what happened there (the web's `live-send.ts`), never the
+     * generic "couldn't be submitted".
+     */
+    @Test
+    fun `a send the signing page did not sign says what happened there`() {
+        val drawn = (FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm).model
+        val failed = SendView(stage = SendStage.Confirm, selected_token = xdai, recipient = recipient, confirm_amount = "0.001", fee = fee(), can_confirm = true, tx_status = SendTxStatus.Error)
+        val said = mapOf(
+            SendTxErrorKey.PageUnanswered to "componentsUi.signing.trustedSignerUnanswered",
+            SendTxErrorKey.PageMismatch to "componentsUi.signing.trustedSignerMismatch",
+            SendTxErrorKey.PageRefused to "componentsUi.signing.trustedSignerRefused",
+            SendTxErrorKey.PageNotOpened to "componentsUi.signing.integrity.couldNotCheck",
+        )
+        for ((key, words) in said) {
+            val notice = SendLive.confirm(drawn, failed.copy(tx_error = key), ctx()).notice
+            assertEquals(key.name, strings.t(words), notice)
+            assertTrue(key.name, notice != strings.t(I18nKeys.Flows.TX_ERROR_GENERIC))
+        }
+    }
+
     @Test
     fun `the confirm page names what stopped it and offers the one action`() {
         val drawn = (FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm).model
