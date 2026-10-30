@@ -4399,7 +4399,7 @@ impl WalletPage {
                     .read(cx)
                     .view()
                     .balance_unknown,
-                &resident::resident::<ActivityFeed>(cx).read(cx).view(),
+                &resident::resident::<ActivityFeed>(cx).read(cx).shared(),
                 &self.strings,
             );
             match state {
@@ -4993,12 +4993,15 @@ impl WalletPage {
         }
     }
 
-    fn feed_view(&mut self, cx: &mut Context<Self>) -> vela_core::app::activity_feed::FeedView {
+    fn feed_view(
+        &mut self,
+        cx: &mut Context<Self>,
+    ) -> std::rc::Rc<vela_core::app::activity_feed::FeedView> {
         if let Some(pinned) = Self::pinned_feed() {
-            return pinned;
+            return std::rc::Rc::new(pinned);
         }
         self.sync_feed_privacy(cx);
-        resident::resident::<ActivityFeed>(cx).read(cx).view()
+        resident::resident::<ActivityFeed>(cx).read(cx).shared()
     }
 
     /// The core-list indices behind the home's asset strip, in drawn order.
@@ -5230,7 +5233,7 @@ impl WalletPage {
     fn sync_feed_privacy(&mut self, cx: &mut Context<Self>) -> bool {
         let hidden = resident::resident::<BalanceDashboard>(cx)
             .read(cx)
-            .view()
+            .shared()
             .hidden;
         if self.feed_privacy != Some(hidden) {
             self.feed_privacy = Some(hidden);
@@ -5245,11 +5248,9 @@ impl WalletPage {
         if self.identity.is_none() {
             return self.celebrating.then_some(fixtures::CELEBRATED_ROW);
         }
-        let new_item_id = resident::resident::<ActivityFeed>(cx)
-            .read(cx)
-            .view()
-            .new_item_id?;
-        home_tx_ids.iter().position(|id| *id == new_item_id)
+        let feed = resident::resident::<ActivityFeed>(cx).read(cx).shared();
+        let new_item_id = feed.new_item_id.as_deref()?;
+        home_tx_ids.iter().position(|id| id == new_item_id)
     }
 
     /// The home's asset strip: the person's holdings, or the mocks'.
@@ -5371,7 +5372,7 @@ impl WalletPage {
             return fixtures::asset_detail_default(&self.strings);
         }
         let view = crate::network_space::balance_view(cx);
-        let feed = resident::resident::<ActivityFeed>(cx).read(cx).view();
+        let feed = resident::resident::<ActivityFeed>(cx).read(cx).shared();
         let money = self.money(cx);
         wallet_live::asset_detail(&view, &feed, index, &self.strings, &self.locale, &money)
             // The holding is gone — a refresh re-ordered the list under an open
@@ -20317,7 +20318,7 @@ impl WalletPage {
                     self.dress_batch_total(&mut body, cx);
                     let tx_ids = if self.identity.is_some() && panel == FlowPanel::Da1 {
                         flows_live::history_ids(
-                            &resident::resident::<ActivityFeed>(cx).read(cx).view(),
+                            &resident::resident::<ActivityFeed>(cx).read(cx).shared(),
                         )
                     } else {
                         Vec::new()
@@ -21146,7 +21147,7 @@ impl WalletPage {
             // withholds the toast while the hero is masked, and it only knows
             // to because of this call.
             self.sync_feed_privacy(cx);
-            let feed = resident::resident::<ActivityFeed>(cx).read(cx).view();
+            let feed = resident::resident::<ActivityFeed>(cx).read(cx).shared();
             wallet_live::receipt_toast(&feed, &self.strings)?
         } else {
             self.celebrating

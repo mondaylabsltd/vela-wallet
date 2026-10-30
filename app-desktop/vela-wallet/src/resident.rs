@@ -172,7 +172,12 @@ where
     A::Effect: SplitEffect,
 {
     host: CoreHost<A>,
-    view: A::ViewModel,
+    /// Shared, so a screen that reads it every frame borrows it rather than
+    /// copying it ([`Self::shared`]): the activity feed's view is every
+    /// transfer the account ever made, and History read it four times a
+    /// frame — 0.7 ms of a 120 Hz frame's 8.3 on 200 rows, before anything
+    /// was drawn (Phase 4).
+    view: std::rc::Rc<A::ViewModel>,
 }
 
 impl<A> ResidentCore<A>
@@ -186,12 +191,18 @@ where
 {
     fn new() -> Self {
         let host = CoreHost::<A>::new();
-        let view = host.view();
+        let view = std::rc::Rc::new(host.view());
         Self { host, view }
     }
 
-    /// The current view. Cheap to clone; screens read it per frame.
+    /// The current view, as a copy of its own — for a reader that keeps or
+    /// changes it. A reader that only looks takes [`Self::shared`].
     pub fn view(&self) -> A::ViewModel {
+        (*self.view).clone()
+    }
+
+    /// The current view, shared: no copy. What a per-frame reader takes.
+    pub fn shared(&self) -> std::rc::Rc<A::ViewModel> {
         self.view.clone()
     }
 
@@ -282,7 +293,7 @@ where
                 }
             }
         }
-        self.view = self.host.view();
+        self.view = std::rc::Rc::new(self.host.view());
         cx.notify();
     }
 }
