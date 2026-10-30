@@ -25,6 +25,8 @@ mod intents;
 mod multisig_machines;
 mod onboarding;
 mod settings;
+/// The launch animation's replay rule and the ENS nodes.
+mod shell_rules;
 /// Where an account's signatures go: its sign-in key.
 mod signing;
 /// Only the REGISTRY's relying party: the web wallet offers no Trusted Signer
