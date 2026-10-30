@@ -68,6 +68,13 @@ multisig_object!(
     vela_core::app::multisig_proposals::MultisigProposals
 );
 
+multisig_object!(
+    /// Who the members are on each network, what a change would be, and
+    /// the waiting changes with their per-network progress.
+    MultisigMembersCore,
+    vela_core::app::multisig_members::MultisigMembers
+);
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {

@@ -19,3 +19,10 @@ bridge_class!(
     MultisigProposalsCore,
     vela_core::app::multisig_proposals::MultisigProposals
 );
+
+bridge_class!(
+    /// Who the members are on each network, what a change would be, and
+    /// the waiting changes with their per-network progress.
+    MultisigMembersCore,
+    vela_core::app::multisig_members::MultisigMembers
+);

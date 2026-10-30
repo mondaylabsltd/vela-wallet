@@ -11,6 +11,7 @@ use std::{env, error::Error, fs, path::PathBuf};
 
 use ts_rs::{Config, TS};
 use vela_core::app::multisig_accounts::{Event as AccountsEvent, MultisigAccountsView};
+use vela_core::app::multisig_members::{Event as MembersEvent, MultisigMembersView};
 use vela_core::app::multisig_proposals::{Event as ProposalsEvent, ProposalsView};
 use vela_core::app::multisig_shell::{MultisigOperation, MultisigShellResult};
 
@@ -28,6 +29,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     MultisigAccountsView::export_all(&config)?;
     ProposalsEvent::export_all(&config)?;
     ProposalsView::export_all(&config)?;
+    MembersEvent::export_all(&config)?;
+    MultisigMembersView::export_all(&config)?;
     println!("multisig bindings written to {}", out_dir.display());
     Ok(())
 }
