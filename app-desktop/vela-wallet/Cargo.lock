@@ -10099,6 +10099,7 @@ dependencies = [
  "coset",
  "crux_core",
  "ecdsa 0.17.0",
+ "futures",
  "hkdf 0.13.0",
  "hmac 0.13.0",
  "k256 0.14.0",
