@@ -70,6 +70,11 @@ export interface MemberInfo {
 	name?: string;
 	/** A Vela account (its key a passkey), or an outside wallet. */
 	kind?: 'passkey' | 'wallet';
+	/**
+	 * r5reg-16: `name` is what the person typed on this device (Settings →
+	 * Add member), not a link's label — shown for that member over any other.
+	 */
+	typed?: true;
 }
 
 /**
@@ -199,9 +204,15 @@ class MultisigStore {
 	/**
 	 * Keep what is known of its members (r4D-5). What this device already
 	 * holds stays: a field is only filled where it is empty — the person's own
-	 * names over a link's. `known` is keyed by address, any case.
+	 * names over a link's. `known` is keyed by address, any case. `typed`: the
+	 * person typed these just now (Settings → Add member, r5reg-16) — their
+	 * word replaces what was kept.
 	 */
-	nameMembers(address: string, known: Record<string, MemberInfo>): void {
+	nameMembers(
+		address: string,
+		known: Record<string, MemberInfo>,
+		{ typed = false }: { typed?: boolean } = {}
+	): void {
 		const row = this.find(address);
 		if (!row) return;
 		const members = { ...(row.members ?? {}) };
@@ -209,10 +220,16 @@ class MultisigStore {
 		for (const [member, info] of Object.entries(known)) {
 			const key = member.toLowerCase();
 			const was = members[key] ?? {};
-			const name = was.name ?? (info.name?.trim() || undefined);
-			const kind = was.kind ?? info.kind;
-			if (name === was.name && kind === was.kind) continue;
-			members[key] = { ...(name ? { name } : {}), ...(kind ? { kind } : {}) };
+			const given = info.name?.trim() || undefined;
+			const name = typed ? (given ?? was.name) : (was.name ?? given);
+			const kind = typed ? (info.kind ?? was.kind) : (was.kind ?? info.kind);
+			const mine = (typed && !!given) || was.typed === true;
+			if (name === was.name && kind === was.kind && mine === (was.typed === true)) continue;
+			members[key] = {
+				...(name ? { name } : {}),
+				...(kind ? { kind } : {}),
+				...(mine && name ? { typed: true as const } : {})
+			};
 			changed = true;
 		}
 		if (!changed) return;

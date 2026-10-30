@@ -529,6 +529,8 @@ pub fn recipient_risk(chain_id: u32, address: &str) -> SendRecipientRisk {
         first_time: Some(first_time(address)),
         // The local records are read here, never fetched: always read.
         history_unread: false,
+        known_name: None,
+        own: false,
     }
 }
 

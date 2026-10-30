@@ -729,6 +729,7 @@ fn recipients_first_time_contract_and_lookalike() {
         known: vec![Known {
             address: friend.into(),
             label: "Alice".into(),
+            kind: KnownKind::Contact,
         }],
         sim_reply: Some(r#"{"unreachable":true}"#.into()),
         ..ReviewInput::default()
@@ -752,6 +753,113 @@ fn recipients_first_time_contract_and_lookalike() {
         .any(|c| matches!(c, Concern::ToContract { .. })));
     assert_eq!(r.tone, Tone::Danger);
     assert!(r.sign.anyway);
+    assert!(rc.known.is_none());
+    assert!(rc.first_time_cue && rc.contract_cue);
+}
+
+/// What the review says of one paid address with `facts`, known as `known`.
+fn paid_to(to: &str, is_contract: bool, first_time: bool, known: Vec<Known>) -> MultisigReview {
+    multisig_review(&ReviewInput {
+        reads: reads(tx(to, "0x1", "0x", 0)),
+        recipient_facts: vec![RecipientFacts {
+            address: checksum(a(to)),
+            is_contract: Some(is_contract),
+            first_time: Some(first_time),
+        }],
+        known,
+        sim_reply: Some(r#"{"unreachable":true}"#.into()),
+        ..ReviewInput::default()
+    })
+    .unwrap()
+}
+
+fn says_first_time_or_contract(r: &MultisigReview) -> (bool, bool) {
+    (
+        r.concerns
+            .iter()
+            .any(|c| matches!(c, Concern::FirstTime { .. })),
+        r.concerns
+            .iter()
+            .any(|c| matches!(c, Concern::ToContract { .. })),
+    )
+}
+
+#[test]
+fn own_accounts_and_members_are_never_strangers() {
+    // r4a-18, r5reg-8: a Vela account of this device is a smart account the
+    // person controls — no "first time", no "coins lost in a contract".
+    let known = |kind| {
+        vec![Known {
+            address: B.to_lowercase(),
+            label: "Bob".into(),
+            kind,
+        }]
+    };
+    let own = paid_to(B, true, true, known(KnownKind::Own));
+    let rc = &own.recipients[0];
+    assert_eq!(rc.known.as_ref().unwrap().kind, KnownKind::Own);
+    assert_eq!(rc.known.as_ref().unwrap().label, "Bob");
+    assert!(!rc.first_time_cue && !rc.contract_cue);
+    assert_eq!(says_first_time_or_contract(&own), (false, false));
+    // A member of the multisig: the same.
+    let member = paid_to(B, true, true, known(KnownKind::Member));
+    assert!(!member.recipients[0].first_time_cue && !member.recipients[0].contract_cue);
+    assert_eq!(says_first_time_or_contract(&member), (false, false));
+    // A contact is still somebody else's: both are said.
+    let contact = paid_to(B, true, true, known(KnownKind::Contact));
+    assert_eq!(says_first_time_or_contract(&contact), (true, true));
+    // An unknown contract and an unknown plain account: said as before.
+    assert_eq!(
+        says_first_time_or_contract(&paid_to(B, true, true, vec![])),
+        (true, true)
+    );
+    assert_eq!(
+        says_first_time_or_contract(&paid_to(B, false, true, vec![])),
+        (true, false)
+    );
+    assert_eq!(
+        says_first_time_or_contract(&paid_to(B, false, false, vec![])),
+        (false, false)
+    );
+}
+
+#[test]
+fn the_closest_known_wins() {
+    let both = vec![
+        Known {
+            address: B.into(),
+            label: "Bob (contact)".into(),
+            kind: KnownKind::Contact,
+        },
+        Known {
+            address: B.to_uppercase().replace("0X", "0x"),
+            label: "Bob".into(),
+            kind: KnownKind::Own,
+        },
+    ];
+    let r = paid_to(B, true, true, both);
+    assert_eq!(r.recipients[0].known.as_ref().unwrap().label, "Bob");
+    assert_eq!(says_first_time_or_contract(&r), (false, false));
+}
+
+#[test]
+fn a_member_being_added_is_sent_nothing() {
+    // r5reg-16: nothing is sent to a new member — no "first time sending here".
+    let r = multisig_review(&ReviewInput {
+        reads: reads(tx(SAFE, "0x0", &add_owner(C, 1), 0)),
+        recipient_facts: vec![RecipientFacts {
+            address: checksum(a(C)),
+            is_contract: Some(true),
+            first_time: Some(true),
+        }],
+        sim_reply: Some(r#"{"unreachable":true}"#.into()),
+        ..ReviewInput::default()
+    })
+    .unwrap();
+    let rc = &r.recipients[0];
+    assert_eq!(rc.role, RecipientRole::Member);
+    assert!(!rc.first_time_cue && !rc.contract_cue);
+    assert_eq!(says_first_time_or_contract(&r), (false, false));
 }
 
 #[test]

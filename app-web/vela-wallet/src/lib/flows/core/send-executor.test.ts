@@ -954,7 +954,43 @@ describe('round 3: reliable sending', () => {
 			})
 		).resolves.toEqual({
 			type: 'risk_resolved',
-			risk: { is_contract: false, first_time: null, history_unread: true }
+			risk: {
+				is_contract: false,
+				first_time: null,
+				history_unread: true,
+				known_name: null,
+				own: false
+			}
+		});
+	});
+
+	it('tells the core the person’s own name for it, and that it is theirs (r4a-18)', async () => {
+		const { resolveRecipientRisk } = await import('$lib/services/recipient-risk');
+		vi.mocked(resolveRecipientRisk).mockResolvedValueOnce({
+			isContract: true,
+			firstInteraction: true,
+			historyUnread: false
+		});
+		const executor = createSendExecutor(
+			ports({
+				knownName: (address) => (address === ACCOUNT ? ' R5 Bob ' : null),
+				ownAddress: (address) => address === ACCOUNT
+			})
+		);
+		await expect(
+			executor.execute({
+				id: 1,
+				operation: { type: 'resolve_risk', chain_id: 100, address: ACCOUNT }
+			})
+		).resolves.toEqual({
+			type: 'risk_resolved',
+			risk: {
+				is_contract: true,
+				first_time: true,
+				history_unread: false,
+				known_name: 'R5 Bob',
+				own: true
+			}
 		});
 	});
 });

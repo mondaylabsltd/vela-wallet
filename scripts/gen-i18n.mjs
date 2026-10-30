@@ -1289,9 +1289,16 @@ if (branchSet.size !== 108) fail(`expected 108 branch paths, got ${branchSet.siz
 //   guard/handler words change value only (plain words, every locale).
 //   562 + 6 = 568.
 {
-// Merged (round-6 fix-a integration, 2026-10-30): copy/visual's 6 and
-//   r6a-g3's `add.unchecked` (1) together: 562 + 6 + 1 = 569.
-  const pins = { multisig: 569 };
+  // 570 (r6a-g2, 2026-10-30, who-is-who): + `home.multisig.review.{knownOwn,
+  //   knownMember}` (an address the review reaches that is the person's own
+  //   account, or a member — r4a-18, r5reg-8), `add.badChecksum` (an invite
+  //   whose address's letter case was changed — r5reg-22), `add.thatsYou` (the
+  //   invited member that is this device's own account — r5reg-24) and
+  //   `presence.waitingPayer_{one,few,many,other}` (ready, but no member here
+  //   can pay — r5reg-6). 562 + 2 + 1 + 1 + 4 = 570.
+  // Merged (round-6 fix-a integration, 2026-10-30): copy/visual's 6, r6a-g3's
+  //   `add.unchecked` (1) and r6a-g2's 8 together: 562 + 6 + 1 + 8 = 577.
+  const pins = { multisig: 577 };
   for (const [name, docs] of Object.entries(onDemand)) {
     const leaves = new Set();
     for (const lng of LOCALES) walk(docs[lng], '', leaves, new Set());

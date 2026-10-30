@@ -17,6 +17,7 @@
 	import { chainName, spaceNetworksSync } from '$lib/services/networks';
 	import { openProposalLink } from '../core/linked.svelte';
 	import {
+		addLinkFault,
 		brokenLink,
 		brokenLinkText,
 		carriedLinkHash,
@@ -27,6 +28,8 @@
 		type ProposalLink
 	} from '../core/link';
 	import { keepLink, takeKeptLink } from '../core/kept-link';
+	import { keepInvited as keepInvitedMembers } from '../core/invite';
+	import { readMembers } from '../core/chain';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import Button from '$lib/ui/Button.svelte';
@@ -197,8 +200,10 @@
 			// invite shows what it held in the add sheet, with what is wrong
 			// with it already said.
 			const raw = brokenLinkText(location.hash);
+			// r5reg-22: an address whose letters were changed is said as such.
+			const fault = addLinkFault(location.hash) ?? 'damaged';
 			clearHash();
-			if (broken === 'add') multisigUi.open({ kind: 'add', broken: raw });
+			if (broken === 'add') multisigUi.open({ kind: 'add', broken: raw, fault });
 			else multisigUi.open({ kind: 'notice', text: m.proposal.badLink });
 			return;
 		}
@@ -217,17 +222,15 @@
 	}
 
 	/**
-	 * r4D-5: what an invite says of the founding members, kept with the
-	 * multisig on this device — matched by the genesis's own order, so a
-	 * label never lands on another member. Labels only.
+	 * r4D-5: what an invite says of the members, kept with the multisig on
+	 * this device — only for addresses that are its members (founding, or on
+	 * the invite's networks now), never over this device's own names. Labels
+	 * only.
 	 */
 	function keepInvited(address: string, link: AddLink | undefined) {
-		const account = multisig.find(address);
-		if (!account || !link?.members || link.members.length !== account.owners.length) return;
-		multisig.nameMembers(
-			account.address,
-			Object.fromEntries(account.owners.map((owner, i) => [owner, link.members?.[i] ?? {}]))
-		);
+		void keepInvitedMembers(address, link, (chainId, account) =>
+			readMembers(chainId, account.address, account.genesis).then((now) => now.owners)
+		).catch(() => {});
 	}
 
 	/** A proposal link's transaction (from the hash, or kept while its network was added). */
@@ -374,7 +377,7 @@
 			{m}
 			prefill={invite?.multisig ?? sheet.broken ?? addPrefill}
 			link={invite}
-			broken={sheet.broken !== undefined}
+			broken={sheet.broken !== undefined ? (sheet.fault ?? 'damaged') : false}
 			prefillFailure={invite || sheet.broken !== undefined ? null : addFailure}
 			{locale}
 			{wide}

@@ -39,7 +39,8 @@
 	import { indexName, missingTitle } from '../core/activity.svelte';
 	import { keepLink } from '../core/kept-link';
 	import { parseSafeExport, type ExportedSafe } from '../core/kernel';
-	import { addLink, type AddLink } from '../core/link';
+	import { addLink, type AddLink, type InvitedMember } from '../core/link';
+	import { localName } from '../core/display';
 	import { heldChains, lastUsedChains, likelyNetworks } from '../core/likely-networks';
 	import { multisig } from '../core/store.svelte';
 	import AuthorityNotice from './AuthorityNotice.svelte';
@@ -58,8 +59,11 @@
 		prefillFailure?: string | null;
 		/** The invite it was opened from: its networks, its members' labels. */
 		link?: AddLink;
-		/** It was opened from an invite that does not read: said at once. */
-		broken?: boolean;
+		/**
+		 * It was opened from an invite that does not read: said at once —
+		 * `checksum` when its address's letters were changed on the way (r5reg-22).
+		 */
+		broken?: false | 'damaged' | 'checksum';
 		/** The page's locale, for the way to Settings → Add network. */
 		locale?: string;
 		wide: boolean;
@@ -86,7 +90,11 @@
 	let busy = $state(false);
 	// r4b-13: a damaged invite is said the moment it opens, not at Add; so is
 	// what a proposal link's own lookup already found.
-	let failure = $state<string | null>(untrack(() => (broken ? m.add.badInvite : prefillFailure)));
+	let failure = $state<string | null>(
+		untrack(() =>
+			broken === 'checksum' ? m.add.badChecksum : broken ? m.add.badInvite : prefillFailure
+		)
+	);
 	// The core's one address rule (send-2), checksum included.
 	const entry = $derived(addressEntry(address.trim()));
 	const valid = $derived(entry === 'valid');
@@ -102,6 +110,13 @@
 	);
 	let lackingName = $state<string | null>(null);
 	if (linkLacks !== null) void indexName(linkLacks).then((name) => (lackingName = name));
+	/**
+	 * r5reg-24: this device's own name for an invited member that is one of
+	 * its accounts (the invite names it by address), else `null`.
+	 */
+	function mine(member: InvitedMember): string | null {
+		return member.address ? localName(member.address) : null;
+	}
 	/** The invite still names this address (the person did not type another). */
 	const fromLink = $derived(!!link && address.trim().toLowerCase() === link.multisig.toLowerCase());
 
@@ -366,7 +381,7 @@
 					onclick={() => void add(true)}>{m.authority.riskConfirm}</Button
 				>
 			{/if}
-			{#if fromLink && link && (link.chainIds.length > 0 || link.members?.some((x) => x.name))}
+			{#if fromLink && link && (link.chainIds.length > 0 || link.members?.some((x) => x.name || mine(x)))}
 				<!-- What the invite says, before anything is added (r4D-4, r4D-5). -->
 				<div class="invite" data-testid="invite-summary">
 					{#if linkHas.length > 0}
@@ -383,13 +398,16 @@
 							>{m.proposal.addNetwork}</Button
 						>
 					{/if}
-					{#if link.members?.some((member) => member.name)}
+					{#if link.members?.some((member) => member.name || mine(member))}
 						<p class="line">{m.add.invitedMembers}</p>
 						<ul class="named">
 							{#each link.members as member, i (i)}
-								{#if member.name}
-									<li>
-										<span class="who">{member.name}</span>
+								<!-- r5reg-24: the one of them that is this device's own account, said. -->
+								{@const you = mine(member)}
+								{#if member.name || you}
+									<li data-testid={you ? 'invite-you' : undefined}>
+										<span class="who">{member.name ?? you}</span>
+										{#if you}<span class="you">{m.add.thatsYou}</span>{/if}
 										{#if member.kind}<span class="kind"
 												>{member.kind === 'passkey' ? m.add.kindPasskey : m.add.kindWallet}</span
 											>{/if}
@@ -601,6 +619,12 @@
 	.kind {
 		color: var(--color-fg-muted);
 		font-size: calc(var(--text-xs) * var(--text-scale, 1));
+	}
+
+	.you {
+		color: var(--color-fg-base);
+		font-size: calc(var(--text-xs) * var(--text-scale, 1));
+		font-weight: var(--weight-semibold);
 	}
 
 	.choose {

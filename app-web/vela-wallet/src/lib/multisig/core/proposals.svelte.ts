@@ -48,6 +48,7 @@ import { loadAccounts } from '$lib/onboarding/core/storage';
 import { multisigApprovalRoute } from '$lib/core/kernels';
 import { localOwners, signApproval, type LocalOwner } from './owners';
 import { plainAccounts } from './signers.svelte';
+import { lastActor, proposerOf } from './actor';
 import {
 	fetchAllProposals,
 	fetchProposals,
@@ -1355,7 +1356,9 @@ export async function draftCalls(
 export async function proposeCalls(
 	address: string,
 	chainId: number,
-	calls: DappCall[]
+	calls: DappCall[],
+	/** The member of this device picked on its review to propose it (r5reg-5). */
+	as?: string | null
 ): Promise<{ safeTxHash: string; nonce: string }> {
 	let nonce = '0x0';
 	const { safeTxHash } = await proposeBuilt(
@@ -1367,7 +1370,7 @@ export async function proposeCalls(
 		},
 		undefined,
 		// Its review was drawn and confirmed on its draft.
-		{ reviewed: true }
+		{ reviewed: true, as }
 	);
 	return { safeTxHash, nonce };
 }
@@ -1400,7 +1403,7 @@ async function proposeBuilt(
 	build: (nonce: bigint, chain: ChainState) => SafeTx,
 	signal?: AbortSignal,
 	/** Its review was drawn and confirmed already (a dApp's calls, on their draft). */
-	opts: { reviewed?: boolean } = {}
+	opts: { reviewed?: boolean; as?: string | null } = {}
 ): Promise<{ safeTxHash: string }> {
 	const account = multisig.find(address);
 	if (!account) throw new Error('not a multisig on this device');
@@ -1413,22 +1416,32 @@ async function proposeBuilt(
 	if (!chain?.mailbox) throw new MailboxUnreadableError();
 	// The owners on that chain now (a Safe's owners may have changed since its genesis).
 	const owners = chain.members.owners;
-	const owner = localOwners(owners)[0];
 	const tx = build(nextNonceOf(chain), chain);
 	const review = reviewTx(chainId, account.address, tx);
 	if (review.action === null) throw new Error(review.refusal ?? 'refused');
 	stopIfWithdrawn(signal);
 	// §3.6: the one review before the proposer's own passkey, as every member
 	// gets it: drawn at its number, signed only after "Propose and approve".
+	let picked = opts.as ?? null;
 	if (!opts.reviewed) {
-		await reviewFirst(fresh.address, chainId, chain, draftItem(fresh, chain, tx));
+		picked = await reviewFirst(fresh.address, chainId, chain, draftItem(fresh, chain, tx));
 		stopIfWithdrawn(signal);
 	}
+	// r5reg-5: the member of this device the person picked on the review;
+	// else the one used here last, else the first — never another silently.
+	const here = localOwners(owners);
+	const owner = proposerOf(here, picked, fresh.address);
+	// Remembered only where there is a choice to remember.
+	if (owner && here.length > 1) lastActor.note(fresh.address, owner.address);
 	// No member here: an outside wallet proposes it — only a plain account's
 	// can; a Vela member approves in Vela, never on a wallet page (r4C-10).
 	let outside: string[] = [];
 	if (!owner) {
-		outside = await plainAccounts(chainId, owners);
+		outside = await plainAccounts(
+			chainId,
+			owners,
+			sameAddress(proposals.followed, fresh.address) ? proposals.items : []
+		);
 		if (outside.length === 0) throw new NoOutsideSignerError();
 	}
 	const { safeTxHash } = owner

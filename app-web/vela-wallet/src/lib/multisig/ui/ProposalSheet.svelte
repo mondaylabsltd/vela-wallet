@@ -95,6 +95,7 @@
 	import { feeCoin, feeWords, whyText } from '../core/execution-words';
 	import { preflight, PREVIEW_FRESH_MS, UNPRICED_FRESH_MS } from '../core/preflight.svelte';
 	import { signers } from '../core/signers.svelte';
+	import { defaultActor, lastActor } from '../core/actor';
 	import {
 		declinedRisk,
 		gateOf,
@@ -145,6 +146,7 @@
 		type ProposalItem
 	} from '../core/proposals.svelte';
 	import type { MultisigAccount } from '../core/store.svelte';
+	import { typedName } from '../core/typed-name';
 	import type { DappProposal } from '../core/ui.svelte';
 	import type { ReviewFirstRequest } from '../core/review-first.svelte';
 	import type { ProposalSource } from '../core/linked.svelte';
@@ -260,8 +262,12 @@
 	});
 	const site = $derived(draft ? hostLabel(draft.origin) : '');
 
-	/** A member as a change names it: the name this device knows, and the short address. */
-	const who = (address: string) => memberWho(address, names.label(address));
+	/**
+	 * A member as a change names it: the name typed for them here (r5reg-16),
+	 * else the name this device knows, and the short address.
+	 */
+	const who = (address: string) =>
+		memberWho(address, typedName(account, address) ?? names.label(address));
 
 	let title = $state('');
 	let lines = $state<{ label: string; to: string; note: ProvenanceNote | null }[]>([]);
@@ -392,7 +398,9 @@
 		network: chainName(chainId),
 		nativeSymbol: nativeSymbol(chainId),
 		preset: resolvedFormatKeys().number,
-		nameOf: (address: string) => names.label(address) ?? localName(address)
+		nameOf: (address: string) => names.label(address) ?? localName(address),
+		// r5reg-16: a member being added is named as typed when they were added.
+		memberName: (address: string) => typedName(account, address)
 	});
 	/**
 	 * r5reg-15: the addresses the call's reading names already (its
@@ -480,8 +488,16 @@
 			return p?.kind === 'priced' && p.canPay;
 		}) ?? null
 	);
+	/**
+	 * r5reg-5: the person's pick; else one who can pay; else the member used
+	 * here last; else the first — among those who have not approved yet (or
+	 * can execute). With two or more, "As" shows who it is, drafting too.
+	 */
 	const actor = $derived<LocalOwner | null>(
-		candidates.find((o) => sameAddress(o.address, chosen)) ?? payer ?? candidates[0] ?? null
+		candidates.find((o) => sameAddress(o.address, chosen)) ??
+			payer ??
+			defaultActor(candidates, account.address) ??
+			null
 	);
 	const actorPreview = $derived(executors.length > 0 ? previewOf(actor) : null);
 	/** The executor shown cannot run it: it would fail, or it cannot pay the fee. */
@@ -691,16 +707,17 @@
 	/** The person confirmed the dApp's transaction: propose it, approved by this device's member. */
 	async function onPropose() {
 		// §3.6: the proposer's own transaction goes on to its passkey (the host closes this).
+		// r5reg-5: the member shown under "As" proposes it — never another, silently.
 		if (prebuilt) {
 			phase = { kind: 'busy', what: 'propose' };
-			prebuilt.confirm();
+			prebuilt.confirm(actor?.address ?? null);
 			return;
 		}
 		if (!draft || !item) return;
 		const thenExecute = executeNow;
 		phase = { kind: 'busy', what: 'propose' };
 		try {
-			await draft.propose();
+			await draft.propose(actor?.address ?? null);
 			phase = { kind: 'idle' };
 		} catch (error) {
 			phase = failedPhase(error);
@@ -716,6 +733,7 @@
 		phase = { kind: 'busy', what: 'approve' };
 		try {
 			await approve(account, item, actor);
+			if (candidates.length > 1) lastActor.note(account.address, actor.address);
 			// r5reg-14: read after the approval — never a read begun before it.
 			await store.refresh(account, account.chainIds, { fresh: true });
 			phase = { kind: 'idle' };
@@ -781,6 +799,7 @@
 			phase = failedPhase(error);
 			return;
 		}
+		if (candidates.length > 1) lastActor.note(account.address, by);
 		// r4b-7: written down the moment the relay has it — a reload resumes
 		// watching it, and it is not offered again while it may land.
 		const flight = executions.start({
@@ -939,20 +958,33 @@
 	);
 	/** Enough members approved: nobody else's approval is needed (r4D-6). */
 	const enough = $derived(!!item && item.approved >= item.threshold);
+	/** The proposals read here: a passkey approval on any of them says a Vela account (r4a-9). */
+	const readItems = $derived([
+		...(store.chain(chainId)?.items ?? []),
+		...(sameAddress(proposals.followed, account.address) ? proposals.items : [])
+	]);
+	/** How each member still to approve signs (`signers.kindOf`). */
+	const kinds = $derived(
+		new Map(missingOwners.map((o) => [o, signers.kindOf(chainId, o, readItems)]))
+	);
 	/**
 	 * Owners still to approve whose wallets are elsewhere: an outside wallet
 	 * can sign for a plain account — a queued transaction too (its approval
 	 * waits like any other). Never for a smart account (ms-11, r4-9): code at
-	 * its address on this network, or a Vela account the index knows — its
-	 * key is a passkey, and it approves in Vela, from the link. Nothing is
-	 * offered once enough have approved.
+	 * its address on this network, a Vela account the index knows, one that
+	 * approved with its passkey or this device keeps as one (r4a-9) — its key
+	 * is a passkey, and it approves in Vela, from the link. One nothing says
+	 * (`unsure`) is offered the Vela way first and the outside wallet's beside
+	 * it — never alone. Nothing is offered once enough have approved.
 	 */
 	const outside = $derived(
-		enough ? [] : missingOwners.filter((o) => signers.kindOf(chainId, o) === 'wallet')
+		enough
+			? []
+			: missingOwners.filter((o) => kinds.get(o) === 'wallet' || kinds.get(o) === 'unsure')
 	);
 	/** Vela members elsewhere still to approve: they approve in Vela, from the link. */
 	const elsewhere = $derived(
-		enough ? [] : missingOwners.filter((o) => signers.kindOf(chainId, o) === 'vela')
+		enough ? [] : missingOwners.filter((o) => kinds.get(o) === 'vela' || kinds.get(o) === 'unsure')
 	);
 
 	/**
@@ -969,14 +1001,14 @@
 					safeTxHash
 				})
 	);
-	/** Members still to approve who approve in Vela (not this device's, not outside wallets). */
+	/** Members still to approve who approve in Vela (not this device's, not surely outside wallets). */
 	const velaMissing = $derived(
 		!item
 			? []
 			: (members?.owners ?? []).filter(
 					(o) =>
 						localOwners([o]).length === 0 &&
-						!outside.some((x) => sameAddress(x, o)) &&
+						(!outside.some((x) => sameAddress(x, o)) || elsewhere.some((x) => sameAddress(x, o))) &&
 						!item.approvals.some((a) => a.counts && sameAddress(a.owner, o))
 				)
 	);
@@ -1498,12 +1530,13 @@
 							{:else if item.status !== 'done' && enough}
 								<!-- Enough approved: theirs is not needed, and nothing asks for it. -->
 								{m.proposal.notNeeded}
-							{:else if !drafting && outside.some((o) => sameAddress(o, owner)) && !busy}
+							{:else if !drafting && kinds.get(owner) === 'wallet' && !busy}
 								<button type="button" class="external" onclick={onExternal}
 									>{m.external.signWithWallet}</button
 								>
 							{:else if !drafting && elsewhere.some((o) => sameAddress(o, owner))}
-								<!-- A Vela member elsewhere approves in Vela, from the link (r4-9). -->
+								<!-- A Vela member elsewhere approves in Vela, from the link (r4-9);
+								     one that may be either is offered the Vela way first (r4a-9). -->
 								{m.proposal.waiting} ·
 								<button
 									type="button"
@@ -1691,10 +1724,42 @@
 			</section>
 		{/if}
 
+		{#snippet actorChoice()}
+			<!-- r5reg-5: which of this device's members does it — never picked silently. -->
+			<fieldset class="actor" data-testid="actor-choice">
+				<legend>{m.proposal.as}</legend>
+				{#each candidates as owner (owner.address)}
+					<!-- An executor's coin here, and whether it covers the fee (r4-10). -->
+					{@const look = executors.length > 0 ? previewOf(owner) : null}
+					<label class:on={actor?.address === owner.address}>
+						<input
+							type="radio"
+							name="actor"
+							value={owner.address}
+							checked={actor?.address === owner.address}
+							onchange={() => (chosen = owner.address)}
+						/>
+						<span class="actor-name">{owner.name}</span>
+						{#if look?.kind === 'priced' && look.balance !== null}
+							<span class="actor-balance" data-testid="actor-balance"
+								>{formatUnits(look.balance, 18)}
+								{nativeSymbol(
+									chainId
+								)}{#if !look.canPay}{` · ${m.proposal.pickerCantPay}`}{/if}</span
+							>
+						{/if}
+					</label>
+				{/each}
+			</fieldset>
+		{/snippet}
+
 		{#if drafting}
 			<!-- The review of what the site asks: nothing is signed before this. -->
 			{#if phase.kind === 'failed'}
 				<p class="warn" role="alert" data-testid="proposal-failed">{phase.reason}</p>
+			{/if}
+			{#if candidates.length > 1 && item.review.action !== null && !readOnly && !signBlocked}
+				{@render actorChoice()}
 			{/if}
 			<!-- r4D-19: in the desktop's capped dialog the actions stay in view. -->
 			<div class="two" class:actions={wide} data-testid="proposal-actions">
@@ -1764,31 +1829,7 @@
 			</div>
 		{:else if item.status !== 'done' && item.review.action !== null && !readOnly && !signBlocked}
 			{#if candidates.length > 1}
-				<fieldset class="actor">
-					<legend>{m.proposal.as}</legend>
-					{#each candidates as owner (owner.address)}
-						<!-- An executor's coin here, and whether it covers the fee (r4-10). -->
-						{@const look = executors.length > 0 ? previewOf(owner) : null}
-						<label class:on={actor?.address === owner.address}>
-							<input
-								type="radio"
-								name="actor"
-								value={owner.address}
-								checked={actor?.address === owner.address}
-								onchange={() => (chosen = owner.address)}
-							/>
-							<span class="actor-name">{owner.name}</span>
-							{#if look?.kind === 'priced' && look.balance !== null}
-								<span class="actor-balance" data-testid="actor-balance"
-									>{formatUnits(look.balance, 18)}
-									{nativeSymbol(
-										chainId
-									)}{#if !look.canPay}{` · ${m.proposal.pickerCantPay}`}{/if}</span
-								>
-							{/if}
-						</label>
-					{/each}
-				</fieldset>
+				{@render actorChoice()}
 			{/if}
 
 			{#if phase.kind === 'failed'}

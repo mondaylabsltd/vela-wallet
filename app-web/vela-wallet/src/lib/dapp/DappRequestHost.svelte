@@ -537,10 +537,10 @@
 			// RB5: a page that is gone gets nothing signed.
 			claim: () => claimFor(rid, 'approve'),
 			gone: () => withdraw(rid),
-			propose: async (safe, chain, calls) => {
+			propose: async (safe, chain, calls, as) => {
 				// Where its execution is looked for later: read while the passkey is up.
 				const head = headBlock(chain);
-				const proposed = await proposeCalls(safe, chain, calls);
+				const proposed = await proposeCalls(safe, chain, calls, as);
 				return { ...proposed, fromBlock: await head };
 			},
 			settle: (answer) => void settle(answer),

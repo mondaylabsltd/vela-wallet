@@ -35,6 +35,8 @@ const fake = vi.hoisted(() => ({
 	refused: false,
 	/** Owners the passkey index knows: Vela accounts elsewhere (ms-11). */
 	vela: [] as string[],
+	/** r4a-9: owners nothing says how they sign (no code, the index holds none). */
+	unsure: [] as string[],
 	/** What the chain says executed a done proposal (ms-9, ms-10). */
 	executed: undefined as string | null | undefined,
 	/** What the chain says executed another hash (the cancellation's, ms-9). */
@@ -91,6 +93,9 @@ vi.mock('../core/proposals.svelte', () => ({
 		},
 		get followed() {
 			return fake.followed;
+		},
+		get items() {
+			return fake.chain?.items ?? [];
 		}
 	},
 	outbox: {
@@ -267,7 +272,13 @@ vi.mock('../core/execution-watch.svelte', () => ({
 vi.mock('../core/signers.svelte', () => ({
 	signers: {
 		kindOf: (_chain: number, a: string) =>
-			a.toLowerCase() === ME ? 'here' : fake.vela.includes(a) ? 'vela' : 'wallet'
+			a.toLowerCase() === ME
+				? 'here'
+				: fake.vela.includes(a)
+					? 'vela'
+					: fake.unsure.includes(a)
+						? 'unsure'
+						: 'wallet'
 	}
 }));
 vi.mock('../core/owners', () => ({
@@ -452,6 +463,7 @@ beforeEach(() => {
 	fake.held = 0;
 	fake.refused = false;
 	fake.vela = [];
+	fake.unsure = [];
 	fake.executed = undefined;
 	fake.executedBy = {};
 	fake.chains = [];
@@ -1779,6 +1791,60 @@ describe('who executes (r4-10, r4D-1)', () => {
 	});
 });
 
+/**
+ * r5reg-5: a device holding two members of the multisig shows who proposes
+ * on the review ("As") — never a silent pick — and the one picked proposes.
+ */
+describe('who proposes, on the review before the passkey (r5reg-5)', () => {
+	const SECOND = { address: OTHER, name: 'Second', account: { address: OTHER } };
+
+	it('offers "As" with both members, and the one picked goes on to its passkey', async () => {
+		const confirm = vi.fn();
+		const prebuilt = {
+			chainId: 100,
+			address: SAFE,
+			chain: { chainId: 100, members, items: [], mailbox: true },
+			item: item({ canApprove: [local, SECOND] }),
+			confirm,
+			decline: vi.fn()
+		};
+		const screen = show({ prebuilt, safeTxHash: '' });
+		await settle();
+		const choice = document.querySelector('[data-testid="actor-choice"]');
+		expect(choice, '"As" is shown while drafting').not.toBeNull();
+		expect(choice?.textContent).toContain('Mine');
+		expect(choice?.textContent).toContain('Second');
+		const second = [...document.querySelectorAll<HTMLInputElement>('input[name="actor"]')].find(
+			(i) => i.value === OTHER
+		);
+		second?.click();
+		await settle();
+		press('send.propose');
+		await settle();
+		expect(confirm).toHaveBeenCalledWith(OTHER);
+		await screen.unmount();
+	});
+
+	it('one member here: no choice to show, it proposes', async () => {
+		const confirm = vi.fn();
+		const prebuilt = {
+			chainId: 100,
+			address: SAFE,
+			chain: { chainId: 100, members, items: [], mailbox: true },
+			item: item({ canApprove: [local] }),
+			confirm,
+			decline: vi.fn()
+		};
+		const screen = show({ prebuilt, safeTxHash: '' });
+		await settle();
+		expect(document.querySelector('[data-testid="actor-choice"]')).toBeNull();
+		press('send.propose');
+		await settle();
+		expect(confirm).toHaveBeenCalledWith(ME);
+		await screen.unmount();
+	});
+});
+
 describe('"Approve and execute" whose execute part cannot run (r4-11)', () => {
 	it('keeps the approval, and says only executing could not run', async () => {
 		fake.chain.items = [item({ approved: 1, canExecute: [local], canApprove: [local] })];
@@ -1805,6 +1871,23 @@ describe('how each missing member approves (r4-9, r4D-6)', () => {
 		expect(buttons()).not.toContain('external.signWithWallet');
 		expect(buttons()).toContain('proposal.sendLink');
 		expect(document.querySelector('[data-testid="approves-in-vela"]')).not.toBeNull();
+		await screen.unmount();
+	});
+
+	it('one nothing says how they sign (r4a-9): the Vela way first, the outside wallet only beside it', async () => {
+		fake.unsure = [OTHER];
+		fake.chain.items = [item()];
+		const screen = show();
+		await settle();
+		// Their row offers the Vela link, never "Sign with another wallet".
+		expect(buttons()).not.toContain('external.signWithWallet');
+		expect(buttons()).toContain('proposal.sendLink');
+		const vela = document.querySelector('[data-testid="approves-in-vela"]');
+		const outside = document.querySelector('[data-testid="outside-invite"]');
+		expect(vela).not.toBeNull();
+		// The outside wallet's link is still there, after the Vela one.
+		expect(outside).not.toBeNull();
+		expect(vela!.compareDocumentPosition(outside!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 		await screen.unmount();
 	});
 

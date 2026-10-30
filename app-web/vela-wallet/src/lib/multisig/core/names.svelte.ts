@@ -6,9 +6,12 @@
  * the genesis's and each chain's owners. Looked up once per address; the
  * label is the short address until (unless) a name answers.
  */
-import { queryWalletName } from '$lib/services/public-key-index';
+import { lookupWalletName } from '$lib/services/public-key-index';
 import { localName, shortenAddress } from './display';
 import { multisig, type MemberInfo } from './store.svelte';
+
+/** An index lookup nobody answered is asked again after this long, not on every redraw. */
+const ASK_AGAIN_MS = 10_000;
 
 /** What the multisigs on this device keep of `address` (the first that names it). */
 export function keptMember(address: string): MemberInfo {
@@ -70,7 +73,13 @@ class Names {
 		const known = this.#registered[key];
 		if (!this.#asked.has(key)) {
 			this.#asked.add(key);
-			void queryWalletName(address).then((hit) => {
+			void lookupWalletName(address).then((hit) => {
+				// r4a-9: nobody answered — no verdict; asked again a while later,
+				// and meanwhile `answered` stays false (nothing offered on it).
+				if (hit === undefined) {
+					setTimeout(() => this.#asked.delete(key), ASK_AGAIN_MS);
+					return;
+				}
 				this.#answered = { ...this.#answered, [key]: true };
 				if (hit) this.#vela = { ...this.#vela, [key]: true };
 				if (hit?.name) this.#registered = { ...this.#registered, [key]: hit.name };

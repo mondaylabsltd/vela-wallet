@@ -99,6 +99,26 @@ describe('the state-diff guard, said (§3.6)', () => {
 		});
 	});
 
+	it('a member being added: the name typed for them, never "first time sending here" (r5reg-16)', () => {
+		const input = vector('fork-add-owner-trace');
+		const preview = multisigReview(input);
+		const added = preview.recipients.find((r) => r.role === 'member');
+		expect(added).toBeDefined();
+		const review = multisigReview({
+			...input,
+			recipientFacts: [{ address: added!.address, isContract: true, firstTime: true }]
+		});
+		const blocks = reviewBlocks(review, simOf(review), {
+			...ctx,
+			nameOf: () => 'A local label',
+			memberName: (a) => (a.toLowerCase() === added!.address.toLowerCase() ? 'Typed name' : null)
+		});
+		const party = blocks.find((b) => b.kind === 'party' && b.label === m.review.roleMember);
+		expect(party).toMatchObject({ name: 'Typed name' });
+		expect(party && party.kind === 'party' && party.badge).toBeUndefined();
+		expect(review.concerns.some((c) => c.kind === 'firstTime')).toBe(false);
+	});
+
 	it('no source on the network: a caution, and only the reading stands', () => {
 		const input = vector('fork-transfer-probe-only');
 		const review = multisigReview({ ...input, probe: { error: { code: -32601, message: 'x' } } });
@@ -159,6 +179,65 @@ describe('what moves, who it reaches, the bytes (§3.6)', () => {
 		expect(warning && warning.kind === 'warning' && warning.text).toContain('Alice');
 		expect(review.sign.anyway).toBe(true);
 		expect(anywayLabel('approve', m.proposal.approve, review, m)).toBe(m.review.approveAnyway);
+	});
+
+	/**
+	 * r4a-18, r5reg-8: one's own Vela account and a member are smart accounts
+	 * the person controls or knows — never "first time sending here" nor
+	 * "coins sent to a contract are lost"; said as theirs. An unknown
+	 * contract and an unknown plain account are said as before.
+	 */
+	describe('who a transfer reaches (r4a-18, r5reg-8)', () => {
+		const BOB = '0x412f2165f299Dfc2363ED08F8Fc6DE4353E81fF6';
+		const reviewTo = (isContract: boolean, known: ReviewInput['known']) =>
+			multisigReview({
+				...vector('fork-transfer-probe-only'),
+				tx: txOf(BOB, '0x1', '0x'),
+				recipientFacts: [{ address: BOB, isContract, firstTime: true }],
+				known
+			});
+		const partyOf = (review: MultisigReviewOut) => {
+			const blocks = reviewBlocks(review, simOf(review), ctx);
+			const party = blocks.find((b) => b.kind === 'party');
+			return { blocks, party: party?.kind === 'party' ? party : null };
+		};
+		const lost = (blocks: Block[]) =>
+			blocks.some(
+				(b) => b.kind === 'warning' && b.text === m.review.toContract.replace('{{address}}', BOB)
+			);
+
+		it('one of this device’s accounts: "Your account", by its name, nothing else', () => {
+			const review = reviewTo(true, [{ address: BOB, label: 'R5 Bob', kind: 'own' }]);
+			const { blocks, party } = partyOf(review);
+			expect(party?.name).toBe('R5 Bob');
+			expect(party?.badge).toEqual({ text: m.review.knownOwn, tone: 'neutral' });
+			expect(lost(blocks)).toBe(false);
+			expect(review.concerns.some((c) => c.kind === 'firstTime' || c.kind === 'toContract')).toBe(
+				false
+			);
+		});
+
+		it('a member: "Member", nothing else', () => {
+			const review = reviewTo(true, [{ address: BOB, label: 'Bob', kind: 'member' }]);
+			const { blocks, party } = partyOf(review);
+			expect(party?.badge).toEqual({ text: m.review.knownMember, tone: 'neutral' });
+			expect(lost(blocks)).toBe(false);
+		});
+
+		it('an unknown contract: first time and contract, and the coins-lost line', () => {
+			const review = reviewTo(true, []);
+			const { blocks, party } = partyOf(review);
+			expect(party?.badge?.text).toContain(signing.tagFirstTime);
+			expect(party?.badge?.text).toContain(signing.tagContract);
+			expect(lost(blocks)).toBe(true);
+		});
+
+		it('an unknown plain account: first time only', () => {
+			const review = reviewTo(false, []);
+			const { blocks, party } = partyOf(review);
+			expect(party?.badge?.text).toBe(signing.tagFirstTime);
+			expect(lost(blocks)).toBe(false);
+		});
 	});
 
 	it('technical details: the ten SafeTx fields, the typed data as JSON, the three hashes', () => {

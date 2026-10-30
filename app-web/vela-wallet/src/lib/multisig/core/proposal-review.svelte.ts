@@ -30,6 +30,7 @@ import {
 	type SafeTx
 } from './kernel';
 import { multisig } from './store.svelte';
+import { names } from './names.svelte';
 import { bounded } from './bounded';
 
 /**
@@ -65,9 +66,11 @@ export interface ReviewSubject {
 }
 
 /**
- * The addresses the person knows — what a lookalike is measured against:
- * the contacts (saved and the ones sent to before), this device's accounts
- * and multisigs, the members.
+ * The addresses the person knows — what a lookalike is measured against —
+ * and whose each is (r4a-18): the contacts (saved and the ones sent to
+ * before), this device's own accounts and multisigs, the members by the name
+ * this device has for them. The core never calls one's own account or a
+ * member a stranger ("first time", "coins lost in a contract").
  */
 export function knownAddresses(members: string[]): KnownAddress[] {
 	const out: KnownAddress[] = [];
@@ -75,12 +78,12 @@ export function knownAddresses(members: string[]): KnownAddress[] {
 		out.push({ address: c.address, label: c.name ?? c.resolved_name ?? c.address });
 	}
 	for (const row of session.view.accounts ?? []) {
-		out.push({ address: row.account.address, label: row.account.name });
+		out.push({ address: row.account.address, label: row.account.name, kind: 'own' });
 	}
 	for (const a of multisig.accounts) {
-		out.push({ address: a.address, label: a.genesis.name ?? a.label ?? a.address });
+		out.push({ address: a.address, label: a.genesis.name ?? a.label ?? a.address, kind: 'own' });
 	}
-	for (const m of members) out.push({ address: m, label: m });
+	for (const m of members) out.push({ address: m, label: names.label(m), kind: 'member' });
 	return out;
 }
 

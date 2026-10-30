@@ -24,6 +24,11 @@ export interface ReviewContext {
 	preset: string;
 	/** The name this device knows for an address, if any. */
 	nameOf: (address: string) => string | null;
+	/**
+	 * The name this multisig keeps for a member — the one typed when they
+	 * were added (r5reg-16) — if any. Asked first for a member being added.
+	 */
+	memberName?: (address: string) => string | null;
 }
 
 /** One undeclared change, in words. */
@@ -107,15 +112,26 @@ function roleLabel(r: ReviewRecipient, m: MultisigMessages['review']): string {
 	return r.call === null ? role : `${fillTemplate(m.callNumber, { n: String(r.call) })} · ${role}`;
 }
 
-/** What is known of a recipient, as its row's badge ("First time sending here"). */
+/**
+ * What is known of a recipient, as its row's badge ("First time sending
+ * here"). The core's cues (r4a-18, r5reg-8, r5reg-16) are never of one's own
+ * account, a member, or a member being added (who is sent nothing); for
+ * those the badge says whose it is ("Your account" / "Member").
+ */
 function recipientBadge(r: ReviewRecipient, ctx: ReviewContext): PartyBadge | undefined {
+	const m = ctx.m.review;
 	const tags = [
-		r.firstTime === true && r.role !== 'contract' ? ctx.signing.tagFirstTime : null,
-		r.isContract === true && r.role !== 'contract' ? ctx.signing.tagContract : null
+		r.firstTimeCue ? ctx.signing.tagFirstTime : null,
+		r.contractCue ? ctx.signing.tagContract : null
 	].filter((t): t is string => t !== null);
-	return tags.length > 0
-		? { text: tags.join(' · '), tone: r.lookalike ? 'danger' : 'caution' }
-		: undefined;
+	if (tags.length > 0) return { text: tags.join(' · '), tone: r.lookalike ? 'danger' : 'caution' };
+	const whose =
+		r.known?.kind === 'own'
+			? m.knownOwn
+			: r.known?.kind === 'member' && r.role !== 'member'
+				? m.knownMember
+				: null;
+	return whose ? { text: whose, tone: 'neutral' } : undefined;
 }
 
 /**
@@ -161,7 +177,12 @@ export function recipientBlocks(
 			out.push({
 				kind: 'party',
 				label: roleLabel(r, m),
-				name: ctx.nameOf(r.address) ?? r.address,
+				// A member being added keeps the name typed for them (r5reg-16).
+				name:
+					(r.role === 'member' ? ctx.memberName?.(r.address) : null) ??
+					ctx.nameOf(r.address) ??
+					r.known?.label ??
+					r.address,
 				address: r.address,
 				badge: recipientBadge(r, ctx)
 			});
@@ -177,7 +198,7 @@ export function recipientBlocks(
 				})
 			});
 		}
-		if (r.role === 'recipient' && r.isContract === true) {
+		if (r.contractCue) {
 			out.push({
 				kind: 'warning',
 				tone: 'caution',

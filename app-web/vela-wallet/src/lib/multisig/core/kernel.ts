@@ -803,10 +803,18 @@ export interface RecipientFacts {
 	firstTime: boolean | null;
 }
 
+/**
+ * Whose an address the person knows is (r4a-18): a contact, a member of the
+ * multisig, or one of this device's own accounts — the closest last.
+ */
+export type KnownKind = 'contact' | 'member' | 'own';
+
 /** An address the person knows (a contact, an account, a member). */
 export interface KnownAddress {
 	address: string;
 	label: string;
+	/** Absent: a contact. */
+	kind?: KnownKind;
 }
 
 export interface ReviewRecipient {
@@ -816,6 +824,12 @@ export interface ReviewRecipient {
 	isContract: boolean | null;
 	firstTime: boolean | null;
 	lookalike: KnownAddress | null;
+	/** The address the person knows it is, exactly (r4a-18): the closest of them. */
+	known: KnownAddress | null;
+	/** The core says "first time sending here" of it — never of one's own, a member, a new member. */
+	firstTimeCue: boolean;
+	/** The core says money goes to a contract — never to one's own smart account, nor a member. */
+	contractCue: boolean;
 }
 
 export type ReviewConcern =

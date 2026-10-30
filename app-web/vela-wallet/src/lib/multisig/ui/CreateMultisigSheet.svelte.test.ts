@@ -81,7 +81,8 @@ vi.mock('$lib/contacts/core/contacts-book.svelte', () => ({
 }));
 vi.mock('$lib/wallet/core/balance.svelte', () => ({ balance: { view: { tokens: [] } } }));
 vi.mock('../core/names.svelte', () => ({
-	names: { label: (a: string) => a.slice(0, 6), kindOf: () => null }
+	names: { label: (a: string) => a.slice(0, 6), kindOf: () => null },
+	keptMember: () => ({})
 }));
 vi.mock('../core/ens-name', () => ({
 	looksLikeEns: (t: string) => t.trim().endsWith('.eth'),

@@ -376,6 +376,8 @@ export interface MultisigMessages {
 	presence: {
 		needsYou: PluralCopy;
 		ready: PluralCopy;
+		/** r5reg-6: ready, but no member here can pay its fee. */
+		waitingPayer: PluralCopy;
 		ruleDiffers: string;
 		/** The switcher button's dot, in words. */
 		othersWaiting: string;
@@ -595,6 +597,8 @@ export interface MultisigMessages {
 		badLink: string;
 		/** r4b-13: an invite that does not read, said at once. */
 		badInvite: string;
+		/** r5reg-22: an invite whose address's letter case is not its checksum. */
+		badChecksum: string;
 		/** `{{networks}}`: where its invite says it is used. */
 		usedOn: string;
 		/** Its invite's network is not on this device (`{{network}}`). */
@@ -602,6 +606,8 @@ export interface MultisigMessages {
 		moreNetworks: string;
 		/** r4D-5: the members' labels an invite carries. */
 		invitedMembers: string;
+		/** r5reg-24: beside the invited member that is this device's own account. */
+		thatsYou: string;
 		kindPasskey: string;
 		kindWallet: string;
 		labelsNote: string;
@@ -714,6 +720,10 @@ export interface ReviewMessages {
 	lookalike: string;
 	/** `{{address}}` */
 	toContract: string;
+	/** r4a-18: an address the review reaches that is one of this device's own accounts. */
+	knownOwn: string;
+	/** r4a-18: an address the review reaches that is a member of the multisig. */
+	knownMember: string;
 	typedData: string;
 	techTitle: string;
 	hashesTitle: string;
@@ -1071,6 +1081,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 	presence: {
 		needsYou: { locale: '', forms: {} },
 		ready: { locale: '', forms: {} },
+		waitingPayer: { locale: '', forms: {} },
 		ruleDiffers: '',
 		othersWaiting: ''
 	},
@@ -1266,10 +1277,12 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		unchecked: '',
 		badLink: '',
 		badInvite: '',
+		badChecksum: '',
 		usedOn: '',
 		networkMissing: '',
 		moreNetworks: '',
 		invitedMembers: '',
+		thatsYou: '',
 		kindPasskey: '',
 		kindWallet: '',
 		labelsNote: ''
@@ -1398,6 +1411,8 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		callNumber: '',
 		lookalike: '',
 		toContract: '',
+		knownOwn: '',
+		knownMember: '',
 		typedData: '',
 		techTitle: '',
 		hashesTitle: '',

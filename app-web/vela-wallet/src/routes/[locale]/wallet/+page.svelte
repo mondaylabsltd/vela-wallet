@@ -107,7 +107,11 @@
 		proposalOfRow,
 		waitingRows
 	} from '$lib/multisig/core/activity.svelte';
-	import { proposals as multisigProposals } from '$lib/multisig/core/proposals.svelte';
+	import {
+		membersAnywhere,
+		proposals as multisigProposals
+	} from '$lib/multisig/core/proposals.svelte';
+	import { multisigKnownName, ownOrMember } from '$lib/multisig/core/known';
 	import { readMembers } from '$lib/multisig/core/chain';
 	import { localOwners } from '$lib/multisig/core/owners';
 	import FlowsMobile from '$lib/flows/FlowsMobile.svelte';
@@ -880,10 +884,19 @@
 						(row) => row.account.address.toLowerCase() === low
 					);
 					if (own) return own.account.name;
+					// r4a-18: a multisig here, or a member of the multisig sending.
+					const kept = multisigKnownName(address, sendingMultisig);
+					if (kept) return kept;
 					const contact = contactsView?.contacts.find((c) => c.address.toLowerCase() === low);
 					// Only a name the person gave: a resolved one is a service's word.
 					return contact?.name ?? null;
 				},
+				// r4a-18: one of the person's own accounts, or a member of the
+				// multisig sending — never told as a first transfer.
+				ownAddress: (address) =>
+					session.view.accounts.some(
+						(row) => row.account.address.toLowerCase() === address.toLowerCase()
+					) || ownOrMember(address, sendingMultisig ? membersAnywhere(sendingMultisig) : []),
 				// ONE source for holdings (spec 078): the asset list's, already in
 				// memory. `null` until it has settled a round for this account —
 				// the executor then walks the chains as it always has.

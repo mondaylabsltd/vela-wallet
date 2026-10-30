@@ -1202,6 +1202,31 @@ pub struct RecipientFacts {
 pub struct Known {
     pub address: String,
     pub label: String,
+    /// Whose it is (r4a-18, r5reg-8): a contact (the default, as before), one
+    /// of this device's own accounts, or a member of the multisig.
+    pub kind: KnownKind,
+}
+
+/// Whose an address the person knows is ([`Known::kind`]), the closest last.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum KnownKind {
+    /// A contact: named by the person, still somebody else's.
+    #[default]
+    Contact,
+    /// A member of the multisig the review is of.
+    Member,
+    /// One of this device's own accounts (a Vela account, a multisig here).
+    Own,
+}
+
+impl KnownKind {
+    /// Not a stranger's: never "first time sending here", never "coins sent
+    /// to a contract are lost" — a smart account the person controls, or one
+    /// of the multisig's own members.
+    fn trusted(self) -> bool {
+        matches!(self, KnownKind::Own | KnownKind::Member)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1227,6 +1252,27 @@ pub struct Recipient {
     pub first_time: Option<bool>,
     /// It is not, but looks like, an address the person knows.
     pub lookalike: Option<Known>,
+    /// It is an address the person knows (r4a-18): the closest of them —
+    /// their own account over a member over a contact.
+    pub known: Option<Known>,
+    /// The review says "first time sending here" of it: money goes to it,
+    /// this device never sent there, and it is neither one of the person's
+    /// own accounts nor a member. A member being added receives nothing
+    /// (r5reg-16).
+    pub first_time_cue: bool,
+    /// The review says money goes to a contract (coins may be lost there):
+    /// never of the person's own (smart) accounts nor of a member (r5reg-8).
+    pub contract_cue: bool,
+}
+
+/// The address the person knows that `address` is, exactly (any case): the
+/// closest of them — their own account over a member over a contact.
+fn known_as(known: &[Known], address: &str) -> Option<Known> {
+    known
+        .iter()
+        .filter(|k| k.address.eq_ignore_ascii_case(address))
+        .max_by_key(|k| k.kind)
+        .cloned()
 }
 
 /// An address that looks like `known` (address poisoning): another address
@@ -1552,13 +1598,21 @@ pub fn multisig_review(input: &ReviewInput) -> Result<MultisigReview, CoreError>
                 .iter()
                 .find(|k| looks_like(&address, &k.address))
                 .cloned();
+            let known = known_as(&input.known, &address);
+            let trusted = known.as_ref().is_some_and(|k| k.kind.trusted());
+            let is_contract = facts.and_then(|f| f.is_contract);
+            let first_time = facts.and_then(|f| f.first_time);
+            let paid = role == RecipientRole::Recipient && !trusted;
             Recipient {
                 call,
                 role,
                 address,
-                is_contract: facts.and_then(|f| f.is_contract),
-                first_time: facts.and_then(|f| f.first_time),
+                is_contract,
+                first_time,
                 lookalike,
+                known,
+                first_time_cue: paid && first_time == Some(true),
+                contract_cue: paid && is_contract == Some(true),
             }
         })
         .collect();
@@ -1598,12 +1652,12 @@ pub fn multisig_review(input: &ReviewInput) -> Result<MultisigReview, CoreError>
                 label: k.label.clone(),
             });
         }
-        if rc.first_time == Some(true) && rc.role != RecipientRole::Contract {
+        if rc.first_time_cue {
             concerns.push(Concern::FirstTime {
                 address: rc.address.clone(),
             });
         }
-        if rc.role == RecipientRole::Recipient && rc.is_contract == Some(true) {
+        if rc.contract_cue {
             concerns.push(Concern::ToContract {
                 address: rc.address.clone(),
             });

@@ -350,7 +350,15 @@ describe('the form', () => {
 		expect(named.recipient?.note).toBe('alice.eth · ENS');
 		const firstTime = liveSendForm(
 			formModel(),
-			inputs({ recipient_risk: { is_contract: false, first_time: true, history_unread: false } })
+			inputs({
+				recipient_risk: {
+					is_contract: false,
+					first_time: true,
+					history_unread: false,
+					known_name: null,
+					own: false
+				}
+			})
 		);
 		expect(firstTime.recipient?.note).toBe(m['componentsUi.signing.firstTimeTag']);
 		expect(liveSendForm(formModel(), inputs({})).recipient?.note).toBeUndefined();
@@ -375,7 +383,13 @@ describe('the form', () => {
 			formModel(),
 			inputs({
 				recipient_is_token_contract: true,
-				recipient_risk: { is_contract: true, first_time: true, history_unread: false }
+				recipient_risk: {
+					is_contract: true,
+					first_time: true,
+					history_unread: false,
+					known_name: null,
+					own: false
+				}
 			})
 		);
 		expect(token.recipient?.note).toBe(m['send.recipientTokenContract']);
@@ -799,7 +813,13 @@ describe('the confirm screen', () => {
 			confirmModel(),
 			inputs({
 				...single,
-				recipient_risk: { is_contract: false, first_time: true, history_unread: false }
+				recipient_risk: {
+					is_contract: false,
+					first_time: true,
+					history_unread: false,
+					known_name: null,
+					own: false
+				}
 			})
 		);
 		expect(first.recipientTag).toBe(m['componentsUi.signing.firstTimeTag']);
@@ -807,7 +827,13 @@ describe('the confirm screen', () => {
 			confirmModel(),
 			inputs({
 				...single,
-				recipient_risk: { is_contract: false, first_time: false, history_unread: false }
+				recipient_risk: {
+					is_contract: false,
+					first_time: false,
+					history_unread: false,
+					known_name: null,
+					own: false
+				}
 			})
 		);
 		expect(known.recipientTag).toBeUndefined();
@@ -818,7 +844,13 @@ describe('the confirm screen', () => {
 				...single,
 				split_mode: true,
 				recipients: [{ id: 'a', address: '0x' + 'ab'.repeat(20), amount: '0.5', name: null }],
-				recipient_risk: { is_contract: false, first_time: true, history_unread: false }
+				recipient_risk: {
+					is_contract: false,
+					first_time: true,
+					history_unread: false,
+					known_name: null,
+					own: false
+				}
 			})
 		);
 		expect(split.recipientTag).toBeUndefined();
@@ -837,7 +869,13 @@ describe('the confirm screen', () => {
 			inputs({
 				...single,
 				recipient_is_token_contract: true,
-				recipient_risk: { is_contract: true, first_time: true, history_unread: false }
+				recipient_risk: {
+					is_contract: true,
+					first_time: true,
+					history_unread: false,
+					known_name: null,
+					own: false
+				}
 			})
 		);
 		expect(token.recipientTag).toBe(m['send.recipientTokenContract']);
@@ -3573,7 +3611,13 @@ describe('the send flow’s round-2 findings', () => {
 		const model = confirm({
 			risk_unfinished: true,
 			risk_history_unread: true,
-			recipient_risk: { is_contract: false, first_time: null, history_unread: true }
+			recipient_risk: {
+				is_contract: false,
+				first_time: null,
+				history_unread: true,
+				known_name: null,
+				own: false
+			}
 		});
 		expect(model.recipientTag).toBeUndefined();
 		expect(model.recipientCheck).toEqual({
@@ -3606,8 +3650,15 @@ describe('the send flow’s round-2 findings', () => {
 		});
 		// A first transfer, known, is said as that.
 		expect(
-			confirm({ recipient_risk: { is_contract: false, first_time: true, history_unread: false } })
-				.recipientTag
+			confirm({
+				recipient_risk: {
+					is_contract: false,
+					first_time: true,
+					history_unread: false,
+					known_name: null,
+					own: false
+				}
+			}).recipientTag
 		).toBe(m['componentsUi.signing.firstTimeTag']);
 	});
 

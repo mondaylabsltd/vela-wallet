@@ -802,12 +802,18 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 
 			case 'resolve_risk': {
 				const risk = await resolveRecipientRisk(operation.chain_id, operation.address);
+				// r4a-18: the person's own name for it, and whether it is theirs
+				// (or a member of the multisig sending) — facts; the core decides
+				// what the confirm says of them.
+				const known = ports.knownName?.(operation.address)?.trim() || null;
 				return {
 					type: 'risk_resolved',
 					risk: {
 						is_contract: risk.isContract,
 						first_time: risk.firstInteraction,
-						history_unread: risk.historyUnread
+						history_unread: risk.historyUnread,
+						known_name: known,
+						own: ports.ownAddress?.(operation.address) ?? false
 					}
 				};
 			}

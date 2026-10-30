@@ -242,9 +242,11 @@
 			const who = c.kind === 'add' ? c.owner : c.newOwner;
 			// Kept with the multisig on this device, as its creator's names are
 			// (r4D-5): one store of members' labels, read by `names.label`.
-			multisig.nameMembers(account.address, {
-				[who]: { name: memberName, kind: kind === 'vela' ? 'passkey' : 'wallet' }
-			});
+			multisig.nameMembers(
+				account.address,
+				{ [who]: { name: memberName, kind: kind === 'vela' ? 'passkey' : 'wallet' } },
+				{ typed: true }
+			);
 		}
 		// The networks as they stood when the person pressed: once one is
 		// proposed, the plan reads it as a change waiting there.

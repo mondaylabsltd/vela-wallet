@@ -836,6 +836,17 @@ pub struct SendRecipientRisk {
     /// ([`SendView::risk_history_unread`]).
     #[serde(default)]
     pub history_unread: bool,
+    /// The person's own name for the address, told by the shell with the
+    /// check (r4a-18): one of their accounts on this device, a member of the
+    /// multisig sending, or a contact they named. A split row with no name
+    /// of its own is named by it, as the person's own word.
+    #[serde(default)]
+    pub known_name: Option<String>,
+    /// The address is one of the person's own accounts on this device, or a
+    /// member of the multisig sending (r4a-18): never a stranger, so never
+    /// told as a first transfer, whatever the history says.
+    #[serde(default)]
+    pub own: bool,
 }
 
 /// The fee the submit path signs — EXACTLY what the confirm screen displayed
@@ -2028,6 +2039,9 @@ struct SplitRisk {
     address: String,
     flight: Option<u64>,
     first_time: Option<bool>,
+    /// [`SendRecipientRisk::known_name`], [`SendRecipientRisk::own`] (r4a-18).
+    known_name: Option<String>,
+    own: bool,
 }
 
 /// The records written ahead of one submit's POST (spec 082 RJ1).
@@ -3299,8 +3313,10 @@ impl Send {
             recipient_risk: model.recipient_risk.clone().map(|mut risk| {
                 // Money to one's own address is not a first transfer to a
                 // stranger, whatever the history says (the 102 device run
-                // drew 「第一次给这个地址转账」 over the person's own wallet).
-                if sends_to_self(model) {
+                // drew 「第一次给这个地址转账」 over the person's own wallet) —
+                // nor to another of their accounts here, or a member of the
+                // multisig sending (r4a-18).
+                if sends_to_self(model) || risk.own {
                     risk.first_time = None;
                 }
                 risk
@@ -3320,26 +3336,29 @@ fn payees(model: &Model) -> Vec<SendPayee> {
             .recipients
             .iter()
             .map(|row| {
+                let address = row.address.trim();
+                let low = address.to_lowercase();
+                let checked = model.split_risks.iter().find(|risk| risk.address == low);
+                // The row's own name; else the person's own name for the
+                // address, told with its check (r4a-18: one of their
+                // accounts, a member, a contact) — never a bare address
+                // where the person has a name for it.
                 let name = row
                     .name
                     .as_deref()
+                    .or(checked.and_then(|risk| risk.known_name.as_deref()))
                     .map(str::trim)
                     .filter(|name| !name.is_empty());
-                let address = row.address.trim();
-                let low = address.to_lowercase();
                 let own = model
                     .account
                     .as_ref()
-                    .is_some_and(|account| account.address.trim().eq_ignore_ascii_case(address));
+                    .is_some_and(|account| account.address.trim().eq_ignore_ascii_case(address))
+                    || checked.is_some_and(|risk| risk.own);
                 SendPayee {
                     address: address.to_owned(),
                     name: name.map(str::to_owned),
                     name_source: name.map(|_| SendNameSource::Own),
-                    first_time: !own
-                        && model
-                            .split_risks
-                            .iter()
-                            .any(|risk| risk.address == low && risk.first_time == Some(true)),
+                    first_time: !own && checked.is_some_and(|risk| risk.first_time == Some(true)),
                 }
             })
             .collect();
@@ -5144,6 +5163,8 @@ fn risk_probes(model: &mut Model) -> Vec<Cmd> {
                 address: address.clone(),
                 flight: Some(id),
                 first_time: None,
+                known_name: None,
+                own: false,
             });
             cmds.push(issue(
                 id,
@@ -6920,6 +6941,8 @@ fn accept(model: &mut Model, id: u64, result: SendShellResult) -> Cmd {
                     .as_ref()
                     .and_then(|risk| risk.first_time)
                     .filter(|_| !unread);
+                row.known_name = risk.as_ref().and_then(|risk| risk.known_name.clone());
+                row.own = risk.as_ref().is_some_and(|risk| risk.own);
                 model.risk_history_unread |= unread;
                 if !model.split_risks.iter().any(|row| row.flight.is_some()) {
                     model.risk_wait = None;

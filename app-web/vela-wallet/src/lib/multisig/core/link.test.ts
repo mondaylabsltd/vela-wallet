@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
 	addLink,
+	addLinkFault,
 	brokenLink,
+	checksumHolds,
 	brokenLinkText,
 	carriedLinkHash,
 	isMultisigLink,
@@ -159,5 +161,49 @@ describe('the invite link', () => {
 		});
 		expect(parseAddLink(`#msa=100:${SAFE}&m=p%E0%A4%A`)?.members).toBeNull();
 		expect(parseAddLink(`#msa=100:${SAFE}&m=p${'a'.repeat(65)}`)?.members).toBeNull();
+	});
+
+	it('carries every member by address: the founding ones and those added since (r4D-5)', () => {
+		const ALICE = '0xe331F2Ef7A6f4ED426529c8C10642b68084771A2';
+		const BOB = '0x412f2165f299Dfc2363ED08F8Fc6DE4353E81fF6';
+		const link = addLink('https://x', 'en', SAFE, {
+			chainIds: [5042002],
+			members: [
+				{ address: ALICE, name: 'Alice', kind: 'passkey' },
+				// Added in Settings: its typed name rides along.
+				{ address: BOB, name: 'R5 Bob', kind: 'passkey' },
+				{ address: SAFE.toLowerCase() }
+			]
+		});
+		const hash = new URL(link).hash;
+		expect(hash).toBe(
+			`#msa=5042002:${SAFE}&a=${ALICE.slice(2).toLowerCase()}pAlice,` +
+				`${BOB.slice(2).toLowerCase()}pR5%20Bob,${SAFE.slice(2).toLowerCase()}-`
+		);
+		// Read back in their checksummed case.
+		expect(parseAddLink(hash)?.members).toEqual([
+			{ address: ALICE, name: 'Alice', kind: 'passkey' },
+			{ address: BOB, name: 'R5 Bob', kind: 'passkey' },
+			{ address: SAFE }
+		]);
+		// One that does not read drops the labels, never the multisig.
+		expect(parseAddLink(`#msa=5042002:${SAFE}&a=12pAlice`)?.members).toBeNull();
+		expect(parseAddLink(`#msa=5042002:${SAFE}&a=12pAlice`)?.multisig).toBe(SAFE);
+	});
+
+	it('refuses an address whose letter case was changed on the way (r5reg-22)', () => {
+		// One letter's case flipped: not its checksum.
+		const flipped = SAFE.replace('aEF', 'AEF');
+		expect(flipped).not.toBe(SAFE);
+		expect(checksumHolds(flipped)).toBe(false);
+		expect(parseAddLink(`#msa=5042002:${flipped}`)).toBeNull();
+		expect(brokenLink(`#msa=5042002:${flipped}`)).toBe('add');
+		expect(addLinkFault(`#msa=5042002:${flipped}`)).toBe('checksum');
+		// All one case carries no checksum, and reads.
+		expect(parseAddLink(`#msa=5042002:${SAFE.toLowerCase()}`)?.multisig).toBe(SAFE.toLowerCase());
+		expect(checksumHolds(SAFE)).toBe(true);
+		// A cut-short one is damaged, not a checksum.
+		expect(addLinkFault(`#msa=5042002:${SAFE.slice(0, 30)}`)).toBe('damaged');
+		expect(addLinkFault(`#msa=5042002:${SAFE}`)).toBeNull();
 	});
 });

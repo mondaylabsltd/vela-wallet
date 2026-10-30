@@ -14,8 +14,12 @@ export interface ReviewFirstRequest {
 	address: string;
 	chain: ChainState;
 	item: ProposalItem;
-	/** "Propose and approve": the proposal goes on to its passkey. */
-	confirm(): void;
+	/**
+	 * "Propose and approve": the proposal goes on to its passkey — `as`, the
+	 * member of this device the person picked to propose it (r5reg-5);
+	 * absent: the proposing code picks.
+	 */
+	confirm(as?: string | null): void;
 	/** Declined, or the sheet closed: nothing is signed. */
 	decline(): void;
 }
@@ -37,18 +41,21 @@ class ReviewFirstHost {
 		};
 	}
 
-	/** Resolves on "Propose and approve"; rejects (`AbortError`) on decline or with no host. */
-	ask(input: Omit<ReviewFirstRequest, 'confirm' | 'decline'>): Promise<void> {
+	/**
+	 * Resolves on "Propose and approve", with the member picked to propose it
+	 * (`null`: none picked); rejects (`AbortError`) on decline or with no host.
+	 */
+	ask(input: Omit<ReviewFirstRequest, 'confirm' | 'decline'>): Promise<string | null> {
 		this.request?.decline();
 		if (this.#hosts === 0) {
 			return Promise.reject(new DOMException(REVIEW_DECLINED, 'AbortError'));
 		}
-		return new Promise<void>((resolve, reject) => {
+		return new Promise<string | null>((resolve, reject) => {
 			const request: ReviewFirstRequest = {
 				...input,
-				confirm: () => {
+				confirm: (as) => {
 					if (this.request === request) this.request = null;
-					resolve();
+					resolve(as ?? null);
 				},
 				decline: () => {
 					if (this.request === request) this.request = null;
@@ -62,12 +69,16 @@ class ReviewFirstHost {
 
 export const reviewFirstHost = new ReviewFirstHost();
 
-/** The review of `item` (built at its number on `chain`), before the proposer's passkey. */
+/**
+ * The review of `item` (built at its number on `chain`), before the
+ * proposer's passkey. Resolves with the member of this device picked to
+ * propose it, if one was.
+ */
 export function reviewFirst(
 	address: string,
 	chainId: number,
 	chain: ChainState,
 	item: ProposalItem
-): Promise<void> {
+): Promise<string | null> {
 	return reviewFirstHost.ask({ chainId, address, chain, item });
 }
