@@ -144,6 +144,11 @@ path = "src/bin/generate_wallet_state_bindings.rs"
 required-features = ["bindings"]
 
 [[bin]]
+name = "generate_multisig_bindings"
+path = "src/bin/generate_multisig_bindings.rs"
+required-features = ["bindings"]
+
+[[bin]]
 name = "generate_session_bindings"
 path = "src/bin/generate_session_bindings.rs"
 required-features = ["bindings"]

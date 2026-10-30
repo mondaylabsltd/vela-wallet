@@ -152,6 +152,7 @@ pub struct ProposalItem {
     pub nonce: u128,
     pub proposer: String,
     pub approvals: Vec<ApprovalRow>,
+    #[cfg_attr(feature = "bindings", ts(type = "number"))]
     pub approved: u64,
     #[cfg_attr(feature = "bindings", ts(type = "number"))]
     pub threshold: u64,
@@ -366,6 +367,7 @@ pub fn next_nonce_of(chain: &ChainState) -> u128 {
 pub struct MissingChain {
     #[cfg_attr(feature = "bindings", ts(type = "number"))]
     pub chain_id: u64,
+    #[cfg_attr(feature = "bindings", ts(type = "number"))]
     pub count: u64,
 }
 
@@ -628,16 +630,17 @@ pub struct DraftView {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "MultisigProposalsView"))]
 pub struct ProposalsView {
     pub followed: Option<String>,
     pub chains: Vec<ChainState>,
     /// Every proposal, by nonce then age.
     pub items: Vec<ProposalItem>,
+    #[cfg_attr(feature = "bindings", ts(type = "number"))]
     pub open_count: u64,
     /// Open proposals one of this device's members can approve (the
     /// switcher's "N waiting", presence).
+    #[cfg_attr(feature = "bindings", ts(type = "number"))]
     pub waiting_on_me: u64,
     pub missing: Vec<MissingChain>,
     /// What is shown is the list an earlier page kept (when it was read).

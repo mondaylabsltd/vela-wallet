@@ -18,6 +18,8 @@ mod ctap_bridge;
 mod intents_bridge;
 /// Multicall3 encoding for the native read path (spec 051).
 mod multicall;
+/// The multisig machines (F0.4).
+mod multisig_bridge;
 mod onboarding_bridge;
 mod settings_bridge;
 mod trusted_signer_bridge;
