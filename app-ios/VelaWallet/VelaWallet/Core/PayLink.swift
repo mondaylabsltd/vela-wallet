@@ -80,3 +80,31 @@ enum PayLink: Equatable {
         )
     }
 }
+
+/// The core's verdict on one `/pay` link (`payment_request`'s `pay_valid`,
+/// `pay_refusal`): the request to open Send on, or why the link was refused.
+/// `serial` tells one link's verdict from the next one's.
+struct PayLinkVerdict: Equatable {
+    let serial: Int
+    /// The request the core accepted; `nil` when it refused the link.
+    let accepted: PayRequestWire?
+    /// The core's reason (`recipient`, `network`, `token`, `amount`) when it
+    /// refused the link; `nil` when it accepted it.
+    let refusal: String?
+
+    /// The refused link's words, the web's (`refusalBody`,
+    /// `receive.pay.invalid*`): a token that is not one and an amount that
+    /// cannot be read say so; a recipient or a network — and a reason this
+    /// build does not know, which the core never sends — say the general
+    /// sentence, true of all of them.
+    static func refusalBody(_ refusal: String?, loc: Loc) -> String {
+        switch refusal {
+        case "token": loc.t("receive.pay.invalidToken")
+        case "amount": loc.t("receive.pay.invalidAmount")
+        default: loc.t("receive.pay.invalidBody")
+        }
+    }
+
+    /// The refused link's title: "Invalid payment link".
+    static func refusalTitle(loc: Loc) -> String { loc.t("receive.pay.invalidTitle") }
+}
