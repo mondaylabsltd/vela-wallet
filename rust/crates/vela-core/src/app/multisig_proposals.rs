@@ -550,6 +550,92 @@ pub enum Event {
     },
     #[serde(skip)]
     Changed,
+    // -- presence and the timeline (`presence.svelte.ts`, `timeline.ts`) ----
+    /// Every multisig on this device (the accounts machine's list): what
+    /// waits on each is said in `presence`.
+    Accounts {
+        #[cfg_attr(feature = "bindings", ts(type = "unknown[]"))]
+        accounts: Vec<MultisigAccount>,
+    },
+    /// Read every multisig not shown again: the shell sends it every
+    /// [`super::multisig_presence::OTHERS_EVERY_MS`] while a page is visible,
+    /// and when the page is shown again. Quiet; skipped during an outage.
+    OthersTick,
+    /// A done proposal's sheet opened: read how it ran (its execution's
+    /// receipt, else what this device recorded) for its timeline.
+    Timeline {
+        #[cfg_attr(feature = "bindings", ts(type = "number"))]
+        chain_id: u64,
+        safe_tx_hash: String,
+    },
+    // -- a dApp's request from a multisig (`dapp-request.ts`) ---------------
+    /// A site asks `account` (the multisig it was granted, followed for the
+    /// request's life) for `method`: refused (`multisigRefusal`), or read
+    /// (`dapp_rpc::multisig_calls`) and drawn as a proposal with its review —
+    /// nothing signed before `ConfirmDraft`. `limit_ms`: how long from the
+    /// claim before the passkey the request can still be answered.
+    DappRequest {
+        id: String,
+        #[cfg_attr(feature = "bindings", ts(type = "unknown"))]
+        account: Box<MultisigAccount>,
+        method: String,
+        #[cfg_attr(feature = "bindings", ts(type = "unknown"))]
+        params: Value,
+        origin: String,
+        #[cfg_attr(feature = "bindings", ts(type = "number"))]
+        chain_id: u64,
+        #[serde(default)]
+        limit_ms: Option<f64>,
+    },
+    /// The person declined or closed the request's sheet, or its page left:
+    /// `4001` before it was proposed, "proposed, waiting" after.
+    DappLeave {
+        id: String,
+    },
+    /// The shell answered the site with the request's answer: forgotten.
+    DappSettled {
+        id: String,
+    },
+    /// `wallet_getCallsStatus` of a batch this multisig answered with
+    /// (`calls_id`, the proposal's safeTxHash): answered in `calls_status[id]`.
+    CallsStatus {
+        id: String,
+        #[cfg_attr(feature = "bindings", ts(type = "number"))]
+        chain_id: u64,
+        calls_id: String,
+    },
+    // -- a proposal link (`linked.svelte.ts`) -------------------------------
+    /// Open the proposal a link named ([`Notice::OpenProposal`]): on the
+    /// followed multisig, or `preview` — one with no member here, read only.
+    OpenLinked {
+        #[cfg_attr(feature = "bindings", ts(type = "number"))]
+        chain_id: u64,
+        safe_tx_hash: String,
+        #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(type = "unknown"))]
+        preview: Option<Box<MultisigAccount>>,
+    },
+    CloseLinked,
+    // -- an outside member's wallet (`approveExternally`) -------------------
+    /// Approve this proposal from an outside member's wallet (no member on
+    /// this device): the gate, then [`Notice::OutsideSign`].
+    ApproveOutside {
+        #[cfg_attr(feature = "bindings", ts(type = "number"))]
+        chain_id: u64,
+        safe_tx_hash: String,
+    },
+    /// What the outside session came to for the SafeTx it was handed.
+    OutsideAnswered {
+        #[cfg_attr(feature = "bindings", ts(type = "number"))]
+        chain_id: u64,
+        safe_tx_hash: String,
+        outcome: super::multisig_outside::session::SessionOutcome,
+    },
+    /// Members the passkey index knows as Vela accounts: never offered to an
+    /// outside wallet to sign for.
+    IndexedMembers {
+        addresses: Vec<String>,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -601,6 +687,16 @@ pub enum ActionState {
     Failed {
         detail: String,
     },
+    /// No member here: an outside member's wallet is asked to sign it over
+    /// a live session ([`Notice::OutsideSign`]); `owners`: who may.
+    OutsideAsked {
+        safe_tx_hash: String,
+        owners: Vec<String>,
+    },
+    /// No member here, and none can sign through an outside wallet (every
+    /// member is a Vela account, which approves in Vela on its own device).
+    /// Nothing was proposed.
+    NoOutsideSigner,
 }
 
 /// Where one kept approval stands (`OutboxEntry`).
@@ -670,6 +766,25 @@ pub struct ProposalsView {
     /// How each execution followed here ended (or stands).
     #[cfg_attr(feature = "bindings", ts(type = "Record<string, unknown>"))]
     pub executions: BTreeMap<String, Value>,
+    /// What waits on this device, per multisig on it (lowercase address):
+    /// `None` until read — never a zero it did not see; a multisig not read
+    /// yet on this page says what the list kept from an earlier one says.
+    pub presence: BTreeMap<String, Option<super::multisig_presence::Waiting>>,
+    /// A multisig other than the followed one has something waiting (the
+    /// dot on the switcher's button).
+    pub others_waiting: bool,
+    /// Each open proposal's one word, per `<chainId>:<safeTxHash>`.
+    pub standings: BTreeMap<String, super::multisig_presence::Standing>,
+    /// What the waiting group says of the list.
+    pub waiting_note: Option<super::multisig_presence::WaitingNote>,
+    /// Each proposal's story, per `<chainId>:<safeTxHash>`.
+    pub timelines: BTreeMap<String, Vec<super::multisig_presence::TimelineStep>>,
+    /// The dApp requests held here, by request id.
+    pub dapp: BTreeMap<String, super::multisig_dapp::HeldRequest>,
+    /// `wallet_getCallsStatus` answers, by request id.
+    pub calls_status: BTreeMap<String, super::multisig_dapp::DappAnswer>,
+    /// The proposal a link opened.
+    pub linked: Option<flows::LinkedView>,
 }
 
 // ---------------------------------------------------------------------------
@@ -759,6 +874,8 @@ pub struct State {
     previews: BTreeMap<String, Value>,
     preview_plans: BTreeMap<String, Preview>,
     verdicts: BTreeMap<String, Value>,
+    /// Presence, timelines, dApp requests, links, outside wallets.
+    more: flows::More,
 }
 
 impl State {
@@ -807,6 +924,11 @@ fn exec_key(chain_id: u64, safe: &str, hash: &str) -> String {
 pub struct Model {
     state: Shared<State>,
 }
+
+/// Presence, timelines, a dApp's requests, links and outside wallets: the
+/// machine's later rules, kept in their own file.
+#[path = "multisig_proposals_flows.rs"]
+pub mod flows;
 
 #[derive(Default)]
 pub struct MultisigProposals;
@@ -996,18 +1118,23 @@ impl App for MultisigProposals {
                     s.draft_round
                 };
                 flow(model, move |io, st| async move {
+                    let claimed = flows::claim(&io, &st, round).await;
                     let outcome = confirm_draft(&io, &st, as_member, round).await;
-                    let mut s = lock(&st);
-                    if s.draft_round == round {
-                        if matches!(outcome, ActionState::Done { .. }) {
-                            s.draft = None;
+                    {
+                        let mut s = lock(&st);
+                        if s.draft_round == round {
+                            if matches!(outcome, ActionState::Done { .. }) {
+                                s.draft = None;
+                            }
+                            s.actions.insert("propose".to_owned(), outcome.clone());
                         }
-                        s.actions.insert("propose".to_owned(), outcome);
                     }
+                    flows::on_proposed(&io, &st, round, &outcome, claimed).await;
                 })
             }
             Event::Withdraw => {
                 let mut s = lock(&model.state);
+                flows::on_withdraw(&mut s);
                 s.draft = None;
                 s.draft_round += 1;
                 s.actions
@@ -1040,6 +1167,7 @@ impl App for MultisigProposals {
                 let preview = preview_execution(&io, &st, &input).await;
                 let key = format!("{chain_id}:{}", safe_tx_hash.to_ascii_lowercase());
                 let mut s = lock(&st);
+                flows::keep_look(&mut s, &input, &preview);
                 s.previews.insert(key.clone(), preview.to_value());
                 s.preview_plans.insert(key, preview);
             }),
@@ -1053,11 +1181,25 @@ impl App for MultisigProposals {
                     .actions
                     .insert(key.clone(), ActionState::Working);
                 flow(model, move |io, st| async move {
+                    let input = execution_input(&st, chain_id, &safe_tx_hash, &executor);
                     let outcome = execute(&io, &st, chain_id, &safe_tx_hash, &executor).await;
+                    flows::remember_execution(&io, &st, input.as_ref(), &outcome).await;
                     lock(&st).actions.insert(key, outcome);
                     refresh(&io, &st, false, true).await;
                 })
             }
+            Event::Accounts { .. }
+            | Event::OthersTick
+            | Event::Timeline { .. }
+            | Event::DappRequest { .. }
+            | Event::DappLeave { .. }
+            | Event::DappSettled { .. }
+            | Event::CallsStatus { .. }
+            | Event::OpenLinked { .. }
+            | Event::CloseLinked
+            | Event::ApproveOutside { .. }
+            | Event::OutsideAnswered { .. }
+            | Event::IndexedMembers { .. } => flows::update(event, model),
             Event::SendAgain {
                 chain_id,
                 safe_tx_hash,
@@ -1078,7 +1220,8 @@ impl App for MultisigProposals {
     }
 
     fn view(&self, model: &Model) -> ProposalsView {
-        let s = lock(&model.state);
+        let mut s = lock(&model.state);
+        let more = flows::view_more(&mut s);
         let items = s.items();
         let open: Vec<&ProposalItem> = items
             .iter()
@@ -1100,7 +1243,11 @@ impl App for MultisigProposals {
             loading: s.loading,
             stale: s.stale,
             unreachable: s.stale && down,
-            pace_ms: if s.held > 0 { OPEN_POLL_MS } else { POLL_MS },
+            pace_ms: if s.held > 0 || flows::watching(&s) {
+                OPEN_POLL_MS
+            } else {
+                POLL_MS
+            },
             outbox: s.outbox_entries.clone(),
             draft: s.draft.as_ref().map(|d| {
                 let here = local_owners(&s.locals, &d.chain.members.owners);
@@ -1124,6 +1271,14 @@ impl App for MultisigProposals {
             reviews: s.reviews.clone(),
             previews: s.previews.clone(),
             executions: s.verdicts.clone(),
+            presence: more.presence,
+            others_waiting: more.others_waiting,
+            standings: more.standings,
+            waiting_note: more.waiting_note,
+            timelines: more.timelines,
+            dapp: more.dapp,
+            calls_status: more.calls_status,
+            linked: more.linked,
         }
     }
 }
@@ -1476,6 +1631,7 @@ async fn refresh(io: &Io<Event>, st: &Shared<State>, tick: bool, fresh: bool) {
             break;
         }
     }
+    flows::after_refresh(io, st).await;
 }
 
 async fn refresh_once(io: &Io<Event>, st: &Shared<State>, tick: bool) {
@@ -2375,7 +2531,8 @@ async fn confirm_draft(
         .or_else(|| last.and_then(|l| here.iter().find(|o| same_address(&o.address, &l)).cloned()))
         .or_else(|| here.first().cloned());
     let Some(owner) = picked else {
-        return ActionState::NoMemberHere;
+        // No member here: an outside member's wallet proposes it.
+        return flows::propose_outside(io, st, &account, &chain, &tx, round).await;
     };
     if here.len() > 1 {
         let map = {

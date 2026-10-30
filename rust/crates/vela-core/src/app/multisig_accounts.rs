@@ -233,6 +233,22 @@ pub enum Event {
     },
     #[serde(skip)]
     Changed,
+    /// A multisig link (`#ms=` / `#msa=`, readable or not) opened here — the
+    /// location's hash, as given: ONE flow ([`link`]) says where it stands
+    /// in `link`. `take_kept`: the wallet is here now (r4b-9) — the link
+    /// kept before opens, unless `hash` is one.
+    OpenLink {
+        hash: String,
+        #[serde(default)]
+        take_kept: bool,
+    },
+    /// r4b-9: no Vela account here yet — keep the link (a day) for when
+    /// there is one.
+    KeepLink {
+        hash: String,
+    },
+    /// The link's sheet closed.
+    CloseLink,
 }
 
 /// A member an invite names (`InvitedMember`).
@@ -436,6 +452,8 @@ pub struct MultisigAccountsView {
     pub rename: BTreeMap<String, RenamePlan>,
     /// The service is away (the outage), as far as this machine has seen.
     pub service_down: bool,
+    /// Where the multisig link opened here stands.
+    pub link: Option<link::LinkStand>,
 }
 
 // ---------------------------------------------------------------------------
@@ -471,6 +489,8 @@ pub struct State {
     backup: BTreeMap<String, BackupState>,
     share_again: BTreeMap<String, Phase>,
     rename: BTreeMap<String, RenamePlan>,
+    /// The multisig link opened here.
+    link: link::LinkState,
 }
 
 impl State {
@@ -699,6 +719,10 @@ pub struct Model {
     state: Shared<State>,
 }
 
+/// A multisig link opened here, as one flow.
+#[path = "multisig_accounts_link.rs"]
+pub mod link;
+
 // ---------------------------------------------------------------------------
 // App
 // ---------------------------------------------------------------------------
@@ -752,11 +776,28 @@ impl App for MultisigAccounts {
                 render()
             }
             Event::Networks { networks } => {
-                lock(&model.state).networks = networks;
-                flow(
-                    model,
-                    |io, st| async move { recheck_stored(&io, &st).await },
-                )
+                let pending = {
+                    let mut s = lock(&model.state);
+                    s.networks = networks;
+                    link::pending_ready(&mut s)
+                };
+                flow(model, |io, st| async move {
+                    // ms-22: a link waiting for its network opens now.
+                    if let Some(pending) = pending {
+                        link::open_proposal(&io, &st, pending).await;
+                    }
+                    recheck_stored(&io, &st).await;
+                })
+            }
+            Event::OpenLink { hash, take_kept } => flow(model, move |io, st| async move {
+                link::open(&io, &st, hash, take_kept).await;
+            }),
+            Event::KeepLink { hash } => flow(model, move |io, st| async move {
+                link::keep(&io, &st, &hash).await;
+            }),
+            Event::CloseLink => {
+                lock(&model.state).link.stand = None;
+                render()
             }
             Event::Service { url } => {
                 lock(&model.state).service.set_url(&url);
@@ -837,9 +878,22 @@ impl App for MultisigAccounts {
                 }
                 flow(model, move |io, st| async move {
                     let outcome = add_multisig(&io, &st, &address, network, accept_risks).await;
-                    let mut s = lock(&st);
-                    s.add.phase = Phase::Done;
-                    s.add.outcome = Some(outcome);
+                    let added = match &outcome {
+                        AddOutcome::Added { address } => lock(&st).find(address).cloned(),
+                        _ => None,
+                    };
+                    {
+                        let mut s = lock(&st);
+                        s.add.phase = Phase::Done;
+                        s.add.outcome = Some(outcome);
+                    }
+                    // ms-22: added from a link's transaction: it opens now.
+                    if let Some(added) = added {
+                        let pending = link::pending_for(&mut lock(&st), &added.address);
+                        if let Some(pending) = pending {
+                            link::open_member(&io, &st, &pending, &added, false).await;
+                        }
+                    }
                 })
             }
             Event::Find { address, network } => {
@@ -1078,6 +1132,7 @@ impl App for MultisigAccounts {
             share_again: s.share_again.clone(),
             rename: s.rename.clone(),
             service_down,
+            link: s.link.stand.clone(),
         }
     }
 }

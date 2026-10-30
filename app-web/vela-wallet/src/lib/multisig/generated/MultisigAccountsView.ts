@@ -4,6 +4,7 @@ import type { MultisigAddView } from "./MultisigAddView";
 import type { MultisigBackupState } from "./MultisigBackupState";
 import type { MultisigCreateView } from "./MultisigCreateView";
 import type { MultisigImportView } from "./MultisigImportView";
+import type { MultisigLinkStand } from "./MultisigLinkStand";
 import type { MultisigPhase } from "./MultisigPhase";
 import type { MultisigRenamePlan } from "./MultisigRenamePlan";
 
@@ -11,4 +12,8 @@ export type MultisigAccountsView = { loaded: boolean, accounts: Array<MultisigAc
 /**
  * The service is away (the outage), as far as this machine has seen.
  */
-service_down: boolean, };
+service_down: boolean, 
+/**
+ * Where the multisig link opened here stands.
+ */
+link: MultisigLinkStand | null, };

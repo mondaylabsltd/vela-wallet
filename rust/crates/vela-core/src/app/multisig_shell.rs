@@ -250,6 +250,28 @@ pub enum Notice {
     MailboxTook { safe: String },
     /// The multisig shown is this one now (`None`: the Vela account).
     Activated { address: Option<String> },
+    /// A proposal link opened (`multisig_accounts::Event::OpenLink`): the
+    /// proposals machine opens that proposal's sheet
+    /// (`multisig_proposals::Event::OpenLinked` with these fields). `preview`:
+    /// no member of it is on this device — the multisig as read, kept
+    /// nowhere and not shown, its transaction read only (ms-21); `None`: it
+    /// is `address`, on this device and activated.
+    OpenProposal {
+        address: String,
+        #[cfg_attr(feature = "bindings", ts(type = "number"))]
+        chain_id: u64,
+        safe_tx_hash: String,
+        #[cfg_attr(feature = "bindings", ts(type = "unknown"))]
+        preview: Option<Box<MultisigAccount>>,
+    },
+    /// No member is on this device: an outside member's wallet signs this
+    /// SafeTx over a live session — the shell starts the session machine
+    /// (`multisig_outside::session::Event::Start` with this `request`) and
+    /// hands its outcome back (`multisig_proposals::Event::OutsideAnswered`).
+    OutsideSign {
+        #[cfg_attr(feature = "bindings", ts(type = "unknown"))]
+        request: Box<super::multisig_outside::session::SessionRequest>,
+    },
 }
 
 /// One change to a stored multisig, made by a machine that does not own
