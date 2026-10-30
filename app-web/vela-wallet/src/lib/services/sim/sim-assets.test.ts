@@ -71,4 +71,35 @@ describe('deriveAssetDeltas', () => {
 			)
 		).toEqual([]);
 	});
+
+	// r5reg-1: Arc's simulation logs each native move twice — traced from the
+	// sentinel and from its own `0xffff…fffe` — once to an account, once to a
+	// smart account (which logs `SafeReceived` too). Each move counts once.
+	it('counts a native move the chain also logs itself once', () => {
+		const CHAIN = '0xfffffffffffffffffffffffffffffffffffffffe';
+		const smart = '0x' + 'cc'.repeat(20);
+		const eoa = '0x' + 'dd'.repeat(20);
+		const leg = (to: string) => [
+			{
+				address: NATIVE_TRANSFER_SENTINEL,
+				topics: [TRANSFER_TOPIC, topic(ME), topic(to)],
+				data: word(ONE)
+			},
+			{ address: CHAIN, topics: [TRANSFER_TOPIC, topic(ME), topic(to)], data: word(ONE) }
+		];
+		expect(deriveAssetDeltas(leg(eoa), ME)).toEqual([
+			{ kind: 'native', token: undefined, delta: -ONE }
+		]);
+		expect(deriveAssetDeltas([...leg(smart), ...leg(eoa)], ME)).toEqual([
+			{ kind: 'native', token: undefined, delta: -2n * ONE }
+		]);
+		// A receipt has no traced log: the chain's own is the record — the
+		// coin, never a token at 0xffff…fffe.
+		expect(
+			deriveAssetDeltas(
+				[{ address: CHAIN, topics: [TRANSFER_TOPIC, topic(ME), topic(smart)], data: word(ONE) }],
+				ME
+			)
+		).toEqual([{ kind: 'native', token: undefined, delta: -ONE }]);
+	});
 });

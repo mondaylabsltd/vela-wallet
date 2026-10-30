@@ -832,6 +832,70 @@ fn deltas_net_and_zero_and_strangers_drop() {
     assert_eq!(deltas[1].delta, "10000000");
 }
 
+/// The chain's own native log (Arc's EIP-7708 sentinel).
+const CHAIN_NATIVE: &str = "0xfffffffffffffffffffffffffffffffffffffffe";
+/// A Vela account (a Safe proxy): its `receive()` logs `SafeReceived(sender, value)`.
+const SMART: &str = "0x412f2165f299Dfc2363ED08F8Fc6DE4353E81fF6";
+const SAFE_RECEIVED: &str = "0x3d0ce9bfc3ed7d6862dbb28b2dea94561fe714a1b4d019aa8af39730d1ad7c3d";
+
+/// One native leg as Arc's `eth_simulateV1` (traceTransfers) answers it
+/// (read from arc-testnet.drpc.org, r5reg-1): the traced log from `0xeeee…`,
+/// the chain's own log from `0xffff…fffe`, and — to a smart account — its
+/// `SafeReceived`.
+fn arc_native_leg(to: &str, value: u128) -> Value {
+    let mut logs = vec![
+        transfer(NATIVE_SENTINEL, ME, to, value),
+        transfer(CHAIN_NATIVE, ME, to, value),
+    ];
+    if to == SMART {
+        logs.push(json!({
+            "address": to.to_lowercase(),
+            "topics": [SAFE_RECEIVED, topic(ME)],
+            "data": word(value),
+        }));
+    }
+    ok_call(logs)
+}
+
+fn native_delta(reply: SimReply) -> Vec<TrustAssetDelta> {
+    match classify(reply, ME) {
+        SimOutcome::Deltas { deltas } => deltas,
+        other => panic!("not deltas: {other:?}"),
+    }
+}
+
+/// r5reg-1: a traced native move and the chain's own log of it are ONE move
+/// — to an account or to a smart account, alone or in a batch.
+#[test]
+fn a_native_move_logged_twice_counts_once() {
+    let thousandth = 1_000_000_000_000_000u128;
+    for to in [OTHER, SMART] {
+        let single = native_delta(result(vec![arc_native_leg(to, thousandth)]));
+        assert_eq!(single.len(), 1, "single to {to}");
+        assert_eq!(single[0].kind, TrustDeltaKind::Native);
+        assert_eq!(single[0].delta, "-1000000000000000", "single to {to}");
+        let batch = native_delta(result(vec![
+            arc_native_leg(to, thousandth),
+            arc_native_leg(SMART, thousandth),
+        ]));
+        assert_eq!(batch.len(), 1, "batch to {to}");
+        assert_eq!(batch[0].delta, "-2000000000000000", "batch to {to}");
+    }
+}
+
+/// Without a traced log (a receipt, or a node that logs natively and does
+/// not trace) the chain's own native log is the only record, and counts.
+#[test]
+fn the_chains_own_native_log_counts_when_nothing_was_traced() {
+    let deltas = deltas_of(&[
+        transfer(CHAIN_NATIVE, ME, OTHER, 5),
+        transfer(CHAIN_NATIVE, ME, SMART, 7),
+    ]);
+    assert_eq!(deltas.len(), 1);
+    assert_eq!(deltas[0].kind, TrustDeltaKind::Native);
+    assert_eq!(deltas[0].delta, "-12");
+}
+
 /// iOS `aMoveThatCancelsIsNotAMove`: in and out of the same token is how a
 /// swap looks like a theft.
 #[test]

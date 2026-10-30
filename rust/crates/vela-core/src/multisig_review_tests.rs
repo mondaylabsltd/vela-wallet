@@ -619,6 +619,62 @@ fn probe_reads_what_moves_where_no_simulation_is_offered() {
     assert_eq!(r.state.verdict, StateVerdict::Unchanged);
 }
 
+/// r5reg-1: what moves in a batch of native sends, as a node that traces
+/// transfers AND logs native moves itself (Arc) answers — to an account and
+/// to a smart account (a Vela account's `SafeReceived` beside it), alone and
+/// together: each send once, never the traced log and the chain's log both.
+#[test]
+fn a_native_batch_simulated_where_the_chain_logs_it_too_counts_each_send_once() {
+    const SMART: &str = "0x412f2165f299Dfc2363ED08F8Fc6DE4353E81fF6";
+    const EOA: &str = "0x9181a394E0a993E9eDe4DddC96Ac0B2Fe5ee039e";
+    let transfer_topic = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+    let safe_received = "0x3d0ce9bfc3ed7d6862dbb28b2dea94561fe714a1b4d019aa8af39730d1ad7c3d";
+    let thousandth = U256::from(1_000_000_000_000_000u64);
+    let leg = |to: &str| {
+        let mut logs = vec![
+            json!({"address": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                   "topics": [transfer_topic, w(SAFE), w(to)], "data": hex(&word(thousandth))}),
+            json!({"address": "0xfffffffffffffffffffffffffffffffffffffffe",
+                   "topics": [transfer_topic, w(SAFE), w(to)], "data": hex(&word(thousandth))}),
+        ];
+        if to == SMART {
+            logs.push(json!({"address": to.to_lowercase(),
+                             "topics": [safe_received, w(SAFE)], "data": hex(&word(thousandth))}));
+        }
+        json!({"status": "0x1", "returnData": "0x", "gasUsed": "0x5208", "logs": logs})
+    };
+    for legs in [
+        vec![SMART],
+        vec![EOA],
+        vec![SMART, SMART],
+        vec![EOA, EOA],
+        vec![SMART, EOA],
+    ] {
+        let transfers: Vec<crate::multisig::Transfer> = legs
+            .iter()
+            .map(|to| crate::multisig::Transfer {
+                token: None,
+                to: (*to).into(),
+                amount: "1000000000000000".into(),
+            })
+            .collect();
+        let t = crate::multisig::transfers_tx(&transfers, "0x0").unwrap();
+        let reply =
+            json!({"result": [{"calls": legs.iter().map(|to| leg(to)).collect::<Vec<_>>()}]});
+        let r = multisig_review(&ReviewInput {
+            reads: reads(t),
+            trace: Some(not_offered_answer()),
+            sim_reply: Some(reply.to_string()),
+            ..ReviewInput::default()
+        })
+        .unwrap();
+        assert_eq!(r.simulation_source, "simulate", "{legs:?}");
+        assert_eq!(r.simulation.deltas.len(), 1, "{legs:?}");
+        let want = format!("-{}", thousandth * U256::from(legs.len()));
+        assert_eq!(r.simulation.deltas[0].delta, want, "{legs:?}");
+    }
+}
+
 #[test]
 fn probe_inner_revert_is_a_danger_with_sign_anyway() {
     let t = tx("0x4444444444444444444444444444444444444444", "0x1", "0x", 0);
