@@ -4167,6 +4167,7 @@ dependencies = [
  "coset",
  "crux_core",
  "ecdsa 0.17.0",
+ "futures",
  "hex-literal",
  "hkdf",
  "hmac 0.13.0",

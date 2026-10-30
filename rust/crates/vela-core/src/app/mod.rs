@@ -70,6 +70,13 @@ pub mod login;
 pub mod manage_tokens;
 pub mod method_words;
 pub mod money;
+pub mod multisig_accounts;
+pub mod multisig_members;
+/// An owner whose wallet is not Vela: the connect page and Vela's live session (§11.2, §11.3).
+pub mod multisig_outside;
+pub mod multisig_proposals;
+/// The multisig machines (F0.4): one shell vocabulary, four machines.
+pub mod multisig_shell;
 pub mod name_verify;
 pub mod net_health;
 pub mod network_admin;

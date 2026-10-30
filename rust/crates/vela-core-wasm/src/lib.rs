@@ -21,6 +21,8 @@ use wasm_bindgen::prelude::*;
 mod bridge;
 mod clientmcp;
 mod intents;
+/// The multisig machines (F0.4).
+mod multisig_machines;
 mod onboarding;
 mod settings;
 /// Where an account's signatures go: its sign-in key.
