@@ -58,6 +58,7 @@ mod webview;
 #[cfg(target_os = "windows")]
 mod webview2_events;
 mod window_frame;
+mod window_state;
 
 use gallery::GalleryView;
 use gpui::{
@@ -229,6 +230,9 @@ pub(crate) fn close_requested(window: &mut gpui::Window, cx: &mut App) -> bool {
     if !allow {
         window.activate_window();
         wallet::page::close_held(cx);
+    } else {
+        // N-D3: the last bounds and section, written before the app goes.
+        window_state::flush();
     }
     allow
 }
@@ -245,7 +249,17 @@ fn open_main_window(cx: &mut App) {
     }
     match RootPage::from_env() {
         // The default: the session's route guard picks the screen.
-        RootPage::Onboarding => open_window_with(cx, |_window, cx| cx.new(Root::new)),
+        RootPage::Onboarding => open_window_with(cx, |window, cx| {
+            // N-D3: the real app (not a drawn route) remembers its window.
+            let root = cx.new(Root::new);
+            root.update(cx, |_, cx| {
+                cx.observe_window_bounds(window, |_, window, cx| {
+                    window_state::note_bounds(window, cx);
+                })
+                .detach();
+            });
+            root
+        }),
         RootPage::Wallet => open_window_with(cx, |window, cx| {
             cx.new(|cx| WalletPage::new(false, window, cx))
         }),
@@ -272,15 +286,33 @@ fn open_window_with<V: gpui::Render + 'static>(
     // that size, never under the design's — a measurement pass cannot drag
     // an edge, and what a taller window gives a column is part of what it
     // measures.
-    let (width, height) = dev_env::var!("VELA_WINDOW")
-        .and_then(|want| {
-            let (width, height) = want.trim().split_once('x')?;
-            Some((width.parse::<f32>().ok()?, height.parse::<f32>().ok()?))
+    let pinned = dev_env::var!("VELA_WINDOW").and_then(|want| {
+        let (width, height) = want.trim().split_once('x')?;
+        Some((width.parse::<f32>().ok()?, height.parse::<f32>().ok()?))
+    });
+    let (width, height) = pinned.map_or((WINDOW_W, WINDOW_H), |(width, height)| {
+        (width.max(WINDOW_W), height.max(WINDOW_H))
+    });
+    // N-D3: where the person left it, on a display that is still there —
+    // checked, never trusted (`window_state::placement`). Only the real app's
+    // window: a drawn route or a pinned size opens as it always has.
+    let restored = (pinned.is_none()
+        && !gallery::gallery_enabled()
+        && RootPage::from_env() == RootPage::Onboarding)
+        .then(|| {
+            window_state::placement(
+                window_state::load().as_ref(),
+                &window_state::screens(cx),
+                size(px(WINDOW_W), px(WINDOW_H)),
+            )
         })
-        .map_or((WINDOW_W, WINDOW_H), |(width, height)| {
-            (width.max(WINDOW_W), height.max(WINDOW_H))
-        });
-    let bounds = Bounds::centered(None, size(px(width), px(height)), cx);
+        .flatten();
+    let (display_id, window_bounds) = restored.unwrap_or_else(|| {
+        (
+            None,
+            WindowBounds::Windowed(Bounds::centered(None, size(px(width), px(height)), cx)),
+        )
+    });
     // Spec 082 RD14 (W17): closing the window quits the app
     // (`LastWindowClosed`), so a close during a submit POST is held once —
     // the window comes forward and says why (RJ17); a second close within
@@ -304,7 +336,8 @@ fn open_window_with<V: gpui::Render + 'static>(
 
     cx.open_window(
         WindowOptions {
-            window_bounds: Some(WindowBounds::Windowed(bounds)),
+            window_bounds: Some(window_bounds),
+            display_id,
             // `VELA_NO_ACTIVATE=1`: the window opens without taking the
             // keyboard, so a screenshot pass on a machine somebody is using
             // never types into this app what they meant for another.
@@ -489,6 +522,9 @@ fn main() {
         // Ctrl on Windows and Linux) — README, "Keyboard shortcuts".
         cx.bind_keys(app_menu::wallet_key_bindings(cfg!(target_os = "macos")));
         app_menu::install(cx);
+        // N-D3: ⌘Q skips the window's close hook; the window state is
+        // written on the way out either way.
+        cx.on_app_quit(|_| async { window_state::flush() }).detach();
         open_main_window(cx);
 
         // Payment links the OS handed over (`open_link`): Send opens on each,

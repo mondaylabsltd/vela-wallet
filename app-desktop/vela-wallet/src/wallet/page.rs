@@ -352,6 +352,26 @@ pub enum Section {
 }
 
 impl Section {
+    /// The section a saved name or `VELA_SECTION` names; the home otherwise.
+    fn from_name(name: Option<&str>) -> Self {
+        match name {
+            Some("settings") => Section::Settings,
+            Some("contacts") => Section::Contacts,
+            Some("explore") => Section::Explore,
+            _ => Section::Wallet,
+        }
+    }
+
+    /// Its name in [`crate::window_state::Saved::section`].
+    const fn name(self) -> &'static str {
+        match self {
+            Section::Wallet => "wallet",
+            Section::Contacts => "contacts",
+            Section::Explore => "explore",
+            Section::Settings => "settings",
+        }
+    }
+
     /// Whether THIS build has the destination — the web's rule
     /// (`app-web/.../wallet/destinations.ts`), for the same reason.
     ///
@@ -1477,13 +1497,12 @@ impl WalletPage {
     /// same thing and must not become it — that route has no session behind it
     /// and renders the mocks on purpose.
     pub fn signed_in(identity: Identity, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let section = match crate::dev_env::var!("VELA_SECTION").as_deref() {
-            Some("settings") => Section::Settings,
-            Some("contacts") => Section::Contacts,
-            Some("explore") => Section::Explore,
-            _ => Section::Wallet,
-        }
-        .or_wallet();
+        // N-D3: the section the window showed when it was last closed — on
+        // the launch's first wallet only (a later account switch starts on
+        // the home, as it always has). `VELA_SECTION` wins in a dev build.
+        let wanted = crate::dev_env::var!("VELA_SECTION")
+            .or_else(crate::window_state::take_launch_section);
+        let section = Section::from_name(wanted.as_deref()).or_wallet();
         // perf-10: a window opened on a screen that draws no balance of its
         // own notes the account and reads no network until the home shows.
         if section != Section::Wallet {
@@ -22090,6 +22109,11 @@ impl Render for WalletPage {
         self.watch_field_blurs(window, cx);
         // N-D1: `VELA_A11Y_DUMP` (developer builds) — the last frame's tree.
         crate::ui::a11y::dump_tree(window);
+        // N-D3: the section on screen, for the next launch (a signed-in
+        // wallet only; a drawn route remembers nothing).
+        if self.identity.is_some() && !self.gallery {
+            crate::window_state::note_section(self.section.name(), cx);
+        }
         self.watch_money(cx);
         self.watch_send_display(cx);
         // An identicon somewhere was pressed (078 H-02): open the viewer on
