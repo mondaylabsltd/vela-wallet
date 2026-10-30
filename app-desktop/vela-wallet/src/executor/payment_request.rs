@@ -8,7 +8,8 @@ use gpui::App;
 use serde_json::Value;
 
 use vela_core::app::payment_request::{
-    Event, PaymentRequest, PaymentRequestOperation, PaymentRequestShellResult,
+    Event, PayRefusal, PayRequest, PaymentRequest, PaymentRequestOperation,
+    PaymentRequestShellResult,
 };
 
 use crate::executor::storage;
@@ -20,12 +21,13 @@ use crate::session;
 /// or scanned (`https://getvela.app/pay?…`).
 ///
 /// `None`: not a payment link at all, the caller reads it another way.
-/// `Some(None)`: a payment link the core refused — the untrusted `/pay`
-/// grammar is the core's (`LinkOpened`, `validate_pay_query`: a strict
-/// amount, a real address, a numeric chain), so nothing here parses an
-/// amount. `Some(Some(pay))`: the request, as the core read it.
+/// `Some(Err(why))`: a payment link the core refused, and the first rule it
+/// broke (`pay_refusal`) — the untrusted `/pay` grammar is the core's
+/// (`LinkOpened`, `validate_pay_query`: a strict amount, a real address, a
+/// numeric chain, a token that is an address), so nothing here parses an
+/// amount. `Some(Ok(pay))`: the request, as the core read it.
 #[must_use]
-pub fn pay_link(text: &str) -> Option<Option<vela_core::app::payment_request::PayRequest>> {
+pub fn pay_link(text: &str) -> Option<Result<PayRequest, PayRefusal>> {
     let url = url::Url::parse(text.trim()).ok()?;
     let pay_path = |path: &str| {
         matches!(path.trim_end_matches('/'), "" | "/pay")
@@ -60,11 +62,24 @@ pub fn pay_link(text: &str) -> Option<Option<vela_core::app::payment_request::Pa
         net: get("net"),
     });
     let view = core.view();
-    Some(if view.pay_valid == Some(true) {
-        view.pay
-    } else {
-        None
+    Some(match (view.pay_valid, view.pay) {
+        (Some(true), Some(pay)) => Ok(pay),
+        // The core says why exactly when it refused; a refusal it gave no
+        // reason for (it never does) is still a refusal, said generally.
+        _ => Err(view.pay_refusal.unwrap_or(PayRefusal::Recipient)),
     })
+}
+
+/// A refused payment link's sentence, in the web's words (`/pay`'s
+/// `refusalBody`, `receive.pay.*`): a recipient or a network the corpus says
+/// in one sentence, a token or an amount each in its own.
+#[must_use]
+pub fn refusal_key(refusal: PayRefusal) -> &'static str {
+    match refusal {
+        PayRefusal::Recipient | PayRefusal::Network => "receive.pay.invalidBody",
+        PayRefusal::Token => "receive.pay.invalidToken",
+        PayRefusal::Amount => "receive.pay.invalidAmount",
+    }
 }
 
 /// `vela.payAck.<account>` — one key per account, the Expo shape.
@@ -180,7 +195,7 @@ mod tests {
         const TO: &str = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
         let link = format!("https://getvela.app/pay?to={TO}&chain=100&amount=1.5&sym=xDAI&dec=18");
         let pay = pay_link(&link)
-            .flatten()
+            .and_then(Result::ok)
             .unwrap_or_else(|| unreachable!("a valid link"));
         assert_eq!(pay.recipient, TO);
         assert_eq!(pay.chain_id, 100);
@@ -188,12 +203,43 @@ mod tests {
         // The OS's own spelling, on a wallet that registered the scheme.
         let scheme = format!("velawallet://pay?to={TO}&chain=8453");
         assert_eq!(
-            pay_link(&scheme).flatten().map(|pay| pay.chain_id),
+            pay_link(&scheme)
+                .and_then(Result::ok)
+                .map(|pay| pay.chain_id),
             Some(8453)
         );
-        // Refused by the core: "1e18" is not an amount a person typed.
-        let bad = format!("https://wallet.getvela.app/pay?to={TO}&chain=1&amount=1e18");
-        assert_eq!(pay_link(&bad), Some(None));
+        // Refused by the core, and why: "1e18" is not an amount a person
+        // typed; a token that is no address; no recipient; no network.
+        let refused = |query: &str| {
+            pay_link(&format!("https://wallet.getvela.app/pay?{query}"))
+                .and_then(Result::err)
+                .map(refusal_key)
+        };
+        assert_eq!(
+            refused(&format!("to={TO}&chain=1&amount=1e18")),
+            Some("receive.pay.invalidAmount")
+        );
+        assert_eq!(
+            refused(&format!("to={TO}&chain=1&token=usdc")),
+            Some("receive.pay.invalidToken")
+        );
+        assert_eq!(
+            refused("to=nope&chain=1"),
+            Some("receive.pay.invalidBody")
+        );
+        assert_eq!(
+            refused(&format!("to={TO}&chain=gnosis")),
+            Some("receive.pay.invalidBody")
+        );
+        // Each sentence is in the corpus, as the web's `/pay` says it.
+        let loc = crate::loc::Loc::for_language("zh");
+        for key in [
+            "receive.pay.invalidBody",
+            "receive.pay.invalidToken",
+            "receive.pay.invalidAmount",
+        ] {
+            assert_ne!(loc.t(key).as_ref(), key, "{key}");
+        }
         // Not a payment link: another site, the signer's callback, a bare address.
         assert_eq!(
             pay_link(&format!("https://evil.example/pay?to={TO}&chain=1")),

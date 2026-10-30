@@ -21443,9 +21443,24 @@ impl WalletPage {
     /// form opens, prefilled and locked to the link's chain, and nothing is
     /// sent until the person confirms.
     pub(crate) fn open_pay_link(&mut self, url: &str, cx: &mut Context<Self>) {
-        if self.scan_resolved(url.to_owned(), cx) {
+        if self.pay_refused(url, cx) || self.scan_resolved(url.to_owned(), cx) {
             cx.activate(true);
         }
+    }
+
+    /// A payment link the core refused, said where the person can see it —
+    /// the scanner, up with the core's reason (`pay_refusal`) in the web's
+    /// words (`receive.pay.*`) — whether it was pasted, dropped or opened by
+    /// the OS. `true` when `text` was such a link.
+    fn pay_refused(&mut self, text: &str, cx: &mut Context<Self>) -> bool {
+        let Some(Err(refusal)) = crate::executor::payment_request::pay_link(text) else {
+            return false;
+        };
+        self.show_scan_notice(
+            ScanNotice::Said(crate::executor::payment_request::refusal_key(refusal)),
+            cx,
+        );
+        true
     }
 
     /// N-D3: text that arrived from outside a field — pasted onto the window
@@ -21480,7 +21495,7 @@ impl WalletPage {
                     cx.notify();
                     return true;
                 }
-                if self.scan_resolved(text, cx) {
+                if self.pay_refused(&text, cx) || self.scan_resolved(text, cx) {
                     return true;
                 }
                 // Read and not a payment: the scanner says so, where a scan
@@ -21592,14 +21607,18 @@ impl WalletPage {
         // a valid one is the request it names — always on its chain, so the
         // send locks to it — and a malformed one is refused, never guessed.
         let request = match crate::executor::payment_request::pay_link(&text) {
-            Some(Some(pay)) => Some(crate::flows::eip681::Eip681 {
+            Some(Ok(pay)) => Some(crate::flows::eip681::Eip681 {
                 recipient: pay.recipient,
                 chain_id: Some(pay.chain_id),
                 token_address: pay.token_address,
                 amount_base_units: pay.amount_base,
             }),
-            Some(None) => {
-                self.scan_notice = Some(ScanNotice::Unusable);
+            // Refused, and the scanner says why — the first rule the link
+            // broke, in the web's words (`pay_refusal`, `receive.pay.*`).
+            Some(Err(refusal)) => {
+                self.scan_notice = Some(ScanNotice::Said(
+                    crate::executor::payment_request::refusal_key(refusal),
+                ));
                 self.scan_quiet_until =
                     Some(std::time::Instant::now() + std::time::Duration::from_secs(2));
                 cx.notify();
