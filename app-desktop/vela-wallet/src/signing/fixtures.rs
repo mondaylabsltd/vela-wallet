@@ -76,6 +76,16 @@ pub enum Block {
         text: SharedString,
         tone: Tone,
     },
+    /// One small muted line saying where something came from (cs-14, the
+    /// web's `SourceLine`): the reading's provenance under the intent, the
+    /// contract on the card's face, a token named only by its own contract.
+    /// Information, not a statement of the request — drawn at the web's
+    /// `--text-sm` in `fg.muted` (a caution or danger tone in its own
+    /// colour), never at the body size a [`Block::Sentence`] takes.
+    Source {
+        text: SharedString,
+        tone: Tone,
+    },
     Allowance {
         label: SharedString,
         value: SharedString,
@@ -1065,11 +1075,11 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
                     },
                     // P2.3 (cs-14): where the reading came from, and the
                     // registry on the card's face with who named it.
-                    Block::Sentence {
+                    Block::Source {
                         text: s.certain_words("readByVela", &[]),
                         tone: Tone::Neutral,
                     },
-                    Block::Sentence {
+                    Block::Source {
                         text: s.certain_words(
                             "contractNamed",
                             &[

@@ -1038,18 +1038,8 @@ pub fn action_pill(
         .child(label)
 }
 
-/// Section header: bold title + muted trailing action with chevron.
-pub fn section_header(
-    theme: &Theme,
-    icons: &mut IconCache,
-    title: SharedString,
-    action: SharedString,
-) -> Div {
-    let (title, action) = section_header_parts(theme, icons, title, action);
-    section_header_row().child(title).child(action)
-}
-
-/// The header's frame, for callers that bind the halves separately.
+/// The section header's frame (bold title + muted trailing action with
+/// chevron); the halves come from [`section_header_parts`].
 pub fn section_header_row() -> Div {
     div().flex().items_center().justify_between().py(px(12.))
 }
@@ -1067,12 +1057,22 @@ pub fn section_header_parts(
     action: SharedString,
 ) -> (Div, Div) {
     (
+        // The web's `<h2>`: a level-2 heading, what VoiceOver's rotor jumps
+        // between ("Activity", "Assets", a contacts group, an Explore row).
+        // Named by its own words, so two headers under one parent never
+        // share an accessibility node.
         div()
             .text_size(theme::text_section())
             .line_height(gpui::relative(LINE_BODY))
             .font_weight(gpui::FontWeight::BOLD)
             .text_color(theme.fg_base)
-            .child(title),
+            .child(
+                crate::ui::a11y::heading(
+                    ElementId::Name(SharedString::from(format!("section-heading:{title}"))),
+                    title,
+                )
+                .aria_level(2),
+            ),
         // The web's header button (078 H-08): padded 4 and pulled back 4 at
         // the end so the chevron still lines up with the column's edge; hover
         // brings words and chevron to fg-base together.

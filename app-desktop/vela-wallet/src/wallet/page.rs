@@ -128,7 +128,7 @@ use vela_core::app::sign_request::{SignErrorKind, SignResponsePayload};
 use super::WalletStrings;
 use super::components::{
     action_pill, activity_row, asset_row, asset_sub, balance_display, chain_row, empty_state,
-    icon_img, identicon_avatar, nav_row, qr_placeholder, section_header, section_header_parts,
+    icon_img, identicon_avatar, nav_row, qr_placeholder, section_header_parts,
     section_header_row, skeleton_row, token_icon, token_icon_logos, wallet_header,
 };
 use super::fixtures::{self, ADDRESS_FULL, IDENTICON_BOARD_SEEDS, WALLET_NAME};
@@ -4454,27 +4454,47 @@ impl WalletPage {
                         div()
                             .max_w(px(WALLET_ROW_MEASURE))
                             .child(pills)
-                            .child(
-                                div()
-                                    .id("section-activity")
-                                    .cursor_pointer()
-                                    .child(section_header(
-                                        theme,
-                                        &mut self.icons,
-                                        s_activity,
-                                        s_all,
-                                    ))
-                                    .on_click(cx.listener(|this, _, _, cx| {
-                                        this.enter_flow(FlowEntry::Activity, cx);
-                                        cx.notify();
-                                    })),
-                            )
+                            .child({
+                                // Both halves open the activity, as the whole
+                                // row did; taken apart so a screen reader meets
+                                // the web's `<h2>` and then its button.
+                                let all_label = s_all.clone();
+                                let (title, action) = section_header_parts(
+                                    theme,
+                                    &mut self.icons,
+                                    s_activity,
+                                    s_all,
+                                );
+                                section_header_row()
+                                    .child(
+                                        div()
+                                            .id("section-activity")
+                                            .cursor_pointer()
+                                            .child(title)
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.enter_flow(FlowEntry::Activity, cx);
+                                                cx.notify();
+                                            })),
+                                    )
+                                    .child(
+                                        div()
+                                            .id("section-activity-all")
+                                            .cursor_pointer()
+                                            .a11y_button(all_label)
+                                            .child(action)
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.enter_flow(FlowEntry::Activity, cx);
+                                                cx.notify();
+                                            })),
+                                    )
+                            })
                             .child(activity_col)
                             .child({
                                 // The two halves lead to two different panels: the title names
                                 // the assets list, and the action reads 添加, so it opens the
                                 // add-token panel stacked on it — which is what makes DT3L's
                                 // back chevron lead somewhere.
+                                let add_label = s_add.clone();
                                 let (title, action) =
                                     section_header_parts(theme, &mut self.icons, s_assets, s_add);
                                 section_header_row()
@@ -4492,6 +4512,7 @@ impl WalletPage {
                                         div()
                                             .id("section-assets-add")
                                             .cursor_pointer()
+                                            .a11y_button(add_label)
                                             .child(action)
                                             .on_click(cx.listener(|this, _, _, cx| {
                                                 this.enter_flow(FlowEntry::AddToken, cx);
@@ -17858,6 +17879,7 @@ impl WalletPage {
                     this.explore_groups = true;
                     cx.notify();
                 }))
+                .a11y_button(self.explore.edit.clone())
                 .into_any_element()
         } else {
             edit_half.into_any_element()
@@ -17942,12 +17964,14 @@ impl WalletPage {
             };
             // The Clear on the live Recent heading clears the core's history.
             let clearable = group.id == "recent" && matches!(group.action, GroupAction::Clear);
+            let action_label = action.clone();
             let (title_half, action_half) =
                 section_header_parts(theme, &mut self.icons, group.title.clone(), action);
             let action_half = if clearable {
                 action_half
                     .id("recent-clear")
                     .cursor_pointer()
+                    .a11y_button(action_label)
                     .on_click(cx.listener(|_, _: &gpui::ClickEvent, _, cx| {
                         resident::resident::<BrowserHistory>(cx).update(cx, |resident, cx| {
                             resident.dispatch(vela_core::app::browser_history::Event::ClearAll, cx);

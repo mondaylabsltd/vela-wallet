@@ -531,6 +531,16 @@ pub fn text_section() -> Pixels {
 pub fn text_label() -> Pixels {
     scaled(11.)
 }
+/// A signing sheet's source line (`--text-sm`, the web's `SourceLine`):
+/// where a reading came from, set smaller than the request it qualifies.
+pub fn text_source() -> Pixels {
+    scaled(11.)
+}
+/// [`text_source`] at `--leading-normal` (1.4), so a wrapped source line
+/// keeps the web's rhythm instead of gpui's default leading.
+pub fn line_source() -> Pixels {
+    scaled(11. * 1.4)
+}
 pub fn text_amount() -> Pixels {
     scaled(15.)
 }
