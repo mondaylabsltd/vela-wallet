@@ -237,8 +237,7 @@ vi.mock('./store.svelte', () => ({
 	multisig: { find: () => account, useChain: (_a: string, id: number) => used.push(id) }
 }));
 
-const { proposeCalls, draftCalls, readProposal, markCancellations } =
-	await import('./proposals.svelte');
+const { readProposal, markCancellations } = await import('./proposals.svelte');
 const { serviceOutage } = await import('./service-state.svelte');
 
 function stored(nonce: number, chainId = 100) {
@@ -285,23 +284,6 @@ beforeEach(() => {
 	gate.asked.length = 0;
 	gate.refuse = null;
 	rpc.down = [];
-});
-
-describe("a dApp's calls, proposed", () => {
-	it('several are ONE transaction (a MultiSendCallOnly batch), at the next number', async () => {
-		mailbox.proposals = [stored(3)];
-		const calls = [
-			{ to: TO, value: '0x1', data: '0x' },
-			{ to: OWNER, value: '0x0', data: '0x1234' }
-		];
-		const draft = await draftCalls(SAFE, 100, calls);
-		expect(draft.item.tx.operation).toBe(1);
-		expect(draft.item.nonce).toBe(4n);
-		const { nonce } = await proposeCalls(SAFE, 100, calls);
-		expect(nonce).toBe('0x4');
-		expect(submitted).toHaveLength(1);
-		expect(signed).toHaveLength(1);
-	});
 });
 
 describe('who counts', () => {

@@ -245,28 +245,6 @@ export interface CallArg {
 export const callsTx = (calls: CallArg[], nonce: string) =>
 	call<SafeTx>('callsTx', { calls, nonce });
 
-/**
- * The calls a site's `eth_sendTransaction` / `wallet_sendCalls` asks a
- * multisig to make on `chainId` (`dapp_rpc::multisig_calls`), or the error the
- * site is answered with (another chain, a required capability, no calls, a
- * call with no `to`).
- */
-export function dappMultisigCalls(
-	method: string,
-	params: unknown,
-	chainId: number
-): { calls: CallArg[] } | { error: { code: number; message: string } } {
-	const answer = JSON.parse(
-		wasm.dappRpcMultisigCalls(method, JSON.stringify(params ?? null), chainId)
-	) as { result?: CallArg[]; error?: { code: number; message: string } };
-	return answer.error ? { error: answer.error } : { calls: answer.result ?? [] };
-}
-
-/** `wallet_sendCalls`' answer for batch `id`, in the shape its request asked for (the core's rule). */
-export function sendCallsResult(params: unknown, id: string): unknown {
-	return JSON.parse(wasm.dappRpcSendCallsResult(JSON.stringify(params ?? null), id));
-}
-
 export const cancelTx = (multisig: string, nonce: string) =>
 	call<SafeTx>('cancelTx', { multisig, nonce });
 

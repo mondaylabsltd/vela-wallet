@@ -360,8 +360,23 @@
 	const active = $derived(multisig.active);
 	/** The multisig a dApp's request is for: the one it was granted, shown or not. */
 	const dappAccount = $derived(
-		sheet?.kind === 'dapp' ? (multisig.find(sheet.request.address) ?? null) : null
+		sheet?.kind === 'dapp' ? (multisig.find(sheet.request.held.safe) ?? null) : null
 	);
+
+	/**
+	 * The person closed a dApp request's sheet: the machine answers its site
+	 * as things stand (declined before it was proposed, else "proposed"), and
+	 * goes back to the multisig shown — it followed the one the site was
+	 * granted for the request.
+	 */
+	function closeDapp(rid: string) {
+		proposalsHost.send({ type: 'dapp_leave', id: rid });
+		multisigUi.closeDapp(rid);
+		const shown = multisig.active;
+		if (proposals.followed?.toLowerCase() !== (shown?.address.toLowerCase() ?? null)) {
+			proposals.follow(shown, shown?.chainIds ?? []);
+		}
+	}
 </script>
 
 {#if sheet?.kind === 'create'}
@@ -446,13 +461,13 @@
 			{signing}
 			{m}
 			account={dappAccount}
-			chainId={sheet.request.chainId}
-			safeTxHash={sheet.request.safeTxHash ?? ''}
-			draft={sheet.request}
+			chainId={sheet.request.held.chain_id}
+			safeTxHash={sheet.request.held.safe_tx_hash ?? ''}
+			dapp={sheet.request}
 			{locale}
 			{wide}
 			{closeLabel}
-			onclose={() => sheet.request.close()}
+			onclose={() => closeDapp(sheet.request.rid)}
 			onexecuted={() => onchanged?.()}
 		/>
 	{/key}

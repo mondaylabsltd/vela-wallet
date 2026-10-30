@@ -10,15 +10,14 @@
  * against the members on that chain now, keeps the outbox and takes the
  * nonce from the mailbox's list read now.
  *
- * Still here, for a dApp's request from a multisig (`DappRequestHost`,
- * moved onto the machine next): its draft, read and proposed by
- * {@link readChain} / {@link proposeCalls}, and the outbox they submit
- * through.
+ * Still here, for a link's transaction read on a device with none of its
+ * members (`core/linked.svelte.ts`, moved onto the machine next): its read
+ * ({@link readChain}) and an outside approval of it, and the outbox that
+ * approval is submitted through.
  */
 import { untrack } from 'svelte';
 import { readMembers, type ChainMembers } from './chain';
 import {
-	callsTx,
 	reviewTx,
 	safeTxHash,
 	isEcdsaApproval,
@@ -32,12 +31,9 @@ import {
 	type Review,
 	type SafeTx
 } from './kernel';
-import { hasCode } from './chain';
 import type { ExecutionInput } from './execute';
 import { loadAccounts } from '$lib/onboarding/core/storage';
-import { localOwners, signApproval, type LocalOwner } from './owners';
-import { plainAccounts } from './signers.svelte';
-import { lastActor, proposerOf } from './actor';
+import { localOwners, type LocalOwner } from './owners';
 import {
 	fetchProposals,
 	ServiceBusyError,
@@ -770,41 +766,6 @@ function unique<T>(values: T[]): T[] {
 
 // -- actions --------------------------------------------------------------------------
 
-/** Propose `tx` on `chainId`, approved at once by `owner` (one passkey prompt). */
-export async function propose(
-	account: MultisigAccount,
-	chainId: number,
-	tx: SafeTx,
-	owner: LocalOwner,
-	signal?: AbortSignal
-) {
-	// A delegatecall into nothing "succeeds" doing nothing and spends the
-	// nonce: the batch contract (MultiSendCallOnly) must be on this chain, which
-	// a network the wallet accepts for Vela accounts does not promise.
-	if (Number(tx.operation) === 1 && !(await hasCode(chainId, tx.to))) {
-		throw new Error(`${tx.to} has no code on chain ${chainId}`);
-	}
-	// §3.5: read-only where its genesis is refused; asked, every time, where
-	// more than its members can act for it — before the passkey.
-	await authorizeSigning(account, chainId, tx);
-	const hash = safeTxHash(chainId, account.address, tx);
-	stopIfWithdrawn(signal);
-	const approval = await signApproval(owner.account, chainId, hash, {
-		multisig: account.address,
-		name: account.genesis.name ?? account.label ?? null,
-		tx,
-		signal
-	});
-	// r4b-5: withdrawn while the passkey was up: what it signed goes nowhere.
-	stopIfWithdrawn(signal);
-	return submitProposal(account, chainId, tx, approval);
-}
-
-/** r4b-5: the person withdrew it (the confirm dismissed): nothing more is asked or sent. */
-function stopIfWithdrawn(signal: AbortSignal | undefined): void {
-	if (signal?.aborted) throw new DOMException('the proposal was withdrawn', 'AbortError');
-}
-
 /**
  * Signed approvals not yet in the mailbox (ms-19): written before the POST,
  * removed once the mailbox answered (took it or refused it), and sent again
@@ -1104,149 +1065,6 @@ export function proposeMemberChange(
 	change: MemberChangeRequest
 ): Promise<{ safeTxHash: string }> {
 	return proposeThrough(address, chainId, { kind: 'member_change', change: change as never });
-}
-
-/**
- * A dApp's call (`eth_sendTransaction`'s `to`, `value`, `data`, or one of
- * `wallet_sendCalls`' calls): `value` a quantity, `data` hex.
- */
-export interface DappCall {
-	to: string;
-	value: string;
-	data: string;
-}
-
-/**
- * A dApp's calls as ONE transaction at `nonce` (the core's `callsTx`): one is
- * a plain CALL, several a MultiSendCallOnly batch, executed together or not
- * at all. No gas is ever paid from the multisig.
- */
-function dappTx(calls: DappCall[], nonce: bigint): SafeTx {
-	return callsTx(
-		calls.map((c) => ({ to: c.to, value: c.value || '0x0', data: c.data || '0x' })),
-		`0x${nonce.toString(16)}`
-	);
-}
-
-/**
- * A dApp's calls as they would be proposed now, before anything is signed:
- * the transaction at the next free nonce, read by the core (`reviewTx`) as
- * every member will read it, with no approval yet — the review the person
- * confirms with "Propose and approve". Throws `MailboxUnreadableError` when
- * the list of waiting transactions cannot be read (there is no number to
- * give it).
- */
-export async function draftCalls(
-	address: string,
-	chainId: number,
-	calls: DappCall[]
-): Promise<{ chain: ChainState; item: ProposalItem }> {
-	const account = multisig.find(address);
-	if (!account) throw new Error('not a multisig on this device');
-	const read = await readChain(account, chainId).catch(() => null);
-	if (!read?.mailbox) throw new MailboxUnreadableError();
-	const chain: ChainState = {
-		chainId,
-		members: read.members,
-		items: read.items,
-		mailbox: true
-	};
-	const tx = dappTx(calls, nextNonceOf(chain));
-	const now = Date.now();
-	const item = readProposal(account, chain.members, {
-		chainId,
-		safe: account.address,
-		safeTxHash: safeTxHash(chainId, account.address, tx),
-		safeTx: tx,
-		proposer: '',
-		approvals: [],
-		createdMs: now,
-		updatedMs: now
-	});
-	if (!item) throw new Error('the transaction does not hash as itself');
-	return { chain, item };
-}
-
-/**
- * A dApp's `eth_sendTransaction` or `wallet_sendCalls` from a multisig: the
- * calls, proposed as ONE transaction on `chainId` at the next free nonce and
- * approved at once, as a transfer is — only after the person confirmed its
- * review (`draftCalls`). Resolves the proposal's safeTxHash and number.
- */
-export async function proposeCalls(
-	address: string,
-	chainId: number,
-	calls: DappCall[],
-	/** The member of this device picked on its review to propose it (r5reg-5). */
-	as?: string | null
-): Promise<{ safeTxHash: string; nonce: string }> {
-	let nonce = '0x0';
-	const { safeTxHash } = await proposeBuilt(
-		address,
-		chainId,
-		(n) => {
-			nonce = `0x${n.toString(16)}`;
-			return dappTx(calls, n);
-		},
-		undefined,
-		// Its review was drawn and confirmed on its draft.
-		{ reviewed: true, as }
-	);
-	return { safeTxHash, nonce };
-}
-
-/**
- * Propose what `build` makes at the next free nonce, read back by the core
- * first: approved by an owner on this device (its passkey), else by an
- * owner's own wallet through the connect page.
- */
-async function proposeBuilt(
-	address: string,
-	chainId: number,
-	build: (nonce: bigint, chain: ChainState) => SafeTx,
-	signal?: AbortSignal,
-	/** The member of this device picked on its draft's review. */
-	opts: { reviewed?: boolean; as?: string | null } = {}
-): Promise<{ safeTxHash: string }> {
-	const account = multisig.find(address);
-	if (!account) throw new Error('not a multisig on this device');
-	multisig.useChain(account.address, chainId);
-	const fresh = multisig.find(account.address) ?? account;
-	// Read now, not from what is shown: the nonce comes from the mailbox's
-	// list as it stands, and a list that cannot be read gives none — the
-	// chain's own nonce would be one an open proposal may already hold.
-	const chain = await readChain(fresh, chainId).catch(() => null);
-	if (!chain?.mailbox) throw new MailboxUnreadableError();
-	// The owners on that chain now (a Safe's owners may have changed since its genesis).
-	const owners = chain.members.owners;
-	const tx = build(nextNonceOf(chain), chain);
-	const review = reviewTx(chainId, account.address, tx);
-	if (review.action === null) throw new Error(review.refusal ?? 'refused');
-	stopIfWithdrawn(signal);
-	// Its review was drawn and confirmed on its draft (a dApp's calls).
-	const picked = opts.as ?? null;
-	// r5reg-5: the member of this device the person picked on the review;
-	// else the one used here last, else the first — never another silently.
-	const here = localOwners(owners);
-	const owner = proposerOf(here, picked, fresh.address);
-	// Remembered only where there is a choice to remember.
-	if (owner && here.length > 1) lastActor.note(fresh.address, owner.address);
-	// No member here: an outside wallet proposes it — only a plain account's
-	// can; a Vela member approves in Vela, never on a wallet page (r4C-10).
-	let outside: string[] = [];
-	if (!owner) {
-		outside = await plainAccounts(
-			chainId,
-			owners,
-			sameAddress(proposals.followed, fresh.address) ? proposals.items : []
-		);
-		if (outside.length === 0) throw new NoOutsideSignerError();
-	}
-	const { safeTxHash } = owner
-		? await propose(fresh, chainId, tx, owner, signal)
-		: await approveExternally(fresh, chainId, tx, outside);
-	await proposals.refresh(fresh, fresh.chainIds);
-	return { safeTxHash };
 }
 
 /** What `executor` executing `item` is, for its preview and its submit alike. */
