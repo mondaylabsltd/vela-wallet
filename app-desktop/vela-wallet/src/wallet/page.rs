@@ -4080,9 +4080,21 @@ impl WalletPage {
                 } else {
                     (None, None)
                 };
+                // ob-2: a wallet no other device can find yet says so under
+                // its name — "syncing…", then "not synced yet" with Retry.
+                let sync = live
+                    .then(|| {
+                        wallet_live::sync_line(
+                            &session::view(cx).unsynced,
+                            &identity.address,
+                            &self.strings,
+                            session::sync_rounds(),
+                        )
+                    })
+                    .flatten();
                 // 20 under the header before the nav, as the web's `.top`
                 // pads it (078 H-11): the column's gap supplies 16.
-                wallet_header(
+                let header = wallet_header(
                     theme,
                     &mut self.icons,
                     &mut self.identicons,
@@ -4092,8 +4104,42 @@ impl WalletPage {
                     on_identicon,
                     on_account,
                     space,
-                )
-                .mb(px(4.))
+                );
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(6.))
+                    .mb(px(4.))
+                    .child(header)
+                    .children(sync.map(|sync| {
+                        div()
+                            .id("sidebar-sync")
+                            .px(px(12.))
+                            .flex()
+                            .flex_wrap()
+                            .items_center()
+                            .gap(px(6.))
+                            .text_size(theme::text_label())
+                            .text_color(if sync.stalled {
+                                theme.warning_base
+                            } else {
+                                theme.fg_muted
+                            })
+                            .child(sync.text)
+                            .children(sync.retry.map(|retry| {
+                                div()
+                                    .id("sidebar-sync-retry")
+                                    .cursor_pointer()
+                                    .text_color(theme.fg_base)
+                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                    .hover(|el| el.underline())
+                                    .child(retry)
+                                    .on_click(cx.listener(|_, _, _, cx| {
+                                        session::sync_pending(cx);
+                                        cx.notify();
+                                    }))
+                            }))
+                    }))
             })
             .child(nav_col)
             // The network list is the Wallet's filter, as on the web (spec 028

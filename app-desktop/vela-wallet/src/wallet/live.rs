@@ -663,6 +663,58 @@ pub struct DetailChain {
     pub retry: bool,
 }
 
+/// The header's sync line (ob-2, the web's `syncLine`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SyncLine {
+    pub text: SharedString,
+    /// Not synced yet — said in the caution ink, not the quiet one.
+    pub stalled: bool,
+    /// "Retry": ask the session to try now (`Event::SyncPending`). Only for
+    /// a wallet the session can finish on its own, once its own widening
+    /// retries have failed for a while.
+    pub retry: Option<SharedString>,
+}
+
+/// How many of the session's own widening retries fail before the line
+/// stops saying "syncing…" and offers Retry (the web's `stalledRounds`).
+pub const SYNC_STALLED_ROUNDS: usize = 2;
+
+/// ob-2: the line under the wallet at `address` when the session names it
+/// unsynced (`SessionView.unsynced`) — no other device can find it yet.
+/// "Syncing…" while the session is still trying on its own, then "not synced
+/// yet" with Retry; a wallet the session cannot finish on its own (a record
+/// from before ob-2) says so, with no retry to offer.
+#[must_use]
+pub fn sync_line(
+    unsynced: &[vela_core::app::session::SessionUnsynced],
+    address: &str,
+    s: &WalletStrings,
+    failed_rounds: usize,
+) -> Option<SyncLine> {
+    let owed = unsynced
+        .iter()
+        .find(|wallet| !wallet.address.is_empty() && wallet.address.eq_ignore_ascii_case(address))?;
+    Some(if !owed.retrying {
+        SyncLine {
+            text: s.sync_stalled.clone(),
+            stalled: true,
+            retry: None,
+        }
+    } else if failed_rounds < SYNC_STALLED_ROUNDS {
+        SyncLine {
+            text: s.sync_syncing.clone(),
+            stalled: false,
+            retry: None,
+        }
+    } else {
+        SyncLine {
+            text: s.sync_stalled.clone(),
+            stalled: true,
+            retry: Some(s.detail_retry.clone()),
+        }
+    })
+}
+
 #[must_use]
 pub fn balance_detail(
     view: &BalanceView,
@@ -1205,6 +1257,34 @@ mod tests {
 
     fn strings() -> WalletStrings {
         WalletStrings::resolve(&crate::loc::Loc::from_env())
+    }
+
+    /// P2.4 (ob-2): the header's sync line — "syncing…" while the session
+    /// tries on its own, then "not synced yet" with Retry; a wallet the
+    /// session cannot finish says so without one; a synced wallet, nothing.
+    #[test]
+    fn an_unsynced_wallet_says_so_under_its_name() {
+        use vela_core::app::session::SessionUnsynced;
+        let s = strings();
+        let me = "0xAbC0000000000000000000000000000000000001";
+        let owed = |retrying: bool| {
+            vec![SessionUnsynced {
+                name: "Wallet".to_owned(),
+                address: me.to_lowercase(),
+                retrying,
+            }]
+        };
+        let early = sync_line(&owed(true), me, &s, 0).unwrap_or_else(|| unreachable!("a line"));
+        assert_eq!(early.text, s.sync_syncing);
+        assert!(!early.stalled && early.retry.is_none());
+        let late = sync_line(&owed(true), me, &s, SYNC_STALLED_ROUNDS)
+            .unwrap_or_else(|| unreachable!("a line"));
+        assert!(late.stalled);
+        assert_eq!(late.retry.as_ref(), Some(&s.detail_retry));
+        let legacy = sync_line(&owed(false), me, &s, 0).unwrap_or_else(|| unreachable!("a line"));
+        assert!(legacy.stalled && legacy.retry.is_none());
+        assert!(sync_line(&[], me, &s, 9).is_none());
+        assert!(sync_line(&owed(true), "0x1", &s, 0).is_none());
     }
 
     use vela_core::app::activity_feed::{
