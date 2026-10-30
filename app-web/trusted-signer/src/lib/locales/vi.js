@@ -242,7 +242,7 @@ window.VelaCS.i18n.register('vi', {
   'ui.proofFailed': 'Chưa ký: quá trình đã bị hủy, hết thời gian, hoặc thiết bị này không có khóa đó.',
   'ui.waitingForWallet': 'Đang chờ ví',
   'ui.waitingNote': 'Trang này vẫn mở để chờ yêu cầu tiếp theo của ví. Bạn có thể quay lại ví.',
-  'ui.sessionDone': 'Xong — ví đã nhận đủ những gì cần. Bạn có thể đóng trang này.',
+  'ui.sessionDone': 'Ví đã nhận đủ những gì cần. Bạn có thể đóng trang này.',
   'ui.sessionIdle': 'Không có yêu cầu nào trong 5 phút, nên trang này đã ngừng chờ. Hãy bắt đầu lại từ ví.',
   'ui.openerSilent': 'Trang đã mở trang này không hề gửi yêu cầu nào.',
   'ui.sessionEnded': 'Phiên đã kết thúc',

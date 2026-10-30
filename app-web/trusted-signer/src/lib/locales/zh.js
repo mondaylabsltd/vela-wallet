@@ -261,7 +261,7 @@ window.VelaCS.i18n.register('zh', {
   'ui.proofFailed': '没有签成：仪式被取消、超时，或这台设备上没有这把钥匙。',
   'ui.waitingForWallet': '等待钱包',
   'ui.waitingNote': '这一页会一直开着，等钱包的下一个请求。你可以回到钱包了。',
-  'ui.sessionDone': '完成 —— 钱包要的都已交回。可以关掉这一页了。',
+  'ui.sessionDone': '钱包要的都已交回。可以关掉这一页了。',
   'ui.sessionIdle': '5 分钟内没有新的请求，这一页已停止等待。请回到钱包重新发起。',
   'ui.openerSilent': '打开这一页的页面始终没有发来请求。',
   'ui.sessionEnded': '会话已结束',

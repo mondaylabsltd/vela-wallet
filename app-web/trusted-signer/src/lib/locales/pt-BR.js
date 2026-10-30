@@ -242,7 +242,7 @@ window.VelaCS.i18n.register('pt-BR', {
   'ui.proofFailed': 'Não assinado: o processo foi cancelado, o tempo acabou ou este aparelho não tem essa chave.',
   'ui.waitingForWallet': 'Aguardando a carteira',
   'ui.waitingNote': 'Esta página fica aberta para o próximo pedido da carteira. Você já pode voltar para a carteira.',
-  'ui.sessionDone': 'Concluído — a carteira já tem o que pediu. Você pode fechar esta página.',
+  'ui.sessionDone': 'A carteira já tem o que pediu. Você pode fechar esta página.',
   'ui.sessionIdle': 'Nada chegou em 5 minutos, então esta página parou de esperar. Comece de novo pela carteira.',
   'ui.openerSilent': 'A página que abriu esta nunca enviou uma solicitação.',
   'ui.sessionEnded': 'Sessão encerrada',

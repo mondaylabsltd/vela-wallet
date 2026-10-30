@@ -243,7 +243,7 @@ window.VelaCS.i18n.register('de', {
   'ui.proofFailed': 'Nicht signiert: Der Vorgang wurde abgebrochen oder hat zu lange gedauert, oder dieses Gerät hat keinen solchen Schlüssel.',
   'ui.waitingForWallet': 'Warte auf die Wallet',
   'ui.waitingNote': 'Diese Seite bleibt für die nächste Anfrage der Wallet geöffnet. Du kannst zur Wallet zurückkehren.',
-  'ui.sessionDone': 'Fertig — die Wallet hat, was sie angefordert hat. Du kannst diese Seite schließen.',
+  'ui.sessionDone': 'Die Wallet hat, was sie angefordert hat. Du kannst diese Seite schließen.',
   'ui.sessionIdle': '5 Minuten lang kam nichts an, daher wartet diese Seite nicht mehr. Starte erneut über die Wallet.',
   'ui.openerSilent': 'Die Seite, die diese geöffnet hat, hat nie eine Anfrage gesendet.',
   'ui.sessionEnded': 'Sitzung beendet',

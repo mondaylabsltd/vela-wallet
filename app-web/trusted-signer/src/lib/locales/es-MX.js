@@ -242,7 +242,7 @@ window.VelaCS.i18n.register('es-MX', {
   'ui.proofFailed': 'No se firmó: el proceso se canceló, se agotó el tiempo o este dispositivo no tiene esa llave.',
   'ui.waitingForWallet': 'Esperando a la billetera',
   'ui.waitingNote': 'Esta página sigue abierta para la próxima solicitud de la billetera. Ya puedes volver a la billetera.',
-  'ui.sessionDone': 'Listo — la billetera ya tiene lo que pidió. Puedes cerrar esta página.',
+  'ui.sessionDone': 'La billetera ya tiene lo que pidió. Puedes cerrar esta página.',
   'ui.sessionIdle': 'No llegó nada en 5 minutos, así que esta página dejó de esperar. Empieza de nuevo desde la billetera.',
   'ui.openerSilent': 'La página que abrió esta nunca envió una solicitud.',
   'ui.sessionEnded': 'Sesión terminada',

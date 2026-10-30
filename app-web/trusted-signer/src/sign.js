@@ -460,16 +460,35 @@
   }
 
   function closing(reason) {
+    // Answered, taken, nothing refused or withdrawn: the page has finished.
+    var finished = session.answered && !lastGone && !window.__refused && session.why !== 'withdrawn';
+    if (finished && reason !== 'error') {
+      // Done, said once (round 7, S4): the card says it, the status line is
+      // quiet, and nothing about it is drawn as a failure.
+      say('');
+      waiting({ titleKey: 'ui.doneTitle', noteKey: 'ui.sessionDone' });
+      // The wallet has the answer: a page it opened closes itself, in every
+      // way the session ends — its goodbye, or its window gone before it
+      // could say one — rather than leaving a finished tab behind (the
+      // extension opened one per signature). A browser lets a script close
+      // only a window a script opened; anywhere else the card stays, and
+      // says the page may be closed.
+      setTimeout(function () { try { window.close(); } catch (e) { /* stays */ } }, closeAfterMs());
+      return;
+    }
     if (reason === 'error') {
-      say(session.endDetail || 'ui.walletGone');
       if (session.persistent) {
+        // Said once, on the card, in the calm style of an ended session.
+        say('');
         waiting({ titleKey: 'ui.sessionEnded', noteKey: session.endDetail || 'ui.walletGone' });
         slot.firstChild.classList.add('sheet-ended');
+      } else {
+        say(session.endDetail || 'ui.walletGone');
       }
       return;
     }
     if (reason === 'idle') {
-      say('ui.sessionIdle');
+      say('');
       waiting({ titleKey: 'ui.sessionEnded', noteKey: 'ui.sessionIdle' });
       slot.firstChild.classList.add('sheet-ended');
       return;
@@ -491,18 +510,6 @@
       say('');
       waiting({ titleKey: 'ui.withdrawnTitle', noteKey: 'ui.answerNotTaken' });
       slot.firstChild.classList.add('sheet-ended');
-      return;
-    }
-    if (session.answered) {
-      // Done, said once (round 7): the card says it, the status line is
-      // quiet, and nothing about it is drawn as a failure.
-      say('');
-      waiting({ titleKey: 'ui.doneTitle', noteKey: 'ui.sessionDone' });
-      // The wallet has the answer and said goodbye: a page it opened closes
-      // itself, rather than leaving a finished tab behind (the extension
-      // opened one per signature). A browser lets a script close only a
-      // window a script opened; anywhere else the card stays, and says so.
-      if (reason === 'bye') setTimeout(function () { try { window.close(); } catch (e) { /* stays */ } }, closeAfterMs());
       return;
     }
     // Nothing was answered: the wallet stopped waiting (or never came).

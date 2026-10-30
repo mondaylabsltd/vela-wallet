@@ -242,7 +242,7 @@ window.VelaCS.i18n.register('ko', {
   'ui.proofFailed': '서명되지 않았습니다: 절차가 취소되었거나, 시간이 초과되었거나, 이 기기에 그런 키가 없습니다.',
   'ui.waitingForWallet': '지갑을 기다리는 중',
   'ui.waitingNote': '이 페이지는 지갑의 다음 요청을 위해 열린 채로 있습니다. 지갑으로 돌아가도 됩니다.',
-  'ui.sessionDone': '완료 — 지갑이 요청한 것을 모두 받았습니다. 이 페이지를 닫아도 됩니다.',
+  'ui.sessionDone': '지갑이 요청한 것을 모두 받았습니다. 이 페이지를 닫아도 됩니다.',
   'ui.sessionIdle': '5분 동안 아무것도 오지 않아 이 페이지가 기다리기를 멈췄습니다. 지갑에서 다시 시작하세요.',
   'ui.openerSilent': '이 페이지를 연 페이지가 요청을 보내지 않았습니다.',
   'ui.sessionEnded': '세션 종료',

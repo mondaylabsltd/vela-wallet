@@ -242,7 +242,7 @@ window.VelaCS.i18n.register('id', {
   'ui.proofFailed': 'Tidak ditandatangani: prosesnya dibatalkan, waktunya habis, atau perangkat ini tidak menyimpan kunci tersebut.',
   'ui.waitingForWallet': 'Menunggu dompet',
   'ui.waitingNote': 'Halaman ini tetap terbuka untuk permintaan dompet berikutnya. Anda bisa kembali ke dompet.',
-  'ui.sessionDone': 'Selesai — dompet sudah menerima yang dimintanya. Anda bisa menutup halaman ini.',
+  'ui.sessionDone': 'Dompet sudah menerima yang dimintanya. Anda bisa menutup halaman ini.',
   'ui.sessionIdle': 'Tidak ada yang masuk selama 5 menit, jadi halaman ini berhenti menunggu. Mulai lagi dari dompet.',
   'ui.openerSilent': 'Halaman yang membuka halaman ini tidak pernah mengirim permintaan.',
   'ui.sessionEnded': 'Sesi berakhir',
