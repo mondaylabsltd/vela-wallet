@@ -797,6 +797,34 @@ fun runParity(fn: String, i: JSONObject): Any = when (fn) {
         resolvedNameStep(u32(i, "chain_id"), i.getString("registry"), i.getString("name"), i.getString("answers_json"))
     )
     "currency_fraction_digits" -> currencyFractionDigits(i.getString("code")).toLong()
+    // --- core asks 1 ---
+    "classify_relay_rejection" -> when (val r = classifyRelayRejection(i.getString("message"))) {
+        RelayRejection.RelayerUnavailable -> "relayer_unavailable"
+        RelayRejection.BundlerUnderfunded -> "bundler_underfunded"
+        RelayRejection.NonceUsed -> "nonce_used"
+        is RelayRejection.NonceHeld -> JSONObject().put("nonce_held", JSONObject().put("user_op_hash", r.userOpHash))
+        is RelayRejection.Other -> JSONObject().put("other", r.message)
+    }
+    "is_localhost_http" -> isLocalhostHttp(i.getString("url"))
+    "passkey_ceremony_end" -> when (passkeyCeremonyEnd(i.getString("kind"), i.getDouble("elapsed_ms"))) {
+        PasskeyCeremonyEnd.CANCELLED -> "cancelled"
+        PasskeyCeremonyEnd.TIMED_OUT -> "timed_out"
+        PasskeyCeremonyEnd.NOT_SUPPORTED -> "not_supported"
+        PasskeyCeremonyEnd.NOT_DISCOVERABLE -> "not_discoverable"
+        PasskeyCeremonyEnd.OTHER -> "other"
+    }
+    "passkey_sign_timeout_ms" -> whole(passkeySignTimeoutMs())
+    "rpc_node_standing" -> rpcNodeStanding(i.getString("view_json"), u32(i, "chain_id"))
+    "sim_outcome" -> simOutcome(i.getString("user"), i.getString("reply_json")).let { r ->
+        JSONObject()
+            .put("kind", r.kind)
+            .put("deltas", jsonText(r.deltasJson))
+            .put("revert_reason", orNull(r.revertReason))
+            .put("notice_risk", orNull(r.noticeRisk))
+            .put("notice_key", orNull(r.noticeKey))
+            .put("no_change_key", orNull(r.noChangeKey))
+            .put("recheck", r.recheck)
+    }
     else -> throw NoSuchElementException("no native-parity arm for fn `$fn` — add it to Harness.kt")
 }
 

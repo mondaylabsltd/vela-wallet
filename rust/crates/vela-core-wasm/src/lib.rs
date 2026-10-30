@@ -2123,6 +2123,25 @@ pub fn user_op_previous_pending_detail() -> String {
     vela_core::user_op::PREVIOUS_PENDING_DETAIL.to_owned()
 }
 
+/// The dApp's `-32603` detail for a request whose nonce another transaction
+/// of the account spent first (send-15, `RelayRejection::NonceUsed`).
+#[wasm_bindgen(js_name = userOpNonceUsedDetail)]
+#[must_use]
+pub fn user_op_nonce_used_detail() -> String {
+    vela_core::user_op::NONCE_USED_DETAIL.to_owned()
+}
+
+/// The relay's sentence as the core reads it — `user_op::classify_relay_rejection`
+/// — as the `RelayRejection` JSON a submit verdict carries
+/// (`"relayer_unavailable"`, `"nonce_used"`, `{"other": …}`, …). The one
+/// classifier: no shell keeps its own reading of the relay's words.
+#[wasm_bindgen(js_name = classifyRelayRejection)]
+#[must_use]
+pub fn classify_relay_rejection(message: &str) -> String {
+    serde_json::to_string(&vela_core::user_op::classify_relay_rejection(message))
+        .unwrap_or_default()
+}
+
 /// The dApp's `-32603` detail for an operation the relay refused (spec 082
 /// RJ3) — a fixed sentence.
 #[wasm_bindgen(js_name = userOpRefusedDappDetail)]
@@ -2560,6 +2579,52 @@ pub fn rpc_own_only_pool(seeds_json: &str, own_only: bool) -> String {
     serde_json::json!({ "endpoints": endpoints, "own_only": own_only }).to_string()
 }
 
+/// Where `chain_id`'s reads stand in the pool's view — `rpc_pool::node_standing`:
+/// `"pooled"`, `"own_only"`, `"own_node_unreached"` or `"falling_back"`;
+/// `""` for a view the core cannot read.
+#[wasm_bindgen(js_name = rpcNodeStanding)]
+#[must_use]
+pub fn rpc_node_standing(view_json: &str, chain_id: u32) -> String {
+    use vela_core::app::rpc_pool::{node_standing, RpcPoolView};
+    serde_json::from_str::<RpcPoolView>(view_json)
+        .ok()
+        .and_then(|view| serde_json::to_value(node_standing(&view, chain_id)).ok())
+        .and_then(|standing| standing.as_str().map(str::to_owned))
+        .unwrap_or_default()
+}
+
+/// The HTTPS exception for an address a person types into Settings: plain
+/// `http://` to this computer (`localhost`, `127.0.0.1`, `[::1]`, any port)
+/// — `network_admin::is_localhost_http`.
+#[wasm_bindgen(js_name = isLocalhostHttp)]
+#[must_use]
+pub fn is_localhost_http(url: &str) -> bool {
+    vela_core::app::network_admin::is_localhost_http(url)
+}
+
+/// How a passkey prompt that failed as `kind` (a `FailureKind` wire name),
+/// `elapsed_ms` after it was raised, ended — `passkey_end::ceremony_end`, as
+/// its wire name (`"cancelled"`, `"timed_out"`, …). A kind this build does
+/// not know is `"other"`.
+#[wasm_bindgen(js_name = passkeyCeremonyEnd)]
+#[must_use]
+pub fn passkey_ceremony_end(kind: &str, elapsed_ms: f64) -> String {
+    use vela_core::app::{passkey_end::ceremony_end, FailureKind};
+    let kind = serde_json::from_value(serde_json::Value::String(kind.to_owned()))
+        .unwrap_or(FailureKind::Other);
+    serde_json::to_value(ceremony_end(kind, elapsed_ms))
+        .ok()
+        .and_then(|end| end.as_str().map(str::to_owned))
+        .unwrap_or_default()
+}
+
+/// The signing prompt's deadline, ms (`passkey_end::SIGN_TIMEOUT_MS`).
+#[wasm_bindgen(js_name = passkeySignTimeoutMs)]
+#[must_use]
+pub fn passkey_sign_timeout_ms() -> f64 {
+    vela_core::app::passkey_end::SIGN_TIMEOUT_MS
+}
+
 /// The answer a hedge's outcome may hand the caller before the pool reaches
 /// that endpoint in its own order — `rpc_pool::early_verdict` — as the
 /// verdict's JSON, or `""` when it must wait (an outcome the shell cannot
@@ -2882,6 +2947,17 @@ mod core_082_exports {
         assert_eq!(
             step(&refused.to_string(), 0, false),
             json!({"done": {"type": "not_sent", "rejection": "relayer_unavailable"}})
+        );
+        // send-15: the bare AA25 — the nonce another transaction spent.
+        let spent = json!({"error": {"code": -32500, "message": "AA25 invalid account nonce"}});
+        assert_eq!(
+            step(&spent.to_string(), 0, false),
+            json!({"done": {"type": "not_sent", "rejection": "nonce_used"}})
+        );
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&classify_relay_rejection("nonce too low"))
+                .ok(),
+            Some(json!("nonce_used"))
         );
         assert!(user_op_submit_step_inner("{\"other\":1}", 0, false, OP_HASH).is_err());
         assert!(user_op_submit_step_inner("not json", 0, false, OP_HASH).is_err());

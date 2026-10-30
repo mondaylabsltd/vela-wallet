@@ -161,5 +161,16 @@ export function nativeParityDispatch(wasm) {
     site_start_chain: (i) => wasm.siteStartChain(Uint32Array.from(i.space_chain_ids), opt(i.last_used)),
     resolved_name_step: (i) => json(wasm.resolvedNameStep(i.chain_id, i.registry, i.name, i.answers_json)),
     currency_fraction_digits: (i) => wasm.currencyFractionDigits(i.code),
+
+    // --- core asks 1 ---
+    // The `RelayRejection` wire JSON: "nonce_used", { other: … }, …
+    classify_relay_rejection: (i) => json(wasm.classifyRelayRejection(i.message)),
+    is_localhost_http: (i) => wasm.isLocalhostHttp(i.url),
+    passkey_ceremony_end: (i) => wasm.passkeyCeremonyEnd(i.kind, i.elapsed_ms),
+    passkey_sign_timeout_ms: () => wasm.passkeySignTimeoutMs(),
+    rpc_node_standing: (i) => wasm.rpcNodeStanding(i.view_json, i.chain_id),
+    // The verdict record, as uniffi's `SimOutcomeRecord` carries it (its
+    // `deltas_json` parsed as `deltas`).
+    sim_outcome: (i) => json(wasm.simOutcome(i.user, i.reply_json)),
   };
 }
