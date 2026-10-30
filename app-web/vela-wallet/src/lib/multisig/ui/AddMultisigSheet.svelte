@@ -30,7 +30,7 @@
 	import { fillTemplate } from '$lib/i18n/fill';
 	import { chainName, networkForChainId, spaceNetworksSync } from '$lib/services/networks';
 	import { balance } from '$lib/wallet/core/balance.svelte';
-	import { shortenAddress } from '../core/display';
+	import { localName, shortenAddress } from '../core/display';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import type { MultisigMessages } from '../messages';
@@ -40,7 +40,6 @@
 	import { keepLink } from '../core/kept-link';
 	import { parseSafeExport, type ExportedSafe } from '../core/kernel';
 	import { addLink, type AddLink, type InvitedMember } from '../core/link';
-	import { localName } from '../core/display';
 	import { heldChains, lastUsedChains, likelyNetworks } from '../core/likely-networks';
 	import { multisig } from '../core/store.svelte';
 	import AuthorityNotice from './AuthorityNotice.svelte';

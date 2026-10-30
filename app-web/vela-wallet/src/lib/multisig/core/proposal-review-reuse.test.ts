@@ -10,6 +10,7 @@ const reads = vi.hoisted(() => ({ simulations: 0, state: 'unchanged' }));
 vi.mock('$lib/contacts/core/contacts-book.svelte', () => ({ contactsBook: { view: null } }));
 vi.mock('$lib/session/core/session.svelte', () => ({ session: { view: { accounts: [] } } }));
 vi.mock('./store.svelte', () => ({ multisig: { accounts: [] } }));
+vi.mock('./names.svelte', () => ({ names: { label: () => null } }));
 vi.mock('$lib/services/rpc-pool', () => ({ poolRpcCall: async () => ({ result: '0x' }) }));
 vi.mock('$lib/services/recipient-risk', () => ({ resolveRecipientRisk: async () => null }));
 vi.mock('$lib/services/sim/sim-trust', () => ({ judgeCheck: async () => null }));
