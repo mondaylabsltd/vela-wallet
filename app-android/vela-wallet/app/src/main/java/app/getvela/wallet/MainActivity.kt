@@ -373,6 +373,18 @@ class MainActivity : ComponentActivity() {
         if (BuildConfig.DEBUG) app.getvela.wallet.core.diagnostics.BugReport.forceDocumentPicker = intent?.getBooleanExtra("vela.forceDocumentPicker", false) == true
         if (BuildConfig.DEBUG) app.getvela.wallet.core.diagnostics.BugReport.debugPrepareDelayMs = intent?.getLongExtra("vela.screenshotDelayMs", 0L) ?: 0L
         // Spec 047 US4: a forced crash for the device pass — debug builds only.
+        // Phase 3 device pass: ask the launcher to place the balance widget
+        // (its own "Add to home screen" dialog answers) — debug builds only.
+        if (BuildConfig.DEBUG && intent?.getBooleanExtra("vela.pinWidget", false) == true) {
+            val widgets = getSystemService(android.appwidget.AppWidgetManager::class.java)
+            if (widgets?.isRequestPinAppWidgetSupported == true) {
+                widgets.requestPinAppWidget(
+                    android.content.ComponentName(this, app.getvela.wallet.core.widget.VelaBalanceWidgetReceiver::class.java),
+                    null,
+                    null,
+                )
+            }
+        }
         if (BuildConfig.DEBUG && intent?.getBooleanExtra("vela.testPanic", false) == true) {
             android.os.Handler(mainLooper).postDelayed({ throw IllegalStateException("vela.testPanic") }, 2_000)
         }

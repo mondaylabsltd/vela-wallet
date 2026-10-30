@@ -765,7 +765,11 @@ fun VelaNavHost(
             LaunchedEffect(pendingFlow) {
                 val entry = pendingFlow ?: return@LaunchedEffect
                 VelaLog.event("flows", "pending flow", "entry" to entry.name, "top" to flows.top?.name)
+                val sendWasOpen = flows.top in SEND_STATES
                 flows.enter(entry)
+                // Phase 3 (device-found): the Scan tile over a Send already open —
+                // that Send does not open again, so its scanner opens on it now.
+                if (entry == WalletFlowEntry.Scan && sendWasOpen) application.container.send.openScanner()
                 application.container.pendingFlow.value = null
             }
             // Phase 3: an address or an `ethereum:` request shared into Vela —
