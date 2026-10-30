@@ -52,6 +52,9 @@ struct ScanInputs {
     /// FIXTURE frame — a drawn viewfinder with the sample code — and there
     /// is no camera behind it (`CameraScanner.fixtureOnly`).
     var fixture = false
+    /// VisionKit's live scanner reads the codes (native parity N-I2): the
+    /// viewfinder is `DataScannerView`, and a code goes here.
+    var dataScanner: ((String) -> Void)?
 }
 
 struct FlowHost: View {
@@ -329,7 +332,8 @@ struct FlowHost: View {
                 torchOn: scan?.torchOn ?? false,
                 // No live inputs at all is a gallery or a screenshot sweep:
                 // the fixture frame, as for a dev session's scanner.
-                fixtureFrame: scan?.fixture ?? true
+                fixtureFrame: scan?.fixture ?? true,
+                dataScanner: scan?.dataScanner
             )
         case .share(let m):
             // Not a screen: the saved image, shown on its own so the gallery
@@ -464,7 +468,7 @@ struct FlowHost: View {
                         // A BUTTON — the same primary button the signing sheet
                         // confirms with since issue #461, so the two confirm
                         // screens are one control.
-                        VelaButton(title: m.cta, kind: .primary) {
+                        VelaButton(title: m.cta, kind: .primary, haptic: .confirm) {
                             if let onConfirm { onConfirm() } else { onNavigate(.sendReceipt) }
                         }
                         .disabled(sendCtaDisabled)

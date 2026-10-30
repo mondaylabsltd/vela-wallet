@@ -17,6 +17,12 @@
 //  - `select`   a selection that TAKES EFFECT: a switch, a filter, a network /
 //               fee-token / account pick, a favourite, a copy
 //  - `success` / `reject`  an outcome the core decided
+//  - `confirm`  the tap that moves value or signs — Confirm & Send, Sign,
+//               Approve (native parity, premium motion): firmer than a press,
+//               so the one tap that matters feels like it did
+//  - `approvalCounted`  a member's approval counted towards a multisig's
+//               threshold (the web's "1 of 2 approved" moving) — a level
+//               rising, for the native multisig screens
 //
 //  **Never** for scrolling, a row tap that navigates, re-tapping the tab in
 //  force, Back, a sheet opening or closing, typing, animation, or a value the
@@ -30,10 +36,11 @@
 //  pasteboard write exists outside this file.
 //
 
+import SwiftUI
 import UIKit
 
-enum VelaHaptic {
-    case press, detent, select, success, reject
+enum VelaHaptic: CaseIterable {
+    case press, detent, select, success, reject, confirm, approvalCounted
 
     /// A confirmation, not a jolt: a CTA is a tap, not a transaction.
     private static let pressIntensity: CGFloat = 0.7
@@ -64,6 +71,45 @@ enum VelaHaptic {
             UINotificationFeedbackGenerator().notificationOccurred(.success)
         case .reject:
             UINotificationFeedbackGenerator().notificationOccurred(.error)
+        case .confirm:
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred(intensity: Self.confirmIntensity)
+        case .approvalCounted:
+            UIImpactFeedbackGenerator(style: .rigid).impactOccurred(intensity: Self.pressIntensity)
+        }
+    }
+
+    /// The value tap: a medium impact, nearly full — distinct from a press
+    /// under the same finger, never a jolt.
+    private static let confirmIntensity: CGFloat = 0.9
+
+    /// The same vocabulary as SwiftUI's declarative feedback, for a view that
+    /// plays one when a value changes (`velaHaptic(trigger:)`): one mapping,
+    /// so `.sensoryFeedback` and `play()` can never disagree about what a
+    /// success feels like.
+    var sensory: SensoryFeedback {
+        switch self {
+        case .press: .impact(weight: .light, intensity: Self.pressIntensity)
+        case .detent: .selection
+        case .select: .selection
+        case .success: .success
+        case .reject: .error
+        case .confirm: .impact(weight: .medium, intensity: Self.confirmIntensity)
+        case .approvalCounted: .increase
+        }
+    }
+}
+
+extension View {
+    /// Play the haptic `feedback` names when `trigger` changes — SwiftUI's
+    /// `sensoryFeedback`, in this vocabulary. `nil` plays nothing: one per
+    /// gesture, and none for a value the app changed by itself.
+    func velaHaptic<T: Equatable>(trigger: T, _ feedback: @escaping (T, T) -> VelaHaptic?) -> some View {
+        sensoryFeedback(trigger: trigger) { old, new in
+            guard let haptic = feedback(old, new) else { return nil }
+            #if DEBUG
+            VelaHaptic.recordDeclared(haptic)
+            #endif
+            return haptic.sensory
         }
     }
 }
@@ -86,6 +132,11 @@ extension VelaHaptic {
         defer { recorded = nil }
         try body()
         return recorded ?? []
+    }
+
+    /// A declared haptic (`velaHaptic(trigger:)`), into the same list.
+    static func recordDeclared(_ haptic: VelaHaptic) {
+        recorded?.append(haptic)
     }
 }
 #endif

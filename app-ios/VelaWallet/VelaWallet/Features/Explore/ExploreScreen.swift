@@ -1035,15 +1035,22 @@ struct ExploreScreen: View {
             torchOn: camera?.torchOn ?? false,
             // A gallery / board / dev session — or a drawing with no camera
             // behind it at all: the fixture frame (PR 3 note 7).
-            fixtureFrame: camera?.fixtureOnly ?? true
+            fixtureFrame: camera?.fixtureOnly ?? true,
+            dataScanner: liveDataScanner
         )
     }
 
     /// Handed over only while there are frames to show: a preview layer on a
     /// session with none is a black square where the drawn frame belongs.
     private var liveSession: AVCaptureSession? {
-        guard let camera, camera.refusal == nil, camera.running else { return nil }
+        guard let camera, camera.refusal == nil, camera.running, !camera.usesDataScanner else { return nil }
         return camera.session
+    }
+
+    /// VisionKit's live scanner, where the phone has it (native parity N-I2).
+    private var liveDataScanner: ((String) -> Void)? {
+        guard let camera, camera.refusal == nil, camera.running, camera.usesDataScanner else { return nil }
+        return { text in camera.deliver(text) }
     }
 
     /// 授予权限, when a refused permission is the thing standing in the way.

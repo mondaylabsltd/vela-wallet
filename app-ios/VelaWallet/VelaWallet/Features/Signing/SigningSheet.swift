@@ -252,8 +252,11 @@ struct SigningSheet: View {
                     // disabled control. Spec 079: an account that signs on the
                     // Trusted Signer's page says where it goes instead — that
                     // page's slide is the consent.
+                    // The value tap feels like one (`confirm`); the Trusted
+                    // Signer's button only opens a page, so it is a press.
                     VelaButton(title: model.confirmAsButton ? model.confirmButtonLabel : confirm.action,
-                               kind: .primary, enabled: confirm.enabled, action: onConfirm)
+                               kind: .primary, enabled: confirm.enabled,
+                               haptic: model.confirmAsButton ? .press : .confirm, action: onConfirm)
                         // The Trusted Signer route's button opens a page; it
                         // signs nothing here, so it carries its own hook
                         // (Android and desktop: `signing-open-signer`).

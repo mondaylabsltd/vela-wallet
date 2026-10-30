@@ -63,6 +63,14 @@ final class CameraScanner: NSObject {
     /// Rule 5: this session draws a fixture frame and never touches the
     /// camera. Decided once, when the scanner is made.
     let fixtureOnly: Bool
+    /// Native parity N-I2: VisionKit's live scanner reads the codes
+    /// (`DataScannerView`) instead of this session's frames. Decided when the
+    /// camera is granted — VisionKit is "available" only after that — and
+    /// never for a fixture session or a phone without the hardware.
+    private(set) var usesDataScanner = false
+    /// What the device would say about VisionKit — `nil` asks it; a test
+    /// says.
+    @ObservationIgnored private let dataScannerAllowed: Bool?
     /// How many times this scanner got PAST the gate, towards the capture
     /// hardware (device discovery, permission, the session). Always 0 for a
     /// `fixtureOnly` scanner — which is what its test holds.
@@ -84,8 +92,9 @@ final class CameraScanner: NSObject {
 
     /// `fixtureOnly` defaults to the session's own signal: any `VELA_PAGE`
     /// override is a gallery, a board or a dev flow.
-    init(fixtureOnly: Bool = PageOverride.isDevSession()) {
+    init(fixtureOnly: Bool = PageOverride.isDevSession(), dataScannerAllowed: Bool? = nil) {
         self.fixtureOnly = fixtureOnly
+        self.dataScannerAllowed = dataScannerAllowed
         super.init()
     }
 
@@ -127,7 +136,29 @@ final class CameraScanner: NSObject {
             refusal = .denied
             return
         }
+        // The camera is granted: VisionKit's scanner when the phone has it.
+        // It runs its own camera, so this session is never made.
+        if DataScannerSupport.usesDataScanner(
+            fixtureOnly: fixtureOnly,
+            deviceAllows: dataScannerAllowed ?? DataScannerSupport.deviceAllows
+        ) {
+            usesDataScanner = true
+            canFlip = false
+            hasTorch = Self.backCamera()?.hasTorch ?? false
+            reported = false
+            running = true
+            return
+        }
         await configure()
+    }
+
+    /// A code read — by this session's frames or by VisionKit. Rule 3: once
+    /// per session, then the camera stops and the owner hears it.
+    func deliver(_ payload: String) {
+        guard !reported else { return }
+        reported = true
+        stop()
+        onScan(payload)
     }
 
     func stop() {
@@ -141,7 +172,10 @@ final class CameraScanner: NSObject {
 
     /// The torch, which only a back camera has.
     func toggleTorch() {
-        guard !fixtureOnly, let device = input?.device, device.hasTorch else { return }
+        // VisionKit's camera is the back one; its torch is that device's.
+        guard !fixtureOnly, let device = usesDataScanner ? Self.backCamera() : input?.device,
+              device.hasTorch
+        else { return }
         do {
             try device.lockForConfiguration()
             device.torchMode = device.torchMode == .on ? .off : .on
@@ -165,6 +199,10 @@ final class CameraScanner: NSObject {
 
     /// Every wide-angle lens this device has. Empty on a simulator, and on a
     /// Mac whose camera is disabled by policy.
+    private static func backCamera() -> AVCaptureDevice? {
+        AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
+    }
+
     private static func cameras() -> [AVCaptureDevice] {
         AVCaptureDevice.DiscoverySession(
             deviceTypes: [.builtInWideAngleCamera], mediaType: .video, position: .unspecified
@@ -239,10 +277,7 @@ extension CameraScanner: AVCaptureVideoDataOutputSampleBufferDelegate {
         guard let payload = QrDecoder.decode(sampleBuffer: sampleBuffer, orientation: 1)
         else { return }
         Task { @MainActor [weak self] in
-            guard let self, !reported else { return }
-            reported = true
-            stop()
-            onScan(payload)
+            self?.deliver(payload)
         }
     }
 }
