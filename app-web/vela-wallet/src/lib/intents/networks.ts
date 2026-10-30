@@ -143,11 +143,15 @@ export async function setOnlyMyNode(chainId: number, on: boolean): Promise<null>
 	return null;
 }
 
-/** The network's own row is what its delete names. */
+/**
+ * The network's own row is what its delete names — a custom network, or a
+ * Vela network shown on the person's word (`optional`), which the core takes
+ * out of the lists and keeps everything stored for it.
+ */
 export async function removeNetwork(chainId: number): Promise<void> {
 	await ready();
 	const row = networkAdmin.view.networks.find(
-		(entry) => entry.chain_id === chainId && entry.is_custom
+		(entry) => entry.chain_id === chainId && (entry.is_custom || entry.optional)
 	);
 	networkAdmin.dispatch({ type: 'delete_confirmed', id: row?.id ?? `custom-${chainId}` });
 }
