@@ -109,6 +109,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.activity.compose.BackHandler
+import app.getvela.wallet.core.designsystem.motion.flowMotion
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
@@ -320,7 +321,11 @@ fun SettingsRoute(
     LaunchedEffect(page) { actions.onPageShown(page) }
     // The system Back steps out of a pushed page the way its ‹ does; on the
     // home it is the app's, as before (SettingsPage.back).
-    BackHandler(enabled = page.back != null) { page.back?.let { page = it } }
+    // Phase 3: a pushed page follows the held back gesture, and each page
+    // settles in from its side (the settings home cuts in, as a tab does).
+    val pageBack = app.getvela.wallet.core.designsystem.motion.rememberPredictiveBackState()
+    val reducedMotion = app.getvela.wallet.core.designsystem.motion.rememberReducedMotion()
+    app.getvela.wallet.core.designsystem.motion.VelaBackHandler(enabled = page.back != null, state = pageBack) { page.back?.let { page = it } }
     // Spec 072: the network a trash tap asked about, until the sheet answers.
     var pendingRemoval by rememberSaveable { mutableStateOf<String?>(null) }
     // Spec 102: the saved signing page whose sheet is open.
@@ -359,7 +364,13 @@ fun SettingsRoute(
         page = page,
         overlay = overlay,
         advancedOpen = advancedOpen,
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().flowMotion(
+            level = page,
+            depth = generateSequence(page) { it.back }.count(),
+            back = pageBack,
+            reduced = reducedMotion,
+            animateFirst = false,
+        ),
         onRow = { id ->
             when (id) {
                 "contacts" -> actions.onOpenContacts()
