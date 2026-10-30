@@ -31,7 +31,19 @@ const seams = vi.hoisted(() => ({
 	networks: [{ chainId: 100, displayName: 'Gnosis' }] as { chainId: number; displayName: string }[],
 	/** The core's verdict per chain on the Safe v1.4.1 contracts. */
 	contracts: {} as Record<number, 'present' | 'missing' | 'unknown'>,
-	created: [] as { chainId: number }[]
+	created: [] as { chainId: number }[],
+	/** r7: what the wallet can tell of each address (`signers.evidence`), and the networks asked. */
+	evidence: {} as Record<string, 'vela' | 'contract' | 'wallet' | null>,
+	evidenceOn: [] as number[][]
+}));
+vi.mock('../core/signers.svelte', async (importOriginal) => ({
+	...(await importOriginal<typeof import('../core/signers.svelte')>()),
+	signers: {
+		evidence: (chainIds: number[], a: string) => {
+			seams.evidenceOn.push([...chainIds]);
+			return seams.evidence[a] ?? null;
+		}
+	}
 }));
 vi.mock('$lib/services/networks', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/services/networks')>()),
@@ -147,6 +159,8 @@ afterEach(() => {
 	seams.networks = [{ chainId: 100, displayName: 'Gnosis' }];
 	seams.contracts = {};
 	seams.created = [];
+	seams.evidence = {};
+	seams.evidenceOn = [];
 });
 
 describe('creating a multisig', () => {
@@ -438,6 +452,97 @@ describe('r4a-14: what a creation can be, and how its members come', () => {
 				})
 			})
 		);
+		await screen.unmount();
+	});
+
+	it('r7: each added member’s kind — found, a smart contract, hinted, or asked — kept only as declared', async () => {
+		const BOB = '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC';
+		const CAROL = '0x90F79bf6EB2c4f870365E785982E1f101E93b906';
+		/** Another Safe as a member: code, no index record. */
+		const SAFE_MEMBER = '0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc';
+		seams.networks = [
+			{ chainId: 100, displayName: 'Gnosis' },
+			{ chainId: 8453, displayName: 'Base' }
+		];
+		seams.evidence = { [BOB]: 'wallet', [DAN]: 'vela', [SAFE_MEMBER]: 'contract' };
+		const screen = open();
+		await settle();
+		type('.name-field', 'Team');
+		for (const address of [BOB, CAROL, DAN, SAFE_MEMBER]) {
+			type('input.mono', address);
+			await settle();
+			addPressed();
+			await settle();
+		}
+		const rows = [...document.body.querySelectorAll<HTMLElement>('.owners li')];
+		const kindOf = (row: HTMLElement) =>
+			row.querySelector<HTMLElement>('[data-testid="member-kind"]')?.dataset.kind ?? null;
+		// This device's account is a Vela account here: nothing asked of it.
+		expect(rows.map(kindOf)).toEqual([null, 'unknown', 'unknown', 'passkey', 'contract']);
+		// Bob: no Vela account found — "Other wallet" only hinted, and said so.
+		expect(rows[1].querySelector('[data-testid="member-kind-likely"]')).not.toBeNull();
+		expect(rows[1].querySelectorAll('[aria-checked="true"]')).toHaveLength(0);
+		expect(rows[1].querySelector('[data-suggested]')?.textContent?.trim()).toBe(
+			'members.kindWallet'
+		);
+		// Carol: it can't tell — asked, nothing picked.
+		expect(rows[2].querySelector('[data-testid="member-kind-ask"]')).not.toBeNull();
+		expect(rows[2].querySelectorAll('[aria-checked="true"]')).toHaveLength(0);
+		// Dan: Vela found a Vela account — shown, nothing to pick.
+		expect(rows[3].querySelectorAll('[role="radio"]')).toHaveLength(0);
+		// The other Safe: a smart contract account, never "Vela account" — said honestly.
+		expect(rows[4].querySelectorAll('[role="radio"]')).toHaveLength(0);
+		expect(rows[4].textContent).toContain('members.kindContractNote');
+		expect(rows[4].textContent).not.toContain('members.kindVela');
+		// Looked for on every network it may be used on: the same address on each.
+		expect([...(seams.evidenceOn.at(-1) ?? [])].sort()).toEqual([100, 8453]);
+		// The person says Carol is a Vela account.
+		[...rows[2].querySelectorAll<HTMLButtonElement>('[role="radio"]')]
+			.find((b) => b.textContent?.trim() === 'members.kindVela')
+			?.click();
+		await settle();
+		expect(kindOf(rows[2])).toBe('passkey');
+		press('create.next');
+		await settle();
+		press('create.next');
+		await settle();
+		document.body.querySelector<HTMLButtonElement>('[role="radio"]')?.click();
+		await settle();
+		press('create.create');
+		await settle();
+		expect(seams.created[0]).toEqual(
+			expect.objectContaining({
+				members: expect.objectContaining({
+					// Bob's hint was not picked: nothing kept, unsure.
+					[BOB]: {},
+					[CAROL]: { kind: 'passkey' },
+					[DAN]: { kind: 'passkey' },
+					[SAFE_MEMBER]: { kind: 'contract' }
+				})
+			})
+		);
+		await screen.unmount();
+	});
+
+	it('r7: a member left unsaid keeps no kind — it is offered both ways later', async () => {
+		const CAROL = '0x90F79bf6EB2c4f870365E785982E1f101E93b906';
+		const screen = open();
+		await settle();
+		type('.name-field', 'Team');
+		type('input.mono', CAROL);
+		await settle();
+		addPressed();
+		await settle();
+		press('create.next');
+		await settle();
+		press('create.next');
+		await settle();
+		document.body.querySelector<HTMLButtonElement>('[role="radio"]')?.click();
+		await settle();
+		press('create.create');
+		await settle();
+		const members = (seams.created[0] as unknown as { members: Record<string, unknown> }).members;
+		expect(members[CAROL]).toEqual({});
 		await screen.unmount();
 	});
 

@@ -163,6 +163,7 @@
     "notNeeded": "Não é necessário",
     "sendLink": "Enviar link",
     "approvesInVela": "Aprova no Vela pelo próprio dispositivo: {{names}}. Envie este link a eles.",
+    "contractMembers": "{{names}}: uma conta de contrato inteligente aprova pelo próprio app (ex.: outro Safe). O Vela ainda não consegue coletar essas aprovações.",
     "rejectCancel": "Cancelar",
     "noOutsideSigner": "nenhum membro está neste dispositivo, e todos aprovam no Vela pelo próprio dispositivo — peça a um deles para propor",
     "lostRace": "Outro membro executou primeiro. Nada foi enviado da sua conta.",
@@ -499,7 +500,9 @@
     "importing": "Importando…",
     "imported": "Importado",
     "already": "Já adicionado",
-    "notDeployed": "Não foi implantado em nenhuma das suas redes, e o arquivo não traz a configuração."
+    "notDeployed": "Não foi implantado em nenhuma das suas redes, e o arquivo não traz a configuração.",
+    "kindsTitle": "Como cada membro aprova?",
+    "kindsBody": "Uma conta Vela aprova no Vela com sua passkey; outra carteira assina com essa carteira. O Vela preenche o que consegue saber. Isso só decide o que o Vela oferece a eles — quem pode aprovar é definido pelo Safe."
    },
    "settings": {
     "backupTitle": "Fazer backup da configuração na Ethereum",
@@ -554,6 +557,11 @@
     "kind": "Tipo de membro",
     "kindVela": "Conta Vela (passkey)",
     "kindWallet": "Outra carteira",
+    "kindKnown": "O Vela encontrou uma conta Vela neste endereço. Ela aprova no Vela, com sua passkey.",
+    "kindLikely": "Nenhuma conta Vela encontrada neste endereço — provavelmente outra carteira. Toque em Outra carteira para confirmar; se deixar assim, as duas formas de aprovar serão oferecidas.",
+    "kindAsk": "O Vela não consegue saber pelo endereço. Escolha uma opção — ou deixe assim, e as duas formas de aprovar serão oferecidas.",
+    "kindContract": "Conta de contrato inteligente",
+    "kindContractNote": "Aprova pelo próprio app (ex.: outro Safe). O Vela ainda não consegue coletar essa aprovação.",
     "newAccount": "A nova conta da pessoa",
     "replaceIntro": "Coloque a nova conta de {{name}} no lugar, por exemplo depois de perder uma passkey. Os outros membros aprovam; nada mais muda.",
     "removeIntro": "{{name}} não poderá mais aprovar transações nem mover fundos.",

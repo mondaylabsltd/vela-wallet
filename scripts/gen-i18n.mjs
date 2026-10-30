@@ -1336,7 +1336,21 @@ if (branchSet.size !== 108) fail(`expected 108 branch paths, got ${branchSet.siz
   //   linkDamaged` ("This link is damaged — ask for a new one": an invite
   //   that does not read is the link's, never "the wallet couldn't sign:
   //   invalid invite"). 594 + 1 = 595.
-  const pins = { multisig: 595 };
+  // 600 (round 7, a member's kind declared then verified, 2026-10-30): +
+  //   `home.multisig.members.{kindKnown, kindLikely, kindAsk}` (the kind
+  //   choice's line: Vela found a Vela account; none found, "Other wallet"
+  //   pre-filled for the person to confirm; it can't tell, asked — left
+  //   unsaid, both ways are offered) and `home.multisig.import.{kindsTitle,
+  //   kindsBody}` (the import's step that asks each member's kind). The
+  //   compiled table is untouched (2210). 595 + 3 + 2 = 600.
+  // 603 (round 7, the same day, owner's refinements): + `home.multisig.
+  //   members.{kindContract, kindContractNote}` (code at the address and no
+  //   index record is a smart contract account, never "Vela account": it
+  //   approves from its own app, which Vela can't collect yet) and
+  //   `home.multisig.proposal.contractMembers` (said under the approvals).
+  //   `members.kindLikely` changes value only ("Other wallet" is a hint, kept
+  //   only if tapped). 600 + 3 = 603.
+  const pins = { multisig: 603 };
   for (const [name, docs] of Object.entries(onDemand)) {
     const leaves = new Set();
     for (const lng of LOCALES) walk(docs[lng], '', leaves, new Set());

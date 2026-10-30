@@ -16,6 +16,10 @@
 	 * Or importing Safes from a Safe{Wallet} export: the file is read by the
 	 * core on this device, the person picks the Safes, and each is imported
 	 * with a genesis the core re-derives its address from (`importExported`).
+	 * r7: before that, each member not on this device is asked its kind —
+	 * "Vela account" or "Other wallet", shown as found where Vela can tell
+	 * (or a smart contract account), "Other wallet" only hinted — and the
+	 * answer kept with each Safe it is a member of: a label, never authority.
 	 *
 	 * Who can act for it is the chain's, or the core's counterfactual rule
 	 * (§3.5): a genesis it refuses is said with every reason and nothing adds
@@ -38,12 +42,18 @@
 	import type { Finding } from '../core/refusal';
 	import { indexName, missingTitle } from '../core/activity.svelte';
 	import { keepLink } from '../core/kept-link';
-	import { parseSafeExport, type ExportedSafe } from '../core/kernel';
+	import { parseSafeExport, sameAddress, type ExportedSafe } from '../core/kernel';
 	import { addLink, type AddLink, type InvitedMember } from '../core/link';
 	import { heldChains, lastUsedChains, likelyNetworks } from '../core/likely-networks';
-	import { multisig } from '../core/store.svelte';
+	import { kindChoice, type MemberKind } from '../core/member-kind';
+	import { keptMember, names } from '../core/names.svelte';
+	import { signers } from '../core/signers.svelte';
+	import { multisig, type MemberInfo } from '../core/store.svelte';
+	import Identicon from '$lib/wallet/ui/Identicon.svelte';
+	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import AuthorityNotice from './AuthorityNotice.svelte';
 	import CustomServiceNote from './CustomServiceNote.svelte';
+	import MemberKindChoice from './MemberKindChoice.svelte';
 	import NetworkChoice from './NetworkChoice.svelte';
 	import Sheet from './Sheet.svelte';
 
@@ -237,17 +247,77 @@
 		picked = picked.includes(address) ? picked.filter((a) => a !== address) : [...picked, address];
 	}
 
+	/** r7: the members' kinds are asked before anything is imported. */
+	let asking = $state(false);
+	/** r7: the kind the person picked for a member, by lowercase address. */
+	let kinds = $state<Record<string, MemberKind>>({});
+	/**
+	 * r7: the picked Safes' members not on this device (any of their
+	 * networks' owners, once each), with the networks each is a member on —
+	 * where code at its address is looked for.
+	 */
+	const toAsk = $derived.by(() => {
+		const out: { address: string; chainIds: number[] }[] = [];
+		for (const safe of exported ?? []) {
+			if (!picked.includes(safe.address)) continue;
+			for (const c of safe.chains) {
+				for (const owner of c.owners) {
+					if (localName(owner)) continue;
+					const seen = out.find((o) => sameAddress(o.address, owner));
+					if (!seen) out.push({ address: owner, chainIds: [c.chainId] });
+					else if (!seen.chainIds.includes(c.chainId)) seen.chainIds.push(c.chainId);
+				}
+			}
+		}
+		return out;
+	});
+
+	function kindOf(member: { address: string; chainIds: number[] }) {
+		return kindChoice(
+			signers.evidence(member.chainIds, member.address),
+			kinds[member.address.toLowerCase()] ?? keptMember(member.address).kind
+		);
+	}
+
+	/**
+	 * The pick's next step is the members' kinds — unless every member is on
+	 * this device, or they were asked already (an import is being retried).
+	 */
+	const askFirst = $derived(toAsk.length > 0 && Object.keys(results).length === 0);
+	function next() {
+		if (askFirst) asking = true;
+		else void importPicked();
+	}
+
 	async function importPicked() {
 		if (!exported) return;
+		asking = false;
 		for (const safe of exported.filter((s) => picked.includes(s.address))) {
 			if (results[safe.address] === 'ok') continue;
 			await importOne(safe);
 		}
 	}
 
+	/**
+	 * r7: what each of `safe`'s members was declared as (or Vela found), kept
+	 * with it — a label that steers what each member is offered, never
+	 * authority. One left unsaid keeps nothing: it is offered both ways.
+	 */
+	function keepKinds(safe: ExportedSafe) {
+		const members: Record<string, MemberInfo> = {};
+		for (const member of toAsk) {
+			if (!safe.chains.some((c) => c.owners.some((o) => sameAddress(o, member.address)))) continue;
+			const kind = kindOf(member).kind;
+			if (kind) members[member.address] = { kind };
+		}
+		if (Object.keys(members).length > 0)
+			multisig.nameMembers(safe.address, members, { typed: true });
+	}
+
 	async function importOne(safe: ExportedSafe, acceptRisks = false) {
 		results = { ...results, [safe.address]: 'busy' };
 		const outcome = await importExported(safe, { acceptRisks });
+		if (outcome.ok) keepKinds(safe);
 		if (!outcome.ok && 'findings' in outcome)
 			found = { ...found, [safe.address]: outcome.findings };
 		if (!outcome.ok && outcome.reason === 'unverified') {
@@ -263,7 +333,44 @@
 </script>
 
 <Sheet title={m.add.title} {closeLabel} {wide} busy={busy || importing} {onclose}>
-	{#if exported}
+	{#if exported && asking}
+		<!-- r7: each member's kind, declared before the Safes are imported. -->
+		<h3>{m.import.kindsTitle}</h3>
+		<p class="hint">{m.import.kindsBody}</p>
+		<ul class="members" data-testid="import-kinds">
+			{#each toAsk as member (member.address)}
+				<li>
+					<span class="member">
+						<Identicon
+							svg={identiconSvgForClient(member.address)}
+							size="compact"
+							address={member.address}
+						/>
+						<span class="text"
+							><span class="name">{names.label(member.address)}</span
+							>{#if names.label(member.address) !== shortenAddress(member.address)}<span
+									class="meta">{shortenAddress(member.address)}</span
+								>{/if}</span
+						>
+					</span>
+					<MemberKindChoice
+						{m}
+						choice={kindOf(member)}
+						name={names.label(member.address)}
+						onpick={(k) => (kinds = { ...kinds, [member.address.toLowerCase()]: k })}
+					/>
+				</li>
+			{/each}
+		</ul>
+		<div class="nav">
+			<Button variant="secondary" shape="rounded" onclick={() => (asking = false)}
+				>{m.create.back}</Button
+			>
+			<Button variant="primary" shape="rounded" onclick={() => void importPicked()}
+				>{fillTemplate(m.import.importSome, { total: picked.length })}</Button
+			>
+		</div>
+	{:else if exported}
 		<h3>{m.import.pick}</h3>
 		<ul class="safes">
 			{#each exported as safe (safe.address)}
@@ -339,8 +446,10 @@
 				shape="rounded"
 				loading={importing}
 				disabled={importing || picked.length === 0}
-				onclick={() => void importPicked()}
-				>{fillTemplate(m.import.importSome, { total: picked.length })}</Button
+				onclick={next}
+				>{askFirst
+					? m.create.next
+					: fillTemplate(m.import.importSome, { total: picked.length })}</Button
 			>
 		{/if}
 	{:else}
@@ -408,7 +517,11 @@
 										<span class="who">{member.name ?? you}</span>
 										{#if you}<span class="you">{m.add.thatsYou}</span>{/if}
 										{#if member.kind}<span class="kind"
-												>{member.kind === 'passkey' ? m.add.kindPasskey : m.add.kindWallet}</span
+												>{member.kind === 'passkey'
+													? m.add.kindPasskey
+													: member.kind === 'contract'
+														? m.members.kindContract
+														: m.add.kindWallet}</span
 											>{/if}
 									</li>
 								{/if}
@@ -558,6 +671,53 @@
 
 	.safes .state:empty {
 		display: none;
+	}
+
+	/* r7: the members' kinds, one member a row — who, then how they approve. */
+	.members {
+		list-style: none;
+		margin: var(--space-md) 0 var(--space-lg);
+		padding: 0;
+	}
+
+	.members li {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-sm);
+		padding-block: var(--space-md);
+		border-bottom: var(--border-hairline) solid var(--color-border-base);
+	}
+
+	.member {
+		display: flex;
+		align-items: center;
+		gap: var(--space-md);
+		min-width: 0;
+	}
+
+	.member .text {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+	}
+
+	.member .name {
+		font-weight: var(--weight-semibold);
+		overflow-wrap: anywhere;
+	}
+
+	.member .meta {
+		font-size: calc(var(--text-xs) * var(--text-scale, 1));
+		color: var(--color-fg-muted);
+	}
+
+	.nav {
+		display: flex;
+		gap: var(--space-md);
+	}
+
+	.nav > :global(*) {
+		flex: 1;
 	}
 
 	.error {

@@ -33,7 +33,18 @@ const seams = vi.hoisted(() => ({
 	refuseOn: null as number | null,
 	contacts: [] as unknown[],
 	/** Members' labels kept with the multisig (create's store, r4D-5). */
-	named: [] as [string, Record<string, unknown>][]
+	named: [] as [string, Record<string, unknown>][],
+	/** r7: what the wallet can tell of each address (`signers.evidence`), and the networks asked. */
+	evidence: {} as Record<string, 'vela' | 'contract' | 'wallet' | null>,
+	evidenceOn: [] as number[][]
+}));
+vi.mock('../core/signers.svelte', () => ({
+	signers: {
+		evidence: (chainIds: number[], a: string) => {
+			seams.evidenceOn.push([...chainIds]);
+			return seams.evidence[a] ?? null;
+		}
+	}
 }));
 vi.mock('../core/store.svelte', () => ({
 	multisig: {
@@ -70,7 +81,8 @@ vi.mock('../core/ui.svelte', () => ({
 	multisigUi: { open: (sheet: unknown) => seams.opened.push(sheet) }
 }));
 vi.mock('../core/names.svelte', () => ({
-	names: { label: (a: string) => `name-${a.slice(2, 4)}`, isVela: () => false }
+	names: { label: (a: string) => `name-${a.slice(2, 4)}`, isVela: () => false },
+	keptMember: () => ({})
 }));
 vi.mock('$lib/onboarding/core/storage', async (original) => ({
 	...(await original<object>()),
@@ -136,7 +148,13 @@ function shown() {
 	return render(MemberChanges, {
 		props: {
 			m: words(),
-			account: { address: SAFE, genesis: {}, owners: [A, B, C], threshold: 2 } as never,
+			account: {
+				address: SAFE,
+				genesis: {},
+				owners: [A, B, C],
+				threshold: 2,
+				chainIds: [ARC, BASE, GNOSIS]
+			} as never,
 			cancelLabel: 'Cancel'
 		}
 	});
@@ -157,6 +175,8 @@ afterEach(() => {
 	seams.opened = [];
 	seams.refuseOn = null;
 	seams.contacts = [];
+	seams.evidence = {};
+	seams.evidenceOn = [];
 });
 
 describe('changing the members (Settings)', () => {
@@ -219,6 +239,8 @@ describe('changing the members (Settings)', () => {
 
 	it('replaces a member (the lost-passkey path): the new account shown in full, its name kept here', async () => {
 		twoNetworks();
+		// r7: no Vela account found at D — "Other wallet" only hinted: not picked, no kind kept.
+		seams.evidence[D] = 'wallet';
 		const screen = shown();
 		await tick();
 		screen.container
@@ -254,7 +276,7 @@ describe('changing the members (Settings)', () => {
 		byText(screen.container, 'send.propose')?.click();
 		await vi.waitFor(() => expect(seams.proposed).toHaveLength(2));
 		expect(seams.proposed[1][2]).toEqual({ kind: 'replace', oldOwner: C, newOwner: D });
-		expect(seams.named.at(-1)?.[1]).toEqual({ [D]: { name: 'Dana', kind: 'wallet' } });
+		expect(seams.named.at(-1)?.[1]).toEqual({ [D]: { name: 'Dana' } });
 	});
 
 	it('changes the approvals needed with the stepper, and says a network that refuses', async () => {
@@ -284,6 +306,7 @@ describe('changing the members (Settings)', () => {
 
 	it('adds a member picked from the contacts: its address shown, its name and kind kept', async () => {
 		twoNetworks();
+		seams.evidence[D] = 'wallet';
 		seams.contacts = [
 			{ address: D, name: 'Dana', resolved_name: null, kind: 'eoa' },
 			{ address: '0x5555555555555555555555555555555555555555', name: 'Eve', kind: 'eoa' }
@@ -317,7 +340,7 @@ describe('changing the members (Settings)', () => {
 		byText(screen.container, 'send.propose')?.click();
 		await vi.waitFor(() => expect(seams.proposed).toHaveLength(2));
 		expect(seams.proposed[0][2]).toEqual({ kind: 'add', owner: D, threshold: undefined });
-		expect(seams.named.at(-1)?.[1]).toEqual({ [D]: { name: 'Dana', kind: 'wallet' } });
+		expect(seams.named.at(-1)?.[1]).toEqual({ [D]: { name: 'Dana' } });
 	});
 
 	it('offers nothing when it is deployed nowhere', async () => {
@@ -352,5 +375,117 @@ describe('changing the members (Settings)', () => {
 		expect(group?.textContent).toContain('Add name-44');
 		[...(group?.querySelectorAll<HTMLButtonElement>('button.part') ?? [])][1].click();
 		expect(seams.opened).toEqual([{ kind: 'proposal', chainId: BASE, safeTxHash: `0x${BASE}` }]);
+	});
+});
+
+/**
+ * r7: Add member asks the member's kind — "Vela account" or "Other wallet" —
+ * pre-filled where the wallet can tell, asked where it can't, and kept with
+ * the member as a label (never authority). It used to read "Other wallet"
+ * whenever nothing said.
+ */
+describe('Add member: the kind, declared then verified (r7)', () => {
+	async function typeMember(address: string) {
+		twoNetworks();
+		const screen = shown();
+		await tick();
+		byText(screen.container, 'members.add')?.click();
+		await tick();
+		const input = screen.container.querySelector<HTMLInputElement>('[data-testid="member-entry"]');
+		if (!input) throw new Error('no entry');
+		input.value = address;
+		input.dispatchEvent(new Event('input', { bubbles: true }));
+		input.dispatchEvent(new Event('blur'));
+		await tick();
+		const kind = () => screen.container.querySelector<HTMLElement>('[data-testid="member-kind"]');
+		const radios = () =>
+			[...screen.container.querySelectorAll<HTMLButtonElement>('[role="radio"]')].map((r) => [
+				r.textContent?.trim(),
+				r.getAttribute('aria-checked')
+			]);
+		return { screen, kind, radios };
+	}
+
+	it('it can’t tell: nothing picked, the person asked — and left unsaid, no kind is kept', async () => {
+		const { screen, kind, radios } = await typeMember(D);
+		expect(kind()?.dataset.kind).toBe('unknown');
+		expect(radios()).toEqual([
+			['members.kindVela', 'false'],
+			['members.kindWallet', 'false']
+		]);
+		expect(screen.container.querySelector('[data-testid="member-kind-ask"]')?.textContent).toBe(
+			'members.kindAsk'
+		);
+		// Looked for on the multisig's networks.
+		expect(seams.evidenceOn.at(-1)).toEqual([ARC, BASE, GNOSIS]);
+		byText(screen.container, 'send.propose')?.click();
+		await vi.waitFor(() => expect(seams.proposed).toHaveLength(2));
+		expect(seams.named.at(-1)?.[1]).toEqual({ [D]: { name: '' } });
+	});
+
+	it('asked, the person says a Vela account: kept as one', async () => {
+		const { screen, kind } = await typeMember(D);
+		byText(screen.container, 'members.kindVela')?.click();
+		await tick();
+		expect(kind()?.dataset.kind).toBe('passkey');
+		byText(screen.container, 'send.propose')?.click();
+		await vi.waitFor(() => expect(seams.proposed).toHaveLength(2));
+		expect(seams.named.at(-1)?.[1]).toEqual({ [D]: { name: '', kind: 'passkey' } });
+	});
+
+	it('no Vela account found: "Other wallet" only hinted and said — not picked, nothing kept', async () => {
+		seams.evidence[D] = 'wallet';
+		const { screen, radios } = await typeMember(D);
+		expect(radios()).toEqual([
+			['members.kindVela', 'false'],
+			['members.kindWallet', 'false']
+		]);
+		const hinted = [
+			...screen.container.querySelectorAll<HTMLButtonElement>('[role="radio"][data-suggested]')
+		].map((b) => b.textContent?.trim());
+		expect(hinted).toEqual(['members.kindWallet']);
+		expect(screen.container.querySelector('[data-testid="member-kind-likely"]')).not.toBeNull();
+		byText(screen.container, 'send.propose')?.click();
+		await vi.waitFor(() => expect(seams.proposed).toHaveLength(2));
+		// Unsure: offered both ways later.
+		expect(seams.named.at(-1)?.[1]).toEqual({ [D]: { name: '' } });
+	});
+
+	it('the hint, picked: kept as another wallet', async () => {
+		seams.evidence[D] = 'wallet';
+		const { screen, radios } = await typeMember(D);
+		byText(screen.container, 'members.kindWallet')?.click();
+		await tick();
+		expect(radios()).toEqual([
+			['members.kindVela', 'false'],
+			['members.kindWallet', 'true']
+		]);
+		byText(screen.container, 'send.propose')?.click();
+		await vi.waitFor(() => expect(seams.proposed).toHaveLength(2));
+		expect(seams.named.at(-1)?.[1]).toEqual({ [D]: { name: '', kind: 'wallet' } });
+	});
+
+	it('another Safe (code, no index record): a smart contract account, said honestly, kept as one', async () => {
+		seams.evidence[D] = 'contract';
+		const { screen, kind, radios } = await typeMember(D);
+		expect(kind()?.dataset.kind).toBe('contract');
+		expect(radios()).toEqual([]);
+		expect(kind()?.textContent).toContain('members.kindContract');
+		expect(kind()?.textContent).toContain('members.kindContractNote');
+		expect(kind()?.textContent).not.toContain('members.kindVela');
+		byText(screen.container, 'send.propose')?.click();
+		await vi.waitFor(() => expect(seams.proposed).toHaveLength(2));
+		expect(seams.named.at(-1)?.[1]).toEqual({ [D]: { name: '', kind: 'contract' } });
+	});
+
+	it('evidence of a Vela account: shown as found, nothing to pick, kept as a Vela account', async () => {
+		seams.evidence[D] = 'vela';
+		const { screen, kind, radios } = await typeMember(D);
+		expect(kind()?.dataset.kind).toBe('passkey');
+		expect(radios()).toEqual([]);
+		expect(kind()?.textContent).toContain('members.kindKnown');
+		byText(screen.container, 'send.propose')?.click();
+		await vi.waitFor(() => expect(seams.proposed).toHaveLength(2));
+		expect(seams.named.at(-1)?.[1]).toEqual({ [D]: { name: '', kind: 'passkey' } });
 	});
 });

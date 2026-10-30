@@ -237,6 +237,7 @@
         "notNeeded": "Nicht nötig",
         "sendLink": "Link senden",
         "approvesInVela": "Genehmigt in Vela auf dem eigenen Gerät: {{names}}. Schick ihnen diesen Link.",
+        "contractMembers": "{{names}}: Ein Smart-Contract-Konto genehmigt in seiner eigenen App (z. B. ein anderer Safe). Vela kann diese Genehmigungen noch nicht einholen.",
         "rejectCancel": "Abbrechen",
         "noOutsideSigner": "kein Mitglied ist auf diesem Gerät, und alle Mitglieder genehmigen in Vela auf ihrem eigenen Gerät — bitte eines von ihnen, es vorzuschlagen",
         "lostRace": "Ein anderes Mitglied hat sie zuerst ausgeführt. Von deinem Konto wurde nichts gesendet.",
@@ -569,7 +570,9 @@
         "importing": "Wird importiert…",
         "imported": "Importiert",
         "already": "Bereits hinzugefügt",
-        "notDeployed": "Auf keinem seiner Netzwerke bereitgestellt, und die Datei enthält seine Einrichtung nicht."
+        "notDeployed": "Auf keinem seiner Netzwerke bereitgestellt, und die Datei enthält seine Einrichtung nicht.",
+        "kindsTitle": "Wie genehmigt jedes Mitglied?",
+        "kindsBody": "Ein Vela-Konto genehmigt in Vela mit seinem Passkey; eine andere Wallet signiert mit dieser Wallet. Vela trägt ein, was es erkennen kann. Das bestimmt nur, was Vela ihnen anbietet — wer genehmigen darf, legt der Safe fest."
       },
       "settings": {
         "backupTitle": "Einrichtung auf Ethereum sichern",
@@ -624,6 +627,11 @@
         "kind": "Art des Mitglieds",
         "kindVela": "Vela-Konto (Passkey)",
         "kindWallet": "Andere Wallet",
+        "kindKnown": "Vela hat unter dieser Adresse ein Vela-Konto gefunden. Es genehmigt in Vela, mit seinem Passkey.",
+        "kindLikely": "Unter dieser Adresse wurde kein Vela-Konto gefunden — wahrscheinlich eine andere Wallet. Tippe zur Bestätigung auf „Andere Wallet“; bleibt es offen, werden beide Wege zum Genehmigen angeboten.",
+        "kindAsk": "Vela kann es an der Adresse nicht erkennen. Wähle eines aus — oder lass es offen, dann werden beide Wege zum Genehmigen angeboten.",
+        "kindContract": "Smart-Contract-Konto",
+        "kindContractNote": "Genehmigt in seiner eigenen App (z. B. ein anderer Safe). Vela kann diese Genehmigung noch nicht einholen.",
         "newAccount": "Das neue Konto",
         "replaceIntro": "Setze das neue Konto von {{name}} an dessen Stelle, etwa nach einem verlorenen Passkey. Die anderen Mitglieder genehmigen es; sonst ändert sich nichts.",
         "removeIntro": "{{name}} kann dann keine Transaktionen mehr genehmigen und kein Guthaben mehr bewegen.",

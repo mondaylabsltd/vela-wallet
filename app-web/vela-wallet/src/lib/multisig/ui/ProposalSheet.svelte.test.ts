@@ -37,6 +37,8 @@ const fake = vi.hoisted(() => ({
 	vela: [] as string[],
 	/** r4a-9: owners nothing says how they sign (no code, the index holds none). */
 	unsure: [] as string[],
+	/** r7: smart contract members (code, no index record) — another Safe. */
+	contract: [] as string[],
 	/** What the chain says executed a done proposal (ms-9, ms-10). */
 	executed: undefined as string | null | undefined,
 	/** What the chain says executed another hash (the cancellation's, ms-9). */
@@ -278,7 +280,9 @@ vi.mock('../core/signers.svelte', () => ({
 					? 'vela'
 					: fake.unsure.includes(a)
 						? 'unsure'
-						: 'wallet'
+						: fake.contract.includes(a)
+							? 'contract'
+							: 'wallet'
 	}
 }));
 vi.mock('../core/owners', () => ({
@@ -464,6 +468,7 @@ beforeEach(() => {
 	fake.refused = false;
 	fake.vela = [];
 	fake.unsure = [];
+	fake.contract = [];
 	fake.executed = undefined;
 	fake.executedBy = {};
 	fake.chains = [];
@@ -1874,20 +1879,50 @@ describe('how each missing member approves (r4-9, r4D-6)', () => {
 		await screen.unmount();
 	});
 
-	it('one nothing says how they sign (r4a-9): the Vela way first, the outside wallet only beside it', async () => {
+	it('one nothing says how they sign (r4a-9, r7): the Vela way first, the outside wallet beside it', async () => {
 		fake.unsure = [OTHER];
 		fake.chain.items = [item()];
 		const screen = show();
 		await settle();
-		// Their row offers the Vela link, never "Sign with another wallet".
-		expect(buttons()).not.toContain('external.signWithWallet');
-		expect(buttons()).toContain('proposal.sendLink');
+		// r7: their row offers "Send link" first AND "Approve with another
+		// wallet" beside it — both paths, the Vela one first, never one alone.
+		const row = [...document.querySelectorAll('section.approvals li')].find((li) =>
+			li.textContent?.includes('proposal.sendLink')
+		);
+		if (!row) throw new Error('no row offers the Vela link');
+		const controls = [...row.querySelectorAll('.state button')].map((b) => b.textContent?.trim());
+		expect(controls).toEqual(['proposal.sendLink', 'external.signWithWallet']);
 		const vela = document.querySelector('[data-testid="approves-in-vela"]');
 		const outside = document.querySelector('[data-testid="outside-invite"]');
 		expect(vela).not.toBeNull();
 		// The outside wallet's link is still there, after the Vela one.
 		expect(outside).not.toBeNull();
 		expect(vela!.compareDocumentPosition(outside!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		// The row's live pairing is the outside wallet's own way (r7).
+		[...row.querySelectorAll('button')]
+			.find((b) => b.textContent?.trim() === 'external.signWithWallet')
+			?.click();
+		await settle();
+		expect(fake.calls).toContain('external');
+		await screen.unmount();
+	});
+
+	it('r7: another Safe as a member — a smart contract account: said honestly, no wallet or Vela link offered', async () => {
+		fake.contract = [OTHER];
+		fake.chain.items = [item()];
+		const screen = show();
+		await settle();
+		const row = document.querySelector('[data-testid="contract-member"]');
+		expect(row?.textContent).toContain('members.kindContract');
+		expect(row?.closest('li')?.querySelectorAll('.state button')).toHaveLength(0);
+		expect(buttons()).not.toContain('external.signWithWallet');
+		expect(buttons()).not.toContain('proposal.sendLink');
+		expect(document.querySelector('[data-testid="contract-members"]')?.textContent).toContain(
+			'proposal.contractMembers'
+		);
+		// Neither an outside wallet's link nor the Vela invite is offered for it.
+		expect(document.querySelector('[data-testid="outside-invite"]')).toBeNull();
+		expect(document.querySelector('[data-testid="approves-in-vela"]')).toBeNull();
 		await screen.unmount();
 	});
 

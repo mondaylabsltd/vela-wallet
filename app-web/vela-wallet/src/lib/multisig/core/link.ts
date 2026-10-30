@@ -108,7 +108,8 @@ const ADDRESSED = 'a=';
 
 /**
  * What the inviter knows of a member: a label and its kind — a Vela account
- * (a passkey) or an outside wallet — and, in a link made since r6, its
+ * (a passkey), an outside wallet or a smart contract account — and, in a
+ * link made since r6, its
  * address. Labels only: who may act is the multisig's genesis and each
  * chain's owners, never this.
  */
@@ -116,7 +117,7 @@ export interface InvitedMember {
 	/** Its address (r4D-5, r5reg-24); absent in a link from before they rode along. */
 	address?: string;
 	name?: string;
-	kind?: 'passkey' | 'wallet';
+	kind?: 'passkey' | 'wallet' | 'contract';
 }
 
 /** An invite (r4D-4, r4D-5): the multisig, the networks it is used on, what the inviter knows of its members. */
@@ -146,7 +147,8 @@ export function checksumHolds(address: string): boolean {
 
 /** The longest member label a link carries, in characters (the core's name rule bounds it again). */
 export const MEMBER_NAME_MAX = 64;
-const KIND_CODE = { passkey: 'p', wallet: 'w' } as const;
+/** r7: `c` — a smart contract account; `p` and `w` read as they always did. */
+const KIND_CODE = { passkey: 'p', wallet: 'w', contract: 'c' } as const;
 
 function memberCode(member: InvitedMember): string {
 	const kind = member.kind ? KIND_CODE[member.kind] : '-';
@@ -168,7 +170,7 @@ function readMembers(raw: string, addressed: boolean): InvitedMember[] | null {
 			part = part.slice(40);
 		}
 		const kind = part[0];
-		if (kind !== 'p' && kind !== 'w' && kind !== '-') return null;
+		if (kind !== 'p' && kind !== 'w' && kind !== 'c' && kind !== '-') return null;
 		let name: string;
 		try {
 			name = decodeURIComponent(part.slice(1)).trim();
@@ -179,6 +181,7 @@ function readMembers(raw: string, addressed: boolean): InvitedMember[] | null {
 		if (name) member.name = name;
 		if (kind === 'p') member.kind = 'passkey';
 		if (kind === 'w') member.kind = 'wallet';
+		if (kind === 'c') member.kind = 'contract';
 		out.push(member);
 	}
 	return out;
@@ -190,7 +193,8 @@ function readMembers(raw: string, addressed: boolean): InvitedMember[] | null {
  * networks it is used on ride with it — Safe{Wallet}'s links name theirs —
  * so whoever opens it is never asked to guess one; and, when the inviter
  * knows them, each member's address (40 hex, lowercase), its kind — `p` a
- * Vela account, `w` an outside wallet, `-` not known — and its label,
+ * Vela account, `w` an outside wallet, `c` a smart contract account (r7), `-`
+ * not known — and its label,
  * URI-encoded: the founding members and those added since (r4D-5), and the
  * one who opens it is told which is them (r5reg-24). A member given without
  * an address is written the old way (`m=`, in the genesis's order). All in

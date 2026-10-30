@@ -163,6 +163,7 @@
     "notNeeded": "Non serve",
     "sendLink": "Invia link",
     "approvesInVela": "Approva in Vela dal proprio dispositivo: {{names}}. Invia loro questo link.",
+    "contractMembers": "{{names}}: un account smart contract approva dalla sua app (ad es. un altro Safe). Vela non può ancora raccogliere queste approvazioni.",
     "rejectCancel": "Annulla",
     "noOutsideSigner": "nessun membro è su questo dispositivo, e ogni membro approva in Vela dal proprio dispositivo — chiedi a uno di loro di proporla",
     "lostRace": "Un altro membro l’ha eseguita per primo. Dal tuo account non è stato inviato nulla.",
@@ -499,7 +500,9 @@
     "importing": "Importazione…",
     "imported": "Importato",
     "already": "Già aggiunto",
-    "notDeployed": "Non è distribuito su nessuna delle sue reti e il file non contiene la sua configurazione."
+    "notDeployed": "Non è distribuito su nessuna delle sue reti e il file non contiene la sua configurazione.",
+    "kindsTitle": "Come approva ogni membro?",
+    "kindsBody": "Un account Vela approva in Vela con la sua passkey; un altro wallet firma con quel wallet. Vela compila ciò che riesce a capire. Questo decide solo cosa Vela gli propone: chi può approvare lo stabilisce il Safe."
    },
    "settings": {
     "backupTitle": "Esegui il backup della configurazione su Ethereum",
@@ -554,6 +557,11 @@
     "kind": "Tipo di membro",
     "kindVela": "Account Vela (passkey)",
     "kindWallet": "Altro wallet",
+    "kindKnown": "Vela ha trovato un account Vela a questo indirizzo. Approva in Vela, con la sua passkey.",
+    "kindLikely": "Nessun account Vela trovato a questo indirizzo: probabilmente è un altro wallet. Tocca «Altro wallet» per confermare; se lo lasci così, gli verranno offerti entrambi i modi per approvare.",
+    "kindAsk": "Vela non può capirlo dall'indirizzo. Scegli tu, oppure lascia così e gli verranno offerti entrambi i modi per approvare.",
+    "kindContract": "Account smart contract",
+    "kindContractNote": "Approva dalla sua app (ad es. un altro Safe). Vela non può ancora raccogliere la sua approvazione.",
     "newAccount": "Il suo nuovo account",
     "replaceIntro": "Metti il nuovo account di {{name}} al suo posto, ad esempio dopo una passkey persa. Gli altri membri lo approvano; nient'altro cambia.",
     "removeIntro": "{{name}} non potrà più approvare transazioni né spostare fondi.",

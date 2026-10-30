@@ -163,6 +163,7 @@
     "notNeeded": "Tidak diperlukan",
     "sendLink": "Kirim tautan",
     "approvesInVela": "Menyetujui di Vela dari perangkatnya sendiri: {{names}}. Kirimkan tautan ini kepada mereka.",
+    "contractMembers": "{{names}}: akun kontrak pintar menyetujui dari aplikasinya sendiri (mis. Safe lain). Vela belum bisa mengumpulkan persetujuan itu.",
     "rejectCancel": "Batal",
     "noOutsideSigner": "tidak ada anggota di perangkat ini, dan setiap anggota menyetujui di Vela dari perangkatnya sendiri — minta salah satu dari mereka untuk mengusulkannya",
     "lostRace": "Anggota lain mengeksekusinya lebih dulu. Tidak ada yang dikirim dari akunmu.",
@@ -495,7 +496,9 @@
     "importing": "Mengimpor…",
     "imported": "Diimpor",
     "already": "Sudah ditambahkan",
-    "notDeployed": "Belum di-deploy di jaringan mana pun, dan file tidak memuat pengaturannya."
+    "notDeployed": "Belum di-deploy di jaringan mana pun, dan file tidak memuat pengaturannya.",
+    "kindsTitle": "Bagaimana setiap anggota menyetujui?",
+    "kindsBody": "Akun Vela menyetujui di Vela dengan passkey-nya; dompet lain menandatangani dengan dompet itu. Vela mengisi apa yang bisa diketahuinya. Ini hanya menentukan apa yang Vela tawarkan kepada mereka — siapa yang bisa menyetujui ditentukan oleh Safe."
    },
    "settings": {
     "backupTitle": "Cadangkan pengaturannya di Ethereum",
@@ -550,6 +553,11 @@
     "kind": "Jenis anggota",
     "kindVela": "Akun Vela (passkey)",
     "kindWallet": "Dompet lain",
+    "kindKnown": "Vela menemukan akun Vela di alamat ini. Akun ini menyetujui di Vela, dengan passkey-nya.",
+    "kindLikely": "Tidak ada akun Vela di alamat ini — kemungkinan dompet lain. Ketuk Dompet lain untuk mengonfirmasi; jika dibiarkan, mereka akan ditawari kedua cara untuk menyetujui.",
+    "kindAsk": "Vela tidak bisa mengetahuinya dari alamat. Pilih salah satu — atau biarkan, dan mereka akan ditawari kedua cara untuk menyetujui.",
+    "kindContract": "Akun kontrak pintar",
+    "kindContractNote": "Menyetujui dari aplikasinya sendiri (mis. Safe lain). Vela belum bisa mengumpulkan persetujuannya.",
     "newAccount": "Akun baru mereka",
     "replaceIntro": "Ganti {{name}} dengan akun barunya, misalnya setelah kehilangan passkey. Anggota lain menyetujuinya; selebihnya tidak berubah.",
     "removeIntro": "{{name}} tidak akan bisa lagi menyetujui transaksi atau memindahkan dana.",

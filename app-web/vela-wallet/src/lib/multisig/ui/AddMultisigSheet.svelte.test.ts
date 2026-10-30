@@ -62,7 +62,10 @@ vi.mock('../core/accounts', () => ({
 			? { ok: false, reason: 'chooseNetwork' }
 			: { ok: true, account: { address } };
 	},
-	importExported: async () => ({ ok: true })
+	importExported: async (safe: { address: string }) => {
+		io.imported.push(safe.address);
+		return { ok: true, account: { address: safe.address } };
+	}
 }));
 vi.mock('$lib/services/networks', () => ({
 	spaceNetworksSync: () => [
@@ -88,12 +91,35 @@ vi.mock('../core/display', () => ({
 	shortenAddress: (a: string) => `${a.slice(0, 8)}…${a.slice(-6)}`,
 	localName: (a: string) => (a.toLowerCase() === CAROL.toLowerCase() ? 'R5 Carol' : null)
 }));
+/** r7: the import's seams — the export read, what Vela can tell, what is kept, what is imported. */
+const io = vi.hoisted(() => ({
+	exported: [] as unknown[],
+	evidence: {} as Record<string, 'vela' | 'contract' | 'wallet' | null>,
+	named: [] as [string, Record<string, unknown>, unknown][],
+	imported: [] as string[]
+}));
 vi.mock('../core/store.svelte', () => ({
 	multisig: {
 		accounts: [],
 		find: () => undefined,
-		useChain: (_a: string, id: number) => void used.push(id)
+		useChain: (_a: string, id: number) => void used.push(id),
+		nameMembers: (a: string, known: Record<string, unknown>, options: unknown) =>
+			void io.named.push([a, known, options])
 	}
+}));
+vi.mock('../core/kernel', async (importOriginal) => ({
+	...(await importOriginal<typeof import('../core/kernel')>()),
+	parseSafeExport: () => io.exported
+}));
+vi.mock('../core/signers.svelte', () => ({
+	signers: { evidence: (_ids: number[], a: string) => io.evidence[a] ?? null }
+}));
+vi.mock('$lib/wallet/identicon', () => ({
+	identiconSvgForClient: (a: string) => `<svg data-seed="${a}"></svg>`
+}));
+vi.mock('../core/names.svelte', () => ({
+	names: { label: (a: string) => `${a.slice(0, 8)}…${a.slice(-6)}` },
+	keptMember: () => ({})
 }));
 
 const { default: AddMultisigSheet } = await import('./AddMultisigSheet.svelte');
@@ -124,7 +150,30 @@ const m = {
 	proposal: { addNetwork: 'Add network' },
 	send: { invalidAddress: 'bad', invalidChecksum: 'checksum' },
 	service: { customNote: '({{host}})' },
-	import: { or: 'or', body: 'b', choose: 'c' },
+	import: {
+		or: 'or',
+		body: 'b',
+		choose: 'c',
+		pick: 'Choose the Safes to import',
+		undeployed: 'undeployed',
+		importSome: 'Import {{total}}',
+		importing: 'Importing…',
+		imported: 'Imported',
+		already: 'Already added',
+		kindsTitle: 'How does each member approve?',
+		kindsBody: 'kinds body'
+	},
+	create: { next: 'Next', back: 'Back', done: 'Done', thresholdValue: '{{m}} of {{n}}' },
+	members: {
+		kind: 'Kind of member',
+		kindVela: 'Vela account (passkey)',
+		kindWallet: 'Other wallet',
+		kindKnown: 'Vela found a Vela account',
+		kindLikely: 'likely another wallet',
+		kindAsk: 'Vela can’t tell',
+		kindContract: 'Smart contract account',
+		kindContractNote: 'Approves from its own app'
+	},
 	authority: {
 		refusedTitle: 'Vela won’t use this multisig',
 		refusedBody: 'refused body',
@@ -371,6 +420,156 @@ describe('a link the wallet already looked up, or a damaged one', () => {
 		await settle();
 		expect(document.body.textContent).toContain('nf');
 		expect(calls).toEqual([]);
+		await screen.unmount();
+	});
+});
+
+/**
+ * r7: importing from Safe{Wallet} asks each member's kind before anything is
+ * imported — pre-filled where Vela can tell, asked where it can't — and keeps
+ * what was declared with each Safe it is a member of (a label, never
+ * authority). A member on this device is not asked.
+ */
+describe('the Safe{Wallet} import asks each member’s kind (r7)', () => {
+	const BOB = '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC';
+	const DAN = '0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65';
+	const ERIN = '0x90F79bf6EB2c4f870365E785982E1f101E93b906';
+	const ONE = '0x1111111111111111111111111111111111111111';
+	const TWO = '0x2222222222222222222222222222222222222222';
+
+	beforeEach(() => {
+		io.exported = [
+			{
+				address: ONE,
+				name: 'Team',
+				chains: [
+					{
+						chainId: 100,
+						deployed: true,
+						owners: [CAROL, BOB, DAN],
+						threshold: 2,
+						props: null,
+						version: null
+					}
+				]
+			},
+			{
+				address: TWO,
+				name: 'Ops',
+				chains: [
+					{
+						chainId: 8453,
+						deployed: false,
+						owners: [BOB, ERIN],
+						threshold: 1,
+						props: {},
+						version: null
+					}
+				]
+			}
+		];
+		io.evidence = { [BOB]: 'wallet', [DAN]: 'vela' };
+		io.named = [];
+		io.imported = [];
+	});
+
+	const button = (label: string) =>
+		[...document.body.querySelectorAll<HTMLButtonElement>('button')].find(
+			(b) => b.textContent?.trim() === label
+		);
+
+	async function chooseFile() {
+		const screen = render(AddMultisigSheet, {
+			props: { m, wide: true, closeLabel: 'Close', onclose: () => {}, onadded: () => {} }
+		});
+		await tick();
+		const input = screen.container.querySelector<HTMLInputElement>('input[type=file]')!;
+		const files = new DataTransfer();
+		files.items.add(new File(['{}'], 'safes.json', { type: 'application/json' }));
+		input.files = files.files;
+		input.dispatchEvent(new Event('change', { bubbles: true }));
+		await settle();
+		return screen;
+	}
+
+	it('Next asks each member not on this device once — found, pre-filled, or asked', async () => {
+		const screen = await chooseFile();
+		expect(root().textContent).toContain('Choose the Safes to import');
+		button('Next')!.click();
+		await settle();
+		expect(io.imported, 'nothing imported before the kinds are asked').toEqual([]);
+		const step = screen.container.querySelector('[data-testid="import-kinds"]')!;
+		expect(root().textContent).toContain('How does each member approve?');
+		const rows = [...step.querySelectorAll<HTMLElement>('li')];
+		// Carol is on this device: not asked. Bob is in both Safes: asked once.
+		expect(rows).toHaveLength(3);
+		const kinds = rows.map(
+			(r) => r.querySelector<HTMLElement>('[data-testid="member-kind"]')?.dataset.kind
+		);
+		// Bob: "Other wallet" only hinted — nothing picked.
+		expect(kinds).toEqual(['unknown', 'passkey', 'unknown']);
+		expect(rows[0].textContent).toContain('likely another wallet');
+		expect(rows[0].querySelector('[data-suggested]')?.textContent?.trim()).toBe('Other wallet');
+		expect(rows[1].querySelectorAll('[role="radio"]')).toHaveLength(0);
+		expect(rows[2].textContent).toContain('Vela can’t tell');
+		await screen.unmount();
+	});
+
+	it('imports with what was declared, kept with each Safe it is a member of', async () => {
+		const screen = await chooseFile();
+		button('Next')!.click();
+		await settle();
+		// Bob is a Vela account after all, says the person; Erin is left unsaid.
+		const rows = [
+			...screen.container.querySelectorAll<HTMLElement>('[data-testid="import-kinds"] li')
+		];
+		[...rows[0].querySelectorAll<HTMLButtonElement>('[role="radio"]')]
+			.find((b) => b.textContent?.trim() === 'Vela account (passkey)')
+			?.click();
+		await settle();
+		button('Import 2')!.click();
+		await settle();
+		expect(io.imported).toEqual([ONE, TWO]);
+		expect(io.named).toEqual([
+			[ONE, { [BOB]: { kind: 'passkey' }, [DAN]: { kind: 'passkey' } }, { typed: true }],
+			[TWO, { [BOB]: { kind: 'passkey' } }, { typed: true }]
+		]);
+		// Back on the list, each Safe's outcome.
+		expect(root().textContent).toContain('Imported');
+		await screen.unmount();
+	});
+
+	it('another Safe as a member: a smart contract account, kept as one; the unpicked hint keeps nothing', async () => {
+		io.evidence = { [BOB]: 'wallet', [DAN]: 'vela', [ERIN]: 'contract' };
+		const screen = await chooseFile();
+		button('Next')!.click();
+		await settle();
+		const rows = [
+			...screen.container.querySelectorAll<HTMLElement>('[data-testid="import-kinds"] li')
+		];
+		expect(rows[2].querySelector<HTMLElement>('[data-testid="member-kind"]')?.dataset.kind).toBe(
+			'contract'
+		);
+		expect(rows[2].textContent).toContain('Smart contract account');
+		expect(rows[2].textContent).toContain('Approves from its own app');
+		expect(rows[2].querySelectorAll('[role="radio"]')).toHaveLength(0);
+		button('Import 2')!.click();
+		await settle();
+		expect(io.named).toEqual([
+			[ONE, { [DAN]: { kind: 'passkey' } }, { typed: true }],
+			[TWO, { [ERIN]: { kind: 'contract' } }, { typed: true }]
+		]);
+		await screen.unmount();
+	});
+
+	it('Back returns to the list, and nothing is imported', async () => {
+		const screen = await chooseFile();
+		button('Next')!.click();
+		await settle();
+		button('Back')!.click();
+		await settle();
+		expect(root().textContent).toContain('Choose the Safes to import');
+		expect(io.imported).toEqual([]);
 		await screen.unmount();
 	});
 });

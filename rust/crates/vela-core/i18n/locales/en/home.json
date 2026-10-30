@@ -237,6 +237,7 @@
         "notNeeded": "Not needed",
         "sendLink": "Send link",
         "approvesInVela": "Approves in Vela on their own device: {{names}}. Send them this link.",
+        "contractMembers": "{{names}}: a smart contract account approves from its own app (e.g. another Safe). Vela can't collect those approvals yet.",
         "rejectCancel": "Cancel",
         "noOutsideSigner": "no member is on this device, and every member approves in Vela on their own device — ask one of them to propose it",
         "lostRace": "Another member executed this first. Nothing was sent from your account.",
@@ -569,7 +570,9 @@
         "importing": "Importing…",
         "imported": "Imported",
         "already": "Already added",
-        "notDeployed": "Not deployed on any of its networks, and the file doesn't hold its setup."
+        "notDeployed": "Not deployed on any of its networks, and the file doesn't hold its setup.",
+        "kindsTitle": "How does each member approve?",
+        "kindsBody": "A Vela account approves in Vela with its passkey; another wallet signs with that wallet. Vela fills in what it can tell. This only decides what Vela offers them — who can approve is set by the Safe."
       },
       "settings": {
         "backupTitle": "Back up its setup on Ethereum",
@@ -624,6 +627,11 @@
         "kind": "Kind of member",
         "kindVela": "Vela account (passkey)",
         "kindWallet": "Other wallet",
+        "kindKnown": "Vela found a Vela account at this address. It approves in Vela, with its passkey.",
+        "kindLikely": "No Vela account found at this address — likely another wallet. Tap Other wallet to confirm; left as it is, they'll be offered both ways to approve.",
+        "kindAsk": "Vela can't tell from the address. Choose one — or leave it, and they'll be offered both ways to approve.",
+        "kindContract": "Smart contract account",
+        "kindContractNote": "Approves from its own app (e.g. another Safe). Vela can't collect its approval yet.",
         "newAccount": "Their new account",
         "replaceIntro": "Put {{name}}'s new account in their place, for example after a lost passkey. The other members approve it; nothing else changes.",
         "removeIntro": "{{name}} will no longer approve transactions or move funds.",

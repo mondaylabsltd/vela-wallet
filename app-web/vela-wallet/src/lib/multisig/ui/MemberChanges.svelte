@@ -40,10 +40,13 @@
 	} from '../core/member-changes';
 	import { looksLikeName, resolveTypedName } from '../core/member-entry';
 	import { memberProblem } from '../core/members';
-	import { names } from '../core/names.svelte';
+	import { kindChoice, type MemberKind } from '../core/member-kind';
+	import { keptMember, names } from '../core/names.svelte';
 	import { MailboxUnreadableError, proposals, proposeMemberChange } from '../core/proposals.svelte';
+	import { signers } from '../core/signers.svelte';
 	import { multisig, type MultisigAccount } from '../core/store.svelte';
 	import { multisigUi } from '../core/ui.svelte';
+	import MemberKindChoice from './MemberKindChoice.svelte';
 
 	interface Props {
 		m: MultisigMessages;
@@ -77,8 +80,6 @@
 	let picked = $state<number | null>(null);
 
 	// -- who joins (Add, Replace) -------------------------------------------------
-	/** A Vela account (approves with its passkey, in Vela) or an outside wallet. */
-	type MemberKind = 'vela' | 'wallet';
 	let typed = $state('');
 	let entry = $state<{ address: string; name: string | null } | null>(null);
 	let entryNote = $state<string | null>(null);
@@ -93,25 +94,29 @@
 		if (q === '' || entry) return [];
 		const book = (contactsBook.view?.contacts ?? []).map((c) => ({
 			address: c.address,
-			name: c.name ?? c.resolved_name ?? null,
-			kind: (c.kind === 'eoa' ? 'wallet' : 'vela') as MemberKind
+			name: c.name ?? c.resolved_name ?? null
 		}));
-		const mine = accounts.map((a) => ({
-			address: a.address,
-			name: a.name || null,
-			kind: 'vela' as MemberKind
-		}));
+		const mine = accounts.map((a) => ({ address: a.address, name: a.name || null }));
 		return [...mine, ...book]
 			.filter((s, i, all) => all.findIndex((x) => sameAddress(x.address, s.address)) === i)
 			.filter((s) => s.name?.toLowerCase().includes(q) || s.address.toLowerCase().startsWith(q))
 			.slice(0, 5);
 	});
-	const kind = $derived<MemberKind>(
-		kindPick ??
-			(entry &&
-			(accounts.some((a) => sameAddress(a.address, entry?.address)) || names.isVela(entry.address))
-				? 'vela'
-				: 'wallet')
+	/**
+	 * r7: the member's kind — Vela's finding where it has one (an account
+	 * here or the index: a Vela account; code on one of the multisig's
+	 * networks and no index record: a smart contract account), else the
+	 * person's word (here, or kept on this device), else nothing: asked,
+	 * "Other wallet" only hinted when no Vela account is found — never
+	 * guessed (it used to read "Other wallet" whenever nothing said).
+	 */
+	const kindShown = $derived(
+		entry
+			? kindChoice(
+					signers.evidence(account.chainIds, entry.address),
+					kindPick ?? keptMember(entry.address).kind
+				)
+			: null
 	);
 
 	let lookup = 0;
@@ -150,12 +155,12 @@
 						: m.send.invalidAddress;
 	}
 
-	function pick(s: { address: string; name: string | null; kind: MemberKind }) {
+	function pick(s: { address: string; name: string | null }) {
 		typed = s.address;
 		entry = { address: s.address, name: null };
 		entryNote = null;
 		if (memberName === '' && s.name) memberName = s.name;
-		kindPick = s.kind;
+		kindPick = null;
 	}
 
 	function open(next: Compose) {
@@ -244,7 +249,7 @@
 			// (r4D-5): one store of members' labels, read by `names.label`.
 			multisig.nameMembers(
 				account.address,
-				{ [who]: { name: memberName, kind: kind === 'vela' ? 'passkey' : 'wallet' } },
+				{ [who]: { name: memberName, ...(kindShown?.kind ? { kind: kindShown.kind } : {}) } },
 				{ typed: true }
 			);
 		}
@@ -347,17 +352,9 @@
 			/>
 		</label>
 		<p class="hint">{mm.nameNote}</p>
-		<div class="kinds" role="radiogroup" aria-label={mm.kind}>
-			{#each [['vela', mm.kindVela], ['wallet', mm.kindWallet]] as [value, label] (value)}
-				<button
-					type="button"
-					role="radio"
-					aria-checked={kind === value}
-					class:on={kind === value}
-					onclick={() => (kindPick = value as MemberKind)}>{label}</button
-				>
-			{/each}
-		</div>
+		{#if kindShown}
+			<MemberKindChoice {m} choice={kindShown} onpick={(k) => (kindPick = k)} />
+		{/if}
 	{/if}
 {/snippet}
 
@@ -763,29 +760,6 @@
 
 	.resolved {
 		cursor: default;
-	}
-
-	.kinds {
-		display: flex;
-		gap: var(--space-xs);
-	}
-
-	.kinds button {
-		flex: 1;
-		min-height: var(--size-control-md);
-		border: var(--border-hairline) solid var(--color-border-strong);
-		border-radius: var(--radius-full);
-		background: var(--color-bg-base);
-		font-family: var(--font-ui);
-		font-size: calc(var(--text-sm) * var(--text-scale, 1));
-		color: var(--color-fg-muted);
-		cursor: pointer;
-	}
-
-	.kinds button.on {
-		border-color: var(--color-fg-base);
-		color: var(--color-fg-base);
-		font-weight: var(--weight-semibold);
 	}
 
 	.plan li {

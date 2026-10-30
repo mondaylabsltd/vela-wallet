@@ -237,6 +237,7 @@
         "notNeeded": "Gerekmiyor",
         "sendLink": "Bağlantı gönder",
         "approvesInVela": "Kendi cihazındaki Vela’da onaylar: {{names}}. Onlara bu bağlantıyı gönderin.",
+        "contractMembers": "{{names}}: akıllı sözleşme hesabı kendi uygulamasından onaylar (ör. başka bir Safe). Vela bu onayları henüz toplayamıyor.",
         "rejectCancel": "Vazgeç",
         "noOutsideSigner": "bu cihazda hiçbir üye yok ve her üye kendi cihazındaki Vela’da onaylıyor — üyelerden birinden önermesini isteyin",
         "lostRace": "Başka bir üye önce yürüttü. Hesabından hiçbir şey gönderilmedi.",
@@ -569,7 +570,9 @@
         "importing": "İçe aktarılıyor…",
         "imported": "İçe aktarıldı",
         "already": "Zaten eklendi",
-        "notDeployed": "Hiçbir ağında dağıtılmamış ve dosyada kurulumu yok."
+        "notDeployed": "Hiçbir ağında dağıtılmamış ve dosyada kurulumu yok.",
+        "kindsTitle": "Her üye nasıl onaylıyor?",
+        "kindsBody": "Bir Vela hesabı Vela'da passkey'iyle onaylar; başka bir cüzdan o cüzdanla imzalar. Vela anlayabildiğini doldurur. Bu yalnızca Vela'nın onlara ne sunacağını belirler — kimin onaylayabileceğini Safe belirler."
       },
       "settings": {
         "backupTitle": "Kurulumunu Ethereum'da yedekle",
@@ -624,6 +627,11 @@
         "kind": "Üye türü",
         "kindVela": "Vela hesabı (passkey)",
         "kindWallet": "Başka cüzdan",
+        "kindKnown": "Vela bu adreste bir Vela hesabı buldu. Vela'da, passkey'iyle onaylar.",
+        "kindLikely": "Bu adreste Vela hesabı bulunamadı — büyük olasılıkla başka bir cüzdan. Onaylamak için Başka cüzdan'a dokun; böyle bırakırsan ona iki onay yolu da sunulur.",
+        "kindAsk": "Vela bunu adresten anlayamıyor. Birini seç — ya da boş bırak, ona iki onay yolu da sunulur.",
+        "kindContract": "Akıllı sözleşme hesabı",
+        "kindContractNote": "Kendi uygulamasından onaylar (ör. başka bir Safe). Vela bu onayı henüz toplayamıyor.",
         "newAccount": "Yeni hesabı",
         "replaceIntro": "{{name}} yerine yeni hesabını koyun; örneğin passkey kaybolduğunda. Diğer üyeler onaylar; başka hiçbir şey değişmez.",
         "removeIntro": "{{name}} artık işlem onaylayamayacak veya fon taşıyamayacak.",

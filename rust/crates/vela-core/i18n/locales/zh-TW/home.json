@@ -237,6 +237,7 @@
         "notNeeded": "不需要",
         "sendLink": "傳送連結",
         "approvesInVela": "在自己裝置上的 Vela 中批准：{{names}}。把這個連結傳給他們。",
+        "contractMembers": "{{names}}：智慧合約帳戶在自己的應用程式中核准（例如另一個 Safe）。Vela 暫時還無法收取這些核准。",
         "rejectCancel": "取消",
         "noOutsideSigner": "此裝置上沒有成員，而每位成員都在自己裝置上的 Vela 中批准 — 請其中一位來提議",
         "lostRace": "另一位成員先執行了這筆交易。你的帳戶沒有傳送任何東西。",
@@ -569,7 +570,9 @@
         "importing": "正在匯入…",
         "imported": "已匯入",
         "already": "已新增",
-        "notDeployed": "它在任何網路上都尚未部署，檔案中也沒有它的建立設定。"
+        "notDeployed": "它在任何網路上都尚未部署，檔案中也沒有它的建立設定。",
+        "kindsTitle": "每位成員如何核准？",
+        "kindsBody": "Vela 帳戶在 Vela 中用通行金鑰核准；其他錢包用該錢包簽署。Vela 會填好它能判斷的。這只決定 Vela 為他們提供哪種方式——誰能核准由 Safe 決定。"
       },
       "settings": {
         "backupTitle": "在 Ethereum 上備份多簽設定",
@@ -624,6 +627,11 @@
         "kind": "成員類型",
         "kindVela": "Vela 帳戶（通行金鑰）",
         "kindWallet": "其他錢包",
+        "kindKnown": "Vela 在這個地址找到了 Vela 帳戶。它在 Vela 中用通行金鑰核准。",
+        "kindLikely": "這個地址沒有 Vela 帳戶——很可能是其他錢包。輕觸「其他錢包」確認；保持不選，兩種核准方式都會提供給對方。",
+        "kindAsk": "Vela 無法從地址判斷。請選一個——也可以不選，屆時兩種核准方式都會提供給對方。",
+        "kindContract": "智慧合約帳戶",
+        "kindContractNote": "在它自己的應用程式中核准（例如另一個 Safe）。Vela 暫時還無法收取它的核准。",
         "newAccount": "對方的新帳戶",
         "replaceIntro": "用 {{name}} 的新帳戶替換對方，例如遺失通行金鑰之後。由其他成員核准，其餘一切不變。",
         "removeIntro": "{{name}} 將不能再核准交易或轉出資金。",

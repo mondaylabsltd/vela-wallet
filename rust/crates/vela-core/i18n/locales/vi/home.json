@@ -237,6 +237,7 @@
         "notNeeded": "Không cần",
         "sendLink": "Gửi liên kết",
         "approvesInVela": "Phê duyệt trong Vela trên thiết bị của họ: {{names}}. Hãy gửi họ liên kết này.",
+        "contractMembers": "{{names}}: tài khoản hợp đồng thông minh phê duyệt từ ứng dụng riêng (ví dụ một Safe khác). Vela chưa thể thu thập những phê duyệt đó.",
         "rejectCancel": "Hủy",
         "noOutsideSigner": "không có thành viên nào trên thiết bị này, và mọi thành viên đều phê duyệt trong Vela trên thiết bị của họ — hãy nhờ một người đề xuất",
         "lostRace": "Một thành viên khác đã thực thi trước. Không có gì được gửi từ tài khoản của bạn.",
@@ -569,7 +570,9 @@
         "importing": "Đang nhập…",
         "imported": "Đã nhập",
         "already": "Đã thêm",
-        "notDeployed": "Chưa được triển khai trên mạng nào, và tệp không có thiết lập của nó."
+        "notDeployed": "Chưa được triển khai trên mạng nào, và tệp không có thiết lập của nó.",
+        "kindsTitle": "Mỗi thành viên phê duyệt bằng cách nào?",
+        "kindsBody": "Tài khoản Vela phê duyệt trong Vela bằng passkey; ví khác ký bằng chính ví đó. Vela điền những gì nó biết được. Điều này chỉ quyết định Vela đưa ra cách nào cho họ — ai được phê duyệt là do Safe quy định."
       },
       "settings": {
         "backupTitle": "Sao lưu thiết lập trên Ethereum",
@@ -624,6 +627,11 @@
         "kind": "Loại thành viên",
         "kindVela": "Tài khoản Vela (passkey)",
         "kindWallet": "Ví khác",
+        "kindKnown": "Vela đã tìm thấy một tài khoản Vela ở địa chỉ này. Tài khoản này phê duyệt trong Vela, bằng passkey của nó.",
+        "kindLikely": "Không tìm thấy tài khoản Vela ở địa chỉ này — có thể là ví khác. Chạm Ví khác để xác nhận; nếu để nguyên, họ sẽ được đưa cả hai cách phê duyệt.",
+        "kindAsk": "Vela không thể biết từ địa chỉ. Hãy chọn một — hoặc để trống, và họ sẽ được đưa cả hai cách phê duyệt.",
+        "kindContract": "Tài khoản hợp đồng thông minh",
+        "kindContractNote": "Phê duyệt từ ứng dụng riêng của nó (ví dụ một Safe khác). Vela chưa thể thu thập phê duyệt của nó.",
         "newAccount": "Tài khoản mới của họ",
         "replaceIntro": "Đặt tài khoản mới của {{name}} vào chỗ của họ, ví dụ sau khi mất passkey. Các thành viên khác phê duyệt; mọi thứ khác giữ nguyên.",
         "removeIntro": "{{name}} sẽ không thể phê duyệt giao dịch hay chuyển tiền nữa.",

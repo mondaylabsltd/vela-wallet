@@ -68,8 +68,11 @@ export interface MultisigAccount {
 /** A member's label and kind, as one device knows it (never authority). */
 export interface MemberInfo {
 	name?: string;
-	/** A Vela account (its key a passkey), or an outside wallet. */
-	kind?: 'passkey' | 'wallet';
+	/**
+	 * A Vela account (its key a passkey), an outside wallet, or (r7) a smart
+	 * contract account that approves from its own app.
+	 */
+	kind?: 'passkey' | 'wallet' | 'contract';
 	/**
 	 * r5reg-16: `name` is what the person typed on this device (Settings →
 	 * Add member), not a link's label — shown for that member over any other.
