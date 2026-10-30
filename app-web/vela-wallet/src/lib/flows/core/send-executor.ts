@@ -79,6 +79,9 @@ import {
 	withdrawTracked
 } from '$lib/wallet/core/tracker-resident';
 import { acquireSendLock, releaseWhen, sendLockName, type SendLockRelease } from './send-lock';
+import { BeforePasskeyError, boundedUntilPasskey, PrepareTimeoutError } from './prepare-bound';
+import { getFailedRpcChains, getRateLimitedChains, PoolFailedError } from '$lib/services/rpc-pool';
+import { TimeoutError } from '$lib/services/net';
 import { WriteAheadTimeoutError } from '$lib/signing/core/sign-types';
 import type { LocalTransaction } from '$lib/services/transactions-model';
 import { resolveTokenMetadata } from '$lib/services/token-metadata';
@@ -529,8 +532,39 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 				} catch (error) {
 					return { type: 'submit_failed', failure: classifySubmit(error) };
 				}
+				// r5reg-3: from here to the passkey, the network's reads are
+				// bounded and said — how long, and whether its nodes are busy —
+				// and a wait that gives up is the network's, never the passkey's.
+				const busy = () => getRateLimitedChains().has(operation.chain_id);
+				// Narrowed once, for the submit below (a nested function forgets).
+				const op = operation;
 				try {
-					const credentialId = ports.credentialId(operation.account);
+					return await boundedUntilPasskey((gate) => submitOnce(gate), {
+						busy,
+						onSlow: (elapsed, isBusy) =>
+							self?.dispatch({ type: 'submit_slow', elapsed_ms: elapsed, busy: isBusy }),
+						passThrough: (error) =>
+							error instanceof PasskeyError ||
+							error instanceof VenueBlockedError ||
+							error instanceof UserOpNotSentError
+					});
+				} catch (error) {
+					if (error instanceof BeforePasskeyError) {
+						return {
+							type: 'submit_failed',
+							failure: networkFailed(error.cause, operation.chain_id)
+								? { type: 'chain_unreachable', busy: error.busy || busy() }
+								: classifySubmit(error.cause)
+						};
+					}
+					return { type: 'submit_failed', failure: classifySubmit(error) };
+				} finally {
+					// Nothing went out (or the hold below took it): the next tab goes.
+					release?.();
+				}
+
+				async function submitOnce(gate: () => void): Promise<SendShellResult> {
+					const credentialId = ports.credentialId(op.account);
 					if (!credentialId) {
 						// Fail closed: the wallet must never sign with a credential that
 						// does not belong to the account the core built this batch for.
@@ -540,7 +574,7 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 					// every credential and let the provider pick; the assertion's own
 					// credentialId then selects the signer address (r-field) and the
 					// full key set builds the (undeployed) initCode.
-					const stored = findAccountByAddress(operation.account);
+					const stored = findAccountByAddress(op.account);
 					// Only a genuinely multi-key account changes shape here — a
 					// single-key wallet keeps the exact historical wire (and bytes).
 					const keySet = stored?.keys && stored.keys.length > 1 ? keySetOf(stored) : null;
@@ -548,15 +582,18 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 						? keySet.keys.map((key) => ({ id: key.credentialId }))
 						: [{ id: credentialId }];
 					const signer = {
-						account: operation.account,
+						account: op.account,
 						keys: stored
 							? keySetOf(stored).keys
-							: [{ credentialId, publicKeyHex: operation.public_key_hex }],
+							: [{ credentialId, publicKeyHex: op.public_key_hex }],
 						credentials,
 						// The wallet's own send: no method, no site (contract §1).
-						request: { method: '', params: [], origin: '', chainId: operation.chain_id }
+						request: { method: '', params: [], origin: '', chainId: op.chain_id }
 					};
 					const signFn: SignFn = async (challenge: Uint8Array) => {
+						// The wait before it is over — or was given up, and then no
+						// passkey opens (r5reg-3).
+						gate();
 						// The passkey sheet is opening — the core moves to 'signing' here,
 						// exactly where `setTxStatus('signing')` sat.
 						ports.signingStarted();
@@ -587,30 +624,28 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 					// (`buildNativeCallData`), so this is byte-for-byte the calldata
 					// `sendNative`/`sendERC20` produced for a single transfer.
 					const result = await sendBatchCalls(
-						operation.account,
-						operation.calls.map(toShellCall),
-						operation.chain_id,
-						keySet ?? operation.public_key_hex,
+						op.account,
+						op.calls.map(toShellCall),
+						op.chain_id,
+						keySet ?? op.public_key_hex,
 						signFn,
-						operation.max_fee_per_gas != null
-							? fromWireAmount(operation.max_fee_per_gas)
-							: undefined,
-						operation.gas_fee_token,
-						operation.quoted_fee
+						op.max_fee_per_gas != null ? fromWireAmount(op.max_fee_per_gas) : undefined,
+						op.gas_fee_token,
+						op.quoted_fee
 							? {
-									amount: fromWireAmount(operation.quoted_fee.amount),
-									recipient: operation.quoted_fee.recipient,
+									amount: fromWireAmount(op.quoted_fee.amount),
+									recipient: op.quoted_fee.recipient,
 									// The speed the person was shown, named on the wire beside
 									// the reimbursement it was priced with (spec 068). The core
 									// takes it from the SAME estimate as the amount (spec 069),
 									// so the screen and the chain cannot disagree about which
 									// tier this send is — and `rapid` never gets this far.
-									tier: wireTier(operation.quoted_fee.tier)
+									tier: wireTier(op.quoted_fee.tier)
 								}
 							: undefined,
 						// The review the person confirmed: the operation is signed
 						// only if it is exactly this.
-						operation.review
+						op.review
 					);
 					submitted.set(result.userOpHash, result);
 					// What the tracker learned while the reply was out (RJ1, RJ4).
@@ -626,11 +661,6 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 						maybe_sent: result.maybeSent,
 						submit_block: result.submitBlock
 					};
-				} catch (error) {
-					return { type: 'submit_failed', failure: classifySubmit(error) };
-				} finally {
-					// Nothing went out (or the hold above took it): the next tab goes.
-					release?.();
 				}
 			}
 
@@ -865,6 +895,20 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 				return { type: 'closed' };
 			}
 		}
+	}
+
+	/**
+	 * r5reg-3: whether a failure before the passkey was the network's — the
+	 * wait given up, a node that timed out or answered nothing usable, or the
+	 * pool saying this chain's nodes are failing or busy. Anything else (a
+	 * missing credential, a refusal) keeps its own reading.
+	 */
+	function networkFailed(error: unknown, chainId: number): boolean {
+		if (error instanceof PrepareTimeoutError || error instanceof TimeoutError) return true;
+		if (error instanceof PoolFailedError) return !error.internal;
+		// fetch's own refusal: the request never got an answer.
+		if (error instanceof TypeError && /fetch|network/i.test(error.message)) return true;
+		return getFailedRpcChains().has(chainId) || getRateLimitedChains().has(chainId);
 	}
 
 	/**

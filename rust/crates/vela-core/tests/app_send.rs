@@ -26,13 +26,13 @@ use vela_core::app::send::{
     max_figure, receipt_outcome_of, recipients_are_valid, split_row_issues, sum_split_base_units,
     Event, ReentryLock, Send, SendAccountRef, SendAddNetworkOutcome, SendAlertKind,
     SendAmountWarning, SendChainInfo, SendDisplayContext, SendEstimateFailure, SendFeeOutcome,
-    SendHapticKind, SendHoldReason, SendLockError, SendNameSource, SendOpenParams,
+    SendHapticKind, SendHoldReason, SendLockError, SendMaxMoved, SendNameSource, SendOpenParams,
     SendOperation as Op, SendPasskeyNote, SendPayee, SendProposeFailure, SendReceiptKind,
     SendReceiptOutcome, SendReceiptStatus, SendRecipientDraft, SendRecipientRisk,
     SendRowFieldState, SendScan, SendShellResult as Res, SendStage, SendSubmitFailure,
-    SendTimerTag, SendToken, SendTokenMeta, SendTreasuryAsset, SendTreasuryCoin, SendTreasuryProbe,
-    SendTreasuryStatus, SendTxErrorKey, SendTxRecord, SendTxStatus, SendUnitIssue, SendView,
-    BATCH_MAX_RECIPIENTS, RISK_WAIT_MS, TREASURY_WATCH_MS,
+    SendSubmitSlow, SendTimerTag, SendToken, SendTokenMeta, SendTreasuryAsset, SendTreasuryCoin,
+    SendTreasuryProbe, SendTreasuryStatus, SendTxErrorKey, SendTxRecord, SendTxStatus,
+    SendUnitIssue, SendView, BATCH_MAX_RECIPIENTS, RISK_WAIT_MS, TREASURY_WATCH_MS,
 };
 
 type Sut = DomainDriver<Send>;
@@ -5176,6 +5176,98 @@ fn a_passkey_prompt_that_timed_out_says_so() {
     assert_eq!(sut.view().passkey_note, None);
 }
 
+/// r5reg-3: the reads before the passkey are slow — the confirm says so,
+/// with the time and whether the nodes are busy; once the passkey opens,
+/// the line goes.
+#[test]
+fn a_slow_wait_before_the_passkey_is_said_with_its_time() {
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    let early = Event::SubmitSlow {
+        elapsed_ms: 6_000,
+        busy: true,
+    };
+    assert!(sut.dispatch(early.clone()).is_empty(), "no submit out");
+    assert_eq!(sut.view().submit_slow, None);
+    slide_to_submit(&mut sut);
+    sut.dispatch(early);
+    assert_eq!(
+        sut.view().submit_slow,
+        Some(SendSubmitSlow {
+            seconds: 6,
+            busy: true
+        })
+    );
+    sut.dispatch(Event::SubmitSlow {
+        elapsed_ms: 14_900,
+        busy: false,
+    });
+    assert_eq!(
+        sut.view().submit_slow,
+        Some(SendSubmitSlow {
+            seconds: 14,
+            busy: false
+        })
+    );
+    sut.dispatch(Event::SigningStarted);
+    assert_eq!(sut.view().submit_slow, None, "the passkey is open now");
+    sut.dispatch(Event::SubmitSlow {
+        elapsed_ms: 20_000,
+        busy: true,
+    });
+    assert_eq!(sut.view().submit_slow, None, "never over an open passkey");
+}
+
+/// r5reg-3: the network's reads before the passkey gave up — said as the
+/// network's (busy, or out of reach), with Try again; never the passkey's.
+#[test]
+fn a_network_wait_before_the_passkey_is_the_networks_failure() {
+    for (busy, key) in [
+        (true, SendTxErrorKey::ChainBusy),
+        (false, SendTxErrorKey::ChainUnreachable),
+    ] {
+        let mut sut = boot(vec![eth("2")]);
+        to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+        slide_to_submit(&mut sut);
+        sut.dispatch(Event::SubmitSlow {
+            elapsed_ms: 44_000,
+            busy,
+        });
+        sut.resolve(Res::SubmitFailed {
+            failure: SendSubmitFailure::ChainUnreachable { busy },
+        });
+        let view = sut.view();
+        assert_eq!(view.tx_status, SendTxStatus::Error);
+        assert_eq!(view.tx_error, Some(key));
+        assert_eq!(view.passkey_note, None, "never the passkey's");
+        assert_eq!(view.submit_slow, None);
+        assert!(!view.sending);
+        sut.dispatch(Event::RetryAfterError);
+        assert!(sut.view().can_confirm, "Try again");
+    }
+    let wire = serde_json::to_value(SendSubmitFailure::ChainUnreachable { busy: true })
+        .unwrap_or_default();
+    assert_eq!(
+        wire,
+        serde_json::json!({"type": "chain_unreachable", "busy": true})
+    );
+}
+
+/// r5reg-3: "timed out" before any passkey sheet opened was the network's
+/// wait, not the passkey's — said as the network's.
+#[test]
+fn a_timeout_before_the_passkey_opened_is_not_the_passkeys() {
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    slide_to_submit(&mut sut);
+    sut.resolve(Res::SubmitFailed {
+        failure: SendSubmitFailure::PasskeyTimedOut,
+    });
+    let view = sut.view();
+    assert_eq!(view.passkey_note, None);
+    assert_eq!(view.tx_error, Some(SendTxErrorKey::ChainUnreachable));
+}
+
 /// send-15: the nonce this send signed was spent by another transaction of
 /// the account (another tab's): nothing was sent — said calmly, by its own
 /// key, and "Try again" opens the confirm to sign anew.
@@ -6828,6 +6920,61 @@ fn the_submit_pays_in_the_coin_the_quote_named() {
     };
     assert_eq!(gas_fee_token.as_deref(), Some(USDC));
     assert_eq!(quoted.amount, "1000000");
+}
+
+/// r5reg-3: a Max filled again from a newer quote before the confirm — the
+/// fee's reserve moved — says what it read and what it reads now (the amount
+/// sent); a new Max, or a typed figure, lets the note go.
+#[test]
+fn a_max_filled_again_says_it_moved() {
+    let mut sut = boot(vec![eth("0.181252")]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 24_865_000_000_000_000),
+    });
+    sut.dispatch(Event::TapMax);
+    assert_eq!(sut.view().amount, "0.156387");
+    assert_eq!(sut.view().max_moved, None, "nothing moved yet");
+    // Continue's own quote: the fee is a little higher now.
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 24_870_000_000_000_000),
+    });
+    let view = sut.view();
+    assert_eq!(view.amount, "0.156382");
+    assert_eq!(
+        view.token_amount, "0.156382",
+        "the figure sent is the one shown"
+    );
+    assert_eq!(
+        view.max_moved,
+        Some(SendMaxMoved {
+            from: "0.156387".to_owned(),
+            to: "0.156382".to_owned()
+        })
+    );
+    // Moved again: still from what the person first saw.
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 24_875_000_000_000_000),
+    });
+    assert_eq!(
+        sut.view().max_moved.map(|m| m.from),
+        Some("0.156387".to_owned())
+    );
+    // Back to where it was: nothing to say.
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 24_865_000_000_000_000),
+    });
+    assert_eq!(sut.view().max_moved, None);
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 24_870_000_000_000_000),
+    });
+    assert!(sut.view().max_moved.is_some());
+    sut.dispatch(Event::SetAmount {
+        amount: "0.1".to_owned(),
+    });
+    assert_eq!(sut.view().max_moved, None, "a typed figure ends the Max");
+    sut.dispatch(Event::TapMax);
+    assert_eq!(sut.view().max_moved, None, "a new Max starts over");
 }
 
 #[test]

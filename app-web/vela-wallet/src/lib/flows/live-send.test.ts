@@ -14,6 +14,7 @@ import type { SendView } from '$lib/core/generated/SendView';
 import { resolveMultisigMessages, resolveWalletFlowMessages } from '$lib/i18n/engine.server';
 import type { WalletIdentity } from '$lib/wallet/identity';
 import { shortenAddress } from '$lib/wallet/identity';
+import { chainName } from '$lib/services/networks';
 import { fill } from '$lib/wallet/messages';
 import { liveAssetRow, MONEY_PENDING, sentAmountText } from '$lib/wallet/live';
 import { COMMITTED, expectWithheld, ON_ITS_WAY } from '$lib/wallet/testing/fiat-withheld';
@@ -3626,6 +3627,42 @@ describe('the send flow’s round-2 findings', () => {
 		});
 		// Answered: nothing to check again.
 		expect(confirm({}).recipientCheck).toBeUndefined();
+	});
+
+	it('r5reg-3: the wait before the passkey is said with its time and cause; its failure is the network’s', () => {
+		const network = chainName(ETH.chain_id);
+		expect(confirm({ sending: true, submit_slow: { seconds: 14, busy: true } }).held).toBe(
+			fill(m['send.submitSlowBusy'], { network, seconds: 14 })
+		);
+		expect(confirm({ sending: true, submit_slow: { seconds: 7, busy: false } }).held).toBe(
+			fill(m['send.submitSlow'], { network, seconds: 7 })
+		);
+		expect(m['send.submitSlowBusy']).toContain('{{seconds}}');
+		for (const [key, words] of [
+			['chain_busy', 'send.txErrorChainBusy'],
+			['chain_unreachable', 'send.txErrorChainUnreachable']
+		] as const) {
+			const model = confirm({ tx_status: 'error', tx_error: key });
+			expect(model.error).toEqual({
+				text: fill(m[words], { network }),
+				retry: m['send.txRetryBtn']
+			});
+			expect(model.error?.text).toContain(network);
+			expect(model.error?.text).not.toBe(m['componentsUi.signing.passkeyTimedOut']);
+		}
+	});
+
+	it('r5reg-3: a Max filled again from a newer quote says so before the confirm', () => {
+		const model = confirm({
+			confirm_amount: '0.156382',
+			max_moved: { from: '0.156387', to: '0.156382' }
+		});
+		expect(model.maxNote).toBe(
+			fill(m['send.maxMoved'], { from: '0.156387', to: '0.156382', symbol: 'ETH' })
+		);
+		expect(model.maxNote).toContain('0.156387');
+		expect(model.amount).toBe('0.156382');
+		expect(confirm({}).maxNote).toBeUndefined();
 	});
 
 	it('send-11: a passkey prompt that signed nothing says so — closed, or out of time', () => {

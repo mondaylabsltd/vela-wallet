@@ -319,6 +319,13 @@ export const WALLET_FLOW_KEYS = [
 	'send.riskHistoryUnread',
 	'send.riskRetry',
 	'send.queuedBehindTab',
+	// r5reg-3: the reads before the passkey, said with their time and cause;
+	// their giving up as the network's (never the passkey's); a Max that moved.
+	'send.submitSlowBusy',
+	'send.submitSlow',
+	'send.txErrorChainBusy',
+	'send.txErrorChainUnreachable',
+	'send.maxMoved',
 	'send.txReviewAgain',
 	'send.txSendAgain',
 	'send.txCheckingElapsed',

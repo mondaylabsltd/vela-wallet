@@ -1024,6 +1024,15 @@ pub enum SendSubmitFailure {
     /// another transaction of this account landed first (a bare AA25, e.g.
     /// from another tab, send-15). Nothing was sent; "Try again" signs anew.
     NonceUsed,
+    /// r5reg-3: the reads the operation needs before the passkey (nonce,
+    /// deployment, gas, fee) did not answer within the shell's bound, or
+    /// failed at the network — `busy` when its nodes answered "too many
+    /// requests". The passkey never opened: nothing was signed or sent, and
+    /// it is never told as the passkey's ([`SendTxErrorKey::ChainBusy`],
+    /// [`SendTxErrorKey::ChainUnreachable`]).
+    ChainUnreachable {
+        busy: bool,
+    },
 }
 
 /// Why the last passkey prompt on the confirm signed nothing (send-11): said
@@ -1714,6 +1723,17 @@ pub enum Event {
     /// ([`SendView::queued_behind_tab`]). Cleared when its passkey sheet
     /// opens ([`Event::SigningStarted`]) or the submit ends.
     SendQueued,
+    /// Inside `SubmitUserOp`, before the passkey sheet opens (r5reg-3): the
+    /// reads the operation needs first (its nonce, whether the account is
+    /// deployed, the gas, the fee) have been out `elapsed_ms` without an
+    /// answer — `busy` when the network's nodes answer "too many requests".
+    /// The confirm says so with the time, never a spinner alone
+    /// ([`SendView::submit_slow`]). Cleared when the passkey sheet opens
+    /// ([`Event::SigningStarted`]) or the submit ends.
+    SubmitSlow {
+        elapsed_ms: u32,
+        busy: bool,
+    },
     /// The confirm's "Check again" over a recipient check that could not
     /// finish, or could not read the history (round 3).
     RetryRiskCheck,
@@ -1836,6 +1856,14 @@ pub enum SendTxErrorKey {
     ProposalMailboxDown,
     /// A multisig's proposal: this device is offline, nothing was proposed.
     ProposalOffline,
+    /// r5reg-3: the network's nodes are busy ("too many requests") and the
+    /// reads before the passkey did not get through: nothing was signed or
+    /// sent (`send.txErrorChainBusy`, with the network's name).
+    ChainBusy,
+    /// r5reg-3: the network could not be reached for the reads before the
+    /// passkey: nothing was signed or sent
+    /// (`send.txErrorChainUnreachable`, with the network's name).
+    ChainUnreachable,
 }
 
 /// Why a multisig's proposal was not made, as the shell knows it.
@@ -2217,6 +2245,11 @@ pub struct Model {
     receipt_still_unknown: bool,
     /// [`SendView::queued_behind_tab`].
     queued_behind_tab: bool,
+    /// [`SendView::submit_slow`] (r5reg-3).
+    submit_slow: Option<SendSubmitSlow>,
+    /// [`SendView::max_moved`] (r5reg-3): the figure the Max first showed, and
+    /// the one it shows now.
+    max_moved: Option<SendMaxMoved>,
     fee_held: bool,
     /// The relay is topping up its gas before it sends (098 follow-up). Not
     /// sticky: the next outcome clears it.
@@ -2406,6 +2439,27 @@ pub enum SendHoldReason {
     /// The relay is topping up the gas it pays with on this chain; it sends
     /// the operation once that lands.
     RelayFunding,
+}
+
+/// [`SendView::submit_slow`]: the reads before the passkey are taking long
+/// (r5reg-3) — how long so far, and whether the nodes say they are busy.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct SendSubmitSlow {
+    /// Whole seconds since the reads started.
+    pub seconds: u32,
+    /// The network's nodes answer "too many requests".
+    pub busy: bool,
+}
+
+/// [`SendView::max_moved`]: a Max the person was shown, filled again from a
+/// newer fee quote before they confirmed (r5reg-3) — the two figures as the
+/// field shows them ([`max_figure`]).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct SendMaxMoved {
+    pub from: String,
+    pub to: String,
 }
 
 /// [`SendView::previous_pending`]: the transaction this send waits for.
@@ -2723,6 +2777,19 @@ pub struct SendView {
     /// with a nonce read after that one.
     #[serde(default)]
     pub queued_behind_tab: bool,
+    /// r5reg-3: the submit's reads before the passkey are slow — said on the
+    /// confirm with the time it has taken and the reason (the network's
+    /// nodes busy, or not answering), never a bare spinner. `None` once the
+    /// passkey sheet opens, the submit ends, or nothing is slow.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "bindings", ts(optional = nullable))]
+    pub submit_slow: Option<SendSubmitSlow>,
+    /// r5reg-3: the Max on the field was filled again from a newer fee quote
+    /// after the person saw it — what it read, and what it reads now (the
+    /// amount sent). Said beside the amount until the Max is let go of.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "bindings", ts(optional = nullable))]
+    pub max_moved: Option<SendMaxMoved>,
     /// Spec 102: with `tx_error` = [`SendTxErrorKey::VenueBlocked`], why this
     /// account cannot sign here — drawn as `VenueBlock::key()` with its
     /// domains. `None` otherwise.
@@ -2969,8 +3036,10 @@ impl Send {
                 _ => slide_confirm(model),
             },
             Event::SigningStarted => {
-                // Its turn came: no longer waiting for another tab.
-                let was_queued = std::mem::take(&mut model.queued_behind_tab);
+                // Its turn came: no longer waiting for another tab, nor for
+                // the network's reads.
+                let was_slow = model.submit_slow.take().is_some();
+                let was_queued = std::mem::take(&mut model.queued_behind_tab) || was_slow;
                 // Order is preparing → submitting → signing, as today
                 // (`setTxStatus('submitting')` precedes `signFn`).
                 if model.tx == SendTxStatus::Submitting
@@ -2983,6 +3052,19 @@ impl Send {
                     return render();
                 }
                 Command::done()
+            }
+            Event::SubmitSlow { elapsed_ms, busy } => {
+                // Only a submit that is out, its passkey not open yet.
+                if !matches!(model.pipeline, Pipeline::Submitting { .. })
+                    || model.tx == SendTxStatus::Signing
+                {
+                    return Command::done();
+                }
+                model.submit_slow = Some(SendSubmitSlow {
+                    seconds: elapsed_ms / 1_000,
+                    busy,
+                });
+                render()
             }
             Event::SendQueued => {
                 // Only a submit that is out can be waiting its turn.
@@ -3291,6 +3373,14 @@ impl Send {
             risk_history_unread: model.risk_unfinished && model.risk_history_unread,
             queued_behind_tab: model.queued_behind_tab
                 && matches!(model.pipeline, Pipeline::Submitting { .. }),
+            submit_slow: model.submit_slow.filter(|_| {
+                matches!(model.pipeline, Pipeline::Submitting { .. })
+                    && model.tx != SendTxStatus::Signing
+            }),
+            max_moved: model
+                .max_moved
+                .clone()
+                .filter(|_| matches!(model.max_fill, Some(MaxFill::Exact(_)))),
             tx_venue_block: model
                 .venue_block
                 .clone()
@@ -4399,6 +4489,7 @@ fn tap_max(model: &mut Model) -> Cmd {
     model.amount = DenominatedAmount::token("");
     model.fiat_origin = None;
     model.max_fill = Some(MaxFill::Waiting);
+    model.max_moved = None;
     max_follow_up(model, &token)
 }
 
@@ -4488,7 +4579,21 @@ fn follow_max(model: &mut Model) -> Cmd {
 /// Put an exact Max on the field: the figure rounded as the balance line
 /// rounds, the exact amount behind it for everything that counts.
 fn set_max(model: &mut Model, exact: String) {
-    model.amount = DenominatedAmount::token(max_figure(&exact));
+    let figure = max_figure(&exact);
+    // r5reg-3: a Max the person saw, filled again from a newer quote — the
+    // reserve for the fee moved — is said, never swapped silently: the figure
+    // first shown, and the one sent.
+    if let Some(MaxFill::Exact(before)) = &model.max_fill {
+        let shown = model
+            .max_moved
+            .as_ref()
+            .map_or_else(|| max_figure(before), |moved| moved.from.clone());
+        model.max_moved = (shown != figure).then(|| SendMaxMoved {
+            from: shown,
+            to: figure.clone(),
+        });
+    }
+    model.amount = DenominatedAmount::token(figure);
     model.max_fill = Some(MaxFill::Exact(exact));
 }
 
@@ -6840,6 +6945,7 @@ fn accept(model: &mut Model, id: u64, result: SendShellResult) -> Cmd {
             submit_block,
         } => {
             model.queued_behind_tab = false;
+            model.submit_slow = None;
             if model.withdrawn_submit == Some(id) {
                 // Never cleared, yet it went out (a shell that POSTs without
                 // the write-ahead): sent is sent — recorded as any other.
@@ -6849,6 +6955,7 @@ fn accept(model: &mut Model, id: u64, result: SendShellResult) -> Cmd {
         }
         R::SubmitFailed { failure } => {
             model.queued_behind_tab = false;
+            model.submit_slow = None;
             if model.withdrawn_submit == Some(id) {
                 // The submit the person cancelled ended, and nothing was
                 // sent: no error, no haptic — the form, as they left it.
@@ -7994,9 +8101,32 @@ fn submit_failed(model: &mut Model, gen: u64, failure: SendSubmitFailure) -> Cmd
             model.lock.end(gen);
             render()
         }
+        SendSubmitFailure::PasskeyTimedOut if model.tx != SendTxStatus::Signing => {
+            // r5reg-3: no passkey sheet opened on this submit — whatever ran
+            // out of time was the wait before it, the network's. Never told
+            // as the passkey's.
+            submit_failed(
+                model,
+                gen,
+                SendSubmitFailure::ChainUnreachable { busy: false },
+            )
+        }
         SendSubmitFailure::PasskeyTimedOut => {
             model.tx = SendTxStatus::Idle;
             model.passkey_note = Some(SendPasskeyNote::TimedOut);
+            model.lock.end(gen);
+            render()
+        }
+        SendSubmitFailure::ChainUnreachable { busy } => {
+            // The passkey never opened (r5reg-3): the network's reads before
+            // it did not get through. Said as the network's — busy, or out of
+            // reach — with "Try again"; never as the passkey's.
+            model.tx = SendTxStatus::Error;
+            model.tx_error = Some(if busy {
+                SendTxErrorKey::ChainBusy
+            } else {
+                SendTxErrorKey::ChainUnreachable
+            });
             model.lock.end(gen);
             render()
         }

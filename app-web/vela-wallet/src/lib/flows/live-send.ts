@@ -385,6 +385,29 @@ export function feeFailureWords(
 	return { figure, reason };
 }
 
+/** The form's network by name — what a network failure on the confirm names. */
+function networkOf(send: Pick<SendView, 'selected_token' | 'multi_chain_id'>): string {
+	const chain = formChainOf(send);
+	return chain === null ? '' : chainName(chain);
+}
+
+/**
+ * r5reg-3: a Max filled again from a newer quote after the person saw it —
+ * "Max is now 0.156382 USDC (it was 0.156387): …" — or nothing.
+ */
+export function maxMovedNote(
+	send: Pick<SendView, 'max_moved' | 'selected_token'>,
+	m: WalletFlowMessages
+): string | undefined {
+	const moved = send.max_moved;
+	if (!moved) return undefined;
+	return fill(m['send.maxMoved'], {
+		from: moved.from,
+		to: moved.to,
+		symbol: send.selected_token?.symbol ?? ''
+	});
+}
+
 /** The form's chain: the selected token's, else the sweep's (the core's `form_chain`). */
 export function formChainOf(
 	send: Pick<SendView, 'selected_token' | 'multi_chain_id'>
@@ -1437,6 +1460,23 @@ function confirmHolds(
 			case 'proposal_offline':
 				// A proposal's own words replace these (`liveSendConfirm`).
 				return { error: { text: m['send.txErrorGeneric'], retry: m['send.txRetryBtn'] } };
+			case 'chain_busy':
+			case 'chain_unreachable':
+				// r5reg-3: the reads before the passkey did not get through —
+				// the network's failure, by its name, never the passkey's.
+				return {
+					error: {
+						text: fill(
+							m[
+								send.tx_error === 'chain_busy'
+									? 'send.txErrorChainBusy'
+									: 'send.txErrorChainUnreachable'
+							],
+							{ network: networkOf(send) }
+						),
+						retry: m['send.txRetryBtn']
+					}
+				};
 		}
 	}
 	// send-11: the passkey prompt signed nothing — said calmly over the
@@ -1451,6 +1491,16 @@ function confirmHolds(
 	// Round 3 (send-15): another tab is sending from this account on this
 	// network; this one goes next, by itself, with a nonce read after it.
 	if (send.queued_behind_tab) return { ...note, held: m['send.queuedBehindTab'] };
+	// r5reg-3: the reads before the passkey are slow — the network, by name,
+	// busy or not answering, and for how long. Nothing is signed yet.
+	const slow = send.submit_slow;
+	if (slow) {
+		const words = slow.busy ? m['send.submitSlowBusy'] : m['send.submitSlow'];
+		return {
+			...note,
+			held: fill(words, { network: networkOf(send), seconds: slow.seconds })
+		};
+	}
 	const held = send.previous_pending;
 	if (held === null || held === undefined) {
 		// PR 2 note 1: else the fee's failure, in the line the signing sheet
@@ -1693,6 +1743,7 @@ function liveSendConfirmPage(model: SendConfirmModel, inputs: SendLiveInputs): S
 		amount: sentAmountText(send.confirm_amount),
 		amountUnit: token?.symbol || undefined,
 		subline: usd === null ? '' : `≈ ${moneyText(usd, currency)}`,
+		maxNote: maxMovedNote(send, m),
 		// r4a-2: on the page that signs, a coin nobody vouches for shows its
 		// contract — and a lookalike says it is not the real one.
 		...(token && provenanceView(token, m) ? { provenance: provenanceView(token, m) } : {}),

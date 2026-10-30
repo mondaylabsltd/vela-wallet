@@ -84,6 +84,10 @@
 			{/if}
 		</p>
 		<p class="subline">{model.subline}</p>
+		{#if model.maxNote !== undefined}
+			<!-- r5reg-3: a Max filled again from a newer quote, said before the confirm. -->
+			<p class="max-note" role="status">{model.maxNote}</p>
+		{/if}
 		{#if model.provenance !== undefined}
 			<!-- r4a-2: the page that signs says which contract this coin is. -->
 			<div class="provenance">
@@ -234,6 +238,14 @@
 		display: flex;
 		justify-content: center;
 		padding-top: var(--space-sm);
+	}
+
+	.max-note {
+		margin: 0;
+		padding-top: var(--space-sm);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
+		color: var(--color-fg-muted);
 	}
 
 	.subline {
