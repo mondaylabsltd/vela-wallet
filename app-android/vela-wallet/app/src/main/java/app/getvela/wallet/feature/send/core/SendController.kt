@@ -54,6 +54,10 @@ class SendController(
     feedChanged: () -> Unit = {},
     /** Spec 043 T048: a name for the recipient, through the app's waterfall. */
     identity: suspend (String) -> SendRecipientIdentity? = { null },
+    /** r4a-18: the person's own name for an address — one of their accounts, else a contact they named. */
+    knownName: suspend (String) -> String? = { null },
+    /** r4a-18: one of the person's own accounts on this device. */
+    ownAddress: suspend (String) -> Boolean = { false },
     /** Spec 045 US3: the display currency the batch prices in, the wallet's fiat-rate waterfall, the platform's documents. */
     private val currencyCode: () -> String = { "USD" },
     fiatRate: suspend (String) -> Double? = { null },
@@ -226,6 +230,8 @@ class SendController(
         },
         ports = ports,
         identity = identity,
+        knownName = knownName,
+        ownAddress = ownAddress,
         trustedSigner = trustedSigner,
         words = words,
         holdings = holdings,
@@ -794,6 +800,9 @@ class SendController(
     fun dismissRelayUnreachable() = dispatch(SendEvent.DismissRelayUnreachable)
 
     fun retryAfterError() = dispatch(SendEvent.RetryAfterError)
+
+    /** send-18: ask the recipient's check again (the confirm's "Check again"). */
+    fun retryRiskCheck() = dispatch(SendEvent.RetryRiskCheck)
 
     fun done() = dispatch(SendEvent.Done)
 

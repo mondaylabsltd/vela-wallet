@@ -123,6 +123,11 @@ data class BalanceView(
     /** `null` = unknown. A screen that renders this as `0` is lying. */
     val display_total_usd: Double? = null,
     val balance_unknown: Boolean = false,
+    /** Only unpriced coins are held: there is no figure to total, said as that. */
+    val unpriced_only: Boolean = false,
+    /** The networks read through a fallback endpoint this round, and the line that says so. */
+    val fallback_chain_ids: List<Int> = emptyList(),
+    val fallback_status_key: String = "",
     val balance_partial: Boolean = false,
     /**
      * Nothing could be read and nothing is known: the first fetch failed with
@@ -326,6 +331,14 @@ sealed class BalanceShellResult {
          * its token list" for them and offers no RPC fix.
          */
         val registry_chain_ids: List<Int> = emptyList(),
+        /**
+         * The failed chains whose own node ("Only use my node") did not answer:
+         * the person's node is the reason, said as that — never an RPC the
+         * wallet could route around. A subset of [failed_chain_ids].
+         */
+        val own_node_chain_ids: List<Int> = emptyList(),
+        /** Chains this round read through a fallback endpoint (the pool's verdict). */
+        val fallback_chain_ids: List<Int> = emptyList(),
         val now_ms: Double,
     ) : BalanceShellResult()
 

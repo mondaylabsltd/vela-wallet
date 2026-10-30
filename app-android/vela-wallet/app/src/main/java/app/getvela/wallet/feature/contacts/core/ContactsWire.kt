@@ -17,6 +17,8 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class ContactsView(
+    /** A write did not land (set-22): the book is kept in memory, not on this device. */
+    val save_failed: Boolean = false,
     val loaded: Boolean = false,
     /**
      * The unified book: saved ⊕ history-derived, tombstone-suppressed, sorted
@@ -411,6 +413,23 @@ sealed class ContactShellResult {
     @Serializable
     @SerialName("written")
     data object Written : ContactShellResult()
+
+    /**
+     * The write did not land (set-22): the core keeps the change in memory and
+     * says it is not kept on this device — never the old silent `written`.
+     */
+    @Serializable
+    @SerialName("write_failed")
+    data object WriteFailed : ContactShellResult()
+
+    /**
+     * The store could not be read — which is not "empty" (set-1): the core
+     * reads it as no book yet on a first read and keeps the book it holds on a
+     * re-read, so a fault is never written back as an empty address book.
+     */
+    @Serializable
+    @SerialName("store_unreadable")
+    data object StoreUnreadable : ContactShellResult()
 
     @Serializable
     @SerialName("identity_resolved")

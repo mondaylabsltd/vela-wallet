@@ -548,6 +548,14 @@ class AppContainer(private val app: Application) {
             // now, so the pending row shows at submit, not at the next tick.
             feedChanged = { wallet.feedReconciled(1) },
             identity = { address -> identity.resolve(address)?.let { SendRecipientIdentity(name = it.name, source = it.source) } },
+            // r4a-18 / vis-24 (the web's `knownName` / `ownAddress`): one of the
+            // person's accounts on this device, else a contact they named — a
+            // resolved name is a service's word, not theirs.
+            knownName = { address ->
+                session.view.value.accounts.firstOrNull { it.address.equals(address, ignoreCase = true) }?.name?.ifBlank { null }
+                    ?: contacts.view.value.contacts.firstOrNull { it.address.equals(address, ignoreCase = true) }?.name?.ifBlank { null }
+            },
+            ownAddress = { address -> session.view.value.accounts.any { it.address.equals(address, ignoreCase = true) } },
             // The importer is opened in the person's currency when that is known —
             // committed, or the stored choice on its way (F8); only before either
             // does it get the placeholder it needs to exist, which its sheet does
@@ -963,6 +971,12 @@ class AppContainer(private val app: Application) {
                         pool.call(chainId, "eth_simulateV1", params)
                     override suspend fun judgeDeltas(chainId: Int, wallet: String, deltas: List<app.getvela.wallet.feature.wallet.core.TrustAssetDelta>): app.getvela.wallet.feature.wallet.core.TrustSimView? =
                         this@AppContainer.wallet.judgeSimDeltas(wallet, chainId, deltas)
+                    // cs-13: the raw code as the chain gave it; an error or no answer is `null`.
+                    override suspend fun getCode(chainId: Int, address: String): String? {
+                        val body = (pool.call(chainId, "eth_getCode", listOf(address, "latest")) as? RpcResult.Body)?.json ?: return null
+                        if (body.optJSONObject("error") != null) return null
+                        return body.optString("result").takeIf { it.startsWith("0x") }
+                    }
                     override suspend fun ethCall(chainId: Int, to: String, data: String): Pair<String?, Boolean> {
                         val body = (pool.call(chainId, "eth_call", listOf(JSONObject().put("to", to).put("data", data), "latest")) as? RpcResult.Body)?.json
                             ?: return null to false
@@ -1024,9 +1038,18 @@ class AppContainer(private val app: Application) {
      * a composable: the question is about the PROCESS, and a composable that
      * leaves the composition answers nothing at all.
      */
+    /** An activity has been in front once: a later first start is a return. */
+    private var everStarted = false
+
     private val activityCounter = object : Application.ActivityLifecycleCallbacks {
         override fun onActivityStarted(activity: android.app.Activity) {
             foregroundActivities += 1
+            // ob-2: back in front — a wallet saved here whose registration has
+            // not landed may land now (the web's `online`). The core ignores it
+            // when nothing is owed or a round is already running. Not on the
+            // first start: the boot's own round is that one.
+            if (foregroundActivities == 1 && everStarted) session.syncPending()
+            everStarted = true
             wallet.focused()
             // The AI agent answers only while the wallet is in front.
             agent.sceneActive(true)

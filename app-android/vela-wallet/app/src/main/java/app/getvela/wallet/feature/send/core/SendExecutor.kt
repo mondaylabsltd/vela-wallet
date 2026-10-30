@@ -93,6 +93,14 @@ class SendExecutor(
     private val prewarm: (account: String, chainIds: List<Int>) -> Unit = { _, _ -> },
     /** Spec 082 RJ1: the write-ahead gate; tests pin its wait. */
     private val writeAhead: WriteAhead = WriteAhead(),
+    /**
+     * r4a-18 / vis-24: the person's own name for an address — one of their
+     * accounts here, else a contact they NAMED (a resolved name is a
+     * service's word, not theirs). Asked before any lookup.
+     */
+    private val knownName: suspend (String) -> String? = { null },
+    /** r4a-18: [address] is one of the person's own accounts on this device — never a stranger. */
+    private val ownAddress: suspend (String) -> Boolean = { false },
 ) {
 
     /** The account store, as the send path reads it. */
@@ -276,16 +284,21 @@ class SendExecutor(
             ports.trackWithdrawn(operation.user_op_hash, operation.record_ids)
             SendShellResult.TrackHandedOff
         }
-        is SendOperation.ResolveIdentity -> SendShellResult.IdentityResolved(identity(operation.address))
-        // `first_time` from this device's own send history (the web's
-        // `resolveRecipientRisk`): an address it never sent to wears the
-        // "first time" tag, the poisoning defence. Not an address → `false`.
-        is SendOperation.ResolveRisk -> SendShellResult.RiskResolved(
-            SendRecipientRisk(
-                is_contract = relay.isContract(operation.chain_id, operation.address),
-                first_time = firstTime(operation.address),
-            ),
+        // The person's own names first (vis-24): one of their accounts, or a
+        // contact they named — local, no network, told as theirs (`self`).
+        is SendOperation.ResolveIdentity -> SendShellResult.IdentityResolved(
+            knownName(operation.address)?.trim()?.ifEmpty { null }?.let { SendRecipientIdentity(name = it, source = "self") }
+                ?: identity(operation.address),
         )
+        is SendOperation.ResolveRisk -> SendShellResult.RiskResolved(risk(operation.chain_id, operation.address))
+        // A multisig's send becomes a proposal — orchestration is web-only
+        // until the core carries it (F0.4). Answered at once, never left to
+        // spin: `mailbox_down` is the nearest reason the wire has for "this
+        // shell has no multisig service" (CORE lane: a `not_supported` reason).
+        is SendOperation.ProposeSafeTx -> {
+            VelaLog.event("send.propose", "multisig is not on this shell yet", "chain" to operation.chain_id)
+            SendShellResult.ProposeFailed(cancelled = false, reason = SendProposeFailure.MailboxDown)
+        }
         // No simulation engine on this base (046).
         is SendOperation.SimulateCalls -> SendShellResult.SimResolved(null)
         is SendOperation.StartTimer -> {
@@ -306,9 +319,40 @@ class SendExecutor(
         }
     }
 
-    /** `true` = never sent to this address from this device; a non-address is never "first". */
-    private suspend fun firstTime(address: String): Boolean =
-        ADDRESS.matches(address) && !feed.hasSentTo(address)
+    /**
+     * The recipient's risk signals — the web's `recipient-risk.ts` with its
+     * `knownName` / `ownAddress` ports (r4a-18), port for port:
+     *
+     * - `is_contract`: bytecode at the address, a 7702-delegated account
+     *   being a person's, not a contract; unknown when the chain could not be
+     *   asked (or did not answer within [CODE_WAIT_MS] — a slow chain must not
+     *   hold the confirm, which waits for this answer a bounded while).
+     * - `first_time`: never sent here from this device. `null` when the
+     *   history could not be read (`history_unread`) — said, not guessed.
+     * - `own` / `known_name`: one of the person's accounts, or a contact they
+     *   named. Facts; the core decides that an own address is never a first
+     *   transfer.
+     *
+     * Not an address: nothing to check, and never "first".
+     */
+    private suspend fun risk(chainId: Int, address: String): SendRecipientRisk {
+        val known = knownName(address)?.trim()?.ifEmpty { null }
+        val own = ownAddress(address)
+        if (!ADDRESS.matches(address)) {
+            return SendRecipientRisk(is_contract = null, first_time = false, history_unread = false, known_name = known, own = own)
+        }
+        return coroutineScope {
+            val code = async { withTimeoutOrNull(CODE_WAIT_MS) { relay.isContract(chainId, address) } }
+            val sent = feed.sentTo(address)
+            SendRecipientRisk(
+                is_contract = code.await(),
+                first_time = sent?.let { !it },
+                history_unread = sent == null,
+                known_name = known,
+                own = own,
+            )
+        }
+    }
 
     // -- tokens -----------------------------------------------------------------
 
@@ -588,11 +632,15 @@ class SendExecutor(
         is SendOperation.Haptic -> SendShellResult.HapticPlayed
         is SendOperation.ShowAlert -> SendShellResult.AlertAcknowledged
         SendOperation.Close -> SendShellResult.Closed
+        is SendOperation.ProposeSafeTx -> SendShellResult.ProposeFailed(cancelled = false, reason = SendProposeFailure.MailboxDown)
     }
 
     internal companion object {
         /** The id half the core keys tokens on; the chain id is the whole story here. */
         fun network(chainId: Int) = "chain-$chainId"
+
+        /** How long the contract read may hold the risk answer (send-18, the web's `CODE_WAIT_MS`). */
+        const val CODE_WAIT_MS = 3_000L
 
         /** How long `fetch_tokens` waits for the dashboard's first round of an account. */
         const val HOLDINGS_WAIT_MS = 30_000L

@@ -712,6 +712,27 @@ class RelayClient(
         signals
     }
 
+    /**
+     * Round 3 (send-5): the head, then `getNonce(sender, 0)` on [entryPoint]
+     * AT that block — the tracker's `read_nonce`. The result as it came, with
+     * the block; both `null` when either read went unanswered (the web's
+     * `readAccountNonce`).
+     */
+    suspend fun nonceAt(chainId: Int, entryPoint: String, sender: String): Pair<String, Long>? {
+        val head = headBlock(chainId) ?: return null
+        val word = sender.removePrefix("0x").lowercase()
+        if (!ADDRESS_HEX.matches(word)) return null
+        val data = "0x" + getNonceSelector + addressWord(sender) + "0".repeat(64)
+        val body = chainCall(
+            chainId,
+            "eth_call",
+            listOf(JSONObject().put("to", entryPoint).put("data", data), "0x" + head.toString(16)),
+        ) ?: return null
+        if (body.has("error") && !body.isNull("error")) return null
+        val nonce = body.opt("result") as? String ?: return null
+        return nonce to head
+    }
+
     /** `EntryPoint.getNonce(sender, 0)` as a hex QUANTITY; `null` when unreadable. */
     suspend fun nonce(chainId: Int, sender: String): String? {
         val data = "0x" + getNonceSelector + addressWord(sender) + "0".repeat(64)
@@ -797,6 +818,7 @@ class RelayClient(
 
     private companion object {
         val EIP7702_DESIGNATOR = Regex("^0xef0100[0-9a-f]{40}$", RegexOption.IGNORE_CASE)
+        val ADDRESS_HEX = Regex("^[0-9a-f]{40}$")
         const val QUOTE_TTL_MS = 8_000L
         const val INFO_TTL_MS = 30_000L
 

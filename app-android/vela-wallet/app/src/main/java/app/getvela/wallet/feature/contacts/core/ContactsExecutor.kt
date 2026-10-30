@@ -61,35 +61,35 @@ class ContactsExecutor(
             groups = readGroups(),
         )
 
-        is ContactOperation.WriteContacts -> {
+        // A refused write is said as one (`write_failed`, set-22): the
+        // platform's `false` used to be answered `written`, and the screen
+        // said a contact was saved that the next launch would not have.
+        is ContactOperation.WriteContacts -> written(
             store.write(
                 KeyValueStore.Keys.CONTACTS,
                 JSONArray().apply {
                     operation.contacts.forEach { put(toStoredContact(it)) }
                 }.toString(),
-            )
-            ContactShellResult.Written
-        }
+            ),
+        )
 
-        is ContactOperation.WriteDismissed -> {
+        is ContactOperation.WriteDismissed -> written(
             store.write(
                 KeyValueStore.Keys.CONTACTS_DISMISSED,
                 JSONObject().apply {
                     operation.tombstones.forEach { put(it.address, it.dismissed_at_ms.toLongOrDouble()) }
                 }.toString(),
-            )
-            ContactShellResult.Written
-        }
+            ),
+        )
 
-        is ContactOperation.WriteGroups -> {
+        is ContactOperation.WriteGroups -> written(
             store.write(
                 KeyValueStore.Keys.CONTACT_GROUPS,
                 JSONArray().apply {
                     operation.groups.forEach { put(toStoredGroup(it)) }
                 }.toString(),
-            )
-            ContactShellResult.Written
-        }
+            ),
+        )
 
         // -- what the rest of the app knows -----------------------------------
 
@@ -137,11 +137,15 @@ class ContactsExecutor(
 
     /** What to answer when the shell itself threw. Exhaustive by construction. */
     fun neutralAnswer(operation: ContactOperation): ContactShellResult = when (operation) {
-        is ContactOperation.ReadStore -> ContactShellResult.StoreLoaded()
+        // Unreadable, which is not "empty": an empty `store_loaded` here would
+        // let the core write the book away on its next save (set-1).
+        is ContactOperation.ReadStore -> ContactShellResult.StoreUnreadable
+        // The in-memory ledger keeps the change; the core says it is not kept
+        // on this device (set-22).
         is ContactOperation.WriteContacts,
         is ContactOperation.WriteDismissed,
         is ContactOperation.WriteGroups,
-        -> ContactShellResult.Written
+        -> ContactShellResult.WriteFailed
         // A failure to read history is a different fact from an empty history,
         // and the core has a variant for each.
         is ContactOperation.LoadSendHistory -> ContactShellResult.HistoryFailed
@@ -150,6 +154,9 @@ class ContactsExecutor(
         is ContactOperation.ClassifyRecipient ->
             ContactShellResult.RecipientClassified(operation.chain_id, operation.address, null)
     }
+
+    private fun written(ok: Boolean): ContactShellResult =
+        if (ok) ContactShellResult.Written else ContactShellResult.WriteFailed
 
     // -- stored ⇄ wire -------------------------------------------------------
 

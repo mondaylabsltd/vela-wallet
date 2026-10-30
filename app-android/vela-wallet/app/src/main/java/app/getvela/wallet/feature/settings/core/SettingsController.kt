@@ -370,6 +370,9 @@ class SettingsController(
 
     fun dappAddApproved() = net(NetEvent.DappAddApproved(nowIso()))
 
+    /** Spec 100: the check could not finish and the person adds it anyway (`can_add_unverified`). */
+    fun dappAddApprovedUnverified() = net(NetEvent.DappAddApprovedUnverified(nowIso()))
+
     fun dappAddDeclined() = net(NetEvent.DappAddDeclined)
 
     fun dappAddRetried() = net(NetEvent.DappAddRetried)
@@ -397,10 +400,14 @@ class SettingsController(
         net(NetEvent.OverrideBlurred(chainId))
     }
 
-    /** Spec 048: a provider's 检查密钥 — the core probes the key it was given. */
-    fun testProvider(provider: NetProviderId) {
-        VelaLog.event("net", "provider test", "provider" to provider.name)
-        net(NetEvent.ProviderTestRequested(provider))
+    /**
+     * "Only use my node" (owner decision 2026-10-28) for a network with an
+     * RPC of the person's own — what it means for the pool is the core's
+     * (`rpc_pool::own_only_pool`).
+     */
+    fun setOnlyMine(chainId: Long, on: Boolean) {
+        VelaLog.event("net", "only mine", "chain" to chainId, "on" to on)
+        net(NetEvent.OnlyMineChanged(chainId, on))
     }
 
     fun openEndpoints() = net(NetEvent.EndpointsOpened)
@@ -411,13 +418,6 @@ class SettingsController(
     fun commitEndpoint(field: NetEndpointField) = net(NetEvent.EndpointBlurred(field))
 
     fun resetEndpoints() = net(NetEvent.ResetEndpointsToDefaults)
-
-    fun openProviders() = net(NetEvent.ProvidersOpened)
-
-    fun editProviderKey(provider: NetProviderId, value: String) =
-        net(NetEvent.ProviderKeyEdited(provider, value))
-
-    fun commitProviderKey(provider: NetProviderId) = net(NetEvent.ProviderKeyBlurred(provider))
 
     private fun net(event: NetEvent) = networkHost.dispatch(event, NetEvent.serializer())
 

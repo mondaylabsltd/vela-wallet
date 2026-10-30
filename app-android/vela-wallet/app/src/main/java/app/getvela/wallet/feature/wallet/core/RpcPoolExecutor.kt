@@ -54,6 +54,7 @@ class RpcPoolExecutor(
                 chain_id = operation.chain_id,
                 rpc_endpoints = seeds.rpc,
                 bundler_endpoints = seeds.bundler,
+                own_only = seeds.ownOnly,
                 now_ms = now(),
             )
         }
@@ -185,7 +186,7 @@ class RpcPoolExecutor(
     /** What to answer when the shell itself threw. Exhaustive by construction. */
     fun neutralAnswer(operation: RpcOperation): RpcShellResult = when (operation) {
         is RpcOperation.LoadPoolConfig ->
-            RpcShellResult.PoolConfig(operation.chain_id, emptyList(), emptyList(), now())
+            RpcShellResult.PoolConfig(operation.chain_id, emptyList(), emptyList(), own_only = false, now_ms = now())
         // An escaped exception is a dead endpoint as far as the core is
         // concerned: report it and let the routing continue.
         is RpcOperation.JsonRpcPost -> RpcShellResult.PostOutcome(
@@ -250,6 +251,8 @@ interface RpcEndpointSource {
 data class RpcSeeds(
     val rpc: List<RpcEndpointSeed> = emptyList(),
     val bundler: List<RpcEndpointSeed> = emptyList(),
+    /** "Only use my node" is on for the chain (the network's saved `only_mine`). */
+    val ownOnly: Boolean = false,
 )
 
 /** The POST, and nothing about what it means. */

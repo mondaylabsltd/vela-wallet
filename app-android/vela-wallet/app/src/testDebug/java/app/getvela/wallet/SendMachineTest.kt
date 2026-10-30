@@ -422,7 +422,7 @@ class SendMachineTest {
         c.seedSplit(
             listOf(
                 app.getvela.wallet.feature.send.core.SendRecipientDraft(id = "a", address = recipient, amount = "0.001"),
-                app.getvela.wallet.feature.send.core.SendRecipientDraft(id = "b", address = "0x9F3c000000000000000000000000000000021aE0", amount = "0.002"),
+                app.getvela.wallet.feature.send.core.SendRecipientDraft(id = "b", address = "0x9f3c000000000000000000000000000000021ae0", amount = "0.002"),
             ),
         )
         withTimeout(10_000) { c.send.first { it.can_continue } }

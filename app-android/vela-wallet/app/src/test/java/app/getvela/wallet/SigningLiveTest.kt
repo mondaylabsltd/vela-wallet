@@ -100,6 +100,7 @@ class SigningLiveTest {
                         is ClearOperation.SelectorDbLookup -> ClearShellResult.SelectorCandidates()
                         is ClearOperation.Timer -> ClearShellResult.TimedOut(op.token)
                         ClearOperation.Now -> ClearShellResult.Clock(1.0e12)
+                        is ClearOperation.RpcGetCode -> ClearShellResult.RpcAnswer(ClearProbe.Code, op.chain_id, op.address, null, false)
                     }
                 },
                 escapedFailure = JsonShell.escapedFailure(ClearOperation.serializer(), ClearShellResult.serializer(), fallback = ClearShellResult.Clock(1.0e12)) { ClearShellResult.Clock(1.0e12) },
@@ -281,6 +282,7 @@ class SigningLiveTest {
                         is ClearOperation.SelectorDbLookup -> ClearShellResult.SelectorCandidates()
                         is ClearOperation.Timer -> ClearShellResult.TimedOut(op.token)
                         ClearOperation.Now -> ClearShellResult.Clock(1.790957e12)
+                        is ClearOperation.RpcGetCode -> ClearShellResult.RpcAnswer(ClearProbe.Code, op.chain_id, op.address, null, false)
                     }
                 },
                 escapedFailure = JsonShell.escapedFailure(ClearOperation.serializer(), ClearShellResult.serializer(), fallback = ClearShellResult.Clock(1.0e12)) { ClearShellResult.Clock(1.0e12) },
@@ -1678,7 +1680,8 @@ class SigningLiveTest {
     fun `the kickoff hands a batch over whole and reads a transaction from its own call`() {
         val batch = """[{"calls":[{"to":"$founder","value":"0x1"},{"to":"$other","value":"0x2"}]}]"""
         assertEquals(
-            ClearSigningEvent.ResolveBatch(params_json = batch, chain_id = 100, locale = (SigningController.clearKickoff("wallet_sendCalls", batch, 100, null) as ClearSigningEvent.ResolveBatch).locale),
+            // cs-13: this shell answers `rpc_get_code`, so the core may ask the target's code.
+            ClearSigningEvent.ResolveBatch(params_json = batch, chain_id = 100, locale = (SigningController.clearKickoff("wallet_sendCalls", batch, 100, null) as ClearSigningEvent.ResolveBatch).locale, probe_code = true),
             SigningController.clearKickoff("wallet_sendCalls", batch, 100, null),
         )
         val stray = """[{"to":"$founder","data":"0x095ea7b3ffff","calls":[{"to":"$other","value":"0x1"}]}]"""

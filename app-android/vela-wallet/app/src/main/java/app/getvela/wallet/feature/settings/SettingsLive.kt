@@ -36,7 +36,6 @@ import app.getvela.wallet.feature.settings.core.CurrencyView
 import app.getvela.wallet.feature.settings.core.NetProbeHealth
 import app.getvela.wallet.feature.settings.core.NetServiceHealth
 import app.getvela.wallet.feature.settings.core.NetEndpointField
-import app.getvela.wallet.feature.settings.core.NetProviderId
 import app.getvela.wallet.feature.settings.core.NetRpcField
 import app.getvela.wallet.feature.settings.core.NetView
 import app.getvela.wallet.feature.settings.core.NetWizardErrorKind
@@ -628,7 +627,10 @@ object SettingsLive {
             // left the count untouched. Found on a device (spec 040 phase 11).
             sections = model.sections.map { section ->
                 section.copy(
-                    rows = section.rows.map { row ->
+                    // The RPC providers are retired in the core
+                    // (`retire_provider_keys`): their keys became the networks'
+                    // own RPCs, and there is no page to open any more.
+                    rows = section.rows.filter { it.id != "rpc-providers" }.map { row ->
                         if (row.id == "networks") {
                             row.copy(
                                 value = row.value.orEmpty()
@@ -685,51 +687,8 @@ object SettingsLive {
                     )
                 },
             ),
-            rpcProviders = model.rpcProviders.copy(
-                providers = view.providers.mapIndexed { index, provider ->
-                    val card = model.rpcProviders.providers.getOrNull(index)
-                        ?: model.rpcProviders.providers.firstOrNull()
-                    val notSet = strings.t(I18nKeys.SettingsUi.PROVIDER_NOT_SET)
-                    val test = provider.test
-                    card?.copy(
-                        id = provider.provider.name,
-                        name = providerName(provider.provider),
-                        // Whether a key is set is the core's `has_key`, not the
-                        // card's position: the fixture drew Alchemy connected
-                        // and "supports 12" on every device (the web's
-                        // `liveRpcProviders`).
-                        badge = if (provider.has_key) {
-                            StatusPillModel(SettingsTone.Ok, strings.t(I18nKeys.SettingsUi.PROVIDER_CONNECTED))
-                        } else {
-                            StatusPillModel(SettingsTone.Neutral, notSet)
-                        },
-                        // The field's id is what the host maps back to a
-                        // machine event, so it must be the core's own name for
-                        // this provider rather than the fixture's label.
-                        field = card.field.copy(
-                            id = provider.provider.name,
-                            value = provider.key,
-                            placeholder = if (provider.has_key) null else notSet,
-                        ),
-                        action = strings.t(
-                            if (provider.has_key) I18nKeys.SettingsUi.PROVIDER_CHECK_KEY else I18nKeys.SettingsUi.PROVIDER_GET_KEY,
-                        ),
-                        // The test's own count, once it has finished — never a drawn one.
-                        support = if (test != null && test.done) {
-                            strings.t(
-                                I18nKeys.SettingsUi.PROVIDER_SUPPORTS,
-                                mapOf("count" to test.ok_count.toString(), "total" to test.total.toString()),
-                            )
-                        } else {
-                            null
-                        },
-                        link = if (provider.has_key) null else "${strings.t(I18nKeys.SettingsUi.PROVIDER_GET_KEY)} →",
-                        // The link used to hand its own LABEL to the opener
-                        // ("https://Get key →"); each provider's key comes from its own site.
-                        linkUrl = if (provider.has_key) null else providerKeyUrl(provider.provider),
-                    )
-                }.filterNotNull(),
-            ),
+            // Retired (`retire_provider_keys`): no provider cards are live.
+            rpcProviders = model.rpcProviders.copy(providers = emptyList()),
         )
     }
 
@@ -754,11 +713,6 @@ object SettingsLive {
         return drawn.getOrNull(index)?.label ?: field.name
     }
 
-    private fun providerName(provider: NetProviderId): String = when (provider) {
-        NetProviderId.Alchemy -> "Alchemy"
-        NetProviderId.Drpc -> "dRPC"
-        NetProviderId.Ankr -> "Ankr"
-    }
 
     /**
      * The row's right-hand value: the code and its sign, and nothing more —
@@ -1024,12 +978,6 @@ object SettingsLive {
         )
     }
 
-    /** Where a provider's API key is made — the "Get key →" link's target. */
-    internal fun providerKeyUrl(provider: NetProviderId): String = when (provider) {
-        NetProviderId.Alchemy -> "https://dashboard.alchemy.com/"
-        NetProviderId.Drpc -> "https://drpc.org/"
-        NetProviderId.Ankr -> "https://www.ankr.com/rpc/"
-    }
 
     /**
      * The saved RPC answered its probe: a save went out from the sheet, nothing

@@ -36,6 +36,7 @@ import app.getvela.wallet.feature.signing.SigningFixtures
 import app.getvela.wallet.feature.signing.SigningLive
 import app.getvela.wallet.feature.signing.SigningScreenState
 import app.getvela.wallet.feature.signing.core.ClearOperation
+import app.getvela.wallet.feature.signing.core.ClearProbe
 import app.getvela.wallet.feature.signing.core.ClearShellResult
 import app.getvela.wallet.feature.signing.core.ClearSigningEvent
 import app.getvela.wallet.feature.signing.core.ClearSigningView
@@ -360,6 +361,7 @@ class BrowserTabsAndLayersTest {
                     is ClearOperation.SelectorDbLookup -> ClearShellResult.SelectorCandidates()
                     is ClearOperation.Timer -> ClearShellResult.TimedOut(op.token)
                     ClearOperation.Now -> ClearShellResult.Clock(1.0e12)
+                    is ClearOperation.RpcGetCode -> ClearShellResult.RpcAnswer(ClearProbe.Code, op.chain_id, op.address, null, false)
                 }
             },
             escapedFailure = JsonShell.escapedFailure(ClearOperation.serializer(), ClearShellResult.serializer(), fallback = ClearShellResult.Clock(1.0e12)) { ClearShellResult.Clock(1.0e12) },

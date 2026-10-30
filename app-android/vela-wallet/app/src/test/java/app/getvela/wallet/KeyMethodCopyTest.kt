@@ -99,8 +99,9 @@ class KeyMethodCopyTest {
         val zh = strings("zh")
         assertEquals("使用可信签名页", app.getvela.wallet.feature.onboarding.flow.OwnPageModel.entry(zh).first)
         assertEquals("高级：Vela 官方页或自建页", app.getvela.wallet.feature.onboarding.flow.OwnPageModel.entry(zh).second)
-        assertEquals("在 Vela 里预览并签名", zh.t(uniffi.vela_core_uniffi.venueWords("in_vela")!!.titleKey))
-        assertEquals("在可信签名页预览并签名", zh.t(uniffi.vela_core_uniffi.venueWords("page")!!.titleKey))
+        // The round-6 corpus (`settings.venue.*`): the venue named, without "预览并".
+        assertEquals("在 Vela 里签名", zh.t(uniffi.vela_core_uniffi.venueWords("in_vela")!!.titleKey))
+        assertEquals("在可信签名页签名", zh.t(uniffi.vela_core_uniffi.venueWords("page")!!.titleKey))
         // "My own signing page" is nowhere (D6).
         for (s in listOf(strings, zh)) {
             assertFalse(app.getvela.wallet.feature.onboarding.flow.OwnPageModel.entry(s).first.contains("own", ignoreCase = true))

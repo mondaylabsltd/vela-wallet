@@ -164,7 +164,6 @@ import app.getvela.wallet.feature.send.core.SendRelayReport
 import app.getvela.wallet.feature.settings.SettingsLive
 import app.getvela.wallet.feature.settings.SettingsOverlay
 import app.getvela.wallet.feature.settings.core.NetEndpointField
-import app.getvela.wallet.feature.settings.core.NetProviderId
 import app.getvela.wallet.feature.settings.SettingsRoute
 import app.getvela.wallet.feature.settings.SettingsScreenState
 import app.getvela.wallet.feature.settings.gallery.SettingsGalleryScreen
@@ -1542,6 +1541,7 @@ fun VelaNavHost(
                             onNoticeSecondary = {
                                 if (sendView.relay_unreachable != null) send.dismissRelayUnreachable() else send.dismissTreasurySheet()
                             },
+                            onRecipientCheckRetry = { send.retryRiskCheck() },
                             // Issue #466: snapshot the core's report NOW and open the report sheet with it.
                             onRelayReport = {
                                 sendView.relay_report?.let { report ->
@@ -2669,7 +2669,9 @@ fun VelaNavHost(
                         // person typed (the web's `recheck`) — never the scan path, which
                         // adds without asking.
                         onRecheckNetwork = { networks.wizard.chain_info?.chain_id?.let { settings.selectChain(it, keepCustomRpc = true) } },
-                        onProviderTest = { id -> NetProviderId.entries.firstOrNull { it.name.equals(id, ignoreCase = true) }?.let { settings.testProvider(it) } },
+                        // The provider keys are retired (the core's `retire_provider_keys`):
+                        // no card to test any more.
+                        onProviderTest = { _ -> },
                         onFeedbackGithub = { runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/mondaylabsltd/vela-wallet/issues"))) } },
                         onOpenLink = { value ->
                             val url = if (value.startsWith("http")) value else "https://$value"
@@ -2738,11 +2740,9 @@ fun VelaNavHost(
                         // is a line in one place rather than a callback per box.
                         onFieldEdited = { fieldId, value ->
                             endpointField(fieldId)?.let { settings.editEndpoint(it, value) }
-                            providerId(fieldId)?.let { settings.editProviderKey(it, value) }
                         },
                         onFieldCommitted = { fieldId ->
                             endpointField(fieldId)?.let { settings.commitEndpoint(it) }
-                            providerId(fieldId)?.let { settings.commitProviderKey(it) }
                         },
                         onRemoveNetwork = { id ->
                             settings.networks.value.networks.firstOrNull { it.id == id }
@@ -2816,7 +2816,6 @@ fun VelaNavHost(
                                 SettingsPage.Venue -> liveModel.venue?.choices.orEmpty().mapNotNull { it.page?.url }.forEach { url ->
                                     scope.launch { application.container.signerPages.ensure(url) }
                                 }
-                                SettingsPage.RpcProviders -> settings.openProviders()
                                 SettingsPage.Endpoints -> settings.openEndpoints()
                                 SettingsPage.AddNetwork -> settings.resetWizard()
                                 else -> Unit
@@ -3162,9 +3161,6 @@ private fun android.content.Context.openUrl(url: String) {
  */
 private fun endpointField(fieldId: String): NetEndpointField? =
     NetEndpointField.entries.firstOrNull { it.name == fieldId }
-
-private fun providerId(fieldId: String): NetProviderId? =
-    NetProviderId.entries.firstOrNull { it.name == fieldId }
 
 /** Reached only by the `vela.startDestination` extra; the guard leaves them alone. */
 internal val DEVELOPER_ROUTES = setOf(

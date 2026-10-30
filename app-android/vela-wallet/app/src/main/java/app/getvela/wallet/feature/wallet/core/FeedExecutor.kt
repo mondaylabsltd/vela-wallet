@@ -226,10 +226,24 @@ class FeedExecutor(
      * or a record with no `type` (a legacy send) counts. An unreadable store
      * answers `false` — the web's catch, so the tag shows rather than hides.
      */
-    suspend fun hasSentTo(address: String): Boolean {
+    suspend fun hasSentTo(address: String): Boolean = sentTo(address) == true
+
+    /**
+     * Has this device ever sent (a transfer, a dApp transaction) to [address]?
+     * `null` when the history could not be READ — a store that would not open,
+     * bytes that are not a list (round 3): a failed read is never "never sent
+     * here", and the confirm says so instead of tagging every address "first
+     * time". No history at all is a real `false`.
+     */
+    suspend fun sentTo(address: String): Boolean? {
         val lc = address.lowercase()
-        val raw = runCatching { store.read(KeyValueStore.Keys.TRANSACTIONS) }.getOrNull() ?: return false
-        val array = runCatching { JSONArray(raw) }.getOrNull() ?: return false
+        val raw = try {
+            store.read(KeyValueStore.Keys.TRANSACTIONS)
+        } catch (error: Throwable) {
+            if (error is kotlinx.coroutines.CancellationException) throw error
+            return null
+        } ?: return false
+        val array = runCatching { JSONArray(raw) }.getOrNull() ?: return null
         return (0 until array.length()).any { index ->
             val row = array.optJSONObject(index) ?: return@any false
             val to = if (row.has("to") && !row.isNull("to")) row.optString("to").lowercase() else null

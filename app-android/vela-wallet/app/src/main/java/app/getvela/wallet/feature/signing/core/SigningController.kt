@@ -298,6 +298,9 @@ class SigningController(
         /** `eth_call` through the pool: `(result, reverted)`. */
         suspend fun ethCall(chainId: Int, to: String, data: String): Pair<String?, Boolean>
 
+        /** `eth_getCode` through the pool, the raw code; `null` = no answer (clear signing's cs-13). */
+        suspend fun getCode(chainId: Int, address: String): String? = null
+
         /**
          * Spec 046 US1 / 082 RG6: `eth_simulateV1` with these params, through
          * the pool — its answer as it came. `null` = this host has no
@@ -425,7 +428,11 @@ class SigningController(
         originSeenByBrowser = { _request.value?.let { it.transportId != app.getvela.wallet.feature.signing.SigningLive.WALLET_TRANSPORT } ?: false },
         timer = simVerdictTimer,
     )
-    private val clearExecutor = ClearExecutor(dataBase = { ports.dataBase() }, ethCall = { c, to, d -> ports.ethCall(c, to, d) })
+    private val clearExecutor = ClearExecutor(
+        dataBase = { ports.dataBase() },
+        ethCall = { c, to, d -> ports.ethCall(c, to, d) },
+        getCode = { c, address -> ports.getCode(c, address) },
+    )
     private val guardExecutor = GuardExecutor(ethCall = { c, to, d -> ports.ethCall(c, to, d).first })
     private val feeExecutor = FeeExecutor(relay = relay, keyHexes = { address -> accounts.keysOf(address).map { it.publicKeyHex } }, measureCall = measureCall)
 
@@ -559,7 +566,10 @@ class SigningController(
         // What it does. A transaction decodes from its call; typed data and a
         // plain message are their own rungs of the same ladder. The BROWSER's
         // fact about who is asking, never the page's claim.
-        clearKickoff(request.method, request.paramsJson, request.chainId, request.origin.ifBlank { null })?.let { clearHost.dispatch(it, ClearSigningEvent.serializer()) }
+        // The signing account rides along (cs-2), and the core may ask the
+        // target's code (cs-13) — `ClearExecutor` answers `rpc_get_code`.
+        clearKickoff(request.method, request.paramsJson, request.chainId, request.origin.ifBlank { null }, from = wallet.address)
+            ?.let { clearHost.dispatch(it, ClearSigningEvent.serializer()) }
         guardHost.dispatch(
             GuardEvent.ApprovalDetected(method = request.method, params_json = request.paramsJson, chain_id = request.chainId, wallet_address = wallet.address, read_only = false, now_ms = now()),
             GuardEvent.serializer(),
@@ -829,19 +839,43 @@ class SigningController(
             return Triple(field("to"), field("data"), field("value"))
         }
 
-        fun clearKickoff(method: String, paramsJson: String, chainId: Int, origin: String?): ClearSigningEvent? = when {
+        fun clearKickoff(
+            method: String,
+            paramsJson: String,
+            chainId: Int,
+            origin: String?,
+            /** The signing account; `null` when unknown. */
+            from: String? = null,
+            /** This shell answers `rpc_get_code` (the web's `probeCode: true`). */
+            probeCode: Boolean = true,
+        ): ClearSigningEvent? = when {
             // 089 S1: a batch goes over whole — the core reads EVERY call, so
             // the sheet can never describe call 1 while signing them all.
             method == "wallet_sendCalls" -> ClearSigningEvent.ResolveBatch(
                 params_json = paramsJson,
                 chain_id = chainId,
                 locale = ClearLocale.fromFormats(Formats.current),
+                from = from?.ifBlank { null },
+                probe_code = probeCode,
             )
             method == "eth_sendTransaction" -> {
                 val call = firstCall(paramsJson, method)
-                ClearSigningEvent.ResolveTransaction(to = call?.first, data = call?.second, value = call?.third, chain_id = chainId, locale = ClearLocale.fromFormats(Formats.current))
+                ClearSigningEvent.ResolveTransaction(
+                    to = call?.first,
+                    data = call?.second,
+                    value = call?.third,
+                    chain_id = chainId,
+                    locale = ClearLocale.fromFormats(Formats.current),
+                    from = from?.ifBlank { null },
+                    probe_code = probeCode,
+                )
             }
-            method.contains("signTypedData") -> ClearSigningEvent.ResolveTypedData(typed_data_json = typedDataOf(method, paramsJson), chain_id = chainId, locale = ClearLocale.fromFormats(Formats.current))
+            method.contains("signTypedData") -> ClearSigningEvent.ResolveTypedData(
+                typed_data_json = typedDataOf(method, paramsJson),
+                chain_id = chainId,
+                locale = ClearLocale.fromFormats(Formats.current),
+                from = from?.ifBlank { null },
+            )
             method == "personal_sign" || method == "eth_sign" -> ClearSigningEvent.MessagePresented(
                 method = if (method == "eth_sign") ClearSignMethod.EthSign else ClearSignMethod.PersonalSign,
                 params = stringParams(paramsJson),

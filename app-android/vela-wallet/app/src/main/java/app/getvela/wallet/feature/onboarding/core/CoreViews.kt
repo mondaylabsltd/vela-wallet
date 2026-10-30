@@ -266,6 +266,17 @@ data class SessionView(
     val accounts: List<SessionAccountRow>,
     val allowedRoute: SessionRoute,
     val signOut: SessionSignOutView?,
+    /**
+     * The stored account list could not be read (settings set-21): the route
+     * is onboarding, but the shell must say so rather than look signed out.
+     */
+    val accountsUnreadable: Boolean = false,
+    /**
+     * ob-2: the wallets on this device whose registration has not landed —
+     * named, so a screen that could lose one (erasing this device) says WHICH.
+     * A `retrying` one keeps [SessionController]'s retry timer armed.
+     */
+    val unsynced: List<SessionUnsynced> = emptyList(),
 ) {
     /**
      * The active account's display NAME, `""` when there is none.
@@ -303,6 +314,14 @@ data class SessionView(
                     pendingUploadWarning = sheet.optBoolean("pending_upload_warning"),
                     // One wallet and six cannot read the same (2026-09-23).
                     accountCount = sheet.optInt("account_count", 1),
+                )
+            },
+            accountsUnreadable = json.optBoolean("accounts_unreadable"),
+            unsynced = json.optJSONArray("unsynced").objects().map { row ->
+                SessionUnsynced(
+                    name = row.optString("name"),
+                    address = row.optString("address"),
+                    retrying = row.optBoolean("retrying"),
                 )
             },
         )

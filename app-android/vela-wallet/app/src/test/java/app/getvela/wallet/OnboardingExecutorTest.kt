@@ -56,8 +56,11 @@ class OnboardingExecutorTest {
      * whose landing was confirmed.
      */
     @Test
-    fun sessionOperationsAreAllEleven() {
-        assertEquals(11, SessionExecutor.OPERATIONS.size)
+    fun sessionOperationsAreAllTwelve() {
+        // Twelve since ob-2: `publish_pending_upload`, a wallet's publish
+        // replayed from its outbox record. The typed wire makes the executor's
+        // `when` exhaustive; `CoreWireDriftTest` holds the list to the mirror.
+        assertEquals(12, SessionExecutor.OPERATIONS.size)
     }
 
     /** The landing watch's failures keep the record: nothing is removed on a guess. */

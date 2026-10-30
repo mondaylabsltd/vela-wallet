@@ -11,7 +11,6 @@ import app.getvela.wallet.feature.contacts.core.ContactSaveInput
 import app.getvela.wallet.feature.send.core.FeeTier
 import app.getvela.wallet.feature.settings.core.NetEndpointField
 import app.getvela.wallet.feature.settings.core.NetOverrideField
-import app.getvela.wallet.feature.settings.core.NetProviderId
 import app.getvela.wallet.feature.settings.core.NetworkSpace
 import kotlinx.coroutines.delay
 import kotlinx.serialization.KSerializer
@@ -116,7 +115,6 @@ internal class AgentPerform(private val wallet: AgentWallet, private val agent: 
                     .firstOrNull { it.optLong("chain_id") == chainId && it.optBoolean("is_custom") }
                 wallet.settings.deleteNetwork(row?.optString("id") ?: "custom-$chainId")
             }
-            "set_provider_key" -> setProviderKey(action.optString("provider"), text("key"))
             "set_service_endpoint" -> setServiceEndpoint(action.optString("field"), text("url"))
             "reset_service_endpoints" -> DONE.also { wallet.settings.resetEndpoints() }
             // -- Explore (spec 107): the browser's own calls, as its controls make them.
@@ -292,24 +290,6 @@ internal class AgentPerform(private val wallet: AgentWallet, private val agent: 
             if (before != null) settings.editOverride(chainId, wire, before)
             return refused("that RPC answers for another chain; the network keeps the RPC it had")
         }
-        return DONE
-    }
-
-    /**
-     * RPC providers: open the page (it seeds the drafts), type the key, leave
-     * it. A key already in its field is only left — opening the page again
-     * would reseed every draft.
-     */
-    private fun setProviderKey(provider: String, key: String): String {
-        val wire = named(NetProviderId.serializer(), provider) ?: return refused("invalid_input", "not a provider")
-        val settings = wallet.settings
-        val typed = networks().optJSONArray("providers").objects()
-            .any { it.optString("provider") == provider && it.optString("key") == key }
-        if (!typed) {
-            settings.openProviders()
-            settings.editProviderKey(wire, key)
-        }
-        settings.commitProviderKey(wire)
         return DONE
     }
 
