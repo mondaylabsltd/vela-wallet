@@ -571,6 +571,16 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
+     * A web-wallet link this build does not act on (a multisig link, an
+     * outside signer's connect page): the person's browser opens it, in a
+     * named browser — never the chooser, and never back into this app.
+     */
+    internal fun openInBrowser(url: String, container: AppContainer) {
+        val opened = container.trustedSignerTab?.open(url) == true
+        if (!opened) container.browser.askToOpen(url)
+    }
+
+    /**
      * Phase 3: a launcher shortcut, the Scan tile, or text shared into Vela —
      * read by [app.getvela.wallet.core.platform.LaunchEntry], handed to the
      * wallet route, which enters the flow once a wallet is in front. Shared
@@ -589,6 +599,7 @@ class MainActivity : ComponentActivity() {
             is app.getvela.wallet.core.platform.LaunchEntry.Ask.Open -> container.pendingLaunch.value = ask.flow
             is app.getvela.wallet.core.platform.LaunchEntry.Ask.PayLinkShared -> container.pendingPayLink.value = android.net.Uri.parse(ask.url)
             is app.getvela.wallet.core.platform.LaunchEntry.Ask.PaymentShared -> container.pendingShare.value = ask.text
+            is app.getvela.wallet.core.platform.LaunchEntry.Ask.WebLinkShared -> openInBrowser(ask.url, container)
             null -> Unit
         }
         // Read once: a configuration change replays the same intent.
@@ -618,8 +629,7 @@ class MainActivity : ComponentActivity() {
                 // it as it always has, in a named browser — never the chooser,
                 // and never back into this app, which claims the link.
                 app.getvela.wallet.core.diagnostics.VelaLog.event("applink", "to the web", "kind" to route.kind.name)
-                val opened = container.trustedSignerTab?.open(route.url) == true
-                if (!opened) container.browser.askToOpen(route.url)
+                openInBrowser(route.url, container)
                 return
             }
             app.getvela.wallet.feature.wallet.core.AppLinks.Route.Home -> return

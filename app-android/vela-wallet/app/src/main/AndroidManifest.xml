@@ -188,20 +188,22 @@
                 <data android:scheme="app.getvela.wallet" />
             </intent-filter>
             <!--
-                Native parity Phase 3 (owner decision 2, 2026-10-30): verified
-                App Links. The installed app claims what the web wallet shares,
-                by default — pay links on both hosts, and on the wallet's host a
-                multisig transaction (`/{locale}/wallet#ms=`), a multisig to add
-                (`#msa=`) and the outside signer's page (`/{locale}/connect#…`).
-                The fragment never reaches a filter: AppLinks.classify reads it
-                with the core's link codec, and a `/wallet` link that carries
-                nothing opens the app.
+                Native parity Phase 3 (owner decision 2, 2026-10-30, narrowed by
+                the coordinator): verified App Links for the pay link — `/pay`
+                on getvela.app and on wallet.getvela.app — each host in its own
+                `autoVerify` filter, so Android 12+ verifies each on its own.
+
+                NOT claimed: the outside signer's page (`/{locale}/connect…`) —
+                it is for members who sign with another wallet, and Vela in the
+                way is only a detour; and the bare wallet pages — a filter cannot
+                see the `#ms=` / `#msa=` fragment before Android 15, so claiming
+                `/{locale}/wallet` would take every web-wallet visit away from
+                the browser. Multisig links are claimed by the alias below, on
+                Android 15+ only, where the fragment can be matched.
 
                 `autoVerify`: each host must serve /.well-known/assetlinks.json
                 naming this package and its signing key — getvela.app does;
                 wallet.getvela.app must (app-android/vela-wallet/app-links/).
-                One host per filter, so Android 12+ verifies each on its own and
-                the pay link on getvela.app does not wait on the wallet's host.
             -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
@@ -218,10 +220,48 @@
                 <data android:scheme="https" />
                 <data android:host="wallet.getvela.app" />
                 <data android:path="/pay" />
-                <data android:pathPattern="/..*/wallet" />
-                <data android:pathPattern="/..*/connect" />
             </intent-filter>
         </activity>
+        <!--
+            Phase 3: the multisig links — a transaction to approve
+            (`/{locale}/wallet#ms=…`) and a multisig to add (`#msa=…`, also on
+            the front page `/{locale}#msa=…` / `#ms=…`) — matched ON THE
+            FRAGMENT, which only Android 15's `uri-relative-filter-group` can
+            do. Enabled on API 35+ only (`@bool/vela_fragment_links`, true in
+            values-v35): an older Android ignores the groups and would claim
+            every wallet page. A URI that matches no group is not claimed, so a
+            plain `/{locale}/wallet` visit stays the browser's. AppLinks reads
+            what arrives with the core's link codec.
+        -->
+        <activity-alias
+            android:name=".MultisigLinks"
+            android:targetActivity=".MainActivity"
+            android:enabled="@bool/vela_fragment_links"
+            android:exported="true">
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:host="wallet.getvela.app" />
+                <uri-relative-filter-group>
+                    <data android:pathAdvancedPattern="/[A-Za-z]{2}(-[A-Za-z]{2})?/wallet" />
+                    <data android:fragmentPrefix="ms=" />
+                </uri-relative-filter-group>
+                <uri-relative-filter-group>
+                    <data android:pathAdvancedPattern="/[A-Za-z]{2}(-[A-Za-z]{2})?/wallet" />
+                    <data android:fragmentPrefix="msa=" />
+                </uri-relative-filter-group>
+                <uri-relative-filter-group>
+                    <data android:pathAdvancedPattern="/[A-Za-z]{2}(-[A-Za-z]{2})?" />
+                    <data android:fragmentPrefix="ms=" />
+                </uri-relative-filter-group>
+                <uri-relative-filter-group>
+                    <data android:pathAdvancedPattern="/[A-Za-z]{2}(-[A-Za-z]{2})?" />
+                    <data android:fragmentPrefix="msa=" />
+                </uri-relative-filter-group>
+            </intent-filter>
+        </activity-alias>
         <!-- Spec 076: the Trusted Signer's answer. Transparent, out of recents,
              and gone the moment it has handed the URL to the request waiting
              for it — so the wallet's own screen is never entered. -->

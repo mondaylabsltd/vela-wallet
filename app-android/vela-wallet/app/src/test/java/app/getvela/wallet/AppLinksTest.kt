@@ -62,6 +62,15 @@ class AppLinksTest {
     }
 
     @Test
+    fun `the front page's carried multisig link is one too, and nothing else of the front page is ours`() {
+        val url = "https://wallet.getvela.app/en#msa=$safe"
+        assertEquals(Route.Web(url, WebKind.Invite), AppLinks.classify(url))
+        assertEquals(WebKind.Proposal, (AppLinks.classify("https://wallet.getvela.app/zh#ms=100.$safe.$txHash") as Route.Web).kind)
+        assertNull(AppLinks.classify("https://wallet.getvela.app/en"))
+        assertNull(AppLinks.classify("https://wallet.getvela.app/en#settings"))
+    }
+
+    @Test
     fun `the wallet page with nothing to act on just opens the app`() {
         assertEquals(Route.Home, AppLinks.classify("https://wallet.getvela.app/en/wallet"))
         assertEquals(Route.Home, AppLinks.classify("https://wallet.getvela.app/zh/wallet#settings"))
@@ -90,31 +99,73 @@ class AppLinksTest {
         assertEquals(Route.Web(url, WebKind.Broken), AppLinks.classify(url, refusing))
     }
 
+    private val ns = "http://schemas.android.com/apk/res/android"
+
+    private fun manifest(): Element {
+        val root = File(System.getProperty("vela.repo.root"))
+        val file = root.resolve("app-android/vela-wallet/app/src/main/AndroidManifest.xml")
+        return DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }.newDocumentBuilder().parse(file).documentElement
+    }
+
+    private fun Element.children(tag: String): List<Element> =
+        getElementsByTagName(tag).let { list -> (0 until list.length).map { list.item(it) as Element } }
+
     /**
-     * The manifest claims exactly these, with `autoVerify`, one host per
-     * filter (Android 12+ verifies each host alone, so getvela.app's pay link
-     * never waits on the wallet host's `assetlinks.json`).
+     * MainActivity claims `/pay` only, one host per verified filter (Android
+     * 12+ verifies each host alone) — never a bare wallet page, which would
+     * take every web-wallet visit from the browser, and never the connect
+     * page, which belongs to members who sign with another wallet.
      */
     @Test
-    fun `the manifest claims each host with autoVerify`() {
-        val root = File(System.getProperty("vela.repo.root"))
-        val manifest = root.resolve("app-android/vela-wallet/app/src/main/AndroidManifest.xml")
-        val doc = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }.newDocumentBuilder().parse(manifest)
-        val ns = "http://schemas.android.com/apk/res/android"
-        val filters = doc.getElementsByTagName("intent-filter").let { list -> (0 until list.length).map { list.item(it) as Element } }
-        val verified = filters.filter { it.getAttributeNS(ns, "autoVerify") == "true" }
-        val claims = verified.associate { filter ->
-            val data = filter.getElementsByTagName("data").let { list -> (0 until list.length).map { list.item(it) as Element } }
+    fun `the activity claims the pay link on each host, and nothing else`() {
+        val activity = manifest().children("activity").single { it.getAttributeNS(ns, "name") == ".MainActivity" }
+        val claims = activity.children("intent-filter").filter { it.getAttributeNS(ns, "autoVerify") == "true" }.associate { filter ->
+            val data = filter.children("data")
             val hosts = data.mapNotNull { it.getAttributeNS(ns, "host").takeIf(String::isNotEmpty) }
             assertEquals("one host per verified filter", 1, hosts.size)
             assertEquals(listOf("https"), data.mapNotNull { it.getAttributeNS(ns, "scheme").takeIf(String::isNotEmpty) })
-            val actions = filter.getElementsByTagName("category").let { list -> (0 until list.length).map { (list.item(it) as Element).getAttributeNS(ns, "name") } }
-            assertTrue(actions.containsAll(listOf("android.intent.category.DEFAULT", "android.intent.category.BROWSABLE")))
-            hosts.single() to data.flatMap { d -> listOf("path", "pathPattern").mapNotNull { a -> d.getAttributeNS(ns, a).takeIf(String::isNotEmpty) } }.toSet()
+            val categories = filter.children("category").map { it.getAttributeNS(ns, "name") }
+            assertTrue(categories.containsAll(listOf("android.intent.category.DEFAULT", "android.intent.category.BROWSABLE")))
+            hosts.single() to data.flatMap { d -> PATH_ATTRS.mapNotNull { a -> d.getAttributeNS(ns, a).takeIf(String::isNotEmpty) } }.toSet()
         }
         assertEquals(AppLinks.HOSTS, claims.keys)
         assertEquals(setOf("/pay"), claims["getvela.app"])
-        assertEquals(setOf("/pay", "/..*/wallet", "/..*/connect"), claims["wallet.getvela.app"])
+        assertEquals(setOf("/pay"), claims["wallet.getvela.app"])
+        assertTrue(
+            "the connect page is claimed nowhere",
+            manifest().children("data").none { d -> PATH_ATTRS.any { "connect" in d.getAttributeNS(ns, it) } },
+        )
+    }
+
+    /**
+     * The multisig links are matched on the fragment (Android 15's
+     * `uri-relative-filter-group`) by an alias that is OFF before API 35 —
+     * where the groups are ignored and the path alone would claim every
+     * wallet page.
+     */
+    @Test
+    fun `multisig links are claimed on the fragment, on Android 15 and later only`() {
+        val alias = manifest().children("activity-alias").single { it.getAttributeNS(ns, "name") == ".MultisigLinks" }
+        assertEquals(".MainActivity", alias.getAttributeNS(ns, "targetActivity"))
+        assertEquals("@bool/vela_fragment_links", alias.getAttributeNS(ns, "enabled"))
+        val res = File(System.getProperty("vela.repo.root"), "app-android/vela-wallet/app/src/main/res")
+        assertTrue(res.resolve("values/bools.xml").readText().contains("""<bool name="vela_fragment_links">false</bool>"""))
+        assertTrue(res.resolve("values-v35/bools.xml").readText().contains("""<bool name="vela_fragment_links">true</bool>"""))
+        val filter = alias.children("intent-filter").single()
+        assertEquals("true", filter.getAttributeNS(ns, "autoVerify"))
+        val groups = filter.children("uri-relative-filter-group")
+        assertEquals(4, groups.size)
+        val pages = mutableSetOf<String>()
+        groups.forEach { group ->
+            val data = group.children("data")
+            assertTrue("every group names a fragment", data.any { it.getAttributeNS(ns, "fragmentPrefix") in setOf("ms=", "msa=") })
+            pages += data.mapNotNull { it.getAttributeNS(ns, "pathAdvancedPattern").takeIf(String::isNotEmpty) }
+        }
+        // The two pages the classifier reads: a locale's wallet page and its front page.
+        val wallet = Regex(pages.single { it.endsWith("/wallet") })
+        val front = Regex(pages.single { !it.endsWith("/wallet") })
+        assertTrue(wallet.matches("/en/wallet") && wallet.matches("/pt-BR/wallet") && !wallet.matches("/en/connect"))
+        assertTrue(front.matches("/zh") && front.matches("/zh-TW") && !front.matches("/en/wallet"))
     }
 
     /** The file the owner hosts names this package and the keys getvela.app's already names. */
@@ -133,6 +184,7 @@ class AppLinksTest {
     }
 
     private companion object {
-        const val RELEASE_KEY = "A3:8E:36:FE:5A:99:AE:30:73:F7:91:4C:3D:43:58:32:AE:BD:D9:7D:C1:A4:DF:EF:9E:4B:3A:6E:10:31:9D:53"
+        val PATH_ATTRS = listOf("path", "pathPrefix", "pathPattern", "pathAdvancedPattern", "pathSuffix")
+        const val RELEASE_KEY ="A3:8E:36:FE:5A:99:AE:30:73:F7:91:4C:3D:43:58:32:AE:BD:D9:7D:C1:A4:DF:EF:9E:4B:3A:6E:10:31:9D:53"
     }
 }

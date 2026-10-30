@@ -4,20 +4,23 @@ import java.net.URI
 import org.json.JSONObject
 
 /**
- * The verified App Links (native parity Phase 3, owner decision 2 of
- * 2026-10-30: the installed app claims proposal, invite, connect and pay links
- * by default; the web keeps working). The manifest claims, with
- * `autoVerify`, what the web wallet shares:
+ * The web wallet's links, wherever they reach the app (native parity Phase 3,
+ * owner decision 2 of 2026-10-30 as narrowed by the coordinator). The manifest
+ * claims, with `autoVerify`:
  *
  * - `https://(wallet.)getvela.app/pay?…` — a payment request ([PayLink]);
- * - `https://wallet.getvela.app/{locale}/wallet#ms=…` — a multisig transaction
- *   to approve, and `#msa=…` — a multisig to add (web `multisig/core/link.ts`);
- * - `https://wallet.getvela.app/{locale}/connect#…` — the page an outside
- *   signer approves on (web `multisig/external/connect-link.ts`).
+ * - on Android 15+ only (the fragment is matchable there), a multisig
+ *   transaction to approve `https://wallet.getvela.app/{locale}/wallet#ms=…`
+ *   and a multisig to add `#msa=…` — also on the front page `/{locale}#…`
+ *   (web `multisig/core/link.ts`).
  *
- * The fragment never reaches the intent filter, so the filter claims the
- * paths and THIS reads what came — with the core's own link codec
- * (`multisig_link_call`, the wasm `multisigLinkCall`), never a second parser.
+ * The outside signer's page `/{locale}/connect#…` (web
+ * `multisig/external/connect-link.ts`) is NOT claimed: it is for members who
+ * sign with another wallet. One that reaches the app anyway — shared into it,
+ * scanned in Explore — is still read here and offered in the browser.
+ *
+ * The fragment is read with the core's own link codec (`multisig_link_call`,
+ * the wasm `multisigLinkCall`), never a second parser.
  *
  * Multisig is not in the phone app yet (audit §0.1: native M1–M6 are owed), so
  * a multisig or connect link is handed to the person's browser — the web
@@ -81,8 +84,10 @@ object AppLinks {
         if (segments == listOf("pay")) return (PayLink.parse(text) as? PayLink.Pay)?.let(Route::Pay)
         // Multisig and connect links are the web wallet's, on its own host.
         if (host != "wallet.getvela.app") return null
-        if (segments.size != 2 || !LOCALE.matches(segments[0])) return null
+        if (segments.isEmpty() || segments.size > 2 || !LOCALE.matches(segments[0])) return null
         val hash = uri.rawFragment.orEmpty()
+        // The front page carries a multisig link too (web `keepLink`); nothing else of it is ours.
+        if (segments.size == 1) return walletLink(text, hash, codec).takeIf { it is Route.Web }
         return when (segments[1]) {
             "connect" -> Route.Web(text, WebKind.Connect)
             "wallet" -> walletLink(text, hash, codec)

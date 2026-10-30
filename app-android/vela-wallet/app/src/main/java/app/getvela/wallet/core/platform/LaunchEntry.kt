@@ -31,6 +31,12 @@ object LaunchEntry {
 
         /** An address or an `ethereum:` request, shared as text: Send's `scan_resolved` decides. */
         data class PaymentShared(val text: String) : Ask
+
+        /**
+         * A web-wallet link this build hands to the browser (a multisig or an
+         * outside signer's connect link, read by the core's codec — [AppLinks]).
+         */
+        data class WebLinkShared(val url: String) : Ask
     }
 
     /** The flow a shortcut's or the tile's action names, or `null`. */
@@ -49,15 +55,19 @@ object LaunchEntry {
     /**
      * Text shared into Vela, as another app shares it — often a sentence
      * around the thing ("Pay me: https://getvela.app/pay?…"). The first token
-     * that is ours wins: a pay link, then an `ethereum:` request, then an
-     * address. Anything else asks nothing (the app just opens): a word is
-     * never guessed into a recipient.
+     * that is ours wins: a pay link or a web-wallet link (read by the core's
+     * codec), then an `ethereum:` request, then an address. Anything else
+     * asks nothing (the app just opens): a word is never guessed into a
+     * recipient.
      */
-    fun shared(text: String?): Ask? {
+    fun shared(text: String?, codec: AppLinks.LinkCodec = AppLinks.coreCodec): Ask? {
         val tokens = text.orEmpty().split(WHITESPACE).map { it.trim(*TRIM) }.filter { it.isNotEmpty() }
         tokens.firstNotNullOfOrNull { token ->
-            (AppLinks.classify(token, NO_CODEC) as? AppLinks.Route.Pay)?.let { Ask.PayLinkShared(token) }
-                ?: (PayLink.parse(token) as? PayLink.Pay)?.let { Ask.PayLinkShared(token) }
+            when (val route = AppLinks.classify(token, codec)) {
+                is AppLinks.Route.Pay -> Ask.PayLinkShared(token)
+                is AppLinks.Route.Web -> Ask.WebLinkShared(route.url)
+                else -> (PayLink.parse(token) as? PayLink.Pay)?.let { Ask.PayLinkShared(token) }
+            }
         }?.let { return it }
         tokens.firstOrNull { it.startsWith("ethereum:", ignoreCase = true) }?.let { return Ask.PaymentShared(it) }
         tokens.firstOrNull { ADDRESS.matches(it) }?.let { return Ask.PaymentShared(it) }
@@ -72,6 +82,4 @@ object LaunchEntry {
     /** Punctuation a sentence leaves stuck to a link or an address. */
     private val TRIM = charArrayOf('"', '\'', '(', ')', '<', '>', '[', ']', ',', ';', '.', '!', '。', '，', '！', '（', '）', '“', '”', '‘', '’', '「', '」')
 
-    /** A pay link needs no multisig codec: only the `/pay` path is read here. */
-    private val NO_CODEC = AppLinks.LinkCodec { _, _ -> "false" }
 }

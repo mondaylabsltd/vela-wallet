@@ -2,4 +2,7 @@
 <resources>
     <!-- Dark system-bar icons on the light palette (themes.xml). -->
     <bool name="vela_light_bars">true</bool>
+    <!-- Before Android 15 a filter cannot see the URI fragment: the multisig
+         links' alias stays off rather than claim every wallet page (values-v35). -->
+    <bool name="vela_fragment_links">false</bool>
 </resources>

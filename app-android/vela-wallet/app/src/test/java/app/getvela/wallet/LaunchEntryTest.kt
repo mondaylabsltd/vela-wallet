@@ -61,6 +61,17 @@ class LaunchEntryTest {
     }
 
     @Test
+    fun `a shared web-wallet multisig or connect link is read by the core and goes to the browser`() {
+        val connect = "https://wallet.getvela.app/en/connect#wss%3A%2F%2Frelay.example%23abc&for=$founder"
+        assertEquals(Ask.WebLinkShared(connect), LaunchEntry.shared("Approve here: $connect"))
+        val proposal = "https://wallet.getvela.app/en/wallet#ms=100.0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83." +
+            "0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa"
+        assertEquals(Ask.WebLinkShared(proposal), LaunchEntry.shared(proposal))
+        // A plain wallet page is not a link to act on.
+        assertNull(LaunchEntry.shared("https://wallet.getvela.app/en/wallet"))
+    }
+
+    @Test
     fun `anything else shared asks nothing - no word is guessed into a recipient`() {
         assertNull(LaunchEntry.shared(null))
         assertNull(LaunchEntry.shared(""))

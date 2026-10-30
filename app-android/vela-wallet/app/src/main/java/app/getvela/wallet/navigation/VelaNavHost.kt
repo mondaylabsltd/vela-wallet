@@ -2038,7 +2038,16 @@ fun VelaNavHost(
                                     callbacks = ScanCallbacks(
                                         onDecoded = { text ->
                                             when (val scanned = app.getvela.wallet.feature.browser.ExploreLive.scanned(text)) {
-                                                is app.getvela.wallet.feature.browser.ExploreLive.Scanned.Url -> onUrl(scanned.url)
+                                                is app.getvela.wallet.feature.browser.ExploreLive.Scanned.Url ->
+                                                    // Phase 3: a web-wallet multisig or connect link is the
+                                                    // browser's (read by the core's codec), never the dApp browser's.
+                                                    if (app.getvela.wallet.feature.wallet.core.AppLinks.classify(scanned.url) is app.getvela.wallet.feature.wallet.core.AppLinks.Route.Web) {
+                                                        onClose()
+                                                        val tab = application.container.trustedSignerTab
+                                                        if (tab?.open(scanned.url) != true) application.container.browser.askToOpen(scanned.url)
+                                                    } else {
+                                                        onUrl(scanned.url)
+                                                    }
                                                 is app.getvela.wallet.feature.browser.ExploreLive.Scanned.Payment -> {
                                                     onClose()
                                                     section = VelaTab.Wallet
