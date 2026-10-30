@@ -195,8 +195,51 @@ final class Loc {
 
     // MARK: - Bundled catalogs
 
-    private static func catalogData(_ lang: String) -> Data? {
-        guard let url = Bundle.main.url(forResource: lang, withExtension: "json") else { return nil }
-        return try? Data(contentsOf: url)
+    /// `lang`'s catalog as the engine reads it: the main one, with each
+    /// on-demand catalog (`multisig/<lang>.json`, the `home.multisig`
+    /// subtree gen-i18n splits out) deep-merged in — the web's
+    /// `catalogBytes`. The engine's `load_catalog` REPLACES the active
+    /// catalog, so a merge is the only way both halves are read.
+    static func catalogData(_ lang: String, bundle: Bundle = .main) -> Data? {
+        guard let url = bundle.url(forResource: lang, withExtension: "json"),
+              let main = try? Data(contentsOf: url)
+        else { return nil }
+        var parts: [Data] = []
+        for dir in onDemand {
+            if let more = bundle.url(forResource: lang, withExtension: "json", subdirectory: dir),
+               let data = try? Data(contentsOf: more) {
+                parts.append(data)
+            }
+        }
+        return merged(main, parts) ?? main
+    }
+
+    /// The on-demand catalogs bundled beside the main ones (gen-i18n's
+    /// `ON_DEMAND`; `gen-catalog-filelists.mjs` declares them).
+    static let onDemand = ["multisig"]
+
+    /// `main` with every object in `parts` deep-merged into it — a nested
+    /// object merges key by key, anything else is replaced. `nil` when any
+    /// part is not a JSON object (the main catalog then stands alone).
+    static func merged(_ main: Data, _ parts: [Data]) -> Data? {
+        guard !parts.isEmpty else { return main }
+        guard var base = (try? JSONSerialization.jsonObject(with: main)) as? [String: Any] else { return nil }
+        for part in parts {
+            guard let more = (try? JSONSerialization.jsonObject(with: part)) as? [String: Any] else { return nil }
+            base = deepMerge(base, more)
+        }
+        return try? JSONSerialization.data(withJSONObject: base)
+    }
+
+    private static func deepMerge(_ base: [String: Any], _ more: [String: Any]) -> [String: Any] {
+        var out = base
+        for (key, value) in more {
+            if let inner = value as? [String: Any], let existing = out[key] as? [String: Any] {
+                out[key] = deepMerge(existing, inner)
+            } else {
+                out[key] = value
+            }
+        }
+        return out
     }
 }

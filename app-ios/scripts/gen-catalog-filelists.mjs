@@ -3,8 +3,16 @@
  * Catalog build-declaration generator (spec 010-ios-catalog-bundling).
  *
  * Source  <-  assets/i18n/<lng>.json                                (repo root)
- * Output  ->  app-ios/scripts/catalogs-input.xcfilelist   (15 declared reads)
- *             app-ios/scripts/catalogs-output.xcfilelist  (15 declared writes)
+ *             assets/i18n/multisig/<lng>.json   (the on-demand home.multisig
+ *                                                catalog, gen-i18n's ON_DEMAND)
+ * Output  ->  app-ios/scripts/catalogs-input.xcfilelist   (15 + 15 declared reads)
+ *             app-ios/scripts/catalogs-output.xcfilelist  (15 + 15 declared writes)
+ *
+ * The main catalogs come FIRST: `bundle-catalogs.sh` takes the corpus
+ * directory from entry 0. The on-demand ones land under `multisig/` in the
+ * bundle, and `Loc.catalogData` deep-merges each into its locale's main
+ * catalog before the engine reads it — the web's `catalogBytes`, since the
+ * core's `load_catalog` replaces the active catalog rather than adding to it.
  *
  * iOS does NOT keep a copy of the catalogs: the Xcode build phase
  * `Bundle locale catalogs` copies them straight from assets/i18n into
@@ -29,6 +37,8 @@ import { basename, join } from 'node:path';
 const APP_ROOT = join(import.meta.dirname, '..');
 const REPO_ROOT = join(APP_ROOT, '..');
 const SOURCE_DIR = join(REPO_ROOT, 'assets', 'i18n');
+/** `scripts/gen-i18n.mjs`'s ON_DEMAND catalogs, one directory each. */
+const ON_DEMAND = ['multisig'];
 const INPUT_LIST = join(APP_ROOT, 'scripts', 'catalogs-input.xcfilelist');
 const OUTPUT_LIST = join(APP_ROOT, 'scripts', 'catalogs-output.xcfilelist');
 
@@ -69,8 +79,30 @@ function loadLocales() {
 	return files;
 }
 
-function render(prefix, files) {
-	return `${files.map((f) => `${prefix}/${f}`).join('\n')}\n`;
+/**
+ * Each on-demand catalog must carry the same locales as the main one — a
+ * locale whose multisig words are missing would draw keys.
+ */
+function loadOnDemand(files) {
+	return ON_DEMAND.map((dir) => {
+		const found = jsonFiles(join(SOURCE_DIR, dir));
+		const missing = files.filter((f) => !found.includes(f));
+		const extra = found.filter((f) => !files.includes(f));
+		if (missing.length || extra.length) {
+			throw new Error(
+				`assets/i18n/${dir} must carry the main catalog's ${files.length} locales` +
+					(missing.length ? `; missing: ${missing.join(', ')}` : '') +
+					(extra.length ? `; extra: ${extra.join(', ')}` : '')
+			);
+		}
+		return { dir, files: found };
+	});
+}
+
+function render(prefix, files, onDemand = []) {
+	const lines = files.map((f) => `${prefix}/${f}`);
+	for (const { dir, files: more } of onDemand) lines.push(...more.map((f) => `${prefix}/${dir}/${f}`));
+	return `${lines.join('\n')}\n`;
 }
 
 function read(path) {
@@ -110,13 +142,15 @@ function trackedCatalogsUnderAppIos(files) {
 
 function generate() {
 	const files = loadLocales();
-	writeFileSync(INPUT_LIST, render(INPUT_PREFIX, files));
-	writeFileSync(OUTPUT_LIST, render(OUTPUT_PREFIX, files));
+	const onDemand = loadOnDemand(files);
+	writeFileSync(INPUT_LIST, render(INPUT_PREFIX, files, onDemand));
+	writeFileSync(OUTPUT_LIST, render(OUTPUT_PREFIX, files, onDemand));
 	console.log(`wrote ${files.length} entries -> ${basename(INPUT_LIST)}, ${basename(OUTPUT_LIST)}`);
 }
 
 function check() {
 	const files = loadLocales();
+	const onDemand = loadOnDemand(files);
 	const drift = [];
 
 	for (const [path, prefix] of [
@@ -125,7 +159,7 @@ function check() {
 	]) {
 		const actual = read(path);
 		if (actual === null) drift.push(`missing: ${basename(path)}`);
-		else if (actual !== render(prefix, files)) drift.push(`stale:   ${basename(path)}`);
+		else if (actual !== render(prefix, files, onDemand)) drift.push(`stale:   ${basename(path)}`);
 	}
 
 	for (const path of trackedCatalogsUnderAppIos(files)) {
