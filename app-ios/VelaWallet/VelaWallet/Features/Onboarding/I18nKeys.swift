@@ -280,6 +280,9 @@ enum I18nKeys {
         static let openInBrowser = "explore.openInSystemBrowser"
         static let copyLink = "home.multisig.proposal.copyLink"
         static let close = "common.done"
+        /// Why the sheet offers the web wallet: "Multisig links open in the
+        /// web wallet for now."
+        static let multisigOnWeb = "componentsUi.linkSheet.multisigOnWeb"
     }
 
     enum Settings {

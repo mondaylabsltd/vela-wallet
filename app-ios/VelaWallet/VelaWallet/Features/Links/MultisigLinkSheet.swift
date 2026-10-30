@@ -46,6 +46,10 @@ struct MultisigLinkModel: Equatable {
     /// has no multisig list to know who "you" is in one.
     var members: [Member] = []
     var membersLabel: String?
+    /// Where the link is acted on, said plainly over the buttons:
+    /// "Multisig links open in the web wallet for now." — this app does not
+    /// pretend to approve anything until its multisig lands.
+    let onWeb: String
     let openLabel: String
     let copyLabel: String
     let closeLabel: String
@@ -59,6 +63,7 @@ struct MultisigLinkModel: Equatable {
         func base(_ title: String, url: URL) -> MultisigLinkModel {
             MultisigLinkModel(
                 title: title,
+                onWeb: loc.t(k.multisigOnWeb),
                 openLabel: loc.t(k.openInBrowser),
                 copyLabel: loc.t(k.copyLink),
                 closeLabel: loc.t(k.close),
@@ -201,6 +206,12 @@ struct MultisigLinkSheet: View {
                 }
                 .accessibilityElement(children: .combine)
             }
+            Text(verbatim: model.onWeb)
+                .typeRole(Typography.rowSub.scaled(textScale))
+                .foregroundStyle(theme.fgMuted)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, Tokens.Space.s8)
+                .accessibilityIdentifier("applink.onWeb")
             VStack(spacing: Tokens.Space.s12) {
                 // Opening a page moves nothing: the neutral ink, not the accent.
                 VelaButton(title: model.openLabel, kind: .ink, action: onOpen)
