@@ -1744,9 +1744,11 @@ fn format_wei_to_eth(wei: u128) -> String {
 /// approve) — in the danger tone, with [`guard_warnings`] saying why. The
 /// cap is one chip away: Balance, or Custom for the typed field.
 ///
-/// What is deliberately NOT offered: "grant all anyway". The core has the
-/// event, and this shell does not raise it — the founder's rule, and the
-/// drawn scenarios never drew that chip either.
+/// "Grant all anyway" is never offered on an AMOUNT card — a cap is always
+/// one chip away there. A grant-all (setApprovalForAll / DAI permit, cs-17)
+/// has no amount to cap: its card offers exactly "Allow all" or "Revoke",
+/// and the core waits for that deliberate tap
+/// (`GrantDeliberatelyChosen`), as the web's does.
 #[must_use]
 pub fn guard_editor(
     guard: &GuardView,
@@ -1756,6 +1758,9 @@ pub fn guard_editor(
         return None;
     }
     let editor = guard.editor.as_ref()?;
+    if guard.detected.as_ref().is_some_and(|d| d.is_boolean_grant) {
+        return Some(grant_all_editor(editor, s));
+    }
     Some(allowance_editor(
         editor,
         &guard.meta,
@@ -1764,6 +1769,40 @@ pub fn guard_editor(
         guard.increase_total.as_ref(),
         s,
     ))
+}
+
+/// cs-17: a grant-all's card — no amount, only the choice: "Allow all"
+/// (the danger tone, as the grant it is) or "Revoke"; nothing until one is
+/// tapped (the web's boolean `allowanceBlock`).
+fn grant_all_editor(
+    editor: &vela_core::app::approval_guard::GuardEditorView,
+    s: &SigningStrings,
+) -> (Block, Vec<GuardEditorMode>) {
+    let picked = editor.choice.as_ref();
+    let state = |on: bool| if on { ChipState::Selected } else { ChipState::Idle };
+    let granted = matches!(picked, Some(GuardChoice::Grant));
+    let revoked = matches!(picked, Some(GuardChoice::Revoke));
+    (
+        Block::Allowance {
+            label: s.label_operator.clone(),
+            value: if granted {
+                s.chip_grant_all.clone()
+            } else if revoked {
+                s.chip_revoke.clone()
+            } else {
+                SharedString::from("—")
+            },
+            value_tone: if granted { Tone::Danger } else { Tone::Neutral },
+            chips: vec![
+                (s.chip_grant_all.clone(), state(granted)),
+                (s.chip_revoke.clone(), state(revoked)),
+            ],
+            note: None,
+            resulting_total: None,
+            custom: None,
+        },
+        vec![GuardEditorMode::Grant, GuardEditorMode::Revoke],
+    )
 }
 
 /// One batch leg's cap editor, as [`guard_leg_editors`] hands it out: the card,
@@ -1796,7 +1835,11 @@ pub fn guard_leg_editors(guard: &GuardView, s: &SigningStrings) -> Vec<LegEditor
         .enumerate()
         .filter_map(|(index, leg)| {
             let editor = leg.editor.as_ref().filter(|_| leg.needs_editor)?;
-            let (mut block, modes) = allowance_editor(editor, &leg.meta, false, false, None, s);
+            let (mut block, modes) = if leg.approval.as_ref().is_some_and(|a| a.is_boolean_grant) {
+                grant_all_editor(editor, s)
+            } else {
+                allowance_editor(editor, &leg.meta, false, false, None, s)
+            };
             if let Block::Allowance { label, .. } = &mut block {
                 *label = SharedString::from(format!("#{} {label}", index + 1));
             }
@@ -4105,6 +4148,64 @@ mod tests {
     /// A batch's unbounded leg gets its own cap card — "#n", its own chips,
     /// its spender under it, and the leg the page dispatches for. A leg the
     /// core mounts no editor for (a transfer, a finite approve) gets none.
+    /// cs-17 on the desktop: a grant-all (setApprovalForAll) has no amount
+    /// to cap — its card offers exactly "Allow all" and "Revoke", says the
+    /// pick (Allow all in the danger tone), and nothing until one is tapped;
+    /// a batch leg's grant-all gets the same card.
+    #[test]
+    fn a_grant_all_offers_allow_all_or_revoke_and_nothing_else() {
+        let s = strings();
+        let detected = vela_core::app::approval_guard::detect_calldata_approval(
+            Some("0xdd"),
+            Some(&format!(
+                "0xa22cb465{:0>64}{:0>64}",
+                "1111111111111111111111111111111111111111", "1"
+            )),
+        );
+        assert!(detected.as_ref().is_some_and(|d| d.is_boolean_grant));
+        let mut guard = guard_view(editor_view(None, false, None));
+        guard.detected = detected.clone();
+        let (block, modes) = guard_editor(&guard, &s).unwrap_or_else(|| unreachable!("a card"));
+        assert_eq!(modes, vec![GuardEditorMode::Grant, GuardEditorMode::Revoke]);
+        let Block::Allowance { value, chips, custom, .. } = &block else {
+            unreachable!("an allowance card");
+        };
+        assert_eq!(value.as_ref(), "—", "nothing until a deliberate tap");
+        assert!(custom.is_none(), "no amount to type");
+        assert_eq!(chips.len(), 2);
+
+        let mut picked = guard.clone();
+        if let Some(editor) = picked.editor.as_mut() {
+            editor.choice = Some(GuardChoice::Grant);
+        }
+        let (block, _) = guard_editor(&picked, &s).unwrap_or_else(|| unreachable!("a card"));
+        let Block::Allowance { value, value_tone, .. } = block else {
+            unreachable!("an allowance card");
+        };
+        assert_eq!(value, s.chip_grant_all);
+        assert_eq!(value_tone, Tone::Danger);
+
+        let mut batch = guard.clone();
+        batch.surface = GuardSurface::Batch;
+        batch.batch = Some(vela_core::app::approval_guard::GuardBatchView {
+            legs: vec![vela_core::app::approval_guard::GuardLegView {
+                to: "0xdd".to_owned(),
+                approval: detected,
+                meta: guard.meta.clone(),
+                editor: guard.editor.clone(),
+                choice: None,
+                needs_editor: true,
+                needs_choice: true,
+                grants_broad: true,
+            }],
+            any_uncapped: true,
+            any_to_own_token: false,
+            all_settled: true,
+        });
+        let legs = guard_leg_editors(&batch, &s);
+        assert_eq!(legs[0].modes, vec![GuardEditorMode::Grant, GuardEditorMode::Revoke]);
+    }
+
     #[test]
     fn a_batch_leg_gets_its_own_cap_editor() {
         let s = strings();

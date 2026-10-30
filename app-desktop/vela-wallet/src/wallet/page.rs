@@ -17298,11 +17298,42 @@ impl WalletPage {
         cx.notify();
     }
 
+    /// Round 3: the landing on screen was closed — its Done, its own beat, or
+    /// the column's ✕ — and that is the CORE's to remember
+    /// (`sign_request::Event::LandingClosed`): every column still holding the
+    /// operation is told, so none raises it again (the web's
+    /// `landingClosed`).
+    fn landing_closed(&mut self, cx: &mut Context<Self>) {
+        use vela_core::app::sign_request::SignEnding;
+        let Some(op) = self.dapp_landing.as_ref().and_then(|landing| match &landing.ending {
+            SignEnding::Landed { user_op_hash, .. } | SignEnding::Reverted { user_op_hash, .. } => {
+                user_op_hash.clone()
+            }
+            SignEnding::StillConfirming { user_op_hash } => Some(user_op_hash.clone()),
+            _ => None,
+        }) else {
+            return;
+        };
+        #[cfg(not(target_os = "linux"))]
+        for host in self.signing_host.iter().chain(&self.signing_background) {
+            let op = op.clone();
+            host.update(cx, |host, cx| {
+                host.dispatch_sign(
+                    vela_core::app::sign_request::Event::LandingClosed { user_op_hash: op },
+                    cx,
+                );
+            });
+        }
+        #[cfg(target_os = "linux")]
+        let _ = (op, cx);
+    }
+
     fn close_signing_column(&mut self, cx: &mut Context<Self>) {
         #[cfg(not(target_os = "linux"))]
         if let Some(host) = self.signing_host.clone() {
             host.update(cx, |host, cx| host.close(cx));
         }
+        self.landing_closed(cx);
         self.dapp_landing = None;
         self.signing_hidden = false;
         if self.panel == PanelId::Signing {
@@ -19133,9 +19164,15 @@ impl WalletPage {
                             Box::new(cx.listener(move |page, _: &gpui::ClickEvent, _, cx| {
                                 #[cfg(not(target_os = "linux"))]
                                 if let Some(host) = page.signing_host.as_ref() {
-                                    let event = match leg {
-                                        None => vela_core::app::approval_guard::Event::PresetSelected { mode },
-                                        Some(index) => vela_core::app::approval_guard::Event::LegPresetSelected { index, mode },
+                                    use vela_core::app::approval_guard::GuardEditorMode;
+                                    // cs-17: a grant-all's deliberate tap is
+                                    // its own event — the core's consent to
+                                    // allow all, never a preset.
+                                    let event = match (leg, mode) {
+                                        (None, GuardEditorMode::Grant) => vela_core::app::approval_guard::Event::GrantDeliberatelyChosen,
+                                        (Some(index), GuardEditorMode::Grant) => vela_core::app::approval_guard::Event::LegGrantDeliberatelyChosen { index },
+                                        (None, mode) => vela_core::app::approval_guard::Event::PresetSelected { mode },
+                                        (Some(index), mode) => vela_core::app::approval_guard::Event::LegPresetSelected { index, mode },
                                     };
                                     host.update(cx, |host, cx| host.dispatch_guard(event, cx));
                                 }
@@ -20320,6 +20357,7 @@ impl WalletPage {
                     .await;
                 page.update(cx, |this, cx| {
                     if this.dapp_landing.as_ref().is_some_and(|l| l.seq == seq) {
+                        this.landing_closed(cx);
                         this.dapp_landing = None;
                         if this.panel == PanelId::Signing && this.no_signing_host() {
                             this.panel = PanelId::None;
@@ -20336,6 +20374,7 @@ impl WalletPage {
             }
         }
         let on_done: panels::Click = Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+            this.landing_closed(cx);
             this.dapp_landing = None;
             if this.panel == PanelId::Signing && this.no_signing_host() {
                 this.panel = PanelId::None;
