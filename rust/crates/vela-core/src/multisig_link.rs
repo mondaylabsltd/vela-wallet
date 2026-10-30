@@ -340,13 +340,17 @@ pub fn checksum_holds(address: &str) -> bool {
 /// name rule bounds it again).
 pub const MEMBER_NAME_MAX: usize = 64;
 
-/// A member's kind: a Vela account (a passkey) or an outside wallet.
+/// A member's kind: a Vela account (a passkey), an outside wallet, or (r7)
+/// a smart contract account.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub enum MemberKind {
     Passkey,
     Wallet,
+    /// r7: `c` — another Safe or a contract wallet; `p` and `w` read as
+    /// they always did.
+    Contract,
 }
 
 impl MemberKind {
@@ -354,6 +358,7 @@ impl MemberKind {
         match self {
             MemberKind::Passkey => 'p',
             MemberKind::Wallet => 'w',
+            MemberKind::Contract => 'c',
         }
     }
 }
@@ -430,6 +435,7 @@ fn read_members(raw: &str, addressed: bool) -> Option<Vec<InvitedMember>> {
         let kind = match part.as_bytes().first() {
             Some(b'p') => Some(MemberKind::Passkey),
             Some(b'w') => Some(MemberKind::Wallet),
+            Some(b'c') => Some(MemberKind::Contract),
             Some(b'-') => None,
             _ => return None,
         };

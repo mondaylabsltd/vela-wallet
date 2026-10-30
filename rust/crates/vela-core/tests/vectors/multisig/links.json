@@ -2974,5 +2974,98 @@
       "threshold": 1
     },
     "expect": "{1}"
+  },
+  {
+    "name": "link.test r7: carries a smart contract member as `c`: the link",
+    "method": "addLink",
+    "args": {
+      "origin": "https://x",
+      "locale": "en",
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "extra": {
+        "chainIds": [
+          100
+        ],
+        "members": [
+          {
+            "address": "0xe331F2Ef7A6f4ED426529c8C10642b68084771A2",
+            "kind": "contract",
+            "name": "Treasury Safe"
+          },
+          {
+            "address": "0x412f2165f299Dfc2363ED08F8Fc6DE4353E81fF6",
+            "kind": "wallet"
+          }
+        ]
+      }
+    },
+    "expect": "https://x/en/wallet#msa=100:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&a=e331f2ef7a6f4ed426529c8c10642b68084771a2cTreasury%20Safe,412f2165f299dfc2363ed08f8fc6de4353e81ff6w"
+  },
+  {
+    "name": "link.test r7: carries a smart contract member as `c`: read back",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa=100:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&a=e331f2ef7a6f4ed426529c8c10642b68084771a2cTreasury%20Safe,412f2165f299dfc2363ed08f8fc6de4353e81ff6w"
+    },
+    "expect": {
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "chainIds": [
+        100
+      ],
+      "members": [
+        {
+          "address": "0xe331F2Ef7A6f4ED426529c8C10642b68084771A2",
+          "name": "Treasury Safe",
+          "kind": "contract"
+        },
+        {
+          "address": "0x412f2165f299Dfc2363ED08F8Fc6DE4353E81fF6",
+          "kind": "wallet"
+        }
+      ]
+    }
+  },
+  {
+    "name": "link.test r7: links from before r7 read as they were",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa=100:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&m=pAlice,wBob,-"
+    },
+    "expect": {
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "chainIds": [
+        100
+      ],
+      "members": [
+        {
+          "name": "Alice",
+          "kind": "passkey"
+        },
+        {
+          "name": "Bob",
+          "kind": "wallet"
+        },
+        {}
+      ]
+    }
+  },
+  {
+    "name": "link.test r7: a contract member in the genesis-order form",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa=100:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&m=cSafe"
+    },
+    "expect": {
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "chainIds": [
+        100
+      ],
+      "members": [
+        {
+          "name": "Safe",
+          "kind": "contract"
+        }
+      ]
+    }
   }
 ]

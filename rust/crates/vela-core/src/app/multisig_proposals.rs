@@ -946,8 +946,16 @@ impl State {
         chain_id: u64,
         hash: &str,
     ) -> Option<ItemSigners> {
-        let (item, members) = self.item(chain_id, hash)?;
-        let account = self.account.as_ref()?;
+        // The followed list's proposal, or a link's read-only one (ms-21):
+        // its own list says who approved with what.
+        let (item, chain, account) = flows::find_item(self, chain_id, hash)?;
+        let members = chain.members;
+        let items = if self.followed(&account.address) {
+            items
+        } else {
+            &chain.items[..]
+        };
+        let account = &account;
         let rows_of = items.iter().flat_map(|i| {
             i.approvals
                 .iter()
@@ -1248,7 +1256,9 @@ impl App for MultisigProposals {
             } => {
                 let asked = {
                     let mut s = lock(&model.state);
-                    let found = s.item(chain_id, &safe_tx_hash).zip(s.account.clone());
+                    // The followed list's proposal, or a link's read-only one (ms-21).
+                    let found = flows::find_item(&s, chain_id, &safe_tx_hash)
+                        .map(|(item, chain, account)| ((item, chain.members), account));
                     found.map(|((item, members), account)| {
                         s.signers_asked
                             .insert((chain_id, item.safe_tx_hash.clone()));

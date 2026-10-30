@@ -451,3 +451,58 @@ fn a_members_link_opens_on_the_followed_list() {
     assert_eq!(linked.stand, LinkedStand::Found);
     assert_eq!(linked.item.unwrap().can_approve, vec![me]);
 }
+
+/// ms-21: a preview's members still to approve are read as any sheet's —
+/// how each signs, and who an outside wallet may sign for — from the link's
+/// own list, never the followed multisig's.
+#[test]
+fn a_previews_members_say_how_they_sign() {
+    let g = genesis(&[OUTSIDE], 1, "0x5c");
+    let account = account_of(&g);
+    let tx = multisig::cancel_tx(&account.address, "0x0").unwrap();
+    let hash = multisig::safe_tx_hash(100, &account.address, &tx).unwrap();
+    let mut world = World {
+        locals: vec![fixture(0)],
+        ..World::default()
+    };
+    world.mailbox.push(json!({
+        "chainId": 100, "safe": account.address, "safeTxHash": hash, "safeTx": tx,
+        "proposer": OUTSIDE, "approvals": [], "createdMs": 1, "updatedMs": 1,
+    }));
+    let mut sut = Props::new();
+    let ev = proposals::Event::Start {
+        service_url: SERVICE.to_owned(),
+        accounts: world.locals.clone(),
+        networks: vec![100],
+        known: Vec::new(),
+    };
+    run(&mut sut, &mut world, ev);
+    run(
+        &mut sut,
+        &mut world,
+        proposals::Event::OpenLinked {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+            preview: Some(Box::new(account.clone())),
+        },
+    );
+    assert_eq!(sut.view().linked.unwrap().stand, LinkedStand::Found);
+    run(
+        &mut sut,
+        &mut world,
+        proposals::Event::ReadSigners {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+        },
+    );
+    let signers = sut.view().signers[&format!("100:{hash}")].clone();
+    let owners: Vec<String> = signers
+        .rows
+        .iter()
+        .map(|r| r.owner.to_lowercase())
+        .collect();
+    assert_eq!(owners, vec![OUTSIDE.to_owned()]);
+    assert!(signers.rows[0].kind.is_some(), "how it signs is read");
+    assert_eq!(signers.outside.len(), 1, "its own wallet may sign for it");
+    assert_eq!(sut.view().followed, None, "nothing switched");
+}
