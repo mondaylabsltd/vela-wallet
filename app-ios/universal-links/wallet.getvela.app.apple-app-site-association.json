@@ -1,0 +1,69 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["F9W689P9NE.app.getvela.VelaWallet"],
+        "components": [
+          {
+            "/": "/*/connect",
+            "comment": "The connect page an outside owner approves on (/<locale>/connect#<invite>&for=…&ms=…). The app reads it with the core (readConnectHash) and offers it in the system browser, where the owner's wallet is."
+          },
+          {
+            "/": "/*/connect/",
+            "comment": "The same page with a trailing slash."
+          },
+          {
+            "/": "/*/wallet",
+            "#": "ms=*",
+            "comment": "A multisig proposal: /<locale>/wallet#ms=<chainId>.<multisig>.<safeTxHash>. The fragment is matched here because a path alone is every visit to the web wallet."
+          },
+          {
+            "/": "/*/wallet",
+            "#": "msa=*",
+            "comment": "A multisig invite: /<locale>/wallet#msa=<chainIds>:<multisig>&a=<members>."
+          },
+          {
+            "/": "/*/wallet",
+            "#": "ms%3D*",
+            "caseSensitive": false,
+            "comment": "A proposal or an invite whose '=' a chat app percent-encoded (#ms%3D… / #msa%3D…, r4b-17): the core reads both."
+          },
+          {
+            "/": "/*/wallet",
+            "#": "msa%3D*",
+            "caseSensitive": false,
+            "comment": "An invite with its '=' encoded."
+          },
+          {
+            "/": "/??",
+            "#": "msa=*",
+            "comment": "An invite opened on the site's front page (/en#msa=…, r4b-17)."
+          },
+          {
+            "/": "/?????",
+            "#": "msa=*",
+            "comment": "The same for a regional locale (/zh-TW#msa=…)."
+          },
+          {
+            "/": "/??",
+            "#": "ms=*",
+            "comment": "A proposal on the front page."
+          },
+          {
+            "/": "/?????",
+            "#": "ms=*",
+            "comment": "A proposal on a regional locale's front page."
+          },
+          {
+            "/": "/pay",
+            "comment": "A payment link: /pay?to=…&chain=…&token=…&amount=…. The app hands it to the core's payment_request, which validates it before Send opens prefilled."
+          },
+          {
+            "/": "/pay/",
+            "comment": "The same with a trailing slash."
+          }
+        ]
+      }
+    ]
+  }
+}
