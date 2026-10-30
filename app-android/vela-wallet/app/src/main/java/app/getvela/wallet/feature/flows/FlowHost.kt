@@ -45,6 +45,7 @@ import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.core.designsystem.tokens.VelaLeading
 import app.getvela.wallet.core.designsystem.tokens.VelaTextSize
 import app.getvela.wallet.feature.flows.components.FlowScaffold
+import app.getvela.wallet.feature.flows.components.FlowLazyScaffold
 import app.getvela.wallet.feature.flows.components.ScanSurface
 
 /**
@@ -183,15 +184,17 @@ private fun FlowHostContent(
                     onQr = { index -> onReceiveNetwork?.invoke(index) ?: onNavigate(FlowStep.ReceiveQr) },
                 )
             }
-            is FlowBase.History -> FlowScaffold(
+            // Phase 4: up to 200 rows — a lazy list, not a scrolled column.
+            is FlowBase.History -> FlowLazyScaffold(
                 header = base.model.header,
-                // Phase 4: the journey scrolls the history by this tag.
-                modifier = Modifier.testTag("activity-list"),
                 onBack = onBack,
                 onPill = { onNavigate(FlowStep.Chains) },
+                // The journey scrolls the history by this tag.
+                listModifier = Modifier.testTag("activity-list"),
             ) {
-                HistoryBody(
+                historyItems(
                     model = base.model,
+                    emptyText = { HistoryEmptyText(base.model) },
                     onSelect = { group, row ->
                         val id = base.model.groups.getOrNull(group)?.rows?.getOrNull(row)?.id
                         if (!id.isNullOrEmpty()) onOpen(FlowStep.TxDetail, id)

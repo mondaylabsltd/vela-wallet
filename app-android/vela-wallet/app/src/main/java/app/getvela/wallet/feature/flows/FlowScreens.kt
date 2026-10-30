@@ -36,6 +36,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -477,22 +478,9 @@ fun HistoryBody(
     modifier: Modifier = Modifier,
     onSelect: (Int, Int) -> Unit = { _, _ -> },
 ) {
-    val colors = VelaTheme.colors
     Column(modifier = modifier.fillMaxWidth()) {
         when (model.mode) {
-            HistoryMode.Empty -> Text(
-                // A filtered-empty history is a narrowing, not a problem: one
-                // quiet line rather than the illustrated empty state the home
-                // uses for a wallet that has genuinely never done anything.
-                text = model.emptyText,
-                color = colors.fgSubtle,
-                fontFamily = VelaFontFamily,
-                fontSize = VelaTextSize.base,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = VelaSpacing.xl5),
-            )
+            HistoryMode.Empty -> HistoryEmptyText(model)
             HistoryMode.Loading, HistoryMode.Rows ->
                 model.groups.forEachIndexed { groupIndex, group ->
                     DayLabel(label = group.label)
@@ -504,6 +492,58 @@ fun HistoryBody(
                 }
         }
     }
+}
+
+/**
+ * A1's rows as lazy items, for [FlowLazyScaffold] (Phase 4) — the same day
+ * headings and [ActivityRow]s as [HistoryBody], composed only as they come
+ * into view. Keyed by the record's id when the feed's ids are distinct (they
+ * should be: the core folds duplicates), by position otherwise, so a feed that
+ * ever carries a repeated id still draws instead of failing on a duplicate key.
+ */
+fun LazyListScope.historyItems(
+    model: HistoryModel,
+    emptyText: @Composable () -> Unit,
+    onSelect: (Int, Int) -> Unit,
+) {
+    when (model.mode) {
+        HistoryMode.Empty -> item(key = "history-empty", contentType = "history-empty") { emptyText() }
+        HistoryMode.Loading, HistoryMode.Rows -> {
+            val ids = model.groups.flatMap { group -> group.rows.map { it.id } }
+            val keyed = ids.none { it.isEmpty() } && ids.toSet().size == ids.size
+            model.groups.forEachIndexed { groupIndex, group ->
+                item(key = "day:$groupIndex:${group.label}", contentType = "day") { DayLabel(label = group.label) }
+                group.rows.forEachIndexed { rowIndex, row ->
+                    item(
+                        key = if (keyed) "row:${row.id}" else "row:$groupIndex:$rowIndex",
+                        contentType = "row",
+                    ) {
+                        Box(modifier = Modifier.clickable { onSelect(groupIndex, rowIndex) }) {
+                            ActivityRow(model = row)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** A1's empty line — shared by [HistoryBody] and the lazy list. */
+@Composable
+fun HistoryEmptyText(model: HistoryModel) {
+    Text(
+        // A filtered-empty history is a narrowing, not a problem: one
+        // quiet line rather than the illustrated empty state the home
+        // uses for a wallet that has genuinely never done anything.
+        text = model.emptyText,
+        color = VelaTheme.colors.fgSubtle,
+        fontFamily = VelaFontFamily,
+        fontSize = VelaTextSize.base,
+        textAlign = TextAlign.Center,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = VelaSpacing.xl5),
+    )
 }
 
 /**
