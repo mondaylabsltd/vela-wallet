@@ -155,7 +155,9 @@ pub struct TrustedSignerApprovalInput {
 /// multisig's name. An error for a SafeTx, route or address that does not read.
 #[uniffi::export]
 #[allow(clippy::needless_pass_by_value)]
-pub fn trusted_signer_approval_request(input: TrustedSignerApprovalInput) -> Result<String, CoreError> {
+pub fn trusted_signer_approval_request(
+    input: TrustedSignerApprovalInput,
+) -> Result<String, CoreError> {
     let tx: vela_core::multisig::SafeTx = serde_json::from_str(&input.tx_json)
         .map_err(|e| CoreError::Internal(format!("tx_json: {e}")))?;
     let key_route: Option<vela_core::signing_venue::KeyRoute> = input
@@ -184,8 +186,12 @@ pub fn trusted_signer_approval_request(input: TrustedSignerApprovalInput) -> Res
 pub enum TrustedSignerApprovalOutcome {
     /// The member's approval (`PasskeyApproval` JSON: `{owner, signature, …}`),
     /// checked the chain's way — what the genesis service and the chain take.
-    Accepted { approval_json: String },
-    Refused { refusal: TrustedSignerRefusal },
+    Accepted {
+        approval_json: String,
+    },
+    Refused {
+        refusal: TrustedSignerRefusal,
+    },
 }
 
 /// The page's answer (`result_json`) as `member`'s approval of
@@ -209,7 +215,13 @@ pub fn trusted_signer_approval_accept(
         Ok(value) => value,
         Err(error) => return refused(malformed(format!("result_json: {error}"))),
     };
-    match approval::accept(&result, chain_id, &member, &safe_tx_hash, &wallet_keys(&keys)) {
+    match approval::accept(
+        &result,
+        chain_id,
+        &member,
+        &safe_tx_hash,
+        &wallet_keys(&keys),
+    ) {
         Ok(approval) => match serde_json::to_string(&approval) {
             Ok(approval_json) => TrustedSignerApprovalOutcome::Accepted { approval_json },
             Err(error) => refused(malformed(error)),

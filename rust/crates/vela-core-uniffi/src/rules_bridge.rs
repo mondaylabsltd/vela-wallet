@@ -52,7 +52,12 @@ pub fn rpc_is_hedged_read(kind: String, method: String) -> bool {
 /// `RpcTransportOutcome`.
 #[uniffi::export]
 #[must_use]
-pub fn rpc_early_verdict(kind: String, method: String, url: String, outcome_json: String) -> String {
+pub fn rpc_early_verdict(
+    kind: String,
+    method: String,
+    url: String,
+    outcome_json: String,
+) -> String {
     let kind = match kind.as_str() {
         "rpc" => rpc_pool::RpcKind::Rpc,
         "bundler" => rpc_pool::RpcKind::Bundler,
@@ -121,7 +126,11 @@ pub fn dapp_rpc_classify(method: String) -> String {
 /// (all JSON). Answers `{"result":…}` or `{"error":{"code","message"}}`.
 #[uniffi::export]
 #[must_use]
-pub fn dapp_rpc_capabilities(params_json: String, granted_json: String, chains_json: String) -> String {
+pub fn dapp_rpc_capabilities(
+    params_json: String,
+    granted_json: String,
+    chains_json: String,
+) -> String {
     let params: serde_json::Value =
         serde_json::from_str(&params_json).unwrap_or(serde_json::Value::Null);
     let granted: Vec<String> = serde_json::from_str(&granted_json).unwrap_or_default();
@@ -165,7 +174,12 @@ pub fn dapp_rpc_calls_status(
 /// `token` empty is the native coin.
 #[uniffi::export]
 #[must_use]
-pub fn token_provenance(chain_id: u32, token: String, symbol: String, native_symbol: String) -> String {
+pub fn token_provenance(
+    chain_id: u32,
+    token: String,
+    symbol: String,
+    native_symbol: String,
+) -> String {
     let token = Some(token.as_str()).filter(|t| !t.trim().is_empty());
     serde_json::to_string(&vela_core::app::token_provenance::token_provenance(
         chain_id,
@@ -193,7 +207,12 @@ pub fn site_start_chain(space_chain_ids: Vec<u32>, last_used: Option<u32>) -> u3
 /// the transcript (`LookupAnswer[]`); the return a `ResolveStep`.
 #[uniffi::export]
 #[must_use]
-pub fn resolved_name_step(chain_id: u32, registry: String, name: String, answers_json: String) -> String {
+pub fn resolved_name_step(
+    chain_id: u32,
+    registry: String,
+    name: String,
+    answers_json: String,
+) -> String {
     vela_core::app::name_verify::resolve_step_json(chain_id, &registry, &name, &answers_json)
 }
 

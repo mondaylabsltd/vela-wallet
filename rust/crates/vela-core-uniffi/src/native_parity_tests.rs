@@ -36,12 +36,18 @@ fn opt_s(input: &Value, key: &str) -> Option<String> {
 }
 
 fn u32_of(input: &Value, key: &str) -> u32 {
-    u32::try_from(input[key].as_u64().unwrap_or_else(|| panic!("input `{key}`")))
-        .expect("u32 input")
+    u32::try_from(
+        input[key]
+            .as_u64()
+            .unwrap_or_else(|| panic!("input `{key}`")),
+    )
+    .expect("u32 input")
 }
 
 fn b(input: &Value, key: &str) -> bool {
-    input[key].as_bool().unwrap_or_else(|| panic!("input `{key}`"))
+    input[key]
+        .as_bool()
+        .unwrap_or_else(|| panic!("input `{key}`"))
 }
 
 fn strings(input: &Value, key: &str) -> Vec<String> {
@@ -292,7 +298,9 @@ fn run(func: &str, i: &Value) -> Value {
                 .iter()
                 .map(|v| u32::try_from(v.as_u64().expect("chain id")).expect("u32"))
                 .collect(),
-            i["last_used"].as_u64().map(|v| u32::try_from(v).expect("u32")),
+            i["last_used"]
+                .as_u64()
+                .map(|v| u32::try_from(v).expect("u32")),
         )),
         "resolved_name_step" => json_text(&rules::resolved_name_step(
             u32_of(i, "chain_id"),
@@ -328,7 +336,10 @@ fn replay(func: &str) {
         let got = run(func, &case["input"]);
         let want = &case["expect"]["value"];
         if !same(&got, want) {
-            failures.push(format!("{}\n  wasm:   {want}\n  uniffi: {got}", case["name"]));
+            failures.push(format!(
+                "{}\n  wasm:   {want}\n  uniffi: {got}",
+                case["name"]
+            ));
         }
     }
     assert!(
@@ -434,17 +445,19 @@ fn unreadable_page_answers_are_malformed() {
             refusal: TrustedSignerRefusal::Malformed { .. }
         }
     ));
-    assert!(signing::trusted_signer_approval_request(signing::TrustedSignerApprovalInput {
-        chain_id: 100,
-        chain_name: None,
-        native_symbol: None,
-        multisig: "0x1111111111111111111111111111111111111111".into(),
-        multisig_name: None,
-        tx_json: "{}".into(),
-        member: "0x1111111111111111111111111111111111111111".into(),
-        member_name: None,
-        credential_ids_hex: Vec::new(),
-        key_route_json: None,
-    })
-    .is_err());
+    assert!(
+        signing::trusted_signer_approval_request(signing::TrustedSignerApprovalInput {
+            chain_id: 100,
+            chain_name: None,
+            native_symbol: None,
+            multisig: "0x1111111111111111111111111111111111111111".into(),
+            multisig_name: None,
+            tx_json: "{}".into(),
+            member: "0x1111111111111111111111111111111111111111".into(),
+            member_name: None,
+            credential_ids_hex: Vec::new(),
+            key_route_json: None,
+        })
+        .is_err()
+    );
 }
