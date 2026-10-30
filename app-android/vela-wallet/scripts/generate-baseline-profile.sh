@@ -39,10 +39,12 @@ a pull "$DEVICE_DIR/." "$WORK/" >/dev/null
 
 # Every collected rule, de-duplicated and sorted so a regeneration diffs cleanly,
 # less the benchmark build types' own doors (src/benchmark), which release has not.
+# `awk 1`, not `cat`: the collected files end without a newline, and cat glued
+# one file's last rule to the next file's first (AGP refuses that line).
 # The startup profile is the launch journey's alone (includeInStartupProfile).
 mkdir -p "$OUT"
-cat "$WORK"/*-baseline-prof.txt | grep -v 'Lapp/getvela/wallet/bench/' | LC_ALL=C sort -u > "$OUT/baseline-prof.txt"
+awk 1 "$WORK"/*-baseline-prof.txt | grep -v 'Lapp/getvela/wallet/bench/' | LC_ALL=C sort -u > "$OUT/baseline-prof.txt"
 if ls "$WORK"/*-startup-prof.txt >/dev/null 2>&1; then
-  cat "$WORK"/*-startup-prof.txt | grep -v 'Lapp/getvela/wallet/bench/' | LC_ALL=C sort -u > "$OUT/startup-prof.txt"
+  awk 1 "$WORK"/*-startup-prof.txt | grep -v 'Lapp/getvela/wallet/bench/' | LC_ALL=C sort -u > "$OUT/startup-prof.txt"
 fi
 wc -l "$OUT"/*.txt
