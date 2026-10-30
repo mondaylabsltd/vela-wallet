@@ -102,8 +102,18 @@ where
         }
     }
 
+    /// Through `serde_json::Value`, exactly as [`Self::serialize`] writes the
+    /// view inside every dispatch result — so both report the same JSON (keys
+    /// in `Value`'s sorted order) and each `ViewModel` is serialized by ONE
+    /// serializer, not two. Writing the view straight to a string here gave
+    /// every one of the ~33 machines a second, string-serializer copy of its
+    /// view code: 108,563 wasm bytes (25,838 brotli'd) for the same JSON
+    /// value. The cost is an intermediate `Value` per call — ~13 µs on the
+    /// Send machine's view — on the call the effect loop makes once when it
+    /// starts a machine; every later view arrives inside a dispatch result.
     pub(crate) fn view(&self) -> Result<String, JsValue> {
-        serde_json::to_string(&self.core.view())
+        serde_json::to_value(self.core.view())
+            .and_then(|view| serde_json::to_string(&view))
             .map_err(|error| JsValue::from_str(&format!("could not serialize view: {error}")))
     }
 
