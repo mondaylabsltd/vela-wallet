@@ -172,5 +172,7 @@ export function nativeParityDispatch(wasm) {
     // The verdict record, as uniffi's `SimOutcomeRecord` carries it (its
     // `deltas_json` parsed as `deltas`).
     sim_outcome: (i) => json(wasm.simOutcome(i.user, i.reply_json)),
+    builtin_network_display_name: (i) => opt(wasm.builtinNetworkDisplayName(i.chain_id)),
+    builtin_network_ids: () => Array.from(wasm.builtinNetworkIds()),
   };
 }

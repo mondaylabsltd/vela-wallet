@@ -1207,6 +1207,10 @@ func runParity(_ fn: String, _ i: [String: Any]) throws -> Any {
             "no_change_key": orNull(r.noChangeKey),
             "recheck": r.recheck,
         ] as [String: Any]
+    case "builtin_network_display_name":
+        return orNull(builtinNetworkDisplayName(chainId: try u32(i, "chain_id")))
+    case "builtin_network_ids":
+        return builtinNetworkIds().map { Int64($0) }
     default: throw NoDispatch(fn: fn)
     }
 }

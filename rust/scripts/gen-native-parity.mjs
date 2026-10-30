@@ -368,6 +368,11 @@ for (const [label, reply] of [
   ['not_offered', { error: { code: -32601, message: 'the method eth_simulateV1 does not exist' } }],
   ['nothing_moves', { result: [{ calls: [{ status: '0x1', logs: [] }] }] }],
 ]) add(`sim_outcome/${label}`, 'sim_outcome', { user: simUser, reply_json: S(reply) });
+// A built-in network's name, without a core instance (the Android lane's ask).
+for (const chain of [1, 100, 8453, 5042002, 999999]) {
+  add(`builtin_network_display_name/${chain}`, 'builtin_network_display_name', { chain_id: chain });
+}
+add('builtin_network_ids', 'builtin_network_ids', {});
 
 // --- run through the shipped wasm ------------------------------------------------------
 const out = cases.map((c) => ({ ...c, expect: { value: D[c.fn](c.input) } }));

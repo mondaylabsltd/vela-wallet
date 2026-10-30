@@ -825,6 +825,8 @@ fun runParity(fn: String, i: JSONObject): Any = when (fn) {
             .put("no_change_key", orNull(r.noChangeKey))
             .put("recheck", r.recheck)
     }
+    "builtin_network_display_name" -> orNull(builtinNetworkDisplayName(u32(i, "chain_id")))
+    "builtin_network_ids" -> JSONArray(builtinNetworkIds().map { it.toLong() })
     else -> throw NoSuchElementException("no native-parity arm for fn `$fn` — add it to Harness.kt")
 }
 

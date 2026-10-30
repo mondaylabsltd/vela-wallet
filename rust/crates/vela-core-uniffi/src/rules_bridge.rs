@@ -61,6 +61,27 @@ pub fn is_localhost_http(url: String) -> bool {
     vela_core::app::network_admin::is_localhost_http(&url)
 }
 
+/// A built-in network's name as the wallet writes it ("Ethereum", "Gnosis")
+/// — `network_admin::builtin_display_name` — or `None` for a chain Vela does
+/// not ship (a network someone added is named by its own record). No core
+/// instance needed to look one up.
+#[uniffi::export]
+#[must_use]
+pub fn builtin_network_display_name(chain_id: u32) -> Option<String> {
+    vela_core::app::network_admin::builtin_display_name(chain_id).map(str::to_owned)
+}
+
+/// Every network Vela ships, by chain id, in the order every list of
+/// networks shows them (`network_admin::BUILTIN_CHAINS`).
+#[uniffi::export]
+#[must_use]
+pub fn builtin_network_ids() -> Vec<u32> {
+    vela_core::app::network_admin::BUILTIN_CHAINS
+        .iter()
+        .map(|chain| chain.chain_id)
+        .collect()
+}
+
 /// How long a read waits on one endpoint before the shell also asks the one
 /// the pool will ask next, ms — `rpc_pool::HEDGE_AFTER_MS`.
 #[uniffi::export]

@@ -2602,6 +2602,26 @@ pub fn is_localhost_http(url: &str) -> bool {
     vela_core::app::network_admin::is_localhost_http(url)
 }
 
+/// A built-in network's name as the wallet writes it
+/// (`network_admin::builtin_display_name`), or `undefined` for a chain Vela
+/// does not ship.
+#[wasm_bindgen(js_name = builtinNetworkDisplayName)]
+#[must_use]
+pub fn builtin_network_display_name(chain_id: u32) -> Option<String> {
+    vela_core::app::network_admin::builtin_display_name(chain_id).map(str::to_owned)
+}
+
+/// Every network Vela ships, by chain id, in list order
+/// (`network_admin::BUILTIN_CHAINS`).
+#[wasm_bindgen(js_name = builtinNetworkIds)]
+#[must_use]
+pub fn builtin_network_ids() -> Vec<u32> {
+    vela_core::app::network_admin::BUILTIN_CHAINS
+        .iter()
+        .map(|chain| chain.chain_id)
+        .collect()
+}
+
 /// How a passkey prompt that failed as `kind` (a `FailureKind` wire name),
 /// `elapsed_ms` after it was raised, ended — `passkey_end::ceremony_end`, as
 /// its wire name (`"cancelled"`, `"timed_out"`, …). A kind this build does

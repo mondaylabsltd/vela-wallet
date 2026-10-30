@@ -351,6 +351,10 @@ fn run(func: &str, i: &Value) -> Value {
                 "recheck": record.recheck,
             })
         }
+        "builtin_network_display_name" => {
+            json!(rules::builtin_network_display_name(u32_of(i, "chain_id")))
+        }
+        "builtin_network_ids" => json!(rules::builtin_network_ids()),
         other => panic!("no uniffi arm for `{other}` — add it to native_parity_tests.rs"),
     }
 }
@@ -453,6 +457,8 @@ parity!(
     passkey_sign_timeout_ms,
     rpc_node_standing,
     sim_outcome,
+    builtin_network_display_name,
+    builtin_network_ids,
 );
 
 /// The refusals the corpus does not reach by a page's answer: input a shell
