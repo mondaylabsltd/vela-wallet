@@ -79,6 +79,8 @@ pub mod multisig_outside;
 pub mod multisig_proposals;
 /// The multisig machines (F0.4): one shell vocabulary, four machines.
 pub mod multisig_shell;
+/// What a multisig member is and how it signs: one rule over facts, for every machine.
+pub mod multisig_signers;
 pub mod name_verify;
 pub mod net_health;
 pub mod network_admin;

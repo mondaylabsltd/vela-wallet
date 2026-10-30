@@ -28,6 +28,7 @@ use vela_core::app::multisig_shell::{
     AccountUpdate, ChainMembers, MemberInfo, MultisigAccount, MultisigOperation as Op,
     MultisigShellResult as Res, Notice,
 };
+use vela_core::app::multisig_signers::KindNote;
 use vela_core::multisig::{self, Action, CallArg, MemberChange, MemberRefusal, MemberVerdict};
 use world::{fixture, genesis, settle_reads_first, stored_row, DeployedSafe, World};
 
@@ -559,6 +560,12 @@ fn replaces_a_member_the_new_account_shown_in_full_and_its_name_kept_here() {
             new_owner: D.to_owned()
         })
     );
+    // r7: no code at D, Vela's signer configured for it nowhere: "Other
+    // wallet" is only hinted — and kept only if picked.
+    let choice = sut.view().entry.choice.unwrap();
+    assert_eq!(choice.suggested, Some(MemberKind::Wallet));
+    assert_eq!(choice.note, Some(KindNote::Likely));
+    assert_eq!(choice.kind, None);
     run(&mut sut, &mut world, Event::Proposing);
     assert_eq!(
         world.notices,
@@ -569,7 +576,8 @@ fn replaces_a_member_the_new_account_shown_in_full_and_its_name_kept_here() {
                     D.to_owned(),
                     MemberInfo {
                         name: Some("Dana".to_owned()),
-                        kind: Some("wallet".to_owned()),
+                        // Unsaid: nothing kept, the member stays unsure.
+                        kind: None,
                         typed: None,
                     }
                 )]),
@@ -673,7 +681,7 @@ fn adds_a_member_picked_from_the_contacts_its_address_shown_its_name_and_kind_ke
     let view = sut.view();
     assert_eq!(view.entry.entry.as_ref().unwrap().address, D);
     assert_eq!(view.entry.name, "Dana");
-    assert_eq!(view.entry.kind, MemberKind::Wallet);
+    assert_eq!(view.entry.kind, Some(MemberKind::Wallet));
     assert!(view.entry.suggestions.is_empty(), "picked: no more offers");
     assert_eq!(rules_of(&on(&plan_of(&sut), ARC)), ((2, 3), (2, 4)));
     assert_eq!(
@@ -1157,8 +1165,14 @@ fn this_devices_accounts_are_offered_and_join_as_vela_accounts() {
         },
     );
     run(&mut sut, &mut world, Event::ReadEntry);
-    assert_eq!(sut.view().entry.kind, MemberKind::Vela);
-    // The person's pick wins.
+    assert_eq!(sut.view().entry.kind, Some(MemberKind::Vela));
+    assert_eq!(
+        sut.view().entry.choice.unwrap().note,
+        Some(KindNote::Known),
+        "found, not asked"
+    );
+    // r7: evidence beats the label — an account here is a Vela account,
+    // whatever is picked.
     run(
         &mut sut,
         &mut world,
@@ -1166,7 +1180,8 @@ fn this_devices_accounts_are_offered_and_join_as_vela_accounts() {
             kind: Some(MemberKind::Wallet),
         },
     );
-    assert_eq!(sut.view().entry.kind, MemberKind::Wallet);
+    assert_eq!(sut.view().entry.kind, Some(MemberKind::Vela));
+    assert!(sut.view().entry.choice.unwrap().locked);
 }
 
 // =====================================================================================
@@ -1678,4 +1693,117 @@ fn a_networks_proposal_is_dispatched_as_it_is_into_the_proposals_machines_draft(
         shown.item.tx.data.to_ascii_lowercase(),
         tx.data.to_ascii_lowercase()
     );
+}
+
+// =====================================================================================
+// r7 + the owner's rule: a member's kind from the chain — Vela's passkey
+// signer configured for it, other contract code, or neither.
+// =====================================================================================
+
+const NEWCOMER: &str = "0x5555555555555555555555555555555555555555";
+
+fn entered(world: &mut World, typed: &str) -> vela_core::app::multisig_signers::KindChoice {
+    let mut sut = Sut::new();
+    let (_, account) = two_networks();
+    let event = show_event(world, &account, &[ARC]);
+    run(&mut sut, world, event);
+    run(
+        &mut sut,
+        world,
+        Event::Compose {
+            compose: Some(Compose::Add),
+        },
+    );
+    run(
+        &mut sut,
+        world,
+        Event::Entry {
+            text: typed.to_owned(),
+        },
+    );
+    run(&mut sut, world, Event::ReadEntry);
+    sut.view().entry.choice.expect("a choice for the entry")
+}
+
+fn deployed_code(world: &mut World, chain: u64, address: &str) {
+    world
+        .codes
+        .insert((chain, address.to_ascii_lowercase()), "0x6080".to_owned());
+}
+
+#[test]
+fn vela_s_passkey_signer_configured_for_it_is_a_vela_account_with_no_index_record() {
+    let (mut world, _) = two_networks();
+    deployed_code(&mut world, ARC, NEWCOMER);
+    world
+        .configured
+        .insert((ARC, NEWCOMER.to_ascii_lowercase()));
+    let choice = entered(&mut world, NEWCOMER);
+    assert_eq!(choice.kind, Some(MemberKind::Vela));
+    assert_eq!(choice.note, Some(KindNote::Known));
+    assert!(choice.locked);
+    // Read through the wallet's own RPC, as the passkey index's first hop reads it.
+    assert!(world.rpc_log.iter().any(|(c, m, p)| *c == ARC
+        && m == "eth_call"
+        && p[0]["to"]
+            .as_str()
+            .is_some_and(|t| t.eq_ignore_ascii_case(vela_core::safe::WEBAUTHN_SIGNER))));
+}
+
+#[test]
+fn configured_on_another_chain_is_a_vela_account_not_yet_set_up_here() {
+    let (mut world, _) = two_networks();
+    world
+        .configured
+        .insert((100, NEWCOMER.to_ascii_lowercase()));
+    let choice = entered(&mut world, NEWCOMER);
+    assert_eq!(choice.kind, Some(MemberKind::Vela));
+    assert_eq!(choice.note, Some(KindNote::Known));
+}
+
+#[test]
+fn code_without_vela_s_signer_is_a_smart_contract_account() {
+    let (mut world, _) = two_networks();
+    deployed_code(&mut world, ARC, NEWCOMER);
+    let choice = entered(&mut world, NEWCOMER);
+    assert_eq!(choice.kind, Some(MemberKind::Contract));
+    assert_eq!(choice.note, Some(KindNote::Contract));
+    assert!(choice.locked, "shown, not asked");
+}
+
+#[test]
+fn a_configuration_read_that_failed_decides_nothing() {
+    let (mut world, _) = two_networks();
+    deployed_code(&mut world, ARC, NEWCOMER);
+    world.rpc_hooks.push(Box::new(|_, method, params| {
+        let to_signer = params[0]["to"]
+            .as_str()
+            .is_some_and(|t| t.eq_ignore_ascii_case(vela_core::safe::WEBAUTHN_SIGNER));
+        (method == "eth_call" && to_signer).then(|| Res::RpcUnanswered {
+            detail: "timed out".into(),
+        })
+    }));
+    let choice = entered(&mut world, NEWCOMER);
+    assert_eq!(choice.kind, None, "never guessed");
+    assert_eq!(choice.note, Some(KindNote::Ask));
+}
+
+#[test]
+fn no_code_and_vela_s_signer_nowhere_is_only_hinted_as_an_outside_wallet() {
+    let (mut world, _) = two_networks();
+    let choice = entered(&mut world, NEWCOMER);
+    assert_eq!(choice.kind, None);
+    assert_eq!(choice.suggested, Some(MemberKind::Wallet));
+    assert_eq!(choice.note, Some(KindNote::Likely));
+}
+
+#[test]
+fn an_eip_7702_delegation_is_a_persons_wallet_not_a_contract() {
+    let (mut world, _) = two_networks();
+    world.codes.insert(
+        (ARC, NEWCOMER.to_ascii_lowercase()),
+        format!("0xef0100{}", "ab".repeat(20)),
+    );
+    let choice = entered(&mut world, NEWCOMER);
+    assert_eq!(choice.note, Some(KindNote::Likely), "{choice:?}");
 }

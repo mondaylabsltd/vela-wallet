@@ -16,6 +16,7 @@ use vela_core::app::multisig_proposals::{
     ActionState, Event, MultisigProposals, ProposalKind, ProposalStatus,
 };
 use vela_core::app::multisig_shell::{AccountUpdate, MultisigAccount, Notice};
+use vela_core::app::multisig_signers::SignerKind;
 use vela_core::multisig::{self, Transfer};
 use world::{fixture, genesis, settle, DeployedSafe, Landing, World, HANDLER_141, SERVICE};
 
@@ -958,4 +959,75 @@ fn the_execution_vectors_hold() {
             "{name}"
         );
     }
+}
+
+// -- r7: how each member still to approve signs (signers.kindOf, plainAccounts) ---------
+
+/// A 2-of-4 of a Vela member here, a plain address, another Safe (code, Vela's
+/// passkey signer not configured for it) and a Vela account set up on Base
+/// (its signer configured there, no index record needed); the sheet asks
+/// how each remaining member signs.
+#[test]
+fn each_remaining_member_signs_as_the_one_rule_says() {
+    const PLAIN: &str = "0x00000000000000000000000000000000000000a7";
+    const OTHER_SAFE: &str = "0x00000000000000000000000000000000000000c5";
+    const VELA_ON_BASE: &str = "0x00000000000000000000000000000000000000d3";
+    let me = fixture(0).address;
+    let g = genesis(&[&me, PLAIN, OTHER_SAFE, VELA_ON_BASE], 2, "0x41");
+    let account: MultisigAccount =
+        serde_json::from_value(world::stored_row(&g, &[100], true)).unwrap();
+    let mut world = World {
+        locals: vec![fixture(0)],
+        ..World::default()
+    };
+    world.deploy(
+        100,
+        &g.address,
+        DeployedSafe::clean(&[&me, PLAIN, OTHER_SAFE, VELA_ON_BASE], 2),
+    );
+    world
+        .codes
+        .insert((100, OTHER_SAFE.to_owned()), "0x6080".to_owned());
+    world.configured.insert((8453, VELA_ON_BASE.to_owned()));
+    let mut sut = Sut::new();
+    let ev = start(&world, vec![100, 8453]);
+    run(&mut sut, &mut world, ev);
+    run(
+        &mut sut,
+        &mut world,
+        Event::Follow {
+            account: Some(account.clone()),
+        },
+    );
+    let hash = hash_of(&propose(&mut sut, &mut world, transfer("1"), None));
+    run(
+        &mut sut,
+        &mut world,
+        Event::ReadSigners {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+        },
+    );
+    let signers = sut.view().signers[&format!("100:{hash}")].clone();
+    let kind = |who: &str| {
+        signers
+            .rows
+            .iter()
+            .find(|r| r.owner.eq_ignore_ascii_case(who))
+            .unwrap_or_else(|| panic!("{who}: {signers:?}"))
+            .kind
+    };
+    assert!(
+        !signers
+            .rows
+            .iter()
+            .any(|r| r.owner.eq_ignore_ascii_case(&me)),
+        "the proposer approved"
+    );
+    assert_eq!(kind(PLAIN), Some(SignerKind::Unsure), "the Vela way first");
+    assert_eq!(kind(OTHER_SAFE), Some(SignerKind::Contract));
+    assert_eq!(kind(VELA_ON_BASE), Some(SignerKind::Vela));
+    // Only a plain account is ever offered to an outside wallet.
+    assert_eq!(signers.outside.len(), 1);
+    assert!(signers.outside[0].eq_ignore_ascii_case(PLAIN));
 }

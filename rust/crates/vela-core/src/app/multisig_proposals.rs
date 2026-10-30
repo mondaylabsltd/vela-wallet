@@ -58,6 +58,7 @@ use super::multisig_shell::{
     MultisigShellResult, Notice, PasskeyPurpose, Proposal, Service, ServiceFail, Shared,
     StoredApproval, Submission, SubmitAnswer,
 };
+use super::multisig_signers::{self as signers, SignerKind, SignerRead};
 use crate::multisig::{self, Action, Approval, Call, SafeTx};
 use crate::multisig_review::{self, Known, ReviewInput};
 use crate::multisig_watch::{
@@ -550,6 +551,37 @@ pub enum Event {
     },
     #[serde(skip)]
     Changed,
+    /// r7: how each member still to approve this proposal signs (its sheet
+    /// opened): the chain read for each — code on the multisig's networks,
+    /// Vela's passkey signer configuration — and the one rule
+    /// ([`ProposalsView::signers`]).
+    ReadSigners {
+        #[cfg_attr(feature = "bindings", ts(type = "number"))]
+        chain_id: u64,
+        safe_tx_hash: String,
+    },
+}
+
+/// One member still to approve, and how it signs (`signers.kindOf`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "MultisigSignerRow"))]
+pub struct SignerRow {
+    pub owner: String,
+    /// `None` while that is still being read: nothing is offered on a guess.
+    pub kind: Option<SignerKind>,
+}
+
+/// How a proposal's remaining approvals can come (r4C-10, r7).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "MultisigItemSigners"))]
+pub struct ItemSigners {
+    /// The members on its network that have not approved yet, in the
+    /// chain's order, each with how it signs.
+    pub rows: Vec<SignerRow>,
+    /// Of them, those an outside wallet may be asked to sign for
+    /// (`plainAccounts`): never this device's, a Vela account, or a smart
+    /// contract account.
+    pub outside: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -670,6 +702,9 @@ pub struct ProposalsView {
     /// How each execution followed here ended (or stands).
     #[cfg_attr(feature = "bindings", ts(type = "Record<string, unknown>"))]
     pub executions: BTreeMap<String, Value>,
+    /// r7: per `<chainId>:<safeTxHash>` asked ([`Event::ReadSigners`]), how
+    /// its remaining approvals can come.
+    pub signers: BTreeMap<String, ItemSigners>,
 }
 
 // ---------------------------------------------------------------------------
@@ -759,9 +794,69 @@ pub struct State {
     previews: BTreeMap<String, Value>,
     preview_plans: BTreeMap<String, Preview>,
     verdicts: BTreeMap<String, Value>,
+    /// r7: the proposals whose signers were asked (`<chainId>:<safeTxHash>`).
+    signers_asked: BTreeSet<(u64, String)>,
+    /// What the chains said of each member read (lowercase address).
+    signer_reads: BTreeMap<String, SignerRead>,
 }
 
 impl State {
+    /// How each member still to approve `hash` on `chain_id` signs, and who
+    /// an outside wallet may sign for (`kindOf`, `plainAccounts`).
+    fn item_signers(
+        &self,
+        items: &[ProposalItem],
+        chain_id: u64,
+        hash: &str,
+    ) -> Option<ItemSigners> {
+        let (item, members) = self.item(chain_id, hash)?;
+        let account = self.account.as_ref()?;
+        let rows_of = items.iter().flat_map(|i| {
+            i.approvals
+                .iter()
+                .map(|a| (a.owner.as_str(), a.counts, &a.approval))
+        });
+        let facts = |owner: &str| {
+            let local = self.locals.iter().any(|l| same_address(&l.address, owner));
+            let kept = account
+                .members
+                .as_ref()
+                .and_then(|m| m.get(&owner.to_ascii_lowercase()))
+                .and_then(|i| i.kind.clone());
+            let approved = signers::approved_with_in(rows_of.clone(), owner);
+            match self.signer_reads.get(&owner.to_ascii_lowercase()) {
+                Some(read) => read.facts(Some(chain_id), local, approved, kept),
+                None => signers::SignerFacts {
+                    local,
+                    approved_with: approved,
+                    kept,
+                    ..signers::SignerFacts::default()
+                },
+            }
+        };
+        let missing: Vec<String> = members
+            .owners
+            .iter()
+            .filter(|o| {
+                !item
+                    .approvals
+                    .iter()
+                    .any(|a| a.counts && same_address(&a.owner, o))
+            })
+            .cloned()
+            .collect();
+        Some(ItemSigners {
+            rows: missing
+                .iter()
+                .map(|o| SignerRow {
+                    owner: o.clone(),
+                    kind: signers::signer_kind(&facts(o)),
+                })
+                .collect(),
+            outside: signers::plain_accounts(&missing, |o| facts(o)),
+        })
+    }
+
     fn followed(&self, address: &str) -> bool {
         self.account
             .as_ref()
@@ -876,6 +971,8 @@ impl App for MultisigProposals {
                         s.draft = None;
                         s.reviews.clear();
                         s.previews.clear();
+                        s.signers_asked.clear();
+                        s.signer_reads.clear();
                     }
                     s.account = account.clone();
                     if account.is_some() && s.chains.is_empty() {
@@ -978,6 +1075,46 @@ impl App for MultisigProposals {
                     .reviews
                     .insert(format!("{chain_id}:{}", item.safe_tx_hash), out);
             }),
+            Event::ReadSigners {
+                chain_id,
+                safe_tx_hash,
+            } => {
+                let asked = {
+                    let mut s = lock(&model.state);
+                    let found = s.item(chain_id, &safe_tx_hash).zip(s.account.clone());
+                    found.map(|((item, members), account)| {
+                        s.signers_asked
+                            .insert((chain_id, item.safe_tx_hash.clone()));
+                        let owners: Vec<String> = members
+                            .owners
+                            .iter()
+                            .filter(|o| !s.locals.iter().any(|l| same_address(&l.address, o)))
+                            .cloned()
+                            .collect();
+                        let mut chain_ids = vec![chain_id];
+                        for id in &account.chain_ids {
+                            if !chain_ids.contains(id) {
+                                chain_ids.push(*id);
+                            }
+                        }
+                        (owners, chain_ids)
+                    })
+                };
+                let Some((owners, chain_ids)) = asked else {
+                    return render();
+                };
+                flow(model, move |io, st| async move {
+                    let reads = owners.iter().map(|o| {
+                        let (io, st, chain_ids) = (&io, &st, &chain_ids);
+                        async move {
+                            let read = signers::read_signer(io, chain_ids, o).await;
+                            lock(st).signer_reads.insert(o.to_ascii_lowercase(), read);
+                            io.emit(Event::Changed);
+                        }
+                    });
+                    future::join_all(reads).await;
+                })
+            }
             Event::Draft { chain_id, proposal } => {
                 {
                     let mut s = lock(&model.state);
@@ -1124,6 +1261,14 @@ impl App for MultisigProposals {
             reviews: s.reviews.clone(),
             previews: s.previews.clone(),
             executions: s.verdicts.clone(),
+            signers: s
+                .signers_asked
+                .iter()
+                .filter_map(|(chain_id, hash)| {
+                    let signers = s.item_signers(&items, *chain_id, hash)?;
+                    Some((format!("{chain_id}:{hash}"), signers))
+                })
+                .collect(),
         }
     }
 }

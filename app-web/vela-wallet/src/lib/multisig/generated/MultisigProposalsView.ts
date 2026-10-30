@@ -2,6 +2,7 @@
 import type { MultisigActionState } from "./MultisigActionState";
 import type { MultisigChainState } from "./MultisigChainState";
 import type { MultisigDraft } from "./MultisigDraft";
+import type { MultisigItemSigners } from "./MultisigItemSigners";
 import type { MultisigMissingChain } from "./MultisigMissingChain";
 import type { MultisigOutboxEntry } from "./MultisigOutboxEntry";
 import type { MultisigProposalItem } from "./MultisigProposalItem";
@@ -43,4 +44,9 @@ previews: Record<string, unknown>,
 /**
  * How each execution followed here ended (or stands).
  */
-executions: Record<string, unknown>, };
+executions: Record<string, unknown>, 
+/**
+ * r7: per `<chainId>:<safeTxHash>` asked ([`Event::ReadSigners`]), how
+ * its remaining approvals can come.
+ */
+signers: { [key in string]: MultisigItemSigners }, };

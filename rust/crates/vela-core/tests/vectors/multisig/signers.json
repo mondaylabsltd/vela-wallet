@@ -1,0 +1,234 @@
+{
+ "about": "What a multisig member is and how it signs — one rule over facts (multisig_signers), every machine's: signer_kind (kindOf), kind_evidence (evidence), kind_choice (kindChoice), plain_accounts (plainAccounts). Ported from signers.test.ts and member-kind.test.ts, with the owner's rule (2026-10-30): a Vela account when Vela's shared passkey signer is configured for it (getConfiguration non-empty: `configured`), or the index / this device / a counted passkey approval says so; any other contract code a smart contract account; a read that failed decides nothing. Facts: local, approvedWith (passkey|wallet), indexed, indexAnswered, kept (passkey|wallet|contract), code (true|false|null: unread), configured (true|false|null: unread or a read failed).",
+ "signerKind": [
+  { "name": "this device's account signs here", "facts": { "local": true }, "expect": "here" },
+  { "name": "the passkey index knows it: a Vela account", "facts": { "indexed": true }, "expect": "vela" },
+  { "name": "nothing read yet: nothing offered on a guess", "facts": {}, "expect": null },
+  {
+   "name": "code at its address, its signer configuration unread: no verdict (code alone is no Vela account)",
+   "facts": { "code": true },
+   "expect": null
+  },
+  {
+   "name": "code at its address, the index answered none, the configuration unread: still no verdict (a read that failed decides nothing)",
+   "facts": { "code": true, "indexAnswered": true },
+   "expect": null
+  },
+  {
+   "name": "code, and the chain says Vela's signer is not configured for it: a smart contract account",
+   "facts": { "code": true, "configured": false },
+   "expect": "contract"
+  },
+  {
+   "name": "Vela's signer configured for it: a Vela account, with no index record",
+   "facts": { "code": true, "configured": true },
+   "expect": "vela"
+  },
+  {
+   "name": "configured on another chain, nothing here yet: a Vela account",
+   "facts": { "code": false, "configured": true, "indexAnswered": true },
+   "expect": "vela"
+  },
+  {
+   "name": "no code, the index not answered, the configuration unread: still unknown",
+   "facts": { "code": false },
+   "expect": null
+  },
+  {
+   "name": "approved anything with her passkey: a Vela account, before the code read too",
+   "facts": { "approvedWith": "passkey" },
+   "expect": "vela"
+  },
+  { "name": "kept here as a Vela account: a Vela account", "facts": { "kept": "passkey" }, "expect": "vela" },
+  {
+   "name": "kept as a Vela account with code: stands until the chain answers its signer is not configured",
+   "facts": { "kept": "passkey", "code": true },
+   "expect": "vela"
+  },
+  {
+   "name": "kept as a Vela account with code and no configuration: a smart contract account (evidence beats the label)",
+   "facts": { "kept": "passkey", "code": true, "configured": false },
+   "expect": "contract"
+  },
+  {
+   "name": "kept as an outside wallet, but code there without Vela's signer: a smart contract account",
+   "facts": { "kept": "wallet", "code": true, "configured": false },
+   "expect": "contract"
+  },
+  {
+   "name": "kept as a smart contract account (an invite's c): one, before any code is read",
+   "facts": { "kept": "contract" },
+   "expect": "contract"
+  },
+  {
+   "name": "kept as an outside wallet, but it approved with its passkey: a Vela account",
+   "facts": { "kept": "wallet", "approvedWith": "passkey" },
+   "expect": "vela"
+  },
+  {
+   "name": "kept as a smart contract account, but Vela's signer is configured for it: a Vela account",
+   "facts": { "kept": "contract", "code": true, "configured": true },
+   "expect": "vela"
+  },
+  {
+   "name": "nothing says, no code, the index holds none: unsure",
+   "facts": { "code": false, "indexAnswered": true },
+   "expect": "unsure"
+  },
+  {
+   "name": "nothing says, no code, Vela's signer configured nowhere read: unsure",
+   "facts": { "code": false, "configured": false },
+   "expect": "unsure"
+  },
+  {
+   "name": "a wallet's own signature, with no code: a plain wallet",
+   "facts": { "code": false, "approvedWith": "wallet" },
+   "expect": "wallet"
+  },
+  {
+   "name": "kept as an outside wallet, with no code: a plain wallet",
+   "facts": { "code": false, "kept": "wallet" },
+   "expect": "wallet"
+  }
+ ],
+ "evidence": [
+  { "name": "an account here: a Vela account", "facts": { "local": true }, "expect": "vela" },
+  { "name": "one the passkey index holds: a Vela account", "facts": { "indexed": true }, "expect": "vela" },
+  {
+   "name": "Vela's signer configured for it, no index record: a Vela account",
+   "facts": { "code": true, "configured": true },
+   "expect": "vela"
+  },
+  {
+   "name": "a counted passkey approval: a Vela account",
+   "facts": { "approvedWith": "passkey" },
+   "expect": "vela"
+  },
+  {
+   "name": "another Safe as a member: code, Vela's signer not configured — a smart contract account",
+   "facts": { "code": true, "configured": false },
+   "expect": "contract"
+  },
+  {
+   "name": "code, its configuration read failed: it can't tell — asked",
+   "facts": { "code": true, "indexAnswered": true },
+   "expect": null
+  },
+  {
+   "name": "code, nothing else read: asked",
+   "facts": { "code": true },
+   "expect": null
+  },
+  {
+   "name": "no code anywhere and Vela's signer configured nowhere: likely an outside wallet",
+   "facts": { "code": false, "configured": false },
+   "expect": "wallet"
+  },
+  {
+   "name": "no code anywhere and the index holds none: likely an outside wallet",
+   "facts": { "code": false, "indexAnswered": true },
+   "expect": "wallet"
+  },
+  {
+   "name": "a network that does not answer: it can't tell — asked",
+   "facts": { "configured": false },
+   "expect": null
+  },
+  {
+   "name": "no code, nothing answered for Vela's signer: asked",
+   "facts": { "code": false },
+   "expect": null
+  },
+  {
+   "name": "kept as a smart contract account is a label, not evidence",
+   "facts": { "kept": "contract" },
+   "expect": null
+  }
+ ],
+ "kindChoice": [
+  {
+   "name": "a Vela account found: shown as found, not asked",
+   "evidence": "vela",
+   "said": null,
+   "expect": { "kind": "vela", "suggested": null, "locked": true, "note": "known" }
+  },
+  {
+   "name": "a Vela account found: evidence beats the label",
+   "evidence": "vela",
+   "said": "wallet",
+   "expect": { "kind": "vela", "suggested": null, "locked": true, "note": "known" }
+  },
+  {
+   "name": "a smart contract account, shown, never 'Vela account'",
+   "evidence": "contract",
+   "said": null,
+   "expect": { "kind": "contract", "suggested": null, "locked": true, "note": "contract" }
+  },
+  {
+   "name": "a smart contract account: evidence beats the label (Vela account said)",
+   "evidence": "contract",
+   "said": "vela",
+   "expect": { "kind": "contract", "suggested": null, "locked": true, "note": "contract" }
+  },
+  {
+   "name": "a smart contract account: evidence beats the label (outside wallet said)",
+   "evidence": "contract",
+   "said": "wallet",
+   "expect": { "kind": "contract", "suggested": null, "locked": true, "note": "contract" }
+  },
+  {
+   "name": "an invite's c, nothing read yet: the label stands",
+   "evidence": null,
+   "said": "contract",
+   "expect": { "kind": "contract", "suggested": null, "locked": true, "note": "contract" }
+  },
+  {
+   "name": "the person's word stands where the wallet has no finding",
+   "evidence": null,
+   "said": "vela",
+   "expect": { "kind": "vela", "suggested": null, "locked": false, "note": null }
+  },
+  {
+   "name": "the person's word over the 'Other wallet' hint",
+   "evidence": "wallet",
+   "said": "vela",
+   "expect": { "kind": "vela", "suggested": null, "locked": false, "note": null }
+  },
+  {
+   "name": "the person's word, the same as the hint",
+   "evidence": "wallet",
+   "said": "wallet",
+   "expect": { "kind": "wallet", "suggested": null, "locked": false, "note": null }
+  },
+  {
+   "name": "no Vela account found: 'Other wallet' only hinted — nothing kept unless picked",
+   "evidence": "wallet",
+   "said": null,
+   "expect": { "kind": null, "suggested": "wallet", "locked": false, "note": "likely" }
+  },
+  {
+   "name": "it can't tell: nothing picked — the person is asked",
+   "evidence": null,
+   "said": null,
+   "expect": { "kind": null, "suggested": null, "locked": false, "note": "ask" }
+  }
+ ],
+ "plainAccounts": [
+  {
+   "name": "only plain accounts: never this device's, a deployed smart account, a Vela account, a passkey approver or a kept Vela or contract account",
+   "owners": [
+    { "address": "here", "facts": { "local": true } },
+    { "address": "deployed", "facts": { "code": true } },
+    { "address": "indexed", "facts": { "indexed": true } },
+    { "address": "configured", "facts": { "code": false, "configured": true } },
+    { "address": "carol", "facts": { "approvedWith": "passkey" } },
+    { "address": "keptVela", "facts": { "kept": "passkey" } },
+    { "address": "keptContract", "facts": { "kept": "contract" } },
+    { "address": "otherSafe", "facts": { "code": true, "configured": false } },
+    { "address": "plain", "facts": { "code": false, "configured": false } },
+    { "address": "unread", "facts": {} }
+   ],
+   "expect": ["plain", "unread"]
+  }
+ ]
+}

@@ -15,10 +15,11 @@ use std::collections::BTreeMap;
 use serde_json::{json, Value};
 use support::DomainDriver;
 use vela_core::app::multisig_accounts::{
-    AddOutcome, BackupState, CreateChoice, EnsAnswer, Event, ImportOutcome, InvitedMember,
+    AddOutcome, BackupState, CreateChoice, EnsAnswer, Event, ImportOutcome, InvitedMember, KindAsk,
     MultisigAccounts, Phase,
 };
 use vela_core::app::multisig_shell::{keys, AccountUpdate, MemberInfo, Notice};
+use vela_core::app::multisig_signers::{KindNote, MemberKind};
 use world::{fixture, genesis, settle, stored_row, DeployedSafe, World, HANDLER_141, SERVICE, T0};
 
 type Sut = DomainDriver<MultisigAccounts>;
@@ -949,4 +950,178 @@ fn the_backup_is_checked_and_sent() {
 /// A voiding transaction at nonce 0: a proposal any mailbox could hold.
 fn cancel(safe: &str) -> Value {
     serde_json::to_value(vela_core::multisig::cancel_tx(safe, "0x0").unwrap()).unwrap()
+}
+
+// -- r7: a member's kind, declared then verified (member-kind, signers) -----------------
+
+const SAFE_MEMBER: &str = "0x00000000000000000000000000000000000000cc";
+const VELA_ELSEWHERE: &str = "0x00000000000000000000000000000000000000dd";
+
+fn ask(address: &str, chain_ids: &[u64]) -> KindAsk {
+    KindAsk {
+        address: address.to_owned(),
+        chain_ids: chain_ids.to_vec(),
+    }
+}
+
+/// The create sheet's members, read on the networks it may be used on: an
+/// account here (found), another Safe (code, Vela's signer not configured:
+/// a smart contract account), a Vela account deployed elsewhere (its signer
+/// configured there, no index record needed), and a plain address ("Other
+/// wallet" only hinted).
+#[test]
+fn the_create_sheets_members_are_found_contract_or_hinted_from_the_chain() {
+    let mut world = World::default();
+    world.locals.push(fixture(0));
+    world
+        .codes
+        .insert((8453, SAFE_MEMBER.to_owned()), "0x6080".to_owned());
+    world.configured.insert((1, VELA_ELSEWHERE.to_owned()));
+    let mut sut = started(&mut world, vec![100, 8453]);
+    let me = world.locals[0].address.clone();
+    run(
+        &mut sut,
+        &mut world,
+        Event::ReadKinds {
+            members: vec![
+                ask(&me, &[100, 8453]),
+                ask(SAFE_MEMBER, &[100, 8453]),
+                ask(VELA_ELSEWHERE, &[100, 8453]),
+                ask(B, &[100, 8453]),
+            ],
+        },
+    );
+    let kinds = sut.view().member_kinds;
+    let of = |a: &str| kinds[&a.to_ascii_lowercase()];
+    assert_eq!(of(&me).kind, Some(MemberKind::Vela));
+    assert_eq!(of(&me).note, Some(KindNote::Known));
+    assert_eq!(of(SAFE_MEMBER).kind, Some(MemberKind::Contract));
+    assert_eq!(of(SAFE_MEMBER).note, Some(KindNote::Contract));
+    assert!(of(SAFE_MEMBER).locked);
+    assert_eq!(of(VELA_ELSEWHERE).kind, Some(MemberKind::Vela));
+    assert_eq!(of(VELA_ELSEWHERE).note, Some(KindNote::Known));
+    assert_eq!(of(B).kind, None);
+    assert_eq!(of(B).suggested, Some(MemberKind::Wallet));
+    assert_eq!(of(B).note, Some(KindNote::Likely));
+    // An account here is never read.
+    assert!(!world.rpc_log.iter().any(|(_, _, p)| p
+        .to_string()
+        .to_ascii_lowercase()
+        .contains(&me[2..].to_ascii_lowercase())));
+}
+
+/// The person's pick stands where the chain has no finding, never over it;
+/// creating keeps each member's kind as chosen — and one left unsaid keeps
+/// nothing.
+#[test]
+fn the_persons_pick_is_kept_with_the_new_multisig_where_evidence_allows() {
+    let mut world = World::default();
+    world.locals.push(fixture(0));
+    world
+        .codes
+        .insert((8453, SAFE_MEMBER.to_owned()), "0x6080".to_owned());
+    let mut sut = started(&mut world, vec![100, 8453]);
+    let me = world.locals[0].address.clone();
+    run(
+        &mut sut,
+        &mut world,
+        Event::ReadKinds {
+            members: vec![ask(SAFE_MEMBER, &[8453]), ask(B, &[8453]), ask(A, &[8453])],
+        },
+    );
+    for (who, kind) in [(B, MemberKind::Wallet), (SAFE_MEMBER, MemberKind::Vela)] {
+        run(
+            &mut sut,
+            &mut world,
+            Event::PickKind {
+                address: who.to_owned(),
+                kind: Some(kind),
+            },
+        );
+    }
+    let kinds = sut.view().member_kinds;
+    assert_eq!(kinds[B].kind, Some(MemberKind::Wallet), "the person's word");
+    assert_eq!(kinds[B].note, None);
+    assert_eq!(
+        kinds[SAFE_MEMBER].kind,
+        Some(MemberKind::Contract),
+        "evidence beats the label"
+    );
+    run(&mut sut, &mut world, Event::NewDraft);
+    let c = CreateChoice {
+        owners: vec![
+            me.clone(),
+            SAFE_MEMBER.to_owned(),
+            B.to_owned(),
+            A.to_owned(),
+        ],
+        threshold: 2,
+        name: "Quiet Harbor".to_owned(),
+        chain_id: 8453,
+        creator: me.clone(),
+        members: BTreeMap::from([(
+            B.to_owned(),
+            MemberInfo {
+                name: Some("Bo".to_owned()),
+                kind: None,
+                typed: None,
+            },
+        )]),
+    };
+    run(&mut sut, &mut world, Event::Create { choice: c });
+    assert_eq!(sut.view().create.phase, Phase::Done);
+    let members = &world.stored_accounts()[0]["members"];
+    assert_eq!(members[me.to_ascii_lowercase()]["kind"], "passkey");
+    assert_eq!(members[SAFE_MEMBER]["kind"], "contract");
+    assert_eq!(members[B]["kind"], "wallet");
+    assert_eq!(members[B]["name"], "Bo");
+    assert!(
+        members.get(A).is_none_or(|m| m.get("kind").is_none()),
+        "unsaid keeps nothing: {members}"
+    );
+}
+
+/// A Safe{Wallet} import keeps what each member was declared as (or Vela
+/// found), as the person's word.
+#[test]
+fn an_import_keeps_its_members_kinds() {
+    let g = genesis(&[A], 1, "0x22");
+    let mut world = World::default();
+    world.record(&g.address, &g.genesis, false);
+    world.configured.insert((100, A.to_owned()));
+    let mut sut = started(&mut world, vec![100]);
+    run(
+        &mut sut,
+        &mut world,
+        Event::ParseExport {
+            json: export_of(&g.address, 100, true, None),
+        },
+    );
+    world.deploy(100, &g.address, DeployedSafe::clean(&[A], 1));
+    run(
+        &mut sut,
+        &mut world,
+        Event::ReadKinds {
+            members: vec![ask(A, &[100])],
+        },
+    );
+    assert_eq!(
+        sut.view().member_kinds[A].note,
+        Some(KindNote::Known),
+        "Vela's signer configured for it: a Vela account"
+    );
+    run(
+        &mut sut,
+        &mut world,
+        Event::Import {
+            address: g.address.clone(),
+            accept_risks: false,
+        },
+    );
+    assert_eq!(
+        sut.view().import.outcomes[&g.address.to_ascii_lowercase()],
+        ImportOutcome::Imported
+    );
+    let members = &world.stored_accounts()[0]["members"];
+    assert_eq!(members[A]["kind"], "passkey", "{members}");
 }

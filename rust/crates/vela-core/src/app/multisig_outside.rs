@@ -684,109 +684,22 @@ pub fn read_item(
 // Who may be asked to sign through an outside wallet (`signers.svelte.ts`)
 // ---------------------------------------------------------------------------
 
-/// How a member signs, as this device can tell (ms-11, r4-9, r4a-9).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "OutsideSignerKind"))]
-pub enum SignerKind {
-    /// A Vela account on this device.
-    Here,
-    /// A smart account elsewhere: it approves in Vela; never an outside wallet.
-    Vela,
-    /// A plain account: its own wallet signs.
-    Wallet,
-    /// Nothing says: the Vela way first, the outside wallet's beside it.
-    Unsure,
-}
-
-/// What a counted approval says of how an address approved.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "OutsideApprovedWith"))]
-pub enum ApprovedWith {
-    Passkey,
-    Wallet,
-}
+// The one rule of what a member is and how it signs lives in
+// `multisig_signers` (every machine uses it); these are its names here.
+pub use super::multisig_signers::{
+    plain_accounts, signer_kind, ApprovedWith, SignerFacts, SignerKind,
+};
 
 /// What the proposals this device reads say of how `address` approved, if it
 /// did (r4a-9): only a counted approval is evidence.
 pub fn approved_with(items: &[Vec<ApprovalRow>], address: &str) -> Option<ApprovedWith> {
-    let mut wallet = false;
-    for rows in items {
-        for a in rows {
-            if !a.counts || !same_address(&a.owner, address) {
-                continue;
-            }
-            match a.approval {
-                Approval::Passkey(_) => return Some(ApprovedWith::Passkey),
-                Approval::Ecdsa(_) => wallet = true,
-                Approval::OnChain(_) => {}
-            }
-        }
-    }
-    wallet.then_some(ApprovedWith::Wallet)
-}
-
-/// What is known of one member, read by the shell.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", default)]
-#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "OutsideSignerFacts"))]
-pub struct SignerFacts {
-    /// A Vela account on this device.
-    pub local: bool,
-    pub approved_with: Option<ApprovedWith>,
-    /// The passkey index knows it as a Vela account.
-    pub indexed: bool,
-    /// The passkey index answered for it (either way).
-    pub index_answered: bool,
-    /// This device's word: `passkey` or `wallet`.
-    pub kept: Option<String>,
-    /// Contract code at its address there (an EIP-7702 delegation is none);
-    /// `None` while it is read.
-    pub code: Option<bool>,
-}
-
-/// How a member signs (`kindOf`); `None` while that is still being read:
-/// nothing is offered on a guess.
-pub fn signer_kind(f: &SignerFacts) -> Option<SignerKind> {
-    if f.local {
-        return Some(SignerKind::Here);
-    }
-    if f.approved_with == Some(ApprovedWith::Passkey) || f.indexed {
-        return Some(SignerKind::Vela);
-    }
-    match f.code {
-        Some(true) => return Some(SignerKind::Vela),
-        _ if f.kept.as_deref() == Some("passkey") => return Some(SignerKind::Vela),
-        None => return None,
-        Some(false) => {}
-    }
-    if f.approved_with == Some(ApprovedWith::Wallet) || f.kept.as_deref() == Some("wallet") {
-        return Some(SignerKind::Wallet);
-    }
-    if !f.index_answered {
-        return None;
-    }
-    Some(SignerKind::Unsure)
-}
-
-/// Of `owners`, those an outside wallet may be asked to sign for (r4C-10):
-/// not this device's, no code at their address, not a Vela account the index
-/// knows, none that approved with a passkey. A read that failed is no code
-/// and no index entry (`plainAccounts`).
-pub fn plain_accounts(owners: &[String], facts: impl Fn(&str) -> SignerFacts) -> Vec<String> {
-    owners
-        .iter()
-        .filter(|o| {
-            let f = facts(o);
-            !f.local
-                && f.approved_with != Some(ApprovedWith::Passkey)
-                && f.kept.as_deref() != Some("passkey")
-                && f.code != Some(true)
-                && !f.indexed
-        })
-        .cloned()
-        .collect()
+    super::multisig_signers::approved_with_in(
+        items
+            .iter()
+            .flatten()
+            .map(|a| (a.owner.as_str(), a.counts, &a.approval)),
+        address,
+    )
 }
 
 // ---------------------------------------------------------------------------

@@ -38,11 +38,13 @@ use serde_json::{json, Value};
 #[cfg(feature = "bindings")]
 use ts_rs::TS;
 
+use super::multisig_members::kept_member;
 use super::multisig_shell::{
     self as shell, keys, local_owners, lock, same_address, AccountUpdate, Chain, GenesisAnswer,
     ImportAnswer, Io, LocalAccount, MemberInfo, MultisigAccount, MultisigEffect, MultisigOperation,
     MultisigShellResult, Notice, OwnerProof, PasskeyPurpose, Service, ServiceFail, Shared,
 };
+use super::multisig_signers::{self as signers, KindChoice, MemberKind, SignerFacts, SignerRead};
 use crate::multisig::{self, ExportedSafe, Genesis};
 
 /// The default service's home chain (Gnosis): where a record goes when the
@@ -233,6 +235,28 @@ pub enum Event {
     },
     #[serde(skip)]
     Changed,
+    /// r7: read what the chain says of members being added (the create
+    /// sheet's owners on the networks it may be used on; an import's members
+    /// on the networks the export lists them on): their kind choices are
+    /// [`MultisigAccountsView::member_kinds`]. An account here needs no read.
+    ReadKinds {
+        members: Vec<KindAsk>,
+    },
+    /// The person's pick of what a member is (`None`: as it reads), here or
+    /// in an import's kinds step.
+    PickKind {
+        address: String,
+        kind: Option<MemberKind>,
+    },
+}
+
+/// A member whose kind is read, and the networks to read it on.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "MultisigKindAsk"))]
+pub struct KindAsk {
+    pub address: String,
+    #[cfg_attr(feature = "bindings", ts(type = "number[]"))]
+    pub chain_ids: Vec<u64>,
 }
 
 /// A member an invite names (`InvitedMember`).
@@ -436,6 +460,11 @@ pub struct MultisigAccountsView {
     pub rename: BTreeMap<String, RenamePlan>,
     /// The service is away (the outage), as far as this machine has seen.
     pub service_down: bool,
+    /// r7: each member asked about ([`Event::ReadKinds`], [`Event::PickKind`]),
+    /// by lowercase address: what its kind choice shows — a Vela account
+    /// found, a smart contract account, "Other wallet" hinted, or asked
+    /// (`kindChoice`).
+    pub member_kinds: BTreeMap<String, KindChoice>,
 }
 
 // ---------------------------------------------------------------------------
@@ -471,9 +500,71 @@ pub struct State {
     backup: BTreeMap<String, BackupState>,
     share_again: BTreeMap<String, Phase>,
     rename: BTreeMap<String, RenamePlan>,
+    /// r7: members whose kind is asked, by lowercase address: what the
+    /// chains said once read (`None` while read, or for an account here).
+    kind_reads: BTreeMap<String, Option<SignerRead>>,
+    kind_picks: BTreeMap<String, MemberKind>,
 }
 
 impl State {
+    /// What `address`'s kind choice shows (`kindChoice(signers.evidence(…),
+    /// kinds[address] ?? keptMember(address).kind)`).
+    fn kind_choice(&self, address: &str) -> KindChoice {
+        let key = address.to_ascii_lowercase();
+        let local = self.local.iter().any(|l| same_address(&l.address, address));
+        let kept = kept_member(&self.accounts, address).kind;
+        let facts = match self.kind_reads.get(&key).cloned().flatten() {
+            Some(read) => read.facts(None, local, None, kept.clone()),
+            None => SignerFacts {
+                local,
+                kept: kept.clone(),
+                ..SignerFacts::default()
+            },
+        };
+        let said = self
+            .kind_picks
+            .get(&key)
+            .copied()
+            .or_else(|| kept.as_deref().and_then(MemberKind::from_stored));
+        signers::kind_choice(signers::kind_evidence(&facts), said)
+    }
+
+    fn member_kinds(&self) -> BTreeMap<String, KindChoice> {
+        self.kind_reads
+            .keys()
+            .chain(self.kind_picks.keys())
+            .map(|a| (a.clone(), self.kind_choice(a)))
+            .collect()
+    }
+
+    /// The kinds to keep with `owners` (an account here: a Vela account;
+    /// another: what its choice keeps — one left unsaid keeps nothing).
+    fn chosen_kinds(&self, owners: &[String]) -> BTreeMap<String, MemberInfo> {
+        owners
+            .iter()
+            .filter_map(|o| {
+                let asked = self.kind_reads.contains_key(&o.to_ascii_lowercase())
+                    || self.kind_picks.contains_key(&o.to_ascii_lowercase());
+                let local = self.local.iter().any(|l| same_address(&l.address, o));
+                let kind = if local {
+                    Some(MemberKind::Vela)
+                } else if asked {
+                    self.kind_choice(o).kind
+                } else {
+                    None
+                }?;
+                Some((
+                    o.clone(),
+                    MemberInfo {
+                        name: None,
+                        kind: Some(kind.stored().to_owned()),
+                        typed: None,
+                    },
+                ))
+            })
+            .collect()
+    }
+
     fn find(&self, address: &str) -> Option<&MultisigAccount> {
         self.accounts
             .iter()
@@ -734,6 +825,41 @@ impl App for MultisigAccounts {
     fn update(&self, event: Event, model: &mut Model) -> Cmd {
         match event {
             Event::Changed => render(),
+            Event::ReadKinds { members } => {
+                let asks: Vec<KindAsk> = {
+                    let mut s = lock(&model.state);
+                    for m in &members {
+                        s.kind_reads.insert(m.address.to_ascii_lowercase(), None);
+                    }
+                    // An account here is a Vela account: nothing to read.
+                    members
+                        .into_iter()
+                        .filter(|m| !s.local.iter().any(|l| same_address(&l.address, &m.address)))
+                        .collect()
+                };
+                flow(model, move |io, st| async move {
+                    let reads = asks.iter().map(|m| {
+                        let (io, st) = (&io, &st);
+                        async move {
+                            let read = signers::read_signer(io, &m.chain_ids, &m.address).await;
+                            lock(st)
+                                .kind_reads
+                                .insert(m.address.to_ascii_lowercase(), Some(read));
+                            io.emit(Event::Changed);
+                        }
+                    });
+                    future::join_all(reads).await;
+                })
+            }
+            Event::PickKind { address, kind } => {
+                let mut s = lock(&model.state);
+                let key = address.to_ascii_lowercase();
+                match kind {
+                    Some(k) => s.kind_picks.insert(key, k),
+                    None => s.kind_picks.remove(&key),
+                };
+                render()
+            }
             Event::Start {
                 service_url,
                 accounts,
@@ -926,10 +1052,32 @@ impl App for MultisigAccounts {
                         .cloned()
                 };
                 flow(model, move |io, st| async move {
-                    let outcome = match safe {
-                        Some(safe) => import_exported(&io, &st, &safe, accept_risks).await,
+                    let outcome = match &safe {
+                        Some(safe) => import_exported(&io, &st, safe, accept_risks).await,
                         None => ImportOutcome::NotFound,
                     };
+                    // r7: what each member was declared as (or Vela found),
+                    // kept with it — the person's word (`keepKinds`).
+                    if let (ImportOutcome::Imported, Some(safe)) = (&outcome, &safe) {
+                        let mut owners: Vec<String> = Vec::new();
+                        for o in safe.chains.iter().flat_map(|c| c.owners.iter()) {
+                            if !owners.iter().any(|x| same_address(x, o)) {
+                                owners.push(o.clone());
+                            }
+                        }
+                        let kinds = {
+                            let s = lock(&st);
+                            let mut kinds = s.chosen_kinds(&owners);
+                            kinds.retain(|o, _| {
+                                !s.local.iter().any(|l| same_address(&l.address, o))
+                            });
+                            kinds
+                        };
+                        if !kinds.is_empty() && lock(&st).name_members(&safe.address, &kinds, true)
+                        {
+                            save(&io, &st).await;
+                        }
+                    }
                     let mut s = lock(&st);
                     s.import.busy = None;
                     s.import
@@ -1078,6 +1226,7 @@ impl App for MultisigAccounts {
             share_again: s.share_again.clone(),
             rename: s.rename.clone(),
             service_down,
+            member_kinds: s.member_kinds(),
         }
     }
 }
@@ -1312,8 +1461,24 @@ async fn create(io: &Io<Event>, st: &Shared<State>, choice: CreateChoice) {
             now,
         ) {
             Ok(kept) => {
-                if !choice.members.is_empty() {
-                    s.name_members(&kept.address, &choice.members, false);
+                // r7: each member's kind as chosen (an account here, a Vela
+                // account), beside what the sheet said of it.
+                let mut members = choice.members.clone();
+                for (owner, info) in s.chosen_kinds(&choice.owners) {
+                    let entry = members
+                        .iter_mut()
+                        .find(|(a, _)| same_address(a, &owner))
+                        .map(|(_, i)| i);
+                    match entry {
+                        Some(i) if i.kind.is_none() => i.kind = info.kind,
+                        Some(_) => {}
+                        None => {
+                            members.insert(owner, info);
+                        }
+                    }
+                }
+                if !members.is_empty() {
+                    s.name_members(&kept.address, &members, false);
                 }
                 s.set_first_run(&kept.address, true);
                 s.create.address = Some(kept.address.clone());
