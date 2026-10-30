@@ -125,6 +125,11 @@
       "attestation": "증명",
       "userVerified": "사용 시 인증 필요",
       "signsHere": "로그인 중"
+    },
+    "appearance": {
+      "menuBar": "메뉴 막대에 표시",
+      "trayIcon": "시스템 트레이에 표시",
+      "statusItemHint": "총액과 빠른 보내기·받기. 마지막으로 불러온 수치를 쓰며 따로 가져오지 않습니다."
     }
   }
 }

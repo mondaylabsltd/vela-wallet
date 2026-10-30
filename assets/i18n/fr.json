@@ -541,6 +541,7 @@
   "submitSlow": "En attente de la réponse de {{network}} — {{seconds}} s jusqu’ici. Rien n’est encore signé.",
   "txErrorChainBusy": "Les nœuds de {{network}} sont saturés et n’ont pas répondu à temps : rien n’a été signé ni envoyé. Réessayez dans un instant.",
   "txErrorChainUnreachable": "Impossible de joindre {{network}} : rien n’a été signé ni envoyé. Réessayez dans un instant.",
+  "txErrorProposalNotSupported": "Cette app ne peut pas encore proposer de transactions multisig : rien n’a été signé ni proposé.",
   "maxMoved": "Le max est maintenant de {{to}} {{symbol}} (au lieu de {{from}}) : les frais de réseau ont été recalculés, donc la part mise de côté pour eux a changé.",
   "txReviewAgain": "Revoir",
   "txSendAgain": "Renvoyer",
@@ -1873,7 +1874,28 @@
    "fullScreen": "Activer/désactiver le plein écran",
    "window": "Fenêtre",
    "minimize": "Placer dans le Dock",
-   "closeWindow": "Fermer la fenêtre"
+   "closeWindow": "Fermer la fenêtre",
+   "find": "Rechercher",
+   "commandPalette": "Palette de commandes"
+  },
+  "appUpdate": {
+   "title": "Mise à jour disponible",
+   "install": "Installer",
+   "later": "Plus tard"
+  },
+  "dropOverlay": {
+   "title": "Déposez une adresse, un lien de paiement ou une image QR"
+  },
+  "shortcuts": {
+   "send": "Envoyer avec {{app}}",
+   "receive": "Recevoir avec {{app}}",
+   "scan": "Scanner avec {{app}}"
+  },
+  "linkSheet": {
+   "multisigOnWeb": "Pour l’instant, les liens multisig s’ouvrent dans le portefeuille web."
+  },
+  "widget": {
+   "balanceDescription": "Votre solde en un coup d’œil, tel que Vela l’a mis à jour la dernière fois."
   },
   "browserStatus": {
    "title": "État de l'onglet",
@@ -2053,6 +2075,11 @@
    "attestation": "Attestation",
    "userVerified": "Vérification à chaque utilisation",
    "signsHere": "Connectée"
+  },
+  "appearance": {
+   "menuBar": "Afficher dans la barre des menus",
+   "trayIcon": "Afficher dans la zone de notification",
+   "statusItemHint": "Votre total et Envoyer et Recevoir en un clic, d’après les derniers montants chargés : rien de plus n’est récupéré."
   }
  },
  "contacts": {

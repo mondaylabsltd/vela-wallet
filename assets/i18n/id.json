@@ -538,6 +538,7 @@
   "submitSlow": "Menunggu jawaban {{network}} — sudah {{seconds}} dtk. Belum ada yang ditandatangani.",
   "txErrorChainBusy": "Node {{network}} sedang sibuk dan tidak menjawab tepat waktu, jadi tidak ada yang ditandatangani atau dikirim. Coba lagi sebentar lagi.",
   "txErrorChainUnreachable": "Tidak dapat menjangkau {{network}}, jadi tidak ada yang ditandatangani atau dikirim. Coba lagi sebentar lagi.",
+  "txErrorProposalNotSupported": "Aplikasi ini belum bisa mengusulkan transaksi multisig, jadi tidak ada yang ditandatangani atau diusulkan.",
   "maxMoved": "Maks sekarang {{to}} {{symbol}} (sebelumnya {{from}}): biaya jaringan dihitung ulang, jadi jumlah yang disisihkan untuknya berubah.",
   "txReviewAgain": "Tinjau lagi",
   "txSendAgain": "Kirim lagi",
@@ -1868,7 +1869,28 @@
    "fullScreen": "Alihkan Layar Penuh",
    "window": "Jendela",
    "minimize": "Minimalkan",
-   "closeWindow": "Tutup Jendela"
+   "closeWindow": "Tutup Jendela",
+   "find": "Cari",
+   "commandPalette": "Palet Perintah"
+  },
+  "appUpdate": {
+   "title": "Pembaruan tersedia",
+   "install": "Instal",
+   "later": "Nanti"
+  },
+  "dropOverlay": {
+   "title": "Letakkan alamat, tautan pembayaran, atau gambar QR"
+  },
+  "shortcuts": {
+   "send": "Kirim dengan {{app}}",
+   "receive": "Terima dengan {{app}}",
+   "scan": "Pindai dengan {{app}}"
+  },
+  "linkSheet": {
+   "multisigOnWeb": "Untuk saat ini, tautan multisig dibuka di dompet web."
+  },
+  "widget": {
+   "balanceDescription": "Saldo Anda sekilas, sesuai terakhir kali Vela memperbaruinya."
   },
   "browserStatus": {
    "title": "Status tab",
@@ -2048,6 +2070,11 @@
    "attestation": "Atestasi",
    "userVerified": "Perlu verifikasi saat digunakan",
    "signsHere": "Sedang masuk"
+  },
+  "appearance": {
+   "menuBar": "Tampilkan di bilah menu",
+   "trayIcon": "Tampilkan di baki sistem",
+   "statusItemHint": "Total Anda serta Kirim dan Terima cepat, dari angka terakhir yang dimuat — tidak ada yang diambil tambahan."
   }
  },
  "contacts": {

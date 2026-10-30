@@ -125,6 +125,11 @@
       "attestation": "Atestación",
       "userVerified": "Verificación al usarla",
       "signsHere": "Conectada"
+    },
+    "appearance": {
+      "menuBar": "Mostrar en la barra de menús",
+      "trayIcon": "Mostrar en la bandeja del sistema",
+      "statusItemHint": "Tu total y Enviar y Recibir rápidos, con las últimas cifras cargadas; no se consulta nada más."
     }
   }
 }

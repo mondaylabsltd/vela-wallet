@@ -538,6 +538,7 @@
   "submitSlow": "Đang chờ {{network}} phản hồi — đã {{seconds}} giây. Chưa ký gì cả.",
   "txErrorChainBusy": "Các nút của {{network}} đang quá tải và không phản hồi kịp, nên chưa có gì được ký hay gửi. Hãy thử lại sau giây lát.",
   "txErrorChainUnreachable": "Không kết nối được với {{network}}, nên chưa có gì được ký hay gửi. Hãy thử lại sau giây lát.",
+  "txErrorProposalNotSupported": "Ứng dụng này chưa thể đề xuất giao dịch multisig, nên chưa có gì được ký hay đề xuất.",
   "maxMoved": "Mức tối đa giờ là {{to}} {{symbol}} (trước là {{from}}): phí mạng vừa được tính lại nên khoản giữ lại để trả phí đã thay đổi.",
   "txReviewAgain": "Xem lại",
   "txSendAgain": "Gửi lại",
@@ -1868,7 +1869,28 @@
    "fullScreen": "Bật/tắt toàn màn hình",
    "window": "Cửa sổ",
    "minimize": "Thu nhỏ",
-   "closeWindow": "Đóng cửa sổ"
+   "closeWindow": "Đóng cửa sổ",
+   "find": "Tìm",
+   "commandPalette": "Bảng lệnh"
+  },
+  "appUpdate": {
+   "title": "Có bản cập nhật",
+   "install": "Cài đặt",
+   "later": "Để sau"
+  },
+  "dropOverlay": {
+   "title": "Thả địa chỉ, liên kết thanh toán hoặc ảnh QR vào đây"
+  },
+  "shortcuts": {
+   "send": "Gửi bằng {{app}}",
+   "receive": "Nhận bằng {{app}}",
+   "scan": "Quét bằng {{app}}"
+  },
+  "linkSheet": {
+   "multisigOnWeb": "Hiện tại, liên kết multisig sẽ mở trong ví web."
+  },
+  "widget": {
+   "balanceDescription": "Số dư trong nháy mắt, theo lần cập nhật gần nhất của Vela."
   },
   "browserStatus": {
    "title": "Trạng thái tab",
@@ -2048,6 +2070,11 @@
    "attestation": "Chứng thực",
    "userVerified": "Cần xác minh khi dùng",
    "signsHere": "Đang đăng nhập"
+  },
+  "appearance": {
+   "menuBar": "Hiển thị trên thanh menu",
+   "trayIcon": "Hiển thị trong khay hệ thống",
+   "statusItemHint": "Tổng số dư cùng Gửi và Nhận nhanh, từ số liệu tải gần nhất — không tải thêm gì."
   }
  },
  "contacts": {

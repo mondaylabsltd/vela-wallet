@@ -541,6 +541,7 @@
   "submitSlow": "Aguardando resposta da {{network}} — {{seconds}} s até agora. Nada foi assinado ainda.",
   "txErrorChainBusy": "Os nós da {{network}} estão sobrecarregados e não responderam a tempo, então nada foi assinado nem enviado. Tente de novo em instantes.",
   "txErrorChainUnreachable": "Não foi possível conectar à {{network}}, então nada foi assinado nem enviado. Tente de novo em instantes.",
+  "txErrorProposalNotSupported": "Este app ainda não pode propor transações multisig, então nada foi assinado nem proposto.",
   "maxMoved": "O máximo agora é {{to}} {{symbol}} (antes {{from}}): a taxa de rede foi recalculada, então o valor reservado para ela mudou.",
   "txReviewAgain": "Revisar de novo",
   "txSendAgain": "Enviar de novo",
@@ -1873,7 +1874,28 @@
    "fullScreen": "Alternar Tela Cheia",
    "window": "Janela",
    "minimize": "Minimizar",
-   "closeWindow": "Fechar Janela"
+   "closeWindow": "Fechar Janela",
+   "find": "Buscar",
+   "commandPalette": "Paleta de Comandos"
+  },
+  "appUpdate": {
+   "title": "Atualização disponível",
+   "install": "Instalar",
+   "later": "Depois"
+  },
+  "dropOverlay": {
+   "title": "Solte um endereço, link de pagamento ou imagem QR"
+  },
+  "shortcuts": {
+   "send": "Enviar com o {{app}}",
+   "receive": "Receber com o {{app}}",
+   "scan": "Escanear com o {{app}}"
+  },
+  "linkSheet": {
+   "multisigOnWeb": "Por enquanto, links de multisig abrem na carteira web."
+  },
+  "widget": {
+   "balanceDescription": "Seu saldo num relance, conforme a última atualização do Vela."
   },
   "browserStatus": {
    "title": "Status da aba",
@@ -2053,6 +2075,11 @@
    "attestation": "Atestação",
    "userVerified": "Verificação ao usar",
    "signsHere": "Conectada"
+  },
+  "appearance": {
+   "menuBar": "Mostrar na barra de menus",
+   "trayIcon": "Mostrar na bandeja do sistema",
+   "statusItemHint": "Seu total e Enviar e Receber rápidos, com os últimos valores carregados — nada extra é buscado."
   }
  },
  "contacts": {

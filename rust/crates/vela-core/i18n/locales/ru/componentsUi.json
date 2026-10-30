@@ -558,7 +558,28 @@
       "fullScreen": "Полноэкранный режим",
       "window": "Окно",
       "minimize": "Свернуть",
-      "closeWindow": "Закрыть окно"
+      "closeWindow": "Закрыть окно",
+      "find": "Найти",
+      "commandPalette": "Палитра команд"
+    },
+    "appUpdate": {
+      "title": "Доступно обновление",
+      "install": "Установить",
+      "later": "Позже"
+    },
+    "dropOverlay": {
+      "title": "Перетащите адрес, платёжную ссылку или QR-изображение"
+    },
+    "shortcuts": {
+      "send": "Отправить в {{app}}",
+      "receive": "Получить в {{app}}",
+      "scan": "Сканировать в {{app}}"
+    },
+    "linkSheet": {
+      "multisigOnWeb": "Пока ссылки мультисига открываются в веб-кошельке."
+    },
+    "widget": {
+      "balanceDescription": "Баланс одним взглядом — на момент последнего обновления в Vela."
     },
     "browserStatus": {
       "title": "Состояние вкладки",

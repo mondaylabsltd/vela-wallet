@@ -125,6 +125,11 @@
       "attestation": "Attestation",
       "userVerified": "Verify to use",
       "signsHere": "Signed in"
+    },
+    "appearance": {
+      "menuBar": "Show in menu bar",
+      "trayIcon": "Show in system tray",
+      "statusItemHint": "Your total and quick Send and Receive, from the figures last loaded — nothing extra is fetched."
     }
   }
 }

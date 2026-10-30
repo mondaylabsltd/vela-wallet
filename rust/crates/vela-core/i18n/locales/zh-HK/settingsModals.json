@@ -125,6 +125,11 @@
       "attestation": "認證聲明",
       "userVerified": "使用時需驗證",
       "signsHere": "目前登入"
+    },
+    "appearance": {
+      "menuBar": "在選單列中顯示",
+      "trayIcon": "在系統匣中顯示",
+      "statusItemHint": "總額及快速發送、收款，取自最近一次載入的資料，不會另外連網。"
     }
   }
 }

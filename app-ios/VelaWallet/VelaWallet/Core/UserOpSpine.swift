@@ -532,6 +532,12 @@ final class UserOpSpine {
             throw Refused(failure: .bundlerUnderfunded)
         case .notSent(.other(let text)?):
             throw Refused(failure: .rejected(text.isEmpty ? nil : text))
+        case .notSent(.nonceUsed?):
+            // send-15: the core's reading of a bare AA25 — another transaction
+            // of the account spent the nonce first. Refused, as the relay's
+            // sentence was before; the iOS lane words it as "went first"
+            // (`nonce_used`).
+            throw Refused(failure: .rejected(userOpNonceUsedDetail()))
         case .notSent(.nonceHeld?):
             // 083: another operation of the account holds the nonce — its
             // hash is never this request's; nothing of this one went out.

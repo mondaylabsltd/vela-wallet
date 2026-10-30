@@ -167,16 +167,6 @@ export interface SendExecutorSelf {
 	dispatch(event: SendEvent): void;
 }
 
-/**
- * The relay refused the op because its nonce was spent (send-15): AA25 —
- * which the core's `relay_error_message` words "Transaction nonce mismatch"
- * — or the relay's own words for it. Wording-tolerant, as
- * `parseBundlerUnderfunded` is.
- */
-export function isNonceSpent(message: string): boolean {
-	return /nonce mismatch|invalid account nonce|nonce too low|\bAA25\b/i.test(message);
-}
-
 let trackerSink: ((handoff: SendTrackerHandoff) => void) | null = null;
 
 export function setSendTrackerSink(sink: ((handoff: SendTrackerHandoff) => void) | null): void {
@@ -954,20 +944,22 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 		if (error instanceof UserOpNotSentError) {
 			if (error.rejection === 'relayer_unavailable') return { type: 'relayer_unavailable' };
 			if (error.rejection === 'bundler_underfunded') return { type: 'bundler_underfunded' };
+			// The nonce this op signed was spent already — another transaction
+			// of the account (another tab's) landed first (send-15): nothing was
+			// sent, said as that, never "couldn't be submitted". The relay's
+			// AA25, as the core reads it (`RelayRejection::NonceUsed`).
+			if (error.rejection === 'nonce_used') return { type: 'nonce_used' };
 			// Another operation of this account still holds the nonce (the
 			// relay's `nonce_in_flight`, or an older relay's `[existingHash:…]`
 			// marker — both read by the core as `NonceHeld`): not a failure of
 			// the network. Said as "waiting for your last transaction", and Try
 			// again waits for it like any held confirm (correctness batch item 3).
-			if (typeof error.rejection === 'object' && error.rejection !== null) {
-				if ('nonce_held' in error.rejection) return { type: 'previous_pending' };
-				// The nonce this op signed was spent already — another
-				// transaction of the account (another tab's) landed first
-				// (send-15): nothing was sent, said as that, never "couldn't be
-				// submitted". The relay's AA25, in the core's sentence for it.
-				if ('other' in error.rejection && isNonceSpent(error.rejection.other)) {
-					return { type: 'nonce_used' };
-				}
+			if (
+				typeof error.rejection === 'object' &&
+				error.rejection !== null &&
+				'nonce_held' in error.rejection
+			) {
+				return { type: 'previous_pending' };
 			}
 			console.warn('[send] submit not sent:', message);
 			return { type: 'other', message: message || null };

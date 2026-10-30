@@ -809,6 +809,8 @@ fn every_key_the_082_core_hands_a_shell_is_in_all_15_locales() {
             activity_feed::HISTORY_EMPTY_FILTERED,
             activity_feed::HOME_EMPTY_ALL,
             activity_feed::HOME_EMPTY_FILTERED,
+            // A proposal a shell cannot make yet, said as that.
+            vela_core::app::send::PROPOSAL_NOT_SUPPORTED_KEY,
         ]
         .map(str::to_owned),
     );

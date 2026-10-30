@@ -1392,6 +1392,13 @@ export type RelayRejection =
 	| 'relayer_unavailable'
 	| 'bundler_underfunded'
 	| { nonce_held: { user_op_hash: string } }
+	/**
+	 * The nonce this op signed was spent already — another transaction of the
+	 * account landed first (the relay's bare AA25, send-15). The core's
+	 * reading of the relay's words (`user_op::is_nonce_spent`); no shell keeps
+	 * its own.
+	 */
+	| 'nonce_used'
 	| { other: string };
 
 /** The end of one submit (`SubmitVerdict`). Hand-written: no ts-rs type exists. */

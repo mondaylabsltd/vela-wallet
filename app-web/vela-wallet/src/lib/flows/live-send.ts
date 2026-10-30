@@ -1460,6 +1460,11 @@ function confirmHolds(
 			case 'proposal_offline':
 				// A proposal's own words replace these (`liveSendConfirm`).
 				return { error: { text: m['send.txErrorGeneric'], retry: m['send.txRetryBtn'] } };
+			case 'proposal_not_supported':
+				// A shell that cannot propose a multisig's transaction yet
+				// (`SendProposeFailure::NotSupported` — never this one, which can):
+				// said as that, and no retry that would meet the same answer.
+				return { error: { text: m['send.txErrorProposalNotSupported'] } };
 			case 'page_unanswered':
 			case 'page_mismatch':
 			case 'page_not_opened':

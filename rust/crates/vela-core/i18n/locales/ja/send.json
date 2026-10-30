@@ -186,6 +186,7 @@
     "submitSlow": "{{network}} の応答を待っています（{{seconds}} 秒経過）。まだ何も署名していません。",
     "txErrorChainBusy": "{{network}} のノードが混み合っていて時間内に応答がなかったため、署名も送信もしていません。少し待ってからもう一度お試しください。",
     "txErrorChainUnreachable": "{{network}} に接続できなかったため、署名も送信もしていません。少し待ってからもう一度お試しください。",
+    "txErrorProposalNotSupported": "このアプリではまだマルチシグの取引を提案できないため、署名も提案もしていません。",
     "maxMoved": "最大額は {{to}} {{symbol}} になりました（以前は {{from}}）。ネットワーク手数料を見積もり直したため、手数料用に残す額が変わりました。",
     "txReviewAgain": "内容を確認し直す",
     "txSendAgain": "もう一度送信",

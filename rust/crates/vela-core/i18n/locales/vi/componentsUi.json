@@ -558,7 +558,28 @@
       "fullScreen": "Bật/tắt toàn màn hình",
       "window": "Cửa sổ",
       "minimize": "Thu nhỏ",
-      "closeWindow": "Đóng cửa sổ"
+      "closeWindow": "Đóng cửa sổ",
+      "find": "Tìm",
+      "commandPalette": "Bảng lệnh"
+    },
+    "appUpdate": {
+      "title": "Có bản cập nhật",
+      "install": "Cài đặt",
+      "later": "Để sau"
+    },
+    "dropOverlay": {
+      "title": "Thả địa chỉ, liên kết thanh toán hoặc ảnh QR vào đây"
+    },
+    "shortcuts": {
+      "send": "Gửi bằng {{app}}",
+      "receive": "Nhận bằng {{app}}",
+      "scan": "Quét bằng {{app}}"
+    },
+    "linkSheet": {
+      "multisigOnWeb": "Hiện tại, liên kết multisig sẽ mở trong ví web."
+    },
+    "widget": {
+      "balanceDescription": "Số dư trong nháy mắt, theo lần cập nhật gần nhất của Vela."
     },
     "browserStatus": {
       "title": "Trạng thái tab",

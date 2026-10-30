@@ -1161,6 +1161,12 @@ fn clear_and_post(
             // of the network — "previous transaction pending" (Send) or the
             // core's detail for it (a dApp).
             Some(RelayRejection::NonceHeld { .. }) => SubmitFailure::PreviousPending,
+            // The core's reading of a bare AA25 (send-15): refused, as the
+            // relay's sentence was before — the desktop lane words it as
+            // "went first" (`SendSubmitFailure::NonceUsed`).
+            Some(RelayRejection::NonceUsed) => {
+                SubmitFailure::Refused(vela_core::user_op::NONCE_USED_DETAIL.to_owned())
+            }
             Some(RelayRejection::Other(message)) => SubmitFailure::Refused(message),
         }),
     }

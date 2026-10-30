@@ -3509,6 +3509,35 @@ export function buildMemberProof(authenticator_data_hex, client_data_json_hex, s
 }
 
 /**
+ * A built-in network's name as the wallet writes it
+ * (`network_admin::builtin_display_name`), or `undefined` for a chain Vela
+ * does not ship.
+ * @param {number} chain_id
+ * @returns {string | undefined}
+ */
+export function builtinNetworkDisplayName(chain_id) {
+    const ret = wasm.builtinNetworkDisplayName(chain_id);
+    let v1;
+    if (ret[0] !== 0) {
+        v1 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v1;
+}
+
+/**
+ * Every network Vela ships, by chain id, in list order
+ * (`network_admin::BUILTIN_CHAINS`).
+ * @returns {Uint32Array}
+ */
+export function builtinNetworkIds() {
+    const ret = wasm.builtinNetworkIds();
+    var v1 = getArrayU32FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v1;
+}
+
+/**
  * Issue 212: may the relay's gas quote for one tier be held?
  * @param {string} max_fee_per_gas
  * @returns {boolean}
@@ -3617,6 +3646,29 @@ export function checksumAddress(address_hex) {
 export function chooseNativePrice(dex, chainlink_local, chainlink_eth) {
     const ret = wasm.chooseNativePrice(!isLikeNone(dex), isLikeNone(dex) ? 0 : dex, !isLikeNone(chainlink_local), isLikeNone(chainlink_local) ? 0 : chainlink_local, !isLikeNone(chainlink_eth), isLikeNone(chainlink_eth) ? 0 : chainlink_eth);
     return ret;
+}
+
+/**
+ * The relay's sentence as the core reads it — `user_op::classify_relay_rejection`
+ * — as the `RelayRejection` JSON a submit verdict carries
+ * (`"relayer_unavailable"`, `"nonce_used"`, `{"other": …}`, …). The one
+ * classifier: no shell keeps its own reading of the relay's words.
+ * @param {string} message
+ * @returns {string}
+ */
+export function classifyRelayRejection(message) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(message, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.classifyRelayRejection(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
 }
 
 /**
@@ -5316,6 +5368,20 @@ export function intentWorldNeeds(action_json) {
 }
 
 /**
+ * The HTTPS exception for an address a person types into Settings: plain
+ * `http://` to this computer (`localhost`, `127.0.0.1`, `[::1]`, any port)
+ * — `network_admin::is_localhost_http`.
+ * @param {string} url
+ * @returns {boolean}
+ */
+export function isLocalhostHttp(url) {
+    const ptr0 = passStringToWasm0(url, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.isLocalhostHttp(ptr0, len0);
+    return ret !== 0;
+}
+
+/**
  * @param {Uint8Array} data
  * @returns {Uint8Array}
  */
@@ -5633,6 +5699,30 @@ export function parseUserOpStatus(json) {
 }
 
 /**
+ * How a passkey prompt that failed as `kind` (a `FailureKind` wire name),
+ * `elapsed_ms` after it was raised, ended — `passkey_end::ceremony_end`, as
+ * its wire name (`"cancelled"`, `"timed_out"`, …). A kind this build does
+ * not know is `"other"`.
+ * @param {string} kind
+ * @param {number} elapsed_ms
+ * @returns {string}
+ */
+export function passkeyCeremonyEnd(kind, elapsed_ms) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(kind, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.passkeyCeremonyEnd(ptr0, len0, elapsed_ms);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
  * **Read a directory answer.** `undefined` unless the body is about the AAGUID
  * that was asked about and carries a usable name; `iconUrl` is present only
  * when the path is the service's own shape.
@@ -5760,6 +5850,15 @@ export function passkeyProviderName(aaguid) {
     } finally {
         wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
     }
+}
+
+/**
+ * The signing prompt's deadline, ms (`passkey_end::SIGN_TIMEOUT_MS`).
+ * @returns {number}
+ */
+export function passkeySignTimeoutMs() {
+    const ret = wasm.passkeySignTimeoutMs();
+    return ret;
 }
 
 /**
@@ -6164,6 +6263,29 @@ export function rpcIsHedgedRead(kind, method) {
     const len1 = WASM_VECTOR_LEN;
     const ret = wasm.rpcIsHedgedRead(ptr0, len0, ptr1, len1);
     return ret !== 0;
+}
+
+/**
+ * Where `chain_id`'s reads stand in the pool's view — `rpc_pool::node_standing`:
+ * `"pooled"`, `"own_only"`, `"own_node_unreached"` or `"falling_back"`;
+ * `""` for a view the core cannot read.
+ * @param {string} view_json
+ * @param {number} chain_id
+ * @returns {string}
+ */
+export function rpcNodeStanding(view_json, chain_id) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(view_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.rpcNodeStanding(ptr0, len0, chain_id);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
 }
 
 /**
@@ -7405,6 +7527,24 @@ export function userOpHash(op_json, chain_id) {
 }
 
 /**
+ * The dApp's `-32603` detail for a request whose nonce another transaction
+ * of the account spent first (send-15, `RelayRejection::NonceUsed`).
+ * @returns {string}
+ */
+export function userOpNonceUsedDetail() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.userOpNonceUsedDetail();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
+}
+
+/**
  * The dApp's `-32603` detail for a request that was not sent and has no
  * relay refusal to quote (RA10) — a fixed sentence, never the pool's text.
  * @returns {string}
@@ -8092,6 +8232,11 @@ function getArrayJsValueFromWasm0(ptr, len) {
     }
     wasm.__externref_drop_slice(ptr, len);
     return result;
+}
+
+function getArrayU32FromWasm0(ptr, len) {
+    ptr = ptr >>> 0;
+    return getUint32ArrayMemory0().subarray(ptr / 4, ptr / 4 + len);
 }
 
 function getArrayU8FromWasm0(ptr, len) {

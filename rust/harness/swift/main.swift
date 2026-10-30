@@ -1172,6 +1172,45 @@ func runParity(_ fn: String, _ i: [String: Any]) throws -> Any {
             answersJson: try str(i, "answers_json")))
     case "currency_fraction_digits":
         return Int64(currencyFractionDigits(code: try str(i, "code")))
+    // --- core asks 1 ---
+    case "classify_relay_rejection":
+        switch classifyRelayRejection(message: try str(i, "message")) {
+        case .relayerUnavailable: return "relayer_unavailable"
+        case .bundlerUnderfunded: return "bundler_underfunded"
+        case .nonceUsed: return "nonce_used"
+        case .nonceHeld(let hash): return ["nonce_held": ["user_op_hash": hash]]
+        case .other(let message): return ["other": message]
+        }
+    case "is_localhost_http":
+        return isLocalhostHttp(url: try str(i, "url"))
+    case "passkey_ceremony_end":
+        guard let elapsed = i["elapsed_ms"] as? NSNumber else { throw BadInput(detail: "elapsed_ms") }
+        switch passkeyCeremonyEnd(kind: try str(i, "kind"), elapsedMs: elapsed.doubleValue) {
+        case .cancelled: return "cancelled"
+        case .timedOut: return "timed_out"
+        case .notSupported: return "not_supported"
+        case .notDiscoverable: return "not_discoverable"
+        case .other: return "other"
+        }
+    case "passkey_sign_timeout_ms":
+        return whole(passkeySignTimeoutMs())
+    case "rpc_node_standing":
+        return rpcNodeStanding(viewJson: try str(i, "view_json"), chainId: try u32(i, "chain_id"))
+    case "sim_outcome":
+        let r = simOutcome(user: try str(i, "user"), replyJson: try str(i, "reply_json"))
+        return [
+            "kind": r.kind,
+            "deltas": try parityJson(r.deltasJson),
+            "revert_reason": orNull(r.revertReason),
+            "notice_risk": orNull(r.noticeRisk),
+            "notice_key": orNull(r.noticeKey),
+            "no_change_key": orNull(r.noChangeKey),
+            "recheck": r.recheck,
+        ] as [String: Any]
+    case "builtin_network_display_name":
+        return orNull(builtinNetworkDisplayName(chainId: try u32(i, "chain_id")))
+    case "builtin_network_ids":
+        return builtinNetworkIds().map { Int64($0) }
     default: throw NoDispatch(fn: fn)
     }
 }

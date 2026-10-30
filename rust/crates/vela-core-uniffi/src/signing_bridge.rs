@@ -278,3 +278,64 @@ pub fn sign_answered(payload_json: String) -> Option<String> {
 pub fn sign_request_ttl_ms() -> f64 {
     vela_core::app::sign_request::EXTENSION_REQUEST_TTL_MS
 }
+
+// ---------------------------------------------------------------------------
+// How a passkey prompt ended (send-11)
+// ---------------------------------------------------------------------------
+
+/// How a passkey prompt ended without a signature — `passkey_end::CeremonyEnd`.
+/// Closed and out of time are the same refusal to every rule (the confirm
+/// stays for another try); only the words differ.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum PasskeyCeremonyEnd {
+    /// The person closed it: report `passkey_cancelled`.
+    Cancelled,
+    /// It ran out of time: report `passkey_timed_out` (the send's
+    /// `SendSubmitFailure`, the sheet's `SignSubmitOutcome`).
+    TimedOut,
+    /// No passkey can be used here.
+    NotSupported,
+    /// A credential sign-in would never offer.
+    NotDiscoverable,
+    /// Any other failure.
+    Other,
+}
+
+impl From<vela_core::app::passkey_end::CeremonyEnd> for PasskeyCeremonyEnd {
+    fn from(end: vela_core::app::passkey_end::CeremonyEnd) -> Self {
+        use vela_core::app::passkey_end::CeremonyEnd as E;
+        match end {
+            E::Cancelled => Self::Cancelled,
+            E::TimedOut => Self::TimedOut,
+            E::NotSupported => Self::NotSupported,
+            E::NotDiscoverable => Self::NotDiscoverable,
+            E::Other => Self::Other,
+        }
+    }
+}
+
+/// How a passkey prompt that failed as `kind` — the platform error's
+/// classification, a `FailureKind` wire name (`cancelled`, `not_supported`,
+/// `not_discoverable`, `other`) — `elapsed_ms` after it was raised, ended:
+/// a cancel at the prompt's deadline ([`passkey_sign_timeout_ms`]) is a
+/// timeout, any other the person's (`passkey_end::ceremony_end`). Android's
+/// `GetCredentialCancellationException` and iOS's
+/// `ASAuthorizationError.canceled` say both the same way; this tells them
+/// apart. A kind this build does not know is `Other`.
+#[uniffi::export]
+#[must_use]
+#[allow(clippy::needless_pass_by_value)]
+pub fn passkey_ceremony_end(kind: String, elapsed_ms: f64) -> PasskeyCeremonyEnd {
+    let kind = serde_json::from_value(serde_json::Value::String(kind))
+        .unwrap_or(vela_core::app::FailureKind::Other);
+    vela_core::app::passkey_end::ceremony_end(kind, elapsed_ms).into()
+}
+
+/// The signing prompt's deadline, ms — what a shell asks its platform's
+/// prompt for, so [`passkey_ceremony_end`] reads the same clock
+/// (`passkey_end::SIGN_TIMEOUT_MS`).
+#[uniffi::export]
+#[must_use]
+pub fn passkey_sign_timeout_ms() -> f64 {
+    vela_core::app::passkey_end::SIGN_TIMEOUT_MS
+}
