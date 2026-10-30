@@ -88,7 +88,7 @@ pub enum Look {
 /// (`blockOf`): any look says it fails, or every one was priced and none can
 /// pay. `None` while any look is missing or unpriced, or someone can run it.
 pub fn block_of(looks: &[Option<Look>]) -> Option<ReadyBlock> {
-    if looks.iter().any(|l| *l == Some(Look::Fails)) {
+    if looks.contains(&Some(Look::Fails)) {
         return Some(ReadyBlock::Fails);
     }
     if looks.is_empty() {
