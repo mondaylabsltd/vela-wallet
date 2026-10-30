@@ -6014,6 +6014,790 @@ public func FfiConverterTypeManageTokensCore_lower(_ value: ManageTokensCore) ->
 
 
 /**
+ * The multisigs on this device: create, add, import, records, recheck.
+ */
+public protocol MultisigAccountsCoreProtocol: AnyObject, Sendable {
+    
+    func dispatch(eventJson: String) throws  -> String
+    
+    func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    func view() throws  -> String
+    
+}
+/**
+ * The multisigs on this device: create, add, import, records, recheck.
+ */
+open class MultisigAccountsCore: MultisigAccountsCoreProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_vela_core_uniffi_fn_clone_multisigaccountscore(self.handle, $0) }
+    }
+public convenience init() {
+    let handle =
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_constructor_multisigaccountscore_new(uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_vela_core_uniffi_fn_free_multisigaccountscore(handle, $0) }
+    }
+
+    
+
+    
+open func dispatch(eventJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigaccountscore_dispatch(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(eventJson),uniffiCallStatus
+    )
+})
+}
+    
+open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigaccountscore_resolve_effect(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(effectId),
+        FfiConverterString.lower(resultJson),uniffiCallStatus
+    )
+})
+}
+    
+open func view()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigaccountscore_view(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMultisigAccountsCore: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = MultisigAccountsCore
+
+    public static func lift(_ handle: UInt64) throws -> MultisigAccountsCore {
+        return MultisigAccountsCore(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: MultisigAccountsCore) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MultisigAccountsCore {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: MultisigAccountsCore, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMultisigAccountsCore_lift(_ handle: UInt64) throws -> MultisigAccountsCore {
+    return try FfiConverterTypeMultisigAccountsCore.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMultisigAccountsCore_lower(_ value: MultisigAccountsCore) -> UInt64 {
+    return FfiConverterTypeMultisigAccountsCore.lower(value)
+}
+
+
+
+
+
+
+/**
+ * Who the members are on each network, what a change would be, and
+ * the waiting changes with their per-network progress.
+ */
+public protocol MultisigMembersCoreProtocol: AnyObject, Sendable {
+    
+    func dispatch(eventJson: String) throws  -> String
+    
+    func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    func view() throws  -> String
+    
+}
+/**
+ * Who the members are on each network, what a change would be, and
+ * the waiting changes with their per-network progress.
+ */
+open class MultisigMembersCore: MultisigMembersCoreProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_vela_core_uniffi_fn_clone_multisigmemberscore(self.handle, $0) }
+    }
+public convenience init() {
+    let handle =
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_constructor_multisigmemberscore_new(uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_vela_core_uniffi_fn_free_multisigmemberscore(handle, $0) }
+    }
+
+    
+
+    
+open func dispatch(eventJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigmemberscore_dispatch(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(eventJson),uniffiCallStatus
+    )
+})
+}
+    
+open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigmemberscore_resolve_effect(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(effectId),
+        FfiConverterString.lower(resultJson),uniffiCallStatus
+    )
+})
+}
+    
+open func view()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigmemberscore_view(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMultisigMembersCore: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = MultisigMembersCore
+
+    public static func lift(_ handle: UInt64) throws -> MultisigMembersCore {
+        return MultisigMembersCore(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: MultisigMembersCore) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MultisigMembersCore {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: MultisigMembersCore, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMultisigMembersCore_lift(_ handle: UInt64) throws -> MultisigMembersCore {
+    return try FfiConverterTypeMultisigMembersCore.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMultisigMembersCore_lower(_ value: MultisigMembersCore) -> UInt64 {
+    return FfiConverterTypeMultisigMembersCore.lower(value)
+}
+
+
+
+
+
+
+/**
+ * The connect page acting for an outside owner (§11.2, §11.3).
+ */
+public protocol MultisigOutsidePageCoreProtocol: AnyObject, Sendable {
+    
+    func dispatch(eventJson: String) throws  -> String
+    
+    func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    func view() throws  -> String
+    
+}
+/**
+ * The connect page acting for an outside owner (§11.2, §11.3).
+ */
+open class MultisigOutsidePageCore: MultisigOutsidePageCoreProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_vela_core_uniffi_fn_clone_multisigoutsidepagecore(self.handle, $0) }
+    }
+public convenience init() {
+    let handle =
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_constructor_multisigoutsidepagecore_new(uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_vela_core_uniffi_fn_free_multisigoutsidepagecore(handle, $0) }
+    }
+
+    
+
+    
+open func dispatch(eventJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigoutsidepagecore_dispatch(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(eventJson),uniffiCallStatus
+    )
+})
+}
+    
+open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigoutsidepagecore_resolve_effect(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(effectId),
+        FfiConverterString.lower(resultJson),uniffiCallStatus
+    )
+})
+}
+    
+open func view()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigoutsidepagecore_view(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMultisigOutsidePageCore: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = MultisigOutsidePageCore
+
+    public static func lift(_ handle: UInt64) throws -> MultisigOutsidePageCore {
+        return MultisigOutsidePageCore(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: MultisigOutsidePageCore) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MultisigOutsidePageCore {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: MultisigOutsidePageCore, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMultisigOutsidePageCore_lift(_ handle: UInt64) throws -> MultisigOutsidePageCore {
+    return try FfiConverterTypeMultisigOutsidePageCore.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMultisigOutsidePageCore_lower(_ value: MultisigOutsidePageCore) -> UInt64 {
+    return FfiConverterTypeMultisigOutsidePageCore.lower(value)
+}
+
+
+
+
+
+
+/**
+ * Vela's side of a live session with an outside owner's wallet.
+ */
+public protocol MultisigOutsideSessionCoreProtocol: AnyObject, Sendable {
+    
+    func dispatch(eventJson: String) throws  -> String
+    
+    func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    func view() throws  -> String
+    
+}
+/**
+ * Vela's side of a live session with an outside owner's wallet.
+ */
+open class MultisigOutsideSessionCore: MultisigOutsideSessionCoreProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_vela_core_uniffi_fn_clone_multisigoutsidesessioncore(self.handle, $0) }
+    }
+public convenience init() {
+    let handle =
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_constructor_multisigoutsidesessioncore_new(uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_vela_core_uniffi_fn_free_multisigoutsidesessioncore(handle, $0) }
+    }
+
+    
+
+    
+open func dispatch(eventJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigoutsidesessioncore_dispatch(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(eventJson),uniffiCallStatus
+    )
+})
+}
+    
+open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigoutsidesessioncore_resolve_effect(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(effectId),
+        FfiConverterString.lower(resultJson),uniffiCallStatus
+    )
+})
+}
+    
+open func view()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigoutsidesessioncore_view(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMultisigOutsideSessionCore: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = MultisigOutsideSessionCore
+
+    public static func lift(_ handle: UInt64) throws -> MultisigOutsideSessionCore {
+        return MultisigOutsideSessionCore(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: MultisigOutsideSessionCore) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MultisigOutsideSessionCore {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: MultisigOutsideSessionCore, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMultisigOutsideSessionCore_lift(_ handle: UInt64) throws -> MultisigOutsideSessionCore {
+    return try FfiConverterTypeMultisigOutsideSessionCore.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMultisigOutsideSessionCore_lower(_ value: MultisigOutsideSessionCore) -> UInt64 {
+    return FfiConverterTypeMultisigOutsideSessionCore.lower(value)
+}
+
+
+
+
+
+
+/**
+ * A multisig's transactions in flight: read, verify, propose, approve,
+ * the signing gate, the outbox, execute and follow.
+ */
+public protocol MultisigProposalsCoreProtocol: AnyObject, Sendable {
+    
+    func dispatch(eventJson: String) throws  -> String
+    
+    func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    func view() throws  -> String
+    
+}
+/**
+ * A multisig's transactions in flight: read, verify, propose, approve,
+ * the signing gate, the outbox, execute and follow.
+ */
+open class MultisigProposalsCore: MultisigProposalsCoreProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_vela_core_uniffi_fn_clone_multisigproposalscore(self.handle, $0) }
+    }
+public convenience init() {
+    let handle =
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_constructor_multisigproposalscore_new(uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_vela_core_uniffi_fn_free_multisigproposalscore(handle, $0) }
+    }
+
+    
+
+    
+open func dispatch(eventJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigproposalscore_dispatch(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(eventJson),uniffiCallStatus
+    )
+})
+}
+    
+open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigproposalscore_resolve_effect(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(effectId),
+        FfiConverterString.lower(resultJson),uniffiCallStatus
+    )
+})
+}
+    
+open func view()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigproposalscore_view(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMultisigProposalsCore: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = MultisigProposalsCore
+
+    public static func lift(_ handle: UInt64) throws -> MultisigProposalsCore {
+        return MultisigProposalsCore(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: MultisigProposalsCore) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MultisigProposalsCore {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: MultisigProposalsCore, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMultisigProposalsCore_lift(_ handle: UInt64) throws -> MultisigProposalsCore {
+    return try FfiConverterTypeMultisigProposalsCore.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMultisigProposalsCore_lower(_ value: MultisigProposalsCore) -> UInt64 {
+    return FfiConverterTypeMultisigProposalsCore.lower(value)
+}
+
+
+
+
+
+
+/**
  * Network & endpoint configuration: add-network wizard, overrides,
  * service endpoints, provider keys.
  */
@@ -11863,6 +12647,138 @@ public func FfiConverterTypeTrackStatusAnswer_lower(_ value: TrackStatusAnswer) 
 
 
 /**
+ * What the shell holds when a member would approve a SafeTx on the page —
+ * the web's `trustedSignerApprovalRequest` arguments.
+ */
+public struct TrustedSignerApprovalInput: Equatable, Hashable {
+    public var chainId: UInt64
+    public var chainName: String?
+    public var nativeSymbol: String?
+    /**
+     * The multisig (the Safe whose transaction this is).
+     */
+    public var multisig: String
+    /**
+     * The multisig's name as this device knows it — drawn by the page as the
+     * app's word.
+     */
+    public var multisigName: String?
+    /**
+     * The raw SafeTx as JSON (`{to, value, data, operation, safeTxGas,
+     * baseGas, gasPrice, gasToken, refundReceiver, nonce}`), as the core's
+     * `multisig::SafeTx` reads it.
+     */
+    public var txJson: String
+    /**
+     * The member approving: an account of this device that owns the multisig.
+     */
+    public var member: String
+    public var memberName: String?
+    /**
+     * The member's credential ids, hex — offered when there is no route.
+     */
+    public var credentialIdsHex: [String]
+    /**
+     * The member's key route as JSON (`signing_plan`'s `key`), as it came.
+     */
+    public var keyRouteJson: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(chainId: UInt64, chainName: String?, nativeSymbol: String?, 
+        /**
+         * The multisig (the Safe whose transaction this is).
+         */multisig: String, 
+        /**
+         * The multisig's name as this device knows it — drawn by the page as the
+         * app's word.
+         */multisigName: String?, 
+        /**
+         * The raw SafeTx as JSON (`{to, value, data, operation, safeTxGas,
+         * baseGas, gasPrice, gasToken, refundReceiver, nonce}`), as the core's
+         * `multisig::SafeTx` reads it.
+         */txJson: String, 
+        /**
+         * The member approving: an account of this device that owns the multisig.
+         */member: String, memberName: String?, 
+        /**
+         * The member's credential ids, hex — offered when there is no route.
+         */credentialIdsHex: [String], 
+        /**
+         * The member's key route as JSON (`signing_plan`'s `key`), as it came.
+         */keyRouteJson: String?) {
+        self.chainId = chainId
+        self.chainName = chainName
+        self.nativeSymbol = nativeSymbol
+        self.multisig = multisig
+        self.multisigName = multisigName
+        self.txJson = txJson
+        self.member = member
+        self.memberName = memberName
+        self.credentialIdsHex = credentialIdsHex
+        self.keyRouteJson = keyRouteJson
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension TrustedSignerApprovalInput: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTrustedSignerApprovalInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TrustedSignerApprovalInput {
+        return
+            try TrustedSignerApprovalInput(
+                chainId: FfiConverterUInt64.read(from: &buf), 
+                chainName: FfiConverterOptionString.read(from: &buf), 
+                nativeSymbol: FfiConverterOptionString.read(from: &buf), 
+                multisig: FfiConverterString.read(from: &buf), 
+                multisigName: FfiConverterOptionString.read(from: &buf), 
+                txJson: FfiConverterString.read(from: &buf), 
+                member: FfiConverterString.read(from: &buf), 
+                memberName: FfiConverterOptionString.read(from: &buf), 
+                credentialIdsHex: FfiConverterSequenceString.read(from: &buf), 
+                keyRouteJson: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TrustedSignerApprovalInput, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.chainId, into: &buf)
+        FfiConverterOptionString.write(value.chainName, into: &buf)
+        FfiConverterOptionString.write(value.nativeSymbol, into: &buf)
+        FfiConverterString.write(value.multisig, into: &buf)
+        FfiConverterOptionString.write(value.multisigName, into: &buf)
+        FfiConverterString.write(value.txJson, into: &buf)
+        FfiConverterString.write(value.member, into: &buf)
+        FfiConverterOptionString.write(value.memberName, into: &buf)
+        FfiConverterSequenceString.write(value.credentialIdsHex, into: &buf)
+        FfiConverterOptionString.write(value.keyRouteJson, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTrustedSignerApprovalInput_lift(_ buf: RustBuffer) throws -> TrustedSignerApprovalInput {
+    return try FfiConverterTypeTrustedSignerApprovalInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTrustedSignerApprovalInput_lower(_ value: TrustedSignerApprovalInput) -> RustBuffer {
+    return FfiConverterTypeTrustedSignerApprovalInput.lower(value)
+}
+
+
+/**
  * What the shell holds when it would sign.
  */
 public struct TrustedSignerInput: Equatable, Hashable {
@@ -14002,6 +14918,85 @@ public func FfiConverterTypeSignerVersionChoice_lift(_ buf: RustBuffer) throws -
 #endif
 public func FfiConverterTypeSignerVersionChoice_lower(_ value: SignerVersionChoice) -> RustBuffer {
     return FfiConverterTypeSignerVersionChoice.lower(value)
+}
+
+
+
+/**
+ * The page's answer to a member's approval, judged.
+ */
+
+public enum TrustedSignerApprovalOutcome: Equatable, Hashable {
+    
+    /**
+     * The member's approval (`PasskeyApproval` JSON: `{owner, signature, …}`),
+     * checked the chain's way — what the genesis service and the chain take.
+     */
+    case accepted(approvalJson: String
+    )
+    case refused(refusal: TrustedSignerRefusal
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension TrustedSignerApprovalOutcome: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTrustedSignerApprovalOutcome: FfiConverterRustBuffer {
+    typealias SwiftType = TrustedSignerApprovalOutcome
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TrustedSignerApprovalOutcome {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .accepted(approvalJson: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 2: return .refused(refusal: try FfiConverterTypeTrustedSignerRefusal.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: TrustedSignerApprovalOutcome, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .accepted(approvalJson):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(approvalJson, into: &buf)
+            
+        
+        case let .refused(refusal):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeTrustedSignerRefusal.write(refusal, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTrustedSignerApprovalOutcome_lift(_ buf: RustBuffer) throws -> TrustedSignerApprovalOutcome {
+    return try FfiConverterTypeTrustedSignerApprovalOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTrustedSignerApprovalOutcome_lower(_ value: TrustedSignerApprovalOutcome) -> RustBuffer {
+    return FfiConverterTypeTrustedSignerApprovalOutcome.lower(value)
 }
 
 
@@ -18577,6 +19572,46 @@ public func shareCardQrMatrix(text: String) -> QrMatrix?  {
 })
 }
 /**
+ * `vela_advise`: the agent's opinion on the review on the sheet, sanitized
+ * and bound to the review's digest — or refused. The AI advisor card's
+ * input (the web's `intentAdvice`).
+ */
+public func intentAdvice(inputJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_intent_advice(
+        FfiConverterString.lower(inputJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * How an opinion the sheet holds stands now — `current`, `earlier_version`
+ * or `fee_changed` — and the fee it was given for (the web's
+ * `intentAdviceStanding`).
+ */
+public func intentAdviceStanding(inputJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_intent_advice_standing(
+        FfiConverterString.lower(inputJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * Why an agent may not read what `vela_review` (`operation` absent) or
+ * `vela_wait` (`operation`) would answer: a reason's JSON, or `null` — the
+ * web's `intentAgentReads`.
+ */
+public func intentAgentReads(worldJson: String, operation: String?) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_intent_agent_reads(
+        FfiConverterString.lower(worldJson),
+        FfiConverterOptionString.lower(operation),uniffiCallStatus
+    )
+})
+}
+/**
  * `vela_state`: the wallet as an agent reads it.
  */
 public func intentAgentState(worldJson: String, page: String, approvalsJson: String, activityJson: String) -> String  {
@@ -18793,6 +19828,229 @@ public func multicall3EncodeAggregate3(calls: [Multicall3Call])throws  -> Data  
 })
 }
 /**
+ * The multisig links (`vela_core::multisig_link`): `method` plus its
+ * arguments as JSON, the answer as JSON — the wasm `multisigLinkCall`.
+ */
+public func multisigLinkCall(method: String, argsJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_multisig_link_call(
+        FfiConverterString.lower(method),
+        FfiConverterString.lower(argsJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * How many fraction digits a fiat figure in `code` carries
+ * (`l10n::currency_fraction_digits`): none for the yen, the won and the
+ * other zero-decimal currencies, three for the dinars, two otherwise.
+ */
+public func currencyFractionDigits(code: String) -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_currency_fraction_digits(
+        FfiConverterString.lower(code),uniffiCallStatus
+    )
+})
+}
+/**
+ * EIP-5792 `wallet_getCallsStatus`'s answer for batch `id` on `chain_id`,
+ * from the bundler's `eth_getUserOperationReceipt` result JSON (`None` or
+ * `null`: not landed) and, with no receipt, the relay's
+ * `pimlico_getUserOperationStatus` result JSON — `dapp_rpc::calls_status`,
+ * as JSON.
+ */
+public func dappRpcCallsStatus(id: String, chainId: UInt32, receiptJson: String?, relayStatusJson: String?) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_dapp_rpc_calls_status(
+        FfiConverterString.lower(id),
+        FfiConverterUInt32.lower(chainId),
+        FfiConverterOptionString.lower(receiptJson),
+        FfiConverterOptionString.lower(relayStatusJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * EIP-5792 `wallet_getCapabilities` — `dapp_rpc::capabilities` over the
+ * request's params, the site's granted addresses and the wallet's chains
+ * (all JSON). Answers `{"result":…}` or `{"error":{"code","message"}}`.
+ */
+public func dappRpcCapabilities(paramsJson: String, grantedJson: String, chainsJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_dapp_rpc_capabilities(
+        FfiConverterString.lower(paramsJson),
+        FfiConverterString.lower(grantedJson),
+        FfiConverterString.lower(chainsJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * The core's route for `method`, as JSON (`{"type":"read","bundler":true}`).
+ */
+public func dappRpcClassify(method: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_dapp_rpc_classify(
+        FfiConverterString.lower(method),uniffiCallStatus
+    )
+})
+}
+/**
+ * The bound on one whole fee quote, ms — `fee_policy::QUOTE_DEADLINE_MS`
+ * (spec 094 S9). A shell bounds the deployment read it makes before a quote
+ * by the same figure.
+ */
+public func feeQuoteDeadlineMs() -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_fee_quote_deadline_ms(uniffiCallStatus
+    )
+})
+}
+/**
+ * The lowest gas price a chain accepts, as a decimal string: `"0"` on every
+ * chain but Arc, which discards an underpriced transaction silently —
+ * `fee_policy::min_gas_price_wei`.
+ */
+public func minGasPriceWei(chainId: UInt32) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_min_gas_price_wei(
+        FfiConverterUInt32.lower(chainId),uniffiCallStatus
+    )
+})
+}
+/**
+ * **The address a typed name points to** (`alice.eth`, a member to add):
+ * `name_verify::resolve_step` over JSON — the same forward walk as
+ * `verified_name_step`, handing back the address (EIP-55) for the
+ * shell to show beside the name before anything uses it. `answers_json` is
+ * the transcript (`LookupAnswer[]`); the return a `ResolveStep`.
+ */
+public func resolvedNameStep(chainId: UInt32, registry: String, name: String, answersJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_resolved_name_step(
+        FfiConverterUInt32.lower(chainId),
+        FfiConverterString.lower(registry),
+        FfiConverterString.lower(name),
+        FfiConverterString.lower(answersJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * How long an endpoint rests after `consecutive_failures` failures in a
+ * row, ms: `30 s · 2^(n−1)`, capped at 300 s, `0` for none —
+ * `rpc_pool::cooldown_ms`.
+ */
+public func rpcCooldownMs(consecutiveFailures: UInt32) -> Double  {
+    return try!  FfiConverterDouble.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_rpc_cooldown_ms(
+        FfiConverterUInt32.lower(consecutiveFailures),uniffiCallStatus
+    )
+})
+}
+/**
+ * The answer a hedge's outcome may hand the caller before the pool reaches
+ * that endpoint in its own order — `rpc_pool::early_verdict` — as the
+ * verdict's JSON, or `""` when it must wait (an outcome that does not read
+ * is never an answer). `kind` is `rpc` or `bundler`; `outcome_json` an
+ * `RpcTransportOutcome`.
+ */
+public func rpcEarlyVerdict(kind: String, method: String, url: String, outcomeJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_rpc_early_verdict(
+        FfiConverterString.lower(kind),
+        FfiConverterString.lower(method),
+        FfiConverterString.lower(url),
+        FfiConverterString.lower(outcomeJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * How long a read waits on one endpoint before the shell also asks the one
+ * the pool will ask next, ms — `rpc_pool::HEDGE_AFTER_MS`.
+ */
+public func rpcHedgeAfterMs() -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_rpc_hedge_after_ms(uniffiCallStatus
+    )
+})
+}
+/**
+ * May this routed call be hedged — `rpc_pool::is_hedged_read`. `kind` is the
+ * wire word (`rpc` / `bundler`); anything but `rpc` is not a hedged read.
+ */
+public func rpcIsHedgedRead(kind: String, method: String) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_rpc_is_hedged_read(
+        FfiConverterString.lower(kind),
+        FfiConverterString.lower(method),uniffiCallStatus
+    )
+})
+}
+/**
+ * "Only use my node" applied to a collected endpoint list —
+ * `rpc_pool::own_only_pool`: `seeds_json` is `[{url, source}]`, the answer
+ * `{"endpoints": [...], "own_only": bool}`; `""` for a list the core
+ * cannot read.
+ */
+public func rpcOwnOnlyPool(seedsJson: String, ownOnly: Bool) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_rpc_own_only_pool(
+        FfiConverterString.lower(seedsJson),
+        FfiConverterBool.lower(ownOnly),uniffiCallStatus
+    )
+})
+}
+/**
+ * The per-endpoint timeout of a chain read, ms — `rpc_pool::RPC_READ_TIMEOUT_MS`.
+ */
+public func rpcReadTimeoutMs() -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_rpc_read_timeout_ms(uniffiCallStatus
+    )
+})
+}
+/**
+ * The chain a site with no chain of its own starts on (dapp-17):
+ * `network_space::site_start_chain` — the space's chain ids in the list's
+ * order, and the chain the person last put a site on there (`None`: none).
+ */
+public func siteStartChain(spaceChainIds: [UInt32], lastUsed: UInt32?) -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_site_start_chain(
+        FfiConverterSequenceUInt32.lower(spaceChainIds),
+        FfiConverterOptionUInt32.lower(lastUsed),uniffiCallStatus
+    )
+})
+}
+/**
+ * Who vouches for a token's name on its chain (`app::token_provenance`):
+ * `{"trust": "native" | "vouched" | "unverified", "imitates": "USDC" | null}`.
+ * `token` empty is the native coin.
+ */
+public func tokenProvenance(chainId: UInt32, token: String, symbol: String, nativeSymbol: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_token_provenance(
+        FfiConverterUInt32.lower(chainId),
+        FfiConverterString.lower(token),
+        FfiConverterString.lower(symbol),
+        FfiConverterString.lower(nativeSymbol),uniffiCallStatus
+    )
+})
+}
+/**
  * Settings' debug mode in force on this build (spec 091): `hidden` (no
  * switch — and debug mode is off), `off` or `on`. `developer_build` is the
  * shell's build fact — Android `BuildConfig.DEBUG`, iOS `#if DEBUG`, the
@@ -18957,6 +20215,164 @@ public func storageRecordsIn(value: String) -> UInt32?  {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_storage_records_in(
         FfiConverterString.lower(value),uniffiCallStatus
+    )
+})
+}
+/**
+ * Where a multisig member's approval goes — [`signing_route`] for
+ * `vela_multisigApprove` (`trusted_signer::approval::approval_route`), as
+ * the same JSON. `None` for a record this build cannot read.
+ * `account_json` is the member's record as stored.
+ */
+public func multisigApprovalRoute(accountJson: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_multisig_approval_route(
+        FfiConverterString.lower(accountJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * The hash or signature an answer to a page names (`payload_json`, the
+ * core's `SignResponsePayload` JSON) — a batch's id read out of EIP-5792
+ * 2.0.0's `{ id }` (spec 097 G) — `SignResponsePayload::answered`. `None`
+ * for an error, a `null` answer or JSON that does not read.
+ */
+public func signAnswered(payloadJson: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_sign_answered(
+        FfiConverterString.lower(payloadJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * The message a dApp reads when signing ended in the error the core named
+ * `kind` (a `SignErrorKind`'s wire name, `"user_rejected"`), with the
+ * notice's `detail` — `dapp_rpc::sign_error_words`. `None` for a kind the
+ * core does not know. For the developer, not the person: EIP-1193 messages
+ * are not UI.
+ */
+public func signErrorWords(kind: String, detail: String?) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_sign_error_words(
+        FfiConverterString.lower(kind),
+        FfiConverterOptionString.lower(detail),uniffiCallStatus
+    )
+})
+}
+/**
+ * The page's "not confirmed yet" for an operation that may still land —
+ * `sign_request::not_confirmed_detail` (083).
+ */
+public func signNotConfirmedDetail(userOpHash: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_sign_not_confirmed_detail(
+        FfiConverterString.lower(userOpHash),uniffiCallStatus
+    )
+})
+}
+/**
+ * A sign request older than this (ms) is never signed —
+ * `sign_request::EXTENSION_REQUEST_TTL_MS` (RB2).
+ */
+public func signRequestTtlMs() -> Double  {
+    return try!  FfiConverterDouble.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_sign_request_ttl_ms(uniffiCallStatus
+    )
+})
+}
+/**
+ * R7 — where a request of `method` by the stored account goes
+ * (`signing_venue::signing_route`): `{"type":"in_vela"}`,
+ * `{"type":"page","url":…}` or `{"type":"blocked","block":…}`. `method` is
+ * the JSON-RPC method (`""` for the wallet's own send,
+ * `vela_multisigExecute` for a multisig executor's operation,
+ * `vela_multisigApprove` for a member's approval). `None` for a record this
+ * build cannot read or a method no venue signs (`eth_sign`) — refuse it.
+ * `account_json` is the stored account record, as for `signing_plan`.
+ */
+public func signingRoute(accountJson: String, method: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_signing_route(
+        FfiConverterString.lower(accountJson),
+        FfiConverterString.lower(method),uniffiCallStatus
+    )
+})
+}
+/**
+ * R1: why `venue_json` (a `SigningVenue`) cannot reach the keys of an
+ * account on `domain`, as a `VenueBlock` JSON — or `None` when it can. A
+ * venue that does not read reaches nothing: the JSON string `"invalid"`.
+ */
+public func signingVenueBlock(domain: String, venueJson: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_signing_venue_block(
+        FfiConverterString.lower(domain),
+        FfiConverterString.lower(venueJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * The page's answer (`result_json`) as `member`'s approval of
+ * `safe_tx_hash` on `chain_id`, accepted only as
+ * `trusted_signer::approval::accept` accepts it: a user-verified assertion
+ * over exactly the approval bytes THIS wallet computes, by one of `keys`
+ * (the member's founding keys), whose approval names `member` and verifies
+ * the way the chain will.
+ */
+public func trustedSignerApprovalAccept(resultJson: String, chainId: UInt64, member: String, safeTxHash: String, keys: [WalletKeyRecord]) -> TrustedSignerApprovalOutcome  {
+    return try!  FfiConverterTypeTrustedSignerApprovalOutcome_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_trusted_signer_approval_accept(
+        FfiConverterString.lower(resultJson),
+        FfiConverterUInt64.lower(chainId),
+        FfiConverterString.lower(member),
+        FfiConverterString.lower(safeTxHash),
+        FfiConverterSequenceTypeWalletKeyRecord.lower(keys),uniffiCallStatus
+    )
+})
+}
+/**
+ * The page's `{intent, context}` for a member's approval of a SafeTx
+ * (`trusted_signer::approval::request`), as JSON: the method, the raw
+ * SafeTx, the core's safeTxHash, the member, its keys and route, the
+ * multisig's name. An error for a SafeTx, route or address that does not read.
+ */
+public func trustedSignerApprovalRequest(input: TrustedSignerApprovalInput)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_trusted_signer_approval_request(
+        FfiConverterTypeTrustedSignerApprovalInput_lower(input),uniffiCallStatus
+    )
+})
+}
+/**
+ * The page's answer (`result_json`) to the request it was handed
+ * (`request_json`, the `{intent, context}` of `trusted_signer_request`),
+ * accepted only as `trusted_signer::accept_signature` accepts it: the bytes
+ * the CORE computes from the request must be `digest` — the bytes the shell
+ * is about to sign with the answer — and the answer a user-verified
+ * assertion over them by one of `keys` (the account's founding keys). A
+ * request that describes one thing while the shell signs another is
+ * `WrongChallenge` before the answer is read.
+ *
+ * Stricter than `trusted_signer_verify`, which takes the shell's
+ * digest on trust; the web's `trustedSignerSignatureAccept`.
+ */
+public func trustedSignerSignatureAccept(requestJson: String, resultJson: String, keys: [WalletKeyRecord], digest: Data) -> TrustedSignerOutcome  {
+    return try!  FfiConverterTypeTrustedSignerOutcome_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_trusted_signer_signature_accept(
+        FfiConverterString.lower(requestJson),
+        FfiConverterString.lower(resultJson),
+        FfiConverterSequenceTypeWalletKeyRecord.lower(keys),
+        FfiConverterData.lower(digest),uniffiCallStatus
     )
 })
 }
@@ -19933,6 +21349,15 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_share_card_qr_matrix() != 49895) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_intent_advice() != 3481) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_intent_advice_standing() != 13337) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_intent_agent_reads() != 47404) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_intent_agent_state() != 5204) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -19984,6 +21409,54 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_multicall3_encode_aggregate3() != 41166) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_multisig_link_call() != 29990) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_currency_fraction_digits() != 30271) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_dapp_rpc_calls_status() != 11669) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_dapp_rpc_capabilities() != 10985) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_dapp_rpc_classify() != 41717) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_fee_quote_deadline_ms() != 29736) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_min_gas_price_wei() != 54568) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_resolved_name_step() != 18577) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_rpc_cooldown_ms() != 46197) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_rpc_early_verdict() != 8870) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_rpc_hedge_after_ms() != 37173) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_rpc_is_hedged_read() != 43846) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_rpc_own_only_pool() != 60479) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_rpc_read_timeout_ms() != 22601) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_site_start_chain() != 36503) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_token_provenance() != 26831) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_prefs_debug_mode() != 14685) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -20024,6 +21497,36 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_storage_records_in() != 32407) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_multisig_approval_route() != 29971) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_sign_answered() != 50979) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_sign_error_words() != 13698) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_sign_not_confirmed_detail() != 30335) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_sign_request_ttl_ms() != 25092) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_signing_route() != 29236) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_signing_venue_block() != 29109) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_trusted_signer_approval_accept() != 55026) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_trusted_signer_approval_request() != 16298) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_trusted_signer_signature_accept() != 53726) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_signer_integrity_line_while_checking() != 50930) {
@@ -20258,6 +21761,51 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_usbhidport_path() != 10313) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigaccountscore_dispatch() != 58979) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigaccountscore_resolve_effect() != 64603) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigaccountscore_view() != 52284) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigmemberscore_dispatch() != 49424) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigmemberscore_resolve_effect() != 7005) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigmemberscore_view() != 17720) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigoutsidepagecore_dispatch() != 11920) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigoutsidepagecore_resolve_effect() != 28924) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigoutsidepagecore_view() != 7267) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigoutsidesessioncore_dispatch() != 14768) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigoutsidesessioncore_resolve_effect() != 35149) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigoutsidesessioncore_view() != 16360) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigproposalscore_dispatch() != 61623) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigproposalscore_resolve_effect() != 19338) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigproposalscore_view() != 59246) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_activityfeedcore_dispatch() != 50992) {
@@ -20567,6 +22115,21 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_constructor_agentcore_new() != 2462) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_constructor_multisigaccountscore_new() != 13977) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_constructor_multisigmemberscore_new() != 9317) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_constructor_multisigoutsidepagecore_new() != 27515) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_constructor_multisigoutsidesessioncore_new() != 36483) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_constructor_multisigproposalscore_new() != 26862) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_constructor_activityfeedcore_new() != 25853) {
