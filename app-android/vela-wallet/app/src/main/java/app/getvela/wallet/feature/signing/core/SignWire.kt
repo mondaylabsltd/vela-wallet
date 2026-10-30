@@ -85,6 +85,38 @@ enum class SignErrorKind {
      * says why.
      */
     @SerialName("venue_blocked") VenueBlocked,
+
+    /**
+     * Round 7 (r7-2): the account's trusted signing page never answered — not
+     * ready in time, or its check never finished. Nothing was signed; it may
+     * work the next time.
+     */
+    @SerialName("page_unanswered") PageUnanswered,
+
+    /** Round 7 (r7-7): the page's answer is not this request's signature (tampered, replayed). Nothing was sent. */
+    @SerialName("page_mismatch") PageMismatch,
+
+    /** The page's own rules refused the request (it says why there). Nothing was signed. */
+    @SerialName("page_refused") PageRefused,
+
+    /** The page did not pass its check (spec 102 R6), so it was not opened. Nothing was signed. */
+    @SerialName("page_not_opened") PageNotOpened,
+}
+
+/**
+ * Why the account's trusted signing page did not sign, when the person did
+ * not decline there ([SignSubmitOutcome.PageDeclined]) — the core's
+ * `PageFailure` (round 7). The core says it as a [SignErrorKind].
+ */
+@Serializable
+enum class PageFailure {
+    @SerialName("unanswered") Unanswered,
+
+    @SerialName("mismatch") Mismatch,
+
+    @SerialName("refused") Refused,
+
+    @SerialName("not_opened") NotOpened,
 }
 
 /**
@@ -439,6 +471,16 @@ sealed class SignSubmitOutcome {
     @Serializable
     @SerialName("page_declined")
     data object PageDeclined : SignSubmitOutcome()
+
+    /**
+     * Round 7 (r7-2, r7-7): the trusted signing page did not sign for another
+     * reason — [failure] says which; the page (the dApp) hears -32603 with it.
+     * Declared so the wire decodes; this shell's page failures are told by its
+     * own trusted signer, never sent as this.
+     */
+    @Serializable
+    @SerialName("page_failed")
+    data class PageFailed(val failure: PageFailure) : SignSubmitOutcome()
 }
 
 @Serializable

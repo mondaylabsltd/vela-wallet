@@ -186,6 +186,9 @@ enum class DbrReason(val key: String) {
 
     @SerialName("signer_failed") SignerFailed(REASON + "signerFailed"),
 
+    /** Round 7 (r7-2, r7-7): the account's trusted signing page did not sign it. */
+    @SerialName("signing_page") SigningPage(REASON + "signingPage"),
+
     /** Spec 100: the network a page asked to add lacks Vela's contracts (4902) — Settings' own line. */
     @SerialName("not_compatible") NotCompatible("addToken.errorNotCompatible"),
 

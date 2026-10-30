@@ -1478,6 +1478,11 @@ object SendLive {
                 if (view.tx_error == SendTxErrorKey.ChainBusy) I18nKeys.Flows.TX_ERROR_CHAIN_BUSY else I18nKeys.Flows.TX_ERROR_CHAIN_UNREACHABLE,
                 mapOf("network" to (view.selected_token?.chain_id?.let { ctx.chainNames[it] } ?: "")),
             )
+            // Round 7: the web's trusted signing page. This app's page failures
+            // are said by its own trusted signer and never reach the core as
+            // these keys, so they are never set here.
+            SendTxErrorKey.PageUnanswered, SendTxErrorKey.PageMismatch,
+            SendTxErrorKey.PageRefused, SendTxErrorKey.PageNotOpened -> s.t(I18nKeys.Flows.TX_ERROR_GENERIC)
             null -> if (view.tx_status == SendTxStatus.Signing) s.t(I18nKeys.Flows.TX_PREPARING_BIOMETRIC) else null
         }
     }

@@ -1173,6 +1173,10 @@ class CoreWireDriftTest {
         assertTrue(view.pending_op_maybe_sent)
         assertEquals(SignSubmitOutcome.AskerGone, roundTrip<SignSubmitOutcome>("""{"type":"asker_gone"}"""))
         assertEquals(
+            SignSubmitOutcome.PageFailed(PageFailure.Mismatch),
+            roundTrip<SignSubmitOutcome>("""{"type":"page_failed","failure":"mismatch"}"""),
+        )
+        assertEquals(
             SignEnding.Landed("0xtx", "0xop"),
             roundTrip<SignEnding>("""{"type":"landed","tx_hash":"0xtx","user_op_hash":"0xop"}"""),
         )
@@ -1595,6 +1599,8 @@ class CoreWireDriftTest {
         assertStringUnion<SignSwipeAction>("SignSwipeAction")
         assertStringUnion<SignMethodKind>("SignMethodKind")
         assertStringUnion<SignErrorKind>("SignErrorKind")
+        // Round 7: why the trusted signing page did not sign (r7-2, r7-7).
+        assertStringUnion<PageFailure>("PageFailure")
         assertStringUnion<SignFundingPresentation>("SignFundingPresentation")
         assertStringUnion<SignRecordKind>("SignRecordKind")
         assertStringUnion<SignRecordStatus>("SignRecordStatus")

@@ -328,6 +328,16 @@ sealed class SendSubmitFailure {
     @Serializable
     @SerialName("chain_unreachable")
     data class ChainUnreachable(val busy: Boolean = false) : SendSubmitFailure()
+
+    /**
+     * Round 7 (r7-2, r7-7): the account's trusted signing page did not sign,
+     * and not because the person declined there — [failure] says why. Declared
+     * so the wire decodes; this shell's page failures are told in its own
+     * words (the trusted signer's sheet), never sent as this.
+     */
+    @Serializable
+    @SerialName("page_failed")
+    data class PageFailed(val failure: app.getvela.wallet.feature.signing.core.PageFailure) : SendSubmitFailure()
 }
 
 /** Present ⇔ in-band: the fee leg to sign EXACTLY as quoted (invariant ①). */
@@ -409,6 +419,18 @@ enum class SendTxErrorKey {
 
     /** r5reg-3: …the chain could not be reached at all. */
     @SerialName("chain_unreachable") ChainUnreachable,
+
+    /** Round 7 (r7-2): the trusted signing page is not answering — nothing was signed (web's page). */
+    @SerialName("page_unanswered") PageUnanswered,
+
+    /** Round 7 (r7-7): the page's answer is not this operation's signature — nothing was sent. */
+    @SerialName("page_mismatch") PageMismatch,
+
+    /** The page's own rules refused it — nothing was signed. */
+    @SerialName("page_refused") PageRefused,
+
+    /** The page did not pass its check and was not opened — nothing was signed. */
+    @SerialName("page_not_opened") PageNotOpened,
 }
 
 @Serializable
