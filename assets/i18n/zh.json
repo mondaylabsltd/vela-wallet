@@ -1877,6 +1877,17 @@
   "dropOverlay": {
    "title": "拖放地址、付款链接或二维码图片"
   },
+  "shortcuts": {
+   "send": "用{{app}}转账",
+   "receive": "用{{app}}收款",
+   "scan": "用{{app}}扫码"
+  },
+  "linkSheet": {
+   "multisigOnWeb": "多签链接目前会在网页版钱包中打开。"
+  },
+  "widget": {
+   "balanceDescription": "一眼看到余额，以 Vela 最近一次更新为准。"
+  },
   "browserStatus": {
    "title": "标签页状态",
    "page": {

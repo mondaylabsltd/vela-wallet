@@ -1882,6 +1882,17 @@
   "dropOverlay": {
    "title": "Solte um endereço, link de pagamento ou imagem QR"
   },
+  "shortcuts": {
+   "send": "Enviar com o {{app}}",
+   "receive": "Receber com o {{app}}",
+   "scan": "Escanear com o {{app}}"
+  },
+  "linkSheet": {
+   "multisigOnWeb": "Por enquanto, links de multisig abrem na carteira web."
+  },
+  "widget": {
+   "balanceDescription": "Seu saldo num relance, conforme a última atualização do Vela."
+  },
   "browserStatus": {
    "title": "Status da aba",
    "page": {
