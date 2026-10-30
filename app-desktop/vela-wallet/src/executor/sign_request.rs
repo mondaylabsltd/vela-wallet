@@ -57,8 +57,7 @@ use crate::executor::{now_ms, relay, storage, user_op};
 const TX_KEY: &str = "vela.transactionHistory";
 
 /// The submit's work: reports events on the way and settles once.
-pub type SignWork =
-    Box<dyn FnOnce(&crate::resident::Sink<Event>) -> SignShellResult + Send>;
+pub type SignWork = Box<dyn FnOnce(&crate::resident::Sink<Event>) -> SignShellResult + Send>;
 
 /// How this operation is performed, and therefore where. Mirrors
 /// `send::SendAnswer` — the signing panel owns its machines the way the send
@@ -794,24 +793,46 @@ fn submit_failure(
     account: &str,
     failure: user_op::SubmitFailure,
 ) -> SignSubmitOutcome {
+    submit_failure_with(chain_id, account, failure, || {
+        // A refusal right after somebody funded the account must not read
+        // the balance from before they funded it (`clearBundlerCache`).
+        relay::clear_cache(chain_id, Some(account));
+        relay::account_info(chain_id, account)
+    })
+}
+
+/// The web's `REACTIVE_THRESHOLD_MARGIN_WEI` (`sign-executor.ts`): with no
+/// required figure in the relay's refusal, the gas account is asked to rise
+/// this far above what it holds.
+const REACTIVE_THRESHOLD_MARGIN_WEI: u128 = 100_000_000_000_000;
+
+/// [`submit_failure`], with the gas account's live facts read through `info`
+/// — only for an underfunded refusal, the one composition the core cannot do
+/// (WIRE-AUDIT A9, `sign-executor.ts` `submitOutcomeOf`).
+fn submit_failure_with(
+    chain_id: u32,
+    account: &str,
+    failure: user_op::SubmitFailure,
+    info: impl FnOnce() -> Option<relay::AccountInfo>,
+) -> SignSubmitOutcome {
     match failure {
         // Dismissing the passkey sheet is never an error and never a
         // response: the person did not decide, and a 4001 would report that
         // they declined.
         user_op::SubmitFailure::PasskeyCancelled => SignSubmitOutcome::PasskeyCancelled,
-        user_op::SubmitFailure::BundlerUnderfunded => {
-            let message = "the relay's gas account is underfunded".to_owned();
-            // `funding` stays `None` until the desktop has a source for the
-            // threshold and recommended amounts. Those are POLICY numbers,
-            // and a funding screen that invents them tells somebody to send
-            // the wrong amount — the core's documented fallback for a funding
-            // it cannot compose is a generic failure, which is honest.
-            let _ = (chain_id, account);
-            SignSubmitOutcome::Underfunded {
-                message,
-                funding: None,
-            }
-        }
+        user_op::SubmitFailure::BundlerUnderfunded => SignSubmitOutcome::Underfunded {
+            message: "the relay's gas account is underfunded".to_owned(),
+            // The live account: where to send, what it holds, and the web's
+            // own threshold and buffer — never an invented figure. No deposit
+            // address is the core's documented fallback, a generic failure.
+            funding: info().and_then(|info| underfunded_funding(chain_id, account, &info)),
+        },
+        // Spec 102 (owner 2026-10-30): the person declined on the account's
+        // signing page, or closed it unsigned — their answer, as the sheet's
+        // ✕ is: the core answers the site 4001 and clears the sheet.
+        user_op::SubmitFailure::PageDeclined => SignSubmitOutcome::PageDeclined,
+        // Round 7: the page did not sign, and not by the person's choice.
+        user_op::SubmitFailure::PageFailed(failure) => SignSubmitOutcome::PageFailed { failure },
         user_op::SubmitFailure::RelayerUnavailable => SignSubmitOutcome::Failed {
             message: "the relay could not be reached".to_owned(),
             refused: false,
@@ -856,6 +877,32 @@ fn submit_failure(
         // the sheet says why in the person's language.
         user_op::SubmitFailure::VenueBlocked(block) => SignSubmitOutcome::VenueBlocked { block },
     }
+}
+
+/// The funding card's facts for an underfunded refusal: the live gas account
+/// (`fetchBundlerAccountInfo`), the threshold its balance must reach — the
+/// web's reactive margin above what it holds, as the relay's refusal names
+/// no figure here — and the buffered amount to send
+/// (`recommendedFundingWei`). `None` without a deposit address.
+fn underfunded_funding(
+    chain_id: u32,
+    account: &str,
+    info: &relay::AccountInfo,
+) -> Option<SignFundingNeeded> {
+    if info.deposit_address.is_empty() {
+        return None;
+    }
+    let current = info.spendable_balance;
+    let threshold = current.saturating_add(REACTIVE_THRESHOLD_MARGIN_WEI);
+    Some(SignFundingNeeded {
+        deposit_address: info.deposit_address.clone(),
+        safe_address: account.to_owned(),
+        chain_id,
+        native_symbol: info.native_symbol.clone(),
+        threshold_wei: threshold.to_string(),
+        recommended_wei: relay::recommended_funding_wei(threshold, current).to_string(),
+        current_balance_wei: current.to_string(),
+    })
 }
 
 /// One dApp signature or transaction, in the store every other client reads.
@@ -2210,9 +2257,10 @@ mod tests {
                 "{kept:?} is not a refusal"
             );
         }
+        // No gas account read: the core's generic fallback (no funding).
         assert!(matches!(
-            submit_failure(100, ME, user_op::SubmitFailure::BundlerUnderfunded),
-            SignSubmitOutcome::Underfunded { .. }
+            submit_failure_with(100, ME, user_op::SubmitFailure::BundlerUnderfunded, || None),
+            SignSubmitOutcome::Underfunded { funding: None, .. }
         ));
 
         storage::tests::with_temp_state("sign-refused", || {
@@ -3563,5 +3611,78 @@ mod tests {
             "stopped at {:?}, not at the next 3 s poll",
             started.elapsed()
         );
+    }
+
+    /// WIRE-AUDIT A9: an underfunded refusal carries the funding card's facts
+    /// from the live gas account — its deposit address and balance, the web's
+    /// reactive margin as the threshold, and the buffered amount to send.
+    #[test]
+    fn an_underfunded_refusal_carries_the_live_gas_account() {
+        let account = |deposit: &str, balance: u128| relay::AccountInfo {
+            chain_id: 100,
+            deposit_address: deposit.to_owned(),
+            settlement_recipient: None,
+            onchain_balance: balance,
+            spendable_balance: balance,
+            status: "ACTIVE".to_owned(),
+            native_symbol: "xDAI".to_owned(),
+        };
+        let info = account("0xdep0517", 40_000_000_000_000);
+        let outcome = submit_failure_with(
+            100,
+            ME,
+            user_op::SubmitFailure::BundlerUnderfunded,
+            move || Some(info),
+        );
+        let SignSubmitOutcome::Underfunded {
+            funding: Some(funding),
+            ..
+        } = outcome
+        else {
+            unreachable!("funding: {outcome:?}");
+        };
+        assert_eq!(funding.deposit_address, "0xdep0517");
+        assert_eq!(funding.safe_address, ME);
+        assert_eq!(funding.native_symbol, "xDAI");
+        assert_eq!(funding.current_balance_wei, "40000000000000");
+        assert_eq!(funding.threshold_wei, "140000000000000");
+        assert_eq!(
+            funding.recommended_wei,
+            relay::recommended_funding_wei(140_000_000_000_000, 40_000_000_000_000).to_string()
+        );
+        // No deposit address: nothing to fund — the generic fallback.
+        let none = account("", 0);
+        assert!(matches!(
+            submit_failure_with(
+                100,
+                ME,
+                user_op::SubmitFailure::BundlerUnderfunded,
+                move || Some(none)
+            ),
+            SignSubmitOutcome::Underfunded { funding: None, .. }
+        ));
+    }
+
+    /// WIRE-AUDIT A10 (spec 102, round 7): the page's own "no" settles the
+    /// request as the person's answer; a page that did not sign for another
+    /// reason says which.
+    #[test]
+    fn a_page_that_declined_or_failed_is_said_as_the_page() {
+        use vela_core::app::sign_request::PageFailure;
+        assert!(matches!(
+            submit_failure(100, ME, user_op::SubmitFailure::PageDeclined),
+            SignSubmitOutcome::PageDeclined
+        ));
+        for failure in [
+            PageFailure::Unanswered,
+            PageFailure::Mismatch,
+            PageFailure::Refused,
+            PageFailure::NotOpened,
+        ] {
+            assert!(matches!(
+                submit_failure(100, ME, user_op::SubmitFailure::PageFailed(failure)),
+                SignSubmitOutcome::PageFailed { failure: said } if said == failure
+            ));
+        }
     }
 }

@@ -43,6 +43,7 @@ use vela_core::app::fee_policy::{
     user_op_gas_floors,
 };
 use vela_core::app::send::SendSubmitFailure;
+use vela_core::app::sign_request::PageFailure;
 use vela_core::app::{Account, Assertion, FailureKind};
 use vela_core::primitives::{from_hex, to_hex};
 use vela_core::signed_review::{SignedReview, reviewed_safe_op_hash};
@@ -111,6 +112,17 @@ pub enum SubmitFailure {
     /// language (`SendSubmitFailure::VenueBlocked`,
     /// `SignSubmitOutcome::VenueBlocked`).
     VenueBlocked(VenueBlock),
+    /// Spec 102 (owner 2026-10-30): the person declined on the account's
+    /// trusted signing page — it answered `user_rejected`. The page is the
+    /// venue, so that is their answer: a dApp request settles rejected
+    /// (`SignSubmitOutcome::PageDeclined`), the wallet's own send says the
+    /// prompt was closed (`SendSubmitFailure::PasskeyCancelled`).
+    PageDeclined,
+    /// Round 7: the page did not sign, and not by the person's choice — it
+    /// never answered in time, its answer was not this request's, its rules
+    /// refused, or its check failed and it was never opened. Nothing was
+    /// signed or sent.
+    PageFailed(PageFailure),
     /// Diagnostics only; the core words the screen.
     Other(String),
 }
@@ -131,6 +143,11 @@ impl From<SubmitFailure> for SendSubmitFailure {
             },
             SubmitFailure::VenueBlocked(block) => SendSubmitFailure::VenueBlocked { block },
             SubmitFailure::PreviousPending => SendSubmitFailure::PreviousPending,
+            // The core's own reading (`SendSubmitFailure::PageFailed` doc):
+            // a decline on the page is the closed prompt; anything else the
+            // page did is said as the page's.
+            SubmitFailure::PageDeclined => SendSubmitFailure::PasskeyCancelled,
+            SubmitFailure::PageFailed(failure) => SendSubmitFailure::PageFailed { failure },
             SubmitFailure::Other(message)
             | SubmitFailure::Refused(message)
             | SubmitFailure::Signer { message, .. } => SendSubmitFailure::Other {
@@ -395,21 +412,34 @@ impl Signer<'_> {
                     None => keys.to_vec(),
                 };
                 let request = ask.request(chain_id, safe, &allowed, *key_route, operation);
-                trusted_signer::sign(&request, page, digest, &allowed, channel)
+                return trusted_signer::sign(&request, page, digest, &allowed, channel).map_err(
+                    |end| match end {
+                        trusted_signer::PageEnd::Passkey(failure) => passkey_failure(failure),
+                        trusted_signer::PageEnd::Declined => SubmitFailure::PageDeclined,
+                        trusted_signer::PageEnd::Failed(failure) => {
+                            SubmitFailure::PageFailed(failure)
+                        }
+                    },
+                );
             }
             Self::Unreachable { .. } => unreachable!("answered above"),
         }
-        .map_err(|failure| match failure.kind {
-            FailureKind::Cancelled => SubmitFailure::PasskeyCancelled,
-            // Spec 099 R8: how it failed travels on, so the sheet and the
-            // page's record name the passkey, not "couldn't submit".
-            kind => SubmitFailure::Signer {
-                kind,
-                message: failure
-                    .message
-                    .unwrap_or_else(|| "the passkey ceremony failed".to_owned()),
-            },
-        })
+        .map_err(passkey_failure)
+    }
+}
+
+/// A passkey ceremony that signed nothing, as the submit says it.
+fn passkey_failure(failure: PasskeyFailure) -> SubmitFailure {
+    match failure.kind {
+        FailureKind::Cancelled => SubmitFailure::PasskeyCancelled,
+        // Spec 099 R8: how it failed travels on, so the sheet and the
+        // page's record name the passkey, not "couldn't submit".
+        kind => SubmitFailure::Signer {
+            kind,
+            message: failure
+                .message
+                .unwrap_or_else(|| "the passkey ceremony failed".to_owned()),
+        },
     }
 }
 
@@ -972,11 +1002,11 @@ fn submit_tempo(
     if let Some(quoted) = &quoted_fee
         && (!quoted.recipient.eq_ignore_ascii_case(&collector)
             || quoted.amount < tempo_minimum_fee_token_units(TEMPO_FEE_TOKEN_DECIMALS))
-        {
-            return Err(other(
-                "The gas quote has expired. Please review the updated fee and try again.",
-            ));
-        }
+    {
+        return Err(other(
+            "The gas quote has expired. Please review the updated fee and try again.",
+        ));
+    }
     // The relay ignores a speed on Tempo (no priority fee to buy), but the
     // name still travels with the fee it was shown beside, as on the web.
     let tier = quoted_fee.as_ref().and_then(|fee| fee.tier);
@@ -2048,10 +2078,11 @@ mod tests {
         // Opened, never signed: no "done" edge for a ceremony that returned
         // nothing.
         assert_eq!(heard.take(), vec![CeremonyEdge::Started]);
-        assert_eq!(declined.err(), Some(SubmitFailure::PasskeyCancelled));
+        // Spec 102: the page is the venue, so its "no" is the person's answer.
+        assert_eq!(declined.err(), Some(SubmitFailure::PageDeclined));
         assert_eq!(
             channel.ended(),
-            Some(crate::executor::trusted_signer::Refusal::Closed)
+            Some(crate::executor::trusted_signer::Refusal::Declined)
         );
     }
 
@@ -2072,7 +2103,14 @@ mod tests {
             wallet_key(&signing_key(7), &second),
         ];
         let route = KeyRoute::new(&keys[1].credential_id, "platform", "internal");
-        let original = [0x42_u8; 32];
+        // The bytes the core derives from the request the page is handed
+        // (`trusted_signer::accept_signature`): the page cannot be asked about
+        // one message while another is signed.
+        let original = vela_core::sign_message::original_hash(
+            "personal_sign",
+            &serde_json::json!(["0x68656c6c6f", SAFE]).to_string(),
+        )
+        .unwrap_or_else(|| unreachable!("a message"));
         let challenge =
             compute_safe_message_hash(&original, 100, SAFE).unwrap_or_else(|e| unreachable!("{e}"));
         let ask = Ask {
@@ -2105,7 +2143,10 @@ mod tests {
         // Refused as any unusable answer is: the request stays open, and the
         // sheet says the answer was not this wallet's for this request.
         let (other_key, ended) = through_page(page_result(&signing_key(9), &first, &challenge));
-        assert_eq!(other_key.err(), Some(SubmitFailure::PasskeyCancelled));
+        assert_eq!(
+            other_key.err(),
+            Some(SubmitFailure::PageFailed(PageFailure::Mismatch))
+        );
         assert_eq!(
             ended,
             Some(crate::executor::trusted_signer::Refusal::Mismatch),
@@ -2165,7 +2206,11 @@ mod tests {
         const SAFE: &str = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
         let credential = [0x11_u8, 0x22, 0x33];
         let keys = vec![wallet_key(&signing_key(7), &credential)];
-        let original = [0x42_u8; 32];
+        let original = vela_core::sign_message::original_hash(
+            "personal_sign",
+            &serde_json::json!(["0x68656c6c6f", SAFE]).to_string(),
+        )
+        .unwrap_or_else(|| unreachable!("a message"));
         let challenge =
             compute_safe_message_hash(&original, 100, SAFE).unwrap_or_else(|e| unreachable!("{e}"));
         let (channel, _changed) = Channel::new();
