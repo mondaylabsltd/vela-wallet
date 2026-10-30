@@ -19248,12 +19248,18 @@ impl WalletPage {
                         measuring,
                         signing_live::reserve_warning(fee, &self.signing),
                     );
+                    // A shut confirm says why; an open one after a prompt
+                    // that signed nothing says that, calmly — closed, or run
+                    // out at its deadline (signer-11, the core's note).
+                    let passkey = signing_live::passkey_note_key(host.view.passkey_note)
+                        .map(|key| gpui::SharedString::from(self.loc.t(key).to_string()));
                     held_note = Some(
                         held.note(
                             confirm
                                 .note
                                 .clone()
-                                .filter(|_| !confirm.enabled && !confirm.label.is_empty()),
+                                .filter(|_| !confirm.enabled && !confirm.label.is_empty())
+                                .or(passkey),
                         ),
                     );
                 }

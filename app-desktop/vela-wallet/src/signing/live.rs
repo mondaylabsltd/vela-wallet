@@ -117,6 +117,21 @@ impl ColumnKind {
     }
 }
 
+/// The line under the confirm after a passkey prompt that signed nothing
+/// (`SignView::passkey_note`, signer-11): closed by the person, or run out at
+/// its deadline — the core tells them apart (`passkey_end::ceremony_end`),
+/// this only names the words. Never silent, never an error.
+#[must_use]
+pub fn passkey_note_key(
+    note: Option<vela_core::app::send::SendPasskeyNote>,
+) -> Option<&'static str> {
+    use vela_core::app::send::SendPasskeyNote;
+    Some(match note? {
+        SendPasskeyNote::Cancelled => "componentsUi.signing.passkeyClosed",
+        SendPasskeyNote::TimedOut => "componentsUi.signing.passkeyTimedOut",
+    })
+}
+
 /// The bottom of the column: the fee card, the button's words, whether it is
 /// armed, and the core's note under a shut one.
 pub struct ColumnConfirm {
