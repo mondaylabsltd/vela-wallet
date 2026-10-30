@@ -1206,6 +1206,15 @@ fn lead_circle_logos(
 
 /// Activity row (mock H1/D1): direction glyph + chain badge, title/subtitle,
 /// signed amount + unit. Masked keeps the unit (H5's rule).
+/// An activity row as a screen reader says it: what happened, with whom and
+/// when, and the amount with its unit ("Sent, To hold on · Today 14:02,
+/// -2 POL").
+#[must_use]
+pub fn activity_row_words(row: &ActivityRowModel) -> SharedString {
+    let amount = format!("{} {}", row.amount, row.unit);
+    crate::ui::a11y::sentence([row.title.as_ref(), row.subtitle.as_ref(), amount.trim()])
+}
+
 pub fn activity_row(theme: &Theme, icons: &mut IconCache, row: &ActivityRowModel) -> Div {
     let glyph = match row.kind {
         ActivityKind::Sent => Icon::ArrowUpRight,

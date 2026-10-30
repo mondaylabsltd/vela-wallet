@@ -811,6 +811,9 @@ pub struct WalletPage {
     /// two-second re-arm after an unusable code, so the same poster in frame
     /// is not refused thirty times a second.
     scan_quiet_until: Option<std::time::Instant>,
+    /// N-D3: what a drop or a paste has to say, for the scanner it opens —
+    /// set before that scanner's first frame, which clears the last one's.
+    scan_notice_on_open: Option<ScanNotice>,
     /// Why the camera is not running, as the last frame reported it.
     scan_camera_failure: Option<crate::executor::camera::CameraFailure>,
     /// A once-a-second redraw is running for a waiting receipt (078 F-04):
@@ -1510,6 +1513,22 @@ impl WalletPage {
         }
         let mut page = Self::with_section(section, false, window, cx);
         page.identity = Some(identity);
+        // `VELA_DROP_FILE=<path>` (developer builds): that file dropped on
+        // the window once it is up — the `VELA_SCAN_FILE` seam, for the same
+        // reason: a drag from the Finder is a gesture no headless pass makes.
+        if let Some(path) = crate::dev_env::var_os!("VELA_DROP_FILE") {
+            let path = std::path::PathBuf::from(path);
+            cx.spawn_in(window, async move |page, cx| {
+                cx.background_executor()
+                    .timer(std::time::Duration::from_secs(2))
+                    .await;
+                page.update_in(cx, |this, window, cx| {
+                    this.take_dropped(vec![path], window, cx);
+                })
+                .ok();
+            })
+            .detach();
+        }
         // `VELA_PALETTE=<query>` (developer builds): the command palette open,
         // narrowed by `<query>` — a keystroke a screenshot pass cannot press.
         if let Some(query) = crate::dev_env::var!("VELA_PALETTE") {
@@ -1805,6 +1824,7 @@ impl WalletPage {
             flow_query_focus: cx.focus_handle(),
             scan_notice: None,
             scan_quiet_until: None,
+            scan_notice_on_open: None,
             scan_camera_failure: None,
             receipt_ticking: false,
             dapp_landing: None,
@@ -4297,6 +4317,8 @@ impl WalletPage {
             activity_col = activity_col.child(
                 div()
                     .id(ElementId::from(("activity", i)))
+                    // N-D1: one row, read as one sentence, as an asset is.
+                    .a11y_item(crate::wallet::components::activity_row_words(row))
                     .cursor_pointer()
                     .when(fresh == Some(i), |el| {
                         // A tint behind the row, not a border or a badge:
@@ -8969,6 +8991,7 @@ impl WalletPage {
             tx = tx.child(
                 div()
                     .id(ElementId::from(("detail-activity", i)))
+                    .a11y_item(crate::wallet::components::activity_row_words(row))
                     .when(id.is_some(), |el| el.cursor_pointer())
                     .child(activity_row(theme, &mut self.icons, row))
                     .on_click(cx.listener(move |this, _, _, cx| {
@@ -21196,8 +21219,9 @@ impl WalletPage {
     /// stack (`VELA_FLOW=DS1`) where no click happened.
     fn pump_camera(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.scan_camera.is_none() {
-            // A scanner just opened: what the last one said is not true of it.
-            self.scan_notice = None;
+            // A scanner just opened: what the last one said is not true of it
+            // — unless a drop or a paste opened it to say something (N-D3).
+            self.scan_notice = self.scan_notice_on_open.take();
             self.scan_quiet_until = None;
             // The one place a scanner's frames start — and the real camera
             // only for a signed-in person's own scanner (PR 3 note 7). The
@@ -21444,15 +21468,20 @@ impl WalletPage {
     /// The scanner, up with `notice` on it: what was dropped or pasted, said
     /// where the person can pick another picture or close it.
     fn show_scan_notice(&mut self, notice: ScanNotice, cx: &mut Context<Self>) {
-        if self.flows.last() != Some(&FlowPanel::Ds1) {
-            if self.send_host.is_none() {
-                self.section = Section::Wallet;
-                self.enter_flow(FlowEntry::Scan, cx);
-            } else {
-                self.flows.push(FlowPanel::Ds1);
+        if self.flows.last() == Some(&FlowPanel::Ds1) && self.scan_camera.is_some() {
+            self.scan_notice = Some(notice);
+        } else {
+            // Its first frame clears the notice it opens with: hand it over.
+            self.scan_notice_on_open = Some(notice);
+            if self.flows.last() != Some(&FlowPanel::Ds1) {
+                if self.send_host.is_none() {
+                    self.section = Section::Wallet;
+                    self.enter_flow(FlowEntry::Scan, cx);
+                } else {
+                    self.flows.push(FlowPanel::Ds1);
+                }
             }
         }
-        self.scan_notice = Some(notice);
         cx.notify();
     }
 
@@ -22729,7 +22758,16 @@ fn drop_overlay(theme: &Theme, icons: &mut crate::icons::IconCache, title: Share
         .flex()
         .items_center()
         .justify_center()
-        .opacity(0.)
+        // `VELA_DROP_PREVIEW=1` (developer builds): drawn as a drag shows it,
+        // for a screenshot pass that cannot hold a file over the window.
+        .opacity(if crate::dev_env::var_os!("VELA_DROP_PREVIEW").is_some() {
+            1.
+        } else {
+            0.
+        })
+        .when(crate::dev_env::var_os!("VELA_DROP_PREVIEW").is_some(), |el| {
+            el.bg(tint)
+        })
         .group_drag_over::<ExternalPaths>("wallet-drop", move |style| style.opacity(1.).bg(tint))
         .child(
             div()
