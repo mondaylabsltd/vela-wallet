@@ -114,7 +114,7 @@ private fun ThemeOptionRow(
             selected = selected,
             onClick = null,
             colors = RadioButtonDefaults.colors(
-                selectedColor = colors.accentBase,
+                selectedColor = colors.fgBase,
                 unselectedColor = colors.fgSubtle,
             ),
         )

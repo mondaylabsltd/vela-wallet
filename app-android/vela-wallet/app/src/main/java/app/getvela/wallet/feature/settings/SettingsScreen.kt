@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.settings
 
+import androidx.compose.ui.text.style.TextDecoration
 import app.getvela.wallet.core.designsystem.components.withheldFigure
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
@@ -1036,7 +1037,7 @@ private fun SettingsPageBody(
                 Icon(
                     imageVector = VelaIcons.Plus,
                     contentDescription = null,
-                    tint = colors.infoBase,
+                    tint = colors.fgBase,
                     modifier = Modifier.size(VelaIconSize.md),
                 )
                 Spacer(modifier = Modifier.size(VelaSpacing.md))
@@ -1044,7 +1045,7 @@ private fun SettingsPageBody(
                 // is reserved for actions that move value.
                 Text(
                     text = model.addNetworkLabel,
-                    color = colors.infoBase,
+                    color = colors.fgBase,
                     fontFamily = VelaFontFamily,
                     fontWeight = VelaFontWeight.semibold,
                     fontSize = VelaTextSize.lg,
@@ -1233,7 +1234,8 @@ private fun SettingsPageBody(
                 if (add.recheck != null) {
                     Text(
                         text = add.recheck,
-                        color = colors.infoBase,
+                        color = colors.fgBase,
+                        textDecoration = TextDecoration.Underline,
                         fontFamily = VelaFontFamily,
                         fontWeight = VelaFontWeight.semibold,
                         fontSize = VelaTextSize.base,
@@ -1286,7 +1288,8 @@ private fun SettingsPageBody(
                 if (provider.link != null && provider.linkUrl != null) {
                     Text(
                         text = provider.link,
-                        color = colors.infoBase,
+                        color = colors.fgBase,
+                        textDecoration = TextDecoration.Underline,
                         fontFamily = VelaFontFamily,
                         fontSize = VelaTextSize.sm,
                         modifier = Modifier.clickable { onOpenLink(provider.linkUrl) }.padding(top = VelaSpacing.md),
@@ -1507,7 +1510,8 @@ private fun RpcBanner(banner: RpcBannerModel) {
                     // The only accent on this banner: the thing that fixes it.
                     Text(
                         text = chip.action,
-                        color = colors.accentBase,
+                        color = colors.fgBase,
+                        textDecoration = TextDecoration.Underline,
                         fontFamily = VelaFontFamily,
                         fontWeight = VelaFontWeight.semibold,
                         fontSize = VelaTextSize.base,
@@ -1846,7 +1850,8 @@ private fun SelectSheetBody(sheet: SelectSheetModel, onFooterLink: (() -> Unit)?
     if (sheet.footerLink != null) {
         Text(
             text = sheet.footerLink,
-            color = colors.infoBase,
+            color = colors.fgBase,
+            textDecoration = TextDecoration.Underline,
             fontFamily = VelaFontFamily,
             fontSize = VelaTextSize.base,
             modifier = Modifier.clickable(enabled = onFooterLink != null) { onFooterLink?.invoke() }.padding(top = VelaSpacing.md),
@@ -1889,7 +1894,8 @@ private fun NetworkSpaceHeading(model: NetworkSpaceHeadingModel, onSwitch: () ->
         // A link, not a CTA: a switch of space moves no value.
         Text(
             text = model.switchLabel,
-            color = colors.infoBase,
+            color = colors.fgBase,
+            textDecoration = TextDecoration.Underline,
             fontFamily = VelaFontFamily,
             fontWeight = VelaFontWeight.semibold,
             fontSize = VelaTextSize.base,
@@ -2200,7 +2206,8 @@ private fun FeedbackSheetBody(
         // The form marks steps required; this is the box behind the promise.
         Text(
             text = model.addSteps,
-            color = colors.infoBase,
+            color = colors.fgBase,
+            textDecoration = TextDecoration.Underline,
             fontFamily = VelaFontFamily,
             fontSize = VelaTextSize.base,
             modifier = Modifier
@@ -2257,7 +2264,7 @@ private fun FeedbackSheetBody(
     // The promise, quiet and next to the thing it is about (v2 A4: no tinted
     // box — blue on blue failed contrast).
     Row(horizontalArrangement = Arrangement.spacedBy(VelaSpacing.sm)) {
-        FeedbackLineIcon(VelaIcons.Info, colors.infoBase, VelaTextSize.sm * 1.2f, Modifier.padding(top = 1.dp))
+        FeedbackLineIcon(VelaIcons.Info, colors.fgMuted, VelaTextSize.sm * 1.2f, Modifier.padding(top = 1.dp))
         Text(
             text = model.consent,
             color = colors.fgMuted,
@@ -2579,12 +2586,13 @@ private fun FeedbackFiled(model: FeedbackModel, status: FeedbackStatus.Filed, he
     }
 }
 
-/** A link line under the report: centred, info-blue, a real button to TalkBack. */
+/** A link line under the report: centred, neutral ink underlined (web vis-21), a real button to TalkBack. */
 @Composable
 private fun FeedbackLink(text: String, onClick: () -> Unit) {
     Text(
         text = text,
-        color = VelaTheme.colors.infoBase,
+        color = VelaTheme.colors.fgBase,
+        textDecoration = TextDecoration.Underline,
         fontFamily = VelaFontFamily,
         fontSize = VelaTextSize.base,
         textAlign = TextAlign.Center,
@@ -2620,7 +2628,7 @@ private fun FeedbackField(value: String, placeholder: String, minLines: Int, ena
             enabled = enabled,
             minLines = minLines,
             textStyle = style,
-            cursorBrush = SolidColor(colors.accentBase),
+            cursorBrush = SolidColor(colors.fgBase),
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, keyboardType = KeyboardType.Text),
             modifier = Modifier.fillMaxWidth().semantics { contentDescription = placeholder },
         )
@@ -2699,7 +2707,8 @@ private fun RpcFixSheetBody(model: RpcFixModel, onPrimary: () -> Unit, onField: 
     if (model.report != null) {
         Text(
             text = model.report,
-            color = colors.infoBase,
+            color = colors.fgBase,
+            textDecoration = TextDecoration.Underline,
             fontFamily = VelaFontFamily,
             fontSize = VelaTextSize.base,
             modifier = Modifier.padding(top = VelaSpacing.xl),
@@ -2836,7 +2845,8 @@ private fun UnreachableFixAction(label: String, onClick: () -> Unit) {
     )
     Text(
         text = label,
-        color = VelaTheme.colors.infoBase,
+        color = VelaTheme.colors.fgBase,
+        textDecoration = TextDecoration.Underline,
         fontFamily = VelaFontFamily,
         fontSize = VelaTextSize.base,
         modifier = Modifier
@@ -2897,7 +2907,8 @@ private fun BalanceDetailRow(row: BalanceDetailRowModel, onRetry: (String) -> Un
             // Drawn with no handler before: the retry reached nothing.
             Text(
                 text = row.action,
-                color = colors.infoBase,
+                color = colors.fgBase,
+                textDecoration = TextDecoration.Underline,
                 fontFamily = VelaFontFamily,
                 fontSize = VelaTextSize.base,
                 modifier = Modifier.clickable { onRetry(row.id) }.padding(VelaSpacing.sm),

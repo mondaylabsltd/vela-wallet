@@ -289,7 +289,7 @@ private fun SigningFeeBody(
                             )
                             if (option.selected) {
                                 Icon(
-                                    VelaIcons.Check, null, tint = colors.accentBase,
+                                    VelaIcons.Check, null, tint = colors.fgBase,
                                     modifier = Modifier.size(VelaIconSize.sm),
                                 )
                             }

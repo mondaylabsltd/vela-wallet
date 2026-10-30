@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.flows
 
+import androidx.compose.ui.text.style.TextDecoration
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFeatures
 import app.getvela.wallet.core.designsystem.tokens.VelaSizing
 import androidx.compose.ui.unit.Constraints
@@ -68,6 +69,7 @@ import androidx.compose.ui.unit.times
 import app.getvela.wallet.core.designsystem.components.VelaIcons
 import app.getvela.wallet.core.designsystem.components.VelaPrimaryButton
 import app.getvela.wallet.core.designsystem.components.VelaSecondaryButton
+import app.getvela.wallet.core.designsystem.components.VelaValueButton
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaBorder
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
@@ -151,7 +153,7 @@ private fun FundAddress(model: FundAddressModel, modifier: Modifier = Modifier) 
         FlowCta(
             label = if (copied == 0) model.copied else model.copy,
             onClick = { if (Clipboard.copy(context, model.label, model.address)) { haptic(VelaHaptic.Select); setCopied(0) } },
-            accent = false,
+            kind = FlowCtaKind.Secondary,
             modifier = Modifier.fillMaxWidth(),
         )
     }
@@ -169,7 +171,7 @@ private fun RelayReportButton(label: String, onReport: () -> Unit, modifier: Mod
     FlowCta(
         label = label,
         onClick = onReport,
-        accent = false,
+        kind = FlowCtaKind.Secondary,
         modifier = modifier.fillMaxWidth().testTag(RELAY_REPORT_TAG),
     )
 }
@@ -409,14 +411,14 @@ fun ReceiveQrBody(
         FlowCta(
             label = model.saveImage,
             onClick = onSave,
-            accent = false,
+            kind = FlowCtaKind.Secondary,
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(modifier = Modifier.height(VelaSpacing.md))
         FlowCta(
             label = model.viewOnExplorer,
             onClick = onExplorer,
-            accent = false,
+            kind = FlowCtaKind.Secondary,
             modifier = Modifier.fillMaxWidth(),
         )
     }
@@ -582,7 +584,7 @@ fun TxDetailBody(
             FlowCta(
                 label = model.viewOnExplorer,
                 onClick = onExplorer,
-                accent = false,
+                kind = FlowCtaKind.Secondary,
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -802,7 +804,7 @@ fun AssetsBody(
                 FlowCta(
             label = empty.cta,
             onClick = onAdd,
-            accent = false,
+            kind = FlowCtaKind.Secondary,
             modifier = Modifier.fillMaxWidth(),
         )
             }
@@ -897,13 +899,13 @@ fun TokenDetailBody(
             FlowCta(
             label = model.receive,
             onClick = onReceive,
-            accent = false,
+            kind = FlowCtaKind.Secondary,
             modifier = Modifier.weight(1f),
         )
             FlowCta(
             label = model.send,
             onClick = onSend,
-            accent = false,
+            kind = FlowCtaKind.Secondary,
             modifier = Modifier.weight(1f),
         )
         }
@@ -1103,7 +1105,7 @@ fun AddTokenBody(
         FlowCta(
             label = model.cta,
             onClick = onSubmit,
-            accent = true,
+            kind = FlowCtaKind.Primary,
             enabled = !model.ctaDisabled,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -1238,7 +1240,7 @@ fun SendPickBody(
         FlowCta(
             label = model.cta.label,
             onClick = onCta,
-            accent = model.cta.accent,
+            kind = if (model.cta.accent) FlowCtaKind.Primary else FlowCtaKind.Secondary,
             modifier = Modifier.fillMaxWidth(),
         )
     }
@@ -1465,7 +1467,7 @@ fun SendFormBody(
         FlowCta(
             label = model.cta,
             onClick = onContinue,
-            accent = true,
+            kind = FlowCtaKind.Primary,
             modifier = Modifier.fillMaxWidth(),
             enabled = model.ctaEnabled,
         )
@@ -1731,7 +1733,7 @@ fun BatchImportBody(
                     },
                     singleLine = true,
                     textStyle = rateStyle,
-                    cursorBrush = SolidColor(colors.accentBase),
+                    cursorBrush = SolidColor(colors.fgBase),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.width(88.dp).semantics { contentDescription = "batch-rate" },
                 )
@@ -1739,7 +1741,8 @@ fun BatchImportBody(
                     Spacer(modifier = Modifier.width(VelaSpacing.xs))
                     Text(
                         text = model.rateReset,
-                        color = colors.accentBase,
+                        color = colors.fgBase,
+                        textDecoration = TextDecoration.Underline,
                         fontFamily = VelaFontFamily,
                         fontSize = VelaTextSize.sm,
                         modifier = Modifier.clickable(onClick = onRateReset),
@@ -1861,7 +1864,8 @@ fun BatchImportBody(
                     Spacer(modifier = Modifier.width(VelaSpacing.sm))
                     Text(
                         text = action,
-                        color = colors.accentBase,
+                        color = colors.fgBase,
+                        textDecoration = TextDecoration.Underline,
                         fontFamily = VelaFontFamily,
                         fontWeight = VelaFontWeight.medium,
                         fontSize = VelaTextSize.sm,
@@ -1875,7 +1879,7 @@ fun BatchImportBody(
         FlowCta(
             label = model.cta,
             onClick = onApply,
-            accent = true,
+            kind = FlowCtaKind.Primary,
             enabled = !model.ctaDisabled,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -2137,7 +2141,7 @@ fun SendConfirmBody(
                 }
                 model.noticeAction?.let { action ->
                     Spacer(modifier = Modifier.height(VelaSpacing.md))
-                    FlowCta(label = action, onClick = onNoticeAction, accent = false, modifier = Modifier.fillMaxWidth())
+                    FlowCta(label = action, onClick = onNoticeAction, kind = FlowCtaKind.Secondary, modifier = Modifier.fillMaxWidth())
                 }
                 model.noticeSecondary?.let { secondary ->
                     Spacer(modifier = Modifier.height(VelaSpacing.sm))
@@ -2162,7 +2166,7 @@ fun SendConfirmBody(
             FlowCta(
                 label = model.cta,
                 onClick = onConfirm,
-                accent = true,
+                kind = FlowCtaKind.Value,
                 modifier = Modifier.fillMaxWidth(),
                 enabled = model.ctaEnabled,
             )
@@ -2314,29 +2318,29 @@ fun SendReceiptBody(
             FlowCta(
             label = it,
             onClick = onExplorer,
-            accent = false,
+            kind = FlowCtaKind.Secondary,
             modifier = Modifier.fillMaxWidth(),
         )
             Spacer(modifier = Modifier.height(VelaSpacing.md))
         }
         val retry = model.retry
         if (retry != null && onRetry != null && !model.retryAccent) {
-            // send-5: nothing left the account — the way on, above the way
-            // out; neither moves value, so neither wears the accent.
-            FlowCta(label = retry, onClick = onRetry, accent = false, modifier = Modifier.fillMaxWidth())
+            // send-5: nothing left the account — the way on (ink), above the
+            // way out; neither moves value, so neither wears the accent.
+            FlowCta(label = retry, onClick = onRetry, kind = FlowCtaKind.Primary, modifier = Modifier.fillMaxWidth())
             Spacer(modifier = Modifier.height(VelaSpacing.md))
-            FlowCta(label = model.cta, onClick = onCta, accent = model.ctaAccent, modifier = Modifier.fillMaxWidth())
+            FlowCta(label = model.cta, onClick = onCta, kind = if (model.ctaAccent) FlowCtaKind.Primary else FlowCtaKind.Secondary, modifier = Modifier.fillMaxWidth())
         } else if (retry != null && onRetry != null) {
             // Spec 096 F8: Done answers the page; Try again goes back to review.
             Row(horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md), modifier = Modifier.fillMaxWidth()) {
-                FlowCta(label = model.cta, onClick = onCta, accent = false, modifier = Modifier.weight(1f))
-                FlowCta(label = retry, onClick = onRetry, accent = true, modifier = Modifier.weight(1f))
+                FlowCta(label = model.cta, onClick = onCta, kind = FlowCtaKind.Secondary, modifier = Modifier.weight(1f))
+                FlowCta(label = retry, onClick = onRetry, kind = FlowCtaKind.Primary, modifier = Modifier.weight(1f))
             }
         } else {
             FlowCta(
                 label = model.cta,
                 onClick = onCta,
-                accent = model.ctaAccent,
+                kind = if (model.ctaAccent) FlowCtaKind.Primary else FlowCtaKind.Secondary,
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -2345,26 +2349,36 @@ fun SendReceiptBody(
 
 // ------------------------------------------------------------------ shared
 
+/** The three weights a flow CTA comes in — the web's Button variants. */
+internal enum class FlowCtaKind {
+    /** Moves the money (SD3's confirm): the one accent button of a journey. */
+    Value,
+    /** The screen's main way on (Continue, Add, Done): neutral inverse ink. */
+    Primary,
+    /** Everything else: the outline. */
+    Secondary,
+}
+
 /**
  * The one CTA in the flows.
  *
- * `accent` is not styling: in this product the accent means "this moves the
- * money", so exactly one button per journey carries it (SD3's confirm) and
- * every other is an outline. Routing both through one helper is what keeps that
- * rule checkable at a glance.
+ * The kind is not styling: in this product the accent means "this moves the
+ * money", so exactly one button per journey carries it (SD3's confirm); a
+ * screen's main way on is the neutral ink, every other an outline. Routing all
+ * three through one helper is what keeps that rule checkable at a glance.
  */
 @Composable
 private fun FlowCta(
     label: String,
     onClick: () -> Unit,
-    accent: Boolean,
+    kind: FlowCtaKind,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
-    if (accent) {
-        VelaPrimaryButton(text = label, onClick = onClick, modifier = modifier, enabled = enabled)
-    } else {
-        VelaSecondaryButton(text = label, onClick = onClick, modifier = modifier, enabled = enabled)
+    when (kind) {
+        FlowCtaKind.Value -> VelaValueButton(text = label, onClick = onClick, modifier = modifier, enabled = enabled)
+        FlowCtaKind.Primary -> VelaPrimaryButton(text = label, onClick = onClick, modifier = modifier, enabled = enabled)
+        FlowCtaKind.Secondary -> VelaSecondaryButton(text = label, onClick = onClick, modifier = modifier, enabled = enabled)
     }
 }
 

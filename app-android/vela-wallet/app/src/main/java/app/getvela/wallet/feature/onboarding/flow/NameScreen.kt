@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.onboarding.flow
 
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -137,10 +138,10 @@ fun ColumnScope.NameScreen(
                         conjunction = strings.t(I18nKeys.Create.ACK2_AND),
                         terms = strings.t(I18nKeys.Create.ACK2_TERMS),
                         period = strings.t(I18nKeys.Create.ACK2_PERIOD),
-                        // Accent alone marks a link here, as it does on web,
-                        // iOS and the desktop — an underline on one shell only
-                        // is the kind of drift this pass exists to remove.
-                        linkStyle = SpanStyle(color = colors.accentBase),
+                        // Neutral ink, underlined: the web's ack link (NameScreen
+                        // `.ack a`, vis-21) — the accent belongs to value-moving
+                        // actions only.
+                        linkStyle = SpanStyle(color = colors.fgBase, textDecoration = TextDecoration.Underline),
                     ),
                     onLink = { which ->
                         when (which) {

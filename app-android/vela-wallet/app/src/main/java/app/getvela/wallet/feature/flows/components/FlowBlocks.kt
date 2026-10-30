@@ -514,7 +514,7 @@ private fun AmountFigure(
                     // At rest the field's own glyphs step aside for the drawn
                     // figure above them (below); focused, they scroll to the caret.
                     textStyle = if (focused) figureStyle else figureStyle.copy(color = Color.Transparent),
-                    cursorBrush = SolidColor(colors.accentBase),
+                    cursorBrush = SolidColor(colors.fgBase),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier
                         .width(with(density) { widthPx.toDp() })
@@ -651,7 +651,7 @@ fun StatusHero(
 ) {
     val colors = VelaTheme.colors
     val (disc, tint) = when (stage) {
-        ReceiptStage.Submitting -> colors.bgSunken to colors.accentBase
+        ReceiptStage.Submitting -> colors.bgSunken to colors.fgBase
         ReceiptStage.Submitted -> colors.bgSunken to colors.fgMuted
         ReceiptStage.Confirmed -> colors.successSoft to colors.successBase
         ReceiptStage.Failed -> colors.errorSoft to colors.errorBase
@@ -677,7 +677,7 @@ fun StatusHero(
             label = "receiptRing",
         )
         val arcColor by animateColorAsState(
-            targetValue = if (stage == ReceiptStage.Confirmed) colors.successBase else colors.accentBase,
+            targetValue = if (stage == ReceiptStage.Confirmed) colors.successBase else colors.fgBase,
             label = "receiptRingColor",
         )
         val wait = rememberInfiniteTransition(label = "receiptWait")
@@ -1061,7 +1061,7 @@ fun RecipientField(
                         // the third — the tail a poisoned look-alike forges.
                         maxLines = Int.MAX_VALUE,
                         textStyle = monoStyle,
-                        cursorBrush = SolidColor(colors.accentBase),
+                        cursorBrush = SolidColor(colors.fgBase),
                         modifier = Modifier.fillMaxWidth(),
                         decorationBox = { inner ->
                             if (typed.isEmpty()) {

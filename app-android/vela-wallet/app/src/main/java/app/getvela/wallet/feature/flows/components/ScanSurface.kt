@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.flows.components
 
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -119,7 +120,8 @@ fun ScanSurface(
             statusAction?.let { action ->
                 Text(
                     text = action,
-                    color = colors.accentBase,
+                    color = colors.fgBase,
+                    textDecoration = TextDecoration.Underline,
                     fontFamily = VelaFontFamily,
                     fontSize = VelaTextSize.sm,
                     textAlign = TextAlign.Center,

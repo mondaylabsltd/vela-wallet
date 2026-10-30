@@ -108,7 +108,7 @@ fun ChainFilterList(
                     Icon(
                         imageVector = VelaIcons.Check,
                         contentDescription = null,
-                        tint = colors.accentBase,
+                        tint = colors.fgBase,
                         modifier = Modifier.size(VelaIconSize.base),
                     )
                     Spacer(modifier = Modifier.width(VelaSpacing.md))

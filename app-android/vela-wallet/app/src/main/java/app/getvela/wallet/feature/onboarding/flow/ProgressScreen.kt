@@ -103,7 +103,7 @@ fun ColumnScope.ProgressScreen(position: ProgressPosition, keyCount: Int) {
                             modifier = Modifier.size(VelaIconSize.base),
                         )
                         active -> CircularProgressIndicator(
-                            color = colors.accentBase,
+                            color = colors.fgBase,
                             strokeWidth = VelaBorder.emphasis,
                             modifier = Modifier.size(VelaIconSize.base),
                         )
