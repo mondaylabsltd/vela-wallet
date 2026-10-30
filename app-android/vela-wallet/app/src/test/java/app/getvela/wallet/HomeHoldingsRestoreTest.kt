@@ -117,8 +117,9 @@ class HomeHoldingsRestoreTest {
         h.host.send(BalanceEvent.AccountChanged(ADDRESS))
         h.host.send(BalanceEvent.HoldingsRestored(ADDRESS, kept))
         val view = h.host.settle { it.tokens.size == 2 }
-        assertEquals(setOf("XDAI", "ETH"), view.tokens.map { it.symbol }.toSet())
-        assertEquals("USD-sorted", "ETH", view.tokens.first().symbol)
+        // The core shows each row under its display symbol (`with_display_symbol`: XDAI reads xDAI).
+        assertEquals(setOf(100, 1), view.tokens.map { it.chain_id }.toSet())
+        assertEquals("USD-sorted", 1, view.tokens.first().chain_id)
         assertTrue("still reading", view.last_refreshed_at_ms == null)
     }
 
@@ -129,7 +130,7 @@ class HomeHoldingsRestoreTest {
         h.host.send(BalanceEvent.HoldingsRestored(OTHER, kept))
         h.host.send(BalanceEvent.HoldingsRestored(ADDRESS, kept.take(1)))
         val view = h.host.settle { it.tokens.isNotEmpty() }
-        assertEquals(listOf("XDAI"), view.tokens.map { it.symbol })
+        assertEquals(listOf(100), view.tokens.map { it.chain_id })
     }
 
     @Test
