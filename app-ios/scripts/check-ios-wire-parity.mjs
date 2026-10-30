@@ -52,7 +52,9 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 export const GEN = join(ROOT, 'app-web/vela-wallet/src/lib/core/generated');
-export const IOS = join(ROOT, 'app-ios/VelaWallet/VelaWallet');
+// `VELA_IOS_SRC`: measure another copy of the sources (a past commit's, for a
+// before/after report) against today's generated types.
+export const IOS = process.env.VELA_IOS_SRC || join(ROOT, 'app-ios/VelaWallet/VelaWallet');
 
 /**
  * Generated machine prefix → the Swift files that answer its operations.
@@ -64,9 +66,11 @@ export const IOS = join(ROOT, 'app-ios/VelaWallet/VelaWallet');
  * keys are the stored bytes', not literals in the Swift).
  */
 export const MACHINES = {
-	Balance: ['Features/Wallet/BalanceExecutor.swift'],
+	// The token rows are written by the chain reads.
+	Balance: ['Features/Wallet/BalanceExecutor.swift', 'Core/TokenReads.swift'],
 	Batch: ['Features/Send/BatchExecutor.swift'],
-	Bhist: ['Features/Explore/Core/ExploreExecutor.swift'],
+	// The history list is handed over as stored (the web's shape, snake_case).
+	Bhist: { files: ['Features/Explore/Core/ExploreExecutor.swift'], passthrough: ['loaded.entries'] },
 	Clear: ['Features/Signing/Core/ClearExecutor.swift'],
 	Contact: ['Features/Contacts/ContactsExecutor.swift'],
 	Currency: ['Features/Settings/DisplayCurrencyExecutor.swift'],
@@ -76,19 +80,29 @@ export const MACHINES = {
 	// The bundler quote's fields are written by the relay client.
 	Fee: ['Features/Send/FeeExecutor.swift', 'Core/RelayClient.swift'],
 	FeeTierPref: ['Features/Settings/FeeTierExecutor.swift'],
-	Feed: ['Features/Wallet/ActivityExecutor.swift'],
+	// The records' wire form is `TxRecords.toWire`.
+	Feed: ['Features/Wallet/ActivityExecutor.swift', 'Core/TxRecords.swift'],
 	Guard: ['Features/Signing/Core/GuardExecutor.swift'],
-	Mtok: ['Features/Wallet/ManageTokensExecutor.swift'],
+	// The custom tokens' wire form is `CustomTokens.toWire`.
+	Mtok: ['Features/Wallet/ManageTokensExecutor.swift', 'Core/CustomTokens.swift'],
 	Net: ['Features/Settings/NetworkAdminExecutor.swift'],
 	PaymentRequest: ['Features/Wallet/PaymentRequestExecutor.swift'],
 	ReceiveWatch: ['Features/Wallet/ReceiveWatchStore.swift'],
 	Rpc: ['Core/RpcPool.swift'],
 	Send: ['Features/Send/SendExecutor.swift'],
-	Session: ['Features/Onboarding/Core/SessionExecutor.swift'],
+	// The accounts and the outbox are handed over as `AccountStore` holds them.
+	Session: {
+		files: ['Features/Onboarding/Core/SessionExecutor.swift'],
+		passthrough: ['accounts_loaded.accounts', 'pending_uploads_loaded.records']
+	},
 	Sign: ['Features/Signing/Core/SignExecutor.swift'],
 	SigningPages: ['Features/Settings/SigningPagesExecutor.swift'],
-	Track: ['Features/Send/TrackerExecutor.swift'],
-	Trust: ['Features/Wallet/TokenTrustExecutor.swift'],
+	// A receipt's logs go back as the node wrote them.
+	Track: {
+		files: ['Features/Send/TrackerExecutor.swift'],
+		passthrough: ['receipt_with_logs.logs']
+	},
+	Trust: ['Features/Wallet/TokenTrustExecutor.swift', 'Core/CustomTokens.swift'],
 	// Not iOS machines: the extension's permission store, its dApp sessions
 	// (WalletPair / remote inject) and its attestation cache. iOS's dApps run
 	// in the in-app browser (`Dbr`).
@@ -353,7 +367,11 @@ export function measure(io, machines = MACHINES) {
 			for (const f of r.fields) {
 				if (!keys.has(f.name)) (f.optional ? optional : required).push(`${r.tag}.${f.name}`);
 				if (passthrough.has(`${r.tag}.${f.name}`)) continue;
-				const bare = f.type.replace(/\s*\|\s*null$/, '').trim();
+				// `T`, `T | null` and `Array<T>` all carry T's keys.
+				const bare = f.type
+					.replace(/\s*\|\s*null$/, '')
+					.trim()
+					.replace(/^Array<\s*([A-Za-z0-9]+)\s*>$/, '$1');
 				if (!/^[A-Z][A-Za-z0-9]*$/.test(bare)) continue;
 				const nested = resolveFields(bare);
 				if (!nested) continue;

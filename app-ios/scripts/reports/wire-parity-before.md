@@ -16,15 +16,15 @@
 | Dsess | 17 | (not an iOS machine) | 11 | | | | |
 | Explore | 2 | — | 2 | — | — | — | — |
 | ExtCache | 5 | (not an iOS machine) | 5 | | | | |
-| Fee | 9 | — | 9 | — | — | — | — |
+| Fee | 9 | — | 9 | — | — | — | in_band_quotes.quotes.native_usd_floor_price (opt) |
 | FeeSpeed | 0 | (not an iOS machine) | 0 | | | | |
 | FeeTierPref | 2 | — | 2 | — | — | — | — |
-| Feed | 8 | — | 9 | delete_failed | — | — | — |
+| Feed | 8 | — | 9 | delete_failed | — | — | store_loaded.records.calldata (opt), store_loaded.records.token (opt) |
 | FeedDapp | 4 | (not an iOS machine) | 0 | | | | |
 | Guard | 3 | — | 3 | — | — | — | — |
 | Intent | 0 | (not an iOS machine) | 0 | | | | |
 | Mtok | 5 | — | 7 | saved, save_failed, remove_failed | — | — | — |
-| Net | 18 | retire_provider_keys, write_shown_networks | 14 | provider_keys_retired | store_loaded.multisig_service | store_loaded.shown_networks | store_loaded.endpoints.genesis_service_url (opt), store_loaded.shown_networks.version (opt), store_loaded.shown_networks.shown (opt), chain_info.data.slip44 (opt) |
+| Net | 18 | retire_provider_keys, write_shown_networks | 14 | provider_keys_retired | store_loaded.multisig_service | store_loaded.shown_networks | store_loaded.custom_networks.is_testnet (opt), store_loaded.network_configs.only_mine, store_loaded.endpoints.genesis_service_url (opt), store_loaded.shown_networks.version (opt), store_loaded.shown_networks.shown (opt), search_index.chains.vela, chain_info.data.slip44 (opt) |
 | PaymentRequest | 2 | — | 2 | — | — | — | — |
 | ReceiveWatch | 3 | — | 5 | — | — | — | — |
 | Rpc | 7 | — | 7 | — | pool_config.own_only | — | — |
@@ -35,9 +35,9 @@
 | Track | 10 | read_nonce | 14 | receipt, nonce_read | — | — | — |
 | Trust | 8 | — | 8 | — | — | — | — |
 
-unanswered ops: 6 · results never produced: 13 · required fields missing: 4 · optional fields missing: 1 · payload fields missing: 14 · unmapped machines: 0
+unanswered ops: 6 · results never produced: 13 · required fields missing: 4 · optional fields missing: 1 · payload fields missing: 20 · unmapped machines: 0
 
-## --strict: 12 failure(s)
+## --strict: 14 failure(s)
 
 - Balance: required field missing fetch_settled.own_node_chain_ids
 - Balance: required field missing fetch_settled.fallback_chain_ids
@@ -45,6 +45,8 @@ unanswered ops: 6 · results never produced: 13 · required fields missing: 4 ·
 - Net: unanswered op retire_provider_keys
 - Net: unanswered op write_shown_networks
 - Net: required field missing store_loaded.multisig_service
+- Net: payload field missing store_loaded.network_configs.only_mine
+- Net: payload field missing search_index.chains.vela
 - Rpc: required field missing pool_config.own_only
 - Send: unanswered op propose_safe_tx
 - Send: payload field missing risk_resolved.risk.history_unread
