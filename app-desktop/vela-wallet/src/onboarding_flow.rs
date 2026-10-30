@@ -194,6 +194,9 @@ pub enum FlowEvent {
     ChooseOwnPage,
     /// Spec 102: back to Vela's own keys (`SigningPageChosen { url: None }`).
     ClearOwnPage,
+    /// ob-7: close the passkey prompt that is waiting (`CreateEvent::
+    /// CancelPending`) — back to the key list, every drafted key intact.
+    CancelPending,
 }
 
 pub type FlowSink = Rc<dyn Fn(FlowEvent, &mut Window, &mut App)>;
@@ -720,6 +723,21 @@ fn render_keys(host: &FlowHost<'_>) -> Div {
     column = column.child(add);
 
     column = column.child(caption(theme, loc.t("onboarding.create.keysHint")));
+    // ob-7: a passkey prompt is waiting — the way out is said, not hidden
+    // behind it (`CreateView.can_cancel`, `CreateEvent::CancelPending`).
+    if view.can_cancel {
+        let sink_cancel = host.sink.clone();
+        column = column
+            .child(caption(theme, loc.t("onboarding.common.confirmInPrompt")))
+            .child(vela_button_state(
+                "flow-cancel-pending",
+                ButtonVariant::Secondary,
+                loc.t("common.cancel"),
+                ButtonState::Enabled,
+                theme,
+                move |_, window, cx| sink_cancel(FlowEvent::CancelPending, window, cx),
+            ));
+    }
     let finish_label = if view.needs_second_key {
         loc.t("onboarding.create.addSecondKeyBtn")
     } else {

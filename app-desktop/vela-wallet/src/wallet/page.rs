@@ -823,6 +823,9 @@ pub struct WalletPage {
     contacts_query: String,
     /// SR3, the balance breakdown the hero's status line opens (078 H-03).
     balance_detail_open: bool,
+    /// dapp-13: the add-network sheet's "Add without verifying" was opened,
+    /// and its warning and confirm are up.
+    add_unverified_open: bool,
     /// Spec 092: the list of networks the wallet cannot reach, which the
     /// hero's status line opens while any is.
     unreachable_open: bool,
@@ -1785,6 +1788,7 @@ impl WalletPage {
             signing_background: Vec::new(),
             contacts_query: String::new(),
             balance_detail_open: false,
+            add_unverified_open: false,
             unreachable_open: false,
             refresh_hold: None,
             hero_clock: None,
@@ -7493,9 +7497,9 @@ impl WalletPage {
                                 self.send_class,
                             ))
                         }
-                        FlowPanel::Dsd2 | FlowPanel::Dsd2b => {
-                            flow_fixtures::FlowBody::SendForm(Box::new(flows_live::send_form(&inputs)))
-                        }
+                        FlowPanel::Dsd2 | FlowPanel::Dsd2b => flow_fixtures::FlowBody::SendForm(
+                            Box::new(flows_live::send_form(&inputs)),
+                        ),
                         FlowPanel::Dsd2e => {
                             let contacts = resident::resident::<Contacts>(cx).read(cx).view();
                             flow_fixtures::FlowBody::ContactPick(flows_live::contact_pick(
@@ -7917,6 +7921,7 @@ impl WalletPage {
                     to_host(SendEvent::AddNetworkTapped { chain_id })
                 }
                 flows_live::NoticeWayOut::EditAmount => to_host(SendEvent::EditAmount),
+                flows_live::NoticeWayOut::RetryAfterError => to_host(SendEvent::RetryAfterError),
             });
             match panel {
                 FlowPanel::Dsd1 => {
@@ -12021,10 +12026,8 @@ impl WalletPage {
         // Owner decision 2026-10-29: the Vela networks out of the person's
         // list, by name, after the mainnet hint — "Add one from Add Network".
         let view = resident::resident::<NetworkAdmin>(cx).read(cx).view();
-        let more = settings_live::more_networks(
-            &view,
-            &self.loc.t("settingsModals.network.moreNetworks"),
-        );
+        let more =
+            settings_live::more_networks(&view, &self.loc.t("settingsModals.network.moreNetworks"));
         let hint = settings_live::space_hint(&self.loc.t(hint), more.as_deref(), testnet);
         Some(
             div()
@@ -12342,7 +12345,12 @@ impl WalletPage {
     /// network's saved RPC is the person's own (`NetNetworkRow::own_rpc`) —
     /// on, the pool never asks a public node about the account. The switch
     /// says what is saved; the core decides what it binds.
-    fn only_mine_row(&mut self, theme: &Theme, chain_id: u32, cx: &mut Context<Self>) -> Option<Div> {
+    fn only_mine_row(
+        &mut self,
+        theme: &Theme,
+        chain_id: u32,
+        cx: &mut Context<Self>,
+    ) -> Option<Div> {
         self.identity.as_ref()?;
         let view = resident::resident::<NetworkAdmin>(cx).read(cx).view();
         let row = view.networks.iter().find(|row| row.chain_id == chain_id)?;
@@ -13211,7 +13219,6 @@ impl WalletPage {
             ))
     }
 
-
     /// DST8 — the build, the technical inventory, the three links.
     fn settings_about(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
         let s = &self.settings;
@@ -13292,9 +13299,8 @@ impl WalletPage {
                 .iter()
                 .filter(|chain| chain.testnet == testnet)
                 .count()
-                + if self
-                    .identity
-                    .is_some() { {
+                + if self.identity.is_some() {
+                    {
                         resident::resident::<NetworkAdmin>(cx)
                             .read(cx)
                             .view()
@@ -13302,7 +13308,10 @@ impl WalletPage {
                             .iter()
                             .filter(|row| row.is_custom && row.is_testnet == testnet)
                             .count()
-                    } } else { 0 },
+                    }
+                } else {
+                    0
+                },
         )
         .unwrap_or(u32::MAX);
         for (label, value, mono) in settings_fixtures::about_rows_with(&self.settings, networks) {
@@ -14509,7 +14518,8 @@ impl WalletPage {
                     return;
                 };
                 let view = host.read(cx).view.clone();
-                if view.stage == vela_core::app::send::SendStage::EnterDetails && view.can_continue {
+                if view.stage == vela_core::app::send::SendStage::EnterDetails && view.can_continue
+                {
                     self.send_to_pinned = Some(false);
                     host.update(cx, |host, cx| host.dispatch(SendEvent::Continue, cx));
                 }
@@ -17356,13 +17366,16 @@ impl WalletPage {
     /// `landingClosed`).
     fn landing_closed(&mut self, cx: &mut Context<Self>) {
         use vela_core::app::sign_request::SignEnding;
-        let Some(op) = self.dapp_landing.as_ref().and_then(|landing| match &landing.ending {
-            SignEnding::Landed { user_op_hash, .. } | SignEnding::Reverted { user_op_hash, .. } => {
-                user_op_hash.clone()
-            }
-            SignEnding::StillConfirming { user_op_hash } => Some(user_op_hash.clone()),
-            _ => None,
-        }) else {
+        let Some(op) = self
+            .dapp_landing
+            .as_ref()
+            .and_then(|landing| match &landing.ending {
+                SignEnding::Landed { user_op_hash, .. }
+                | SignEnding::Reverted { user_op_hash, .. } => user_op_hash.clone(),
+                SignEnding::StillConfirming { user_op_hash } => Some(user_op_hash.clone()),
+                _ => None,
+            })
+        else {
             return;
         };
         #[cfg(not(target_os = "linux"))]
@@ -18089,6 +18102,58 @@ impl WalletPage {
                     .on_click(cx.listener(dispatch(NetEvent::DappAddRetried)))
                     .child(crate::flows::components::accent_button(theme, label)),
             );
+        }
+        // dapp-13: the check could not be made — the person may add the
+        // page's network unverified, on an explicit confirmation under the
+        // warning (`NetEvent::DappAddApprovedUnverified`). Only where the core
+        // offers it (`can_add_unverified`).
+        if let Some((open, warning, confirm)) = sheet.unverified.clone() {
+            if self.add_unverified_open {
+                col = col
+                    .child(crate::settings::components::callout(
+                        theme,
+                        &mut self.icons,
+                        crate::settings::components::CalloutTone::Warning,
+                        warning,
+                    ))
+                    .child(
+                        div()
+                            .id("add-network-unverified-confirm")
+                            .cursor_pointer()
+                            .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                                this.add_unverified_open = false;
+                                let admin = this.network_admin(cx);
+                                admin.update(cx, |admin, cx| {
+                                    admin.dispatch(
+                                        NetEvent::DappAddApprovedUnverified {
+                                            now_iso: crate::executor::now_iso(),
+                                        },
+                                        cx,
+                                    );
+                                });
+                                cx.notify();
+                            }))
+                            .child(crate::flows::components::accent_button(theme, confirm)),
+                    );
+            } else {
+                col = col.child(
+                    outline_button(
+                        ElementId::from("add-network-unverified"),
+                        theme,
+                        &mut self.icons,
+                        None,
+                        open,
+                    )
+                    .on_click(cx.listener(
+                        |this, _: &gpui::ClickEvent, _, cx| {
+                            this.add_unverified_open = true;
+                            cx.notify();
+                        },
+                    )),
+                );
+            }
+        } else {
+            self.add_unverified_open = false;
         }
         // Chain Setup, on this chain — only where the core says there is
         // something to deploy (never for a network with no P-256 verifier).
@@ -21012,9 +21077,38 @@ impl WalletPage {
     /// Returns whether the scan was acted on. `false` is a code that is not a
     /// payment, read outside a send: the scanner stays up and says "Invalid
     /// QR" (078 F-02) — it used to close without a word.
+    /// A payment link the OS handed over (`open_link`, `velawallet://pay?…`):
+    /// read exactly as a scanned one is ([`Self::scan_resolved`]) — the Send
+    /// form opens, prefilled and locked to the link's chain, and nothing is
+    /// sent until the person confirms.
+    pub(crate) fn open_pay_link(&mut self, url: &str, cx: &mut Context<Self>) {
+        if self.scan_resolved(url.to_owned(), cx) {
+            cx.activate(true);
+        }
+    }
+
     fn scan_resolved(&mut self, text: String, cx: &mut Context<Self>) -> bool {
         use vela_core::app::send::SendScan;
-        let request = crate::flows::eip681::parse(&text);
+        // A payment link (`…/pay?to=…&chain=…`, `velawallet://pay?…`) is read
+        // by the core's `/pay` grammar (`payment_request::Event::LinkOpened`):
+        // a valid one is the request it names — always on its chain, so the
+        // send locks to it — and a malformed one is refused, never guessed.
+        let request = match crate::executor::payment_request::pay_link(&text) {
+            Some(Some(pay)) => Some(crate::flows::eip681::Eip681 {
+                recipient: pay.recipient,
+                chain_id: Some(pay.chain_id),
+                token_address: pay.token_address,
+                amount_base_units: pay.amount_base,
+            }),
+            Some(None) => {
+                self.scan_notice = Some(ScanNotice::Unusable);
+                self.scan_quiet_until =
+                    Some(std::time::Instant::now() + std::time::Duration::from_secs(2));
+                cx.notify();
+                return false;
+            }
+            None => crate::flows::eip681::parse(&text),
+        };
         if self.send_host.is_none()
             && request.is_none()
             && !crate::flows::eip681::is_hex_address(text.trim())

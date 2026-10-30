@@ -31,6 +31,7 @@ mod marks;
 mod network_space;
 mod onboarding;
 mod onboarding_flow;
+mod open_link;
 mod outcome;
 mod panic_report;
 mod parallel_space;
@@ -379,11 +380,11 @@ fn main() {
     // the running app.
     let mut relayed = false;
     for argument in std::env::args().skip(1) {
-        if argument.starts_with(vela_core::trusted_signer::CALLBACK_URL) {
+        if open_link::is_ours(&argument) {
             if scheme_relay::forward(&argument) {
                 relayed = true;
             } else {
-                executor::trusted_signer::deliver_callback(&argument);
+                open_link::deliver(&argument);
             }
         }
     }
@@ -412,9 +413,11 @@ fn main() {
     });
 
     // macOS: the same answer as an Apple Event, to the running app.
+    // A payment link (`velawallet://pay?…`) is routed the same way: the
+    // window opens Send on it below (`open_link`).
     app.on_open_urls(|urls| {
         for url in urls {
-            executor::trusted_signer::deliver_callback(&url);
+            open_link::deliver(&url);
         }
     });
 
@@ -484,6 +487,27 @@ fn main() {
         }
         app_menu::install(cx);
         open_main_window(cx);
+
+        // Payment links the OS handed over (`open_link`): Send opens on each,
+        // prefilled, on the wallet's page. On a cold start the page is still
+        // booting, so a link waits for it — for a few seconds, never forever.
+        if let Some(mut links) = open_link::take_pay_links() {
+            cx.spawn(async move |cx| {
+                use futures::StreamExt as _;
+                while let Some(url) = links.next().await {
+                    for _ in 0..40 {
+                        let opened = agent::on_page(cx, |page, _, cx| page.open_pay_link(&url, cx));
+                        if opened.is_some() {
+                            break;
+                        }
+                        cx.background_executor()
+                            .timer(std::time::Duration::from_millis(250))
+                            .await;
+                    }
+                }
+            })
+            .detach();
+        }
 
         if dev_env::var_os!("VELA_NO_ACTIVATE").is_none() {
             cx.activate(true);

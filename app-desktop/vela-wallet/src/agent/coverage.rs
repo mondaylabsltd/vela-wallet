@@ -116,6 +116,7 @@ const EVENTS: &[(&str, Place)] = &[
     ("CreateEvent::ConfirmKey", Later(ONBOARD)),
     ("CreateEvent::EnterWallet", Later(ONBOARD)),
     ("CreateEvent::FinishKeys", Later(ONBOARD)),
+    ("CreateEvent::CancelPending", Later(ONBOARD)),
     ("CreateEvent::GoBack", Later(ONBOARD)),
     ("CreateEvent::NameChanged", Later(ONBOARD)),
     ("CreateEvent::RemoveKey", Later(ONBOARD)),
@@ -155,6 +156,7 @@ const EVENTS: &[(&str, Place)] = &[
     ("FlowEvent::AckToggled", Later(ONBOARD)),
     ("FlowEvent::AddKey", Later(ONBOARD)),
     ("FlowEvent::Back", Later(ONBOARD)),
+    ("FlowEvent::CancelPending", Later(ONBOARD)),
     ("FlowEvent::ChooseOwnPage", Later(ONBOARD)),
     ("FlowEvent::ClearOwnPage", Later(ONBOARD)),
     ("FlowEvent::ConfirmKey", Later(ONBOARD)),
@@ -188,6 +190,7 @@ const EVENTS: &[(&str, Place)] = &[
     ("NetEvent::CustomRpcEdited", Step("add_network")),
     ("NetEvent::CustomSpaceChanged", NotOne(SPACE_OF)),
     ("NetEvent::DappAddApproved", NotOne(DAPP)),
+    ("NetEvent::DappAddApprovedUnverified", NotOne(DAPP)),
     ("NetEvent::DappAddCancelled", NotOne(DAPP)),
     ("NetEvent::DappAddDeclined", NotOne(DAPP)),
     ("NetEvent::DappAddRequested", NotOne(DAPP)),
@@ -246,7 +249,10 @@ const EVENTS: &[(&str, Place)] = &[
         View("a notice dismissed"),
     ),
     ("SendEvent::DisplayChanged", Machine("the display currency")),
-    ("SendEvent::ChainAnswered", Machine("the network answering again")),
+    (
+        "SendEvent::ChainAnswered",
+        Machine("the network answering again"),
+    ),
     ("SendEvent::Done", View("the receipt closed")),
     (
         "sign_request::Event::LandingClosed",
@@ -295,6 +301,7 @@ const EVENTS: &[(&str, Place)] = &[
         "SendEvent::RetryAfterBootstrap",
         View("the review's own retry"),
     ),
+    ("SendEvent::RetryAfterError", View("the review's own retry")),
     (
         "SendEvent::RetryRelayUnreachable",
         View("the review's own retry"),
@@ -338,6 +345,7 @@ const EVENTS: &[(&str, Place)] = &[
     ),
     ("SignEvent::SimSettled", Machine("the simulation")),
     ("SignEvent::SimStarted", Machine("the simulation")),
+    ("SignEvent::DismissTapped", Later(SIGN)),
     ("SignEvent::SwipeDismissed", Later(SIGN)),
     ("SigningPagesEvent::VersionTrusted", NotOne(BOUNDARY)),
     (
@@ -358,8 +366,14 @@ const EVENTS: &[(&str, Place)] = &[
         View("the network filter"),
     ),
     ("approval_guard::Event::CustomAmountChanged", Later(SIGN)),
-    ("approval_guard::Event::GrantDeliberatelyChosen", Later(SIGN)),
-    ("approval_guard::Event::LegGrantDeliberatelyChosen", Later(SIGN)),
+    (
+        "approval_guard::Event::GrantDeliberatelyChosen",
+        Later(SIGN),
+    ),
+    (
+        "approval_guard::Event::LegGrantDeliberatelyChosen",
+        Later(SIGN),
+    ),
     ("approval_guard::Event::LegCustomAmountChanged", Later(SIGN)),
     ("approval_guard::Event::LegPresetSelected", Later(SIGN)),
     ("approval_guard::Event::PresetSelected", Later(SIGN)),
@@ -451,6 +465,10 @@ const EVENTS: &[(&str, Place)] = &[
     (
         "payment_request::Event::IncludeNetworkChanged",
         View("what the receive code carries"),
+    ),
+    (
+        "payment_request::Event::LinkOpened",
+        View("a payment link read into the send form; the send is the step"),
     ),
     (
         "sign_request::Event::FundingCompleteTapped",

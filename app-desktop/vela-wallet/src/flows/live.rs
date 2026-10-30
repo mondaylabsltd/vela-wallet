@@ -2826,9 +2826,10 @@ pub fn split_amount_edited(
 ) -> Vec<SendRecipientDraft> {
     let mut next = rows.to_vec();
     if let Some(row) = next.get_mut(index)
-        && let Some(clean) = amount_edited(&amount, &amount_to_input(&row.amount)) {
-            row.amount = clean;
-        }
+        && let Some(clean) = amount_edited(&amount, &amount_to_input(&row.amount))
+    {
+        row.amount = clean;
+    }
     next
 }
 
@@ -3124,8 +3125,21 @@ pub fn send_token_ids(view: &SendView) -> Vec<String> {
 /// resolver's raw "passkey"), else the first-interaction tell (the one that
 /// matters for a poisoned look-alike).
 fn recipient_note(send: &SendView, s: &FlowStrings) -> Option<SharedString> {
+    // send-2: a mixed case that is not its EIP-55 checksum — `Continue`
+    // refuses it as not an address, and this says which way it is not one.
+    if send.recipient_checksum_mismatch {
+        return Some(s.recipient_checksum.clone());
+    }
     if send.recipient_is_token_contract {
         return Some(s.recipient_token_contract.clone());
+    }
+    // send-13: the zero address, or the account's own — warned, never refused.
+    if let Some(warning) = send.recipient_warning {
+        use vela_core::app::send::SendRecipientWarning;
+        return Some(match warning {
+            SendRecipientWarning::ZeroAddress => s.recipient_zero_address.clone(),
+            SendRecipientWarning::OwnAddress => s.recipient_self.clone(),
+        });
     }
     if let Some(name) = single_payee(send).and_then(|payee| payee_name(&payee, s)) {
         return Some(name.into());
@@ -3214,6 +3228,9 @@ pub enum NoticeWayOut {
     AddNetwork { chain_id: u32 },
     /// Back to the amount field.
     EditAmount,
+    /// The failed submit's "Try again" — back to a confirm that can be
+    /// confirmed (`SendEvent::RetryAfterError`).
+    RetryAfterError,
 }
 
 /// Why a locked request's "Add this network" stopped, as it rides through
@@ -3274,7 +3291,13 @@ pub(crate) fn send_notice(i: &SendInputs<'_>, confirming: bool) -> Option<SendNo
 /// What its action does. Same function, same order — see [`NoticeWayOut`].
 #[must_use]
 pub fn notice_way_out(i: &SendInputs<'_>, confirming: bool) -> Option<NoticeWayOut> {
-    build_notice(i, confirming).and_then(|(_, way_out)| way_out)
+    match build_notice(i, confirming) {
+        Some((_, way_out)) => way_out,
+        // The confirm's last-resort notice is the failed submit's
+        // ([`tx_error_notice`]), and its button is "Try again".
+        None if confirming => tx_error_retry(i.send, i.s).map(|_| NoticeWayOut::RetryAfterError),
+        None => None,
+    }
 }
 
 fn build_notice(
@@ -3583,6 +3606,22 @@ fn build_notice(
                     &issue.symbol,
                 ))
             })
+        })
+        .or_else(|| {
+            // r5reg-3: the Max was filled again from a newer fee quote after
+            // the person saw it — what it read, and what is sent now.
+            send.max_moved.as_ref().map(|moved| {
+                let symbol = send
+                    .selected_token
+                    .as_ref()
+                    .map(|token| token.symbol.as_str())
+                    .unwrap_or_default();
+                SharedString::from(fill(
+                    &fill(&fill(&s.max_moved, "to", &moved.to), "from", &moved.from),
+                    "symbol",
+                    symbol,
+                ))
+            })
         })?;
     Some((
         SendNotice {
@@ -3728,7 +3767,10 @@ pub fn send_form(i: &SendInputs<'_>) -> SendForm {
     } else {
         recipient_note(send, s)
     };
-    let recipient_note_warn = !split && send.recipient_is_token_contract;
+    let recipient_note_warn = !split
+        && (send.recipient_is_token_contract
+            || send.recipient_checksum_mismatch
+            || send.recipient_warning.is_some());
     // SD2d (078 F-05): the picked coins, each at the amount it will move —
     // the same reading the confirm lists (`sweep_breakdown`).
     let sweep = sweeping.then(|| {
@@ -3921,9 +3963,9 @@ fn tx_error_text(send: &SendView, s: &FlowStrings) -> Option<SharedString> {
         // over what to do, and "Try again" waits for it.
         vela_core::app::send::SendTxErrorKey::PreviousPending => s.not_sent_body.clone(),
         // Another transaction of this account spent the nonce first
-        // (send-15): nothing was sent — "Not sent", as above, and "Try
-        // again" signs anew.
-        vela_core::app::send::SendTxErrorKey::NonceUsed => s.not_sent_body.clone(),
+        // (send-15): nothing was sent — "Not sent", calmly, and "Review
+        // again" signs anew ([`tx_error_notice`]).
+        vela_core::app::send::SendTxErrorKey::NonceUsed => s.went_first.clone(),
         vela_core::app::send::SendTxErrorKey::VenueBlocked => {
             send.tx_venue_block.as_ref().map_or_else(
                 || s.tx_error_generic.clone(),
@@ -3939,17 +3981,37 @@ fn tx_error_text(send: &SendView, s: &FlowStrings) -> Option<SharedString> {
         vela_core::app::send::SendTxErrorKey::ChainBusy => {
             fill(&s.tx_error_chain_busy, "network", &form_network(send)).into()
         }
-        vela_core::app::send::SendTxErrorKey::ChainUnreachable => {
-            fill(&s.tx_error_chain_unreachable, "network", &form_network(send)).into()
-        }
-        // The web's trusted signing page (round 7): the desktop's page
-        // failures come back as the signer's own words (`executor::user_op`),
-        // never as these keys, so they are never set here.
-        vela_core::app::send::SendTxErrorKey::PageUnanswered
-        | vela_core::app::send::SendTxErrorKey::PageMismatch
-        | vela_core::app::send::SendTxErrorKey::PageRefused
-        | vela_core::app::send::SendTxErrorKey::PageNotOpened => s.tx_error_generic.clone(),
+        vela_core::app::send::SendTxErrorKey::ChainUnreachable => fill(
+            &s.tx_error_chain_unreachable,
+            "network",
+            &form_network(send),
+        )
+        .into(),
+        // Round 7 (r7-2, r7-7): the account's signing page did not sign —
+        // said as what happened there (`SendSubmitFailure::PageFailed`, from
+        // `executor::trusted_signer::PageEnd`), never "couldn't be
+        // submitted".
+        vela_core::app::send::SendTxErrorKey::PageUnanswered => s.page_unanswered.clone(),
+        vela_core::app::send::SendTxErrorKey::PageMismatch => s.page_mismatch.clone(),
+        vela_core::app::send::SendTxErrorKey::PageRefused => s.page_refused.clone(),
+        vela_core::app::send::SendTxErrorKey::PageNotOpened => s.page_not_opened.clone(),
     })
+}
+
+/// The failed submit's way out (`retry_after_error`): "Try again", or
+/// "Review again" after another transaction spent the nonce first — and
+/// none where trying again would meet the same refusal: a venue this device
+/// cannot use (spec 102), a page whose own rules refused (round 7).
+fn tx_error_retry(send: &SendView, s: &FlowStrings) -> Option<SharedString> {
+    use vela_core::app::send::{SendTxErrorKey, SendTxStatus};
+    if send.tx_status != SendTxStatus::Error {
+        return None;
+    }
+    match send.tx_error? {
+        SendTxErrorKey::VenueBlocked | SendTxErrorKey::PageRefused => None,
+        SendTxErrorKey::NonceUsed => Some(s.tx_review_again.clone()),
+        _ => Some(s.tx_retry.clone()),
+    }
 }
 
 /// The form's network, by name — what the confirm's network lines say.
@@ -4047,7 +4109,34 @@ pub(crate) fn confirm_held_line(i: &SendInputs<'_>) -> Option<SharedString> {
     if i.send.previous_pending.is_some() {
         return Some(i.s.previous_pending.clone());
     }
-    send_fee_failure(i).map(|failure| failure.footer)
+    send_fee_failure(i)
+        .map(|failure| failure.footer)
+        // send-18: the confirm waits a bounded while for the recipient's
+        // check (`SendView::risk_checking`) — said, not a silent grey button.
+        .or_else(|| i.send.risk_checking.then(|| i.s.risk_checking.clone()))
+}
+
+/// send-11: the last passkey prompt signed nothing — said calmly over the
+/// confirm, which is the way to try again (`SendView::passkey_note`): closed
+/// (or no passkey on this device), or out of time. Never the failure's red.
+pub(crate) fn passkey_note_notice(send: &SendView, s: &FlowStrings) -> Option<SendNotice> {
+    use vela_core::app::send::SendPasskeyNote;
+    let body = match send.passkey_note? {
+        SendPasskeyNote::Cancelled => s.passkey_closed.clone(),
+        SendPasskeyNote::TimedOut => s.passkey_timed_out.clone(),
+    };
+    Some(SendNotice {
+        dismiss: None,
+        title: None,
+        body,
+        detail: None,
+        action: None,
+        copy: None,
+        report: None,
+        link: None,
+        error: false,
+        calm: true,
+    })
 }
 
 /// The core's alert kind, in the corpus's words. Semantic keys only — the
@@ -4161,7 +4250,7 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
         if refused_for_previous && send.previous_pending.is_some() {
             return None;
         }
-        tx_error_notice(send, s)
+        tx_error_notice(send, s).or_else(|| passkey_note_notice(send, s))
     });
     SendConfirm {
         // A sweep moves several coins; one mark would name the wrong one.
@@ -4302,13 +4391,22 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
 /// and nothing went wrong, and "Try again" (the confirm) waits for it. Every
 /// other error is red: the person cannot proceed as things stand.
 pub(crate) fn tx_error_notice(send: &SendView, s: &FlowStrings) -> Option<SendNotice> {
-    let not_sent = send.tx_error == Some(vela_core::app::send::SendTxErrorKey::PreviousPending);
+    use vela_core::app::send::SendTxErrorKey;
+    let held = send.tx_error == Some(SendTxErrorKey::PreviousPending);
+    let went_first = send.tx_error == Some(SendTxErrorKey::NonceUsed);
+    let not_sent = held || went_first;
     tx_error_text(send, s).map(|body| SendNotice {
         dismiss: None,
-        title: not_sent.then(|| s.not_sent_title.clone()),
+        title: if went_first {
+            Some(s.status_not_sent.clone())
+        } else {
+            held.then(|| s.not_sent_title.clone())
+        },
         body,
         detail: None,
-        action: None,
+        // The error panel's own "Try again" (WIRE-AUDIT §2, `RetryAfterError`)
+        // — wired by [`notice_way_out`], which names the same notice.
+        action: tx_error_retry(send, s),
         copy: None,
         report: None,
         link: None,
@@ -4404,7 +4502,10 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
 /// again"; "Review again" when another send used the nonce (send-15).
 #[must_use]
 pub fn receipt_send_again(send: &SendView, s: &FlowStrings) -> Option<SharedString> {
-    let receipt = send.receipt.as_ref().filter(|receipt| receipt.can_send_again)?;
+    let receipt = send
+        .receipt
+        .as_ref()
+        .filter(|receipt| receipt.can_send_again)?;
     Some(
         if receipt.refusal_key.as_deref() == Some("componentsUi.signing.wentFirst") {
             s.tx_review_again.clone()
@@ -6024,7 +6125,10 @@ mod tests {
         send.tx_status = SendTxStatus::Error;
         send.tx_error = Some(SendTxErrorKey::ChainUnreachable);
         let said = tx_error_text(&send, &s).unwrap_or_default().to_string();
-        assert!(said.contains("Ethereum") && said != s.tx_error_generic.as_ref(), "{said}");
+        assert!(
+            said.contains("Ethereum") && said != s.tx_error_generic.as_ref(),
+            "{said}"
+        );
         send.tx_error = Some(SendTxErrorKey::ChainBusy);
         let busy = tx_error_text(&send, &s).unwrap_or_default().to_string();
         assert!(busy.contains("Ethereum") && busy != said, "{busy}");
@@ -6045,7 +6149,10 @@ mod tests {
             refusal_key: Some("componentsUi.signing.wentFirst".to_owned()),
             ..receipt.clone()
         });
-        assert_eq!(receipt_send_again(&send, &s), Some(s.tx_review_again.clone()));
+        assert_eq!(
+            receipt_send_again(&send, &s),
+            Some(s.tx_review_again.clone())
+        );
         send.receipt = Some(SendReceiptView {
             can_send_again: false,
             ..receipt
