@@ -74,6 +74,9 @@ final class ContactsStore {
             bridge: ContactsCore(),
             perform: { [executor] operation in await executor.perform(operation) },
             onView: { [weak self] view in self?.view = view },
+            // An answer the core refused: unreadable, not kept — never a
+            // silent success.
+            neutralAnswer: { ContactsExecutor.neutralAnswer($0) },
             // The view as the core wrote it, for the AI agent's world (spec 104).
             keepsJson: true
         )
