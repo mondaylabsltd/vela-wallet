@@ -92,6 +92,7 @@ vi.mock('../shell/proposals-host.svelte', () => {
 	return {
 		ProposeFailedError,
 		proposalsHost: {
+			detach: () => {},
 			propose: async (
 				account: { address: string },
 				chainId: number,
@@ -208,7 +209,7 @@ function shown() {
 	const w = world();
 	asked = w.asked;
 	startMembers(w);
-	return render(MemberChanges, {
+	const screen = render(MemberChanges, {
 		props: {
 			m: words(),
 			account: {
@@ -222,6 +223,9 @@ function shown() {
 			cancelLabel: 'Cancel'
 		}
 	});
+	// What the proposals machine's view says waits, as the one host feeds it.
+	machines.membersWaiting(seams.items as never);
+	return screen;
 }
 
 const byText = (root: HTMLElement, text: string) =>

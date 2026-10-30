@@ -18,6 +18,8 @@ import { proposals, type ChainState } from '../core/proposals.svelte';
 import { multisig, type MultisigAccount } from '../core/store.svelte';
 import { loadCore } from '$lib/core/client';
 import {
+	memoryStorage,
+	offlineDeps,
 	startAccounts,
 	stopAccounts,
 	type AccountsMachineForTests
@@ -29,6 +31,7 @@ vi.mock('../core/presence.svelte', () => ({
 }));
 
 const { default: MultisigHomeCard } = await import('./MultisigHomeCard.svelte');
+const { machines } = await import('../shell/machines.svelte');
 
 const SAFE = '0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83';
 const A = '0x00000000000000000000000000000000000000aa';
@@ -111,7 +114,15 @@ describe('the first-run card (r5reg-17, r5reg-18)', () => {
 		expect(card()).not.toBeNull();
 
 		// The host follows it after the home has drawn; its networks are read.
+		// (Following is the one host's proposals machine, over a world that
+		// never answers; this test's accounts machine stays the store's.)
 		const active = multisig.active!;
+		await machines.boot({
+			deps: offlineDeps(memoryStorage()),
+			load: async () => {},
+			facts: () => ({ serviceUrl: 'http://service.test', accounts: [], networks: [100] })
+		});
+		multisig.attach(machine);
 		proposals.follow(active, []);
 		await settle();
 		expect(card(), 'not deployed anywhere yet').not.toBeNull();

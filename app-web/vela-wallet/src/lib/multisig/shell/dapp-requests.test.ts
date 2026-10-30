@@ -26,7 +26,8 @@ vi.mock('../core/store.svelte', () => ({
 		accounts: [],
 		useChain: () => {},
 		setFindingsOn: () => {},
-		send: () => {}
+		send: () => {},
+		attach: () => {}
 	}
 }));
 vi.mock('$lib/contacts/core/contacts-book.svelte', () => ({ contactsBook: { view: null } }));
