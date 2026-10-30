@@ -681,7 +681,12 @@ fn adds_a_member_picked_from_the_contacts_its_address_shown_its_name_and_kind_ke
     let view = sut.view();
     assert_eq!(view.entry.entry.as_ref().unwrap().address, D);
     assert_eq!(view.entry.name, "Dana");
-    assert_eq!(view.entry.kind, Some(MemberKind::Wallet));
+    // r7: picked from the contacts, it is asked like one typed — no Vela
+    // account found: "Other wallet" only hinted, nothing kept.
+    assert_eq!(view.entry.kind, None);
+    let choice = view.entry.choice.unwrap();
+    assert_eq!(choice.suggested, Some(MemberKind::Wallet));
+    assert_eq!(choice.note, Some(KindNote::Likely));
     assert!(view.entry.suggestions.is_empty(), "picked: no more offers");
     assert_eq!(rules_of(&on(&plan_of(&sut), ARC)), ((2, 3), (2, 4)));
     assert_eq!(
@@ -704,7 +709,7 @@ fn adds_a_member_picked_from_the_contacts_its_address_shown_its_name_and_kind_ke
         members[D],
         MemberInfo {
             name: Some("Dana".to_owned()),
-            kind: Some("wallet".to_owned()),
+            kind: None,
             typed: None
         }
     );
@@ -907,6 +912,55 @@ fn members_changed_on_chain_are_read_again() {
     };
     assert_eq!(members.len(), 4);
     assert!(members[0].added);
+}
+
+#[test]
+fn a_member_change_that_ran_has_each_networks_members_read_again() {
+    let (mut world, account) = two_networks();
+    let mut sut = shown(&mut world, &account, &[ARC, BASE]);
+    let open = waiting(ARC, add_d(), 2, WaitingStatus::Ready);
+    run(
+        &mut sut,
+        &mut world,
+        Event::Waiting {
+            proposals: vec![open.clone()],
+        },
+    );
+    {
+        let safe = world.safe_mut(ARC, &account.address);
+        safe.owners = vec![D.to_owned(), A.to_owned(), B.to_owned(), C.to_owned()];
+        safe.nonce = 1;
+    }
+    // A transfer done, or the same change still open: nothing read again.
+    run(
+        &mut sut,
+        &mut world,
+        Event::Waiting {
+            proposals: vec![open.clone()],
+        },
+    );
+    let NetworkState::Deployed { members, .. } = &sut.view().networks[0].state else {
+        panic!()
+    };
+    assert_eq!(members.len(), 3, "nothing moved yet");
+    // Executed: done — Arc's members as they are now, the change no longer waiting.
+    run(
+        &mut sut,
+        &mut world,
+        Event::Waiting {
+            proposals: vec![WaitingProposal {
+                status: WaitingStatus::Done,
+                ..open
+            }],
+        },
+    );
+    let view = sut.view();
+    let NetworkState::Deployed { members, .. } = &view.networks[0].state else {
+        panic!()
+    };
+    assert_eq!(members.len(), 4);
+    assert!(members[0].added);
+    assert!(view.groups.is_empty());
 }
 
 #[test]

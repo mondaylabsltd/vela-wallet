@@ -13,7 +13,9 @@
 	 *
 	 * Where it can be renamed, sharing it again and its Ethereum backup are
 	 * the core's accounts machine's (`plan_rename`, `share_again`,
-	 * `check_backup`, `save_to_ethereum`): this draws its views.
+	 * `check_backup`, `save_to_ethereum`); its members — the original ones,
+	 * each network's now, which are on this device — the members machine's
+	 * (`machines.members`): this draws their views.
 	 */
 	import { onMount } from 'svelte';
 	import Button from '$lib/ui/Button.svelte';
@@ -24,15 +26,10 @@
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import type { MultisigMessages } from '../messages';
 	import { chainName, ruleTitle, shortenAddress } from '../core/display';
-	import { memberDrift, sameAddress, validName } from '../core/kernel';
+	import { sameAddress, validName } from '../core/kernel';
 	import { names } from '../core/names.svelte';
 	import { localOwners } from '../core/owners';
-	import {
-		MailboxUnreadableError,
-		membersAnywhere,
-		proposals,
-		proposeRename
-	} from '../core/proposals.svelte';
+	import { MailboxUnreadableError, proposeRename } from '../core/proposals.svelte';
 	import {
 		SigningBlockedError,
 		SigningRefusedError,
@@ -41,6 +38,8 @@
 	import { isShared, multisig, type MultisigAccount } from '../core/store.svelte';
 	import { failureText } from '../shell/failure';
 	import { localAccounts } from '../shell/local-accounts';
+	import { machines } from '../shell/machines.svelte';
+	import type { MultisigMemberRow } from '../generated/MultisigMemberRow';
 	import { multisigUi } from '../core/ui.svelte';
 	import AuthorityNotice from './AuthorityNotice.svelte';
 	import CustomServiceNote from './CustomServiceNote.svelte';
@@ -59,26 +58,25 @@
 	/**
 	 * Owners are each network's (owner, 2026-10-29): the original members (its
 	 * genesis) are where it starts, and each network it is deployed on has its
-	 * own members now, read through this wallet's RPC (`proposals`), shown
-	 * beside the original ones with what changed. A network it is not
+	 * own members now, read through this wallet's RPC by the members machine,
+	 * shown beside the original ones with what changed. A network it is not
 	 * deployed on starts with the original members.
 	 */
-	const original = $derived({ owners: account.owners, threshold: account.threshold });
+	$effect(() => machines.showMembers(account, multisig.accounts));
+	const members = $derived.by(() => {
+		const v = machines.members?.view;
+		return v && sameAddress(v.address, account.address) ? v : null;
+	});
 	const deployedOn = $derived(
-		proposals.chains
-			.filter((c) => c.members.deployed)
-			.map((c) => ({
-				chainId: c.chainId,
-				members: c.members,
-				drift: memberDrift(original, c.members)
-			}))
+		(members?.networks ?? []).flatMap((n) =>
+			n.state.kind === 'deployed' ? [{ chainId: n.chain_id, ...n.state }] : []
+		)
 	);
-	const undeployedOn = $derived(proposals.chains.filter((c) => !c.members.deployed));
-	/**
-	 * This device's members anywhere: on each network it is deployed on, and
-	 * the original ones wherever it is not (or nothing is read yet).
-	 */
-	const local = $derived(localOwners(membersAnywhere(account)));
+	const undeployedOn = $derived(
+		(members?.networks ?? []).filter((n) => n.state.kind === 'undeployed')
+	);
+	/** None of its members (anywhere) is on this device. */
+	const readOnly = $derived(members?.read_only ?? localOwners(account.owners).length === 0);
 	/** §3.5: what the chain says, split: a genesis refused on a network, and a risk where it is deployed. */
 	const findings = $derived((multisig.find(account.address) ?? account).findings ?? []);
 	const refusedFindings = $derived(findings.filter((f) => f.from === 'genesis'));
@@ -86,7 +84,7 @@
 	const riskFindings = $derived(findings.filter((f) => f.from === 'chain'));
 
 	/** Who proves an owner asks to share it: an original member (the service checks the genesis). */
-	const founders = $derived(localOwners(original.owners));
+	const founders = $derived(localOwners(account.owners));
 
 	let removing = $state(false);
 	const key = $derived(account.address.toLowerCase());
@@ -230,11 +228,9 @@
 	);
 </script>
 
-{#snippet memberList(owners: string[], added: string[], removed: string[])}
+{#snippet memberList(rows: MultisigMemberRow[], removed: MultisigMemberRow[])}
 	<ul class="members">
-		{#each owners as owner (owner)}
-			{@const mine = local.some((o) => sameAddress(o.address, owner))}
-			{@const isNew = added.some((a) => sameAddress(a, owner))}
+		{#each rows as { address: owner, added: isNew, on_device: mine } (owner)}
 			<li>
 				<!-- The member's artwork opens the viewer on its address (founder
 				     call, 2026-09-05): the row itself is no control. -->
@@ -250,7 +246,7 @@
 				{#if mine}<span class="here">{m.panel.thisDevice}</span>{/if}
 			</li>
 		{/each}
-		{#each removed as owner (owner)}
+		{#each removed as { address: owner } (owner)}
 			<li class="gone">
 				<Identicon svg={identiconSvgForClient(owner)} size="compact" address={owner} />
 				<span class="text">
@@ -280,45 +276,49 @@
 		     or found since) — said here for as long as it is on this device. -->
 		<AuthorityNotice {m} kind="risk" findings={riskFindings} />
 	{/if}
-	<div class="set" data-testid="members-original">
-		<div class="set-head">
-			<h3>{m.settings.originalMembers}</h3>
-			<p class="rule">
-				{ruleTitle(m, { m: original.threshold, n: original.owners.length })}
-			</p>
+	{#if members}
+		<div class="set" data-testid="members-original">
+			<div class="set-head">
+				<h3>{m.settings.originalMembers}</h3>
+				{#if members.original.rule}
+					<p class="rule">
+						{ruleTitle(m, members.original.rule)}
+					</p>
+				{/if}
+			</div>
+			<p class="note">{m.settings.originalNote}</p>
+			{@render memberList(members.original.members, [])}
 		</div>
-		<p class="note">{m.settings.originalNote}</p>
-		{@render memberList(original.owners, [], [])}
-	</div>
+	{/if}
 	{#each deployedOn as c (c.chainId)}
 		<div class="set" data-testid="members-current">
 			<div class="set-head">
 				<h3>{fillTemplate(m.settings.currentOn, { network: chainName(c.chainId) })}</h3>
 				<p class="rule">
-					{ruleTitle(m, { m: c.members.threshold, n: c.members.owners.length })}
+					{ruleTitle(m, c.rule)}
 				</p>
 			</div>
-			{#if c.drift.same}
+			{#if c.same}
 				<p class="note">{m.settings.sameAsOriginal}</p>
 			{:else}
-				{@render memberList(c.members.owners, c.drift.added, c.drift.removed)}
-				{#if c.drift.thresholdWas !== c.drift.thresholdIs}
+				{@render memberList(c.members, c.removed)}
+				{#if c.threshold_was !== c.threshold_is}
 					<p class="note">
 						{fillTemplate(m.settings.thresholdChanged, {
-							was: c.drift.thresholdWas,
-							is: c.drift.thresholdIs
+							was: c.threshold_was,
+							is: c.threshold_is
 						})}
 					</p>
 				{/if}
 			{/if}
 		</div>
 	{/each}
-	{#each undeployedOn as c (c.chainId)}
+	{#each undeployedOn as c (c.chain_id)}
 		<p class="note" data-testid="members-undeployed">
-			{fillTemplate(m.settings.undeployedOn, { network: chainName(c.chainId) })}
+			{fillTemplate(m.settings.undeployedOn, { network: chainName(c.chain_id) })}
 		</p>
 	{/each}
-	{#if local.length === 0}
+	{#if readOnly}
 		<p class="note">{m.panel.readOnly}</p>
 	{/if}
 	<!-- Add, replace, remove, the approvals needed: one proposal per deployed network. -->

@@ -11,41 +11,38 @@
 	 * signed. A network it is not deployed on starts with the original
 	 * members when first used: said, and nothing offered that would deploy.
 	 *
+	 * All of that is the core's members machine (`multisig_members`, the
+	 * host's `machines.members`): each network's members, the member entry
+	 * (an address, an ENS name, a suggestion; the member's kind), the change
+	 * and its plan per network, and the changes waiting. This draws its view
+	 * and sends it what the person does.
+	 *
 	 * Proposing is "Propose and approve", as a transfer is: one passkey per
-	 * network (each network's transaction is its own). The proposals then go
-	 * the normal way — approved on other devices, executed — and the changes
-	 * still waiting show here as one change with each network's progress
+	 * network (each network's transaction is its own), each plan row's
+	 * `proposal` through `proposeChange`. The proposals then go the normal
+	 * way — approved on other devices, executed — and the changes still
+	 * waiting show here as one change with each network's progress
 	 * ("Arc 1/2 · Base 0/2").
 	 */
 	import Button from '$lib/ui/Button.svelte';
 	import { fillTemplate } from '$lib/i18n/fill';
-	import { loadAccounts } from '$lib/onboarding/core/storage';
 	import { contactsBook } from '$lib/contacts/core/contacts-book.svelte';
 	import Identicon from '$lib/wallet/ui/Identicon.svelte';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import type { MultisigMessages } from '../messages';
 	import { chainName, shortenAddress } from '../core/display';
-	import {
-		sameAddress,
-		type Action,
-		type MemberChangeRequest,
-		type MemberRefusal
-	} from '../core/kernel';
-	import {
-		deployedMembers,
-		memberChangeGroups,
-		MemberChangeRefusedError,
-		planMemberChange,
-		progressLine
-	} from '../core/member-changes';
-	import { looksLikeName, resolveTypedName } from '../core/member-entry';
-	import { memberProblem } from '../core/members';
-	import { kindChoice, type MemberKind } from '../core/member-kind';
-	import { keptMember, names } from '../core/names.svelte';
-	import { MailboxUnreadableError, proposals, proposeMemberChange } from '../core/proposals.svelte';
-	import { signers } from '../core/signers.svelte';
+	import { sameAddress, type Action, type MemberRefusal, type MemberVerdict } from '../core/kernel';
+	import type { KindChoice, MemberKind } from '../core/member-kind';
+	import { proposeChange } from '../core/member-propose';
+	import { names } from '../core/names.svelte';
+	import { proposals } from '../core/proposals.svelte';
 	import { multisig, type MultisigAccount } from '../core/store.svelte';
 	import { multisigUi } from '../core/ui.svelte';
+	import type { MultisigChangeGroup } from '../generated/MultisigChangeGroup';
+	import type { MultisigKindChoice } from '../generated/MultisigKindChoice';
+	import type { MultisigMemberCompose } from '../generated/MultisigMemberCompose';
+	import type { MultisigMembersEvent } from '../generated/MultisigMembersEvent';
+	import { machines } from '../shell/machines.svelte';
 	import MemberKindChoice from './MemberKindChoice.svelte';
 
 	interface Props {
@@ -57,155 +54,59 @@
 	let { m, account, cancelLabel }: Props = $props();
 
 	const mm = $derived(m.members);
-	const chains = $derived(proposals.chains);
-	const deployed = $derived(chains.filter((c) => c.members.deployed));
-	/** The members the rows offer Replace and Remove on: every deployed network's. */
-	const rows = $derived(deployedMembers(chains));
-	/** The rule the stepper starts from: the first deployed network's. */
-	const base = $derived(deployed[0]?.members ?? null);
-	const groups = $derived(
-		memberChangeGroups(
-			proposals.items,
-			chains.map((c) => c.chainId)
-		)
-	);
 
-	type Compose =
-		| { kind: 'add' }
-		| { kind: 'remove'; owner: string }
-		| { kind: 'replace'; owner: string }
-		| { kind: 'threshold' };
-	let compose = $state<Compose | null>(null);
-	/** The approvals the person picked; `null`: untouched (each network keeps its own). */
-	let picked = $state<number | null>(null);
+	// The members machine is shown this multisig, and told what it reads.
+	$effect(() => machines.showMembers(account, multisig.accounts));
+	$effect(() => machines.membersWaiting(proposals.items));
+	$effect(() => machines.membersContacts(contactsBook.view?.contacts ?? []));
 
-	// -- who joins (Add, Replace) -------------------------------------------------
-	let typed = $state('');
-	let entry = $state<{ address: string; name: string | null } | null>(null);
-	let entryNote = $state<string | null>(null);
-	let resolving = $state(false);
-	let memberName = $state('');
-	let kindPick = $state<MemberKind | null>(null);
-
-	const accounts = loadAccounts();
-	/** This device's accounts and the contacts, matching what is typed. */
-	const suggestions = $derived.by(() => {
-		const q = typed.trim().toLowerCase();
-		if (q === '' || entry) return [];
-		const book = (contactsBook.view?.contacts ?? []).map((c) => ({
-			address: c.address,
-			name: c.name ?? c.resolved_name ?? null
-		}));
-		const mine = accounts.map((a) => ({ address: a.address, name: a.name || null }));
-		return [...mine, ...book]
-			.filter((s, i, all) => all.findIndex((x) => sameAddress(x.address, s.address)) === i)
-			.filter((s) => s.name?.toLowerCase().includes(q) || s.address.toLowerCase().startsWith(q))
-			.slice(0, 5);
+	/** The machine's view, once it shows this multisig. */
+	const view = $derived.by(() => {
+		const v = machines.members?.view;
+		return v && sameAddress(v.address, account.address) ? v : null;
 	});
-	/**
-	 * r7: the member's kind — Vela's finding where it has one (an account
-	 * here or the index: a Vela account; code on one of the multisig's
-	 * networks and no index record: a smart contract account), else the
-	 * person's word (here, or kept on this device), else nothing: asked,
-	 * "Other wallet" only hinted when no Vela account is found — never
-	 * guessed (it used to read "Other wallet" whenever nothing said).
-	 */
-	const kindShown = $derived(
-		entry
-			? kindChoice(
-					signers.evidence(account.chainIds, entry.address),
-					kindPick ?? keptMember(entry.address).kind
-				)
-			: null
-	);
+	const send = (event: MultisigMembersEvent) => machines.members?.dispatch(event);
 
-	let lookup = 0;
-	async function readEntry() {
-		const value = typed.trim();
-		entry = null;
-		entryNote = null;
-		if (value === '') return;
-		if (looksLikeName(value)) {
-			const ask = ++lookup;
-			resolving = true;
-			const answer = await resolveTypedName(value);
-			if (ask !== lookup) return;
-			resolving = false;
-			if (answer.state === 'resolved') {
-				entry = { address: answer.address, name: answer.name };
-				if (memberName === '') memberName = answer.name;
-			} else {
-				entryNote = fillTemplate(
-					answer.state === 'not_found' ? mm.nameNotFound : mm.nameUnavailable,
-					{ name: value }
-				);
-			}
-			return;
+	const compose = $derived(view?.compose ?? null);
+	const entry = $derived(view?.entry ?? null);
+	const plan = $derived(view?.plan ?? null);
+
+	/** What the entry's note says, in the words the sheet always said it in. */
+	const entryNote = $derived.by(() => {
+		const note = entry?.note;
+		if (!note) return null;
+		switch (note.kind) {
+			case 'invalid_address':
+				return m.send.invalidAddress;
+			case 'invalid_checksum':
+				return m.send.invalidChecksum;
+			case 'no_one':
+				return mm.refuse.noOne;
+			case 'name_not_found':
+				return fillTemplate(mm.nameNotFound, { name: note.name });
+			case 'name_unavailable':
+				return fillTemplate(mm.nameUnavailable, { name: note.name });
 		}
-		const problem = memberProblem(value, []);
-		if (problem === null) entry = { address: value, name: null };
-		// A name being searched among the suggestions is no wrong address.
-		else if (problem === 'invalidAddress' && suggestions.length > 0) return;
-		else
-			entryNote =
-				problem === 'checksum'
-					? m.send.invalidChecksum
-					: problem === 'notMember'
-						? mm.refuse.noOne
-						: m.send.invalidAddress;
+	});
+
+	/** The machine's kind choice as the choice draws it (a Vela account is kept as `passkey`). */
+	function drawn(choice: MultisigKindChoice): KindChoice {
+		return {
+			kind: choice.kind === null ? null : choice.kind === 'vela' ? 'passkey' : choice.kind,
+			suggested: choice.suggested === 'wallet' ? 'wallet' : null,
+			locked: choice.locked,
+			note: choice.note
+		};
 	}
 
-	function pick(s: { address: string; name: string | null }) {
-		typed = s.address;
-		entry = { address: s.address, name: null };
-		entryNote = null;
-		if (memberName === '' && s.name) memberName = s.name;
-		kindPick = null;
+	function pickKind(kind: MemberKind) {
+		send({ type: 'entry_kind', kind: kind === 'passkey' ? 'vela' : kind });
 	}
 
-	function open(next: Compose) {
-		compose = next;
-		picked = null;
-		typed = '';
-		entry = null;
-		entryNote = null;
-		memberName = '';
-		kindPick = null;
+	function open(next: MultisigMemberCompose | null) {
+		send({ type: 'compose', compose: next });
 		progress = [];
 		failure = null;
-	}
-
-	// -- the change, and what it is on each network ---------------------------------
-	const change = $derived.by((): MemberChangeRequest | null => {
-		const c = compose;
-		if (!c) return null;
-		const threshold = picked ?? undefined;
-		switch (c.kind) {
-			case 'add':
-				return entry ? { kind: 'add', owner: entry.address, threshold } : null;
-			case 'remove':
-				return { kind: 'remove', owner: c.owner, threshold };
-			case 'replace':
-				return entry ? { kind: 'replace', oldOwner: c.owner, newOwner: entry.address } : null;
-			case 'threshold':
-				return picked === null ? null : { kind: 'threshold', threshold: picked };
-		}
-	});
-	const plan = $derived(change ? planMemberChange(account.address, chains, change) : null);
-
-	/** The approvals stepper's bounds and value for the change being composed. */
-	const stepper = $derived.by(() => {
-		if (!base || !compose || compose.kind === 'replace') return null;
-		const n =
-			base.owners.length + (compose.kind === 'add' ? 1 : compose.kind === 'remove' ? -1 : 0);
-		// Untouched, it reads the rule as it stands — "3 of 2" when removing
-		// would leave too few, which the core's reason under it explains.
-		return { n, value: picked ?? base.threshold };
-	});
-
-	function step(by: number) {
-		if (!stepper) return;
-		picked = Math.max(1, Math.min(stepper.n, stepper.value + by));
 	}
 
 	const rule = (set: { owners: string[]; threshold: number }) =>
@@ -215,6 +116,8 @@
 		const words = mm.refuse[r.kind];
 		return fillTemplate(words, r as unknown as Record<string, string | number>);
 	}
+
+	const verdictOf = (v: unknown) => v as MemberVerdict;
 
 	function title(action: Action): string {
 		switch (action.kind) {
@@ -234,6 +137,10 @@
 		}
 	}
 
+	/** "Arc 1/2 · Base 0/2": each network's approvals so far, of what it needs there. */
+	const progressLine = (g: MultisigChangeGroup) =>
+		g.parts.map((p) => `${chainName(p.chain_id)} ${p.shown}/${p.threshold}`).join(' · ');
+
 	// -- proposing, network by network ------------------------------------------------
 	type Step = { chainId: number; state: 'waiting' | 'proposing' | 'proposed' | 'failed' };
 	let progress = $state<Step[]>([]);
@@ -241,50 +148,40 @@
 	const busy = $derived(progress.some((p) => p.state === 'proposing'));
 
 	async function proposeAll() {
-		const c = change;
-		if (!c || !plan || plan.ready.length === 0 || busy) return;
-		if ((c.kind === 'add' || c.kind === 'replace') && entry) {
-			const who = c.kind === 'add' ? c.owner : c.newOwner;
-			// Kept with the multisig on this device, as its creator's names are
-			// (r4D-5): one store of members' labels, read by `names.label`.
-			multisig.nameMembers(
-				account.address,
-				{ [who]: { name: memberName, ...(kindShown?.kind ? { kind: kindShown.kind } : {}) } },
-				{ typed: true }
-			);
-		}
+		if (!view?.plan || !view.can_propose || busy) return;
+		// The new member's name and kind are kept with the multisig on this
+		// device (r4D-5): the machine tells the accounts machine.
+		send({ type: 'proposing' });
 		// The networks as they stood when the person pressed: once one is
 		// proposed, the plan reads it as a change waiting there.
-		const ready = [...plan.ready];
-		progress = ready.map((chainId) => ({ chainId, state: 'waiting' }));
+		const ready = view.plan.networks.flatMap((n) =>
+			n.proposal ? [{ chainId: n.chain_id, proposal: n.proposal }] : []
+		);
+		progress = ready.map(({ chainId }) => ({ chainId, state: 'waiting' }));
 		failure = null;
 		const made: { chainId: number; safeTxHash: string }[] = [];
-		for (const chainId of ready) {
+		for (const { chainId, proposal } of ready) {
 			progress = progress.map((p) => (p.chainId === chainId ? { ...p, state: 'proposing' } : p));
-			try {
-				const { safeTxHash } = await proposeMemberChange(account.address, chainId, c);
-				made.push({ chainId, safeTxHash });
+			const outcome = await proposeChange(account.address, chainId, proposal);
+			if (outcome.ok) {
+				made.push({ chainId, safeTxHash: outcome.safeTxHash });
 				progress = progress.map((p) => (p.chainId === chainId ? { ...p, state: 'proposed' } : p));
-			} catch (error) {
-				progress = progress.map((p) => (p.chainId === chainId ? { ...p, state: 'failed' } : p));
-				const name = error instanceof DOMException ? error.name : '';
-				// A passkey prompt dismissed: stop here, nothing said wrong.
-				if (name === 'NotAllowedError' || name === 'AbortError') break;
-				failure = fillTemplate(mm.failedOn, {
-					network: chainName(chainId),
-					reason:
-						error instanceof MemberChangeRefusedError
-							? refusalText(error.refusal)
-							: error instanceof MailboxUnreadableError
-								? m.proposal.mailboxDown
-								: error instanceof Error
-									? error.message
-									: String(error)
-				});
+				continue;
 			}
+			progress = progress.map((p) => (p.chainId === chainId ? { ...p, state: 'failed' } : p));
+			// A passkey prompt dismissed: stop here, nothing said wrong.
+			if (outcome.declined) break;
+			failure = fillTemplate(mm.failedOn, {
+				network: chainName(chainId),
+				reason: outcome.refusal
+					? refusalText(outcome.refusal)
+					: outcome.mailboxDown
+						? m.proposal.mailboxDown
+						: (outcome.message ?? '')
+			});
 		}
 		if (made.length > 0 && made.length === ready.length) {
-			compose = null;
+			send({ type: 'compose', compose: null });
 			progress = [];
 			// One network: straight to its proposal, as a transfer's confirm does.
 			if (made.length === 1) multisigUi.open({ kind: 'proposal', ...made[0] });
@@ -293,72 +190,76 @@
 </script>
 
 {#snippet who()}
-	<label class="field">
-		<span>{compose?.kind === 'replace' ? mm.newAccount : mm.entryLabel}</span>
-		<input
-			class="mono"
-			placeholder={mm.entryPlaceholder}
-			autocomplete="off"
-			spellcheck="false"
-			bind:value={typed}
-			oninput={() => {
-				entry = null;
-				entryNote = null;
-				kindPick = null;
-			}}
-			onblur={() => void readEntry()}
-			onkeydown={(e) => e.key === 'Enter' && (e.preventDefault(), void readEntry())}
-			data-testid="member-entry"
-		/>
-	</label>
-	{#if resolving}
-		<p class="note" role="status">{fillTemplate(mm.resolving, { name: typed.trim() })}</p>
-	{:else if entryNote}
-		<p class="error" role="alert">{entryNote}</p>
-	{/if}
-	{#if suggestions.length > 0}
-		<p class="label">{mm.suggestions}</p>
-		<ul class="suggestions">
-			{#each suggestions as s (s.address)}
-				<li>
-					<!-- Picked on press, before the field's blur reads what is typed. -->
-					<button type="button" onmousedown={(e) => e.preventDefault()} onclick={() => pick(s)}>
-						<Identicon svg={identiconSvgForClient(s.address)} size="compact" />
-						<span class="text">
-							<span class="name">{s.name ?? shortenAddress(s.address)}</span>
-							<span class="address">{shortenAddress(s.address)}</span>
-						</span>
-					</button>
-				</li>
-			{/each}
-		</ul>
-	{/if}
 	{#if entry}
-		<!-- The address the entry resolved to, in full: the member is the address. -->
-		<div class="resolved" data-testid="member-resolved">
-			<Identicon svg={identiconSvgForClient(entry.address)} size="compact" />
-			<span class="text">
-				{#if entry.name}<span class="name">{entry.name}</span>{/if}
-				<span class="address full">{entry.address}</span>
-			</span>
-		</div>
 		<label class="field">
-			<span>{mm.memberName}</span>
+			<span>{compose?.kind === 'replace' ? mm.newAccount : mm.entryLabel}</span>
 			<input
-				placeholder={mm.memberNamePlaceholder}
+				class="mono"
+				placeholder={mm.entryPlaceholder}
 				autocomplete="off"
-				bind:value={memberName}
-				data-testid="member-name"
+				spellcheck="false"
+				value={entry.typed}
+				oninput={(e) => send({ type: 'entry', text: e.currentTarget.value })}
+				onblur={() => send({ type: 'read_entry' })}
+				onkeydown={(e) => e.key === 'Enter' && (e.preventDefault(), send({ type: 'read_entry' }))}
+				data-testid="member-entry"
 			/>
 		</label>
-		<p class="hint">{mm.nameNote}</p>
-		{#if kindShown}
-			<MemberKindChoice {m} choice={kindShown} onpick={(k) => (kindPick = k)} />
+		{#if entry.resolving}
+			<p class="note" role="status">{fillTemplate(mm.resolving, { name: entry.typed.trim() })}</p>
+		{:else if entryNote}
+			<p class="error" role="alert">{entryNote}</p>
+		{/if}
+		{#if entry.suggestions.length > 0}
+			<p class="label">{mm.suggestions}</p>
+			<ul class="suggestions">
+				{#each entry.suggestions as s (s.address)}
+					<li>
+						<!-- Picked on press, before the field's blur reads what is typed. -->
+						<button
+							type="button"
+							onmousedown={(e) => e.preventDefault()}
+							onclick={() => send({ type: 'pick', address: s.address })}
+						>
+							<Identicon svg={identiconSvgForClient(s.address)} size="compact" />
+							<span class="text">
+								<span class="name">{s.name ?? shortenAddress(s.address)}</span>
+								<span class="address">{shortenAddress(s.address)}</span>
+							</span>
+						</button>
+					</li>
+				{/each}
+			</ul>
+		{/if}
+		{#if entry.entry}
+			<!-- The address the entry resolved to, in full: the member is the address. -->
+			<div class="resolved" data-testid="member-resolved">
+				<Identicon svg={identiconSvgForClient(entry.entry.address)} size="compact" />
+				<span class="text">
+					{#if entry.entry.name}<span class="name">{entry.entry.name}</span>{/if}
+					<span class="address full">{entry.entry.address}</span>
+				</span>
+			</div>
+			<label class="field">
+				<span>{mm.memberName}</span>
+				<input
+					placeholder={mm.memberNamePlaceholder}
+					autocomplete="off"
+					value={entry.name}
+					oninput={(e) => send({ type: 'entry_name', name: e.currentTarget.value })}
+					data-testid="member-name"
+				/>
+			</label>
+			<p class="hint">{mm.nameNote}</p>
+			{#if entry.choice}
+				<MemberKindChoice {m} choice={drawn(entry.choice)} onpick={pickKind} />
+			{/if}
 		{/if}
 	{/if}
 {/snippet}
 
-{#snippet thresholdStepper(label: string)}
+{#snippet stepperRow(label: string, testid: string)}
+	{@const stepper = view?.stepper}
 	{#if stepper}
 		<div class="stepper-row">
 			<span class="label">{label}</span>
@@ -366,17 +267,17 @@
 				<button
 					type="button"
 					aria-label={m.create.fewer}
-					disabled={stepper.value <= 1 || busy}
-					onclick={() => step(-1)}>−</button
+					disabled={!stepper.can_fewer || busy}
+					onclick={() => send({ type: 'step', by: -1 })}>−</button
 				>
-				<output data-testid="threshold-value"
+				<output data-testid={testid}
 					>{fillTemplate(mm.ruleValue, { m: stepper.value, n: stepper.n })}</output
 				>
 				<button
 					type="button"
 					aria-label={m.create.more}
-					disabled={stepper.value >= stepper.n || busy}
-					onclick={() => step(1)}>+</button
+					disabled={!stepper.can_more || busy}
+					onclick={() => send({ type: 'step', by: 1 })}>+</button
 				>
 			</div>
 		</div>
@@ -385,12 +286,13 @@
 
 <div class="changes" data-testid="member-changes">
 	<h3>{mm.title}</h3>
-	{#if deployed.length === 0}
+	{#if view?.none_deployed}
 		<!-- Nothing deployed: a change would deploy it. Said, nothing offered. -->
 		<p class="note" data-testid="members-none-deployed">{mm.noneDeployed}</p>
-	{:else}
+	{:else if view && view.rows.length > 0}
 		<ul class="rows">
-			{#each rows as owner (owner)}
+			{#each view.rows as row (row.address)}
+				{@const owner = row.address}
 				<li>
 					<Identicon svg={identiconSvgForClient(owner)} size="compact" address={owner} />
 					<span class="text">
@@ -431,37 +333,11 @@
 		{/if}
 
 		{#if compose === null || compose.kind === 'threshold'}
-			{#if base}
-				{@const s = { n: base.owners.length, value: picked ?? base.threshold }}
-				<div class="stepper-row">
-					<span class="label">{mm.thresholdTitle}</span>
-					<div class="stepper" role="group" aria-label={mm.thresholdTitle}>
-						<button
-							type="button"
-							aria-label={m.create.fewer}
-							disabled={s.value <= 1 || busy}
-							onclick={() => {
-								compose = { kind: 'threshold' };
-								picked = Math.max(1, s.value - 1);
-							}}>−</button
-						>
-						<output data-testid="rule-value"
-							>{fillTemplate(mm.ruleValue, { m: s.value, n: s.n })}</output
-						>
-						<button
-							type="button"
-							aria-label={m.create.more}
-							disabled={s.value >= s.n || busy}
-							onclick={() => {
-								compose = { kind: 'threshold' };
-								picked = Math.min(s.n, s.value + 1);
-							}}>+</button
-						>
-					</div>
-				</div>
+			{@render stepperRow(mm.thresholdTitle, 'rule-value')}
+			{#if view.recovery}
 				<p class="note" data-testid="recovery">
-					{base.threshold < base.owners.length
-						? fillTemplate(mm.recovery, { m: base.threshold, n: base.owners.length })
+					{view.recovery.kind === 'replaceable'
+						? fillTemplate(mm.recovery, { m: view.recovery.m, n: view.recovery.n })
 						: mm.recoveryAll}
 				</p>
 			{/if}
@@ -472,7 +348,7 @@
 				{#if compose.kind === 'add'}
 					<h4>{mm.add}</h4>
 					{@render who()}
-					{@render thresholdStepper(mm.thresholdAfter)}
+					{@render stepperRow(mm.thresholdAfter, 'threshold-value')}
 				{:else if compose.kind === 'replace'}
 					<h4>{fillTemplate(mm.replaceLabel, { name: names.label(compose.owner) })}</h4>
 					<p class="hint">{fillTemplate(mm.replaceIntro, { name: names.label(compose.owner) })}</p>
@@ -480,40 +356,42 @@
 				{:else if compose.kind === 'remove'}
 					<h4>{fillTemplate(mm.removeLabel, { name: names.label(compose.owner) })}</h4>
 					<p class="hint">{fillTemplate(mm.removeIntro, { name: names.label(compose.owner) })}</p>
-					{@render thresholdStepper(mm.thresholdAfter)}
+					{@render stepperRow(mm.thresholdAfter, 'threshold-value')}
 				{/if}
 
-				{#if plan && compose.kind === 'replace' && entry}
+				{#if compose.kind === 'replace' && view.replace_preview}
+					{@const preview = view.replace_preview}
 					<!-- Round 5: the preview names who replaces whom, before anything is proposed. -->
 					<p class="replacing" data-testid="member-replace-preview">
 						{fillTemplate(mm.changeReplace, {
 							old: names.label(compose.owner),
-							new: memberName.trim() || entry.name || names.label(entry.address)
+							new: preview.new_name ?? names.label(preview.new_address)
 						})}
 					</p>
 				{/if}
 				{#if plan}
 					<p class="label">{mm.perNetwork}</p>
 					<ul class="plan" data-testid="member-plan">
-						{#each plan.networks as n (n.chainId)}
-							<li data-testid="plan-{n.chainId}" class:refused={n.verdict.kind === 'refused'}>
-								{#if n.verdict.kind === 'ready'}
+						{#each plan.networks as n (n.chain_id)}
+							{@const verdict = verdictOf(n.verdict)}
+							<li data-testid="plan-{n.chain_id}" class:refused={verdict.kind === 'refused'}>
+								{#if verdict.kind === 'ready'}
 									{fillTemplate(mm.onNetwork, {
-										network: chainName(n.chainId),
-										before: rule(n.verdict.before),
-										after: rule(n.verdict.after)
+										network: chainName(n.chain_id),
+										before: rule(verdict.before),
+										after: rule(verdict.after)
 									})}
 								{:else}
-									{chainName(n.chainId)}: {refusalText(n.verdict.refusal)}
+									{chainName(n.chain_id)}: {refusalText(verdict.refusal)}
 								{/if}
-								{#each progress.filter((p) => p.chainId === n.chainId) as p (p.chainId)}
+								{#each progress.filter((p) => p.chainId === n.chain_id) as p (p.chainId)}
 									{#if p.state === 'proposing'}
 										<span class="state" role="status"
-											>{fillTemplate(mm.proposing, { network: chainName(n.chainId) })}</span
+											>{fillTemplate(mm.proposing, { network: chainName(n.chain_id) })}</span
 										>
 									{:else if p.state === 'proposed'}
 										<span class="state"
-											>{fillTemplate(mm.proposed, { network: chainName(n.chainId) })}</span
+											>{fillTemplate(mm.proposed, { network: chainName(n.chain_id) })}</span
 										>
 									{/if}
 								{/each}
@@ -531,35 +409,28 @@
 					<Button
 						variant="value"
 						shape="rounded"
-						disabled={!plan || plan.ready.length === 0}
+						disabled={!view.can_propose}
 						loading={busy}
 						busyLabel={m.send.propose}
 						onclick={() => void proposeAll()}>{m.send.propose}</Button
 					>
-					<Button
-						variant="secondary"
-						shape="rounded"
-						disabled={busy}
-						onclick={() => {
-							compose = null;
-							picked = null;
-							progress = [];
-						}}>{cancelLabel}</Button
+					<Button variant="secondary" shape="rounded" disabled={busy} onclick={() => open(null)}
+						>{cancelLabel}</Button
 					>
 				</div>
 			</div>
 		{/if}
 	{/if}
 
-	{#if groups.length > 0}
+	{#if view && view.groups.length > 0}
 		<div class="waiting" data-testid="member-groups">
 			<p class="label">{mm.waitingTitle}</p>
 			<ul>
-				{#each groups as g (g.key)}
-					<li data-testid="member-group" data-progress={progressLine(g, chainName)}>
-						<span class="name">{title(g.action)}</span>
+				{#each view.groups as g (g.key)}
+					<li data-testid="member-group" data-progress={progressLine(g)}>
+						<span class="name">{title(g.action as Action)}</span>
 						<span class="parts">
-							{#each g.parts as p, i (p.chainId)}
+							{#each g.parts as p, i (p.chain_id)}
 								{#if i > 0}<span aria-hidden="true">·</span>{/if}
 								<button
 									type="button"
@@ -567,11 +438,11 @@
 									onclick={() =>
 										multisigUi.open({
 											kind: 'proposal',
-											chainId: p.chainId,
-											safeTxHash: p.safeTxHash
+											chainId: p.chain_id,
+											safeTxHash: p.safe_tx_hash
 										})}
-									>{chainName(p.chainId)}
-									{Math.min(p.approved, p.threshold)}/{p.threshold}</button
+									>{chainName(p.chain_id)}
+									{p.shown}/{p.threshold}</button
 								>
 							{/each}
 						</span>

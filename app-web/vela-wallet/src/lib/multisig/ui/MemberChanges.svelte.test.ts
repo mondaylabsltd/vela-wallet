@@ -1,5 +1,7 @@
 /**
- * Changing the members in Settings (r4D-3, r4a-15), with the real core:
+ * Changing the members in Settings (r4D-3, r4a-15), with the real core —
+ * its members machine on the host, over a simulated world of chains (each
+ * network's Safe, and what each member's address is):
  * Remove, Replace, Add and the approvals stepper each make ONE proposal per
  * network the multisig is deployed on — never one where it is not (that
  * would deploy it) — refuse an impossible state per network in its own
@@ -9,14 +11,14 @@
  * The words are their keys (a stand-in catalog), so what is asserted is
  * WHICH sentence is drawn.
  */
-import { tick } from 'svelte';
+import { tick as svelteTick } from 'svelte';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
 import { loadCore } from '$lib/core/client';
 import { MULTISIG_SHAPE, type MultisigMessages } from '../messages';
+import type { WorldSafe } from '../shell/members.testing';
 
-const SAFE = '0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83';
 const A = '0x1111111111111111111111111111111111111111';
 const B = '0x2222222222222222222222222222222222222222';
 const C = '0x3333333333333333333333333333333333333333';
@@ -26,30 +28,33 @@ const BASE = 8453;
 const GNOSIS = 100;
 
 const seams = vi.hoisted(() => ({
-	chains: [] as unknown[],
+	/** Each network's Safe, as its chain answers. */
+	chains: {} as Record<number, WorldSafe>,
 	items: [] as unknown[],
 	proposed: [] as [string, number, unknown][],
 	opened: [] as unknown[],
 	refuseOn: null as number | null,
 	contacts: [] as unknown[],
-	/** Members' labels kept with the multisig (create's store, r4D-5). */
+	/** Members' labels kept with the multisig (the accounts machine's `name_members`, r4D-5). */
 	named: [] as [string, Record<string, unknown>][],
-	/** r7: what the wallet can tell of each address (`signers.evidence`), and the networks asked. */
-	evidence: {} as Record<string, 'vela' | 'contract' | 'wallet' | null>,
-	evidenceOn: [] as number[][]
-}));
-vi.mock('../core/signers.svelte', () => ({
-	signers: {
-		evidence: (chainIds: number[], a: string) => {
-			seams.evidenceOn.push([...chainIds]);
-			return seams.evidence[a] ?? null;
-		}
-	}
+	/** r7: what the chains say of each address added (unlisted: nobody answers). */
+	evidence: {} as Record<string, 'vela' | 'contract' | 'wallet' | null>
 }));
 vi.mock('../core/store.svelte', () => ({
+	MULTISIG_ACCOUNTS_KEY: 'vela.multisigAccounts',
+	ACTIVE_MULTISIG_KEY: 'vela.activeMultisig',
 	multisig: {
-		nameMembers: (address: string, known: Record<string, unknown>) =>
-			void seams.named.push([address, known])
+		accounts: [],
+		attach: () => {},
+		/** The members machine's notice, routed to the accounts machine. */
+		send: (event: {
+			type: string;
+			address: string;
+			update?: { kind: string; members?: Record<string, unknown> };
+		}) => {
+			if (event.type === 'apply' && event.update?.kind === 'name_members')
+				seams.named.push([event.address, event.update.members ?? {}]);
+		}
 	}
 }));
 vi.mock('../core/proposals.svelte', async () => {
@@ -73,6 +78,11 @@ vi.mock('../core/proposals.svelte', async () => {
 		}
 	};
 });
+// The wallet's network order, as these tests list it: Arc, Base, Gnosis.
+vi.mock('$lib/services/networks', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/services/networks')>()),
+	networkRank: (id: number) => [ARC, BASE, GNOSIS].indexOf(id)
+}));
 vi.mock('../core/display', () => ({
 	chainName: (id: number) => ({ [ARC]: 'Arc', [BASE]: 'Base', [GNOSIS]: 'Gnosis' })[id] ?? `${id}`,
 	shortenAddress: (a: string) => `${a.slice(0, 8)}…${a.slice(-6)}`
@@ -100,6 +110,14 @@ vi.mock('$lib/wallet/identicon', () => ({
 }));
 
 const { default: MemberChanges } = await import('./MemberChanges.svelte');
+const { machines } = await import('../shell/machines.svelte');
+const { startMembers, membersSettled, worldMultisig } = await import('../shell/members.testing');
+
+/** The machine's reads answered, and what they changed drawn. */
+async function tick() {
+	await membersSettled();
+	await svelteTick();
+}
 
 function words(): MultisigMessages {
 	const walk = (node: Record<string, unknown>, prefix: string): Record<string, unknown> =>
@@ -128,32 +146,47 @@ function words(): MultisigMessages {
 	return out as unknown as MultisigMessages;
 }
 
-const members = (owners: string[], threshold: number, deployed = true) => ({
+const members = (owners: string[], threshold: number, deployed = true): WorldSafe => ({
 	deployed,
 	owners,
-	threshold,
-	nonce: 0n
+	threshold
 });
+
+/** The multisig: founded by A, B and C, 2 of 3 (a real genesis). */
+let SAFE = '';
+let GENESIS: unknown = null;
 
 /** Arc and Base deployed with the same 2 of 3; Gnosis not deployed. */
 function twoNetworks() {
-	seams.chains = [
-		{ chainId: ARC, members: members([A, B, C], 2), items: [], mailbox: true },
-		{ chainId: BASE, members: members([A, B, C], 2), items: [], mailbox: true },
-		{ chainId: GNOSIS, members: members([A, B, C], 2, false), items: [], mailbox: true }
-	];
+	seams.chains = {
+		[ARC]: members([A, B, C], 2),
+		[BASE]: members([A, B, C], 2),
+		[GNOSIS]: members([A, B, C], 2, false)
+	};
 }
 
+const world = () => ({
+	safe: SAFE,
+	chains: seams.chains,
+	signers: seams.evidence,
+	asked: [] as { chainId: number; method: string; params: unknown }[]
+});
+let asked: ReturnType<typeof world>['asked'] = [];
+
 function shown() {
+	const w = world();
+	asked = w.asked;
+	startMembers(w);
 	return render(MemberChanges, {
 		props: {
 			m: words(),
 			account: {
 				address: SAFE,
-				genesis: {},
+				genesis: GENESIS,
 				owners: [A, B, C],
 				threshold: 2,
-				chainIds: [ARC, BASE, GNOSIS]
+				chainIds: Object.keys(seams.chains).map(Number),
+				recorded: true
 			} as never,
 			cancelLabel: 'Cancel'
 		}
@@ -165,10 +198,14 @@ const byText = (root: HTMLElement, text: string) =>
 
 beforeAll(async () => {
 	await loadCore();
+	const made = worldMultisig([A, B, C], 2);
+	SAFE = made.address;
+	GENESIS = made.genesis;
 });
 
 afterEach(() => {
-	seams.chains = [];
+	machines.resetForTests();
+	seams.chains = {};
 	seams.items = [];
 	seams.proposed = [];
 	seams.named = [];
@@ -176,7 +213,6 @@ afterEach(() => {
 	seams.refuseOn = null;
 	seams.contacts = [];
 	seams.evidence = {};
-	seams.evidenceOn = [];
 });
 
 describe('changing the members (Settings)', () => {
@@ -206,12 +242,14 @@ describe('changing the members (Settings)', () => {
 		await vi.waitFor(() => expect(seams.proposed).toHaveLength(2));
 		expect(seams.proposed.map(([, chainId]) => chainId)).toEqual([ARC, BASE]);
 		expect(seams.proposed[0][2]).toEqual({ kind: 'remove', owner: A, threshold: undefined });
+		// The new member's name and kind are kept only for Add and Replace.
+		expect(seams.named).toEqual([]);
 		// Two networks: no single proposal to jump to; the change shows as waiting.
 		expect(seams.opened).toEqual([]);
 	});
 
 	it('refuses removing below the approvals needed, and lowering them makes it possible', async () => {
-		seams.chains = [{ chainId: ARC, members: members([A, B, C], 3), items: [], mailbox: true }];
+		seams.chains = { [ARC]: members([A, B, C], 3) };
 		const screen = shown();
 		await tick();
 		screen.container
@@ -234,7 +272,9 @@ describe('changing the members (Settings)', () => {
 		await vi.waitFor(() => expect(seams.proposed).toHaveLength(1));
 		expect(seams.proposed[0][2]).toEqual({ kind: 'remove', owner: B, threshold: 2 });
 		// One network: straight to its proposal.
-		expect(seams.opened).toEqual([{ kind: 'proposal', chainId: ARC, safeTxHash: `0xhash${ARC}` }]);
+		await vi.waitFor(() =>
+			expect(seams.opened).toEqual([{ kind: 'proposal', chainId: ARC, safeTxHash: `0xhash${ARC}` }])
+		);
 	});
 
 	it('replaces a member (the lost-passkey path): the new account shown in full, its name kept here', async () => {
@@ -344,9 +384,7 @@ describe('changing the members (Settings)', () => {
 	});
 
 	it('offers nothing when it is deployed nowhere', async () => {
-		seams.chains = [
-			{ chainId: GNOSIS, members: members([A, B], 2, false), items: [], mailbox: true }
-		];
+		seams.chains = { [GNOSIS]: members([A, B], 2, false) };
 		const screen = shown();
 		await tick();
 		expect(
@@ -416,11 +454,14 @@ describe('Add member: the kind, declared then verified (r7)', () => {
 		expect(screen.container.querySelector('[data-testid="member-kind-ask"]')?.textContent).toBe(
 			'members.kindAsk'
 		);
-		// Looked for on the multisig's networks.
-		expect(seams.evidenceOn.at(-1)).toEqual([ARC, BASE, GNOSIS]);
+		// Looked for on the multisig's networks: its code on each.
+		const codeOn = asked
+			.filter((a) => a.method === 'eth_getCode' && (a.params as string[])[0] === D)
+			.map((a) => a.chainId);
+		expect([...new Set(codeOn)].sort()).toEqual([GNOSIS, BASE, ARC].sort());
 		byText(screen.container, 'send.propose')?.click();
 		await vi.waitFor(() => expect(seams.proposed).toHaveLength(2));
-		expect(seams.named.at(-1)?.[1]).toEqual({ [D]: { name: '' } });
+		expect(seams.named.at(-1)?.[1]).toEqual({ [D]: {} });
 	});
 
 	it('asked, the person says a Vela account: kept as one', async () => {
@@ -430,7 +471,7 @@ describe('Add member: the kind, declared then verified (r7)', () => {
 		expect(kind()?.dataset.kind).toBe('passkey');
 		byText(screen.container, 'send.propose')?.click();
 		await vi.waitFor(() => expect(seams.proposed).toHaveLength(2));
-		expect(seams.named.at(-1)?.[1]).toEqual({ [D]: { name: '', kind: 'passkey' } });
+		expect(seams.named.at(-1)?.[1]).toEqual({ [D]: { kind: 'passkey' } });
 	});
 
 	it('no Vela account found: "Other wallet" only hinted and said — not picked, nothing kept', async () => {
@@ -448,7 +489,7 @@ describe('Add member: the kind, declared then verified (r7)', () => {
 		byText(screen.container, 'send.propose')?.click();
 		await vi.waitFor(() => expect(seams.proposed).toHaveLength(2));
 		// Unsure: offered both ways later.
-		expect(seams.named.at(-1)?.[1]).toEqual({ [D]: { name: '' } });
+		expect(seams.named.at(-1)?.[1]).toEqual({ [D]: {} });
 	});
 
 	it('the hint, picked: kept as another wallet', async () => {
@@ -462,7 +503,7 @@ describe('Add member: the kind, declared then verified (r7)', () => {
 		]);
 		byText(screen.container, 'send.propose')?.click();
 		await vi.waitFor(() => expect(seams.proposed).toHaveLength(2));
-		expect(seams.named.at(-1)?.[1]).toEqual({ [D]: { name: '', kind: 'wallet' } });
+		expect(seams.named.at(-1)?.[1]).toEqual({ [D]: { kind: 'wallet' } });
 	});
 
 	it('another Safe (code, no index record): a smart contract account, said honestly, kept as one', async () => {
@@ -475,7 +516,7 @@ describe('Add member: the kind, declared then verified (r7)', () => {
 		expect(kind()?.textContent).not.toContain('members.kindVela');
 		byText(screen.container, 'send.propose')?.click();
 		await vi.waitFor(() => expect(seams.proposed).toHaveLength(2));
-		expect(seams.named.at(-1)?.[1]).toEqual({ [D]: { name: '', kind: 'contract' } });
+		expect(seams.named.at(-1)?.[1]).toEqual({ [D]: { kind: 'contract' } });
 	});
 
 	it('evidence of a Vela account: shown as found, nothing to pick, kept as a Vela account', async () => {
@@ -486,6 +527,6 @@ describe('Add member: the kind, declared then verified (r7)', () => {
 		expect(kind()?.textContent).toContain('members.kindKnown');
 		byText(screen.container, 'send.propose')?.click();
 		await vi.waitFor(() => expect(seams.proposed).toHaveLength(2));
-		expect(seams.named.at(-1)?.[1]).toEqual({ [D]: { name: '', kind: 'passkey' } });
+		expect(seams.named.at(-1)?.[1]).toEqual({ [D]: { kind: 'passkey' } });
 	});
 });
