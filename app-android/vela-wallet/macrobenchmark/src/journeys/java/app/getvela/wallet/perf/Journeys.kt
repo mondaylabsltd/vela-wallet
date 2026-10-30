@@ -48,7 +48,7 @@ object Journeys {
     }
 
     fun MacrobenchmarkScope.openHistory(): UiObject2 {
-        device.findObject(By.res("home-activity-all")).click()
+        expect(By.res("home-activity-all"), "the home's Activity · All is not there").click()
         return expect(By.res("activity-list"), "the history never opened")
     }
 
@@ -78,7 +78,7 @@ object Journeys {
 
     /** Home → Send → a token → recipient and amount → Confirm. */
     fun MacrobenchmarkScope.openSendToConfirm() {
-        device.findObject(By.res("home-send")).click()
+        expect(By.res("home-send"), "the home's Send is not there").click()
         expect(By.res("send-token:$TOKEN"), "Send's token list never offered $TOKEN").click()
         expect(By.res("send-amount"), "Send's form never appeared").text = AMOUNT
         expect(By.res("send-recipient"), "Send's recipient field is not there").text = RECIPIENT

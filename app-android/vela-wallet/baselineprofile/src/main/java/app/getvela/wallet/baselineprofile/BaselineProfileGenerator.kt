@@ -41,7 +41,7 @@ class BaselineProfileGenerator {
     }
 
     @Test
-    fun journeys() = rule.collect(
+    fun historyAndSigning() = rule.collect(
         packageName = Journeys.PACKAGE,
         includeInStartupProfile = false,
     ) {
@@ -53,6 +53,22 @@ class BaselineProfileGenerator {
         back()
         openSigningSheet()
         closeSigningSheet()
-        openSendToConfirm()
+    }
+
+    /**
+     * Its own collection: Confirm waits on the live relay's quote, and a relay
+     * that refuses for the moment must not cost the profile the screens up to
+     * it — what ran before the refusal is collected all the same.
+     */
+    @Test
+    fun send() = rule.collect(
+        packageName = Journeys.PACKAGE,
+        includeInStartupProfile = false,
+    ) {
+        seedReturningPerson()
+        pressHome()
+        startActivityAndWait()
+        awaitHome()
+        runCatching { openSendToConfirm() }
     }
 }
