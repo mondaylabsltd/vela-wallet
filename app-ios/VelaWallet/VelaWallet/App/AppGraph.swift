@@ -210,6 +210,8 @@ final class AppGraph {
         // what they were worth. Web gets the same three facts from its
         // `fetchTokens` cache; there is no such cache here, so it is explicit.
         let held = HeldTokens()
+        // The shown-networks settle counts a network held on as one in use.
+        settingsStore.heldChainIds = { [weak held] in held?.allChainIds() ?? [] }
         let trust = TokenTrustStore(store: shelf, pool: pool, accounts: store, held: held)
         self.trust = trust
         let activityStore = ActivityStore(

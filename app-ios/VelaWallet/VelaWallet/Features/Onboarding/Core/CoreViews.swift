@@ -239,6 +239,16 @@ struct SessionView: Decodable, Equatable {
     let accounts: [SessionAccountRow]
     let allowedRoute: SessionRoute
     let signOut: SessionSignOutView?
+    /// The stored account list could not be read (settings set-21). Absent
+    /// from an older core: readable.
+    var accountsUnreadable: Bool? = nil
+    /// ob-2: the wallets on this device whose registration has not finished
+    /// — no other device can find them yet. Absent from an older core: none.
+    var unsynced: [SessionUnsyncedWire]? = nil
+
+    /// Some wallet is still owed and the session can finish it on its own —
+    /// what keeps `SessionController`'s retry going (`sync_pending`).
+    var retryingUnsynced: Bool { (unsynced ?? []).contains(where: \.retrying) }
 
     /// The active account's display NAME, `""` when there is none.
     ///
@@ -259,6 +269,18 @@ struct SessionView: Decodable, Equatable {
         allowedRoute: .loading,
         signOut: nil
     )
+}
+
+/// `SessionUnsynced` — one wallet still owed to the registry (ob-2).
+struct SessionUnsyncedWire: Decodable, Equatable {
+    /// The account's name on this device, else the name the record was made under.
+    let name: String
+    /// Its address; empty when the record's keys derive none.
+    let address: String
+    /// The session finishes it on its own, with no prompt, when asked again
+    /// (`sync_pending`) and on every launch. `false`: a record from before
+    /// ob-2, which only a sign-in can publish.
+    let retrying: Bool
 }
 
 /// `PromptKind` — a question or a notice.

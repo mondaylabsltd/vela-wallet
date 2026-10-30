@@ -47,6 +47,14 @@ enum RpcEndpoints {
     /// Every source is independently `try`-free: a shelf that cannot be read
     /// contributes nothing rather than failing the collection, because a chain
     /// with *some* endpoints is usable and a chain with none is not.
+    /// The person's "Only use my node" switch for the chain, as saved with its
+    /// network config (`onlyMine`, owner decision 2026-10-28). A fact of
+    /// config, handed to the core with the collected lists.
+    static func ownNodeOnly(chainId: Int, store: VelaStore) -> Bool {
+        store.readList(VelaStore.Key.networkConfig)
+            .first { ($0["chainId"] as? NSNumber)?.intValue == chainId }?["onlyMine"] as? Bool == true
+    }
+
     static func collect(
         chainId: Int,
         store: VelaStore,

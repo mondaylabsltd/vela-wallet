@@ -109,6 +109,13 @@ final class RpcPool {
     /// notice reads `failed ∪ unreached ∖ rate-limited`; the home banner
     /// keeps reading `failedChains` alone.
     private(set) var unreachedChains: [Int] = []
+    /// "Only use my node": chains public nodes are serving because the
+    /// person's own is not answering — read, but said (the balance's
+    /// `fallback_chain_ids`).
+    private(set) var fallbackChains: [Int] = []
+    /// Chains read through the person's own node alone that cannot be read
+    /// now — the balance's `own_node_chain_ids` (of its failed ones).
+    private(set) var ownNodeUnreachedChains: [Int] = []
 
     /// One in-flight call: what to send, what came back from where, and who is
     /// waiting.
@@ -157,6 +164,8 @@ final class RpcPool {
                 self?.failedChains = view.failedChains
                 self?.rateLimitedChains = view.rateLimitedChains
                 self?.unreachedChains = view.unreachedChains
+                self?.fallbackChains = view.fallbackChains
+                self?.ownNodeUnreachedChains = view.ownNodeUnreachedChains
             },
             onFault: { VelaLog.failure(.rpc, kind: "pool_fault", VelaLog.error($0)) }
         )
@@ -392,7 +401,7 @@ final class RpcPool {
 
     // MARK: - The seven operations
 
-    private func perform(_ operation: [String: Any]) async -> String {
+    func perform(_ operation: [String: Any]) async -> String {
         switch operation["type"] as? String ?? "" {
 
         case "load_pool_config":
@@ -408,6 +417,9 @@ final class RpcPool {
                 "chain_id": chainId,
                 "rpc_endpoints": rpcs.map { ["url": $0.url, "source": $0.source] },
                 "bundler_endpoints": bundlers.map { ["url": $0.url, "source": $0.source] },
+                // The person's "Only use my node": what it means — and that it
+                // means nothing without an endpoint of theirs — is the core's.
+                "own_only": RpcEndpoints.ownNodeOnly(chainId: chainId, store: store),
                 "now_ms": Self.nowMs,
             ])
 
@@ -606,6 +618,45 @@ struct RpcPoolViewWire: Decodable, Equatable {
     let banned: [RpcBanEntryWire]
     /// Spec 082 RF1: chains one call's first pass could not reach at all.
     var unreachedChains: [Int] = []
+    /// "Only use my node" (owner decision 2026-10-28): the chains whose own
+    /// node is not answering and whose reads public nodes served for now.
+    var fallbackChains: [Int] = []
+    /// The chains read through the person's own node alone.
+    var ownOnlyChains: [Int] = []
+    /// Of those, the ones that cannot be read now — "Can't reach your node".
+    var ownNodeUnreachedChains: [Int] = []
+
+    private enum CodingKeys: String, CodingKey {
+        case failedChains, rateLimitedChains, banned, unreachedChains
+        case fallbackChains, ownOnlyChains, ownNodeUnreachedChains
+    }
+
+    init(
+        failedChains: [Int], rateLimitedChains: [Int], banned: [RpcBanEntryWire],
+        unreachedChains: [Int] = [], fallbackChains: [Int] = [], ownOnlyChains: [Int] = [],
+        ownNodeUnreachedChains: [Int] = []
+    ) {
+        self.failedChains = failedChains
+        self.rateLimitedChains = rateLimitedChains
+        self.banned = banned
+        self.unreachedChains = unreachedChains
+        self.fallbackChains = fallbackChains
+        self.ownOnlyChains = ownOnlyChains
+        self.ownNodeUnreachedChains = ownNodeUnreachedChains
+    }
+
+    /// The newer lists are read when present: a view from an older core reads
+    /// as none — never a view this app cannot decode.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        failedChains = try c.decode([Int].self, forKey: .failedChains)
+        rateLimitedChains = try c.decode([Int].self, forKey: .rateLimitedChains)
+        banned = try c.decode([RpcBanEntryWire].self, forKey: .banned)
+        unreachedChains = try c.decodeIfPresent([Int].self, forKey: .unreachedChains) ?? []
+        fallbackChains = try c.decodeIfPresent([Int].self, forKey: .fallbackChains) ?? []
+        ownOnlyChains = try c.decodeIfPresent([Int].self, forKey: .ownOnlyChains) ?? []
+        ownNodeUnreachedChains = try c.decodeIfPresent([Int].self, forKey: .ownNodeUnreachedChains) ?? []
+    }
 }
 
 struct RpcBanEntryWire: Decodable, Equatable {
