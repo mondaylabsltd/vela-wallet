@@ -3929,6 +3929,10 @@ fn tx_error_text(send: &SendView, s: &FlowStrings) -> Option<SharedString> {
         // accounts are web-only), so these are never set here.
         vela_core::app::send::SendTxErrorKey::ProposalMailboxDown
         | vela_core::app::send::SendTxErrorKey::ProposalOffline => s.tx_error_generic.clone(),
+        // The web's bounded wait before the passkey (r5reg-3): the desktop
+        // reports no such failure to the core, so these are never set here.
+        vela_core::app::send::SendTxErrorKey::ChainBusy
+        | vela_core::app::send::SendTxErrorKey::ChainUnreachable => s.tx_error_generic.clone(),
     })
 }
 
