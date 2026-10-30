@@ -3077,3 +3077,243 @@ fn a_dapp_side_reads_responses_events_and_ignores_the_rest() {
         None
     );
 }
+
+// ---------------------------------------------------------------------------
+// r4C-12 / r7-11: what each row was, and the request reviewed as the link is
+// ---------------------------------------------------------------------------
+
+/// `addOwnerWithThreshold(owner, threshold)` from the multisig to itself.
+fn add_owner(owner: &str, threshold: u8, nonce: &str) -> SafeTx {
+    SafeTx {
+        to: SAFE.into(),
+        value: "0x0".into(),
+        data: format!(
+            "0x0d582f13{:0>64}{:0>64x}",
+            owner.trim_start_matches("0x").to_ascii_lowercase(),
+            threshold
+        ),
+        ..tx(nonce)
+    }
+}
+
+/// Vela asks to approve adding a member: its row says what it is, and its
+/// review is the core one, drawn as the link one is, the member change
+/// rule with it (r7-11: Approvals 2 of 3, then 2 of 4) even before the
+/// mailbox holds it.
+#[test]
+fn a_request_is_said_by_what_it_is_and_reviewed_with_its_member_change() {
+    use outside::reading::{RowLabel, RowOutcome, TxTitle};
+    let member = addr(MEMBER_SEED);
+    let mut w = with_wallet(&[MEMBER_SEED]);
+    let mut safe = DeployedSafe::clean(&[&addr(SEED_A), &member, &addr(SEED_STRANGER)], 2);
+    safe.nonce = 3;
+    w.deploy(CHAIN, SAFE, safe);
+    let newcomer = addr(42);
+    let t = add_owner(&newcomer, 2, "0x3");
+    let (mut sut, room, session) = joined(&mut w, vec![member.clone()]);
+    w.peer.deliver(&room, typed_request("r1", &member, &t));
+    settle_ready(&mut sut, &mut w, 20_000);
+
+    let shown = sut.view().request_review.expect("the request is reviewed");
+    assert_eq!(shown.nonce, "3");
+    assert_eq!(shown.chain_nonce.as_deref(), Some("3"));
+    assert_eq!(
+        shown.hashes.safe_tx_hash.to_ascii_lowercase(),
+        hash_of(SAFE, &t).to_ascii_lowercase()
+    );
+    match &shown.title {
+        TxTitle::AddOwner { owner } => assert!(owner.eq_ignore_ascii_case(&newcomer)),
+        other => panic!("not an addition: {other:?}"),
+    }
+    let review = shown.review.expect("the core reviewed it");
+    let changes = &review["memberChanges"];
+    assert_eq!(changes["before"], json!({ "threshold": 2, "owners": 3 }));
+    assert_eq!(changes["after"], json!({ "threshold": 2, "owners": 4 }));
+    assert_eq!(changes["fits"], json!(true));
+
+    let row = sut.view().rows[0].clone();
+    assert_eq!(row.id, "r1");
+    match &row.label {
+        RowLabel::Approve { nonce, title, .. } => {
+            assert_eq!(nonce, "3");
+            assert!(matches!(title, TxTitle::AddOwner { .. }));
+        }
+        other => panic!("not an approval: {other:?}"),
+    }
+    assert_eq!(row.outcome, RowOutcome::Waiting);
+    run(
+        &mut sut,
+        &mut w,
+        page::Event::AnswerRequest {
+            session,
+            id: "r1".into(),
+            go: true,
+        },
+    );
+    let row = sut.view().rows[0].clone();
+    assert_eq!(row.outcome, RowOutcome::Done);
+    assert!(!row.bad);
+}
+
+/// A token the registry does not name is read once, by the core: its
+/// symbol and decimals are the contract own word, said as such.
+#[test]
+fn a_request_sending_a_token_carries_its_facts_read_by_the_core() {
+    use outside::reading::{RowLabel, TxTitle};
+    let member = addr(MEMBER_SEED);
+    let mut w = with_wallet(&[MEMBER_SEED]);
+    let mut safe = DeployedSafe::clean(&[&addr(SEED_A), &member], 2);
+    safe.nonce = 3;
+    w.deploy(CHAIN, SAFE, safe);
+    let token = "0x1111111111111111111111111111111111111111";
+    w.rpc_hooks.push(Box::new(move |_, method, params| {
+        if method != "eth_call" {
+            return None;
+        }
+        let to = params[0]["to"]
+            .as_str()
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        if to != token {
+            return None;
+        }
+        let data = params[0]["data"].as_str().unwrap_or_default();
+        let word = |n: u64| format!("{n:064x}");
+        let answer = match data {
+            "0x95d89b41" => format!("0x{}{}{:0<64}", word(32), word(3), "544b4e"),
+            "0x313ce567" => format!("0x{}", word(6)),
+            _ => return None,
+        };
+        Some(Res::RpcResult {
+            result: json!(answer),
+        })
+    }));
+    let to = "0x000000000000000000000000000000000000bEEF";
+    let t = SafeTx {
+        to: token.into(),
+        value: "0x0".into(),
+        data: format!(
+            "0xa9059cbb{:0>64}{:0>64x}",
+            to.trim_start_matches("0x").to_ascii_lowercase(),
+            2_500_000u64
+        ),
+        ..tx("0x3")
+    };
+    let (mut sut, room, _) = joined(&mut w, vec![member.clone()]);
+    w.peer.deliver(&room, typed_request("r1", &member, &t));
+    settle_ready(&mut sut, &mut w, 20_000);
+    let shown = sut.view().request_review.unwrap();
+    match &shown.title {
+        TxTitle::Send {
+            amount,
+            token: facts,
+            to: recipient,
+        } => {
+            assert_eq!(amount, "2500000");
+            assert!(recipient.eq_ignore_ascii_case(to));
+            assert_eq!(facts.token.as_deref(), Some(token));
+            assert_eq!(facts.symbol.as_deref(), Some("TKN"));
+            assert_eq!(facts.decimals, Some(6));
+            assert!(!facts.known, "the contract own word, not the registry");
+        }
+        other => panic!("not a transfer: {other:?}"),
+    }
+    match &sut.view().rows[0].label {
+        RowLabel::ApproveTo { to: who, title, .. } => {
+            assert!(who.eq_ignore_ascii_case(to));
+            assert!(
+                matches!(title, TxTitle::Send { token, .. } if token.symbol.as_deref() == Some("TKN"))
+            );
+        }
+        other => panic!("not an approval to someone: {other:?}"),
+    }
+}
+
+/// What was done here on the link transaction is a row too, with how it
+/// ended: approved, then rejected.
+#[test]
+fn what_was_done_here_on_the_links_transaction_is_a_row() {
+    use outside::reading::{RowLabel, RowOutcome, TxTitle};
+    let mut w = deployed_world();
+    let t = tx("0x3");
+    let mut sut = opened(&mut w, link_to(SAFE, &t));
+    assert!(sut.view().rows.is_empty());
+    match &sut.view().tx.unwrap().title {
+        TxTitle::Send { amount, token, .. } => {
+            assert_eq!(amount, "10000000000000000");
+            assert_eq!(token.token, None, "the network coin");
+        }
+        other => panic!("not a transfer: {other:?}"),
+    }
+    run(
+        &mut sut,
+        &mut w,
+        page::Event::Approve {
+            account: addr(SEED_B),
+            form: None,
+        },
+    );
+    let rows = sut.view().rows;
+    assert_eq!(rows.len(), 1);
+    assert!(rows[0].id.starts_with("here-"));
+    match &rows[0].label {
+        RowLabel::ApproveTo { nonce, to, .. } => {
+            assert_eq!(nonce, "3");
+            assert!(to.eq_ignore_ascii_case(&t.to));
+        }
+        other => panic!("not an approval: {other:?}"),
+    }
+    assert_eq!(rows[0].outcome, RowOutcome::Done);
+    // Read again: the same step is not logged twice.
+    run(&mut sut, &mut w, page::Event::Refresh);
+    assert_eq!(sut.view().rows.len(), 1);
+}
+
+/// `execTransaction` carries no number: the SafeTx it runs is matched,
+/// field by field and byte by byte, to one this page has seen.
+#[test]
+fn an_exec_transaction_is_matched_to_the_safe_tx_it_runs() {
+    use outside::reading::executed_nonce;
+    let t = tx("0x7");
+    let data = multisig::exec_transaction_data(&t, "0x").unwrap();
+    let known = vec![(SAFE.to_owned(), t.clone())];
+    assert_eq!(executed_nonce(SAFE, &data, &known).as_deref(), Some("7"));
+    assert_eq!(
+        executed_nonce(
+            &SAFE.to_ascii_lowercase(),
+            &data.to_ascii_uppercase().replacen("0X", "0x", 1),
+            &known
+        )
+        .as_deref(),
+        Some("7"),
+        "any case"
+    );
+    // Another multisig, or another transaction: not this one.
+    assert_eq!(executed_nonce(MODULE, &data, &known), None);
+    let other = SafeTx {
+        value: "0x1".into(),
+        ..t.clone()
+    };
+    assert_eq!(
+        executed_nonce(
+            SAFE,
+            &multisig::exec_transaction_data(&other, "0x").unwrap(),
+            &known
+        ),
+        None
+    );
+    let bytes = SafeTx {
+        data: "0xdeadbeef".into(),
+        ..t.clone()
+    };
+    assert_eq!(
+        executed_nonce(
+            SAFE,
+            &multisig::exec_transaction_data(&bytes, "0x").unwrap(),
+            &known
+        ),
+        None,
+        "its bytes are matched too"
+    );
+    assert_eq!(executed_nonce(SAFE, "0xa9059cbb", &known), None);
+}
