@@ -27,6 +27,7 @@ import app.getvela.wallet.feature.send.core.TrackRecordStatus
 import app.getvela.wallet.feature.send.core.TrackOperation
 import app.getvela.wallet.feature.send.core.TrackEvent
 import app.getvela.wallet.feature.send.core.TrackHandoff
+import app.getvela.wallet.feature.send.core.submitFacts
 import app.getvela.wallet.feature.send.core.TrackEntryView
 import app.getvela.wallet.feature.send.core.TrackOutcome
 import app.getvela.wallet.feature.send.core.RelayClient
@@ -570,6 +571,9 @@ class WalletController(
             "sender" to handoff.sender?.take(10),
         )
         host.dispatch(handoff.event(), TrackEvent.serializer())
+        // Round 3 (send-5): a lost reply's nonce — the tracker reads the chain
+        // with it instead of waiting the relay's grace out.
+        handoff.submitFacts()?.let { host.dispatch(it, TrackEvent.serializer()) }
         // Device-found (spec 043 phase 4): a person taps confirm and leaves
         // before the relay answers. `backgrounded()` ran with nothing pending,
         // the submit landed afterwards, and no clock ticked until the next

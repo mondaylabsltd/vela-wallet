@@ -263,9 +263,20 @@ class UserOpSpine(
      * one), and the head read before the first POST ([submitBlock], `null` =
      * unknown). Both flags go with the record and into the tracker.
      */
-    data class Submitted(val userOpHash: String, val maybeSent: Boolean = false, val submitBlock: Long? = null)
+    data class Submitted(
+        val userOpHash: String,
+        val maybeSent: Boolean = false,
+        val submitBlock: Long? = null,
+        /** Round 3 (send-5): the nonce the op signed, a hex quantity — what the tracker reads a lost reply against. */
+        val nonce: String? = null,
+    )
 
-    class Refused(val failure: Failure) : Exception()
+    /**
+     * [chainRead]: the refusal is a read of the chain that went unanswered —
+     * whether the account is deployed, its nonce (r5reg-3) — the network's
+     * failure, never the operation's.
+     */
+    class Refused(val failure: Failure, val chainRead: Boolean = false) : Exception()
 
     private companion object {
         /** The corpus lines a page that cannot be reached, or will not sign, is told in. */
@@ -277,6 +288,9 @@ class UserOpSpine(
     }
 
     private fun other(message: String): Nothing = throw Refused(Failure.Other(message))
+
+    /** A read of the chain nobody answered (r5reg-3): the network's failure. */
+    private fun unanswered(message: String): Nothing = throw Refused(Failure.Other(message), chainRead = true)
 
     /**
      * Every real contract call measured from the Safe's own address; the draft's
@@ -423,9 +437,9 @@ class UserOpSpine(
         val pinned = keys.first()
         val tempo = isChainWithoutNativeCoin(chainId.toUInt())
         val deployed = relay.isDeployed(chainId, account)
-            ?: other("The network could not be reached. Please try again.")
+            ?: unanswered("The network could not be reached. Please try again.")
         val nonce = if (deployed) {
-            relay.nonce(chainId, account) ?: other("The account's nonce could not be read. Please try again.")
+            relay.nonce(chainId, account) ?: unanswered("The account's nonce could not be read. Please try again.")
         } else {
             "0x0"
         }
@@ -533,8 +547,8 @@ class UserOpSpine(
         // by the person (owner ruling 1). The nonce is read from the chain on
         // every attempt, so nothing here advances it.
         return when (val answer = relay.sendUserOp(chainId, userOpRelayJson(signed, feeToken.takeIf { tempo }), quoted.tier, localHash)) {
-            is RelayClient.SubmitAnswer.Accepted -> Submitted(answer.userOpHash, maybeSent = false, submitBlock = submitBlock)
-            is RelayClient.SubmitAnswer.MaybeSent -> Submitted(answer.userOpHash, maybeSent = true, submitBlock = submitBlock)
+            is RelayClient.SubmitAnswer.Accepted -> Submitted(answer.userOpHash, maybeSent = false, submitBlock = submitBlock, nonce = nonce)
+            is RelayClient.SubmitAnswer.MaybeSent -> Submitted(answer.userOpHash, maybeSent = true, submitBlock = submitBlock, nonce = nonce)
             is RelayClient.SubmitAnswer.NotSent -> throw Refused(
                 when (val rejection = answer.rejection) {
                     null -> Failure.NotSent

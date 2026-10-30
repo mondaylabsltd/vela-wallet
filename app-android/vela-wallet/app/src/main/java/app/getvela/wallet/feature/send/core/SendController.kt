@@ -77,6 +77,13 @@ class SendController(
      * (tests) answers from [balances] as it stands and follows nothing.
      */
     private val holdings: HoldingsFeed? = null,
+    /**
+     * Round 6: one bounded read of a chain — `true` when its network answered.
+     * `null`: the chain's head through the relay client's pool.
+     */
+    chainRead: (suspend (Int) -> Boolean)? = null,
+    /** Round 6: whether the device reaches a server; its turn back asks a failed chain at once. */
+    backOnline: kotlinx.coroutines.flow.Flow<Boolean> = app.getvela.wallet.core.net.NetHealth.online,
     /** The tracker handoff; the wallet controller binds it (phase 4). */
     var onTrackSubmitted: (TrackHandoff) -> Unit = { handoff ->
         VelaLog.event("send.track", "no tracker bound", "hash" to handoff.userOpHash.take(12))
@@ -131,6 +138,11 @@ class SendController(
         override fun signingStarted() {
             dispatch(SendEvent.SigningStarted)
             onCeremony?.invoke("started")
+        }
+
+        // r5reg-3: the reads before the passkey are slow — said with the time.
+        override fun submitSlow(elapsedMs: Long, busy: Boolean) {
+            dispatch(SendEvent.SubmitSlow(elapsed_ms = elapsedMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(), busy = busy))
         }
 
         override fun trackSubmitted(handoff: TrackHandoff) {
@@ -339,9 +351,27 @@ class SendController(
     /** The fee view of the session pricing `tier` — for formatting that option's fee. */
     fun feeViewOf(tier: FeeTier): FeeView? = speedControl.feeViewOf(tier)
 
+    /**
+     * Round 6 (the web's `watchChainRecovery`): while the review carries a
+     * submit that failed as the network's, its network is asked until it
+     * answers; the answer opens the confirm (`chain_answered`, the core's
+     * rule) and the fee is asked again — no "Try again" needed.
+     */
+    private val chainRecovery = ChainRecovery(
+        scope = scope,
+        read = chainRead ?: { chainId -> relay.headBlock(chainId) != null },
+        backOnline = backOnline,
+        answered = { chainId -> chainAnswered(chainId) },
+    )
+
     init {
         sendHost.start()
         speedControl.start()
+        // Only while a Send is on screen: a review nobody is looking at asks no network.
+        scope.launch {
+            combine(sendHost.view, _journeyOpen) { view, open -> if (open) ChainRecovery.chainOf(view) else null }
+                .collect { chain -> chainRecovery.follow(chain) }
+        }
         holdings?.let { feed -> scope.launch { feed.settled.collect(::followHoldings) } }
         // The send leaving its form ends any free-upgrade question.
         scope.launch {
@@ -803,6 +833,35 @@ class SendController(
 
     /** send-18: ask the recipient's check again (the confirm's "Check again"). */
     fun retryRiskCheck() = dispatch(SendEvent.RetryRiskCheck)
+
+    /**
+     * Round 6: [chainId] answered again after a submit failed as its
+     * network's — the core opens the confirm, and the fee is asked again with
+     * it (the web's `feeQuote.requote()` beside `chain_answered`).
+     */
+    fun chainAnswered(chainId: Int) {
+        VelaLog.event("send.recovery", "chain answered", "chain" to chainId)
+        dispatch(SendEvent.ChainAnswered(chainId))
+        speedControl.refresh()
+    }
+
+    /**
+     * send-5: the never-sent receipt's "Send again" — back to the confirm,
+     * every value as it was, for a new quote (asked here, as the web does)
+     * and a new signature. The core offers it only over a payment proven
+     * never sent (`SendReceiptView.can_send_again`).
+     */
+    fun sendAgain() {
+        dispatch(SendEvent.SendAgain)
+        speedControl.refresh()
+    }
+
+    /**
+     * F6 / F27: "Add this network" on a payment request for a network the
+     * wallet lacks — the core runs `add_network` (answered by the settings
+     * machine) and says how it went (`adding_network`, `add_network_msg`).
+     */
+    fun addNetworkTapped(chainId: Int) = dispatch(SendEvent.AddNetworkTapped(chainId))
 
     fun done() = dispatch(SendEvent.Done)
 
