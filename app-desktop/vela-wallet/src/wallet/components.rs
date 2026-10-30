@@ -469,11 +469,19 @@ pub fn balance_display(
     // lands first on the home.
     let figure_words: String = match model.state {
         BalanceState::Loading => String::new(),
-        _ => format!(
-            "{}{}",
-            model.integer,
-            model.decimals.as_ref().map_or("", |d| d.as_ref())
-        ),
+        // The figure as drawn: the integer, then the person's decimal mark
+        // and the decimals (the mark is drawn apart, below).
+        _ => match model.decimals.as_ref() {
+            Some(decimals) => format!(
+                "{}{}{decimals}",
+                model.integer,
+                crate::executor::format_prefs::current()
+                    .number
+                    .separators()
+                    .decimal
+            ),
+            None => model.integer.to_string(),
+        },
     };
     let hero_words = crate::ui::a11y::sentence([
         model.label.as_ref(),

@@ -81,6 +81,12 @@ impl WalletPage {
         crate::app_menu::COMMANDS
             .iter()
             .filter(|entry| entry.command != Command::Palette)
+            // Find is a row only where the section has a search of its own;
+            // elsewhere ⌘F is this palette, already open.
+            .filter(|entry| {
+                entry.command != Command::Find
+                    || matches!(self.section, Section::Contacts | Section::Explore)
+            })
             .filter(|entry| match entry.command {
                 Command::Section(section) => section.available(),
                 _ => true,
