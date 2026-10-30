@@ -4202,9 +4202,9 @@ export function groupPublicKeyFromSeed(seed_hex) {
 
 /**
  * The hand-off card's compact fee + speed row (spec 102, D4) as a
- * `HandoffFee` JSON, or `undefined` for no row. The web opens no page and
- * draws no hand-off card; exported for the gallery's boards, which draw the
- * apps' card. See `vela_core::app::sign_confirm::handoff_fee`.
+ * `HandoffFee` JSON, or `undefined` for no row. The web's screens keep their
+ * own fee row above the hand-off card (D-18), so this is for the gallery's
+ * boards, which draw the apps' card. See `vela_core::app::sign_confirm::handoff_fee`.
  * @param {string | null} [fee_json]
  * @param {string | null} [speed_json]
  * @returns {string | undefined}
@@ -4989,8 +4989,8 @@ export function minGasPriceWei(chain_id) {
 }
 
 /**
- * Where a multisig member's approval goes on the web
- * (`trusted_signer::approval::approval_route`): `{type: 'in_vela'}`,
+ * Where a multisig member's approval goes — `signingRoute` for
+ * `vela_multisigApprove` (`trusted_signer::approval::approval_route`): `{type: 'in_vela'}`,
  * `{type: 'page', url}` or `{type: 'blocked', block}` — `null` for a record
  * this build cannot read. `account_json` is the member's record as stored.
  * @param {string} account_json
@@ -6089,24 +6089,42 @@ export function signingPageDomain(url) {
  * record written before the account named its sign-in key, which signs as it
  * always did; `key_label` the name of that key as the person reads it
  * (`{name?, place_key}`). `null` for a record this build cannot read.
- * `account_json` is the stored account record.
- *
- * With `surface = "web"` the plan is the web's
- * (`SigningPlan::on_web`): a `getvela.app` account whose venue is a page
- * signs in Vela, and a custom-domain account is `blocked` with
- * `{"type":"not_on_web"}` — refuse to sign, and report
- * `venue_blocked { block }` to the send/sign core so the sheet says why. See
- * `vela_core::app::Account::signing_plan`.
+ * `account_json` is the stored account record. The web's plan is the apps'
+ * (owner, 2026-10-30: the page is usable everywhere); where a signature goes
+ * is `signingRoute`. See `vela_core::app::Account::signing_plan`.
  * @param {string} account_json
- * @param {string | null} [surface]
  * @returns {string | undefined}
  */
-export function signingPlan(account_json, surface) {
+export function signingPlan(account_json) {
     const ptr0 = passStringToWasm0(account_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
-    var ptr1 = isLikeNone(surface) ? 0 : passStringToWasm0(surface, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    var len1 = WASM_VECTOR_LEN;
-    const ret = wasm.signingPlan(ptr0, len0, ptr1, len1);
+    const ret = wasm.signingPlan(ptr0, len0);
+    let v2;
+    if (ret[0] !== 0) {
+        v2 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v2;
+}
+
+/**
+ * R7 — where a request of `method` by the stored account goes, on the web and
+ * in the Chrome extension as in the apps (`signing_venue::signing_route`):
+ * `{type: 'in_vela'}`, `{type: 'page', url}` or `{type: 'blocked', block}`.
+ * `method` is the JSON-RPC method (`""` for the wallet's own send,
+ * `vela_multisigExecute` for a multisig executor's operation,
+ * `vela_multisigApprove` for a member's approval). `null` for a record this
+ * build cannot read or a method no venue signs (`eth_sign`) — refuse it.
+ * @param {string} account_json
+ * @param {string} method
+ * @returns {string | undefined}
+ */
+export function signingRoute(account_json, method) {
+    const ptr0 = passStringToWasm0(account_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(method, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.signingRoute(ptr0, len0, ptr1, len1);
     let v3;
     if (ret[0] !== 0) {
         v3 = getStringFromWasm0(ret[0], ret[1]).slice();
@@ -6142,31 +6160,26 @@ export function signingVenueBlock(domain, venue_json) {
  * Vela's sheet, the official page, then the saved pages, each reachable or
  * blocked with its reason (spec 102 R1, R2). `active_json` is the account's
  * `signing_venue`; `saved_json` the `SigningPage[]` Settings keeps. `null`
- * when either does not read. With `surface = "web"`, every page row R1 does
- * not already block is blocked `{"type":"not_on_web"}`
- * (`settings.venue.blockedWeb`): the web shows the rows, disabled, with why.
+ * when either does not read. The web's rows are the apps' (2026-10-30).
  * @param {string} domain
  * @param {string} active_json
  * @param {string} saved_json
- * @param {string | null} [surface]
  * @returns {string | undefined}
  */
-export function signingVenueChoices(domain, active_json, saved_json, surface) {
+export function signingVenueChoices(domain, active_json, saved_json) {
     const ptr0 = passStringToWasm0(domain, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
     const ptr1 = passStringToWasm0(active_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len1 = WASM_VECTOR_LEN;
     const ptr2 = passStringToWasm0(saved_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len2 = WASM_VECTOR_LEN;
-    var ptr3 = isLikeNone(surface) ? 0 : passStringToWasm0(surface, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    var len3 = WASM_VECTOR_LEN;
-    const ret = wasm.signingVenueChoices(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3);
-    let v5;
+    const ret = wasm.signingVenueChoices(ptr0, len0, ptr1, len1, ptr2, len2);
+    let v4;
     if (ret[0] !== 0) {
-        v5 = getStringFromWasm0(ret[0], ret[1]).slice();
+        v4 = getStringFromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     }
-    return v5;
+    return v4;
 }
 
 /**
@@ -6625,6 +6638,70 @@ export function trustedSignerRegistryRpId(signer_origin) {
         wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     }
     return v2;
+}
+
+/**
+ * The page's answer to a signature request, as the shell's passkey
+ * assertion (`{credentialId, signatureHex, authenticatorDataHex,
+ * clientDataJSONHex}`: hex, the signature DER as WebAuthn gives it) — or an
+ * error whose message is the refusal's code (`wrong_challenge`,
+ * `foreign_key`, `bad_signature`, `not_verified`, `refused`, `malformed`).
+ * Accepted only as `trusted_signer::accept_signature` accepts it: over
+ * exactly the bytes the core computes from the request (which must be the
+ * bytes the shell signs, `digestHex`), by one of the account's keys,
+ * user-verified, under the Safe verifier's client-data rules.
+ * @param {string} args_json
+ * @returns {string}
+ */
+export function trustedSignerSignatureAccept(args_json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(args_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.trustedSignerSignatureAccept(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * The page's `{intent, context}` for a transaction, a batch, the wallet's own
+ * send (`method: ""`) or a message (`trusted_signer::request`): the method and
+ * params, the ASSEMBLED operation (the SafeOp hash covers that, not the
+ * site's call) with its fee leg's index, the account, its key and where it
+ * lives. An error for an operation that does not read.
+ * @param {string} args_json
+ * @returns {string}
+ */
+export function trustedSignerSignatureRequest(args_json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(args_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.trustedSignerSignatureRequest(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
 }
 
 /**

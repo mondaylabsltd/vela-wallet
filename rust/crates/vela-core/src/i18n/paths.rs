@@ -3,12 +3,12 @@
 //! The SHARED key-path table: every dotted path in the corpus, sorted, interned
 //! once for all 15 locales. Regenerate with `node scripts/gen-i18n.mjs`.
 //!
-//! 2203 paths = 2095 leaf + 108 branch. Repeated per locale these key bytes
-//! would cost 901230 bytes; interned once they cost 62124.
+//! 2204 paths = 2096 leaf + 108 branch. Repeated per locale these key bytes
+//! would cost 901590 bytes; interned once they cost 62148.
 
 /// Every path in the corpus, strictly sorted. Lookup is a binary search here, then
 /// an O(1) index into the active locale's value table.
-pub(crate) static PATHS: [&str; 2203] = [
+pub(crate) static PATHS: [&str; 2204] = [
     "about",
     "about.debugMode",
     "about.debugModeBody",
@@ -2065,9 +2065,10 @@ pub(crate) static PATHS: [&str; 2203] = [
     "settings.venue.inVelaBody",
     "settings.venue.page",
     "settings.venue.pageBody",
+    "settings.venue.pageLimit",
+    "settings.venue.pageProtects",
     "settings.venue.subtitle",
     "settings.venue.title",
-    "settings.venue.webApprovals",
     "settingsModals",
     "settingsModals.account",
     "settingsModals.account.createNew",
@@ -2235,12 +2236,12 @@ pub(crate) static IS_BRANCH: [u8; 276] = [
     0x00, 0x00, 0x08, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc0,
     0x04, 0x02, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x24, 0x40, 0x08, 0x80, 0x24, 0x44, 0x80, 0x40, 0x40, 0x80, 0x00, 0x40, 0x08, 0x00, 0x00, 0x00,
-    0x01, 0x18, 0x04, 0x00, 0x00, 0x00, 0x20, 0x10, 0x00, 0x80, 0x10, 0x00, 0x02, 0x00, 0x04, 0x04,
-    0x02, 0x08, 0x02, 0x00,
+    0x01, 0x30, 0x08, 0x00, 0x00, 0x00, 0x40, 0x20, 0x00, 0x00, 0x21, 0x00, 0x04, 0x00, 0x08, 0x08,
+    0x04, 0x10, 0x04, 0x00,
 ];
 
 /// Number of entries in [`PATHS`]. Value tables carry `N_PATHS + 1` offsets.
-pub(crate) const N_PATHS: usize = 2203;
+pub(crate) const N_PATHS: usize = 2204;
 
 /// Index of `path` in [`PATHS`], or `None`.
 pub(crate) fn path_id(path: &str) -> Option<usize> {

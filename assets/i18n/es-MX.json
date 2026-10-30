@@ -88,7 +88,8 @@
    "blockedApp": "Las llaves de acceso de esta cuenta solo firman para {{domain}}, así que Vela no puede usarlas aquí.",
    "blockedPage": "Esta página está en {{pageDomain}}, pero las llaves de acceso de esta cuenta solo firman para {{domain}}.",
    "blockedWeb": "No disponible en la web. Ábrelo desde la app de Vela.",
-   "webApprovals": "En la web, una página de firma revisa y firma tus aprobaciones multifirma. Las demás transacciones y mensajes se confirman en Vela."
+   "pageProtects": "Una página de firma lee la solicitud por sí misma y firma exactamente lo que te muestra, así que una pantalla de Vela alterada no puede engañarte para firmar otra cosa.",
+   "pageLimit": "No te protege si la propia billetera está comprometida: tus llaves de acceso firman para {{domain}}, y el código que se ejecute ahí aún podría pedirles una firma."
   },
   "advanced": {
    "networksTitle": "Redes",

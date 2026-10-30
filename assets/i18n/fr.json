@@ -88,7 +88,8 @@
    "blockedApp": "Les clés d'accès de ce compte ne signent que pour {{domain}}, donc Vela ne peut pas les utiliser ici.",
    "blockedPage": "Cette page est sur {{pageDomain}}, mais les clés d'accès de ce compte ne signent que pour {{domain}}.",
    "blockedWeb": "Indisponible sur le web. Ouvrez-le depuis l'appli Vela.",
-   "webApprovals": "Sur le web, une page de signature examine et signe vos approbations multisig. Les autres transactions et messages se confirment dans Vela."
+   "pageProtects": "Une page de signature lit elle-même la demande et signe exactement ce qu'elle vous montre : une interface Vela trafiquée ne peut donc pas vous faire signer autre chose.",
+   "pageLimit": "Elle ne vous protège pas si ce portefeuille lui-même est compromis : vos clés d'accès signent pour {{domain}}, et du code qui s'y exécute pourrait encore leur demander une signature."
   },
   "advanced": {
    "networksTitle": "Réseaux",

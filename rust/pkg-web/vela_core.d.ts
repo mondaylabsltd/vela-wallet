@@ -1009,9 +1009,9 @@ export function groupPublicKeyFromSeed(seed_hex: string): string;
 
 /**
  * The hand-off card's compact fee + speed row (spec 102, D4) as a
- * `HandoffFee` JSON, or `undefined` for no row. The web opens no page and
- * draws no hand-off card; exported for the gallery's boards, which draw the
- * apps' card. See `vela_core::app::sign_confirm::handoff_fee`.
+ * `HandoffFee` JSON, or `undefined` for no row. The web's screens keep their
+ * own fee row above the hand-off card (D-18), so this is for the gallery's
+ * boards, which draw the apps' card. See `vela_core::app::sign_confirm::handoff_fee`.
  */
 export function handoffFeeRow(fee_json?: string | null, speed_json?: string | null): string | undefined;
 
@@ -1195,8 +1195,8 @@ export function matchSelector(sig: string, calldata: Uint8Array): boolean;
 export function minGasPriceWei(chain_id: number): string;
 
 /**
- * Where a multisig member's approval goes on the web
- * (`trusted_signer::approval::approval_route`): `{type: 'in_vela'}`,
+ * Where a multisig member's approval goes — `signingRoute` for
+ * `vela_multisigApprove` (`trusted_signer::approval::approval_route`): `{type: 'in_vela'}`,
  * `{type: 'page', url}` or `{type: 'blocked', block}` — `null` for a record
  * this build cannot read. `account_json` is the member's record as stored.
  */
@@ -1566,16 +1566,22 @@ export function signingPageDomain(url: string): string;
  * record written before the account named its sign-in key, which signs as it
  * always did; `key_label` the name of that key as the person reads it
  * (`{name?, place_key}`). `null` for a record this build cannot read.
- * `account_json` is the stored account record.
- *
- * With `surface = "web"` the plan is the web's
- * (`SigningPlan::on_web`): a `getvela.app` account whose venue is a page
- * signs in Vela, and a custom-domain account is `blocked` with
- * `{"type":"not_on_web"}` — refuse to sign, and report
- * `venue_blocked { block }` to the send/sign core so the sheet says why. See
- * `vela_core::app::Account::signing_plan`.
+ * `account_json` is the stored account record. The web's plan is the apps'
+ * (owner, 2026-10-30: the page is usable everywhere); where a signature goes
+ * is `signingRoute`. See `vela_core::app::Account::signing_plan`.
  */
-export function signingPlan(account_json: string, surface?: string | null): string | undefined;
+export function signingPlan(account_json: string): string | undefined;
+
+/**
+ * R7 — where a request of `method` by the stored account goes, on the web and
+ * in the Chrome extension as in the apps (`signing_venue::signing_route`):
+ * `{type: 'in_vela'}`, `{type: 'page', url}` or `{type: 'blocked', block}`.
+ * `method` is the JSON-RPC method (`""` for the wallet's own send,
+ * `vela_multisigExecute` for a multisig executor's operation,
+ * `vela_multisigApprove` for a member's approval). `null` for a record this
+ * build cannot read or a method no venue signs (`eth_sign`) — refuse it.
+ */
+export function signingRoute(account_json: string, method: string): string | undefined;
 
 /**
  * R1: why `venue_json` cannot reach the keys of an account on `domain`, as a
@@ -1589,11 +1595,9 @@ export function signingVenueBlock(domain: string, venue_json: string): string | 
  * Vela's sheet, the official page, then the saved pages, each reachable or
  * blocked with its reason (spec 102 R1, R2). `active_json` is the account's
  * `signing_venue`; `saved_json` the `SigningPage[]` Settings keeps. `null`
- * when either does not read. With `surface = "web"`, every page row R1 does
- * not already block is blocked `{"type":"not_on_web"}`
- * (`settings.venue.blockedWeb`): the web shows the rows, disabled, with why.
+ * when either does not read. The web's rows are the apps' (2026-10-30).
  */
-export function signingVenueChoices(domain: string, active_json: string, saved_json: string, surface?: string | null): string | undefined;
+export function signingVenueChoices(domain: string, active_json: string, saved_json: string): string | undefined;
 
 /**
  * What the pool's `eth_simulateV1` answer means for `user` (the signing
@@ -1727,6 +1731,28 @@ export function trustedSignerPageTarget(base: string, index_json: string | null 
  * 「可信签名器的回复与这笔请求不符」, which is how both phones found this.
  */
 export function trustedSignerRegistryRpId(signer_origin?: string | null): string | undefined;
+
+/**
+ * The page's answer to a signature request, as the shell's passkey
+ * assertion (`{credentialId, signatureHex, authenticatorDataHex,
+ * clientDataJSONHex}`: hex, the signature DER as WebAuthn gives it) — or an
+ * error whose message is the refusal's code (`wrong_challenge`,
+ * `foreign_key`, `bad_signature`, `not_verified`, `refused`, `malformed`).
+ * Accepted only as `trusted_signer::accept_signature` accepts it: over
+ * exactly the bytes the core computes from the request (which must be the
+ * bytes the shell signs, `digestHex`), by one of the account's keys,
+ * user-verified, under the Safe verifier's client-data rules.
+ */
+export function trustedSignerSignatureAccept(args_json: string): string;
+
+/**
+ * The page's `{intent, context}` for a transaction, a batch, the wallet's own
+ * send (`method: ""`) or a message (`trusted_signer::request`): the method and
+ * params, the ASSEMBLED operation (the SafeOp hash covers that, not the
+ * site's call) with its fee leg's index, the account, its key and where it
+ * lives. An error for an operation that does not read.
+ */
+export function trustedSignerSignatureRequest(args_json: string): string;
 
 /**
  * The ONE relying party a unit is filed under, or an error naming the parties
@@ -2186,9 +2212,10 @@ export interface InitOutput {
     readonly signerIntegrityTime: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
     readonly signerPageCheckHeaders: () => [number, number];
     readonly signingPageDomain: (a: number, b: number) => [number, number];
-    readonly signingPlan: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly signingPlan: (a: number, b: number) => [number, number];
+    readonly signingRoute: (a: number, b: number, c: number, d: number) => [number, number];
     readonly signingVenueBlock: (a: number, b: number, c: number, d: number) => [number, number];
-    readonly signingVenueChoices: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
+    readonly signingVenueChoices: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly signingpagescore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly signingpagescore_new: () => number;
     readonly signingpagescore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
@@ -2222,6 +2249,8 @@ export interface InitOutput {
     readonly trustedSignerPageAdmit: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number];
     readonly trustedSignerPageTarget: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly trustedSignerRegistryRpId: (a: number, b: number) => [number, number];
+    readonly trustedSignerSignatureAccept: (a: number, b: number) => [number, number, number, number];
+    readonly trustedSignerSignatureRequest: (a: number, b: number) => [number, number, number, number];
     readonly trustedSignerUnitRpId: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly txtrackercore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly txtrackercore_new: () => number;

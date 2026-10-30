@@ -88,7 +88,8 @@
    "blockedApp": "Die Passkeys dieses Kontos signieren nur für {{domain}}, daher kann Vela sie hier nicht verwenden.",
    "blockedPage": "Diese Seite liegt auf {{pageDomain}}, aber die Passkeys dieses Kontos signieren nur für {{domain}}.",
    "blockedWeb": "Im Web nicht verfügbar. Öffnen Sie es in der Vela-App.",
-   "webApprovals": "Im Web prüft und signiert eine Signaturseite Ihre Multisig-Freigaben. Andere Transaktionen und Nachrichten bestätigen Sie in Vela."
+   "pageProtects": "Eine Signaturseite liest die Anfrage selbst und signiert genau das, was sie Ihnen zeigt – eine manipulierte Vela-Oberfläche kann Sie also nicht dazu bringen, etwas anderes zu signieren.",
+   "pageLimit": "Sie schützt Sie nicht, wenn diese Wallet selbst kompromittiert ist: Ihre Passkeys signieren für {{domain}}, und Code, der dort läuft, könnte sie trotzdem direkt um eine Signatur bitten."
   },
   "advanced": {
    "networksTitle": "Netzwerke",
