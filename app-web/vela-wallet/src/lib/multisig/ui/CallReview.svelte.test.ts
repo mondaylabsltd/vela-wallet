@@ -23,12 +23,21 @@ const m = new Proxy({} as SigningMessages, {
 	get: (_, key) => (key === 'certain' ? new Proxy({}, names) : String(key))
 });
 
-function shown(call: typeof APPROVE_MAX, badges?: Record<string, PartyBadge>) {
+function shown(
+	call: typeof APPROVE_MAX,
+	badges?: Record<string, PartyBadge>,
+	names?: Record<string, string>
+) {
 	const reading = new CallReading(CHAIN, MULTISIG, call);
 	const views = read(call);
 	reading.clear = views.clear;
 	reading.guard = views.guard;
-	return render(CallReview, { reading, m, ...(badges ? { badges } : {}) });
+	return render(CallReview, {
+		reading,
+		m,
+		...(badges ? { badges } : {}),
+		...(names ? { names } : {})
+	});
 }
 
 describe('a member reads a multisig’s contract call (cs-12)', () => {
@@ -64,5 +73,18 @@ describe('a member reads a multisig’s contract call (cs-12)', () => {
 			[SPENDER.toLowerCase()]: { text: 'tagFirstTime', tone: 'caution' }
 		});
 		expect(screen.container.textContent).toContain('tagFirstTime');
+	});
+
+	it('r4a-18: its recipient row reads by the name the review knows, the address beneath', async () => {
+		const send = { to: SPENDER, value: '50000000000000000', data: '0x' };
+		const screen = shown(
+			send,
+			{ [SPENDER.toLowerCase()]: { text: 'knownOwn', tone: 'neutral' } },
+			{ [SPENDER.toLowerCase()]: 'R6 Bob' }
+		);
+		const text = screen.container.textContent ?? '';
+		expect(text).toContain('R6 Bob');
+		expect(text).toContain('knownOwn');
+		expect(text).toContain(SPENDER);
 	});
 });

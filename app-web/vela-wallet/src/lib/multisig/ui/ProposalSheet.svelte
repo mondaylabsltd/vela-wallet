@@ -45,6 +45,7 @@
 		anywayLabel,
 		partyAddresses,
 		recipientBadges,
+		recipientNames,
 		reviewBlocks,
 		reviewTech
 	} from '../core/review-blocks';
@@ -411,6 +412,7 @@
 		reading ? partyAddresses(callReviewBlocks(reading, signing, currency.view)) : []
 	);
 	const partyBadges = $derived(recipientBadges(fullReview, reviewContext));
+	const partyNames = $derived(recipientNames(fullReview, reviewContext));
 	const tech = $derived(fullReview ? reviewTech(fullReview, reviewContext) : null);
 	/** The review's rule: nothing signed (no override), "… anyway", or plain. */
 	const signRule = $derived(fullReview?.sign ?? null);
@@ -1378,7 +1380,7 @@
 				</section>
 			{/if}
 			{#if reading}
-				<CallReview {reading} m={signing} badges={partyBadges} />
+				<CallReview {reading} m={signing} badges={partyBadges} names={partyNames} />
 			{/if}
 			{#if lines.length > 0 && !reading}
 				<ul class="lines">
@@ -2457,9 +2459,12 @@
 	   in their place at its end. */
 	.actions {
 		position: sticky;
-		bottom: 0;
+		/* The dialog's scroller keeps a little room under its content
+		   (Dialog's `.content`); the bar covers it, so nothing scrolls
+		   past beneath the actions. */
+		bottom: calc(var(--space-sm) * -1);
 		z-index: 1;
-		padding-block: var(--space-md) var(--space-sm);
+		padding-block: var(--space-md) calc(var(--space-sm) * 2);
 		border-top: var(--border-hairline) solid var(--color-border-base);
 		background: var(--color-bg-raised);
 	}

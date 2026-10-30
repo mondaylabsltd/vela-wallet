@@ -22,18 +22,23 @@
 		 * call's own row, as the review does not name that address again.
 		 */
 		badges?: Record<string, PartyBadge>;
+		/**
+		 * r4a-18: the name the review knows for an address this call names
+		 * (one's own account, a member), by lowercased address — the row
+		 * reads by it, its address beneath as always.
+		 */
+		names?: Record<string, string>;
 	}
 
-	let { reading, m, alerts = [], badges = {} }: Props = $props();
+	let { reading, m, alerts = [], badges = {}, names = {} }: Props = $props();
 
 	const blocks = $derived([
 		...alerts.map((text) => ({ kind: 'warning' as const, tone: 'danger' as const, text })),
 		...callReviewBlocks(reading, m, currency.view).map((block) => {
-			const badge =
-				block.kind === 'party' && block.address && !block.badge
-					? badges[block.address.toLowerCase()]
-					: undefined;
-			return badge ? { ...block, badge } : block;
+			if (block.kind !== 'party' || !block.address) return block;
+			const key = block.address.toLowerCase();
+			const badge = block.badge ?? badges[key];
+			return { ...block, name: names[key] ?? block.name, ...(badge ? { badge } : {}) };
 		})
 	]);
 </script>

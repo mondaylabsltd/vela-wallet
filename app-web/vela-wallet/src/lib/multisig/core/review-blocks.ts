@@ -160,6 +160,38 @@ export function recipientBadges(
 }
 
 /**
+ * The name the review knows for a recipient — the one typed for a member
+ * being added (r5reg-16), this device's, or the core's match — if any.
+ */
+function recipientName(r: ReviewRecipient, ctx: ReviewContext): string | null {
+	return (
+		(r.role === 'member' ? ctx.memberName?.(r.address) : null) ??
+		ctx.nameOf(r.address) ??
+		r.known?.label ??
+		null
+	);
+}
+
+/**
+ * Each recipient's name, by lowercased address, when the review knows one:
+ * worn by the call's own row for that address (r5reg-15 left the review's
+ * named row out), so one's own account or a member reads by its name there
+ * too (r4a-18) — not as a bare address beside "Your account".
+ */
+export function recipientNames(
+	review: MultisigReviewOut | null,
+	ctx: ReviewContext
+): Record<string, string> {
+	const out: Record<string, string> = {};
+	for (const r of review?.recipients ?? []) {
+		const name = recipientName(r, ctx);
+		const key = r.address.toLowerCase();
+		if (name && name.toLowerCase() !== key && !out[key]) out[key] = name;
+	}
+	return out;
+}
+
+/**
  * Every address a leg sends to, calls or makes a member — with what is known
  * of it. One the call's own review names already (`drawn`, lowercased) is
  * not named twice (r5reg-15: "Recipient 0xd9c7…" then "To 0xd9c7…"); its
@@ -178,11 +210,7 @@ export function recipientBlocks(
 				kind: 'party',
 				label: roleLabel(r, m),
 				// A member being added keeps the name typed for them (r5reg-16).
-				name:
-					(r.role === 'member' ? ctx.memberName?.(r.address) : null) ??
-					ctx.nameOf(r.address) ??
-					r.known?.label ??
-					r.address,
+				name: recipientName(r, ctx) ?? r.address,
 				address: r.address,
 				badge: recipientBadge(r, ctx)
 			});

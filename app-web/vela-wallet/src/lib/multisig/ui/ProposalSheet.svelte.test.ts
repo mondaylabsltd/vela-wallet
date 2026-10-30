@@ -2008,7 +2008,8 @@ describe('round 6: the review’s words and where its actions stand', () => {
 		const bar = document.querySelector<HTMLElement>('[data-testid="proposal-actions"]');
 		expect(bar).not.toBeNull();
 		expect(getComputedStyle(bar!).position).toBe('sticky');
-		expect(getComputedStyle(bar!).bottom).toBe('0px');
+		// Over the scroller's own room beneath its content: nothing scrolls past under it.
+		expect(parseFloat(getComputedStyle(bar!).bottom)).toBeLessThan(0);
 		await wide.unmount();
 
 		fake.chain.items = [item({ canExecute: [local] })];

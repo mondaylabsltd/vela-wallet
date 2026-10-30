@@ -31,6 +31,7 @@ import {
 	hashRows,
 	partyAddresses,
 	recipientBadges,
+	recipientNames,
 	reviewBlocks,
 	reviewTech,
 	stateBlocks,
@@ -237,6 +238,20 @@ describe('what moves, who it reaches, the bytes (§3.6)', () => {
 			const { blocks, party } = partyOf(review);
 			expect(party?.badge?.text).toBe(signing.tagFirstTime);
 			expect(lost(blocks)).toBe(false);
+		});
+
+		/**
+		 * r4a-18 with r5reg-15: when the call's own row names the address (and
+		 * the review's row is left out), that row reads by the name the review
+		 * knows — "R5 Bob · Your account", never a bare address beside it.
+		 */
+		it('the call row wears the known name; an unknown address has none to wear', () => {
+			const own = reviewTo(true, [{ address: BOB, label: 'R5 Bob', kind: 'own' }]);
+			expect(recipientNames(own, ctx)).toEqual({ [BOB.toLowerCase()]: 'R5 Bob' });
+			expect(recipientNames(reviewTo(false, []), ctx)).toEqual({});
+			// This device's own name for it comes first.
+			const named = { ...ctx, nameOf: () => 'Bob (this device)' };
+			expect(recipientNames(own, named)[BOB.toLowerCase()]).toBe('Bob (this device)');
 		});
 	});
 
