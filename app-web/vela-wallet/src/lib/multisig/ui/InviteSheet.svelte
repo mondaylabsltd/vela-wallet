@@ -18,7 +18,7 @@
 	import { multisigName } from '../core/display';
 	import { inviteLink } from '../core/invite';
 	import { shareOrigin } from '../core/link';
-	import { isShared, multisig, type MultisigAccount } from '../core/store.svelte';
+	import { multisig, type MultisigAccount } from '../core/store.svelte';
 	import Sheet from './Sheet.svelte';
 
 	interface Props {
@@ -49,7 +49,7 @@
 	 * adds it by this address may not find it until it has. Read from the
 	 * accounts machine's row, so it changes the moment a retry lands.
 	 */
-	const unshared = $derived(!(multisig.row(account.address)?.shared ?? isShared(shown)));
+	const unshared = $derived(multisig.shared(account.address) === false);
 	let copied = $state<'address' | 'link' | null>(null);
 	const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 

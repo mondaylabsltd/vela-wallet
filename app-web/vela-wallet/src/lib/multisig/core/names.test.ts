@@ -3,7 +3,8 @@
  * their labels — after this device's own account names, before the passkey
  * index's — and an invite's labels never overwrite what this device holds.
  * The labels are kept by the core's accounts machine (`name_members`), read
- * through the store's facade.
+ * through the store's facade (`known_members`); the order is the core's
+ * (`names.label`, its cases in `multisig_rules/names.rs`).
  */
 import '$lib/i18n/wasm-init.server';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -23,7 +24,7 @@ vi.mock('$lib/services/public-key-index', () => ({
 }));
 vi.mock('./display', () => ({
 	localName: (a: string) => (a.toLowerCase() === MINE.toLowerCase() ? 'My account' : null),
-	shortenAddress: (a: string) => `${a.slice(0, 8)}…`
+	memberLabel: (a: string) => a
 }));
 
 const { multisig } = await import('./store.svelte');
@@ -47,7 +48,8 @@ afterAll(() => stopAccounts(machine));
 
 describe("members' names (r4D-5)", () => {
 	it('shows a member by the label kept with a multisig here, with the kind', () => {
-		expect(names.label(BOB)).toBe('0x3C44Cd…');
+		// The core's short form (EIP-55) until a name answers.
+		expect(names.label(BOB)).toBe('0x3C44Cd…4293BC');
 		multisig.nameMembers(SAFE, { [BOB]: { name: 'Bob', kind: 'wallet' } });
 		expect(names.label(BOB)).toBe('Bob');
 		expect(names.kindOf(BOB)).toBe('wallet');

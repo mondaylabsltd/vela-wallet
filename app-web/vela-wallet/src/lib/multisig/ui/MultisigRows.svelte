@@ -18,7 +18,7 @@
 	import { multisigName, shortenAddress } from '../core/display';
 	import { localOwners } from '../core/owners';
 	import { membersAnywhere } from '../core/proposals.svelte';
-	import { isShared, multisig, type MultisigAccount } from '../core/store.svelte';
+	import { multisig, type MultisigAccount } from '../core/store.svelte';
 
 	interface Props {
 		m: MultisigMessages;
@@ -88,7 +88,7 @@
 							data-testid="flag-risk"
 						>
 							· {m.authority.riskFlag}</span
-						>{:else if !(row?.shared ?? isShared(account))}<span class="flag">
+						>{:else if row?.shared === false}<span class="flag">
 							· {m.switcher.notShared}</span
 						>{:else if localOwners(membersAnywhere(account)).length === 0}<span class="flag">
 							· {m.switcher.readOnly}</span
