@@ -5396,6 +5396,8 @@ mod tests {
                 is_contract: Some(false),
                 first_time: Some(first_time),
                 history_unread: false,
+                known_name: None,
+                own: false,
             })
         };
         send.recipient_risk = risk(false);
