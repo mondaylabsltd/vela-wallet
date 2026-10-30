@@ -894,7 +894,8 @@ class AppContainer(private val app: Application) {
     suspend fun foundingKeyOf(address: String): String? =
         StoreAccountPort(AccountStore(app)).keysOf(address).firstOrNull()?.publicKeyHex
 
-    private fun openSigningRequest(
+    /** Internal, not private: the benchmark build types' sheet journey opens one too (src/benchmark). */
+    internal fun openSigningRequest(
         request: IncomingRequest,
         answer: (SignResponsePayload) -> Unit,
         rememberUserOp: (String) -> Unit,

@@ -24,6 +24,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.TextStyle
@@ -518,6 +519,7 @@ private fun AmountFigure(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier
                         .width(with(density) { widthPx.toDp() })
+                        .testTag("send-amount")
                         .focusRequester(focus)
                         .onFocusChanged { focused = it.isFocused }
                         .alignByBaseline(),
@@ -1062,7 +1064,7 @@ fun RecipientField(
                         maxLines = Int.MAX_VALUE,
                         textStyle = monoStyle,
                         cursorBrush = SolidColor(colors.fgBase),
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().testTag("send-recipient"),
                         decorationBox = { inner ->
                             if (typed.isEmpty()) {
                                 Text(text = "0x…", style = monoStyle.copy(color = colors.fgSubtle))

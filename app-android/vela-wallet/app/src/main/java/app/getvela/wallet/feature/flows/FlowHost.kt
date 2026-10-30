@@ -32,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.times
 import app.getvela.wallet.core.designsystem.components.VelaIcons
@@ -184,6 +185,8 @@ private fun FlowHostContent(
             }
             is FlowBase.History -> FlowScaffold(
                 header = base.model.header,
+                // Phase 4: the journey scrolls the history by this tag.
+                modifier = Modifier.testTag("activity-list"),
                 onBack = onBack,
                 onPill = { onNavigate(FlowStep.Chains) },
             ) {

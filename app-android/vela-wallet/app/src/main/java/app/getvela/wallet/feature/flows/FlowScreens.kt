@@ -1207,6 +1207,7 @@ fun SendPickBody(
                     selected = model.selection?.selected?.getOrNull(entry.index) ?: false,
                     dimmed = model.selection?.dimmed?.getOrNull(entry.index) ?: false,
                     onClick = { onSelect(entry.index) },
+                    modifier = Modifier.testTag("send-token:${entry.value.ticker}"),
                 )
             }
         }
@@ -1468,7 +1469,7 @@ fun SendFormBody(
             label = model.cta,
             onClick = onContinue,
             kind = FlowCtaKind.Primary,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().testTag("send-continue"),
             enabled = model.ctaEnabled,
         )
     }
@@ -1915,7 +1916,7 @@ fun SendConfirmBody(
     onRecipientCheckRetry: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
-    Column(modifier = modifier.fillMaxWidth()) {
+    Column(modifier = modifier.fillMaxWidth().testTag("send-confirm")) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()

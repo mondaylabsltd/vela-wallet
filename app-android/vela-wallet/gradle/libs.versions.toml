@@ -28,6 +28,14 @@ camerax = "1.4.1"
 zxing = "3.5.3"
 # Native parity Phase 3: the home-screen balance widget.
 glance = "1.1.1"
+# Native parity Phase 4 (perf): Macrobenchmark + the Baseline Profile Gradle plugin.
+# The test-side androidx.test versions are the ones benchmark 1.5 is built against;
+# they live under their own names so the app's own androidTest set is untouched.
+benchmark = "1.5.0"
+profileinstaller = "1.4.1"
+uiautomator = "2.3.0"
+benchmarkTestExtJunit = "1.2.1"
+benchmarkTestRunner = "1.6.2"
 
 [libraries]
 # The caBLE WebSocket tunnel (CTAP 2.2 channel of the hybrid transport).
@@ -89,7 +97,17 @@ kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 # (its README's coordinate 404s), JitPack only. See research D2.
 lottie-compose = { group = "com.airbnb.android", name = "lottie-compose", version.ref = "lottie" }
 
+# Phase 4: installs the shipped baseline profile on sideloaded and benchmark
+# installs (Play applies it from the bundle's dex metadata by itself).
+androidx-profileinstaller = { group = "androidx.profileinstaller", name = "profileinstaller", version.ref = "profileinstaller" }
+androidx-benchmark-macro-junit4 = { group = "androidx.benchmark", name = "benchmark-macro-junit4", version.ref = "benchmark" }
+androidx-test-uiautomator = { group = "androidx.test.uiautomator", name = "uiautomator", version.ref = "uiautomator" }
+androidx-benchmark-test-ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "benchmarkTestExtJunit" }
+androidx-benchmark-test-runner = { group = "androidx.test", name = "runner", version.ref = "benchmarkTestRunner" }
+
 [plugins]
+android-test = { id = "com.android.test", version.ref = "agp" }
+androidx-baselineprofile = { id = "androidx.baselineprofile", version.ref = "benchmark" }
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
