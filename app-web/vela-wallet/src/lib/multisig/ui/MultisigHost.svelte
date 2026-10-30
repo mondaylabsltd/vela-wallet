@@ -317,7 +317,8 @@
 
 	/**
 	 * Settings → Add network, the chain filled in (the wizard reads it in the
-	 * chain index). A link's transaction opens once the network is here.
+	 * chain index). A link's transaction opens once the network is here — the
+	 * accounts machine keeps it waiting, through a reload (ms-22).
 	 */
 	function addNetwork(chainId: number) {
 		multisigUi.close();
@@ -445,7 +446,17 @@
 		/>
 	{/key}
 {:else if sheet?.kind === 'missing'}
-	<Sheet title={m.proposal.title} {closeLabel} {wide} onclose={() => multisigUi.close()}>
+	<!-- Closed: the link waiting for its network is let go (the machine's
+	     record — Add network keeps it, through a reload, until the network is here). -->
+	<Sheet
+		title={m.proposal.title}
+		{closeLabel}
+		{wide}
+		onclose={() => {
+			multisig.send({ type: 'drop_link' });
+			multisigUi.close();
+		}}
+	>
 		<p class="missing-title" data-testid="missing-network">
 			{missingTitle(m, sheet.chainId, missingName)}
 		</p>
