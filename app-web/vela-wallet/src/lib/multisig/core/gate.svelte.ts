@@ -189,11 +189,16 @@ export async function authorizeSigning(
 		safe: account.address,
 		findings: gate.findings as Finding[]
 	});
-	if (!signs) throw new DOMException(RISK_DECLINED, 'AbortError');
+	if (!signs) throw riskDeclinedError();
 }
 
 /** What the gate throws when the person chose "Don't sign" (an `AbortError`, so a cancel). */
 const RISK_DECLINED = 'The person did not sign for the risk';
+
+/** The person's "Don't sign" on the risk, as the gate says it ({@link declinedRisk} reads it). */
+export function riskDeclinedError(): DOMException {
+	return new DOMException(RISK_DECLINED, 'AbortError');
+}
 
 /**
  * The person declined to sign on a high-risk network: nothing was asked of

@@ -1,7 +1,9 @@
 /**
  * r4D-7: what waits on this device — needs an approval from a member here,
- * or is ready to execute — counted from what this device read, and said in
- * one line.
+ * or is ready to execute — as the proposals machine counts it (its rule:
+ * rust/crates/vela-core/tests/app_multisig_presence.rs,
+ * `counts_one_needing_an_approval_here_and_one_ready`,
+ * `a_ready_one_nobody_here_can_pay_for_is_not_ready`), said in one line.
  */
 import { describe, expect, it, vi } from 'vitest';
 import type { MultisigMessages } from '../messages';
@@ -60,40 +62,9 @@ vi.mock('./kernel', () => ({
 		!!a && !!b && a.toLowerCase() === b.toLowerCase()
 }));
 
-const { presence, waitingOf, waitingWords } = await import('./presence.svelte');
+const { presence, waitingWords } = await import('./presence.svelte');
 
-const item = (over: Partial<ProposalItem>): ProposalItem =>
-	({
-		chainId: 100,
-		safeTxHash: `0x${String(over.nonce ?? 0n).padStart(64, '0')}`,
-		nonce: 0n,
-		approved: 0,
-		threshold: 2,
-		status: 'pending',
-		canApprove: [],
-		canExecute: [],
-		cancelledBy: null,
-		...over
-	}) as ProposalItem;
-
-const ME = { address: '0xaa' } as ProposalItem['canApprove'][number];
-
-describe('what waits here (r4D-7)', () => {
-	it('counts one needing this device’s approval and one ready to execute', () => {
-		const w = waitingOf([
-			item({ nonce: 1n, canApprove: [ME], approved: 1 }),
-			item({ nonce: 0n, status: 'ready', approved: 2, canApprove: [ME], canExecute: [ME] }),
-			// Someone else's turn: nothing for this device.
-			item({ nonce: 2n, status: 'queued', approved: 0 }),
-			// Done, or voided: not waiting.
-			item({ nonce: 3n, status: 'done', canApprove: [ME] }),
-			item({ nonce: 4n, canApprove: [ME], cancelledBy: '0x1' })
-		]);
-		expect(w.needsYou).toBe(1);
-		expect(w.ready).toBe(1);
-		expect(w.first?.safeTxHash).toBe(`0x${'1'.padStart(64, '0')}`);
-	});
-
+describe('what waits here, said (r4D-7)', () => {
 	it('says it in one line, plurals by count; nothing when nothing waits', () => {
 		const forms = (one: string, other: string) => ({
 			locale: 'en',
@@ -119,38 +90,6 @@ describe('what waits here (r4D-7)', () => {
 		expect(waitingWords(w(2, 0), m)).toBe('2 need your approval');
 		expect(waitingWords(w(0, 0), m)).toBe('');
 		expect(waitingWords(w(0, 0, 1), m)).toBe('1 waiting for a member who can pay');
-	});
-});
-
-/**
- * r5reg-6: "ready to execute" counts only what someone here can run now; one
- * nobody here can pay for (or with no member here) waits for a member who
- * can — said as such, as its row says "Can't run now".
- */
-describe('ready, as far as this device can run it (r5reg-6)', () => {
-	it('a ready one nobody here can pay for is not "ready to execute"', () => {
-		seams.accounts = [{ address: '0xAA' }];
-		const ready = (n: bigint, canExecute = [ME]) =>
-			item({ nonce: n, status: 'ready', approved: 2, canExecute });
-		const payable = ready(0n);
-		const unpaid = ready(1n);
-		const nobodyHere = ready(2n, []);
-		const unread = ready(3n);
-		seams.looks = {
-			[payable.safeTxHash]: { kind: 'priced', canPay: true },
-			[unpaid.safeTxHash]: { kind: 'priced', canPay: false }
-		};
-		seams.followed = { address: '0xAA', items: [payable, unpaid, nobodyHere, unread] };
-		const w = presence.of('0xaa');
-		// The one that can be paid, and the one whose look is still out.
-		expect(w?.ready).toBe(2);
-		expect(w?.waitingPayer).toBe(2);
-		seams.followed = { address: null, items: [] };
-	});
-
-	it('without looks, a ready one with a member here counts as ready', () => {
-		const w = waitingOf([item({ nonce: 0n, status: 'ready', approved: 2, canExecute: [ME] })]);
-		expect(w).toMatchObject({ ready: 1, waitingPayer: 0 });
 	});
 });
 

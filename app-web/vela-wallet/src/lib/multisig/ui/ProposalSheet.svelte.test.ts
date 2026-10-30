@@ -26,6 +26,7 @@ const SAFE = '0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83';
 const HASH = `0x${'ab'.repeat(32)}`;
 const TO = '0x000000000000000000000000000000000000dEaD';
 const TX = `0x${'ee'.repeat(32)}`;
+const USDC = '0x00000000000000000000000000000000000000c0';
 
 const fake = vi.hoisted(() => ({
 	chain: null as any,
@@ -64,7 +65,6 @@ const fake = vi.hoisted(() => ({
 	verdict: null as any,
 	/** r4b-7: an execution sent before a reload, still in flight. */
 	inflight: null as any,
-	ended: [] as string[],
 	/** r4b-3: networks that did not answer. */
 	unreadable: [] as number[],
 	/** Each executor's look at the execution (r4-5, r4-7), by address. */
@@ -74,62 +74,240 @@ const fake = vi.hoisted(() => ({
 	/** What execute throws before its passkey (r4-11). */
 	executeThrows: null as any,
 	/** Sheets holding the shown multisig's faster poll (r5reg-14). */
-	held: 0
+	held: 0,
+	/** The person's Retry on what the machine could not read. */
+	retried: 0,
+	/** The machine's draft, while a review-first sheet shows it (§3.6). */
+	machineDraft: null as any
 }));
 
-vi.mock('../core/proposals.svelte', () => ({
-	proposals: {
-		loading: false,
-		get unreadable() {
-			return fake.unreadable;
-		},
-		chain: () => fake.chain,
-		refresh: async () => {},
-		// r5reg-14: the faster pace an open sheet on a waiting transaction holds.
-		watch: () => {
-			fake.held += 1;
-			return () => void (fake.held -= 1);
-		},
-		get chains() {
-			return fake.chains;
-		},
-		get followed() {
-			return fake.followed;
-		},
-		get items() {
-			return fake.chain?.items ?? [];
-		}
-	},
-	outbox: {
-		stateOf: () => fake.kept,
-		sendAgain: async () => {
-			fake.sentAgain += 1;
-			fake.kept = null;
-			return [];
-		}
-	},
-	approve: async () => {
-		if (fake.approveError) throw fake.approveError;
-		fake.calls.push('approve');
-	},
-	approveExternally: async () => void fake.calls.push('external'),
-	execute: async (_a: unknown, _i: unknown, _o: unknown, _m: unknown, preview: unknown) => {
-		fake.executedWith.push(preview);
-		if (fake.executeThrows) throw fake.executeThrows;
-		fake.calls.push('execute');
-		return fake.execution;
-	},
-	executionInput: (_a: unknown, item: any, executor: any, members: unknown) => ({
-		chainId: item.chainId,
-		executor,
-		members
-	}),
-	proposeCancel: async () => void fake.calls.push('reject'),
-	draftCalls: async () => fake.draft,
-	MailboxUnreadableError: class extends Error {},
-	MailboxRefusedError: class extends Error {},
-	NoOutsideSignerError: class extends Error {}
+/**
+ * The shown multisig's list (the facade over the proposals machine) and the
+ * machine's view the sheet reads: its reviews, each executor's look, how
+ * each member signs, its story, where each action stands — stood in for
+ * from the seams above; the machine's own suites drive the real one
+ * (rust/crates/vela-core/tests/app_multisig_proposals.rs).
+ */
+const view = vi.hoisted(() => ({
+	key: (hash: string) => `100:${hash.toLowerCase()}`
 }));
+vi.mock('../core/proposals.svelte', async () => {
+	const { machineSeam, machineLook } = await import('./proposal-sheet.testing.svelte');
+	const { timelineOf } = await import('../core/timeline');
+	const shownItem = () =>
+		(fake.chain?.items ?? []).find((i: any) => i.safeTxHash.toLowerCase() === HASH) ?? null;
+	const machineView = () => {
+		const item = shownItem();
+		const key = view.key(HASH);
+		const previews: Record<string, unknown> = {};
+		for (const [owner, look] of Object.entries(fake.previews)) {
+			previews[`${key}:${owner.toLowerCase()}`] = machineLook(look);
+		}
+		const owners: string[] = fake.chain?.members.owners ?? [];
+		const kindOf = (a: string) =>
+			a.toLowerCase() === ME
+				? 'here'
+				: fake.vela.includes(a)
+					? 'vela'
+					: fake.unsure.includes(a)
+						? 'unsure'
+						: fake.contract.includes(a)
+							? 'contract'
+							: 'wallet';
+		const rows = owners
+			.filter((o) => !(item?.approvals ?? []).some((a: any) => a.counts && a.owner === o))
+			.map((owner) => ({ owner, kind: kindOf(owner) }));
+		const timelines: Record<string, unknown> = {};
+		if (item?.status === 'done' && typeof fake.executed === 'string') {
+			timelines[key] = timelineOf(item, fake.executed, fake.frozen).map((s: any) =>
+				s.kind === 'created'
+					? { kind: 'created', who: s.who, at_ms: s.atMs }
+					: s.kind === 'approved'
+						? {
+								kind: 'approved',
+								who: s.who,
+								at_ms: s.atMs,
+								counted: s.counted,
+								by_executing: s.byExecuting,
+								unsent: false,
+								on_chain: false
+							}
+						: { kind: 'executed', who: s.who, tx_hash: s.txHash, at_ms: s.atMs }
+			);
+		} else if (item?.status === 'done' && fake.executed === null) {
+			const cancel = item.cancelledBy;
+			timelines[key] = [
+				{
+					kind: 'replaced',
+					by: cancel,
+					cancellation: !!cancel && typeof fake.executedBy[cancel] === 'string'
+				}
+			];
+		} else if (fake.executed === undefined && item?.status === 'done' && fake.frozen) {
+			timelines[key] = [];
+		}
+		const outbox: Record<string, unknown> = { ...machineSeam.outbox };
+		if (fake.kept) outbox[`100:${SAFE.toLowerCase()}:${HASH}:${ME}`] = fake.kept;
+		return {
+			followed: fake.followed,
+			actions: machineSeam.actions,
+			// r4b-7: a flight read back after a reload, watched by the machine.
+			executions: fake.inflight
+				? { ...machineSeam.executions, [key]: fake.verdict }
+				: machineSeam.executions,
+			outbox,
+			reviews: { [key]: reviewSeam.review ?? REVIEW },
+			previews,
+			signers: { [key]: { rows, outside: [] } },
+			timelines,
+			frozen: fake.frozen ? { [key]: fake.frozen } : {},
+			history_unreadable: fake.executed === undefined ? [100] : [],
+			draft: fake.machineDraft,
+			last_actor: null
+		};
+	};
+	return {
+		proposals: {
+			loading: false,
+			get view() {
+				// Read so a sheet redraws when an action settles.
+				void machineSeam.actions;
+				void machineSeam.executions;
+				void machineSeam.outbox;
+				void machineSeam.reads;
+				return machineView();
+			},
+			get unreadable() {
+				return fake.unreadable;
+			},
+			chain: () => fake.chain,
+			refresh: async () => {},
+			retry: async () => {
+				fake.retried += 1;
+				machineSeam.reads += 1;
+			},
+			// r5reg-14: the faster pace an open sheet on a waiting transaction holds.
+			watch: () => {
+				fake.held += 1;
+				return () => void (fake.held -= 1);
+			},
+			get chains() {
+				return fake.chains;
+			},
+			get followed() {
+				return fake.followed;
+			},
+			get items() {
+				return fake.chain?.items ?? [];
+			}
+		},
+		itemOf: (i: unknown) => i,
+		approveExternally: async () => void fake.calls.push('external'),
+		draftCalls: async () => fake.draft
+	};
+});
+/**
+ * The proposals machine's host: each event the sheet sends, answered as the
+ * machine would — where the action ends (`actions`), how an execution ended
+ * (`executions`) — from the seams above.
+ */
+vi.mock('../shell/proposals-host.svelte', async () => {
+	const { machineSeam, stateOf, sentLog } = await import('./proposal-sheet.testing.svelte');
+	class ProposeFailedError extends Error {
+		constructor(
+			readonly state: unknown,
+			readonly chainId: number
+		) {
+			super('not proposed');
+		}
+	}
+	const settle = (key: string, state: unknown) => {
+		machineSeam.actions = { ...machineSeam.actions, [key]: state as never };
+	};
+	const host = {
+		get view() {
+			return null;
+		},
+		send(event: any) {
+			sentLog.push(event);
+			const key = `${event.chain_id}:${String(event.safe_tx_hash ?? '').toLowerCase()}`;
+			switch (event.type) {
+				case 'approve':
+					fake.calls.push('approve');
+					settle(
+						`approve:${event.safe_tx_hash.toLowerCase()}`,
+						fake.approveError ? stateOf(fake.approveError) : { kind: 'done', kept: false }
+					);
+					return;
+				case 'approve_outside':
+					fake.calls.push('external');
+					settle(`approve:${event.safe_tx_hash.toLowerCase()}`, { kind: 'done', kept: false });
+					return;
+				case 'preview': {
+					// r5reg-21: a look that finds its number used reads what ran.
+					const look = fake.previews[event.executor] as { kind?: string } | undefined;
+					if (look?.kind === 'spent') {
+						machineSeam.executions = {
+							...machineSeam.executions,
+							[key]:
+								typeof fake.executed === 'string'
+									? { kind: 'executedByOther', txHash: fake.executed, paid: false }
+									: fake.executed === null
+										? { kind: 'replaced', paid: false }
+										: { kind: 'unknown' }
+						};
+					}
+					return;
+				}
+				case 'execute': {
+					const done = `execute:${event.safe_tx_hash.toLowerCase()}`;
+					fake.executedWith.push(fake.previews[event.executor]);
+					if (fake.executeThrows) return settle(done, stateOf(fake.executeThrows));
+					fake.calls.push('execute');
+					void (async () => {
+						const verdict =
+							fake.verdict ??
+							(fake.refused
+								? { kind: 'notSent' }
+								: { kind: 'executed', txHash: await fake.execution.waitForTxHash() });
+						machineSeam.executions = { ...machineSeam.executions, [key]: verdict };
+						settle(done, { kind: 'done', safe_tx_hash: event.safe_tx_hash, kept: false });
+					})();
+					return;
+				}
+				case 'send_again':
+					fake.sentAgain += 1;
+					fake.kept = null;
+					machineSeam.outbox = {};
+					return;
+			}
+		},
+		async settled(key: string) {
+			for (let i = 0; i < 200; i += 1) {
+				const state = machineSeam.actions[key];
+				if (state && state.kind !== 'working') return state;
+				await new Promise((r) => setTimeout(r, 0));
+			}
+			return null;
+		},
+		async until(pick: (v: unknown) => unknown) {
+			for (let i = 0; i < 20; i += 1) {
+				const found = pick(null);
+				if (found !== null && found !== undefined) return found;
+				await new Promise((r) => setTimeout(r, 0));
+			}
+			return null;
+		},
+		async propose(_a: unknown, _c: number, proposal: { kind: string }, opts: { as?: string }) {
+			fake.calls.push(proposal.kind === 'cancel' ? 'reject' : `propose:${opts?.as ?? ''}`);
+			if (fake.approveError) throw new ProposeFailedError(stateOf(fake.approveError), 100);
+			return { safeTxHash: HASH };
+		},
+		confirmDraft: (as: string | null) => void fake.calls.push(`confirm:${as}`),
+		withdrawDraft: () => void fake.calls.push('withdraw')
+	};
+	return { proposalsHost: host, ProposeFailedError };
+});
 // §3.5: the network's check, as the chain would answer it (`recheck.test.ts` reads it).
 vi.mock('../core/recheck', () => ({
 	checkOn: async () => fake.checked,
@@ -167,6 +345,7 @@ vi.mock('../core/gate.svelte', () => {
 		signingGate: () => ({ kind: 'open' }),
 		declinedRisk: (e: unknown) =>
 			e instanceof DOMException && e.message === 'The person did not sign for the risk',
+		riskDeclinedError: () => new DOMException('The person did not sign for the risk', 'AbortError'),
 		SigningRefusedError,
 		SigningUncheckedError,
 		SigningBlockedError
@@ -203,6 +382,8 @@ const REVIEW = vi.hoisted(() => ({
 const reviewSeam = vi.hoisted(() => ({ review: null as any, refreshed: 0 }));
 vi.mock('../core/proposal-review.svelte', () => ({
 	REVIEW_FRESH_MS: 60_000,
+	REVIEW_RETRY_MS: 60_000,
+	simEndedOf: async () => null,
 	ProposalReview: class {
 		sim = null;
 		failed = false;
@@ -251,25 +432,10 @@ vi.mock('../core/execute', () => {
 vi.mock('../core/preflight.svelte', () => ({
 	PREVIEW_FRESH_MS: 15_000,
 	UNPRICED_FRESH_MS: 5_000,
-	preflight: {
-		get: (input: any) => fake.previews[input.executor.address] ?? null,
-		check: async (input: any) => fake.previews[input.executor.address] ?? { kind: 'unpriced' }
-	}
+	PREVIEW_CAP_MS: 15_000
 }));
 vi.mock('../core/chain', () => ({ ChainUnavailableError: class extends Error {} }));
 vi.mock('../core/service', () => ({ ServiceUnavailableError: class extends Error {} }));
-vi.mock('../core/execution-watch.svelte', () => ({
-	executions: {
-		start: (flight: unknown) => flight,
-		get: () => fake.inflight,
-		end: (_c: number, _m: string, hash: string) => void fake.ended.push(hash)
-	},
-	watchExecution: async () => {
-		if (fake.verdict) return fake.verdict;
-		if (fake.refused) return { kind: 'notSent' };
-		return { kind: 'executed', txHash: await fake.execution.waitForTxHash() };
-	}
-}));
 // How each member signs: this device's, a Vela account the index knows, else a plain wallet.
 vi.mock('../core/signers.svelte', () => ({
 	signers: {
@@ -317,7 +483,8 @@ vi.mock('../core/display', () => ({
 		doesNotFit: reading.fits ? null : 'change.doesNotFit'
 	}),
 	shortenAddress: (a: string) => a.slice(0, 8),
-	tokenInfo: async () => ({ symbol: 'xDAI', decimals: 18 })
+	tokenInfo: async (_chain: number, token: string) =>
+		token === USDC ? { symbol: 'USDC', decimals: 0 } : { symbol: 'xDAI', decimals: 18 }
 }));
 vi.mock('../core/kernel', () => {
 	const same = (a?: string | null, b?: string | null) =>
@@ -365,6 +532,18 @@ vi.mock('$lib/services/networks', async (importOriginal) => ({
 }));
 
 const { default: ProposalSheet } = await import('./ProposalSheet.svelte');
+const { resetMachineSeam, sentLog } = await import('./proposal-sheet.testing.svelte');
+
+/** The events of `type` the sheet sent the machine. */
+const machineSent = (type: string) => sentLog.filter((e) => e.type === type);
+
+/** The machine's draft of the person's own proposal, reviewed before its passkey (§3.6). */
+const draftOf = (draft: unknown, here: string[]) => ({
+	item: draft,
+	review: REVIEW,
+	membersHere: here,
+	defaultMember: here[0] ?? null
+});
 
 /** Every word is its own key, so a test names what it looks for. */
 function words(): MultisigMessages {
@@ -484,12 +663,14 @@ beforeEach(() => {
 	fake.approveError = null;
 	fake.verdict = null;
 	fake.inflight = null;
-	fake.ended = [];
 	fake.unreadable = [];
 	fake.previews = { [ME]: priced() };
 	fake.executedWith = [];
 	fake.executeThrows = null;
 	fake.chain = { chainId: 100, members, items: [item()], mailbox: true };
+	fake.retried = 0;
+	fake.machineDraft = null;
+	resetMachineSeam();
 	fake.draft = { chain: { chainId: 100, members, items: [], mailbox: true }, item: item() };
 	reviewSeam.review = null;
 	reviewSeam.refreshed = 0;
@@ -1341,7 +1522,6 @@ describe('an execution in flight (r4b-1, r4b-7)', () => {
 		expect(text).toContain('proposal.lostRace');
 		expect(text).not.toContain('proposal.executing');
 		expect(buttons()).not.toContain('proposal.execute');
-		expect(fake.ended).toEqual([HASH]);
 		await screen.unmount();
 	});
 
@@ -1402,8 +1582,11 @@ describe('an execution in flight (r4b-1, r4b-7)', () => {
 		await settle();
 		// One signature: the execution, nothing approved first.
 		expect(fake.calls).toEqual(['execute']);
-		expect(fake.remembered).toHaveLength(1);
-		expect(fake.remembered[0][3]).toMatchObject({ executor: ME, approvers: [OTHER, THIRD] });
+		// What it carried is kept by the machine from the look it signed (Rust:
+		// `remember_execution`, app_multisig_proposals.rs): the executor alone is asked.
+		expect(machineSent('execute')).toEqual([
+			expect.objectContaining({ executor: ME, safe_tx_hash: HASH })
+		]);
 		await screen.unmount();
 	});
 
@@ -1441,7 +1624,8 @@ describe('an execution in flight (r4b-1, r4b-7)', () => {
 	});
 
 	it('sent before a reload: watched again at once, not offered for execution', async () => {
-		fake.chain.items = [ready()];
+		// The machine read its flight back: its item says it is executing.
+		fake.chain.items = [{ ...ready(), executing: true }];
 		fake.inflight = {
 			chainId: 100,
 			multisig: SAFE,
@@ -1466,9 +1650,7 @@ describe('an execution in flight (r4b-1, r4b-7)', () => {
 		const onexecuted = vi.fn();
 		screen = show({ onexecuted });
 		await settle();
-		expect(onexecuted).toHaveBeenCalledWith(
-			expect.objectContaining({ txHash: TX, userOpHash: '0x01' })
-		);
+		expect(onexecuted).toHaveBeenCalledWith(expect.objectContaining({ txHash: TX }));
 		expect(fake.calls).not.toContain('execute');
 		await screen.unmount();
 	});
@@ -1701,7 +1883,8 @@ describe('an execution looked at before its passkey (r4-5, r4-7)', () => {
 		fake.previews = {
 			[ME]: {
 				kind: 'fails',
-				why: { kind: 'short', symbol: 'USDC', decimals: 0, have: 28n, need: 50n }
+				// The machine's word: the token it is short of, and the amounts.
+				why: { kind: 'short', token: USDC, have: 28n, need: 50n }
 			}
 		};
 		const m = words();
@@ -1836,15 +2019,8 @@ describe('who proposes, on the review before the passkey (r5reg-5)', () => {
 	const SECOND = { address: OTHER, name: 'Second', account: { address: OTHER } };
 
 	it('offers "As" with both members, and the one picked goes on to its passkey', async () => {
-		const confirm = vi.fn();
-		const prebuilt = {
-			chainId: 100,
-			address: SAFE,
-			chain: { chainId: 100, members, items: [], mailbox: true },
-			item: item({ canApprove: [local, SECOND] }),
-			confirm,
-			decline: vi.fn()
-		};
+		const prebuilt = { chainId: 100, address: SAFE, kind: 'transfers' };
+		fake.machineDraft = draftOf(item({ canApprove: [local, SECOND] }), [ME, OTHER]);
 		const screen = show({ prebuilt, safeTxHash: '' });
 		await settle();
 		const choice = document.querySelector('[data-testid="actor-choice"]');
@@ -1858,26 +2034,19 @@ describe('who proposes, on the review before the passkey (r5reg-5)', () => {
 		await settle();
 		press('send.propose');
 		await settle();
-		expect(confirm).toHaveBeenCalledWith(OTHER);
+		expect(fake.calls).toEqual([`confirm:${OTHER}`]);
 		await screen.unmount();
 	});
 
 	it('one member here: no choice to show, it proposes', async () => {
-		const confirm = vi.fn();
-		const prebuilt = {
-			chainId: 100,
-			address: SAFE,
-			chain: { chainId: 100, members, items: [], mailbox: true },
-			item: item({ canApprove: [local] }),
-			confirm,
-			decline: vi.fn()
-		};
+		const prebuilt = { chainId: 100, address: SAFE, kind: 'transfers' };
+		fake.machineDraft = draftOf(item({ canApprove: [local] }), [ME]);
 		const screen = show({ prebuilt, safeTxHash: '' });
 		await settle();
 		expect(document.querySelector('[data-testid="actor-choice"]')).toBeNull();
 		press('send.propose');
 		await settle();
-		expect(confirm).toHaveBeenCalledWith(ME);
+		expect(fake.calls).toEqual([`confirm:${ME}`]);
 		await screen.unmount();
 	});
 });
@@ -2030,25 +2199,23 @@ describe('a dApp’s transaction on a device with no member (r4C-10)', () => {
 
 describe('round 6: the review’s words and where its actions stand', () => {
 	/** The person's own transfer, reviewed before its passkey (`prebuilt`). */
-	const own = (decline = () => {}) => ({
-		chainId: 100,
-		address: SAFE,
-		chain: { chainId: 100, members, items: [], mailbox: true },
-		item: item({
-			review: { action: { kind: 'transfer', token: null, to: TO, amount: '1' }, refusal: null }
-		}),
-		confirm: () => {},
-		decline
-	});
+	const own = () => {
+		fake.machineDraft = draftOf(
+			item({
+				review: { action: { kind: 'transfer', token: null, to: TO, amount: '1' }, refusal: null }
+			}),
+			[ME]
+		);
+		return { chainId: 100, address: SAFE, kind: 'transfers' };
+	};
 
 	it('r4D-13: the person’s own proposal is withdrawn, not declined (a site’s request still is)', async () => {
-		const decline = vi.fn();
-		const screen = show({ prebuilt: own(decline), safeTxHash: '' });
+		const screen = show({ prebuilt: own(), safeTxHash: '' });
 		await settle();
 		expect(buttons()).toContain('proposal.withdraw');
 		expect(buttons()).not.toContain('external.decline');
 		press('proposal.withdraw');
-		expect(decline).toHaveBeenCalledTimes(1);
+		expect(fake.calls).toEqual(['withdraw']);
 		await screen.unmount();
 	});
 

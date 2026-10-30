@@ -1,73 +1,70 @@
 /**
- * The active multisig's transactions in flight: what the mailbox holds,
- * re-checked here against the chain, and what this device can do about each.
+ * The active multisig's transactions in flight — what the mailbox holds,
+ * re-checked against the chain, and what this device can do about each — as
+ * the core's proposals machine reads them (`multisig_proposals`, through
+ * `shell/proposals-host.svelte.ts`). This is its facade: the shapes the
+ * screens draw (`ProposalItem`, `ChainState`), the poll at the machine's
+ * pace, and the proposals the send flow, Settings and the members surface
+ * make (`draft`, its review, `confirm_draft`). Nothing here reads, verifies
+ * or decides: the machine re-hashes every proposal, verifies every approval
+ * against the members on that chain now, keeps the outbox and takes the
+ * nonce from the mailbox's list read now.
  *
- * Nothing is taken from the mailbox on trust. For every proposal the core
- * re-hashes the transaction, re-reads what it does (`reviewTx`) and verifies
- * every approval (`verifyApproval`); an approval counts only if it verifies
- * AND its owner is an owner on that chain now. The members and nonce come from
- * the chain through the wallet's own RPC (`readMembers`) — on every network the
- * multisig is used on, including one the service does not read: the mailbox
- * stores proposals for any chain, but there it knows only the genesis (its
- * owners, nonce 0), so the service's own word on members is never used here.
- *
- * The four actions — propose, approve, execute, cancel — are each one passkey
- * prompt, and each is safe to retry: the mailbox merges, and an execution that
- * may have been sent is followed rather than sent again.
+ * Still here, for a dApp's request from a multisig (`DappRequestHost`,
+ * moved onto the machine next): its draft, read and proposed by
+ * {@link readChain} / {@link proposeCalls}, and the outbox they submit
+ * through.
  */
-import { hasCode, readMembers, type ChainMembers } from './chain';
-import {
-	submitExecution,
-	throwIfStopped,
-	type ExecutionInput,
-	type ExecutionPreview
-} from './execute';
+import { untrack } from 'svelte';
+import { readMembers, type ChainMembers } from './chain';
 import {
 	callsTx,
-	cancelTx,
-	missingNetworks,
-	multisigNetworks,
-	namedGenesis,
-	renameTx,
 	reviewTx,
-	transfersTx,
 	safeTxHash,
 	isEcdsaApproval,
 	isOnChainApproval,
+	namedGenesis,
 	sameAddress,
 	verifyApproval,
 	verifyEcdsaApproval,
-	memberChangeTx,
 	type Approval,
 	type MemberChangeRequest,
 	type Review,
 	type SafeTx
 } from './kernel';
-import { MemberChangeRefusedError, memberStateOf } from './member-changes';
+import { hasCode } from './chain';
+import type { ExecutionInput } from './execute';
 import { loadAccounts } from '$lib/onboarding/core/storage';
 import { localOwners, signApproval, type LocalOwner } from './owners';
 import { plainAccounts } from './signers.svelte';
 import { lastActor, proposerOf } from './actor';
 import {
-	fetchAllProposals,
 	fetchProposals,
-	genesisServiceURL,
-	probeService,
 	ServiceBusyError,
 	ServiceUnavailableError,
 	submitApproval,
 	type Proposal,
 	type SubmitAnswer
 } from './service';
-import { serviceOutage } from './service-state.svelte';
 import { multisig, type MultisigAccount } from './store.svelte';
-import { recordRemoteExecutions } from './records';
-import { executions } from './execution-watch.svelte';
-import { networkForChainId, networkRank } from '$lib/services/networks';
+import { networkForChainId } from '$lib/services/networks';
 import { externalSigning } from '../external/signing.svelte';
 import { authorizeSigning } from './gate.svelte';
-import { reviewFirst } from './review-first.svelte';
 import { onChainApprovals } from '../external/onchain';
+import {
+	MailboxRefusedError,
+	MailboxUnreadableError,
+	NoOutsideSignerError
+} from './proposal-errors';
+import { proposalsHost, ProposeFailedError } from '../shell/proposals-host.svelte';
+import { actionError, memberRefusal } from '../shell/proposal-failure';
+import { MemberChangeRefusedError } from './member-changes';
+import type { MultisigProposalsView } from '../generated/MultisigProposalsView';
+import type { MultisigProposalItem } from '../generated/MultisigProposalItem';
+import type { MultisigChainState } from '../generated/MultisigChainState';
+import type { MultisigProposalKind } from '../generated/MultisigProposalKind';
+
+export { MailboxRefusedError, MailboxUnreadableError, NoOutsideSignerError };
 
 export type ProposalStatus =
 	/** Enough approvals, and its nonce is next: it can be executed now. */
@@ -143,11 +140,6 @@ export interface ChainState {
 	 * last ones read, and no new proposal may take a nonce from them.
 	 */
 	mailbox: boolean;
-}
-
-function sortKey(a: ProposalItem, b: ProposalItem): number {
-	if (a.nonce !== b.nonce) return a.nonce < b.nonce ? -1 : 1;
-	return a.createdMs - b.createdMs;
 }
 
 /**
@@ -227,7 +219,8 @@ export function readProposal(
 	// A rename runs only where the multisig is deployed: executed elsewhere it
 	// would deploy it there with its original members (the core refuses it too).
 	const renameUndeployed = review.action?.kind === 'rename' && !members.deployed;
-	const executing = status !== 'done' && !!executions.get(p.chainId, account.address, hash);
+	// A dApp's draft and a link's preview are never this device's execution in flight.
+	const executing = false;
 	const canExecute =
 		status === 'done' ||
 		status === 'queued' ||
@@ -398,37 +391,6 @@ export function nextNonceOf(chain: ChainState): bigint {
 	return n;
 }
 
-/** A refresh still out after this long: the person is told the list may be stale. */
-export const SLOW_REFRESH_MS = 8_000;
-/** The poll's pace while the multisig is shown. */
-export const POLL_MS = 12_000;
-/**
- * r5reg-14: the pace while a sheet on one of its waiting transactions is
- * open (`watch`) — another member's approval is seen there within about
- * five seconds, not at the next 12 s round.
- */
-export const OPEN_POLL_MS = 4_000;
-/**
- * r4D-18 (round 5): on a network with nothing waiting — no open proposal in
- * the mailbox's list or here, nothing of this device's in flight — the chain
- * is read every this many polls (a minute), not every poll: nothing there can
- * be executed meanwhile but a transaction from outside Vela, said within the
- * minute. Anything waiting, and every read the person or the page asks for,
- * reads the chain at once.
- */
-export const QUIET_POLLS = 5;
-
-/** Whether `list` holds a proposal at or past `nonce` (one that can still run). */
-function hasOpen(list: Proposal[], nonce: bigint): boolean {
-	return list.some((p) => {
-		try {
-			return BigInt(p.safeTx.nonce) >= nonce;
-		} catch {
-			return true;
-		}
-	});
-}
-
 /**
  * Proposals the mailbox holds for the multisig on a network this device
  * does not have (a member's own network, say): shown as that, with the way
@@ -446,159 +408,117 @@ export function hasNetwork(chainId: number): boolean {
 	return networkForChainId(chainId) !== null;
 }
 
-/**
- * The cross-chain list split by chain: the networks something there puts
- * the multisig on (the core's rule, `have` this device's), and those this
- * device lacks.
- */
-export function splitListed(
-	listed: Proposal[],
-	chainIds: number[]
-): { lists: Map<number, Proposal[]>; used: number[]; missing: MissingChain[] } {
-	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- built for one read and returned, never state
-	const lists = new Map<number, Proposal[]>();
-	for (const p of listed) lists.set(p.chainId, [...(lists.get(p.chainId) ?? []), p]);
-	const proposed = [...lists.keys()];
-	const have = unique([...proposed, ...chainIds]).filter(hasNetwork);
-	const used = multisigNetworks({ proposals: proposed, kept: chainIds, have });
-	const missing = missingNetworks({ proposals: proposed, have }).map((chainId) => ({
-		chainId,
-		count: lists.get(chainId)?.length ?? 0
-	}));
-	return { lists, used, missing };
+/** A refresh still out after this long: the person is told the list may be stale (the core's). */
+export const SLOW_REFRESH_MS = 8_000;
+/** The poll's pace before the machine has said its own (`pace_ms`). */
+export const POLL_MS = 12_000;
+
+/** One proposal as the machine reads it, in the shapes the screens draw. */
+export function itemOf(i: MultisigProposalItem): ProposalItem {
+	return {
+		chainId: i.chainId,
+		safeTxHash: i.safeTxHash,
+		tx: i.tx as SafeTx,
+		review: i.review as Review,
+		nonce: BigInt(i.nonce),
+		proposer: i.proposer,
+		approvals: i.approvals.map((a) => ({
+			owner: a.owner,
+			counts: a.counts,
+			approval: a.approval as Approval,
+			createdMs: a.createdMs,
+			unsent: a.unsent
+		})),
+		approved: i.approved,
+		threshold: i.threshold,
+		status: i.status,
+		canApprove: localOwners(i.canApprove),
+		canExecute: localOwners(i.canExecute),
+		cancelledBy: i.cancelledBy,
+		sameNonce: i.sameNonce,
+		executing: i.executing,
+		createdMs: i.createdMs,
+		unsent: i.unsent,
+		renameUndeployed: i.renameUndeployed
+	};
 }
 
-/**
- * r4b-11: the last list read for each multisig, kept across reloads — its
- * members and the mailbox's waiting proposals per chain, by service. Shown at
- * once on the next page (as the last known, said so), re-read against the
- * chain as soon as it answers; never a source of a new proposal's number.
- */
-const WAITING_KEY = 'vela.multisigWaiting';
-const WAITING_CAP = 20;
-
-interface KeptChain {
-	chainId: number;
-	members: Omit<ChainMembers, 'nonce'> & { nonce: string };
-	proposals: Proposal[];
+/** One network's members and proposals as the machine reads them. */
+export function chainOf(c: MultisigChainState): ChainState {
+	return {
+		chainId: c.chainId,
+		members: { ...c.members, nonce: BigInt(c.members.nonce) },
+		items: c.items.map(itemOf),
+		mailbox: c.mailbox
+	};
 }
 
-interface KeptList {
-	service: string;
-	at: number;
-	chains: KeptChain[];
+const itemKey = (chainId: number, hash: string) => `${chainId}:${hash.toLowerCase()}`;
+
+interface Read {
+	view: MultisigProposalsView | null;
+	chains: ChainState[];
+	items: ProposalItem[];
 }
 
-function readWaiting(): Record<string, KeptList> {
-	try {
-		return JSON.parse(localStorage.getItem(WAITING_KEY) ?? '{}') as Record<string, KeptList>;
-	} catch {
-		return {};
-	}
-}
-
-/** The list kept for `address` from `service`, or `null`. */
-export function keptWaiting(address: string, service: string): KeptList | null {
-	const kept = readWaiting()[address.toLowerCase()];
-	return kept && kept.service === service ? kept : null;
-}
+const NOTHING: Read = { view: null, chains: [], items: [] };
 
 /**
- * r4b-11: the waiting transactions kept for `account` from an earlier page
- * (this service's), each re-read against the members kept with it — what the
- * home shows at once, and what the switcher counts (r4D-7) before this page
- * has read it. `null`: none is kept.
+ * The shown multisig's list — the machine's (`follow`): read now and on
+ * every tick at the machine's pace while the page is visible, at once when
+ * it is shown again, back online, or a sheet on a waiting transaction opens
+ * (`watch`, r5reg-14).
  */
-export function keptChains(
-	account: MultisigAccount
-): { chains: ChainState[]; lists: Map<number, Proposal[]>; at: number } | null {
-	const kept = keptWaiting(account.address, genesisServiceURL());
-	if (!kept) return null;
-	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- built for one read and returned, never state
-	const lists = new Map<number, Proposal[]>();
-	const chains: ChainState[] = kept.chains.map((c) => {
-		const members: ChainMembers = { ...c.members, nonce: BigInt(c.members.nonce) };
-		const items = c.proposals
-			.map((p) => readProposal(account, members, p))
-			.filter((i): i is ProposalItem => i !== null);
-		markCancellations(account.address, items);
-		lists.set(c.chainId, c.proposals);
-		return { chainId: c.chainId, members, items, mailbox: false };
-	});
-	return { chains, lists, at: kept.at };
-}
-
-function keepWaiting(address: string, list: KeptList): void {
-	try {
-		const all = { ...readWaiting(), [address.toLowerCase()]: list };
-		const keys = Object.keys(all);
-		for (const old of keys.slice(0, Math.max(0, keys.length - WAITING_CAP))) delete all[old];
-		localStorage.setItem(WAITING_KEY, JSON.stringify(all));
-	} catch {
-		// best effort: the next page reads it afresh
-	}
-}
-
 class Proposals {
-	/** Per chain the multisig is used on. */
-	chains = $state<ChainState[]>([]);
-	/**
-	 * r4b-11: what is shown is the list kept from an earlier page, not read
-	 * yet on this one (`at`: when it was read). Said as the last known.
-	 */
-	cached = $state<{ at: number } | null>(null);
-	/** r4b-3: networks whose members could not be read on the last refresh. */
-	unreadable = $state<number[]>([]);
-	/** r4b-2: networks whose history could not be read (executions elsewhere may be missing). */
-	historyUnreadable = $state<number[]>([]);
-	/** r4b-15: the device says it is offline. */
-	offline = $state(false);
-	/** When the list shown was last read in full (the offline line names it). */
-	readAt = $state<number | null>(null);
-	/** The networks the mailbox holds proposals of it on that this device lacks. */
-	missing = $state<MissingChain[]>([]);
-	loading = $state(false);
-	/**
-	 * The last refresh failed (offline, the service down) or is taking long:
-	 * the list may be stale, and whoever shows it says so.
-	 */
-	stale = $state(false);
-	/** New activity was written: whoever shows it refreshes. */
-	onrecorded: (() => void) | null = null;
-	#address: string | null = null;
-	/**
-	 * r5reg-17: the multisig followed, as state: a view derived from whether
-	 * it is the one followed reads it again when it becomes so. A plain field
-	 * read once (the home's first-run card, before the host followed it) left
-	 * the card up for good — the networks it was deployed on never re-read.
-	 */
-	#shown = $state<string | null>(null);
-	#timer: ReturnType<typeof setInterval> | null = null;
-	#inflight: Promise<void> | null = null;
-	/** A read asked for while another was under way: it runs next. */
-	#queued: Promise<void> | null = null;
-	/** The poll's rounds since the last read the person or the page asked for. */
-	#ticks = 0;
-	/** The last list the mailbox gave, per chain: kept while it cannot be read. */
-	#lists = new Map<number, Proposal[]>();
-	/** The service those lists came from: another one's say nothing of it. */
-	#source: string | null = null;
-	#chainIds: number[] = [];
-	#account: MultisigAccount | null = null;
-	#online: (() => void) | null = null;
-	#offline: (() => void) | null = null;
-	#visible: (() => void) | null = null;
-	/** Open sheets holding the faster pace (`watch`). */
-	#held = 0;
-	#pace = POLL_MS;
+	#read: Read = NOTHING;
+	#stops: (() => void)[] = [];
+	#timer: ReturnType<typeof setTimeout> | null = null;
+
+	#now(): Read {
+		const view = proposalsHost.view;
+		if (!view) return NOTHING;
+		if (this.#read.view === view) return this.#read;
+		const chains = view.chains.map(chainOf);
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- built for one read, never state
+		const byKey = new Map<string, ProposalItem>();
+		for (const c of chains) for (const i of c.items) byKey.set(itemKey(i.chainId, i.safeTxHash), i);
+		const items = view.items.map((i) => byKey.get(itemKey(i.chainId, i.safeTxHash)) ?? itemOf(i));
+		this.#read = { view, chains, items };
+		return this.#read;
+	}
+
+	/** The machine's view itself (the sheets read its reviews, looks and actions). */
+	get view(): MultisigProposalsView | null {
+		return proposalsHost.view;
+	}
 
 	/** The multisig followed (`null`: none). */
 	get followed(): string | null {
-		return this.#shown;
+		return proposalsHost.view?.followed ?? null;
 	}
 
+	/** Per chain the multisig is used on, in the wallet's network order. */
+	get chains(): ChainState[] {
+		return this.#stub ?? this.#now().chains;
+	}
+
+	/** Tests: a list as the machine would read it (`null`: the machine's again). */
+	set chains(chains: ChainState[] | null) {
+		this.#stub = chains;
+	}
+
+	#stub = $state.raw<ChainState[] | null>(null);
+
+	/** Every proposal, by number then age. */
 	get items(): ProposalItem[] {
-		return this.chains.flatMap((c) => c.items).sort(sortKey);
+		if (this.#stub) {
+			return this.#stub
+				.flatMap((c) => c.items)
+				.sort((a, b) =>
+					a.nonce !== b.nonce ? (a.nonce < b.nonce ? -1 : 1) : a.createdMs - b.createdMs
+				);
+		}
+		return this.#now().items;
 	}
 
 	/** Open proposals (not done), next first. */
@@ -606,289 +526,190 @@ class Proposals {
 		return this.items.filter((i) => i.status !== 'done');
 	}
 
-	/** Follow `account` (or stop, `null`): refresh now and every 12 s while shown. */
-	follow(account: MultisigAccount | null, chainIds: number[]): void {
-		const address = account?.address ?? null;
-		if (this.#timer) clearInterval(this.#timer);
-		this.#timer = null;
-		if (this.#online) window.removeEventListener('online', this.#online);
-		if (this.#offline) window.removeEventListener('offline', this.#offline);
-		if (this.#visible) document.removeEventListener('visibilitychange', this.#visible);
-		this.#online = null;
-		this.#offline = null;
-		this.#visible = null;
-		if (!sameAddress(this.#address, address)) {
-			this.chains = [];
-			this.missing = [];
-			this.#lists.clear();
-			this.stale = false;
-			this.cached = null;
-			this.unreadable = [];
-			this.historyUnreadable = [];
-			this.readAt = null;
-		}
-		this.#address = address;
-		this.#shown = address;
-		this.#account = account;
-		this.#chainIds = chainIds;
-		if (!account) return;
-		if (this.chains.length === 0) this.#seed(account);
-		void this.refresh(account, chainIds);
-		if (typeof window !== 'undefined') {
-			this.offline = navigator.onLine === false;
-			// Back online: the outage is over as far as anyone knows — read now.
-			this.#online = () => {
-				this.offline = false;
-				void this.retry();
-			};
-			this.#offline = () => (this.offline = true);
-			window.addEventListener('online', this.#online);
-			window.addEventListener('offline', this.#offline);
-			// r4b-16: back to the tab — read now, not at the next tick.
-			this.#visible = () => {
-				if (document.visibilityState === 'visible') void this.refresh(account, chainIds);
-			};
-			document.addEventListener('visibilitychange', this.#visible);
-		}
-		this.#poll();
+	/** r4b-11: what is shown is the list kept from an earlier page (`at`: when it was read). */
+	get cached(): { at: number } | null {
+		const at = proposalsHost.view?.cached_at;
+		return at === null || at === undefined ? null : { at };
 	}
 
-	/** The poll, at the pace it is held at now. */
-	#poll(): void {
-		if (this.#timer) clearInterval(this.#timer);
+	/** r4b-3: networks whose members could not be read on the last refresh. */
+	get unreadable(): number[] {
+		return proposalsHost.view?.unreadable ?? [];
+	}
+
+	/** r4b-2: networks whose history could not be read. */
+	get historyUnreadable(): number[] {
+		return proposalsHost.view?.history_unreadable ?? [];
+	}
+
+	/** r4b-15: the device says it is offline. */
+	get offline(): boolean {
+		return proposalsHost.view?.offline ?? false;
+	}
+
+	/** When the list shown was last read in full. */
+	get readAt(): number | null {
+		return proposalsHost.view?.read_at ?? null;
+	}
+
+	/** The networks the mailbox holds proposals of it on that this device lacks. */
+	get missing(): MissingChain[] {
+		return proposalsHost.view?.missing ?? [];
+	}
+
+	get loading(): boolean {
+		return proposalsHost.view?.loading ?? false;
+	}
+
+	/** The last refresh failed or is taking long: whoever shows it says so. */
+	get stale(): boolean {
+		return proposalsHost.view?.stale ?? false;
+	}
+
+	/** Stale because the multisig service is away: said as such, with a Retry. */
+	get unreachable(): boolean {
+		return proposalsHost.view?.unreachable ?? false;
+	}
+
+	/** The poll's pace now (the machine's). */
+	get pace(): number {
+		return proposalsHost.view?.pace_ms ?? POLL_MS;
+	}
+
+	/** New activity was written: whoever shows it refreshes. */
+	get onrecorded(): (() => void) | null {
+		return proposalsHost.onrecorded;
+	}
+
+	set onrecorded(fn: (() => void) | null) {
+		proposalsHost.onrecorded = fn;
+	}
+
+	/**
+	 * Follow `account` (or stop, `null`): read now, then on every tick while
+	 * it is shown. Called from a screen's effect: what it reads of the
+	 * machine's view is never what that effect depends on (`untrack`).
+	 */
+	follow(account: MultisigAccount | null, chainIds: number[] = account?.chainIds ?? []): void {
+		void chainIds;
+		untrack(() => this.#follow(account));
+	}
+
+	#follow(account: MultisigAccount | null): void {
+		for (const stop of this.#stops.splice(0)) stop();
+		if (this.#timer) clearTimeout(this.#timer);
 		this.#timer = null;
-		const account = this.#account;
-		if (!account) return;
-		const chainIds = this.#chainIds;
-		this.#pace = this.#held > 0 ? OPEN_POLL_MS : POLL_MS;
-		this.#timer = setInterval(() => {
-			if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
-			void this.refresh(account, chainIds, { tick: true });
-		}, this.#pace);
+		void proposalsHost.follow(account);
+		if (!account || typeof window === 'undefined') return;
+		if (navigator.onLine === false) {
+			void proposalsHost.boot().then(() => proposalsHost.send({ type: 'online', online: false }));
+		}
+		// Back online: the outage is over as far as anyone knows — read now.
+		const online = () => proposalsHost.send({ type: 'online', online: true });
+		const offline = () => proposalsHost.send({ type: 'online', online: false });
+		// r4b-16: back to the tab — read now, not at the next tick.
+		const visible = () => {
+			if (document.visibilityState === 'visible') {
+				proposalsHost.send({ type: 'refresh', fresh: false });
+			}
+		};
+		window.addEventListener('online', online);
+		window.addEventListener('offline', offline);
+		document.addEventListener('visibilitychange', visible);
+		this.#stops.push(
+			() => window.removeEventListener('online', online),
+			() => window.removeEventListener('offline', offline),
+			() => document.removeEventListener('visibilitychange', visible)
+		);
+		// The poll, at the pace the machine says now (faster while a sheet watches).
+		const round = () => {
+			this.#timer = setTimeout(() => {
+				if (document.visibilityState === 'visible') proposalsHost.send({ type: 'tick' });
+				round();
+			}, this.pace);
+		};
+		round();
+		this.#stops.push(() => {
+			if (this.#timer) clearTimeout(this.#timer);
+			this.#timer = null;
+		});
 	}
 
 	/**
 	 * r5reg-14: keep it fresh while a sheet on one of its waiting
-	 * transactions is open — the poll at {@link OPEN_POLL_MS}, a read at once
-	 * when the list is older than that, and one whenever the window gets the
-	 * focus back. The returned function lets go (the pace returns to
-	 * {@link POLL_MS} once no sheet holds it).
+	 * transactions is open — the machine's faster pace, a read at once when
+	 * the list is older than that, and one whenever the window gets the focus
+	 * back. The returned function lets go.
 	 */
 	watch(): () => void {
-		this.#held += 1;
-		if (this.#pace !== OPEN_POLL_MS) this.#poll();
-		const account = this.#account;
-		if (account && (this.readAt === null || Date.now() - this.readAt > OPEN_POLL_MS)) {
-			void this.refresh(account, this.#chainIds);
-		}
-		const onFocus = () => {
-			if (this.#account) void this.refresh(this.#account, this.#chainIds);
-		};
-		if (typeof window !== 'undefined') window.addEventListener('focus', onFocus);
+		return untrack(() => this.#watch());
+	}
+
+	#watch(): () => void {
+		proposalsHost.send({ type: 'watch' });
+		// The pace changed: the next round is at the new one.
+		this.#repace();
+		const focus = () => proposalsHost.send({ type: 'refresh', fresh: false });
+		if (typeof window !== 'undefined') window.addEventListener('focus', focus);
 		let released = false;
 		return () => {
 			if (released) return;
 			released = true;
-			this.#held -= 1;
-			if (typeof window !== 'undefined') window.removeEventListener('focus', onFocus);
-			if (this.#held === 0 && this.#pace !== POLL_MS) this.#poll();
+			if (typeof window !== 'undefined') window.removeEventListener('focus', focus);
+			untrack(() => {
+				proposalsHost.send({ type: 'unwatch' });
+				this.#repace();
+			});
 		};
 	}
 
-	/** Tests: the poll's pace now. */
-	get pace(): number {
-		return this.#pace;
-	}
-
-	/**
-	 * r4b-11: the list kept from an earlier page, shown before anything is
-	 * read — each proposal re-read here against the members kept with it.
-	 */
-	#seed(account: MultisigAccount): void {
-		try {
-			const kept = keptChains(account);
-			if (!kept) return;
-			for (const [chainId, list] of kept.lists) this.#lists.set(chainId, list);
-			this.chains = kept.chains.sort((a, b) => networkRank(a.chainId) - networkRank(b.chainId));
-			this.#source = genesisServiceURL();
-			this.cached = { at: kept.at };
-			this.readAt = kept.at;
-			this.stale = true;
-		} catch {
-			// a kept list this build cannot read: read afresh
-			this.chains = [];
-			this.#lists.clear();
-		}
-	}
-
-	/**
-	 * Whether the stale list is stale because the multisig service is away
-	 * (rather than slow, or a chain unread): said as such, with a Retry.
-	 */
-	get unreachable(): boolean {
-		return this.stale && serviceOutage.down;
+	#repace(): void {
+		if (!this.#timer) return;
+		clearTimeout(this.#timer);
+		const round = () => {
+			this.#timer = setTimeout(() => {
+				if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+					proposalsHost.send({ type: 'tick' });
+				}
+				round();
+			}, this.pace);
+		};
+		round();
 	}
 
 	/** The person's Retry (or `online`): ask the service now, whatever its schedule. */
 	retry(): Promise<void> {
-		serviceOutage.reset();
-		this.historyUnreadable = [];
-		const account = this.#account;
-		return account ? this.refresh(account, this.#chainIds) : Promise.resolve();
+		return untrack(() => {
+			const before = this.readAt;
+			proposalsHost.send({ type: 'retry' });
+			return this.#read_settled(before);
+		});
 	}
 
 	/**
-	 * Re-read every chain the multisig is used on. One refresh at a time.
-	 * `tick`: the poll's own round — a quiet network's chain is read only
-	 * every {@link QUIET_POLLS}th. `fresh`: a read begun after this call —
-	 * one under way is waited out, then another made.
+	 * Read every chain the multisig is used on again. `fresh`: a read begun
+	 * after this call (one under way is waited out, then another made).
+	 * Resolves once a read ended (or {@link SLOW_REFRESH_MS} twice over).
 	 */
 	refresh(
-		account: MultisigAccount,
-		chainIds: number[],
-		{ tick = false, fresh = false }: { tick?: boolean; fresh?: boolean } = {}
+		account?: MultisigAccount | null,
+		chainIds?: number[],
+		{ fresh = false }: { tick?: boolean; fresh?: boolean } = {}
 	): Promise<void> {
-		if (this.#inflight) {
-			if (!fresh) return this.#inflight;
-			// r5reg-14: a read after what this device just did (an approval)
-			// is never answered by one begun before it — it runs once the one
-			// under way ends (one queued, however many ask).
-			const next = () => {
-				this.#queued = null;
-				return this.refresh(account, chainIds);
-			};
-			this.#queued ??= this.#inflight.then(next, next);
-			return this.#queued;
-		}
-		const round = tick ? (this.#ticks += 1) : (this.#ticks = 0);
-		// Another service (Settings): the lists the last one gave are not its.
-		const source = genesisServiceURL();
-		if (this.#source !== source) {
-			this.#lists.clear();
-			if (this.#source !== null) this.chains = [];
-			this.#source = source;
-		}
-		this.loading = this.chains.length === 0;
-		const followed = () => sameAddress(this.#address, account.address);
-		// Slow is said as stale: "No activity yet" over transactions the
-		// mailbox has not answered for would be a claim nobody checked.
-		const slow = setTimeout(() => {
-			if (followed()) this.stale = true;
-		}, SLOW_REFRESH_MS);
-		const run = (async () => {
-			let failed = false;
-			const next: ChainState[] = [];
-			const unread: number[] = [];
-			// While the service is away: nothing until its next step, then one
-			// probe for every network — not a failed read per network per round.
-			let mailbox = await serviceOutage.available(probeService);
-			// One read for every chain at once (a service that has the list):
-			// proposals on a network the multisig is not deployed on, or one
-			// this device lacks, are found without a link. `null`: an older
-			// service — asked network by network, as before.
-			let split: ReturnType<typeof splitListed> | null = null;
-			if (mailbox) {
-				try {
-					const all = await fetchAllProposals(account.address, { background: true });
-					if (all) split = splitListed(all.proposals, chainIds);
-				} catch {
-					mailbox = false;
-				}
-			}
-			if (split) {
-				// A network something there says it is on becomes one of its
-				// networks here (kept: the next refresh reads it too).
-				for (const id of split.used) {
-					if (!account.chainIds.includes(id)) multisig.useChain(account.address, id);
-				}
-				if (followed()) this.missing = split.missing;
-			}
-			const reading = split ? unique([...chainIds, ...split.used]) : chainIds;
-			await Promise.all(
-				reading.map(async (chainId) => {
-					const known = followed() ? (this.#lists.get(chainId) ?? null) : null;
-					const listed = split ? (split.lists.get(chainId) ?? []) : undefined;
-					const previous = followed() ? this.chains.find((c) => c.chainId === chainId) : undefined;
-					// r4D-18: a quiet network's members, as last read, on all
-					// but every QUIET_POLLS-th poll.
-					const quiet =
-						tick &&
-						round % QUIET_POLLS !== 0 &&
-						previous !== undefined &&
-						previous.mailbox &&
-						listed !== undefined &&
-						!hasOpen(listed, previous.members.nonce) &&
-						!previous.items.some((i) => i.status !== 'done' || i.executing);
-					try {
-						const read = await readChain(account, chainId, known, {
-							background: true,
-							mailbox,
-							listed,
-							members: quiet && previous ? previous.members : undefined
-						});
-						if (!read.mailbox) failed = true;
-						else if (followed()) this.#lists.set(chainId, read.proposals);
-						next.push({
-							chainId,
-							members: read.members,
-							items: read.items,
-							mailbox: read.mailbox
-						});
-					} catch {
-						// r4b-3: the network did not answer — said as that, never as
-						// a transaction nobody shared.
-						failed = true;
-						unread.push(chainId);
-						const previous = this.chains.find((c) => c.chainId === chainId);
-						if (previous) next.push({ ...previous, mailbox: false });
-					}
-				})
-			);
-			clearTimeout(slow);
-			if (followed()) {
-				// The wallet's network order (owner decision 2026-10-29).
-				this.chains = next.sort((a, b) => networkRank(a.chainId) - networkRank(b.chainId));
-				this.stale = failed;
-				this.unreadable = unread;
-				if (!failed) {
-					this.cached = null;
-					this.readAt = Date.now();
-					this.#keep(account, source);
-				}
-				// Executed on another member's device (or this one's, before a
-				// reload): no longer in flight here.
-				for (const item of this.items) {
-					if (item.status === 'done')
-						executions.end(item.chainId, account.address, item.safeTxHash);
-				}
-				// Executed on another member's device: into this device's activity too.
-				void recordRemoteExecutions(account.address, this.items).then(
-					({ wrote, unreadable }) => {
-						if (followed()) this.historyUnreadable = unreadable;
-						if (wrote) this.onrecorded?.();
-					},
-					() => {}
-				);
-			}
-			this.loading = false;
-		})();
-		this.#inflight = run.finally(() => (this.#inflight = null));
-		return this.#inflight;
+		void account;
+		void chainIds;
+		return untrack(() => {
+			const before = this.readAt;
+			proposalsHost.send({ type: 'refresh', fresh });
+			return this.#read_settled(before);
+		});
 	}
 
-	/** r4b-11: what was read in full, kept for the next page (open proposals only). */
-	#keep(account: MultisigAccount, service: string): void {
-		keepWaiting(account.address, {
-			service,
-			at: Date.now(),
-			chains: this.chains.map((c) => ({
-				chainId: c.chainId,
-				members: { ...c.members, nonce: c.members.nonce.toString() },
-				proposals: (this.#lists.get(c.chainId) ?? []).filter(
-					(p) => BigInt(p.safeTx.nonce) >= c.members.nonce
-				)
-			}))
-		});
+	async #read_settled(before: number | null): Promise<void> {
+		await proposalsHost.until(
+			(view) => (!view.loading && (view.read_at !== before || view.stale) ? true : null),
+			SLOW_REFRESH_MS * 2
+		);
 	}
 
 	chain(chainId: number): ChainState | undefined {
@@ -901,6 +722,8 @@ class Proposals {
 		return c ? nextNonceOf(c) : 0n;
 	}
 }
+
+export const proposals = new Proposals();
 
 /**
  * A proposal at the same nonce that sends nothing to the multisig itself
@@ -922,8 +745,6 @@ export function markCancellations(multisigAddress: string, items: ProposalItem[]
 	}
 	void multisigAddress;
 }
-
-export const proposals = new Proposals();
 
 /**
  * Everyone who is a member of `account` on some network: on each network it
@@ -1164,13 +985,6 @@ function submitKept(req: Submission) {
 }
 
 /**
- * Send again what a page signed and never saw reach the mailbox (ms-19).
- * Quiet: a submission that still cannot go is kept, and sent again on its
- * own for a while. Resolves the multisigs whose mailbox took something.
- */
-export function flushOutbox(): Promise<string[]> {
-	return outbox.sendAgain();
-}
 
 /** Hand `tx` and one owner's approval of it to the mailbox. */
 export async function submitProposal(
@@ -1220,69 +1034,76 @@ export async function approveExternally(
 }
 
 /**
- * The send's confirm for a multisig: these transfers, as the review the person
- * confirmed, proposed on `chainId` at the next free nonce and approved at once
- * by this device's first member (one passkey prompt). The core reads the
- * transaction back before anything is signed.
+ * Propose `proposal` on `chainId` through the machine — drawn at the next
+ * free number with its review, shown first (§3.6), signed once the person
+ * confirms it — and say why not in the typed errors the screens word.
  */
-export async function proposeTransfers(
+async function proposeThrough(
+	address: string,
+	chainId: number,
+	proposal: MultisigProposalKind,
+	signal?: AbortSignal
+): Promise<{ safeTxHash: string }> {
+	const account = multisig.find(address);
+	if (!account) throw new Error('not a multisig on this device');
+	try {
+		return await proposalsHost.propose(account, chainId, proposal, { signal });
+	} catch (error) {
+		if (error instanceof ProposeFailedError) {
+			// A member change the core refuses there (the members moved since the person looked).
+			const refusal = error.state.kind === 'refused' ? memberRefusal(error.state.reason) : null;
+			if (refusal) throw new MemberChangeRefusedError(refusal as never);
+			throw actionError(error.state, chainId) ?? new Error(error.state.kind);
+		}
+		throw error;
+	}
+}
+
+/**
+ * The send's confirm for a multisig: these transfers, proposed on `chainId`
+ * at the next free nonce — its review first, then one passkey.
+ */
+export function proposeTransfers(
 	address: string,
 	chainId: number,
 	transfers: { to: string; token: string | null; amount: string }[],
 	/** r4b-5: stops it — no passkey, nothing proposed — once the person withdraws it. */
 	signal?: AbortSignal
 ): Promise<{ safeTxHash: string }> {
-	return proposeBuilt(
+	return proposeThrough(
 		address,
 		chainId,
-		(nonce) =>
-			transfersTx(
-				transfers.map((t) => ({ token: t.token, to: t.to, amount: t.amount })),
-				`0x${nonce.toString(16)}`
-			),
+		{
+			kind: 'transfers',
+			transfers: transfers.map((t) => ({ token: t.token, to: t.to, amount: t.amount }))
+		},
 		signal
 	);
 }
 
 /**
  * Rename the multisig's record in the registry on `chainId` — a transaction
- * of the multisig's own (`rename(name)` to the registry, which only the Safe
- * itself can call), proposed at the next free nonce and approved at once like
- * a transfer; the members approve it and one executes it there (deploying the
- * multisig on that chain first if it is not yet). The core reads it back as a
- * rename before anything is signed. Resolves its safeTxHash.
+ * of the multisig's own, proposed at the next free nonce like a transfer.
  */
-export async function proposeRename(
+export function proposeRename(
 	address: string,
 	chainId: number,
 	name: string
 ): Promise<{ safeTxHash: string }> {
-	return proposeBuilt(address, chainId, (nonce) => renameTx(name, `0x${nonce.toString(16)}`));
+	return proposeThrough(address, chainId, { kind: 'rename', name });
 }
 
 /**
  * A change of members or approvals on `chainId`, built by the core against
- * that network's members as the chain holds them NOW (read again here, with
- * the open proposals: `prevOwner` comes from that network's own list) and
- * proposed at the next free nonce, approved at once like a transfer. Throws
- * {@link MemberChangeRefusedError} when the core refuses it there — the
- * members moved since the person looked, say.
+ * that network's members as the chain holds them NOW; throws
+ * `MemberChangeRefusedError` when the core refuses it there.
  */
-export async function proposeMemberChange(
+export function proposeMemberChange(
 	address: string,
 	chainId: number,
 	change: MemberChangeRequest
 ): Promise<{ safeTxHash: string }> {
-	return proposeBuilt(address, chainId, (nonce, chain) => {
-		const verdict = memberChangeTx(
-			address,
-			memberStateOf(chain),
-			change,
-			`0x${nonce.toString(16)}`
-		);
-		if (verdict.kind === 'refused') throw new MemberChangeRefusedError(verdict.refusal);
-		return verdict.tx;
-	});
+	return proposeThrough(address, chainId, { kind: 'member_change', change: change as never });
 }
 
 /**
@@ -1374,23 +1195,6 @@ export async function proposeCalls(
 	return { safeTxHash, nonce };
 }
 
-/** `tx` as the proposal it will be, at its number on `chain`, with no approval yet. */
-function draftItem(account: MultisigAccount, chain: ChainState, tx: SafeTx): ProposalItem {
-	const now = Date.now();
-	const item = readProposal(account, chain.members, {
-		chainId: chain.chainId,
-		safe: account.address,
-		safeTxHash: safeTxHash(chain.chainId, account.address, tx),
-		safeTx: tx,
-		proposer: '',
-		approvals: [],
-		createdMs: now,
-		updatedMs: now
-	});
-	if (!item) throw new Error('the transaction does not hash as itself');
-	return item;
-}
-
 /**
  * Propose what `build` makes at the next free nonce, read back by the core
  * first: approved by an owner on this device (its passkey), else by an
@@ -1401,7 +1205,7 @@ async function proposeBuilt(
 	chainId: number,
 	build: (nonce: bigint, chain: ChainState) => SafeTx,
 	signal?: AbortSignal,
-	/** Its review was drawn and confirmed already (a dApp's calls, on their draft). */
+	/** The member of this device picked on its draft's review. */
 	opts: { reviewed?: boolean; as?: string | null } = {}
 ): Promise<{ safeTxHash: string }> {
 	const account = multisig.find(address);
@@ -1419,13 +1223,8 @@ async function proposeBuilt(
 	const review = reviewTx(chainId, account.address, tx);
 	if (review.action === null) throw new Error(review.refusal ?? 'refused');
 	stopIfWithdrawn(signal);
-	// §3.6: the one review before the proposer's own passkey, as every member
-	// gets it: drawn at its number, signed only after "Propose and approve".
-	let picked = opts.as ?? null;
-	if (!opts.reviewed) {
-		picked = await reviewFirst(fresh.address, chainId, chain, draftItem(fresh, chain, tx));
-		stopIfWithdrawn(signal);
-	}
+	// Its review was drawn and confirmed on its draft (a dApp's calls).
+	const picked = opts.as ?? null;
 	// r5reg-5: the member of this device the person picked on the review;
 	// else the one used here last, else the first — never another silently.
 	const here = localOwners(owners);
@@ -1450,26 +1249,6 @@ async function proposeBuilt(
 	return { safeTxHash };
 }
 
-/** `owner` approves `item` (one passkey prompt). */
-export async function approve(account: MultisigAccount, item: ProposalItem, owner: LocalOwner) {
-	await authorizeSigning(account, item.chainId, item.tx);
-	const approval = await signApproval(owner.account, item.chainId, item.safeTxHash, {
-		multisig: account.address,
-		name: account.genesis.name ?? account.label ?? null,
-		tx: item.tx
-	});
-	const answer = await submitKept({
-		chainId: item.chainId,
-		safe: account.address,
-		safeTx: item.tx,
-		approval,
-		genesis: namedGenesis(account.genesis)
-	});
-	if (answer && !answer.ok) throw new MailboxRefusedError(answer.refusal);
-	// `null`: kept, and sent again on its own (the sheet says so).
-	return answer?.proposal ?? null;
-}
-
 /** What `executor` executing `item` is, for its preview and its submit alike. */
 export function executionInput(
 	account: Pick<MultisigAccount, 'address' | 'genesis'>,
@@ -1489,83 +1268,3 @@ export function executionInput(
 		name: account.genesis.name ?? null
 	};
 }
-
-/**
- * `executor` executes `item` (one passkey prompt); resolves once the relay
- * has it. `preview` is the one shown: its calls and fee are what is signed.
- */
-export async function execute(
-	account: MultisigAccount,
-	item: ProposalItem,
-	executor: LocalOwner,
-	members: ChainMembers,
-	preview?: ExecutionPreview
-) {
-	// §3.5: the signing gate before the executor's passkey, as every signature.
-	// A look that already says it stops before the passkey (it would fail, it
-	// has no price, it could not be checked in time, the executor cannot pay)
-	// stops here, before the gate asks anything — the approval a caller may
-	// give instead goes through the gate once, as its own signature.
-	if (preview) throwIfStopped(preview);
-	// §3.5, §3.6: the signing gate before the executor's passkey, as every
-	// signature — the core's rule over the chain read now.
-	await authorizeSigning(account, item.chainId, item.tx);
-	// r7-3: one signature, the executor's own operation — on its page when it
-	// signs on one (`signChallenge` hands the page the operation). It counts
-	// as its approval as `msg.sender` where one is missing; no approval of
-	// its own is asked first, which would be a second trip to the page for
-	// nothing the chain needs.
-	return submitExecution(executionInput(account, item, executor, members), preview);
-}
-
-/** A voiding transaction at `item`'s nonce, approved at once by `owner`. */
-export async function proposeCancel(
-	account: MultisigAccount,
-	item: ProposalItem,
-	owner: LocalOwner
-) {
-	return propose(
-		account,
-		item.chainId,
-		cancelTx(account.address, `0x${item.nonce.toString(16)}`),
-		owner
-	);
-}
-
-/**
- * The mailbox's list of waiting transactions (or the chain's members) could
- * not be read, so nothing was proposed: there is no nonce to take that is
- * known to be free.
- */
-export class MailboxUnreadableError extends Error {
-	constructor() {
-		super("the multisig's waiting transactions could not be read");
-		this.name = 'MailboxUnreadableError';
-	}
-}
-
-/**
- * No member is on this device, and none can sign through an outside wallet:
- * every member is a Vela account, which approves in Vela on its own device.
- * Nothing was proposed.
- */
-export class NoOutsideSignerError extends Error {
-	constructor() {
-		super('no member can sign through an outside wallet');
-		this.name = 'NoOutsideSignerError';
-	}
-}
-
-/** The mailbox refused a submission (the core's reason, for the log). */
-export class MailboxRefusedError extends Error {
-	constructor(readonly refusal: unknown) {
-		super(`the mailbox refused it: ${JSON.stringify(refusal)}`);
-		this.name = 'MailboxRefusedError';
-	}
-}
-
-// Kept approvals that reach the mailbox: the shown multisig's list is read again.
-outbox.onsent = (safe) => {
-	const shown = multisig.find(safe);
-	if (shown) void proposals.refresh(shown, shown.chainIds);
-};

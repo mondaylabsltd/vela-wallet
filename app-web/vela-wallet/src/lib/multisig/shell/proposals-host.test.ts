@@ -6,8 +6,8 @@
  *   it reads anything, the waiting list an earlier page kept — re-read here
  *   against the members kept with it (Rust:
  *   `the_others_start_from_the_kept_list_then_are_read`);
- * - the multisig shown is never one of the others: the machine reads nothing
- *   of it (its list is still `core/proposals.svelte.ts`');
+ * - the multisig shown is the list it follows (`follow`), never one of the
+ *   others its round reads;
  * - a notice it sends reaches where it goes: a multisig's record to the store,
  *   executed rows to the activity.
  */
@@ -39,7 +39,8 @@ vi.mock('../core/store.svelte', () => ({
 		nameMembers: () => {}
 	}
 }));
-vi.mock('../core/proposals.svelte', () => ({ proposals: { followed: null } }));
+vi.mock('$lib/contacts/core/contacts-book.svelte', () => ({ contactsBook: { view: null } }));
+vi.mock('$lib/session/core/session.svelte', () => ({ session: { view: { accounts: [] } } }));
 
 const { proposalsHost } = await import('./proposals-host.svelte');
 
@@ -130,7 +131,7 @@ afterEach(() => {
 });
 
 describe('the proposals machine’s host', () => {
-	it('says what waits on a multisig not shown — the kept list first — and nothing of the shown one', async () => {
+	it('says what waits on every multisig — the kept list first — and reads the others apart from the shown one', async () => {
 		const store = memoryStore({
 			'vela.multisigWaiting': JSON.stringify({
 				[OTHER.toLowerCase()]: await keptList(OTHER),
@@ -146,14 +147,18 @@ describe('the proposals machine’s host', () => {
 				accounts: [{ address: ME, name: 'Me', keys: [], route: 'vela' }],
 				networks: [100]
 			}),
-			multisigs: () => ({ accounts: [account(SHOWN), account(OTHER)] as never, shown: SHOWN })
+			multisigs: () => ({ accounts: [account(SHOWN), account(OTHER)] as never })
 		});
 		await settled();
 		const presence = proposalsHost.view!.presence;
 		expect(presence[OTHER.toLowerCase()]).toMatchObject({ needs_you: 1, ready: 0 });
-		expect(SHOWN.toLowerCase() in presence).toBe(false);
+		expect(presence[SHOWN.toLowerCase()]).toMatchObject({ needs_you: 1, ready: 0 });
 		expect(proposalsHost.view!.others_waiting).toBe(true);
-		// Reading the others asks the service of the other one alone.
+		// The shown one is followed: reading the others asks the service of the other one alone.
+		await proposalsHost.follow(account(SHOWN) as never);
+		await settled();
+		expect(proposalsHost.view!.followed).toBe(SHOWN);
+		http.length = 0;
 		await proposalsHost.othersTick();
 		await settled();
 		expect(http.some((u) => u.toLowerCase().includes(OTHER.toLowerCase()))).toBe(true);
@@ -167,7 +172,7 @@ describe('the proposals machine’s host', () => {
 			deps: deps(memoryStore(), []),
 			load: async () => {},
 			facts: () => ({ serviceUrl: SERVICE, accounts: [], networks: [100] }),
-			multisigs: () => ({ accounts: [], shown: null }),
+			multisigs: () => ({ accounts: [] }),
 			saveRows: async (r) => void rows.push(...r)
 		});
 		proposalsHost.onrecorded = recorded;
