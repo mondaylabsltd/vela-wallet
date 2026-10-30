@@ -320,6 +320,11 @@ where
 {
     app: Core<A>,
     pending: VecDeque<Request<<A::Effect as SplitEffect>::Op>>,
+    /// Renders asked for so far.
+    renders: usize,
+    /// The view as of the last render: what a shell holds from a host that
+    /// builds the view only on a render (`SplitEffect::RENDERS_EVERY_CHANGE`).
+    rendered: Option<A::ViewModel>,
 }
 
 impl<A> DomainDriver<A>
@@ -333,7 +338,19 @@ where
         Self {
             app: Core::new(),
             pending: VecDeque::new(),
+            renders: 0,
+            rendered: None,
         }
+    }
+
+    /// How many renders the machine has asked for so far.
+    pub fn renders(&self) -> usize {
+        self.renders
+    }
+
+    /// The view as of the last render (`None` before the first).
+    pub fn rendered_view(&self) -> Option<&A::ViewModel> {
+        self.rendered.as_ref()
     }
 
     /// Send an event; returns the operations the core asked for, in order.
@@ -408,11 +425,18 @@ where
 
     fn collect(&mut self, effects: Vec<A::Effect>) -> Vec<<A::Effect as SplitEffect>::Op> {
         let mut operations = Vec::new();
+        let mut rendered = false;
         for effect in effects {
             if let Some(request) = effect.into_shell() {
                 operations.push(request.operation.clone());
                 self.pending.push_back(request);
+            } else {
+                rendered = true;
             }
+        }
+        if rendered {
+            self.renders += 1;
+            self.rendered = Some(self.app.view());
         }
         operations
     }

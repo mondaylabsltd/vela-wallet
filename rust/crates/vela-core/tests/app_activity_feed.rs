@@ -3749,3 +3749,201 @@ fn the_time_verified_mark_on_the_wire() {
         }
     );
 }
+
+// ---------------------------------------------------------------------------
+// The view host: every change renders; names render in batches
+// ---------------------------------------------------------------------------
+
+/// The feed promises the generic host that its view moves only with a render
+/// (`SplitEffect::RENDERS_EVERY_CHANGE`), so the host builds the view only
+/// then. Walked through every event and answer that changes what it draws:
+/// after each, the view as of the last render IS the view.
+#[test]
+fn every_change_renders() {
+    fn shown_is_current(sut: &Sut, step: &str) {
+        assert_eq!(sut.rendered_view(), Some(&sut.view()), "{step}");
+    }
+    let named = send("s1", "0xU1", "0xCafe", "1", 300_000.0);
+    let unnamed = recv("r1", "0xBEEF", "2", "USDT", 200_000.0);
+    let mut sut = Sut::new();
+    sut.dispatch(Event::AccountSwitched {
+        address: ADDR.to_owned(),
+    });
+    shown_is_current(&sut, "account switched");
+    sut.resolve(loaded(&sut, vec![named.clone(), unnamed.clone()], T0));
+    shown_is_current(&sut, "store loaded");
+    sut.resolve(Res::SyncCompleted { new_count: 0 });
+    shown_is_current(&sut, "first sync");
+    sut.resolve(Res::AliasResolved {
+        addr: "0xbeef".to_owned(),
+        name: Some("Bob".to_owned()),
+    });
+    shown_is_current(&sut, "the batch's one name");
+    assert_eq!(items(&sut)[1].alias.as_deref(), Some("Bob"));
+
+    for event in [
+        Event::ChainFilterChanged {
+            chain_id: Some(8453),
+        },
+        Event::ChainFilterChanged { chain_id: None },
+        Event::SpaceChainsChanged {
+            chain_ids: Some(vec![1]),
+        },
+        Event::SpaceChainsChanged { chain_ids: None },
+        Event::ContactFilterChanged {
+            address: Some("0xbeef".to_owned()),
+        },
+        Event::ContactFilterChanged { address: None },
+        Event::PrivacyChanged { hidden: true },
+        Event::PrivacyChanged { hidden: false },
+    ] {
+        let step = format!("{event:?}");
+        sut.dispatch(event);
+        shown_is_current(&sut, &step);
+    }
+
+    sut.dispatch(Event::DeleteRequested { id: "s1".to_owned() });
+    shown_is_current(&sut, "delete requested");
+    sut.resolve(Res::DeleteCommitted { id: "s1".to_owned() });
+    shown_is_current(&sut, "delete committed");
+
+    // A receipt lands: re-read, celebrate, the toast expires.
+    let landed = recv("r2", "0xBeEf", "5", "USDT", 400_000.0);
+    sut.dispatch(Event::FocusTick);
+    sut.resolve(loaded(&sut, vec![unnamed.clone()], T0 + 1_000.0));
+    shown_is_current(&sut, "tick read");
+    sut.resolve(Res::SyncCompleted { new_count: 1 });
+    shown_is_current(&sut, "sync found one");
+    sut.resolve(loaded(&sut, vec![landed, unnamed.clone()], T0 + 2_000.0));
+    shown_is_current(&sut, "celebrating read");
+    assert!(sut.view().toast.is_some(), "a toast is up");
+    let generation = sut
+        .outstanding()
+        .iter()
+        .find_map(|op| match op {
+            Op::Timer { generation, .. } => Some(*generation),
+            _ => None,
+        })
+        .expect("the toast timer");
+    sut.resolve_matching(|op| matches!(op, Op::Haptic), Res::HapticPlayed);
+    sut.resolve_matching(
+        |op| matches!(op, Op::Timer { .. }),
+        Res::ToastExpired { generation },
+    );
+    shown_is_current(&sut, "toast expired");
+    assert!(sut.view().toast.is_none());
+
+    sut.dispatch(Event::ReconcileCompleted { resolved_count: 1 });
+    sut.resolve(loaded(&sut, vec![unnamed], T0 + 3_000.0));
+    shown_is_current(&sut, "reconcile re-read");
+
+    sut.dispatch(Event::AccountSwitched {
+        address: OTHER.to_owned(),
+    });
+    shown_is_current(&sut, "another account");
+}
+
+/// 10 unnamed counterparties: a recipient each.
+fn ten_strangers() -> Vec<FeedTxRecord> {
+    (0..10_u32)
+        .map(|i| {
+            recv(
+                &format!("r{i}"),
+                &format!("0x{:040x}", 0xb000 + i),
+                "1",
+                "USDT",
+                100_000.0 + f64::from(i),
+            )
+        })
+        .collect()
+}
+
+/// Each name answer rebuilt every row of the feed: 200 names were 200
+/// rebuilds of 200 rows. Names now render in batches that double from one:
+/// the first at once (the rows on screen are the first asked), and whatever
+/// is left when the batch's last answer is in.
+#[test]
+fn names_render_in_batches() {
+    let mut sut = Sut::new();
+    sut.dispatch(Event::AccountSwitched {
+        address: ADDR.to_owned(),
+    });
+    sut.resolve(loaded(&sut, ten_strangers(), T0));
+    sut.resolve(Res::SyncCompleted { new_count: 0 });
+
+    let mut rendered_at = Vec::new();
+    for answer in 1..=10 {
+        let Some(Op::ResolveRecipientIdentity { addr }) = sut.outstanding().first().cloned() else {
+            panic!("a lookup is outstanding");
+        };
+        let before = sut.renders();
+        sut.resolve(Res::AliasResolved {
+            name: Some(format!("name-{addr}")),
+            addr,
+        });
+        if sut.renders() > before {
+            rendered_at.push(answer);
+        }
+    }
+    assert_eq!(rendered_at, vec![1, 3, 7, 10]);
+    assert_eq!(sut.rendered_view(), Some(&sut.view()), "the last batch shows");
+    assert!(items(&sut).iter().all(|item| item.alias.is_some()), "every row named");
+}
+
+/// The batch's last answer closes it even when it named nobody, and a
+/// lookup that never answers holds nothing back past the next read.
+#[test]
+fn a_batch_closes_on_its_last_answer_and_on_the_next_read() {
+    let mut sut = Sut::new();
+    sut.dispatch(Event::AccountSwitched {
+        address: ADDR.to_owned(),
+    });
+    sut.resolve(loaded(&sut, ten_strangers()[..3].to_vec(), T0));
+    sut.resolve(Res::SyncCompleted { new_count: 0 });
+    let lookups = sut.outstanding();
+    assert_eq!(lookups.len(), 3);
+    let addr_of = |op: &Op| match op {
+        Op::ResolveRecipientIdentity { addr } => addr.clone(),
+        other => panic!("not a lookup: {other:?}"),
+    };
+    // First: named, shown at once (goal 1). Second: named, held (goal 2).
+    sut.resolve(Res::AliasResolved {
+        addr: addr_of(&lookups[0]),
+        name: Some("Ann".to_owned()),
+    });
+    let held = sut.renders();
+    sut.resolve(Res::AliasResolved {
+        addr: addr_of(&lookups[1]),
+        name: Some("Bea".to_owned()),
+    });
+    assert_eq!(sut.renders(), held, "Bea waits for her batch");
+    // Third: nobody. The batch is over and Bea shows.
+    sut.resolve(Res::AliasResolved {
+        addr: addr_of(&lookups[2]),
+        name: None,
+    });
+    assert_eq!(sut.renders(), held + 1);
+    assert_eq!(sut.rendered_view(), Some(&sut.view()));
+
+    // A new batch whose last lookup never answers.
+    sut.dispatch(Event::FocusTick);
+    sut.resolve(loaded(&sut, ten_strangers()[..6].to_vec(), T0 + 1_000.0));
+    sut.resolve(Res::SyncCompleted { new_count: 0 });
+    let lookups = sut.outstanding();
+    assert_eq!(lookups.len(), 3, "only the three never asked");
+    sut.resolve(Res::AliasResolved {
+        addr: addr_of(&lookups[0]),
+        name: Some("Cy".to_owned()),
+    });
+    sut.resolve(Res::AliasResolved {
+        addr: addr_of(&lookups[1]),
+        name: Some("Di".to_owned()),
+    });
+    sut.drop_oldest();
+    assert_ne!(sut.rendered_view(), Some(&sut.view()), "Di is held");
+    sut.dispatch(Event::FocusTick);
+    sut.resolve(loaded(&sut, ten_strangers()[..6].to_vec(), T0 + 2_000.0));
+    assert_eq!(sut.rendered_view(), Some(&sut.view()), "the read shows Di");
+    let named = items(&sut).iter().filter(|item| item.alias.is_some()).count();
+    assert_eq!(named, 4);
+}

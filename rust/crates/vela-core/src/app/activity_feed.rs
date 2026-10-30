@@ -861,6 +861,11 @@ pub struct FeedToast {
 // Protocol
 // ---------------------------------------------------------------------------
 
+/// The most name answers one render of the feed waits for. Names render in
+/// batches that double from one (`FeedShellResult::AliasResolved`); this caps
+/// the batch so a long history fills in steadily rather than all at the end.
+pub const ALIAS_RENDER_BATCH_MAX: u32 = 32;
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "FeedOperation"))]
@@ -1109,6 +1114,14 @@ pub struct Model {
     /// Addresses already asked — never asked again this session
     /// (invariant ⑦).
     alias_attempted: BTreeSet<String>,
+    /// The name lookups asked and not answered yet, lower-cased: the batch
+    /// in flight ([`ALIAS_RENDER_BATCH_MAX`]).
+    alias_in_flight: BTreeSet<String>,
+    /// Names that arrived since the view last showed them.
+    alias_unshown: u32,
+    /// How many unshown names the next render waits for: 1, 2, 4, … up to
+    /// [`ALIAS_RENDER_BATCH_MAX`], from 1 again with each new batch.
+    alias_goal: u32,
     chain_filter: Option<u32>,
     /// The space's chains ([`Event::SpaceChainsChanged`]); `None` = all.
     space_chains: Option<BTreeSet<u32>>,
@@ -1204,6 +1217,10 @@ impl App for ActivityFeed {
                 model.time_repair.in_flight.clear();
                 model.time_repair.moved = false;
                 model.time_repair.own_read = None;
+                // The previous account's name answers are dropped with its
+                // attempt: a batch waiting on them would never close.
+                model.alias_in_flight.clear();
+                model.alias_unshown = 0;
                 load_pipeline(model)
             }
             Event::FocusTick | Event::LiveTick => {
@@ -1512,6 +1529,9 @@ fn accept(model: &mut Model, result: FeedShellResult) -> Command<FeedEffect, Eve
             // a stored local name never ask (invariant ⑦'s "local wins"),
             // attempted addresses never ask again
             // (`useHomeController.ts:422-427`).
+            if model.alias_in_flight.is_empty() {
+                model.alias_goal = 1;
+            }
             for item in &model.items {
                 if item.alias.is_some() {
                     continue;
@@ -1523,6 +1543,7 @@ fn accept(model: &mut Model, result: FeedShellResult) -> Command<FeedEffect, Eve
                 if !model.alias_attempted.insert(addr.clone()) {
                     continue;
                 }
+                model.alias_in_flight.insert(addr.clone());
                 commands.push(shell_request(
                     model.attempt,
                     FeedOperation::ResolveRecipientIdentity { addr },
@@ -1537,6 +1558,8 @@ fn accept(model: &mut Model, result: FeedShellResult) -> Command<FeedEffect, Eve
                 commands.extend(start_time_repair_round(model));
             }
 
+            // This render shows every name known so far.
+            model.alias_unshown = 0;
             commands.push(render());
             Command::all(commands)
         }
@@ -1604,14 +1627,29 @@ fn accept(model: &mut Model, result: FeedShellResult) -> Command<FeedEffect, Eve
             shell_request(model.attempt, op)
         }
 
-        FeedShellResult::AliasResolved { addr, name } => match name {
+        FeedShellResult::AliasResolved { addr, name } => {
+            let addr = addr.to_lowercase();
+            model.alias_in_flight.remove(&addr);
             // `if (id?.name)` — an empty name is falsy in TS; same here.
-            Some(name) if !name.is_empty() => {
-                model.alias_map.insert(addr.to_lowercase(), name);
-                render()
+            if let Some(name) = name.filter(|name| !name.is_empty()) {
+                model.alias_map.insert(addr, name);
+                model.alias_unshown += 1;
             }
-            _ => Command::done(),
-        },
+            // Names render in batches: the first at once (the rows on screen
+            // are the first asked), then 2, 4, … up to ALIAS_RENDER_BATCH_MAX
+            // at a time, and whatever is left when the last answer of the
+            // batch is in. 200 names are a dozen renders, not 200, and each
+            // render rebuilds every row. A lookup that never answers holds
+            // nothing back for long: every tick's read renders.
+            let batch_over = model.alias_in_flight.is_empty();
+            if model.alias_unshown > 0 && (batch_over || model.alias_unshown >= model.alias_goal) {
+                model.alias_unshown = 0;
+                model.alias_goal = (model.alias_goal * 2).clamp(1, ALIAS_RENDER_BATCH_MAX);
+                render()
+            } else {
+                Command::done()
+            }
+        }
 
         // The `.finally()` port: the tombstone drops on failure too, so a
         // failed delete lets the next reload resurrect the row — ported
@@ -3245,6 +3283,10 @@ fn shell_request(attempt: u64, operation: FeedOperation) -> Command<FeedEffect, 
 }
 
 impl super::SplitEffect for FeedEffect {
+    /// Every change to the feed's view renders (`tests/app_activity_feed.rs`,
+    /// `every_change_renders`), and its name answers render in batches, so the
+    /// host rebuilds the 200 rows only when they moved.
+    const RENDERS_EVERY_CHANGE: bool = true;
     type Op = FeedOperation;
     fn into_shell(self) -> Option<crux_core::Request<FeedOperation>> {
         match self {

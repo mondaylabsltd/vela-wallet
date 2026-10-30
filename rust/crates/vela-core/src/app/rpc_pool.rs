@@ -2581,6 +2581,9 @@ fn request(model: &mut Model, operation: RpcOperation) -> Command<RpcEffect, Eve
 
 impl super::SplitEffect for RpcEffect {
     type Op = RpcOperation;
+    /// Each call's remaining endpoints move at every step of every call;
+    /// only a shell that hedges reads them ([`RpcPoolView::pending_urls`]).
+    const VOLATILE_VIEW_KEYS: &'static [&'static str] = &["pending_urls"];
     fn into_shell(self) -> Option<crux_core::Request<RpcOperation>> {
         match self {
             RpcEffect::Render(_) => None,
