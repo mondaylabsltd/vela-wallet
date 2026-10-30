@@ -1,6 +1,8 @@
 # PeerConnect JavaScript client (vendored)
 
-The transport under WalletPair (`src/lib/walletpair/`): end-to-end encrypted
+The transport under WalletPair (whose messages the core's
+`multisig_outside` machines speak; `src/lib/multisig/shell/peer.ts` binds
+this client for them): end-to-end encrypted
 two-peer rooms through a relay that reads nothing and keeps nothing. Copied
 from PeerConnect's built `js/` package, because PeerConnect is not yet
 published to a registry — with one local addition, `Connection.reconnectNow()`
