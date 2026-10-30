@@ -3,7 +3,7 @@
  * home watches its balance — a move between two readings is a payment the
  * balances must read again for. Only the wire is mocked.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /** Per chain, what `eth_getBalance` answers (a hex), or `'down'`. */
 const wire = new Map<number, string>();
@@ -20,8 +20,12 @@ vi.mock('./rpc-pool', () => ({
 }));
 
 import {
+	decimalToBase,
+	MAX_ASKS,
 	onNativeBalanceMoved,
+	RECHECK_MS,
 	resetNativeWatchForTests,
+	setShownNative,
 	watchNativeBalances
 } from './native-watch';
 
@@ -68,5 +72,68 @@ describe('watchNativeBalances', () => {
 		);
 		wire.set(1, '0x6');
 		expect(await watchNativeBalances(ADDR, [1, 100])).toBe(true);
+	});
+});
+
+/** Arc Testnet: its coin is USDC, 18 places natively. */
+const ARC = 5042002;
+const HALF = 5n * 10n ** 17n;
+const hex = (wei: bigint) => `0x${wei.toString(16)}`;
+
+describe('held against what the home shows (r4a-17)', () => {
+	afterEach(() => vi.useRealTimers());
+
+	it('a coin that landed before the first reading is still asked for', async () => {
+		const heard: string[] = [];
+		onNativeBalanceMoved((address) => heard.push(address));
+		setShownNative(() => 0n); // the home settled on nothing
+		wire.set(ARC, hex(HALF)); // …and the first reading already holds 0.5
+		expect(await watchNativeBalances(ADDR, [ARC])).toBe(true);
+		expect(heard).toEqual([ADDR]);
+	});
+
+	it('a re-read that did not land asks again after a while, a few times at most', async () => {
+		vi.useFakeTimers();
+		let shown = 0n;
+		setShownNative(() => shown);
+		const heard: string[] = [];
+		onNativeBalanceMoved((address) => heard.push(address));
+		wire.set(ARC, '0x0');
+		expect(await watchNativeBalances(ADDR, [ARC])).toBe(false);
+		wire.set(ARC, hex(HALF));
+		expect(await watchNativeBalances(ADDR, [ARC])).toBe(true);
+		// The home's re-read did not reach Arc (429): still 0 shown.
+		vi.advanceTimersByTime(30_000);
+		expect(await watchNativeBalances(ADDR, [ARC])).toBe(false);
+		vi.advanceTimersByTime(RECHECK_MS);
+		expect(await watchNativeBalances(ADDR, [ARC])).toBe(true);
+		for (let i = 2; i < MAX_ASKS; i++) {
+			vi.advanceTimersByTime(RECHECK_MS);
+			expect(await watchNativeBalances(ADDR, [ARC])).toBe(true);
+		}
+		vi.advanceTimersByTime(RECHECK_MS);
+		expect(await watchNativeBalances(ADDR, [ARC])).toBe(false);
+		expect(heard).toHaveLength(MAX_ASKS);
+		// The home caught up: quiet, and the next deposit is a move at once.
+		shown = HALF;
+		expect(await watchNativeBalances(ADDR, [ARC])).toBe(false);
+		wire.set(ARC, hex(2n * HALF));
+		expect(await watchNativeBalances(ADDR, [ARC])).toBe(true);
+	});
+
+	it('nothing settled to hold it against: two readings decide, as before', async () => {
+		setShownNative(() => undefined);
+		wire.set(ARC, hex(HALF));
+		expect(await watchNativeBalances(ADDR, [ARC])).toBe(false);
+		wire.set(ARC, hex(2n * HALF));
+		expect(await watchNativeBalances(ADDR, [ARC])).toBe(true);
+		expect(await watchNativeBalances(ADDR, [ARC])).toBe(false);
+	});
+
+	it('reads the home figure exactly', () => {
+		expect(decimalToBase('0.5', 18)).toBe(HALF);
+		expect(decimalToBase('12', 6)).toBe(12_000_000n);
+		expect(decimalToBase('0.1563871', 6)).toBeUndefined();
+		expect(decimalToBase('1e3', 18)).toBeUndefined();
 	});
 });
