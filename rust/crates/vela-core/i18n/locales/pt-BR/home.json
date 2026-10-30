@@ -238,6 +238,7 @@
         "notNeeded": "Não é necessário",
         "sendLink": "Enviar link",
         "approvesInVela": "Aprova no Vela pelo próprio dispositivo: {{names}}. Envie este link a eles.",
+        "eitherWay": "Ainda não se sabe como aprovam: {{names}}. Podem aprovar no Vela com este link ou com a própria carteira pelo link de carteira externa.",
         "contractMembers": "{{names}}: uma conta de contrato inteligente aprova pelo próprio app (ex.: outro Safe). O Vela ainda não consegue coletar essas aprovações.",
         "rejectCancel": "Cancelar",
         "noOutsideSigner": "nenhum membro está neste dispositivo, e todos aprovam no Vela pelo próprio dispositivo — peça a um deles para propor",

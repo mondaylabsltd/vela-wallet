@@ -17,8 +17,6 @@
 import { fillTemplate } from '$lib/i18n/fill';
 import { pluralForm } from '$lib/i18n/plural';
 import type { MultisigMessages } from '../messages';
-import { multisig } from './store.svelte';
-import { sameAddress } from './kernel';
 import type { MultisigWaiting } from '../generated/MultisigWaiting';
 import { proposalsHost } from '../shell/proposals-host.svelte';
 
@@ -81,13 +79,14 @@ class Presence {
 		return read ? fromMachine(read) : null;
 	}
 
-	/** Whether a multisig other than `shown` (the address on screen) has something waiting. */
-	othersWaiting(shown: string | null): boolean {
-		return multisig.accounts.some((a) => {
-			if (shown && sameAddress(a.address, shown)) return false;
-			const w = this.of(a.address);
-			return !!w && w.needsYou + w.ready > 0;
-		});
+	/**
+	 * Whether a multisig other than the one shown has something waiting —
+	 * the machine's word (`others_waiting`: every multisig here but the one
+	 * it follows, which is the one on screen; all of them when a Vela account
+	 * is shown).
+	 */
+	get othersWaiting(): boolean {
+		return proposalsHost.view?.others_waiting ?? false;
 	}
 
 	/** Read every multisig not shown again (the machine's `others_tick`: one round at a time). */

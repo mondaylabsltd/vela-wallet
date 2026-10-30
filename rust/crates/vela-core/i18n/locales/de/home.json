@@ -237,6 +237,7 @@
         "notNeeded": "Nicht nötig",
         "sendLink": "Link senden",
         "approvesInVela": "Genehmigt in Vela auf dem eigenen Gerät: {{names}}. Schick ihnen diesen Link.",
+        "eitherWay": "Noch nicht bekannt, wie sie genehmigen: {{names}}. Sie können in Vela mit diesem Link genehmigen oder mit ihrer eigenen Wallet über den Link für externe Wallets.",
         "contractMembers": "{{names}}: Ein Smart-Contract-Konto genehmigt in seiner eigenen App (z. B. ein anderer Safe). Vela kann diese Genehmigungen noch nicht einholen.",
         "rejectCancel": "Abbrechen",
         "noOutsideSigner": "kein Mitglied ist auf diesem Gerät, und alle Mitglieder genehmigen in Vela auf ihrem eigenen Gerät — bitte eines von ihnen, es vorzuschlagen",

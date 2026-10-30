@@ -428,11 +428,6 @@ vi.mock('../core/execute', () => {
 		relayRefused: async () => fake.refused
 	};
 });
-vi.mock('../core/preflight.svelte', () => ({
-	PREVIEW_FRESH_MS: 15_000,
-	UNPRICED_FRESH_MS: 5_000,
-	PREVIEW_CAP_MS: 15_000
-}));
 vi.mock('../core/chain', () => ({ ChainUnavailableError: class extends Error {} }));
 vi.mock('../core/service', () => ({ ServiceUnavailableError: class extends Error {} }));
 vi.mock('../core/owners', () => ({

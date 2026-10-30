@@ -237,6 +237,7 @@
         "notNeeded": "Không cần",
         "sendLink": "Gửi liên kết",
         "approvesInVela": "Phê duyệt trong Vela trên thiết bị của họ: {{names}}. Hãy gửi họ liên kết này.",
+        "eitherWay": "Chưa rõ họ phê duyệt bằng cách nào: {{names}}. Họ có thể phê duyệt trong Vela bằng liên kết này, hoặc bằng ví riêng qua liên kết ví bên ngoài.",
         "contractMembers": "{{names}}: tài khoản hợp đồng thông minh phê duyệt từ ứng dụng riêng (ví dụ một Safe khác). Vela chưa thể thu thập những phê duyệt đó.",
         "rejectCancel": "Hủy",
         "noOutsideSigner": "không có thành viên nào trên thiết bị này, và mọi thành viên đều phê duyệt trong Vela trên thiết bị của họ — hãy nhờ một người đề xuất",

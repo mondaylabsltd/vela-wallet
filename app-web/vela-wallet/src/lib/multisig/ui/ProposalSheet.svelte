@@ -111,7 +111,6 @@
 	import AuthorityNotice from './AuthorityNotice.svelte';
 	import { ChainUnavailableError } from '../core/chain';
 	import { progressLine } from '../core/progress';
-	import { PREVIEW_CAP_MS, PREVIEW_FRESH_MS, UNPRICED_FRESH_MS } from '../core/preflight.svelte';
 	import { proposalsHost, ProposeFailedError } from '../shell/proposals-host.svelte';
 	import {
 		actionError,
@@ -529,14 +528,12 @@
 		Object.entries(machine?.previews ?? {}).find(
 			([k]) => k.toLowerCase() === lookKey(executor)
 		)?.[1];
-	/** When each look was asked, and what stood then (a look past its cap is said as unchecked). */
-	let asked = $state<Record<string, { at: number; was: unknown }>>({});
-	let clockLook = $state(Date.now());
+	/** How often an open sheet asks the machine to look (it decides whether a look is stale). */
+	const ASK_LOOK_EVERY_MS = 5_000;
 	function look(executor: string): void {
 		// Asked from an effect: what it reads here is not what it depends on.
 		untrack(() => {
 			if (!item) return;
-			asked = { ...asked, [executor.toLowerCase()]: { at: Date.now(), was: lookOf(executor) } };
 			proposalsHost.send({
 				type: 'preview',
 				chain_id: chainId,
@@ -550,18 +547,13 @@
 		if (!lookKeys) return;
 		const executors = untrack(() => looked);
 		for (const e of executors) look(e);
-		// r5reg-14: asked every 5 s — a priced look still stands its 15 s; one
-		// that could not price or check it (an RPC outage) is taken again
-		// within 5 s of the network's return.
+		// r5reg-14: asked every few seconds while the sheet is open — the
+		// machine decides whether a look is stale (a priced one stands its
+		// 15 s, an unpriced one 5 s), never runs two at once, and says a look
+		// past its cap as unchecked.
 		const timer = setInterval(() => {
-			clockLook = Date.now();
-			for (const e of executors) {
-				const at = untrack(() => asked[e.toLowerCase()]?.at ?? 0);
-				const now = untrack(() => previewOf(localOwners([e])[0] ?? null));
-				const soon = !now || now.kind === 'unpriced' || now.kind === 'unchecked';
-				if (Date.now() - at >= (soon ? UNPRICED_FRESH_MS : PREVIEW_FRESH_MS)) look(e);
-			}
-		}, UNPRICED_FRESH_MS);
+			for (const e of executors) look(e);
+		}, ASK_LOOK_EVERY_MS);
 		return () => clearInterval(timer);
 	});
 	/** The token a `short` look is about, worded (`tokenInfo`; the chain's coin by its symbol). */
@@ -581,13 +573,6 @@
 	function previewOf(owner: LocalOwner | null): ExecutionPreview | null {
 		if (!owner || !looked.some((e) => sameAddress(e, owner.address))) return null;
 		const value = lookOf(owner.address);
-		const sent = asked[owner.address.toLowerCase()];
-		// Round 5: a look that has not answered within its cap is said as not checked.
-		if (sent && value === sent.was && clockLook - sent.at >= PREVIEW_CAP_MS) {
-			return value === undefined
-				? { kind: 'unchecked' }
-				: previewFrom(value, chainId, wordsFor(value));
-		}
 		return value === undefined ? null : previewFrom(value, chainId, wordsFor(value));
 	}
 	/** Someone here who can pay the fee — the one picked unless the person picks. */
@@ -1086,28 +1071,21 @@
 		)
 	);
 	/**
-	 * Owners still to approve whose wallets are elsewhere: an outside wallet
-	 * can sign for a plain account — a queued transaction too (its approval
-	 * waits like any other). Never for a Vela account (ms-11, r4-9): one the
-	 * index knows, one that approved with its passkey or this device keeps as
-	 * one (r4a-9) — its key is a passkey, and it approves in Vela, from the
-	 * link. Never for a smart contract account either (r7: code at its
-	 * address, no index record) — it approves from its own app, which Vela
-	 * can't collect yet, and that is said (`contractMissing`). One nothing says
-	 * (`unsure`) is offered the Vela way first and the outside wallet's beside
-	 * it — never alone: its row's "Send link", then "Approve with another
-	 * wallet" (r7, restored beside it). Nothing is offered once enough have
-	 * approved.
+	 * r7-8: the machine's one partition of the members still to approve —
+	 * each said once: `in_vela` (something shows a Vela account: it approves
+	 * in Vela, from the link — never an outside wallet, ms-11/r4-9), `outside`
+	 * (the outside-wallet link: a plain account, or one nothing says, beside
+	 * the Vela way), `either` (nothing says yet: both ways, its own line),
+	 * `contract` (it approves from its own app, which Vela can't collect yet:
+	 * said, nothing offered). Nothing once enough approved (r4D-6).
 	 */
-	const outside = $derived(
-		enough
-			? []
-			: missingOwners.filter((o) => kinds.get(o) === 'wallet' || kinds.get(o) === 'unsure')
-	);
+	const partOf = (list: readonly string[] | undefined): string[] =>
+		(list ?? []).filter((o) => missingOwners.some((x) => sameAddress(x, o)));
+	const outside = $derived(partOf(machineSigners?.outside));
 	/** Vela members elsewhere still to approve: they approve in Vela, from the link. */
-	const elsewhere = $derived(
-		enough ? [] : missingOwners.filter((o) => kinds.get(o) === 'vela' || kinds.get(o) === 'unsure')
-	);
+	const elsewhere = $derived(partOf(machineSigners?.in_vela));
+	/** Members nothing says how they sign yet: either way, said once (r7-8). */
+	const either = $derived(partOf(machineSigners?.either));
 
 	/**
 	 * r4C-13: the one link to send a member whose wallet is elsewhere — the
@@ -1123,16 +1101,20 @@
 					safeTxHash
 				})
 	);
-	/** Members still to approve who approve in Vela (not this device's, not surely outside wallets). */
+	/**
+	 * Members still to approve the Vela link is for: Vela's, nothing-says-yet
+	 * ones, and those still being read (never this device's, never a
+	 * contract or a surely outside wallet).
+	 */
 	const velaMissing = $derived(
-		!item
+		enough
 			? []
-			: (members?.owners ?? []).filter(
+			: missingOwners.filter(
 					(o) =>
 						localOwners([o]).length === 0 &&
-						kinds.get(o) !== 'contract' &&
-						(!outside.some((x) => sameAddress(x, o)) || elsewhere.some((x) => sameAddress(x, o))) &&
-						!item.approvals.some((a) => a.counts && sameAddress(a.owner, o))
+						(elsewhere.some((x) => sameAddress(x, o)) ||
+							either.some((x) => sameAddress(x, o)) ||
+							kinds.get(o) === null)
 				)
 	);
 	/**
@@ -1140,9 +1122,7 @@
 	 * own app (EIP-1271), which Vela can't collect yet: said, and neither the
 	 * Vela link nor an outside wallet offered for them.
 	 */
-	const contractMissing = $derived(
-		enough ? [] : missingOwners.filter((o) => kinds.get(o) === 'contract')
-	);
+	const contractMissing = $derived(partOf(machineSigners?.contract));
 	let outsideCopied = $state(false);
 	async function copyOutsideLink() {
 		try {
@@ -1691,15 +1671,20 @@
 								<button type="button" class="external" onclick={onExternal}
 									>{m.external.signWithWallet}</button
 								>
-							{:else if !drafting && elsewhere.some((o) => sameAddress(o, owner))}
+							{:else if !drafting && (elsewhere.some((o) => sameAddress(o, owner)) || either.some((o) => sameAddress(o, owner)))}
 								<!-- A Vela member elsewhere approves in Vela, from the link (r4-9);
-								     one that may be either is offered the Vela way first (r4a-9)
-								     and its own wallet's beside it (r7). -->
+								     one nothing says yet is offered the Vela way first (r4a-9)
+								     and its own wallet's beside it (r7), worded as either (r7-8). -->
 								{m.proposal.waiting} ·
 								<button
 									type="button"
 									class="external"
-									title={fillTemplate(m.proposal.approvesInVela, { names: names.label(owner) })}
+									title={fillTemplate(
+										either.some((o) => sameAddress(o, owner))
+											? m.proposal.eitherWay
+											: m.proposal.approvesInVela,
+										{ names: names.label(owner) }
+									)}
 									onclick={canShare ? shareLink : copyLink}>{m.proposal.sendLink}</button
 								>{#if kinds.get(owner) === 'unsure' && !busy}
 									·
@@ -2168,6 +2153,14 @@
 					<p class="fine" data-testid="approves-in-vela">
 						{fillTemplate(m.proposal.approvesInVela, {
 							names: elsewhere.map((o) => names.label(o)).join(', ')
+						})}
+					</p>
+				{/if}
+				{#if either.length > 0}
+					<!-- r7-8: nothing says how they sign yet — said once, both ways offered. -->
+					<p class="fine" data-testid="either-way">
+						{fillTemplate(m.proposal.eitherWay, {
+							names: either.map((o) => names.label(o)).join(', ')
 						})}
 					</p>
 				{/if}

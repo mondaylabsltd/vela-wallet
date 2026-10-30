@@ -330,6 +330,8 @@ pub fn view_more(s: &mut State) -> MoreView {
         stale: s.stale,
         history_unreadable: s.history_unreadable.clone(),
         loading: s.loading,
+        nothing_shown: !items.iter().any(|i| i.status != ProposalStatus::Done)
+            && s.missing.is_empty(),
     });
     let mut timelines = BTreeMap::new();
     if let Some(f) = &followed {

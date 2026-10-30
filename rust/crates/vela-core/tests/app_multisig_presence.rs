@@ -254,9 +254,16 @@ fn the_waiting_group_says_where_its_list_stands() {
     assert!(waiting_note(&history).unwrap().retry());
     let loading = ListFacts {
         loading: true,
-        ..base
+        nothing_shown: true,
+        ..base.clone()
     };
     assert_eq!(waiting_note(&loading), Some(WaitingNote::Checking));
+    // Over rows, the rows speak: "checking" only with nothing shown (W9).
+    let over_rows = ListFacts {
+        loading: true,
+        ..base
+    };
+    assert_eq!(waiting_note(&over_rows), None);
 }
 
 // -- what an execution from this device counts (executed.test.ts) ------------------------

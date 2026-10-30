@@ -268,6 +268,8 @@ export interface MultisigMessages {
 		sendLink: string;
 		/** r4-9: Vela members elsewhere approve from the link (`{{names}}`). */
 		approvesInVela: string;
+		/** r7-8: members nothing says how they sign yet (`{{names}}`): either way, said once. */
+		eitherWay: string;
 		/** r7: smart contract members still to approve (`{{names}}`): from their own app, not collected yet. */
 		contractMembers: string;
 		/** r4D-14: the way back from Reject. */
@@ -1042,6 +1044,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		notNeeded: '',
 		sendLink: '',
 		approvesInVela: '',
+		eitherWay: '',
 		contractMembers: '',
 		rejectCancel: '',
 		noOutsideSigner: ''

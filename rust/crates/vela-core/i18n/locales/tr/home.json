@@ -237,6 +237,7 @@
         "notNeeded": "Gerekmiyor",
         "sendLink": "Bağlantı gönder",
         "approvesInVela": "Kendi cihazındaki Vela’da onaylar: {{names}}. Onlara bu bağlantıyı gönderin.",
+        "eitherWay": "Nasıl onaylayacakları henüz bilinmiyor: {{names}}. Bu bağlantıyla Vela’da ya da harici cüzdan bağlantısıyla kendi cüzdanlarıyla onaylayabilirler.",
         "contractMembers": "{{names}}: akıllı sözleşme hesabı kendi uygulamasından onaylar (ör. başka bir Safe). Vela bu onayları henüz toplayamıyor.",
         "rejectCancel": "Vazgeç",
         "noOutsideSigner": "bu cihazda hiçbir üye yok ve her üye kendi cihazındaki Vela’da onaylıyor — üyelerden birinden önermesini isteyin",

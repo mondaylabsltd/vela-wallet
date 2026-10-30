@@ -3,4 +3,4 @@
 /**
  * Why a ready transaction cannot run here now (`blockOf`'s word).
  */
-export type MultisigReadyBlock = "fails" | "nobodyPays";
+export type MultisigReadyBlock = { "kind": "fails", why: unknown, } | { "kind": "nobodyPays" };

@@ -237,6 +237,7 @@
         "notNeeded": "Tidak diperlukan",
         "sendLink": "Kirim tautan",
         "approvesInVela": "Menyetujui di Vela dari perangkatnya sendiri: {{names}}. Kirimkan tautan ini kepada mereka.",
+        "eitherWay": "Belum diketahui cara mereka menyetujui: {{names}}. Mereka bisa menyetujui di Vela dengan tautan ini, atau dengan dompet sendiri lewat tautan dompet luar.",
         "contractMembers": "{{names}}: akun kontrak pintar menyetujui dari aplikasinya sendiri (mis. Safe lain). Vela belum bisa mengumpulkan persetujuan itu.",
         "rejectCancel": "Batal",
         "noOutsideSigner": "tidak ada anggota di perangkat ini, dan setiap anggota menyetujui di Vela dari perangkatnya sendiri — minta salah satu dari mereka untuk mengusulkannya",

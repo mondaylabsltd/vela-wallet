@@ -272,6 +272,9 @@ pub struct ListFacts {
     pub stale: bool,
     pub history_unreadable: Vec<u64>,
     pub loading: bool,
+    /// The group shows no row (no open transaction, no network missing):
+    /// only then is "checking" said — over rows, the rows speak.
+    pub nothing_shown: bool,
 }
 
 /// The waiting group's note; `None`: nothing to say of the list.
@@ -298,7 +301,7 @@ pub fn waiting_note(f: &ListFacts) -> Option<WaitingNote> {
             chain_ids: f.history_unreadable.clone(),
         });
     }
-    f.loading.then_some(WaitingNote::Checking)
+    (f.loading && f.nothing_shown).then_some(WaitingNote::Checking)
 }
 
 // ---------------------------------------------------------------------------

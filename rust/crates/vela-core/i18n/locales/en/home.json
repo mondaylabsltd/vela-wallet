@@ -237,6 +237,7 @@
         "notNeeded": "Not needed",
         "sendLink": "Send link",
         "approvesInVela": "Approves in Vela on their own device: {{names}}. Send them this link.",
+        "eitherWay": "Not known yet how they approve: {{names}}. They can approve in Vela with this link, or with their own wallet using the outside-wallet link.",
         "contractMembers": "{{names}}: a smart contract account approves from its own app (e.g. another Safe). Vela can't collect those approvals yet.",
         "rejectCancel": "Cancel",
         "noOutsideSigner": "no member is on this device, and every member approves in Vela on their own device — ask one of them to propose it",

@@ -237,6 +237,7 @@
         "notNeeded": "不需要",
         "sendLink": "傳送連結",
         "approvesInVela": "在自己裝置上的 Vela 中批准：{{names}}。把這個連結傳給他們。",
+        "eitherWay": "尚未知道他們如何批准：{{names}}。他們可以用這個連結在 Vela 中批准，或透過外部錢包連結用自己的錢包批准。",
         "contractMembers": "{{names}}：智慧合約帳戶在自己的應用程式中核准（例如另一個 Safe）。Vela 暫時還無法收取這些核准。",
         "rejectCancel": "取消",
         "noOutsideSigner": "此裝置上沒有成員，而每位成員都在自己裝置上的 Vela 中批准 — 請其中一位來提議",
