@@ -36,7 +36,9 @@ for marker in \
   'Luniffi/vela_dev_fixtures/' \
   'fixtureAssert'
 do
-  if cat "$WORK"/classes*.dex | LC_ALL=C grep -aqF "$marker"; then
+  # grep the files themselves: `cat | grep -q` under pipefail reads as "absent"
+  # when grep exits early and cat takes the SIGPIPE.
+  if LC_ALL=C grep -aqF "$marker" "$WORK"/classes*.dex; then
     problems+=("the dex carries $marker")
   fi
 done
