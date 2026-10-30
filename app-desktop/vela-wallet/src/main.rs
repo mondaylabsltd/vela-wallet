@@ -13,6 +13,9 @@ mod core_host;
 mod ctap;
 mod dev_env;
 mod dev_probe;
+// F0.5: developer launch inputs (a debug, test or `dev-fixtures` build only).
+#[cfg(any(test, debug_assertions, feature = "dev-fixtures"))]
+mod dev_seed;
 mod diag;
 mod executor;
 mod explore;
@@ -445,6 +448,15 @@ fn main() {
         // style removed), then the theme, the language and the text size are
         // in force for the first frame rather than the second.
         crate::executor::preferences::boot();
+        // F0.5: a developer build pointed at a local harness writes its
+        // endpoints, RPC overrides and relay into the store first, so every
+        // reader below sees them.
+        #[cfg(any(test, debug_assertions, feature = "dev-fixtures"))]
+        crate::dev_seed::apply();
+        // Which of Vela's networks the person's lists show, settled once
+        // per device (owner decision 2026-10-29) before anything lists or
+        // reads networks — never a network read and then hidden.
+        crate::executor::network_admin::ensure_shown_networks();
         // Spec 081 FR-002: the person's own public-key index, applied before
         // anything asks one a question. This used to happen inside
         // `OnboardingPage::new`, so a session that started already signed in —

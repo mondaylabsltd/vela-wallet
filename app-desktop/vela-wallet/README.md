@@ -761,6 +761,21 @@ VELA_THEME=light VELA_LANG=zh cargo run    # both
 | `VELA_LANG` | [loc.rs:20](src/loc.rs#L20) | First entry in the chain `VELA_LANG` → `LC_ALL` → `LC_MESSAGES` → `LANG`. Unrecognized tags fall back to `en` |
 | `VELA_SKIP_LAUNCH_ANIMATION=1` | [theme.rs:218](src/theme.rs#L218) | Skips the launch animation outright. For tests and screenshots — the deterministic alternative to sleeping ~1.9 s |
 | `VELA_UPDATE_GOLDEN=1` | [launch_animation.rs:869](src/ui/launch_animation.rs#L869) | Rewrites the golden references instead of asserting against them. Review the diff — a change here means the animation changed on this platform |
+| `VELA_SERVICE_ENDPOINTS` | [dev_seed.rs](src/dev_seed.rs) | JSON object of stored endpoint names (`bundlerServiceURL`, `genesisServiceURL`, `passkeyIndexURL`, `ethereumDataURL`, `fiatRatesURL`) merged into `vela.serviceEndpoints` at launch — a local relay or mailbox |
+| `VELA_RPC_OVERRIDES` | [dev_seed.rs](src/dev_seed.rs) | JSON object chain id → RPC URL written into `vela.networkConfig` at launch (each chain's other settings kept) — a fork |
+| `VELA_PEERCONNECT_RELAY` | [dev_seed.rs](src/dev_seed.rs) | Written to `vela.peerconnectRelay` (the web's key), for multisig once it lands here |
+
+The last three are writes into the store, as Settings would write them —
+pair them with `VELA_STATE_DIR=<scratch dir>`. Against the multisig fork
+harness (`scripts/onchain/multisig-fork/up.sh`):
+
+```sh
+VELA_STATE_DIR=/tmp/vela-desk VELA_PARALLEL_SPACE=1 \
+VELA_SERVICE_ENDPOINTS='{"bundlerServiceURL":"http://127.0.0.1:9190","genesisServiceURL":"http://127.0.0.1:9187"}' \
+VELA_RPC_OVERRIDES='{"100":"http://127.0.0.1:9145"}' \
+VELA_PEERCONNECT_RELAY=ws://127.0.0.1:9192 \
+cargo dev
+```
 
 ---
 
