@@ -25,6 +25,7 @@
 	import Button from '$lib/ui/Button.svelte';
 	import { indexName, missingTitle } from '../core/activity.svelte';
 	import { proposals } from '../core/proposals.svelte';
+	import type { MultisigReviewOut } from '../core/kernel';
 	import { proposalsHost } from '../shell/proposals-host.svelte';
 	import { useRecordWords } from '../core/records';
 	import { multisig, type MultisigAccount } from '../core/store.svelte';
@@ -139,6 +140,19 @@
 	 * deployed one can gain a module since. What is found is kept on it and
 	 * shown (Settings, the switcher, its transactions); nothing is silent.
 	 */
+	/**
+	 * The one review of the SafeTx an outside wallet is asked to sign — the
+	 * proposals machine's (`reviews[<chainId>:<safeTxHash>]`): the sheet draws
+	 * it as the connect page does, one reading for every signer (§3.6).
+	 */
+	const externalReview = $derived.by(() => {
+		const r = externalSigning.request;
+		if (!r) return null;
+		const key = `${r.chainId}:${r.safeTxHash}`.toLowerCase();
+		const reviews = proposals.view?.reviews ?? {};
+		const hit = Object.entries(reviews).find(([k]) => k.toLowerCase() === key);
+		return (hit?.[1] ?? null) as MultisigReviewOut | null;
+	});
 	const recheckKey = $derived(
 		multisig.accounts.map((a) => `${a.address}:${a.chainIds.join(',')}`).join(';')
 	);
@@ -559,6 +573,7 @@
 			{signing}
 			{locale}
 			request={externalSigning.request}
+			review={externalReview}
 			{wide}
 			{closeLabel}
 		/>

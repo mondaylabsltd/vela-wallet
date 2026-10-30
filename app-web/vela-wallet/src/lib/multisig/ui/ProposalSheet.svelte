@@ -70,6 +70,7 @@
 	} from '$lib/agent/advice.svelte';
 	import { adviceCard } from '$lib/agent/advisor';
 	import ReviewTech from './ReviewTech.svelte';
+	import MemberChangeRule from './MemberChangeRule.svelte';
 	import { names } from '../core/names.svelte';
 	import {
 		actionRecipient,
@@ -210,7 +211,9 @@
 	 */
 	onMount(() => multisig.checkOn(account.address, chainId));
 	const networkVerdict = $derived(multisig.verdictOn(account.address, chainId));
-	const checked = $derived<Finding[] | null>(networkVerdict.checked ? networkVerdict.findings : null);
+	const checked = $derived<Finding[] | null>(
+		networkVerdict.checked ? networkVerdict.findings : null
+	);
 
 	/**
 	 * Whether this device signs here: not at all where its genesis is
@@ -1475,39 +1478,16 @@
 				/>
 			{/if}
 			{#if change && memberReading}
-				<!-- r4a-1: who it adds, removes or replaces, the rule before and
-				     after, on which network — said before anything else. -->
-				<section class="change" data-testid="member-change">
-					{#if item.status !== 'done'}
-						<p class="change-caution" role="alert">
-							<Icon icon={UTILITY_ICONS['triangle-alert']} size="sm" />
-							<span>{change.caution}</span>
-						</p>
-					{/if}
-					<ul class="change-list">
-						{#each memberReading.changes as c, i (i)}
-							<li>
-								<span class="change-what">{change.changes[i]}</span>
-								{#each [c.removed, c.added].filter((a) => a !== null) as address, j (j)}
-									<span class="change-who">
-										<Identicon
-											svg={identiconSvgForClient(address ?? '')}
-											size="compact"
-											address={address ?? ''}
-										/>
-										<code class="change-address">{eip55(address ?? '')}</code>
-									</span>
-								{/each}
-							</li>
-						{/each}
-					</ul>
-					{#if item.status !== 'done'}
-						<p class="change-rule" data-testid="member-change-rule">{change.rule}</p>
-						{#if change.doesNotFit}
-							<p class="warn" role="alert">{change.doesNotFit}</p>
-						{/if}
-					{/if}
-				</section>
+				<!-- r4a-1 / r7-11: who it adds, removes or replaces, the rule before and
+				     after, on which network — said before anything else, drawn as every
+				     signer reads it (the connect page too). -->
+				<MemberChangeRule
+					{m}
+					changes={memberReading}
+					network={chainName(chainId)}
+					{who}
+					done={item.status === 'done'}
+				/>
 			{/if}
 			{#if reading}
 				<CallReview {reading} m={signing} badges={partyBadges} names={partyNames} />
@@ -2455,66 +2435,6 @@
 		margin: var(--space-lg) 0 0;
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-fg-muted);
-	}
-
-	/* r4a-1: a member change, read before anything else. */
-	.change {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-sm);
-		margin: var(--space-md) 0 var(--space-lg);
-		padding: var(--space-md);
-		border-radius: var(--radius-lg);
-		background: var(--color-error-soft);
-	}
-
-	.change-caution {
-		display: flex;
-		gap: var(--space-sm);
-		align-items: flex-start;
-		margin: 0;
-		font-weight: var(--weight-semibold);
-		color: var(--color-error-base);
-	}
-
-	.change-list {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-sm);
-		margin: 0;
-		padding: 0;
-		list-style: none;
-	}
-
-	.change-list li {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-xs);
-	}
-
-	.change-what {
-		font-weight: var(--weight-semibold);
-		color: var(--color-fg-base);
-	}
-
-	.change-who {
-		display: flex;
-		align-items: center;
-		gap: var(--space-sm);
-		min-width: 0;
-	}
-
-	.change-address {
-		font-family: var(--font-mono);
-		font-size: calc(var(--text-sm) * var(--text-scale, 1));
-		color: var(--color-fg-muted);
-		overflow-wrap: anywhere;
-	}
-
-	.change-rule {
-		margin: 0;
-		font-variant-numeric: tabular-nums;
-		color: var(--color-fg-base);
 	}
 
 	.line-note {
