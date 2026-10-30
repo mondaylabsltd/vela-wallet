@@ -1383,10 +1383,13 @@ pub fn call_json(method: &str, args_json: &str) -> Result<String, CoreError> {
             arg(&args, "approved")?,
             arg(&args, "threshold")?,
         )),
+        #[cfg(feature = "crux")]
         other => match crate::multisig_rules::call_json(other, &args) {
             Some(answer) => answer,
             None => Err(err(format!("unknown multisig link method: {other}"))),
         },
+        #[cfg(not(feature = "crux"))]
+        other => Err(err(format!("unknown multisig link method: {other}"))),
     }
 }
 

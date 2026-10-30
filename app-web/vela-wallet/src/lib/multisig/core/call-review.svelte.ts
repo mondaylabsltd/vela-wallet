@@ -36,6 +36,7 @@ import { localizedTerms, readBy, requestBlocks } from '$lib/signing/live';
 import type { SigningMessages } from '$lib/signing/messages';
 import type { Block } from '$lib/signing/model';
 import type { Action } from './kernel';
+import * as wasm from '../../../../../../rust/pkg-web/vela_core.js';
 
 /** The call a SafeTx makes: `value` in base units, decimal (the core's `Action::Call`). */
 export interface InnerCall {
@@ -44,42 +45,32 @@ export interface InnerCall {
 	data: string;
 }
 
-/**
- * The calls of `action` the signing sheet's machines read: a call to another
- * contract, or every call of a batch that is more than transfers (one of
- * transfers alone keeps its own lines). `null`: nothing for them to read.
- */
-export function readableCalls(action: Action | null): InnerCall[] | null {
-	if (action?.kind === 'call') return [action];
-	if (action?.kind !== 'batch' || action.calls.every((c) => c.action.kind === 'transfer')) {
-		return null;
-	}
-	return action.calls.map((c) => ({ to: c.to, value: c.value, data: c.data }));
+/** One of the core's pure multisig rules (`multisig_rules::calls`). */
+function rule<T>(method: string, args: Record<string, unknown>): T {
+	return JSON.parse(wasm.multisigLinkCall(method, JSON.stringify(args))) as T;
 }
 
 /**
- * §3.6: the calls the one review reads as the signing sheet would — every
- * call and every transfer, alone or in a batch, as a site would have sent
- * it from the multisig — so a member sees the same blocks a Vela account
- * would for the same intent. A member change, a rename or a cancellation is
- * the multisig's own reading (`null`).
+ * The calls of `action` the signing sheet's machines read — the core's
+ * (`calls.readable`): a call to another contract, or every call of a batch
+ * that is more than transfers (one of transfers alone keeps its own lines).
+ * `null`: nothing for them to read.
+ */
+export function readableCalls(action: Action | null): InnerCall[] | null {
+	return rule<InnerCall[] | null>('calls.readable', { action });
+}
+
+/**
+ * §3.6: the calls the one review reads as the signing sheet would — the
+ * core's (`calls.reviewed`): every call and every transfer, alone or in a
+ * batch, as a site would have sent it from the multisig. A member change,
+ * a rename or a cancellation is the multisig's own reading (`null`).
  */
 export function reviewedCalls(
 	action: Action | null,
 	tx: { to: string; value: string; data: string }
 ): InnerCall[] | null {
-	if (action?.kind === 'call') return [action];
-	if (action?.kind === 'batch')
-		return action.calls.map((c) => ({ to: c.to, value: c.value, data: c.data }));
-	if (action?.kind === 'transfer') {
-		try {
-			const value = BigInt(tx.value || '0').toString();
-			return [{ to: tx.to, value, data: tx.data || '0x' }];
-		} catch {
-			return null;
-		}
-	}
-	return null;
+	return rule<InnerCall[] | null>('calls.reviewed', { action, tx });
 }
 
 /** A value as a site sends one: a hex quantity (the core reads one that is not hex as unreadable, RC4). */

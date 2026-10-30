@@ -179,7 +179,9 @@ describe('a multisig batch of calls reads call by call', () => {
 			calls: [leg(transfer), leg({ kind: 'call', ...APPROVE_MAX })]
 		});
 		expect(mixed).toHaveLength(2);
-		expect(readableCalls({ kind: 'call', ...BLIND })).toEqual([{ kind: 'call', ...BLIND }]);
+		expect(readableCalls({ kind: 'call', ...BLIND })).toEqual([
+			{ to: BLIND.to, value: BLIND.value, data: BLIND.data }
+		]);
 		expect(readableCalls(null)).toBeNull();
 	});
 });

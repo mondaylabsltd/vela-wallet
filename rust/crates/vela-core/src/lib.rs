@@ -55,6 +55,7 @@ pub mod multisig_review;
 /// The multisig's pure rules a shell asks one at a time (relay, labels,
 /// network order, Activity rows, the calls a review reads), through
 /// `multisig_link::call_json`.
+#[cfg(feature = "crux")]
 pub mod multisig_rules;
 pub mod multisig_watch;
 pub mod passkey;
