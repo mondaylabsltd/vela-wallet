@@ -681,10 +681,23 @@ pub struct ItemSigners {
     /// The members on its network that have not approved yet, in the
     /// chain's order, each with how it signs.
     pub rows: Vec<SignerRow>,
-    /// Of them, those an outside wallet may be asked to sign for
-    /// (`plainAccounts`): never this device's, a Vela account, or a smart
-    /// contract account.
+    /// Of them, those an outside wallet may be asked to sign for — the
+    /// outside-wallet link names them: a plain account, or one nothing
+    /// says (beside the Vela way). Never this device's, a Vela account, a
+    /// smart contract account, or one still being read.
     pub outside: Vec<String>,
+    /// r7-8: those that approve in Vela on their own device (the Vela link)
+    /// — only a member something shows is a Vela account; never an outside
+    /// member nothing has said yet.
+    pub in_vela: Vec<String>,
+    /// r7-8: those nothing says how they sign yet: either way is offered,
+    /// and said once — never listed as Vela's and the outside wallet's both.
+    pub either: Vec<String>,
+    /// Smart contract members: they approve from their own app, which Vela
+    /// can't collect yet (said; no link offered).
+    pub contract: Vec<String>,
+    /// Enough approvals are in: nobody else is asked (every list empty).
+    pub enough: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -1002,15 +1015,33 @@ impl State {
             })
             .cloned()
             .collect();
+        let rows: Vec<SignerRow> = missing
+            .iter()
+            .map(|o| SignerRow {
+                owner: o.clone(),
+                kind: signers::signer_kind(&facts(o)),
+            })
+            .collect();
+        // Nobody else is asked once enough approved, nor for one done or one
+        // Vela cannot read (r4D-6).
+        let enough = item.approved >= item.threshold;
+        let asks = !enough && item.status != ProposalStatus::Done && item.review.action.is_some();
+        let of = |kinds: &[SignerKind]| -> Vec<String> {
+            if !asks {
+                return Vec::new();
+            }
+            rows.iter()
+                .filter(|r| r.kind.is_some_and(|k| kinds.contains(&k)))
+                .map(|r| r.owner.clone())
+                .collect()
+        };
         Some(ItemSigners {
-            rows: missing
-                .iter()
-                .map(|o| SignerRow {
-                    owner: o.clone(),
-                    kind: signers::signer_kind(&facts(o)),
-                })
-                .collect(),
-            outside: signers::plain_accounts(&missing, |o| facts(o)),
+            outside: of(&[SignerKind::Wallet, SignerKind::Unsure]),
+            in_vela: of(&[SignerKind::Vela]),
+            either: of(&[SignerKind::Unsure]),
+            contract: of(&[SignerKind::Contract]),
+            enough,
+            rows,
         })
     }
 

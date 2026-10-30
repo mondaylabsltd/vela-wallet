@@ -1127,6 +1127,64 @@ fn each_remaining_member_signs_as_the_one_rule_says() {
     // Only a plain account is ever offered to an outside wallet.
     assert_eq!(signers.outside.len(), 1);
     assert!(signers.outside[0].eq_ignore_ascii_case(PLAIN));
+    // r7-8: each member is said once — the Vela account under "approves in
+    // Vela", the one nothing says on its own "either way" line, never both;
+    // the outside link never names a Vela account.
+    let has = |list: &[String], who: &str| list.iter().any(|x| x.eq_ignore_ascii_case(who));
+    assert!(has(&signers.in_vela, VELA_ON_BASE));
+    assert!(!has(&signers.in_vela, PLAIN), "{signers:?}");
+    assert!(has(&signers.either, PLAIN));
+    assert!(!has(&signers.outside, VELA_ON_BASE));
+    assert!(has(&signers.contract, OTHER_SAFE));
+    assert!(!signers.enough);
+}
+
+/// r7-8: an outside member the person said is a wallet is never listed as
+/// approving in Vela, and a Vela member the person said is one is never in
+/// the outside-wallet link.
+#[test]
+fn a_kept_kind_puts_each_member_on_one_side() {
+    const EVE: &str = "0x00000000000000000000000000000000000000e5";
+    const BOB: &str = "0x00000000000000000000000000000000000000b0";
+    let me = fixture(0).address;
+    let g = genesis(&[&me, BOB, EVE], 2, "0x42");
+    let mut row = world::stored_row(&g, &[100], true);
+    row["members"] = json!({
+        BOB: {"name": "Bob", "kind": "passkey"},
+        EVE: {"name": "Eve", "kind": "wallet"},
+    });
+    let account: MultisigAccount = serde_json::from_value(row).unwrap();
+    let mut world = World {
+        locals: vec![fixture(0)],
+        ..World::default()
+    };
+    world.deploy(100, &g.address, DeployedSafe::clean(&[&me, BOB, EVE], 2));
+    let mut sut = Sut::new();
+    let ev = start(&world, vec![100]);
+    run(&mut sut, &mut world, ev);
+    run(
+        &mut sut,
+        &mut world,
+        Event::Follow {
+            account: Some(account),
+        },
+    );
+    let hash = hash_of(&propose(&mut sut, &mut world, transfer("1"), None));
+    run(
+        &mut sut,
+        &mut world,
+        Event::ReadSigners {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+        },
+    );
+    let signers = sut.view().signers[&format!("100:{hash}")].clone();
+    let has = |list: &[String], who: &str| list.iter().any(|x| x.eq_ignore_ascii_case(who));
+    assert!(has(&signers.in_vela, BOB), "{signers:?}");
+    assert!(!has(&signers.outside, BOB), "{signers:?}");
+    assert!(has(&signers.outside, EVE), "{signers:?}");
+    assert!(!has(&signers.in_vela, EVE), "{signers:?}");
+    assert!(signers.either.is_empty(), "{signers:?}");
 }
 
 // -- W8-M2b: a blind review, each executor's look, frozen facts, a used number, a reload --
