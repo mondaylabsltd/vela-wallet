@@ -35,10 +35,19 @@ data class SigningPageRow(
     val trusted: List<String> = emptyList(),
 )
 
+/**
+ * Vela's official signing page, as the core normalises it — what the list
+ * holds before the stored one is read. A constant rather than a literal in
+ * the view's default: the wire ruler (`scripts/check-native-wire.mjs`) reads
+ * a `//` as a comment, and a URL inside the parameter list hid every field
+ * of [SigningPagesView] from it.
+ */
+const val OFFICIAL_SIGNING_PAGE_URL = "https://sign.getvela.app/"
+
 @Serializable
 data class SigningPagesView(
     val pages: List<SigningPageRow> = listOf(
-        SigningPageRow(url = "https://sign.getvela.app/", domain = "getvela.app", official = true),
+        SigningPageRow(url = OFFICIAL_SIGNING_PAGE_URL, domain = "getvela.app", official = true),
     ),
     /** The saved pages as stored — what `signingVenueChoices` takes. */
     val saved: List<SigningPage> = emptyList(),

@@ -166,7 +166,9 @@ class NetworkAdminExecutorTest {
         val stored = JSONObject(store.values[KeyValueStore.Keys.SERVICE_ENDPOINTS])
         // The same key onboarding's endpoint sheet reads — one storage home.
         assertEquals("https://index.example", stored.getString("passkeyIndexURL"))
-        assertEquals(4, stored.length())
+        // Five, the multisig service's (`genesisServiceURL`) with them, as the web writes it.
+        assertEquals(5, stored.length())
+        assertEquals("https://safe-genesis.getvela.app", stored.getString("genesisServiceURL"))
     }
 
     // -- retire_provider_keys (the core's `retire_provider_keys`) -------------
@@ -349,7 +351,8 @@ class NetworkAdminExecutorTest {
         // wrong shape by hand.
         val net = executor()
         assertEquals(
-            NetShellResult.StoreLoaded(),
+            // Nothing read — and the multisig service still one of the endpoints.
+            NetShellResult.StoreLoaded(multisig_service = true),
             net.neutralAnswer(NetOperation.ReadStore),
         )
         assertEquals(

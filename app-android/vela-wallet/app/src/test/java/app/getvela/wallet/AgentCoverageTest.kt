@@ -227,6 +227,7 @@ class AgentCoverageTest {
             "settings.renameSigningPage" to Place.None(BOUNDARY),
             "settings.resetWizard" to Place.Step("add_network"),
             "settings.searchNetworks" to Place.Step("add_network"),
+            "settings.setOnlyMine" to Place.Intent("set_only_my_node"),
             "settings.selectChain" to Place.Step("add_network"),
             "settings.startNetworks" to Place.Machine(BOOT),
             "themeRepository.setThemePreference" to Place.Intent("set_preference"),

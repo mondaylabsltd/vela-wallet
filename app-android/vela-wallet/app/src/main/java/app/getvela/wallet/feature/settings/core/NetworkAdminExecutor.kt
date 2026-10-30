@@ -70,6 +70,11 @@ class NetworkAdminExecutor(
                 network_configs = configs,
                 endpoints = decodeStoredEndpoints(store.read(KeyValueStore.Keys.SERVICE_ENDPOINTS)),
                 provider_keys = decodeProviderKeys(store.read(KeyValueStore.Keys.RPC_PROVIDERS)),
+                // The multisig service is one of this device's endpoints, as
+                // on the web: the core lists, probes and resets it with the
+                // other four. Where it points is a setting of the device,
+                // whichever surface reads it.
+                multisig_service = true,
                 // The device's shown Vela networks, settled (once, by the
                 // core) before the ledger reads them: never a list drawn
                 // before it. Absent: every network is shown.
@@ -97,7 +102,7 @@ class NetworkAdminExecutor(
             NetShellResult.Written
         }
 
-        // The core sends the COMPLETE merged record — four strings, written
+        // The core sends the COMPLETE merged record — five strings, written
         // verbatim. Merging here instead would mean two places deciding what an
         // unset endpoint is, and the onboarding sheet reads this same key.
         is NetOperation.WriteServiceEndpoints -> {
@@ -108,6 +113,8 @@ class NetworkAdminExecutor(
                     put("passkeyIndexURL", operation.endpoints.passkey_index_url)
                     put("bundlerServiceURL", operation.endpoints.bundler_service_url)
                     put("fiatRatesURL", operation.endpoints.fiat_rates_url)
+                    // The web's key for the multisig service (`genesisServiceURL`).
+                    put("genesisServiceURL", operation.endpoints.genesis_service_url)
                 }.toString(),
             )
             NetShellResult.Written
@@ -278,7 +285,7 @@ class NetworkAdminExecutor(
      */
     @Suppress("CyclomaticComplexMethod")
     fun neutralAnswer(operation: NetOperation): NetShellResult = when (operation) {
-        is NetOperation.ReadStore -> NetShellResult.StoreLoaded()
+        is NetOperation.ReadStore -> NetShellResult.StoreLoaded(multisig_service = true)
         is NetOperation.WriteCustomNetworks,
         is NetOperation.WriteNetworkConfigs,
         is NetOperation.WriteServiceEndpoints,
@@ -427,6 +434,7 @@ class NetworkAdminExecutor(
             passkey_index_url = record.optionalString("passkeyIndexURL"),
             bundler_service_url = record.optionalString("bundlerServiceURL"),
             fiat_rates_url = record.optionalString("fiatRatesURL"),
+            genesis_service_url = record.optionalString("genesisServiceURL"),
         )
     }
 
