@@ -480,7 +480,8 @@
     "rowExecute": "Thực thi {{number}}",
     "rowReject": "Từ chối {{number}}",
     "outcomeNotSent": "Đã ký, chưa gửi",
-    "nameFromRecord": "Tên được lưu cùng bản ghi của nó — bạn ký cho địa chỉ"
+    "nameFromRecord": "Tên được lưu cùng bản ghi của nó — bạn ký cho địa chỉ",
+    "linkDamaged": "Liên kết này bị hỏng — hãy xin một liên kết mới."
    },
    "import": {
     "or": "Hoặc nhập từ Safe{Wallet}",

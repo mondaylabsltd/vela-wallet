@@ -480,7 +480,8 @@
     "rowExecute": "#{{number}} を実行",
     "rowReject": "#{{number}} を拒否",
     "outcomeNotSent": "署名済み・未送信",
-    "nameFromRecord": "記録とともに保存された名前です — 署名の対象はアドレスです"
+    "nameFromRecord": "記録とともに保存された名前です — 署名の対象はアドレスです",
+    "linkDamaged": "このリンクは壊れています — 新しいリンクを頼んでください。"
    },
    "import": {
     "or": "または Safe{Wallet} から読み込む",

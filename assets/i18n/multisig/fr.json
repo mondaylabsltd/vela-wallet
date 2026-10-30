@@ -484,7 +484,8 @@
     "rowExecute": "Exécuter {{number}}",
     "rowReject": "Rejeter {{number}}",
     "outcomeNotSent": "Signé, pas encore envoyé",
-    "nameFromRecord": "Son nom tel qu'enregistré avec sa fiche — vous signez pour l'adresse"
+    "nameFromRecord": "Son nom tel qu'enregistré avec sa fiche — vous signez pour l'adresse",
+    "linkDamaged": "Ce lien est endommagé — demandez-en un nouveau."
    },
    "import": {
     "or": "Ou importer depuis Safe{Wallet}",
