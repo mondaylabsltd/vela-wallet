@@ -189,6 +189,31 @@ pub enum MultisigOperation {
         #[cfg_attr(feature = "bindings", ts(type = "unknown"))]
         params: Value,
     },
+    /// Simulate `calls` from `from` (the Safe) on `chain_id` — the signing
+    /// sheet's own simulation (`rpcSimulateReply`, `eth_simulateV1`), as
+    /// the multisig review reads it. Answered `simulated`, with `None`
+    /// when the pool gave up (the review says "could not check").
+    Simulate {
+        #[cfg_attr(feature = "bindings", ts(type = "number"))]
+        chain_id: u64,
+        from: String,
+        #[cfg_attr(feature = "bindings", ts(type = "unknown[]"))]
+        calls: Vec<crate::multisig_review::SimCall>,
+    },
+    /// What the send flow knows of a recipient (`resolveRecipientRisk`):
+    /// whether it is a contract, and whether this device sent to it before.
+    RecipientRisk {
+        #[cfg_attr(feature = "bindings", ts(type = "number"))]
+        chain_id: u64,
+        address: String,
+    },
+    /// Where a user operation stands with the relay (`pollUserOpStatus`):
+    /// answered `user_op_status`.
+    UserOpStatus {
+        #[cfg_attr(feature = "bindings", ts(type = "number"))]
+        chain_id: u64,
+        user_op_hash: String,
+    },
     /// Something the shell routes on: another machine to tell, rows to
     /// write, a screen to refresh. Answered `ack`.
     Notice { notice: Notice },
@@ -311,6 +336,22 @@ pub enum MultisigShellResult {
     },
     RiskAnswered {
         signs: bool,
+    },
+    /// The simulation's reply (the signing sheet's envelope), or `None`.
+    Simulated {
+        reply: Option<String>,
+    },
+    /// The relay's word on a user operation: `status` is one of
+    /// `pending`, `included`, `failed`, `rejected`, `not_found`; `None`:
+    /// it did not answer.
+    UserOpStatus {
+        status: Option<String>,
+        tx_hash: Option<String>,
+    },
+    /// A recipient's facts; `None`: unread.
+    RecipientFacts {
+        is_contract: Option<bool>,
+        first_time: Option<bool>,
     },
     /// The user operation is with the relay.
     CallsSent {
@@ -442,6 +483,18 @@ impl<Ev: Send + 'static> Io<Ev> {
     /// Ask the shell, and wait for its answer.
     pub async fn ask(&self, op: MultisigOperation) -> MultisigShellResult {
         self.ctx.request_from_shell(op).await
+    }
+
+    /// Run `f` alongside, in the same command (a resend that goes on after
+    /// the person was told it is kept).
+    pub fn spawn<F, Fut>(&self, f: F)
+    where
+        F: FnOnce(Io<Ev>) -> Fut,
+        Fut: std::future::Future<Output = ()> + Send + 'static,
+    {
+        let io = self.clone();
+        // Dropping the handle detaches the task; it runs to its end.
+        drop(self.ctx.spawn(move |_| f(io)));
     }
 
     /// Hand an event back to the machine's `update`.

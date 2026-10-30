@@ -109,6 +109,38 @@ fn modules_ret(list: &[String]) -> String {
 
 pub type RpcHook = Box<dyn FnMut(u64, &str, &Value) -> Option<Res>>;
 
+/// What an execution does once its user operation lands: the Safe's state
+/// after it, and the transaction that carried it (its `ExecutionSuccess`).
+#[derive(Clone, Debug)]
+pub struct Landing {
+    pub chain: u64,
+    pub safe: String,
+    pub after: DeployedSafe,
+    pub safe_tx_hash: String,
+    pub tx_hash: String,
+    pub user_op_hash: String,
+}
+
+impl World {
+    fn land(&mut self, l: Landing) {
+        self.deploy(l.chain, &l.safe, l.after);
+        self.receipts.insert(
+            l.tx_hash.to_ascii_lowercase(),
+            json!({"logs": [
+                {"address": l.safe, "topics": [
+                    "0x442e715f626346e8c54381002da614f62bee8d27386535b2521ec8540898556e",
+                    l.safe_tx_hash.to_ascii_lowercase()
+                ], "data": "0x"},
+                {"address": "0x0000000071727De22E5E9d8BAf0edAc6f37da032", "topics": [
+                    "0x49628fd1471006c1482da88028e9ce4dbb080b815c9b0344d39e5a8e6ec1419f",
+                    l.user_op_hash
+                ], "data": "0x"}
+            ]}),
+        );
+        self.user_op = Some(("included".to_owned(), Some(l.tx_hash)));
+    }
+}
+
 pub struct World {
     pub now: f64,
     pub store: BTreeMap<String, String>,
@@ -148,6 +180,13 @@ pub struct World {
     pub quote_answer: Option<Res>,
     pub notices: Vec<Notice>,
     pub random: u8,
+    /// What a sent user operation does on chain when it lands.
+    pub on_send: Option<Landing>,
+    /// The relay's word on a user operation: (status, tx hash).
+    pub user_op: Option<(String, Option<String>)>,
+    pub receipts: BTreeMap<String, Value>,
+    pub balances: BTreeMap<(u64, String), u128>,
+    pub sim_reply: Option<String>,
 }
 
 impl Default for World {
@@ -186,6 +225,11 @@ impl Default for World {
             quote_answer: None,
             notices: Vec::new(),
             random: 7,
+            on_send: None,
+            user_op: None,
+            receipts: BTreeMap::new(),
+            balances: BTreeMap::new(),
+            sim_reply: None,
         }
     }
 }
@@ -474,7 +518,36 @@ impl World {
                 "number": "0x64",
                 "timestamp": format!("0x{:x}", (self.now / 1000.0) as u64),
             })),
-            "eth_getLogs" => ok(json!([])),
+            "eth_getLogs" => {
+                let topics = &params[0]["topics"];
+                let hash = topics[1].as_str().unwrap_or("").to_ascii_lowercase();
+                let logs: Vec<Value> = self
+                    .receipts
+                    .iter()
+                    .filter(|(_, r)| {
+                        r["logs"].as_array().unwrap().iter().any(|l| {
+                            l["topics"][1]
+                                .as_str()
+                                .unwrap_or("")
+                                .eq_ignore_ascii_case(&hash)
+                        })
+                    })
+                    .map(|(tx, _)| json!({"transactionHash": tx, "blockNumber": "0x64"}))
+                    .collect();
+                ok(json!(logs))
+            }
+            "eth_getTransactionReceipt" => ok(self
+                .receipts
+                .get(&params[0].as_str().unwrap().to_ascii_lowercase())
+                .cloned()
+                .unwrap_or(Value::Null)),
+            "eth_getBalance" => ok(json!(format!(
+                "0x{:x}",
+                self.balances
+                    .get(&(chain, params[0].as_str().unwrap().to_ascii_lowercase()))
+                    .copied()
+                    .unwrap_or(10u128.pow(20))
+            ))),
             _ => Res::RpcError {
                 code: Some(-32601),
                 message: format!("{method} not here"),
@@ -593,6 +666,9 @@ impl World {
                 calls,
                 ..
             } => {
+                if let Some(landing) = self.on_send.take() {
+                    self.land(landing);
+                }
                 self.sent.push((
                     *chain_id,
                     from.clone(),
@@ -607,8 +683,25 @@ impl World {
                 })
             }
             Op::QuoteCalls { .. } => self.quote_answer.clone().unwrap_or(Res::Quoted {
-                quote: json!({"canPay": true, "fee": "0x1"}),
+                quote: json!({"kind": "quoted", "fee": {"token": null, "amount": "0x1"}, "totalGas": "0x1", "executorDeployed": true}),
             }),
+            Op::Simulate { .. } => Res::Simulated {
+                reply: self.sim_reply.clone(),
+            },
+            Op::RecipientRisk { .. } => Res::RecipientFacts {
+                is_contract: Some(false),
+                first_time: Some(false),
+            },
+            Op::UserOpStatus { .. } => match &self.user_op {
+                Some((s, tx)) => Res::UserOpStatus {
+                    status: Some(s.clone()),
+                    tx_hash: tx.clone(),
+                },
+                None => Res::UserOpStatus {
+                    status: Some("pending".to_owned()),
+                    tx_hash: None,
+                },
+            },
             Op::Notice { notice } => {
                 self.notices.push(notice.clone());
                 Res::Ack
