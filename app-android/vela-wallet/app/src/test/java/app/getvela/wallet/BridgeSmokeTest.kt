@@ -23,6 +23,7 @@ import app.getvela.wallet.feature.browser.core.ExploreOperation
 import app.getvela.wallet.feature.browser.core.ExploreShellResult
 import app.getvela.wallet.feature.browser.core.ExploreView
 import app.getvela.wallet.feature.signing.core.ClearOperation
+import app.getvela.wallet.feature.signing.core.ClearProbe
 import app.getvela.wallet.feature.signing.core.ClearShellResult
 import app.getvela.wallet.feature.signing.core.ClearSigningEvent
 import app.getvela.wallet.feature.signing.core.ClearSigningView
@@ -161,6 +162,7 @@ class BridgeSmokeTest {
                 is ClearOperation.SelectorDbLookup -> ClearShellResult.SelectorCandidates()
                 is ClearOperation.Timer -> ClearShellResult.TimedOut(op.token)
                 ClearOperation.Now -> ClearShellResult.Clock(1.0e12)
+                is ClearOperation.RpcGetCode -> ClearShellResult.RpcAnswer(ClearProbe.Code, op.chain_id, op.address, null, false)
             }
         }
         clear.dispatch(ClearSigningEvent.Cleared, ClearSigningEvent.serializer())

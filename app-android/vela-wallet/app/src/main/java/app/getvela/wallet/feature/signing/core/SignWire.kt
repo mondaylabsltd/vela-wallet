@@ -118,6 +118,9 @@ enum class ConfirmBlock {
 
     @SerialName("approval_choice") ApprovalChoice,
 
+    /** cs-10: the message continues past what has been in sight — scroll to read all of it. */
+    @SerialName("message_unread") MessageUnread,
+
     @SerialName("batch_unsettled") BatchUnsettled,
 
     @SerialName("fee_measuring") FeeMeasuring,

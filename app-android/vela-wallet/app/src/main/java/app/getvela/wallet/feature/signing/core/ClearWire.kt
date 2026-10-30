@@ -161,6 +161,12 @@ enum class ClearProbe {
     @SerialName("decimals") Decimals,
 
     @SerialName("symbol") Symbol,
+
+    /** The answer to [ClearOperation.RpcGetCode] (cs-13). */
+    @SerialName("code") Code,
+
+    /** `name()` of an NFT collection a `setApprovalForAll` grants. */
+    @SerialName("name") Name,
 }
 
 @Serializable
@@ -383,6 +389,16 @@ sealed class ClearOperation {
     @Serializable
     @SerialName("now")
     data object Now : ClearOperation()
+
+    /**
+     * cs-13: does the target have code? Asked only when the request said
+     * `probe_code`, before any name or descriptor is applied to it. Answered
+     * [ClearShellResult.RpcAnswer] with `probe = code`, `to = address`, the
+     * raw code (`null` when unreachable).
+     */
+    @Serializable
+    @SerialName("rpc_get_code")
+    data class RpcGetCode(val chain_id: Int, val address: String) : ClearOperation()
 }
 
 @Serializable
@@ -424,6 +440,10 @@ sealed class ClearSigningEvent {
         val value: String? = null,
         val chain_id: Int,
         val locale: ClearLocale = ClearLocale(),
+        /** The signing account — so a line can say "this account" (cs-2). */
+        val from: String? = null,
+        /** The core may ask for the target's code ([ClearOperation.RpcGetCode], cs-13): this shell answers it. */
+        val probe_code: Boolean = false,
     ) : ClearSigningEvent()
 
     /** 089 S1: a `wallet_sendCalls`, handed over whole — the core reads EVERY call. */
@@ -433,11 +453,18 @@ sealed class ClearSigningEvent {
         val params_json: String,
         val chain_id: Int,
         val locale: ClearLocale = ClearLocale(),
+        val from: String? = null,
+        val probe_code: Boolean = false,
     ) : ClearSigningEvent()
 
     @Serializable
     @SerialName("resolve_typed_data")
-    data class ResolveTypedData(val typed_data_json: String, val chain_id: Int, val locale: ClearLocale = ClearLocale()) : ClearSigningEvent()
+    data class ResolveTypedData(
+        val typed_data_json: String,
+        val chain_id: Int,
+        val locale: ClearLocale = ClearLocale(),
+        val from: String? = null,
+    ) : ClearSigningEvent()
 
     @Serializable
     @SerialName("message_presented")

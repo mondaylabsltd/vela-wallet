@@ -963,6 +963,12 @@ class AppContainer(private val app: Application) {
                         pool.call(chainId, "eth_simulateV1", params)
                     override suspend fun judgeDeltas(chainId: Int, wallet: String, deltas: List<app.getvela.wallet.feature.wallet.core.TrustAssetDelta>): app.getvela.wallet.feature.wallet.core.TrustSimView? =
                         this@AppContainer.wallet.judgeSimDeltas(wallet, chainId, deltas)
+                    // cs-13: the raw code as the chain gave it; an error or no answer is `null`.
+                    override suspend fun getCode(chainId: Int, address: String): String? {
+                        val body = (pool.call(chainId, "eth_getCode", listOf(address, "latest")) as? RpcResult.Body)?.json ?: return null
+                        if (body.optJSONObject("error") != null) return null
+                        return body.optString("result").takeIf { it.startsWith("0x") }
+                    }
                     override suspend fun ethCall(chainId: Int, to: String, data: String): Pair<String?, Boolean> {
                         val body = (pool.call(chainId, "eth_call", listOf(JSONObject().put("to", to).put("data", data), "latest")) as? RpcResult.Body)?.json
                             ?: return null to false
