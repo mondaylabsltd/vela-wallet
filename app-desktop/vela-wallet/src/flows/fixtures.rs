@@ -976,7 +976,9 @@ pub enum FlowBody {
     Assets(AssetsPanel),
     AddToken(AddToken),
     SendPick(SendPick),
-    SendForm(SendForm),
+    /// Boxed: the form is by far the largest body (clippy's
+    /// `large_enum_variant`), and every other panel would carry its size.
+    SendForm(Box<SendForm>),
     ContactPick(ContactPick),
     FeeToken(FeeTokenPick),
     BatchImport(BatchImport),
@@ -1832,8 +1834,8 @@ pub fn body(panel: FlowPanel, s: &FlowStrings) -> FlowBody {
         FlowPanel::Dt3 => FlowBody::AddToken(add_token(s, false)),
         FlowPanel::Dt3b => FlowBody::AddToken(add_token(s, true)),
         FlowPanel::Dsd1 => FlowBody::SendPick(send_pick(s)),
-        FlowPanel::Dsd2 => FlowBody::SendForm(send_form(s, false)),
-        FlowPanel::Dsd2b => FlowBody::SendForm(send_form(s, true)),
+        FlowPanel::Dsd2 => FlowBody::SendForm(Box::new(send_form(s, false))),
+        FlowPanel::Dsd2b => FlowBody::SendForm(Box::new(send_form(s, true))),
         FlowPanel::Dsd2c => FlowBody::BatchImport(batch_import(s)),
         FlowPanel::Dsd2e => FlowBody::ContactPick(contact_pick(s)),
         FlowPanel::Dsd2f => FlowBody::FeeToken(fee_token(s)),

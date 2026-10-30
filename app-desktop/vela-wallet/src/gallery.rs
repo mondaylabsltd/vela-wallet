@@ -417,7 +417,9 @@ pub fn currency_pin_flow(
         relay_sent_at_ms: None,
     };
     match body {
-        FlowBody::SendForm(_) => FlowBody::SendForm(crate::flows::live::send_form(&inputs)),
+        FlowBody::SendForm(_) => {
+            FlowBody::SendForm(Box::new(crate::flows::live::send_form(&inputs)))
+        }
         FlowBody::SendConfirm(_) => {
             FlowBody::SendConfirm(crate::flows::live::send_confirm(&inputs))
         }

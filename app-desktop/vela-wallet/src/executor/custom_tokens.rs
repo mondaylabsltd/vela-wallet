@@ -60,13 +60,11 @@ pub fn own_network_name(chain_id: u32) -> Option<String> {
     }
     if let Ok(Some(Value::Array(items))) = storage::read_value(storage::KEY_CUSTOM_NETWORKS) {
         for item in items {
-            if item.get("chainId").and_then(Value::as_u64) == Some(u64::from(chain_id)) {
-                if let Some(name) = item.get("displayName").and_then(Value::as_str) {
-                    if !name.trim().is_empty() {
+            if item.get("chainId").and_then(Value::as_u64) == Some(u64::from(chain_id))
+                && let Some(name) = item.get("displayName").and_then(Value::as_str)
+                    && !name.trim().is_empty() {
                         return Some(name.to_owned());
                     }
-                }
-            }
         }
     }
     None

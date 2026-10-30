@@ -344,8 +344,10 @@ pub fn probe_treasury(chain_id: u32) -> SendTreasuryProbe {
 // JSON-RPC, through the pool
 // ---------------------------------------------------------------------------
 
-static QUOTE_CACHE: Mutex<Option<HashMap<String, (Vec<FeeAssetQuote>, Instant)>>> =
-    Mutex::new(None);
+/// `chain:safe` → the relay's rows and when they were read.
+type QuoteCache = HashMap<String, (Vec<FeeAssetQuote>, Instant)>;
+
+static QUOTE_CACHE: Mutex<Option<QuoteCache>> = Mutex::new(None);
 
 /// A decimal-looking string or number, kept as text so conversion never
 /// loses precision (`parseDecimalString`).

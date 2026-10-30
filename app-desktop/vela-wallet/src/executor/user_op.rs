@@ -313,7 +313,7 @@ pub enum Signer<'a> {
     /// (R5) — the one key the page may sign with, the account's sign-in key
     /// (founder, 2026-09-26). `None` for a record from before it, whose every
     /// founding key may answer.
-    TrustedSigner {
+    TrustedPage {
         ask: &'a Ask,
         page: String,
         channel: &'a Channel,
@@ -373,7 +373,7 @@ impl Signer<'_> {
         }
         match self {
             Self::Passkey(sign) => sign(digest),
-            Self::TrustedSigner {
+            Self::TrustedPage {
                 ask,
                 page,
                 channel,
@@ -965,15 +965,14 @@ fn submit_tempo(
     // when there is one, never below the static model.
     let realistic_gas = estimated_gas.map_or(static_gas, |est| est.max(static_gas));
     let calculated = tempo_reimbursement(realistic_gas, gas_price, TEMPO_FEE_TOKEN_DECIMALS);
-    if let Some(quoted) = &quoted_fee {
-        if !quoted.recipient.eq_ignore_ascii_case(&collector)
-            || quoted.amount < tempo_minimum_fee_token_units(TEMPO_FEE_TOKEN_DECIMALS)
+    if let Some(quoted) = &quoted_fee
+        && (!quoted.recipient.eq_ignore_ascii_case(&collector)
+            || quoted.amount < tempo_minimum_fee_token_units(TEMPO_FEE_TOKEN_DECIMALS))
         {
             return Err(other(
                 "The gas quote has expired. Please review the updated fee and try again.",
             ));
         }
-    }
     // The relay ignores a speed on Tempo (no priority fee to buy), but the
     // name still travels with the fee it was shown beside, as on the web.
     let tier = quoted_fee.as_ref().and_then(|fee| fee.tier);
@@ -1977,7 +1976,7 @@ mod tests {
         let heard = std::cell::RefCell::new(Vec::new());
         let edges = |edge: CeremonyEdge| heard.borrow_mut().push(edge);
         let signed = {
-            let mut signer = Signer::TrustedSigner {
+            let mut signer = Signer::TrustedPage {
                 ask: &ask,
                 page: "https://sign.getvela.app/".to_owned(),
                 channel: &channel,
@@ -2015,7 +2014,7 @@ mod tests {
         // dismissed passkey sheet — and the sheet has its sentence.
         let declining = refuses_once(&channel, "user_rejected");
         let declined = {
-            let mut signer = Signer::TrustedSigner {
+            let mut signer = Signer::TrustedPage {
                 ask: &ask,
                 page: "https://sign.getvela.app/".to_owned(),
                 channel: &channel,
@@ -2076,7 +2075,7 @@ mod tests {
                 SAFE,
                 &original,
                 &keys,
-                Signer::TrustedSigner {
+                Signer::TrustedPage {
                     ask: &ask,
                     page: "https://sign.getvela.app/".to_owned(),
                     channel: &channel,
@@ -2175,7 +2174,7 @@ mod tests {
             SAFE,
             &original,
             &keys,
-            Signer::TrustedSigner {
+            Signer::TrustedPage {
                 ask: &ask,
                 page: "https://sign.getvela.app/".to_owned(),
                 channel: &channel,

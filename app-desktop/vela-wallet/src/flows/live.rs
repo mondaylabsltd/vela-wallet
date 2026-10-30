@@ -1192,6 +1192,9 @@ pub fn receive_list(address: &str, s: &FlowStrings) -> ReceiveList {
 
 /// One network's QR, with the person's real address under it.
 #[must_use]
+// A builder over the screen's inputs, each a different source; a struct of
+// them would be one more name for the same list.
+#[allow(clippy::too_many_arguments)]
 pub fn receive_qr(
     address: &str,
     name: &str,
@@ -1281,6 +1284,9 @@ pub fn receive_qr(
 /// token instead: its symbol in the title, its contract above the account
 /// card, its logo in the centre — the web's `liveReceiveQr` asset variant.
 #[must_use]
+// A builder over the screen's inputs, each a different source; a struct of
+// them would be one more name for the same list.
+#[allow(clippy::too_many_arguments)]
 pub fn receive_token_qr(
     address: &str,
     name: &str,
@@ -1917,7 +1923,7 @@ fn chain_notice(chain_id: u32, template: &str) -> (u32, u32, SharedString, Share
     (
         chain_id,
         crate::settings::model::chain_tint(u64::from(chain_id)).unwrap_or(0x8A_8F_98),
-        SharedString::from(crate::settings::model::lettermark(&name)),
+        crate::settings::model::lettermark(&name),
         SharedString::from(crate::wallet::fill(template, "network", &name)),
     )
 }
@@ -2819,11 +2825,10 @@ pub fn split_amount_edited(
     amount: String,
 ) -> Vec<SendRecipientDraft> {
     let mut next = rows.to_vec();
-    if let Some(row) = next.get_mut(index) {
-        if let Some(clean) = amount_edited(&amount, &amount_to_input(&row.amount)) {
+    if let Some(row) = next.get_mut(index)
+        && let Some(clean) = amount_edited(&amount, &amount_to_input(&row.amount)) {
             row.amount = clean;
         }
-    }
     next
 }
 
@@ -4606,6 +4611,7 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
 ///
 /// The core's curve (`tx_tracker::landing_pace`, spec 099 R6).
 #[must_use]
+#[cfg(test)]
 pub fn ring_progress(elapsed_s: u64, typical_s: u64) -> Option<f32> {
     let typical = u16::try_from(typical_s).ok()?;
     #[allow(clippy::cast_precision_loss, reason = "seconds as ms")]

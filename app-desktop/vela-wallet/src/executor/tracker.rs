@@ -56,8 +56,10 @@ const MAX_TRACKED_RECEIPTS: usize = 64;
 const TICK: Duration = Duration::from_secs(3);
 
 /// hash → (sender, authentic logs) of the receipt that confirmed it.
-static RECEIPTS: Mutex<Option<HashMap<String, (Option<String>, Vec<TrustReceiptLog>)>>> =
-    Mutex::new(None);
+/// hash → (sender, authentic logs).
+type ReceiptMap = HashMap<String, (Option<String>, Vec<TrustReceiptLog>)>;
+
+static RECEIPTS: Mutex<Option<ReceiptMap>> = Mutex::new(None);
 
 fn normalize(hash: &str) -> String {
     hash.to_lowercase()
@@ -555,7 +557,7 @@ pub fn start(cx: &mut App) {
             cx.background_executor().timer(TICK).await;
             // Re-fetched each tick: a sign-out drops every resident, and the
             // next sign-in's tracker must be the one that gets the ticks.
-            let tracker = cx.update(|cx| resident::resident::<TxTracker>(cx));
+            let tracker = cx.update(resident::resident::<TxTracker>);
             tracker.update(cx, |resident, cx| resident.dispatch(Event::Tick, cx));
             // Anything the sweep just converged, handed to the feed within one
             // tick rather than at its own 30 s pass: the row a person is
@@ -564,7 +566,7 @@ pub fn start(cx: &mut App) {
                 .swap(0, Ordering::SeqCst)
                 .saturating_add(WRITTEN.swap(0, Ordering::SeqCst));
             if patched > 0 {
-                let _ = cx.update(|cx| crate::executor::activity_feed::reconciled(patched, cx));
+                cx.update(|cx| crate::executor::activity_feed::reconciled(patched, cx));
             }
         }
     })

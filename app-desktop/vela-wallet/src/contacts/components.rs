@@ -120,7 +120,7 @@ pub fn section_letter(theme: &Theme, letter: gpui::SharedString) -> Div {
             div()
                 .font_weight(gpui::FontWeight::MEDIUM)
                 .text_color(theme.fg_subtle)
-                .child(SharedString::from(letter)),
+                .child(letter),
         )
         .child(div().flex_1().h(px(1.)).bg(theme.divider))
 }

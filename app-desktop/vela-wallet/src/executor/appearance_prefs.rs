@@ -81,6 +81,7 @@ impl TextScale {
     }
 
     /// Which stop the thumb sits on.
+    #[cfg(test)]
     #[must_use]
     pub fn index(self) -> usize {
         TEXT_SCALES

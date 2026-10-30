@@ -2386,7 +2386,6 @@ mod tests {
             now_ms: 20_000.0,
             typical_s: Some(5),
             chain_name: "Gnosis".to_owned(),
-            seen_submitted_ms: None,
         };
         // One source: the sheet's line is the core's `failure_refusal_key`,
         // the same key the tracker entry carries — drawn with no tracker

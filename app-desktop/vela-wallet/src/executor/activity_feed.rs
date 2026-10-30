@@ -736,7 +736,7 @@ pub fn start_ticks(cx: &mut App) {
             // Re-fetched each tick, for the reason the tracker's loop states:
             // a sign-out drops every resident, and the next sign-in's feed is
             // the one that must get the ticks.
-            let feed = cx.update(|cx| resident::resident::<ActivityFeed>(cx));
+            let feed = cx.update(resident::resident::<ActivityFeed>);
             feed.update(cx, |resident, cx| resident.dispatch(event, cx));
         }
     })

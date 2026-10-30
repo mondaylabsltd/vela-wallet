@@ -1271,7 +1271,6 @@ mod tests {
 
             let mismatch = row
                 .rpc_chain_mismatch
-                .clone()
                 .unwrap_or_else(|| unreachable!("the write was NOT refused: {row:?}"));
             println!(
                 "  refused: card is chain {}, endpoint reported chain {}",

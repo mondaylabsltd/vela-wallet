@@ -2117,7 +2117,7 @@ fn message_blocks(message: &ClearMessageView, s: &SigningStrings) -> Vec<Block> 
     if message.non_printable {
         out.push(Block::Warning {
             tone: Tone::Caution,
-            text: SharedString::from(s.warn_hex_message.clone()),
+            text: s.warn_hex_message.clone(),
         });
     }
 
@@ -2452,6 +2452,9 @@ pub fn off_chain(clear: &ClearSigningView) -> bool {
 /// An off-chain signature costs nothing, and saying "network fee: 0" would
 /// invite the reader to look for one.
 #[must_use]
+// A builder over the screen's inputs, each a different source; a struct of
+// them would be one more name for the same list.
+#[allow(clippy::too_many_arguments)]
 pub fn fee_model(
     clear: &ClearSigningView,
     fee: &FeeView,
@@ -4108,8 +4111,8 @@ mod tests {
         let detected = vela_core::app::approval_guard::detect_calldata_approval(
             Some("0xdd"),
             Some(&format!(
-                "0x095ea7b3{}{}",
-                format!("{:0>64}", "1111111111111111111111111111111111111111"),
+                "0x095ea7b3{:0>64}{}",
+                "1111111111111111111111111111111111111111",
                 "f".repeat(64)
             )),
         );

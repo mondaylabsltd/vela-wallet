@@ -492,7 +492,7 @@ pub fn start_ticks(cx: &mut App) {
             cx.background_executor().timer(period).await;
             // Re-fetched each tick: a sign-out drops every resident, and the
             // next sign-in's hero is the one that must get the ticks.
-            let balance = cx.update(|cx| resident::resident::<BalanceDashboard>(cx));
+            let balance = cx.update(resident::resident::<BalanceDashboard>);
             balance.update(cx, |resident, cx| {
                 resident.dispatch(
                     Event::RefreshRequested {

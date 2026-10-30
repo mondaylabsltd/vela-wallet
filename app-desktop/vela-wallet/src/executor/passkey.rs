@@ -938,7 +938,7 @@ fn run_hybrid(ceremony: &Ceremony, for_get: bool) -> Result<Box<dyn Cable>, Pass
     // our own authenticators never needed the offer: the channel is chosen by
     // the ADVERT — a PSM in its suffix means BLE, none means the tunnel — and
     // `establish_hybrid` only takes the L2CAP branch where this desktop can
-    // connect it (`cable::BLE_CHANNEL_SUPPORTED` gates the branch, not the QR).
+    // connect it (a `cfg` on the branch, not the QR).
     (ceremony.qr)(Some(session.qr_payload(unix_seconds(), for_get)));
 
     let ephemeral_seed = random(32);

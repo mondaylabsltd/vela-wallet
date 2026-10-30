@@ -407,23 +407,6 @@ pub fn currency_row_value(view: &CurrencyView, locale: &str) -> SharedString {
     }
 }
 
-/// `1.0 MB`, `42 KB`, `0 KB`. The page's other figure (`human_bytes`) splits
-/// amount from unit for the hero; a row wants one string.
-#[must_use]
-pub fn human_size_public(bytes: usize) -> String {
-    human_size(bytes)
-}
-
-fn human_size(bytes: usize) -> String {
-    #[allow(clippy::cast_precision_loss)]
-    let kb = bytes as f64 / 1024.0;
-    if kb >= 1024.0 {
-        format!("{:.1} MB", kb / 1024.0)
-    } else {
-        format!("{} KB", kb.round() as u64)
-    }
-}
-
 /// The 货币 dropdown: every currency the rate endpoint can price, each beside
 /// what the row's sample figure looks like in it.
 ///

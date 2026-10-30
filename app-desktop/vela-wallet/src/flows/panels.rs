@@ -226,8 +226,11 @@ pub struct AddressField {
     pub focus: FocusHandle,
     pub value: String,
     pub placeholder: SharedString,
-    pub on_change: Box<dyn Fn(String, &mut Window, &mut App) + 'static>,
+    pub on_change: OnChange,
 }
+
+/// A field's keystroke handler: the text as it now stands.
+pub type OnChange = Box<dyn Fn(String, &mut Window, &mut App) + 'static>;
 
 /// Wrap an element so it answers to a click, when the page bound one.
 ///

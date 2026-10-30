@@ -239,7 +239,7 @@ pub fn signer_for<'a>(
         return Signer::Unreachable { block };
     }
     match page {
-        Some(page) => Signer::TrustedSigner {
+        Some(page) => Signer::TrustedPage {
             ask,
             page,
             channel,

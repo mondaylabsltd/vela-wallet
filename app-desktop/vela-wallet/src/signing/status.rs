@@ -73,9 +73,6 @@ pub struct Clock {
     /// The chain's usual inclusion time (`network_admin`'s table).
     pub typical_s: Option<u32>,
     pub chain_name: String,
-    /// When this column first saw the operation accepted — the ring's start
-    /// until the tracker has its own `submitted_at_ms`.
-    pub seen_submitted_ms: Option<f64>,
 }
 
 /// Where this approval's signature stands (083 W11) — the executor's word,
@@ -746,7 +743,6 @@ mod tests {
             now_ms,
             typical_s: Some(5),
             chain_name: "Gnosis".to_owned(),
-            seen_submitted_ms: None,
         }
     }
 

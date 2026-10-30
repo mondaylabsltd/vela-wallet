@@ -1082,9 +1082,6 @@ pub struct WalletPage {
     /// What moves the balance, watched (078 W-01 / W-02).
     money_watch: MoneyWatch,
     signer_page_focus: Option<gpui::FocusHandle>,
-    /// Spec 075: the tunnel, the same way — typed until Save, and the core
-    /// says whether it is one (https/wss only, loopback allowed).
-    tunnel_focus: Option<gpui::FocusHandle>,
     /// Which network card's probes have been asked for, so opening one asks
     /// once rather than on every frame.
     settings_probed_network: Option<u32>,
@@ -1881,7 +1878,6 @@ impl WalletPage {
             feedback: FeedbackDraft::new(cx),
             money_watch: MoneyWatch::default(),
             signer_page_focus: None,
-            tunnel_focus: None,
             settings_probed_network: None,
             settings_probed_panel: None,
             settings_fix_chain: None,
@@ -4651,9 +4647,7 @@ impl WalletPage {
     /// `None` on the design surfaces, which is what stops a fixture panel from
     /// mutating a real ledger.
     fn selected_contact_address(&mut self, cx: &mut Context<Self>) -> Option<gpui::SharedString> {
-        if self.identity.is_none() {
-            return None;
-        }
+        self.identity.as_ref()?;
         // The CORE's order, as `self.contact` is (`open_contact_by_address`).
         // This read the A–Z sections — searched, at that — so with the panel
         // on Alice, its copy button copied Bob, and its delete asked to delete
@@ -4670,9 +4664,7 @@ impl WalletPage {
         &mut self,
         cx: &mut Context<Self>,
     ) -> Option<contacts_fixtures::ContactDetailModel> {
-        if self.identity.is_none() {
-            return None;
-        }
+        self.identity.as_ref()?;
         let view = resident::resident::<Contacts>(cx).read(cx).view();
         if !view.loaded {
             return None;
@@ -7485,7 +7477,7 @@ impl WalletPage {
                             ))
                         }
                         FlowPanel::Dsd2 | FlowPanel::Dsd2b => {
-                            flow_fixtures::FlowBody::SendForm(flows_live::send_form(&inputs))
+                            flow_fixtures::FlowBody::SendForm(Box::new(flows_live::send_form(&inputs)))
                         }
                         FlowPanel::Dsd2e => {
                             let contacts = resident::resident::<Contacts>(cx).read(cx).view();
@@ -7605,6 +7597,7 @@ impl WalletPage {
     /// Bound from `FlowPanel::step`, so an affordance is live exactly when the
     /// mocks draw somewhere for it to go — the chevron and the destination
     /// cannot drift apart.
+    #[allow(clippy::too_many_arguments)]
     fn flow_actions(
         panel: FlowPanel,
         live: bool,
@@ -13130,42 +13123,6 @@ impl WalletPage {
             ))
     }
 
-    /// What one 清除 is about, in the row's own words.
-    ///
-    /// Nothing new is written for it: the title is the row's label, the body is
-    /// its GROUP's label — which is where the consequence is spelled out — and
-    /// the confirm word is the row's own action. iOS composes the same sheet
-    /// the same way.
-    fn clear_storage_target(
-        &self,
-        id: Option<&'static str>,
-    ) -> (SharedString, SharedString, SharedString, bool) {
-        let groups = settings_fixtures::storage_groups(&self.settings);
-        let Some(id) = id else {
-            return (
-                self.settings.storage_clear_all.clone(),
-                self.settings.storage_caches.clone(),
-                self.settings.storage_clear_all.clone(),
-                false,
-            );
-        };
-        for group in &groups {
-            if let Some(item) = group.items.iter().find(|item| item.id == id) {
-                return (
-                    item.label.clone(),
-                    group.label.clone(),
-                    item.action.clone(),
-                    item.destructive,
-                );
-            }
-        }
-        (
-            self.settings.storage_clear.clone(),
-            SharedString::from(""),
-            self.settings.storage_clear.clone(),
-            true,
-        )
-    }
 
     /// DST8 — the build, the technical inventory, the three links.
     fn settings_about(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
@@ -13247,10 +13204,9 @@ impl WalletPage {
                 .iter()
                 .filter(|chain| chain.testnet == testnet)
                 .count()
-                + self
+                + if self
                     .identity
-                    .is_some()
-                    .then(|| {
+                    .is_some() { {
                         resident::resident::<NetworkAdmin>(cx)
                             .read(cx)
                             .view()
@@ -13258,8 +13214,7 @@ impl WalletPage {
                             .iter()
                             .filter(|row| row.is_custom && row.is_testnet == testnet)
                             .count()
-                    })
-                    .unwrap_or(0),
+                    } } else { 0 },
         )
         .unwrap_or(u32::MAX);
         for (label, value, mono) in settings_fixtures::about_rows_with(&self.settings, networks) {
@@ -14684,9 +14639,9 @@ impl WalletPage {
                 host.view
                     .pending_op_hash
                     .clone()
-                    .map(|op| (op, host.chain_id, host.seen_submitted_ms, host.tab.clone()))
+                    .map(|op| (op, host.chain_id, host.tab.clone()))
             });
-            if let Some((user_op_hash, chain_id, seen_submitted_ms, tab)) = following {
+            if let Some((user_op_hash, chain_id, tab)) = following {
                 self.dapp_landing_seq += 1;
                 self.dapp_landing = Some(DappLanding {
                     ending: vela_core::app::sign_request::SignEnding::StillConfirming {
@@ -14695,7 +14650,6 @@ impl WalletPage {
                     chain_id,
                     tab,
                     seq: self.dapp_landing_seq,
-                    seen_submitted_ms,
                     closing: false,
                 });
                 self.panel = PanelId::Signing;
@@ -17166,7 +17120,7 @@ impl WalletPage {
                 .into_iter()
                 .find(|entry| entry.user_op_hash.eq_ignore_ascii_case(op))
         });
-        let clock = signing_clock(host.chain_id, host.seen_submitted_ms);
+        let clock = signing_clock(host.chain_id);
         crate::signing::status::approved(
             &host.view,
             crate::signing::status::on_chain(&host.raw.0),
@@ -17219,7 +17173,8 @@ impl WalletPage {
                     host.update(cx, |host, cx| host.cancel_touch(cx));
                 },
             )
-        } else if let Some(stop) = stopped {
+        } else {
+            let stop = stopped?;
             // Nothing was answered: Retry shows a new code, and the close is
             // the column's own — a refusal, made by the person.
             let (title, body) = crate::signing::status::phone_stop_words(stop, on_chain);
@@ -17253,8 +17208,6 @@ impl WalletPage {
                     theme,
                     close,
                 ))
-        } else {
-            return None;
         };
         // A dialog's width; the column is narrower.
         Some(card.w_full())
@@ -17403,7 +17356,6 @@ impl WalletPage {
                         chain_id: read.chain_id,
                         tab: read.tab.clone(),
                         seq: 0,
-                        seen_submitted_ms: read.seen_submitted_ms,
                         closing: false,
                     })
                 };
@@ -18541,7 +18493,7 @@ impl WalletPage {
         {
             let summary = crate::signing::status::summary_of(&model.blocks);
             let header = signing_components::HeaderModel::of(&model);
-            let clock = signing_clock(100, None);
+            let clock = signing_clock(100);
             if let Some(receipt) = crate::signing::status::approved(
                 &view,
                 true,
@@ -19700,7 +19652,7 @@ impl WalletPage {
             PanelId::BrowserStatus if self.browsing && self.shown_tab.is_some() => {
                 self.sync_inspector(cx);
                 let body = self.browser_status_body(theme, cx);
-                let title = SharedString::from(self.loc.t("componentsUi.browserStatus.title"));
+                let title = self.loc.t("componentsUi.browserStatus.title");
                 columns.child(self.panel_scaffold(theme, title, body, cx))
             }
             PanelId::BrowserStatus => columns,
@@ -20275,7 +20227,7 @@ impl WalletPage {
                 .find(|entry| entry.user_op_hash.eq_ignore_ascii_case(&op))
         });
         let (header, summary) = self.signing_last.clone().unzip();
-        let clock = signing_clock(landing.chain_id, landing.seen_submitted_ms);
+        let clock = signing_clock(landing.chain_id);
         let receipt = crate::signing::status::ended(
             &landing.ending,
             summary.flatten().as_ref(),
@@ -22051,8 +22003,6 @@ struct DappLanding {
     tab: Option<String>,
     /// Its number (`dapp_landing_seq`) — a tick's timer closes only its own.
     seq: u64,
-    /// When the column first saw the operation accepted.
-    seen_submitted_ms: Option<f64>,
     /// Its tick's timer is running.
     closing: bool,
 }
@@ -22084,15 +22034,6 @@ fn confirmed_sends(
 const SIGNING_TECH_COPY: &str = "signing-tech-copy";
 const CONTACTS_COPY_HOLD: std::time::Duration = std::time::Duration::from_millis(1500);
 
-/// The Ethereum key backup, as a request for the SHARED signing sheet.
-///
-/// A pure function so the sheet it goes to can be pinned by a test: the backup
-/// is an ordinary `eth_sendTransaction` on the wallet's own transport, which
-/// means it goes where every other signature of the account goes — its venue
-/// (spec 102), Vela's sheet or its trusted page. A backup with a sheet of its
-/// own would be the one signature a person could not review on their page.
-#[cfg(not(target_os = "linux"))]
-
 /// Spec 083 FR-006: an open bar nobody has typed in follows the page — the
 /// address that committed replaces the one it was opened with. Typed text is
 /// the person's, and an engine page is not a place.
@@ -22105,6 +22046,13 @@ fn address_follows(draft: Option<&str>, opened: Option<&str>, committed: &str) -
     .then(|| committed.to_owned())
 }
 
+/// The Ethereum key backup, as a request for the SHARED signing sheet.
+///
+/// A pure function so the sheet it goes to can be pinned by a test: the backup
+/// is an ordinary `eth_sendTransaction` on the wallet's own transport, which
+/// means it goes where every other signature of the account goes — its venue
+/// (spec 102), Vela's sheet or its trusted page. A backup with a sheet of its
+/// own would be the one signature a person could not review on their page.
 fn backup_request(
     address: &str,
     call: &vela_core::registry_backup::BackupCall,
@@ -22154,12 +22102,11 @@ fn send_fee_tap(host: gpui::Entity<SendHost>, cx: &mut Context<WalletPage>) -> p
 /// already in the field under it.
 /// The chain's clock for a signing receipt (spec 079): now, its usual
 /// inclusion time and its name.
-fn signing_clock(chain_id: u32, seen_submitted_ms: Option<f64>) -> crate::signing::status::Clock {
+fn signing_clock(chain_id: u32) -> crate::signing::status::Clock {
     crate::signing::status::Clock {
         now_ms: crate::executor::now_ms(),
         typical_s: vela_core::app::network_admin::typical_inclusion_s(chain_id).map(u32::from),
         chain_name: crate::flows::live::chain_name(chain_id).to_string(),
-        seen_submitted_ms,
     }
 }
 

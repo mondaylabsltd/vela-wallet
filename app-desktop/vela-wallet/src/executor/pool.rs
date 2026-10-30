@@ -1513,8 +1513,7 @@ fn post(
         return (RpcTransportOutcome::NonJson, None);
     }
 
-    let error = body.get("error").and_then(|error| {
-        Some(vela_core::app::rpc_pool::RpcErrorInfo {
+    let error = body.get("error").map(|error| vela_core::app::rpc_pool::RpcErrorInfo {
             code: error
                 .get("code")
                 .and_then(Value::as_i64)
@@ -1523,8 +1522,7 @@ fn post(
                 .get("message")
                 .and_then(Value::as_str)
                 .map(str::to_owned),
-        })
-    });
+        });
     (RpcTransportOutcome::Response { error }, Some(body))
 }
 
@@ -2151,7 +2149,7 @@ mod tests {
             // default, then the curated public list.
             assert_eq!(sources.first(), Some(&RpcSource::Default));
             assert!(
-                sources.iter().any(|s| *s == RpcSource::Public),
+                sources.contains(&RpcSource::Public),
                 "the curated fallbacks must be offered: {sources:?}"
             );
             assert!(

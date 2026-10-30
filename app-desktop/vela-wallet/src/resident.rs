@@ -113,8 +113,11 @@ pub enum Answer<T, E> {
     /// the work calls as partial results land. Twelve chains answer at twelve
     /// different speeds, and a hero that shows nothing until the slowest one
     /// replies is a hero gated by the worst network on the list.
-    Streaming(Box<dyn FnOnce(&Sink<E>) -> T + Send>),
+    Streaming(StreamWork<T, E>),
 }
+
+/// Work that reports `E`s on the way and settles once with a `T`.
+pub type StreamWork<T, E> = Box<dyn FnOnce(&Sink<E>) -> T + Send>;
 
 /// Run a streaming answer without an async pump, reports first.
 ///
@@ -124,7 +127,7 @@ pub enum Answer<T, E> {
 /// reproduce is the concurrency, which is the point of the real path and not
 /// of a test.
 #[cfg(test)]
-pub fn run_streaming<T, E>(work: Box<dyn FnOnce(&Sink<E>) -> T + Send>) -> (Vec<E>, T) {
+pub fn run_streaming<T, E>(work: StreamWork<T, E>) -> (Vec<E>, T) {
     let (tx, mut rx) = futures::channel::mpsc::unbounded();
     let result = work(&Sink(tx));
     let mut reports = Vec::new();
@@ -370,7 +373,7 @@ mod tests {
     #[test]
     fn every_streamed_event_lands_before_the_result() {
         let (tx, mut rx) = futures::channel::mpsc::unbounded();
-        let work: Box<dyn FnOnce(&Sink<u32>) -> &'static str + Send> = Box::new(|sink| {
+        let work: StreamWork<&'static str, u32> = Box::new(|sink| {
             for chain in 0..12 {
                 sink.send(chain);
             }

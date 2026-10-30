@@ -2942,7 +2942,6 @@ mod tests {
             now_ms: 20_000.0,
             typical_s: Some(5),
             chain_name: "Gnosis".to_owned(),
-            seen_submitted_ms: None,
         };
         for (want, key, retry) in [
             ("held", NOT_SENT_BODY_KEY, true),
