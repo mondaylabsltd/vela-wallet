@@ -19,6 +19,9 @@ struct VelaWalletApp: App {
         ParallelSpaceBinding.install()
         // `VELA_DEV_PROXY` (spec 082): the browser's store, before any tab.
         DevProxy.install()
+        // Local services for a harness run (native parity F0.5): written
+        // before the graph, so no machine has read a store yet.
+        DevLaunchInputs.install()
         #endif
         // The object graph, once, after the seams above are in (issue #483):
         // never in a view's init, which SwiftUI may run again at any time.
