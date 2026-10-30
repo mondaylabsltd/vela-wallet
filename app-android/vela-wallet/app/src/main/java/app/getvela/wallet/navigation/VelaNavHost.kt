@@ -472,6 +472,44 @@ fun VelaNavHost(
         }
     }
 
+    // Phase 3: no wallet left on this device (signed out, erased) — the
+    // home-screen widget forgets the figure it was showing.
+    val widgetAppContext = LocalContext.current.applicationContext
+    LaunchedEffect(session.allowedRoute) {
+        if (session.allowedRoute == SessionRoute.Onboarding &&
+            app.getvela.wallet.core.widget.BalanceWidgetSnapshot.clear(widgetAppContext)
+        ) {
+            app.getvela.wallet.core.widget.VelaBalanceWidget.refresh(widgetAppContext)
+        }
+    }
+
+    // Phase 3: a launcher shortcut, the Scan tile or text shared into Vela
+    // asked for the wallet. Brought in front once the session knows there is
+    // one (the wallet route then enters the flow, or reads the shared text);
+    // with no wallet there is nothing to send from, and the ask is dropped.
+    val pendingLaunch by application.container.pendingLaunch.collectAsStateWithLifecycle()
+    val pendingShare by application.container.pendingShare.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingLaunch, pendingShare, session.allowedRoute) {
+        if (pendingLaunch == null && pendingShare == null) return@LaunchedEffect
+        if (startDestination in DEVELOPER_ROUTES) return@LaunchedEffect
+        when (session.allowedRoute) {
+            SessionRoute.Loading -> Unit
+            SessionRoute.Onboarding -> {
+                VelaLog.event("launch", "dropped: no wallet yet")
+                application.container.pendingLaunch.value = null
+                application.container.pendingShare.value = null
+            }
+            SessionRoute.Wallet -> {
+                section = VelaTab.Wallet
+                navController.popBackStack(VelaDestinations.WALLET, inclusive = false)
+                pendingLaunch?.let { flow ->
+                    application.container.pendingFlow.value = launchFlowEntry(flow)
+                    application.container.pendingLaunch.value = null
+                }
+            }
+        }
+    }
+
     // Spec 105: the testnet space's bar over every route, in the flow of the
     // layout — it takes the status bar's inset, and the routes under it lay
     // out as if the bar were the top of the screen (their `statusBarsPadding`
@@ -729,6 +767,21 @@ fun VelaNavHost(
                 VelaLog.event("flows", "pending flow", "entry" to entry.name, "top" to flows.top?.name)
                 flows.enter(entry)
                 application.container.pendingFlow.value = null
+            }
+            // Phase 3: an address or an `ethereum:` request shared into Vela —
+            // read by Send as its own scanner's would be (`scan_resolved`): now
+            // when Send is open, else parked for the Send it opens (no camera).
+            val sharedPayment by application.container.pendingShare.collectAsStateWithLifecycle()
+            LaunchedEffect(sharedPayment) {
+                val text = sharedPayment ?: return@LaunchedEffect
+                VelaLog.event("share", "payment", "top" to flows.top?.name)
+                application.container.paymentHandOff.scan(
+                    text = text,
+                    sendOpen = flows.top in SEND_STATES,
+                    scanNow = { application.container.send.scanned(it) },
+                    enterScanner = { flows.enter(WalletFlowEntry.Send) },
+                )
+                application.container.pendingShare.value = null
             }
             // A flow's own button sits low on its page: the agent's capsule
             // floats above it while one is up.
@@ -1216,6 +1269,9 @@ fun VelaNavHost(
                         // Spec 070: a payment code scanned in 探索 arrives already read.
                         if (flows.top == FlowState.S1) {
                             send.openScanner()
+                            application.container.paymentHandOff.takeScan()?.let { text -> send.scanned(text) }
+                        } else {
+                            // Phase 3: text shared into Vela, read as a scan would be — no camera.
                             application.container.paymentHandOff.takeScan()?.let { text -> send.scanned(text) }
                         }
                     }
@@ -2033,6 +2089,19 @@ fun VelaNavHost(
                         }
                         val syncRounds by application.container.session.syncRoundsSeen.collectAsStateWithLifecycle()
                         val homeNow = remember(balances, ageTick) { System.currentTimeMillis() }
+                        // Phase 3: the home-screen widget repeats this hero — the whole
+                        // account's (no chain filter), as last drawn, with the core's
+                        // time of the read. Written off the frame; redrawn on change.
+                        val widgetContext = LocalContext.current.applicationContext
+                        LaunchedEffect(balances, currency, space.testnet, session.activeName, strings.language) {
+                            val hero = WalletLive.home(model, balances, feed, currency, strings, chainNames, now = homeNow, chainFilter = null).balance
+                            val write = app.getvela.wallet.core.widget.BalanceWidgetSnapshot.of(hero, balances.last_refreshed_at_ms, session.activeName, space.testnet)
+                            if (write is app.getvela.wallet.core.widget.BalanceWidgetSnapshot.Write.Save &&
+                                app.getvela.wallet.core.widget.BalanceWidgetSnapshot.save(widgetContext, write.snapshot)
+                            ) {
+                                app.getvela.wallet.core.widget.VelaBalanceWidget.refresh(widgetContext)
+                            }
+                        }
                         WalletScreen(
                             model = WalletLive.home(
                                 model, balances, feed, currency, strings, chainNames, now = homeNow, chainFilter = chainFilter,
@@ -3405,4 +3474,11 @@ private fun addCheckedNetwork(agent: AgentStore, settings: app.getvela.wallet.fe
 private fun confirmTransfer(agent: AgentStore, send: app.getvela.wallet.feature.send.core.SendController, review: String?) {
     val operation = agent.reviewing() ?: return send.slideConfirm(review)
     agent.person(intent("submit_transfer", "operation" to operation, "review" to review))
+}
+
+/** Phase 3: the wallet flow a launcher shortcut or the Scan tile names. */
+internal fun launchFlowEntry(flow: app.getvela.wallet.core.platform.LaunchEntry.Flow): WalletFlowEntry = when (flow) {
+    app.getvela.wallet.core.platform.LaunchEntry.Flow.Send -> WalletFlowEntry.Send
+    app.getvela.wallet.core.platform.LaunchEntry.Flow.Receive -> WalletFlowEntry.Receive
+    app.getvela.wallet.core.platform.LaunchEntry.Flow.Scan -> WalletFlowEntry.Scan
 }

@@ -126,6 +126,10 @@ class AppContainer(private val app: Application) {
     val pendingSendParams = MutableStateFlow<SendOpenParams?>(null)
     /** Spec 048: a wallet flow another route asked for (contacts: 转账 / 收款 / 群发转账), entered once the wallet is back on top. */
     val pendingFlow = MutableStateFlow<WalletFlowEntry?>(null)
+    /** Phase 3: the flow a launcher shortcut or the Scan tile asked for — entered once a wallet is in front. */
+    val pendingLaunch = MutableStateFlow<app.getvela.wallet.core.platform.LaunchEntry.Flow?>(null)
+    /** Phase 3: an address or `ethereum:` request shared into Vela — Send's `scan_resolved` reads it once a wallet is in front. */
+    val pendingShare = MutableStateFlow<String?>(null)
     /** Spec 048: split rows to seed into the send machine right after it opens (a group's 群发转账). */
     val pendingSplitSeed = MutableStateFlow<List<SendRecipientDraft>?>(null)
 

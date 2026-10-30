@@ -172,6 +172,13 @@
                 <data android:scheme="velawallet" android:host="pay" />
                 <data android:scheme="velawallet" android:host="open" />
             </intent-filter>
+            <!-- Phase 3: text shared into Vela — an address, an `ethereum:`
+                 request or a pay link (LaunchEntry.shared); the core rules on it. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
             <!-- Spec 106: clientmcp.dev's return after the person signs in
                  (`app.getvela.wallet:/clientmcp?code=…&state=…`, RFC 8252 §7.1). -->
             <intent-filter>
@@ -232,6 +239,34 @@
                 <data android:scheme="velawallet" android:host="sign-result" />
             </intent-filter>
         </activity>
+        <!-- Phase 3: the Quick Settings Scan tile. Its label in the shade is
+             the dock's word in the app's language (ScanTileService); this one
+             names it in the tile picker. -->
+        <service
+            android:name=".core.platform.ScanTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_tile_scan"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.quicksettings.ACTIVE_TILE"
+                android:value="false" />
+        </service>
+        <!-- Phase 3: the home-screen balance widget (Glance). -->
+        <receiver
+            android:name=".core.widget.VelaBalanceWidgetReceiver"
+            android:exported="true"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/vela_balance_widget_info" />
+        </receiver>
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.files"

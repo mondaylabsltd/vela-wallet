@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark system-bar icons on the light palette (themes.xml). -->
+    <bool name="vela_light_bars">true</bool>
+</resources>

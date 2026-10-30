@@ -434,6 +434,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.work.runtime)
+    // Native parity Phase 3: the home-screen balance widget (no network on it).
+    implementation(libs.androidx.glance.appwidget)
     implementation(libs.androidx.webkit)
     // Spec 046: the scanner.
     implementation(libs.androidx.camera.core)

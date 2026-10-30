@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -364,6 +365,7 @@ class MainActivity : ComponentActivity() {
         receiptRequested()?.let { container.pendingReceipt.value = it }
         debugOpenUrl(intent)?.let { container.browser.open(it, fromOutside = true) }
         routeDeepLink(intent, container)
+        routeLaunch(intent, container)
         // Spec 078 round 3: a stand-in report endpoint for the device pass, so
         // checking 发送 never files a real issue — debug builds only (and the
         // debug network config lets cleartext reach 127.0.0.1 alone).
@@ -415,13 +417,22 @@ class MainActivity : ComponentActivity() {
             val splashDark = (view.view.background as? android.graphics.drawable.ColorDrawable)
                 ?.let { painted -> android.graphics.Color.luminance(painted.color) < 0.5f }
                 ?: systemDark
+            // Phase 3, edge to edge: removing the splash re-applies the
+            // window theme's system-bar colours (core-splashscreen's
+            // `applyThemesSystemBarAppearance`) — an opaque black status bar
+            // over the app, measured on API 34. The bars are set again, for
+            // the app's own appearance, once the splash is gone.
             if (appDark == splashDark) {
                 view.remove()
+                edgeToEdge(appDark)
             } else {
                 view.view.animate()
                     .alpha(0f)
                     .setDuration(VelaLaunch.exitCrossfadeMs.toLong())
-                    .withEndAction { view.remove() }
+                    .withEndAction {
+                        view.remove()
+                        edgeToEdge(appDark)
+                    }
                     .start()
             }
         }
@@ -438,11 +449,13 @@ class MainActivity : ComponentActivity() {
             // enableEdgeToEdge's defaults key bar-icon appearance off the SYSTEM uiMode
             // only; the FR-006 override must re-style the bars for the EFFECTIVE theme.
             DisposableEffect(darkTheme) {
-                enableEdgeToEdge(
-                    statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { darkTheme },
-                    navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { darkTheme },
-                )
+                edgeToEdge(darkTheme)
                 onDispose {}
+            }
+
+            // Phase 3: the launcher's Send / Receive / Scan, in the app's language.
+            LaunchedEffect(i18nState.language) {
+                app.getvela.wallet.core.platform.LauncherShortcuts.publish(this@MainActivity, container.i18nRuntime)
             }
 
             // New provider identity per resolved language: every t() reader recomposes,
@@ -520,14 +533,52 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Drawn behind both system bars, their icons dark on the light palette and
+     * light on the dark one — the APP's appearance (FR-006), not the system's,
+     * which is all `enableEdgeToEdge()`'s defaults read.
+     */
+    private fun edgeToEdge(dark: Boolean) {
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark },
+            navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark },
+        )
+    }
+
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         val container = (application as VelaWalletApplication).container
         debugOpenUrl(intent)?.let { container.browser.open(it, fromOutside = true) }
         routeDeepLink(intent, container)
+        routeLaunch(intent, container)
         // Spec 070: the page in front's renderer dies on purpose — debug builds only.
         if (BuildConfig.DEBUG && intent.getBooleanExtra("vela.crashRenderer", false)) container.browser.debugCrashRenderer()
+    }
+
+    /**
+     * Phase 3: a launcher shortcut, the Scan tile, or text shared into Vela —
+     * read by [app.getvela.wallet.core.platform.LaunchEntry], handed to the
+     * wallet route, which enters the flow once a wallet is in front. Shared
+     * text goes where the core rules on it: a pay link to `LinkOpened`, an
+     * address or an `ethereum:` request to Send's `scan_resolved`.
+     */
+    private fun routeLaunch(intent: android.content.Intent?, container: AppContainer) {
+        intent ?: return
+        val ask = app.getvela.wallet.core.platform.LaunchEntry.read(
+            action = intent.action,
+            type = intent.type,
+            sharedText = intent.getStringExtra(android.content.Intent.EXTRA_TEXT),
+        )
+        app.getvela.wallet.core.diagnostics.VelaLog.event("launch", "intent", "action" to intent.action, "ask" to ask?.javaClass?.simpleName)
+        when (ask) {
+            is app.getvela.wallet.core.platform.LaunchEntry.Ask.Open -> container.pendingLaunch.value = ask.flow
+            is app.getvela.wallet.core.platform.LaunchEntry.Ask.PayLinkShared -> container.pendingPayLink.value = android.net.Uri.parse(ask.url)
+            is app.getvela.wallet.core.platform.LaunchEntry.Ask.PaymentShared -> container.pendingShare.value = ask.text
+            null -> Unit
+        }
+        // Read once: a configuration change replays the same intent.
+        if (ask != null) setIntent(android.content.Intent(intent).setAction(android.content.Intent.ACTION_MAIN).also { it.removeExtra(android.content.Intent.EXTRA_TEXT) })
     }
 
     /**
