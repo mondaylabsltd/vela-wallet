@@ -667,7 +667,7 @@ fn executed_and_followed_until_it_landed() {
             executor: fixture(0).address,
         },
     );
-    let preview = sut.view().previews[&format!("100:{hash}")].clone();
+    let preview = sut.view().previews[&look_key(&hash, &fixture(0).address)].clone();
     assert_eq!(preview["kind"], "priced", "{preview}");
     assert_eq!(
         preview["setup"]["multisig"], true,
@@ -883,7 +883,16 @@ fn preview_of(sut: &mut Sut, world: &mut World, hash: &str, executor: &str) -> V
             executor: executor.to_owned(),
         },
     );
-    sut.view().previews[&format!("100:{hash}")].clone()
+    sut.view().previews[&look_key(hash, executor)].clone()
+}
+
+/// One executor's look in the view: `<chainId>:<hash>:<executor>`, lowercase.
+fn look_key(hash: &str, executor: &str) -> String {
+    format!(
+        "100:{}:{}",
+        hash.to_ascii_lowercase(),
+        executor.to_ascii_lowercase()
+    )
 }
 
 /// execute.test.ts "is priced at the relay's quote, with the one-time
@@ -1114,4 +1123,345 @@ fn each_remaining_member_signs_as_the_one_rule_says() {
     // Only a plain account is ever offered to an outside wallet.
     assert_eq!(signers.outside.len(), 1);
     assert!(signers.outside[0].eq_ignore_ascii_case(PLAIN));
+}
+
+// -- W8-M2b: a blind review, each executor's look, frozen facts, a used number, a reload --
+
+const OTHER_TX: &str = "0xefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef";
+
+fn owners_of_setup() -> Vec<String> {
+    (0..3).map(|i| fixture(i).address).collect()
+}
+
+/// The multisig after its first execution: deployed, its number 1.
+fn after_first(world: &mut World, account: &MultisigAccount) {
+    let owners = owners_of_setup();
+    let mut after = DeployedSafe::clean(&owners.iter().map(String::as_str).collect::<Vec<_>>(), 2);
+    after.nonce = 1;
+    world.deploy(100, &account.address, after);
+}
+
+/// Execute `hash` as `executor`, its user operation landing at once.
+fn execute_landed(
+    world: &mut World,
+    sut: &mut Sut,
+    account: &MultisigAccount,
+    hash: &str,
+    executor: &str,
+) {
+    let owners = owners_of_setup();
+    let mut after = DeployedSafe::clean(&owners.iter().map(String::as_str).collect::<Vec<_>>(), 2);
+    after.nonce = 1;
+    world.on_send = Some(Landing {
+        chain: 100,
+        safe: account.address.clone(),
+        after,
+        safe_tx_hash: hash.to_owned(),
+        tx_hash: format!("0x{}", "cd".repeat(32)),
+        user_op_hash: format!("0x{}", "ab".repeat(32)),
+    });
+    run(
+        sut,
+        world,
+        Event::Execute {
+            chain_id: 100,
+            safe_tx_hash: hash.to_owned(),
+            executor: executor.to_owned(),
+        },
+    );
+}
+
+fn has_blind(review: &Value) -> bool {
+    review["concerns"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|c| c["kind"] == "blind")
+}
+
+/// C1 (`ProposalReview.read(blind)`): a review asked blind — a call the
+/// clear reading cannot read — says sign anyway, with the Blind concern; one
+/// not asked blind has neither from it.
+#[test]
+fn a_blind_review_says_sign_anyway_and_names_the_blind_concern() {
+    let (mut world, mut sut, _) = setup(&[0, 1]);
+    let hash = hash_of(&propose(&mut sut, &mut world, transfer("1"), None));
+    let key = format!("100:{hash}");
+    let review = |sut: &mut Sut, world: &mut World, blind: bool| {
+        run(
+            sut,
+            world,
+            Event::Review {
+                chain_id: 100,
+                safe_tx_hash: hash.clone(),
+                blind,
+            },
+        );
+        sut.view().reviews[&key].clone()
+    };
+    let plain = review(&mut sut, &mut world, false);
+    assert!(!has_blind(&plain), "{plain}");
+    assert_eq!(plain["sign"]["anyway"], false, "{plain}");
+    let blind = review(&mut sut, &mut world, true);
+    assert!(has_blind(&blind), "{blind}");
+    assert_eq!(blind["sign"]["anyway"], true, "{blind}");
+    // Another shell that sends no `blind`: not blind.
+    let ev: Event =
+        serde_json::from_value(json!({"type": "review", "chain_id": 100, "safe_tx_hash": hash}))
+            .unwrap();
+    assert!(matches!(ev, Event::Review { blind: false, .. }));
+}
+
+/// C2 (`preflight`'s one look per execution and executor): two executors
+/// here, each looked at — each look under its own key; executing as one
+/// sends that executor's own calls, from it.
+#[test]
+fn each_executor_here_has_its_own_look_and_executes_from_it() {
+    let (mut world, mut sut, account) = setup(&[0, 1]);
+    let hash = approved_twice(&mut world, &mut sut);
+    let (a, b) = (fixture(0).address, fixture(1).address);
+    let look_a = preview_of(&mut sut, &mut world, &hash, &a);
+    let look_b = preview_of(&mut sut, &mut world, &hash, &b);
+    let previews = sut.view().previews;
+    assert_eq!(previews.len(), 2, "{previews:?}");
+    assert_eq!(previews[&look_key(&hash, &a)], look_a, "never overwritten");
+    assert_eq!(look_a["kind"], "priced");
+    assert_eq!(look_b["kind"], "priced");
+    assert_eq!(look_a["carries"], json!([b.clone()]));
+    assert_eq!(look_b["carries"], json!([a.clone()]));
+    assert_ne!(look_a["calls"], look_b["calls"]);
+    execute_landed(&mut world, &mut sut, &account, &hash, &b);
+    assert_eq!(world.sent.len(), 1);
+    assert_eq!(world.sent[0].1, b, "sent from the executor picked");
+    assert_eq!(
+        json!(world.sent[0].2),
+        look_b["calls"],
+        "its own look's calls"
+    );
+    let kept: Value =
+        serde_json::from_str(&world.store[vela_core::app::multisig_presence::EXECUTED_KEY])
+            .unwrap();
+    let facts = kept.as_object().unwrap().values().next().unwrap().clone();
+    assert!(
+        facts["approvers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|x| x.as_str().unwrap().eq_ignore_ascii_case(&a)),
+        "what its own look carried: {facts}"
+    );
+}
+
+/// C2: a priced look older than PREVIEW_FRESH_MS is taken again before
+/// Execute signs anything.
+#[test]
+fn a_stale_look_is_taken_again_before_execute() {
+    use vela_core::app::multisig_proposals::PREVIEW_FRESH_MS;
+    let (mut world, mut sut, account) = setup(&[0, 1]);
+    let hash = approved_twice(&mut world, &mut sut);
+    let a = fixture(0).address;
+    preview_of(&mut sut, &mut world, &hash, &a);
+    let looks = |w: &World| {
+        w.rpc_log
+            .iter()
+            .filter(|(_, m, p)| {
+                m == "eth_getBalance" && p[0].as_str().is_some_and(|x| x.eq_ignore_ascii_case(&a))
+            })
+            .count()
+    };
+    let before = looks(&world);
+    world.now += PREVIEW_FRESH_MS + 1.0;
+    execute_landed(&mut world, &mut sut, &account, &hash, &a);
+    assert!(looks(&world) > before, "looked again");
+    assert_eq!(world.sent.len(), 1);
+}
+
+/// C3: the frozen facts the timeline reads are in the view.
+#[test]
+fn the_frozen_facts_of_an_executed_proposal_are_in_the_view() {
+    let (mut world, mut sut, account) = setup(&[0, 1]);
+    let hash = approved_twice(&mut world, &mut sut);
+    let a = fixture(0).address;
+    execute_landed(&mut world, &mut sut, &account, &hash, &a);
+    run(
+        &mut sut,
+        &mut world,
+        Event::Timeline {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+        },
+    );
+    let frozen = sut.view().frozen[&format!("100:{hash}")].clone();
+    assert!(frozen.executor.unwrap().eq_ignore_ascii_case(&a));
+    assert_eq!(frozen.threshold, 2);
+    assert_eq!(frozen.approvers.len(), 2, "{:?}", frozen.approvers);
+}
+
+/// C4 (`settleSpent`): a look that finds its number used — another member
+/// executed it meanwhile — says who executed it, never "it would fail".
+#[test]
+fn a_look_at_a_number_used_by_another_says_it_was_executed_by_another() {
+    let (mut world, mut sut, account) = setup(&[0, 1]);
+    let owners = owners_of_setup();
+    world.deploy(
+        100,
+        &account.address,
+        DeployedSafe::clean(&owners.iter().map(String::as_str).collect::<Vec<_>>(), 2),
+    );
+    run(&mut sut, &mut world, Event::Refresh { fresh: true });
+    let hash = approved_twice(&mut world, &mut sut);
+    // Another member's device executes it.
+    after_first(&mut world, &account);
+    world.receipts.insert(
+        OTHER_TX.to_owned(),
+        json!({"logs": [{"address": account.address, "topics": [
+            vela_core::app::multisig_proposals::EXECUTION_SUCCESS, hash
+        ], "data": "0x"}]}),
+    );
+    world.quote_answer = Some(
+        vela_core::app::multisig_shell::MultisigShellResult::Quoted {
+            quote: json!({"kind": "reverts", "reason": "GS025"}),
+        },
+    );
+    let look = preview_of(&mut sut, &mut world, &hash, &fixture(0).address);
+    assert_eq!(look["kind"], "spent", "{look}");
+    let verdict = sut.view().executions[&format!("100:{hash}")].clone();
+    assert_eq!(verdict["kind"], "executedByOther", "{verdict}");
+    assert_eq!(verdict["txHash"], OTHER_TX);
+    assert_eq!(verdict["paid"], false);
+    assert!(world.sent.is_empty());
+}
+
+/// C5 (r4b-7): an execution this device sent before a reload, whose user
+/// operation landed, is watched again once its multisig is followed —
+/// judged executed with no Execute, ended in flight, its activity row
+/// handed on.
+#[test]
+fn an_execution_in_flight_before_a_reload_is_watched_again() {
+    let (mut world, mut sut, account) = setup(&[0, 1]);
+    let hash = approved_twice(&mut world, &mut sut);
+    drop(sut);
+    let tx_hash = format!("0x{}", "cd".repeat(32));
+    let user_op = format!("0x{}", "ab".repeat(32));
+    world.store.insert(
+        "vela.multisigExecuting".to_owned(),
+        json!({
+            format!("100:{}:{hash}", account.address.to_ascii_lowercase()): {
+                "chainId": 100, "multisig": account.address, "safeTxHash": hash,
+                "nonce": "0", "userOpHash": user_op, "by": fixture(0).address,
+                "maybeSent": false, "startedMs": world.now, "createdMs": 1,
+            }
+        })
+        .to_string(),
+    );
+    // It landed while the page was away.
+    after_first(&mut world, &account);
+    world.receipts.insert(
+        tx_hash.clone(),
+        json!({"logs": [
+            {"address": account.address, "topics": [
+                vela_core::app::multisig_proposals::EXECUTION_SUCCESS, hash
+            ], "data": "0x"},
+            {"address": "0x0000000071727De22E5E9d8BAf0edAc6f37da032", "topics": [
+                "0x49628fd1471006c1482da88028e9ce4dbb080b815c9b0344d39e5a8e6ec1419f",
+                user_op
+            ], "data": "0x"}
+        ]}),
+    );
+    world.user_op = Some(("included".to_owned(), Some(tx_hash.clone())));
+    let notices = world.notices.len();
+    let mut next = Sut::new();
+    let ev = start(&world, vec![100, 8453]);
+    run(&mut next, &mut world, ev);
+    run(
+        &mut next,
+        &mut world,
+        Event::Follow {
+            account: Some(account.clone()),
+        },
+    );
+    let verdict = next.view().executions[&format!("100:{hash}")].clone();
+    assert_eq!(verdict["kind"], "executed", "{verdict}");
+    assert_eq!(verdict["txHash"], tx_hash);
+    assert!(world.sent.is_empty(), "no Execute");
+    assert!(
+        !world.store.contains_key("vela.multisigExecuting"),
+        "no longer in flight"
+    );
+    assert!(world.notices[notices..].iter().any(|n| matches!(
+        n,
+        Notice::ActivityRows { rows } if rows.iter().any(|r| r["userOpHash"] == user_op)
+    )));
+}
+
+/// C6 (`lastActor.note`): the member used here last, for approving and
+/// executing too, when more than one member is here; none noted with one.
+#[test]
+fn the_member_used_last_is_noted_for_approve_and_execute() {
+    let (mut world, mut sut, account) = setup(&[0, 1]);
+    let hash = approved_twice(&mut world, &mut sut);
+    let b = fixture(1).address.to_ascii_lowercase();
+    assert_eq!(sut.view().last_actor.as_deref(), Some(b.as_str()));
+    let kept: Value = serde_json::from_str(&world.store["vela.multisigLastActor"]).unwrap();
+    assert_eq!(kept[account.address.to_ascii_lowercase()], b);
+    let a = fixture(0).address;
+    execute_landed(&mut world, &mut sut, &account, &hash, &a);
+    assert_eq!(
+        sut.view().last_actor,
+        Some(a.to_ascii_lowercase()),
+        "the executor"
+    );
+
+    let (mut world, mut sut, _) = setup(&[0]);
+    hash_of(&propose(&mut sut, &mut world, transfer("1"), None));
+    assert_eq!(
+        sut.view().last_actor,
+        None,
+        "one member here: nothing to pick"
+    );
+}
+
+/// C7: a link's proposal on a multisig with no member here is reviewed by
+/// `Review` too (blind, when the sheet asks so).
+#[test]
+fn a_linked_previews_proposal_is_reviewed() {
+    const OUTSIDE: &str = "0x00000000000000000000000000000000000000a7";
+    let g = genesis(&[OUTSIDE], 1, "0x5c");
+    let account: MultisigAccount =
+        serde_json::from_value(world::stored_row(&g, &[100], true)).unwrap();
+    let tx = multisig::cancel_tx(&account.address, "0x0").unwrap();
+    let hash = multisig::safe_tx_hash(100, &account.address, &tx).unwrap();
+    let mut world = World {
+        locals: vec![fixture(0)],
+        ..World::default()
+    };
+    world.mailbox.push(stored(&account, 100, &tx, vec![]));
+    let mut sut = Sut::new();
+    let ev = start(&world, vec![100]);
+    run(&mut sut, &mut world, ev);
+    run(
+        &mut sut,
+        &mut world,
+        Event::OpenLinked {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+            preview: Some(Box::new(account.clone())),
+        },
+    );
+    assert_eq!(sut.view().followed, None);
+    run(
+        &mut sut,
+        &mut world,
+        Event::Review {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+            blind: true,
+        },
+    );
+    let review = sut.view().reviews[&format!("100:{hash}")].clone();
+    assert!(review.is_object(), "{review}");
+    assert!(
+        has_blind(&review),
+        "this Review's, not the link's own: {review}"
+    );
 }

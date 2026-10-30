@@ -153,6 +153,8 @@ pub struct MoreView {
     pub dapp: BTreeMap<String, HeldRequest>,
     pub calls_status: BTreeMap<String, DappAnswer>,
     pub linked: Option<LinkedView>,
+    /// What [`read_frozen`] read, per `<chainId>:<safeTxHash lowercase>`.
+    pub frozen: BTreeMap<String, FrozenFacts>,
 }
 
 /// Why a ready `item` of the followed multisig cannot run here, from the
@@ -363,6 +365,7 @@ pub fn view_more(s: &mut State) -> MoreView {
             .collect(),
         calls_status: s.more.calls_status.clone(),
         linked,
+        frozen: s.more.frozen.clone(),
     }
 }
 
@@ -675,13 +678,14 @@ pub async fn remember_execution(
     // r7-3: what its calls carried (`planExecution`'s `carries`), never
     // every approval the mailbox holds — one it did not carry did not count;
     // and the executor itself only when it approved by sending it.
-    let key = format!(
-        "{}:{}",
+    // This executor's own look: another's carried other approvals.
+    let key = preview_key(
         input.chain_id,
-        input.item.safe_tx_hash.to_ascii_lowercase()
+        &input.item.safe_tx_hash,
+        &input.executor.address,
     );
     let planned = match lock(st).preview_plans.get(&key) {
-        Some(Preview::Priced { planned, .. }) => Some(planned.clone()),
+        Some((_, Preview::Priced { planned, .. })) => Some(planned.clone()),
         _ => None,
     };
     let (approvals, executor_approves) = match planned {
@@ -747,7 +751,7 @@ async fn block_time(io: &Io<Event>, chain_id: u64, block: Option<&Value>) -> Opt
 }
 
 /// The proposal (and its multisig) the followed list or the link holds.
-fn find_item(
+pub(super) fn find_item(
     s: &State,
     chain_id: u64,
     hash: &str,
