@@ -1000,6 +1000,25 @@ fun VelaNavHost(
                     val clearJson by controller.clearJson.collectAsStateWithLifecycle()
                     val guardJson by controller.guardJson.collectAsStateWithLifecycle()
                     val feeJson by controller.feeJson.collectAsStateWithLifecycle()
+                    // dapp-15: "Check again", and a check out again.
+                    val simAgain by controller.simAgainOffered.collectAsStateWithLifecycle()
+                    val simRechecking by controller.simRechecking.collectAsStateWithLifecycle()
+                    // Spec 103: the agent's opinion, read against the review on screen now.
+                    val heldAdvice by controller.advice.collectAsStateWithLifecycle()
+                    val adviceCard = remember(heldAdvice, signJson, strings) {
+                        heldAdvice?.let { held ->
+                            val review = controller.review()
+                            app.getvela.wallet.feature.signing.SigningAdvice.card(
+                                held,
+                                app.getvela.wallet.feature.signing.SigningAdvice.standing(
+                                    held,
+                                    app.getvela.wallet.feature.signing.SigningAdvice.digestOf(review),
+                                    app.getvela.wallet.feature.signing.SigningAdvice.reviewFee(review),
+                                ),
+                                strings,
+                            )
+                        }
+                    }
                     val signChain = signRequest?.chainId ?: 0
                     val signCtx = app.getvela.wallet.feature.signing.SigningLive.Context(
                         strings = strings,
@@ -1027,6 +1046,10 @@ fun VelaNavHost(
                                 saved = app.getvela.wallet.feature.signing.SigningLive.savedPage(savedSigningPages.pages, card.page),
                             )
                         },
+                        simAgain = simAgain,
+                        simRechecking = simRechecking,
+                        advice = adviceCard,
+                        descriptorHost = remember(controller) { controller.descriptorHost },
                     )
                     signRequest?.let { request ->
                         if (signView.surface != app.getvela.wallet.feature.signing.core.SignSurface.Hidden) {
@@ -1045,9 +1068,9 @@ fun VelaNavHost(
                                 // commitment point, a dismiss after — the core routes it.
                                 onDismiss = { controller.swipeDismissed() },
                                 onConfirm = { controller.approve() },
-                                onChip = { id -> app.getvela.wallet.feature.signing.SigningLive.chipMode(id)?.let(controller::guardPreset) },
+                                onChip = { id -> controller.guardChip(id) },
                                 onCustomAmount = { controller.guardCustomAmount(it) },
-                                onLegChip = { leg, id -> app.getvela.wallet.feature.signing.SigningLive.chipMode(id)?.let { controller.guardLegPreset(leg, it) } },
+                                onLegChip = { leg, id -> controller.guardChip(id, leg) },
                                 onLegCustomAmount = { leg, text -> controller.guardLegCustomAmount(leg, text) },
                                 onFee = { controller.feeTapped() },
                                 onRefreshFee = { controller.refreshFee() },
@@ -1062,6 +1085,7 @@ fun VelaNavHost(
                                     handoff?.page?.let { page -> returnScope.launch { runCatching { application.container.signerPages.trust(page) } } }
                                 },
                                 onRetry = { controller.retry() },
+                                onRecheck = { controller.simAgain() },
                             )
                         }
                     }

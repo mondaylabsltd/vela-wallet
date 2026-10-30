@@ -153,6 +153,18 @@ enum class SigningScreenState {
      * timer runs on a board. The confirm is where it is on CS57.
      */
     CS69, CS70,
+
+    /**
+     * Signing depth (Android phase 2, P2.3; `SigningDepthBoards`), each drawn
+     * through the live builders: a message as the core draws it — a hidden
+     * character's marker, empty lines folded (CS71); a reading with where it
+     * came from and what the certain decode says against it (CS72); a
+     * grant-all approval waiting for "Allow all" or "Revoke" (CS73); a
+     * could-not-check line with "Check again" (CS74) and while it runs again
+     * (CS75); the trusted signing page that never answered (CS76); the AI
+     * agent's opinion, current (CS77) and given for an earlier version (CS78).
+     */
+    CS71, CS72, CS73, CS74, CS75, CS76, CS77, CS78,
 }
 
 /**
@@ -204,6 +216,10 @@ data class AllowanceInput(val value: String, val symbol: String, val placeholder
 @Immutable
 data class PartyBadge(val text: String, val tone: SigningTone)
 
+/** A stretch of a code line: text as written, or (muted) a marker the core put in its place. */
+@Immutable
+data class CodeRun(val text: String, val muted: Boolean = false)
+
 @Immutable
 data class BalanceDeltaRow(val symbol: String, val delta: String, val tone: SigningTone)
 
@@ -250,12 +266,39 @@ sealed interface SigningBlock {
 
     data class Rows(val rows: List<SigningRow>) : SigningBlock
 
-    data class Warning(val tone: SigningTone, val text: String) : SigningBlock
+    data class Warning(val tone: SigningTone, val text: String, val recheck: Recheck? = null) : SigningBlock
+
+    /**
+     * dapp-15: "Check again" under a could-not-check line whose node nobody
+     * reached — or, while the new check is out ([checking]), "Checking
+     * again…" in its place, the line above it stale.
+     */
+    data class Recheck(val label: String, val checking: Boolean)
 
     data class Positive(val text: String) : SigningBlock
 
-    /** Message, hex, typed-data JSON or calldata — always monospace. */
-    data class Code(val lines: List<String>, val note: String? = null) : SigningBlock
+    /**
+     * cs-14: one small line that says where a reading came from — "✓ Read by
+     * Vela from the transaction", "△ Described by … — a description, not a
+     * guarantee", the contract and who named it, a token named only by its
+     * own contract. The web's `source` block: quiet, in its tone's ink.
+     */
+    data class Source(val text: String, val tone: SigningTone = SigningTone.Neutral) : SigningBlock
+
+    /**
+     * Message, hex, typed-data JSON or calldata — always monospace.
+     *
+     * [runs] (cs-10, cs-11): a message as the core drew it
+     * (`ClearMessageView.display_lines`) — each line its stretches, a hidden
+     * or direction-changing character's `⟨U+…⟩` marker and a folded run of
+     * empty lines drawn muted. `null`: [lines] are the whole drawing.
+     * [lines] is always the plain text, whatever [runs] says.
+     */
+    data class Code(
+        val lines: List<String>,
+        val note: String? = null,
+        val runs: List<List<CodeRun>>? = null,
+    ) : SigningBlock
 
     /** A batch step or a Safe inner call. */
     data class Card(
@@ -625,6 +668,12 @@ data class SigningScreenModel(
      * is measured again — is held per request, never carried to the next.
      */
     val requestKey: String = "",
+    /**
+     * Spec 103: the person's AI agent's opinion on this request, in its own
+     * card under Vela's lines and over the fee (the web's `AgentAdviceCard`).
+     * `null`: no agent linked, none has spoken, or the request is refused.
+     */
+    val advice: AdviceModel? = null,
 )
 
 /**

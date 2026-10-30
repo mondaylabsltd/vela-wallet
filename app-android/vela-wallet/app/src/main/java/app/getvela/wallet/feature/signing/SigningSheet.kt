@@ -48,7 +48,9 @@ import app.getvela.wallet.core.designsystem.tokens.VelaTextSize
 import app.getvela.wallet.core.designsystem.tokens.VelaSizing
 import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.feature.flows.SendReceiptBody
+import app.getvela.wallet.feature.signing.components.AgentAdviceCard
 import app.getvela.wallet.feature.signing.components.AllowanceEditor
+import app.getvela.wallet.feature.signing.components.SigningSource
 import app.getvela.wallet.feature.signing.components.TrustedSignerWaiting
 import app.getvela.wallet.feature.signing.components.HandoffCard
 import app.getvela.wallet.feature.signing.components.SigningAmount
@@ -138,6 +140,8 @@ fun SigningSheet(
     onRefreshFee: (() -> Unit)? = null,
     /** Spec 096 F8: the failed receipt's Try again. */
     onRetry: (() -> Unit)? = null,
+    /** dapp-15: "Check again" on a could-not-check line whose node nobody reached. */
+    onRecheck: () -> Unit = {},
 ) {
     VelaModalSheet(
         onDismissRequest = onDismiss,
@@ -164,6 +168,7 @@ fun SigningSheet(
             onTrustedSignerCancel = onTrustedSignerCancel,
             onHandoffTrust = onHandoffTrust,
             onRetry = onRetry,
+            onRecheck = onRecheck,
         )
     }
 }
@@ -220,6 +225,8 @@ fun SigningSheetContent(
     onHandoffTrust: () -> Unit = {},
     /** Spec 096 F8: the failed receipt's Try again. */
     onRetry: (() -> Unit)? = null,
+    /** dapp-15: "Check again" on a could-not-check line whose node nobody reached. */
+    onRecheck: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     var techOverride by remember(model.state) { mutableStateOf<Boolean?>(null) }
@@ -357,9 +364,10 @@ fun SigningSheetContent(
                         SigningParty(block.label, block.name, block.address, block.badge)
 
                     is SigningBlock.Rows -> SigningRows(block.rows)
-                    is SigningBlock.Warning -> SigningWarning(block.tone, block.text)
+                    is SigningBlock.Warning -> SigningWarning(block.tone, block.text, recheck = block.recheck, onRecheck = onRecheck)
                     is SigningBlock.Positive -> SigningPositive(block.text)
-                    is SigningBlock.Code -> SigningCode(block.lines, block.note)
+                    is SigningBlock.Source -> SigningSource(block.text, block.tone)
+                    is SigningBlock.Code -> SigningCode(block.lines, block.note, runs = block.runs)
                     is SigningBlock.Card -> SigningCard(block.title, block.rows, block.tone)
                     is SigningBlock.Balances ->
                         SigningBalances(block.title, block.rows, block.note, block.noteTone)
@@ -383,6 +391,10 @@ fun SigningSheetContent(
                 }
             }
             model.blocks.forEach { block -> Draw(block) }
+
+            // Spec 103: the AI agent's opinion — its own card, under Vela's
+            // lines, over the fee (the web's `AgentAdviceCard`).
+            model.advice?.let { AgentAdviceCard(it) }
 
             Box(
                 Modifier
