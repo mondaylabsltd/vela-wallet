@@ -731,6 +731,9 @@ final class SendExecutor {
         }
         signing = task
         defer { signing = nil }
+        // A submit that ended before any prompt closes the "confirm → passkey"
+        // interval too (`PerfMarks`); one that reached the prompt closed it there.
+        defer { PerfMarks.passkeyRaised() }
         let watch = Task { @MainActor [pool, prepare, ports] in
             let started = Date()
             try? await Task.sleep(nanoseconds: UInt64(prepare.slowMs * 1_000_000))

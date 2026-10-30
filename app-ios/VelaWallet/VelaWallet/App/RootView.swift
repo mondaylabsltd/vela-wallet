@@ -4416,6 +4416,8 @@ struct RootView: View {
     /// agent's request asks for it — the slide, and the passkey after it —
     /// naming the review the tap was drawn on.
     private func confirmTransfer(review: String?) {
+        // "Confirm → passkey" starts with the tap (`PerfMarks`).
+        PerfMarks.confirmed()
         guard let operation = agent.reviewing() else {
             send.slideConfirm(review: review)
             return
