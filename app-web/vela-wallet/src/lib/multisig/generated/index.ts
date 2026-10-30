@@ -26,6 +26,8 @@ export * from './MultisigDraft';
 export * from './MultisigEnsAnswer';
 export * from './MultisigEntryNote';
 export * from './MultisigEntryView';
+export * from './MultisigFactsSource';
+export * from './MultisigFrozenFacts';
 export * from './MultisigHeldRequest';
 export * from './MultisigHeldStage';
 export * from './MultisigImportOutcome';
