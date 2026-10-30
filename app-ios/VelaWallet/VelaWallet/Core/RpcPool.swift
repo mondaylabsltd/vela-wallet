@@ -116,6 +116,11 @@ final class RpcPool {
     /// Chains read through the person's own node alone that cannot be read
     /// now — the balance's `own_node_chain_ids` (of its failed ones).
     private(set) var ownNodeUnreachedChains: [Int] = []
+    /// The pool's view as the core wrote it (`RpcPoolView`) — what the core's
+    /// `rpc_node_standing` reads a chain's standing from, so Settings' rows
+    /// and the balance read the person's node by one rule. `nil` before the
+    /// first view.
+    private(set) var viewJson: String?
 
     /// One in-flight call: what to send, what came back from where, and who is
     /// waiting.
@@ -166,8 +171,10 @@ final class RpcPool {
                 self?.unreachedChains = view.unreachedChains
                 self?.fallbackChains = view.fallbackChains
                 self?.ownNodeUnreachedChains = view.ownNodeUnreachedChains
+                self?.viewJson = self?.core.json
             },
-            onFault: { VelaLog.failure(.rpc, kind: "pool_fault", VelaLog.error($0)) }
+            onFault: { VelaLog.failure(.rpc, kind: "pool_fault", VelaLog.error($0)) },
+            keepsJson: true
         )
     }
 

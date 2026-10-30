@@ -28,6 +28,7 @@
 //
 
 import Foundation
+import VelaCore
 
 enum CoreHTTP {
 
@@ -267,24 +268,13 @@ enum CoreHTTP {
         return request
     }
 
-    /// The core's HTTPS exception (`network_admin::is_localhost_http`),
-    /// mirrored until uniffi exports it:
-    /// `/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/`, anchored
-    /// on the FULL host label — `http://127.0.0.1.evil.com` is NOT localhost.
+    /// The core's HTTPS exception (`network_admin::is_localhost_http`, over
+    /// uniffi): `http://` to `localhost`, `127.0.0.1` or `[::1]`, any port,
+    /// anchored on the FULL host label — `http://127.0.0.1.evil.com` is NOT
+    /// localhost. One rule, the core's; the mirror that stood here until the
+    /// export landed is gone.
     nonisolated static func isLocalhostHttp(_ url: String) -> Bool {
-        let lower = url.lowercased()
-        guard lower.hasPrefix("http://") else { return false }
-        var rest = Substring(lower.dropFirst("http://".count))
-        guard let host = ["localhost", "127.0.0.1", "[::1]"].first(where: { rest.hasPrefix($0) })
-        else { return false }
-        rest = rest.dropFirst(host.count)
-        if rest.hasPrefix(":") {
-            rest = rest.dropFirst()
-            let digits = rest.prefix(while: { $0.isASCII && $0.isNumber })
-            guard !digits.isEmpty else { return false }
-            rest = rest.dropFirst(digits.count)
-        }
-        return rest.isEmpty || rest.hasPrefix("/")
+        VelaCore.isLocalhostHttp(url: url)
     }
 
     private static func perform(_ request: URLRequest) async -> Probe {
