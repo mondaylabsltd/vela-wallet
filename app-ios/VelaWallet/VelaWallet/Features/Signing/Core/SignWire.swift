@@ -336,6 +336,9 @@ struct SignViewWire: Decodable, Equatable {
     let isSigning: Bool
     let isSubmitting: Bool
     let pendingOpHash: String?
+    /// The landing for the tracker handoff's operation was closed
+    /// (`landing_closed`): not raised again. Absent reads as open.
+    var landingClosed: Bool? = nil
     let error: SignErrorNoticeWire?
     let funding: SignFundingViewWire?
     /// This machine's own part of the gate. See the file header: the confirm

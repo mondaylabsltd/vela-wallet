@@ -48,6 +48,7 @@ struct SigningFixturesTests {
                 out += [label, name] + [address, badge?.text].compactMap { $0 }
             case .rows(let rows): out += rows.flatMap { [$0.label, $0.value] }
             case .warning(_, let text): out.append(text)
+            case .source(let text, _): out.append(text)
             case .positive(let text): out.append(text)
             case .code(_, let note): if let note { out.append(note) }
             case .card(let title, let rows, _):
