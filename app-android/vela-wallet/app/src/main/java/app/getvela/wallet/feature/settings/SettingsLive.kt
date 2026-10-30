@@ -653,28 +653,37 @@ object SettingsLive {
 
     /**
      * The RPC pool's word on the person's own nodes (owner decision
-     * 2026-10-28, `RpcPoolView`): the chains public nodes serve because the
-     * person's node is not answering, and the chains read through their node
+     * 2026-10-28, `RpcPoolView`), read per network by the core's one rule
+     * (`rpc_node_standing`): public nodes serving a chain because the
+     * person's node is not answering, or a chain read through their node
      * alone that cannot be reached. The web's `LiveOwnNodes`.
      */
-    data class OwnNodes(val fallback: List<Long> = emptyList(), val unreached: List<Long> = emptyList()) {
+    data class OwnNodes(val pool: app.getvela.wallet.feature.wallet.core.RpcPoolView) {
+        fun standing(chainId: Long): app.getvela.wallet.feature.wallet.core.NodeStanding =
+            if (chainId in 0..Int.MAX_VALUE.toLong()) {
+                pool.standing(chainId.toInt())
+            } else {
+                app.getvela.wallet.feature.wallet.core.NodeStanding.Pooled
+            }
+
         companion object {
-            fun of(pool: app.getvela.wallet.feature.wallet.core.RpcPoolView): OwnNodes = OwnNodes(
-                fallback = pool.fallback_chains.map { it.toLong() },
-                unreached = pool.own_node_unreached_chains.map { it.toLong() },
-            )
+            fun of(pool: app.getvela.wallet.feature.wallet.core.RpcPoolView): OwnNodes = OwnNodes(pool)
         }
     }
 
-    /** A network's own-node notice, or none — the pool's two lists, worded (the web's `ownNodeNotice`). */
-    fun ownNodeNotice(row: NetNetworkRow, nodes: OwnNodes?, strings: VelaStrings): NetworkNoticeModel? = when {
-        nodes == null || !row.own_rpc -> null
-        row.chain_id in nodes.unreached -> NetworkNoticeModel(
-            SettingsTone.Error,
-            strings.t(I18nKeys.SettingsUi.OWN_NODE_UNREACHABLE, mapOf("name" to row.display_name)),
-        )
-        row.chain_id in nodes.fallback -> NetworkNoticeModel(SettingsTone.Warn, strings.t(I18nKeys.SettingsUi.NETWORK_FALLBACK))
-        else -> null
+    /** A network's own-node notice, or none — its standing in the pool, worded (the web's `ownNodeNotice`). */
+    fun ownNodeNotice(row: NetNetworkRow, nodes: OwnNodes?, strings: VelaStrings): NetworkNoticeModel? {
+        if (nodes == null || !row.own_rpc) return null
+        return when (nodes.standing(row.chain_id)) {
+            app.getvela.wallet.feature.wallet.core.NodeStanding.OwnNodeUnreached -> NetworkNoticeModel(
+                SettingsTone.Error,
+                strings.t(I18nKeys.SettingsUi.OWN_NODE_UNREACHABLE, mapOf("name" to row.display_name)),
+            )
+            app.getvela.wallet.feature.wallet.core.NodeStanding.FallingBack ->
+                NetworkNoticeModel(SettingsTone.Warn, strings.t(I18nKeys.SettingsUi.NETWORK_FALLBACK))
+            app.getvela.wallet.feature.wallet.core.NodeStanding.OwnOnly,
+            app.getvela.wallet.feature.wallet.core.NodeStanding.Pooled -> null
+        }
     }
 
     /**

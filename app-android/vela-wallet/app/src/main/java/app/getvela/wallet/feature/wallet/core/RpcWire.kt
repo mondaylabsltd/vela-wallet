@@ -183,7 +183,39 @@ data class RpcPoolView(
      * so this view is the core's whole view. This shell does not hedge yet.
      */
     val pending_urls: Map<String, List<String>> = emptyMap(),
-)
+) {
+    /**
+     * Where [chainId]'s reads stand — the core's one reading of
+     * [own_only_chains], [own_node_unreached_chains] and [fallback_chains]
+     * (`rpc_node_standing`), so a network's row, the balance read and the
+     * breakdown never order the three lists their own way. A view the core
+     * cannot read is [NodeStanding.Pooled]: nothing to say, never a guess.
+     */
+    fun standing(chainId: Int): NodeStanding {
+        if (chainId < 0) return NodeStanding.Pooled
+        val wire = runCatching {
+            uniffi.vela_core_uniffi.rpcNodeStanding(
+                app.getvela.wallet.core.crux.Wire.json.encodeToString(serializer(), this),
+                chainId.toUInt(),
+            )
+        }.getOrDefault("")
+        return NodeStanding.entries.firstOrNull { it.wire == wire } ?: NodeStanding.Pooled
+    }
+}
+
+/**
+ * Where one chain's reads stand in the pool (`rpc_pool::NodeStanding`): with
+ * nothing to say, through the person's own node alone, their own-only node
+ * not answering ("Can't reach your node for …": nothing went elsewhere), or
+ * their node silent and public nodes serving the reads for now.
+ */
+@Serializable
+enum class NodeStanding(val wire: String) {
+    @SerialName("pooled") Pooled("pooled"),
+    @SerialName("own_only") OwnOnly("own_only"),
+    @SerialName("own_node_unreached") OwnNodeUnreached("own_node_unreached"),
+    @SerialName("falling_back") FallingBack("falling_back"),
+}
 
 // -- what the shell sends ----------------------------------------------------
 

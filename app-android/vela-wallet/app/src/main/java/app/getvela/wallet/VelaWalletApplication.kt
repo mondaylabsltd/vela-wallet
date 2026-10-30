@@ -650,7 +650,9 @@ class AppContainer(private val app: Application) {
         override val theme get() = themeRepository.current
         override suspend fun setTheme(value: ThemePreference) = themeRepository.setThemePreference(value)
         override fun applyLanguage(tag: String) = this@AppContainer.applyLanguage(tag)
-        override fun signingJson(): String? = signing.value?.signJson?.value
+        // The request with its sheet's facts (spec 103): what the agent reviews,
+        // and the fee its opinion is bound to.
+        override fun signingJson(): String? = signing.value?.agentSigningJson()
         override val browser get() = this@AppContainer.browser
         override fun signingSheet() = signing.value
         override fun agentWallets() = agent.config.value.wallets

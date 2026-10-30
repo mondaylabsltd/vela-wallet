@@ -292,6 +292,16 @@ object I18nKeys {
         const val GOT_IT = "common.gotIt"
     }
 
+    /** A `/pay` link the core refused (spec 039 Part B): the web's `/pay` page's words. */
+    object PayLink {
+        const val INVALID_TITLE = "receive.pay.invalidTitle"
+
+        /** A recipient or network the core refused — the corpus's one sentence for both. */
+        const val INVALID_BODY = "receive.pay.invalidBody"
+        const val INVALID_TOKEN = "receive.pay.invalidToken"
+        const val INVALID_AMOUNT = "receive.pay.invalidAmount"
+    }
+
     /** Wallet home vocabulary (spec 015, research.md D3 key map — all pre-existing corpus keys). */
     object Wallet {
         // Main navigation (tab bar).
@@ -897,7 +907,9 @@ object I18nKeys {
         /** r5reg-3: the reads before the passkey did not get through — the network's failure, by its name. */
         const val TX_ERROR_CHAIN_BUSY = "send.txErrorChainBusy"
         const val TX_ERROR_CHAIN_UNREACHABLE = "send.txErrorChainUnreachable"
-        /** send-15: another transaction of this account spent the nonce first; nothing was sent. */
+        /** A multisig's proposal this shell cannot make (`SendTxErrorKey::ProposalNotSupported`): said as that, no retry. */
+        const val TX_ERROR_PROPOSAL_NOT_SUPPORTED = "send.txErrorProposalNotSupported"
+        /** send-15:another transaction of this account spent the nonce first; nothing was sent. */
         const val WENT_FIRST = "componentsUi.signing.wentFirst"
         /** send-18 / round 3: the confirm opened without the recipient's check — said neutrally, with Check again. */
         const val RISK_UNFINISHED = "send.riskUnfinished"

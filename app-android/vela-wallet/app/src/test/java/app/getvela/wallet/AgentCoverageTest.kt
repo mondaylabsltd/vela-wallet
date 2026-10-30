@@ -122,7 +122,6 @@ class AgentCoverageTest {
             "controller.pickFee" to Place.Later(SIGN),
             "controller.refreshFee" to Place.Later(SIGN),
             "controller.retry" to Place.Later(SIGN),
-            "controller.review" to Place.Machine(READ),
             "controller.simAgain" to Place.Later(SIGN),
             "controller.swipeDismissed" to Place.Later(SIGN),
             "controller.toggleSpeed" to Place.Later(SIGN),

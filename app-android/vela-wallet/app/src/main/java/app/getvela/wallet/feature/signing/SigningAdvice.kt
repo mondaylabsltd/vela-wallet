@@ -8,24 +8,22 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
-import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
-import uniffi.vela_core_uniffi.intentAdvice
 import uniffi.vela_core_uniffi.intentAdviceStanding
-import uniffi.vela_core_uniffi.intentReview
 
 /**
  * The person's AI agent's opinion on the signing request on screen (spec
  * 103, `vela_advise`) — the web's `agent/advisor.ts` + `advice.svelte.ts`.
  *
- * Whether an opinion is accepted, and what of it is kept (plain text,
- * capped, no bidi or zero-width character, source hosts only), is the
- * core's (`intent_advice`, `agent_review::advice`). How it stands against
- * the sheet now — the review it was given for, the fee it was given at — is
- * the core's too (`intent_advice_standing`). What the sheet draws of it is
- * here: its own card, never one of Vela's words, greyed once the review it
- * was given for is not the one on screen or the fee moved past its band.
+ * The phone agent is the core's (`vela-agent`): it registers `vela_advise`
+ * and `vela_watch_reviews`, judges an opinion (plain text, capped, no bidi or
+ * zero-width character, source hosts only — `agent_review::advice`), keeps
+ * it with the request it was given on, and hands the card its input
+ * (`AgentCore.advice`: the opinion, its standing against the sheet now — the
+ * review it was given for, the fee it was given at — and that fee). What the
+ * sheet draws of it is here: its own card, never one of Vela's words, greyed
+ * once the review it was given for is not the one on screen or the fee
+ * moved past its band.
  */
 object SigningAdvice {
 
@@ -69,36 +67,33 @@ object SigningAdvice {
         val fee_when_given: FeeWhenGiven? = null,
     )
 
-    /** What `intent_advice` answers: the accepted opinion, or why not. */
-    sealed interface Answer {
-        data class Ok(val advice: Accepted) : Answer
-        data class Refused(val code: String, val detail: String) : Answer
+    /**
+     * What the phone agent hands the card (`AgentCore.advice`): the opinion
+     * as the core accepted it, how it stands against the sheet now, and the
+     * fee it was given for.
+     */
+    @Serializable
+    data class Held(
+        val advice: Accepted,
+        val standing: Standing = Standing.EarlierVersion,
+        val fee_when_given: FeeWhenGiven? = null,
+    ) {
+        val standingAnswer: StandingAnswer get() = StandingAnswer(standing, fee_when_given)
     }
 
     /**
-     * `vela_advise`'s arguments ([argsJson]), judged by the core against
-     * [worldJson] (who may use the wallet in front) and the review on screen
-     * ([currentDigest], its [currentFeeJson]): the opinion as the core kept
-     * it, or its refusal.
+     * The agent core's card input ([json], `AgentCore.advice`), read — `null`
+     * for none (no request on the sheet, no opinion on this one) or one that
+     * does not read: never a card drawn on a guess.
      */
-    fun accept(worldJson: String, currentDigest: String?, currentFeeJson: String?, argsJson: String): Answer {
-        val input = buildJsonObject {
-            put("world", Wire.json.parseToJsonElement(worldJson))
-            put("current_digest", currentDigest?.let { kotlinx.serialization.json.JsonPrimitive(it) } ?: JsonNull)
-            put("current_fee", currentFeeJson?.let(Wire.json::parseToJsonElement) ?: JsonNull)
-            put("args", Wire.json.parseToJsonElement(argsJson))
-        }
-        val answer = runCatching { Wire.json.parseToJsonElement(intentAdvice(input.toString())) as JsonObject }
-            .getOrElse { return Answer.Refused("internal", it.message.orEmpty()) }
-        val ok = (answer["ok"] as? kotlinx.serialization.json.JsonPrimitive)?.content == "true"
-        if (!ok) {
-            fun text(key: String) = (answer[key] as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty()
-            return Answer.Refused(text("code"), text("detail"))
-        }
-        val advice = answer["advice"]?.let { runCatching { Wire.json.decodeFromJsonElement(Accepted.serializer(), it) }.getOrNull() }
-            ?: return Answer.Refused("not_found", "no signing review is open")
-        return Answer.Ok(advice)
+    fun held(json: String?): Held? = json?.let {
+        runCatching { Wire.json.decodeFromString(Held.serializer(), it) }
+            .onFailure { error -> VelaLog.failure("signing.advice", "the agent's card could not be read", error) }
+            .getOrNull()
     }
+
+    /** The card the agent core's input ([json]) draws, as it stands now — `null` for none. */
+    fun cardOf(json: String?, s: VelaStrings): AdviceModel? = held(json)?.let { card(it.advice, it.standingAnswer, s) }
 
     /**
      * How [advice] stands against the review on the sheet now — its digest
@@ -117,36 +112,6 @@ object SigningAdvice {
             .getOrDefault(StandingAnswer())
     }
 
-    /**
-     * The dApp signing review on the sheet now, as the agent reads it
-     * (`vela_review`: `intent_rules::review` over the sign view, as the
-     * native agent builds it) — JSON, `null` when no request is open.
-     */
-    fun currentReview(signingJson: String?, account: String?, networksJson: String? = null): String? {
-        signingJson ?: return null
-        val input = runCatching {
-            buildJsonObject {
-                put("signing", Wire.json.parseToJsonElement(signingJson))
-                put("account", account?.takeIf { it.isNotBlank() }?.let { kotlinx.serialization.json.JsonPrimitive(it) } ?: JsonNull)
-                put("networks", networksJson?.let(Wire.json::parseToJsonElement) ?: JsonNull)
-            }
-        }.getOrNull() ?: return null
-        return runCatching { intentReview(input.toString()) }.getOrNull()
-    }
-
-    /** A review's `signing.review_digest` — `null` when it names no signing request. */
-    fun digestOf(reviewJson: String?): String? {
-        val review = reviewJson?.let { runCatching { Wire.json.parseToJsonElement(it) as JsonObject }.getOrNull() } ?: return null
-        val signing = review["signing"] as? JsonObject ?: return null
-        return (signing["review_digest"] as? kotlinx.serialization.json.JsonPrimitive)?.content
-    }
-
-    /** The fee a review shows (its `signing.fee`), as JSON — what an opinion is bound to. */
-    fun reviewFee(reviewJson: String?): String? {
-        val review = reviewJson?.let { runCatching { Wire.json.parseToJsonElement(it) as JsonObject }.getOrNull() } ?: return null
-        val fee = (review["signing"] as? JsonObject)?.get("fee") ?: return null
-        return fee.takeIf { it !is JsonNull }?.toString()
-    }
 
     /**
      * The card for [advice] as it stands ([standing]) — the web's
