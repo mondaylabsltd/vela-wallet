@@ -304,23 +304,6 @@ impl TabStripScroll {
     }
 }
 
-pub fn tab_strip(
-    theme: &Theme,
-    icons: &mut IconCache,
-    tabs: &[TabModel],
-    new_tab_label: SharedString,
-    close_label: SharedString,
-) -> Div {
-    tab_strip_with(
-        theme,
-        icons,
-        tabs,
-        new_tab_label,
-        close_label,
-        TabActions::default(),
-    )
-}
-
 pub fn tab_strip_with(
     theme: &Theme,
     icons: &mut IconCache,

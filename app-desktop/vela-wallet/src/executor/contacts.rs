@@ -176,6 +176,20 @@ where
         .collect()
 }
 
+/// The name the person gave `address` in their address book (vis-24), read
+/// from disk. Only their own word: a resolved name is a service's, not
+/// theirs, and is never told as the person's name for it.
+#[must_use]
+pub fn contact_name(address: &str) -> Option<String> {
+    let wanted = address.trim().to_lowercase();
+    read_list::<StoredContact, Contact>(storage::KEY_CONTACTS)
+        .into_iter()
+        .find(|contact| contact.address == wanted)
+        .and_then(|contact| contact.name)
+        .map(|name| name.trim().to_owned())
+        .filter(|name| !name.is_empty())
+}
+
 fn write_list<T, S: Serialize>(key: &str, items: &[T], to_stored: impl Fn(&T) -> S) {
     let encoded = Value::Array(
         items

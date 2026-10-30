@@ -623,7 +623,7 @@ fn the_page_signs_a_message_as_the_wallet_hashes_it() {
                 SAFE,
                 &original,
                 &rig.keys,
-                Signer::TrustedSigner {
+                Signer::TrustedPage {
                     ask: &ask,
                     page: rig.page.clone(),
                     channel: &rig.channel,

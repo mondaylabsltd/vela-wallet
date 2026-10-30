@@ -344,8 +344,10 @@ pub fn probe_treasury(chain_id: u32) -> SendTreasuryProbe {
 // JSON-RPC, through the pool
 // ---------------------------------------------------------------------------
 
-static QUOTE_CACHE: Mutex<Option<HashMap<String, (Vec<FeeAssetQuote>, Instant)>>> =
-    Mutex::new(None);
+/// `chain:safe` → the relay's rows and when they were read.
+type QuoteCache = HashMap<String, (Vec<FeeAssetQuote>, Instant)>;
+
+static QUOTE_CACHE: Mutex<Option<QuoteCache>> = Mutex::new(None);
 
 /// A decimal-looking string or number, kept as text so conversion never
 /// loses precision (`parseDecimalString`).
@@ -404,10 +406,10 @@ fn parse_quote_row(row: &Value) -> Option<FeeAssetQuote> {
         symbol: symbol.to_owned(),
         usd_balance,
         usd_price,
-        // Issue 682's floor price is a WEB seam so far: this shell has no
-        // balances feed to read a native price out of yet, and `None` is
-        // exactly the pre-682 answer (the blind 0.001-coin floor), so
-        // desktop's behaviour is unchanged rather than half-changed.
+        // Issue 682's floor price is the fee session's to add, per answer,
+        // from the balances already in memory ([`with_native_floor_price`]):
+        // never cached with the relay's rows, so a round settling between
+        // two answers is read by the next.
         native_usd_floor_price: None,
         // The relay's own floor for this row (relay `fix/held-nonce-and-floor`),
         // verbatim — the core reads hex or decimal. An older relay sends
@@ -418,6 +420,68 @@ fn parse_quote_row(row: &Value) -> Option<FeeAssetQuote> {
             _ => None,
         },
     })
+}
+
+/// Whether the RELAY's published price is one the core will actually use
+/// (the web's `relayPricedTheCoin`): the core's own grammar — digits, one
+/// optional dot, nothing else — and more than zero. A relay row that says
+/// "0" means exactly what no price means to the core, and read as "priced"
+/// here it would withhold the floor price and keep the issue-682 overcharge
+/// one spelling away from the fix.
+fn relay_priced_the_coin(usd_price: Option<&str>) -> bool {
+    let Some(price) = usd_price else {
+        return false;
+    };
+    let mut parts = price.splitn(2, '.');
+    let whole = parts.next().unwrap_or_default();
+    let fraction = parts.next();
+    let digits = |text: &str| !text.is_empty() && text.bytes().all(|b| b.is_ascii_digit());
+    digits(whole)
+        && fraction.is_none_or(digits)
+        && price.parse::<f64>().is_ok_and(|value| value > 0.0)
+}
+
+/// What this wallet last read the native coin of `chain_id` to be worth, for
+/// `account` — from the balances already in memory (the web's
+/// `getCachedNativePriceUsd`), a synchronous read, never a fetch: a cold
+/// cache simply means the core gets today's blind floor. A zero or negative
+/// "price" is not a price.
+#[must_use]
+pub fn cached_native_price_usd(account: &str, chain_id: u32) -> Option<f64> {
+    crate::executor::balance_dashboard::settled(account)?
+        .tokens
+        .iter()
+        .find(|token| token.chain_id == chain_id && token.token_address.is_none())
+        .and_then(|token| token.price_usd)
+        .filter(|price| *price > 0.0)
+}
+
+/// Issue 682, as the web's fee executor does it: the relay publishes no price
+/// for a coin its feed does not know — every network the person ADDED, in
+/// practice — and the core's "$0.01 worth of the coin" minimum then fell back
+/// to a blind 0.001 of it (on XLayer's OKB, twelve times the cent, on every
+/// send). So when the relay priced nothing, the native row carries the price
+/// this wallet already derived for its balances.
+///
+/// A FLOOR PRICE, NOT A CONVERSION RATE: only the native minimum in
+/// `fee_policy` reads it, and the core only lets it LOWER that floor. Only on
+/// the native row, only when the relay priced nothing, and only a positive
+/// finite figure under 1e21, at the core's eight decimals.
+#[must_use]
+pub fn with_native_floor_price(
+    mut quotes: Vec<FeeAssetQuote>,
+    floor_price_usd: Option<f64>,
+) -> Vec<FeeAssetQuote> {
+    let floor = floor_price_usd
+        .filter(|price| price.is_finite() && *price > 0.0 && *price < 1e21)
+        .map(|price| format!("{price:.8}"));
+    for quote in &mut quotes {
+        quote.native_usd_floor_price = (quote.asset == FeeAssetKind::Native
+            && !relay_priced_the_coin(quote.usd_price.as_deref()))
+        .then(|| floor.clone())
+        .flatten();
+    }
+    quotes
 }
 
 /// Every in-band fee asset in one call (`fetchInBandGasQuotes`), cached 8 s.
@@ -1279,6 +1343,68 @@ fn sponsorship_answer(status: u16, text: &str) -> (bool, Option<String>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn quote_row(asset: &str, usd_price: Option<&str>) -> FeeAssetQuote {
+        let mut row = json!({
+            "recipient": "0x00000000000000000000000000000000000000aa",
+            "asset": asset,
+            "balance": "0x0",
+            "decimals": 18,
+            "symbol": if asset == "native" { "OKB" } else { "USDC" },
+            "usdBalance": "0",
+        });
+        if asset == "erc20" {
+            row["feeToken"] = json!("0x00000000000000000000000000000000000000bb");
+        }
+        if let Some(price) = usd_price {
+            row["usdPrice"] = json!(price);
+        }
+        parse_quote_row(&row).unwrap_or_else(|| unreachable!("a well-formed row"))
+    }
+
+    /// The web's `relayPricedTheCoin`: the core's own grammar, and more than
+    /// zero — "0" and "1e-7" are no price.
+    #[test]
+    fn only_a_price_the_core_would_use_counts_as_the_relays() {
+        assert!(relay_priced_the_coin(Some("120.5")));
+        assert!(relay_priced_the_coin(Some("3")));
+        assert!(!relay_priced_the_coin(None));
+        assert!(!relay_priced_the_coin(Some("0")));
+        assert!(!relay_priced_the_coin(Some("0.0")));
+        assert!(!relay_priced_the_coin(Some("1e-7")));
+        assert!(!relay_priced_the_coin(Some("-1")));
+        assert!(!relay_priced_the_coin(Some(".5")));
+    }
+
+    /// Issue 682: the balances' price rides on the native row only, only
+    /// when the relay priced nothing, at eight decimals — and a price that
+    /// is not one never crosses.
+    #[test]
+    fn the_native_floor_price_is_the_balances_when_the_relay_has_none() {
+        let rows = || vec![quote_row("native", None), quote_row("erc20", Some("1"))];
+        let floored = with_native_floor_price(rows(), Some(120.25));
+        assert_eq!(
+            floored[0].native_usd_floor_price.as_deref(),
+            Some("120.25000000")
+        );
+        assert_eq!(floored[1].native_usd_floor_price, None, "never a stable's");
+
+        let priced = with_native_floor_price(vec![quote_row("native", Some("119"))], Some(120.25));
+        assert_eq!(priced[0].native_usd_floor_price, None, "the relay's wins");
+        let zero = with_native_floor_price(vec![quote_row("native", Some("0"))], Some(120.25));
+        assert_eq!(zero[0].native_usd_floor_price.as_deref(), Some("120.25000000"));
+
+        for bad in [None, Some(0.0), Some(-3.0), Some(f64::NAN), Some(f64::INFINITY), Some(1e21)] {
+            let rows = with_native_floor_price(vec![quote_row("native", None)], bad);
+            assert_eq!(rows[0].native_usd_floor_price, None, "{bad:?} is no price");
+        }
+        let tiny = with_native_floor_price(vec![quote_row("native", None)], Some(1e-7));
+        assert_eq!(
+            tiny[0].native_usd_floor_price.as_deref(),
+            Some("0.00000010"),
+            "never the exponent"
+        );
+    }
 
     /// Spec 083 fee: the relay's "UserOperation simulation failed" (the
     /// device log's words) and a revert are answers about the operation; a

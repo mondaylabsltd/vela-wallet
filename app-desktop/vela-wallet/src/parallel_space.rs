@@ -84,6 +84,54 @@ pub fn is_test_wallet(account: &vela_core::app::Account) -> bool {
     }
 }
 
+/// `VELA_PARALLEL_SEED=1`, inside the parallel space: a store with no wallet
+/// is given the keyset's three single-key wallets — Parallel One active — so
+/// a headless run starts signed in, as the web's `vela.parallel.enter()`
+/// seeds its fixture wallet. Never touches a store that holds a wallet; the
+/// fixture keys are public, so these can be nobody's own. Answers how many
+/// were written. Compiled only with `dev-fixtures`.
+#[cfg(feature = "dev-fixtures")]
+pub fn seed_wallets() -> usize {
+    use vela_core::app::{Account, AccountKey};
+    use vela_core::dev_fixtures as fixtures;
+    if !active() || std::env::var("VELA_PARALLEL_SEED").as_deref() != Ok("1") {
+        return 0;
+    }
+    let storage_has_wallets = crate::executor::storage::load_accounts()
+        .map_or(true, |accounts| !accounts.is_empty());
+    if storage_has_wallets {
+        return 0;
+    }
+    let Ok(rows) = fixtures::accounts() else {
+        return 0;
+    };
+    let mut written = 0;
+    for row in rows {
+        let account = Account {
+            id: row.credential_id_hex.clone(),
+            name: row.name.to_owned(),
+            address: row.address.clone(),
+            public_key_hex: row.public_key_hex.clone(),
+            created_at_iso: "2026-01-01T00:00:00.000Z".to_owned(),
+            keys: vec![AccountKey {
+                credential_id: row.credential_id_hex.clone(),
+                public_key_hex: row.public_key_hex.clone(),
+                name: String::new(),
+                transports: fixtures::TRANSPORTS.to_owned(),
+                signer_origin: None,
+            }],
+            sign_in_key: None,
+            signing_domain: vela_core::signing_venue::APP_DOMAIN.to_owned(),
+            signing_venue: vela_core::signing_venue::SigningVenue::InVela,
+        };
+        if crate::executor::storage::save_account(&account).is_ok() {
+            written += 1;
+        }
+    }
+    let _ = crate::executor::storage::save_active_index(0);
+    written
+}
+
 /// The marker, over whichever screen `root` is. A no-op when the space is
 /// not active, so every root can call it without a branch of its own.
 pub fn overlay(root: Div, _window: &Window) -> Div {

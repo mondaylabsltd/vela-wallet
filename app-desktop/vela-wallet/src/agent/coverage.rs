@@ -195,6 +195,7 @@ const EVENTS: &[(&str, Place)] = &[
     ("NetEvent::EndpointBlurred", Intent("set_service_endpoint")),
     ("NetEvent::EndpointEdited", Step("set_service_endpoint")),
     ("NetEvent::EndpointsOpened", Step("set_service_endpoint")),
+    ("NetEvent::OnlyMineChanged", Intent("set_only_my_node")),
     ("NetEvent::OverrideBlurred", Intent("set_network_endpoint")),
     ("NetEvent::OverrideExpanded", Step("set_network_endpoint")),
     (
@@ -245,7 +246,20 @@ const EVENTS: &[(&str, Place)] = &[
         View("a notice dismissed"),
     ),
     ("SendEvent::DisplayChanged", Machine("the display currency")),
+    ("SendEvent::ChainAnswered", Machine("the network answering again")),
     ("SendEvent::Done", View("the receipt closed")),
+    (
+        "sign_request::Event::LandingClosed",
+        View("the landing on screen closed"),
+    ),
+    (
+        "SendEvent::SendAgain",
+        View("the receipt's own way back to the review it confirms again"),
+    ),
+    (
+        "SendEvent::RetryRiskCheck",
+        View("the review's own retry of the recipient check"),
+    ),
     ("SendEvent::EditAmount", Step("prepare_transfer")),
     ("SendEvent::EnterSplitMode", Step("prepare_batch_transfer")),
     ("SendEvent::FeeBusyChanged", Machine("the fee quote")),
@@ -344,6 +358,8 @@ const EVENTS: &[(&str, Place)] = &[
         View("the network filter"),
     ),
     ("approval_guard::Event::CustomAmountChanged", Later(SIGN)),
+    ("approval_guard::Event::GrantDeliberatelyChosen", Later(SIGN)),
+    ("approval_guard::Event::LegGrantDeliberatelyChosen", Later(SIGN)),
     ("approval_guard::Event::LegCustomAmountChanged", Later(SIGN)),
     ("approval_guard::Event::LegPresetSelected", Later(SIGN)),
     ("approval_guard::Event::PresetSelected", Later(SIGN)),
@@ -472,9 +488,17 @@ const CALLS: &[(&str, Place)] = &[
         "balance_dashboard::dispatch",
         Machine("its events are placed above"),
     ),
+    (
+        "balance_dashboard::note_only",
+        Machine("a boot: the account noted, no network read (perf-10)"),
+    ),
     ("balance_dashboard::pull", Intent("refresh_balances")),
     ("balance_dashboard::refresh", Intent("refresh_balances")),
     ("balance_dashboard::settled", Machine("a read")),
+    (
+        "balance_dashboard::shown",
+        Machine("the home on screen: a noted account is read"),
+    ),
     ("balance_dashboard::start_ticks", Machine("a tick")),
     ("balance_dashboard::take_invalidation", Machine("a read")),
     ("device_storage::clear_caches", Intent("clear_caches")),
@@ -623,6 +647,7 @@ const CALLS: &[(&str, Place)] = &[
     ("tracker::focused", Machine("the chain tracker")),
     ("tracker::in_flight_news", Machine("the chain tracker")),
     ("tracker::start", Machine("the chain tracker")),
+    ("tracker::submit_facts", Machine("the chain tracker")),
     ("tracker::submitted", Machine("the chain tracker")),
     ("tracker::withdrawn", Machine("the chain tracker")),
 ];

@@ -77,6 +77,11 @@ struct Signal {
 }
 
 impl Signal {
+    // The `Arc` is the delegate's ivar type (objc2's `declare_class!` holds it);
+    // `Signal` is `!Send` only through the `Retained` channel it carries, which
+    // the connecting thread takes once it is open — the Mutex/Condvar pair is
+    // the only thing shared.
+    #[allow(clippy::arc_with_non_send_sync)]
     fn new() -> Arc<Self> {
         Arc::new(Self {
             state: Mutex::new(Shared::default()),

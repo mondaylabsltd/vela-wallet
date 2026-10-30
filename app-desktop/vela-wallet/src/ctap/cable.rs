@@ -189,31 +189,26 @@ impl Cable for PhoneCable {
 /// The two 16-bit BLE service-data UUIDs a caBLE responder advertises under
 /// (CTAP 2.2 used `0xFFF9`; 2.3 moved to `0xFDE2`). A scanner watches both.
 const SERVICE_UUIDS: [Uuid; 2] = [
-    Uuid::from_u128(0x0000_fff9_0000_1000_8000_00805f9b34fb),
-    Uuid::from_u128(0x0000_fde2_0000_1000_8000_00805f9b34fb),
+    Uuid::from_u128(0x0000_fff9_0000_1000_8000_0080_5f9b_34fb),
+    Uuid::from_u128(0x0000_fde2_0000_1000_8000_0080_5f9b_34fb),
 ];
 
-/// Can this desktop connect a Bluetooth LE L2CAP connection-oriented channel —
-/// the CTAP 2.3 local data channel, which needs no tunnel server?
-///
-/// macOS can, through `CBL2CAPChannel` (see [`l2cap`]); Linux can, through a
-/// BlueZ `AF_BLUETOOTH`/`BTPROTO_L2CAP` socket (see [`l2cap_linux`]). Windows
-/// cannot — and the gap is the OS's, verified, not this module's laziness:
-/// user mode gets RFCOMM sockets (classic Bluetooth) and GATT (WinRT), but LE
-/// CoC — the exact channel CTAP 2.3 rides on — has no user-mode surface; it
-/// takes a KMDF kernel profile driver speaking the L2CAP DDI. Even Microsoft's
-/// own cross-device passkey flow requires internet on both devices (tunnel
-/// data, BLE for proximity only). The one real route — our own HCI/L2CAP stack
-/// on a WinUSB-attached dongle — is the Phase-11 self-owned-stack project, not
-/// a patch.
-///
-/// It is read twice, and both readings matter. The QR payload uses it to decide
-/// whether to OFFER the BLE channel: offering one that cannot be connected
-/// invites an authenticator to pick it and strands the ceremony. And
-/// [`establish_hybrid`] uses it as the guard on the L2CAP branch, so an
-/// authenticator that advertises a PSM anyway lands on the tunnel rather than
-/// on an error.
-pub const BLE_CHANNEL_SUPPORTED: bool = cfg!(any(target_os = "macos", target_os = "linux"));
+// Which desktops can connect a Bluetooth LE L2CAP connection-oriented channel —
+// the CTAP 2.3 local data channel, which needs no tunnel server? The
+// `cfg(any(target_os = "macos", target_os = "linux"))` on
+// [`establish_hybrid`]'s L2CAP branch says it, so an authenticator that
+// advertises a PSM anyway lands on the tunnel rather than on an error.
+//
+// macOS can, through `CBL2CAPChannel` (see [`l2cap`]); Linux can, through a
+// BlueZ `AF_BLUETOOTH`/`BTPROTO_L2CAP` socket (see [`l2cap_linux`]). Windows
+// cannot — and the gap is the OS's, verified, not this module's laziness:
+// user mode gets RFCOMM sockets (classic Bluetooth) and GATT (WinRT), but LE
+// CoC — the exact channel CTAP 2.3 rides on — has no user-mode surface; it
+// takes a KMDF kernel profile driver speaking the L2CAP DDI. Even Microsoft's
+// own cross-device passkey flow requires internet on both devices (tunnel
+// data, BLE for proximity only). The one real route — our own HCI/L2CAP stack
+// on a WinUSB-attached dongle — is the Phase-11 self-owned-stack project, not
+// a patch.
 
 /// The WebSocket subprotocol the tunnel server requires.
 const CABLE_SUBPROTOCOL: &str = "fido.cable";
@@ -378,7 +373,7 @@ impl CablePort for WebSocketCablePort {
         }
         log(&format!("→ tunnel frame ({} bytes)", frame.len()));
         self.ws
-            .send(Message::Binary(frame.to_vec().into()))
+            .send(Message::Binary(frame.to_vec()))
             .map_err(port_error)
     }
 
@@ -578,8 +573,8 @@ fn connect_phone(
     // 2.2 tunnel is still derivable and an authenticator that offers BOTH
     // channels will meet us there. Only a BLE-ONLY authenticator is genuinely
     // out of reach — and it should never have got this far, because the QR
-    // this desktop showed did not offer the BLE channel (`BLE_CHANNEL_SUPPORTED`
-    // gates `qr_payload`), so it would have declined the QR outright. Falling
+    // this desktop showed did not offer the BLE channel (the QR offers no
+    // channel at all), so it would have declined the QR outright. Falling
     // through beats the hard error this used to raise, which also caught every
     // dual-channel phone.
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]

@@ -41,6 +41,9 @@ use vela_core::app::network_admin::{
     NetShellResult, NetStoredEndpoints, NetworkAdmin, P256_PRECOMPILE, VALID_P256_CALL,
 };
 
+use vela_core::app::shown_networks::{self, NetShownNetworks, NetUseEvidence};
+
+use crate::diag::vlog;
 use crate::executor::{proxy, storage};
 use crate::resident::{Answer, Machine};
 
@@ -370,7 +373,84 @@ pub fn wallet_chain_ids() -> Vec<u32> {
     crate::network_space::retain(all_wallet_chain_ids())
 }
 
+// ---------------------------------------------------------------------------
+// Shown networks — settled once per device (owner decision 2026-10-29)
+// ---------------------------------------------------------------------------
+
+/// Chain ids under `field` of every row of the list stored at `key`.
+fn stored_chain_ids(key: &str, field: &str) -> Vec<u32> {
+    let Ok(Some(Value::Array(rows))) = storage::read_value(key) else {
+        return Vec::new();
+    };
+    rows.iter()
+        .filter_map(|row| row.get(field).and_then(Value::as_u64))
+        .filter_map(|id| u32::try_from(id).ok())
+        .filter(|id| *id > 0)
+        .collect()
+}
+
+/// Everything this device holds that ties its person to a network — the
+/// web's `gatherNetworkUse`, read from this shell's stores as they are. What
+/// counts is the core's (`shown_networks::settle`).
+#[must_use]
+pub fn gather_network_use() -> NetUseEvidence {
+    NetUseEvidence {
+        balance_chain_ids: crate::executor::balance_dashboard::held_chain_ids(),
+        activity_chain_ids: stored_chain_ids("vela.transactionHistory", "chainId"),
+        // Multisig accounts are the web's alone so far.
+        multisig_chain_ids: Vec::new(),
+        chosen_chain_ids: stored_chain_ids("vela.customTokens", "chainId"),
+        overrides: decode_list::<StoredConfig, NetNetworkConfig>(storage::KEY_NETWORK_CONFIG),
+        added_chain_ids: read_store_custom_chain_ids(),
+    }
+}
+
+/// The device's record: the stored one, else — once — the one the core
+/// settles from what this device holds, stored before it is used (the web's
+/// `settleShownNetworks`). A record that cannot be stored still answers for
+/// this run's caller; the next read settles again, on the same evidence.
+/// Reading a record of a later shape is reading it, never settling again.
+pub fn settle_shown_networks() -> NetShownNetworks {
+    let stored = storage::read_value(shown_networks::KEY)
+        .ok()
+        .flatten()
+        .and_then(|value| serde_json::from_value::<NetShownNetworks>(value).ok());
+    let settled = shown_networks::settle(stored, &gather_network_use());
+    if settled.write {
+        match serde_json::to_value(&settled.record) {
+            Ok(value) => {
+                if storage::write_value(shown_networks::KEY, value).is_err() {
+                    vlog!("network_admin", "the shown networks could not be stored");
+                }
+            }
+            Err(_) => vlog!("network_admin", "the shown networks did not serialize"),
+        }
+    }
+    settled.record
+}
+
+/// [`settle_shown_networks`], once per store this process has opened —
+/// before anything lists networks for the person (the balances, Settings'
+/// network ledger), so no network is read and then hidden.
+pub fn ensure_shown_networks() {
+    static SETTLED: std::sync::Mutex<Vec<std::path::PathBuf>> = std::sync::Mutex::new(Vec::new());
+    let Ok(path) = storage::path() else {
+        return;
+    };
+    let mut settled = SETTLED
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if settled.contains(&path) {
+        return;
+    }
+    let _ = settle_shown_networks();
+    settled.push(path);
+}
+
 fn read_store() -> NetShellResult {
+    // The device's shown Vela networks are settled (once, by the core)
+    // before the ledger reads them: never a list drawn before it.
+    ensure_shown_networks();
     let endpoints = storage::read_value(storage::KEY_SERVICE_ENDPOINTS)
         .ok()
         .flatten()
@@ -404,8 +484,9 @@ fn read_store() -> NetShellResult {
             ankr: provider_keys.ankr,
         },
         multisig_service: false,
-        // Which Vela networks shown on the person's word they show. None
-        // stored (this shell does not settle a device yet): every one is shown.
+        // Which Vela networks shown on the person's word they show — the
+        // record settled above. None stored (a store that refused the write):
+        // every one is shown.
         shown_networks: storage::read_value(vela_core::app::shown_networks::KEY)
             .ok()
             .flatten()
@@ -830,6 +911,66 @@ mod tests {
     use super::*;
     use crate::core_host::CoreHost;
     use vela_core::app::network_admin::NetOverrideField;
+
+    /// Owner decision 2026-10-29, on the desktop: a device with no record is
+    /// settled once from what it holds — a held coin, a record of activity,
+    /// a token added there, an RPC of the person's own — and the rest of the
+    /// opt-in networks leave the lists; after that the record is the
+    /// person's word and nothing re-decides it.
+    #[test]
+    fn a_device_is_settled_once_from_what_it_holds() {
+        crate::executor::storage::tests::with_temp_state("shown-settle", || {
+            // Stable (988): money held there. MegaETH (4326): a record of
+            // activity. Plume (98866): an RPC of the person's own.
+            crate::executor::balance_dashboard::save_holdings(
+                "0xabc",
+                "mainnet",
+                &[vela_core::app::balance_dashboard::BalanceToken {
+                    chain_id: 988,
+                    symbol: "USDT".to_owned(),
+                    name: "USDT".to_owned(),
+                    balance: "5".to_owned(),
+                    decimals: 6,
+                    token_address: Some("0x1".to_owned()),
+                    price_usd: Some(1.0),
+                    spam: false,
+                }],
+                1.0,
+            );
+            let _ = storage::write_value(
+                "vela.transactionHistory",
+                json!([{ "chainId": 4326, "to": "0x2", "type": "send" }]),
+            );
+            let _ = storage::write_value(
+                storage::KEY_NETWORK_CONFIG,
+                json!([{ "chainId": 98866, "rpcURL": "http://127.0.0.1:9145", "explorerURL": "", "bundlerURL": "" }]),
+            );
+            let evidence = gather_network_use();
+            assert_eq!(evidence.balance_chain_ids, vec![988]);
+            assert_eq!(evidence.activity_chain_ids, vec![4326]);
+            let record = settle_shown_networks();
+            for kept in [988, 4326, 98866] {
+                assert!(record.shown.contains(&kept), "{kept} stays shown");
+            }
+            assert!(!record.shown.contains(&1_440_000), "unused: out of the lists");
+            let stored: NetShownNetworks = serde_json::from_value(
+                storage::read_value(shown_networks::KEY).ok().flatten().unwrap_or_default(),
+            )
+            .unwrap_or_default();
+            assert_eq!(stored, record, "stored before it is used");
+            // The person's word stands: new evidence re-decides nothing.
+            let _ = storage::write_value(
+                "vela.transactionHistory",
+                json!([{ "chainId": 1_440_000, "to": "0x2", "type": "send" }]),
+            );
+            assert_eq!(settle_shown_networks(), record);
+            // …and the ledger reads the record it settled.
+            let NetShellResult::StoreLoaded { shown_networks, .. } = read_store() else {
+                unreachable!("read_store answers the store");
+            };
+            assert_eq!(shown_networks, Some(record));
+        });
+    }
 
     /// The chain directory answers an OBJECT with the rows under `data`.
     /// Reading it as a bare array gave every search zero results, and a search
@@ -1271,7 +1412,6 @@ mod tests {
 
             let mismatch = row
                 .rpc_chain_mismatch
-                .clone()
                 .unwrap_or_else(|| unreachable!("the write was NOT refused: {row:?}"));
             println!(
                 "  refused: card is chain {}, endpoint reported chain {}",

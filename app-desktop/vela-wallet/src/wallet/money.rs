@@ -75,6 +75,34 @@ use vela_core::app::send::SendAddNetworkOutcome;
 
 use super::speed_control::{self, SpeedControl, SpeedHost};
 
+/// How often the network is asked while its failure is on the review
+/// (round 6, `chain-recovery.ts` `RECOVERY_EVERY_MS`).
+const RECOVERY_EVERY: std::time::Duration = std::time::Duration::from_millis(5_000);
+/// How long one of those reads may take before it counts as no answer
+/// (`RECOVERY_READ_MS`).
+const RECOVERY_READ: std::time::Duration = std::time::Duration::from_millis(4_000);
+
+/// The network a submit failed as, while the review says so: the form's
+/// network, only for `ChainUnreachable` / `ChainBusy` on an errored submit.
+fn recovery_chain(view: &SendView) -> Option<u32> {
+    use vela_core::app::send::{SendTxErrorKey, SendTxStatus};
+    if view.tx_status != SendTxStatus::Error
+        || !matches!(
+            view.tx_error,
+            Some(SendTxErrorKey::ChainUnreachable | SendTxErrorKey::ChainBusy)
+        )
+    {
+        return None;
+    }
+    view.selected_token.as_ref().map(|token| token.chain_id)
+}
+
+/// One bounded read of the chain's head: an error body is no answer.
+fn head_answers(chain_id: u32) -> bool {
+    crate::executor::pool::call_within(chain_id, "eth_blockNumber", serde_json::json!([]), RECOVERY_READ)
+        .is_ok_and(|body| body.get("error").is_none() && body.get("result").is_some_and(serde_json::Value::is_string))
+}
+
 /// How often the ceremony channel and the signing flag are polled while a
 /// machine is busy. The same cadence onboarding uses.
 const TICK_MS: u64 = 120;
@@ -290,6 +318,9 @@ pub struct SendHost {
     pub pin: Option<PinDialog>,
     pub pick: Option<Vec<CredentialChoice>>,
     watching: bool,
+    /// Round 6: the network a submit failed as (`ChainUnreachable` /
+    /// `ChainBusy`) while that line is up — asked until it answers.
+    recovery: Option<u32>,
     /// The last whole second the receipt re-rendered for (#D3).
     last_counted_second: Option<u64>,
     signing_reported: bool,
@@ -414,6 +445,7 @@ impl SendHost {
             pin: None,
             pick: None,
             watching: false,
+            recovery: None,
             last_counted_second: None,
             signing_reported: false,
             relay_sent_at_ms: None,
@@ -549,6 +581,7 @@ impl SendHost {
         self.sync_stage(cx);
         self.sync_batch(cx);
         self.ensure_watcher(cx);
+        self.watch_recovery(cx);
         // The form may have just reached the chain the fee session prices —
         // or left the chain its failure was for.
         self.sync_fee_failed(cx);
@@ -959,6 +992,15 @@ impl SendHost {
                     },
                     cx,
                 );
+                // Round 3 (send-5): what the submit knew of an op that may
+                // have been sent — the nonce it signed — once the hand-off
+                // has named its records, as the web's `noteSubmitFacts`.
+                if *maybe_sent
+                    && !record_ids.is_empty()
+                    && let Some(nonce) = send_executor::take_signed_nonce(user_op_hash)
+                {
+                    tracker::submit_facts(user_op_hash, nonce, None, cx);
+                }
                 self.resolve_send(id, SendShellResult::TrackHandedOff, cx);
                 return;
             }
@@ -1317,6 +1359,49 @@ impl SendHost {
         })
     }
 
+    /// Round 6 (the web's `watchChainRecovery`): a submit that failed as the
+    /// network's leaves Confirm & Send shut with the network's words. While
+    /// that line is up the form's network is asked — one bounded read every
+    /// [`RECOVERY_EVERY`] — and its first answer is told to the core
+    /// (`ChainAnswered`, which opens the confirm) with the fee asked again.
+    /// The line stays until the network itself answers.
+    fn watch_recovery(&mut self, cx: &mut Context<Self>) {
+        let want = recovery_chain(&self.view);
+        if want == self.recovery {
+            return;
+        }
+        self.recovery = want;
+        let Some(chain_id) = want else {
+            return;
+        };
+        cx.spawn(async move |host, cx| {
+            loop {
+                cx.background_executor().timer(RECOVERY_EVERY).await;
+                let watching = host
+                    .update(cx, |host, _| host.recovery == Some(chain_id))
+                    .unwrap_or(false);
+                if !watching {
+                    break;
+                }
+                let answered = cx
+                    .background_executor()
+                    .spawn(async move { head_answers(chain_id) })
+                    .await;
+                if answered {
+                    let _ = host.update(cx, |host, cx| {
+                        if host.recovery == Some(chain_id) {
+                            host.recovery = None;
+                            host.dispatch(SendEvent::ChainAnswered { chain_id }, cx);
+                            host.refresh_fee(cx);
+                        }
+                    });
+                    break;
+                }
+            }
+        })
+        .detach();
+    }
+
     fn ensure_watcher(&mut self, cx: &mut Context<Self>) {
         if self.watching || (self.send.is_idle() && self.fees_idle() && !self.receipt_counting()) {
             return;
@@ -1519,6 +1604,36 @@ mod tests {
     use vela_core::app::send::{SendChainInfo, SendFeeCoin, SendToken};
 
     const BSC_USDT: &str = "0x55d398326f99059ff775485246999027b3197955";
+
+    /// Round 6: only a submit that failed as the network's is watched for
+    /// the network's answer — on the form's network — and nothing else.
+    #[test]
+    fn only_a_network_failure_is_watched_for_the_networks_answer() {
+        use vela_core::app::send::{SendTxErrorKey, SendTxStatus};
+        let mut view = CoreHost::<Send>::new().view();
+        view.selected_token = Some(SendToken {
+            network: "arc-testnet".to_owned(),
+            chain_id: 5_042_002,
+            symbol: "USDC".to_owned(),
+            balance: "1".to_owned(),
+            decimals: 6,
+            token_address: None,
+            price_usd: None,
+            logo_urls: Vec::new(),
+            spam: false,
+        });
+        assert_eq!(recovery_chain(&view), None);
+        view.tx_status = SendTxStatus::Error;
+        for key in [SendTxErrorKey::ChainUnreachable, SendTxErrorKey::ChainBusy] {
+            view.tx_error = Some(key);
+            assert_eq!(recovery_chain(&view), Some(5_042_002));
+        }
+        view.tx_error = Some(SendTxErrorKey::Generic);
+        assert_eq!(recovery_chain(&view), None, "another error is kept as it is");
+        view.tx_error = Some(SendTxErrorKey::ChainUnreachable);
+        view.tx_status = SendTxStatus::Idle;
+        assert_eq!(recovery_chain(&view), None, "the line is down");
+    }
 
     /// A send journey on the real machine, its effects answered inline: the
     /// holdings below, and every warm quote FAILED — the form has no estimate

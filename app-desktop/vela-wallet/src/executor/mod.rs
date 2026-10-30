@@ -65,6 +65,7 @@ pub mod payment_request;
 mod platform_macos;
 pub mod pool;
 pub mod preferences;
+pub mod prepare_bound;
 pub mod proxy;
 #[cfg(target_os = "macos")]
 pub mod proxy_macos;

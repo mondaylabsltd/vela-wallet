@@ -165,7 +165,16 @@ pub fn switch(space: NetworkSpace, cx: &mut App) {
             snapshot.space = space;
         }
     }
-    networks_changed(cx);
+    // A switch of space starts the account over in the core (home-7): the
+    // other space's failures, holdings and cached total are not said here,
+    // the cache is read again for this space and the chains forced — then
+    // the rows this space last showed (the web's `space_changed` and
+    // `#restoreRows`).
+    if crate::session::view(cx).address.is_empty() {
+        return;
+    }
+    tell_feed(cx);
+    crate::executor::balance_dashboard::space_switched(cx);
 }
 
 /// The space's network set changed — a switch, a network added, moved to

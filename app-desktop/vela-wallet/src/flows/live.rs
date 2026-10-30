@@ -1192,6 +1192,9 @@ pub fn receive_list(address: &str, s: &FlowStrings) -> ReceiveList {
 
 /// One network's QR, with the person's real address under it.
 #[must_use]
+// A builder over the screen's inputs, each a different source; a struct of
+// them would be one more name for the same list.
+#[allow(clippy::too_many_arguments)]
 pub fn receive_qr(
     address: &str,
     name: &str,
@@ -1281,6 +1284,9 @@ pub fn receive_qr(
 /// token instead: its symbol in the title, its contract above the account
 /// card, its logo in the centre — the web's `liveReceiveQr` asset variant.
 #[must_use]
+// A builder over the screen's inputs, each a different source; a struct of
+// them would be one more name for the same list.
+#[allow(clippy::too_many_arguments)]
 pub fn receive_token_qr(
     address: &str,
     name: &str,
@@ -1917,7 +1923,7 @@ fn chain_notice(chain_id: u32, template: &str) -> (u32, u32, SharedString, Share
     (
         chain_id,
         crate::settings::model::chain_tint(u64::from(chain_id)).unwrap_or(0x8A_8F_98),
-        SharedString::from(crate::settings::model::lettermark(&name)),
+        crate::settings::model::lettermark(&name),
         SharedString::from(crate::wallet::fill(template, "network", &name)),
     )
 }
@@ -2819,11 +2825,10 @@ pub fn split_amount_edited(
     amount: String,
 ) -> Vec<SendRecipientDraft> {
     let mut next = rows.to_vec();
-    if let Some(row) = next.get_mut(index) {
-        if let Some(clean) = amount_edited(&amount, &amount_to_input(&row.amount)) {
+    if let Some(row) = next.get_mut(index)
+        && let Some(clean) = amount_edited(&amount, &amount_to_input(&row.amount)) {
             row.amount = clean;
         }
-    }
     next
 }
 
@@ -3929,10 +3934,42 @@ fn tx_error_text(send: &SendView, s: &FlowStrings) -> Option<SharedString> {
         // accounts are web-only), so these are never set here.
         vela_core::app::send::SendTxErrorKey::ProposalMailboxDown
         | vela_core::app::send::SendTxErrorKey::ProposalOffline => s.tx_error_generic.clone(),
-        // The web's bounded wait before the passkey (r5reg-3): the desktop
-        // reports no such failure to the core, so these are never set here.
-        vela_core::app::send::SendTxErrorKey::ChainBusy
-        | vela_core::app::send::SendTxErrorKey::ChainUnreachable => s.tx_error_generic.clone(),
+        // r5reg-3: the reads before the passkey did not get through — the
+        // network's failure, by its name, never the passkey's.
+        vela_core::app::send::SendTxErrorKey::ChainBusy => {
+            fill(&s.tx_error_chain_busy, "network", &form_network(send)).into()
+        }
+        vela_core::app::send::SendTxErrorKey::ChainUnreachable => {
+            fill(&s.tx_error_chain_unreachable, "network", &form_network(send)).into()
+        }
+    })
+}
+
+/// The form's network, by name — what the confirm's network lines say.
+fn form_network(send: &SendView) -> String {
+    chain_name(
+        send.selected_token
+            .as_ref()
+            .map_or_else(|| send.multi_chain_id.unwrap_or(1), |token| token.chain_id),
+    )
+}
+
+/// Round 3: the recipient's check that the confirm opened without (send-18)
+/// — it did not finish in its wait, or the account's history could not be
+/// read: said neutrally, with "Check again" (the web's `riskCheckLine`).
+/// Never a first-time tag built on a failed read; the core withholds
+/// `first_time` then.
+#[must_use]
+pub fn risk_check_line(send: &SendView, s: &FlowStrings) -> Option<(SharedString, SharedString)> {
+    send.risk_unfinished.then(|| {
+        (
+            if send.risk_history_unread {
+                s.risk_history_unread.clone()
+            } else {
+                s.risk_unfinished.clone()
+            },
+            s.risk_retry.clone(),
+        )
     })
 }
 
@@ -3983,6 +4020,23 @@ pub(crate) fn confirm_fee_control(i: &SendInputs<'_>) -> bool {
 /// "Retrying…" while the core asks again by itself, "Tap it to retry" only
 /// when a tap is the one way), else nothing.
 pub(crate) fn confirm_held_line(i: &SendInputs<'_>) -> Option<SharedString> {
+    // r5reg-3: the reads before the passkey are slow — the network, by name,
+    // busy or not answering, and for how long. Nothing is signed yet.
+    if let Some(slow) = &i.send.submit_slow {
+        let words = if slow.busy {
+            &i.s.submit_slow_busy
+        } else {
+            &i.s.submit_slow
+        };
+        return Some(
+            fill(
+                &fill(words, "network", &form_network(i.send)),
+                "seconds",
+                &slow.seconds.to_string(),
+            )
+            .into(),
+        );
+    }
     if i.send.previous_pending.is_some() {
         return Some(i.s.previous_pending.clone());
     }
@@ -4206,6 +4260,7 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
                     .is_some_and(|risk| risk.first_time == Some(true)))
             .then(|| s.first_time_tag.clone())
         },
+        recipient_check: risk_check_line(send, s),
         notice,
         // After the relay's "previous transaction pending", the confirm is
         // "Try again" — it waits for the first like any held confirm.
@@ -4332,6 +4387,27 @@ fn sweep_breakdown(
 /// say the money had arrived while it was still in the air.
 #[must_use]
 pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
+    let mut receipt = receipt_body(i);
+    receipt.send_again = receipt_send_again(i.send, i.s);
+    receipt
+}
+
+/// The receipt's way on (send-5): offered by the core only over a payment
+/// proven never sent — back to the confirm, as the person left it. "Send
+/// again"; "Review again" when another send used the nonce (send-15).
+#[must_use]
+pub fn receipt_send_again(send: &SendView, s: &FlowStrings) -> Option<SharedString> {
+    let receipt = send.receipt.as_ref().filter(|receipt| receipt.can_send_again)?;
+    Some(
+        if receipt.refusal_key.as_deref() == Some("componentsUi.signing.wentFirst") {
+            s.tx_review_again.clone()
+        } else {
+            s.tx_send_again.clone()
+        },
+    )
+}
+
+fn receipt_body(i: &SendInputs<'_>) -> SendReceipt {
     let (send, s) = (i.send, i.s);
     let token = send.selected_token.as_ref();
     let symbol = token.map(|t| t.symbol.clone()).unwrap_or_default();
@@ -4390,6 +4466,7 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
             captions: Vec::new(),
             hash: None,
             cta: s.done.clone(),
+            send_again: None,
         };
     }
     if status == Some(SendReceiptStatus::Failed) || send.tx_status == SendTxStatus::Error {
@@ -4415,6 +4492,7 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
             captions: rejected.into_iter().collect(),
             hash: None,
             cta: s.done.clone(),
+            send_again: None,
         };
     }
     // Spec 082 RA10 (ruling 1): the reply was lost and the payment may be on
@@ -4436,6 +4514,7 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
                 .clone()
                 .map(|hash| (s.tx_hash.clone(), hash.into())),
             cta: s.tx_close_background.clone(),
+            send_again: None,
         };
     }
     if status == Some(SendReceiptStatus::Confirmed) {
@@ -4509,6 +4588,7 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
                 .clone()
                 .map(|hash| (s.tx_hash.clone(), hash.into())),
             cta: s.done.clone(),
+            send_again: None,
         };
     }
     if status == Some(SendReceiptStatus::Submitted) {
@@ -4581,6 +4661,7 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
                 .or_else(|| send.user_op_hash.clone())
                 .map(|hash| (s.tx_hash.clone(), hash.into())),
             cta: s.tx_close_background.clone(),
+            send_again: None,
         };
     }
     // Signing or submitting: nothing has been accepted yet.
@@ -4595,6 +4676,7 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
         captions: vec![s.tx_preparing.clone(), s.tx_background_hint.clone()],
         hash: None,
         cta: s.tx_close_background.clone(),
+        send_again: None,
     }
 }
 
@@ -4606,6 +4688,7 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
 ///
 /// The core's curve (`tx_tracker::landing_pace`, spec 099 R6).
 #[must_use]
+#[cfg(test)]
 pub fn ring_progress(elapsed_s: u64, typical_s: u64) -> Option<f32> {
     let typical = u16::try_from(typical_s).ok()?;
     #[allow(clippy::cast_precision_loss, reason = "seconds as ms")]
@@ -5889,6 +5972,78 @@ mod tests {
             speed: None,
             relay_sent_at_ms: None,
         }
+    }
+
+    /// Round 3 / r5reg-3 / round 6 / send-5 on the desktop: the recipient
+    /// check that could not finish says so with "Check again"; the slow wait
+    /// before the passkey says the network and the seconds; a submit that
+    /// failed as the network's says the network, never the generic failure;
+    /// a payment proven never sent offers "Send again".
+    #[test]
+    fn the_confirm_says_what_the_round_three_to_six_core_holds() {
+        use vela_core::app::send::{
+            Send, SendReceiptView, SendStage, SendSubmitSlow, SendTxErrorKey, SendTxStatus,
+        };
+        let s = strings();
+        let wallet = wallet_strings();
+        let fee = CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
+        let mut send = CoreHost::<Send>::new().view();
+        send.stage = SendStage::Confirm;
+        send.selected_token = Some(eth_on(1));
+
+        assert_eq!(risk_check_line(&send, &s), None);
+        send.risk_unfinished = true;
+        assert_eq!(
+            risk_check_line(&send, &s),
+            Some((s.risk_unfinished.clone(), s.risk_retry.clone()))
+        );
+        send.risk_history_unread = true;
+        assert_eq!(
+            send_confirm(&inputs_for(&send, &fee, &s, &wallet)).recipient_check,
+            Some((s.risk_history_unread.clone(), s.risk_retry.clone()))
+        );
+
+        send.submit_slow = Some(SendSubmitSlow {
+            seconds: 7,
+            busy: true,
+        });
+        let held = confirm_held_line(&inputs_for(&send, &fee, &s, &wallet))
+            .unwrap_or_default()
+            .to_string();
+        assert!(held.contains("Ethereum") && held.contains('7'), "{held}");
+        assert!(!held.contains("{{"), "every slot filled: {held}");
+
+        send.submit_slow = None;
+        send.tx_status = SendTxStatus::Error;
+        send.tx_error = Some(SendTxErrorKey::ChainUnreachable);
+        let said = tx_error_text(&send, &s).unwrap_or_default().to_string();
+        assert!(said.contains("Ethereum") && said != s.tx_error_generic.as_ref(), "{said}");
+        send.tx_error = Some(SendTxErrorKey::ChainBusy);
+        let busy = tx_error_text(&send, &s).unwrap_or_default().to_string();
+        assert!(busy.contains("Ethereum") && busy != said, "{busy}");
+
+        assert_eq!(receipt_send_again(&send, &s), None);
+        let receipt: SendReceiptView = serde_json::from_value(serde_json::json!({
+            "status": "not_sent",
+            "can_send_again": true,
+            "transfers": [],
+            "coins": [],
+            "amount": "1",
+            "usd_value": 0.0,
+        }))
+        .unwrap_or_else(|error| unreachable!("a receipt: {error}"));
+        send.receipt = Some(receipt.clone());
+        assert_eq!(receipt_send_again(&send, &s), Some(s.tx_send_again.clone()));
+        send.receipt = Some(SendReceiptView {
+            refusal_key: Some("componentsUi.signing.wentFirst".to_owned()),
+            ..receipt.clone()
+        });
+        assert_eq!(receipt_send_again(&send, &s), Some(s.tx_review_again.clone()));
+        send.receipt = Some(SendReceiptView {
+            can_send_again: false,
+            ..receipt
+        });
+        assert_eq!(receipt_send_again(&send, &s), None);
     }
 
     /// PR 2 polish, on Send: after the relay answered that it fails, the

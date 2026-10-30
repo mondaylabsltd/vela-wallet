@@ -335,11 +335,10 @@ fn spawn_capture(shared: &Arc<Mutex<Shared>>, stop: &Arc<AtomicBool>) {
             let rgba = image::DynamicImage::ImageRgb8(rgb).to_rgba8();
             if let Ok(mut shared) = shared.lock() {
                 shared.frame = Some(rgba);
-                if let Some(text) = payload {
-                    if shared.payload.is_none() {
+                if let Some(text) = payload
+                    && shared.payload.is_none() {
                         shared.payload = Some(text);
                     }
-                }
             }
         }
         let _ = camera.stop_stream();

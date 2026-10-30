@@ -407,23 +407,6 @@ pub fn currency_row_value(view: &CurrencyView, locale: &str) -> SharedString {
     }
 }
 
-/// `1.0 MB`, `42 KB`, `0 KB`. The page's other figure (`human_bytes`) splits
-/// amount from unit for the hero; a row wants one string.
-#[must_use]
-pub fn human_size_public(bytes: usize) -> String {
-    human_size(bytes)
-}
-
-fn human_size(bytes: usize) -> String {
-    #[allow(clippy::cast_precision_loss)]
-    let kb = bytes as f64 / 1024.0;
-    if kb >= 1024.0 {
-        format!("{:.1} MB", kb / 1024.0)
-    } else {
-        format!("{} KB", kb.round() as u64)
-    }
-}
-
 /// The 货币 dropdown: every currency the rate endpoint can price, each beside
 /// what the row's sample figure looks like in it.
 ///
@@ -708,6 +691,28 @@ mod tests {
     /// wizard, endpoint and provider sub-views have their own invariants, and a
     /// literal I typed would be a guess about them that drifts the first time
     /// they change.
+    /// The Vela networks out of the person's list, by name, after the
+    /// mainnet space's hint — none, no line; never on the testnet space.
+    #[test]
+    fn the_networks_out_of_the_list_are_named_under_the_mainnet_heading() {
+        let template = "Also supported, not in your list: {{names}}.";
+        let mut view = view_with(Vec::new());
+        view.hidden_vela_chain_ids = Vec::new();
+        assert_eq!(more_networks(&view, template), None);
+        view.hidden_vela_chain_ids = vec![988, 4326];
+        let more = more_networks(&view, template);
+        assert_eq!(
+            more.as_deref(),
+            Some("Also supported, not in your list: Stable, MegaETH.")
+        );
+        assert_eq!(
+            space_hint("Real money.", more.as_deref(), false),
+            "Real money. Also supported, not in your list: Stable, MegaETH."
+        );
+        assert_eq!(space_hint("Test coins.", more.as_deref(), true), "Test coins.");
+        assert_eq!(space_hint("Real money.", None, false), "Real money.");
+    }
+
     fn view_with(networks: Vec<NetNetworkRow>) -> NetView {
         let mut host = CoreHost::<NetworkAdmin>::new();
         let _ = host.dispatch(NetEvent::Started);
@@ -1189,6 +1194,38 @@ pub fn network_rows(view: &NetView) -> Vec<NetworkRowModel> {
             testnet: row.is_testnet,
         })
         .collect()
+}
+
+/// "Also supported, not in your list: Stable, MegaETH…" — the Vela networks
+/// the core says are out of the person's lists (`hidden_vela_chain_ids`), by
+/// name; none, no line (the web's `moreNetworks`).
+#[must_use]
+pub fn more_networks(view: &NetView, template: &str) -> Option<String> {
+    if view.hidden_vela_chain_ids.is_empty() {
+        return None;
+    }
+    let names: Vec<String> = view
+        .hidden_vela_chain_ids
+        .iter()
+        .map(|id| {
+            vela_core::app::network_admin::BUILTIN_CHAINS
+                .iter()
+                .find(|chain| chain.chain_id == *id)
+                .map_or_else(|| format!("Chain {id}"), |chain| chain.display_name.to_owned())
+        })
+        .collect();
+    Some(crate::wallet::fill(template, "names", &names.join(", ")))
+}
+
+/// The network list heading's hint (the web's `liveSpaceHeading`): the
+/// space's own line, and — on the mainnet space only — the networks out of
+/// the person's list after it.
+#[must_use]
+pub fn space_hint(hint: &str, more: Option<&str>, testnet: bool) -> String {
+    match more {
+        Some(more) if !testnet => format!("{hint} {more}"),
+        _ => hint.to_owned(),
+    }
 }
 
 /// The line under a network's RPC field, in the order the core's three states

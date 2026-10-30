@@ -495,6 +495,9 @@ fn log_failure(control: &mut SpeedControl) {
 /// account first, then prices it (issue #483). HOW FAST is the speed core's to say (spec 068) — the
 /// stored default, a one-shot pick, or a free upgrade — so `tier` is not a
 /// parameter.
+// A builder over the screen's inputs, each a different source; a struct of
+// them would be one more name for the same list.
+#[allow(clippy::too_many_arguments)]
 pub fn ask<H: SpeedHost>(
     host: &mut H,
     chain_id: u32,

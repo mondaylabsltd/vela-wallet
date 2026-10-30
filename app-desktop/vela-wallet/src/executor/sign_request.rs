@@ -56,6 +56,10 @@ use crate::executor::{now_ms, relay, storage, user_op};
 /// `vela.transactionHistory` — the shared local store.
 const TX_KEY: &str = "vela.transactionHistory";
 
+/// The submit's work: reports events on the way and settles once.
+pub type SignWork =
+    Box<dyn FnOnce(&crate::resident::Sink<Event>) -> SignShellResult + Send>;
+
 /// How this operation is performed, and therefore where. Mirrors
 /// `send::SendAnswer` — the signing panel owns its machines the way the send
 /// column owns its two, so `Screen` is the arm the host takes back.
@@ -64,7 +68,7 @@ pub enum SignAnswer {
     Now(SignShellResult),
     Blocking(Box<dyn FnOnce() -> SignShellResult + Send>),
     /// Reports events on the way and settles once — the submit.
-    Streaming(Box<dyn FnOnce(&crate::resident::Sink<Event>) -> SignShellResult + Send>),
+    Streaming(SignWork),
     /// Answered once this long has passed, and by nothing else — a timer the
     /// core asked for (PR 3: the deadline of the wait for the simulation's
     /// verdict). The same seam as the other machines' timers
@@ -2267,7 +2271,6 @@ mod tests {
                 now_ms: 6_000.0,
                 typical_s: Some(5),
                 chain_name: "Gnosis".to_owned(),
-                seen_submitted_ms: None,
             };
             let ctx = context(Some("http://127.0.0.1:8137"));
             for (failure, key, retry) in [

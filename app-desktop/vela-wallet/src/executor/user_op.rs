@@ -152,6 +152,10 @@ pub struct Submitted {
     /// The chain head read before the first POST, where the tracker's
     /// relay-independent landing check starts (ruling 8). Best effort.
     pub submit_block: Option<u64>,
+    /// The nonce it signed, as on the wire — only for an op that may have
+    /// been sent (round 3, send-5): the tracker reads the account's nonce
+    /// while it is in doubt (`tx_tracker::Event::SubmitFacts`).
+    pub nonce: Option<String>,
 }
 
 /// The ceremony's two edges (spec 082 RA9): the prompt opened, and it came
@@ -313,7 +317,7 @@ pub enum Signer<'a> {
     /// (R5) — the one key the page may sign with, the account's sign-in key
     /// (founder, 2026-09-26). `None` for a record from before it, whose every
     /// founding key may answer.
-    TrustedSigner {
+    TrustedPage {
         ask: &'a Ask,
         page: String,
         channel: &'a Channel,
@@ -373,7 +377,7 @@ impl Signer<'_> {
         }
         match self {
             Self::Passkey(sign) => sign(digest),
-            Self::TrustedSigner {
+            Self::TrustedPage {
                 ask,
                 page,
                 channel,
@@ -965,15 +969,14 @@ fn submit_tempo(
     // when there is one, never below the static model.
     let realistic_gas = estimated_gas.map_or(static_gas, |est| est.max(static_gas));
     let calculated = tempo_reimbursement(realistic_gas, gas_price, TEMPO_FEE_TOKEN_DECIMALS);
-    if let Some(quoted) = &quoted_fee {
-        if !quoted.recipient.eq_ignore_ascii_case(&collector)
-            || quoted.amount < tempo_minimum_fee_token_units(TEMPO_FEE_TOKEN_DECIMALS)
+    if let Some(quoted) = &quoted_fee
+        && (!quoted.recipient.eq_ignore_ascii_case(&collector)
+            || quoted.amount < tempo_minimum_fee_token_units(TEMPO_FEE_TOKEN_DECIMALS))
         {
             return Err(other(
                 "The gas quote has expired. Please review the updated fee and try again.",
             ));
         }
-    }
     // The relay ignores a speed on Tempo (no priority fee to buy), but the
     // name still travels with the fee it was shown beside, as on the web.
     let tier = quoted_fee.as_ref().and_then(|fee| fee.tier);
@@ -1063,6 +1066,13 @@ fn sign_and_submit(
         // attempt reuses nonce N and can never become a second payment.
         |accepted| note_submitted(chain_id, safe, accepted, &op.nonce),
     )
+    // The nonce it signed travels with an op that may have been sent.
+    .map(|mut submitted| {
+        if submitted.maybe_sent {
+            submitted.nonce = Some(op.nonce.to_string());
+        }
+        submitted
+    })
 }
 
 /// The last steps before the bytes leave, in the order the money rules set:
@@ -1104,12 +1114,14 @@ fn clear_and_post(
                 user_op_hash,
                 maybe_sent: false,
                 submit_block,
+                nonce: None,
             })
         }
         SubmitVerdict::MaybeSent { user_op_hash } => Ok(Submitted {
             user_op_hash,
             maybe_sent: true,
             submit_block,
+            nonce: None,
         }),
         SubmitVerdict::NotSent { rejection } => Err(match rejection {
             None => SubmitFailure::NotSent,
@@ -1583,6 +1595,7 @@ mod tests {
                 user_op_hash: LOCAL.to_owned(),
                 maybe_sent: false,
                 submit_block: Some(48_487_620),
+                nonce: None,
             })
         );
 
@@ -1977,7 +1990,7 @@ mod tests {
         let heard = std::cell::RefCell::new(Vec::new());
         let edges = |edge: CeremonyEdge| heard.borrow_mut().push(edge);
         let signed = {
-            let mut signer = Signer::TrustedSigner {
+            let mut signer = Signer::TrustedPage {
                 ask: &ask,
                 page: "https://sign.getvela.app/".to_owned(),
                 channel: &channel,
@@ -2015,7 +2028,7 @@ mod tests {
         // dismissed passkey sheet — and the sheet has its sentence.
         let declining = refuses_once(&channel, "user_rejected");
         let declined = {
-            let mut signer = Signer::TrustedSigner {
+            let mut signer = Signer::TrustedPage {
                 ask: &ask,
                 page: "https://sign.getvela.app/".to_owned(),
                 channel: &channel,
@@ -2076,7 +2089,7 @@ mod tests {
                 SAFE,
                 &original,
                 &keys,
-                Signer::TrustedSigner {
+                Signer::TrustedPage {
                     ask: &ask,
                     page: "https://sign.getvela.app/".to_owned(),
                     channel: &channel,
@@ -2175,7 +2188,7 @@ mod tests {
             SAFE,
             &original,
             &keys,
-            Signer::TrustedSigner {
+            Signer::TrustedPage {
                 ask: &ask,
                 page: "https://sign.getvela.app/".to_owned(),
                 channel: &channel,

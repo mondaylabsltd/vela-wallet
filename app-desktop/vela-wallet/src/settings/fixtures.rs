@@ -1093,8 +1093,6 @@ pub const RPC_PROVIDER_LINKS: [(&str, &str); 4] = [
     ("Chainlist", "https://chainlist.org"),
 ];
 
-/// Where the endpoints panel's "Self-hosting guide →" goes (the web's).
-
 /// Find a network fixture by id. Panics only on a typo in this file's own
 /// constants, which a test catches before anybody runs the app.
 pub fn network(id: &str) -> &'static NetworkFixture {

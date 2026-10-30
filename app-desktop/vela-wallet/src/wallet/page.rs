@@ -1034,6 +1034,11 @@ pub struct WalletPage {
     site_networks: Vec<explore_fixtures::NetworkPick>,
     /// `VELA_BROWSER_URL` is applied once, not on every frame the column draws.
     browser_url_pinned: bool,
+    /// `VELA_SEND_TO` was applied (once); `true` while its send is still to be
+    /// carried to the confirm.
+    send_to_pinned: Option<bool>,
+    /// `VELA_SETTINGS_NETWORK` was looked at (once).
+    settings_network_pinned: bool,
     send_amount_focus: gpui::FocusHandle,
     send_recipient_focus: gpui::FocusHandle,
     /// DSD2cL, live: the rate field's focus.
@@ -1082,9 +1087,6 @@ pub struct WalletPage {
     /// What moves the balance, watched (078 W-01 / W-02).
     money_watch: MoneyWatch,
     signer_page_focus: Option<gpui::FocusHandle>,
-    /// Spec 075: the tunnel, the same way — typed until Save, and the core
-    /// says whether it is one (https/wss only, loopback allowed).
-    tunnel_focus: Option<gpui::FocusHandle>,
     /// Which network card's probes have been asked for, so opening one asks
     /// once rather than on every frame.
     settings_probed_network: Option<u32>,
@@ -1473,6 +1475,11 @@ impl WalletPage {
             _ => Section::Wallet,
         }
         .or_wallet();
+        // perf-10: a window opened on a screen that draws no balance of its
+        // own notes the account and reads no network until the home shows.
+        if section != Section::Wallet {
+            crate::executor::balance_dashboard::note_only();
+        }
         let mut page = Self::with_section(section, false, window, cx);
         page.identity = Some(identity);
         // Money in flight outlives every screen: the tracker runs from the
@@ -1863,6 +1870,8 @@ impl WalletPage {
             pick_scroll: crate::ui::SmoothScroll::new(),
             site_networks: Vec::new(),
             browser_url_pinned: false,
+            send_to_pinned: None,
+            settings_network_pinned: false,
             send_amount_focus: cx.focus_handle(),
             send_recipient_focus: cx.focus_handle(),
             send_rate_focus: cx.focus_handle(),
@@ -1881,7 +1890,6 @@ impl WalletPage {
             feedback: FeedbackDraft::new(cx),
             money_watch: MoneyWatch::default(),
             signer_page_focus: None,
-            tunnel_focus: None,
             settings_probed_network: None,
             settings_probed_panel: None,
             settings_fix_chain: None,
@@ -3390,6 +3398,11 @@ impl WalletPage {
     /// a switch from Settings stays on Settings.
     pub fn restore_place(&mut self, (section, settings_page): (Section, SettingsPage)) {
         self.section = section.or_wallet();
+        // perf-10: the other account, met on Settings or the address book,
+        // is noted — not read across every network — until the home shows.
+        if self.section != Section::Wallet {
+            crate::executor::balance_dashboard::note_only();
+        }
         self.settings_page = settings_page;
     }
 
@@ -4651,9 +4664,7 @@ impl WalletPage {
     /// `None` on the design surfaces, which is what stops a fixture panel from
     /// mutating a real ledger.
     fn selected_contact_address(&mut self, cx: &mut Context<Self>) -> Option<gpui::SharedString> {
-        if self.identity.is_none() {
-            return None;
-        }
+        self.identity.as_ref()?;
         // The CORE's order, as `self.contact` is (`open_contact_by_address`).
         // This read the A–Z sections — searched, at that — so with the panel
         // on Alice, its copy button copied Bob, and its delete asked to delete
@@ -4670,9 +4681,7 @@ impl WalletPage {
         &mut self,
         cx: &mut Context<Self>,
     ) -> Option<contacts_fixtures::ContactDetailModel> {
-        if self.identity.is_none() {
-            return None;
-        }
+        self.identity.as_ref()?;
         let view = resident::resident::<Contacts>(cx).read(cx).view();
         if !view.loaded {
             return None;
@@ -7485,7 +7494,7 @@ impl WalletPage {
                             ))
                         }
                         FlowPanel::Dsd2 | FlowPanel::Dsd2b => {
-                            flow_fixtures::FlowBody::SendForm(flows_live::send_form(&inputs))
+                            flow_fixtures::FlowBody::SendForm(Box::new(flows_live::send_form(&inputs)))
                         }
                         FlowPanel::Dsd2e => {
                             let contacts = resident::resident::<Contacts>(cx).read(cx).view();
@@ -7605,6 +7614,7 @@ impl WalletPage {
     /// Bound from `FlowPanel::step`, so an affordance is live exactly when the
     /// mocks draw somewhere for it to go — the chevron and the destination
     /// cannot drift apart.
+    #[allow(clippy::too_many_arguments)]
     fn flow_actions(
         panel: FlowPanel,
         live: bool,
@@ -7692,6 +7702,8 @@ impl WalletPage {
             notice_report: None,
             handoff_recheck: None,
             handoff_trust: None,
+            risk_retry: None,
+            send_again: None,
             pick_group_rows: Vec::new(),
             split_amount_fields: Vec::new(),
             split_address_fields: Vec::new(),
@@ -8313,6 +8325,9 @@ impl WalletPage {
                     actions.advance = Some(to_batch(BatchEvent::Apply));
                 }
                 FlowPanel::Dsd3 => {
+                    // Round 3: the recipient check, asked again — its history
+                    // read failed, or it did not finish in its wait.
+                    actions.risk_retry = Some(to_host(SendEvent::RetryRiskCheck));
                     // The person's confirm is `submit_transfer`, through the
                     // intents (spec 103): their own send is adopted as an
                     // operation at its review, and confirmed there — naming
@@ -8351,7 +8366,21 @@ impl WalletPage {
                         ));
                     }
                 }
-                FlowPanel::Dsd4 => actions.advance = Some(to_host(SendEvent::Done)),
+                FlowPanel::Dsd4 => {
+                    actions.advance = Some(to_host(SendEvent::Done));
+                    // send-5: back to the confirm over a payment proven never
+                    // sent — and the fee asked again with it, for a new
+                    // quote and a new signature (the web's `sendAgain`).
+                    let host = host.clone();
+                    actions.send_again = Some(Box::new(
+                        move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                            host.update(cx, |host, cx| {
+                                host.dispatch(SendEvent::SendAgain, cx);
+                                host.refresh_fee(cx);
+                            });
+                        },
+                    ));
+                }
                 _ => {}
             }
         }
@@ -11989,6 +12018,14 @@ impl WalletPage {
         } else {
             (theme.bg_sunken, theme.divider)
         };
+        // Owner decision 2026-10-29: the Vela networks out of the person's
+        // list, by name, after the mainnet hint — "Add one from Add Network".
+        let view = resident::resident::<NetworkAdmin>(cx).read(cx).view();
+        let more = settings_live::more_networks(
+            &view,
+            &self.loc.t("settingsModals.network.moreNetworks"),
+        );
+        let hint = settings_live::space_hint(&self.loc.t(hint), more.as_deref(), testnet);
         Some(
             div()
                 .flex()
@@ -12018,7 +12055,7 @@ impl WalletPage {
                             div()
                                 .text_size(theme::text_row_sub())
                                 .text_color(theme.fg_subtle)
-                                .child(crate::ui::prose(self.loc.t(hint))),
+                                .child(crate::ui::prose(hint)),
                         ),
                 )
                 .child(
@@ -12040,8 +12077,22 @@ impl WalletPage {
 
     fn settings_networks(&mut self, theme: &Theme, window: &Window, cx: &mut Context<Self>) -> Div {
         let page = cx.entity();
-        let expanded = self.settings_expanded_network.clone();
         let rows = self.network_rows(cx);
+        // `VELA_SETTINGS_NETWORK=<chain id>`: that network's card opens on the
+        // first live frame that lists it — expanding is a click no screenshot
+        // pass can make (the `VELA_SETTINGS_PAGE` family). Once.
+        if !self.settings_network_pinned && self.identity.is_some() && !rows.is_empty() {
+            self.settings_network_pinned = true;
+            if let Some(want) = crate::dev_env::var!("VELA_SETTINGS_NETWORK")
+                .and_then(|id| id.trim().parse::<u64>().ok())
+            {
+                self.settings_expanded_network = rows
+                    .iter()
+                    .find(|row| row.chain_id == want)
+                    .map(|row| row.id.clone());
+            }
+        }
+        let expanded = self.settings_expanded_network.clone();
         let mut col = div()
             .flex()
             .flex_col()
@@ -12271,6 +12322,7 @@ impl WalletPage {
                 ),
             )
         };
+        let only_mine = self.only_mine_row(theme, chain_id, cx);
         div()
             .flex()
             .flex_col()
@@ -12283,6 +12335,35 @@ impl WalletPage {
             .border_color(theme.divider)
             .child(rpc)
             .child(explorer)
+            .children(only_mine)
+    }
+
+    /// "Only use my node" (owner decision 2026-10-28): offered only where the
+    /// network's saved RPC is the person's own (`NetNetworkRow::own_rpc`) —
+    /// on, the pool never asks a public node about the account. The switch
+    /// says what is saved; the core decides what it binds.
+    fn only_mine_row(&mut self, theme: &Theme, chain_id: u32, cx: &mut Context<Self>) -> Option<Div> {
+        self.identity.as_ref()?;
+        let view = resident::resident::<NetworkAdmin>(cx).read(cx).view();
+        let row = view.networks.iter().find(|row| row.chain_id == chain_id)?;
+        if !row.own_rpc {
+            return None;
+        }
+        let on = row.only_mine;
+        Some(crate::settings::components::toggle_row(
+            ElementId::from(("settings-only-mine", chain_id as usize)),
+            theme,
+            self.loc.t("settingsModals.network.onlyMine"),
+            self.loc.t("settingsModals.network.onlyMineHint"),
+            on,
+            // The intent an agent sends too (`set_only_my_node`): the same
+            // event, as the web's switch dispatches it.
+            move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                resident::resident::<NetworkAdmin>(cx).update(cx, |ledger, cx| {
+                    ledger.dispatch(NetEvent::OnlyMineChanged { chain_id, on: !on }, cx);
+                });
+            },
+        ))
     }
 
     /// DST6 — the four services the wallet leans on.
@@ -13130,42 +13211,6 @@ impl WalletPage {
             ))
     }
 
-    /// What one 清除 is about, in the row's own words.
-    ///
-    /// Nothing new is written for it: the title is the row's label, the body is
-    /// its GROUP's label — which is where the consequence is spelled out — and
-    /// the confirm word is the row's own action. iOS composes the same sheet
-    /// the same way.
-    fn clear_storage_target(
-        &self,
-        id: Option<&'static str>,
-    ) -> (SharedString, SharedString, SharedString, bool) {
-        let groups = settings_fixtures::storage_groups(&self.settings);
-        let Some(id) = id else {
-            return (
-                self.settings.storage_clear_all.clone(),
-                self.settings.storage_caches.clone(),
-                self.settings.storage_clear_all.clone(),
-                false,
-            );
-        };
-        for group in &groups {
-            if let Some(item) = group.items.iter().find(|item| item.id == id) {
-                return (
-                    item.label.clone(),
-                    group.label.clone(),
-                    item.action.clone(),
-                    item.destructive,
-                );
-            }
-        }
-        (
-            self.settings.storage_clear.clone(),
-            SharedString::from(""),
-            self.settings.storage_clear.clone(),
-            true,
-        )
-    }
 
     /// DST8 — the build, the technical inventory, the three links.
     fn settings_about(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
@@ -13247,10 +13292,9 @@ impl WalletPage {
                 .iter()
                 .filter(|chain| chain.testnet == testnet)
                 .count()
-                + self
+                + if self
                     .identity
-                    .is_some()
-                    .then(|| {
+                    .is_some() { {
                         resident::resident::<NetworkAdmin>(cx)
                             .read(cx)
                             .view()
@@ -13258,8 +13302,7 @@ impl WalletPage {
                             .iter()
                             .filter(|row| row.is_custom && row.is_testnet == testnet)
                             .count()
-                    })
-                    .unwrap_or(0),
+                    } } else { 0 },
         )
         .unwrap_or(u32::MAX);
         for (label, value, mono) in settings_fixtures::about_rows_with(&self.settings, networks) {
@@ -14445,6 +14488,36 @@ impl WalletPage {
     /// signing sheet) can only ever be verified by a person with a keyboard.
     ///
     /// Applied once, on the first frame the browser column draws.
+    /// `VELA_SEND_TO=<address | EIP-681 URI>` opens the LIVE send on that
+    /// request, as a scanned code would (`scan_resolved`), and — once the core
+    /// lets it — presses Continue, so the confirm a person would reach is on
+    /// screen. Same env-pin family as `VELA_SCAN_FILE` and `VELA_BROWSER_URL`,
+    /// for the same reason: no screenshot pass on a machine somebody is using
+    /// may click into it. Nothing is signed: the confirm's own button is never
+    /// pressed. Applied once, on the first signed-in frame of the home.
+    fn send_to_from_env(&mut self, cx: &mut Context<Self>) {
+        match self.send_to_pinned {
+            None => {
+                let Some(text) = crate::dev_env::var!("VELA_SEND_TO") else {
+                    self.send_to_pinned = Some(false);
+                    return;
+                };
+                self.send_to_pinned = Some(self.scan_resolved(text, cx));
+            }
+            Some(true) => {
+                let Some(host) = self.send_host.clone() else {
+                    return;
+                };
+                let view = host.read(cx).view.clone();
+                if view.stage == vela_core::app::send::SendStage::EnterDetails && view.can_continue {
+                    self.send_to_pinned = Some(false);
+                    host.update(cx, |host, cx| host.dispatch(SendEvent::Continue, cx));
+                }
+            }
+            Some(false) => {}
+        }
+    }
+
     fn browser_url_from_env(&mut self, cx: &mut Context<Self>) {
         if self.browser_url_pinned {
             return;
@@ -14684,9 +14757,9 @@ impl WalletPage {
                 host.view
                     .pending_op_hash
                     .clone()
-                    .map(|op| (op, host.chain_id, host.seen_submitted_ms, host.tab.clone()))
+                    .map(|op| (op, host.chain_id, host.tab.clone()))
             });
-            if let Some((user_op_hash, chain_id, seen_submitted_ms, tab)) = following {
+            if let Some((user_op_hash, chain_id, tab)) = following {
                 self.dapp_landing_seq += 1;
                 self.dapp_landing = Some(DappLanding {
                     ending: vela_core::app::sign_request::SignEnding::StillConfirming {
@@ -14695,7 +14768,6 @@ impl WalletPage {
                     chain_id,
                     tab,
                     seq: self.dapp_landing_seq,
-                    seen_submitted_ms,
                     closing: false,
                 });
                 self.panel = PanelId::Signing;
@@ -17166,7 +17238,7 @@ impl WalletPage {
                 .into_iter()
                 .find(|entry| entry.user_op_hash.eq_ignore_ascii_case(op))
         });
-        let clock = signing_clock(host.chain_id, host.seen_submitted_ms);
+        let clock = signing_clock(host.chain_id);
         crate::signing::status::approved(
             &host.view,
             crate::signing::status::on_chain(&host.raw.0),
@@ -17219,7 +17291,8 @@ impl WalletPage {
                     host.update(cx, |host, cx| host.cancel_touch(cx));
                 },
             )
-        } else if let Some(stop) = stopped {
+        } else {
+            let stop = stopped?;
             // Nothing was answered: Retry shows a new code, and the close is
             // the column's own — a refusal, made by the person.
             let (title, body) = crate::signing::status::phone_stop_words(stop, on_chain);
@@ -17253,8 +17326,6 @@ impl WalletPage {
                     theme,
                     close,
                 ))
-        } else {
-            return None;
         };
         // A dialog's width; the column is narrower.
         Some(card.w_full())
@@ -17278,11 +17349,42 @@ impl WalletPage {
         cx.notify();
     }
 
+    /// Round 3: the landing on screen was closed — its Done, its own beat, or
+    /// the column's ✕ — and that is the CORE's to remember
+    /// (`sign_request::Event::LandingClosed`): every column still holding the
+    /// operation is told, so none raises it again (the web's
+    /// `landingClosed`).
+    fn landing_closed(&mut self, cx: &mut Context<Self>) {
+        use vela_core::app::sign_request::SignEnding;
+        let Some(op) = self.dapp_landing.as_ref().and_then(|landing| match &landing.ending {
+            SignEnding::Landed { user_op_hash, .. } | SignEnding::Reverted { user_op_hash, .. } => {
+                user_op_hash.clone()
+            }
+            SignEnding::StillConfirming { user_op_hash } => Some(user_op_hash.clone()),
+            _ => None,
+        }) else {
+            return;
+        };
+        #[cfg(not(target_os = "linux"))]
+        for host in self.signing_host.iter().chain(&self.signing_background) {
+            let op = op.clone();
+            host.update(cx, |host, cx| {
+                host.dispatch_sign(
+                    vela_core::app::sign_request::Event::LandingClosed { user_op_hash: op },
+                    cx,
+                );
+            });
+        }
+        #[cfg(target_os = "linux")]
+        let _ = (op, cx);
+    }
+
     fn close_signing_column(&mut self, cx: &mut Context<Self>) {
         #[cfg(not(target_os = "linux"))]
         if let Some(host) = self.signing_host.clone() {
             host.update(cx, |host, cx| host.close(cx));
         }
+        self.landing_closed(cx);
         self.dapp_landing = None;
         self.signing_hidden = false;
         if self.panel == PanelId::Signing {
@@ -17403,7 +17505,6 @@ impl WalletPage {
                         chain_id: read.chain_id,
                         tab: read.tab.clone(),
                         seq: 0,
-                        seen_submitted_ms: read.seen_submitted_ms,
                         closing: false,
                     })
                 };
@@ -18541,7 +18642,7 @@ impl WalletPage {
         {
             let summary = crate::signing::status::summary_of(&model.blocks);
             let header = signing_components::HeaderModel::of(&model);
-            let clock = signing_clock(100, None);
+            let clock = signing_clock(100);
             if let Some(receipt) = crate::signing::status::approved(
                 &view,
                 true,
@@ -19114,9 +19215,15 @@ impl WalletPage {
                             Box::new(cx.listener(move |page, _: &gpui::ClickEvent, _, cx| {
                                 #[cfg(not(target_os = "linux"))]
                                 if let Some(host) = page.signing_host.as_ref() {
-                                    let event = match leg {
-                                        None => vela_core::app::approval_guard::Event::PresetSelected { mode },
-                                        Some(index) => vela_core::app::approval_guard::Event::LegPresetSelected { index, mode },
+                                    use vela_core::app::approval_guard::GuardEditorMode;
+                                    // cs-17: a grant-all's deliberate tap is
+                                    // its own event — the core's consent to
+                                    // allow all, never a preset.
+                                    let event = match (leg, mode) {
+                                        (None, GuardEditorMode::Grant) => vela_core::app::approval_guard::Event::GrantDeliberatelyChosen,
+                                        (Some(index), GuardEditorMode::Grant) => vela_core::app::approval_guard::Event::LegGrantDeliberatelyChosen { index },
+                                        (None, mode) => vela_core::app::approval_guard::Event::PresetSelected { mode },
+                                        (Some(index), mode) => vela_core::app::approval_guard::Event::LegPresetSelected { index, mode },
                                     };
                                     host.update(cx, |host, cx| host.dispatch_guard(event, cx));
                                 }
@@ -19616,7 +19723,14 @@ impl WalletPage {
             self.backup_for = None;
         }
         columns = match self.section {
-            Section::Wallet => columns.child(self.content(theme, cx)),
+            Section::Wallet => {
+                // The home is on screen: an account only noted is read now.
+                if self.identity.is_some() {
+                    crate::executor::balance_dashboard::shown(cx);
+                    self.send_to_from_env(cx);
+                }
+                columns.child(self.content(theme, cx))
+            }
             Section::Contacts => columns.child(self.contacts_content(theme, caption, window, cx)),
             Section::Explore => columns.child(self.explore_content(theme, cx)),
             Section::Settings => columns
@@ -19700,7 +19814,7 @@ impl WalletPage {
             PanelId::BrowserStatus if self.browsing && self.shown_tab.is_some() => {
                 self.sync_inspector(cx);
                 let body = self.browser_status_body(theme, cx);
-                let title = SharedString::from(self.loc.t("componentsUi.browserStatus.title"));
+                let title = self.loc.t("componentsUi.browserStatus.title");
                 columns.child(self.panel_scaffold(theme, title, body, cx))
             }
             PanelId::BrowserStatus => columns,
@@ -20275,7 +20389,7 @@ impl WalletPage {
                 .find(|entry| entry.user_op_hash.eq_ignore_ascii_case(&op))
         });
         let (header, summary) = self.signing_last.clone().unzip();
-        let clock = signing_clock(landing.chain_id, landing.seen_submitted_ms);
+        let clock = signing_clock(landing.chain_id);
         let receipt = crate::signing::status::ended(
             &landing.ending,
             summary.flatten().as_ref(),
@@ -20295,6 +20409,7 @@ impl WalletPage {
                     .await;
                 page.update(cx, |this, cx| {
                     if this.dapp_landing.as_ref().is_some_and(|l| l.seq == seq) {
+                        this.landing_closed(cx);
                         this.dapp_landing = None;
                         if this.panel == PanelId::Signing && this.no_signing_host() {
                             this.panel = PanelId::None;
@@ -20311,6 +20426,7 @@ impl WalletPage {
             }
         }
         let on_done: panels::Click = Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+            this.landing_closed(cx);
             this.dapp_landing = None;
             if this.panel == PanelId::Signing && this.no_signing_host() {
                 this.panel = PanelId::None;
@@ -22051,8 +22167,6 @@ struct DappLanding {
     tab: Option<String>,
     /// Its number (`dapp_landing_seq`) — a tick's timer closes only its own.
     seq: u64,
-    /// When the column first saw the operation accepted.
-    seen_submitted_ms: Option<f64>,
     /// Its tick's timer is running.
     closing: bool,
 }
@@ -22084,15 +22198,6 @@ fn confirmed_sends(
 const SIGNING_TECH_COPY: &str = "signing-tech-copy";
 const CONTACTS_COPY_HOLD: std::time::Duration = std::time::Duration::from_millis(1500);
 
-/// The Ethereum key backup, as a request for the SHARED signing sheet.
-///
-/// A pure function so the sheet it goes to can be pinned by a test: the backup
-/// is an ordinary `eth_sendTransaction` on the wallet's own transport, which
-/// means it goes where every other signature of the account goes — its venue
-/// (spec 102), Vela's sheet or its trusted page. A backup with a sheet of its
-/// own would be the one signature a person could not review on their page.
-#[cfg(not(target_os = "linux"))]
-
 /// Spec 083 FR-006: an open bar nobody has typed in follows the page — the
 /// address that committed replaces the one it was opened with. Typed text is
 /// the person's, and an engine page is not a place.
@@ -22105,6 +22210,13 @@ fn address_follows(draft: Option<&str>, opened: Option<&str>, committed: &str) -
     .then(|| committed.to_owned())
 }
 
+/// The Ethereum key backup, as a request for the SHARED signing sheet.
+///
+/// A pure function so the sheet it goes to can be pinned by a test: the backup
+/// is an ordinary `eth_sendTransaction` on the wallet's own transport, which
+/// means it goes where every other signature of the account goes — its venue
+/// (spec 102), Vela's sheet or its trusted page. A backup with a sheet of its
+/// own would be the one signature a person could not review on their page.
 fn backup_request(
     address: &str,
     call: &vela_core::registry_backup::BackupCall,
@@ -22154,12 +22266,11 @@ fn send_fee_tap(host: gpui::Entity<SendHost>, cx: &mut Context<WalletPage>) -> p
 /// already in the field under it.
 /// The chain's clock for a signing receipt (spec 079): now, its usual
 /// inclusion time and its name.
-fn signing_clock(chain_id: u32, seen_submitted_ms: Option<f64>) -> crate::signing::status::Clock {
+fn signing_clock(chain_id: u32) -> crate::signing::status::Clock {
     crate::signing::status::Clock {
         now_ms: crate::executor::now_ms(),
         typical_s: vela_core::app::network_admin::typical_inclusion_s(chain_id).map(u32::from),
         chain_name: crate::flows::live::chain_name(chain_id).to_string(),
-        seen_submitted_ms,
     }
 }
 

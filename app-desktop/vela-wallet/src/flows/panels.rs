@@ -173,6 +173,11 @@ pub struct PanelActions {
     /// question.
     pub handoff_recheck: Option<Click>,
     pub handoff_trust: Option<Click>,
+    /// DSD3L, live (round 3): the recipient check's "Check again".
+    pub risk_retry: Option<Click>,
+    /// DSD4L, live (send-5): the receipt's "Send again" over a payment proven
+    /// never sent.
+    pub send_again: Option<Click>,
     /// DSD2eL, live: one listener per GROUP row — a whole group seeds a split.
     pub pick_group_rows: Vec<Click>,
     /// DSD2bL, live: each split row's own amount field and its remove — in the
@@ -226,8 +231,11 @@ pub struct AddressField {
     pub focus: FocusHandle,
     pub value: String,
     pub placeholder: SharedString,
-    pub on_change: Box<dyn Fn(String, &mut Window, &mut App) + 'static>,
+    pub on_change: OnChange,
 }
+
+/// A field's keystroke handler: the text as it now stands.
+pub type OnChange = Box<dyn Fn(String, &mut Window, &mut App) + 'static>;
 
 /// Wrap an element so it answers to a click, when the page bound one.
 ///
@@ -504,6 +512,7 @@ pub fn render(
             (actions.handoff_recheck, actions.handoff_trust),
             // The fee line's tap is the form row's (PR 2 polish).
             actions.open_fee_token,
+            actions.risk_retry,
         ),
         FlowBody::SendReceipt(model) => send_receipt(
             model,
@@ -514,7 +523,7 @@ pub fn render(
             // the receipt centres itself in.
             f32::from(window.viewport_size().height) - 120.,
             actions.copy,
-            actions.advance,
+            (actions.advance, actions.send_again),
         ),
         // The page routes this away before it gets here; a column-shaped
         // viewfinder is the thing DS1L exists to avoid.
@@ -3625,6 +3634,7 @@ fn send_confirm(
     notice_clicks: NoticeClicks,
     (handoff_recheck, handoff_trust): (Option<Click>, Option<Click>),
     mut fee_tap: Option<Click>,
+    risk_retry: Option<Click>,
 ) -> Div {
     let mut hero = div()
         .flex()
@@ -3713,6 +3723,30 @@ fn send_confirm(
                 .child(tag.clone()),
         );
     }
+    // Round 3: the recipient's check that could not finish, or the history
+    // that could not be read — in neutral ink, never the warning colour of a
+    // first transfer, with its "Check again" beside it.
+    if let Some((text, retry)) = &model.recipient_check {
+        col = col.child(
+            div()
+                .px(px(12.))
+                .flex()
+                .flex_col()
+                .items_start()
+                .gap(px(8.))
+                .child(
+                    div()
+                        .text_size(theme::text_row_sub())
+                        .text_color(theme.fg_muted)
+                        .child(crate::ui::prose(text.clone())),
+                )
+                .child(clickable(
+                    "flow-confirm-risk-retry",
+                    risk_retry,
+                    pill(theme, retry.clone()),
+                )),
+        );
+    }
 
     if !model.breakdown.is_empty() {
         col = col.child(breakdown_list(theme, identicons, None, &model.breakdown));
@@ -3784,7 +3818,7 @@ fn send_receipt(
     identicons: &mut IdenticonCache,
     column_h: f32,
     copy: Option<CopyAction>,
-    advance: Option<Click>,
+    (advance, send_again): (Option<Click>, Option<Click>),
 ) -> Div {
     let mut col = column().child(status_hero(
         theme,
@@ -3859,6 +3893,17 @@ fn send_receipt(
             theme,
             label.clone(),
             Some(url),
+        ));
+    }
+    // send-5: over a payment proven never sent, the way back to the confirm
+    // — every value as it was, for a new quote and a new signature.
+    if let Some(label) = &model.send_again {
+        foot = foot.child(cta_button(
+            "flow-receipt-send-again",
+            theme,
+            label.clone(),
+            CtaState::Enabled,
+            send_again,
         ));
     }
     // The CTA is the accent "Done" once the money has landed, and the quiet

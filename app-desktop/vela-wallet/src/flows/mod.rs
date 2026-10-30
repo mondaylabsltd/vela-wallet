@@ -533,6 +533,24 @@ pub struct FlowStrings {
     /// Spec 096 F12: the recipient is a token's own contract.
     pub recipient_token_contract: SharedString,
     pub fee_pending: SharedString,
+    /// Round 3: the recipient's check did not finish in its wait, or the
+    /// account's history could not be read — said neutrally, with "Check
+    /// again" (`SendView::risk_unfinished` / `risk_history_unread`).
+    pub risk_unfinished: SharedString,
+    pub risk_history_unread: SharedString,
+    pub risk_retry: SharedString,
+    /// r5reg-3: the reads before the passkey are slow — `{{network}}`,
+    /// `{{seconds}}` (`SendView::submit_slow`).
+    pub submit_slow: SharedString,
+    pub submit_slow_busy: SharedString,
+    /// r5reg-3: the reads before the passkey did not get through — the
+    /// network's failure, by its name, never the passkey's.
+    pub tx_error_chain_unreachable: SharedString,
+    pub tx_error_chain_busy: SharedString,
+    /// send-5: the receipt's way back to the confirm over a payment proven
+    /// never sent; "Review again" when another send used the nonce.
+    pub tx_send_again: SharedString,
+    pub tx_review_again: SharedString,
 
     // Send · the fee you can refresh, at a speed you can choose (spec 068, on
     // the desktop since 069). `send.gasTier.rapid` is deliberately absent:
@@ -1161,6 +1179,15 @@ impl FlowStrings {
             first_time_tag: s("componentsUi.signing.firstTimeTag"),
             recipient_token_contract: s("send.recipientTokenContract"),
             fee_pending: SharedString::from("…"),
+            risk_unfinished: s("send.riskUnfinished"),
+            risk_history_unread: s("send.riskHistoryUnread"),
+            risk_retry: s("send.riskRetry"),
+            submit_slow: s("send.submitSlow"),
+            submit_slow_busy: s("send.submitSlowBusy"),
+            tx_error_chain_unreachable: s("send.txErrorChainUnreachable"),
+            tx_error_chain_busy: s("send.txErrorChainBusy"),
+            tx_send_again: s("send.txSendAgain"),
+            tx_review_again: s("send.txReviewAgain"),
 
             fee_refresh: s("send.feeRefresh"),
             fee_stale: s("send.feeStale"),
