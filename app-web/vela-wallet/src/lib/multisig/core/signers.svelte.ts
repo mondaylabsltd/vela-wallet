@@ -30,8 +30,8 @@
  * it steers what is offered, never authority, and evidence beats it: a
  * passkey approval or the index make a member a Vela account, and code at
  * its address on any of the multisig's networks (the index holding none) a
- * smart contract account, whatever is kept. `evidence` is what the add
- * screens pre-fill that choice from.
+ * smart contract account, whatever is kept. (What the add screens pre-fill
+ * that choice from is the core's: `multisig_signers::kind_evidence`.)
  */
 import { lookupWalletName } from '$lib/services/public-key-index';
 import { hasContractCode } from './chain';
@@ -41,18 +41,6 @@ import { localOwners } from './owners';
 import type { ApprovalRow } from './proposals.svelte';
 
 export type SignerKind = 'here' | 'vela' | 'contract' | 'wallet' | 'unsure';
-
-/**
- * What the wallet can tell of a member being added, before anyone's word
- * (r7): `vela` — an account here, or the passkey index holds it; `contract`
- * — code at its address on one of the networks and the index holds none (a
- * smart contract account: another Safe, another smart wallet); `wallet` —
- * only a hint, likely an outside wallet: no code on any of them and the
- * index holds none (kept only if the person picks it); `null` — it can't
- * tell (yet): the index or a network has not answered, and the person is
- * asked.
- */
-export type KindEvidence = 'vela' | 'contract' | 'wallet' | null;
 
 /** A code read that failed is asked again after this long, not on every redraw. */
 const RETRY_MS = 10_000;
@@ -114,21 +102,6 @@ class SignerKinds {
 		// The index has not answered (or could not): no verdict yet.
 		if (!names.answered(address)) return null;
 		return 'unsure';
-	}
-
-	/**
-	 * r7: what the wallet can tell of `address` across `chainIds` (the
-	 * multisig's networks) — the add screens' pre-fill of its kind, never
-	 * authority (`KindEvidence`).
-	 */
-	evidence(chainIds: readonly number[], address: string): KindEvidence {
-		if (localOwners([address]).length > 0 || names.isVela(address)) return 'vela';
-		const codes = chainIds.map((id) => this.#read(id, address));
-		// The index has not answered: a Vela account is not ruled out — asked.
-		if (!names.answered(address)) return null;
-		if (codes.some((c) => c === true)) return 'contract';
-		if (chainIds.length === 0 || codes.some((c) => c === undefined)) return null;
-		return 'wallet';
 	}
 
 	/** The code read of `address` on `chainId`: asked the first time, `undefined` until it answers. */

@@ -7,36 +7,41 @@
 	 * from its own app, said honestly); else the two choices. "Other wallet"
 	 * is drawn as a hint, not picked, when no Vela account is found (kept only
 	 * if the person picks it); nothing is picked when the wallet can't tell.
-	 * A label that steers what the member is offered, never authority
-	 * (`member-kind.ts`).
+	 * A label that steers what the member is offered, never authority. What
+	 * it shows is the core's `KindChoice` (`multisig_signers::kind_choice`),
+	 * from the members machine's entry or the accounts machine's
+	 * `member_kinds`; a pick goes back to it.
 	 */
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import type { MultisigMessages } from '../messages';
-	import type { KindChoice, MemberKind } from '../core/member-kind';
+	import type { MultisigKindChoice } from '../generated/MultisigKindChoice';
+	import type { MultisigMemberKind } from '../generated/MultisigMemberKind';
 
 	interface Props {
 		m: MultisigMessages;
-		/** What it shows (`kindChoice`). */
-		choice: KindChoice;
+		/** What it shows (the core's `KindChoice`). */
+		choice: MultisigKindChoice;
 		/** Whose kind it is: names the group for assistive tech. */
 		name?: string;
-		onpick: (kind: MemberKind) => void;
+		onpick: (kind: MultisigMemberKind) => void;
 	}
 
 	let { m, choice, name, onpick }: Props = $props();
 
 	const mm = $derived(m.members);
 	const options = $derived([
-		['passkey', mm.kindVela],
+		['vela', mm.kindVela],
 		['wallet', mm.kindWallet]
 	] as const);
+	/** As a multisig keeps it: a Vela account's key is a passkey. */
+	const kept = $derived(choice.kind === 'vela' ? 'passkey' : (choice.kind ?? 'unknown'));
 </script>
 
-<div class="kind" data-testid="member-kind" data-kind={choice.kind ?? 'unknown'}>
+<div class="kind" data-testid="member-kind" data-kind={kept}>
 	{#if choice.locked}
 		<p class="known">
-			{#if choice.kind === 'passkey'}<Icon icon={UTILITY_ICONS.check} size="sm" />{/if}<span
+			{#if choice.kind === 'vela'}<Icon icon={UTILITY_ICONS.check} size="sm" />{/if}<span
 				>{choice.kind === 'contract' ? mm.kindContract : mm.kindVela}</span
 			>
 		</p>

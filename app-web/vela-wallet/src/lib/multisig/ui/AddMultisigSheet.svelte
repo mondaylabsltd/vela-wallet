@@ -47,10 +47,8 @@
 	import { sameAddress, type ExportedSafe } from '../core/kernel';
 	import { addLink, type AddLink, type InvitedMember } from '../core/link';
 	import { heldChains, lastUsedChains, likelyNetworks } from '../core/likely-networks';
-	import { kindChoice, type MemberKind } from '../core/member-kind';
-	import { keptMember, names } from '../core/names.svelte';
-	import { signers } from '../core/signers.svelte';
-	import { multisig, type MemberInfo } from '../core/store.svelte';
+	import { names } from '../core/names.svelte';
+	import { multisig } from '../core/store.svelte';
 	import type { MultisigAddOutcome } from '../generated/MultisigAddOutcome';
 	import type { MultisigImportOutcome } from '../generated/MultisigImportOutcome';
 	import Identicon from '$lib/wallet/ui/Identicon.svelte';
@@ -278,8 +276,6 @@
 
 	/** r7: the members' kinds are asked before anything is imported. */
 	let asking = $state(false);
-	/** r7: the kind the person picked for a member, by lowercase address. */
-	let kinds = $state<Record<string, MemberKind>>({});
 	/**
 	 * r7: the picked Safes' members not on this device (any of their
 	 * networks' owners, once each), with the networks each is a member on —
@@ -301,12 +297,13 @@
 		return out;
 	});
 
-	function kindOf(member: { address: string; chainIds: number[] }) {
-		return kindChoice(
-			signers.evidence(member.chainIds, member.address),
-			kinds[member.address.toLowerCase()] ?? keptMember(member.address).kind
-		);
-	}
+	/**
+	 * r7: each member's kind is the accounts machine's: asked for when the
+	 * kinds step opens (`read_kinds`, on the networks each is a member on),
+	 * picked there (`pick_kind`), and kept with the Safe by the machine when
+	 * it is imported — what each was declared as, or Vela found.
+	 */
+	const kindOf = (address: string) => multisig.view?.member_kinds[address.toLowerCase()] ?? null;
 
 	/**
 	 * The pick's next step is the members' kinds — unless every member is on
@@ -314,8 +311,12 @@
 	 */
 	const askFirst = $derived(toAsk.length > 0 && Object.keys(results).length === 0);
 	function next() {
-		if (askFirst) asking = true;
-		else void importPicked();
+		if (!askFirst) return void importPicked();
+		multisig.send({
+			type: 'read_kinds',
+			members: toAsk.map((m) => ({ address: m.address, chain_ids: m.chainIds }))
+		});
+		asking = true;
 	}
 
 	async function importPicked() {
@@ -327,23 +328,6 @@
 		}
 	}
 
-	/**
-	 * r7: what each of `safe`'s members was declared as (or Vela found), kept
-	 * with it — a label that steers what each member is offered, never
-	 * authority. One left unsaid keeps nothing: it is offered both ways.
-	 * W8: moves onto the core's member-kind rule (create/import) once merged.
-	 */
-	function keepKinds(safe: ExportedSafe) {
-		const members: Record<string, MemberInfo> = {};
-		for (const member of toAsk) {
-			if (!safe.chains.some((c) => c.owners.some((o) => sameAddress(o, member.address)))) continue;
-			const kind = kindOf(member).kind;
-			if (kind) members[member.address] = { kind };
-		}
-		if (Object.keys(members).length > 0)
-			multisig.nameMembers(safe.address, members, { typed: true });
-	}
-
 	async function importOne(safe: ExportedSafe, acceptRisks = false) {
 		results = { ...results, [safe.address]: 'busy' };
 		const key = safe.address.toLowerCase();
@@ -351,7 +335,6 @@
 			{ type: 'import', address: safe.address, accept_risks: acceptRisks },
 			(view) => (view.import.busy === null ? view.import.outcomes[key] : undefined)
 		);
-		if (outcome.kind === 'imported') keepKinds(safe);
 		if (outcome.kind === 'refused' || outcome.kind === 'highRisk')
 			found = { ...found, [safe.address]: outcome.findings as Finding[] };
 		if (outcome.kind === 'unverified') {
@@ -387,12 +370,14 @@
 								>{/if}</span
 						>
 					</span>
-					<MemberKindChoice
-						{m}
-						choice={kindOf(member)}
-						name={names.label(member.address)}
-						onpick={(k) => (kinds = { ...kinds, [member.address.toLowerCase()]: k })}
-					/>
+					{#if kindOf(member.address)}
+						<MemberKindChoice
+							{m}
+							choice={kindOf(member.address)!}
+							name={names.label(member.address)}
+							onpick={(kind) => multisig.send({ type: 'pick_kind', address: member.address, kind })}
+						/>
+					{/if}
 				</li>
 			{/each}
 		</ul>

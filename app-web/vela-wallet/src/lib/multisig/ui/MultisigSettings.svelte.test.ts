@@ -9,15 +9,17 @@
  * record of is said as not shared, with "Share it again".
  */
 import { tick } from 'svelte';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
 import { identiconViewer } from '$lib/wallet/identicon-viewer.svelte';
+import { loadCore } from '$lib/core/client';
 import { MULTISIG_SHAPE, type MultisigMessages } from '../messages';
+import type { WorldSafe } from '../shell/members.testing';
 
-const ME = '0x00000000000000000000000000000000000000aa';
-const OTHER = '0x00000000000000000000000000000000000000bb';
-const SAFE = '0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83';
+// Addresses whose checksum is their own spelling: a member is drawn EIP-55.
+const ME = '0x0000000000000000000000000000000000000011';
+const OTHER = '0x0000000000000000000000000000000000000022';
 
 const seams = vi.hoisted(() => ({
 	shared: true,
@@ -30,33 +32,28 @@ const seams = vi.hoisted(() => ({
 	waiting: false,
 	/** Whether it is deployed on the chain holding its record (this wallet's RPC). */
 	deployed: true,
-	/** Each network's members now, read through this wallet's RPC. */
-	chains: [] as unknown[]
+	/** The multisig's address (its genesis is made once the core is loaded). */
+	safe: '',
+	/** Each network's Safe, as its chain answers this wallet's RPC. */
+	chains: {} as Record<number, WorldSafe>
 }));
 vi.mock('../core/proposals.svelte', () => ({
-	proposals: {
-		get chains() {
-			return seams.chains;
-		},
-		items: []
-	},
+	proposals: { items: [] },
 	MailboxUnreadableError: class extends Error {},
 	proposeMemberChange: async () => ({ safeTxHash: '0xabc' }),
-	membersAnywhere: (a: { owners: string[] }) => a.owners,
 	proposeRename: async (address: string, chainId: number, name: string) => {
 		seams.renamed.push([address, chainId, name]);
 		return { safeTxHash: '0xabc' };
 	}
 }));
 // Changing the members is its own component's (MemberChanges.svelte.test.ts).
-vi.mock('../core/member-entry', () => ({
-	looksLikeName: () => false,
-	resolveTypedName: async () => ({ state: 'unavailable' })
-}));
 vi.mock('$lib/contacts/core/contacts-book.svelte', () => ({ contactsBook: { view: null } }));
-vi.mock('$lib/services/networks', () => ({
+vi.mock('$lib/services/networks', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/services/networks')>()),
 	networkForChainId: (id: number) => (seams.networks.includes(id) ? { chainId: id } : null),
-	chainName: (id: number) => `Chain ${id}`
+	chainName: (id: number) => `Chain ${id}`,
+	// The wallet's network order: Gnosis, Base, Optimism.
+	networkRank: (id: number) => [100, 8453, 10].indexOf(id)
 }));
 vi.mock('../core/display', () => ({
 	chainName: (id: number) => `Chain ${id}`,
@@ -67,37 +64,16 @@ vi.mock('../core/display', () => ({
 			: m.panel.title.replace('{{m}}', `${r.m}`).replace('{{n}}', `${r.n}`)
 }));
 // A rename's signature passes the gate in `proposeRename` (stood in above).
-vi.mock('../core/gate.svelte', () => ({
+vi.mock('../core/gate.svelte', async (importOriginal) => ({
+	...(await importOriginal<typeof import('../core/gate.svelte')>()),
 	SigningRefusedError: class extends Error {},
 	SigningUncheckedError: class extends Error {},
 	SigningBlockedError: class extends Error {}
 }));
-vi.mock('../core/kernel', () => {
-	const same = (a?: string | null, b?: string | null) =>
-		!!a && !!b && a.toLowerCase() === b.toLowerCase();
-	return {
-		validName: (n: string) => n.length > 0 && n.length <= 64 && n.trim() === n,
-		validOwner: () => true,
-		MEMBER_CHANGES: ['addOwner', 'removeOwner', 'swapOwner', 'changeThreshold'],
-		memberChangeTx: () => ({ kind: 'refused', refusal: { kind: 'unchanged' } }),
-		sameAddress: same,
-		// The core's rule, as it is.
-		memberDrift: (
-			was: { owners: string[]; threshold: number },
-			is: { owners: string[]; threshold: number }
-		) => {
-			const added = is.owners.filter((o) => !was.owners.some((w) => same(w, o)));
-			const removed = was.owners.filter((o) => !is.owners.some((w) => same(w, o)));
-			return {
-				same: added.length === 0 && removed.length === 0 && was.threshold === is.threshold,
-				added,
-				removed,
-				thresholdWas: was.threshold,
-				thresholdIs: is.threshold
-			};
-		}
-	};
-});
+vi.mock('../core/kernel', async (importOriginal) => ({
+	...(await importOriginal<typeof import('../core/kernel')>()),
+	validName: (n: string) => n.length > 0 && n.length <= 64 && n.trim() === n
+}));
 vi.mock('../core/ui.svelte', () => ({
 	multisigUi: { open: (sheet: unknown) => seams.opened.push(sheet) }
 }));
@@ -111,8 +87,6 @@ vi.mock('../core/names.svelte', () => ({
 	names: { label: (a: string) => a.slice(0, 6) },
 	keptMember: () => ({})
 }));
-// r7: Add member pre-fills a member's kind from what the wallet can tell — nothing, here.
-vi.mock('../core/signers.svelte', () => ({ signers: { evidence: () => null } }));
 /**
  * The core's accounts machine as Settings reads it: its rows, where its
  * record can be renamed (the service's home chain, 100, first, among the
@@ -120,15 +94,19 @@ vi.mock('../core/signers.svelte', () => ({ signers: { evidence: () => null } }))
  * the machine would for the world the seams describe.
  */
 vi.mock('../core/store.svelte', () => ({
+	MULTISIG_ACCOUNTS_KEY: 'vela.multisigAccounts',
+	ACTIVE_MULTISIG_KEY: 'vela.activeMultisig',
 	isShared: () => seams.shared,
 	multisig: {
+		accounts: [],
+		attach: () => {},
 		find: () => null,
 		remove: () => {},
 		row: () => ({ shared: seams.shared, record_waiting: seams.waiting }),
 		get view() {
 			const held = seams.recordedOn.filter((id) => seams.networks.includes(id));
 			const chain = held.includes(100) ? 100 : (held[0] ?? null);
-			const key = '0x0cb9aef9713c4a2ea2995fca68d7355ce5e27d83';
+			const key = seams.safe.toLowerCase();
 			return {
 				backup: { [key]: 'unavailable' },
 				rename: {
@@ -159,6 +137,26 @@ vi.mock('$lib/wallet/identicon', () => ({
 }));
 
 const { default: MultisigSettings } = await import('./MultisigSettings.svelte');
+const { machines } = await import('../shell/machines.svelte');
+const { startMembers, membersSettled, worldMultisig } = await import('../shell/members.testing');
+
+/** The multisig: founded by ME and OTHER, 2 of 2 (a real genesis). */
+let SAFE = '';
+let GENESIS: Record<string, unknown> = {};
+
+beforeAll(async () => {
+	await loadCore();
+	const made = worldMultisig([ME, OTHER], 2);
+	SAFE = made.address;
+	seams.safe = SAFE;
+	GENESIS = made.genesis as unknown as Record<string, unknown>;
+});
+
+/** Drawn in this test's world: the members machine reads its chains. */
+const shown: typeof render = (component, options) => {
+	startMembers({ safe: SAFE, chains: seams.chains, signers: {}, asked: [] });
+	return render(component, options);
+};
 
 function words(): MultisigMessages {
 	const out: Record<string, Record<string, string>> = {};
@@ -171,9 +169,10 @@ function words(): MultisigMessages {
 }
 
 afterEach(() => {
+	machines.resetForTests();
 	identiconViewer.close();
 	identiconViewer.openLabel = '';
-	seams.chains = [];
+	seams.chains = {};
 	seams.deployed = true;
 	seams.waiting = false;
 	seams.shared = true;
@@ -184,10 +183,16 @@ afterEach(() => {
 describe('the members list (Settings → Account)', () => {
 	it('opens the viewer on the member whose artwork is tapped', async () => {
 		identiconViewer.openLabel = 'View identicon';
-		const screen = render(MultisigSettings, {
+		const screen = shown(MultisigSettings, {
 			props: {
 				m: words(),
-				account: { address: SAFE, genesis: {}, owners: [ME, OTHER], threshold: 2 } as never,
+				account: {
+					address: SAFE,
+					genesis: GENESIS,
+					owners: [ME, OTHER],
+					threshold: 2,
+					recorded: true
+				} as never,
 				payer: null,
 				cancelLabel: 'Cancel'
 			}
@@ -214,9 +219,10 @@ describe('the name in the registry (v4)', () => {
 		m: words(),
 		account: {
 			address: SAFE,
-			genesis: { name },
+			genesis: { ...GENESIS, name },
 			owners: [ME, OTHER],
 			threshold: 2,
+			recorded: true,
 			chainIds: [100]
 		} as never,
 		payer: null,
@@ -233,7 +239,7 @@ describe('the name in the registry (v4)', () => {
 	});
 
 	it('is renamed by a proposal of its own, on the network holding its record', async () => {
-		const screen = render(MultisigSettings, { props: props() });
+		const screen = shown(MultisigSettings, { props: props() });
 		await expect.element(screen.getByTestId('registry-name')).toHaveTextContent('Team fund');
 		await screen.getByRole('button', { name: 'settings.renameAction' }).click();
 		const field = screen.getByRole('textbox', { name: 'create.name' });
@@ -252,7 +258,7 @@ describe('the name in the registry (v4)', () => {
 
 	it('offers nothing that deploys when it is not deployed where its record is', async () => {
 		seams.deployed = false;
-		const screen = render(MultisigSettings, { props: props() });
+		const screen = shown(MultisigSettings, { props: props() });
 		await expect
 			.element(screen.getByTestId('rename-not-deployed'))
 			.toHaveTextContent('settings.renameNotDeployed');
@@ -263,7 +269,7 @@ describe('the name in the registry (v4)', () => {
 
 	it('says it cannot be renamed here when no network of this wallet holds its record', async () => {
 		seams.networks = [];
-		const screen = render(MultisigSettings, { props: props() });
+		const screen = shown(MultisigSettings, { props: props() });
 		await expect.element(screen.getByText('settings.renameUnavailable')).toBeVisible();
 		expect(screen.getByRole('button', { name: 'settings.renameAction' }).elements()).toHaveLength(
 			0
@@ -273,7 +279,7 @@ describe('the name in the registry (v4)', () => {
 	it('a multisig the service has no record of is said as not shared, and shared again', async () => {
 		seams.shared = false;
 		seams.recordedOn = [];
-		const screen = render(MultisigSettings, { props: props() });
+		const screen = shown(MultisigSettings, { props: props() });
 		await expect.element(screen.getByText('panel.notShared')).toBeVisible();
 		await expect.element(screen.getByText('settings.shareAgainNote')).toBeVisible();
 		await screen.getByRole('button', { name: 'settings.shareAgain' }).click();
@@ -284,7 +290,7 @@ describe('the name in the registry (v4)', () => {
 		seams.shared = false;
 		seams.recordedOn = [];
 		seams.waiting = true;
-		const screen = render(MultisigSettings, { props: props() });
+		const screen = shown(MultisigSettings, { props: props() });
 		await expect.element(screen.getByText('create.savedLater')).toBeVisible();
 		expect(screen.getByText('settings.shareAgainNote').elements()).toHaveLength(0);
 		await expect
@@ -300,18 +306,26 @@ describe('the name in the registry (v4)', () => {
  * a network it is not deployed on starts with the original members.
  */
 describe('original and current members', () => {
-	const NEW = '0x00000000000000000000000000000000000000cc';
-	const account = { address: SAFE, genesis: {}, owners: [ME, OTHER], threshold: 2, chainIds: [] };
+	const NEW = '0x0000000000000000000000000000000000000033';
+	const account = () => ({
+		address: SAFE,
+		genesis: GENESIS,
+		owners: [ME, OTHER],
+		threshold: 2,
+		recorded: true,
+		chainIds: Object.keys(seams.chains).map(Number)
+	});
 
 	it('shows each deployed network beside the original members, marked added and removed', async () => {
-		seams.chains = [
-			{ chainId: 100, members: { deployed: true, owners: [ME, NEW], threshold: 1, nonce: 3n } },
-			{ chainId: 8453, members: { deployed: false, owners: [ME, OTHER], threshold: 2, nonce: 0n } },
-			{ chainId: 10, members: { deployed: true, owners: [ME, OTHER], threshold: 2, nonce: 1n } }
-		];
-		const screen = render(MultisigSettings, {
-			props: { m: words(), account: account as never, payer: null, cancelLabel: 'Cancel' }
+		seams.chains = {
+			100: { deployed: true, owners: [ME, NEW], threshold: 1, nonce: 3 },
+			8453: { deployed: false, owners: [ME, OTHER], threshold: 2 },
+			10: { deployed: true, owners: [ME, OTHER], threshold: 2, nonce: 1 }
+		};
+		const screen = shown(MultisigSettings, {
+			props: { m: words(), account: account() as never, payer: null, cancelLabel: 'Cancel' }
 		});
+		await membersSettled();
 		await tick();
 		const original = screen.container.querySelector('[data-testid="members-original"]')!;
 		expect(original.textContent).toContain('settings.originalMembers');
@@ -332,9 +346,10 @@ describe('original and current members', () => {
 	});
 
 	it('shows the original members alone before any network is read', async () => {
-		const screen = render(MultisigSettings, {
-			props: { m: words(), account: account as never, payer: null, cancelLabel: 'Cancel' }
+		const screen = shown(MultisigSettings, {
+			props: { m: words(), account: account() as never, payer: null, cancelLabel: 'Cancel' }
 		});
+		await membersSettled();
 		await tick();
 		expect(screen.container.querySelectorAll('[data-testid="members-current"]')).toHaveLength(0);
 		expect(screen.container.querySelectorAll('[data-testid="members-original"]')).toHaveLength(1);
@@ -345,14 +360,15 @@ describe('who can act for it (§3.5)', () => {
 	const MODULE = '0x9813461E88aDD60D0eC0943B74A83368CA2E36D1';
 
 	it('says a refused network as read-only, and a risk found on another, each in its own notice', async () => {
-		const screen = render(MultisigSettings, {
+		const screen = shown(MultisigSettings, {
 			props: {
 				m: words(),
 				account: {
 					address: SAFE,
-					genesis: {},
+					genesis: GENESIS,
 					owners: [ME, OTHER],
 					threshold: 2,
+					recorded: true,
 					chainIds: [100, 8453],
 					findings: [
 						{ from: 'chain', chainId: 100, risk: { kind: 'module', address: MODULE } },

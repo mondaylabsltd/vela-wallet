@@ -348,6 +348,20 @@ pub fn member_change_groups(items: &[WaitingProposal], order: &[u64]) -> Vec<Cha
     groups
 }
 
+/// Whether a member change open in `was` is done in `now`, or no longer
+/// listed there: its network's members may have moved.
+pub fn member_change_ended(was: &[WaitingProposal], now: &[WaitingProposal]) -> bool {
+    was.iter()
+        .filter(|w| w.status != WaitingStatus::Done && changes_members(w.action.as_ref()))
+        .any(|w| {
+            !now.iter().any(|n| {
+                n.chain_id == w.chain_id
+                    && n.safe_tx_hash.eq_ignore_ascii_case(&w.safe_tx_hash)
+                    && n.status != WaitingStatus::Done
+            })
+        })
+}
+
 /// "Arc 1/2 · Base 0/2": each network's approvals so far, of what it needs
 /// there (`progressLine`).
 pub fn progress_line(group: &ChangeGroup, chain_name: impl Fn(u64) -> String) -> String {
@@ -642,7 +656,10 @@ pub enum Event {
     Compose { compose: Option<Compose> },
     /// The approvals stepper, by `by` (±1). Outside a change, it starts one
     /// of the approvals needed.
-    Step { by: i64 },
+    Step {
+        #[cfg_attr(feature = "bindings", ts(type = "number"))]
+        by: i64,
+    },
     /// A change composed by the shell itself (a sheet of its own, a link):
     /// checked the same way. `None` clears it.
     Draft { change: Option<MemberChange> },
@@ -1338,8 +1355,19 @@ impl App for MultisigMembers {
                 render()
             }
             Event::Waiting { proposals } => {
-                lock(&model.state).waiting = proposals;
-                render()
+                let moved = {
+                    let mut s = lock(&model.state);
+                    let moved = member_change_ended(&s.waiting, &proposals);
+                    s.waiting = proposals;
+                    moved
+                };
+                // A member change that was waiting ran (or was voided): each
+                // network's members are read again, as they are now.
+                if moved {
+                    flow(model, |io, st| async move { read_all(&io, &st).await })
+                } else {
+                    render()
+                }
             }
             Event::Compose { compose } => {
                 lock(&model.state).open(compose);
@@ -1393,7 +1421,9 @@ impl App for MultisigMembers {
                         e.name = n;
                     }
                 }
-                e.kind_pick = Some(c.kind);
+                // r7: picked, it is asked like one typed — what the chain says
+                // of it, else the person's word; never the list's guess.
+                e.kind_pick = None;
                 let (ask, address) = (e.ask, c.address.clone());
                 drop(s);
                 read_kind(model, ask, address)
