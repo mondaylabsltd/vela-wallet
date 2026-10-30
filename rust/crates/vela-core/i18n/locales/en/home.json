@@ -554,7 +554,8 @@
         "rowExecute": "Execute {{number}}",
         "rowReject": "Reject {{number}}",
         "outcomeNotSent": "Signed, not sent yet",
-        "nameFromRecord": "Its name as saved with its record — the address is what you sign for"
+        "nameFromRecord": "Its name as saved with its record — the address is what you sign for",
+        "linkDamaged": "This link is damaged — ask for a new one."
       },
       "import": {
         "or": "Or import from Safe{Wallet}",

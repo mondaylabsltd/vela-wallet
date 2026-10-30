@@ -554,7 +554,8 @@
         "rowExecute": "{{number}} ausführen",
         "rowReject": "{{number}} ablehnen",
         "outcomeNotSent": "Signiert, noch nicht gesendet",
-        "nameFromRecord": "Der Name, wie er mit seinem Eintrag gespeichert ist — signiert wird für die Adresse"
+        "nameFromRecord": "Der Name, wie er mit seinem Eintrag gespeichert ist — signiert wird für die Adresse",
+        "linkDamaged": "Dieser Link ist beschädigt — bitte um einen neuen."
       },
       "import": {
         "or": "Oder aus Safe{Wallet} importieren",

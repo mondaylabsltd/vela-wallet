@@ -31,7 +31,11 @@ const connections = new Map<string, FakeConnection>();
 vi.mock('$lib/vendor/peerconnect/index.js', () => ({
 	Room: {
 		parse: (record: string) => ({ record }),
-		join: () => ({ toString: () => 'joined' })
+		join: (invite: string) => {
+			// PeerConnect's own refusal of an invite that does not read.
+			if (invite.includes('DAMAGED')) throw new Error('invalid invite');
+			return { toString: () => 'joined' };
+		}
 	}
 }));
 vi.mock('./relay', () => ({
@@ -125,7 +129,7 @@ vi.stubGlobal('localStorage', {
 	removeItem: (k: string) => void store.delete(k)
 });
 
-const { Bridge } = await import('./bridge');
+const { Bridge, DamagedInviteError } = await import('./bridge');
 
 const VELA = { name: 'Vela', origin: 'https://wallet.getvela.app' };
 const session = (id: string, record: string, dapp = VELA) => ({
@@ -202,6 +206,20 @@ describe("the connect page's sessions", () => {
  * ms-14: a room opened from a link that names its members signs as one of
  * them only — a request as anyone else is refused before the wallet is asked.
  */
+describe('a damaged invite (round 6)', () => {
+	it("is said as the link's: DamagedInviteError, and nothing is saved or started", () => {
+		store.set('vela.connect.sessions.v1', JSON.stringify([session('old-1', 'r-old-1')]));
+		const provider = { request: async () => ['0x00000000000000000000000000000000000000aa'] };
+		const bridge = new Bridge(provider as never, [], 'eip155:100');
+		bridge.resumeAll();
+		const before = store.get('vela.connect.sessions.v1');
+		expect(() => bridge.join('wss://relay#DAMAGED')).toThrow(DamagedInviteError);
+		expect(bridge.sessions).toHaveLength(1);
+		expect(store.get('vela.connect.sessions.v1')).toBe(before);
+		expect(connections.has('joined')).toBe(false);
+	});
+});
+
 describe('a session for the members its link named (ms-14)', () => {
 	const MEMBER = '0x70997970c51812dc3a010c7d01b50e0d17dc79c8';
 	const STRANGER = '0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc';

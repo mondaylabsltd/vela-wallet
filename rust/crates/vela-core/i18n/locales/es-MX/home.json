@@ -559,7 +559,8 @@
         "rowExecute": "Ejecutar {{number}}",
         "rowReject": "Rechazar {{number}}",
         "outcomeNotSent": "Firmado, aún sin enviar",
-        "nameFromRecord": "Su nombre tal como se guardó con su registro — lo que firmas es para la dirección"
+        "nameFromRecord": "Su nombre tal como se guardó con su registro — lo que firmas es para la dirección",
+        "linkDamaged": "Este enlace está dañado — pide uno nuevo."
       },
       "import": {
         "or": "O importa desde Safe{Wallet}",

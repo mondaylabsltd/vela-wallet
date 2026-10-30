@@ -554,7 +554,8 @@
         "rowExecute": "執行第 {{number}} 號",
         "rowReject": "拒絕第 {{number}} 號",
         "outcomeNotSent": "已簽署，尚未發出",
-        "nameFromRecord": "隨記錄儲存的名稱——你簽的是這個地址"
+        "nameFromRecord": "隨記錄儲存的名稱——你簽的是這個地址",
+        "linkDamaged": "此連結已損壞——請索取新的連結。"
       },
       "import": {
         "or": "或從 Safe{Wallet} 匯入",

@@ -1332,7 +1332,11 @@ if (branchSet.size !== 108) fail(`expected 108 branch paths, got ${branchSet.siz
   //   `add.unchecked` (1) and r6a-g2's 8 together: 562 + 6 + 1 + 8 = 577.
   // Merged (round-6 integration, 2026-10-30): fix-b's 17 and fix-a's 15
   //   together: 562 + 17 + 15 = 594.
-  const pins = { multisig: 594 };
+  // 595 (round-6 integration, 2026-10-30): + `home.multisig.external.
+  //   linkDamaged` ("This link is damaged — ask for a new one": an invite
+  //   that does not read is the link's, never "the wallet couldn't sign:
+  //   invalid invite"). 594 + 1 = 595.
+  const pins = { multisig: 595 };
   for (const [name, docs] of Object.entries(onDemand)) {
     const leaves = new Set();
     for (const lng of LOCALES) walk(docs[lng], '', leaves, new Set());

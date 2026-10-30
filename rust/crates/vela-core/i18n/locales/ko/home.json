@@ -554,7 +554,8 @@
         "rowExecute": "#{{number}} 실행",
         "rowReject": "#{{number}} 거부",
         "outcomeNotSent": "서명됨, 아직 전송 안 됨",
-        "nameFromRecord": "기록과 함께 저장된 이름입니다 — 서명 대상은 주소입니다"
+        "nameFromRecord": "기록과 함께 저장된 이름입니다 — 서명 대상은 주소입니다",
+        "linkDamaged": "이 링크가 손상되었습니다 — 새 링크를 요청하세요."
       },
       "import": {
         "or": "또는 Safe{Wallet}에서 가져오기",

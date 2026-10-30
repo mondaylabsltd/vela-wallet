@@ -554,7 +554,8 @@
         "rowExecute": "{{number}} yürüt",
         "rowReject": "{{number}} reddet",
         "outcomeNotSent": "İmzalandı, henüz gönderilmedi",
-        "nameFromRecord": "Kaydıyla saklanan adı — imzaladığınız şey adres içindir"
+        "nameFromRecord": "Kaydıyla saklanan adı — imzaladığınız şey adres içindir",
+        "linkDamaged": "Bu bağlantı bozuk — yenisini isteyin."
       },
       "import": {
         "or": "Ya da Safe{Wallet}'tan içe aktarın",

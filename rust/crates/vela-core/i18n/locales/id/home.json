@@ -554,7 +554,8 @@
         "rowExecute": "Eksekusi {{number}}",
         "rowReject": "Tolak {{number}}",
         "outcomeNotSent": "Ditandatangani, belum terkirim",
-        "nameFromRecord": "Namanya seperti tersimpan dengan catatannya — yang Anda tandatangani adalah untuk alamatnya"
+        "nameFromRecord": "Namanya seperti tersimpan dengan catatannya — yang Anda tandatangani adalah untuk alamatnya",
+        "linkDamaged": "Tautan ini rusak — mintalah tautan yang baru."
       },
       "import": {
         "or": "Atau impor dari Safe{Wallet}",

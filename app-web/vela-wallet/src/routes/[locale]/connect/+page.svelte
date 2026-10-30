@@ -42,7 +42,12 @@
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import { chainName, nativeSymbol } from '$lib/services/networks';
 	import { discoverProviders, type ProviderDetail } from '$lib/multisig/external/eip6963';
-	import { Bridge, type ActivityEntry, type SessionView } from '$lib/multisig/external/bridge';
+	import {
+		Bridge,
+		DamagedInviteError,
+		type ActivityEntry,
+		type SessionView
+	} from '$lib/multisig/external/bridge';
 	import { connectLink, isExpected, readConnectHash } from '$lib/multisig/external/connect-link';
 	import { currentChain } from '$lib/multisig/external/injected';
 	import { problemText, walletProblem } from '$lib/multisig/external/errors';
@@ -99,6 +104,8 @@
 	let link = $state('');
 	let copied = $state(false);
 	let failure = $state('');
+	/** Round 6: the link's invite does not read — said as the link's, never the wallet's. */
+	let damagedLink = $state(false);
 	/** r4C-2: the transaction the link names, read and acted on from here. */
 	let outside = $state<OutsideTransaction | null>(null);
 	let now = $state(Date.now());
@@ -135,7 +142,12 @@
 	 */
 	function readLink(hash: string): string | null {
 		const read = readConnectHash(hash);
+		if (read.damaged) {
+			damagedLink = true;
+			invited = false;
+		}
 		if (!read.invite && !read.tx) return null;
+		damagedLink = read.damaged;
 		members = read.members;
 		if (read.invite) {
 			invited = true;
@@ -171,8 +183,26 @@
 	function openLink(hash: string) {
 		const fresh = readLink(hash);
 		if (!fresh) return;
-		if (bridge) bridge.join(fresh, members);
+		if (bridge) joinRoom(bridge, fresh);
 		else invite = fresh;
+	}
+
+	/**
+	 * Round 6: the link's room, joined. An invite that does not read is the
+	 * link's fault, said as such ("This link is damaged — ask for a new one"),
+	 * never "the wallet couldn't sign: invalid invite" — and nothing waits on
+	 * Vela for it.
+	 */
+	function joinRoom(b: Bridge, fresh: string) {
+		try {
+			b.join(fresh, members);
+			// A good link after a damaged one: that one's line goes.
+			damagedLink = false;
+		} catch (error) {
+			if (!(error instanceof DamagedInviteError)) throw error;
+			invited = false;
+			damagedLink = true;
+		}
 	}
 
 	async function boot() {
@@ -204,7 +234,7 @@
 			b.addEventListener('activity', refresh);
 			b.addEventListener('prompt', refresh);
 			b.resumeAll();
-			if (invite) b.join(invite, members);
+			if (invite) joinRoom(b, invite);
 			invite = null;
 			chosen = detail;
 			bridge = b;
@@ -753,6 +783,11 @@
 		<span class="wordmark">VELA WALLET</span>
 	</header>
 	<h1>{m.pageTitle}</h1>
+
+	{#if damagedLink}
+		<!-- Round 6: an invite that does not read is the link's — what to do, plainly. -->
+		<p class="error" role="alert" data-testid="connect-link-damaged">{m.linkDamaged}</p>
+	{/if}
 
 	{#if relay.kind === 'retrying' || relay.kind === 'failed'}
 		<!-- r4C-1: this page's own way onto the relay, said with what to do. -->

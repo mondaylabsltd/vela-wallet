@@ -542,6 +542,8 @@ export interface MultisigMessages {
 		outcomeNotSent: string;
 		/** r5reg-23: under the multisig's name in a review. */
 		nameFromRecord: string;
+		/** Round 6: the link's invite does not read — never "the wallet couldn't sign". */
+		linkDamaged: string;
 	};
 	import: {
 		or: string;
@@ -1257,7 +1259,8 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		rowExecute: '',
 		rowReject: '',
 		outcomeNotSent: '',
-		nameFromRecord: ''
+		nameFromRecord: '',
+		linkDamaged: ''
 	},
 	import: {
 		or: '',

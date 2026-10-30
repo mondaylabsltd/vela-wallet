@@ -35,6 +35,18 @@ import { walletProblem, type WalletProblem } from './errors';
 
 const STORAGE_KEY = 'vela.connect.sessions.v1';
 
+/**
+ * Round 6: the link's invite does not read as a PeerConnect invite (cut short,
+ * or changed on the way). Nothing was joined and nothing asked of the wallet:
+ * the page says the link is damaged, never that the wallet couldn't sign.
+ */
+export class DamagedInviteError extends Error {
+	constructor(cause: unknown) {
+		super(`damaged invite: ${cause instanceof Error ? cause.message : String(cause)}`);
+		this.name = 'DamagedInviteError';
+	}
+}
+
 interface Saved {
 	id: string;
 	record: string;
@@ -203,10 +215,16 @@ export class Bridge extends EventTarget {
 
 	/**
 	 * Joins the room of a scanned invite, for `members` (the link's; empty
-	 * when it named none). Returns the session id.
+	 * when it named none). Returns the session id. An invite that does not
+	 * read throws {@link DamagedInviteError}, and nothing is saved.
 	 */
 	join(invite: string, members: string[] = []): string {
-		const room = Room.join(invite);
+		let room: Room;
+		try {
+			room = Room.join(invite);
+		} catch (error) {
+			throw new DamagedInviteError(error);
+		}
 		// The joiner keeps its record before the first handshake (PeerConnect §3.4).
 		const saved: Saved = {
 			id: crypto.randomUUID(),

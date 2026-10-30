@@ -79,44 +79,50 @@ vi.mock('$lib/multisig/external/eip6963', () => ({
 		];
 	}
 }));
-vi.mock('$lib/multisig/external/bridge', () => ({
-	Bridge: class extends EventTarget {
-		signer: { accounts: string[]; chain: string };
-		activity: unknown[] = [];
-		prompt: unknown = undefined;
-		request: unknown = undefined;
-		relay: unknown = { kind: 'up' };
-		constructor(_provider: unknown, accounts: string[], chain: string) {
-			super();
-			this.signer = { accounts, chain };
-			fake.bridge = this;
+vi.mock('$lib/multisig/external/bridge', () => {
+	class DamagedInviteError extends Error {}
+	return {
+		DamagedInviteError,
+		Bridge: class extends EventTarget {
+			signer: { accounts: string[]; chain: string };
+			activity: unknown[] = [];
+			prompt: unknown = undefined;
+			request: unknown = undefined;
+			relay: unknown = { kind: 'up' };
+			constructor(_provider: unknown, accounts: string[], chain: string) {
+				super();
+				this.signer = { accounts, chain };
+				fake.bridge = this;
+			}
+			get sessions() {
+				return fake.joined.length
+					? [
+							{
+								id: 's',
+								state: fake.state,
+								approved: fake.approved,
+								declined: false,
+								created: 1,
+								stateSince: fake.stateSince || Date.now()
+							}
+						]
+					: [];
+			}
+			resumeAll() {}
+			retryRelay() {
+				fake.retried += 1;
+			}
+			join(...args: unknown[]) {
+				// As `Bridge.join` reads a PeerConnect invite: one cut short does not.
+				if (String(args[0]).includes('DAMAGED')) throw new DamagedInviteError('invalid invite');
+				fake.joined.push(args);
+				this.prompt = { session: 's', params: { name: 'Vela' }, answer: () => {} };
+				return 's';
+			}
+			end() {}
 		}
-		get sessions() {
-			return fake.joined.length
-				? [
-						{
-							id: 's',
-							state: fake.state,
-							approved: fake.approved,
-							declined: false,
-							created: 1,
-							stateSince: fake.stateSince || Date.now()
-						}
-					]
-				: [];
-		}
-		resumeAll() {}
-		retryRelay() {
-			fake.retried += 1;
-		}
-		join(...args: unknown[]) {
-			fake.joined.push(args);
-			this.prompt = { session: 's', params: { name: 'Vela' }, answer: () => {} };
-			return 's';
-		}
-		end() {}
-	}
-}));
+	};
+});
 vi.mock('$lib/multisig/external/outside.svelte', async () => {
 	const { OutsideTransaction: Real } = await vi.importActual<
 		typeof import('$lib/multisig/external/outside.svelte')
@@ -588,6 +594,45 @@ describe('round 6: a new link in the same tab (r5reg-2)', () => {
 		location.hash = `#${encodeURIComponent(next)}&for=${MEMBER}`;
 		await vi.waitFor(() => expect(fake.joined).toHaveLength(2));
 		expect(fake.joined[1]).toEqual([next, [MEMBER]]);
+		await screen.unmount();
+	});
+});
+
+describe("round 6: a damaged invite is the link's, never the wallet's", () => {
+	/** Reads as an invite; PeerConnect refuses it ("invalid invite"). */
+	const DAMAGED = `wss://relay.getvela.app/r/DAMAGED#${'C'.repeat(86)}`;
+	/** Cut short on the way: does not even read as one. */
+	const CUT = `wss://relay.getvela.app/r/abc#${'A'.repeat(40)}`;
+	const damaged = () => testid('connect-link-damaged')?.textContent;
+
+	for (const [what, invite] of [
+		['refused by PeerConnect', DAMAGED],
+		['cut short', CUT]
+	] as const) {
+		it(`${what}: says the link is damaged — not "couldn't sign", not "Connecting to Vela…"`, async () => {
+			const screen = await open([MEMBER], `#${encodeURIComponent(invite)}&for=${MEMBER}`, {
+				wait: false
+			});
+			await vi.waitFor(() => expect(fake.bridge?.signer).toBeDefined(), { timeout: 15_000 });
+			await vi.waitFor(() => expect(damaged()).toBe('external.linkDamaged'));
+			expect(testid('connect-link-damaged')?.getAttribute('role')).toBe('alert');
+			expect(fake.joined).toHaveLength(0);
+			expect(document.body.textContent).not.toContain('external.walletFailed');
+			expect(document.body.textContent).not.toContain('external.connectingVela');
+			await screen.unmount();
+		});
+	}
+
+	it('a good link opened next in the same tab joins, and the line goes', async () => {
+		const screen = await open([MEMBER], `#${encodeURIComponent(DAMAGED)}&for=${MEMBER}`, {
+			wait: false
+		});
+		await vi.waitFor(() => expect(fake.bridge?.signer).toBeDefined(), { timeout: 15_000 });
+		await vi.waitFor(() => expect(damaged()).toBe('external.linkDamaged'));
+		location.hash = `#${encodeURIComponent(INVITE)}&for=${MEMBER}`;
+		await vi.waitFor(() => expect(fake.joined).toHaveLength(1));
+		expect(fake.joined[0]).toEqual([INVITE, [MEMBER]]);
+		await vi.waitFor(() => expect(testid('connect-link-damaged')).toBeNull());
 		await screen.unmount();
 	});
 });

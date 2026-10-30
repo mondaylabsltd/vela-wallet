@@ -22,7 +22,8 @@ describe('the connect link (ms-14)', () => {
 		expect(readConnectHash(url.hash)).toEqual({
 			invite: INVITE,
 			members: [ALICE.toLowerCase(), BOB.toLowerCase()],
-			tx: null
+			tx: null,
+			damaged: false
 		});
 	});
 
@@ -30,14 +31,20 @@ describe('the connect link (ms-14)', () => {
 		expect(readConnectHash(new URL(connectLink(PAGE, null, [ALICE])).hash)).toEqual({
 			invite: null,
 			members: [ALICE.toLowerCase()],
-			tx: null
+			tx: null,
+			damaged: false
 		});
 		expect(connectLink(PAGE, null, [])).toBe(PAGE);
 	});
 
 	it('an older link (the invite alone) still opens, with no one to check against', () => {
 		const old = `#${encodeURIComponent(INVITE)}`;
-		expect(readConnectHash(old)).toEqual({ invite: INVITE, members: [], tx: null });
+		expect(readConnectHash(old)).toEqual({
+			invite: INVITE,
+			members: [],
+			tx: null,
+			damaged: false
+		});
 		expect(isExpected([], BOB)).toBe(true);
 	});
 
@@ -45,9 +52,10 @@ describe('the connect link (ms-14)', () => {
 		expect(readConnectHash('#for=0x123,nonsense&%E0%A4%A')).toEqual({
 			invite: null,
 			members: [],
-			tx: null
+			tx: null,
+			damaged: false
 		});
-		expect(readConnectHash('')).toEqual({ invite: null, members: [], tx: null });
+		expect(readConnectHash('')).toEqual({ invite: null, members: [], tx: null, damaged: false });
 		expect(readConnectHash(`#ms=0.${ALICE}.0x12`).tx).toBeNull();
 		expect(connectLink(PAGE, null, ['0xnope'])).toBe(PAGE);
 	});
@@ -64,7 +72,8 @@ describe('the connect link (ms-14)', () => {
 		expect(readConnectHash(new URL(live).hash)).toEqual({
 			invite: INVITE,
 			members: [BOB.toLowerCase()],
-			tx: { chainId: 5042002, multisig: ALICE.toLowerCase(), safeTxHash: `0x${'ab'.repeat(32)}` }
+			tx: { chainId: 5042002, multisig: ALICE.toLowerCase(), safeTxHash: `0x${'ab'.repeat(32)}` },
+			damaged: false
 		});
 		// The approve link: no room at all.
 		const later = connectLink(PAGE, null, [BOB], tx);
@@ -72,5 +81,19 @@ describe('the connect link (ms-14)', () => {
 		expect(readConnectHash(new URL(later).hash).invite).toBeNull();
 		// A transaction that does not read is left out, never half-written.
 		expect(connectLink(PAGE, null, [BOB], { ...tx, safeTxHash: '0x12' })).not.toContain('ms=');
+	});
+
+	it('round 6: an invite that does not read is said as damaged — dropped, never guessed', () => {
+		const cut = `wss://relay.getvela.app/r/abc#${'A'.repeat(40)}`;
+		expect(readConnectHash(`#${encodeURIComponent(cut)}&for=${ALICE}`)).toEqual({
+			invite: null,
+			members: [ALICE.toLowerCase()],
+			tx: null,
+			damaged: true
+		});
+		// Its encoding broken on the way.
+		expect(readConnectHash('#wss%3A%2F%2Frelay%E0%A4%A').damaged).toBe(true);
+		// Nothing that was meant as an invite: not damaged.
+		expect(readConnectHash(`#for=${ALICE}`).damaged).toBe(false);
 	});
 });

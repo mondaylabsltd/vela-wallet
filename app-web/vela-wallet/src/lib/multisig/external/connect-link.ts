@@ -53,6 +53,12 @@ export interface ConnectHash {
 	members: string[];
 	/** The transaction to approve from the page itself; `null` for an older link. */
 	tx: ProposalLink | null;
+	/**
+	 * Round 6: the link carried a room's invite that does not read — cut short
+	 * or changed on the way. Dropped, never guessed, and said: the link is
+	 * damaged.
+	 */
+	damaged: boolean;
 }
 
 function readTx(body: string): ProposalLink | null {
@@ -71,6 +77,7 @@ export function readConnectHash(hash: string): ConnectHash {
 	let invite: string | null = null;
 	let members: string[] = [];
 	let tx: ProposalLink | null = null;
+	let damaged = false;
 	for (const part of raw ? raw.split('&') : []) {
 		if (part.startsWith(FOR)) {
 			members = part
@@ -87,11 +94,14 @@ export function readConnectHash(hash: string): ConnectHash {
 		try {
 			const decoded = decodeURIComponent(part);
 			if (INVITE.test(decoded)) invite = decoded;
+			// A relay's address with a secret that does not read: an invite, damaged.
+			else if (/^wss?:\/\//.test(decoded)) damaged = true;
 		} catch {
-			// not an invite
+			// Not even a fragment that decodes: damaged when it was meant as the invite.
+			if (/^wss?(:|%3A)/i.test(part)) damaged = true;
 		}
 	}
-	return { invite, members: [...new Set(members)], tx };
+	return { invite, members: [...new Set(members)], tx, damaged: damaged && invite === null };
 }
 
 /** Whether `account` is one of `members` — any account, when the link named none. */
