@@ -211,6 +211,7 @@
       "trustedSignerRefused": "Halaman tanda tangan menolak menandatangani permintaan ini. Alasannya ada di halaman itu.",
       "trustedSignerMismatch": "Jawaban halaman tidak cocok dengan permintaan ini, jadi tidak ada yang dikirim.",
       "trustedSignerTimeout": "Halaman tanda tangan tidak menjawab tepat waktu.",
+      "trustedSignerUnanswered": "Halaman tanda tangan tidak menjawab — coba lagi.",
       "trustedSignerReopen": "Buka halaman lagi",
       "handoffTitle": "Tinjau dan tanda tangani di halaman tanda tangan tepercaya",
       "confirmWithLabel": "Konfirmasi dengan",
@@ -601,6 +602,7 @@
         "signerUnavailable": "Passkey tidak bisa dipakai di sini",
         "signerNotDiscoverable": "Passkey ini tidak bisa menandatangani di sini",
         "signerFailed": "Prompt passkey gagal",
+        "signingPage": "Halaman tanda tangan tidak menandatanganinya",
         "badRpc": "Situs tidak memberi RPC yang bisa dipakai untuk jaringan ini"
       },
       "requests": "Permintaan terbaru",

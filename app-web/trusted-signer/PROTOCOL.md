@@ -864,6 +864,32 @@ P-256 签名在那把钥匙下成立；再组装成 `PasskeyApproval`，并按�
   `wallet.getvela.app` 要 → 卡上有多签名（标 App 提供）和三个哈希，点按后答复回到钱包，签的正是批准字节；
   哈希不符 → 拒、不弹 passkey；网页钱包要别的签名 → 仍拒。
 
+### 12.7 多签的执行（第七轮，r7-1）
+
+执行是执行者**自己的**用户操作（vela-core `execution_calls`），网页钱包按钱包自己的发送交来（`wallet_sendCalls`，`origin` 为空，
+组装好的整笔操作与费用腿下标）。操作里有 `execTransaction` 的腿时，本页把它当作一次执行来读（`lib/multisig.js` `execution`），
+读不全就拒，绝不画成一串盲签：
+
+1. **`execTransaction`**：只认核心的编码（`exec_transaction_data`：十个头字、data、signatures、之后什么都没有），不带币、CALL；
+   里面的 SafeTx 按 12.2 的同一套规则读（`read`，拒签照旧：MultiSendCallOnly 以外的 delegatecall、gas 退款、改模块 / guard …）。
+   批准从签名字节里数（`v = 0` 合约签名、`v = 1` 发送者或链上批准，`r` 为成员；27/28/31/32 为普通钱包的 ECDSA）。
+   接管拦截（`takeover`）对这一腿只查目标是不是执行者自己 —— MultiSendCallOnly 的批量正是 12.2 允许的。
+2. **部署多签的腿**：`createProxyWithNonce` 打在 Safe v1.4.1 工厂上、L2 单例，setup **正好**是 Vela 建多签的那一个
+   （成员、门槛、CompatibilityFallbackHandler、没有 setup 钩子、没有付款 —— 本页重新编码逐字节比对），CREATE2 推出的地址就是被执行的多签。
+   别处建的多签（Safe{Wallet} 的 genesis）在它的第一次执行里部署：本页无法担保它没写的 setup，拒签。
+3. **部署成员账户的腿**：同一工厂与单例，setup 正好是一个 Vela 账户的（`vela_account_genesis`：从 setup 自己的 MultiSend 读出钥匙、
+   重新编码比对，salt nonce 是钥匙的哈希），推出的地址是一位在签名里批准了的成员。
+4. **别的腿**（又一笔调用、第二个执行、核实不了的部署）一律拒（`refuse.msExecExtra` / `refuse.msExecDeploy`）。
+
+`execTransaction` 不带序号（多签用自己的）。钱包在 `context.multisig` 里给 `{address, name, threshold, nonce, safeTxHash}`
+（vela-core `approval::execution_context`，wasm 在 `vela_multisigExecute` 的请求里加上）：地址与被执行的多签不符 → 拒；本页按
+这个序号从字节重算 safeTxHash，与钱包的不符 → 最先、最响地拒（`refuse.msHashMismatch`）；序号、名字、门槛都画成 App 的说法；
+本次部署了多签时门槛是事实，与钱包说的不符 → 拒。钱包没给（旧版本）→ 照样读全，不显示哈希，写一句为什么。
+
+测试：`node samples/multisig-test.mjs` 第 3 段（核心自己的 `genesis` / `velaAccountGenesis` / `deployCall` / `signatures` /
+`execTransactionData` / `executionCalls` 组装；36 个 SafeTx 逐个执行与 `multisigReview` 对拍）；钱包一侧
+`sign-challenge.test.ts`（执行请求带 `context.multisig`）。
+
 ## 13. 签名页处处可用：网页钱包与 Chrome 扩展（2026-10-30）
 
 创始人 2026-10-30 定下：账户的「签名方式」选了签名页，**网页钱包与 Chrome 扩展**也把签名交到这一页，和三个 App
@@ -900,6 +926,11 @@ vela-core `signing_venue::signing_route(plan, kind)`（wasm `signingRoute(record
    dApp 收到 **4001**（核心的 `SignSubmitOutcome::PageDeclined`；钱包自己的发送则当作关掉 passkey，确认界面留着重试）；
    页面按自己的规则拒 / 答复验不过 / 页面 30 秒不说 ready / 核对不过 → 界面上一句「签名页没有签」，什么都没签；
    请求在扩展里过期或站点离开 → 按规格 082（4900，由 worker 答）。
+5. **第七轮**：核对页面最多 20 秒（`CHECK_MS`），过了就是「签名页没有回应，请再试一次」（r7-2），不再无限「正在核对页面…」；
+   没签的原因按核心的一个结果说（`SignSubmitOutcome::PageFailed`：没回应 / 答复与这笔请求不符 / 页面拒签 / 核对不过），
+   站点收到 -32603 和页面的原因，消息签名永远不说「交易无法提交」（r7-7）。钱包放弃请求（超时、请求没了、答复验不过）时
+   先对页面说 `{vela:'bye', reason:'withdrawn'}`，页面撤下按钮、写「已撤回」（r7-5）；答复被接受后钱包说 `bye` `done` 并关掉
+   这一页，页面自己也会关（S4）。
 
 ### 13.3 扩展：请求在页面打开期间一直活着
 

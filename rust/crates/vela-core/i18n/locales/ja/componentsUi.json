@@ -211,6 +211,7 @@
       "trustedSignerRefused": "署名ページが署名を拒否しました。理由はページにあります。",
       "trustedSignerMismatch": "ページの応答がリクエストと一致しないため、何も送信していません。",
       "trustedSignerTimeout": "署名ページから時間内に応答がありませんでした。",
+      "trustedSignerUnanswered": "署名ページが応答していません。もう一度お試しください。",
       "trustedSignerReopen": "ページをもう一度開く",
       "handoffTitle": "信頼できる署名ページで確認して署名",
       "confirmWithLabel": "確認方法",
@@ -601,6 +602,7 @@
         "signerUnavailable": "ここではパスキーを使えません",
         "signerNotDiscoverable": "このパスキーはここで署名できません",
         "signerFailed": "パスキーの認証に失敗しました",
+        "signingPage": "署名ページで署名されませんでした",
         "badRpc": "サイトが使える RPC を示しませんでした"
       },
       "requests": "最近の要求",

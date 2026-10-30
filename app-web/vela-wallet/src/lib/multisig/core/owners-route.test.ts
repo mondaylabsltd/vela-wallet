@@ -1,6 +1,5 @@
 /**
- * Approve, Propose-and-approve, Reject and an executor's own approval all go
- * through `signApproval` — and it follows where the member reviews and signs
+ * Approve, Propose-and-approve and Reject all go through `signApproval` — and it follows where the member reviews and signs
  * (2026-10-29): the trusted signing page the member chose gets the SafeTx
  * itself; Vela's sheet keeps the member's own passkey prompt; a member whose
  * keys nothing here can reach is refused with the core's reason.

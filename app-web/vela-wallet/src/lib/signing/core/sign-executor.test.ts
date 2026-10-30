@@ -52,7 +52,7 @@ import {
 	type DAppSubmitHooks
 } from '$lib/services/dapp-submit';
 import { UserOpNotSentError } from '$lib/services/safe-transaction';
-import { VenueBlockedError } from '$lib/signing/sign-challenge';
+import { PageSignFailedError, VenueBlockedError } from '$lib/signing/sign-challenge';
 import { createSignExecutor } from './sign-executor';
 import {
 	AskerGoneError,
@@ -131,6 +131,29 @@ describe('a venue the web cannot use', () => {
 			type: 'submit',
 			outcome: { type: 'venue_blocked', block: { type: 'not_on_web' } }
 		});
+	});
+});
+
+/**
+ * Round 7 (r7-2, r7-7): the account's trusted signing page did not sign, and
+ * not by the person's choice. The core hears which — it says it on the sheet
+ * and to the site — never a `failed` whose words are "couldn't be submitted".
+ */
+describe('a signing page that did not sign', () => {
+	it('is page_failed with the page’s reason', async () => {
+		for (const [failure, page] of [
+			['silent', 'unanswered'],
+			['unverified', 'mismatch'],
+			['declined', 'refused'],
+			['not_opened', 'not_opened']
+		] as const) {
+			submit.impl = () => Promise.reject(new PageSignFailedError(failure, 'refused'));
+			const result = await createSignExecutor(makePorts()).execute(signAndSubmit);
+			expect(result, failure).toMatchObject({
+				type: 'submit',
+				outcome: { type: 'page_failed', failure: page }
+			});
+		}
 	});
 });
 

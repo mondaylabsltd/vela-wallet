@@ -349,6 +349,28 @@ describe('executing and rejecting from the page (r4C-9)', () => {
 		expect(world.sent[0].data).toContain(A.sign(bytesOf(HASH())).slice(2));
 	});
 
+	it('r7-3: approvals that already meet the threshold are what it carries — the executor only sends it', async () => {
+		world.owners = [A.address, B.address, STRANGER.address];
+		world.proposals = [
+			stored([
+				{ owner: A.address, signature: A.sign(bytesOf(HASH())), createdMs: 1 },
+				{ owner: STRANGER.address, signature: STRANGER.sign(bytesOf(HASH())), createdMs: 2 }
+			])
+		];
+		const tx = new OutsideTransaction(link());
+		await tx.refresh();
+		expect(tx.view!.item.approved).toBe(2);
+		await tx.execute(walletOf(B), B.address);
+		const data = world.sent[0].data.toLowerCase();
+		// Both given approvals counted on chain; no `msg.sender` approval
+		// (v = 1, B's address as r) taking the place of one.
+		expect(data).toContain(A.sign(bytesOf(HASH())).slice(2).toLowerCase());
+		expect(data).toContain(STRANGER.sign(bytesOf(HASH())).slice(2).toLowerCase());
+		expect(data).not.toContain(
+			`${B.address.slice(2).toLowerCase().padStart(64, '0')}${'0'.repeat(64)}01`
+		);
+	});
+
 	it('rejects by proposing the same-number cancellation, approved by the owner', async () => {
 		const tx = new OutsideTransaction(link());
 		await tx.refresh();

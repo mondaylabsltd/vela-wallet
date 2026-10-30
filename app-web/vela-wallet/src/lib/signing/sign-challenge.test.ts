@@ -29,7 +29,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { hashTypedData, keccak256 } from '$lib/core/kernels';
 import { computeSafeMessageHash } from '$lib/services/safe-transaction';
 import { AskerGoneError } from '$lib/signing/core/sign-types';
-import { pageHandoff, type PageHandoffDeps } from './page-handoff.svelte';
+import { CHECK_MS, pageHandoff, type PageHandoffDeps } from './page-handoff.svelte';
+import { safeTxHash } from '$lib/multisig/core/kernel';
 import { bytesToHex } from '$lib/onboarding/core/passkey';
 import { saveAccount } from '$lib/onboarding/core/storage';
 import type { Account } from '$lib/onboarding/generated/Account';
@@ -619,7 +620,7 @@ describe('the page, everywhere: the hand-off and the answer the core accepts', (
 	for (const kind of KINDS) {
 		it(`${kind || 'the wallet’s own send'}: the core’s request goes to the checked page, and its signature comes back`, async () => {
 			const { keys, answer } = await pageAccount();
-			const { deps, from, intent, sent } = browser();
+			const { deps, from, intent, sent, win } = browser();
 			setPageHandoffDeps(deps);
 			const asks = signature(kind);
 			const challenge = asks.challenge ?? (await safeOpOf(asks.operation!.userOp));
@@ -653,8 +654,122 @@ describe('the page, everywhere: the hand-off and the answer the core accepts', (
 			expect(assertion.signatureHex.startsWith('30')).toBe(true);
 			expect(pageHandoff.current).toBeNull();
 			expect(sent.some((s) => (s.message as { vela?: string }).vela === 'bye')).toBe(true);
+			// S4: a finished page is not left behind.
+			expect(win.closed).toBe(true);
 		});
 	}
+
+	it('a multisig executor’s operation: the page is told its number and the core’s safeTxHash at it (r7-1)', async () => {
+		const { keys, answer } = await pageAccount();
+		const { deps, from, intent } = browser();
+		setPageHandoffDeps(deps);
+		const asks = signature('wallet_sendCalls');
+		const multisig = '0x4c3fF6bC7D1A4b7f4e0E93B4C61b8b1a7E5dF2a9';
+		const tx = {
+			to: '0x6813Eb9362372EEF6200f3b1dbC3f819671cBA69',
+			value: '0x1',
+			data: '0x',
+			operation: 0,
+			safeTxGas: '0x0',
+			baseGas: '0x0',
+			gasPrice: '0x0',
+			gasToken: '0x0000000000000000000000000000000000000000',
+			refundReceiver: '0x0000000000000000000000000000000000000000',
+			nonce: '0x3'
+		};
+		const challenge = await safeOpOf(asks.operation!.userOp);
+		const pending = signChallenge(
+			challenge,
+			{
+				account: ADDRESS,
+				keys,
+				credentials: [],
+				request: {
+					method: 'vela_multisigExecute',
+					params: { tx, multisig, name: 'R7 Team', threshold: 2 },
+					origin: '',
+					chainId: CHAIN
+				}
+			},
+			asks.operation
+		);
+		await until(() => pageHandoff.current?.phase === 'ready');
+		pageHandoff.current?.open();
+		from({ vela: 'ready', v: 1 });
+		const handed = intent();
+		// The operation is the wallet's own (its calls), the execution's facts beside it.
+		expect(handed?.intent.method).toBe('wallet_sendCalls');
+		expect(handed?.context.multisig).toEqual({
+			address: multisig,
+			name: 'R7 Team',
+			threshold: 2,
+			nonce: '0x3',
+			safeTxHash: safeTxHash(CHAIN, multisig, tx)
+		});
+		from({ vela: 'result', id: handed?.id, result: await answer(challenge) });
+		expect((await pending).credentialId).toBe(keys[0].credentialId);
+	});
+
+	it('a page whose check never finishes is bounded: not answering, said so, nothing opened (r7-2)', async () => {
+		const { keys } = await pageAccount();
+		const { deps } = browser();
+		setPageHandoffDeps({
+			...deps,
+			// A host that never answers.
+			fetch: (() => new Promise<Response>(() => {})) as typeof fetch,
+			// The check's deadline, at once.
+			setTimeout: (fn, ms) => {
+				if (ms === CHECK_MS) queueMicrotask(fn);
+				return 0;
+			},
+			clearTimeout: () => {}
+		});
+		const asks = signature('personal_sign');
+		const error = await signChallenge(asks.challenge!, {
+			account: ADDRESS,
+			keys,
+			credentials: [],
+			request: asks.request
+		}).then(
+			() => null,
+			(e: unknown) => e
+		);
+		expect(error).toBeInstanceOf(PageSignFailedError);
+		expect((error as PageSignFailedError).failure).toBe('silent');
+		expect((error as PageSignFailedError).page).toBe('unanswered');
+		expect(deps.open).not.toHaveBeenCalled();
+		expect(pageHandoff.current).toBeNull();
+		expect(CHECK_MS).toBeLessThanOrEqual(20_000);
+	});
+
+	it('an answer the wallet will not take withdraws the request: the page is told (r7-5)', async () => {
+		const { keys, answer } = await pageAccount();
+		const asks = signature('personal_sign');
+		const { deps, from, intent, sent, win } = browser();
+		setPageHandoffDeps(deps);
+		const pending = signChallenge(asks.challenge!, {
+			account: ADDRESS,
+			keys,
+			credentials: [],
+			request: asks.request
+		}).then(
+			() => null,
+			(e: unknown) => e
+		);
+		await until(() => pageHandoff.current?.phase === 'ready');
+		pageHandoff.current?.open();
+		from({ vela: 'ready', v: 1 });
+		// A replayed answer: a real signature, over another request's bytes.
+		from({ vela: 'result', id: intent()?.id, result: await answer(new Uint8Array(32).fill(3)) });
+		const error = (await pending) as PageSignFailedError;
+		// r7-7: said as what it is — the page's answer did not match.
+		expect(error.page).toBe('mismatch');
+		const bye = sent.find((s) => (s.message as { vela?: string }).vela === 'bye');
+		expect(bye?.message).toEqual({ vela: 'bye', v: 1, reason: 'withdrawn' });
+		expect(bye?.origin).toBe(PAGE_ORIGIN);
+		// Left open, saying so — the person reads it there.
+		expect(win.closed).toBe(false);
+	});
 
 	it('an answer over different bytes is refused (another operation, a bare EIP-191 hash)', async () => {
 		const { keys, answer } = await pageAccount();
@@ -820,7 +935,7 @@ describe('the page, everywhere: the hand-off and the answer the core accepts', (
 	it('while the page has it, the asker is kept; a request that is gone closes the page', async () => {
 		const { keys } = await pageAccount();
 		const asks = signature('personal_sign');
-		const { deps, from, win, tickKeepAlive } = browser();
+		const { deps, from, win, tickKeepAlive, sent } = browser();
 		setPageHandoffDeps(deps);
 		let live = true;
 		const keepAlive = vi.fn(async () => live);
@@ -844,5 +959,7 @@ describe('the page, everywhere: the hand-off and the answer the core accepts', (
 		tickKeepAlive();
 		expect(await pending).toBeInstanceOf(AskerGoneError);
 		expect(win.closed).toBe(true);
+		// r7-5: told before it closed, in case it does not.
+		expect(sent.some((s) => (s.message as { reason?: string }).reason === 'withdrawn')).toBe(true);
 	});
 });

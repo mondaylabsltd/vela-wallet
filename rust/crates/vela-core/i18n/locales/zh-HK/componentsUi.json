@@ -211,6 +211,7 @@
       "trustedSignerRefused": "簽名頁拒絕簽署此請求，原因請參閱該頁面。",
       "trustedSignerMismatch": "頁面的回覆與此請求不符，因此沒有發出任何內容。",
       "trustedSignerTimeout": "簽名頁未有及時回應。",
+      "trustedSignerUnanswered": "簽名頁冇回應，請再試一次。",
       "trustedSignerReopen": "重新開啟頁面",
       "handoffTitle": "在可信簽名頁上預覽及簽名",
       "confirmWithLabel": "確認方式",
@@ -601,6 +602,7 @@
         "signerUnavailable": "此處無法使用通行密鑰",
         "signerNotDiscoverable": "此通行密鑰無法在此處簽名",
         "signerFailed": "通行密鑰驗證失敗",
+        "signingPage": "簽名頁冇簽",
         "badRpc": "網站沒有提供此網絡可用的 RPC"
       },
       "requests": "最近的請求",

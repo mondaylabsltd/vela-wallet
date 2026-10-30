@@ -851,6 +851,48 @@ describe('after the approval the sheet is a status', () => {
 		expect(refused?.captions).toEqual([SUMMARY, m.receipt.refused]);
 	});
 
+	it('round 7 (S4): while the signing page has it, "Waiting for the signing page…" — no biometric prompt here', () => {
+		const onPage = { signed: false, ceremonyUp: false, onPage: true };
+		expect(
+			signingStatus(at({ phase: 'awaiting_signature', is_signing: true }), onPage, SUMMARY, m)
+				?.title
+		).toBe(m.status.pageSigning);
+		expect(m.status.pageSigning).toBe('Waiting for the signing page…');
+		const message = at({ request: MESSAGE_REQUEST, phase: 'awaiting_signature' });
+		expect(signingStatus(message, onPage, undefined, m)?.title).toBe(m.status.pageSigning);
+		// Past the signature it is the relay's again.
+		expect(
+			signingStatus(at({ phase: 'submitting', is_signing: true }), onPage, SUMMARY, m)?.title
+		).toBe(m.status.submitting);
+	});
+
+	it('round 7 (r7-2, r7-7): a page that did not sign is said as the page’s — never "couldn’t be submitted"', () => {
+		const said = (kind: 'page_unanswered' | 'page_mismatch' | 'page_refused' | 'page_not_opened') =>
+			signingStatus(
+				at({ error: { kind, detail: null }, failure_retryable: kind !== 'page_refused' }),
+				UNSIGNED,
+				SUMMARY,
+				m
+			);
+		expect(said('page_unanswered')?.captions).toEqual([
+			SUMMARY,
+			'The signing page isn’t answering — try again.'.replace('’', "'")
+		]);
+		expect(said('page_unanswered')?.actions?.retry).toBe(m.status.retry);
+		expect(said('page_mismatch')?.captions[1]).toBe(m.signerReasons.page_mismatch);
+		expect(said('page_refused')?.captions[1]).toBe(m.signerReasons.page_refused);
+		expect(said('page_refused')?.actions?.retry).toBeUndefined();
+		expect(said('page_not_opened')?.captions[1]).toBe(m.signerReasons.page_not_opened);
+		for (const kind of [
+			'page_unanswered',
+			'page_mismatch',
+			'page_refused',
+			'page_not_opened'
+		] as const) {
+			expect(said(kind)?.captions).not.toContain(m.status.failedHint);
+		}
+	});
+
 	it('an error before any approval is not a status (the form says it)', () => {
 		expect(
 			signingStatus(at({ error: { kind: 'user_rejected', detail: null } }), UNSIGNED, SUMMARY, m)

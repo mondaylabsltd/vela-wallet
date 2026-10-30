@@ -3933,6 +3933,12 @@ fn tx_error_text(send: &SendView, s: &FlowStrings) -> Option<SharedString> {
         // reports no such failure to the core, so these are never set here.
         vela_core::app::send::SendTxErrorKey::ChainBusy
         | vela_core::app::send::SendTxErrorKey::ChainUnreachable => s.tx_error_generic.clone(),
+        // The web's trusted signing page (round 7): the desktop hands its
+        // page over the URL channel and reports no such failure to the core.
+        vela_core::app::send::SendTxErrorKey::PageUnanswered
+        | vela_core::app::send::SendTxErrorKey::PageMismatch
+        | vela_core::app::send::SendTxErrorKey::PageRefused
+        | vela_core::app::send::SendTxErrorKey::PageNotOpened => s.tx_error_generic.clone(),
     })
 }
 

@@ -1038,6 +1038,15 @@ pub fn sign_error_message(kind: SignErrorKind) -> &'static str {
         // reach them (a custom-domain account on the web, or with no page
         // known here). The person reads the reason in their language.
         SignErrorKind::VenueBlocked => "This account cannot sign here",
+        // Round 7: the account's trusted signing page did not sign.
+        SignErrorKind::PageUnanswered => "The signing page did not answer; nothing was signed",
+        SignErrorKind::PageMismatch => {
+            "The signing page's answer did not match this request; nothing was sent"
+        }
+        SignErrorKind::PageRefused => "The signing page refused this request; nothing was signed",
+        SignErrorKind::PageNotOpened => {
+            "The signing page did not pass its check and was not opened; nothing was signed"
+        }
     }
 }
 

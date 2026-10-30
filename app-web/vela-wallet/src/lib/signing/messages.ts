@@ -80,6 +80,14 @@ export interface HandoffMessages {
 	 * name (D-17).
 	 */
 	places: Record<string, string>;
+	/**
+	 * Round 7: why the page did not sign, when the person did not decline
+	 * there — it is not answering (r7-2), its answer is not this request's
+	 * (r7-7), its own rules refused it.
+	 */
+	unanswered: string;
+	mismatch: string;
+	refused: string;
 }
 
 export const CERTAIN_KEYS = [
@@ -487,6 +495,13 @@ export interface SigningMessages {
 		backgroundHint: string;
 		/** `componentsUi.signing.signing` — a message never "submits". */
 		messageSigning: string;
+		/**
+		 * Round 7 (S4): `componentsUi.signing.trustedSignerWaiting` — the
+		 * account's trusted signing page has the request, and the person signs
+		 * there; no passkey prompt is up here ("Waiting for biometric…" said
+		 * otherwise).
+		 */
+		pageSigning: string;
 		/** `send.txErrorGeneric` — the submission failed; funds are safe. */
 		failedHint: string;
 		/** Spec 096 F8: `send.txRetryBtn` — a failure that sent nothing, tried again. */

@@ -5385,6 +5385,56 @@ fn a_decline_on_the_page_is_the_persons_answer() {
     }
 }
 
+/// Round 7 (r7-2, r7-7): the account's trusted signing page did not sign, and
+/// not by the person's choice — it never answered, its answer was not this
+/// request's signature, its rules refused, its check failed. The sheet says
+/// which; the site hears -32603 with the page's reason — never "the
+/// transaction could not be submitted", which a message never is; a page
+/// that did not answer (or whose answer did not check out) may on the next
+/// try, one that refused will not.
+#[test]
+fn a_page_that_did_not_sign_is_said_as_the_pages() {
+    use vela_core::app::sign_request::PageFailure;
+    for (failure, kind, retry) in [
+        (PageFailure::Unanswered, SignErrorKind::PageUnanswered, true),
+        (PageFailure::Mismatch, SignErrorKind::PageMismatch, true),
+        (PageFailure::Refused, SignErrorKind::PageRefused, false),
+        (PageFailure::NotOpened, SignErrorKind::PageNotOpened, true),
+    ] {
+        let mut sut = boot();
+        sut.dispatch(Arrive::global("req-r7", "personal_sign", r#"["0xdead","0x0"]"#).event());
+        sut.dispatch(approve(SignApproveOpts::default()));
+        let ops = sut.resolve(Res::Submit {
+            outcome: SignSubmitOutcome::PageFailed { failure },
+            now_ms: 11_000.0,
+        });
+        assert_eq!(
+            response_count(&ops),
+            0,
+            "{failure:?}: held while the failure shows"
+        );
+        let view = sut.view();
+        assert_eq!(
+            view.error.as_ref().map(|e| e.kind),
+            Some(kind),
+            "{failure:?}"
+        );
+        assert_eq!(view.failure_retryable, retry, "{failure:?}");
+        let ops = sut.dispatch(Event::RejectTapped);
+        let (code, said, detail) = ops
+            .iter()
+            .find_map(err_detail)
+            .expect("the site is answered");
+        assert_eq!((code, said), (CODE_INTERNAL, kind), "{failure:?}");
+        // The words the site reads: the kind's own (the shell adds no detail).
+        let message = vela_core::app::dapp_rpc::sign_error_words(kind, detail.as_deref());
+        assert!(
+            message.contains("signing page") && !message.contains("could not be submitted"),
+            "{failure:?}: {message}"
+        );
+    }
+}
+
 /// Spec 102: the account cannot sign here (its keys answer only on its page,
 /// and this is the web; or no page for its domain is known here). The sheet
 /// says why with the block's own words, Try again is not offered, and the

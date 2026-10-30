@@ -1460,6 +1460,27 @@ function confirmHolds(
 			case 'proposal_offline':
 				// A proposal's own words replace these (`liveSendConfirm`).
 				return { error: { text: m['send.txErrorGeneric'], retry: m['send.txRetryBtn'] } };
+			case 'page_unanswered':
+			case 'page_mismatch':
+			case 'page_not_opened':
+				// Round 7 (r7-2, r7-7): the signing page did not sign — said as
+				// what happened there, never "couldn't be submitted". Nothing was
+				// signed or sent, and another try may go through.
+				return {
+					error: {
+						text: m[
+							send.tx_error === 'page_unanswered'
+								? 'componentsUi.signing.trustedSignerUnanswered'
+								: send.tx_error === 'page_mismatch'
+									? 'componentsUi.signing.trustedSignerMismatch'
+									: 'componentsUi.signing.integrity.couldNotCheck'
+						],
+						retry: m['send.txRetryBtn']
+					}
+				};
+			case 'page_refused':
+				// The page's own rules refused it: the same send is refused again.
+				return { error: { text: m['componentsUi.signing.trustedSignerRefused'] } };
 			case 'chain_busy':
 			case 'chain_unreachable':
 				// r5reg-3: the reads before the passkey did not get through —
@@ -1567,8 +1588,16 @@ function liveSendConfirmPage(model: SendConfirmModel, inputs: SendLiveInputs): S
 	// line under the confirm promise — "Tap to retry" over "Tap it to retry"
 	// asks again, "Pay with another coin" opens the fee coins, and a dash
 	// with nothing behind it is a fact. Only the form's own chain's failure.
-	const failure = sendFeeFailure(inputs);
+	//
+	// r7-6: while the confirmed operation is out to be signed — its passkey,
+	// or the signing page it was handed to — the row draws the core's figure,
+	// which is then the fee being signed: never the fee machine's newer quote
+	// beside it, nor that machine's failure in its place. Once the submit is
+	// over the newest quote is drawn again, before anything is signed again.
+	const out = send.tx_status === 'signing' || send.tx_status === 'submitting';
+	const failure = out ? null : sendFeeFailure(inputs);
 	const feeFailure = failure ? feeFailureWords(failure, formChainOf(send), m) : null;
+	const shownFee = out ? send.fee : (send.fee ?? inputs.fee.fee);
 	const feeTap: FactRowModel['tap'] =
 		failure === null || failure.tap === 'nothing'
 			? undefined
@@ -1618,10 +1647,10 @@ function liveSendConfirmPage(model: SendConfirmModel, inputs: SendLiveInputs): S
 		},
 		{
 			label:
-				!feeFailure && (send.fee ?? inputs.fee.fee)?.quoted === false
+				!feeFailure && shownFee?.quoted === false
 					? m['send.feeTokenEstimate']
 					: m['send.estFeeLabel'],
-			value: feeFailure ? feeFailure.figure : feeText(send.fee ?? inputs.fee.fee, inputs),
+			value: feeFailure ? feeFailure.figure : feeText(shownFee, inputs),
 			note: feeFailure?.reason,
 			tap: feeTap
 		}

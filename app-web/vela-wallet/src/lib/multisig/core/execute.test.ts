@@ -89,13 +89,14 @@ vi.mock('./kernel', () => ({
 		deployMultisig: unknown;
 		deployOwners: unknown[];
 		approvals: { owner: string }[];
+		executor: string | null;
 	}) => [
 		...(plan.deployMultisig ? [{ to: '0xfactory', value: '0x0', data: '0xmultisig' }] : []),
 		...plan.deployOwners.map((g) => ({ to: '0xfactory', value: '0x0', data: `0x${String(g)}` })),
 		{
 			to: SAFE,
 			value: '0x0',
-			data: `0x6a761202:${plan.approvals.map((a) => a.owner).join(',')}`
+			data: `0x6a761202:${plan.approvals.map((a) => a.owner).join(',')}|${plan.executor ?? ''}`
 		}
 	],
 	counterfactualAuthority: () => authority.verdict,
@@ -208,6 +209,54 @@ describe('which approvals an execution carries (r4-7: no member deployed for not
 		expect(plan.deploysMultisig).toBe(true);
 		expect(plan.activates).toEqual([ALICE]);
 		expect(plan.calls).toHaveLength(3);
+	});
+
+	it('r7-3: approvals that meet the threshold are all carried — an outside wallet’s too; the executor only sends it', async () => {
+		code.add(ALICE);
+		const plan = await planExecution(input({ approvals: [passkey(ALICE), ecdsa(BOB)] }));
+		expect(plan.carries).toEqual([ALICE, BOB]);
+		expect(plan.executorApproves).toBe(false);
+		const exec = (plan.calls.at(-1) as { data: string }).data;
+		expect(exec).toContain(BOB);
+		expect(exec.endsWith('|'), 'no msg.sender approval taking a given one’s place').toBe(true);
+		expect(plan.activates).toEqual([]);
+	});
+
+	it('r7-3: one short, an owner executing approves by sending it — no approval of its own asked', async () => {
+		const plan = await planExecution(input({ approvals: [ecdsa(BOB)] }));
+		expect(plan.carries).toEqual([BOB]);
+		expect(plan.executorApproves).toBe(true);
+		expect((plan.calls.at(-1) as { data: string }).data).toContain(`|${EXECUTOR}`);
+	});
+
+	it('r7-3: the executor’s own approval in the mailbox is not carried twice', async () => {
+		code.add(EXECUTOR);
+		const plan = await planExecution(input({ approvals: [passkey(EXECUTOR), ecdsa(BOB)] }));
+		expect(plan.carries).toEqual([BOB]);
+		expect(plan.executorApproves).toBe(true);
+	});
+
+	it('an executor that is no owner carries the threshold’s approvals, and approves nothing', async () => {
+		const plan = await planExecution(
+			input({
+				approvals: [ecdsa(ALICE), ecdsa(BOB)],
+				executor: { address: CAROL } as never
+			})
+		);
+		expect(plan.carries).toEqual([ALICE, BOB]);
+		expect(plan.executorApproves).toBe(false);
+	});
+
+	it('the look says what it carries: the approvals counted when it runs', async () => {
+		const preview = await previewExecution(
+			input({ approvals: [ecdsa(ALICE), ecdsa(BOB)] }),
+			reads()
+		);
+		expect(preview).toMatchObject({
+			kind: 'priced',
+			carries: [ALICE, BOB],
+			executorApproves: false
+		});
 	});
 });
 
@@ -379,6 +428,8 @@ describe('executing a multisig transaction', () => {
 			fee: { amount: 207n * 10n ** 15n, recipient: RECIPIENT, tier: 'standard' },
 			balance: canPay ? USDC : 79n * 10n ** 15n,
 			canPay,
+			carries: [],
+			executorApproves: true,
 			setup: { multisig: false, members: [], executor: false, amount: null }
 		}) as Priced;
 
@@ -574,6 +625,8 @@ describe('a relay out of reach for a moment (r4a-23)', () => {
 			fee: { amount: 10n ** 15n, recipient: RECIPIENT, tier: 'standard' },
 			balance: USDC,
 			canPay: true,
+			carries: [],
+			executorApproves: true,
 			setup: { multisig: false, members: [], executor: false, amount: null }
 		}) as Priced;
 
@@ -618,6 +671,8 @@ describe('deploying the multisig: only a genesis the core finds Verified, on cod
 			fee: { amount: 10n ** 15n, recipient: RECIPIENT, tier: 'standard' },
 			balance: USDC,
 			canPay: true,
+			carries: [],
+			executorApproves: true,
 			setup: { multisig: true, members: [], executor: false, amount: null }
 		}) as Priced;
 

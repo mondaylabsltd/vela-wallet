@@ -202,6 +202,13 @@ const genericOpener = (signer, request, who) => `<!doctype html><meta charset="u
         window.__answers.push(data);
       }
     });
+    // The wallet's goodbye (round 7): 'done' once it took the answer,
+    // 'withdrawn' when it gave up on the request.
+    window.__bye = function (reason) {
+      child.postMessage({ vela: 'bye', v: 1, reason: reason }, new URL(${JSON.stringify(signer)}).origin);
+      return true;
+    };
+    window.__childClosed = function () { return child.closed; };
     return true;
   };
 </script>`;
@@ -663,6 +670,53 @@ try {
     check('G. the same asked by a getvela.app subdomain: refused, no passkey',
       !sub.slid && sub.used === 0 && sub.answers.length === 1 && sub.answers[0].code === 'refused',
       JSON.stringify(sub.answers).slice(0, 160));
+
+    // Round 7 (r7-5): the wallet gives up on the request while the page shows
+    // it — the page stops offering to sign, and says why.
+    {
+      const req = Buffer.from(JSON.stringify(messageRequest)).toString('base64url');
+      const opener = await Page.open(CDP,
+        `https://wallet.getvela.app/open-request?signer=${encodeURIComponent(`${PAGE}?ch=post&lang=en`)}&req=${req}`);
+      await opener.waitFor('!!window.__go');
+      await opener.ev('window.__go()', true);
+      const popup = await Page.find(CDP, (u) => u.includes('/sign?ch=post'));
+      const uses = await addKey(popup);
+      await popup.waitFor("window.__velaState && window.__velaState.phase === 'card'");
+      await opener.ev("window.__bye('withdrawn')", true);
+      await popup.waitFor("window.__velaState.phase === 'ended' || window.__velaState.phase === 'withdrawn'").catch(() => {});
+      const text = await popup.ev('document.body.innerText');
+      const offered = await popup.ev("!!document.querySelector('.confirm:not([disabled])')");
+      check('G. the wallet withdraws the request: the page says so and offers nothing to sign (r7-5)',
+        text.includes('Withdrawn') && text.includes('stopped waiting for this request') && !offered && (await uses()) === 0,
+        text.slice(0, 200));
+      await popup.close();
+      await opener.close();
+    }
+
+    // Round 7 (S4): answered and said goodbye — the page says it is done once,
+    // then closes itself (each extension signature used to leave a tab open).
+    {
+      const req = Buffer.from(JSON.stringify(messageRequest)).toString('base64url');
+      const opener = await Page.open(CDP,
+        `https://wallet.getvela.app/open-request?signer=${encodeURIComponent(`${PAGE}?ch=post&lang=en`)}&req=${req}`);
+      await opener.waitFor('!!window.__go');
+      await opener.ev('window.__go()', true);
+      const popup = await Page.find(CDP, (u) => u.includes('/sign?ch=post'));
+      await addKey(popup);
+      await popup.waitFor("window.__velaState && window.__velaState.phase === 'card'");
+      const slid = await slideIfOffered(popup);
+      await opener.waitFor('window.__answers.length > 0', 10000).catch(() => {});
+      await opener.ev("window.__bye('done')", true);
+      await popup.waitFor("window.__velaState.phase === 'ended'").catch(() => {});
+      const text = await popup.ev('document.body.innerText').catch(() => '');
+      const said = text.split('Done — the wallet has what it asked for').length - 1;
+      await opener.waitFor('window.__childClosed()', 6000).catch(() => {});
+      const closed = await opener.ev('window.__childClosed()');
+      check('G. answered, the wallet says goodbye: "Done" said once, then the page closes itself (S4)',
+        slid && said === 1 && closed === true, JSON.stringify({ slid, said, closed, text: text.slice(0, 160) }));
+      await popup.close().catch(() => {});
+      await opener.close();
+    }
   }
 
   // === H. the Chrome extension over postMessage (2026-10-30) ====================

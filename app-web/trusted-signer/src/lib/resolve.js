@@ -1424,6 +1424,7 @@ window.VelaCS = window.VelaCS || {};
     'intent.proofVerify': 'button.confirm', 'intent.proofRecover': 'button.confirm',
     'intent.memberProof': 'button.confirm',
     'intent.msReject': 'button.msReject',
+    'intent.msExecute': 'button.msExecute',
   };
 
   function confirmKey(view) {
@@ -2229,6 +2230,160 @@ window.VelaCS = window.VelaCS || {};
     return finished;
   }
 
+  // --- an executor's operation (round 7, r7-1) ------------------------------
+  //
+  // The wallet's own operation that executes a multisig transaction: read
+  // leg by leg in lib/multisig.js (`execution`) — the SafeTx inside
+  // `execTransaction` by the approval's rules, the deploys it needs verified
+  // from their setups — and drawn as what it is: "Execute a multisig
+  // transaction", the transaction's own reading (its amount, its recipient,
+  // its member change…), the approvals it carries, its hashes, and what it
+  // sets up on the way. The app's words — the multisig's name, the number
+  // the transaction runs at, how many approvals it needs when this operation
+  // does not set the multisig up — are drawn as the app's.
+
+  /** The app's account of the execution (`context.multisig`, vela-core `approval::execution_context`). */
+  function executionClaim(ctx) {
+    var claim = ctx.multisig && typeof ctx.multisig === 'object' && !Array.isArray(ctx.multisig) ? ctx.multisig : {};
+    var threshold = typeof claim.threshold === 'number' && Number.isSafeInteger(claim.threshold) && claim.threshold > 0
+      ? BigInt(claim.threshold) : null;
+    return {
+      address: typeof claim.address === 'string' && ADDRESS.test(claim.address) ? claim.address : null,
+      name: typeof claim.name === 'string' && claim.name.trim() ? claim.name.trim().slice(0, 64) : null,
+      nonce: typeof claim.nonce === 'string' ? ns.multisig.quantity(claim.nonce) : null,
+      safeTxHash: typeof claim.safeTxHash === 'string' && /^0x[0-9a-fA-F]{64}$/.test(claim.safeTxHash)
+        ? claim.safeTxHash.toLowerCase() : null,
+      threshold: threshold,
+    };
+  }
+
+  function resolveExecution(reading, ctx, view) {
+    view.badge = 'tag.multisig';
+    provenance(view, 'read');
+    if (reading.refusal) {
+      view.intentKey = 'intent.msExecute';
+      view.hero = null;
+      refuseWith(view, reading.refusal);
+      return view;
+    }
+    var claim = executionClaim(ctx);
+    var multisig = reading.multisig;
+    var tx = Object.assign({}, reading.tx, { nonce: claim.nonce });
+    // The transaction's own reading is the multisig's: "this multisig" is
+    // the one the operation executes on, never the executor.
+    var inner = Object.assign({}, ctx, { selfAccount: multisig, selfTag: 'tag.thisMultisig' });
+    if (claim.address && claim.address.toLowerCase() !== multisig.toLowerCase()) {
+      refuseWith(view, 'refuse.msExecMismatch');
+    }
+
+    var action = ns.multisig.read(multisig, tx);
+    var call = { to: tx.to, value: hexValue(tx.value), data: tx.data };
+    if (action.refusal) {
+      refuseWith(view, action.refusal, action.params);
+    } else if (action.action.kind === 'cancel') {
+      view.sentence = text('sentence.msExecCancel');
+    } else if (action.action.kind === 'batch') {
+      view.legs = action.action.calls.map(function (leg, i) {
+        var legView = baseView({ origin: '' }, inner);
+        multisigAction(leg.action, { to: leg.to, value: hexValue(leg.value), data: leg.data }, inner, legView, true);
+        return { index: i + 1, view: legView };
+      });
+      view.sentence = text('sentence.msBatch', { count: action.action.calls.length });
+      view.legs.forEach(function (leg) { raise(view, leg.view.risk); });
+      view.refuse = view.refuse || view.legs.some(function (leg) { return leg.view.refuse; });
+      liftLegWarnings(view);
+    } else {
+      var drawn = baseView({ origin: '' }, inner);
+      multisigAction(action.action, call, inner, drawn, false);
+      // What the multisig does, on this card: its hero, rows, warnings and
+      // risk — said as the multisig's ("The multisig sends …").
+      view.hero = drawn.hero;
+      view.fields = view.fields.concat(drawn.fields);
+      view.warnings = view.warnings.concat(drawn.warnings);
+      view.tech = drawn.tech;
+      view.level = drawn.level;
+      raise(view, drawn.risk);
+      if (drawn.refuse) view.refuse = true;
+      view.sentence = drawn.sentence && drawn.sentence.key === 'sentence.transfer'
+        ? text('sentence.msSends', drawn.sentence.params) : drawn.sentence;
+    }
+    view.intentKey = 'intent.msExecute';
+    view.lead = claim.nonce === null
+      ? text('sentence.msExecuteNoNonce')
+      : text('sentence.msExecute', { nonce: claim.nonce.toString() });
+
+    // The multisig, at which number, with which hashes. The number is the
+    // app's: `execTransaction` carries none (the multisig uses its own).
+    var safeIdentity = identify(multisig, ctx, {});
+    safeIdentity.contractName = claim.name ? visible(claim.name, view) : null;
+    safeIdentity.tag = claim.name ? 'tag.nameByApp' : null;
+    view.fields.unshift({ label: 'field.multisig', identity: safeIdentity });
+    if (claim.nonce !== null) {
+      var hashes = ns.multisig.hashes(ctx.chainId, multisig, tx);
+      var matches = claim.safeTxHash === null || claim.safeTxHash === hashes.safeTxHash;
+      if (!matches) {
+        // The app describes one transaction and the operation runs another.
+        view.refuse = true;
+        view.risk = 'hard-danger';
+        view.warnings.unshift({
+          tone: 'danger', key: 'refuse.msHashMismatch',
+          params: { claimed: claim.safeTxHash, computed: hashes.safeTxHash },
+        });
+      }
+      view.multisig = {
+        address: multisig, name: safeIdentity.contractName, nonce: claim.nonce.toString(),
+        hashes: hashes, hashMatches: matches, noteKey: 'ui.msHashesExecNote',
+      };
+      view.fields.push({ label: 'field.nonce', value: claim.nonce.toString(), mono: true, tagKey: 'tag.byApp' });
+    } else {
+      view.warnings.push({ tone: 'caution', key: 'warn.msExecNoNonce' });
+    }
+
+    // The approvals it carries, counted from its signature bytes; how many
+    // it needs is a fact when this operation sets the multisig up.
+    var count = reading.approvals.length;
+    var actual = reading.deploy ? reading.deploy.threshold : null;
+    if (actual !== null && claim.threshold !== null && actual !== claim.threshold) {
+      refuseWith(view, 'refuse.msExecThreshold', { claimed: claim.threshold.toString(), actual: actual.toString() });
+    }
+    var needed = actual !== null ? actual : claim.threshold;
+    view.fields.push({
+      label: 'field.approvals',
+      value: needed === null ? String(count) : text('value.approvalsOf', { count: count, threshold: needed.toString() }),
+      emphasis: true,
+      tagKey: actual === null && needed !== null ? 'tag.byApp' : undefined,
+    });
+    reading.approvals.forEach(function (approval) {
+      view.fields.push(approval.owner
+        ? { label: 'field.approvedBy', identity: memberIdentity(approval.owner, ctx) }
+        : { label: 'field.approvedBy', valueKey: 'value.msWalletSignature' });
+    });
+
+    // What it sets up on the way.
+    view.notes = [];
+    if (reading.deploy) {
+      view.notes.push(text('sentence.msExecSetsUp', {
+        chain: view.chain || String(ctx.chainId), count: reading.deploy.owners.length,
+        threshold: reading.deploy.threshold.toString(),
+      }));
+      reading.deploy.owners.forEach(function (owner) {
+        view.fields.push({ label: 'field.member', identity: memberIdentity(owner, ctx) });
+      });
+    }
+    reading.activates.forEach(function (account) {
+      var who = memberIdentity(account, ctx);
+      view.notes.push(text('sentence.msExecActivates', { account: who.short }));
+      view.fields.push({ label: 'field.activates', identity: who });
+    });
+
+    if (!view.tech) {
+      view.tech = techFor('execTransaction · SafeTx', null, tx.data, {
+        addresses: [{ roleKey: 'field.multisig', name: shortAddress(multisig), address: multisig }],
+      });
+    }
+    return view;
+  }
+
   /**
    * What every signature card ends with, whatever it signs: the answer must
    * reach the wallet (R7), the keys must be readable, and the key route and
@@ -2286,8 +2441,16 @@ window.VelaCS = window.VelaCS || {};
     if (ceremony) return resolveCeremony(ceremony, requested, ctx, view);
     var intent = operationSubject(requested, ctx, view);
     view.method = intent.method;
+    // The wallet's own operation that executes a multisig transaction (r7-1):
+    // read whole, or refused — never a batch of blind calls.
+    var shownCalls = intent.method === 'eth_sendTransaction' ? [intent.params[0] || {}]
+      : intent.method === 'wallet_sendCalls' ? ((intent.params[0] || {}).calls || []) : [];
+    var execution = ctx.operation && ctx.operation.userOp && !requested.origin && ns.multisig
+      ? ns.multisig.execution(shownCalls, ctx.operation.userOp.sender) : null;
 
-    if (intent.method === 'eth_sendTransaction') {
+    if (execution) {
+      resolveExecution(execution, ctx, view);
+    } else if (intent.method === 'eth_sendTransaction') {
       resolveCall(intent.params[0], ctx, view, false);
     } else if (intent.method === 'wallet_sendCalls') {
       var payload = intent.params[0];
@@ -2330,11 +2493,15 @@ window.VelaCS = window.VelaCS || {};
     // slipped in a leg of its own is exactly what this page is here to catch.
     var account = (ctx.operation && ctx.operation.userOp && ctx.operation.userOp.sender) ||
       ctx.account || null;
-    var calls = intent.method === 'eth_sendTransaction' ? [intent.params[0] || {}]
-      : intent.method === 'wallet_sendCalls' ? ((intent.params[0] || {}).calls || [])
-      : [];
+    var calls = shownCalls;
     for (var c = 0; c < calls.length; c++) {
-      var fn = takeover(calls[c], account, 0);
+      // An execution's `execTransaction` was read by the multisig's own rules
+      // (MultiSendCallOnly is the one delegatecall they allow, as the core's
+      // review does): only its target is checked here — the account calling
+      // itself — not what runs inside it.
+      var executes = execution && !execution.refusal && calls[c].to &&
+        String(calls[c].to).toLowerCase() === execution.multisig.toLowerCase();
+      var fn = takeover(calls[c], account, executes ? MAX_NESTING : 0);
       if (fn) { refuseTakeover(fn, view); break; }
     }
     if (intent.method && intent.method.indexOf('signTypedData') >= 0 && isSafeTx(intent)) {

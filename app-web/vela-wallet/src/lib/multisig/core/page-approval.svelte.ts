@@ -83,8 +83,7 @@ export interface PageApprovalInput {
 /**
  * What a page answered, for this page's life, by member, chain and
  * safeTxHash: the same bytes approved twice are one approval, and the person
- * is not asked again (an execution that approves first and then stops before
- * its own passkey falls back to approving — it already has).
+ * is not asked again.
  */
 // Not reactive state: nothing draws it, it is only looked up.
 // eslint-disable-next-line svelte/prefer-svelte-reactivity

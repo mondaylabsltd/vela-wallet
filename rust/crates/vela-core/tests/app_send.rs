@@ -4268,6 +4268,143 @@ fn a_requote_after_the_confirm_puts_the_review_back_unsigned() {
     assert_eq!(quoted.amount, "2000000");
 }
 
+/// The USDC fee the confirm draws now, in base units.
+fn shown_usdc_fee(sut: &Sut) -> String {
+    match sut.view().fee.expect("a fee on the confirm").fee_asset {
+        FeeAssetView::Erc20 { amount, .. } => amount,
+        FeeAssetView::Native => panic!("a USDC fee expected"),
+    }
+}
+
+/// r7-6: the fee card keeps re-quoting once a block while the operation is
+/// out to be signed. The confirm keeps drawing the fee being signed — never a
+/// newer figure beside a passkey (or a signing page) that signs the frozen
+/// one. Once the submit fails, the newest quote is drawn, and "Try again"
+/// then signs exactly the figure on screen: re-quoted, shown, then signed.
+#[test]
+fn the_fee_drawn_while_signing_is_the_fee_signed_and_try_again_signs_the_new_one_drawn() {
+    let mut sut = boot(vec![usdc("100")]);
+    select_usdc(&mut sut);
+    set_recipient(&mut sut, RECIPIENT);
+    sut.dispatch(Event::SetAmount {
+        amount: "10".to_owned(),
+    });
+    continue_to_confirm(&mut sut, usdc_fee(1, 1_000_000));
+    let submit = slide_to_submit(&mut sut);
+    let Op::SubmitUserOp {
+        quoted_fee: Some(quoted),
+        ..
+    } = &submit
+    else {
+        panic!("{submit:?}");
+    };
+    assert_eq!(quoted.amount, "1000000");
+
+    // Out, before its passkey opens, and while it is open: a re-quote lands.
+    sut.dispatch(Event::FeeUpdated {
+        estimate: usdc_fee(1, 2_000_000),
+    });
+    assert_eq!(sut.view().tx_status, SendTxStatus::Submitting);
+    assert_eq!(shown_usdc_fee(&sut), "1000000", "the figure being signed");
+    sut.dispatch(Event::SigningStarted);
+    sut.dispatch(Event::FeeUpdated {
+        estimate: usdc_fee(1, 2_500_000),
+    });
+    let view = sut.view();
+    assert_eq!(view.tx_status, SendTxStatus::Signing);
+    assert_eq!(shown_usdc_fee(&sut), "1000000", "the figure being signed");
+
+    // The signing page's answer did not check out: nothing was sent.
+    sut.resolve(Res::SubmitFailed {
+        failure: SendSubmitFailure::Other {
+            message: Some("the signing page's answer did not check out".to_owned()),
+        },
+    });
+    assert_eq!(sut.view().tx_status, SendTxStatus::Error);
+    assert_eq!(
+        shown_usdc_fee(&sut),
+        "2500000",
+        "the newest quote, shown before anything is signed again"
+    );
+
+    // Try again — and one more block's quote lands before the tap.
+    sut.dispatch(Event::RetryAfterError);
+    sut.dispatch(Event::FeeUpdated {
+        estimate: usdc_fee(1, 3_000_000),
+    });
+    let on_screen = shown_usdc_fee(&sut);
+    assert_eq!(on_screen, "3000000");
+    let drawn = sut.view().review_digest.expect("on the review");
+    let ops = sut.dispatch(Event::SlideConfirm {
+        review: Some(drawn),
+    });
+    assert!(
+        matches!(ops.as_slice(), [Op::ProbeTreasury { .. }]),
+        "{ops:?}"
+    );
+    let submit = sut
+        .resolve_matching(|op| matches!(op, Op::ProbeTreasury { .. }), covered())
+        .into_iter()
+        .next()
+        .unwrap();
+    let Op::SubmitUserOp {
+        quoted_fee: Some(quoted),
+        review,
+        ..
+    } = &submit
+    else {
+        panic!("{submit:?}");
+    };
+    assert_eq!(quoted.amount, on_screen, "the fee signed is the fee shown");
+    assert_eq!(
+        review.fee.as_ref().map(|fee| fee.amount.as_str()),
+        Some(on_screen.as_str())
+    );
+}
+
+/// A cancel withdraws the operation: the confirm opens again, so it draws the
+/// newest quote — the one its next confirm signs — not the withdrawn one.
+#[test]
+fn a_cancelled_signing_draws_the_newest_quote_again() {
+    let mut sut = boot(vec![usdc("100")]);
+    select_usdc(&mut sut);
+    set_recipient(&mut sut, RECIPIENT);
+    sut.dispatch(Event::SetAmount {
+        amount: "10".to_owned(),
+    });
+    continue_to_confirm(&mut sut, usdc_fee(1, 1_000_000));
+    slide_to_submit(&mut sut);
+    sut.dispatch(Event::SigningStarted);
+    sut.dispatch(Event::FeeUpdated {
+        estimate: usdc_fee(1, 2_000_000),
+    });
+    assert_eq!(shown_usdc_fee(&sut), "1000000");
+    sut.dispatch(Event::CancelSigning);
+    let view = sut.view();
+    assert_eq!(view.tx_status, SendTxStatus::Idle);
+    assert_eq!(shown_usdc_fee(&sut), "2000000");
+    let ops = sut.dispatch(Event::SlideConfirm {
+        review: view.review_digest,
+    });
+    assert!(
+        matches!(ops.as_slice(), [Op::ProbeTreasury { .. }]),
+        "{ops:?}"
+    );
+    let submit = sut
+        .resolve_matching(|op| matches!(op, Op::ProbeTreasury { .. }), covered())
+        .into_iter()
+        .next()
+        .unwrap();
+    let Op::SubmitUserOp {
+        quoted_fee: Some(quoted),
+        ..
+    } = &submit
+    else {
+        panic!("{submit:?}");
+    };
+    assert_eq!(quoted.amount, "2000000");
+}
+
 /// What the shell's simulation said, opaque to the core.
 const SIM_JSON: &str = r#"{"changes":[]}"#;
 
@@ -5132,6 +5269,52 @@ fn a_blocked_venue_is_said_with_its_reason() {
         wire,
         serde_json::json!({"type": "venue_blocked", "block": {"type": "not_on_web"}})
     );
+}
+
+/// Round 7 (r7-2, r7-7): the account's trusted signing page did not sign —
+/// it is not answering, its answer is not this send's (tampered, replayed),
+/// its rules refused, its check failed. Said as that, by its own key —
+/// never the generic "couldn't be submitted" — and Try again clears it.
+#[test]
+fn a_page_that_did_not_sign_is_said_as_the_pages() {
+    use vela_core::app::sign_request::PageFailure;
+    for (failure, key, wire) in [
+        (
+            PageFailure::Unanswered,
+            SendTxErrorKey::PageUnanswered,
+            "unanswered",
+        ),
+        (
+            PageFailure::Mismatch,
+            SendTxErrorKey::PageMismatch,
+            "mismatch",
+        ),
+        (PageFailure::Refused, SendTxErrorKey::PageRefused, "refused"),
+        (
+            PageFailure::NotOpened,
+            SendTxErrorKey::PageNotOpened,
+            "not_opened",
+        ),
+    ] {
+        let mut sut = boot(vec![eth("2")]);
+        to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+        slide_to_submit(&mut sut);
+        sut.dispatch(Event::SigningStarted);
+        sut.resolve(Res::SubmitFailed {
+            failure: SendSubmitFailure::PageFailed { failure },
+        });
+        let view = sut.view();
+        assert_eq!(view.tx_status, SendTxStatus::Error, "{wire}");
+        assert_eq!(view.tx_error, Some(key), "{wire}");
+        assert!(!view.sending, "{wire}");
+        sut.dispatch(Event::RetryAfterError);
+        assert_eq!(sut.view().tx_status, SendTxStatus::Idle, "{wire}");
+        // On the wire, as the web reports it.
+        assert_eq!(
+            serde_json::to_value(SendSubmitFailure::PageFailed { failure }).unwrap_or_default(),
+            serde_json::json!({"type": "page_failed", "failure": wire})
+        );
+    }
 }
 
 #[test]

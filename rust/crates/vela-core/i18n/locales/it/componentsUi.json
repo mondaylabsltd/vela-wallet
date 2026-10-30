@@ -211,6 +211,7 @@
       "trustedSignerRefused": "La pagina di firma non ha voluto firmare questa richiesta. La pagina spiega perché.",
       "trustedSignerMismatch": "La risposta della pagina non corrisponde a questa richiesta, quindi non è stato inviato nulla.",
       "trustedSignerTimeout": "La pagina di firma non ha risposto in tempo.",
+      "trustedSignerUnanswered": "La pagina di firma non risponde — riprova.",
       "trustedSignerReopen": "Riapri la pagina",
       "handoffTitle": "Controlla e firma su una pagina di firma di fiducia",
       "confirmWithLabel": "Conferma con",
@@ -601,6 +602,7 @@
         "signerUnavailable": "Qui non si possono usare passkey",
         "signerNotDiscoverable": "Questa passkey non può firmare qui",
         "signerFailed": "La passkey non è riuscita",
+        "signingPage": "La pagina di firma non l'ha firmato",
         "badRpc": "Il sito non ha fornito un RPC utilizzabile per questa rete"
       },
       "requests": "Richieste recenti",

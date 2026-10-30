@@ -1017,6 +1017,31 @@ describe('a failed fee on Send, in the core’s one state', () => {
 		expect(line?.tap).toEqual({ does: 'retry', label: m['send.feeRefresh'], busy: false });
 	});
 
+	it('r7-6: while the operation is out to be signed, the row is the fee signed — no newer quote, no failure over it', () => {
+		const newer = { ...QUOTE, total_wei: '3400000000000000' };
+		const feeOf = (send: Partial<SendView>, fee: Partial<FeeView>) =>
+			liveSendConfirm(
+				confirmModel(),
+				inputs({ selected_token: ETH, recipient: alice, confirm_amount: '1', ...send }, fee)
+			).facts.find((fact) => fact.label === m['send.estFeeLabel']);
+		for (const tx_status of ['signing', 'submitting'] as const) {
+			// The fee card re-quoted under the passkey (or the signing page): the
+			// core's figure is the one being signed.
+			expect(feeOf({ tx_status, fee: QUOTE }, { fee: newer })?.value).toBe('0.0021 ETH · ≈$6.30');
+			// …and a failed re-quote does not take its place.
+			const held = feeOf({ tx_status, fee: QUOTE }, { failed: down, failure: auto() });
+			expect(held).toMatchObject({ value: '0.0021 ETH · ≈$6.30' });
+			expect(held?.note).toBeUndefined();
+			expect(held?.tap).toBeUndefined();
+			// No figure from the core: never the fee machine's newer one instead.
+			expect(feeOf({ tx_status, fee: null }, { fee: newer })?.value).toBe('—');
+		}
+		// Over (failed), the newest quote is drawn again before anything is signed.
+		expect(feeOf({ tx_status: 'error', fee: null }, { fee: newer })?.value).toBe(
+			'0.0034 ETH · ≈$10.20'
+		);
+	});
+
 	it('the previous transaction in flight is the one line, ahead of the fee', () => {
 		const confirm = liveSendConfirm(
 			confirmModel(),

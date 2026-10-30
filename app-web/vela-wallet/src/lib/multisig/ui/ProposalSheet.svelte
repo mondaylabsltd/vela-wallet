@@ -116,7 +116,7 @@
 	import { multisigUi } from '../core/ui.svelte';
 	import { PasskeyCheckError } from '../core/owners';
 	import { PageApprovalError } from '../core/page-approval.svelte';
-	import { PageDeclinedError } from '$lib/signing/sign-challenge';
+	import { PageDeclinedError, PageSignFailedError } from '$lib/signing/sign-challenge';
 	import { integrityLineModel } from '$lib/settings/venue';
 	import { ServiceUnavailableError } from '../core/service';
 	import { PasskeyError } from '$lib/onboarding/core/passkey';
@@ -651,12 +651,24 @@
 					integrityLineModel(error.line, '', m.handoff)?.text ?? m.proposal.reason.passkeyFailed
 				);
 			}
+			// Round 7 (r7-2, r7-7): what happened on the page, said as that.
+			if (m.handoff && error.failure === 'unverified') return m.handoff.mismatch;
+			if (m.handoff && error.failure === 'silent') return m.handoff.unanswered;
+			if (m.handoff && error.failure === 'declined' && error.code === 'refused') {
+				return m.handoff.refused;
+			}
 			return error.failure === 'unverified'
 				? m.proposal.reason.passkeyFailed
 				: m.proposal.reason.passkeyClosed;
 		}
 		// An executor's own operation, declined on its trusted signing page.
 		if (error instanceof PageDeclinedError) return m.proposal.reason.passkeyClosed;
+		// …or not signed there for another reason (round 7): said as what it was.
+		if (error instanceof PageSignFailedError && m.handoff) {
+			if (error.page === 'unanswered') return m.handoff.unanswered;
+			if (error.page === 'mismatch') return m.handoff.mismatch;
+			if (error.page === 'refused') return m.handoff.refused;
+		}
 		if (error instanceof PasskeyError) {
 			if (error.kind === 'cancelled') {
 				return error.timedOut ? m.proposal.reason.passkeyTimedOut : m.proposal.reason.passkeyClosed;
@@ -764,14 +776,7 @@
 		let result: Awaited<ReturnType<typeof execute>>;
 		const by = actor.address;
 		const executing = item;
-		// What this execution counts, as it is sent: kept, so the transaction
-		// reads its own facts later, never today's owners re-counted (r4a-8).
-		const sent = factsOfExecution(
-			item.approvals.filter((a) => a.counts).map((a) => a.owner),
-			by,
-			members.owners.some((o) => sameAddress(o, by)),
-			item.threshold
-		);
+		let sent: ReturnType<typeof factsOfExecution> | undefined;
 		try {
 			// The look on screen when it is fresh — its calls and fee are what is
 			// signed — else a new one, said the same way. One that could not
@@ -780,6 +785,12 @@
 			const input = executionInput(account, item, actor, members);
 			const shown = preflight.get(input);
 			const preview = await preflight.check(input, shown?.kind === 'priced' ? PREVIEW_FRESH_MS : 0);
+			// What this execution counts, as it is sent — the approvals its
+			// calls carry (r7-3): kept, so the transaction reads its own facts
+			// later, never today's owners re-counted (r4a-8).
+			if (preview.kind === 'priced') {
+				sent = factsOfExecution(preview.carries, by, preview.executorApproves, item.threshold);
+			}
 			result = await execute(account, item, actor, members, preview);
 		} catch (error) {
 			// r5reg-21: its number was used meanwhile — what ran is said, not a failure.

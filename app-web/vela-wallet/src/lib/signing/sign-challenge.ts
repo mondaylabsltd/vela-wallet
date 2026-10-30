@@ -47,6 +47,7 @@ import {
 	type TrustedSignerKey
 } from '$lib/core/kernels';
 import type { KeyMethod } from '$lib/core/generated/KeyMethod';
+import type { PageFailure } from '$lib/core/generated/PageFailure';
 import type { KeyRoute } from '$lib/core/generated/KeyRoute';
 import type { VenueBlock } from '$lib/core/generated/VenueBlock';
 import { cancelSign, sign, signWithAny, type Assertion } from '$lib/onboarding/core/passkey';
@@ -147,6 +148,25 @@ export class PageSignFailedError extends Error {
 							: 'The signing page could not take this request — nothing was signed'
 		);
 		this.name = 'PageSignFailedError';
+	}
+
+	/**
+	 * The core's word for it (round 7, r7-2 / r7-7): the sheet and the asking
+	 * site hear WHY the page did not sign — not answering, an answer that is
+	 * not this request's, its own refusal, a check that failed — never "the
+	 * transaction could not be submitted", which a message never is.
+	 */
+	get page(): PageFailure {
+		switch (this.failure) {
+			case 'silent':
+				return 'unanswered';
+			case 'unverified':
+				return 'mismatch';
+			case 'not_opened':
+				return 'not_opened';
+			default:
+				return 'refused';
+		}
 	}
 }
 

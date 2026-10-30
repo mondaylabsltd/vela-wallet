@@ -203,7 +203,7 @@ window.VelaCS = window.VelaCS || {};
       row.appendChild(el('code', 'ms-hash-value', pair[1]));
       box.appendChild(row);
     });
-    box.appendChild(el('p', 'ms-hashes-note', t(m.hashMatches ? 'ui.msHashesNote' : 'ui.msHashesMismatch')));
+    box.appendChild(el('p', 'ms-hashes-note', t(m.hashMatches ? (m.noteKey || 'ui.msHashesNote') : 'ui.msHashesMismatch')));
     return box;
   }
 
@@ -306,8 +306,9 @@ window.VelaCS = window.VelaCS || {};
       if (field.amount.symbolClaimed) value.appendChild(el('span', 'tag coin-claimed', t('tag.coinByApp')));
       if (field.amount.fiat) value.appendChild(fiatLine('row-sub', field.amount.fiat));
     } else {
+      // A value in words is a `{key, params}` of resolve.js, never prose.
       value.appendChild(el('span', [field.emphasis ? 'strong' : '', field.mono ? 'mono' : ''].join(' ').trim(),
-        field.valueKey ? t(field.valueKey) : field.value));
+        field.valueKey ? t(field.valueKey) : field.value && typeof field.value === 'object' ? t(field.value) : field.value));
       if (field.expired) value.appendChild(el('span', 'tag tag-bad', t('tag.expired')));
       // Whose figure it is, when it is not this page's (an allowance the app
       // says the spender has now).
@@ -762,9 +763,15 @@ window.VelaCS = window.VelaCS || {};
     if (who) blocks.appendChild(who);
     warningsOf(view, true).forEach(function (w) { blocks.appendChild(warningBanner(w)); });
 
+    // A multisig execution's own line ("Executes multisig transaction #3:")
+    // comes before what the transaction does.
+    if (view.lead) blocks.appendChild(el('p', 'sentence sentence-lead', t(view.lead)));
     var h = hero(view);
     if (h) blocks.appendChild(h);
     if (view.sentence) blocks.appendChild(el('p', 'sentence', t(view.sentence)));
+    // What the operation also does on the way (sets the multisig up,
+    // activates a member's account).
+    (view.notes || []).forEach(function (note) { blocks.appendChild(el('p', 'sentence', t(note))); });
 
     view.legs.forEach(function (leg) { blocks.appendChild(legCard(leg)); });
 

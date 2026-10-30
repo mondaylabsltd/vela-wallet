@@ -403,6 +403,50 @@ pub enum SignErrorKind {
     /// only on its page. Nothing was signed, and trying again would not help:
     /// the sheet draws [`SignErrorNotice::venue_block`]'s reason.
     VenueBlocked,
+    /// -32603 — the account's trusted signing page never answered: not
+    /// within its time to say it was ready, or its check never completed
+    /// (round 7, r7-2). Nothing was signed, and trying again may work.
+    PageUnanswered,
+    /// -32603 — the page answered, and its answer is not this account's
+    /// signature of the bytes the core computed for THIS request (tampered,
+    /// replayed, or another key's) (round 7, r7-7). Nothing was sent.
+    PageMismatch,
+    /// -32603 — the page's own rules refused the request (it says why on
+    /// the page), or it cannot take this kind of request. Nothing was signed.
+    PageRefused,
+    /// -32603 — the page did not pass its check (spec 102 R6), so it was not
+    /// opened. Nothing was signed; the hand-off said why.
+    PageNotOpened,
+}
+
+/// Why the account's trusted signing page did not sign, when the person did
+/// not decline there (that is [`SignSubmitOutcome::PageDeclined`]). The
+/// shell reads it from the hand-off; the core says it ([`SignErrorKind`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum PageFailure {
+    /// It never said it was ready, or its check never finished in time.
+    Unanswered,
+    /// Its answer is not the account's signature of the core's bytes.
+    Mismatch,
+    /// Its rules refused the request, or it cannot take this kind.
+    Refused,
+    /// Its check failed: it was not opened.
+    NotOpened,
+}
+
+impl PageFailure {
+    /// The sheet's and the page's (the dApp's) kind for it.
+    #[must_use]
+    pub fn kind(self) -> SignErrorKind {
+        match self {
+            Self::Unanswered => SignErrorKind::PageUnanswered,
+            Self::Mismatch => SignErrorKind::PageMismatch,
+            Self::Refused => SignErrorKind::PageRefused,
+            Self::NotOpened => SignErrorKind::PageNotOpened,
+        }
+    }
 }
 
 /// What goes back to the dApp. `Ok { result: None }` serialises the `null`
@@ -800,6 +844,13 @@ pub enum SignSubmitOutcome {
     /// page that asked is answered 4001, the request settles rejected, and the
     /// sheet clears.
     PageDeclined,
+    /// The account's trusted signing page did not sign, and not because the
+    /// person said no there (round 7, r7-2 / r7-7): it never answered, its
+    /// answer did not check out, its rules refused, or its check failed.
+    /// Nothing was signed or sent. The page that asked is answered -32603
+    /// with the page's own reason — never "the transaction could not be
+    /// submitted", which a message never is — and the sheet says it.
+    PageFailed { failure: PageFailure },
 }
 
 /// How long the confirm waits for the simulation's verdict
@@ -1758,7 +1809,13 @@ impl Model {
                 .is_some_and(|e| {
                     matches!(
                         e.kind,
-                        SignErrorKind::SubmitFailed | SignErrorKind::SignerFailed
+                        SignErrorKind::SubmitFailed
+                            | SignErrorKind::SignerFailed
+                            // A page that did not answer, or did not
+                            // pass its check, may on the next try.
+                            | SignErrorKind::PageUnanswered
+                            | SignErrorKind::PageNotOpened
+                            | SignErrorKind::PageMismatch
                     )
                 })
     }
@@ -4047,6 +4104,7 @@ fn on_submit_outcome(
             | SignSubmitOutcome::Underfunded { .. }
             | SignSubmitOutcome::PasskeyCancelled
             | SignSubmitOutcome::PageDeclined
+            | SignSubmitOutcome::PageFailed { .. }
             | SignSubmitOutcome::AskerGone,
         ) if is_tx => SignSubmitOutcome::NotConfirmed {
             user_op_hash: op_hash.clone(),
@@ -4058,6 +4116,7 @@ fn on_submit_outcome(
             | SignSubmitOutcome::Underfunded { .. }
             | SignSubmitOutcome::PasskeyCancelled
             | SignSubmitOutcome::PageDeclined
+            | SignSubmitOutcome::PageFailed { .. }
             | SignSubmitOutcome::AskerGone,
         ) => SignSubmitOutcome::ReceiptPending {
             user_op_hash: op_hash.clone(),
@@ -4338,6 +4397,12 @@ fn on_submit_outcome(
                 None
             };
             command
+        }
+        // Round 7: the signing page did not sign, and said or showed why.
+        // Nothing was signed; never after a submission (nothing reaches the
+        // relay before the page has signed).
+        SignSubmitOutcome::PageFailed { failure } => {
+            fail_inflight(model, CODE_INTERNAL, failure.kind(), None)
         }
         // Spec 102: the venue cannot be used here. The page hears a calm
         // English sentence (`dapp_rpc::sign_error_words`); the sheet draws the

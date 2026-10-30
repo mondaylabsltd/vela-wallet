@@ -23,6 +23,7 @@
   var current = null;      // the request on screen, until answered
   var waitingState = null; // what the waiting card says between requests
   var lastGone = false;    // the request on screen lost its wallet
+  var lastWithdrawn = false; // …because the wallet said it gave up on it (r7-5)
 
   ns.i18n.setLocale(ns.i18n.detect(new URLSearchParams(location.search).get('lang')));
   document.title = t('ui.pageName');
@@ -392,6 +393,7 @@
   function show(request) {
     current = request;
     lastGone = false;
+    lastWithdrawn = false;
     window.__refused = false;
     window.__slider = null;
     state.received = session.received;
@@ -444,6 +446,11 @@
     });
   }
 
+  /** How long the done card shows before a finished page closes itself (a test shortens it). */
+  function closeAfterMs() {
+    return typeof window.__velaCloseMs === 'number' ? window.__velaCloseMs : 1500;
+  }
+
   // The session is over. Say why, in the page's own words.
   function ended() {
     state.endReason = session.endReason;
@@ -470,17 +477,32 @@
     // bye, or the channel closed. A card whose wallet went away, or a
     // refusal, keeps its reasons on screen.
     if (lastGone) {
-      say('ui.walletGone');
+      // The withdrawn card says it already; the status line stays quiet.
+      if (!lastWithdrawn) say('ui.walletGone');
       return;
     }
     if (window.__refused) {
       say('ui.sessionOver');
       return;
     }
-    if (session.answered) {
-      say('ui.sessionDone');
-      waiting({ titleKey: 'ui.sessionEnded', noteKey: 'ui.sessionDone' });
+    if (session.why === 'withdrawn') {
+      // The wallet gave up after this page answered: it did not take the
+      // answer (r7-5) — never "Done".
+      say('');
+      waiting({ titleKey: 'ui.withdrawnTitle', noteKey: 'ui.answerNotTaken' });
       slot.firstChild.classList.add('sheet-ended');
+      return;
+    }
+    if (session.answered) {
+      // Done, said once (round 7): the card says it, the status line is
+      // quiet, and nothing about it is drawn as a failure.
+      say('');
+      waiting({ titleKey: 'ui.doneTitle', noteKey: 'ui.sessionDone' });
+      // The wallet has the answer and said goodbye: a page it opened closes
+      // itself, rather than leaving a finished tab behind (the extension
+      // opened one per signature). A browser lets a script close only a
+      // window a script opened; anywhere else the card stays, and says so.
+      if (reason === 'bye') setTimeout(function () { try { window.close(); } catch (e) { /* stays */ } }, closeAfterMs());
       return;
     }
     // Nothing was answered: the wallet stopped waiting (or never came).
@@ -515,14 +537,24 @@
       onWaiting: function () { say('ui.waitingWallet'); },
       // The wallet stopped waiting for the request on screen: signing now
       // would sign into nothing, so the button goes.
-      onGone: function (request) {
+      onGone: function (request, why) {
         if (request !== current) return;
         current = null;
         lastGone = true;
         off(slot.querySelector('.confirm'));
         window.__slider = null;
-        say('ui.walletGone');
-        phase('gone');
+        if (why === 'withdrawn') {
+          // The wallet gave up on this request (r7-5): the card goes, so
+          // nothing here offers to sign what nobody is waiting for.
+          lastWithdrawn = true;
+          say('');
+          waiting({ titleKey: 'ui.withdrawnTitle', noteKey: 'ui.walletWithdrew' });
+          slot.firstChild.classList.add('sheet-ended');
+          phase('withdrawn');
+        } else {
+          say('ui.walletGone');
+          phase('gone');
+        }
         // The session may carry on; listen again. `lose()` runs before a
         // session is marked ended, so wait a tick.
         setTimeout(loop, 0);

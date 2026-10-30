@@ -342,13 +342,13 @@ vi.mock('../core/executed', () => ({
 	factsOfExecution: (
 		approvers: string[],
 		executor: string,
-		_owner: boolean,
+		approves: boolean,
 		threshold: number
 	) => ({
 		executor,
 		threshold,
-		approvers,
-		executorApproved: false
+		approvers: approves ? [...approvers, executor] : approvers,
+		executorApproved: approves
 	}),
 	frozenFacts: async () => fake.frozen,
 	rememberExecution: (...args: any[]) => void fake.remembered.push(args)
@@ -417,6 +417,8 @@ function priced(over: Record<string, unknown> = {}) {
 		fee: { amount: 35n * 10n ** 15n, recipient: '0xfe' },
 		balance: 1000n,
 		canPay: true,
+		carries: [OTHER],
+		executorApproves: true,
 		setup: { multisig: false, members: [], executor: false, amount: null },
 		...over
 	};
@@ -1367,6 +1369,37 @@ describe('an execution in flight (r4b-1, r4b-7)', () => {
 		expect(buttons()).not.toContain('proposal.execute');
 		expect(buttons()).not.toContain('proposal.approve');
 		expect(fake.calls).toEqual([]);
+		await screen.unmount();
+	});
+
+	it('r7-3: what it counts is kept as its calls carry it — every approval given, the executor only sending it', async () => {
+		const THIRD = '0x00000000000000000000000000000000000000e3';
+		fake.chain.items = [
+			item({
+				approved: 2,
+				status: 'ready',
+				canApprove: [local],
+				canExecute: [local],
+				approvals: [
+					{ owner: OTHER, counts: true, approval: {}, createdMs: 1 },
+					{ owner: THIRD, counts: true, approval: {}, createdMs: 2 }
+				]
+			})
+		];
+		fake.previews = { [ME]: priced({ carries: [OTHER, THIRD], executorApproves: false }) };
+		fake.execution = {
+			maybeSent: false,
+			userOpHash: '0x01',
+			waitForTxHash: async () => `0x${'77'.repeat(32)}`
+		};
+		const screen = show();
+		await settle();
+		press('proposal.execute');
+		await settle();
+		// One signature: the execution, nothing approved first.
+		expect(fake.calls).toEqual(['execute']);
+		expect(fake.remembered).toHaveLength(1);
+		expect(fake.remembered[0][3]).toMatchObject({ executor: ME, approvers: [OTHER, THIRD] });
 		await screen.unmount();
 	});
 

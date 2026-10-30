@@ -476,6 +476,387 @@ window.VelaCS = window.VelaCS || {};
     };
   }
 
+  // --- an executor's operation (round 7, r7-1) --------------------------------
+  //
+  // Executing a multisig transaction is the executor's OWN user operation
+  // (vela-core `execution_calls`): deploy the multisig and every approving
+  // member's Vela account that has no code on the chain yet — both
+  // permissionless, from their geneses — then `execTransaction` on the
+  // multisig. Signed blind, that is the Bybit signature: the SafeTx inside
+  // `execTransaction` is what moves the multisig's money, and a deploy's
+  // setup decides who controls what it deploys. So every leg is read here
+  // from its bytes, or the operation is refused:
+  //
+  //  · `execTransaction`: the SafeTx decoded (the core's encoding only) and
+  //    read by the same rules as a member's approval (`read` — the core's
+  //    `review`, refusals included); the approvals it carries counted from
+  //    the signature bytes. Its safeTxHash is recomputed by resolve.js at
+  //    the nonce the app names: `execTransaction` carries no nonce — the
+  //    multisig supplies its own — so the number is the app's word, while
+  //    what runs is read from the bytes whatever the number;
+  //  · a deploy of the multisig: `createProxyWithNonce` on Safe's v1.4.1
+  //    factory, the L2 singleton, and a setup that is EXACTLY the one Vela
+  //    creates a multisig with (`multisig_genesis`: the members, the
+  //    threshold, the CompatibilityFallbackHandler, no hook, no payment) —
+  //    re-encoded here and compared byte for byte — whose CREATE2 address is
+  //    the multisig the operation executes on;
+  //  · a deploy of a member's Vela account: the same factory and singleton,
+  //    a setup that is exactly a Vela account's (`vela_account_genesis`,
+  //    re-encoded from the keys it configures), salted as Vela salts it,
+  //    deriving the address of a member whose approval the execution carries.
+  //
+  // Anything else in the operation — another call, a second execution, a
+  // deploy this page cannot place — is refused, not drawn. A multisig created
+  // elsewhere (a Safe{Wallet} genesis) and deployed by its first execution is
+  // refused too: this page cannot vouch for a setup it does not write.
+
+  var SAFE_PROXY_FACTORY = '0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67';
+  var SAFE_SINGLETON = '0x29fcB43b46531BcA003ddC8FCB67FFE91900C762';
+  var COMPATIBILITY_FALLBACK_HANDLER = '0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99';
+  var SAFE_4337_MODULE = '0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226';
+  var SAFE_MODULE_SETUP = '0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47';
+  var WEBAUTHN_SIGNER = '0x94a4F6affBd8975951142c3999aEAB7ecee555c2';
+  var WEBAUTHN_SIGNER_FACTORY = '0x1d31F259eE307358a26dFb23EB365939E8641195';
+  var WEBAUTHN_SIGNER_SINGLETON = '0x4E27b51350e6c2083EE19011120F50DAfEc5CA50';
+  /** Safe's MultiSend, which a Vela account's setup delegatecalls (vela-core `safe::MULTI_SEND`). */
+  var VELA_MULTI_SEND = '0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526';
+  /** The RIP-7212 precompile a Vela account's passkey verifier uses (`WEBAUTHN_VERIFIERS_HEX`). */
+  var WEBAUTHN_VERIFIERS = 0x100n;
+  /** vela-core `safe::MAX_MULTI_KEYS`. */
+  var MAX_ACCOUNT_KEYS = 7;
+  /** vela-core `multisig::MAX_OWNERS`. */
+  var MAX_OWNERS = 20;
+  var SENTINEL = '0x0000000000000000000000000000000000000001';
+
+  /** Safe v1.4.1's `proxyCreationCode()` (vela-core `safe::PROXY_CREATION_CODE`). */
+  var PROXY_CREATION_CODE = '608060405234801561001057600080fd5b506040516101e63803806101e68339818101604052602081101561003357600080fd5b8101908080519060200190929190505050600073ffffffffffffffffffffffffffffffffffffffff168173ffffffffffffffffffffffffffffffffffffffff1614156100ca576040517f08c379a00000000000000000000000000000000000000000000000000000000081526004018080602001828103825260228152602001806101c46022913960400191505060405180910390fd5b806000806101000a81548173ffffffffffffffffffffffffffffffffffffffff021916908373ffffffffffffffffffffffffffffffffffffffff1602179055505060ab806101196000396000f3fe608060405273ffffffffffffffffffffffffffffffffffffffff600054167fa619486e0000000000000000000000000000000000000000000000000000000060003514156050578060005260206000f35b3660008037600080366000845af43d6000803e60008114156070573d6000fd5b3d6000f3fea264697066735822122003d1488ee65e08fa41e58e888a9865554c535f2c77126a82cb4c0f917f31441364736f6c63430007060033496e76616c69642073696e676c65746f6e20616464726573732070726f7669646564';
+  /** A further key's signer proxy creation code (vela-core `safe::WEBAUTHN_SIGNER_PROXY_CREATION_CODE`). */
+  var WEBAUTHN_SIGNER_PROXY_CREATION_CODE = '610100346100ad57601f6101b538819003918201601f19168301916001600160401b038311848410176100b2578084926080946040528339810103126100ad578051906001600160a01b03821682036100ad5760208101516040820151606090920151926001600160b01b03841684036100ad5760805260a05260c05260e05260405160ec90816100c98239608051816082015260a05181604d015260c051816027015260e0518160010152f35b600080fd5b634e487b7160e01b600052604160045260246000fdfe7f000000000000000000000000000000000000000000000000000000000000000060b63601527f000000000000000000000000000000000000000000000000000000000000000060a03601527f000000000000000000000000000000000000000000000000000000000000000036608001523660006080376000806056360160807f00000000000000000000000000000000000000000000000000000000000000005af43d600060803e60b1573d6080fd5b3d6080f3fea26469706673582212201660515548d15702d720bbc046b457ca85e941a4559ab9f9518488e4c82e5ee964736f6c634300081a0033';
+
+  var EXEC_TRANSACTION = selector('execTransaction(address,uint256,bytes,uint8,uint256,uint256,uint256,address,address,bytes)');
+  var CREATE_PROXY = selector('createProxyWithNonce(address,bytes,uint256)');
+  var SETUP = selector('setup(address[],uint256,address,bytes,address,address,uint256,address)');
+  var ENABLE_MODULES = selector('enableModules(address[])');
+  var CONFIGURE = selector('configure((uint256,uint256,uint176))');
+  var CREATE_SIGNER = selector('createSigner(uint256,uint256,uint176)');
+
+  function padded(n) {
+    return n + ((32 - (n % 32)) % 32);
+  }
+
+  /** ABI `bytes` tail: its length word, the bytes, zero padding. */
+  function bytesTail(bytes) {
+    var out = new Uint8Array(32 + padded(bytes.length));
+    out.set(word(bytes.length), 0);
+    out.set(bytes, 32);
+    return out;
+  }
+
+  /** `bytes` whose length word is at `at`, canonically: inside `data`, zero padding. */
+  function bytesAt(data, at) {
+    var len = wordAt(data, at);
+    if (len === null || len > BigInt(data.length)) return null;
+    var n = Number(len);
+    var end = at + 32 + padded(n);
+    if (end > data.length) return null;
+    for (var i = at + 32 + n; i < end; i++) if (data[i] !== 0) return null;
+    return { bytes: data.subarray(at + 32, at + 32 + n), end: end };
+  }
+
+  /** A word that holds an address: its high twelve bytes zero. */
+  function addressWordAt(data, at) {
+    var v = wordAt(data, at);
+    if (v === null || v >> 160n !== 0n) return null;
+    return checksum('0x' + v.toString(16).padStart(40, '0'));
+  }
+
+  function bytesEqual(a, b) {
+    if (a.length !== b.length) return false;
+    for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+    return true;
+  }
+
+  function create2(deployer, salt, initCodeHash) {
+    var hash = keccak.hash(concat([new Uint8Array([0xff]), fromHex(deployer), salt, initCodeHash]));
+    return checksum(toHex(hash.subarray(12)));
+  }
+
+  /** What `createProxyWithNonce(singleton, initializer, saltNonce)` deploys to on Safe's v1.4.1 factory. */
+  function proxyAddress(singleton, initializer, saltNonce) {
+    var initCodeHash = keccak.hash(concat([fromHex(PROXY_CREATION_CODE), addressWord(singleton)]));
+    var salt = keccak.hash(concat([keccak.hash(initializer), word(saltNonce)]));
+    return create2(SAFE_PROXY_FACTORY, salt, initCodeHash);
+  }
+
+  /**
+   * `execTransaction(...)` calldata, read as vela-core `exec_transaction_data`
+   * writes it — the ten head words, the data, the signatures, nothing after
+   * — or null. `{tx, signatures}`: `tx` in `parseTx`'s shape, without the
+   * nonce `execTransaction` does not carry.
+   */
+  function readExecCall(data) {
+    if (selectorOf(data) !== EXEC_TRANSACTION) return null;
+    var body = data.subarray(4);
+    var to = addressWordAt(body, 0);
+    var gasToken = addressWordAt(body, 7 * 32);
+    var refundReceiver = addressWordAt(body, 8 * 32);
+    var operation = wordAt(body, 3 * 32);
+    if (!to || !gasToken || !refundReceiver || operation === null || operation > 255n) return null;
+    if (wordAt(body, 2 * 32) !== 320n) return null;
+    var inner = bytesAt(body, 320);
+    if (!inner || inner.bytes.length > MAX_DATA_BYTES) return null;
+    if (wordAt(body, 9 * 32) !== BigInt(inner.end)) return null;
+    var signatures = bytesAt(body, inner.end);
+    if (!signatures || signatures.end !== body.length) return null;
+    return {
+      tx: {
+        to: to,
+        value: wordAt(body, 32),
+        data: toHex(inner.bytes),
+        operation: Number(operation),
+        safeTxGas: wordAt(body, 4 * 32),
+        baseGas: wordAt(body, 5 * 32),
+        gasPrice: wordAt(body, 6 * 32),
+        gasToken: gasToken,
+        refundReceiver: refundReceiver,
+      },
+      signatures: signatures.bytes,
+    };
+  }
+
+  /**
+   * The approvals in `execTransaction`'s signature bytes, as the Safe reads
+   * them (`checkNSignatures`): 65-byte entries `r ‖ s ‖ v`, then the
+   * contract signatures' tails (vela-core `assemble_signatures`). `v = 0` —
+   * a contract's signature (a Vela account's passkey, EIP-1271), `r` the
+   * owner; `v = 1` — approved by sending it, or on chain (`approveHash`), `r`
+   * the owner; 27/28 (31/32 in the `eth_sign` form) — a plain wallet's ECDSA
+   * signature, whose owner only recovering it tells (the multisig does).
+   * Null when the bytes are not entries this page can count.
+   */
+  function readSignatures(sigs) {
+    var head = sigs.length;
+    var entries = [];
+    for (var i = 0; (i + 1) * 65 <= head; i++) {
+      var at = i * 65;
+      var v = sigs[at + 64];
+      if (v === 0 || v === 1) {
+        var r = wordAt(sigs, at);
+        if (r === null || r >> 160n !== 0n) return null;
+        var owner = checksum('0x' + r.toString(16).padStart(40, '0'));
+        if (v === 0) {
+          var offset = wordAt(sigs, at + 32);
+          if (offset === null || offset >= BigInt(sigs.length)) return null;
+          // A contract signature's tail starts after every head entry.
+          if (Number(offset) < head) head = Number(offset);
+          entries.push({ kind: 'contract', owner: owner });
+        } else {
+          entries.push({ kind: 'sender', owner: owner });
+        }
+      } else if (v === 27 || v === 28 || v === 31 || v === 32) {
+        entries.push({ kind: 'ecdsa', owner: null });
+      } else {
+        return null;
+      }
+    }
+    if (!entries.length || entries.length * 65 !== head) return null;
+    return entries;
+  }
+
+  /** `createProxyWithNonce(singleton, initializer, saltNonce)` calldata as vela-core `deploy_call` writes it, or null. */
+  function readDeployCall(data) {
+    if (selectorOf(data) !== CREATE_PROXY) return null;
+    var body = data.subarray(4);
+    var singleton = addressWordAt(body, 0);
+    if (!singleton || wordAt(body, 32) !== 0x60n) return null;
+    var saltNonce = wordAt(body, 64);
+    var initializer = bytesAt(body, 96);
+    if (saltNonce === null || !initializer || initializer.end !== body.length) return null;
+    return { singleton: singleton, saltNonce: saltNonce, initializer: initializer.bytes };
+  }
+
+  /** `setup(...)` as vela-core encodes it (`encode_setup_full`), with no payment. */
+  function encodeSetup(owners, threshold, to, data, fallbackHandler) {
+    return concat([
+      fromHex(SETUP),
+      word(0x100),
+      word(threshold),
+      addressWord(to),
+      word(0x100 + 32 + owners.length * 32),
+      addressWord(fallbackHandler),
+      addressWord(ZERO),
+      word(0),
+      addressWord(ZERO),
+      word(owners.length),
+    ].concat(owners.map(addressWord)).concat([bytesTail(data)]));
+  }
+
+  /** The owners and threshold a `setup` call names, or null (vela-core `genesis_members`). */
+  function setupMembers(initializer) {
+    if (selectorOf(initializer) !== SETUP) return null;
+    var body = initializer.subarray(4);
+    var offset = wordAt(body, 0);
+    var threshold = wordAt(body, 32);
+    if (offset !== 0x100n || threshold === null) return null;
+    var count = wordAt(body, 0x100);
+    if (count === null || count > BigInt(MAX_OWNERS)) return null;
+    var owners = [];
+    for (var i = 0; i < Number(count); i++) {
+      var owner = addressWordAt(body, 0x120 + i * 32);
+      if (!owner) return null;
+      owners.push(owner);
+    }
+    return { owners: owners, threshold: threshold };
+  }
+
+  /**
+   * A deploy of a multisig as Vela creates one (vela-core `multisig_genesis`):
+   * `{owners, threshold, address}`, or null. The setup is re-encoded from the
+   * members it names and must be byte for byte the one deployed — no setup
+   * hook (`to`, `data`), no payment, the CompatibilityFallbackHandler — with
+   * members a multisig can have (distinct, not zero, not the sentinel) and a
+   * threshold between one and their number.
+   */
+  function readMultisigDeploy(deploy) {
+    if (!same(deploy.singleton, SAFE_SINGLETON)) return null;
+    var members = setupMembers(deploy.initializer);
+    if (!members || !members.owners.length) return null;
+    var seen = {};
+    for (var i = 0; i < members.owners.length; i++) {
+      var o = members.owners[i].toLowerCase();
+      if (o === ZERO || o === SENTINEL || seen[o]) return null;
+      seen[o] = true;
+    }
+    if (members.threshold < 1n || members.threshold > BigInt(members.owners.length)) return null;
+    var expected = encodeSetup(members.owners, members.threshold, ZERO, new Uint8Array(0),
+      COMPATIBILITY_FALLBACK_HANDLER);
+    if (!bytesEqual(expected, deploy.initializer)) return null;
+    return {
+      owners: members.owners,
+      threshold: members.threshold,
+      address: proxyAddress(deploy.singleton, deploy.initializer, deploy.saltNonce),
+    };
+  }
+
+  /** One MultiSend leg as vela-core packs it (`encode_multisend_tx`): op ‖ to ‖ 0 ‖ length ‖ data. */
+  function packLeg(to, data, operation) {
+    return concat([new Uint8Array([operation]), fromHex(to), word(0), word(data.length), data]);
+  }
+
+  function signerArgs(x, y) {
+    return concat([word(x), word(y), word(WEBAUTHN_VERIFIERS)]);
+  }
+
+  /** vela-core `compute_webauthn_signer_address`: a further key's own signer. */
+  function webauthnSigner(x, y) {
+    var initCode = concat([fromHex(WEBAUTHN_SIGNER_PROXY_CREATION_CODE),
+      addressWord(WEBAUTHN_SIGNER_SINGLETON), signerArgs(x, y)]);
+    return create2(WEBAUTHN_SIGNER_FACTORY, new Uint8Array(32), keccak.hash(initCode));
+  }
+
+  /** vela-core `encode_setup_data`: a Vela account's setup from its keys, `keys[0]` first. */
+  function velaAccountSetup(keys) {
+    var enable = concat([fromHex(ENABLE_MODULES), word(0x20), word(1), addressWord(SAFE_4337_MODULE)]);
+    var configure = concat([fromHex(CONFIGURE), signerArgs(keys[0].x, keys[0].y)]);
+    var legs = [packLeg(SAFE_MODULE_SETUP, enable, 1), packLeg(WEBAUTHN_SIGNER, configure, 1)];
+    var owners = [WEBAUTHN_SIGNER];
+    keys.slice(1).forEach(function (key) {
+      owners.push(webauthnSigner(key.x, key.y));
+      legs.push(packLeg(WEBAUTHN_SIGNER_FACTORY, concat([fromHex(CREATE_SIGNER), signerArgs(key.x, key.y)]), 0));
+    });
+    var multiSend = concat([fromHex(MULTI_SEND), word(0x20), bytesTail(concat(legs))]);
+    return encodeSetup(owners, 1n, VELA_MULTI_SEND, multiSend, SAFE_4337_MODULE);
+  }
+
+  // Where a Vela account's keys sit in its setup's MultiSend: the first leg
+  // (`enableModules([module])`, 85 + 100 bytes), then `configure(x, y, …)`
+  // and one `createSigner(x, y, …)` per further key — each 85 + 100 bytes,
+  // its x at 85 + 4 into the leg.
+  var ACCOUNT_LEG = 85 + 100;
+  var KEY_IN_LEG = 85 + 4;
+
+  /**
+   * A deploy of a Vela account (vela-core `vela_account_genesis`): its
+   * address, or null. The keys are read from the setup's own MultiSend, the
+   * setup is re-encoded from them and must be the one deployed, and the salt
+   * nonce must be the hash of the keys, as Vela derives it.
+   */
+  function readAccountDeploy(deploy) {
+    if (!same(deploy.singleton, SAFE_SINGLETON)) return null;
+    var init = deploy.initializer;
+    var members = setupMembers(init);
+    if (!members || members.owners.length < 1 || members.owners.length > MAX_ACCOUNT_KEYS) return null;
+    var multiSend = bytesAt(init, 4 + 0x120 + members.owners.length * 32);
+    if (!multiSend || selectorOf(multiSend.bytes) !== MULTI_SEND) return null;
+    var packedBytes = bytesAt(multiSend.bytes, 36);
+    if (!packedBytes || packedBytes.bytes.length !== ACCOUNT_LEG * (1 + members.owners.length)) return null;
+    var packed = packedBytes.bytes;
+    var keys = [];
+    for (var k = 0; k < members.owners.length; k++) {
+      var at = ACCOUNT_LEG * (k + 1) + KEY_IN_LEG;
+      keys.push({ x: wordAt(packed, at), y: wordAt(packed, at + 32) });
+    }
+    if (!bytesEqual(velaAccountSetup(keys), init)) return null;
+    var xy = concat(keys.map(function (key) { return concat([word(key.x), word(key.y)]); }));
+    if (BigInt(toHex(keccak.hash(xy))) !== deploy.saltNonce) return null;
+    return { address: proxyAddress(deploy.singleton, init, deploy.saltNonce) };
+  }
+
+  function zeroValue(call) {
+    var v = call.value === undefined || call.value === null ? '0x0' : String(call.value);
+    return quantity(v) === 0n;
+  }
+
+  /**
+   * An executor's operation, read. `calls` are the operation's legs before
+   * its fee leg (`{to, value, data, operation}`, lib/safeop.js), `executor`
+   * the account whose operation it is (`userOp.sender`). Null when no leg
+   * calls `execTransaction`: the operation is no execution. Otherwise
+   * `{multisig, tx, approvals, deploy, activates}` — `deploy` the multisig's
+   * own setup (`{owners, threshold}`) when this operation deploys it,
+   * `activates` the members' accounts it deploys — or `{refusal}` (an i18n
+   * key) for an execution this page cannot read in full.
+   */
+  function execution(calls, executor) {
+    var execs = calls.filter(function (call) {
+      return typeof call.data === 'string' && HEX_BYTES.test(call.data) &&
+        selectorOf(fromHex(call.data)) === EXEC_TRANSACTION;
+    });
+    if (!execs.length) return null;
+    if (execs.length > 1) return { refusal: 'refuse.msExecExtra' };
+    var exec = execs[0];
+    if (!ADDRESS.test(exec.to || '') || !zeroValue(exec) || Number(exec.operation || 0) !== 0) {
+      return { refusal: 'refuse.msExecShape' };
+    }
+    var call = readExecCall(fromHex(exec.data));
+    var approvals = call && readSignatures(call.signatures);
+    if (!approvals || (executor && same(exec.to, executor))) return { refusal: 'refuse.msExecShape' };
+    var multisig = checksum(exec.to);
+    var out = { multisig: multisig, tx: call.tx, approvals: approvals, deploy: null, activates: [] };
+    var contractOwners = approvals.filter(function (a) { return a.kind === 'contract'; })
+      .map(function (a) { return a.owner.toLowerCase(); });
+    for (var i = 0; i < calls.length; i++) {
+      var leg = calls[i];
+      if (leg === exec) continue;
+      var deploy = same(leg.to || '', SAFE_PROXY_FACTORY) && zeroValue(leg) && Number(leg.operation || 0) === 0 &&
+        typeof leg.data === 'string' && HEX_BYTES.test(leg.data) ? readDeployCall(fromHex(leg.data)) : null;
+      if (!deploy) return { refusal: 'refuse.msExecExtra' };
+      var asMultisig = readMultisigDeploy(deploy);
+      if (asMultisig && same(asMultisig.address, multisig) && !out.deploy) {
+        out.deploy = { owners: asMultisig.owners, threshold: asMultisig.threshold };
+        continue;
+      }
+      var account = readAccountDeploy(deploy);
+      if (account && contractOwners.indexOf(account.address.toLowerCase()) >= 0 &&
+        out.activates.indexOf(account.address) < 0) {
+        out.activates.push(account.address);
+        continue;
+      }
+      return { refusal: 'refuse.msExecDeploy' };
+    }
+    return out;
+  }
+
   ns.multisig = {
     METHOD: 'vela_multisigApprove',
     MULTI_SEND_CALL_ONLY: MULTI_SEND_CALL_ONLY,
@@ -487,8 +868,10 @@ window.VelaCS = window.VelaCS || {};
     hashes: hashes,
     approvalChallenge: approvalChallenge,
     read: read,
+    execution: execution,
     validName: validName,
     checksum: checksum,
     toHex: toHex,
+    quantity: quantity,
   };
 })(window.VelaCS);

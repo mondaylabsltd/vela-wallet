@@ -56,6 +56,11 @@
 > 并重新构建本页。测试：`answer-test.mjs` H 段（真的扩展 origin）；钱包一侧 `sign-challenge.test.ts`、
 > `e2e/extension-signing-page.e2e.ts`。见 PROTOCOL.md 第 13 节。
 
+> **第七轮（2026-10-30）：多签的执行在签名页上读得出来。** 新版本 **416a65c1**（`BUILD_ALLOWED` 第一位，LAUNCH 不变）。
+> 执行者的操作（部署 + `execTransaction` + 费用）逐腿读：SafeTx 按批准的规则读、safeTxHash 按钱包给的序号重算、部署从 setup 核实，
+> 读不全就拒（PROTOCOL.md 12.7）；Arc / Stable 的原生币 ERC-20 接口按单位读（`gen-catalog.mjs` 从 `native_alias_token` 生成）；
+> 钱包说 `bye` `withdrawn` 时撤下按钮；完成只说一次、页面自己关。部署顺序同上：`dist/` 先上线（含 `/b/416a65c1…/sign`），再谈 LAUNCH。
+
 > **多签成员在签名页上批准（2026-10-29）。** 创始人的 Bybit 教训：签名人必须能在独立于钱包 App
 > 代码的界面上审阅并签名。多签住在网页钱包里，所以**网页钱包第一次打开签名页** —— 只为这一件事：
 > 成员账户的「签名方式」选了签名页时，发起并批准、批准、执行前执行者自己的批准、拒绝，都把原始
@@ -110,7 +115,7 @@ node samples/gen-fonts.mjs --check  # src/fonts.css 就是 assets/fonts/ 的 Plu
 bun samples/single-file-test.mjs   # 15/15 发布出去的单文件页：CSP 实测、App 的字体在页内加载、自定义 scheme 不被 CSP 拦
 bun samples/desktop-demo.mjs --auto #  8/8 桌面应用全流程 + 自验签（开测试页 samples/loopback-sign.html：只有它接受回环答复）
 bun samples/takeover-test.mjs      # 18/18 自调用 / delegatecall / SafeTx 拒签（与 vela-core self_call_guard 同一规则）
-node samples/multisig-test.mjs     # 248/248 多签批准：哈希、批准字节、读法与发布的 wasm 逐例对拍；敌意输入；十五种语言（2026-10-29）
+node samples/multisig-test.mjs     # 320/320 多签批准与多签执行（第七轮）：哈希、批准字节、读法与发布的 wasm 逐例对拍；执行者的操作逐腿读、部署从 setup 核实；敌意输入；十五种语言
 bun samples/unlimited-line-test.mjs # 11/11 「无限额」的线：uint256 2^200、uint160 2^152（与 vela-core approval_guard 同一条线）
 node samples/origin-line-test.mjs   # 31/31 站点名就是主机时页头只写一次（082 L-HOST，与 vela-core site_label 同一规则）；不是主机的名字只作它的自称，不作页头（`source: 'vela_browser'` 不算证明）；仪式副标题只说一次钱包；网络旁「App 提供」只标 App 给的链名，本页不认识的链总显示链 ID
 node samples/plain-send-test.mjs    # 183/183 没有 calldata 的调用就是发送，金额 0 也是；金额精确到 wei 且整串装得进卡片；站点的 value 按钱包组装时的读法去对（"0X…"、带空格、JSON 数字，同桌面 wei_of），对得上就不能说「组装时被改过」；真读不懂的不出数、在操作里拒签（082 G14/RC4/RC5，与 vela-core is_empty_calldata、exact_native_amount 同一规则）；带 calldata 的调用附带的原生币是一行粗体金额加一条提示，批量每一腿都有；解不开的腿列出合约、函数选择器、金额（0 也写）和 calldata（2026-10-28）

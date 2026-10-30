@@ -1298,8 +1298,14 @@ for (let i = 1; i < PATHS.length; i++) {
 // Merged (round-6 integration, 2026-10-30): the page everywhere (− 1 + 2)
 //   and fix-a's 6 compiled leaves together: 2203 + 1 + 6 = 2210 paths, 2102
 //   leaves, 108 branches.
-if (PATHS.length !== 2210) fail(`expected 2210 paths (2102 leaf + 108 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2102) fail(`expected 2102 leaf paths, got ${leafSet.size}`);
+// 2212 (round 7, the signing page, 2026-10-30): + `componentsUi.signing.
+//   trustedSignerUnanswered` ("The signing page isn't answering — try
+//   again": a page whose check or ready never came, r7-2) and
+//   `componentsUi.browserStatus.reason.signingPage` (the dApp record's line
+//   for a page that did not sign, r7-2 / r7-7). 2210 + 2 = 2212 paths, 2104
+//   leaves, 108 branches.
+if (PATHS.length !== 2212) fail(`expected 2212 paths (2104 leaf + 108 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2104) fail(`expected 2104 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 108) fail(`expected 108 branch paths, got ${branchSet.size}`);
 // The on-demand catalogs, pinned the same way (leaves of every locale's union):
 // a key dropped from one namespace and not landed in the other fails here.

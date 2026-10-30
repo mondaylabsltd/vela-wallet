@@ -128,6 +128,8 @@ pub enum DbrReason {
     /// A passkey that would never be offered at sign-in.
     SignerNotDiscoverable,
     SignerFailed,
+    /// The account's trusted signing page did not sign (round 7).
+    SigningPage,
     /// A network a page asked Vela to add lacks Vela's contracts (4902,
     /// spec 100).
     NotCompatible,
@@ -174,6 +176,7 @@ impl DbrReason {
                 "componentsUi.browserStatus.reason.signerNotDiscoverable"
             }
             Self::SignerFailed => "componentsUi.browserStatus.reason.signerFailed",
+            Self::SigningPage => "componentsUi.browserStatus.reason.signingPage",
             // Settings' own verdict line, word for word.
             Self::NotCompatible => "addToken.errorNotCompatible",
             Self::BadRpc => "componentsUi.browserStatus.reason.badRpc",
@@ -354,6 +357,11 @@ pub fn sign_error_why(kind: SignErrorKind, detail: Option<&str>) -> Why {
         // record says what it says for a passkey that cannot be used; the
         // sheet said why, with the account's domain.
         SignErrorKind::VenueBlocked => (Signer, DbrReason::SignerUnavailable),
+        // Round 7: the account's signing page did not sign.
+        SignErrorKind::PageUnanswered
+        | SignErrorKind::PageMismatch
+        | SignErrorKind::PageRefused
+        | SignErrorKind::PageNotOpened => (Signer, DbrReason::SigningPage),
         SignErrorKind::SubmitFailed => {
             let detail = detail.unwrap_or_default();
             if detail == crate::user_op::REFUSED_DAPP_DETAIL {

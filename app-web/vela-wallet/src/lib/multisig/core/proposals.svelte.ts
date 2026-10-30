@@ -45,7 +45,6 @@ import {
 } from './kernel';
 import { MemberChangeRefusedError, memberStateOf } from './member-changes';
 import { loadAccounts } from '$lib/onboarding/core/storage';
-import { multisigApprovalRoute } from '$lib/core/kernels';
 import { localOwners, signApproval, type LocalOwner } from './owners';
 import { plainAccounts } from './signers.svelte';
 import { lastActor, proposerOf } from './actor';
@@ -1454,11 +1453,6 @@ async function proposeBuilt(
 /** `owner` approves `item` (one passkey prompt). */
 export async function approve(account: MultisigAccount, item: ProposalItem, owner: LocalOwner) {
 	await authorizeSigning(account, item.chainId, item.tx);
-	return approveAuthorized(account, item, owner);
-}
-
-/** `approve` once the signing gate has let it through (one gate per signature asked). */
-async function approveAuthorized(account: MultisigAccount, item: ProposalItem, owner: LocalOwner) {
 	const approval = await signApproval(owner.account, item.chainId, item.safeTxHash, {
 		multisig: account.address,
 		name: account.genesis.name ?? account.label ?? null,
@@ -1491,7 +1485,8 @@ export function executionInput(
 		tx: item.tx,
 		approvals: item.approvals.filter((a) => a.counts).map((a) => a.approval),
 		executor,
-		action: item.review.action
+		action: item.review.action,
+		name: account.genesis.name ?? null
 	};
 }
 
@@ -1515,20 +1510,11 @@ export async function execute(
 	// §3.5, §3.6: the signing gate before the executor's passkey, as every
 	// signature — the core's rule over the chain read now.
 	await authorizeSigning(account, item.chainId, item.tx);
-	// 2026-10-29: an executor that reviews and signs on a page approves THERE
-	// first — its operation counts as its approval (`msg.sender`), and that
-	// approval must be one it read on the page, not only in Vela. Posted like
-	// any approval; a second ask for the same transaction is not made
-	// (`approveOnPage` keeps what the page answered for this page's life).
-	// The gate above already let this transaction through: not asked twice.
-	const record = loadAccounts().find((a) => sameAddress(a.address, executor.address));
-	const route = record ? multisigApprovalRoute(record) : null;
-	if (
-		route?.type === 'page' &&
-		item.canApprove.some((o) => sameAddress(o.address, executor.address))
-	) {
-		await approveAuthorized(account, item, executor);
-	}
+	// r7-3: one signature, the executor's own operation — on its page when it
+	// signs on one (`signChallenge` hands the page the operation). It counts
+	// as its approval as `msg.sender` where one is missing; no approval of
+	// its own is asked first, which would be a second trip to the page for
+	// nothing the chain needs.
 	return submitExecution(executionInput(account, item, executor, members), preview);
 }
 

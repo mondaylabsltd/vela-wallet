@@ -68,17 +68,19 @@ export function rememberExecution(
 
 /**
  * The facts an execution from this device leaves, as Safe counts them: the
- * approvals it sends and, when it is an owner, the executor itself (its
- * `msg.sender` approves; its own approval is not sent twice) — in ascending
- * address order, the order Safe requires, the first `threshold` of them.
+ * approvals it sends and, when it approves by sending it, the executor itself
+ * (its `msg.sender` approves; its own approval is not sent twice) — in
+ * ascending address order, the order Safe requires, the first `threshold` of
+ * them. `approvals`: the ones its calls carry (`planExecution`), never every
+ * one the mailbox holds — a given approval it did not carry did not count.
  */
 export function factsOfExecution(
 	approvals: string[],
 	executor: string,
-	executorIsOwner: boolean,
+	executorApproves: boolean,
 	threshold: number
 ): Omit<FrozenFacts, 'source' | 'atMs'> {
-	const all = executorIsOwner ? [...approvals, executor] : [...approvals];
+	const all = executorApproves ? [...approvals, executor] : [...approvals];
 	const unique = all
 		.filter((a, i) => all.findIndex((b) => sameAddress(a, b)) === i)
 		.sort((a, b) => (a.toLowerCase() < b.toLowerCase() ? -1 : 1));
@@ -87,7 +89,7 @@ export function factsOfExecution(
 		executor,
 		threshold,
 		approvers,
-		executorApproved: executorIsOwner && approvers.some((a) => sameAddress(a, executor))
+		executorApproved: executorApproves && approvers.some((a) => sameAddress(a, executor))
 	};
 }
 

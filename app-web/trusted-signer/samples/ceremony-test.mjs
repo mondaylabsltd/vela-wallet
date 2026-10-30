@@ -260,9 +260,10 @@ try {
 
     await page.waitFor("window.__velaState.phase === 'waiting'");
     wallet.bye();
-    check('session: bye ends it, and the page says it is done',
+    // Round 7: said once — the card says it is done, the status line does not repeat it.
+    check('session: bye ends it, and the page says it is done (once)',
       await page.waitFor("window.__velaState.phase === 'ended' && window.__velaState.endReason === 'bye'") &&
-      /Done/.test(await page.status()));
+      (await page.ev("document.body.innerText.split('Done — the wallet has what it asked for').length - 1")) === 1);
     await wallet.stop();
   }
 
@@ -349,9 +350,9 @@ try {
 
     await page.waitFor("window.__velaState.phase === 'waiting'");
     wallet.drop();
-    check('session: a close without bye ends it too, as done',
+    check('session: a close without bye ends it too, as done (once)',
       await page.waitFor("window.__velaState.phase === 'ended' && window.__velaState.endReason === 'closed'") &&
-      /Done/.test(await page.status()));
+      (await page.ev("document.body.innerText.split('Done — the wallet has what it asked for').length - 1")) === 1);
     await wallet.stop();
   }
 
