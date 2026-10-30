@@ -2,6 +2,7 @@
 import type { MultisigChainMembers } from "./MultisigChainMembers";
 import type { OutsideGate } from "./OutsideGate";
 import type { OutsideItem } from "./OutsideItem";
+import type { OutsideTxTitle } from "./OutsideTxTitle";
 
 /**
  * The link's transaction, read.
@@ -14,4 +15,12 @@ findings: unknown[] | null, gate: OutsideGate,
 /**
  * The one review (§3.6), as `multisig_review` gives it.
  */
-review: unknown, };
+review: unknown, 
+/**
+ * What it does, in the facts its title is said with.
+ */
+title: OutsideTxTitle, 
+/**
+ * The name its record carries, when the core displays it.
+ */
+name: string | null, };

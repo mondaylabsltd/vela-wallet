@@ -168,7 +168,7 @@ async function ask(url: string, body?: unknown): Promise<Kept | string> {
 		status = res.status;
 		text = await res.text();
 	} catch {
-		status = null;
+		// No answer: said as that, by the core.
 	}
 	const answer = rule<{ ok: Kept } | { err: string }>('tokenAnswer', { status, body: text });
 	return 'ok' in answer ? answer.ok : answer.err;

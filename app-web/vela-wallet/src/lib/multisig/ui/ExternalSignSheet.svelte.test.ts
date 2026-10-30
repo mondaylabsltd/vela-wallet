@@ -14,9 +14,11 @@
  * answer that arrives once the request is gone throws nothing.
  */
 import { tick } from 'svelte';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
+import { loadCore } from '$lib/core/client';
+import type { MultisigReviewOut, SafeTx } from '../core/kernel';
 import { MULTISIG_SHAPE, type MultisigMessages } from '../messages';
 import type { OutsideSessionOutcome } from '../generated/OutsideSessionOutcome';
 import type { OutsideSessionView } from '../generated/OutsideSessionView';
@@ -81,7 +83,14 @@ vi.mock('../shell/outside-session.svelte', async () => {
 });
 vi.mock('../core/kernel', async (original) => ({
 	...(await original<typeof import('../core/kernel')>()),
-	reviewTx: () => ({ action: { kind: 'transfer' } })
+	reviewTx: () => ({
+		action: {
+			kind: 'transfer',
+			token: null,
+			to: '0x000000000000000000000000000000000000dEaD',
+			amount: '1'
+		}
+	})
 }));
 vi.mock('$lib/wallet/qr', () => ({ encodeQr: () => ({ modules: 21, path: 'M0 0h1v1H0z' }) }));
 
@@ -103,12 +112,12 @@ function words(): MultisigMessages {
 
 const SAFE_TX_HASH = `0x${'ab'.repeat(32)}`;
 
-function open() {
+function open(over: { review?: MultisigReviewOut; tx?: SafeTx; m?: MultisigMessages } = {}) {
 	const settled: OutsideSessionOutcome[] = [];
 	const request = {
 		chainId: 5042002,
 		safe: '0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83',
-		tx: {} as never,
+		tx: (over.tx ?? {}) as never,
 		safeTxHash: SAFE_TX_HASH,
 		owners: [OWNER],
 		settle: (o: OutsideSessionOutcome) => settled.push(o),
@@ -116,7 +125,8 @@ function open() {
 	};
 	const screen = render(Sheet, {
 		props: {
-			m: words(),
+			m: over.m ?? words(),
+			review: over.review,
 			signing: new Proxy({}, { get: (_, k) => String(k) }) as never,
 			locale: 'en',
 			request,
@@ -132,6 +142,10 @@ const button = (label: string) =>
 	[...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === label) as
 		HTMLButtonElement | undefined;
 const events = () => (fake.session?.events ?? []) as { type: string }[];
+
+beforeAll(async () => {
+	await loadCore();
+});
 
 afterEach(() => {
 	fake.next = {};
@@ -262,6 +276,47 @@ describe('the outside-wallet sheet', () => {
 		expect(events()).toContainEqual({ type: 'close' });
 		await tick();
 		expect(settled).toHaveLength(1);
+		await screen.unmount();
+	});
+});
+
+describe('the outside-wallet sheet, with the one review', () => {
+	it('draws the core review as the connect page does: the member change and its rule', async () => {
+		const { multisigReview } = await import('../core/kernel');
+		const safe = '0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83';
+		const newcomer = '0x15d34aaf54267db7d7c367839aaf71a00a2c6a65';
+		const tx: SafeTx = {
+			to: safe,
+			value: '0x0',
+			data: `0x0d582f13${newcomer.slice(2).padStart(64, '0')}${(2).toString(16).padStart(64, '0')}`,
+			operation: 0,
+			safeTxGas: '0x0',
+			baseGas: '0x0',
+			gasPrice: '0x0',
+			gasToken: '0x0000000000000000000000000000000000000000',
+			refundReceiver: '0x0000000000000000000000000000000000000000',
+			nonce: '0x3'
+		};
+		const review = multisigReview({
+			chainId: 5042002,
+			safe,
+			tx,
+			owners: [
+				OWNER,
+				'0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc',
+				'0x90f79bf6eb2c4f870365e785982e1f101e93b906'
+			],
+			threshold: 2,
+			deployed: true
+		});
+		const m = words();
+		m.change.rule = 'Approvals: {{before}} → {{after}}';
+		m.create.thresholdValue = '{{m}} of {{n}}';
+		const { screen } = open({ review, tx, m });
+		await vi.waitFor(() =>
+			expect(testid('member-change-rule')?.textContent).toBe('Approvals: 2 of 3 → 2 of 4')
+		);
+		expect(testid('review-hashes')?.textContent).toContain(review.hashes.safeTxHash);
 		await screen.unmount();
 	});
 });

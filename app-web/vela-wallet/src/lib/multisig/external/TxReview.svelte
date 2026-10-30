@@ -1,144 +1,95 @@
 <script lang="ts">
 	/**
 	 * r4C-7 / r4D-2: what an outside owner signs, on the connect page, before
-	 * the wallet asks — never blind. Everything here is the core's reading of
-	 * the SafeTx itself (`reviewTx`), drawn with the same pieces Vela's own
-	 * proposal sheet uses: the one-line title and amounts (`display.ts`), a
-	 * call to another contract read by the signing sheet's machines
-	 * (`CallReading` + `CallReview`, cs-12), a batch's member changes said
-	 * first. Which multisig (its name only if the core derives its address
-	 * from the genesis that carries it), the network, the number, and the
-	 * hashes a hardware wallet shows — each one copyable, to match.
+	 * the wallet asks — never blind, and the one reading every signer sees
+	 * (the Bybit rule): the core page machine read it (`TxShown`: its title
+	 * in facts, its hashes, its name, the one review of §3.6), and this draws
+	 * it as a member own proposal sheet does (`ReviewBody`: the member change
+	 * and its rule, r7-11; a call read by the signing sheet machines; the
+	 * state-diff guard, who each leg reaches, what moves; the hashes and the
+	 * typed data). Nothing here reads the SafeTx again.
 	 *
-	 * r5reg-23: the same review for Vela's request on a paired page and for a
-	 * link's transaction: its number as Vela writes it ("#7"), and its name
-	 * when the registry's genesis carries it, said to be its record's.
+	 * Which multisig (its name only if the core derives its address from the
+	 * genesis that carries it, said to be its record), the network, its
+	 * number as Vela writes it ("#7"), and the hashes a hardware wallet
+	 * shows — each one copyable, to match. The same review for Vela request
+	 * on a paired page and for a link transaction (r5reg-23).
 	 */
-	import { onDestroy } from 'svelte';
 	import { fillTemplate } from '$lib/i18n/fill';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import type { SigningMessages } from '$lib/signing/messages';
 	import type { MultisigMessages } from '../messages';
-	import { CallReading, readableCalls } from '../core/call-review.svelte';
-	import {
-		actionRecipient,
-		actionTitle,
-		chainName,
-		formatUnits,
-		memberChanges,
-		shortenAddress,
-		tokenInfo
-	} from '../core/display';
-	import {
-		reviewTx,
-		transfersOf,
-		validName,
-		type Genesis,
-		type SafeTx,
-		type SafeTxHashes
-	} from '../core/kernel';
-	import CallReview from '../ui/CallReview.svelte';
+	import { callTitle, type CallReading } from '../core/call-review.svelte';
+	import { chainName, shortenAddress } from '../core/display';
+	import type { MultisigReviewOut, SafeTx, SafeTxHashes } from '../core/kernel';
+	import type { OutsideTxShown } from '../generated/OutsideTxShown';
 	import { eip55 } from './eip55';
+	import ReviewBody from './ReviewBody.svelte';
+	import { amountText, numbered, titleText, tokenLine } from './words';
 
 	interface Props {
 		m: MultisigMessages;
 		signing: SigningMessages;
-		chainId: number;
-		safe: string;
+		/** The core reading: its title in facts, its hashes, its name, the one review. */
+		shown: OutsideTxShown;
+		/** The SafeTx itself, for the calls the signing sheet machines read. */
 		tx: SafeTx;
-		hashes: SafeTxHashes;
-		/** The genesis the core derived the multisig's address from, if known: its name. */
-		genesis?: Genesis | null;
-		/** The chain's next number, when read: "next" or "after #n". */
-		chainNonce?: bigint | null;
 	}
 
-	let {
-		m,
-		signing,
-		chainId,
-		safe,
-		tx,
-		hashes,
-		genesis = null,
-		chainNonce = null
-	}: Props = $props();
+	let { m, signing, shown, tx }: Props = $props();
 	const w = $derived(m.external);
 
-	const review = $derived.by(() => {
-		try {
-			return reviewTx(chainId, safe, tx);
-		} catch {
-			return null;
-		}
-	});
-	const action = $derived(review?.action ?? null);
-	const nonce = $derived(BigInt(tx.nonce));
-	const numbered = (n: bigint) => fillTemplate(m.action.numberValue, { nonce: n.toString() });
-	const name = $derived.by(() => {
-		const n = genesis?.name;
-		try {
-			return n && validName(n) ? n : null;
-		} catch {
-			return null;
-		}
-	});
+	const review = $derived((shown.review ?? null) as MultisigReviewOut | null);
+	const hashes = $derived(shown.hashes as SafeTxHashes);
+	const chainId = $derived(shown.chainId);
+	const title = $derived(titleText(m, chainId, shown.title, shown.nonce));
+	const recipient = $derived(
+		shown.title.kind === 'send' || shown.title.kind === 'call' ? shown.title.to : null
+	);
+	const token = $derived(
+		shown.title.kind === 'send' ? tokenLine(m, chainId, shown.title.token) : null
+	);
+	/** A batch of transfers alone: each leg, as the core read its token. */
+	const lines = $derived(
+		shown.title.kind === 'batch'
+			? shown.title.transfers.map((t) => ({
+					label: amountText(chainId, t.amount, t.token),
+					to: t.to
+				}))
+			: []
+	);
+	const chainNonce = $derived(shown.chainNonce === null ? null : BigInt(shown.chainNonce));
+	const nonce = $derived(BigInt(shown.nonce));
+	/** Its number is used: a record of what it did, nothing checked before signing. */
+	const used = $derived(chainNonce !== null && nonce < chainNonce);
 
-	let title = $state('');
-	let token = $state<string | null>(null);
-	let lines = $state<{ label: string; to: string }[]>([]);
-	$effect(() => {
-		const a = action;
-		const c = chainId;
-		const n = nonce;
-		void actionTitle(m, c, a, n).then((t) => (title = t));
-		token = null;
-		lines = [];
-		if (a?.kind === 'transfer') {
-			void tokenInfo(c, a.token)
-				.then((info) => {
-					token = a.token
-						? fillTemplate(w.tokenContract, {
-								symbol: info.symbol,
-								address: shortenAddress(a.token)
-							})
-						: fillTemplate(w.tokenNative, { symbol: info.symbol, network: chainName(c) });
-				})
-				.catch(() => (token = a.token ?? null));
-		} else if (a?.kind === 'batch' && readableCalls(a) === null) {
-			void Promise.all(
-				transfersOf(a).map(async (t) => {
-					const info = await tokenInfo(c, t.token).catch(() => ({ symbol: '', decimals: 18 }));
-					return { label: `${formatUnits(t.amount, info.decimals)} ${info.symbol}`, to: t.to };
-				})
-			).then((l) => (lines = l));
-		}
-	});
-
+	/** The call the signing sheet machines read, once started (`ReviewBody`). */
 	let reading = $state<CallReading | null>(null);
-	$effect(() => {
-		const calls = readableCalls(action);
-		if (!calls) return;
-		const next = new CallReading(chainId, safe, calls);
-		reading = next;
-		void next.start();
-		return () => {
-			next.dispose();
-			if (reading === next) reading = null;
-		};
-	});
-	onDestroy(() => reading?.dispose());
+	/** The core verb for a call it could read ("Approve"); else the multisig line. */
+	const shownTitle = $derived((reading && callTitle(reading.clear, signing)) || title);
+	/**
+	 * r5reg-15 / S4: a call read by the signing sheet machines heads itself,
+	 * and a lone member change is named by its own list: the verb is not said twice.
+	 */
+	const headed = $derived(
+		!reading && !(review?.memberChanges && review.memberChanges.changes.length === 1)
+	);
 
-	const changes = $derived(memberChanges(m, action));
-	const recipient = $derived(actionRecipient(action));
-
+	/** The hashes a hardware wallet shows, to match (the review draws its own once gathered). */
+	const hashList = $derived([
+		{ label: w.safeTxHash, value: hashes.safeTxHash, id: 'safe-tx' },
+		{ label: w.domainHash, value: hashes.domainHash, id: 'domain' },
+		{ label: w.messageHash, value: hashes.messageHash, id: 'message' }
+	]);
 	let copied = $state<string | null>(null);
 	async function copy(value: string) {
 		try {
 			await navigator.clipboard.writeText(value);
 			copied = value;
-			setTimeout(() => (copied = copied === value ? null : copied), 1600);
+			setTimeout(() => {
+				if (copied === value) copied = null;
+			}, 1600);
 		} catch {
 			// it stays on screen, selectable
 		}
@@ -151,12 +102,12 @@
 		<div>
 			<dt>{w.multisigLabel}</dt>
 			<dd>
-				{#if name}
+				{#if shown.name}
 					<!-- r5reg-23: its name, as the members gave it — a claim; the address is who it is. -->
-					<span class="name" data-testid="review-name" translate="no">{name}</span>
+					<span class="name" data-testid="review-name" translate="no">{shown.name}</span>
 					<span class="sub" data-testid="review-name-source">{w.nameFromRecord}</span>
 				{/if}
-				<span class="mono" data-testid="review-safe">{eip55(safe)}</span>
+				<span class="mono" data-testid="review-safe">{eip55(shown.safe)}</span>
 			</dd>
 		</div>
 		<div>
@@ -166,7 +117,9 @@
 		<div>
 			<dt>{w.doesLabel}</dt>
 			<dd>
-				<span class="title" data-testid="review-title">{title || '…'}</span>
+				{#if headed}
+					<span class="title" data-testid="review-title">{shownTitle}</span>
+				{/if}
 				{#if recipient}
 					<span class="sub"
 						>{m.action.to}
@@ -180,60 +133,60 @@
 			<dt>{m.action.number}</dt>
 			<dd data-testid="review-nonce">
 				<!-- r5reg-23: numbered as Vela numbers it, "#7". -->
-				{numbered(nonce)}
+				{numbered(m, shown.nonce)}
 				{#if chainNonce !== null && nonce > chainNonce}
-					<span class="sub">{fillTemplate(w.queuedTx, { nonce: numbered(chainNonce) })}</span>
+					<span class="sub"
+						>{fillTemplate(w.queuedTx, { nonce: numbered(m, chainNonce.toString()) })}</span
+					>
 				{/if}
 			</dd>
 		</div>
 	</dl>
 
-	{#if review && action === null}
+	{#if shown.title.kind === 'unsupported'}
 		<p class="warn" role="alert">
 			<Icon icon={UTILITY_ICONS['triangle-alert']} size="sm" />
-			{fillTemplate(w.refusedKind, { reason: review.refusal ?? '' })}
+			{fillTemplate(w.refusedKind, { reason: shown.title.refusal ?? '' })}
 		</p>
 	{/if}
-	{#if reading}
-		<CallReview {reading} m={signing} alerts={changes} />
-	{:else if changes.length > 0}
-		{#each changes as change, i (i)}
-			<p class="warn" role="alert">{change}</p>
-		{/each}
-	{/if}
-	{#if lines.length > 0}
+	{#if lines.length > 0 && !reading}
 		<ul class="lines">
 			{#each lines as line, i (i)}
 				<li><span>{line.label}</span><span class="mono">{shortenAddress(line.to)}</span></li>
 			{/each}
 		</ul>
 	{/if}
-	{#if tx.data !== '0x' && action?.kind !== 'transfer'}
-		<details class="data">
-			<summary>{m.proposal.data}</summary>
-			<code>{tx.to} {tx.data}</code>
-		</details>
-	{/if}
 
-	<div class="hashes" data-testid="review-hashes">
-		<p class="hashes-title">{w.hashesTitle}</p>
-		<p class="fine">{w.hashesNote}</p>
-		{#each [{ label: w.safeTxHash, value: hashes.safeTxHash, id: 'safe-tx' }, { label: w.domainHash, value: hashes.domainHash, id: 'domain' }, { label: w.messageHash, value: hashes.messageHash, id: 'message' }] as h (h.id)}
-			<div class="hash">
-				<span class="hash-label">{h.label}</span>
-				<code class="mono" data-testid="hash-{h.id}">{h.value}</code>
-				<button
-					type="button"
-					class="copy"
-					aria-label="{w.copy} {h.label}"
-					onclick={() => copy(h.value)}
-				>
-					<Icon icon={copied === h.value ? UTILITY_ICONS.check : UTILITY_ICONS.copy} size="sm" />
-					{copied === h.value ? w.copied : w.copy}
-				</button>
-			</div>
-		{/each}
-	</div>
+	{#if review}
+		<ReviewBody {m} {signing} {chainId} safe={shown.safe} {tx} {review} {used} bind:reading />
+	{:else}
+		<!-- The review not gathered (yet): what it carries and its hashes, computed by the core, to match. -->
+		{#if tx.data !== '0x' && shown.title.kind !== 'send'}
+			<details class="data">
+				<summary>{m.proposal.data}</summary>
+				<code>{tx.to} {tx.data}</code>
+			</details>
+		{/if}
+		<div class="hashes" data-testid="review-hashes">
+			<p class="hashes-title">{w.hashesTitle}</p>
+			<p class="fine">{w.hashesNote}</p>
+			{#each hashList as h (h.id)}
+				<div class="hash">
+					<span class="hash-label">{h.label}</span>
+					<code class="mono" data-testid="hash-{h.id}">{h.value}</code>
+					<button
+						type="button"
+						class="copy"
+						aria-label="{w.copy} {h.label}"
+						onclick={() => copy(h.value)}
+					>
+						<Icon icon={copied === h.value ? UTILITY_ICONS.check : UTILITY_ICONS.copy} size="sm" />
+						{copied === h.value ? w.copied : w.copy}
+					</button>
+				</div>
+			{/each}
+		</div>
+	{/if}
 </section>
 
 <style>
