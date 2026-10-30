@@ -153,9 +153,19 @@ impl SendContext {
                 place_of(&route.method).map(|place| (place, Some(route.credential_id.clone())))
             })
             .unwrap_or_else(|| first_key_route(account, &keys));
-        let venue_page = match (&plan.blocked, &plan.venue) {
-            (None, SigningVenue::Page { url }) => Some(url.clone()),
-            _ => None,
+        // R7 — the one rule every surface routes by (owner, 2026-10-30):
+        // `signing_route`, for the wallet's own send (a batch). A site's
+        // transaction, batch, message or typed data follows the same venue
+        // (`venue_for`), so the dApp column that derives its context from
+        // this one routes them identically; only a key ceremony differs, and
+        // that never reaches a send.
+        let (venue_page, venue_block) = match vela_core::signing_venue::signing_route(
+            &plan,
+            vela_core::signing_venue::SignatureKind::Batch,
+        ) {
+            vela_core::signing_venue::SigningRoute::InVela => (None, None),
+            vela_core::signing_venue::SigningRoute::Page { url } => (Some(url), None),
+            vela_core::signing_venue::SigningRoute::Blocked { block } => (None, Some(block)),
         };
         Self {
             keys,
@@ -164,7 +174,7 @@ impl SendContext {
             ceremony,
             signing_started: Arc::new(AtomicBool::new(false)),
             venue_page,
-            venue_block: plan.blocked,
+            venue_block,
             key_route: plan.key,
             account_name: (!account.name.is_empty()).then(|| account.name.clone()),
             key_label: plan.key_label,
