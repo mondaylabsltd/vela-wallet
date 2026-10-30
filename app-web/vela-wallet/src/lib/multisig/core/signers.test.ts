@@ -21,8 +21,6 @@ const SIGNED_WALLET = '0x00000000000000000000000000000000000000c4';
 const KEPT_WALLET_DEPLOYED = '0x00000000000000000000000000000000000000c5';
 /** r7: no code on network 1; network 3 never answers. */
 const UNREACHABLE = '0x00000000000000000000000000000000000000c6';
-/** r7: no code anywhere, the index answered none. */
-const FRESH = '0x00000000000000000000000000000000000000c7';
 /** r7: another Safe as a member — code on network 1, no index record. */
 const OTHER_SAFE = '0x00000000000000000000000000000000000000c8';
 /** r7: kept here as a Vela account, with code on network 1. */
@@ -174,41 +172,17 @@ describe('a Vela member added by address (r4a-9)', () => {
 });
 
 /**
- * r7: a member's kind is declared, then verified. The add screens pre-fill
- * it from what the wallet can tell (`evidence`), and evidence beats the
- * label wherever it is read (`kindOf`).
+ * r7: another Safe as a member is a smart contract account on the proposal
+ * sheet: never offered an outside wallet, nor the Vela link. (What the add
+ * screens pre-fill a member's kind from is the core's `kind_evidence`,
+ * replayed in Rust: `the_signer_vectors_hold`.)
  */
-describe('what the wallet can tell of a member being added (r7)', () => {
-	it('an account here, or one the passkey index holds: a Vela account', () => {
-		expect(signers.evidence([1], HERE)).toBe('vela');
-		expect(signers.evidence([1], INDEXED)).toBe('vela');
-	});
-
-	it('another Safe as a member — code on one of the networks, no index record: a smart contract account', async () => {
-		signers.evidence([1, 2], OTHER_SAFE);
-		await new Promise((r) => setTimeout(r, 0));
-		// Code alone never says "Vela account"; the index not answered, it asks.
-		expect(signers.evidence([1, 2], OTHER_SAFE)).toBeNull();
+describe('another Safe as a member (r7)', () => {
+	it('code on one of the networks, no index record: a smart contract account', async () => {
 		index.answered.add(OTHER_SAFE);
-		expect(signers.evidence([1, 2], OTHER_SAFE)).toBe('contract');
-		// On the proposal sheet too: never offered an outside wallet, nor the Vela link.
-		expect(signers.kindOf(2, OTHER_SAFE, [], [1, 2])).toBe('contract');
+		signers.kindOf(2, OTHER_SAFE, [], [1, 2]);
+		await vi.waitFor(() => expect(signers.kindOf(2, OTHER_SAFE, [], [1, 2])).toBe('contract'));
 		expect(await plainAccounts(1, [OTHER_SAFE])).toEqual([]);
-	});
-
-	it('no code anywhere and the index holds none: likely an outside wallet', async () => {
-		expect(signers.evidence([1, 2], FRESH), 'read first, never guessed').toBeNull();
-		index.answered.add(FRESH);
-		await vi.waitFor(() => expect(signers.evidence([1, 2], FRESH)).toBe('wallet'));
-	});
-
-	it('a network that does not answer, or an index that has not: it can’t tell — asked', async () => {
-		index.answered.add(UNREACHABLE);
-		signers.evidence([1, 3], UNREACHABLE);
-		await new Promise((r) => setTimeout(r, 0));
-		expect(signers.evidence([1, 3], UNREACHABLE)).toBeNull();
-		// No networks to look on is no answer either.
-		expect(signers.evidence([], FRESH)).toBeNull();
 	});
 });
 
