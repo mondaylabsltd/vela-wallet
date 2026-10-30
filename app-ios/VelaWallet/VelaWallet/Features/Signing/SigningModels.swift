@@ -266,6 +266,13 @@ struct FeeRooms: Equatable {
     var reasons: [String] = []
 }
 
+/// dapp-15: the verdict place's "Check again".
+struct SimRecheckModel: Equatable {
+    let label: String
+    /// A new check is out: the control says so and does nothing.
+    let checking: Bool
+}
+
 struct SigningModel {
     let id: SigningStateId
     let dapp: (name: String, host: String, letter: String, tint: Color)
@@ -291,6 +298,16 @@ struct SigningModel {
     /// of the gate that is (`componentsUi.signing.confirmBlock.*`) — one line
     /// under it. `nil` while it may arm, or where the sheet says it its own way.
     var confirmBlockLine: String?
+    /// signer-11: under an OPEN confirm, after a passkey prompt that signed
+    /// nothing — "closed" or "timed out", calmly. `nil` otherwise.
+    var passkeyNote: String?
+    /// dapp-15: "Check again" under the verdict's could-not-check line, or
+    /// "Checking again…" while that check is out. `nil` otherwise.
+    var simRecheck: SimRecheckModel?
+    /// Spec 103 (P2.3): the person's AI agent's opinion on this request, in
+    /// its own card under Vela's lines and over the fee. Set by the host from
+    /// the core's `AgentCore::advice()`, never by the blocks.
+    var advice: AgentAdviceCardModel?
     /// Desktop third-column heading; the phone sheet uses it as its a11y name.
     let panelTitle: String
     /// Spec 079: the ✕'s label — the sheet's one explicit close. Empty in the
