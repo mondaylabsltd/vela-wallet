@@ -475,8 +475,8 @@ sealed class SignSubmitOutcome {
     /**
      * Round 7 (r7-2, r7-7): the trusted signing page did not sign for another
      * reason — [failure] says which; the page (the dApp) hears -32603 with it.
-     * Declared so the wire decodes; this shell's page failures are told by its
-     * own trusted signer, never sent as this.
+     * Sent by the sign executor whenever the account's page did not sign
+     * (`PageSignFailure`, R7 — the page everywhere).
      */
     @Serializable
     @SerialName("page_failed")
@@ -936,6 +936,15 @@ sealed class SignEvent {
     @Serializable
     @SerialName("sim_settled")
     data class SimSettled(val id: String) : SignEvent()
+
+    /**
+     * Round 3/5: the landing raised for [user_op_hash] was closed — the
+     * sheet's ✕ after approving. The core keeps [SignView.landing_closed]
+     * for as long as the hand-off names that operation; nothing else changes.
+     */
+    @Serializable
+    @SerialName("landing_closed")
+    data class LandingClosed(val user_op_hash: String) : SignEvent()
 }
 
 /**

@@ -139,6 +139,13 @@ class SendExecutor(
     interface SendPorts {
         fun signingStarted()
 
+        /**
+         * r5reg-3: the reads before the passkey have been out [elapsedMs]
+         * without an answer; [busy] — the network's nodes say they are busy
+         * (`submit_slow`). Every second past [PrepareBound.SLOW_MS].
+         */
+        fun submitSlow(elapsedMs: Long, busy: Boolean) {}
+
         /** Spec 046 US3: a scanned chain the wallet lacks — the settings machine adds it (or does not know it). */
         suspend fun addNetwork(chainId: Long): SendAddNetworkOutcome = SendAddNetworkOutcome.NotFound
 
@@ -258,6 +265,7 @@ class SendExecutor(
                     submitBlock = operation.submit_block,
                     admitted = operation.admitted,
                     sender = operation.sender,
+                    nonce = synchronized(signedNonces) { signedNonces.remove(operation.user_op_hash.lowercase()) },
                 ),
             )
             SendShellResult.TrackHandedOff
@@ -511,13 +519,32 @@ class SendExecutor(
             job.ensureActive()
         }
         try {
-            val submitted = submitInner(op, ceremonyDone = passkeyReturned)
+            // r5reg-3: from here to the passkey the network's reads are
+            // bounded and said — how long, and whether its nodes are busy —
+            // and a wait that gives up is the network's, never the passkey's.
+            val submitted = PrepareBound.run(
+                busy = { chainBusy(op.chain_id) },
+                onSlow = { elapsed, busy -> ports.submitSlow(elapsed, busy) },
+                // Not the network's: a refusal that keeps its own meaning.
+                passThrough = { error -> error is SubmitRefused && error.failure !is SendSubmitFailure.Other },
+            ) { gate -> submitInner(op, gate = gate, ceremonyDone = passkeyReturned) }
+            // Round 3 (send-5): the nonce a lost reply is read against, for the hand-off.
+            submitted.nonce?.let { nonce -> synchronized(signedNonces) { signedNonces[submitted.userOpHash.lowercase()] = nonce } }
             SendShellResult.Submitted(
                 user_op_hash = submitted.userOpHash,
                 now_ms = now(),
                 maybe_sent = submitted.maybeSent,
                 submit_block = submitted.submitBlock,
             )
+        } catch (before: PrepareBound.BeforePasskey) {
+            val refused = before.cause as? SubmitRefused
+            val failure = if (before.timedOut || refused?.chainRead == true || chainFailed(op.chain_id)) {
+                SendSubmitFailure.ChainUnreachable(busy = before.busy || chainBusy(op.chain_id))
+            } else {
+                refused?.failure ?: SendSubmitFailure.Other(before.cause?.message)
+            }
+            VelaLog.event("send.submit", "before the passkey", "why" to failure.toString().take(160), "timedOut" to before.timedOut)
+            SendShellResult.SubmitFailed(failure)
         } catch (refused: SubmitRefused) {
             VelaLog.event("send.submit", "refused", "why" to refused.failure.toString().take(160))
             SendShellResult.SubmitFailed(refused.failure)
@@ -529,7 +556,27 @@ class SendExecutor(
         }
     }
 
-    private class SubmitRefused(val failure: SendSubmitFailure) : Exception()
+    /** [chainRead]: the refusal is a chain read nobody answered (r5reg-3) — the network's failure. */
+    private class SubmitRefused(val failure: SendSubmitFailure, val chainRead: Boolean = false) : Exception()
+
+    /**
+     * Round 3 (send-5): the nonce each submitted op signed, by hash, until its
+     * hand-off to the tracker takes it (`track_submitted`) — the web's
+     * `submitted` map. A lost reply is read against it.
+     */
+    private val signedNonces = HashMap<String, String>()
+
+    /** The pool's word now: this chain's nodes answer "too many requests". */
+    private fun chainBusy(chainId: Int): Boolean = chainId in pool.view.value.rate_limited_chains
+
+    /**
+     * The pool's word now: this chain's nodes are failing, could not be
+     * reached, or are busy — a failure before the passkey on it is the
+     * network's (the web's `networkFailed`).
+     */
+    private fun chainFailed(chainId: Int): Boolean = pool.view.value.let { view ->
+        chainId in view.failed_chains || chainId in view.unreached_chains || chainId in view.rate_limited_chains
+    }
 
     private fun other(message: String): Nothing = throw SubmitRefused(SendSubmitFailure.Other(message))
 
@@ -539,7 +586,7 @@ class SendExecutor(
     }, trustedSigner = trustedSigner, words = words)
 
     /** The spine (spec 044 T028): one implementation for a person's transfer and a dApp's transaction. */
-    private suspend fun submitInner(op: SendOperation.SubmitUserOp, ceremonyDone: () -> Unit): UserOpSpine.Submitted = try {
+    private suspend fun submitInner(op: SendOperation.SubmitUserOp, gate: () -> Unit = {}, ceremonyDone: () -> Unit): UserOpSpine.Submitted = try {
         spine.submit(
             chainId = op.chain_id,
             account = op.account,
@@ -551,7 +598,12 @@ class SendExecutor(
             // is signed.
             review = op.review?.toString()
                 ?: throw UserOpSpine.Refused(UserOpSpine.Failure.Other("The review was not handed down. Nothing was signed.")),
-            signingStarted = { ports.signingStarted() },
+            // The gate first (r5reg-3): past it the bound is over, and a
+            // wait already given up never opens a passkey.
+            signingStarted = {
+                gate()
+                ports.signingStarted()
+            },
             // The passkey returned: past here nothing a cancel can stop.
             ceremonyDone = ceremonyDone,
             // RJ1: every recipient's row is written ahead of the POST.
@@ -563,7 +615,8 @@ class SendExecutor(
         )
     } catch (refused: UserOpSpine.Refused) {
         throw SubmitRefused(
-            when (val failure = refused.failure) {
+            chainRead = refused.chainRead,
+            failure = when (val failure = refused.failure) {
                 UserOpSpine.Failure.PasskeyCancelled -> SendSubmitFailure.PasskeyCancelled
                 // Nothing left the device (spec 082 RA1): "the relayer could not
                 // be reached — try again" is true of exactly this.
@@ -577,6 +630,12 @@ class SendExecutor(
                 is UserOpSpine.Failure.Signer -> SendSubmitFailure.Other(failure.message)
                 // Spec 102: this account cannot sign here — the confirm screen says why, translated.
                 is UserOpSpine.Failure.VenueBlocked -> SendSubmitFailure.VenueBlocked(failure.block)
+                // Spec 102 (2026-10-30): declined on the account's signing
+                // page — the confirm stays open for another try, as a closed
+                // passkey prompt (the web's `PageDeclinedError` → `passkey_cancelled`).
+                UserOpSpine.Failure.PageDeclined -> SendSubmitFailure.PasskeyCancelled
+                // Round 7: the page did not sign, by the core's name for why.
+                is UserOpSpine.Failure.PageFailed -> SendSubmitFailure.PageFailed(failure.failure)
                 // The account's previous transaction still holds the nonce
                 // (the relay's `nonce_in_flight`): the core's own words for it,
                 // with Try again — never "other".

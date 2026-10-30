@@ -315,6 +315,9 @@ object I18nKeys {
          * `{{name}}`. The core picks it (`BalanceView.unreachable_key`).
          */
         const val TOKEN_LIST_UNREACHABLE = "assets.tokenListUnreachable"
+        /** ob-2 (P2.4): the header line under a wallet saved here, not yet synced. */
+        const val SYNCING = "home.syncingLine"
+        const val SYNC_STALLED = "home.syncStalledLine"
         /**
          * The hero's reason when a first load could read nothing and nothing is
          * cached (#188, spec 038 finding 15). Borrowed from the onboarding
@@ -456,6 +459,9 @@ object I18nKeys {
         const val SAVE = "contacts.save"
         const val INVALID_ADDRESS = "contacts.invalidAddress"
         const val SECTION_FAVORITES = "contacts.sectionFavorites"
+        // P2.5: a contact's note — the form's field and the detail's section (web round 3).
+        const val NOTE_LABEL = "contacts.noteLabel"
+        const val NOTE_PLACEHOLDER = "contacts.notePlaceholder"
         const val CONTRACT_TAG = "componentsUi.signing.contractTag"
         const val WALLET_TAG = "componentsUi.signing.walletTag"
         const val FIRST_TIME_TAG = "componentsUi.signing.firstTimeTagNeutral"
@@ -897,6 +903,25 @@ object I18nKeys {
         const val RISK_UNFINISHED = "send.riskUnfinished"
         const val RISK_HISTORY_UNREAD = "send.riskHistoryUnread"
         const val RISK_RETRY = "send.riskRetry"
+        // P2.2 send rounds 3-6 (the web's `live-send.ts`): the recipient's check
+        // still out, the slow reads before the passkey, another sender ahead, a
+        // Max that moved, the passkey that signed nothing, the recipient's
+        // cautions, the never-sent receipt and its way on, the lock's add.
+        const val RISK_CHECKING = "send.riskChecking"
+        const val SUBMIT_SLOW = "send.submitSlow"
+        const val SUBMIT_SLOW_BUSY = "send.submitSlowBusy"
+        const val QUEUED_BEHIND_TAB = "send.queuedBehindTab"
+        const val MAX_MOVED = "send.maxMoved"
+        const val PASSKEY_TIMED_OUT = "componentsUi.signing.passkeyTimedOut"
+        const val PASSKEY_CLOSED = "componentsUi.signing.passkeyClosed"
+        const val RECIPIENT_CHECKSUM = "send.recipientChecksum"
+        const val RECIPIENT_ZERO_ADDRESS = "send.recipientZeroAddress"
+        const val RECIPIENT_SELF = "send.recipientSelf"
+        const val RECEIPT_NOT_SENT = "componentsTx.receipt.statusNotSent"
+        const val RECEIPT_NOT_SENT_BODY = "componentsTx.receipt.notSentBody"
+        const val TX_SEND_AGAIN = "send.txSendAgain"
+        const val TX_REVIEW_AGAIN = "send.txReviewAgain"
+        const val LOCK_ADD_NETWORK = "send.lock.addNetwork"
         const val WARN_INSUFFICIENT_FOR_GAS = "send.warnInsufficientForGas"
         const val WARN_INSUFFICIENT_GAS = "send.warnInsufficientGas"
         const val WARN_NEED_GAS = "send.warnNeedGas"
@@ -1104,6 +1129,21 @@ object I18nKeys {
         const val ENDPOINTS_RESET_BODY = "settingsModals.endpoints.resetBody"
         const val ENDPOINTS_RESET_CONFIRM = "settingsModals.endpoints.resetConfirm"
         const val ENDPOINTS_RESET_CANCEL = "settingsModals.endpoints.resetCancel"
+        // Phase 2 settings parity (the web's `liveEndpoints`, `liveNetworkRows`, `liveNetworkDetail`, `venueModel`).
+        const val ENDPOINT_GENESIS = "settingsModals.endpoints.genesisLabel"
+        const val ENDPOINT_GENESIS_HINT = "settingsModals.endpoints.genesisHint"
+        const val ENDPOINTS_GUIDE = "settingsModals.endpoints.selfHostGuide"
+        const val HEALTH_URL_REFUSED = "settingsModals.health.urlRefused"
+        const val NETWORK_FALLBACK = "settingsModals.network.fallback"
+        const val NETWORK_ONLY_MINE = "settingsModals.network.onlyMine"
+        const val NETWORK_ONLY_MINE_HINT = "settingsModals.network.onlyMineHint"
+        const val NETWORK_HIDE_BODY = "settingsModals.network.hideBody"
+        const val NETWORK_MORE = "settingsModals.network.moreNetworks"
+        const val OWN_NODE_UNREACHABLE = "assets.ownNodeUnreachable"
+        const val ADD_VELA_NETWORK = "settingsModals.addNetwork.velaNetwork"
+        const val ADD_VELA_NETWORK_HINT = "settingsModals.addNetwork.velaNetworkHint"
+        const val VENUE_PAGE_PROTECTS = "settings.venue.pageProtects"
+        const val VENUE_PAGE_LIMIT = "settings.venue.pageLimit"
 
         // Device storage.
         const val STORAGE_TITLE = "settings.storage.title"
@@ -1188,6 +1228,9 @@ object I18nKeys {
         const val ERASE_KEEPS = "settings.eraseDevice.keeps"
         const val ERASE_CONFIRM = "settings.eraseDevice.confirm"
         const val ERASE_CANCEL = "settings.eraseDevice.cancel"
+        /** ob-2 (P2.4): the wallets an erase would lose before they synced, and the tick it waits for. */
+        const val ERASE_UNSYNCED = "settings.eraseDevice.unsynced"
+        const val ERASE_UNSYNCED_ACK = "settings.eraseDevice.unsyncedAck"
 
         // Feedback.
         const val BUG_TITLE = "componentsUi.bugReport.title"
@@ -1255,6 +1298,8 @@ object I18nKeys {
         const val BALANCE_DETAIL_FAILED = "home.balanceDetailStatusFailed"
         const val BALANCE_DETAIL_UPDATED = "home.balanceDetailUpdatedLabel"
         const val BALANCE_DETAIL_RETRY = "home.balanceDetailRetry"
+        /** P2.4: a network read through public nodes while the person's own does not answer. */
+        const val BALANCE_DETAIL_PUBLIC_NODES = "home.balanceDetailStatusPublicNodes"
         const val RELAYER_TITLE = "componentsUi.treasuryBootstrap.title"
         const val RELAYER_LEAD = "componentsUi.treasuryBootstrap.lead"
         const val RELAYER_AMOUNT_HINT = "componentsUi.treasuryBootstrap.amountHint"

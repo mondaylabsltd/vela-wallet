@@ -331,9 +331,9 @@ sealed class SendSubmitFailure {
 
     /**
      * Round 7 (r7-2, r7-7): the account's trusted signing page did not sign,
-     * and not because the person declined there — [failure] says why. Declared
-     * so the wire decodes; this shell's page failures are told in its own
-     * words (the trusted signer's sheet), never sent as this.
+     * and not because the person declined there — [failure] says why. Sent
+     * by the send executor whenever the page did not sign (R7, the page
+     * everywhere); the core sets `tx_error` to its `page_*` key.
      */
     @Serializable
     @SerialName("page_failed")
@@ -1508,6 +1508,44 @@ sealed class SendEvent {
     @Serializable
     @SerialName("retry_risk_check")
     data object RetryRiskCheck : SendEvent()
+
+    /**
+     * Round 3 (send-15): inside `submit_user_op`, another sender of this
+     * account on this network holds the submit, and this one waits its turn
+     * ([SendView.queued_behind_tab]). The web's cross-tab lock; this app has
+     * one Send per process and never waits on one, so nothing sends it here.
+     */
+    @Serializable
+    @SerialName("send_queued")
+    data object SendQueued : SendEvent()
+
+    /**
+     * r5reg-3: inside `submit_user_op`, before the passkey opens, the reads
+     * the operation needs first have been out [elapsed_ms] without an answer —
+     * [busy] when the network's nodes answer "too many requests"
+     * ([SendView.submit_slow]). Cleared by `signing_started` or the submit's end.
+     */
+    @Serializable
+    @SerialName("submit_slow")
+    data class SubmitSlow(val elapsed_ms: Int, val busy: Boolean) : SendEvent()
+
+    /**
+     * Round 6: the form's network answered a bounded read again after a
+     * submit failed as the network's (`chain_unreachable` / `chain_busy`) —
+     * the confirm opens by itself; the shell asks the fee again with it.
+     */
+    @Serializable
+    @SerialName("chain_answered")
+    data class ChainAnswered(val chain_id: Int) : SendEvent()
+
+    /**
+     * The receipt's "Try again" (send-5) over a payment proven never sent
+     * ([SendReceiptView.can_send_again]): back to the confirm, every value as
+     * it was, for a new quote and a new signature.
+     */
+    @Serializable
+    @SerialName("send_again")
+    data object SendAgain : SendEvent()
 
     /**
      * Every operation in flight on this device, as the tracker last said —

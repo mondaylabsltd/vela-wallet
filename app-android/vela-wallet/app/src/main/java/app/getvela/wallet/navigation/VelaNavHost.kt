@@ -905,6 +905,7 @@ fun VelaNavHost(
                             if (space.testnet) balances.switcher.copy(balances = emptyList()) else balances.switcher,
                             currency,
                             strings,
+                            unsynced = session.unsynced,
                         ),
                         onDismiss = { switcherOpen = false; wallet.switcherClosed() },
                         onSelect = { index ->
@@ -1000,6 +1001,25 @@ fun VelaNavHost(
                     val clearJson by controller.clearJson.collectAsStateWithLifecycle()
                     val guardJson by controller.guardJson.collectAsStateWithLifecycle()
                     val feeJson by controller.feeJson.collectAsStateWithLifecycle()
+                    // dapp-15: "Check again", and a check out again.
+                    val simAgain by controller.simAgainOffered.collectAsStateWithLifecycle()
+                    val simRechecking by controller.simRechecking.collectAsStateWithLifecycle()
+                    // Spec 103: the agent's opinion, read against the review on screen now.
+                    val heldAdvice by controller.advice.collectAsStateWithLifecycle()
+                    val adviceCard = remember(heldAdvice, signJson, strings) {
+                        heldAdvice?.let { held ->
+                            val review = controller.review()
+                            app.getvela.wallet.feature.signing.SigningAdvice.card(
+                                held,
+                                app.getvela.wallet.feature.signing.SigningAdvice.standing(
+                                    held,
+                                    app.getvela.wallet.feature.signing.SigningAdvice.digestOf(review),
+                                    app.getvela.wallet.feature.signing.SigningAdvice.reviewFee(review),
+                                ),
+                                strings,
+                            )
+                        }
+                    }
                     val signChain = signRequest?.chainId ?: 0
                     val signCtx = app.getvela.wallet.feature.signing.SigningLive.Context(
                         strings = strings,
@@ -1027,6 +1047,10 @@ fun VelaNavHost(
                                 saved = app.getvela.wallet.feature.signing.SigningLive.savedPage(savedSigningPages.pages, card.page),
                             )
                         },
+                        simAgain = simAgain,
+                        simRechecking = simRechecking,
+                        advice = adviceCard,
+                        descriptorHost = remember(controller) { controller.descriptorHost },
                     )
                     signRequest?.let { request ->
                         if (signView.surface != app.getvela.wallet.feature.signing.core.SignSurface.Hidden) {
@@ -1045,9 +1069,9 @@ fun VelaNavHost(
                                 // commitment point, a dismiss after — the core routes it.
                                 onDismiss = { controller.swipeDismissed() },
                                 onConfirm = { controller.approve() },
-                                onChip = { id -> app.getvela.wallet.feature.signing.SigningLive.chipMode(id)?.let(controller::guardPreset) },
+                                onChip = { id -> controller.guardChip(id) },
                                 onCustomAmount = { controller.guardCustomAmount(it) },
-                                onLegChip = { leg, id -> app.getvela.wallet.feature.signing.SigningLive.chipMode(id)?.let { controller.guardLegPreset(leg, it) } },
+                                onLegChip = { leg, id -> controller.guardChip(id, leg) },
                                 onLegCustomAmount = { leg, text -> controller.guardLegCustomAmount(leg, text) },
                                 onFee = { controller.feeTapped() },
                                 onRefreshFee = { controller.refreshFee() },
@@ -1062,6 +1086,7 @@ fun VelaNavHost(
                                     handoff?.page?.let { page -> returnScope.launch { runCatching { application.container.signerPages.trust(page) } } }
                                 },
                                 onRetry = { controller.retry() },
+                                onRecheck = { controller.simAgain() },
                             )
                         }
                     }
@@ -1542,6 +1567,8 @@ fun VelaNavHost(
                                 if (sendView.relay_unreachable != null) send.dismissRelayUnreachable() else send.dismissTreasurySheet()
                             },
                             onRecipientCheckRetry = { send.retryRiskCheck() },
+                            onSendAgain = { send.sendAgain() },
+                            onAddNetwork = { chainId -> send.addNetworkTapped(chainId) },
                             // Issue #466: snapshot the core's report NOW and open the report sheet with it.
                             onRelayReport = {
                                 sendView.relay_report?.let { report ->
@@ -1989,6 +2016,7 @@ fun VelaNavHost(
                                 value += 1
                             }
                         }
+                        val syncRounds by application.container.session.syncRoundsSeen.collectAsStateWithLifecycle()
                         val homeNow = remember(balances, ageTick) { System.currentTimeMillis() }
                         WalletScreen(
                             model = WalletLive.home(
@@ -2003,9 +2031,12 @@ fun VelaNavHost(
                                     header = home.header.copy(
                                         space = strings.t(if (space.testnet) I18nKeys.NetworkSpace.TESTNET else I18nKeys.NetworkSpace.MAINNET),
                                         testnet = space.testnet,
+                                        // ob-2 (P2.4): saved here, not synced yet.
+                                        sync = WalletLive.syncLine(session.unsynced, session.address, strings, syncRounds),
                                     ),
                                 )
                             },
+                            onSyncRetry = { application.container.session.syncPending() },
                             onSpace = { application.container.networkSpace.switcherOpen.value = true },
                             onSelectTab = select,
                             // The id says WHICH row was tapped. Without it every row
@@ -2066,6 +2097,8 @@ fun VelaNavHost(
                 var formEdit by rememberSaveable { mutableStateOf<Boolean?>(null) }
                 var formName by rememberSaveable { mutableStateOf("") }
                 var formAddress by rememberSaveable { mutableStateOf("") }
+                // P2.5: the form's note (the web's round-3 field), seeded from the contact on edit.
+                var formNote by rememberSaveable { mutableStateOf("") }
                 var openGroup by rememberSaveable { mutableStateOf<String?>(null) }
                 // Issue #437: the two pick lists hold their ticks until 保存 —
                 // `null` is closed. 添加成员's are addresses (ContactsLive.pickKey),
@@ -2078,7 +2111,12 @@ fun VelaNavHost(
                 // Read the book for THIS account: the core keys history-derived
                 // entries by whose wallet they belong to.
                 LaunchedEffect(session.address) {
-                    contacts.open(session.address.takeIf { it.isNotEmpty() })
+                    // P2.5: a visit to the book already read for this account
+                    // re-reads only its send history (`history_changed`).
+                    contacts.visit(session.address.takeIf { it.isNotEmpty() })
+                    // P2.4 (perf-10): this page draws no balance — the account
+                    // is noted (its cached total for the switcher), no network read.
+                    application.container.wallet.noteAccount(session.address)
                 }
                 // The AI agent's screen (spec 103): the book, a contact, a group.
                 val agentDetail by agent.detail.collectAsStateWithLifecycle()
@@ -2192,10 +2230,10 @@ fun VelaNavHost(
                 }
                 val group = openGroup?.let { id -> book.groups.firstOrNull { it.id == id } }
                 val groupLabels = remember(strings) { ContactsFixtures.groupDetail(strings) }
-                val formLabels = remember(strings, formEdit) { formEdit?.let { ContactsFixtures.contactForm(strings, edit = it) } }
+                val formLabels = remember(strings, formEdit) { formEdit?.let { ContactsFixtures.contactForm(strings, edit = it, noted = true) } }
                 val shown = model.copy(
                     groupDetail = if (selected == null && group != null) ContactsLive.groupDetail(groupLabels, group) else model.groupDetail,
-                    form = formLabels?.let { ContactsLive.form(it, edit = formEdit == true, name = formName, address = formAddress) },
+                    form = formLabels?.let { ContactsLive.form(it, edit = formEdit == true, name = formName, address = formAddress, note = formNote) },
                     notice = ContactsLive.importNotice(book, strings, close = strings.t(I18nKeys.Flows.CLOSE)),
                 )
                 // A pick list belongs to the page that opened it: leaving the
@@ -2324,15 +2362,18 @@ fun VelaNavHost(
                                     menuOpen = false
                                     formName = ""
                                     formAddress = ""
+                                    formNote = ""
                                     formEdit = false
                                 }
                                 "contacts.edit" -> selected?.let { contact ->
                                     formName = contact.name ?: contact.resolved_name ?: ""
                                     formAddress = contact.address
+                                    formNote = contact.note.orEmpty()
                                     formEdit = true
                                 }
                                 "contacts.form.save" -> {
-                                    agent.person(intent("save_contact", "address" to formAddress.trim(), "name" to formName.trim())) { outcome ->
+                                    // P2.5: the note rides along — an emptied one clears it (web `saveContact`).
+                                    agent.person(intent("save_contact", "address" to formAddress.trim(), "name" to ContactsLive.cleanName(formName), "note" to ContactsLive.cleanNote(formNote))) { outcome ->
                                         if (outcome.done) formEdit = null
                                     }
                                 }
@@ -2412,6 +2453,7 @@ fun VelaNavHost(
                         onGroup = { row -> openGroup = book.groups.firstOrNull { it.name == row.name }?.id },
                         onFormName = { formName = it },
                         onFormAddress = { formAddress = it },
+                        onFormNote = { formNote = it },
                         onQueryChange = { typed -> query = typed },
                         onDismissMenu = {
                             menuOpen = false
@@ -2528,6 +2570,9 @@ fun VelaNavHost(
                 LaunchedEffect(session.address) {
                     val address = session.address
                     if (address.isBlank()) return@LaunchedEffect
+                    // P2.4 (perf-10): Settings draws no balance of its own — the
+                    // account is noted, not read (the web's `noteAccount`).
+                    application.container.wallet.noteAccount(address)
                     val device = application.container.deviceKeysOf(address, session.activeName)
                     val signIn = application.container.signInCredentialOf(address)
                     // The record as it stands NOW — a key added since the
@@ -2543,7 +2588,7 @@ fun VelaNavHost(
                     // Spec 105: the network list is the space in front's, under its
                     // heading; the add wizard asks which space a network goes to.
                     var m = SettingsLive.withWizard(
-                        SettingsLive.withNetworks(SettingsLive.withCurrency(model, currency), networks, strings, space = space),
+                        SettingsLive.withNetworks(SettingsLive.withCurrency(model, currency), networks, strings, space = space, nodes = SettingsLive.OwnNodes.of(poolView)),
                         networks,
                         strings,
                         spaceChoice = true,
@@ -2578,11 +2623,12 @@ fun VelaNavHost(
                     m = SettingsLive.withRelayer(m, chainNamesNow[100] ?: "Gnosis", 100, "xDAI", treasury, strings)
                     m = SettingsLive.withAccounts(m, sessionView.accounts.map { it.name to it.address }, sessionView.activeIndex,
                         // Spec 105: no account is worth anything in the testnet space.
-                        if (space.testnet) balanceView.switcher.copy(balances = emptyList()) else balanceView.switcher, currency, strings)
+                        if (space.testnet) balanceView.switcher.copy(balances = emptyList()) else balanceView.switcher, currency, strings,
+                        unsynced = sessionView.unsynced)
                     // Spec 048: the network detail is THIS network's, not the fixture's.
                     openNetworkId?.let { id ->
                         networks.networks.firstOrNull { it.id == id }?.let { row ->
-                            m = m.copy(networkDetail = SettingsLive.networkDetail(m.networkDetail, row, strings))
+                            m = m.copy(networkDetail = SettingsLive.networkDetail(m.networkDetail, row, strings, SettingsLive.OwnNodes.of(poolView)))
                         }
                     }
                     // Spec 048: a page another route asked for (the add-token 原生代币 tab). Kept
@@ -2596,6 +2642,10 @@ fun VelaNavHost(
                     requestedPage?.let { m = m.copy(page = it) }
                     // A partial wipe names what stayed, in the sheet itself (028's rule: the person stays signed in).
                     eraseFailed?.let { left -> m = m.copy(eraseSheet = m.eraseSheet.copy(body = m.eraseSheet.body + "\n\n" + left.joinToString(", "))) }
+                    // ob-2 (P2.4): the wallets an erase would lose before they synced, named.
+                    m = SettingsLive.withEraseUnsynced(m, sessionView.unsynced, strings) { names ->
+                        android.icu.text.ListFormatter.getInstance(java.util.Locale.forLanguageTag(strings.language)).format(names)
+                    }
                     m
                 }
                 // Spec 081 FR-016: the device lines go in `environment`, by the
@@ -2775,6 +2825,8 @@ fun VelaNavHost(
                                 ?.let { settings.expandOverride(it.chain_id) }
                         },
                         onResetEndpoints = { agent.person(intent("reset_service_endpoints")) },
+                        // "Only use my node": the switch sends the core's event, as the web's does.
+                        onOnlyMine = { chainId, on -> settings.setOnlyMine(chainId, on) },
                         onEndpointsOpened = { settings.openEndpoints() },
                         // Spec 102: the account's venue — by address, refused by the
                         // core (nothing written) when it cannot reach the keys.

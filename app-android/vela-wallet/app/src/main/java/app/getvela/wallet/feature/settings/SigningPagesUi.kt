@@ -220,6 +220,18 @@ internal fun VenuePageBody(
         page.trustVersion?.let { version -> TrustAnswer(model.trust) { onTrust(page.url, version) } }
         SettingsDivider()
     }
+    // What a signing page protects against, and what it does not (owner,
+    // 2026-10-30) — said under the choice, as the web's `VenueList` does.
+    model.pageNotes.forEach { note ->
+        Text(
+            text = note,
+            color = colors.fgSubtle,
+            fontFamily = VelaFontFamily,
+            fontSize = VelaTextSize.sm,
+            lineHeight = VelaLeading.normal * VelaTextSize.sm,
+            modifier = Modifier.padding(top = VelaSpacing.lg),
+        )
+    }
     Row(
         modifier = Modifier.fillMaxWidth().padding(top = VelaSpacing.lg),
         verticalAlignment = Alignment.CenterVertically,

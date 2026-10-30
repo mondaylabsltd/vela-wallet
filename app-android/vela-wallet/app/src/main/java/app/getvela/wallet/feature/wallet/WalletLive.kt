@@ -614,6 +614,29 @@ object WalletLive {
         )
 
     /**
+     * ob-2 (P2.4): the line for the wallet at [address] when the session core
+     * names it unsynced (`SessionView.unsynced`) — the web's `syncLine`:
+     * "Syncing…" while the session is still trying on its own and has not
+     * failed for a while ([stalledRounds] of its widening retries), then "Not
+     * synced yet" with a retry. A wallet the session cannot finish on its own
+     * says so, with no retry to offer. `null` when nothing is owed.
+     */
+    fun syncLine(
+        unsynced: List<app.getvela.wallet.feature.onboarding.core.SessionUnsynced>,
+        address: String,
+        strings: VelaStrings,
+        failedRounds: Int,
+        stalledRounds: Int = 2,
+    ): WalletSyncLineModel? {
+        val owed = unsynced.firstOrNull { it.address.isNotEmpty() && it.address.equals(address, ignoreCase = true) } ?: return null
+        return when {
+            !owed.retrying -> WalletSyncLineModel(strings.t(I18nKeys.Wallet.SYNC_STALLED), stalled = true)
+            failedRounds < stalledRounds -> WalletSyncLineModel(strings.t(I18nKeys.Wallet.SYNCING), stalled = false)
+            else -> WalletSyncLineModel(strings.t(I18nKeys.Wallet.SYNC_STALLED), stalled = true, retry = strings.t(I18nKeys.SettingsUi.BALANCE_DETAIL_RETRY))
+        }
+    }
+
+    /**
      * The line over the networks the wallet cannot reach (spec 092) — the
      * hero's status line and the title of the list it opens. The core chooses
      * the sentence (`unreachable_key`: one network named, several counted);
@@ -712,7 +735,10 @@ object WalletLive {
         switcher: BalanceSwitcherView,
         currency: CurrencyView,
         strings: VelaStrings,
+        /** ob-2 (P2.4): the wallets saved here whose registration has not landed (`SessionView.unsynced`). */
+        unsynced: List<app.getvela.wallet.feature.onboarding.core.SessionUnsynced> = emptyList(),
     ): AccountsSheetModel {
+        val owed = unsynced.map { it.address.lowercase() }.toSet()
         val money = Money.of(currency, strings.language)
         // "2 accounts · Total $5.65": the corpus's count line ends in the
         // separator so the total follows it, the way the web's sheet reads.
@@ -742,6 +768,8 @@ object WalletLive {
                     addressFull = address,
                     amount = if (hidden) MASK else usd?.let { money.fiat(it) } ?: "",
                     selected = i == activeIndex,
+                    // ob-2: saved here, not yet findable elsewhere — said on its row.
+                    note = if (address.lowercase() in owed) strings.t(I18nKeys.Wallet.SYNCING) else null,
                 )
             },
             primary = strings.t(I18nKeys.SettingsUi.ACCOUNT_CREATE),

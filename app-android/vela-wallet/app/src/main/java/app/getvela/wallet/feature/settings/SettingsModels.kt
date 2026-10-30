@@ -32,7 +32,21 @@ enum class SettingsScreenState {
      */
     ST2B,
     ST3, ST3B, ST4, ST5, ST6, ST7, ST8,
-    ST9, ST9B, ST10, ST10B, ST10C,
+    ST9, ST9B,
+
+    /**
+     * The network ledger the REAL `network_admin` machine writes (`NetBoards.ledger`)
+     * through the live builders, for a device that showed one opt-in Vela
+     * network and runs two networks on nodes of its own: the list (ST9C) —
+     * Stable, shown on the person's word, with its bin; Gnosis, read through
+     * its node alone, which cannot be reached; Arbitrum, served by public
+     * nodes while its node is silent; the hidden Vela networks named under
+     * the mainnet heading — the detail with "Only use my node" on and that
+     * node unreachable (ST9D), and off, on public nodes for now (ST9E); and
+     * Stable's remove question, which hides it (ST9F).
+     */
+    ST9C, ST9D, ST9E, ST9F,
+    ST10, ST10B, ST10C,
     /**
      * Add network, refused for the OTHER reason: no P-256 verifier. ST10C is
      * the chain whose contracts are missing (Chain Setup, opened on it); here
@@ -53,7 +67,22 @@ enum class SettingsScreenState {
      * is there (ST10J).
      */
     ST10E, ST10F, ST10G, ST10H, ST10I, ST10J,
-    ST11, ST12, ST13, ST13B, ST14, ST14B, ST15, ST16,
+
+    /**
+     * Showing a hidden Vela network again, through Add network, as the real
+     * machine writes it: the search finds it, tagged "Vela network" (ST10K),
+     * and picked it is offered back as itself — nothing to check (ST10L).
+     */
+    ST10K, ST10L,
+    ST11, ST12,
+
+    /**
+     * The endpoints page through the live builder over the real machine's
+     * view: five services with the multisig service, each probed — fast, not
+     * the service it claims, refused for its http:// address, slow, fine.
+     */
+    ST12B,
+    ST13, ST13B, ST14, ST14B, ST15, ST16,
     /**
      * Spec 102, the web's boards: "Where you review and sign" for an account
      * on `getvela.app` reviewing on the official page (ST17) and for one on
@@ -383,6 +412,12 @@ data class VenueModel(
     val manage: String,
     /** "Trust this version" — a page choice's answer when its line asks (`settings.signing.pageTrust`). */
     val trust: String = "",
+    /**
+     * What a signing page protects against, and what it does not (owner,
+     * 2026-10-30, the page everywhere): said under the choice, as the web's
+     * `VenueList` says it. Empty leaves it unsaid.
+     */
+    val pageNotes: List<String> = emptyList(),
 )
 
 @Immutable
@@ -406,6 +441,8 @@ data class AccountsSheetRowModel(
     val addressFull: String,
     val amount: String,
     val selected: Boolean,
+    /** ob-2 (P2.4): saved here, not yet findable elsewhere — "Saved on this device · syncing…". */
+    val note: String? = null,
 )
 
 @Immutable
@@ -437,6 +474,13 @@ data class ConfirmSheetModel(
     /** Second, quieter paragraph — the sign-out sheet's "keeps" line. */
     val note: String? = null,
     val callout: CalloutModel? = null,
+    /**
+     * ob-2 (P2.4): a loss nothing brings back — the erase's unsynced wallets,
+     * by name — drawn first as a danger callout (the web's `warning`).
+     */
+    val warning: String? = null,
+    /** With it, the confirm waits for this acknowledgement to be ticked (the web's `ack`). */
+    val ack: String? = null,
 )
 
 /** A chain's circular avatar: a letter over a fixture-supplied brand colour. */
@@ -456,7 +500,30 @@ data class NetworkRowModel(
     val removable: Boolean = false,
     /** Spec 105: a network the person added moves to the other space — the control's words. */
     val move: String? = null,
+    /**
+     * The remove question's body for THIS row, when it is not the custom
+     * network's: a Vela network shown on the person's word leaves the list
+     * and keeps its settings (`settingsModals.network.hideBody`).
+     */
+    val removeBody: String? = null,
+    /**
+     * The pool's word on the person's own node for this network (owner
+     * decision 2026-10-28): public nodes serve it for now, or it cannot be
+     * read at all ("Only use my node"). The web's `NetworkRow` notice.
+     */
+    val notice: NetworkNoticeModel? = null,
 )
+
+/** A network row's own-node line: [SettingsTone.Warn] (public nodes for now) or [SettingsTone.Error] (can't be read). */
+@Immutable
+data class NetworkNoticeModel(val tone: SettingsTone, val text: String)
+
+/**
+ * "Only use my node" on a network whose RPC is the person's own (owner
+ * decision 2026-10-28): the switch, and what it costs when that node stops.
+ */
+@Immutable
+data class OnlyMineModel(val title: String, val subtitle: String, val on: Boolean)
 
 /**
  * Spec 105: which space the network list shows, under its heading, and the
@@ -495,6 +562,10 @@ data class NetworkDetailModel(
     val callout: CalloutModel? = null,
     /** Spec 048: which chain the overrides are written for. */
     val chainId: Long = 0,
+    /** "Only use my node" — offered only where the RPC is the person's own (`NetNetworkRow.own_rpc`). */
+    val onlyMine: OnlyMineModel? = null,
+    /** The pool's word on that node, beside the field: public nodes for now, or can't be reached. */
+    val nodeCallout: CalloutModel? = null,
 )
 
 @Immutable
@@ -563,6 +634,8 @@ data class EndpointsModel(
     val description: String,
     val fields: List<UrlFieldModel>,
     val reset: String,
+    /** "Self-hosting guide →" beside the reset (the web's `EndpointsPanel`); `null` leaves it undrawn. */
+    val guide: String? = null,
 )
 
 @Immutable

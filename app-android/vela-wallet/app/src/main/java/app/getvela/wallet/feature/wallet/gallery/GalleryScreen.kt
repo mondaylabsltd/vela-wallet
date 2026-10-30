@@ -72,6 +72,7 @@ private enum class GalleryEntry(val label: String) {
     H15("H15"),
     H16("H16"),
     H17("H17"),
+    H18("H18 sync"),
     Components("Components"),
     Identicons("Identicon"),
     ;
@@ -98,6 +99,7 @@ private enum class GalleryEntry(val label: String) {
             H15 -> WalletScreenState.H15
             H16 -> WalletScreenState.H16
             H17 -> WalletScreenState.H17
+            H18 -> WalletScreenState.H18
             Components, Identicons -> null
         }
 }
@@ -153,6 +155,8 @@ fun GalleryScreen(systemDarkTheme: Boolean) {
                         WalletScreen(
                             model = model,
                             onSheetDismiss = { entry = GalleryEntry.H1 },
+                            // H18: the sync line's retry is drawn (inert here).
+                            onSyncRetry = {},
                         )
                     }
                 }

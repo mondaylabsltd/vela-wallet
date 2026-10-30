@@ -194,3 +194,15 @@ class TrackerExecutor(
         }
     }
 }
+
+/**
+ * Round 3 (send-5): what a lost reply's submit knew beyond its hand-off (the
+ * web's `noteSubmitFacts`) — the nonce it signed — told to the tracker after
+ * [TrackHandoff.event], so the entry is there. Only for a may-have-been-sent
+ * op with records and a known nonce: otherwise nothing is in doubt, or
+ * nothing can settle it. The tracker then reads the account's nonce while the
+ * op is in doubt (`read_nonce`) instead of waiting the relay's grace out.
+ */
+fun TrackHandoff.submitFacts(): TrackEvent.SubmitFacts? =
+    nonce?.takeIf { maybeSent && recordIds.isNotEmpty() && userOpHash.isNotEmpty() && it.isNotEmpty() }
+        ?.let { TrackEvent.SubmitFacts(user_op_hash = userOpHash, nonce = it) }

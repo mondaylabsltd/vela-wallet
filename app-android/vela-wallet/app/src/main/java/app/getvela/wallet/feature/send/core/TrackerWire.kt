@@ -487,6 +487,8 @@ data class TrackHandoff(
     val admitted: Boolean = false,
     /** The account that signed it — what makes it an op this account must wait for (`in_flight_ops`). */
     val sender: String? = null,
+    /** Round 3 (send-5): the nonce the submit signed, a hex quantity — `null` when unknown. */
+    val nonce: String? = null,
 ) {
     fun event(): TrackEvent.Submitted = TrackEvent.Submitted(
         user_op_hash = userOpHash,
@@ -530,6 +532,22 @@ sealed class TrackEvent {
     @Serializable
     @SerialName("withdrawn")
     data class Withdrawn(val user_op_hash: String, val record_ids: List<String>) : TrackEvent()
+
+    /**
+     * Round 3 (send-5): what a may-have-been-sent submit knew of its op
+     * beyond the hand-off — [nonce], the nonce it signed (a hex quantity), and
+     * [relay_refusal], an endpoint's JSON-RPC `error` member inside an HTTP
+     * error, as JSON text. Sent after the [Submitted] that named its records;
+     * the core then reads the account's nonce while the op is in doubt
+     * (`read_nonce`) instead of waiting the relay's grace out.
+     */
+    @Serializable
+    @SerialName("submit_facts")
+    data class SubmitFacts(
+        val user_op_hash: String,
+        val nonce: String? = null,
+        val relay_refusal: String? = null,
+    ) : TrackEvent()
 
     @Serializable
     @SerialName("tick")

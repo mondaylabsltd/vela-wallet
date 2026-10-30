@@ -109,8 +109,11 @@ class SettingsFixturesTest {
         // SR3B / SR3C: the balance sheet with the currency on its way, and landed.
         // ST2B: the switcher with one account. SR3D–SR3F: the balance sheet in
         // three rounds the real machine wrote (the final round's F21, F20, F16).
-        assertEquals(53, states.size)
-        assertEquals(36, states.count { it.name.startsWith("ST") })
+        // ST9C–ST9F, ST10K/L, ST12B: the network ledger the real machine
+        // writes (shown networks, own nodes, a Vela network shown again, the
+        // endpoints with the multisig service).
+        assertEquals(60, states.size)
+        assertEquals(43, states.count { it.name.startsWith("ST") })
         assertEquals(13, states.count { it.name.startsWith("SR") })
         assertEquals(4, states.count { it.name.startsWith("SK") })
     }

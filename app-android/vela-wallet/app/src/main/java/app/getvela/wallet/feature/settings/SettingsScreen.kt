@@ -208,8 +208,10 @@ data class SettingsActions(
     val onFieldEdited: (fieldId: String, value: String) -> Unit = { _, _ -> },
     /** The field lost focus — the core's commit point, where it validates and saves. */
     val onFieldCommitted: (fieldId: String) -> Unit = {},
-    /** The bin on a custom network row. */
+    /** The bin on a custom network row — or on a Vela network shown on the person's word, which hides it. */
     val onRemoveNetwork: (id: String) -> Unit = {},
+    /** "Only use my node" on the open network's detail (owner decision 2026-10-28). */
+    val onOnlyMine: (chainId: Long, on: Boolean) -> Unit = { _, _ -> },
     /**
      * A network row was opened.
      *
@@ -349,7 +351,10 @@ fun SettingsRoute(
     val debugMode = model.about.debugMode
     Box(modifier = modifier.fillMaxSize()) {
     SettingsScreen(
-        model = model,
+        // The remove question is the row's own (the web's
+        // `removeNetworkQuestion`): its name, and — for a Vela network shown
+        // on the person's word — that it leaves the list and keeps its settings.
+        model = pendingRemoval?.let { id -> model.copy(removeNetworkSheet = SettingsLive.removeNetworkQuestion(model, id)) } ?: model,
         page = page,
         overlay = overlay,
         advancedOpen = advancedOpen,
@@ -407,6 +412,7 @@ fun SettingsRoute(
         },
         // Spec 048: a network row opens ITS detail page (the row only expanded the core's override before).
         onOpenNetwork = { id -> actions.onOpenNetwork(id); page = SettingsPage.NetworkDetail },
+        onOnlyMine = actions.onOnlyMine,
         onSearchNetwork = actions.onSearchNetwork,
         onPickNetwork = actions.onPickNetwork,
         onConfirmAddNetwork = actions.onConfirmAddNetwork,
@@ -581,6 +587,7 @@ fun SettingsScreen(
     onConfirmRemoveNetwork: () -> Unit = {},
     onConfirmResetEndpoints: () -> Unit = {},
     onOpenNetwork: (String) -> Unit = {},
+    onOnlyMine: (Long, Boolean) -> Unit = { _, _ -> },
     onSearchNetwork: (String) -> Unit = {},
     onPickNetwork: (String) -> Unit = {},
     onConfirmAddNetwork: () -> Unit = {},
@@ -713,6 +720,7 @@ fun SettingsScreen(
                             onFieldCommitted = onFieldCommitted,
                             onRemoveNetwork = onRemoveNetwork,
                             onOpenNetwork = onOpenNetwork,
+                            onOnlyMine = onOnlyMine,
                             onSearchNetwork = onSearchNetwork,
                             onPickNetwork = onPickNetwork,
                             onConfirmAddNetwork = onConfirmAddNetwork,
@@ -964,6 +972,7 @@ private fun SettingsPageBody(
     onFieldCommitted: (String) -> Unit = {},
     onRemoveNetwork: (String) -> Unit = {},
     onOpenNetwork: (String) -> Unit = {},
+    onOnlyMine: (Long, Boolean) -> Unit = { _, _ -> },
     onSearchNetwork: (String) -> Unit = {},
     onPickNetwork: (String) -> Unit = {},
     onConfirmAddNetwork: () -> Unit = {},
@@ -1078,6 +1087,22 @@ private fun SettingsPageBody(
             if (detail.callout != null) {
                 Spacer(modifier = Modifier.height(VelaSpacing.xl))
                 VelaCallout(detail.callout)
+            }
+            // The pool's word on the person's own node, beside the field it
+            // is about — then the switch it bears on (the web's
+            // `NetworkDetailPanel`: rpc, callouts, "Only use my node", explorer).
+            if (detail.nodeCallout != null) {
+                Spacer(modifier = Modifier.height(VelaSpacing.xl))
+                VelaCallout(detail.nodeCallout)
+            }
+            detail.onlyMine?.let { onlyMine ->
+                Spacer(modifier = Modifier.height(VelaSpacing.xl))
+                VelaSwitchRow(
+                    title = onlyMine.title,
+                    body = onlyMine.subtitle,
+                    checked = onlyMine.on,
+                    onCheckedChange = { on -> onOnlyMine(detail.chainId, on) },
+                )
             }
             Spacer(modifier = Modifier.height(VelaSpacing.xl3))
             EditableUrlField(
@@ -1310,6 +1335,23 @@ private fun SettingsPageBody(
                     color = colors.fgMuted,
                     fontFamily = VelaFontFamily,
                     fontSize = VelaTextSize.base,
+                )
+            }
+            // Spec 081 FR-004: the guide is a page — how to run these services
+            // yourself — opened in the browser (the web's `EndpointsPanel`).
+            // A link in the neutral ink every text action carries.
+            model.endpoints.guide?.let { guide ->
+                Text(
+                    text = guide,
+                    color = colors.fgBase,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.base,
+                    textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(role = androidx.compose.ui.semantics.Role.Button) { onOpenLink(SettingsLive.SELF_HOSTING_GUIDE_URL) }
+                        .padding(vertical = VelaSpacing.lg),
                 )
             }
         }
@@ -1865,6 +1907,8 @@ private fun ConfirmSheetBody(
     onCancel: () -> Unit,
 ) {
     val colors = VelaTheme.colors
+    // ob-2 (P2.4): the acknowledgement the confirm waits for, per sheet shown.
+    var acknowledged by remember(sheet.ack) { mutableStateOf(false) }
     SheetTitle(sheet.title)
     Text(
         text = sheet.body,
@@ -1873,6 +1917,10 @@ private fun ConfirmSheetBody(
         fontSize = VelaTextSize.lg,
         modifier = Modifier.padding(bottom = VelaSpacing.xl),
     )
+    if (sheet.warning != null) {
+        VelaCallout(CalloutModel(CalloutTone.Danger, sheet.warning))
+        Spacer(modifier = Modifier.height(VelaSpacing.xl))
+    }
     if (sheet.note != null) {
         Text(
             text = sheet.note,
@@ -1886,16 +1934,30 @@ private fun ConfirmSheetBody(
         VelaCallout(sheet.callout)
         Spacer(modifier = Modifier.height(VelaSpacing.xl))
     }
+    if (sheet.ack != null) {
+        // The design system's acknowledgement row (spec 014), neutral ink.
+        app.getvela.wallet.core.designsystem.components.VelaAckRow(
+            checked = acknowledged,
+            onCheckedChange = { acknowledged = it },
+            text = androidx.compose.ui.text.AnnotatedString(sheet.ack),
+            modifier = Modifier.testTag(CONFIRM_ACK_TAG),
+        )
+        Spacer(modifier = Modifier.height(VelaSpacing.xl))
+    }
+    val blocked = sheet.ack != null && !acknowledged
     // The tone picks the CTA's colour, so "清除缓存" is accent and "全部清除" is
     // red without either screen owning a button of its own.
     if (sheet.danger) {
-        VelaDangerButton(sheet.confirm, onClick = onConfirm, modifier = Modifier.fillMaxWidth())
+        VelaDangerButton(sheet.confirm, onClick = onConfirm, modifier = Modifier.fillMaxWidth(), enabled = !blocked)
     } else {
-        VelaPrimaryButton(sheet.confirm, onClick = onConfirm, modifier = Modifier.fillMaxWidth())
+        VelaPrimaryButton(sheet.confirm, onClick = onConfirm, modifier = Modifier.fillMaxWidth(), enabled = !blocked)
     }
     Spacer(modifier = Modifier.height(VelaSpacing.lg))
     VelaSecondaryButton(sheet.cancel, onClick = onCancel, modifier = Modifier.fillMaxWidth())
 }
+
+/** The confirm sheet's acknowledgement row (ob-2). */
+const val CONFIRM_ACK_TAG = "confirm-ack"
 
 @Composable
 internal fun AccountsSheetBody(
@@ -1942,7 +2004,8 @@ internal fun AccountsSheetBody(
             ) {
                 Text(
                     text = row.name,
-                    color = if (row.selected) colors.accentBase else colors.fgBase,
+                    // A selected state is neutral ink, never the accent (web `.name.active`).
+                    color = colors.fgBase,
                     fontFamily = VelaFontFamily,
                     fontWeight = VelaFontWeight.semibold,
                     fontSize = VelaTextSize.lg,
@@ -1955,6 +2018,15 @@ internal fun AccountsSheetBody(
                     fontFamily = VelaMonoFontFamily,
                     fontSize = VelaTextSize.sm,
                 )
+                // ob-2 (P2.4): this wallet's registration has not landed yet.
+                row.note?.let { note ->
+                    Text(
+                        text = note,
+                        color = colors.fgMuted,
+                        fontFamily = VelaFontFamily,
+                        fontSize = VelaTextSize.xs,
+                    )
+                }
             }
             Text(
                 text = row.amount,
@@ -1967,7 +2039,7 @@ internal fun AccountsSheetBody(
                 Icon(
                     imageVector = VelaIcons.Check,
                     contentDescription = null,
-                    tint = colors.accentBase,
+                    tint = colors.fgBase,
                     modifier = Modifier.size(VelaIconSize.md),
                 )
             }
@@ -2810,7 +2882,12 @@ private fun BalanceDetailRow(row: BalanceDetailRowModel, onRetry: (String) -> Un
                 // resolves itself; a dead RPC gets red and 立即重试.
                 Text(
                     text = row.status,
-                    color = if (row.tone == SettingsTone.Error) colors.errorBase else colors.fgSubtle,
+                    color = when (row.tone) {
+                        SettingsTone.Error -> colors.errorBase
+                        // P2.4: read through public nodes (web `.status.warn`).
+                        SettingsTone.Warn -> colors.warningBase
+                        else -> colors.fgSubtle
+                    },
                     fontFamily = VelaFontFamily,
                     fontSize = VelaTextSize.sm,
                 )

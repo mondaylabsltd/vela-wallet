@@ -56,6 +56,7 @@ import app.getvela.wallet.dev.ParallelSpaceHook
 import app.getvela.wallet.dev.ParallelSpaceBinding
 import app.getvela.wallet.core.i18n.AppLanguage
 import app.getvela.wallet.core.i18n.I18nRuntime
+import app.getvela.wallet.core.i18n.I18nCatalogs
 import app.getvela.wallet.core.i18n.LocaleResolver
 import app.getvela.wallet.feature.contacts.core.ContactsController
 import app.getvela.wallet.feature.onboarding.core.AccountStore
@@ -97,7 +98,16 @@ import kotlinx.coroutines.SupervisorJob
  */
 class AppContainer(private val app: Application) {
 
-    val i18nRuntime = I18nRuntime(onLanguage = { AppLanguage.tag = it }) { tag ->
+    val i18nRuntime = I18nRuntime(
+        onLanguage = { AppLanguage.tag = it },
+        // P2.6: an on-demand namespace (`assets/i18n/<name>/<tag>.json`), read
+        // only when a screen that draws it asks (I18nRuntime.include).
+        readOnDemand = { namespace, tag ->
+            runCatching {
+                app.assets.open(I18nCatalogs.assetPath(tag, namespace)).use { it.readBytes() }
+            }.getOrNull()
+        },
+    ) { tag ->
         app.assets.open("i18n/$tag.json").use { it.readBytes() }
     }
 
@@ -599,6 +609,12 @@ class AppContainer(private val app: Application) {
             CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate).launch {
                 wallet.inFlightOps.collect { ops -> controller.inFlightOps(ops) }
             }
+            // P2.5: a send opening reads the book's send history again — the
+            // picker's suggestions come from it and a send may have landed
+            // since (web `openSend` → `history_changed`). The book stays.
+            CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate).launch {
+                controller.opens.collect { opened -> if (opened > 0) contacts.historyChanged() }
+            }
             // The passkey's ceremony, for the AI agent's transfers to follow:
             // a transfer is awaiting its passkey once the prompt is up.
             controller.onCeremony = { event -> agent.ceremony(event) }
@@ -921,7 +937,7 @@ class AppContainer(private val app: Application) {
                         answer(payload)
                         // Closed by the person after approving: the answer still
                         // goes, the ending does not reappear (spec 079).
-                        signingAftercare.value = if (controller.closedAfterApproval) {
+                        signingAftercare.value = if (controller.landingClosed) {
                             null
                         } else {
                             SigningAftercare.of(
@@ -969,6 +985,10 @@ class AppContainer(private val app: Application) {
                     // The pool's answer as it came; the core reads it (`simOutcome`, RG6).
                     override suspend fun simulate(chainId: Int, params: List<Any?>): RpcResult =
                         pool.call(chainId, "eth_simulateV1", params)
+                    // dapp-15: is the chain answering a plain read again?
+                    override suspend fun nodeAnswers(chainId: Int): Boolean =
+                        (pool.call(chainId, "eth_blockNumber", emptyList()) as? RpcResult.Body)
+                            ?.json?.optString("result")?.startsWith("0x") == true
                     override suspend fun judgeDeltas(chainId: Int, wallet: String, deltas: List<app.getvela.wallet.feature.wallet.core.TrustAssetDelta>): app.getvela.wallet.feature.wallet.core.TrustSimView? =
                         this@AppContainer.wallet.judgeSimDeltas(wallet, chainId, deltas)
                     // cs-13: the raw code as the chain gave it; an error or no answer is `null`.

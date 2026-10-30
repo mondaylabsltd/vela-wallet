@@ -98,6 +98,19 @@ enum class FlowState {
      * the code will be — and SD2Q: the same sheet once it is told CNY.
      */
     SD1L, SD2P, SD2Q,
+
+    /**
+     * Send rounds 3–6 (P2.2), through the live builders, never on the live
+     * flow stack. The confirm held while the reads before the passkey are
+     * slow (SD3L) and while the nodes say they are busy (SD3M); failed as the
+     * network's, reopening by itself when it answers (SD3N); the recipient's
+     * check unfinished with Check again (SD3O); a Max that moved (SD3P); the
+     * passkey closed, nothing signed (SD3Q); one of the person's own accounts
+     * as the recipient (SD3R); signing, the fee row frozen (SD3S). The
+     * never-sent receipt with Send again (SD4E). The lock's Add this network
+     * after an add that found nothing (SD1M), and while it runs (SD1N).
+     */
+    SD3L, SD3M, SD3N, SD3O, SD3P, SD3Q, SD3R, SD3S, SD4E, SD1M, SD1N,
 }
 
 /* ------------------------------------------------------------------ chrome */
@@ -472,7 +485,25 @@ data class AddTokenModel(
 data class FilterChipModel(val id: String, val label: String, val selected: Boolean)
 
 @Immutable
-data class SendNoticeModel(val mark: TokenMarkModel, val text: String)
+data class SendNoticeModel(
+    val mark: TokenMarkModel,
+    val text: String,
+    /** F6 / F27: a request for a network the wallet lacks — "Add this network" under the notice. */
+    val add: SendLockAddModel? = null,
+)
+
+/**
+ * "Add this network" on a payment request's lock (the web's `SendLockModel.add`,
+ * `add_network_tapped`): [busy] while the core's add runs — the button says so
+ * and takes no second press — and [failed], why the last add did not happen.
+ */
+@Immutable
+data class SendLockAddModel(
+    val label: String,
+    val chainId: Int,
+    val busy: Boolean = false,
+    val failed: String? = null,
+)
 
 @Immutable
 data class SendSelectionModel(
@@ -882,6 +913,12 @@ data class SendConfirmModel(
     val facts: List<FactRowModel>,
     val breakdown: List<BreakdownRowModel> = emptyList(),
     /**
+     * r5reg-3: the Max was filled again from a newer fee quote after the
+     * person saw it (`SendView.max_moved`) — what it read, what is sent now,
+     * and why, under the figure before anything is confirmed.
+     */
+    val maxNote: String? = null,
+    /**
      * "First time sending here" — the anti-poisoning tell, on the page that
      * signs. The core resolves it only while this page is up (`confirm_probes`),
      * so the form never had it to show.
@@ -958,6 +995,13 @@ data class SendReceiptModel(
     val eta: ReceiptEtaModel? = null,
     /** Spec 096 F8: "Try again" beside the button — a dApp request that failed before anything was sent. */
     val retry: String? = null,
+    /**
+     * Whether [retry] is the journey's accent. A dApp's Try again goes back to
+     * a signature (spec 096 F8); Send's "Send again" (send-5,
+     * `can_send_again`) only goes back to the review, moves nothing, and is
+     * drawn quietly above the way out, as on the web.
+     */
+    val retryAccent: Boolean = true,
 )
 
 /**

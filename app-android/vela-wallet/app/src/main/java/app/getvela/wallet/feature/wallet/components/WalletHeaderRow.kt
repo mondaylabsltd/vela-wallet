@@ -19,6 +19,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import app.getvela.wallet.core.designsystem.tokens.VelaBorder
 import app.getvela.wallet.core.designsystem.components.VelaIcons
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
@@ -52,6 +57,8 @@ fun WalletHeaderRow(
     onSwitcher: (() -> Unit)? = null,
     /** Spec 105: the space label's tap — the switch prompt. */
     onSpace: (() -> Unit)? = null,
+    /** ob-2 (P2.4): the sync line's "try now" — asks the session to publish again (`sync_pending`). */
+    onSyncRetry: (() -> Unit)? = null,
 ) {
     val colors = VelaTheme.colors
     Row(
@@ -103,6 +110,10 @@ fun WalletHeaderRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            // ob-2: saved here, not yet findable elsewhere. Quiet and neutral:
+            // the session keeps trying on its own; after a while of failing,
+            // the person may ask it to try now (web `WalletHeader` `.sync`).
+            header.sync?.let { sync -> SyncLine(sync, onSyncRetry) }
         }
         // The space in front (spec 105), beside the account it shows: a quiet
         // pill in the mainnet space, amber in the testnet space.
@@ -112,6 +123,45 @@ fun WalletHeaderRow(
         }
     }
 }
+
+/** The header's sync line (ob-2): muted while it keeps trying, full ink once stalled, a retry when offered. */
+@Composable
+private fun SyncLine(sync: app.getvela.wallet.feature.wallet.WalletSyncLineModel, onRetry: (() -> Unit)?) {
+    val colors = VelaTheme.colors
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .testTag(WALLET_SYNC_LINE_TAG)
+            .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+    ) {
+        Text(
+            text = sync.text,
+            color = if (sync.stalled) colors.fgBase else colors.fgMuted,
+            fontFamily = VelaFontFamily,
+            fontSize = VelaTextSize.xs,
+        )
+        if (sync.retry != null && onRetry != null) {
+            Spacer(modifier = Modifier.width(VelaSpacing.sm))
+            Text(
+                text = sync.retry,
+                color = colors.fgBase,
+                fontFamily = VelaFontFamily,
+                fontWeight = VelaFontWeight.semibold,
+                fontSize = VelaTextSize.xs,
+                textDecoration = TextDecoration.Underline,
+                modifier = Modifier
+                    .testTag(WALLET_SYNC_RETRY_TAG)
+                    .clickable(role = Role.Button, onClick = onRetry)
+                    // ≥44dp target without growing the quiet line.
+                    .padding(vertical = VelaSpacing.sm),
+            )
+        }
+    }
+}
+
+/** The header's sync line and its retry (ob-2). */
+const val WALLET_SYNC_LINE_TAG = "wallet-sync-line"
+const val WALLET_SYNC_RETRY_TAG = "wallet-sync-retry"
 
 /** The header's space label — tapping it offers the other space. */
 @Composable

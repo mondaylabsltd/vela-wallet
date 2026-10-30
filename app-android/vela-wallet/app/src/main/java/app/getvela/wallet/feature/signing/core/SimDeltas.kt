@@ -70,7 +70,13 @@ object SimDeltas {
         val risk = record.noticeRisk
             ?.let { runCatching { Wire.json.decodeFromString(ClearRisk.serializer(), "\"$it\"") }.getOrNull() }
             ?: ClearRisk.Caution
-        return SigningController.SimOutcome.Notice(risk = risk, key = key, reason = record.revertReason)
+        return SigningController.SimOutcome.Notice(
+            risk = risk, key = key, reason = record.revertReason,
+            // dapp-15: the core's `SimVerdict.recheck` is "no node answered" —
+            // its `unreachable` kind. The uniffi record does not carry the
+            // flag itself yet, so it is read off the kind the core named.
+            recheck = record.kind == "unreachable",
+        )
     }
 
     /**
@@ -101,7 +107,9 @@ object SimDeltas {
 
     /** The core's "could not check" line, for a run whose moves nobody could judge. */
     fun couldNotCheck(): SigningController.SimOutcome.Notice =
-        notice(simOutcome("", UNREACHABLE))
+        // Not about the network (moves nobody could read or judge, a reading
+        // that threw): asking the node again would say the same — no recheck.
+        notice(simOutcome("", UNREACHABLE))?.copy(recheck = false)
             ?: SigningController.SimOutcome.Notice(ClearRisk.Caution, "componentsUi.signing.simUnavailableWarning")
 
     /**

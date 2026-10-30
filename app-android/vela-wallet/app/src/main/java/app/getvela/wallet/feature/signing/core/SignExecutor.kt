@@ -322,7 +322,8 @@ class SignExecutor(
         } catch (refused: UserOpSpine.Refused) {
             when (val failure = refused.failure) {
                 UserOpSpine.Failure.PasskeyCancelled, is UserOpSpine.Failure.Other, is UserOpSpine.Failure.Signer,
-                is UserOpSpine.Failure.VenueBlocked, UserOpSpine.Failure.PreviousPending -> outcomeOf(failure)
+                is UserOpSpine.Failure.VenueBlocked, UserOpSpine.Failure.PreviousPending,
+                UserOpSpine.Failure.PageDeclined, is UserOpSpine.Failure.PageFailed -> outcomeOf(failure)
                 else -> SignSubmitOutcome.Failed("Signing failed")
             }
         }
@@ -411,6 +412,14 @@ class SignExecutor(
             is UserOpSpine.Failure.Other -> SignSubmitOutcome.Failed(failure.message ?: "Signing failed")
             // Spec 102: this account cannot sign here — the core says why, translated.
             is UserOpSpine.Failure.VenueBlocked -> SignSubmitOutcome.VenueBlocked(failure.block)
+            // Spec 102 (2026-10-30): the person declined on the account's
+            // trusted signing page, or closed it unsigned. The page is the
+            // venue, so that is their answer: the core answers the site 4001
+            // and clears the sheet (the web's `page_declined`).
+            UserOpSpine.Failure.PageDeclined -> SignSubmitOutcome.PageDeclined
+            // Round 7: the page did not sign, and not by the person's choice —
+            // the core says which, on the sheet and to the site.
+            is UserOpSpine.Failure.PageFailed -> SignSubmitOutcome.PageFailed(failure.failure)
             // 083: another operation of the account holds the nonce — the page
             // is told the core's fixed detail, as before.
             UserOpSpine.Failure.PreviousPending -> SignSubmitOutcome.Failed(uniffi.vela_core_uniffi.userOpPreviousPendingDetail())
