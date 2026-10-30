@@ -851,6 +851,100 @@ signing sheet as a group named by what it says.
   Inspector, Narrator, Orca); its test platform never attaches one, so there
   is no unit-level tree test at this pin.
 
+## Window, motion and links
+
+N-D3 and the motion pass, all on every desktop unless said otherwise.
+
+- **The window comes back where it was left** (`src/window_state.rs`,
+  store key `vela.desktop.window`): its display (by UUID), its
+  display-relative bounds, zoomed or not, and the section it showed. It is
+  restored only onto a display that is still there, no bigger than it, with
+  the title strip on screen and never below the 1280×800 design size;
+  anything else opens centred as on a first launch. Full screen comes back as
+  its window (the second-display fullscreen quirk below). `VELA_WINDOW` and
+  the drawn routes (`VELA_PAGE`, the gallery) never restore.
+- **Motion is the web's** (`src/ui/motion.rs`): the third column slides in
+  from its edge in `--motion-panel-in` (240 ms), a dialog's card rises
+  `--space-5xl` while its scrim fades in `--motion-sheet-in` (220 ms), the
+  receipt toast drops `--space-lg` in 220 ms; all CSS `ease-out`, tested
+  against `tokens.css`. **Reduce Motion is the system's** — macOS
+  Accessibility → Display → Reduce motion, Windows "Show animations in
+  Windows", GNOME `enable-animations` — read at launch and on every return
+  to the front; under it every movement is the 150 ms crossfade.
+  `VELA_REDUCE_MOTION=1|0` pins it in a developer build; a layout probe turns
+  motion off.
+- **`velawallet://`** is registered by every package: `Info.plist` on macOS,
+  the installer's `HKCU\Software\Classes\velawallet` on Windows, the
+  `.desktop` file's `MimeType=x-scheme-handler/velawallet` on Linux (RPM and
+  DEB through desktop-file-utils' triggers, Flatpak through its export; a
+  bare tarball needs `xdg-mime default app.getvela.VelaWallet.desktop
+  x-scheme-handler/velawallet`). Windows and Linux hand a link to the running
+  wallet over `scheme_relay`'s pipe / socket. Answered: `sign-result` and
+  `pay`.
+- **Paste and drop** (`src/inbound.rs`): ⌘V (macOS, through the Edit menu)
+  or Ctrl+V (Windows, Linux) with no field taking it, or a file dropped on
+  the home or the address book. A picture is read for a QR code; a saved link
+  (`.webloc`, `.url`, `.txt`) for its link. A payment link, an EIP-681
+  request or an address opens Send exactly as a scan of it would (an address
+  on the address book opens "Add contact" on it); a getvela.app multisig
+  proposal, invite or connect link that the core reads opens on the web
+  wallet — the CORE's rebuilt link at `wallet.getvela.app`, never the pasted
+  text — until multisig lands here; one that does not read is said in the
+  web's words. gpui delivers dropped FILES only: text dragged out of a
+  browser is pasted, not dropped.
+
+## Menu bar and tray
+
+`src/tray/`: macOS's menu-bar extra (an `NSStatusItem`, the Vela mark as a
+template image, the total as its title) and Windows' notification-area icon
+(`Shell_NotifyIconW`, the total in its tooltip, a menu on right-click, the
+window on left-click). The figure is the home's — the core's total,
+last-known rows included — with the hero's "Updated <ago>"; while balances
+are hidden it is the mask. Send, Receive and the window are one click away;
+each is the press of the control it names.
+
+**Off by default** (`vela.desktop.menuBar`). The Settings → Appearance
+switch is drawn once the corpus has its words — `settingsModals.appearance.
+menuBar` (macOS), `settingsModals.appearance.trayIcon` (Windows) and
+`settingsModals.appearance.statusItemHint` — which the I18N lane adds; until
+then the extra stays off. `VELA_MENU_BAR=1` turns it on in a developer build.
+Linux has none yet: a StatusNotifierItem needs a `com.canonical.dbusmenu`
+menu over D-Bus, and GNOME shows none without an extension. Closing the
+window still quits (see the reopen quirk below), and the extra goes with it.
+
+## Updates
+
+`src/updater.rs` holds the whole verification path and ships **off**: no
+feed is asked and nothing is offered while `UPDATE_KEY` is `None`, and store
+builds (the Mac App Store sandbox, a Flatpak, an RPM/DEB under `/usr`) never
+run it. The design, and why not Sparkle / WinSparkle / Velopack, is in the
+file's header. The trust chain: a manifest signed with the owner's
+**ECDSA P-256** release key (the public half compiled in), carrying the
+version, an issue time and per platform an `https` URL, SHA-256 and size; no
+downgrade, no replay of an older manifest; the download taken only when its
+size and hash are the signed ones. Built and tested here: the manifest and
+artifact verification. Not built: the download UI and the install hand-off,
+which add the OS's own signature checks (Developer ID team on macOS,
+Authenticode on Windows) on top and never install silently.
+
+To turn it on, the owner provides:
+
+1. A P-256 release key pair, made and kept OFFLINE (not the web host's, not
+   CI's): `openssl ecparam -name prime256v1 -genkey -noout -out release.pem`,
+   public half `openssl ec -in release.pem -pubout -conv_form uncompressed
+   -outform DER | tail -c 65 | xxd -p -c 65` → `UPDATE_KEY`.
+2. Hosting for `https://getvela.app/desktop/releases/stable.json` (or a new
+   `FEED_URL`): `{"payload": "<json text>", "signature": "<hex r‖s or DER>"}`,
+   the payload `{"version","issued_at","notes_url","platforms":{"macos-aarch64":
+   {"url","sha256","size"},…}}`, signed with `openssl dgst -sha256 -sign
+   release.pem`.
+3. The Developer ID Application identity and team (macOS) and the
+   Authenticode certificate (Windows) the release builds are already signed
+   with — the install hand-off (not built yet: it is the step after a
+   verified download, and needs these to be tested against) checks them.
+4. The words for "Update available / Install / Later" in the corpus (the
+   prompt is drawn only once they exist).
+
 ## Known gpui quirks
 
 Three upstream behaviours found while debugging second-display fullscreen and

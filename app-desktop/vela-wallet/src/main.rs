@@ -24,6 +24,7 @@ mod gallery;
 mod hardware;
 mod icons;
 mod identicon;
+mod inbound;
 mod intro;
 mod intro_art;
 mod loc;
@@ -45,7 +46,11 @@ mod session;
 mod settings;
 mod signing;
 mod theme;
+mod tray;
 mod ui;
+// N-D3: the signed-update check, OFF until the owner's key is compiled in.
+#[allow(dead_code, reason = "off until the README \"Updates\" steps are followed")]
+mod updater;
 mod wallet;
 #[cfg(not(target_os = "linux"))]
 mod webview;
@@ -58,6 +63,7 @@ mod webview;
 #[cfg(target_os = "windows")]
 mod webview2_events;
 mod window_frame;
+mod window_state;
 
 use gallery::GalleryView;
 use gpui::{
@@ -112,6 +118,8 @@ impl Render for Root {
                 root.bg(theme::Theme::of(theme::ThemeMode::detect(window)).bg_base)
             }
             SessionRoute::Onboarding => {
+                // Signed out: no wallet's figure stays in the menu bar.
+                tray::hide();
                 // Dropped on the way out, so a second sign-in starts from a
                 // fresh machine rather than resuming a finished one.
                 self.wallet = None;
@@ -229,6 +237,9 @@ pub(crate) fn close_requested(window: &mut gpui::Window, cx: &mut App) -> bool {
     if !allow {
         window.activate_window();
         wallet::page::close_held(cx);
+    } else {
+        // N-D3: the last bounds and section, written before the app goes.
+        window_state::flush();
     }
     allow
 }
@@ -245,7 +256,17 @@ fn open_main_window(cx: &mut App) {
     }
     match RootPage::from_env() {
         // The default: the session's route guard picks the screen.
-        RootPage::Onboarding => open_window_with(cx, |_window, cx| cx.new(Root::new)),
+        RootPage::Onboarding => open_window_with(cx, |window, cx| {
+            // N-D3: the real app (not a drawn route) remembers its window.
+            let root = cx.new(Root::new);
+            root.update(cx, |_, cx| {
+                cx.observe_window_bounds(window, |_, window, cx| {
+                    window_state::note_bounds(window, cx);
+                })
+                .detach();
+            });
+            root
+        }),
         RootPage::Wallet => open_window_with(cx, |window, cx| {
             cx.new(|cx| WalletPage::new(false, window, cx))
         }),
@@ -272,15 +293,33 @@ fn open_window_with<V: gpui::Render + 'static>(
     // that size, never under the design's — a measurement pass cannot drag
     // an edge, and what a taller window gives a column is part of what it
     // measures.
-    let (width, height) = dev_env::var!("VELA_WINDOW")
-        .and_then(|want| {
-            let (width, height) = want.trim().split_once('x')?;
-            Some((width.parse::<f32>().ok()?, height.parse::<f32>().ok()?))
+    let pinned = dev_env::var!("VELA_WINDOW").and_then(|want| {
+        let (width, height) = want.trim().split_once('x')?;
+        Some((width.parse::<f32>().ok()?, height.parse::<f32>().ok()?))
+    });
+    let (width, height) = pinned.map_or((WINDOW_W, WINDOW_H), |(width, height)| {
+        (width.max(WINDOW_W), height.max(WINDOW_H))
+    });
+    // N-D3: where the person left it, on a display that is still there —
+    // checked, never trusted (`window_state::placement`). Only the real app's
+    // window: a drawn route or a pinned size opens as it always has.
+    let restored = (pinned.is_none()
+        && !gallery::gallery_enabled()
+        && RootPage::from_env() == RootPage::Onboarding)
+        .then(|| {
+            window_state::placement(
+                window_state::load().as_ref(),
+                &window_state::screens(cx),
+                size(px(WINDOW_W), px(WINDOW_H)),
+            )
         })
-        .map_or((WINDOW_W, WINDOW_H), |(width, height)| {
-            (width.max(WINDOW_W), height.max(WINDOW_H))
-        });
-    let bounds = Bounds::centered(None, size(px(width), px(height)), cx);
+        .flatten();
+    let (display_id, window_bounds) = restored.unwrap_or_else(|| {
+        (
+            None,
+            WindowBounds::Windowed(Bounds::centered(None, size(px(width), px(height)), cx)),
+        )
+    });
     // Spec 082 RD14 (W17): closing the window quits the app
     // (`LastWindowClosed`), so a close during a submit POST is held once —
     // the window comes forward and says why (RJ17); a second close within
@@ -292,9 +331,11 @@ fn open_window_with<V: gpui::Render + 'static>(
         // in use is due a re-check (the desktop's "foreground"), whichever
         // screen the window shows.
         root.update(cx, |_, cx| {
-            cx.observe_window_activation(window, |_, window, _| {
+            cx.observe_window_activation(window, |_, window, cx| {
                 if window.is_window_active() {
                     executor::trusted_signer::prime_in_background();
+                    // A Reduce Motion changed while away is in force now.
+                    ui::motion::sync_system(cx);
                 }
             })
             .detach();
@@ -304,7 +345,8 @@ fn open_window_with<V: gpui::Render + 'static>(
 
     cx.open_window(
         WindowOptions {
-            window_bounds: Some(WindowBounds::Windowed(bounds)),
+            window_bounds: Some(window_bounds),
+            display_id,
             // `VELA_NO_ACTIVATE=1`: the window opens without taking the
             // keyboard, so a screenshot pass on a machine somebody is using
             // never types into this app what they meant for another.
@@ -451,6 +493,8 @@ fn main() {
         // style removed), then the theme, the language and the text size are
         // in force for the first frame rather than the second.
         crate::executor::preferences::boot();
+        // The system's Reduce Motion, before the first movement.
+        ui::motion::sync_system(cx);
         // F0.5: a developer build pointed at a local harness writes its
         // endpoints, RPC overrides and relay into the store first, so every
         // reader below sees them.
@@ -489,7 +533,40 @@ fn main() {
         // Ctrl on Windows and Linux) — README, "Keyboard shortcuts".
         cx.bind_keys(app_menu::wallet_key_bindings(cfg!(target_os = "macos")));
         app_menu::install(cx);
+        // N-D3: ⌘Q skips the window's close hook; the window state is
+        // written on the way out either way.
+        cx.on_app_quit(|_| async {
+            window_state::flush();
+            tray::hide();
+        })
+        .detach();
         open_main_window(cx);
+
+        // N-D3: the menu-bar extra's presses (Windows: the tray icon's) —
+        // each the press of the control it names, in the window.
+        if let Some(mut presses) = tray::take_commands() {
+            cx.spawn(async move |cx| {
+                use futures::StreamExt as _;
+                while let Some(press) = presses.next().await {
+                    cx.update(|cx| {
+                        cx.activate(true);
+                        if let Some(window) = cx.windows().first().copied() {
+                            let _ = window.update(cx, |_, window, _| window.activate_window());
+                        }
+                        match press {
+                            tray::TrayCommand::Open => {}
+                            tray::TrayCommand::Send => {
+                                app_menu::run_on_page(app_menu::Command::Send, cx);
+                            }
+                            tray::TrayCommand::Receive => {
+                                app_menu::run_on_page(app_menu::Command::Receive, cx);
+                            }
+                        }
+                    });
+                }
+            })
+            .detach();
+        }
 
         // Payment links the OS handed over (`open_link`): Send opens on each,
         // prefilled, on the wallet's page. On a cold start the page is still

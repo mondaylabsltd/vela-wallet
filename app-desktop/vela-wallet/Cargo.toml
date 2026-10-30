@@ -305,6 +305,8 @@ objc2-foundation = { version = "0.2", features = [
     "NSRunLoop",
     "NSDate",
     "NSProcessInfo",
+    # N-D3: the menu-bar extra's image size (`src/tray/macos.rs`).
+    "NSGeometry",
 ] }
 # "This device" — the platform passkey vault (Touch ID / iCloud Keychain)
 # through AuthenticationServices. Same objc2 generation as the rest, so cargo
@@ -401,6 +403,10 @@ windows-sys = { version = "0.59", features = [
     "Win32_System_RemoteDesktop",
     "Win32_System_Threading",
     "Win32_UI_WindowsAndMessaging",
+    # N-D3: the notification-area icon (`src/tray/windows.rs`):
+    # Shell_NotifyIconW, and the module handle its icon is loaded from.
+    "Win32_UI_Shell",
+    "Win32_System_LibraryLoader",
 ] }
 
 # Embeds the application icon into vela-wallet.exe as resource id 1, which is
