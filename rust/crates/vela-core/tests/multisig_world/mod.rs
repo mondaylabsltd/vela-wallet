@@ -7,7 +7,7 @@
 
 #![allow(dead_code, clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use serde_json::{json, Value};
 use vela_core::app::multisig_shell::{
@@ -108,6 +108,181 @@ fn modules_ret(list: &[String]) -> String {
 }
 
 pub type RpcHook = Box<dyn FnMut(u64, &str, &Value) -> Option<Res>>;
+/// What `POST /api/proposals` answers for one submission instead of taking
+/// it: `(status, body, Retry-After)`; `None` lets the next hook (or the
+/// mailbox) answer.
+pub type SubmitHook = Box<dyn FnMut(&Value) -> Option<(u16, Value, Option<String>)>>;
+
+/// The PeerConnect rooms, as the shell's transport would hold them: every
+/// room opened, every message sent, and what arrives on each (a test
+/// pushes it; a receive with nothing to deliver waits).
+#[derive(Default)]
+pub struct PeerSim {
+    pub next: u32,
+    /// `(invite, pairing)` of each `PeerOpen`, in order.
+    pub opens: Vec<(Option<String>, Option<String>)>,
+    pub sent: Vec<(String, Value)>,
+    /// `(room, end)` of each `PeerClose`.
+    pub closed: Vec<(String, bool)>,
+    pub inbox: BTreeMap<String, VecDeque<Res>>,
+}
+
+impl PeerSim {
+    /// Deliver `message` on `room`.
+    pub fn deliver(&mut self, room: &str, message: Value) {
+        self.inbox
+            .entry(room.to_owned())
+            .or_default()
+            .push_back(Res::PeerMessage { message });
+    }
+
+    /// Close `room` from the other side.
+    pub fn close(&mut self, room: &str, reason: &str) {
+        self.inbox
+            .entry(room.to_owned())
+            .or_default()
+            .push_back(Res::PeerClosed {
+                reason: reason.to_owned(),
+            });
+    }
+
+    /// What was sent on `room`, in order.
+    pub fn sent_on(&self, room: &str) -> Vec<Value> {
+        self.sent
+            .iter()
+            .filter(|(r, _)| r == room)
+            .map(|(_, m)| m.clone())
+            .collect()
+    }
+}
+
+/// An EOA from a 32-byte seed: its key and its address (lowercase).
+pub fn eoa(seed: u8) -> (k256::ecdsa::SigningKey, String) {
+    let key = k256::ecdsa::SigningKey::from_slice(&[seed; 32]).unwrap();
+    let point = key.verifying_key().to_sec1_point(false);
+    let hash = vela_core::primitives::keccak256(&point.as_bytes()[1..]);
+    (key, format!("0x{}", hex_of(&hash[12..])))
+}
+
+pub fn hex_of(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// `r ‖ s ‖ v` (v 27/28) over a 32-byte digest.
+pub fn eoa_sign(key: &k256::ecdsa::SigningKey, digest: &[u8]) -> String {
+    let (sig, id) = key.sign_prehash_recoverable(digest);
+    let mut out = sig.to_bytes().to_vec();
+    out.push(27 + id.to_byte());
+    format!("0x{}", hex_of(&out))
+}
+
+/// An injected wallet (EIP-1193) holding EOA keys: it signs typed data by
+/// its own EIP-712 hash and `personal_sign` by EIP-191, as a real one does.
+pub struct WalletSim {
+    /// Lowercase.
+    pub accounts: Vec<String>,
+    pub chain_id: u64,
+    pub keys: BTreeMap<String, k256::ecdsa::SigningKey>,
+    /// It can sign typed data.
+    pub typed: bool,
+    /// Signs with this account's key whoever is asked (a wrong signer).
+    pub signer: Option<String>,
+    /// It moves to the network asked for.
+    pub switches: bool,
+    /// The next answers, by method, before the wallet's own.
+    pub next: VecDeque<(String, Res)>,
+    /// It has not answered yet: requests wait.
+    pub hold: bool,
+    pub log: Vec<(String, Value)>,
+    pub sent: Vec<Value>,
+}
+
+impl WalletSim {
+    pub fn holding(seeds: &[u8], chain_id: u64) -> Self {
+        let mut keys = BTreeMap::new();
+        let mut accounts = Vec::new();
+        for seed in seeds {
+            let (key, address) = eoa(*seed);
+            accounts.push(address.clone());
+            keys.insert(address, key);
+        }
+        Self {
+            accounts,
+            chain_id,
+            keys,
+            typed: true,
+            signer: None,
+            switches: true,
+            next: VecDeque::new(),
+            hold: false,
+            log: Vec::new(),
+            sent: Vec::new(),
+        }
+    }
+
+    pub fn calls_of(&self, method: &str) -> usize {
+        self.log.iter().filter(|(m, _)| m == method).count()
+    }
+
+    fn key_for(&self, account: &str) -> Option<&k256::ecdsa::SigningKey> {
+        let who = self
+            .signer
+            .as_deref()
+            .unwrap_or(account)
+            .to_ascii_lowercase();
+        self.keys.get(&who)
+    }
+
+    pub fn answer(&mut self, method: &str, params: &Value) -> Res {
+        self.log.push((method.to_owned(), params.clone()));
+        if let Some(at) = self.next.iter().position(|(m, _)| m == method) {
+            return self.next.remove(at).unwrap().1;
+        }
+        let refused = |code: i64, message: &str| Res::WalletRefused {
+            code: Some(code),
+            message: message.to_owned(),
+        };
+        let ok = |v: Value| Res::WalletAnswered { result: v };
+        match method {
+            "eth_chainId" => ok(json!(format!("0x{:x}", self.chain_id))),
+            "eth_requestAccounts" | "eth_accounts" => ok(json!(self.accounts)),
+            "wallet_switchEthereumChain" => {
+                if !self.switches {
+                    return refused(4902, "Unrecognized chain");
+                }
+                let id = params[0]["chainId"].as_str().unwrap();
+                self.chain_id = u64::from_str_radix(id.trim_start_matches("0x"), 16).unwrap();
+                ok(Value::Null)
+            }
+            "eth_signTypedData_v4" => {
+                if !self.typed {
+                    return refused(4200, "Method not supported");
+                }
+                let account = params[0].as_str().unwrap().to_owned();
+                let digest =
+                    vela_core::sign_message::original_hash(method, &params.to_string()).unwrap();
+                match self.key_for(&account) {
+                    Some(key) => ok(json!(eoa_sign(key, &digest))),
+                    None => refused(4100, "Unauthorized"),
+                }
+            }
+            "personal_sign" => {
+                let account = params[1].as_str().unwrap().to_owned();
+                let digest =
+                    vela_core::sign_message::original_hash(method, &params.to_string()).unwrap();
+                match self.key_for(&account) {
+                    Some(key) => ok(json!(eoa_sign(key, &digest))),
+                    None => refused(4100, "Unauthorized"),
+                }
+            }
+            "eth_sendTransaction" => {
+                self.sent.push(params[0].clone());
+                ok(json!(format!("0x{}", "77".repeat(32))))
+            }
+            other => refused(4200, &format!("unexpected {other}")),
+        }
+    }
+}
 
 pub struct World {
     pub now: f64,
@@ -126,6 +301,8 @@ pub struct World {
     pub mailbox_down: BTreeSet<u64>,
     /// What `POST /api/proposals` answers instead of taking it.
     pub submit_status: Option<(u16, Value, Option<String>)>,
+    /// Tried before `submit_status` and the mailbox, in order.
+    pub submit_hooks: Vec<SubmitHook>,
     pub submits: Vec<Value>,
     pub tx_service: BTreeMap<String, (u16, Value)>,
     pub http_log: Vec<String>,
@@ -148,6 +325,9 @@ pub struct World {
     pub quote_answer: Option<Res>,
     pub notices: Vec<Notice>,
     pub random: u8,
+    // The outside owner's side.
+    pub peer: PeerSim,
+    pub wallet: Option<WalletSim>,
 }
 
 impl Default for World {
@@ -166,6 +346,7 @@ impl Default for World {
             mailbox: Vec::new(),
             mailbox_down: BTreeSet::new(),
             submit_status: None,
+            submit_hooks: Vec::new(),
             submits: Vec::new(),
             tx_service: BTreeMap::new(),
             http_log: Vec::new(),
@@ -186,6 +367,8 @@ impl Default for World {
             quote_answer: None,
             notices: Vec::new(),
             random: 7,
+            peer: PeerSim::default(),
+            wallet: None,
         }
     }
 }
@@ -326,6 +509,15 @@ impl World {
         if path == "/api/proposals" && method == "POST" {
             let req: Value = serde_json::from_str(body.unwrap_or("{}")).unwrap();
             self.submits.push(req.clone());
+            for hook in &mut self.submit_hooks {
+                if let Some((status, body, retry)) = hook(&req) {
+                    return Res::HttpAnswered {
+                        status,
+                        retry_after: retry,
+                        body: body.to_string(),
+                    };
+                }
+            }
             if let Some((status, body, retry)) = self.submit_status.clone() {
                 return Res::HttpAnswered {
                     status,
@@ -613,7 +805,43 @@ impl World {
                 self.notices.push(notice.clone());
                 Res::Ack
             }
-            other => panic!("this world does not answer {other:?}"),
+            Op::PeerOpen {
+                invite, pairing, ..
+            } => {
+                self.peer.opens.push((invite.clone(), pairing.clone()));
+                if invite.as_deref().is_some_and(|i| i.contains("DAMAGED")) {
+                    return Res::PeerClosed {
+                        reason: "invalid invite".to_owned(),
+                    };
+                }
+                self.peer.next += 1;
+                let n = self.peer.next;
+                Res::PeerOpened {
+                    room: format!("room-{n}"),
+                    invite: (invite.is_none() && pairing.is_none())
+                        .then(|| format!("wss://relay#invite-{n}")),
+                    pairing: Some(pairing.clone().unwrap_or_else(|| format!("record-{n}"))),
+                }
+            }
+            Op::PeerSend { room, message } => {
+                self.peer.sent.push((room.clone(), message.clone()));
+                Res::Ack
+            }
+            Op::PeerReceive { room } => self
+                .peer
+                .inbox
+                .get_mut(room)
+                .and_then(VecDeque::pop_front)
+                .expect("a receive answered with nothing to deliver"),
+            Op::PeerClose { room, end, .. } => {
+                self.peer.closed.push((room.clone(), *end));
+                Res::Ack
+            }
+            Op::WalletRequest { method, params } => self
+                .wallet
+                .as_mut()
+                .expect("no wallet in this world")
+                .answer(method, params),
         }
     }
 }
@@ -632,6 +860,39 @@ where
         let Some(op) = outstanding.first() else { break };
         let res = world.answer(op);
         sut.resolve(res);
+        answered += 1;
+    }
+    answered
+}
+
+impl World {
+    /// Whether the world can answer `op` now: a receive with nothing to
+    /// deliver, and a wallet that holds its answer, wait.
+    pub fn ready(&self, op: &Op) -> bool {
+        match op {
+            Op::PeerReceive { room } => self.peer.inbox.get(room).is_some_and(|q| !q.is_empty()),
+            Op::WalletRequest { .. } => self.wallet.as_ref().is_some_and(|w| !w.hold),
+            _ => true,
+        }
+    }
+}
+
+/// As [`settle`], answering the oldest operation the world can answer now
+/// and leaving the waiting ones (open rooms, a wallet that holds) outstanding.
+pub fn settle_ready<A>(sut: &mut DomainDriver<A>, world: &mut World, limit: usize) -> usize
+where
+    A: crux_core::App + Default,
+    A::Model: Default,
+    A::Effect: SplitEffect<Op = Op>,
+{
+    let mut answered = 0;
+    while answered < limit {
+        let outstanding = sut.outstanding();
+        let Some(op) = outstanding.iter().find(|op| world.ready(op)).cloned() else {
+            break;
+        };
+        let res = world.answer(&op);
+        sut.resolve_matching(|o| *o == op, res);
         answered += 1;
     }
     answered
