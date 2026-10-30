@@ -494,56 +494,199 @@ pub fn delete_records(ids: &[String]) -> bool {
 // Recipient risk (`recipient-risk.ts`)
 // ---------------------------------------------------------------------------
 
-/// `eth_getCode` tells a wallet from a contract. An EIP-7702 delegated EOA
-/// (`0xef0100 ‖ impl`, 23 bytes) is a WALLET with smart-account features —
-/// a person's account, never badged "contract". `None` = unreachable.
+/// `eth_getCode` tells a wallet from a contract. `None` = unreachable.
+///
+/// Remembered per `chain:address` for the run, as the web's `codeCache`:
+/// only an answer is kept, never an unreachable chain.
 fn is_contract(chain_id: u32, address: &str) -> Option<bool> {
+    let key = format!("{chain_id}:{}", address.to_lowercase());
+    if let Some(known) = with_code_cache(|cache| cache.get(&key).copied()) {
+        return Some(known);
+    }
     let body = pool::call(chain_id, "eth_getCode", json!([address, "latest"])).ok()?;
     if body.get("error").is_some() {
         return None;
     }
     let code = body.get("result").and_then(Value::as_str)?;
+    let verdict = code_is_contract(code);
+    with_code_cache(|cache| cache.insert(key, verdict));
+    Some(verdict)
+}
+
+/// The bytecode's verdict. An EIP-7702 delegated EOA (`0xef0100 ‖ impl`,
+/// 23 bytes) is a WALLET with smart-account features — a person's account,
+/// never badged "contract"; any other code is a contract, none an account.
+fn code_is_contract(code: &str) -> bool {
     let lower = code.to_lowercase();
     if lower.len() == 2 + 46 && lower.starts_with("0xef0100") {
-        return Some(false);
+        return false;
     }
-    Some(code != "0x" && code.len() > 2)
+    code != "0x" && code.len() > 2
+}
+
+fn with_code_cache<R>(f: impl FnOnce(&mut std::collections::HashMap<String, bool>) -> R) -> R {
+    static CACHE: std::sync::Mutex<Option<std::collections::HashMap<String, bool>>> =
+        std::sync::Mutex::new(None);
+    let mut guard = CACHE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    f(guard.get_or_insert_with(Default::default))
+}
+
+/// How long the contract read may hold the answer (send-18,
+/// `recipient-risk.ts` `CODE_WAIT_MS`). The first-time check is local and
+/// quick; a slow chain must not keep it from the confirm. Past it: unknown,
+/// as an unreachable chain is — the read goes on and fills the cache.
+pub const CODE_WAIT: Duration = Duration::from_millis(3_000);
+
+/// [`is_contract`] within `wait`.
+fn is_contract_within(chain_id: u32, address: &str, wait: Duration) -> Option<bool> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let address = address.to_owned();
+    std::thread::spawn(move || {
+        let _ = tx.send(is_contract(chain_id, &address));
+    });
+    rx.recv_timeout(wait).ok().flatten()
 }
 
 /// Have we ever SENT to this address — an outgoing transfer or a dApp
 /// transaction, with a legacy untyped row counting as a send?
-fn has_prior_interaction(address: &str) -> bool {
-    let Ok(Some(Value::Array(rows))) = storage::read_value(TX_KEY) else {
-        return false;
+///
+/// `None` when the history could not be read (round 3): a failed read is
+/// not "never" — read as `false`, the confirm would tag every address
+/// "First time sending here" over a store it could not open. No history at
+/// all is an empty one; a stored value that is not a list is unreadable
+/// (the web's `readTransactionHistory`).
+fn prior_interaction(address: &str) -> Option<bool> {
+    let rows = match storage::read_value(TX_KEY) {
+        Ok(None) => return Some(false),
+        Ok(Some(Value::Array(rows))) => rows,
+        Ok(Some(_)) | Err(_) => return None,
     };
-    rows.iter().any(|row| {
+    Some(rows.iter().any(|row| {
         let to = row.get("to").and_then(Value::as_str).unwrap_or_default();
         let kind = row.get("type").and_then(Value::as_str).unwrap_or("send");
         to.eq_ignore_ascii_case(address) && (kind == "send" || kind == "dapp_tx")
+    }))
+}
+
+/// A `0x` + 40 hex address — the only kind a first transfer is told of.
+fn is_hex_address(address: &str) -> bool {
+    address
+        .strip_prefix("0x")
+        .is_some_and(|hex| hex.len() == 40 && hex.bytes().all(|b| b.is_ascii_hexdigit()))
+}
+
+/// The person's own name for `address` (vis-24, r4a-18): one of their
+/// accounts on this device, else a contact they named — never a service's.
+/// The web's `knownName` port.
+#[must_use]
+pub fn known_name(address: &str) -> Option<String> {
+    identity::own_account_name(address)
+        .map(|name| name.trim().to_owned())
+        .filter(|name| !name.is_empty())
+        .or_else(|| crate::executor::contacts::contact_name(address))
+}
+
+/// `address` is one of the person's own accounts on this device (r4a-18):
+/// never a stranger, whatever its history. The web's `ownAddress` port —
+/// a multisig here, or a member of the one sending, is the web's alone
+/// until multisig lands on this shell.
+#[must_use]
+pub fn own_address(address: &str) -> bool {
+    let wanted = address.trim();
+    !wanted.is_empty()
+        && storage::load_accounts().is_ok_and(|accounts| {
+            accounts
+                .iter()
+                .any(|account| account.address.trim().eq_ignore_ascii_case(wanted))
+        })
+}
+
+/// Who the recipient is (`resolve_identity`): the person's own names first
+/// (vis-24) — one of their accounts, or a contact they saved — local, no
+/// network, and told as theirs (`self`), never a service's; else the shared
+/// waterfall (`identity::resolve`).
+fn send_identity(address: &str) -> Option<SendRecipientIdentity> {
+    if let Some(name) = known_name(address) {
+        return Some(SendRecipientIdentity {
+            name: Some(name),
+            source: Some("self".to_owned()),
+        });
+    }
+    identity::resolve(address).map(|found| SendRecipientIdentity {
+        name: Some(found.name),
+        source: Some(found.source),
     })
 }
 
-pub fn recipient_risk(chain_id: u32, address: &str) -> SendRecipientRisk {
+/// The facts the core decides the confirm's words from, given the chain's
+/// contract verdict as read: everything else this device knows locally.
+fn local_risk(is_contract: Option<bool>, address: &str) -> SendRecipientRisk {
+    let known_name = known_name(address);
+    let own = own_address(address);
+    if !is_hex_address(address) {
+        return SendRecipientRisk {
+            is_contract: None,
+            first_time: Some(false),
+            history_unread: false,
+            known_name,
+            own,
+        };
+    }
+    let prior = prior_interaction(address);
     SendRecipientRisk {
-        is_contract: is_contract(chain_id, address),
-        first_time: Some(first_time(address)),
-        // The local records are read here, never fetched: always read.
-        history_unread: false,
-        known_name: None,
-        own: false,
+        is_contract,
+        first_time: prior.map(|sent| !sent),
+        history_unread: prior.is_none(),
+        known_name,
+        own,
     }
 }
 
-/// `true` = never sent to this address from this device. A non-address is
-/// never "first" (the web's `resolveRecipientRisk`).
-fn first_time(address: &str) -> bool {
-    let hex = address.strip_prefix("0x").unwrap_or_default();
-    hex.len() == 40 && hex.bytes().all(|b| b.is_ascii_hexdigit()) && !has_prior_interaction(address)
+/// `resolveRecipientRisk` plus the shell's two ports: whether the address is
+/// a contract (bounded by [`CODE_WAIT`]), whether this device ever paid it
+/// (or could not tell), and the person's own name for it and whether it is
+/// theirs. Facts only — what the confirm says of them is the core's.
+pub fn recipient_risk(chain_id: u32, address: &str) -> SendRecipientRisk {
+    let contract = is_hex_address(address)
+        .then(|| is_contract_within(chain_id, address, CODE_WAIT))
+        .flatten();
+    local_risk(contract, address)
 }
 
 // ---------------------------------------------------------------------------
 // Perform
 // ---------------------------------------------------------------------------
+
+/// The nonce each may-have-been-sent op signed, until its hand-off to the
+/// tracker names its records (round 3, send-5) — what
+/// `tx_tracker::Event::SubmitFacts` carries. Taken once.
+static SIGNED_NONCES: std::sync::Mutex<Vec<(String, String)>> = std::sync::Mutex::new(Vec::new());
+
+fn note_signed_nonce(user_op_hash: &str, nonce: String) {
+    let mut held = SIGNED_NONCES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    held.retain(|(hash, _)| !hash.eq_ignore_ascii_case(user_op_hash));
+    // A handful at most are ever in doubt at once; never a growing list.
+    if held.len() >= 16 {
+        held.remove(0);
+    }
+    held.push((user_op_hash.to_lowercase(), nonce));
+}
+
+/// The nonce `user_op_hash` signed, if it may have been sent — once.
+#[must_use]
+pub fn take_signed_nonce(user_op_hash: &str) -> Option<String> {
+    let mut held = SIGNED_NONCES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let at = held
+        .iter()
+        .position(|(hash, _)| hash.eq_ignore_ascii_case(user_op_hash))?;
+    Some(held.remove(at).1)
+}
 
 /// The stored public key of the account a credential belongs to.
 fn stored_public_key(account_id: &str) -> Option<String> {
@@ -806,10 +949,7 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
         SendOperation::ResolveIdentity { address } => {
             let address = address.clone();
             SendAnswer::Blocking(Box::new(move || SendShellResult::IdentityResolved {
-                identity: identity::resolve(&address).map(|found| SendRecipientIdentity {
-                    name: Some(found.name),
-                    source: Some(found.source),
-                }),
+                identity: send_identity(&address),
             }))
         }
 
@@ -1129,8 +1269,8 @@ mod tests {
             assert_eq!(rows[1]["maybeSent"], true);
             assert_eq!(rows[1]["submitBlock"], 48_479_132);
             // The address book's first-time tell reads the same rows.
-            assert!(has_prior_interaction("0xYOU"));
-            assert!(!has_prior_interaction("0xnobody"));
+            assert_eq!(prior_interaction("0xYOU"), Some(true));
+            assert_eq!(prior_interaction("0xnobody"), Some(false));
         });
     }
 
@@ -1272,15 +1412,72 @@ mod tests {
     fn first_time_is_the_wallets_own_sends_and_only_for_an_address() {
         crate::executor::storage::tests::with_temp_state("send-first-time", || {
             let paid = format!("0x{}", "ab".repeat(20));
+            let first = |address: &str| local_risk(None, address).first_time;
+            // No history at all is an empty one: every address is new.
+            assert_eq!(first(&paid), Some(true));
             let _ = storage::write_value(
                 TX_KEY,
                 json!([{ "to": paid.to_uppercase().replace("0X", "0x"), "type": "send" }]),
             );
-            assert!(!first_time(&paid));
-            assert!(first_time(&format!("0x{}", "cd".repeat(20))));
-            assert!(!first_time("alice.eth"));
-            assert!(!first_time("0xYOU"));
+            assert_eq!(first(&paid), Some(false));
+            assert_eq!(first(&format!("0x{}", "cd".repeat(20))), Some(true));
+            assert_eq!(first("alice.eth"), Some(false));
+            assert_eq!(first("0xYOU"), Some(false));
         });
+    }
+
+    /// Round 3: a history that cannot be read is not an empty one — never
+    /// "first time" on it, and the confirm is told so (with its retry).
+    #[test]
+    fn an_unreadable_history_is_unknown_never_a_first_transfer() {
+        crate::executor::storage::tests::with_temp_state("send-history-unread", || {
+            let _ = storage::write_value(TX_KEY, json!({ "not": "a list" }));
+            let risk = local_risk(Some(false), &format!("0x{}", "cd".repeat(20)));
+            assert_eq!(risk.first_time, None);
+            assert!(risk.history_unread);
+            assert_eq!(risk.is_contract, Some(false), "the chain's verdict stands");
+        });
+    }
+
+    /// r4a-18 / vis-24: one of the person's own accounts is theirs — never a
+    /// stranger — and named as they named it; a contact is named by the
+    /// person's own word, a resolved name never.
+    #[test]
+    fn an_own_account_or_a_named_contact_is_told_with_the_check() {
+        crate::executor::storage::tests::with_temp_state("send-risk-own", || {
+            let mine = account("usb", 1);
+            let _ = storage::save_account(&mine);
+            let own = local_risk(None, &mine.address.to_uppercase().replace("0X", "0x"));
+            assert!(own.own);
+            assert_eq!(own.known_name.as_deref(), Some("Wallet"));
+            assert_eq!(own.first_time, Some(true), "a fact; the core withholds it");
+
+            let friend = format!("0x{}", "ef".repeat(20));
+            let resolved = format!("0x{}", "12".repeat(20));
+            let _ = storage::write_value(
+                storage::KEY_CONTACTS,
+                json!([
+                    { "address": friend.to_uppercase().replace("0X", "0x"), "name": " Ann " },
+                    { "address": resolved, "resolvedName": "bob.eth" },
+                ]),
+            );
+            let named = local_risk(None, &friend);
+            assert!(!named.own);
+            assert_eq!(named.known_name.as_deref(), Some("Ann"));
+            assert_eq!(local_risk(None, &resolved).known_name, None);
+            assert_eq!(
+                send_identity(&friend).and_then(|found| found.source).as_deref(),
+                Some("self")
+            );
+        });
+    }
+
+    /// The bytecode's verdict, as the web's `isContractAddress` reads it.
+    #[test]
+    fn a_delegated_account_is_a_wallet_and_other_code_a_contract() {
+        assert!(!code_is_contract("0x"));
+        assert!(!code_is_contract(&format!("0xef0100{}", "ab".repeat(20))));
+        assert!(code_is_contract("0x6080604052"));
     }
 
     #[test]
