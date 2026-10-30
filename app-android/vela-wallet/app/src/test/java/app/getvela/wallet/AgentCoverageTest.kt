@@ -102,6 +102,8 @@ class AgentCoverageTest {
             "contacts.importBook" to Place.None(FILE),
             "contacts.inspect" to Place.Step("show"),
             "contacts.open" to Place.Machine(ACCOUNT),
+            // P2.5: the book read for the account in front, or only its history re-read.
+            "contacts.visit" to Place.Machine(ACCOUNT),
             "contacts.toggleFavourite" to Place.Intent("set_contact_favorite"),
             "container.applyLanguage" to Place.Machine(BOOT),
             "container.clearStorageItem" to Place.Intent("disconnect_site"),
@@ -203,6 +205,8 @@ class AgentCoverageTest {
             "send.toggleSpeed" to Place.View("the speed control unfolded"),
             "send.toggleSweep" to Place.Later(SWEEP),
             "session.chooseSigningVenue" to Place.None(BOUNDARY),
+            // ob-2 (P2.4): the header's "Retry now" asks the session to publish again — it heals by itself too.
+            "session.syncPending" to Place.Machine("an unsynced wallet's publish tried again"),
             "session.signOutConfirmed" to Place.Step("sign_out"),
             "session.signOutDismissed" to Place.Step("sign_out"),
             "settings.addSigningPage" to Place.None(BOUNDARY),
@@ -240,6 +244,8 @@ class AgentCoverageTest {
             "wallet.filterContact" to Place.View("a contact's page shown"),
             "wallet.fixChainResolved" to Place.Machine("a network's fix answered"),
             "wallet.includeNetwork" to Place.View("what the receive code says beside the address"),
+            // P2.4 (perf-10): Settings and Contacts note the account in front, no network read.
+            "wallet.noteAccount" to Place.Machine(ACCOUNT),
             "wallet.open" to Place.Machine(ACCOUNT),
             "wallet.openAddToken" to Place.Machine(BOOT),
             "wallet.openReceive" to Place.Step("show"),
