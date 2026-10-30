@@ -419,12 +419,264 @@ const warned = (v, key) => v.warnings.some((w) => w.key === key);
     ns.digest.of({ method: 'vela_multisigApprove', params: [{}] }, {}).refuse === 'refuse.msShape');
 }
 
+// --- 3. an executor's operation (round 7, r7-1) --------------------------------
+//
+// Executing a multisig transaction is the executor's own user operation
+// (vela-core `execution_calls`): the deploys it needs, then `execTransaction`,
+// then the in-band fee. Signed on this page it used to read "Batch —
+// Unknowable", every leg a blind signature. Every bundle here is made of the
+// core's own pieces (`genesis`, `velaAccountGenesis`, `deployCall`,
+// `signatures`, `execTransactionData`, `executionCalls`) and handed to the
+// page as the wallet hands it (`trustedSignerSignatureRequest`'s shape: the
+// wallet's own `wallet_sendCalls`, the assembled operation, its fee leg, and
+// the execution's `context.multisig`).
+
+const MULTI_SEND = '0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526';
+const EXECUTOR = '0x7a3b5C8d9E0f1A2b3C4d5E6f7A8b9C0d1E2f3A4b';
+const FEE_TO = '0x1111111111111111111111111111111111111111';
+const WEBAUTHN_SIGNER = '0x94a4F6affBd8975951142c3999aEAB7ecee555c2';
+const { createECDH } = await import('node:crypto');
+
+/** A passkey's public key, as an account stores it (uncompressed P-256, hex). */
+const passkey = (seed) => {
+  const ecdh = createECDH('prime256v1');
+  ecdh.setPrivateKey(Buffer.alloc(32, seed));
+  return { credentialId: 'c0ffee' + seed.toString(16).padStart(2, '0'), publicKeyHex: ecdh.getPublicKey('hex') };
+};
+const ALICE = ms('velaAccountGenesis', { keys: [passkey(11)] });
+const CAROL = ms('velaAccountGenesis', { keys: [passkey(21), passkey(22), passkey(23)] });
+const team = ms('genesis', { owners: [ALICE.address, EXECUTOR], threshold: 2, name: 'R7 Team', saltNonce: '0x2a' });
+const MS = team.address;
+
+/** A member's passkey approval, as the mailbox holds it (its bytes are not checked here). */
+const passkeyApproval = (owner, ownerGenesis) => ({
+  owner, ownerGenesis, signer: WEBAUTHN_SIGNER, authenticatorData: '0x' + '05'.repeat(37),
+  clientDataFields: '"origin":"https://getvela.app"', r: '0x1', s: '0x2',
+});
+
+/** `executeUserOp(MultiSend, 0, multiSend(legs), DELEGATECALL)`: the executor's callData. */
+function callDataOf(calls) {
+  const inner = '0x' + sel('multiSend(bytes)') + num(32) + bytesArg(packed(calls.map((c) => ({
+    to: c.to, value: BigInt(c.value), data: c.data,
+  }))));
+  const body = inner.slice(2);
+  return '0x' + sel('executeUserOp(address,uint256,bytes,uint8)') + word(MULTI_SEND) + num(0) + num(128) + num(1) + bytesArg(body);
+}
+
+/**
+ * The page's request for an executor's operation: `calls` before the fee leg,
+ * then a native fee of 0.02 USDC. `about` is `context.multisig` (null: a
+ * wallet that names none).
+ */
+function executionRequest(calls, about, extra = {}) {
+  const fee = { to: FEE_TO, value: '0x' + (2n * 10n ** 16n).toString(16), data: '0x' };
+  const userOp = {
+    sender: extra.sender || EXECUTOR, nonce: '0x0', initCode: '0x', callData: callDataOf([...calls, fee]),
+    verificationGasLimit: '0', callGasLimit: '0', preVerificationGas: '0', maxFeePerGas: '0',
+    maxPriorityFeePerGas: '0', paymasterAndData: '0x',
+  };
+  const intent = {
+    method: 'wallet_sendCalls', origin: extra.origin || '',
+    params: [{ version: '1.0', chainId: '0x' + CHAIN.toString(16), from: EXECUTOR, calls }],
+  };
+  const context = {
+    chainId: CHAIN, account: EXECUTOR, ...WALLET_CTX, method: 'wallet_sendCalls',
+    operation: { userOp, feeLegIndex: calls.length, entryPoint: '0x0000000071727De22E5E9d8BAf0edAc6f37da032' },
+  };
+  if (about) context.multisig = about;
+  return { intent, context };
+}
+
+/** `context.multisig` as the core builds it (`approval::execution_context`). */
+const aboutOf = (safeTx, extra = {}) => ({
+  address: MS, name: 'R7 Team', threshold: 2, nonce: safeTx.nonce,
+  safeTxHash: ms('safeTxHash', { chainId: CHAIN, safe: MS, tx: safeTx }), ...extra,
+});
+
+/** The `execTransaction` leg for `safeTx`, carrying `approvals` (and the executor's `msg.sender`). */
+const execLeg = (safeTx, approvals, executor = EXECUTOR) => ({
+  to: MS, value: '0x0',
+  data: ms('execTransactionData', { tx: safeTx, signatures: ms('signatures', { approvals, executor }) }),
+});
+const deployLeg = (genesis) => ms('deployCall', { genesis });
+
+const pay = ms('transfersTx', { transfers: [{ token: USDC, to: THIRD, amount: '50000' }], nonce: '0x7' });
+const aliceSigned = [passkeyApproval(ALICE.address, ALICE.genesis)];
+
+{
+  // The plain case: the multisig and Alice's account exist; Alice approved,
+  // the executor approves as the sender. The calls are the core's own.
+  const calls = ms('executionCalls', {
+    plan: { multisig: MS, deployMultisig: null, deployOwners: [], tx: pay, approvals: aliceSigned, executor: EXECUTOR },
+  });
+  const { intent, context } = executionRequest(calls, aboutOf(pay));
+  const v = ns.resolve(intent, context);
+  check('execution: read as one, never a batch of blind calls', v.intentKey === 'intent.msExecute' && !v.refuse &&
+    v.confirmKey === 'button.msExecute', JSON.stringify([v.intentKey, v.refuse, v.warnings.map((w) => w.key)]));
+  check('…what the multisig sends, in the token\'s units: 0.05 USDC (Arc\'s own coin behind 0x3600…)',
+    v.hero && v.hero.amount && v.hero.amount.text === '0.05' && v.hero.amount.symbol === 'USDC',
+    v.hero && v.hero.amount && v.hero.amount.text + ' ' + v.hero.amount.symbol);
+  check('…said as the multisig\'s: "The multisig sends 0.05 USDC to 0x6813…BA69"',
+    v.sentence && v.sentence.key === 'sentence.msSends' && v.sentence.params.to.toLowerCase() === '0x6813…ba69');
+  check('…"Executes multisig transaction #7"', v.lead && v.lead.key === 'sentence.msExecute' && v.lead.params.nonce === '7');
+  check('…its safeTxHash, computed by the page = vela-core\'s, matching the app\'s',
+    v.multisig && v.multisig.hashMatches && v.multisig.hashes.safeTxHash === ms('safeTxHash', { chainId: CHAIN, safe: MS, tx: pay }));
+  const approvalsRow = v.fields.find((f) => f.label === 'field.approvals');
+  check('…approved 2 of 2 (the threshold the app\'s word, said so)', approvalsRow && approvalsRow.value.key === 'value.approvalsOf' &&
+    approvalsRow.value.params.count === 2 && approvalsRow.value.params.threshold === '2' && approvalsRow.tagKey === 'tag.byApp',
+    JSON.stringify(approvalsRow));
+  const by = v.fields.filter((f) => f.label === 'field.approvedBy').map((f) => f.identity && f.identity.address.toLowerCase());
+  check('…by Alice (her passkey) and the executor (as the sender)', by.length === 2 &&
+    by.includes(ALICE.address.toLowerCase()) && by.includes(EXECUTOR.toLowerCase()), JSON.stringify(by));
+  check('…the fee leg is the fee row, not a leg', v.fee && v.fee.leg && v.fee.leg.amount === '0.02' && !v.legs.length);
+  check('…the reading is the page\'s own (✓)', v.provenance && v.provenance.kind === 'read');
+  const digest = ns.digest.of(intent, context);
+  check('…and the passkey signs the operation\'s SafeOp hash (nothing else)', !digest.refuse && !!digest.hash);
+  ns.i18n.setLocale('en');
+  const text = ns.render(v, {}).textContent;
+  check('…the card says it in words', text.includes('Executes multisig transaction #7:') &&
+    text.toLowerCase().includes('the multisig sends 0.05 usdc to 0x6813…ba69.') && text.includes('2 of 2') &&
+    text.includes(v.multisig.hashes.safeTxHash) && text.includes('Execute'), text.slice(0, 400));
+}
+
+{
+  // The first execution: it deploys the multisig and Alice's account first.
+  const calls = [deployLeg(team.genesis), deployLeg(ALICE.genesis), execLeg(pay, aliceSigned)];
+  const { intent, context } = executionRequest(calls, aboutOf(pay));
+  const v = ns.resolve(intent, context);
+  check('execution with deploys: read, not refused', !v.refuse && v.intentKey === 'intent.msExecute',
+    JSON.stringify(v.warnings.map((w) => w.key)));
+  check('…"It also sets up the multisig on Arc Testnet: 2 members, 2 approvals needed"', v.notes.some((n) =>
+    n.key === 'sentence.msExecSetsUp' && n.params.chain === 'Arc Testnet' && n.params.count === 2 && n.params.threshold === '2'));
+  check('…its members, by address', v.fields.filter((f) => f.label === 'field.member').length === 2);
+  check('…"It also activates 0x…\'s Vela account"', v.notes.some((n) => n.key === 'sentence.msExecActivates') &&
+    v.fields.some((f) => f.label === 'field.activates' && f.identity.address.toLowerCase() === ALICE.address.toLowerCase()));
+  const row = v.fields.find((f) => f.label === 'field.approvals');
+  check('…the threshold is a fact here (the setup says it): no "per the app"', row.tagKey === undefined);
+
+  // A member with three passkeys: its account's setup deploys two more signers.
+  const three = ms('genesis', { owners: [CAROL.address, EXECUTOR], threshold: 2, name: 'Three keys', saltNonce: '0x2b' });
+  const tx3 = ms('transfersTx', { transfers: [{ to: THIRD, amount: '1' }], nonce: '0x0' });
+  const calls3 = [deployLeg(three.genesis), deployLeg(CAROL.genesis), {
+    to: three.address, value: '0x0',
+    data: ms('execTransactionData', { tx: tx3, signatures: ms('signatures', { approvals: [passkeyApproval(CAROL.address, CAROL.genesis)], executor: EXECUTOR }) }),
+  }];
+  const r3 = executionRequest(calls3, { address: three.address, nonce: '0x0', threshold: 2,
+    safeTxHash: ms('safeTxHash', { chainId: CHAIN, safe: three.address, tx: tx3 }) });
+  const v3 = ns.resolve(r3.intent, r3.context);
+  check('…a member account with three passkeys is verified from its setup too', !v3.refuse &&
+    v3.fields.some((f) => f.label === 'field.activates' && f.identity.address.toLowerCase() === CAROL.address.toLowerCase()),
+    JSON.stringify(v3.warnings.map((w) => w.key)));
+}
+
+{
+  const refusedWith = (calls, about, key, extra) => {
+    const { intent, context } = executionRequest(calls, about, extra);
+    const v = ns.resolve(intent, context);
+    return { v, ok: v.refuse && (!key || warned(v, key)) && v.confirmKey === 'button.cannotSign' };
+  };
+  // A deploy of "the multisig" whose setup is not the one Vela writes.
+  const hooked = { ...team.genesis, initializer: team.genesis.initializer.slice(0, 2 + 8 + 64 * 2) +
+    word(THIRD) + team.genesis.initializer.slice(2 + 8 + 64 * 3) };
+  const hookedAddress = ms('genesisAddress', { genesis: hooked });
+  const hookedPay = { ...pay };
+  const hookedExec = { to: hookedAddress, value: '0x0', data: ms('execTransactionData', { tx: hookedPay, signatures: ms('signatures', { approvals: aliceSigned, executor: EXECUTOR }) }) };
+  check('a deploy whose setup has a hook (delegatecall at setup): refused, never "sets up the multisig"',
+    refusedWith([deployLeg(hooked), hookedExec], null, 'refuse.msExecDeploy').ok);
+  const handler = { ...team.genesis, initializer: team.genesis.initializer.replace(
+    'fd0732dc9e303f09fcef3a7388ad10a83459ec99', THIRD.slice(2).toLowerCase()) };
+  const handlerExec = { ...hookedExec, to: ms('genesisAddress', { genesis: handler }) };
+  check('a deploy with another fallback handler: refused', refusedWith([deployLeg(handler), handlerExec], null, 'refuse.msExecDeploy').ok);
+  check('a deploy of a Vela account whose owner did not approve: refused',
+    refusedWith([deployLeg(CAROL.genesis), execLeg(pay, aliceSigned)], aboutOf(pay), 'refuse.msExecDeploy').ok);
+  check('a call besides the execution (an ERC-20 transfer out of the executor): refused',
+    refusedWith([{ to: USDC, value: '0x0', data: transfer }, execLeg(pay, aliceSigned)], aboutOf(pay), 'refuse.msExecExtra').ok);
+  check('two executions in one operation: refused',
+    refusedWith([execLeg(pay, aliceSigned), execLeg(pay, aliceSigned)], aboutOf(pay), 'refuse.msExecExtra').ok);
+  const exec = execLeg(pay, aliceSigned);
+  check('an execTransaction with bytes after it: refused (not the core\'s encoding)',
+    refusedWith([{ ...exec, data: exec.data + '00' }], aboutOf(pay), 'refuse.msExecShape').ok);
+  check('an execution that carries coin: refused', refusedWith([{ ...exec, value: '0x1' }], aboutOf(pay), 'refuse.msExecShape').ok);
+  check('the executor executing on itself: refused', refusedWith([{ ...exec, to: EXECUTOR }], null, null).ok);
+  const other = ms('transfersTx', { transfers: [{ token: USDC, to: OTHER, amount: '1' }], nonce: '0x7' });
+  const forged = refusedWith([exec], aboutOf(pay, { safeTxHash: ms('safeTxHash', { chainId: CHAIN, safe: MS, tx: other }) }), 'refuse.msHashMismatch');
+  check('the app\'s safeTxHash is another transaction\'s: refused, loudly, first', forged.ok && forged.v.risk === 'hard-danger' &&
+    forged.v.warnings[0].key === 'refuse.msHashMismatch');
+  check('the app names another multisig: refused', refusedWith([exec], aboutOf(pay, { address: THIRD }), 'refuse.msExecMismatch').ok);
+  check('the app\'s threshold is not the setup\'s: refused',
+    refusedWith([deployLeg(team.genesis), deployLeg(ALICE.genesis), exec], aboutOf(pay, { threshold: 1 }), 'refuse.msExecThreshold').ok);
+  const bare = executionRequest([exec], null);
+  const vb = ns.resolve(bare.intent, bare.context);
+  check('a wallet that names no number: still read in full, no hashes, said so', !vb.refuse && !vb.multisig &&
+    warned(vb, 'warn.msExecNoNonce') && vb.lead.key === 'sentence.msExecuteNoNonce' && vb.hero.amount.text === '0.05');
+  const dapp = executionRequest([exec], null, { origin: 'https://app.example' });
+  const vd = ns.resolve(dapp.intent, dapp.context);
+  check('a site\'s own operation is not read as the wallet\'s execution', vd.intentKey !== 'intent.msExecute');
+}
+
+{
+  // The SafeTx inside an execution is read by the approval's rules: a batch
+  // through MultiSendCallOnly is drawn leg by leg (and is no "delegatecall"
+  // takeover of the executor), what the core refuses is refused.
+  const batchTx = tx({ to: MSCO, operation: 1, data: multiSend([
+    { to: SAFE, data: '0x' + sel('changeThreshold(uint256)') + num(1) }, { to: USDC, data: transfer },
+  ]) });
+  const legsOf = (safeTx) => {
+    const r = executionRequest([execLeg(safeTx, aliceSigned)], aboutOf(safeTx));
+    return ns.resolve(r.intent, r.context);
+  };
+  const vb = legsOf(batchTx);
+  check('an execution of a MultiSendCallOnly batch: each leg read, not refused', !vb.refuse && vb.legs.length === 2 &&
+    vb.legs[1].view.hero.amount.text === '250', JSON.stringify(vb.warnings.map((w) => w.key)));
+  check('an execution of a delegatecall to a stranger: refused, as Bybit', legsOf(tx({ to: THIRD, operation: 1, data: '0x12345678' })).refuse);
+  check('an execution that pays a refund: refused', legsOf(tx({ gasPrice: '0x1', refundReceiver: THIRD })).refuse);
+  check('an execution that enables a module on the multisig: refused',
+    legsOf(tx({ to: MS, data: '0x' + sel('enableModule(address)') + word(THIRD) })).refuse);
+
+  // Parity with the shipped core: every SafeTx above, executed. Whatever the
+  // core's one review refuses, the page refuses as an execution too; what it
+  // reads, the page reads the same.
+  let paired = 0;
+  for (const [name, safeTx] of CASES) {
+    const parsed = ns.multisig.parseTx(safeTx);
+    if (parsed.error) continue;
+    const onMs = { ...safeTx, to: safeTx.to.toLowerCase() === SAFE.toLowerCase() ? MS : safeTx.to };
+    let data;
+    try {
+      data = ms('execTransactionData', { tx: onMs, signatures: ms('signatures', { approvals: aliceSigned, executor: EXECUTOR }) });
+    } catch {
+      continue;
+    }
+    const r = executionRequest([{ to: MS, value: '0x0', data }], aboutOf(onMs));
+    const v = ns.resolve(r.intent, r.context);
+    const out = reviewOf({ chainId: CHAIN, safe: MS, tx: onMs, owners: members.owners, threshold: members.threshold, deployed: true });
+    const coreRefuses = !!out.thrown || out.error !== undefined || out.sign?.allowed === false;
+    if (coreRefuses) check(`executing "${name}": the core refuses it — so does the page`, v.refuse, JSON.stringify(out.concerns ?? out.thrown));
+    else check(`executing "${name}": what the page signs, the core signs too`, v.refuse || out.sign?.allowed === true);
+    paired += 1;
+  }
+  check(`every case was executed through the page (${paired})`, paired >= CASES.length - 4);
+}
+
+{
+  // r7-4: Arc's own USDC behind its ERC-20 interface, named — never "1,000 ? ?".
+  const v = ns.resolve({ method: 'eth_sendTransaction', origin: '', params: [{
+    to: USDC, value: '0x0', data: '0x' + sel('transfer(address,uint256)') + word(THIRD) + num(1000),
+  }] }, { chainId: CHAIN, ...WALLET_CTX, method: 'eth_sendTransaction' });
+  check('Arc\'s USDC (0x3600…) is read in its units: 0.001 USDC', v.hero && v.hero.amount.text === '0.001' &&
+    v.hero.amount.symbol === 'USDC' && !v.hero.amount.unverifiedDecimals, v.hero && JSON.stringify(v.hero.amount.text));
+}
+
 // Every word this approval can put on the card, in every language.
 const KEYS = Object.keys(ns.i18n.catalogue ? ns.i18n.catalogue('en') : {});
 const msKeys = (KEYS.length ? KEYS : []).filter((k) => /\.ms[A-Z]|^ui\.copy$|^tag\.(multisig|thisMultisig)$|^field\.(multisig|member|newMember|oldMember|threshold|newName)$/.test(k));
 const english = {};
 ns.i18n.setLocale('en');
-const sample = ['intent.msApprove', 'refuse.msHashMismatch', 'refuse.msDelegateCall', 'ui.msHashes', 'button.msApprove', 'warn.msMembers', 'sentence.msReject'];
+const sample = ['intent.msApprove', 'refuse.msHashMismatch', 'refuse.msDelegateCall', 'ui.msHashes', 'button.msApprove', 'warn.msMembers', 'sentence.msReject',
+  // round 7: an execution
+  'intent.msExecute', 'sentence.msExecute', 'sentence.msSends', 'sentence.msExecSetsUp', 'sentence.msExecActivates',
+  'refuse.msExecShape', 'refuse.msExecExtra', 'refuse.msExecDeploy', 'refuse.msExecMismatch', 'refuse.msExecThreshold',
+  'warn.msExecNoNonce', 'ui.msHashesExecNote', 'field.approvedBy', 'ui.walletWithdrew', 'ui.answerNotTaken'];
 for (const key of sample) english[key] = ns.i18n.t(key, { claimed: 'A', computed: 'B', nonce: '7', fn: 'f' });
 for (const locale of LOCALES) {
   ns.i18n.setLocale(locale);

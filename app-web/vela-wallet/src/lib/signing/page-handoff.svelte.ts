@@ -41,6 +41,16 @@ const CHECK_ACCEPT = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;
 export const READY_MS = 30_000;
 
 /**
+ * How long the page's check may take (round 7, r7-2): the index and the
+ * page's bytes, fetched as a browser navigates to them. A host that answers
+ * slowly — or never — held "Checking the page…" for as long as it liked (75 s
+ * in the round-7 test, with no end in sight) while the asking site waited.
+ * Past this the hand-off ends as a page that is not answering, said as that
+ * ("The signing page isn't answering — try again"), and the site is answered.
+ */
+export const CHECK_MS = 20_000;
+
+/**
  * How often the asker is told the request is still being answered while the
  * page has it — well inside the extension's five-minute request window
  * (spec 082 `REQUEST_TTL_MS`), so a person reading a long batch on the page
@@ -58,7 +68,7 @@ export type PageHandoffFailure =
 	| 'declined'
 	/** The page answered, and the answer is not the account's signature of the core's bytes. */
 	| 'unverified'
-	/** The page never said it was ready. */
+	/** The page never said it was ready, or its check never finished in time (`CHECK_MS`). */
 	| 'silent'
 	/** The request is gone (the asking page left, its window ran out): nothing more is asked. */
 	| 'gone';
@@ -128,6 +138,9 @@ export interface PageHandoffDeps {
 	/** Timers, so a test can run the keep-alive and the ready wait on its own clock. */
 	setInterval?: (fn: () => void, ms: number) => unknown;
 	clearInterval?: (id: unknown) => void;
+	/** The check's deadline (`CHECK_MS`), on the test's clock. */
+	setTimeout?: (fn: () => void, ms: number) => unknown;
+	clearTimeout?: (id: unknown) => void;
 }
 
 async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
@@ -268,6 +281,20 @@ export async function handOff<T>(
 		closeWindow();
 		finish(new PageHandoffError('closed'));
 	};
+	// r7-5: the wallet gives up on the request (no answer in time, the asker
+	// gone, an answer it would not take): an open page is told, so it stops
+	// offering to sign what nobody waits for — never a "Confirm" that signs
+	// into nothing.
+	const withdraw = (error: PageHandoffError) => {
+		if (finished) return;
+		try {
+			if (win && !win.closed)
+				win.postMessage({ vela: 'bye', v: 1, reason: 'withdrawn' }, pageOrigin);
+		} catch {
+			/* gone already */
+		}
+		finish(error);
+	};
 	if (input.signal?.aborted) {
 		cancel();
 		return done;
@@ -275,8 +302,24 @@ export async function handOff<T>(
 	input.signal?.addEventListener('abort', cancel, { once: true });
 
 	pageHandoff.current = { ...base, phase: 'checking', line: null, open: () => {}, cancel };
-	const checked = await checkPage(input.page, deps);
+	// r7-2: the check is bounded. A page that has not been checked by then is
+	// a page that is not answering, and the asker hears so.
+	const later = deps.setTimeout ?? ((fn: () => void, ms: number) => setTimeout(fn, ms));
+	const unlater =
+		deps.clearTimeout ?? ((id: unknown) => clearTimeout(id as ReturnType<typeof setTimeout>));
+	let deadline: unknown = null;
+	const checked = await Promise.race([
+		checkPage(input.page, deps),
+		new Promise<null>((resolve) => {
+			deadline = later(() => resolve(null), CHECK_MS);
+		})
+	]);
+	unlater(deadline);
 	if (finished) return done;
+	if (checked === null) {
+		finish(new PageHandoffError('silent'));
+		return done;
+	}
 	if (checked.launch === null) {
 		const line = checked.line;
 		pageHandoff.current = {
@@ -322,7 +365,7 @@ export async function handOff<T>(
 			try {
 				accepted = input.accept(data.result);
 			} catch (error) {
-				finish(
+				withdraw(
 					new PageHandoffError(
 						'unverified',
 						null,
@@ -333,6 +376,9 @@ export async function handOff<T>(
 			}
 			win.postMessage({ vela: 'bye', v: 1, reason: 'done' }, pageOrigin);
 			finish(null, { ok: accepted });
+			// The page has nothing left to do: a finished tab is not left
+			// behind (each extension signature used to leave one open).
+			closeWindow();
 		}
 	};
 
@@ -371,8 +417,8 @@ export async function handOff<T>(
 			void keepAlive().then(
 				(live) => {
 					if (live || finished) return;
+					withdraw(new PageHandoffError('gone'));
 					closeWindow();
-					finish(new PageHandoffError('gone'));
 				},
 				() => {}
 			);

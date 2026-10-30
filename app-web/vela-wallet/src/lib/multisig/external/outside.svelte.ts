@@ -34,6 +34,7 @@
 import { poolRpcCall } from '$lib/services/rpc-pool';
 import { hasCode, readMembers, type ChainMembers } from '../core/chain';
 import { counterfactualFacts } from '../core/authority';
+import { carriedApprovals } from '../core/execute';
 import { gateOf, type SigningGate } from '../core/gate.svelte';
 import { judgeOn } from '../core/judge';
 import { GenesisRefusedError, type Finding } from '../core/refusal';
@@ -43,14 +44,12 @@ import {
 	ecdsaForm,
 	executionCalls,
 	genesisAddress,
-	isPasskeyApproval,
 	namedGenesis,
 	safeTxHash,
 	safeTxHashes,
 	safeTxTypedData,
 	sameAddress,
 	verifyEcdsaApproval,
-	type Approval,
 	type Call,
 	type EcdsaApproval,
 	type Genesis,
@@ -562,22 +561,19 @@ export class OutsideTransaction {
 	/**
 	 * The transactions `account`'s wallet sends to execute it: whatever must
 	 * be deployed first (the multisig, a passkey member's account its check
-	 * needs), then `execTransaction` — the owner's own approval as
-	 * `msg.sender` when it is one.
+	 * needs), then `execTransaction` — the approvals the members gave, and the
+	 * owner's own as `msg.sender` only where those fall short (r7-3,
+	 * `carriedApprovals`).
 	 */
 	async executionCalls(account: string): Promise<Call[]> {
 		const v = this.view;
 		if (!v) throw new Error('not loaded');
-		const owner = this.isOwner(account);
-		const approvals: Approval[] = v.item.approvals
-			.filter((a) => a.counts && !(owner && sameAddress(a.owner, account)))
-			.map((a) => a.approval);
-		const deployOwners: Genesis[] = [];
-		for (const a of approvals) {
-			if (isPasskeyApproval(a) && !(await hasCode(v.chainId, a.owner))) {
-				deployOwners.push(a.ownerGenesis);
-			}
-		}
+		const carried = await carriedApprovals(
+			v.chainId,
+			v.members,
+			v.item.approvals.filter((a) => a.counts).map((a) => a.approval),
+			account
+		);
 		// §3.5: deploying it: its genesis must be Verified here, on code read now.
 		const deployMultisig = v.members.deployed ? null : v.genesis;
 		let deployFacts = null;
@@ -589,10 +585,10 @@ export class OutsideTransaction {
 		return executionCalls({
 			multisig: v.safe,
 			deployMultisig,
-			deployOwners,
+			deployOwners: carried.deployOwners,
 			tx: v.tx,
-			approvals,
-			executor: owner ? account : null,
+			approvals: carried.approvals,
+			executor: carried.executorApproves ? account : null,
 			deployFacts
 		});
 	}

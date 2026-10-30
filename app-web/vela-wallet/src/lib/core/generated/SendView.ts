@@ -200,6 +200,8 @@ multi_valuable_ids: Array<string>, multi_chain_id: number | null,
 multi_specs: Array<SendMultiSpecView>, show_scanner: boolean, show_contact_picker: boolean, show_batch_import: boolean, estimating_gas: boolean, fee_busy: boolean, 
 /**
  * Chain-guarded (`selectedFeeEstimate`) — never a prior network's quote.
+ * While the confirmed operation is out to be signed, the estimate it
+ * signs, not a newer quote (r7-6).
  */
 fee: FeeEstimateView | null, gas_fee_token: string | null, 
 /**

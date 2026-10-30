@@ -426,7 +426,7 @@ describe('every signature passes the gate first (§3.5)', () => {
 		expect(sentExecutions.count).toBe(0);
 	});
 
-	it('an executor that approves on its page: the gate once, its approval, then the execution', async () => {
+	it('r7-3: an executor that signs on its page goes there once — its operation, no approval first', async () => {
 		pageRoute.accounts = [{ address: OWNER }];
 		try {
 			const multisigAccount = account as Parameters<typeof approve>[0];
@@ -434,7 +434,8 @@ describe('every signature passes the gate first (§3.5)', () => {
 				kind: 'priced'
 			} as unknown as Parameters<typeof execute>[4]);
 			expect(gate.asked).toEqual([100]);
-			expect(signed).toEqual([`0x${'22'.repeat(32)}`]);
+			// Its `msg.sender` is its approval: nothing else is signed.
+			expect(signed).toEqual([]);
 			expect(sentExecutions.count).toBe(1);
 		} finally {
 			pageRoute.accounts = [];

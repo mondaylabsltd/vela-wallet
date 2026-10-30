@@ -1517,6 +1517,7 @@
    "trustedSignerRefused": "签名页拒绝签署这笔请求，原因见页面。",
    "trustedSignerMismatch": "页面的回复与这笔请求不符，什么都没有发出。",
    "trustedSignerTimeout": "签名页没有及时回应。",
+   "trustedSignerUnanswered": "签名页没有回应，请再试一次。",
    "trustedSignerReopen": "重新打开页面",
    "handoffTitle": "在可信签名页上预览并签名",
    "confirmWithLabel": "确认方式",
@@ -1907,6 +1908,7 @@
     "signerUnavailable": "这里无法使用通行密钥",
     "signerNotDiscoverable": "这个通行密钥无法在这里签名",
     "signerFailed": "通行密钥验证失败",
+    "signingPage": "签名页没有签",
     "badRpc": "网站未提供此网络可用的 RPC"
    },
    "requests": "最近的请求",

@@ -211,6 +211,7 @@
       "trustedSignerRefused": "A página de assinatura não quis assinar esta solicitação. A página explica o motivo.",
       "trustedSignerMismatch": "A resposta da página não corresponde a esta solicitação, então nada foi enviado.",
       "trustedSignerTimeout": "A página de assinatura não respondeu a tempo.",
+      "trustedSignerUnanswered": "A página de assinatura não está respondendo — tente de novo.",
       "trustedSignerReopen": "Abrir a página de novo",
       "handoffTitle": "Revise e assine em uma página de assinatura confiável",
       "confirmWithLabel": "Confirmar com",
@@ -601,6 +602,7 @@
         "signerUnavailable": "Passkeys não podem ser usadas aqui",
         "signerNotDiscoverable": "Esta passkey não pode assinar aqui",
         "signerFailed": "A passkey falhou",
+        "signingPage": "A página de assinatura não assinou",
         "badRpc": "O site não deu um RPC utilizável para esta rede"
       },
       "requests": "Solicitações recentes",

@@ -97,7 +97,10 @@ export interface SigningLiveInputs {
 	 * is the passkey prompt up (`approval-progress.ts`). Absent: nothing known,
 	 * so the ✕ stays shut while anything is in flight.
 	 */
-	progress?: Pick<ApprovalProgress, 'signed' | 'ceremonyUp'>;
+	progress?: Pick<ApprovalProgress, 'signed' | 'ceremonyUp'> & {
+		/** Round 7 (S4): the account's trusted signing page has the request now. */
+		onPage?: boolean;
+	};
 	/**
 	 * The sheet's own simulation of THIS request, once it has ended: the
 	 * core's reading of the node's reply (`simOutcome`) and, for a check, the
@@ -1771,7 +1774,7 @@ export function refusalWords(
  */
 export function signingStatus(
 	sign: SignView,
-	progress: Pick<ApprovalProgress, 'signed' | 'ceremonyUp'> | undefined,
+	progress: (Pick<ApprovalProgress, 'signed' | 'ceremonyUp'> & { onPage?: boolean }) | undefined,
 	summary: string | undefined,
 	m: SigningMessages
 ): SigningStatus | null {
@@ -1831,10 +1834,13 @@ export function signingStatus(
 	// outlive its answer by a beat): a plain close, the operation carries on.
 	const closable = phase === 'submitting' && progress?.ceremonyUp !== true;
 	const onChain = request.kind === 'transaction' || request.kind === 'batch';
+	// Round 7 (S4): the person signs on the account's trusted signing page —
+	// no prompt is up here, and "Waiting for biometric…" was not true.
+	const onPage = progress?.onPage === true && phase === 'awaiting_signature';
 	if (!onChain) {
 		return {
 			stage: 'submitting',
-			title: m.status.messageSigning,
+			title: onPage ? m.status.pageSigning : m.status.messageSigning,
 			captions: lines(summary),
 			closable
 		};
@@ -1850,7 +1856,7 @@ export function signingStatus(
 		case 'awaiting_signature':
 			return {
 				stage: 'submitting',
-				title: m.status.signing,
+				title: onPage ? m.status.pageSigning : m.status.signing,
 				captions: lines(summary),
 				closable: false
 			};

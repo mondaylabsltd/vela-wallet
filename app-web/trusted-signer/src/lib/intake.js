@@ -97,6 +97,7 @@ window.VelaCS = window.VelaCS || {};
     this.ended = false;
     this.endReason = null;   // 'bye' | 'closed' | 'idle' | 'single' | 'error'
     this.endDetail = null;   // for 'error': an i18n key
+    this.why = null;         // the wallet's own reason for a bye: 'withdrawn'
     this.answered = 0;
     this.received = 0;
     this.inFlight = null;    // the request on screen, until it is answered
@@ -167,22 +168,27 @@ window.VelaCS = window.VelaCS || {};
     return new Promise(function (resolve) { self.waiters.push(resolve); });
   };
 
-  /** The request on screen can no longer be answered (its wallet went away). */
-  Session.prototype.lose = function () {
+  /**
+   * The request on screen can no longer be answered: its wallet went away —
+   * or, `why` = 'withdrawn', the wallet said it gave up on it (round 7,
+   * r7-5: it stopped waiting, or would not take the answer).
+   */
+  Session.prototype.lose = function (why) {
     var request = this.inFlight;
     if (!request || request.answered) return;
     request.gone = true;
     this.inFlight = null;
-    this.emit('onGone', request);
+    this.emit('onGone', request, why || null);
   };
 
-  /** The channel is over. */
-  Session.prototype.finish = function (reason, detail) {
+  /** The channel is over. `why`: the wallet's own reason, when it gave one. */
+  Session.prototype.finish = function (reason, detail, why) {
     if (this.ended) return;
-    this.lose();
+    this.lose(why);
     this.ended = true;
     this.endReason = reason;
     this.endDetail = detail || null;
+    this.why = why || null;
     clearTimeout(this.idleTimer);
     var waiters = this.waiters;
     this.waiters = [];
@@ -216,7 +222,10 @@ window.VelaCS = window.VelaCS || {};
       // and the first must come from the window that opened this page.
       if (peer ? event.source !== peer.source || event.origin !== peer.origin : event.source !== opener) return;
       if (data.vela === 'bye') {
-        if (peer) session.finish('bye');
+        // 'withdrawn': the wallet gave up on the request on screen (it ran
+        // out of time, was cancelled, or would not take the answer) — the
+        // card must stop offering to sign it.
+        if (peer) session.finish('bye', null, data.reason === 'withdrawn' ? 'withdrawn' : null);
         return;
       }
       if (data.vela !== 'intent') return;

@@ -325,6 +325,12 @@ export const WALLET_FLOW_KEYS = [
 	'send.submitSlow',
 	'send.txErrorChainBusy',
 	'send.txErrorChainUnreachable',
+	// Round 7: the account's trusted signing page did not sign — not
+	// answering, an answer that is not this send's, its refusal, its check.
+	'componentsUi.signing.trustedSignerUnanswered',
+	'componentsUi.signing.trustedSignerMismatch',
+	'componentsUi.signing.trustedSignerRefused',
+	'componentsUi.signing.integrity.couldNotCheck',
 	'send.maxMoved',
 	'send.txReviewAgain',
 	'send.txSendAgain',

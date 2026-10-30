@@ -61,6 +61,24 @@
 /// Every entry is a page published at `sign.getvela.app/b/<hash>/sign.html`.
 /// An empty set would open nothing were it enforced — see [`ENFORCE`].
 pub const BUILD_ALLOWED: &[&str] = &[
+    // 031dd666's page, reading a multisig EXECUTION (round 7, r7-1): the
+    // executor's own operation — `execTransaction` with the SafeTx decoded and
+    // read by the approval's rules (refusals included), its safeTxHash
+    // recomputed at the number the wallet names (`context.multisig`,
+    // `approval::execution_context`) and refused when the wallet's differs,
+    // the approvals it carries counted; the multisig's deploy verified from
+    // its setup (exactly Vela's multisig genesis, deriving the multisig) and
+    // a member's Vela account's (exactly its genesis, deriving an approver);
+    // anything else in the operation refused — "Executes multisig transaction
+    // #N: the multisig sends 0.05 USDC to 0x… · approvals 2 of 2", never
+    // "Batch — Unknowable". Also: Arc's and Stable's own coin behind its
+    // ERC-20 interface named in units (r7-4); a request the wallet withdraws
+    // (`bye` `withdrawn`) stops being offered (r7-5); done said once, and a
+    // finished page closes itself (S4). Not LAUNCH (the apps' URL channel is
+    // unchanged); the web and the extension open it once `dist/` is deployed
+    // and `/b/416a65c1…/sign` answers 200 + immutable +
+    // `access-control-allow-origin: *` with exactly these bytes.
+    "416a65c1e400c1c28e525475c4bb9cc0e95173c1dbbc316b9c9dd0bc762eb06d",
     // 48030d02's page, usable everywhere (owner, 2026-10-30): over
     // postMessage it answers every signature a wallet hands it — a
     // transaction, a batch, the wallet's own send, `personal_sign`, typed data

@@ -49,6 +49,8 @@ const priced = (
 		fee: { amount: (35n * USDC) / 1000n, recipient: '0xfe' },
 		balance: USDC,
 		canPay,
+		carries: [],
+		executorApproves: true,
 		setup: { multisig: false, members: [], executor: false, amount: null, ...setup }
 	}) as Priced;
 

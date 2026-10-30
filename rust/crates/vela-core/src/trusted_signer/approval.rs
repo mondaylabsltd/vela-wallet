@@ -98,6 +98,44 @@ pub fn request(input: &ApprovalInput<'_>) -> Result<Value, crate::error::CoreErr
     Ok(built)
 }
 
+/// What the page is told about the multisig transaction an executor's own
+/// operation executes (round 7, r7-1) — its `context.multisig`: the
+/// multisig, its name and how many approvals it needs as this device knows
+/// them, the number the transaction runs at, and the safeTxHash THE CORE
+/// computes at that number.
+///
+/// The page reads what runs from the operation's bytes (the `execTransaction`
+/// leg); this only says what those bytes do not carry. `execTransaction` has
+/// no nonce — the multisig uses its own — so the number, and the hash at it,
+/// are the app's word: the page recomputes the hash from the bytes at that
+/// number and refuses when the two differ (the app describes one transaction
+/// while the operation runs another), and draws the number, the name and the
+/// threshold as the app's.
+///
+/// # Errors
+///
+/// A SafeTx or an address the core cannot hash.
+pub fn execution_context(
+    chain_id: u64,
+    multisig: &str,
+    tx: &SafeTx,
+    name: Option<&str>,
+    threshold: Option<u64>,
+) -> Result<Value, crate::error::CoreError> {
+    let safe_tx_hash = multisig::safe_tx_hash(chain_id, multisig, tx)?;
+    let mut about = serde_json::Map::new();
+    about.insert("address".into(), json!(multisig));
+    if let Some(name) = name.map(str::trim).filter(|n| !n.is_empty()) {
+        about.insert("name".into(), json!(name));
+    }
+    if let Some(threshold) = threshold.filter(|t| *t > 0) {
+        about.insert("threshold".into(), json!(threshold));
+    }
+    about.insert("nonce".into(), json!(tx.nonce));
+    about.insert("safeTxHash".into(), json!(safe_tx_hash));
+    Ok(Value::Object(about))
+}
+
 /// The bytes the member's passkey signs for `safe_tx_hash`
 /// ([`multisig::approval_challenge`]) — what [`accept`] holds the answer to.
 ///
@@ -241,6 +279,25 @@ mod tests {
             "authenticatorData": crate::primitives::to_hex(&auth, false),
             "clientDataJSON": crate::primitives::to_hex(client.as_bytes(), false),
         })
+    }
+
+    #[test]
+    fn an_execution_names_its_number_and_the_cores_hash_at_it() {
+        let about = execution_context(CHAIN, MULTISIG, &tx(), Some("  Team fund "), Some(2))
+            .unwrap_or_else(|_| unreachable!());
+        assert_eq!(about["address"], MULTISIG);
+        assert_eq!(about["name"], "Team fund");
+        assert_eq!(about["threshold"], 2);
+        assert_eq!(about["nonce"], "0x3");
+        assert_eq!(
+            about["safeTxHash"],
+            multisig::safe_tx_hash(CHAIN, MULTISIG, &tx()).unwrap_or_default()
+        );
+        // Nothing this device does not know is said: no name, no threshold.
+        let bare = execution_context(CHAIN, MULTISIG, &tx(), Some(" "), Some(0))
+            .unwrap_or_else(|_| unreachable!());
+        assert!(bare.get("name").is_none() && bare.get("threshold").is_none());
+        assert!(execution_context(CHAIN, "not an address", &tx(), None, None).is_err());
     }
 
     #[test]

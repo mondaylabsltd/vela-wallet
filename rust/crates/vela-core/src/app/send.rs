@@ -1033,6 +1033,15 @@ pub enum SendSubmitFailure {
     ChainUnreachable {
         busy: bool,
     },
+    /// Round 7 (r7-2, r7-7): the account's trusted signing page did not sign,
+    /// and not because the person declined there (that is
+    /// [`Self::PasskeyCancelled`]): it never answered, its answer was not
+    /// this operation's signature, its rules refused, or its check failed.
+    /// Nothing was signed or sent; the confirm says which
+    /// ([`SendTxErrorKey::PageUnanswered`] …), never "couldn't be submitted".
+    PageFailed {
+        failure: super::sign_request::PageFailure,
+    },
 }
 
 /// Why the last passkey prompt on the confirm signed nothing (send-11): said
@@ -1873,6 +1882,19 @@ pub enum SendTxErrorKey {
     /// passkey: nothing was signed or sent
     /// (`send.txErrorChainUnreachable`, with the network's name).
     ChainUnreachable,
+    /// Round 7 (r7-2): the account's trusted signing page is not answering
+    /// (`componentsUi.signing.trustedSignerUnanswered`): nothing was signed.
+    PageUnanswered,
+    /// Round 7 (r7-7): the page's answer is not this operation's signature —
+    /// tampered or replayed (`componentsUi.signing.trustedSignerMismatch`):
+    /// nothing was sent.
+    PageMismatch,
+    /// The page's own rules refused it
+    /// (`componentsUi.signing.trustedSignerRefused`): nothing was signed.
+    PageRefused,
+    /// The page did not pass its check and was not opened
+    /// (`componentsUi.signing.integrity.couldNotCheck`): nothing was signed.
+    PageNotOpened,
 }
 
 /// Why a multisig's proposal was not made, as the shell knows it.
@@ -2032,6 +2054,13 @@ enum Pipeline {
         gen: u64,
         chain_id: u32,
         lines: Vec<SendLine>,
+        /// The estimate the operation's fee leg was priced from — the one
+        /// the confirm froze. The confirm draws THIS while the operation is
+        /// out ([`shown_fee`]): the fee card keeps re-quoting once a block,
+        /// and a newer figure on screen beside a passkey (or a signing page)
+        /// that signs the frozen one is a fee shown that is not the fee
+        /// signed (r7-6).
+        fee: Option<FeeEstimate>,
     },
     /// A classified failure is re-probing the treasury before wording the
     /// error (`useSendController.ts:1078-1096`).
@@ -2683,6 +2712,8 @@ pub struct SendView {
     pub estimating_gas: bool,
     pub fee_busy: bool,
     /// Chain-guarded (`selectedFeeEstimate`) — never a prior network's quote.
+    /// While the confirmed operation is out to be signed, the estimate it
+    /// signs, not a newer quote (r7-6).
     pub fee: Option<FeeEstimateView>,
     pub gas_fee_token: Option<String>,
     /// The coin the form's fee row wears, whether or not a figure is beside
@@ -3364,8 +3395,8 @@ impl Send {
             show_batch_import: model.show_batch_import,
             estimating_gas: model.estimating_gas,
             fee_busy: model.fee_busy,
-            fee: selected_fee(model).map(fee_to_view),
-            gas_fee_token: quoted_fee_token(model, selected_fee(model)),
+            fee: shown_fee(model).map(fee_to_view),
+            gas_fee_token: quoted_fee_token(model, shown_fee(model)),
             fee_coin: fee_coin(model),
             amount_warning: warning,
             amount_issue,
@@ -5452,6 +5483,27 @@ fn selected_fee(model: &Model) -> Option<&FeeEstimate> {
     (fee.chain_id == token.chain_id).then_some(fee)
 }
 
+/// The fee the confirm draws ([`SendView::fee`]) — the one it signs.
+///
+/// While the operation is out to be signed (its passkey, or the signing page
+/// it was handed to, and the POST after), that is the estimate the confirm
+/// froze, carried by [`Pipeline::Submitting`]: the fee card goes on
+/// re-quoting once a block and this machine goes on taking each quote
+/// ([`Event::FeeUpdated`]), but a newer figure is not what is being signed
+/// (r7-6). Once the submit is over — failed, refused, or withdrawn by a
+/// cancel — the newest quote is drawn again, and the next confirm signs that
+/// one: re-quoted, shown, then signed.
+fn shown_fee(model: &Model) -> Option<&FeeEstimate> {
+    match &model.pipeline {
+        Pipeline::Submitting { fee: Some(fee), .. }
+            if matches!(model.tx, SendTxStatus::Submitting | SendTxStatus::Signing) =>
+        {
+            Some(fee)
+        }
+        _ => selected_fee(model),
+    }
+}
+
 /// The chain's own coin, when the registry knows it — the symbol a `None` in
 /// [`SendAmountWarning`] leaves the shell to resolve.
 fn chain_native_symbol(model: &Model, chain_id: u32) -> Option<String> {
@@ -5477,7 +5529,7 @@ fn fee_coin(model: &Model) -> Option<SendFeeCoin> {
     // settles is mirrored here (`FeeUpdated`) and none is dropped for a speed
     // change, so it is this speed's own once that has landed, and the speed
     // just left's while it is measured — in the coin that will pay either way.
-    if let Some(fee) = selected_fee(model) {
+    if let Some(fee) = shown_fee(model) {
         let chain_id = fee.chain_id;
         return Some(match &fee.fee_asset {
             FeeAsset::Native => native_fee_coin(model, chain_id),
@@ -6387,6 +6439,8 @@ fn quoted_fee_token(model: &Model, fee: Option<&FeeEstimate>) -> Option<String> 
 struct SubmitPlan {
     chain_id: u32,
     account: String,
+    /// The estimate `quoted_fee` was read from.
+    fee: Option<FeeEstimate>,
     max_fee_per_gas: Option<String>,
     gas_fee_token: Option<String>,
     quoted_fee: Option<SendQuotedFee>,
@@ -6525,6 +6579,7 @@ fn submit_plan(model: &Model) -> Option<SubmitPlan> {
         account: account.address,
         max_fee_per_gas,
         gas_fee_token: quoted_fee_token(model, current_fee.as_ref()),
+        fee: current_fee,
         quoted_fee,
         calls,
         lines,
@@ -6600,6 +6655,7 @@ fn submit_user_op(model: &mut Model, gen: u64, public_key_hex: String) -> Cmd {
         account,
         max_fee_per_gas,
         gas_fee_token,
+        fee,
         quoted_fee,
         calls,
         lines,
@@ -6612,6 +6668,7 @@ fn submit_user_op(model: &mut Model, gen: u64, public_key_hex: String) -> Cmd {
         gen,
         chain_id,
         lines,
+        fee,
     };
     Command::all([
         issue(
@@ -7942,6 +7999,7 @@ fn accept_submitted(
         gen,
         chain_id,
         lines,
+        ..
     } = model.pipeline.clone()
     else {
         return Command::done();
@@ -8196,6 +8254,24 @@ fn submit_failed(model: &mut Model, gen: u64, failure: SendSubmitFailure) -> Cmd
             model.tx_error = Some(SendTxErrorKey::PreviousPending);
             model.lock.end(gen);
             render()
+        }
+        SendSubmitFailure::PageFailed { failure } => {
+            // Round 7: not the network's and not the relay's — the signing
+            // page did not sign, and the confirm says why.
+            model.tx = SendTxStatus::Error;
+            model.tx_error = Some(match failure {
+                super::sign_request::PageFailure::Unanswered => SendTxErrorKey::PageUnanswered,
+                super::sign_request::PageFailure::Mismatch => SendTxErrorKey::PageMismatch,
+                super::sign_request::PageFailure::Refused => SendTxErrorKey::PageRefused,
+                super::sign_request::PageFailure::NotOpened => SendTxErrorKey::PageNotOpened,
+            });
+            model.lock.end(gen);
+            fire(
+                model,
+                SendOperation::Haptic {
+                    kind: SendHapticKind::Error,
+                },
+            )
         }
         SendSubmitFailure::VenueBlocked { block } => {
             // Spec 102: not a failure of the network or the relay — this

@@ -78,7 +78,12 @@ vi.mock('$lib/signing/sign-challenge', () => ({
 			super('venue blocked');
 		}
 	},
-	PageDeclinedError: class PageDeclinedError extends Error {}
+	PageDeclinedError: class PageDeclinedError extends Error {},
+	PageSignFailedError: class PageSignFailedError extends Error {
+		constructor(readonly page: string) {
+			super('the signing page did not sign');
+		}
+	}
 }));
 vi.mock('$lib/services/add-network.svelte', () => ({
 	addCustomNetworkByChainId: seams.addNetwork
@@ -132,7 +137,7 @@ import { createSendSession } from './send-session';
 import { sendTokenId, type SendShellPorts } from './send-types';
 import type { SendEvent } from '$lib/core/generated/SendEvent';
 import { sendBatchCalls, type SignFn, type SubmitResult } from '$lib/services/safe-transaction';
-import { VenueBlockedError } from '$lib/signing/sign-challenge';
+import { PageSignFailedError, VenueBlockedError } from '$lib/signing/sign-challenge';
 
 const ACCOUNT = '0x' + 'aa'.repeat(20);
 const HELD: SendToken = {
@@ -537,6 +542,30 @@ describe('the wallet’s own Send writes ahead (spec 082 RJ1)', () => {
 			failure: { type: 'venue_blocked', block: { type: 'not_on_web' } }
 		});
 		expect(posted).not.toHaveBeenCalled();
+	});
+
+	/**
+	 * Round 7 (r7-2, r7-7): the signing page did not sign — not answering, an
+	 * answer that is not this send's — and the core hears which, to say it on
+	 * the confirm; never a generic "couldn't be submitted".
+	 */
+	it('a page that did not sign fails as page_failed, with the page’s reason', async () => {
+		vi.mocked(sendBatchCalls).mockImplementationOnce(async (...args: unknown[]) => {
+			const signFn = args[4] as SignFn;
+			await signFn(new Uint8Array(32), {} as never);
+			throw new Error('unreachable');
+		});
+		const { signChallenge } = await import('$lib/signing/sign-challenge');
+		vi.mocked(signChallenge).mockRejectedValueOnce(
+			new (PageSignFailedError as unknown as new (page: string) => Error)('mismatch')
+		);
+		const executor = createSendExecutor(ports({ credentialId: () => 'cred-1' }), {
+			dispatch: () => {}
+		});
+		await expect(executor.execute(submit)).resolves.toEqual({
+			type: 'submit_failed',
+			failure: { type: 'page_failed', failure: 'mismatch' }
+		});
 	});
 
 	/**

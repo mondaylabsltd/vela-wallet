@@ -42,7 +42,11 @@
  */
 
 import { PasskeyError } from '$lib/onboarding/core/passkey';
-import { PageDeclinedError, VenueBlockedError } from '$lib/signing/sign-challenge';
+import {
+	PageDeclinedError,
+	PageSignFailedError,
+	VenueBlockedError
+} from '$lib/signing/sign-challenge';
 import {
 	attemptSilentSponsorship,
 	checkBundlerFunding,
@@ -613,6 +617,11 @@ export function createSignExecutor(ports: SignShellPorts, timer: SignTimer = wal
 		// signing page, or closed it unsigned. The page is the venue, so that is
 		// their answer: the core answers the site 4001 and clears the sheet.
 		if (error instanceof PageDeclinedError) return { type: 'page_declined' };
+		// Round 7: the page did not sign, and not by the person's choice — it
+		// never answered, its answer was not this request's, its rules
+		// refused, its check failed. The core says which, on the sheet and
+		// to the site.
+		if (error instanceof PageSignFailedError) return { type: 'page_failed', failure: error.page };
 		if (error instanceof PasskeyError && error.kind === 'cancelled') {
 			// Never an error, never a response, never a durable 'rejected' (⑧) —
 			// but the sheet says whether the prompt ran out of time (signer-11).

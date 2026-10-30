@@ -474,7 +474,10 @@ export function resolveHandoffMessages(locale: Locale): HandoffMessages {
 			'onboarding.create.methodPlatformTitle',
 			'onboarding.create.methodHybridTitle',
 			'onboarding.create.methodSecurityKeyTitle'
-		])
+		]),
+		unanswered: k('componentsUi.signing.trustedSignerUnanswered'),
+		mismatch: k('componentsUi.signing.trustedSignerMismatch'),
+		refused: k('componentsUi.signing.trustedSignerRefused')
 	};
 }
 
@@ -1384,7 +1387,13 @@ export const CONFIRM_BLOCK_KEYS = [
 export const SIGNER_REASON_KEYS = {
 	signer_unavailable: 'componentsUi.browserStatus.reason.signerUnavailable',
 	signer_not_discoverable: 'componentsUi.browserStatus.reason.signerNotDiscoverable',
-	signer_failed: 'componentsUi.browserStatus.reason.signerFailed'
+	signer_failed: 'componentsUi.browserStatus.reason.signerFailed',
+	// Round 7 (r7-2, r7-7): the account's trusted signing page did not sign —
+	// said as what happened there, never "couldn't be submitted".
+	page_unanswered: 'componentsUi.signing.trustedSignerUnanswered',
+	page_mismatch: 'componentsUi.signing.trustedSignerMismatch',
+	page_refused: 'componentsUi.signing.trustedSignerRefused',
+	page_not_opened: 'componentsUi.signing.integrity.couldNotCheck'
 } as const;
 
 export function resolveSigningMessages(locale: Locale): SigningMessages {
@@ -1626,6 +1635,7 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 			submitting: k('send.txSubmitting'),
 			backgroundHint: k('send.txBackgroundHint'),
 			messageSigning: k('componentsUi.signing.signing'),
+			pageSigning: k('componentsUi.signing.trustedSignerWaiting'),
 			failedHint: k('send.txErrorGeneric'),
 			retry: k('send.txRetryBtn'),
 			notSentTitle: k('componentsUi.signing.notSentTitle')

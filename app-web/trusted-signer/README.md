@@ -49,6 +49,14 @@ scheme —— 发布页的 `default-src 'none'` 就在被哈希的字节里，�
 钱包转来的站点写成「钱包的说法」（`warn.relayedOrigin`），不当作已核实。Chrome 应用商店分配给商店包的 id 尚未加入
 （`resolve.js` 的 `EXTENSIONS`）。见 [PROTOCOL.md](PROTOCOL.md) 第 13 节。
 
+**多签的执行（第七轮，r7-1）**：执行一笔多签交易是执行者自己的操作（钱包自己的 `wallet_sendCalls`：先部署还没上链的多签和
+批准成员的 Vela 账户，再 `execTransaction`，最后费用腿）。本页不再把它画成「批量 —— 无法预知」：`execTransaction` 里的 SafeTx
+按多签批准的同一套规则读（拒签也一样），safeTxHash 按钱包给的序号（`context.multisig`，`execTransaction` 不带序号）重算、
+与钱包的不符就拒；部署多签的腿必须正好是 Vela 建多签的 setup（重新编码逐字节比对）且 CREATE2 推出的就是被执行的多签，
+部署成员账户的腿必须正好是那个 Vela 账户的 setup、推出的是一位批准了的成员；别的腿一律拒。卡上：「执行多签交易 #N：」、
+多签发出的金额与收款方、批准数（`2 / 2`，门槛不是本次部署读出的就标「App 的说法」）、批准人、三个哈希、顺带部署了什么。
+见 [PROTOCOL.md](PROTOCOL.md) 第 12.7 节。
+
 **多签成员的批准（2026-10-29，`vela_multisigApprove`）**：网页钱包的成员选了签名页时，批准交到这一页。
 本页从原始 SafeTx 字段自己算 safeTxHash（以及域哈希、消息哈希），App 给的哈希不一致就拒签；按 vela-core
 `review` 的同一套规则读出转账 / 成员变更 / 批量的每一腿 / 拒绝 / 改名，拒绝 MultiSendCallOnly 以外的
@@ -57,7 +65,7 @@ delegatecall、改模块 / guard / handler / singleton 的自调用和 gas 退�
 （`https://wallet.getvela.app`、`https://getvela.app`），且只限这一种请求。见 [PROTOCOL.md](PROTOCOL.md) 第 12 节。
 
 ```sh
-node samples/multisig-test.mjs  # 248 项：多签批准 —— 哈希、批准字节、读法与发布的 vela-core wasm 逐例对拍；钱包的唯一审阅（multisigReview）拒的本页一律拒，含状态差异守卫的 Bybit 向量；哈希不符、看不见的字符、超大载荷、非钱包打开者；十五种语言
+node samples/multisig-test.mjs  # 320 项：多签批准 —— 哈希、批准字节、读法与发布的 vela-core wasm 逐例对拍；钱包的唯一审阅（multisigReview）拒的本页一律拒，含状态差异守卫的 Bybit 向量；哈希不符、看不见的字符、超大载荷、非钱包打开者；第 3 段：多签的执行（执行者自己的操作：execTransaction 里的 SafeTx 按批准的规则读、部署腿从 setup 核实、其余一律拒；36 个 SafeTx 逐个执行，核心拒的本页必拒）；Arc 的 USDC 按单位读；十五种语言
 bun samples/serve-dist.mjs      # 本机按托管方的样子提供 dist/（含 _headers 的规则与 /b/<hash>/sign），部署前先试
 bun samples/answer-test.mjs     # 55 项：答复只交给钱包 —— 钓鱼站的 cb、postMessage、框架、回环，在发布出去的字节上；G 段：网页钱包的多签批准与消息被答、子域被拒；H 段：真的未打包扩展 —— 已发布 id 的 personal_sign / typed data / 交易被答，别的 id 被拒
 node samples/hostile-test.mjs   # 35 项：请求方能控制的字段全填毒串，断言一个都不当事实显示

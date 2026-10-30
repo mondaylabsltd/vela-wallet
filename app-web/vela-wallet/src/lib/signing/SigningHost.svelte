@@ -60,6 +60,7 @@
 	import { adviceStanding, openReview, sheetBeside } from '$lib/agent/advice.svelte';
 	import { adviceCard } from '$lib/agent/advisor';
 	import PageHandoffSheet from '$lib/signing/ui/PageHandoffSheet.svelte';
+	import { pageHandoff } from '$lib/signing/page-handoff.svelte';
 
 	interface Props {
 		messages: SigningMessages;
@@ -685,7 +686,8 @@
 			clear: signingSheet.clear,
 			guard: signingSheet.guard,
 			fee: feeShown,
-			progress: signRequest.progress,
+			// Round 7 (S4): the page has it — "Waiting for the signing page…".
+			progress: { ...signRequest.progress, onPage: pageHandoff.current?.kind === 'signature' },
 			// This request's own simulation, and no other's.
 			sim: checked !== null && checked.requestId === signView.request?.id ? checked.sim : null,
 			simRechecking: recheckingFor !== null && recheckingFor === signView.request?.id,

@@ -548,6 +548,9 @@ body {
   overflow-wrap: anywhere;
 }
 
+/* A multisig execution's own line, before what the transaction does. */
+.sentence-lead { font-weight: var(--weight-semibold); }
+
 /* --- rows: the app's label / value rows (KeyValueRows) -------------------- */
 
 .rows { display: flex; flex-direction: column; }

@@ -5,8 +5,9 @@
  * fee paid by the executor, one passkey prompt). Its calls are the core's
  * (`executionCalls`): deploy the multisig and every approving owner that has
  * no code on the chain yet — both permissionless, from their geneses — then
- * `execTransaction`. The executor counts as an approval of its own
- * (`msg.sender`), so it needs no second signature.
+ * `execTransaction`. An owner executing counts as an approval of its own
+ * (`msg.sender`) where the members' approvals fall short, so it needs no
+ * second signature — and no trip to a signing page besides its operation's.
  *
  * Before any passkey the execution is looked at as it would run
  * ({@link previewExecution}): what it spends against what the multisig holds,
@@ -74,6 +75,11 @@ export interface ExecutionInput {
 	 * signed. Omitted: the simulation alone speaks.
 	 */
 	action?: Action | null;
+	/**
+	 * The multisig's name on this device, for the executor's trusted signing
+	 * page — which draws it as the app's word (round 7, r7-1).
+	 */
+	name?: string | null;
 }
 
 /** The executor's calls, and what they set up on the chain on the way. */
@@ -87,27 +93,53 @@ export interface PlannedExecution {
 	 * calling the member's account, so the account must exist there first.
 	 */
 	activates: string[];
+	/** The members whose given approvals it carries (the executor's own is never one). */
+	carries: string[];
+	/** The executor approves by sending it (`msg.sender`), one approval besides `carries`. */
+	executorApproves: boolean;
+}
+
+/** Which approvals an execution carries, and what they need deployed ({@link carriedApprovals}). */
+export interface Carried {
+	/** The approvals carried (the executor's own is never one). */
+	approvals: Approval[];
+	/** The executor approves by sending it (`msg.sender`), one approval besides these. */
+	executorApproves: boolean;
+	/** The geneses of the passkey members' accounts its approvals' checks need deployed first. */
+	deployOwners: Genesis[];
+	/** Those members (`activates`, {@link PlannedExecution}). */
+	activates: string[];
 }
 
 /**
- * The executor's calls, with whatever must be deployed first.
+ * Which of `approvals` (verified ones, from members) an execution sent by
+ * `executor` carries.
  *
  * Only the approvals the threshold needs are carried — the multisig reads
  * the first `threshold` signatures and no more — and among them first those
  * that need nothing deployed (a plain account's, or a Vela account that
  * exists there already): a member's account is never deployed, at the
  * executor's cost, for an approval the multisig would not read.
+ *
+ * r7-3: the approvals the members gave come first. An owner executing
+ * approves as `msg.sender` only when those that need nothing deployed fall
+ * short — never in place of one given (an outside wallet's among them),
+ * which would then read as "not counted" on a transaction it approved.
  */
-export async function planExecution(input: ExecutionInput): Promise<PlannedExecution> {
-	const owner = input.members.owners.some((o) => sameAddress(o, input.executor.address));
-	const others = owner
-		? input.approvals.filter((a) => !sameAddress(a.owner, input.executor.address))
-		: input.approvals;
+export async function carriedApprovals(
+	chainId: number,
+	members: Pick<ChainMembers, 'owners' | 'threshold'>,
+	approvals: Approval[],
+	executor: string
+): Promise<Carried> {
+	const owner = members.owners.some((o) => sameAddress(o, executor));
+	const others = owner ? approvals.filter((a) => !sameAddress(a.owner, executor)) : approvals;
 	// A passkey owner's check needs its wallet's code; a plain account signs as it is.
 	const ready = await Promise.all(
-		others.map(async (a) => !isPasskeyApproval(a) || (await hasCode(input.chainId, a.owner)))
+		others.map(async (a) => !isPasskeyApproval(a) || (await hasCode(chainId, a.owner)))
 	);
-	const needed = Math.max(0, input.members.threshold - (owner ? 1 : 0));
+	const executorApproves = owner && ready.filter(Boolean).length < members.threshold;
+	const needed = Math.max(0, members.threshold - (executorApproves ? 1 : 0));
 	const chosen = others
 		.map((approval, i) => ({ approval, ready: ready[i] }))
 		.sort((a, b) => Number(b.ready) - Number(a.ready))
@@ -122,6 +154,19 @@ export async function planExecution(input: ExecutionInput): Promise<PlannedExecu
 			activates.push(approval.owner);
 		}
 	}
+	return {
+		approvals: chosen.map((c) => c.approval),
+		executorApproves,
+		deployOwners,
+		activates
+	};
+}
+
+/** The executor's calls, with whatever must be deployed first ({@link carriedApprovals}). */
+export async function planExecution(input: ExecutionInput): Promise<PlannedExecution> {
+	const executor = input.executor.address;
+	const carried = await carriedApprovals(input.chainId, input.members, input.approvals, executor);
+	const { deployOwners, activates, executorApproves } = carried;
 	// Whether this execution deploys the multisig: asked here, and only here.
 	const deployMultisig = input.members.deployed ? null : input.genesis;
 	// Deploying it: its genesis must be Verified on this chain, on code read now.
@@ -131,11 +176,17 @@ export async function planExecution(input: ExecutionInput): Promise<PlannedExecu
 		deployMultisig,
 		deployOwners,
 		tx: input.tx,
-		approvals: chosen.map((c) => c.approval),
-		executor: owner ? input.executor.address : null,
+		approvals: carried.approvals,
+		executor: executorApproves ? executor : null,
 		deployFacts
 	});
-	return { calls, deploysMultisig: deployMultisig !== null, activates };
+	return {
+		calls,
+		deploysMultisig: deployMultisig !== null,
+		activates,
+		carries: carried.approvals.map((a) => a.owner),
+		executorApproves
+	};
 }
 
 /**
@@ -194,6 +245,10 @@ export type ExecutionPreview =
 			balance: bigint | null;
 			/** The executor holds the fee (or its balance could not be read). */
 			canPay: boolean;
+			/** The members whose given approvals it carries ({@link PlannedExecution}). */
+			carries: string[];
+			/** The executor approves by sending it (`msg.sender`). */
+			executorApproves: boolean;
 			setup: {
 				multisig: boolean;
 				/** Members whose accounts it activates (deploys) for their approvals. */
@@ -428,6 +483,8 @@ async function look(input: ExecutionInput, reads: PreviewReads): Promise<Executi
 		fee: quote.fee,
 		balance,
 		canPay: balance === null || balance >= quote.fee.amount,
+		carries: plan.carries,
+		executorApproves: plan.executorApproves,
 		setup: {
 			multisig: plan.deploysMultisig,
 			members: plan.activates,
@@ -438,7 +495,8 @@ async function look(input: ExecutionInput, reads: PreviewReads): Promise<Executi
 }
 
 /** The executor's passkey over its user operation — the dApp path's signer. */
-function executorSigner(owner: LocalOwner, chainId: number, tx: SafeTx): SignFn {
+function executorSigner(input: ExecutionInput): SignFn {
+	const { executor: owner, chainId, tx } = input;
 	const stored = findAccountByAddress(owner.address);
 	const keys = stored ? keySetOf(stored).keys : [];
 	return async (challenge, operation) => {
@@ -450,7 +508,22 @@ function executorSigner(owner: LocalOwner, chainId: number, tx: SafeTx): SignFn 
 				account: owner.address,
 				keys,
 				credentials: keys.map((k) => ({ id: k.credentialId })),
-				request: { method: 'vela_multisigExecute', params: { tx }, origin: '', chainId }
+				// Round 7 (r7-1): the page reads what runs from the operation's
+				// bytes; this says what they do not carry — the number the
+				// transaction runs at (the core adds its safeTxHash there), the
+				// multisig, its name and how many approvals it needs — each drawn
+				// on the page as the app's word, the hash checked against the bytes.
+				request: {
+					method: 'vela_multisigExecute',
+					params: {
+						tx,
+						multisig: input.multisig,
+						name: input.name ?? null,
+						threshold: input.members.threshold
+					},
+					origin: '',
+					chainId
+				}
 			},
 			operation
 		);
@@ -639,7 +712,7 @@ export async function submitExecution(
 	// §3.5: a preview shown a while ago deploys only what the chain's code
 	// says now — read again right before the passkey, never from that look.
 	if (preview && !input.members.deployed) await verifiedDeployFacts(input);
-	const own = executorSigner(input.executor, input.chainId, input.tx);
+	const own = executorSigner(input);
 	// Whether the passkey was asked: once it was, a retry would ask again —
 	// never done without the person.
 	let asked = false;

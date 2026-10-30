@@ -57,6 +57,7 @@ import { PasskeyError } from '$lib/onboarding/core/passkey';
 import {
 	cancelChallenge,
 	PageDeclinedError,
+	PageSignFailedError,
 	signChallenge,
 	VenueBlockedError
 } from '$lib/signing/sign-challenge';
@@ -937,6 +938,10 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 		// Declined on the trusted signing page, or closed unsigned (R7): as a
 		// passkey closed — the confirm stays, for another try.
 		if (error instanceof PageDeclinedError) return { type: 'passkey_cancelled' };
+		// …or did not sign there for another reason (round 7): not answering,
+		// an answer that is not this send's, its refusal, its check — said as
+		// that, never as a send the network refused.
+		if (error instanceof PageSignFailedError) return { type: 'page_failed', failure: error.page };
 		// Spec 102 (P2b-W1): this account cannot sign on the web — nothing was
 		// signed or sent. The core says why on the confirm screen, in the
 		// person's language (`SendView.tx_venue_block`), from the block itself.
