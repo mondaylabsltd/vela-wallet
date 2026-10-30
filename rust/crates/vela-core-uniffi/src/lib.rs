@@ -18,8 +18,16 @@ mod ctap_bridge;
 mod intents_bridge;
 /// Multicall3 encoding for the native read path (spec 051).
 mod multicall;
+/// F0.2: the uniffi exports held to the wasm's answers on shared vectors.
+#[cfg(test)]
+mod native_parity_tests;
 mod onboarding_bridge;
+/// Small core rules the web reads over wasm (F0.2): RPC clocks, fee figures,
+/// dApp RPC answers, provenance, names, currencies.
+mod rules_bridge;
 mod settings_bridge;
+/// Where a signature goes and how a page's answer is taken (F0.2).
+mod signing_bridge;
 mod trusted_signer_bridge;
 
 pub use onboarding_bridge::{CreateWalletCore, LoginCore, SessionCore};

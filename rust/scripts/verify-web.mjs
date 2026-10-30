@@ -16,6 +16,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { loadShippedCore } from './load-wasm-node.mjs';
+import { nativeParityDispatch } from './native-parity-wasm.mjs';
 
 const RUST_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
 const VECTORS_DIR = join(RUST_DIR, 'crates', 'vela-core', 'tests', 'vectors');
@@ -538,6 +539,37 @@ if (boundary.length) {
   failures.push(...boundary);
 }
 
+// ---------------------------------------------------------------------------
+// F0.2 native parity: the exports the native apps take over from the web. The
+// corpus lives in its own directory (it is not a conformance suite: its
+// expectations ARE this artifact's answers, recorded); this run says the
+// shipped wasm still gives them, and the uniffi tests, smoke-kotlin.sh and
+// smoke-swift.sh say the native bindings give the same.
+// ---------------------------------------------------------------------------
+
+let parityTotal = 0;
+{
+  const doc = JSON.parse(readFileSync(join(VECTORS_DIR, 'native-parity', 'exports.json'), 'utf8'));
+  const dispatch = nativeParityDispatch(wasm);
+  for (const c of doc.cases) {
+    parityTotal++;
+    const run = dispatch[c.fn];
+    if (!run) {
+      failures.push(`native-parity::${c.name} — no dispatch arm for \`${c.fn}\``);
+      continue;
+    }
+    let actual;
+    try {
+      actual = run(c.input);
+    } catch (e) {
+      failures.push(`native-parity::${c.name} — threw ${e?.message ?? e}`);
+      continue;
+    }
+    const problem = check(c.expect, actual);
+    if (problem) failures.push(`native-parity::${c.name} — ${problem}`);
+  }
+}
+
 if (failures.length) {
   console.error(`verify-web: ${failures.length} of ${total} cases FAILED:\n${failures.join('\n')}`);
   process.exit(1);
@@ -547,3 +579,4 @@ console.log(
     ` (${skipped} skipped — core-only functions with no binding surface: ${[...CORE_ONLY_FNS].join(', ')})`,
 );
 console.log(`verify-web: ${2 + 3} boundary regressions green (FR-023 borrow safety, FR-024 non-finite vars)`);
+console.log(`verify-web: ${parityTotal} native-parity cases green (the uniffi exports' recorded answers)`);

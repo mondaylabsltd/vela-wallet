@@ -133,3 +133,30 @@ pub fn intent_dapp_request_target(id: String) -> String {
 pub fn intent_approval_detail_in(action_json: String, world_json: String) -> String {
     intent_json::approval_detail_in(&action_json, &world_json)
 }
+
+/// Why an agent may not read what `vela_review` (`operation` absent) or
+/// `vela_wait` (`operation`) would answer: a reason's JSON, or `null` — the
+/// web's `intentAgentReads`.
+#[uniffi::export]
+#[must_use]
+pub fn intent_agent_reads(world_json: String, operation: Option<String>) -> String {
+    intent_json::agent_reads(&world_json, operation.as_deref())
+}
+
+/// `vela_advise`: the agent's opinion on the review on the sheet, sanitized
+/// and bound to the review's digest — or refused. The AI advisor card's
+/// input (the web's `intentAdvice`).
+#[uniffi::export]
+#[must_use]
+pub fn intent_advice(input_json: String) -> String {
+    intent_json::advice(&input_json)
+}
+
+/// How an opinion the sheet holds stands now — `current`, `earlier_version`
+/// or `fee_changed` — and the fee it was given for (the web's
+/// `intentAdviceStanding`).
+#[uniffi::export]
+#[must_use]
+pub fn intent_advice_standing(input_json: String) -> String {
+    intent_json::advice_standing(&input_json)
+}

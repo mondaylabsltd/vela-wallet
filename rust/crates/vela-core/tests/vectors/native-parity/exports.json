@@ -1,0 +1,2902 @@
+{
+ "suite": "native-parity",
+ "note": "F0.2: the web exports the native apps need over uniffi. Inputs are as the uniffi export takes them (`*_json` keys are JSON TEXT); every expectation is what the SHIPPED wasm answered (rust/scripts/native-parity-wasm.mjs reduces it: JSON text parsed, \"\" kept, undefined as null, a refusal as {refused: code}, an accepted assertion as hex). verify-web.mjs replays it through the wasm; vela-core-uniffi tests, smoke-kotlin.sh and smoke-swift.sh through uniffi. The P-256 keys behind the trusted-signer cases were generated once for this file and thrown away.",
+ "cases": [
+  {
+   "name": "signing_route/official/own_send",
+   "fn": "signing_route",
+   "input": {
+    "account_json": "{\n  \"id\": \"a1b2c3d4\",\n  \"name\": \"Savings\",\n  \"address\": \"0x1111111111111111111111111111111111111111\",\n  \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n  \"created_at_iso\": \"2026-09-30T10:00:00.000Z\",\n  \"keys\": [\n    {\n      \"credential_id\": \"a1b2c3d4\",\n      \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n      \"name\": \"Savings\",\n      \"transports\": \"hybrid,internal\",\n      \"signer_origin\": \"https://sign.getvela.app\"\n    }\n  ],\n  \"signed_in_with\": {\n    \"credential_id\": \"a1b2c3d4\",\n    \"method\": \"trusted_signer\",\n    \"signer_origin\": \"https://sign.getvela.app\"\n  }\n}\n",
+    "method": ""
+   },
+   "expect": {
+    "value": {
+     "type": "page",
+     "url": "https://sign.getvela.app/"
+    }
+   }
+  },
+  {
+   "name": "signing_route/official/eth_sendTransaction",
+   "fn": "signing_route",
+   "input": {
+    "account_json": "{\n  \"id\": \"a1b2c3d4\",\n  \"name\": \"Savings\",\n  \"address\": \"0x1111111111111111111111111111111111111111\",\n  \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n  \"created_at_iso\": \"2026-09-30T10:00:00.000Z\",\n  \"keys\": [\n    {\n      \"credential_id\": \"a1b2c3d4\",\n      \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n      \"name\": \"Savings\",\n      \"transports\": \"hybrid,internal\",\n      \"signer_origin\": \"https://sign.getvela.app\"\n    }\n  ],\n  \"signed_in_with\": {\n    \"credential_id\": \"a1b2c3d4\",\n    \"method\": \"trusted_signer\",\n    \"signer_origin\": \"https://sign.getvela.app\"\n  }\n}\n",
+    "method": "eth_sendTransaction"
+   },
+   "expect": {
+    "value": {
+     "type": "page",
+     "url": "https://sign.getvela.app/"
+    }
+   }
+  },
+  {
+   "name": "signing_route/official/personal_sign",
+   "fn": "signing_route",
+   "input": {
+    "account_json": "{\n  \"id\": \"a1b2c3d4\",\n  \"name\": \"Savings\",\n  \"address\": \"0x1111111111111111111111111111111111111111\",\n  \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n  \"created_at_iso\": \"2026-09-30T10:00:00.000Z\",\n  \"keys\": [\n    {\n      \"credential_id\": \"a1b2c3d4\",\n      \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n      \"name\": \"Savings\",\n      \"transports\": \"hybrid,internal\",\n      \"signer_origin\": \"https://sign.getvela.app\"\n    }\n  ],\n  \"signed_in_with\": {\n    \"credential_id\": \"a1b2c3d4\",\n    \"method\": \"trusted_signer\",\n    \"signer_origin\": \"https://sign.getvela.app\"\n  }\n}\n",
+    "method": "personal_sign"
+   },
+   "expect": {
+    "value": {
+     "type": "page",
+     "url": "https://sign.getvela.app/"
+    }
+   }
+  },
+  {
+   "name": "signing_route/official/eth_signTypedData_v4",
+   "fn": "signing_route",
+   "input": {
+    "account_json": "{\n  \"id\": \"a1b2c3d4\",\n  \"name\": \"Savings\",\n  \"address\": \"0x1111111111111111111111111111111111111111\",\n  \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n  \"created_at_iso\": \"2026-09-30T10:00:00.000Z\",\n  \"keys\": [\n    {\n      \"credential_id\": \"a1b2c3d4\",\n      \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n      \"name\": \"Savings\",\n      \"transports\": \"hybrid,internal\",\n      \"signer_origin\": \"https://sign.getvela.app\"\n    }\n  ],\n  \"signed_in_with\": {\n    \"credential_id\": \"a1b2c3d4\",\n    \"method\": \"trusted_signer\",\n    \"signer_origin\": \"https://sign.getvela.app\"\n  }\n}\n",
+    "method": "eth_signTypedData_v4"
+   },
+   "expect": {
+    "value": {
+     "type": "page",
+     "url": "https://sign.getvela.app/"
+    }
+   }
+  },
+  {
+   "name": "signing_route/official/wallet_sendCalls",
+   "fn": "signing_route",
+   "input": {
+    "account_json": "{\n  \"id\": \"a1b2c3d4\",\n  \"name\": \"Savings\",\n  \"address\": \"0x1111111111111111111111111111111111111111\",\n  \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n  \"created_at_iso\": \"2026-09-30T10:00:00.000Z\",\n  \"keys\": [\n    {\n      \"credential_id\": \"a1b2c3d4\",\n      \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n      \"name\": \"Savings\",\n      \"transports\": \"hybrid,internal\",\n      \"signer_origin\": \"https://sign.getvela.app\"\n    }\n  ],\n  \"signed_in_with\": {\n    \"credential_id\": \"a1b2c3d4\",\n    \"method\": \"trusted_signer\",\n    \"signer_origin\": \"https://sign.getvela.app\"\n  }\n}\n",
+    "method": "wallet_sendCalls"
+   },
+   "expect": {
+    "value": {
+     "type": "page",
+     "url": "https://sign.getvela.app/"
+    }
+   }
+  },
+  {
+   "name": "signing_route/official/vela_multisigExecute",
+   "fn": "signing_route",
+   "input": {
+    "account_json": "{\n  \"id\": \"a1b2c3d4\",\n  \"name\": \"Savings\",\n  \"address\": \"0x1111111111111111111111111111111111111111\",\n  \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n  \"created_at_iso\": \"2026-09-30T10:00:00.000Z\",\n  \"keys\": [\n    {\n      \"credential_id\": \"a1b2c3d4\",\n      \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n      \"name\": \"Savings\",\n      \"transports\": \"hybrid,internal\",\n      \"signer_origin\": \"https://sign.getvela.app\"\n    }\n  ],\n  \"signed_in_with\": {\n    \"credential_id\": \"a1b2c3d4\",\n    \"method\": \"trusted_signer\",\n    \"signer_origin\": \"https://sign.getvela.app\"\n  }\n}\n",
+    "method": "vela_multisigExecute"
+   },
+   "expect": {
+    "value": {
+     "type": "page",
+     "url": "https://sign.getvela.app/"
+    }
+   }
+  },
+  {
+   "name": "signing_route/official/vela_multisigApprove",
+   "fn": "signing_route",
+   "input": {
+    "account_json": "{\n  \"id\": \"a1b2c3d4\",\n  \"name\": \"Savings\",\n  \"address\": \"0x1111111111111111111111111111111111111111\",\n  \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n  \"created_at_iso\": \"2026-09-30T10:00:00.000Z\",\n  \"keys\": [\n    {\n      \"credential_id\": \"a1b2c3d4\",\n      \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n      \"name\": \"Savings\",\n      \"transports\": \"hybrid,internal\",\n      \"signer_origin\": \"https://sign.getvela.app\"\n    }\n  ],\n  \"signed_in_with\": {\n    \"credential_id\": \"a1b2c3d4\",\n    \"method\": \"trusted_signer\",\n    \"signer_origin\": \"https://sign.getvela.app\"\n  }\n}\n",
+    "method": "vela_multisigApprove"
+   },
+   "expect": {
+    "value": {
+     "type": "page",
+     "url": "https://sign.getvela.app/"
+    }
+   }
+  },
+  {
+   "name": "signing_route/official/eth_sign",
+   "fn": "signing_route",
+   "input": {
+    "account_json": "{\n  \"id\": \"a1b2c3d4\",\n  \"name\": \"Savings\",\n  \"address\": \"0x1111111111111111111111111111111111111111\",\n  \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n  \"created_at_iso\": \"2026-09-30T10:00:00.000Z\",\n  \"keys\": [\n    {\n      \"credential_id\": \"a1b2c3d4\",\n      \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n      \"name\": \"Savings\",\n      \"transports\": \"hybrid,internal\",\n      \"signer_origin\": \"https://sign.getvela.app\"\n    }\n  ],\n  \"signed_in_with\": {\n    \"credential_id\": \"a1b2c3d4\",\n    \"method\": \"trusted_signer\",\n    \"signer_origin\": \"https://sign.getvela.app\"\n  }\n}\n",
+    "method": "eth_sign"
+   },
+   "expect": {
+    "value": null
+   }
+  },
+  {
+   "name": "multisig_approval_route/official",
+   "fn": "multisig_approval_route",
+   "input": {
+    "account_json": "{\n  \"id\": \"a1b2c3d4\",\n  \"name\": \"Savings\",\n  \"address\": \"0x1111111111111111111111111111111111111111\",\n  \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n  \"created_at_iso\": \"2026-09-30T10:00:00.000Z\",\n  \"keys\": [\n    {\n      \"credential_id\": \"a1b2c3d4\",\n      \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n      \"name\": \"Savings\",\n      \"transports\": \"hybrid,internal\",\n      \"signer_origin\": \"https://sign.getvela.app\"\n    }\n  ],\n  \"signed_in_with\": {\n    \"credential_id\": \"a1b2c3d4\",\n    \"method\": \"trusted_signer\",\n    \"signer_origin\": \"https://sign.getvela.app\"\n  }\n}\n"
+   },
+   "expect": {
+    "value": {
+     "type": "page",
+     "url": "https://sign.getvela.app/"
+    }
+   }
+  },
+  {
+   "name": "signing_route/app_only/own_send",
+   "fn": "signing_route",
+   "input": {
+    "account_json": "{\n  \"id\": \"5ec0de01\",\n  \"name\": \"Spending\",\n  \"address\": \"0x3333333333333333333333333333333333333333\",\n  \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n  \"created_at_iso\": \"2026-09-27T12:00:00.000Z\",\n  \"keys\": [\n    {\n      \"credential_id\": \"5ec0de01\",\n      \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n      \"name\": \"Spending\",\n      \"transports\": \"hybrid,internal\"\n    },\n    {\n      \"credential_id\": \"5ec0de02\",\n      \"public_key_hex\": \"04b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2\",\n      \"name\": \"YubiKey\",\n      \"transports\": \"nfc,usb\"\n    }\n  ],\n  \"signed_in_with\": {\n    \"credential_id\": \"5ec0de02\",\n    \"method\": \"security_key\",\n    \"transports\": \"usb,nfc,ble,hybrid\"\n  }\n}\n",
+    "method": ""
+   },
+   "expect": {
+    "value": {
+     "type": "in_vela"
+    }
+   }
+  },
+  {
+   "name": "signing_route/app_only/eth_sendTransaction",
+   "fn": "signing_route",
+   "input": {
+    "account_json": "{\n  \"id\": \"5ec0de01\",\n  \"name\": \"Spending\",\n  \"address\": \"0x3333333333333333333333333333333333333333\",\n  \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n  \"created_at_iso\": \"2026-09-27T12:00:00.000Z\",\n  \"keys\": [\n    {\n      \"credential_id\": \"5ec0de01\",\n      \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n      \"name\": \"Spending\",\n      \"transports\": \"hybrid,internal\"\n    },\n    {\n      \"credential_id\": \"5ec0de02\",\n      \"public_key_hex\": \"04b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2\",\n      \"name\": \"YubiKey\",\n      \"transports\": \"nfc,usb\"\n    }\n  ],\n  \"signed_in_with\": {\n    \"credential_id\": \"5ec0de02\",\n    \"method\": \"security_key\",\n    \"transports\": \"usb,nfc,ble,hybrid\"\n  }\n}\n",
+    "method": "eth_sendTransaction"
+   },
+   "expect": {
+    "value": {
+     "type": "in_vela"
+    }
+   }
+  },
+  {
+   "name": "signing_route/app_only/personal_sign",
+   "fn": "signing_route",
+   "input": {
+    "account_json": "{\n  \"id\": \"5ec0de01\",\n  \"name\": \"Spending\",\n  \"address\": \"0x3333333333333333333333333333333333333333\",\n  \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n  \"created_at_iso\": \"2026-09-27T12:00:00.000Z\",\n  \"keys\": [\n    {\n      \"credential_id\": \"5ec0de01\",\n      \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n      \"name\": \"Spending\",\n      \"transports\": \"hybrid,internal\"\n    },\n    {\n      \"credential_id\": \"5ec0de02\",\n      \"public_key_hex\": \"04b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2\",\n      \"name\": \"YubiKey\",\n      \"transports\": \"nfc,usb\"\n    }\n  ],\n  \"signed_in_with\": {\n    \"credential_id\": \"5ec0de02\",\n    \"method\": \"security_key\",\n    \"transports\": \"usb,nfc,ble,hybrid\"\n  }\n}\n",
+    "method": "personal_sign"
+   },
+   "expect": {
+    "value": {
+     "type": "in_vela"
+    }
+   }
+  },
+  {
+   "name": "signing_route/app_only/eth_signTypedData_v4",
+   "fn": "signing_route",
+   "input": {
+    "account_json": "{\n  \"id\": \"5ec0de01\",\n  \"name\": \"Spending\",\n  \"address\": \"0x3333333333333333333333333333333333333333\",\n  \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n  \"created_at_iso\": \"2026-09-27T12:00:00.000Z\",\n  \"keys\": [\n    {\n      \"credential_id\": \"5ec0de01\",\n      \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n      \"name\": \"Spending\",\n      \"transports\": \"hybrid,internal\"\n    },\n    {\n      \"credential_id\": \"5ec0de02\",\n      \"public_key_hex\": \"04b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2\",\n      \"name\": \"YubiKey\",\n      \"transports\": \"nfc,usb\"\n    }\n  ],\n  \"signed_in_with\": {\n    \"credential_id\": \"5ec0de02\",\n    \"method\": \"security_key\",\n    \"transports\": \"usb,nfc,ble,hybrid\"\n  }\n}\n",
+    "method": "eth_signTypedData_v4"
+   },
+   "expect": {
+    "value": {
+     "type": "in_vela"
+    }
+   }
+  },
+  {
+   "name": "signing_route/app_only/wallet_sendCalls",
+   "fn": "signing_route",
+   "input": {
+    "account_json": "{\n  \"id\": \"5ec0de01\",\n  \"name\": \"Spending\",\n  \"address\": \"0x3333333333333333333333333333333333333333\",\n  \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n  \"created_at_iso\": \"2026-09-27T12:00:00.000Z\",\n  \"keys\": [\n    {\n      \"credential_id\": \"5ec0de01\",\n      \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n      \"name\": \"Spending\",\n      \"transports\": \"hybrid,internal\"\n    },\n    {\n      \"credential_id\": \"5ec0de02\",\n      \"public_key_hex\": \"04b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2\",\n      \"name\": \"YubiKey\",\n      \"transports\": \"nfc,usb\"\n    }\n  ],\n  \"signed_in_with\": {\n    \"credential_id\": \"5ec0de02\",\n    \"method\": \"security_key\",\n    \"transports\": \"usb,nfc,ble,hybrid\"\n  }\n}\n",
+    "method": "wallet_sendCalls"
+   },
+   "expect": {
+    "value": {
+     "type": "in_vela"
+    }
+   }
+  },
+  {
+   "name": "signing_route/app_only/vela_multisigExecute",
+   "fn": "signing_route",
+   "input": {
+    "account_json": "{\n  \"id\": \"5ec0de01\",\n  \"name\": \"Spending\",\n  \"address\": \"0x3333333333333333333333333333333333333333\",\n  \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n  \"created_at_iso\": \"2026-09-27T12:00:00.000Z\",\n  \"keys\": [\n    {\n      \"credential_id\": \"5ec0de01\",\n      \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n      \"name\": \"Spending\",\n      \"transports\": \"hybrid,internal\"\n    },\n    {\n      \"credential_id\": \"5ec0de02\",\n      \"public_key_hex\": \"04b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2\",\n      \"name\": \"YubiKey\",\n      \"transports\": \"nfc,usb\"\n    }\n  ],\n  \"signed_in_with\": {\n    \"credential_id\": \"5ec0de02\",\n    \"method\": \"security_key\",\n    \"transports\": \"usb,nfc,ble,hybrid\"\n  }\n}\n",
+    "method": "vela_multisigExecute"
+   },
+   "expect": {
+    "value": {
+     "type": "in_vela"
+    }
+   }
+  },
+  {
+   "name": "signing_route/app_only/vela_multisigApprove",
+   "fn": "signing_route",
+   "input": {
+    "account_json": "{\n  \"id\": \"5ec0de01\",\n  \"name\": \"Spending\",\n  \"address\": \"0x3333333333333333333333333333333333333333\",\n  \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n  \"created_at_iso\": \"2026-09-27T12:00:00.000Z\",\n  \"keys\": [\n    {\n      \"credential_id\": \"5ec0de01\",\n      \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n      \"name\": \"Spending\",\n      \"transports\": \"hybrid,internal\"\n    },\n    {\n      \"credential_id\": \"5ec0de02\",\n      \"public_key_hex\": \"04b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2\",\n      \"name\": \"YubiKey\",\n      \"transports\": \"nfc,usb\"\n    }\n  ],\n  \"signed_in_with\": {\n    \"credential_id\": \"5ec0de02\",\n    \"method\": \"security_key\",\n    \"transports\": \"usb,nfc,ble,hybrid\"\n  }\n}\n",
+    "method": "vela_multisigApprove"
+   },
+   "expect": {
+    "value": {
+     "type": "in_vela"
+    }
+   }
+  },
+  {
+   "name": "signing_route/app_only/eth_sign",
+   "fn": "signing_route",
+   "input": {
+    "account_json": "{\n  \"id\": \"5ec0de01\",\n  \"name\": \"Spending\",\n  \"address\": \"0x3333333333333333333333333333333333333333\",\n  \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n  \"created_at_iso\": \"2026-09-27T12:00:00.000Z\",\n  \"keys\": [\n    {\n      \"credential_id\": \"5ec0de01\",\n      \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n      \"name\": \"Spending\",\n      \"transports\": \"hybrid,internal\"\n    },\n    {\n      \"credential_id\": \"5ec0de02\",\n      \"public_key_hex\": \"04b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2\",\n      \"name\": \"YubiKey\",\n      \"transports\": \"nfc,usb\"\n    }\n  ],\n  \"signed_in_with\": {\n    \"credential_id\": \"5ec0de02\",\n    \"method\": \"security_key\",\n    \"transports\": \"usb,nfc,ble,hybrid\"\n  }\n}\n",
+    "method": "eth_sign"
+   },
+   "expect": {
+    "value": null
+   }
+  },
+  {
+   "name": "multisig_approval_route/app_only",
+   "fn": "multisig_approval_route",
+   "input": {
+    "account_json": "{\n  \"id\": \"5ec0de01\",\n  \"name\": \"Spending\",\n  \"address\": \"0x3333333333333333333333333333333333333333\",\n  \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n  \"created_at_iso\": \"2026-09-27T12:00:00.000Z\",\n  \"keys\": [\n    {\n      \"credential_id\": \"5ec0de01\",\n      \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n      \"name\": \"Spending\",\n      \"transports\": \"hybrid,internal\"\n    },\n    {\n      \"credential_id\": \"5ec0de02\",\n      \"public_key_hex\": \"04b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2\",\n      \"name\": \"YubiKey\",\n      \"transports\": \"nfc,usb\"\n    }\n  ],\n  \"signed_in_with\": {\n    \"credential_id\": \"5ec0de02\",\n    \"method\": \"security_key\",\n    \"transports\": \"usb,nfc,ble,hybrid\"\n  }\n}\n"
+   },
+   "expect": {
+    "value": {
+     "type": "in_vela"
+    }
+   }
+  },
+  {
+   "name": "signing_route/custom/own_send",
+   "fn": "signing_route",
+   "input": {
+    "account_json": "{\n  \"id\": \"c0ffee01\",\n  \"name\": \"Vault\",\n  \"address\": \"0x2222222222222222222222222222222222222222\",\n  \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n  \"created_at_iso\": \"2026-10-01T08:00:00.000Z\",\n  \"keys\": [\n    {\n      \"credential_id\": \"c0ffee01\",\n      \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n      \"name\": \"Vault\",\n      \"transports\": \"usb,nfc\",\n      \"signer_origin\": \"http://localhost:8140\"\n    },\n    {\n      \"credential_id\": \"c0ffee02\",\n      \"public_key_hex\": \"04b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2\",\n      \"name\": \"Key 2\",\n      \"transports\": \"\"\n    }\n  ],\n  \"signed_in_with\": {\n    \"credential_id\": \"c0ffee01\",\n    \"method\": \"trusted_signer\",\n    \"signer_origin\": \"http://localhost:8140\"\n  }\n}\n",
+    "method": ""
+   },
+   "expect": {
+    "value": {
+     "type": "page",
+     "url": "http://localhost:8140/"
+    }
+   }
+  },
+  {
+   "name": "signing_route/custom/eth_sendTransaction",
+   "fn": "signing_route",
+   "input": {
+    "account_json": "{\n  \"id\": \"c0ffee01\",\n  \"name\": \"Vault\",\n  \"address\": \"0x2222222222222222222222222222222222222222\",\n  \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n  \"created_at_iso\": \"2026-10-01T08:00:00.000Z\",\n  \"keys\": [\n    {\n      \"credential_id\": \"c0ffee01\",\n      \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n      \"name\": \"Vault\",\n      \"transports\": \"usb,nfc\",\n      \"signer_origin\": \"http://localhost:8140\"\n    },\n    {\n      \"credential_id\": \"c0ffee02\",\n      \"public_key_hex\": \"04b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2\",\n      \"name\": \"Key 2\",\n      \"transports\": \"\"\n    }\n  ],\n  \"signed_in_with\": {\n    \"credential_id\": \"c0ffee01\",\n    \"method\": \"trusted_signer\",\n    \"signer_origin\": \"http://localhost:8140\"\n  }\n}\n",
+    "method": "eth_sendTransaction"
+   },
+   "expect": {
+    "value": {
+     "type": "page",
+     "url": "http://localhost:8140/"
+    }
+   }
+  },
+  {
+   "name": "signing_route/custom/personal_sign",
+   "fn": "signing_route",
+   "input": {
+    "account_json": "{\n  \"id\": \"c0ffee01\",\n  \"name\": \"Vault\",\n  \"address\": \"0x2222222222222222222222222222222222222222\",\n  \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n  \"created_at_iso\": \"2026-10-01T08:00:00.000Z\",\n  \"keys\": [\n    {\n      \"credential_id\": \"c0ffee01\",\n      \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n      \"name\": \"Vault\",\n      \"transports\": \"usb,nfc\",\n      \"signer_origin\": \"http://localhost:8140\"\n    },\n    {\n      \"credential_id\": \"c0ffee02\",\n      \"public_key_hex\": \"04b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2\",\n      \"name\": \"Key 2\",\n      \"transports\": \"\"\n    }\n  ],\n  \"signed_in_with\": {\n    \"credential_id\": \"c0ffee01\",\n    \"method\": \"trusted_signer\",\n    \"signer_origin\": \"http://localhost:8140\"\n  }\n}\n",
+    "method": "personal_sign"
+   },
+   "expect": {
+    "value": {
+     "type": "page",
+     "url": "http://localhost:8140/"
+    }
+   }
+  },
+  {
+   "name": "signing_route/custom/eth_signTypedData_v4",
+   "fn": "signing_route",
+   "input": {
+    "account_json": "{\n  \"id\": \"c0ffee01\",\n  \"name\": \"Vault\",\n  \"address\": \"0x2222222222222222222222222222222222222222\",\n  \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n  \"created_at_iso\": \"2026-10-01T08:00:00.000Z\",\n  \"keys\": [\n    {\n      \"credential_id\": \"c0ffee01\",\n      \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n      \"name\": \"Vault\",\n      \"transports\": \"usb,nfc\",\n      \"signer_origin\": \"http://localhost:8140\"\n    },\n    {\n      \"credential_id\": \"c0ffee02\",\n      \"public_key_hex\": \"04b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2\",\n      \"name\": \"Key 2\",\n      \"transports\": \"\"\n    }\n  ],\n  \"signed_in_with\": {\n    \"credential_id\": \"c0ffee01\",\n    \"method\": \"trusted_signer\",\n    \"signer_origin\": \"http://localhost:8140\"\n  }\n}\n",
+    "method": "eth_signTypedData_v4"
+   },
+   "expect": {
+    "value": {
+     "type": "page",
+     "url": "http://localhost:8140/"
+    }
+   }
+  },
+  {
+   "name": "signing_route/custom/wallet_sendCalls",
+   "fn": "signing_route",
+   "input": {
+    "account_json": "{\n  \"id\": \"c0ffee01\",\n  \"name\": \"Vault\",\n  \"address\": \"0x2222222222222222222222222222222222222222\",\n  \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n  \"created_at_iso\": \"2026-10-01T08:00:00.000Z\",\n  \"keys\": [\n    {\n      \"credential_id\": \"c0ffee01\",\n      \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n      \"name\": \"Vault\",\n      \"transports\": \"usb,nfc\",\n      \"signer_origin\": \"http://localhost:8140\"\n    },\n    {\n      \"credential_id\": \"c0ffee02\",\n      \"public_key_hex\": \"04b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2\",\n      \"name\": \"Key 2\",\n      \"transports\": \"\"\n    }\n  ],\n  \"signed_in_with\": {\n    \"credential_id\": \"c0ffee01\",\n    \"method\": \"trusted_signer\",\n    \"signer_origin\": \"http://localhost:8140\"\n  }\n}\n",
+    "method": "wallet_sendCalls"
+   },
+   "expect": {
+    "value": {
+     "type": "page",
+     "url": "http://localhost:8140/"
+    }
+   }
+  },
+  {
+   "name": "signing_route/custom/vela_multisigExecute",
+   "fn": "signing_route",
+   "input": {
+    "account_json": "{\n  \"id\": \"c0ffee01\",\n  \"name\": \"Vault\",\n  \"address\": \"0x2222222222222222222222222222222222222222\",\n  \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n  \"created_at_iso\": \"2026-10-01T08:00:00.000Z\",\n  \"keys\": [\n    {\n      \"credential_id\": \"c0ffee01\",\n      \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n      \"name\": \"Vault\",\n      \"transports\": \"usb,nfc\",\n      \"signer_origin\": \"http://localhost:8140\"\n    },\n    {\n      \"credential_id\": \"c0ffee02\",\n      \"public_key_hex\": \"04b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2\",\n      \"name\": \"Key 2\",\n      \"transports\": \"\"\n    }\n  ],\n  \"signed_in_with\": {\n    \"credential_id\": \"c0ffee01\",\n    \"method\": \"trusted_signer\",\n    \"signer_origin\": \"http://localhost:8140\"\n  }\n}\n",
+    "method": "vela_multisigExecute"
+   },
+   "expect": {
+    "value": {
+     "type": "page",
+     "url": "http://localhost:8140/"
+    }
+   }
+  },
+  {
+   "name": "signing_route/custom/vela_multisigApprove",
+   "fn": "signing_route",
+   "input": {
+    "account_json": "{\n  \"id\": \"c0ffee01\",\n  \"name\": \"Vault\",\n  \"address\": \"0x2222222222222222222222222222222222222222\",\n  \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n  \"created_at_iso\": \"2026-10-01T08:00:00.000Z\",\n  \"keys\": [\n    {\n      \"credential_id\": \"c0ffee01\",\n      \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n      \"name\": \"Vault\",\n      \"transports\": \"usb,nfc\",\n      \"signer_origin\": \"http://localhost:8140\"\n    },\n    {\n      \"credential_id\": \"c0ffee02\",\n      \"public_key_hex\": \"04b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2\",\n      \"name\": \"Key 2\",\n      \"transports\": \"\"\n    }\n  ],\n  \"signed_in_with\": {\n    \"credential_id\": \"c0ffee01\",\n    \"method\": \"trusted_signer\",\n    \"signer_origin\": \"http://localhost:8140\"\n  }\n}\n",
+    "method": "vela_multisigApprove"
+   },
+   "expect": {
+    "value": {
+     "type": "page",
+     "url": "http://localhost:8140/"
+    }
+   }
+  },
+  {
+   "name": "signing_route/custom/eth_sign",
+   "fn": "signing_route",
+   "input": {
+    "account_json": "{\n  \"id\": \"c0ffee01\",\n  \"name\": \"Vault\",\n  \"address\": \"0x2222222222222222222222222222222222222222\",\n  \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n  \"created_at_iso\": \"2026-10-01T08:00:00.000Z\",\n  \"keys\": [\n    {\n      \"credential_id\": \"c0ffee01\",\n      \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n      \"name\": \"Vault\",\n      \"transports\": \"usb,nfc\",\n      \"signer_origin\": \"http://localhost:8140\"\n    },\n    {\n      \"credential_id\": \"c0ffee02\",\n      \"public_key_hex\": \"04b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2\",\n      \"name\": \"Key 2\",\n      \"transports\": \"\"\n    }\n  ],\n  \"signed_in_with\": {\n    \"credential_id\": \"c0ffee01\",\n    \"method\": \"trusted_signer\",\n    \"signer_origin\": \"http://localhost:8140\"\n  }\n}\n",
+    "method": "eth_sign"
+   },
+   "expect": {
+    "value": null
+   }
+  },
+  {
+   "name": "multisig_approval_route/custom",
+   "fn": "multisig_approval_route",
+   "input": {
+    "account_json": "{\n  \"id\": \"c0ffee01\",\n  \"name\": \"Vault\",\n  \"address\": \"0x2222222222222222222222222222222222222222\",\n  \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n  \"created_at_iso\": \"2026-10-01T08:00:00.000Z\",\n  \"keys\": [\n    {\n      \"credential_id\": \"c0ffee01\",\n      \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n      \"name\": \"Vault\",\n      \"transports\": \"usb,nfc\",\n      \"signer_origin\": \"http://localhost:8140\"\n    },\n    {\n      \"credential_id\": \"c0ffee02\",\n      \"public_key_hex\": \"04b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2\",\n      \"name\": \"Key 2\",\n      \"transports\": \"\"\n    }\n  ],\n  \"signed_in_with\": {\n    \"credential_id\": \"c0ffee01\",\n    \"method\": \"trusted_signer\",\n    \"signer_origin\": \"http://localhost:8140\"\n  }\n}\n"
+   },
+   "expect": {
+    "value": {
+     "type": "page",
+     "url": "http://localhost:8140/"
+    }
+   }
+  },
+  {
+   "name": "signing_route/before_page/own_send",
+   "fn": "signing_route",
+   "input": {
+    "account_json": "{\n  \"id\": \"b4b4b4b4\",\n  \"name\": \"Old page wallet\",\n  \"address\": \"0x5555555555555555555555555555555555555555\",\n  \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n  \"created_at_iso\": \"2026-09-23T09:30:00.000Z\",\n  \"keys\": [\n    {\n      \"credential_id\": \"b4b4b4b4\",\n      \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n      \"name\": \"Old page wallet\",\n      \"transports\": \"internal\",\n      \"signer_origin\": \"https://sign.getvela.app\"\n    }\n  ]\n}\n",
+    "method": ""
+   },
+   "expect": {
+    "value": {
+     "type": "page",
+     "url": "https://sign.getvela.app/"
+    }
+   }
+  },
+  {
+   "name": "signing_route/before_page/eth_sendTransaction",
+   "fn": "signing_route",
+   "input": {
+    "account_json": "{\n  \"id\": \"b4b4b4b4\",\n  \"name\": \"Old page wallet\",\n  \"address\": \"0x5555555555555555555555555555555555555555\",\n  \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n  \"created_at_iso\": \"2026-09-23T09:30:00.000Z\",\n  \"keys\": [\n    {\n      \"credential_id\": \"b4b4b4b4\",\n      \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n      \"name\": \"Old page wallet\",\n      \"transports\": \"internal\",\n      \"signer_origin\": \"https://sign.getvela.app\"\n    }\n  ]\n}\n",
+    "method": "eth_sendTransaction"
+   },
+   "expect": {
+    "value": {
+     "type": "page",
+     "url": "https://sign.getvela.app/"
+    }
+   }
+  },
+  {
+   "name": "signing_route/before_page/personal_sign",
+   "fn": "signing_route",
+   "input": {
+    "account_json": "{\n  \"id\": \"b4b4b4b4\",\n  \"name\": \"Old page wallet\",\n  \"address\": \"0x5555555555555555555555555555555555555555\",\n  \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n  \"created_at_iso\": \"2026-09-23T09:30:00.000Z\",\n  \"keys\": [\n    {\n      \"credential_id\": \"b4b4b4b4\",\n      \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n      \"name\": \"Old page wallet\",\n      \"transports\": \"internal\",\n      \"signer_origin\": \"https://sign.getvela.app\"\n    }\n  ]\n}\n",
+    "method": "personal_sign"
+   },
+   "expect": {
+    "value": {
+     "type": "page",
+     "url": "https://sign.getvela.app/"
+    }
+   }
+  },
+  {
+   "name": "signing_route/before_page/eth_signTypedData_v4",
+   "fn": "signing_route",
+   "input": {
+    "account_json": "{\n  \"id\": \"b4b4b4b4\",\n  \"name\": \"Old page wallet\",\n  \"address\": \"0x5555555555555555555555555555555555555555\",\n  \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n  \"created_at_iso\": \"2026-09-23T09:30:00.000Z\",\n  \"keys\": [\n    {\n      \"credential_id\": \"b4b4b4b4\",\n      \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n      \"name\": \"Old page wallet\",\n      \"transports\": \"internal\",\n      \"signer_origin\": \"https://sign.getvela.app\"\n    }\n  ]\n}\n",
+    "method": "eth_signTypedData_v4"
+   },
+   "expect": {
+    "value": {
+     "type": "page",
+     "url": "https://sign.getvela.app/"
+    }
+   }
+  },
+  {
+   "name": "signing_route/before_page/wallet_sendCalls",
+   "fn": "signing_route",
+   "input": {
+    "account_json": "{\n  \"id\": \"b4b4b4b4\",\n  \"name\": \"Old page wallet\",\n  \"address\": \"0x5555555555555555555555555555555555555555\",\n  \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n  \"created_at_iso\": \"2026-09-23T09:30:00.000Z\",\n  \"keys\": [\n    {\n      \"credential_id\": \"b4b4b4b4\",\n      \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n      \"name\": \"Old page wallet\",\n      \"transports\": \"internal\",\n      \"signer_origin\": \"https://sign.getvela.app\"\n    }\n  ]\n}\n",
+    "method": "wallet_sendCalls"
+   },
+   "expect": {
+    "value": {
+     "type": "page",
+     "url": "https://sign.getvela.app/"
+    }
+   }
+  },
+  {
+   "name": "signing_route/before_page/vela_multisigExecute",
+   "fn": "signing_route",
+   "input": {
+    "account_json": "{\n  \"id\": \"b4b4b4b4\",\n  \"name\": \"Old page wallet\",\n  \"address\": \"0x5555555555555555555555555555555555555555\",\n  \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n  \"created_at_iso\": \"2026-09-23T09:30:00.000Z\",\n  \"keys\": [\n    {\n      \"credential_id\": \"b4b4b4b4\",\n      \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n      \"name\": \"Old page wallet\",\n      \"transports\": \"internal\",\n      \"signer_origin\": \"https://sign.getvela.app\"\n    }\n  ]\n}\n",
+    "method": "vela_multisigExecute"
+   },
+   "expect": {
+    "value": {
+     "type": "page",
+     "url": "https://sign.getvela.app/"
+    }
+   }
+  },
+  {
+   "name": "signing_route/before_page/vela_multisigApprove",
+   "fn": "signing_route",
+   "input": {
+    "account_json": "{\n  \"id\": \"b4b4b4b4\",\n  \"name\": \"Old page wallet\",\n  \"address\": \"0x5555555555555555555555555555555555555555\",\n  \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n  \"created_at_iso\": \"2026-09-23T09:30:00.000Z\",\n  \"keys\": [\n    {\n      \"credential_id\": \"b4b4b4b4\",\n      \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n      \"name\": \"Old page wallet\",\n      \"transports\": \"internal\",\n      \"signer_origin\": \"https://sign.getvela.app\"\n    }\n  ]\n}\n",
+    "method": "vela_multisigApprove"
+   },
+   "expect": {
+    "value": {
+     "type": "page",
+     "url": "https://sign.getvela.app/"
+    }
+   }
+  },
+  {
+   "name": "signing_route/before_page/eth_sign",
+   "fn": "signing_route",
+   "input": {
+    "account_json": "{\n  \"id\": \"b4b4b4b4\",\n  \"name\": \"Old page wallet\",\n  \"address\": \"0x5555555555555555555555555555555555555555\",\n  \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n  \"created_at_iso\": \"2026-09-23T09:30:00.000Z\",\n  \"keys\": [\n    {\n      \"credential_id\": \"b4b4b4b4\",\n      \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n      \"name\": \"Old page wallet\",\n      \"transports\": \"internal\",\n      \"signer_origin\": \"https://sign.getvela.app\"\n    }\n  ]\n}\n",
+    "method": "eth_sign"
+   },
+   "expect": {
+    "value": null
+   }
+  },
+  {
+   "name": "multisig_approval_route/before_page",
+   "fn": "multisig_approval_route",
+   "input": {
+    "account_json": "{\n  \"id\": \"b4b4b4b4\",\n  \"name\": \"Old page wallet\",\n  \"address\": \"0x5555555555555555555555555555555555555555\",\n  \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n  \"created_at_iso\": \"2026-09-23T09:30:00.000Z\",\n  \"keys\": [\n    {\n      \"credential_id\": \"b4b4b4b4\",\n      \"public_key_hex\": \"04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\n      \"name\": \"Old page wallet\",\n      \"transports\": \"internal\",\n      \"signer_origin\": \"https://sign.getvela.app\"\n    }\n  ]\n}\n"
+   },
+   "expect": {
+    "value": {
+     "type": "page",
+     "url": "https://sign.getvela.app/"
+    }
+   }
+  },
+  {
+   "name": "signing_route/unreadable",
+   "fn": "signing_route",
+   "input": {
+    "account_json": "{\"id\":1}",
+    "method": "personal_sign"
+   },
+   "expect": {
+    "value": null
+   }
+  },
+  {
+   "name": "multisig_approval_route/unreadable",
+   "fn": "multisig_approval_route",
+   "input": {
+    "account_json": "not json"
+   },
+   "expect": {
+    "value": null
+   }
+  },
+  {
+   "name": "signing_venue_block/getvela.app/in_vela/",
+   "fn": "signing_venue_block",
+   "input": {
+    "domain": "getvela.app",
+    "venue_json": "{\"type\":\"in_vela\"}"
+   },
+   "expect": {
+    "value": null
+   }
+  },
+  {
+   "name": "signing_venue_block/getvela.app/page/https://sign.getvela.app/",
+   "fn": "signing_venue_block",
+   "input": {
+    "domain": "getvela.app",
+    "venue_json": "{\"type\":\"page\",\"url\":\"https://sign.getvela.app/\"}"
+   },
+   "expect": {
+    "value": null
+   }
+  },
+  {
+   "name": "signing_venue_block/getvela.app/page/http://localhost:8140/",
+   "fn": "signing_venue_block",
+   "input": {
+    "domain": "getvela.app",
+    "venue_json": "{\"type\":\"page\",\"url\":\"http://localhost:8140/\"}"
+   },
+   "expect": {
+    "value": {
+     "type": "page_on_other_domain",
+     "page_domain": "localhost",
+     "domain": "getvela.app"
+    }
+   }
+  },
+  {
+   "name": "signing_venue_block/localhost/page/https://sign.getvela.app/",
+   "fn": "signing_venue_block",
+   "input": {
+    "domain": "localhost",
+    "venue_json": "{\"type\":\"page\",\"url\":\"https://sign.getvela.app/\"}"
+   },
+   "expect": {
+    "value": {
+     "type": "page_on_other_domain",
+     "page_domain": "getvela.app",
+     "domain": "localhost"
+    }
+   }
+  },
+  {
+   "name": "signing_venue_block/localhost/in_vela/",
+   "fn": "signing_venue_block",
+   "input": {
+    "domain": "localhost",
+    "venue_json": "{\"type\":\"in_vela\"}"
+   },
+   "expect": {
+    "value": {
+     "type": "app_cannot_reach",
+     "domain": "localhost"
+    }
+   }
+  },
+  {
+   "name": "signing_venue_block/localhost/page/http://localhost:8140/",
+   "fn": "signing_venue_block",
+   "input": {
+    "domain": "localhost",
+    "venue_json": "{\"type\":\"page\",\"url\":\"http://localhost:8140/\"}"
+   },
+   "expect": {
+    "value": null
+   }
+  },
+  {
+   "name": "signing_venue_block/unreadable",
+   "fn": "signing_venue_block",
+   "input": {
+    "domain": "getvela.app",
+    "venue_json": "{\"type\":\"elsewhere\"}"
+   },
+   "expect": {
+    "value": "invalid"
+   }
+  },
+  {
+   "name": "trusted_signer_signature_request/personal_sign",
+   "fn": "trusted_signer_signature_request",
+   "input": {
+    "method": "personal_sign",
+    "params_json": "[\"0x48656c6c6f2c2056656c61\",\"0x928ed3C23000BD355951adAED752077aDd934E84\"]",
+    "origin": "https://app.example",
+    "origin_seen_by_browser": true,
+    "chain_id": 100,
+    "chain_name": "Gnosis",
+    "native_symbol": "xDAI",
+    "account": "0x928ed3C23000BD355951adAED752077aDd934E84",
+    "account_name": "Savings",
+    "credential_ids_hex": [
+     "780a3232339d9cfb12c126072718759d"
+    ],
+    "key_route_json": "{\"credential_id\":\"780a3232339d9cfb12c126072718759d\",\"method\":\"trusted_signer\",\"transports\":\"internal,hybrid\",\"hints\":[\"client-device\"]}"
+   },
+   "expect": {
+    "value": {
+     "context": {
+      "account": "0x928ed3C23000BD355951adAED752077aDd934E84",
+      "allowCredentials": [
+       "eAoyMjOdnPsSwSYHJxh1nQ"
+      ],
+      "chainId": 100,
+      "chainName": "Gnosis",
+      "dapp": {
+       "name": "app.example",
+       "origin": "https://app.example",
+       "source": "vela_browser"
+      },
+      "keyRoute": {
+       "credentialId": "eAoyMjOdnPsSwSYHJxh1nQ",
+       "hints": [
+        "client-device"
+       ],
+       "place": "trusted_signer",
+       "transports": [
+        "internal",
+        "hybrid"
+       ]
+      },
+      "nativeSymbol": "xDAI",
+      "signer": {
+       "letter": "S",
+       "name": "Savings"
+      }
+     },
+     "intent": {
+      "method": "personal_sign",
+      "origin": "https://app.example",
+      "params": [
+       "0x48656c6c6f2c2056656c61",
+       "0x928ed3C23000BD355951adAED752077aDd934E84"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "trusted_signer_signature_request/no_route",
+   "fn": "trusted_signer_signature_request",
+   "input": {
+    "method": "personal_sign",
+    "params_json": "[\"0x48656c6c6f2c2056656c61\",\"0x928ed3C23000BD355951adAED752077aDd934E84\"]",
+    "origin": "https://app.example",
+    "origin_seen_by_browser": false,
+    "chain_id": 100,
+    "chain_name": "Gnosis",
+    "native_symbol": "xDAI",
+    "account": "0x928ed3C23000BD355951adAED752077aDd934E84",
+    "account_name": "Savings",
+    "credential_ids_hex": [
+     "780a3232339d9cfb12c126072718759d"
+    ],
+    "key_route_json": null
+   },
+   "expect": {
+    "value": {
+     "context": {
+      "account": "0x928ed3C23000BD355951adAED752077aDd934E84",
+      "allowCredentials": [
+       "eAoyMjOdnPsSwSYHJxh1nQ"
+      ],
+      "chainId": 100,
+      "chainName": "Gnosis",
+      "nativeSymbol": "xDAI",
+      "signer": {
+       "letter": "S",
+       "name": "Savings"
+      }
+     },
+     "intent": {
+      "method": "personal_sign",
+      "origin": "https://app.example",
+      "params": [
+       "0x48656c6c6f2c2056656c61",
+       "0x928ed3C23000BD355951adAED752077aDd934E84"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "trusted_signer_signature_accept/accepted",
+   "fn": "trusted_signer_signature_accept",
+   "input": {
+    "request_json": "{\"context\":{\"account\":\"0x928ed3C23000BD355951adAED752077aDd934E84\",\"allowCredentials\":[\"eAoyMjOdnPsSwSYHJxh1nQ\"],\"chainId\":100,\"chainName\":\"Gnosis\",\"dapp\":{\"name\":\"app.example\",\"origin\":\"https://app.example\",\"source\":\"vela_browser\"},\"keyRoute\":{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"hints\":[\"client-device\"],\"place\":\"trusted_signer\",\"transports\":[\"internal\",\"hybrid\"]},\"nativeSymbol\":\"xDAI\",\"signer\":{\"letter\":\"S\",\"name\":\"Savings\"}},\"intent\":{\"method\":\"personal_sign\",\"origin\":\"https://app.example\",\"params\":[\"0x48656c6c6f2c2056656c61\",\"0x928ed3C23000BD355951adAED752077aDd934E84\"]}}",
+    "result_json": "{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"signature\":\"0x1102b9989829b2c0bb1c718109914d59e2f5793eaa63250187dfdf0032f9d7cac918732db9316415a3f6c7940055b9888dc20ffcec037014be5235314cce95ea\",\"authenticatorData\":\"0xa69533717b230610f14ea657c0bd8231dd6fc7b7108f1215a874fbb1d14df3490500000007\",\"clientDataJSON\":\"0x7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a22733662696d39436537514f79574967476a6b4c666c6774614962414d357575736b46795072455f38516559222c226f726967696e223a2268747470733a2f2f7369676e2e67657476656c612e617070222c2263726f73734f726967696e223a66616c73657d\"}",
+    "keys": [
+     {
+      "credential_id": "780a3232339d9cfb12c126072718759d",
+      "public_key_hex": "04e7615f035290f1599902ef414b6d610a6611445a5c65fae21f47f9bdd186a372d97e7822e60fc84e66a55b0ac3784521e027dd63987c7a4c9a32895f6865b768"
+     }
+    ],
+    "digest_hex": "0xb3a6e29bd09eed03b25888068e42df960b5a21b00ce6ebac905c8fac4ffc41e6"
+   },
+   "expect": {
+    "value": {
+     "accepted": {
+      "credential_id_hex": "780a3232339d9cfb12c126072718759d",
+      "signature_der_hex": "304402201102b9989829b2c0bb1c718109914d59e2f5793eaa63250187dfdf0032f9d7ca022036e78cd146ce9beb5c09386bffaa46772f24eab0bb142e7035679591af948f67",
+      "authenticator_data_hex": "a69533717b230610f14ea657c0bd8231dd6fc7b7108f1215a874fbb1d14df3490500000007",
+      "client_data_json_hex": "7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a22733662696d39436537514f79574967476a6b4c666c6774614962414d357575736b46795072455f38516559222c226f726967696e223a2268747470733a2f2f7369676e2e67657476656c612e617070222c2263726f73734f726967696e223a66616c73657d"
+     }
+    }
+   }
+  },
+  {
+   "name": "trusted_signer_signature_accept/shell_signs_other_bytes",
+   "fn": "trusted_signer_signature_accept",
+   "input": {
+    "request_json": "{\"context\":{\"account\":\"0x928ed3C23000BD355951adAED752077aDd934E84\",\"allowCredentials\":[\"eAoyMjOdnPsSwSYHJxh1nQ\"],\"chainId\":100,\"chainName\":\"Gnosis\",\"dapp\":{\"name\":\"app.example\",\"origin\":\"https://app.example\",\"source\":\"vela_browser\"},\"keyRoute\":{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"hints\":[\"client-device\"],\"place\":\"trusted_signer\",\"transports\":[\"internal\",\"hybrid\"]},\"nativeSymbol\":\"xDAI\",\"signer\":{\"letter\":\"S\",\"name\":\"Savings\"}},\"intent\":{\"method\":\"personal_sign\",\"origin\":\"https://app.example\",\"params\":[\"0x48656c6c6f2c2056656c61\",\"0x928ed3C23000BD355951adAED752077aDd934E84\"]}}",
+    "result_json": "{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"signature\":\"0x1102b9989829b2c0bb1c718109914d59e2f5793eaa63250187dfdf0032f9d7cac918732db9316415a3f6c7940055b9888dc20ffcec037014be5235314cce95ea\",\"authenticatorData\":\"0xa69533717b230610f14ea657c0bd8231dd6fc7b7108f1215a874fbb1d14df3490500000007\",\"clientDataJSON\":\"0x7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a22733662696d39436537514f79574967476a6b4c666c6774614962414d357575736b46795072455f38516559222c226f726967696e223a2268747470733a2f2f7369676e2e67657476656c612e617070222c2263726f73734f726967696e223a66616c73657d\"}",
+    "keys": [
+     {
+      "credential_id": "780a3232339d9cfb12c126072718759d",
+      "public_key_hex": "04e7615f035290f1599902ef414b6d610a6611445a5c65fae21f47f9bdd186a372d97e7822e60fc84e66a55b0ac3784521e027dd63987c7a4c9a32895f6865b768"
+     }
+    ],
+    "digest_hex": "0xd9298a10d1b0735837dc4bd85dac641b0f3cef27a47e5d53a54f2f3f5b2fcffa"
+   },
+   "expect": {
+    "value": {
+     "refused": "wrong_challenge"
+    }
+   }
+  },
+  {
+   "name": "trusted_signer_signature_accept/foreign_key",
+   "fn": "trusted_signer_signature_accept",
+   "input": {
+    "request_json": "{\"context\":{\"account\":\"0x928ed3C23000BD355951adAED752077aDd934E84\",\"allowCredentials\":[\"eAoyMjOdnPsSwSYHJxh1nQ\"],\"chainId\":100,\"chainName\":\"Gnosis\",\"dapp\":{\"name\":\"app.example\",\"origin\":\"https://app.example\",\"source\":\"vela_browser\"},\"keyRoute\":{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"hints\":[\"client-device\"],\"place\":\"trusted_signer\",\"transports\":[\"internal\",\"hybrid\"]},\"nativeSymbol\":\"xDAI\",\"signer\":{\"letter\":\"S\",\"name\":\"Savings\"}},\"intent\":{\"method\":\"personal_sign\",\"origin\":\"https://app.example\",\"params\":[\"0x48656c6c6f2c2056656c61\",\"0x928ed3C23000BD355951adAED752077aDd934E84\"]}}",
+    "result_json": "{\"credentialId\":\"QyLXxD5DImt7pYIXz4P6ng\",\"signature\":\"0x5b2c3c0c6b5924b6ddce069545ae8518c5f0e8c09af1325c6c31fe22aec824f833ec54890dc44aa7911ebc872d14a585becffb5eae25e27b43f679bf2eba7b95\",\"authenticatorData\":\"0xa69533717b230610f14ea657c0bd8231dd6fc7b7108f1215a874fbb1d14df3490500000007\",\"clientDataJSON\":\"0x7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a22733662696d39436537514f79574967476a6b4c666c6774614962414d357575736b46795072455f38516559222c226f726967696e223a2268747470733a2f2f7369676e2e67657476656c612e617070222c2263726f73734f726967696e223a66616c73657d\"}",
+    "keys": [
+     {
+      "credential_id": "780a3232339d9cfb12c126072718759d",
+      "public_key_hex": "04e7615f035290f1599902ef414b6d610a6611445a5c65fae21f47f9bdd186a372d97e7822e60fc84e66a55b0ac3784521e027dd63987c7a4c9a32895f6865b768"
+     }
+    ],
+    "digest_hex": "0xb3a6e29bd09eed03b25888068e42df960b5a21b00ce6ebac905c8fac4ffc41e6"
+   },
+   "expect": {
+    "value": {
+     "refused": "foreign_key"
+    }
+   }
+  },
+  {
+   "name": "trusted_signer_signature_accept/not_user_verified",
+   "fn": "trusted_signer_signature_accept",
+   "input": {
+    "request_json": "{\"context\":{\"account\":\"0x928ed3C23000BD355951adAED752077aDd934E84\",\"allowCredentials\":[\"eAoyMjOdnPsSwSYHJxh1nQ\"],\"chainId\":100,\"chainName\":\"Gnosis\",\"dapp\":{\"name\":\"app.example\",\"origin\":\"https://app.example\",\"source\":\"vela_browser\"},\"keyRoute\":{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"hints\":[\"client-device\"],\"place\":\"trusted_signer\",\"transports\":[\"internal\",\"hybrid\"]},\"nativeSymbol\":\"xDAI\",\"signer\":{\"letter\":\"S\",\"name\":\"Savings\"}},\"intent\":{\"method\":\"personal_sign\",\"origin\":\"https://app.example\",\"params\":[\"0x48656c6c6f2c2056656c61\",\"0x928ed3C23000BD355951adAED752077aDd934E84\"]}}",
+    "result_json": "{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"signature\":\"0x2505864c8b9301b05bdd54e14eab25369f6893ea42cdfa8de38b6a8bd95bab0280d5467dfbf9403f5cd3e2d85e07dd0104787a0409ae164379e5e3b22ea7df06\",\"authenticatorData\":\"0xa69533717b230610f14ea657c0bd8231dd6fc7b7108f1215a874fbb1d14df3490100000007\",\"clientDataJSON\":\"0x7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a22733662696d39436537514f79574967476a6b4c666c6774614962414d357575736b46795072455f38516559222c226f726967696e223a2268747470733a2f2f7369676e2e67657476656c612e617070222c2263726f73734f726967696e223a66616c73657d\"}",
+    "keys": [
+     {
+      "credential_id": "780a3232339d9cfb12c126072718759d",
+      "public_key_hex": "04e7615f035290f1599902ef414b6d610a6611445a5c65fae21f47f9bdd186a372d97e7822e60fc84e66a55b0ac3784521e027dd63987c7a4c9a32895f6865b768"
+     }
+    ],
+    "digest_hex": "0xb3a6e29bd09eed03b25888068e42df960b5a21b00ce6ebac905c8fac4ffc41e6"
+   },
+   "expect": {
+    "value": {
+     "refused": "not_verified"
+    }
+   }
+  },
+  {
+   "name": "trusted_signer_signature_accept/bad_signature",
+   "fn": "trusted_signer_signature_accept",
+   "input": {
+    "request_json": "{\"context\":{\"account\":\"0x928ed3C23000BD355951adAED752077aDd934E84\",\"allowCredentials\":[\"eAoyMjOdnPsSwSYHJxh1nQ\"],\"chainId\":100,\"chainName\":\"Gnosis\",\"dapp\":{\"name\":\"app.example\",\"origin\":\"https://app.example\",\"source\":\"vela_browser\"},\"keyRoute\":{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"hints\":[\"client-device\"],\"place\":\"trusted_signer\",\"transports\":[\"internal\",\"hybrid\"]},\"nativeSymbol\":\"xDAI\",\"signer\":{\"letter\":\"S\",\"name\":\"Savings\"}},\"intent\":{\"method\":\"personal_sign\",\"origin\":\"https://app.example\",\"params\":[\"0x48656c6c6f2c2056656c61\",\"0x928ed3C23000BD355951adAED752077aDd934E84\"]}}",
+    "result_json": "{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"signature\":\"0x1102b9989829b2c0bb1c718109914d59e2f5793eaa63250187dfdf0032f9d7cac918732db9316415a3f6c7940055b9888dc20ffcec037014be5235314cce9500\",\"authenticatorData\":\"0xa69533717b230610f14ea657c0bd8231dd6fc7b7108f1215a874fbb1d14df3490500000007\",\"clientDataJSON\":\"0x7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a22733662696d39436537514f79574967476a6b4c666c6774614962414d357575736b46795072455f38516559222c226f726967696e223a2268747470733a2f2f7369676e2e67657476656c612e617070222c2263726f73734f726967696e223a66616c73657d\"}",
+    "keys": [
+     {
+      "credential_id": "780a3232339d9cfb12c126072718759d",
+      "public_key_hex": "04e7615f035290f1599902ef414b6d610a6611445a5c65fae21f47f9bdd186a372d97e7822e60fc84e66a55b0ac3784521e027dd63987c7a4c9a32895f6865b768"
+     }
+    ],
+    "digest_hex": "0xb3a6e29bd09eed03b25888068e42df960b5a21b00ce6ebac905c8fac4ffc41e6"
+   },
+   "expect": {
+    "value": {
+     "refused": "bad_signature"
+    }
+   }
+  },
+  {
+   "name": "trusted_signer_signature_accept/signed_another_challenge",
+   "fn": "trusted_signer_signature_accept",
+   "input": {
+    "request_json": "{\"context\":{\"account\":\"0x928ed3C23000BD355951adAED752077aDd934E84\",\"allowCredentials\":[\"eAoyMjOdnPsSwSYHJxh1nQ\"],\"chainId\":100,\"chainName\":\"Gnosis\",\"dapp\":{\"name\":\"app.example\",\"origin\":\"https://app.example\",\"source\":\"vela_browser\"},\"keyRoute\":{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"hints\":[\"client-device\"],\"place\":\"trusted_signer\",\"transports\":[\"internal\",\"hybrid\"]},\"nativeSymbol\":\"xDAI\",\"signer\":{\"letter\":\"S\",\"name\":\"Savings\"}},\"intent\":{\"method\":\"personal_sign\",\"origin\":\"https://app.example\",\"params\":[\"0x48656c6c6f2c2056656c61\",\"0x928ed3C23000BD355951adAED752077aDd934E84\"]}}",
+    "result_json": "{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"signature\":\"0x7d6e3de79ee438450dc813ff84a4781966cea036df1d7bbaf7565753f4eddd7a053e93f565e17af51e8766709ad4828dfc3b13b4c28aeec2983802a00ce24e42\",\"authenticatorData\":\"0xa69533717b230610f14ea657c0bd8231dd6fc7b7108f1215a874fbb1d14df3490500000007\",\"clientDataJSON\":\"0x7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a224c5845575172636d73455142596e79702d3677793963685444374751504d54624169574846354961534945222c226f726967696e223a2268747470733a2f2f7369676e2e67657476656c612e617070222c2263726f73734f726967696e223a66616c73657d\"}",
+    "keys": [
+     {
+      "credential_id": "780a3232339d9cfb12c126072718759d",
+      "public_key_hex": "04e7615f035290f1599902ef414b6d610a6611445a5c65fae21f47f9bdd186a372d97e7822e60fc84e66a55b0ac3784521e027dd63987c7a4c9a32895f6865b768"
+     }
+    ],
+    "digest_hex": "0xb3a6e29bd09eed03b25888068e42df960b5a21b00ce6ebac905c8fac4ffc41e6"
+   },
+   "expect": {
+    "value": {
+     "refused": "wrong_challenge"
+    }
+   }
+  },
+  {
+   "name": "trusted_signer_approval_request/named",
+   "fn": "trusted_signer_approval_request",
+   "input": {
+    "chain_id": 100,
+    "chain_name": "Gnosis",
+    "native_symbol": "xDAI",
+    "multisig": "0x4c3FF6Bc7d1a4b7f4e0e93B4C61b8b1a7e5dF2A9",
+    "multisig_name": "Team vault",
+    "tx_json": "{\"to\":\"0x6813Eb9362372EEF6200f3b1dbC3f819671cBA69\",\"value\":\"0xde0b6b3a7640000\",\"data\":\"0x\",\"operation\":0,\"safeTxGas\":\"0x0\",\"baseGas\":\"0x0\",\"gasPrice\":\"0x0\",\"gasToken\":\"0x0000000000000000000000000000000000000000\",\"refundReceiver\":\"0x0000000000000000000000000000000000000000\",\"nonce\":\"0x3\"}",
+    "member": "0x928ed3C23000BD355951adAED752077aDd934E84",
+    "member_name": "Savings",
+    "credential_ids_hex": [
+     "780a3232339d9cfb12c126072718759d"
+    ],
+    "key_route_json": "{\"credential_id\":\"780a3232339d9cfb12c126072718759d\",\"method\":\"trusted_signer\",\"transports\":\"internal\",\"hints\":[]}"
+   },
+   "expect": {
+    "value": {
+     "context": {
+      "account": "0x928ed3C23000BD355951adAED752077aDd934E84",
+      "allowCredentials": [
+       "eAoyMjOdnPsSwSYHJxh1nQ"
+      ],
+      "chainId": 100,
+      "chainName": "Gnosis",
+      "keyRoute": {
+       "credentialId": "eAoyMjOdnPsSwSYHJxh1nQ",
+       "hints": [],
+       "place": "trusted_signer",
+       "transports": [
+        "internal"
+       ]
+      },
+      "multisig": {
+       "name": "Team vault"
+      },
+      "nativeSymbol": "xDAI",
+      "signer": {
+       "letter": "S",
+       "name": "Savings"
+      }
+     },
+     "intent": {
+      "method": "vela_multisigApprove",
+      "origin": "",
+      "params": [
+       {
+        "chainId": 100,
+        "member": "0x928ed3C23000BD355951adAED752077aDd934E84",
+        "safe": "0x4c3FF6Bc7d1a4b7f4e0e93B4C61b8b1a7e5dF2A9",
+        "safeTx": {
+         "baseGas": "0x0",
+         "data": "0x",
+         "gasPrice": "0x0",
+         "gasToken": "0x0000000000000000000000000000000000000000",
+         "nonce": "0x3",
+         "operation": 0,
+         "refundReceiver": "0x0000000000000000000000000000000000000000",
+         "safeTxGas": "0x0",
+         "to": "0x6813Eb9362372EEF6200f3b1dbC3f819671cBA69",
+         "value": "0xde0b6b3a7640000"
+        },
+        "safeTxHash": "0xa85330e91e1fe41ded31f4f26c53ef624641413f1ee4b96e1c8ff8cf5f7f7442"
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "trusted_signer_approval_request/unnamed_no_route",
+   "fn": "trusted_signer_approval_request",
+   "input": {
+    "chain_id": 100,
+    "chain_name": null,
+    "native_symbol": null,
+    "multisig": "0x4c3FF6Bc7d1a4b7f4e0e93B4C61b8b1a7e5dF2A9",
+    "multisig_name": null,
+    "tx_json": "{\"to\":\"0x6813Eb9362372EEF6200f3b1dbC3f819671cBA69\",\"value\":\"0xde0b6b3a7640000\",\"data\":\"0x\",\"operation\":0,\"safeTxGas\":\"0x0\",\"baseGas\":\"0x0\",\"gasPrice\":\"0x0\",\"gasToken\":\"0x0000000000000000000000000000000000000000\",\"refundReceiver\":\"0x0000000000000000000000000000000000000000\",\"nonce\":\"0x3\"}",
+    "member": "0x928ed3C23000BD355951adAED752077aDd934E84",
+    "member_name": null,
+    "credential_ids_hex": [
+     "780a3232339d9cfb12c126072718759d"
+    ],
+    "key_route_json": null
+   },
+   "expect": {
+    "value": {
+     "context": {
+      "account": "0x928ed3C23000BD355951adAED752077aDd934E84",
+      "allowCredentials": [
+       "eAoyMjOdnPsSwSYHJxh1nQ"
+      ],
+      "chainId": 100,
+      "multisig": {}
+     },
+     "intent": {
+      "method": "vela_multisigApprove",
+      "origin": "",
+      "params": [
+       {
+        "chainId": 100,
+        "member": "0x928ed3C23000BD355951adAED752077aDd934E84",
+        "safe": "0x4c3FF6Bc7d1a4b7f4e0e93B4C61b8b1a7e5dF2A9",
+        "safeTx": {
+         "baseGas": "0x0",
+         "data": "0x",
+         "gasPrice": "0x0",
+         "gasToken": "0x0000000000000000000000000000000000000000",
+         "nonce": "0x3",
+         "operation": 0,
+         "refundReceiver": "0x0000000000000000000000000000000000000000",
+         "safeTxGas": "0x0",
+         "to": "0x6813Eb9362372EEF6200f3b1dbC3f819671cBA69",
+         "value": "0xde0b6b3a7640000"
+        },
+        "safeTxHash": "0xa85330e91e1fe41ded31f4f26c53ef624641413f1ee4b96e1c8ff8cf5f7f7442"
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "trusted_signer_approval_accept/accepted",
+   "fn": "trusted_signer_approval_accept",
+   "input": {
+    "result_json": "{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"signature\":\"0x4d46e845e3205232462701dba8efcf6bc437751b4e639e5ea735a1b68573b90e6f33293a55e2a3260507cffc759d535dd08d142053495d8d8c73fb5c8e334268\",\"authenticatorData\":\"0xa69533717b230610f14ea657c0bd8231dd6fc7b7108f1215a874fbb1d14df3490500000007\",\"clientDataJSON\":\"0x7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a22685a5f4455324172736557545535467a77395a306a6f55726e4c63744e795f344b673253794676364a3241222c226f726967696e223a2268747470733a2f2f7369676e2e67657476656c612e617070222c2263726f73734f726967696e223a66616c73657d\"}",
+    "chain_id": 100,
+    "member": "0x928ed3C23000BD355951adAED752077aDd934E84",
+    "safe_tx_hash": "0xa85330e91e1fe41ded31f4f26c53ef624641413f1ee4b96e1c8ff8cf5f7f7442",
+    "keys": [
+     {
+      "credential_id": "780a3232339d9cfb12c126072718759d",
+      "public_key_hex": "04e7615f035290f1599902ef414b6d610a6611445a5c65fae21f47f9bdd186a372d97e7822e60fc84e66a55b0ac3784521e027dd63987c7a4c9a32895f6865b768"
+     }
+    ]
+   },
+   "expect": {
+    "value": {
+     "accepted": {
+      "owner": "0x928ed3C23000BD355951adAED752077aDd934E84",
+      "ownerGenesis": {
+       "factory": "0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67",
+       "singleton": "0x29fcB43b46531BcA003ddC8FCB67FFE91900C762",
+       "saltNonce": "0x249d56cb56914fe2329386567111c4fd28219ed6c787aa448511f5b976c0ee80",
+       "initializer": "0xb63e800d0000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000000100000000000000000000000038869bf66a61cf6bdb996a6ae40d5853fd43b526000000000000000000000000000000000000000000000000000000000000014000000000000000000000000075cf11467937ce3f2f357ce24ffc3dbf8fd5c226000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000000000000000094a4f6affbd8975951142c3999aeab7ecee555c200000000000000000000000000000000000000000000000000000000000001c48d80ff0a00000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000172012dd68b007b46fbe91b9a7c3eda5a7a1063cb5b47000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000648d0dc49f0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000100000000000000000000000075cf11467937ce3f2f357ce24ffc3dbf8fd5c2260194a4f6affbd8975951142c3999aeab7ecee555c2000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000640dd9692fe7615f035290f1599902ef414b6d610a6611445a5c65fae21f47f9bdd186a372d97e7822e60fc84e66a55b0ac3784521e027dd63987c7a4c9a32895f6865b7680000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "signer": "0x94a4F6affBd8975951142c3999aEAB7ecee555c2",
+      "authenticatorData": "0xa69533717b230610f14ea657c0bd8231dd6fc7b7108f1215a874fbb1d14df3490500000007",
+      "clientDataFields": "\"origin\":\"https://sign.getvela.app\",\"crossOrigin\":false",
+      "r": "0x4d46e845e3205232462701dba8efcf6bc437751b4e639e5ea735a1b68573b90e",
+      "s": "0x6f33293a55e2a3260507cffc759d535dd08d142053495d8d8c73fb5c8e334268"
+     }
+    }
+   }
+  },
+  {
+   "name": "trusted_signer_approval_accept/another_tx",
+   "fn": "trusted_signer_approval_accept",
+   "input": {
+    "result_json": "{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"signature\":\"0x661018bba4f0c4b0164e74fbc7e085cb989fd2358c4adf568b7437a0dd8f6d17e400588be9df7b9be9130cd076b959f3215e2a60345100201c8871b5614b008f\",\"authenticatorData\":\"0xa69533717b230610f14ea657c0bd8231dd6fc7b7108f1215a874fbb1d14df3490500000007\",\"clientDataJSON\":\"0x7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a22685a5f4455324172736557545535467a77395a306a6f55726e4c63744e795f344b673253794676364a3241222c226f726967696e223a2268747470733a2f2f7369676e2e67657476656c612e617070222c2263726f73734f726967696e223a66616c73657d\"}",
+    "chain_id": 100,
+    "member": "0x928ed3C23000BD355951adAED752077aDd934E84",
+    "safe_tx_hash": "0xabababababababababababababababababababababababababababababababab",
+    "keys": [
+     {
+      "credential_id": "780a3232339d9cfb12c126072718759d",
+      "public_key_hex": "04e7615f035290f1599902ef414b6d610a6611445a5c65fae21f47f9bdd186a372d97e7822e60fc84e66a55b0ac3784521e027dd63987c7a4c9a32895f6865b768"
+     }
+    ]
+   },
+   "expect": {
+    "value": {
+     "refused": "wrong_challenge"
+    }
+   }
+  },
+  {
+   "name": "trusted_signer_approval_accept/foreign_key",
+   "fn": "trusted_signer_approval_accept",
+   "input": {
+    "result_json": "{\"credentialId\":\"QyLXxD5DImt7pYIXz4P6ng\",\"signature\":\"0x781c05fbdc1a98dd23401dbf8f52f806700c96242c52a9d52e1f8db588fb951a164375cc817f3db1d3acd900c13e3e3be81f360ae522862cd73b52c5fc0d12e5\",\"authenticatorData\":\"0xa69533717b230610f14ea657c0bd8231dd6fc7b7108f1215a874fbb1d14df3490500000007\",\"clientDataJSON\":\"0x7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a22685a5f4455324172736557545535467a77395a306a6f55726e4c63744e795f344b673253794676364a3241222c226f726967696e223a2268747470733a2f2f7369676e2e67657476656c612e617070222c2263726f73734f726967696e223a66616c73657d\"}",
+    "chain_id": 100,
+    "member": "0x928ed3C23000BD355951adAED752077aDd934E84",
+    "safe_tx_hash": "0xa85330e91e1fe41ded31f4f26c53ef624641413f1ee4b96e1c8ff8cf5f7f7442",
+    "keys": [
+     {
+      "credential_id": "780a3232339d9cfb12c126072718759d",
+      "public_key_hex": "04e7615f035290f1599902ef414b6d610a6611445a5c65fae21f47f9bdd186a372d97e7822e60fc84e66a55b0ac3784521e027dd63987c7a4c9a32895f6865b768"
+     }
+    ]
+   },
+   "expect": {
+    "value": {
+     "refused": "foreign_key"
+    }
+   }
+  },
+  {
+   "name": "trusted_signer_approval_accept/not_user_verified",
+   "fn": "trusted_signer_approval_accept",
+   "input": {
+    "result_json": "{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"signature\":\"0xf41703ae862bfe3ead69d1906f94d1fa712e3e82e488e998c897a6b007f398e6e71b379dfa5739c2dc550c3fa410e455c0748bb33964e23963a3f15951d20f40\",\"authenticatorData\":\"0xa69533717b230610f14ea657c0bd8231dd6fc7b7108f1215a874fbb1d14df3490100000007\",\"clientDataJSON\":\"0x7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a22685a5f4455324172736557545535467a77395a306a6f55726e4c63744e795f344b673253794676364a3241222c226f726967696e223a2268747470733a2f2f7369676e2e67657476656c612e617070222c2263726f73734f726967696e223a66616c73657d\"}",
+    "chain_id": 100,
+    "member": "0x928ed3C23000BD355951adAED752077aDd934E84",
+    "safe_tx_hash": "0xa85330e91e1fe41ded31f4f26c53ef624641413f1ee4b96e1c8ff8cf5f7f7442",
+    "keys": [
+     {
+      "credential_id": "780a3232339d9cfb12c126072718759d",
+      "public_key_hex": "04e7615f035290f1599902ef414b6d610a6611445a5c65fae21f47f9bdd186a372d97e7822e60fc84e66a55b0ac3784521e027dd63987c7a4c9a32895f6865b768"
+     }
+    ]
+   },
+   "expect": {
+    "value": {
+     "refused": "not_verified"
+    }
+   }
+  },
+  {
+   "name": "sign_error_words/user_rejected",
+   "fn": "sign_error_words",
+   "input": {
+    "kind": "user_rejected",
+    "detail": null
+   },
+   "expect": {
+    "value": "User rejected the request"
+   }
+  },
+  {
+   "name": "sign_error_words/wallet_switched_chains",
+   "fn": "sign_error_words",
+   "input": {
+    "kind": "wallet_switched_chains",
+    "detail": null
+   },
+   "expect": {
+    "value": "Cancelled: the wallet switched chains"
+   }
+  },
+  {
+   "name": "sign_error_words/unsupported_chain",
+   "fn": "sign_error_words",
+   "input": {
+    "kind": "unsupported_chain",
+    "detail": null
+   },
+   "expect": {
+    "value": "Unsupported chain"
+   }
+  },
+  {
+   "name": "sign_error_words/unauthorized_account",
+   "fn": "sign_error_words",
+   "input": {
+    "kind": "unauthorized_account",
+    "detail": null
+   },
+   "expect": {
+    "value": "Unauthorized account"
+   }
+  },
+  {
+   "name": "sign_error_words/invalid_params",
+   "fn": "sign_error_words",
+   "input": {
+    "kind": "invalid_params",
+    "detail": null
+   },
+   "expect": {
+    "value": "Invalid params"
+   }
+  },
+  {
+   "name": "sign_error_words/unsupported_capability",
+   "fn": "sign_error_words",
+   "input": {
+    "kind": "unsupported_capability",
+    "detail": null
+   },
+   "expect": {
+    "value": "Unsupported capability"
+   }
+  },
+  {
+   "name": "sign_error_words/unlimited_approval",
+   "fn": "sign_error_words",
+   "input": {
+    "kind": "unlimited_approval",
+    "detail": null
+   },
+   "expect": {
+    "value": "The wallet refused an unlimited approval its approval screen did not show"
+   }
+  },
+  {
+   "name": "sign_error_words/self_call_blocked",
+   "fn": "sign_error_words",
+   "input": {
+    "kind": "self_call_blocked",
+    "detail": null
+   },
+   "expect": {
+    "value": "The wallet refused a call that would change who controls the account"
+   }
+  },
+  {
+   "name": "sign_error_words/funding_cancelled",
+   "fn": "sign_error_words",
+   "input": {
+    "kind": "funding_cancelled",
+    "detail": null
+   },
+   "expect": {
+    "value": "Gas account funding cancelled"
+   }
+  },
+  {
+   "name": "sign_error_words/submit_failed",
+   "fn": "sign_error_words",
+   "input": {
+    "kind": "submit_failed",
+    "detail": null
+   },
+   "expect": {
+    "value": "The transaction could not be submitted"
+   }
+  },
+  {
+   "name": "sign_error_words/stale_fee_quote",
+   "fn": "sign_error_words",
+   "input": {
+    "kind": "stale_fee_quote",
+    "detail": null
+   },
+   "expect": {
+    "value": "The fee quote expired"
+   }
+  },
+  {
+   "name": "sign_error_words/no_such_kind",
+   "fn": "sign_error_words",
+   "input": {
+    "kind": "no_such_kind",
+    "detail": null
+   },
+   "expect": {
+    "value": null
+   }
+  },
+  {
+   "name": "sign_error_words/submit_failed_detail",
+   "fn": "sign_error_words",
+   "input": {
+    "kind": "submit_failed",
+    "detail": "bundler said no"
+   },
+   "expect": {
+    "value": "bundler said no"
+   }
+  },
+  {
+   "name": "sign_error_words/invalid_params_detail",
+   "fn": "sign_error_words",
+   "input": {
+    "kind": "invalid_params",
+    "detail": "missing to"
+   },
+   "expect": {
+    "value": "Invalid params (missing to)"
+   }
+  },
+  {
+   "name": "sign_not_confirmed_detail",
+   "fn": "sign_not_confirmed_detail",
+   "input": {
+    "user_op_hash": "0x1212121212121212121212121212121212121212121212121212121212121212"
+   },
+   "expect": {
+    "value": "The transaction was submitted but is not confirmed yet; it may still complete, so check the wallet before sending it again (user operation 0x1212121212121212121212121212121212121212121212121212121212121212)"
+   }
+  },
+  {
+   "name": "sign_answered/hash",
+   "fn": "sign_answered",
+   "input": {
+    "payload_json": "{\"type\":\"ok\",\"result\":\"0x3434343434343434343434343434343434343434343434343434343434343434\"}"
+   },
+   "expect": {
+    "value": "0x3434343434343434343434343434343434343434343434343434343434343434"
+   }
+  },
+  {
+   "name": "sign_answered/batch_object",
+   "fn": "sign_answered",
+   "input": {
+    "payload_json": "{\"type\":\"ok\",\"result\":{\"id\":\"0x5656565656565656565656565656565656565656565656565656565656565656\"}}"
+   },
+   "expect": {
+    "value": "0x5656565656565656565656565656565656565656565656565656565656565656"
+   }
+  },
+  {
+   "name": "sign_answered/null",
+   "fn": "sign_answered",
+   "input": {
+    "payload_json": "{\"type\":\"ok\",\"result\":null}"
+   },
+   "expect": {
+    "value": null
+   }
+  },
+  {
+   "name": "sign_answered/error",
+   "fn": "sign_answered",
+   "input": {
+    "payload_json": "{\"type\":\"err\",\"code\":4001,\"kind\":\"user_rejected\",\"message\":\"User rejected the request.\"}"
+   },
+   "expect": {
+    "value": null
+   }
+  },
+  {
+   "name": "sign_answered/unreadable",
+   "fn": "sign_answered",
+   "input": {
+    "payload_json": "{"
+   },
+   "expect": {
+    "value": null
+   }
+  },
+  {
+   "name": "sign_request_ttl_ms",
+   "fn": "sign_request_ttl_ms",
+   "input": {},
+   "expect": {
+    "value": 300000
+   }
+  },
+  {
+   "name": "intent_agent_reads/review_allowed",
+   "fn": "intent_agent_reads",
+   "input": {
+    "world_json": "{\"session\":{\"address\":\"0x1111111111111111111111111111111111111111\",\"accounts\":[{\"account\":{\"address\":\"0x1111111111111111111111111111111111111111\"}}]},\"agent_wallets\":[\"0x1111111111111111111111111111111111111111\"]}",
+    "operation": null
+   },
+   "expect": {
+    "value": null
+   }
+  },
+  {
+   "name": "intent_agent_reads/review_not_allowed",
+   "fn": "intent_agent_reads",
+   "input": {
+    "world_json": "{\"session\":{\"address\":\"0x1111111111111111111111111111111111111111\",\"accounts\":[{\"account\":{\"address\":\"0x1111111111111111111111111111111111111111\"}}]},\"agent_wallets\":[]}",
+    "operation": null
+   },
+   "expect": {
+    "value": {
+     "code": "wallet_not_allowed",
+     "detail": "the person has not let the agent use the wallet in front (Settings → AI agent)"
+    }
+   }
+  },
+  {
+   "name": "intent_agent_reads/wait_unknown_operation",
+   "fn": "intent_agent_reads",
+   "input": {
+    "world_json": "{\"session\":{\"address\":\"0x1111111111111111111111111111111111111111\",\"accounts\":[{\"account\":{\"address\":\"0x1111111111111111111111111111111111111111\"}}]},\"agent_wallets\":[\"0x1111111111111111111111111111111111111111\"]}",
+    "operation": "op-1"
+   },
+   "expect": {
+    "value": null
+   }
+  },
+  {
+   "name": "intent_agent_reads/unreadable_world",
+   "fn": "intent_agent_reads",
+   "input": {
+    "world_json": "nope",
+    "operation": null
+   },
+   "expect": {
+    "value": null
+   }
+  },
+  {
+   "name": "intent_advice/sanitized",
+   "fn": "intent_advice",
+   "input": {
+    "input_json": "{\"world\":{\"session\":{\"address\":\"0x1111111111111111111111111111111111111111\",\"accounts\":[{\"account\":{\"address\":\"0x1111111111111111111111111111111111111111\"}}]},\"agent_wallets\":[\"0x1111111111111111111111111111111111111111\"]},\"current_digest\":\"0xabc\",\"current_fee\":null,\"args\":{\"review_digest\":\"0xabc\",\"verdict\":\"danger\",\"summary\":\"‮Drains​ your\\n\\nUSDC\",\"points\":[\"one\",\"\",\"two\\u0007\",\"three\",\"four\",\"five\",\"six\"],\"sources\":[\"https://user:pw@Etherscan.io:443/address/0x1?a=b\",\"javascript:alert(1)\",\"not a url\"]}}"
+   },
+   "expect": {
+    "value": {
+     "advice": {
+      "fee": null,
+      "points": [
+       "one",
+       "two",
+       "three",
+       "four",
+       "five"
+      ],
+      "review_digest": "0xabc",
+      "source_hosts": [
+       "etherscan.io"
+      ],
+      "summary": "Drains your USDC",
+      "verdict": "danger"
+     },
+     "current": true,
+     "ok": true,
+     "standing": "current"
+    }
+   }
+  },
+  {
+   "name": "intent_advice/earlier_version",
+   "fn": "intent_advice",
+   "input": {
+    "input_json": "{\"world\":{\"session\":{\"address\":\"0x1111111111111111111111111111111111111111\",\"accounts\":[{\"account\":{\"address\":\"0x1111111111111111111111111111111111111111\"}}]},\"agent_wallets\":[\"0x1111111111111111111111111111111111111111\"]},\"current_digest\":\"0xdef\",\"current_fee\":null,\"args\":{\"review_digest\":\"0xabc\",\"verdict\":\"looks_fine\",\"summary\":\"ok\"}}"
+   },
+   "expect": {
+    "value": {
+     "advice": {
+      "fee": null,
+      "points": [],
+      "review_digest": "0xabc",
+      "source_hosts": [],
+      "summary": "ok",
+      "verdict": "looks_fine"
+     },
+     "current": false,
+     "ok": true,
+     "standing": "earlier_version"
+    }
+   }
+  },
+  {
+   "name": "intent_advice/with_fee",
+   "fn": "intent_advice",
+   "input": {
+    "input_json": "{\"world\":{\"session\":{\"address\":\"0x1111111111111111111111111111111111111111\",\"accounts\":[{\"account\":{\"address\":\"0x1111111111111111111111111111111111111111\"}}]},\"agent_wallets\":[\"0x1111111111111111111111111111111111111111\"]},\"current_digest\":\"0xabc\",\"current_fee\":{\"state\":\"quoted\",\"amount\":\"0.001\",\"amount_raw\":\"1000000000000000\",\"decimals\":18,\"symbol\":\"xDAI\",\"token\":null},\"args\":{\"review_digest\":\"0xabc\",\"verdict\":\"caution\",\"summary\":\"Check it\"}}"
+   },
+   "expect": {
+    "value": {
+     "advice": {
+      "fee": {
+       "amount": "0.001",
+       "amount_raw": "1000000000000000",
+       "decimals": 18,
+       "symbol": "xDAI",
+       "token": null
+      },
+      "points": [],
+      "review_digest": "0xabc",
+      "source_hosts": [],
+      "summary": "Check it",
+      "verdict": "caution"
+     },
+     "current": true,
+     "ok": true,
+     "standing": "current"
+    }
+   }
+  },
+  {
+   "name": "intent_advice/not_allowed",
+   "fn": "intent_advice",
+   "input": {
+    "input_json": "{\"world\":{\"session\":{\"address\":\"0x1111111111111111111111111111111111111111\",\"accounts\":[{\"account\":{\"address\":\"0x1111111111111111111111111111111111111111\"}}]},\"agent_wallets\":[]},\"current_digest\":\"0xabc\",\"current_fee\":null,\"args\":{\"review_digest\":\"0xabc\",\"verdict\":\"caution\",\"summary\":\"Check it\"}}"
+   },
+   "expect": {
+    "value": {
+     "code": "wallet_not_allowed",
+     "detail": "the person has not allowed the agent to use this wallet",
+     "ok": false
+    }
+   }
+  },
+  {
+   "name": "intent_advice/no_review",
+   "fn": "intent_advice",
+   "input": {
+    "input_json": "{\"world\":{\"session\":{\"address\":\"0x1111111111111111111111111111111111111111\",\"accounts\":[{\"account\":{\"address\":\"0x1111111111111111111111111111111111111111\"}}]},\"agent_wallets\":[\"0x1111111111111111111111111111111111111111\"]},\"current_digest\":null,\"current_fee\":null,\"args\":{\"review_digest\":\"0xabc\",\"verdict\":\"caution\",\"summary\":\"Check it\"}}"
+   },
+   "expect": {
+    "value": {
+     "code": "not_found",
+     "detail": "no signing review is open: read one with vela_review or vela_watch_reviews",
+     "ok": false
+    }
+   }
+  },
+  {
+   "name": "intent_advice/bad_verdict",
+   "fn": "intent_advice",
+   "input": {
+    "input_json": "{\"world\":{\"session\":{\"address\":\"0x1111111111111111111111111111111111111111\",\"accounts\":[{\"account\":{\"address\":\"0x1111111111111111111111111111111111111111\"}}]},\"agent_wallets\":[\"0x1111111111111111111111111111111111111111\"]},\"current_digest\":\"0xabc\",\"current_fee\":null,\"args\":{\"review_digest\":\"0xabc\",\"verdict\":\"approve_now\",\"summary\":\"x\"}}"
+   },
+   "expect": {
+    "value": {
+     "code": "invalid_input",
+     "detail": "verdict is one of looks_fine, caution, danger, unsure",
+     "ok": false
+    }
+   }
+  },
+  {
+   "name": "intent_advice/gate_only",
+   "fn": "intent_advice",
+   "input": {
+    "input_json": "{\"world\":{\"session\":{\"address\":\"0x1111111111111111111111111111111111111111\",\"accounts\":[{\"account\":{\"address\":\"0x1111111111111111111111111111111111111111\"}}]},\"agent_wallets\":[\"0x1111111111111111111111111111111111111111\"]}}"
+   },
+   "expect": {
+    "value": {
+     "ok": true
+    }
+   }
+  },
+  {
+   "name": "intent_advice_standing/current",
+   "fn": "intent_advice_standing",
+   "input": {
+    "input_json": "{\"advice\":{\"fee\":{\"amount\":\"0.001\",\"amount_raw\":\"1000000000000000\",\"decimals\":18,\"symbol\":\"xDAI\",\"token\":null},\"points\":[],\"review_digest\":\"0xabc\",\"source_hosts\":[],\"summary\":\"ok\",\"verdict\":\"looks_fine\"},\"current_digest\":\"0xabc\",\"current_fee\":{\"state\":\"quoted\",\"amount\":\"0.001\",\"amount_raw\":\"1200000000000000\",\"decimals\":18,\"symbol\":\"xDAI\",\"token\":null}}"
+   },
+   "expect": {
+    "value": {
+     "fee_when_given": {
+      "amount": "0.001",
+      "symbol": "xDAI"
+     },
+     "standing": "current"
+    }
+   }
+  },
+  {
+   "name": "intent_advice_standing/fee_changed",
+   "fn": "intent_advice_standing",
+   "input": {
+    "input_json": "{\"advice\":{\"fee\":{\"amount\":\"0.001\",\"amount_raw\":\"1000000000000000\",\"decimals\":18,\"symbol\":\"xDAI\",\"token\":null},\"points\":[],\"review_digest\":\"0xabc\",\"source_hosts\":[],\"summary\":\"ok\",\"verdict\":\"looks_fine\"},\"current_digest\":\"0xabc\",\"current_fee\":{\"state\":\"quoted\",\"amount\":\"0.001\",\"amount_raw\":\"2000000000000000\",\"decimals\":18,\"symbol\":\"xDAI\",\"token\":null}}"
+   },
+   "expect": {
+    "value": {
+     "fee_when_given": {
+      "amount": "0.001",
+      "symbol": "xDAI"
+     },
+     "standing": "fee_changed"
+    }
+   }
+  },
+  {
+   "name": "intent_advice_standing/earlier_version",
+   "fn": "intent_advice_standing",
+   "input": {
+    "input_json": "{\"advice\":{\"fee\":{\"amount\":\"0.001\",\"amount_raw\":\"1000000000000000\",\"decimals\":18,\"symbol\":\"xDAI\",\"token\":null},\"points\":[],\"review_digest\":\"0xabc\",\"source_hosts\":[],\"summary\":\"ok\",\"verdict\":\"looks_fine\"},\"current_digest\":\"0xdef\",\"current_fee\":{\"state\":\"quoted\",\"amount\":\"0.001\",\"amount_raw\":\"1000000000000000\",\"decimals\":18,\"symbol\":\"xDAI\",\"token\":null}}"
+   },
+   "expect": {
+    "value": {
+     "fee_when_given": {
+      "amount": "0.001",
+      "symbol": "xDAI"
+     },
+     "standing": "earlier_version"
+    }
+   }
+  },
+  {
+   "name": "intent_advice_standing/unreadable",
+   "fn": "intent_advice_standing",
+   "input": {
+    "input_json": "[]"
+   },
+   "expect": {
+    "value": {
+     "fee_when_given": null,
+     "standing": "earlier_version"
+    }
+   }
+  },
+  {
+   "name": "rpc_own_only_pool/on",
+   "fn": "rpc_own_only_pool",
+   "input": {
+    "seeds_json": "[{\"url\":\"https://rpc.mine.example\",\"source\":\"user\"},{\"url\":\"https://rpc.gnosischain.com\",\"source\":\"default\"},{\"url\":\"https://gnosis.public.example\",\"source\":\"public\"}]",
+    "own_only": true
+   },
+   "expect": {
+    "value": {
+     "endpoints": [
+      {
+       "source": "user",
+       "url": "https://rpc.mine.example"
+      }
+     ],
+     "own_only": true
+    }
+   }
+  },
+  {
+   "name": "rpc_own_only_pool/off",
+   "fn": "rpc_own_only_pool",
+   "input": {
+    "seeds_json": "[{\"url\":\"https://rpc.mine.example\",\"source\":\"user\"},{\"url\":\"https://rpc.gnosischain.com\",\"source\":\"default\"},{\"url\":\"https://gnosis.public.example\",\"source\":\"public\"}]",
+    "own_only": false
+   },
+   "expect": {
+    "value": {
+     "endpoints": [
+      {
+       "source": "user",
+       "url": "https://rpc.mine.example"
+      },
+      {
+       "source": "default",
+       "url": "https://rpc.gnosischain.com"
+      },
+      {
+       "source": "public",
+       "url": "https://gnosis.public.example"
+      }
+     ],
+     "own_only": false
+    }
+   }
+  },
+  {
+   "name": "rpc_own_only_pool/on_without_own",
+   "fn": "rpc_own_only_pool",
+   "input": {
+    "seeds_json": "[{\"url\":\"https://rpc.gnosischain.com\",\"source\":\"default\"},{\"url\":\"https://gnosis.public.example\",\"source\":\"public\"}]",
+    "own_only": true
+   },
+   "expect": {
+    "value": {
+     "endpoints": [
+      {
+       "source": "default",
+       "url": "https://rpc.gnosischain.com"
+      },
+      {
+       "source": "public",
+       "url": "https://gnosis.public.example"
+      }
+     ],
+     "own_only": false
+    }
+   }
+  },
+  {
+   "name": "rpc_own_only_pool/unreadable",
+   "fn": "rpc_own_only_pool",
+   "input": {
+    "seeds_json": "{",
+    "own_only": true
+   },
+   "expect": {
+    "value": ""
+   }
+  },
+  {
+   "name": "rpc_hedge_after_ms",
+   "fn": "rpc_hedge_after_ms",
+   "input": {},
+   "expect": {
+    "value": 1500
+   }
+  },
+  {
+   "name": "rpc_read_timeout_ms",
+   "fn": "rpc_read_timeout_ms",
+   "input": {},
+   "expect": {
+    "value": 8000
+   }
+  },
+  {
+   "name": "rpc_is_hedged_read/rpc/eth_call",
+   "fn": "rpc_is_hedged_read",
+   "input": {
+    "kind": "rpc",
+    "method": "eth_call"
+   },
+   "expect": {
+    "value": true
+   }
+  },
+  {
+   "name": "rpc_is_hedged_read/rpc/eth_getBalance",
+   "fn": "rpc_is_hedged_read",
+   "input": {
+    "kind": "rpc",
+    "method": "eth_getBalance"
+   },
+   "expect": {
+    "value": true
+   }
+  },
+  {
+   "name": "rpc_is_hedged_read/rpc/eth_sendRawTransaction",
+   "fn": "rpc_is_hedged_read",
+   "input": {
+    "kind": "rpc",
+    "method": "eth_sendRawTransaction"
+   },
+   "expect": {
+    "value": false
+   }
+  },
+  {
+   "name": "rpc_is_hedged_read/bundler/eth_estimateUserOperationGas",
+   "fn": "rpc_is_hedged_read",
+   "input": {
+    "kind": "bundler",
+    "method": "eth_estimateUserOperationGas"
+   },
+   "expect": {
+    "value": false
+   }
+  },
+  {
+   "name": "rpc_is_hedged_read/other/eth_call",
+   "fn": "rpc_is_hedged_read",
+   "input": {
+    "kind": "other",
+    "method": "eth_call"
+   },
+   "expect": {
+    "value": false
+   }
+  },
+  {
+   "name": "rpc_early_verdict/answered",
+   "fn": "rpc_early_verdict",
+   "input": {
+    "kind": "rpc",
+    "method": "eth_call",
+    "url": "https://rpc.example",
+    "outcome_json": "{\"type\":\"response\",\"error\":null}"
+   },
+   "expect": {
+    "value": {
+     "type": "respond",
+     "url": "https://rpc.example",
+     "maybe_delivered": false
+    }
+   }
+  },
+  {
+   "name": "rpc_early_verdict/reverted",
+   "fn": "rpc_early_verdict",
+   "input": {
+    "kind": "rpc",
+    "method": "eth_call",
+    "url": "https://rpc.example",
+    "outcome_json": "{\"type\":\"response\",\"error\":{\"code\":3,\"message\":\"execution reverted\"}}"
+   },
+   "expect": {
+    "value": {
+     "type": "respond",
+     "url": "https://rpc.example",
+     "maybe_delivered": false
+    }
+   }
+  },
+  {
+   "name": "rpc_early_verdict/other_error",
+   "fn": "rpc_early_verdict",
+   "input": {
+    "kind": "rpc",
+    "method": "eth_call",
+    "url": "https://rpc.example",
+    "outcome_json": "{\"type\":\"response\",\"error\":{\"code\":-32000,\"message\":\"header not found\"}}"
+   },
+   "expect": {
+    "value": ""
+   }
+  },
+  {
+   "name": "rpc_early_verdict/rate_limited",
+   "fn": "rpc_early_verdict",
+   "input": {
+    "kind": "rpc",
+    "method": "eth_call",
+    "url": "https://rpc.example",
+    "outcome_json": "{\"type\":\"http_error\",\"status\":429}"
+   },
+   "expect": {
+    "value": ""
+   }
+  },
+  {
+   "name": "rpc_early_verdict/timeout",
+   "fn": "rpc_early_verdict",
+   "input": {
+    "kind": "rpc",
+    "method": "eth_getBalance",
+    "url": "https://rpc.example",
+    "outcome_json": "{\"type\":\"timeout\"}"
+   },
+   "expect": {
+    "value": ""
+   }
+  },
+  {
+   "name": "rpc_early_verdict/bundler",
+   "fn": "rpc_early_verdict",
+   "input": {
+    "kind": "bundler",
+    "method": "eth_getUserOperationReceipt",
+    "url": "https://rpc.example",
+    "outcome_json": "{\"type\":\"response\",\"error\":null}"
+   },
+   "expect": {
+    "value": {
+     "type": "respond",
+     "url": "https://rpc.example",
+     "maybe_delivered": false
+    }
+   }
+  },
+  {
+   "name": "rpc_early_verdict/unknown_kind",
+   "fn": "rpc_early_verdict",
+   "input": {
+    "kind": "ws",
+    "method": "eth_call",
+    "url": "https://rpc.example",
+    "outcome_json": "{\"type\":\"response\",\"error\":null}"
+   },
+   "expect": {
+    "value": ""
+   }
+  },
+  {
+   "name": "rpc_early_verdict/unreadable_outcome",
+   "fn": "rpc_early_verdict",
+   "input": {
+    "kind": "rpc",
+    "method": "eth_call",
+    "url": "https://rpc.example",
+    "outcome_json": "{\"type\":\"weird\"}"
+   },
+   "expect": {
+    "value": ""
+   }
+  },
+  {
+   "name": "rpc_cooldown_ms/0",
+   "fn": "rpc_cooldown_ms",
+   "input": {
+    "consecutive_failures": 0
+   },
+   "expect": {
+    "value": 0
+   }
+  },
+  {
+   "name": "rpc_cooldown_ms/1",
+   "fn": "rpc_cooldown_ms",
+   "input": {
+    "consecutive_failures": 1
+   },
+   "expect": {
+    "value": 30000
+   }
+  },
+  {
+   "name": "rpc_cooldown_ms/2",
+   "fn": "rpc_cooldown_ms",
+   "input": {
+    "consecutive_failures": 2
+   },
+   "expect": {
+    "value": 60000
+   }
+  },
+  {
+   "name": "rpc_cooldown_ms/3",
+   "fn": "rpc_cooldown_ms",
+   "input": {
+    "consecutive_failures": 3
+   },
+   "expect": {
+    "value": 120000
+   }
+  },
+  {
+   "name": "rpc_cooldown_ms/4",
+   "fn": "rpc_cooldown_ms",
+   "input": {
+    "consecutive_failures": 4
+   },
+   "expect": {
+    "value": 240000
+   }
+  },
+  {
+   "name": "rpc_cooldown_ms/5",
+   "fn": "rpc_cooldown_ms",
+   "input": {
+    "consecutive_failures": 5
+   },
+   "expect": {
+    "value": 300000
+   }
+  },
+  {
+   "name": "rpc_cooldown_ms/10",
+   "fn": "rpc_cooldown_ms",
+   "input": {
+    "consecutive_failures": 10
+   },
+   "expect": {
+    "value": 300000
+   }
+  },
+  {
+   "name": "rpc_cooldown_ms/40",
+   "fn": "rpc_cooldown_ms",
+   "input": {
+    "consecutive_failures": 40
+   },
+   "expect": {
+    "value": 300000
+   }
+  },
+  {
+   "name": "min_gas_price_wei/1",
+   "fn": "min_gas_price_wei",
+   "input": {
+    "chain_id": 1
+   },
+   "expect": {
+    "value": "0"
+   }
+  },
+  {
+   "name": "typical_inclusion_seconds/1",
+   "fn": "typical_inclusion_seconds",
+   "input": {
+    "chain_id": 1
+   },
+   "expect": {
+    "value": 24
+   }
+  },
+  {
+   "name": "min_gas_price_wei/100",
+   "fn": "min_gas_price_wei",
+   "input": {
+    "chain_id": 100
+   },
+   "expect": {
+    "value": "0"
+   }
+  },
+  {
+   "name": "typical_inclusion_seconds/100",
+   "fn": "typical_inclusion_seconds",
+   "input": {
+    "chain_id": 100
+   },
+   "expect": {
+    "value": 15
+   }
+  },
+  {
+   "name": "min_gas_price_wei/8453",
+   "fn": "min_gas_price_wei",
+   "input": {
+    "chain_id": 8453
+   },
+   "expect": {
+    "value": "0"
+   }
+  },
+  {
+   "name": "typical_inclusion_seconds/8453",
+   "fn": "typical_inclusion_seconds",
+   "input": {
+    "chain_id": 8453
+   },
+   "expect": {
+    "value": 4
+   }
+  },
+  {
+   "name": "min_gas_price_wei/5042002",
+   "fn": "min_gas_price_wei",
+   "input": {
+    "chain_id": 5042002
+   },
+   "expect": {
+    "value": "20000000000"
+   }
+  },
+  {
+   "name": "typical_inclusion_seconds/5042002",
+   "fn": "typical_inclusion_seconds",
+   "input": {
+    "chain_id": 5042002
+   },
+   "expect": {
+    "value": 4
+   }
+  },
+  {
+   "name": "min_gas_price_wei/4217",
+   "fn": "min_gas_price_wei",
+   "input": {
+    "chain_id": 4217
+   },
+   "expect": {
+    "value": "0"
+   }
+  },
+  {
+   "name": "typical_inclusion_seconds/4217",
+   "fn": "typical_inclusion_seconds",
+   "input": {
+    "chain_id": 4217
+   },
+   "expect": {
+    "value": 5
+   }
+  },
+  {
+   "name": "min_gas_price_wei/999999",
+   "fn": "min_gas_price_wei",
+   "input": {
+    "chain_id": 999999
+   },
+   "expect": {
+    "value": "0"
+   }
+  },
+  {
+   "name": "typical_inclusion_seconds/999999",
+   "fn": "typical_inclusion_seconds",
+   "input": {
+    "chain_id": 999999
+   },
+   "expect": {
+    "value": 0
+   }
+  },
+  {
+   "name": "fee_quote_deadline_ms",
+   "fn": "fee_quote_deadline_ms",
+   "input": {},
+   "expect": {
+    "value": 15000
+   }
+  },
+  {
+   "name": "user_op_gas_limits/deployed",
+   "fn": "user_op_gas_limits",
+   "input": {
+    "chain_id": 100,
+    "deployed": true,
+    "sub_calls": 2,
+    "verification_gas_limit": "120000",
+    "call_gas_limit": "200000",
+    "pre_verification_gas": "55000",
+    "settlement_gas": null,
+    "inner_floor": null
+   },
+   "expect": {
+    "value": {
+     "callGasLimit": "200000",
+     "preVerificationGas": "55000",
+     "verificationGasLimit": "120000"
+    }
+   }
+  },
+  {
+   "name": "user_op_gas_limits/undeployed_no_settlement",
+   "fn": "user_op_gas_limits",
+   "input": {
+    "chain_id": 100,
+    "deployed": false,
+    "sub_calls": 2,
+    "verification_gas_limit": "120000",
+    "call_gas_limit": "200000",
+    "pre_verification_gas": "55000",
+    "settlement_gas": null,
+    "inner_floor": null
+   },
+   "expect": {
+    "value": {
+     "callGasLimit": "200000",
+     "preVerificationGas": "55000",
+     "verificationGasLimit": "2000000"
+    }
+   }
+  },
+  {
+   "name": "user_op_gas_limits/undeployed_settlement",
+   "fn": "user_op_gas_limits",
+   "input": {
+    "chain_id": 100,
+    "deployed": false,
+    "sub_calls": 2,
+    "verification_gas_limit": "120000",
+    "call_gas_limit": "200000",
+    "pre_verification_gas": "55000",
+    "settlement_gas": "150000",
+    "inner_floor": null
+   },
+   "expect": {
+    "value": {
+     "callGasLimit": "200000",
+     "preVerificationGas": "55000",
+     "verificationGasLimit": "120000"
+    }
+   }
+  },
+  {
+   "name": "user_op_gas_limits/inner_floor_raises",
+   "fn": "user_op_gas_limits",
+   "input": {
+    "chain_id": 8453,
+    "deployed": true,
+    "sub_calls": 1,
+    "verification_gas_limit": "120000",
+    "call_gas_limit": "200000",
+    "pre_verification_gas": "55000",
+    "settlement_gas": null,
+    "inner_floor": "900000"
+   },
+   "expect": {
+    "value": {
+     "callGasLimit": "900000",
+     "preVerificationGas": "55000",
+     "verificationGasLimit": "120000"
+    }
+   }
+  },
+  {
+   "name": "user_op_gas_limits/inner_floor_below",
+   "fn": "user_op_gas_limits",
+   "input": {
+    "chain_id": 8453,
+    "deployed": true,
+    "sub_calls": 1,
+    "verification_gas_limit": "120000",
+    "call_gas_limit": "200000",
+    "pre_verification_gas": "55000",
+    "settlement_gas": null,
+    "inner_floor": "1000"
+   },
+   "expect": {
+    "value": {
+     "callGasLimit": "200000",
+     "preVerificationGas": "55000",
+     "verificationGasLimit": "120000"
+    }
+   }
+  },
+  {
+   "name": "user_op_gas_limits/tempo",
+   "fn": "user_op_gas_limits",
+   "input": {
+    "chain_id": 4217,
+    "deployed": true,
+    "sub_calls": 3,
+    "verification_gas_limit": "120000",
+    "call_gas_limit": "200000",
+    "pre_verification_gas": "55000",
+    "settlement_gas": null,
+    "inner_floor": null
+   },
+   "expect": {
+    "value": {
+     "callGasLimit": "1140000",
+     "preVerificationGas": "65000",
+     "verificationGasLimit": "300000"
+    }
+   }
+  },
+  {
+   "name": "dapp_rpc_classify/eth_call",
+   "fn": "dapp_rpc_classify",
+   "input": {
+    "method": "eth_call"
+   },
+   "expect": {
+    "value": {
+     "type": "read",
+     "bundler": false
+    }
+   }
+  },
+  {
+   "name": "dapp_rpc_classify/eth_chainId",
+   "fn": "dapp_rpc_classify",
+   "input": {
+    "method": "eth_chainId"
+   },
+   "expect": {
+    "value": {
+     "type": "chain_id"
+    }
+   }
+  },
+  {
+   "name": "dapp_rpc_classify/eth_accounts",
+   "fn": "dapp_rpc_classify",
+   "input": {
+    "method": "eth_accounts"
+   },
+   "expect": {
+    "value": {
+     "type": "accounts"
+    }
+   }
+  },
+  {
+   "name": "dapp_rpc_classify/eth_requestAccounts",
+   "fn": "dapp_rpc_classify",
+   "input": {
+    "method": "eth_requestAccounts"
+   },
+   "expect": {
+    "value": {
+     "type": "connect"
+    }
+   }
+  },
+  {
+   "name": "dapp_rpc_classify/eth_sendTransaction",
+   "fn": "dapp_rpc_classify",
+   "input": {
+    "method": "eth_sendTransaction"
+   },
+   "expect": {
+    "value": {
+     "type": "sign"
+    }
+   }
+  },
+  {
+   "name": "dapp_rpc_classify/personal_sign",
+   "fn": "dapp_rpc_classify",
+   "input": {
+    "method": "personal_sign"
+   },
+   "expect": {
+    "value": {
+     "type": "sign"
+    }
+   }
+  },
+  {
+   "name": "dapp_rpc_classify/eth_signTypedData_v4",
+   "fn": "dapp_rpc_classify",
+   "input": {
+    "method": "eth_signTypedData_v4"
+   },
+   "expect": {
+    "value": {
+     "type": "sign"
+    }
+   }
+  },
+  {
+   "name": "dapp_rpc_classify/wallet_sendCalls",
+   "fn": "dapp_rpc_classify",
+   "input": {
+    "method": "wallet_sendCalls"
+   },
+   "expect": {
+    "value": {
+     "type": "sign"
+    }
+   }
+  },
+  {
+   "name": "dapp_rpc_classify/wallet_getCallsStatus",
+   "fn": "dapp_rpc_classify",
+   "input": {
+    "method": "wallet_getCallsStatus"
+   },
+   "expect": {
+    "value": {
+     "type": "calls_status"
+    }
+   }
+  },
+  {
+   "name": "dapp_rpc_classify/wallet_getCapabilities",
+   "fn": "dapp_rpc_classify",
+   "input": {
+    "method": "wallet_getCapabilities"
+   },
+   "expect": {
+    "value": {
+     "type": "capabilities"
+    }
+   }
+  },
+  {
+   "name": "dapp_rpc_classify/wallet_switchEthereumChain",
+   "fn": "dapp_rpc_classify",
+   "input": {
+    "method": "wallet_switchEthereumChain"
+   },
+   "expect": {
+    "value": {
+     "type": "switch_chain"
+    }
+   }
+  },
+  {
+   "name": "dapp_rpc_classify/wallet_addEthereumChain",
+   "fn": "dapp_rpc_classify",
+   "input": {
+    "method": "wallet_addEthereumChain"
+   },
+   "expect": {
+    "value": {
+     "type": "add_chain"
+    }
+   }
+  },
+  {
+   "name": "dapp_rpc_classify/eth_getUserOperationReceipt",
+   "fn": "dapp_rpc_classify",
+   "input": {
+    "method": "eth_getUserOperationReceipt"
+   },
+   "expect": {
+    "value": {
+     "type": "read",
+     "bundler": true
+    }
+   }
+  },
+  {
+   "name": "dapp_rpc_classify/eth_sign",
+   "fn": "dapp_rpc_classify",
+   "input": {
+    "method": "eth_sign"
+   },
+   "expect": {
+    "value": {
+     "type": "unsupported"
+    }
+   }
+  },
+  {
+   "name": "dapp_rpc_classify/eth_subscribe",
+   "fn": "dapp_rpc_classify",
+   "input": {
+    "method": "eth_subscribe"
+   },
+   "expect": {
+    "value": {
+     "type": "unsupported"
+    }
+   }
+  },
+  {
+   "name": "dapp_rpc_classify/made_up_method",
+   "fn": "dapp_rpc_classify",
+   "input": {
+    "method": "made_up_method"
+   },
+   "expect": {
+    "value": {
+     "type": "unsupported"
+    }
+   }
+  },
+  {
+   "name": "dapp_rpc_capabilities/granted",
+   "fn": "dapp_rpc_capabilities",
+   "input": {
+    "params_json": "[\"0x1111111111111111111111111111111111111111\"]",
+    "granted_json": "[\"0x1111111111111111111111111111111111111111\"]",
+    "chains_json": "[100,8453,1]"
+   },
+   "expect": {
+    "value": {
+     "result": {
+      "0x1": {
+       "atomic": {
+        "status": "supported"
+       }
+      },
+      "0x2105": {
+       "atomic": {
+        "status": "supported"
+       }
+      },
+      "0x64": {
+       "atomic": {
+        "status": "supported"
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "name": "dapp_rpc_capabilities/chain_filter",
+   "fn": "dapp_rpc_capabilities",
+   "input": {
+    "params_json": "[\"0x1111111111111111111111111111111111111111\",[\"0x64\"]]",
+    "granted_json": "[\"0x1111111111111111111111111111111111111111\"]",
+    "chains_json": "[100,8453,1]"
+   },
+   "expect": {
+    "value": {
+     "result": {
+      "0x64": {
+       "atomic": {
+        "status": "supported"
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "name": "dapp_rpc_capabilities/not_granted",
+   "fn": "dapp_rpc_capabilities",
+   "input": {
+    "params_json": "[\"0x2222222222222222222222222222222222222222\"]",
+    "granted_json": "[\"0x1111111111111111111111111111111111111111\"]",
+    "chains_json": "[100,8453,1]"
+   },
+   "expect": {
+    "value": {
+     "error": {
+      "code": 4100,
+      "message": "The address is not connected to this site"
+     }
+    }
+   }
+  },
+  {
+   "name": "dapp_rpc_capabilities/no_params",
+   "fn": "dapp_rpc_capabilities",
+   "input": {
+    "params_json": "[]",
+    "granted_json": "[\"0x1111111111111111111111111111111111111111\"]",
+    "chains_json": "[100,8453,1]"
+   },
+   "expect": {
+    "value": {
+     "error": {
+      "code": -32602,
+      "message": "Expected [address, chainIds?]"
+     }
+    }
+   }
+  },
+  {
+   "name": "dapp_rpc_calls_status/landed",
+   "fn": "dapp_rpc_calls_status",
+   "input": {
+    "id": "0x9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a",
+    "chain_id": 100,
+    "receipt_json": "{\"userOpHash\":\"0x9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a\",\"success\":true,\"actualGasCost\":\"0x1\",\"actualGasUsed\":\"0x5208\",\"logs\":[{\"address\":\"0x1111111111111111111111111111111111111111\",\"topics\":[\"0x0101010101010101010101010101010101010101010101010101010101010101\"],\"data\":\"0x\"}],\"receipt\":{\"transactionHash\":\"0x7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b\",\"blockHash\":\"0x8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c\",\"blockNumber\":\"0x10\",\"gasUsed\":\"0x5208\",\"status\":\"0x1\",\"logs\":[]}}",
+    "relay_status_json": null
+   },
+   "expect": {
+    "value": {
+     "atomic": true,
+     "chainId": "0x64",
+     "id": "0x9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a",
+     "receipts": [
+      {
+       "blockHash": "0x8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c",
+       "blockNumber": "0x10",
+       "gasUsed": "0x5208",
+       "logs": [
+        {
+         "address": "0x1111111111111111111111111111111111111111",
+         "data": "0x",
+         "topics": [
+          "0x0101010101010101010101010101010101010101010101010101010101010101"
+         ]
+        }
+       ],
+       "status": "0x1",
+       "transactionHash": "0x7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b"
+      }
+     ],
+     "status": 200,
+     "version": "2.0.0"
+    }
+   }
+  },
+  {
+   "name": "dapp_rpc_calls_status/reverted",
+   "fn": "dapp_rpc_calls_status",
+   "input": {
+    "id": "0x9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a",
+    "chain_id": 100,
+    "receipt_json": "{\"userOpHash\":\"0x9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a\",\"success\":false,\"actualGasCost\":\"0x1\",\"actualGasUsed\":\"0x5208\",\"logs\":[{\"address\":\"0x1111111111111111111111111111111111111111\",\"topics\":[\"0x0101010101010101010101010101010101010101010101010101010101010101\"],\"data\":\"0x\"}],\"receipt\":{\"transactionHash\":\"0x7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b\",\"blockHash\":\"0x8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c\",\"blockNumber\":\"0x10\",\"gasUsed\":\"0x5208\",\"status\":\"0x0\",\"logs\":[]}}",
+    "relay_status_json": null
+   },
+   "expect": {
+    "value": {
+     "atomic": true,
+     "chainId": "0x64",
+     "id": "0x9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a",
+     "receipts": [
+      {
+       "blockHash": "0x8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c",
+       "blockNumber": "0x10",
+       "gasUsed": "0x5208",
+       "logs": [
+        {
+         "address": "0x1111111111111111111111111111111111111111",
+         "data": "0x",
+         "topics": [
+          "0x0101010101010101010101010101010101010101010101010101010101010101"
+         ]
+        }
+       ],
+       "status": "0x0",
+       "transactionHash": "0x7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b"
+      }
+     ],
+     "status": 500,
+     "version": "2.0.0"
+    }
+   }
+  },
+  {
+   "name": "dapp_rpc_calls_status/pending",
+   "fn": "dapp_rpc_calls_status",
+   "input": {
+    "id": "0x9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a",
+    "chain_id": 8453,
+    "receipt_json": null,
+    "relay_status_json": null
+   },
+   "expect": {
+    "value": {
+     "atomic": true,
+     "chainId": "0x2105",
+     "id": "0x9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a",
+     "status": 100,
+     "version": "2.0.0"
+    }
+   }
+  },
+  {
+   "name": "dapp_rpc_calls_status/no_receipt_null",
+   "fn": "dapp_rpc_calls_status",
+   "input": {
+    "id": "0x9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a",
+    "chain_id": 8453,
+    "receipt_json": "null",
+    "relay_status_json": "{\"status\":\"not_found\"}"
+   },
+   "expect": {
+    "value": {
+     "atomic": true,
+     "chainId": "0x2105",
+     "id": "0x9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a",
+     "status": 100,
+     "version": "2.0.0"
+    }
+   }
+  },
+  {
+   "name": "dapp_rpc_calls_status/relay_rejected",
+   "fn": "dapp_rpc_calls_status",
+   "input": {
+    "id": "0x9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a",
+    "chain_id": 8453,
+    "receipt_json": null,
+    "relay_status_json": "{\"status\":\"rejected\"}"
+   },
+   "expect": {
+    "value": {
+     "atomic": true,
+     "chainId": "0x2105",
+     "id": "0x9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a",
+     "status": 400,
+     "version": "2.0.0"
+    }
+   }
+  },
+  {
+   "name": "dapp_rpc_calls_status/relay_failed",
+   "fn": "dapp_rpc_calls_status",
+   "input": {
+    "id": "0x9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a",
+    "chain_id": 8453,
+    "receipt_json": null,
+    "relay_status_json": "{\"status\":\"failed\"}"
+   },
+   "expect": {
+    "value": {
+     "atomic": true,
+     "chainId": "0x2105",
+     "id": "0x9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a",
+     "status": 100,
+     "version": "2.0.0"
+    }
+   }
+  },
+  {
+   "name": "token_provenance/native",
+   "fn": "token_provenance",
+   "input": {
+    "chain_id": 100,
+    "token": "",
+    "symbol": "xDAI",
+    "native_symbol": "xDAI"
+   },
+   "expect": {
+    "value": {
+     "trust": "native",
+     "imitates": null
+    }
+   }
+  },
+  {
+   "name": "token_provenance/base_usdc",
+   "fn": "token_provenance",
+   "input": {
+    "chain_id": 8453,
+    "token": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+    "symbol": "USDC",
+    "native_symbol": "ETH"
+   },
+   "expect": {
+    "value": {
+     "trust": "vouched",
+     "imitates": null
+    }
+   }
+  },
+  {
+   "name": "token_provenance/imitation_usdc",
+   "fn": "token_provenance",
+   "input": {
+    "chain_id": 8453,
+    "token": "0x00000000000000000000000000000000deadbeef",
+    "symbol": "USDC",
+    "native_symbol": "ETH"
+   },
+   "expect": {
+    "value": {
+     "trust": "unverified",
+     "imitates": "USDC"
+    }
+   }
+  },
+  {
+   "name": "token_provenance/arc_usdc_coin",
+   "fn": "token_provenance",
+   "input": {
+    "chain_id": 5042002,
+    "token": "",
+    "symbol": "USDC",
+    "native_symbol": "USDC"
+   },
+   "expect": {
+    "value": {
+     "trust": "native",
+     "imitates": null
+    }
+   }
+  },
+  {
+   "name": "token_provenance/arc_usdc_contract",
+   "fn": "token_provenance",
+   "input": {
+    "chain_id": 5042002,
+    "token": "0x00000000000000000000000000000000c0ffee00",
+    "symbol": "USDC",
+    "native_symbol": "USDC"
+   },
+   "expect": {
+    "value": {
+     "trust": "unverified",
+     "imitates": "USDC"
+    }
+   }
+  },
+  {
+   "name": "token_provenance/unknown_token",
+   "fn": "token_provenance",
+   "input": {
+    "chain_id": 1,
+    "token": "0x00000000000000000000000000000000000000aa",
+    "symbol": "PEPE",
+    "native_symbol": "ETH"
+   },
+   "expect": {
+    "value": {
+     "trust": "unverified",
+     "imitates": null
+    }
+   }
+  },
+  {
+   "name": "token_provenance/imitates_native",
+   "fn": "token_provenance",
+   "input": {
+    "chain_id": 8453,
+    "token": "0x00000000000000000000000000000000000000bb",
+    "symbol": "ETH",
+    "native_symbol": "ETH"
+   },
+   "expect": {
+    "value": {
+     "trust": "unverified",
+     "imitates": "ETH"
+    }
+   }
+  },
+  {
+   "name": "site_start_chain/first",
+   "fn": "site_start_chain",
+   "input": {
+    "space_chain_ids": [
+     100,
+     8453,
+     1
+    ],
+    "last_used": null
+   },
+   "expect": {
+    "value": 100
+   }
+  },
+  {
+   "name": "site_start_chain/last_used",
+   "fn": "site_start_chain",
+   "input": {
+    "space_chain_ids": [
+     100,
+     8453,
+     1
+    ],
+    "last_used": 8453
+   },
+   "expect": {
+    "value": 8453
+   }
+  },
+  {
+   "name": "site_start_chain/last_used_gone",
+   "fn": "site_start_chain",
+   "input": {
+    "space_chain_ids": [
+     100,
+     8453
+    ],
+    "last_used": 1
+   },
+   "expect": {
+    "value": 100
+   }
+  },
+  {
+   "name": "site_start_chain/empty",
+   "fn": "site_start_chain",
+   "input": {
+    "space_chain_ids": [],
+    "last_used": null
+   },
+   "expect": {
+    "value": 1
+   }
+  },
+  {
+   "name": "site_start_chain/empty_last",
+   "fn": "site_start_chain",
+   "input": {
+    "space_chain_ids": [],
+    "last_used": 10
+   },
+   "expect": {
+    "value": 1
+   }
+  },
+  {
+   "name": "resolved_name_step/first_question",
+   "fn": "resolved_name_step",
+   "input": {
+    "chain_id": 1,
+    "registry": "0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e",
+    "name": "alice.eth",
+    "answers_json": "[]"
+   },
+   "expect": {
+    "value": {
+     "type": "ask",
+     "requests": [
+      {
+       "type": "eth_call",
+       "id": "resolver:0",
+       "chain_id": 1,
+       "to": "0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e",
+       "data": "0x0178b8bf787192fc5378cc32aa956ddfdedbf26b24e8d78e40109add0eea2c1a012c3dec"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "resolved_name_step/not_a_name",
+   "fn": "resolved_name_step",
+   "input": {
+    "chain_id": 1,
+    "registry": "0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e",
+    "name": "not a name",
+    "answers_json": "[]"
+   },
+   "expect": {
+    "value": {
+     "type": "done",
+     "state": "not_found",
+     "address": null,
+     "name": null
+    }
+   }
+  },
+  {
+   "name": "resolved_name_step/unreadable_answers",
+   "fn": "resolved_name_step",
+   "input": {
+    "chain_id": 1,
+    "registry": "0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e",
+    "name": "alice.eth",
+    "answers_json": "{"
+   },
+   "expect": {
+    "value": {
+     "type": "ask",
+     "requests": [
+      {
+       "type": "eth_call",
+       "id": "resolver:0",
+       "chain_id": 1,
+       "to": "0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e",
+       "data": "0x0178b8bf787192fc5378cc32aa956ddfdedbf26b24e8d78e40109add0eea2c1a012c3dec"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "currency_fraction_digits/USD",
+   "fn": "currency_fraction_digits",
+   "input": {
+    "code": "USD"
+   },
+   "expect": {
+    "value": 2
+   }
+  },
+  {
+   "name": "currency_fraction_digits/EUR",
+   "fn": "currency_fraction_digits",
+   "input": {
+    "code": "EUR"
+   },
+   "expect": {
+    "value": 2
+   }
+  },
+  {
+   "name": "currency_fraction_digits/JPY",
+   "fn": "currency_fraction_digits",
+   "input": {
+    "code": "JPY"
+   },
+   "expect": {
+    "value": 0
+   }
+  },
+  {
+   "name": "currency_fraction_digits/KRW",
+   "fn": "currency_fraction_digits",
+   "input": {
+    "code": "KRW"
+   },
+   "expect": {
+    "value": 0
+   }
+  },
+  {
+   "name": "currency_fraction_digits/IDR",
+   "fn": "currency_fraction_digits",
+   "input": {
+    "code": "IDR"
+   },
+   "expect": {
+    "value": 0
+   }
+  },
+  {
+   "name": "currency_fraction_digits/VND",
+   "fn": "currency_fraction_digits",
+   "input": {
+    "code": "VND"
+   },
+   "expect": {
+    "value": 0
+   }
+  },
+  {
+   "name": "currency_fraction_digits/KWD",
+   "fn": "currency_fraction_digits",
+   "input": {
+    "code": "KWD"
+   },
+   "expect": {
+    "value": 3
+   }
+  },
+  {
+   "name": "currency_fraction_digits/BHD",
+   "fn": "currency_fraction_digits",
+   "input": {
+    "code": "BHD"
+   },
+   "expect": {
+    "value": 3
+   }
+  },
+  {
+   "name": "currency_fraction_digits/CNY",
+   "fn": "currency_fraction_digits",
+   "input": {
+    "code": "CNY"
+   },
+   "expect": {
+    "value": 2
+   }
+  },
+  {
+   "name": "currency_fraction_digits/usd",
+   "fn": "currency_fraction_digits",
+   "input": {
+    "code": "usd"
+   },
+   "expect": {
+    "value": 2
+   }
+  },
+  {
+   "name": "currency_fraction_digits/XYZ",
+   "fn": "currency_fraction_digits",
+   "input": {
+    "code": "XYZ"
+   },
+   "expect": {
+    "value": 2
+   }
+  },
+  {
+   "name": "currency_fraction_digits/empty",
+   "fn": "currency_fraction_digits",
+   "input": {
+    "code": ""
+   },
+   "expect": {
+    "value": 2
+   }
+  }
+ ]
+}
