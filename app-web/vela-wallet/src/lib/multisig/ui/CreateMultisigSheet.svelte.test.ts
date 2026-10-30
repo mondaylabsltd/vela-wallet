@@ -32,18 +32,11 @@ const seams = vi.hoisted(() => ({
 	/** The core's verdict per chain on the Safe v1.4.1 contracts. */
 	contracts: {} as Record<number, 'present' | 'missing' | 'unknown'>,
 	created: [] as { chainId: number }[],
-	/** r7: what the wallet can tell of each address (`signers.evidence`), and the networks asked. */
+	/** r7: what the chains say of each address (the accounts machine's read), and the networks asked. */
 	evidence: {} as Record<string, 'vela' | 'contract' | 'wallet' | null>,
-	evidenceOn: [] as number[][]
-}));
-vi.mock('../core/signers.svelte', async (importOriginal) => ({
-	...(await importOriginal<typeof import('../core/signers.svelte')>()),
-	signers: {
-		evidence: (chainIds: number[], a: string) => {
-			seams.evidenceOn.push([...chainIds]);
-			return seams.evidence[a] ?? null;
-		}
-	}
+	evidenceOn: [] as number[][],
+	/** r7: the kinds the person picked (`pick_kind`). */
+	picked: [] as [string, string | null][]
 }));
 vi.mock('$lib/services/networks', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/services/networks')>()),
@@ -55,9 +48,26 @@ vi.mock('$lib/services/networks', async (importOriginal) => ({
  * and a creation kept here at once — answered as the machine would.
  */
 const facade = vi.hoisted(() => ({ accounts: [] as { address: string }[] }));
-vi.mock('../core/store.svelte', () => {
+vi.mock('../core/store.svelte', async () => {
 	const find = (a: string) =>
 		facade.accounts.find((x) => x.address.toLowerCase() === a.toLowerCase());
+	/**
+	 * r7: the machine's `member_kinds` — each member asked about, as the
+	 * machine answers it: what the chains said (`seams.evidence`), else the
+	 * person's pick, else asked.
+	 */
+	const { SvelteMap } = await import('svelte/reactivity');
+	const kinds = new SvelteMap<string, unknown>();
+	const answer = (address: string, picked: string | null = null) => {
+		const said = seams.evidence[address];
+		if (said === 'vela') return { kind: 'vela', suggested: null, locked: true, note: 'known' };
+		if (said === 'contract')
+			return { kind: 'contract', suggested: null, locked: true, note: 'contract' };
+		if (picked) return { kind: picked, suggested: null, locked: false, note: null };
+		if (said === 'wallet')
+			return { kind: null, suggested: 'wallet', locked: false, note: 'likely' };
+		return { kind: null, suggested: null, locked: false, note: 'ask' };
+	};
 	return {
 		multisig: {
 			get accounts() {
@@ -84,10 +94,27 @@ vi.mock('../core/store.svelte', () => {
 							})
 						)
 					},
-					add: { ens: null }
+					add: { ens: null },
+					member_kinds: Object.fromEntries(kinds)
 				};
 			},
-			send: () => {},
+			send: (event: {
+				type: string;
+				members?: { address: string; chain_ids: number[] }[];
+				address?: string;
+				kind?: string | null;
+			}) => {
+				if (event.type === 'read_kinds') {
+					for (const m of event.members ?? []) {
+						seams.evidenceOn.push([...m.chain_ids]);
+						kinds.set(m.address.toLowerCase(), answer(m.address));
+					}
+				}
+				if (event.type === 'pick_kind' && event.address) {
+					seams.picked.push([event.address, event.kind ?? null]);
+					kinds.set(event.address.toLowerCase(), answer(event.address, event.kind ?? null));
+				}
+			},
 			request: async (event: { type: string; choice?: { chain_id: number } }) => {
 				if (event.type !== 'create' || !event.choice) throw new Error(`not asked: ${event.type}`);
 				seams.created.push({ ...event.choice, chainId: event.choice.chain_id });
@@ -189,6 +216,7 @@ afterEach(() => {
 	seams.created = [];
 	seams.evidence = {};
 	seams.evidenceOn = [];
+	seams.picked = [];
 });
 
 describe('creating a multisig', () => {
@@ -538,14 +566,17 @@ describe('r4a-14: what a creation can be, and how its members come', () => {
 		await settle();
 		press('create.create');
 		await settle();
+		// What each is kept as is the machine's (its read, and the person's
+		// word — `chosen_kinds`, Rust: app_multisig_accounts.rs): the sheet
+		// said only Carol's, and Bob's hint was not picked.
+		expect(seams.picked).toEqual([[CAROL, 'vela']]);
 		expect(seams.created[0]).toEqual(
 			expect.objectContaining({
 				members: expect.objectContaining({
-					// Bob's hint was not picked: nothing kept, unsure.
 					[BOB]: {},
-					[CAROL]: { kind: 'passkey' },
-					[DAN]: { kind: 'passkey' },
-					[SAFE_MEMBER]: { kind: 'contract' }
+					[CAROL]: {},
+					[DAN]: {},
+					[SAFE_MEMBER]: {}
 				})
 			})
 		);
@@ -571,6 +602,7 @@ describe('r4a-14: what a creation can be, and how its members come', () => {
 		await settle();
 		const members = (seams.created[0] as unknown as { members: Record<string, unknown> }).members;
 		expect(members[CAROL]).toEqual({});
+		expect(seams.picked).toEqual([]);
 		await screen.unmount();
 	});
 

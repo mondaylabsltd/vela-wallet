@@ -32,14 +32,12 @@
 	import type { MultisigMessages } from '../messages';
 	import { chainName, shortenAddress } from '../core/display';
 	import { sameAddress, type Action, type MemberRefusal, type MemberVerdict } from '../core/kernel';
-	import type { KindChoice, MemberKind } from '../core/member-kind';
 	import { proposeChange } from '../core/member-propose';
 	import { names } from '../core/names.svelte';
 	import { proposals } from '../core/proposals.svelte';
 	import { multisig, type MultisigAccount } from '../core/store.svelte';
 	import { multisigUi } from '../core/ui.svelte';
 	import type { MultisigChangeGroup } from '../generated/MultisigChangeGroup';
-	import type { MultisigKindChoice } from '../generated/MultisigKindChoice';
 	import type { MultisigMemberCompose } from '../generated/MultisigMemberCompose';
 	import type { MultisigMembersEvent } from '../generated/MultisigMembersEvent';
 	import { machines } from '../shell/machines.svelte';
@@ -88,20 +86,6 @@
 				return fillTemplate(mm.nameUnavailable, { name: note.name });
 		}
 	});
-
-	/** The machine's kind choice as the choice draws it (a Vela account is kept as `passkey`). */
-	function drawn(choice: MultisigKindChoice): KindChoice {
-		return {
-			kind: choice.kind === null ? null : choice.kind === 'vela' ? 'passkey' : choice.kind,
-			suggested: choice.suggested === 'wallet' ? 'wallet' : null,
-			locked: choice.locked,
-			note: choice.note
-		};
-	}
-
-	function pickKind(kind: MemberKind) {
-		send({ type: 'entry_kind', kind: kind === 'passkey' ? 'vela' : kind });
-	}
 
 	function open(next: MultisigMemberCompose | null) {
 		send({ type: 'compose', compose: next });
@@ -252,7 +236,11 @@
 			</label>
 			<p class="hint">{mm.nameNote}</p>
 			{#if entry.choice}
-				<MemberKindChoice {m} choice={drawn(entry.choice)} onpick={pickKind} />
+				<MemberKindChoice
+					{m}
+					choice={entry.choice}
+					onpick={(kind) => send({ type: 'entry_kind', kind })}
+				/>
 			{/if}
 		{/if}
 	{/if}

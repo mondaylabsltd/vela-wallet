@@ -60,10 +60,8 @@
 		recentChains
 	} from '../core/likely-networks';
 	import { localOwners } from '../core/owners';
-	import { kindChoice, type MemberKind } from '../core/member-kind';
 	import { memberProblem } from '../core/members';
-	import { keptMember, names } from '../core/names.svelte';
-	import { signers } from '../core/signers.svelte';
+	import { names } from '../core/names.svelte';
 	import { multisig, type MemberInfo } from '../core/store.svelte';
 	import { failureText } from '../shell/failure';
 	import { localAccounts } from '../shell/local-accounts';
@@ -133,8 +131,6 @@
 	);
 	/** What the person said of each member added by address, contact or name (r4D-5). */
 	let info = $state<Record<string, MemberInfo>>({});
-	/** r7: the kind the person picked for a member, by lowercase address. */
-	let kinds = $state<Record<string, MemberKind>>({});
 	let typed = $state('');
 	let typedName = $state('');
 	let typedError = $state<string | null>(null);
@@ -214,23 +210,27 @@
 	);
 
 	/**
-	 * r7: a member's kind — Vela's finding (the index or an account here: a
-	 * Vela account; code at the address on any network it may be used on and
-	 * no index record: a smart contract account), else the person's word
-	 * (here, or kept on this device), else asked — "Other wallet" hinted when
-	 * no Vela account is found, kept only if picked. The same address on
-	 * every network.
-	 * W8: moves onto the core's member-kind rule (create/import) once merged.
+	 * r7: a member's kind — the accounts machine's (`read_kinds`, `pick_kind`,
+	 * its view's `member_kinds`): what the chains say of it on every network
+	 * it may be used on (Vela's passkey signer configured for it: a Vela
+	 * account; other code there: a smart contract account), else the person's
+	 * word (here, or kept on this device), else asked — "Other wallet" hinted
+	 * when no Vela account is found, kept only if picked. The same address on
+	 * every network. Each member is read once for the networks offered.
 	 */
-	function kindOf(address: string) {
-		return kindChoice(
-			signers.evidence(
-				networks.map((n) => n.chainId),
-				address
-			),
-			kinds[address.toLowerCase()] ?? keptMember(address).kind
-		);
-	}
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- what was asked, never drawn
+	const asked = new Set<string>();
+	$effect(() => {
+		const chainIds = networks.map((n) => n.chainId);
+		const members = owners
+			.filter((o) => !localName(o))
+			.map((address) => ({ address, chain_ids: chainIds }))
+			.filter((m) => !asked.has(`${m.address.toLowerCase()}:${chainIds.join(',')}`));
+		if (members.length === 0) return;
+		for (const m of members) asked.add(`${m.address.toLowerCase()}:${chainIds.join(',')}`);
+		multisig.send({ type: 'read_kinds', members });
+	});
+	const kindOf = (address: string) => multisig.view?.member_kinds[address.toLowerCase()] ?? null;
 
 	/** A member's label here: this device's account name, what the person typed, else the index's. */
 	function label(address: string): string {
@@ -320,10 +320,9 @@
 	function membersInfo(): Record<string, MemberInfo> {
 		return Object.fromEntries(
 			owners.map((o) => {
-				const own = localName(o);
-				const kind = own ? 'passkey' : (kindOf(o).kind ?? undefined);
+				// Each member's kind is the machine's, kept with it as chosen.
 				const said = info[o.toLowerCase()]?.name;
-				return [o, { ...(said ? { name: said } : {}), ...(kind ? { kind } : {}) }];
+				return [o, said ? { name: said } : {}];
 			})
 		);
 	}
@@ -565,14 +564,14 @@
 						>
 							<Icon icon={UTILITY_ICONS['x']} size="sm" />
 						</button>
-						{#if !localName(o)}
+						{#if !localName(o) && kindOf(o)}
 							<!-- r7: how they approve, declared — Vela's finding where it has one. -->
 							<div class="member-kind">
 								<MemberKindChoice
 									{m}
-									choice={kindOf(o)}
+									choice={kindOf(o)!}
 									name={label(o)}
-									onpick={(k) => (kinds = { ...kinds, [o.toLowerCase()]: k })}
+									onpick={(kind) => multisig.send({ type: 'pick_kind', address: o, kind })}
 								/>
 							</div>
 						{/if}

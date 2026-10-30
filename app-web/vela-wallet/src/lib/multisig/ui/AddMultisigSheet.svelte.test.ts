@@ -93,26 +93,64 @@ vi.mock('../core/display', () => ({
 	shortenAddress: (a: string) => `${a.slice(0, 8)}…${a.slice(-6)}`,
 	localName: (a: string) => (a.toLowerCase() === CAROL.toLowerCase() ? 'R5 Carol' : null)
 }));
-/** r7: the import's seams — the export read, what Vela can tell, what is kept, what is imported. */
+/** r7: the import's seams — the export read, what the chains say, what is asked and picked, what is imported. */
 const io = vi.hoisted(() => ({
 	exported: [] as unknown[],
 	evidence: {} as Record<string, 'vela' | 'contract' | 'wallet' | null>,
-	named: [] as [string, Record<string, unknown>, unknown][],
+	/** The members whose kinds were read (`read_kinds`), with the networks each is read on. */
+	asked: [] as [string, number[]][],
+	/** The kinds the person picked (`pick_kind`). */
+	picked: [] as [string, string | null][],
 	imported: [] as string[]
 }));
-vi.mock('../core/store.svelte', () => ({
-	multisig: {
-		accounts: [],
-		find: () => undefined,
-		useChain: (_a: string, id: number) => void used.push(id),
-		nameMembers: (a: string, known: Record<string, unknown>, options: unknown) =>
-			void io.named.push([a, known, options]),
-		request: async (event: { type: string }) => machine.answer(event)
-	}
-}));
-vi.mock('../core/signers.svelte', () => ({
-	signers: { evidence: (_ids: number[], a: string) => io.evidence[a] ?? null }
-}));
+vi.mock('../core/store.svelte', async () => {
+	/**
+	 * r7: the accounts machine's `member_kinds` — each member asked about, as
+	 * the machine answers it: what the chains said (`io.evidence`), else the
+	 * person's pick, else asked. Keeping them with each Safe imported is the
+	 * machine's (Rust: `an_import_keeps_its_members_kinds`).
+	 */
+	const { SvelteMap } = await import('svelte/reactivity');
+	const kinds = new SvelteMap<string, unknown>();
+	const answer = (address: string, picked: string | null = null) => {
+		const said = io.evidence[address];
+		if (said === 'vela') return { kind: 'vela', suggested: null, locked: true, note: 'known' };
+		if (said === 'contract')
+			return { kind: 'contract', suggested: null, locked: true, note: 'contract' };
+		if (picked) return { kind: picked, suggested: null, locked: false, note: null };
+		if (said === 'wallet')
+			return { kind: null, suggested: 'wallet', locked: false, note: 'likely' };
+		return { kind: null, suggested: null, locked: false, note: 'ask' };
+	};
+	return {
+		multisig: {
+			accounts: [],
+			find: () => undefined,
+			useChain: (_a: string, id: number) => void used.push(id),
+			get view() {
+				return { member_kinds: Object.fromEntries(kinds) };
+			},
+			send: (event: {
+				type: string;
+				members?: { address: string; chain_ids: number[] }[];
+				address?: string;
+				kind?: string | null;
+			}) => {
+				if (event.type === 'read_kinds') {
+					for (const m of event.members ?? []) {
+						io.asked.push([m.address, m.chain_ids]);
+						kinds.set(m.address.toLowerCase(), answer(m.address));
+					}
+				}
+				if (event.type === 'pick_kind' && event.address) {
+					io.picked.push([event.address, event.kind ?? null]);
+					kinds.set(event.address.toLowerCase(), answer(event.address, event.kind ?? null));
+				}
+			},
+			request: async (event: { type: string }) => machine.answer(event)
+		}
+	};
+});
 vi.mock('$lib/wallet/identicon', () => ({
 	identiconSvgForClient: (a: string) => `<svg data-seed="${a}"></svg>`
 }));
@@ -468,7 +506,8 @@ describe('the Safe{Wallet} import asks each member’s kind (r7)', () => {
 			}
 		];
 		io.evidence = { [BOB]: 'wallet', [DAN]: 'vela' };
-		io.named = [];
+		io.asked = [];
+		io.picked = [];
 		io.imported = [];
 	});
 
@@ -500,8 +539,14 @@ describe('the Safe{Wallet} import asks each member’s kind (r7)', () => {
 		const step = screen.container.querySelector('[data-testid="import-kinds"]')!;
 		expect(root().textContent).toContain('How does each member approve?');
 		const rows = [...step.querySelectorAll<HTMLElement>('li')];
-		// Carol is on this device: not asked. Bob is in both Safes: asked once.
+		// Carol is on this device: not asked. Bob is in both Safes: asked once,
+		// on the networks he is a member on.
 		expect(rows).toHaveLength(3);
+		expect(io.asked).toEqual([
+			[BOB, [100, 8453]],
+			[DAN, [100]],
+			[ERIN, [8453]]
+		]);
 		const kinds = rows.map(
 			(r) => r.querySelector<HTMLElement>('[data-testid="member-kind"]')?.dataset.kind
 		);
@@ -529,10 +574,8 @@ describe('the Safe{Wallet} import asks each member’s kind (r7)', () => {
 		button('Import 2')!.click();
 		await settle();
 		expect(io.imported).toEqual([ONE, TWO]);
-		expect(io.named).toEqual([
-			[ONE, { [BOB]: { kind: 'passkey' }, [DAN]: { kind: 'passkey' } }, { typed: true }],
-			[TWO, { [BOB]: { kind: 'passkey' } }, { typed: true }]
-		]);
+		// What was declared goes to the machine, which keeps it with each Safe.
+		expect(io.picked).toEqual([[BOB, 'vela']]);
 		// Back on the list, each Safe's outcome.
 		expect(root().textContent).toContain('Imported');
 		await screen.unmount();
@@ -554,10 +597,9 @@ describe('the Safe{Wallet} import asks each member’s kind (r7)', () => {
 		expect(rows[2].querySelectorAll('[role="radio"]')).toHaveLength(0);
 		button('Import 2')!.click();
 		await settle();
-		expect(io.named).toEqual([
-			[ONE, { [DAN]: { kind: 'passkey' } }, { typed: true }],
-			[TWO, { [ERIN]: { kind: 'contract' } }, { typed: true }]
-		]);
+		expect(io.imported).toEqual([ONE, TWO]);
+		// Nothing picked: what is kept is what the chains said (the machine's).
+		expect(io.picked).toEqual([]);
 		await screen.unmount();
 	});
 
