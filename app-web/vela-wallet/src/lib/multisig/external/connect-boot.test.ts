@@ -4,9 +4,10 @@
  * before any module runs (the prerendered page never sees it). Run here
  * against links as `connectLink` builds them.
  */
+import '$lib/i18n/wasm-init.server';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { connectLink } from './connect-link';
+import { connectLink } from '../core/link';
 
 function boot(href: string): boolean {
 	const html = readFileSync(new URL('../../../app.html', import.meta.url), 'utf8');

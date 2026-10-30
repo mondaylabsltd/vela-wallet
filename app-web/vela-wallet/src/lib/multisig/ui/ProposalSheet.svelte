@@ -130,8 +130,7 @@
 	import { PasskeyError } from '$lib/onboarding/core/passkey';
 	import type { ExecutionVerdict } from '../core/kernel';
 	import { memberDrift, readMemberChanges, sameAddress, transfersOf } from '../core/kernel';
-	import { proposalLink, shareOrigin } from '../core/link';
-	import { connectLink } from '../external/connect-link';
+	import { connectLink, proposalLink, shareOrigin } from '../core/link';
 	import { eip55 } from '../external/eip55';
 	import { localOwners, type LocalOwner } from '../core/owners';
 	import { itemOf, linkedSource, proposals, type ProposalItem } from '../core/proposals.svelte';

@@ -52,3 +52,17 @@ export function addLink(
 ): string {
 	return linkCall<string>('addLink', { origin, locale, multisig, extra });
 }
+
+/**
+ * r4C-13: the connect page's link for members whose wallets are elsewhere —
+ * `members` (any, when none is named) and the transaction they approve
+ * (`tx`), and the live session's invite when there is one.
+ */
+export function connectLink(
+	page: string,
+	invite: string | null,
+	members: string[],
+	tx: ProposalLink | null = null
+): string {
+	return linkCall<string>('connectLink', { page, invite, members, tx });
+}
