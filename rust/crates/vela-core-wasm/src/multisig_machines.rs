@@ -6,6 +6,16 @@
 //! `multisig_bridge.rs`), one copy of the money rules.
 
 use crate::bridge::bridge_class;
+use wasm_bindgen::prelude::wasm_bindgen;
+
+/// **Multisig links** (`vela_core::multisig_link`): the proposal link
+/// (`#ms=`), the invite (`#msa=`, networks, member names and kinds, the
+/// checksum refusal), the connect page's link (`ms=`, `for=`, damaged),
+/// row ids and units — `method` plus its arguments as JSON, as `multisigCall`.
+#[wasm_bindgen(js_name = multisigLinkCall)]
+pub fn multisig_link_call(method: &str, args_json: &str) -> Result<String, wasm_bindgen::JsValue> {
+    vela_core::multisig_link::call_json(method, args_json).map_err(crate::err)
+}
 
 bridge_class!(
     /// The multisigs on this device: create, add, import, records, recheck.

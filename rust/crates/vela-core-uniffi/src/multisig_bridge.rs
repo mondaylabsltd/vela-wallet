@@ -16,6 +16,13 @@
 //! answer changes nothing, a `Mutex` per core held only for one dispatch);
 //! this file only names the machines.
 
+/// The multisig links (`vela_core::multisig_link`): `method` plus its
+/// arguments as JSON, the answer as JSON — the wasm `multisigLinkCall`.
+#[uniffi::export]
+pub fn multisig_link_call(method: String, args_json: String) -> Result<String, crate::CoreError> {
+    Ok(vela_core::multisig_link::call_json(&method, &args_json)?)
+}
+
 /// One machine as a uniffi object over [`crate::onboarding_bridge::Bridge`].
 macro_rules! multisig_object {
     ($(#[$doc:meta])* $class:ident, $app:ty) => {
@@ -122,7 +129,9 @@ mod tests {
         .unwrap();
         assert_eq!(out["view"]["loaded"], true);
         // An answer that outlived its question changes nothing.
-        assert!(core.resolve_effect(id, r#"{"type":"store_written"}"#.to_owned()).is_ok());
+        assert!(core
+            .resolve_effect(id, r#"{"type":"store_written"}"#.to_owned())
+            .is_ok());
     }
 
     #[test]
