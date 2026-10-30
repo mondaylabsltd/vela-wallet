@@ -205,7 +205,7 @@ class SigningDepthTest {
         val code = SigningLive.messageCode(message, en)!!
         val runs = code.runs!!
         assertTrue(runs.flatten().any { it.muted && it.text.contains("202E") })
-        assertTrue(runs.any { line -> line.single().muted && line.single().text.contains(folded.count.toString()) })
+        assertTrue(runs.any { line -> line.size == 1 && line[0].muted && line[0].text.contains(folded.count.toString()) })
         assertEquals(lines.size, code.lines.size)
 
         val blocks = SigningLive.blocks(view, null, 0, ctx)
