@@ -625,6 +625,12 @@ jobs:
       # Swift Testing (`@Test`), which reports on its own line — "Test run with
       # 130 tests in 13 suites passed". Anything that greps this log for a pass
       # signal must look for the second line, not the first.
+      # Native parity F0.3: every operation, result and required field the core
+      # sends is answered by the iOS shell (reports: app-ios/scripts/reports/).
+      - name: iOS wire parity with the core
+        run: |
+          node --test app-ios/scripts/check-ios-wire-parity.test.mjs
+          node app-ios/scripts/check-ios-wire-parity.mjs --strict
       - name: Build and test
         working-directory: app-ios/VelaWallet
         run: |

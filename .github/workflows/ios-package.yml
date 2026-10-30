@@ -134,6 +134,9 @@ jobs:
           [ "$stamped" = "$(git rev-parse --short=7 HEAD)" ] || {
             echo "::error::the archive says commit '$stamped', not $(git rev-parse --short=7 HEAD)"; exit 1; }
           test -d "$RUNNER_TEMP/VelaWallet.xcarchive/Products/Applications/VelaWallet.app"
+      # Native parity F0.5: no Debug-only launch input or parallel-space fixture in the archive.
+      - name: The archive carries no developer door
+        run: ./app-ios/scripts/check-ios-store-binary.sh "$RUNNER_TEMP/VelaWallet.xcarchive"
       # The Release binary is the one iOS 17 users run (deployment target 17.4):
       # it must not import the iOS 18-only metadata entry point (087 F33; the
       # reasoning is on ci.yml's "Nothing the iOS 17 runtime lacks").
