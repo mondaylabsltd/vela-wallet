@@ -40,6 +40,13 @@ final class SendExecutor {
         CoreJSON.string(["type": "network_added", "outcome": ["type": "error"]])
     }
 
+    /// `propose_safe_tx`'s only honest answer on this shell: not proposed, not
+    /// cancelled by the person, no reason the shell could name (`reason` is
+    /// the mailbox's or the network's, and neither was asked).
+    static let proposeFailed = CoreJSON.string([
+        "type": "propose_failed", "cancelled": false, "reason": NSNull(),
+    ])
+
     /// Every operation this executor is required to handle.
     static let operations = [
         "fetch_tokens", "clear_token_cache", "resolve_token_metadata", "add_network",
@@ -47,6 +54,7 @@ final class SendExecutor {
         "cancel_passkey_sign", "persist_tx_records", "track_submitted", "resolve_identity",
         "resolve_risk", "simulate_calls", "start_timer", "haptic", "show_alert", "close",
         "clear_to_post", "mark_admitted", "delete_tx_records", "track_withdrawn",
+        "propose_safe_tx",
     ]
 
     /// What the screen owns: the tracker handoff, the alert surface, haptics,
@@ -284,6 +292,18 @@ final class SendExecutor {
 
         case "resolve_identity":
             let address = operation["address"] as? String ?? ""
+            // The person's own names first (vis-24): one of their accounts, or
+            // a contact they named — local, no network, and told as theirs
+            // (`self`), never a service's. The web's `knownName` port.
+            if let known = Self.knownName(
+                address,
+                accounts: await accountStore.loadAccounts(),
+                contacts: store.readList(VelaStore.Key.contacts)
+            ) {
+                return CoreJSON.string([
+                    "type": "identity_resolved", "identity": ["name": known, "source": "self"],
+                ])
+            }
             let resolved = await identity.resolve(address)
             return CoreJSON.string([
                 "type": "identity_resolved",
@@ -293,6 +313,15 @@ final class SendExecutor {
 
         case "resolve_risk":
             return await resolveRisk(operation)
+
+        // A multisig's confirm (docs/multisig-vault-design.md): propose the
+        // reviewed transfers to the members. Multisig accounts are the web's
+        // alone until the orchestration is in the core (native parity F0.4),
+        // and no iOS account is one — so this is said as it is: not proposed,
+        // nothing signed, nothing sent. Never a pretend `proposed`.
+        case "propose_safe_tx":
+            VelaLog.failure(.sign, kind: "propose_unsupported", "multisig proposals are not on iOS yet")
+            return Self.proposeFailed
 
         // No simulation engine on this base (055).
         case "simulate_calls":
@@ -691,14 +720,67 @@ final class SendExecutor {
         let deployed = await relay.isContract(chainId: chainId, address: address)
         // Has this device ever paid them? The local store is the only honest
         // source, and it is the same one `contacts::load_send_history` reads.
-        let first = Self.firstTime(address, records: TxRecords.load(store: store))
+        // A store that holds something it cannot read is NOT an empty one
+        // (round 3): `nil`, said as "could not check".
+        let records: [[String: Any]]? = store.isUnreadable(VelaStore.Key.transactionHistory, expecting: .list)
+            ? nil : TxRecords.load(store: store)
         return CoreJSON.string([
             "type": "risk_resolved",
-            "risk": [
-                "is_contract": deployed.map { $0 as Any } ?? NSNull(),
-                "first_time": first,
-            ] as [String: Any],
+            "risk": Self.recipientRisk(
+                address: address,
+                isContract: deployed,
+                records: records,
+                accounts: await accountStore.loadAccounts(),
+                contacts: store.readList(VelaStore.Key.contacts)
+            ),
         ])
+    }
+
+    /// The core's `SendRecipientRisk`, from facts this device holds — the
+    /// web's `resolveRecipientRisk` plus its two ports (r4a-18):
+    ///
+    /// - `own`: the address is one of the person's accounts on this device —
+    ///   never a stranger, so never told as a first transfer, whatever the
+    ///   history says. (No multisig is kept on iOS, so no member is own.)
+    /// - `known_name`: the person's own name for it — their account's, else a
+    ///   contact's name THEY gave (a resolved name is a service's word, not
+    ///   theirs).
+    /// - `history_unread` / `first_time`: a history that could not be read
+    ///   (`records == nil`) is never "never sent here".
+    ///
+    /// The person's own name for `address`: their account's, else a contact's
+    /// name THEY gave — trimmed, `nil` when there is none (the web's
+    /// `knownName` port; a resolved name is a service's word, not theirs).
+    static func knownName(_ address: String, accounts: [[String: Any]], contacts: [[String: Any]]) -> String? {
+        let low = address.lowercased()
+        let trimmed = { (value: Any?) in (value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) }
+        let accountName = trimmed(accounts.first { ($0["address"] as? String)?.lowercased() == low }?["name"])
+        let contactName = trimmed(contacts.first { ($0["address"] as? String)?.lowercased() == low }?["name"])
+        return [accountName, contactName].compactMap { $0 }.first { !$0.isEmpty }
+    }
+
+    /// What the confirm says of them is the core's.
+    static func recipientRisk(
+        address: String,
+        isContract: Bool?,
+        records: [[String: Any]]?,
+        accounts: [[String: Any]],
+        contacts: [[String: Any]]
+    ) -> [String: Any] {
+        let low = address.lowercased()
+        let ownAccount = accounts.first { ($0["address"] as? String)?.lowercased() == low }
+        let known = knownName(address, accounts: accounts, contacts: contacts)
+        // A non-address is never "first", and its history is not the question.
+        let isAddress = address.range(of: "^0x[0-9a-fA-F]{40}$", options: .regularExpression) != nil
+        let unread = isAddress && records == nil
+        let first: Any = unread ? NSNull() : firstTime(address, records: records ?? [])
+        return [
+            "is_contract": isContract.map { $0 as Any } ?? NSNull(),
+            "first_time": first,
+            "history_unread": unread,
+            "known_name": known.map { $0 as Any } ?? NSNull(),
+            "own": ownAccount != nil,
+        ]
     }
 
     /// `true` = this device never sent to `address`: the "first time sending
@@ -706,8 +788,8 @@ final class SendExecutor {
     /// `hasPriorInteraction`, verbatim (Android's `FeedExecutor.hasSentTo`):
     /// `to` compared lower-cased, and only a `send`, a `dapp_tx` or a legacy
     /// row with no `type` counts — a receive or a signature is not a send.
-    /// An unreadable store reads as no history (so the tag shows rather than
-    /// hides); a non-address is never "first".
+    /// A non-address is never "first". An unreadable store never reaches
+    /// here: `recipientRisk` says it as `history_unread` (round 3).
     static func firstTime(_ address: String, records: [[String: Any]]) -> Bool {
         guard address.range(of: "^0x[0-9a-fA-F]{40}$", options: .regularExpression) != nil
         else { return false }
@@ -839,6 +921,8 @@ final class SendExecutor {
             return CoreJSON.string(["type": "identity_resolved", "identity": NSNull()])
         case "resolve_risk":
             return CoreJSON.string(["type": "risk_resolved", "risk": NSNull()])
+        case "propose_safe_tx":
+            return Self.proposeFailed
         case "simulate_calls":
             return CoreJSON.string(["type": "sim_resolved", "sim_json": NSNull()])
         case "start_timer":
