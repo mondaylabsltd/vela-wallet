@@ -95,6 +95,7 @@
     "share": "Compartir",
     "reject": "Rechazar",
     "withdraw": "Retirar",
+    "dontPropose": "No proponer",
     "rejectHint": "Rechazar propone una cancelación con el mismo número; también necesita {{threshold}} aprobaciones, y gana la que se ejecute primero.",
     "cancelPending": "Una cancelación de esta transacción espera aprobación.",
     "executing": "Ejecutando…",
@@ -163,6 +164,7 @@
     "notNeeded": "No hace falta",
     "sendLink": "Enviar enlace",
     "approvesInVela": "Aprueba en Vela desde su propio dispositivo: {{names}}. Envíales este enlace.",
+    "eitherWay": "Aún no se sabe cómo aprueban: {{names}}. Pueden aprobar en Vela con este enlace o con su propia billetera usando el enlace para billeteras externas.",
     "contractMembers": "{{names}}: una cuenta de contrato inteligente aprueba desde su propia app (p. ej., otra Safe). Vela todavía no puede recoger esas aprobaciones.",
     "rejectCancel": "Cancelar",
     "noOutsideSigner": "ningún miembro está en este dispositivo, y todos aprueban en Vela desde su propio dispositivo — pídele a uno que lo proponga",
@@ -261,7 +263,10 @@
     "firstRunFund": "Agregar fondos",
     "firstRunFundNote": "Envía a su dirección en {{network}}.",
     "firstRunCost": "Su primera transferencia saliente también lo configura en {{network}}: una comisión de red única, pagada con esa transferencia y mostrada antes de ejecutarla.",
-    "firstRunDismiss": "Entendido"
+    "firstRunDismiss": "Entendido",
+    "otherSpace": "También en este dispositivo, en {{space}}: {{networks}}. Para crear el multisig en una de ellas, cambia primero a {{space}}.",
+    "draftKept": "Retomaste donde lo dejaste.",
+    "discardDraft": "Empezar de nuevo"
    },
    "invite": {
     "body": "Los miembros escanean el código o abren el enlace: agrega el multisig en Vela con su red y los nombres de los miembros.",
@@ -527,7 +532,8 @@
     "removed": "Eliminados",
     "thresholdChanged": "Aprobaciones necesarias: {{was}} originalmente, {{is}} ahora.",
     "undeployedOn": "Aún no está desplegado en {{network}}: ahí empezará con los miembros originales.",
-    "renameNotRecorded": "Se podrá renombrar cuando su registro esté guardado en el servicio de multisig."
+    "renameNotRecorded": "Se podrá renombrar cuando su registro esté guardado en el servicio de multisig.",
+    "renamePending": "Se podrá renombrar cuando su registro llegue a {{network}}. Puede tardar un poco; mientras tanto no se pierde nada."
    },
    "service": {
     "customNote": "Usando un servicio multifirma propio ({{host}})",

@@ -95,6 +95,7 @@
     "share": "Bagikan",
     "reject": "Tolak",
     "withdraw": "Tarik",
+    "dontPropose": "Jangan ajukan",
     "rejectHint": "Menolak berarti mengusulkan pembatalan dengan nomor yang sama; pembatalan juga perlu {{threshold}} persetujuan, dan yang dieksekusi lebih dulu yang berlaku.",
     "cancelPending": "Pembatalan transaksi ini sedang menunggu persetujuan.",
     "executing": "Mengeksekusi…",
@@ -163,6 +164,7 @@
     "notNeeded": "Tidak diperlukan",
     "sendLink": "Kirim tautan",
     "approvesInVela": "Menyetujui di Vela dari perangkatnya sendiri: {{names}}. Kirimkan tautan ini kepada mereka.",
+    "eitherWay": "Belum diketahui cara mereka menyetujui: {{names}}. Mereka bisa menyetujui di Vela dengan tautan ini, atau dengan dompet sendiri lewat tautan dompet luar.",
     "contractMembers": "{{names}}: akun kontrak pintar menyetujui dari aplikasinya sendiri (mis. Safe lain). Vela belum bisa mengumpulkan persetujuan itu.",
     "rejectCancel": "Batal",
     "noOutsideSigner": "tidak ada anggota di perangkat ini, dan setiap anggota menyetujui di Vela dari perangkatnya sendiri — minta salah satu dari mereka untuk mengusulkannya",
@@ -260,7 +262,10 @@
     "firstRunFund": "Tambah dana",
     "firstRunFundNote": "Kirim ke alamatnya di {{network}}.",
     "firstRunCost": "Transfer keluar pertamanya juga menyiapkannya di {{network}}: biaya jaringan satu kali, dibayar bersama transfer itu dan ditampilkan sebelum dieksekusi.",
-    "firstRunDismiss": "Mengerti"
+    "firstRunDismiss": "Mengerti",
+    "otherSpace": "Juga di perangkat ini, di {{space}}: {{networks}}. Untuk membuat multisig di salah satunya, beralih dulu ke {{space}}.",
+    "draftKept": "Melanjutkan dari yang terakhir Anda isi.",
+    "discardDraft": "Mulai dari awal"
    },
    "invite": {
     "body": "Anggota memindai kode atau membuka tautan: multisig ditambahkan di Vela dengan jaringan dan nama anggotanya.",
@@ -523,7 +528,8 @@
     "removed": "Dihapus",
     "thresholdChanged": "Persetujuan yang diperlukan: awalnya {{was}}, sekarang {{is}}.",
     "undeployedOn": "Belum di-deploy di {{network}}: di sana multisig akan dimulai dengan anggota awal.",
-    "renameNotRecorded": "Namanya bisa diganti setelah catatannya tersimpan di layanan multisig."
+    "renameNotRecorded": "Namanya bisa diganti setelah catatannya tersimpan di layanan multisig.",
+    "renamePending": "Namanya dapat diubah setelah catatannya tiba di {{network}}. Ini bisa memakan waktu — sementara itu tidak ada yang hilang."
    },
    "service": {
     "customNote": "Menggunakan layanan multisig khusus ({{host}})",

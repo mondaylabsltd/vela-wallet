@@ -1385,7 +1385,12 @@ if (branchSet.size !== 114) fail(`expected 114 branch paths, got ${branchSet.siz
   //   `home.multisig.proposal.contractMembers` (said under the approvals).
   //   `members.kindLikely` changes value only ("Other wallet" is a hint, kept
   //   only if tapped). 600 + 3 = 603.
-  const pins = { multisig: 603 };
+  // 609 (W9, 2026-10-31): + `home.multisig.proposal.{eitherWay, dontPropose}`
+  //   (r7-8: a member nothing says how they sign is said once, either way;
+  //   S4: a proposal not made yet is not withdrawn) and `home.multisig.create.
+  //   {otherSpace, draftKept, discardDraft}` + `settings.renamePending` (r7-9,
+  //   r7-10). 603 + 6 = 609.
+  const pins = { multisig: 609 };
   for (const [name, docs] of Object.entries(onDemand)) {
     const leaves = new Set();
     for (const lng of LOCALES) walk(docs[lng], '', leaves, new Set());
