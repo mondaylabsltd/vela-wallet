@@ -900,11 +900,11 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
                             note_signed_nonce(&submitted.user_op_hash, nonce);
                         }
                         SendShellResult::Submitted {
-                        user_op_hash: submitted.user_op_hash,
-                        now_ms: now_ms(),
-                        maybe_sent: submitted.maybe_sent,
-                        submit_block: submitted.submit_block,
-                    }
+                            user_op_hash: submitted.user_op_hash,
+                            now_ms: now_ms(),
+                            maybe_sent: submitted.maybe_sent,
+                            submit_block: submitted.submit_block,
+                        }
                     }
                     Err(failure) => SendShellResult::SubmitFailed {
                         failure: if bounded {
@@ -997,10 +997,24 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
             }))
         }
 
-        // No simulation engine on the desktop yet: the confirm surface stays
-        // empty, which is the honest reading of "best effort".
-        SendOperation::SimulateCalls { .. } => {
-            SendAnswer::Now(SendShellResult::SimResolved { sim_json: None })
+        // `simulateAssetChanges` (WIRE-AUDIT A7): the same `eth_simulateV1`
+        // the dApp sheet asks, through this person's own pool, judged by the
+        // core's one parser (`sim_outcome::classify`). Nothing to ask (no
+        // call, a deployment) answers at once, as the web's `null`.
+        SendOperation::SimulateCalls {
+            chain_id,
+            account,
+            calls,
+        } => {
+            if account.is_empty() || !crate::executor::sim::askable(calls) {
+                return SendAnswer::Now(SendShellResult::SimResolved { sim_json: None });
+            }
+            let (chain_id, account, calls) = (*chain_id, account.clone(), calls.clone());
+            SendAnswer::Blocking(Box::new(move || SendShellResult::SimResolved {
+                sim_json: stored_asset_sim(&crate::executor::sim::simulate(
+                    &account, &calls, chain_id,
+                )),
+            }))
         }
 
         SendOperation::StartTimer { ms, tag } => SendAnswer::After(
@@ -1013,6 +1027,56 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
 
         SendOperation::ShowAlert { .. } | SendOperation::Close => SendAnswer::Screen,
     }
+}
+
+/// A simulation as the web's `serializeAssetSim` stores it (`StoredAssetSim`,
+/// `sim_json` on the wire): `{ok, revertReason?, engine, changes}` — opaque to
+/// the core, display-only.
+///
+/// `None` when the node could not check (it does not simulate, or nobody
+/// answered): the web's `null`, "nothing at all could be learned". A token's
+/// figure is the simulation's, and which figures may be stated is
+/// `token_trust`'s judgment — not made here, so an ERC-20 change carries its
+/// direction alone, flagged `unverified`, exactly as the web stores a change
+/// whose figure it would not state. The native coin's figure is the chain's.
+fn stored_asset_sim(outcome: &vela_core::app::sim_outcome::SimOutcome) -> Option<String> {
+    use serde_json::json;
+    use vela_core::app::sim_outcome::SimOutcome;
+    use vela_core::app::token_trust::TrustDeltaKind;
+    let stored = match outcome {
+        SimOutcome::Deltas { deltas } => {
+            let changes: Vec<serde_json::Value> = deltas
+                .iter()
+                .map(|delta| match delta.kind {
+                    TrustDeltaKind::Native => json!({ "kind": "native", "delta": delta.delta }),
+                    TrustDeltaKind::Erc20 => {
+                        let direction = match delta.delta.trim() {
+                            d if d.starts_with('-') => "out",
+                            d if d.chars().all(|c| c == '0') => "still",
+                            d if d.chars().all(|c| c.is_ascii_digit()) => "in",
+                            _ => "unreadable",
+                        };
+                        json!({
+                            "kind": "erc20",
+                            "token": delta.token,
+                            "direction": direction,
+                            "unverified": true,
+                        })
+                    }
+                })
+                .collect();
+            json!({ "ok": true, "engine": "rpc", "changes": changes })
+        }
+        SimOutcome::Reverts { reason } => {
+            let mut stored = json!({ "ok": false, "engine": "rpc", "changes": null });
+            if let Some(reason) = reason {
+                stored["revertReason"] = json!(reason);
+            }
+            stored
+        }
+        SimOutcome::NotOffered | SimOutcome::Unreachable => return None,
+    };
+    Some(stored.to_string())
 }
 
 #[cfg(test)]
@@ -1503,7 +1567,9 @@ mod tests {
             assert_eq!(named.known_name.as_deref(), Some("Ann"));
             assert_eq!(local_risk(None, &resolved).known_name, None);
             assert_eq!(
-                send_identity(&friend).and_then(|found| found.source).as_deref(),
+                send_identity(&friend)
+                    .and_then(|found| found.source)
+                    .as_deref(),
                 Some("self")
             );
         });
@@ -1595,5 +1661,55 @@ mod tests {
             ),
             SendAnswer::Blocking(_)
         ));
+    }
+
+    /// WIRE-AUDIT A7: the confirm's simulation crosses as the web's
+    /// `StoredAssetSim` — the chain's native figure, a token's direction
+    /// alone (its figure is `token_trust`'s to state), a revert with its
+    /// reason, and nothing at all from a node that could not check.
+    #[test]
+    fn the_confirms_simulation_is_stored_as_the_webs() {
+        use vela_core::app::sim_outcome::SimOutcome;
+        use vela_core::app::token_trust::{TrustAssetDelta, TrustDeltaKind};
+        let moved = SimOutcome::Deltas {
+            deltas: vec![
+                TrustAssetDelta {
+                    kind: TrustDeltaKind::Native,
+                    token: None,
+                    delta: "-1000".to_owned(),
+                },
+                TrustAssetDelta {
+                    kind: TrustDeltaKind::Erc20,
+                    token: Some("0xtoken".to_owned()),
+                    delta: "25".to_owned(),
+                },
+            ],
+        };
+        let stored: serde_json::Value = serde_json::from_str(
+            &stored_asset_sim(&moved).unwrap_or_else(|| unreachable!("a sim")),
+        )
+        .unwrap_or_else(|e| unreachable!("{e}"));
+        assert_eq!(stored["ok"], true);
+        assert_eq!(stored["engine"], "rpc");
+        assert_eq!(stored["changes"][0]["delta"], "-1000");
+        assert_eq!(stored["changes"][1]["direction"], "in");
+        assert!(
+            stored["changes"][1].get("delta").is_none(),
+            "no token figure"
+        );
+
+        let reverts = SimOutcome::Reverts {
+            reason: Some("no".to_owned()),
+        };
+        let stored: serde_json::Value = serde_json::from_str(
+            &stored_asset_sim(&reverts).unwrap_or_else(|| unreachable!("a sim")),
+        )
+        .unwrap_or_else(|e| unreachable!("{e}"));
+        assert_eq!(stored["ok"], false);
+        assert_eq!(stored["revertReason"], "no");
+        assert!(stored["changes"].is_null());
+
+        assert_eq!(stored_asset_sim(&SimOutcome::NotOffered), None);
+        assert_eq!(stored_asset_sim(&SimOutcome::Unreachable), None);
     }
 }
