@@ -31,6 +31,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     ProposalsView::export_all(&config)?;
     MembersEvent::export_all(&config)?;
     MultisigMembersView::export_all(&config)?;
+    vela_core::app::multisig_outside::page::Event::export_all(&config)?;
+    vela_core::app::multisig_outside::page::OutsidePageView::export_all(&config)?;
+    vela_core::app::multisig_outside::session::Event::export_all(&config)?;
+    vela_core::app::multisig_outside::session::OutsideSessionView::export_all(&config)?;
     println!("multisig bindings written to {}", out_dir.display());
     Ok(())
 }

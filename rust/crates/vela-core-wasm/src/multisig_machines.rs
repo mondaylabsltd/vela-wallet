@@ -26,3 +26,17 @@ bridge_class!(
     MultisigMembersCore,
     vela_core::app::multisig_members::MultisigMembers
 );
+
+bridge_class!(
+    /// The connect page acting for an outside owner (§11.2, §11.3): the
+    /// approve-later link, verification, the gate, sign / approveHash /
+    /// execute / reject through the injected wallet, its outbox.
+    MultisigOutsidePageCore,
+    vela_core::app::multisig_outside::page::OutsidePage
+);
+
+bridge_class!(
+    /// Vela's side of a live session with an outside owner's wallet.
+    MultisigOutsideSessionCore,
+    vela_core::app::multisig_outside::session::OutsideSession
+);

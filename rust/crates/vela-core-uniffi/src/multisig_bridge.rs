@@ -75,6 +75,18 @@ multisig_object!(
     vela_core::app::multisig_members::MultisigMembers
 );
 
+multisig_object!(
+    /// The connect page acting for an outside owner (§11.2, §11.3).
+    MultisigOutsidePageCore,
+    vela_core::app::multisig_outside::page::OutsidePage
+);
+
+multisig_object!(
+    /// Vela's side of a live session with an outside owner's wallet.
+    MultisigOutsideSessionCore,
+    vela_core::app::multisig_outside::session::OutsideSession
+);
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
