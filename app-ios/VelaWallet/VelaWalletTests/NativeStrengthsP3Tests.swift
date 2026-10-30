@@ -298,7 +298,6 @@ struct AppSiteAssociationTests {
             ("https://wallet.getvela.app/en/wallet#ms%3D100.\(safe).\(hash)", true),
             ("https://wallet.getvela.app/en#msa=\(safe)", true),
             ("https://wallet.getvela.app/es-MX#ms=100.\(safe).\(hash)", true),
-            ("https://wallet.getvela.app/en/connect#for=0x88cca0eedbf2c4426110bbfc998f048689266894", true),
             ("https://wallet.getvela.app/pay?to=\(safe)&chain=100", true),
             ("https://getvela.app/pay?to=\(safe)&chain=100", true),
             // The web wallet itself is never taken from the browser.
@@ -315,6 +314,12 @@ struct AppSiteAssociationTests {
             #expect(isClaimed == expected, "\(raw): claimed \(isClaimed)")
             #expect((AppLink.read(url) != nil) == expected, "\(raw): read \(AppLink.read(url) != nil)")
         }
+        // The connect page is for an owner who signs with another wallet: it
+        // stays in the browser, where that wallet is (not claimed). A connect
+        // link that reaches the app anyway (pasted, scanned) is still read.
+        let connect = try #require(URL(string: "https://wallet.getvela.app/en/connect#for=0x88cca0eedbf2c4426110bbfc998f048689266894"))
+        #expect(!Self.claimed(connect, by: wallet))
+        #expect(AppLink.read(connect) != nil)
         // The passkeys' association is kept on the site.
         let siteJSON = try JSONSerialization.jsonObject(
             with: Data(contentsOf: Self.dir.appendingPathComponent("getvela.app.apple-app-site-association.json"))

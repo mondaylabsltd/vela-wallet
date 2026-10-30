@@ -27,10 +27,11 @@
 		<!--
 		  Native parity N-I3: the web wallet's own host, where every link the
 		  wallet makes lives — a proposal (`/<locale>/wallet#ms=…`), an invite
-		  (`#msa=…`), the connect page (`/<locale>/connect#…`) and a payment
-		  (`/pay?…`). Its apple-app-site-association must be hosted on
-		  wallet.getvela.app (app-ios/universal-links/), or iOS opens these in
-		  Safari as before — the web keeps working either way.
+		  (`#msa=…`) and a payment (`/pay?…`). The connect page stays in the
+		  browser: it is for an owner who signs with another wallet. Its
+		  apple-app-site-association must be hosted on wallet.getvela.app
+		  (app-ios/universal-links/), or iOS opens these in Safari as
+		  before — the web keeps working either way.
 		-->
 		<string>applinks:wallet.getvela.app</string>
 	</array>

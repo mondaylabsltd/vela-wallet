@@ -2,16 +2,10 @@
   "applinks": {
     "details": [
       {
-        "appIDs": ["F9W689P9NE.app.getvela.VelaWallet"],
+        "appIDs": [
+          "F9W689P9NE.app.getvela.VelaWallet"
+        ],
         "components": [
-          {
-            "/": "/*/connect",
-            "comment": "The connect page an outside owner approves on (/<locale>/connect#<invite>&for=…&ms=…). The app reads it with the core (readConnectHash) and offers it in the system browser, where the owner's wallet is."
-          },
-          {
-            "/": "/*/connect/",
-            "comment": "The same page with a trailing slash."
-          },
           {
             "/": "/*/wallet",
             "#": "ms=*",
