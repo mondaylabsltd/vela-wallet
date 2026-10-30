@@ -376,7 +376,11 @@ fn bad_recipient_or_chain_is_invalid() {
             Some(false),
             "to={to:?} chain={chain:?}"
         );
-        assert_eq!(sut.view().pay_refusal, Some(why), "to={to:?} chain={chain:?}");
+        assert_eq!(
+            sut.view().pay_refusal,
+            Some(why),
+            "to={to:?} chain={chain:?}"
+        );
     }
 }
 
@@ -384,7 +388,11 @@ fn bad_recipient_or_chain_is_invalid() {
 /// link is read, with its own reason — never handed to Send to look up.
 #[test]
 fn a_token_that_is_not_an_address_is_refused() {
-    for token in ["USDC", "0x1234", "0x833589fcd6edb6e08f4c7c32d4f71b54bda0291z"] {
+    for token in [
+        "USDC",
+        "0x1234",
+        "0x833589fcd6edb6e08f4c7c32d4f71b54bda0291z",
+    ] {
         let mut sut = Sut::new();
         sut.dispatch(Event::LinkOpened {
             to: Some(ADDR.to_owned()),
