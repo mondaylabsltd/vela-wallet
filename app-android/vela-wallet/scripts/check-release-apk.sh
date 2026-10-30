@@ -43,9 +43,30 @@ do
   fi
 done
 
+# 3. The core ships stripped and inside its budget (native parity Phase 4:
+#    libvela_core_uniffi.so arm64 ≤ 19.5 MB). An AGP that cannot find its NDK
+#    says "Unable to strip …, packaging them as they are" and moves on — the
+#    library then carries its symbol table (`.symtab`, ~40 MB arm64). The
+#    section name is in the section-header string table only while the
+#    section exists; `.dynsym` (always kept) does not contain it.
+CORE_BUDGET=$((195 * 1024 * 1024 / 10))
+CORE="$WORK/lib/arm64-v8a/libvela_core_uniffi.so"
+if [ ! -f "$CORE" ]; then
+  problems+=("no arm64-v8a libvela_core_uniffi.so is packaged")
+else
+  core_bytes=$(wc -c < "$CORE" | tr -d ' ')
+  if [ "$core_bytes" -gt "$CORE_BUDGET" ]; then
+    problems+=("arm64 libvela_core_uniffi.so is $core_bytes bytes, over the $CORE_BUDGET-byte (19.5 MB) budget")
+  fi
+  if LC_ALL=C grep -aqF '.symtab' "$CORE"; then
+    problems+=("arm64 libvela_core_uniffi.so is not stripped (it carries .symtab) — is the NDK AGP strips with installed?")
+  fi
+  echo "check-release-apk: arm64 libvela_core_uniffi.so = $core_bytes bytes (budget $CORE_BUDGET)"
+fi
+
 if [ ${#problems[@]} -gt 0 ]; then
-  echo "check-release-apk: $(basename "$APK") carries debug-only parts:" >&2
+  echo "check-release-apk: $(basename "$APK") carries what a release must not:" >&2
   printf '  - %s\n' "${problems[@]}" >&2
   exit 1
 fi
-echo "check-release-apk: ok — $(basename "$APK") carries no fixture keys, no parallel-space door, no harness launch inputs"
+echo "check-release-apk: ok — $(basename "$APK") carries no fixture keys, no parallel-space door, no harness launch inputs; its core is stripped and in budget"

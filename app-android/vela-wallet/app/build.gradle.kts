@@ -70,8 +70,37 @@ val velaVersionCode: Int = run {
     }
 }
 
+// The NDK that strips the packaged native libraries — the SAME one
+// rust/scripts/build-android.sh cross-compiles with: ANDROID_NDK_HOME when set,
+// else the newest under <sdk>/ndk. Without it AGP looks for ITS default NDK,
+// which a machine (this one, CI's runner) need not have, says "Unable to strip
+// the following libraries, packaging them as they are", and the arm64 core
+// ships at ~40 MB with its symbol tables instead of ~16 MB (Phase 4 budget:
+// ≤ 19.5 MB). Stripping here, not in the shared Cargo release profile, keeps
+// the host dylib the JVM tests load (and its backtraces) as it was.
+val velaNdkVersion: String? = run {
+    fun revision(dir: File): String? = dir.resolve("source.properties").takeIf { it.isFile }?.readLines()
+        ?.firstOrNull { it.trim().startsWith("Pkg.Revision") }
+        ?.substringAfter('=')?.trim()?.takeIf { it.isNotEmpty() }
+    val explicit = providers.environmentVariable("ANDROID_NDK_HOME").orNull?.takeIf { it.isNotBlank() }?.let(::File)
+    if (explicit != null) return@run revision(explicit)
+    val sdk = (providers.environmentVariable("ANDROID_HOME").orNull ?: providers.environmentVariable("ANDROID_SDK_ROOT").orNull)
+        ?.takeIf { it.isNotBlank() }?.let(::File)
+        ?: rootDir.resolve("local.properties").takeIf { it.isFile }?.let { file ->
+            Properties().apply { file.inputStream().use { load(it) } }.getProperty("sdk.dir")?.let(::File)
+        }
+        ?: File(System.getProperty("user.home"), "Library/Android/sdk")
+    sdk.resolve("ndk").listFiles { f -> f.isDirectory }
+        ?.mapNotNull { dir -> revision(dir) }
+        ?.maxWithOrNull(
+            compareBy<String>({ it.split('.').getOrNull(0)?.toIntOrNull() ?: 0 }, { it.split('.').getOrNull(1)?.toIntOrNull() ?: 0 }, { it.split('.').getOrNull(2)?.toIntOrNull() ?: 0 }),
+        )
+}
+
 android {
     namespace = "app.getvela.wallet"
+    // See velaNdkVersion: the libraries are stripped with the NDK they were built with.
+    velaNdkVersion?.let { ndkVersion = it }
     // Plain compileSdk 36: the scaffold's `release(36) { minorApiLevel = 1 }` makes
     // PackageManager fail to resolve ANY activity in the APK on real devices/emulators
     // ("Error type 3: Activity class does not exist", START_CLASS_NOT_FOUND) — verified
