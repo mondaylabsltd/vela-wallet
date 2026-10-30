@@ -541,6 +541,7 @@
   "submitSlow": "Esperando respuesta de {{network}}: {{seconds}} s hasta ahora. Todavía no se firmó nada.",
   "txErrorChainBusy": "Los nodos de {{network}} están saturados y no respondieron a tiempo, así que no se firmó ni se envió nada. Vuelve a intentarlo en un momento.",
   "txErrorChainUnreachable": "No se pudo conectar con {{network}}, así que no se firmó ni se envió nada. Vuelve a intentarlo en un momento.",
+  "txErrorProposalNotSupported": "Esta app todavía no puede proponer transacciones de multisig, así que no se firmó ni se propuso nada.",
   "maxMoved": "El máximo ahora es {{to}} {{symbol}} (antes {{from}}): se volvió a cotizar la comisión de red y cambió lo que se reserva para ella.",
   "txReviewAgain": "Revisar de nuevo",
   "txSendAgain": "Enviar de nuevo",
@@ -615,7 +616,11 @@
    "amount": "Monto",
    "anyAmount": "Cualquier monto",
    "invalidTitle": "Enlace de pago inválido",
-   "invalidBody": "A este enlace le falta un destinatario o una red válida. Pídele uno nuevo a quien te lo envió."
+   "invalidBody": "A este enlace le falta un destinatario o una red válida. Pídele uno nuevo a quien te lo envió.",
+   "invalidToken": "El token de este enlace no es una dirección de contrato. Pídele uno nuevo a quien te lo envió.",
+   "invalidAmount": "El monto de este enlace no se puede leer con exactitud. Pídele uno nuevo a quien te lo envió.",
+   "noWalletBody": "Todavía no hay una billetera Vela en este dispositivo. Crea una o inicia sesión y este pago te estará esperando para que lo revises.",
+   "home": "Ir a Vela Wallet"
   },
   "addressLabel": "Tu dirección para recibir",
   "searchNetworkPlaceholder": "Buscar redes",
@@ -1869,7 +1874,28 @@
    "fullScreen": "Activar o desactivar pantalla completa",
    "window": "Ventana",
    "minimize": "Minimizar",
-   "closeWindow": "Cerrar ventana"
+   "closeWindow": "Cerrar ventana",
+   "find": "Buscar",
+   "commandPalette": "Paleta de comandos"
+  },
+  "appUpdate": {
+   "title": "Actualización disponible",
+   "install": "Instalar",
+   "later": "Más tarde"
+  },
+  "dropOverlay": {
+   "title": "Suelta una dirección, un enlace de pago o una imagen QR"
+  },
+  "shortcuts": {
+   "send": "Enviar con {{app}}",
+   "receive": "Recibir con {{app}}",
+   "scan": "Escanear con {{app}}"
+  },
+  "linkSheet": {
+   "multisigOnWeb": "Por ahora, los enlaces de multisig se abren en la billetera web."
+  },
+  "widget": {
+   "balanceDescription": "Tu saldo de un vistazo, según la última vez que Vela lo actualizó."
   },
   "browserStatus": {
    "title": "Estado de la pestaña",
@@ -2049,6 +2075,11 @@
    "attestation": "Atestación",
    "userVerified": "Verificación al usarla",
    "signsHere": "Conectada"
+  },
+  "appearance": {
+   "menuBar": "Mostrar en la barra de menús",
+   "trayIcon": "Mostrar en la bandeja del sistema",
+   "statusItemHint": "Tu total y Enviar y Recibir rápidos, con las últimas cifras cargadas; no se consulta nada más."
   }
  },
  "contacts": {

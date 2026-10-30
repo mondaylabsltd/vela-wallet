@@ -10299,6 +10299,11 @@ mod multisig {
                 SendTxErrorKey::ProposalMailboxDown,
             ),
             (SendProposeFailure::Offline, SendTxErrorKey::ProposalOffline),
+            // A shell that cannot propose yet says so — never "the mailbox".
+            (
+                SendProposeFailure::NotSupported,
+                SendTxErrorKey::ProposalNotSupported,
+            ),
         ] {
             let mut sut = boot_multisig(vec![eth("2")]);
             let view = to_review(&mut sut, "0.5");

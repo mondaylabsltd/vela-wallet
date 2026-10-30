@@ -15,6 +15,7 @@ import app.getvela.wallet.feature.settings.core.NetEndpointField
 import app.getvela.wallet.feature.settings.core.NetNetworkRow
 import app.getvela.wallet.feature.settings.core.NetView
 import app.getvela.wallet.feature.settings.core.NetworkSpace
+import app.getvela.wallet.feature.wallet.core.NodeStanding
 import app.getvela.wallet.feature.wallet.core.RpcPoolView
 import java.io.File
 import org.junit.Assert.assertEquals
@@ -97,10 +98,22 @@ class SettingsNetworksLiveTest {
     }
 
     @Test
-    fun `the pool's view is read as the two lists`() {
-        val own = SettingsLive.OwnNodes.of(RpcPoolView(fallback_chains = listOf(42161), own_node_unreached_chains = listOf(100)))
-        assertEquals(listOf(42_161L), own.fallback)
-        assertEquals(listOf(100L), own.unreached)
+    fun `the pool's view is read per network by the core's one rule`() {
+        val own = SettingsLive.OwnNodes.of(
+            RpcPoolView(fallback_chains = listOf(42161), own_only_chains = listOf(100, 10), own_node_unreached_chains = listOf(100)),
+        )
+        assertEquals(NodeStanding.FallingBack, own.standing(42_161L))
+        assertEquals(NodeStanding.OwnNodeUnreached, own.standing(100L))
+        assertEquals(NodeStanding.OwnOnly, own.standing(10L))
+        assertEquals(NodeStanding.Pooled, own.standing(1L))
+        assertEquals("no chain id is no standing", NodeStanding.Pooled, own.standing(-1L))
+        // An own-only chain that cannot be read is never also "falling back":
+        // nobody else is asked there — the core's order, not a list's.
+        val both = RpcPoolView(fallback_chains = listOf(100), own_only_chains = listOf(100), own_node_unreached_chains = listOf(100))
+        assertEquals(NodeStanding.OwnNodeUnreached, both.standing(100))
+        // An own-only node that answers says nothing on its row.
+        val row = NetBoards.ledger().networks.single { it.chain_id == NetBoards.OWN_ONLY_CHAIN }
+        assertNull(SettingsLive.ownNodeNotice(row, SettingsLive.OwnNodes.of(RpcPoolView(own_only_chains = listOf(100))), strings))
     }
 
     @Test

@@ -131,6 +131,10 @@ final class SigningController {
     /// The speed control, as the `fee_speed` core decided it (spec 069).
     var speed: FeeSpeedViewWire? { fees.speed }
 
+    /// The fee in force as the core wrote it (`FeeView`) — the figure the AI
+    /// agent's opinion is bound to.
+    var feeViewJson: String? { fees.viewJson }
+
     /// The fee view of the session pricing `tier`, for that option's line.
     func feeView(of tier: String) -> FeeViewWire? { fees.view(of: tier) }
 
@@ -282,6 +286,31 @@ final class SigningController {
 
     private(set) var simulation: Simulation = .pending
 
+    /// The core's record of THIS request's last simulation once it ended
+    /// (`simOutcome`) — what the AI agent's review reads as the sheet's
+    /// verdict (`SheetFacts.simulation`), and whether it is about the network
+    /// (`recheck`). `nil` while the first one is out.
+    private(set) var simRecord: SimOutcomeRecord?
+
+    /// dapp-15: the could-not-check line is about the network — no node
+    /// answered (`SimOutcomeRecord.recheck`, the core's) — so the sheet
+    /// offers "Check again", and asks again by itself once the chain answers.
+    var simRecheck: Bool { simRecord?.recheck == true && simulation != .answered }
+
+    /// dapp-15: a new check of this request is out; the last verdict stays on
+    /// the sheet, marked stale ("Checking again…"), until it lands.
+    private(set) var simRechecking = false
+
+    /// What the simulation was asked for, kept so it can be asked again.
+    private var simAsk: (id: String, chainId: Int, calls: [UserOpCall])?
+    /// The watch that asks whether a node that could not be reached is back.
+    private var nodeWatch: Task<Void, Never>?
+    /// How often that watch asks (the web's `NODE_BACK_POLL_MS`).
+    static let nodeBackPollSeconds: Double = 5
+    /// Whether this controller's clocks run (`timers: .wallClock`): under a
+    /// test's stopped clock the watch never starts.
+    private let clocksRun: Bool
+
     /// Simulations asked and not yet answered and judged (`simulate`): the
     /// one thing in flight here that no machine's effect stands for.
     private var simulationsOut = 0
@@ -318,6 +347,7 @@ final class SigningController {
         self.relay = relay
         self.pool = pool
         self.ports = ports
+        if case .wallClock = timers { clocksRun = true } else { clocksRun = false }
         self.preferredTier = preferredTier
         self.numberPreset = numberPreset
         self.fees = FeeStore(
@@ -524,9 +554,20 @@ final class SigningController {
     /// is sent), and told it has settled in the very step the verdict's place
     /// stops saying "Checking…": a notice at once; a checked answer when its
     /// judgment is in, not when the node replied.
-    private func simulate(id: String, chainId: Int, calls: [UserOpCall], feeCalls: [[String: Any]]) {
-        simulation = .pending
-        simVerdict = nil
+    private func simulate(
+        id: String, chainId: Int, calls: [UserOpCall], feeCalls: [[String: Any]], again: Bool = false
+    ) {
+        stopNodeWatch()
+        simAsk = (id, chainId, calls)
+        if again {
+            // The last verdict stays, marked stale, until the new one lands.
+            simRechecking = true
+        } else {
+            simulation = .pending
+            simVerdict = nil
+            simRecord = nil
+            simRechecking = false
+        }
         let legs = calls.map {
             SimDeltas.Call(to: $0.to, value: $0.value, data: $0.data)
         }
@@ -534,7 +575,10 @@ final class SigningController {
             // Nothing could be asked, so nothing is: the place says the
             // core's could-not-check line from its first frame, and the core
             // is told of no simulation — the confirm waits for none.
-            simulation = Self.simulation(of: simOutcome(user: wallet.address, replyJson: #"{"unreachable":true}"#))
+            let record = simOutcome(user: wallet.address, replyJson: #"{"unreachable":true}"#)
+            simulation = Self.simulation(of: record)
+            simRecord = record
+            simRechecking = false
             return
         }
         dispatchSign(["type": "sim_started", "id": id])
@@ -550,14 +594,23 @@ final class SigningController {
                     chainId: chainId, method: "eth_simulateV1", params: payload, kind: "rpc"
                 )
             }
+            // A request that left the sheet while the node answered: its
+            // verdict is nobody's now (a new request's check owns the place).
+            guard request?.id == id else { return }
             let outcome = simOutcome(user: wallet.address, replyJson: Self.simReply(answer))
-            simulation = Self.simulation(of: outcome)
             if outcome.kind != "deltas" {
+                simulation = Self.simulation(of: outcome)
+                simRecord = outcome
+                simRechecking = false
                 VelaLog.failure(.sign, kind: "sim_\(outcome.kind)", "chain=\(chainId)")
                 // The notice is the verdict, and it is on the sheet now.
                 simSettled(id)
+                // About the network (dapp-15): asked again once it answers.
+                if outcome.recheck { watchForNode(id: id, chainId: chainId) }
                 return
             }
+            simulation = Self.simulation(of: outcome)
+            simRecord = outcome
             // Checked: the person's own moves, to the machine that judges
             // them — the one entrance that may never admit a token.
             let parsed = (try? JSONSerialization.jsonObject(with: Data(outcome.deltasJson.utf8))) as? [[String: Any]]
@@ -582,14 +635,108 @@ final class SigningController {
                 simulation = Self.simulation(
                     of: simOutcome(user: wallet.address, replyJson: #"{"unreachable":true}"#)
                 )
+                simRechecking = false
                 simSettled(id)
                 return
             }
             // The verdict and the word that it is on the sheet, in one step:
             // no frame draws one without the other.
             simVerdict = judged
+            simRechecking = false
             simSettled(id)
         }
+    }
+
+    /// dapp-15: "Check again" — the request on the sheet's simulation, asked
+    /// again. Only where the core says the line is about the network
+    /// (`recheck`) and no check is out; the core holds the confirm for the
+    /// new check's own short wait (`sim_started`), so nobody signs over a
+    /// verdict about to change.
+    func simulateAgain() {
+        guard let ask = simAsk, request?.id == ask.id, sign.request?.id == ask.id,
+              simRecheck, !simRechecking, !committed
+        else { return }
+        simulate(id: ask.id, chainId: ask.chainId, calls: ask.calls, feeCalls: feeCalls, again: true)
+    }
+
+    /// Ask the chain a plain read every few seconds while the could-not-check
+    /// line stands; once it answers, check again by itself (the web's
+    /// `nodeWatch`). Ends with the request, a new check, or the controller.
+    private func watchForNode(id: String, chainId: Int) {
+        stopNodeWatch()
+        guard clocksRun else { return }
+        nodeWatch = Task { [weak self, pool] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(Self.nodeBackPollSeconds))
+                guard !Task.isCancelled, let self, !self.closed, self.request?.id == id, self.simRecheck else { return }
+                let answer = await pool.call(chainId: chainId, method: "eth_blockNumber", params: [], kind: "rpc")
+                guard !Task.isCancelled, self.request?.id == id else { return }
+                if case .ok(let body) = answer, body is String {
+                    self.simulateAgain()
+                    return
+                }
+            }
+        }
+    }
+
+    private func stopNodeWatch() {
+        nodeWatch?.cancel()
+        nodeWatch = nil
+    }
+
+    /// The request on the sheet as the AI agent reads it (spec 103): the
+    /// request itself (`SignRequestView`, as the desktop and the web hand it
+    /// over) with what the sheet reads beside it as its `sheet` member
+    /// (`agent_review::SheetFacts`) — the reading, the guard, the fee in
+    /// force (the figure an opinion is bound to), and this request's own
+    /// simulation once it ended. `judged` is the trust machine's judged view
+    /// of the deltas (`TrustSimView`), read by the caller. `nil` with no
+    /// request on the sheet.
+    func agentSigningJson(judged: Any?) -> String? {
+        guard let signJson, let view = try? CoreJSON.object(signJson),
+              var request = view["request"] as? [String: Any],
+              let id = request["id"] as? String, id == self.request?.id
+        else { return nil }
+        func object(_ json: String?) -> Any {
+            json.flatMap { try? CoreJSON.object($0) } ?? NSNull()
+        }
+        let onChain = SignExecutor.callsOf(method: self.request?.method ?? "", paramsJson: self.request?.paramsJson ?? "") != nil
+        var sheet: [String: Any] = [
+            "clear": object(clearJson),
+            "guard": object(guardJson),
+            "fee": object(fees.viewJson),
+            "simulation": NSNull(),
+            "simulation_pending": false,
+            "descriptor_base": ports.dataBase(),
+        ]
+        if onChain {
+            if let record = simRecord, !simRechecking {
+                let deltas = (try? JSONSerialization.jsonObject(with: Data(record.deltasJson.utf8))) ?? []
+                let verdict: [String: Any] = [
+                    "kind": record.kind,
+                    "deltas": deltas,
+                    "revert_reason": record.revertReason.map { $0 as Any } ?? NSNull(),
+                    "notice_risk": record.noticeRisk.map { $0 as Any } ?? NSNull(),
+                    "notice_key": record.noticeKey.map { $0 as Any } ?? NSNull(),
+                    "no_change_key": record.noChangeKey.map { $0 as Any } ?? NSNull(),
+                    "recheck": record.recheck,
+                ]
+                // A checked answer is the sheet's only once it is judged.
+                let ended = record.kind != "deltas" || simVerdict != nil
+                if ended {
+                    sheet["simulation"] = [
+                        "verdict": verdict,
+                        "judged": record.kind == "deltas" ? (judged ?? NSNull()) : NSNull(),
+                    ]
+                } else {
+                    sheet["simulation_pending"] = true
+                }
+            } else {
+                sheet["simulation_pending"] = true
+            }
+        }
+        request["sheet"] = sheet
+        return CoreJSON.string(request)
     }
 
     /// What stands in the verdict's place for request `id` is no longer

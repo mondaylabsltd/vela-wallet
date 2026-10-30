@@ -129,7 +129,7 @@ fun AlphaIndexRail(
                     Text(
                         text = letter,
                         color = if (touching && index == activeIndex) {
-                            colors.accentBase
+                            colors.fgBase
                         } else {
                             colors.fgSubtle
                         },

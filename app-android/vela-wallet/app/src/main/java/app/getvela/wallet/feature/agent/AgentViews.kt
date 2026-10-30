@@ -281,11 +281,11 @@ private fun AgentApprovalAlert(strings: VelaStrings, text: String, armed: Boolea
         title = { Text(strings.t("settings.agent.approveTitle")) },
         text = { Text(text) },
         // The safe answer is the easy one: Deny where a dialog's answer sits,
-        // in the accent; Allow beside it, quiet. Asked to tap Deny, the owner
+        // in semibold ink; Allow beside it, quiet. Asked to tap Deny, the owner
         // twice hit the red Allow that used to sit there (2026-10-27).
         confirmButton = {
             TextButton(onClick = { answer(false) }, modifier = Modifier.testTag("agent-deny")) {
-                Text(strings.t("settings.agent.deny"), color = VelaTheme.colors.accentBase, fontWeight = FontWeight.SemiBold)
+                Text(strings.t("settings.agent.deny"), color = VelaTheme.colors.fgBase, fontWeight = FontWeight.SemiBold)
             }
         },
         dismissButton = {
@@ -637,7 +637,7 @@ fun AgentSettingsBody(agent: AgentStore, modifier: Modifier = Modifier) {
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
                 textStyle = TextStyle(color = colors.fgBase, fontFamily = VelaMonoFontFamily, fontSize = VelaTextSize.base),
-                cursorBrush = SolidColor(colors.accentBase),
+                cursorBrush = SolidColor(colors.fgBase),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
                 modifier = Modifier
                     .fillMaxWidth()

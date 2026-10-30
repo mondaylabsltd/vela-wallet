@@ -250,6 +250,41 @@ enum I18nKeys {
         static let cancel = "common.cancel"
     }
 
+    /// The widgets' own words (native parity N-I2); the figure, its label
+    /// and its line are the hero's.
+    enum Widgets {
+        static let updated = "home.balanceDetailUpdatedLabel"
+    }
+
+    /// A multisig link the app was opened with (native parity N-I3). The
+    /// web's own words for the same links — the on-demand `home.multisig`
+    /// catalog — and the explore page's "Open in system browser".
+    enum AppLinks {
+        static let proposalTitle = "home.multisig.proposal.title"
+        static let inviteTitle = "home.multisig.add.title"
+        static let connectTitle = "home.multisig.external.outsideLinkTitle"
+        static let connectBody = "home.multisig.external.scanBody"
+        static let network = "home.multisig.action.network"
+        static let multisig = "home.multisig.external.multisigLabel"
+        static let safeTxHash = "home.multisig.external.safeTxHash"
+        static let missingNetwork = "home.multisig.proposal.missingNetwork"
+        static let usedOn = "home.multisig.add.usedOn"
+        static let invitedMembers = "home.multisig.add.invitedMembers"
+        static let kindVela = "home.multisig.members.kindVela"
+        static let kindWallet = "home.multisig.members.kindWallet"
+        static let kindContract = "home.multisig.members.kindContract"
+        static let badProposal = "home.multisig.proposal.badLink"
+        static let badInvite = "home.multisig.add.badInvite"
+        static let badInviteChecksum = "home.multisig.add.badChecksum"
+        static let badConnect = "home.multisig.external.linkDamaged"
+        static let openInBrowser = "explore.openInSystemBrowser"
+        static let copyLink = "home.multisig.proposal.copyLink"
+        static let close = "common.done"
+        /// Why the sheet offers the web wallet: "Multisig links open in the
+        /// web wallet for now."
+        static let multisigOnWeb = "componentsUi.linkSheet.multisigOnWeb"
+    }
+
     enum Settings {
         static let sectionPasskeyIndex = "onboarding.settings.sectionPasskeyIndex"
         static let endpointUrlLabel = "onboarding.settings.endpointUrlLabel"

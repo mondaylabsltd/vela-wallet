@@ -507,6 +507,9 @@ pub struct FlowStrings {
     /// been sent; Vela keeps checking, don't send it again".
     pub tx_maybe_sent: SharedString,
     pub tx_error_generic: SharedString,
+    /// A multisig's proposal this app cannot make yet: nothing was signed or
+    /// proposed (`SendTxErrorKey::ProposalNotSupported`), and no retry.
+    pub tx_error_proposal_not_supported: SharedString,
     pub tx_error_bundler_fund: SharedString,
     /// The account's previous transaction on this network still holds its
     /// nonce: the one line under a held confirm (`SendView.previous_pending`),
@@ -1199,6 +1202,7 @@ impl FlowStrings {
             tx_background_hint: s("send.txBackgroundHint"),
             tx_maybe_sent: s("componentsUi.signing.maybeSent"),
             tx_error_generic: s("send.txErrorGeneric"),
+            tx_error_proposal_not_supported: s("send.txErrorProposalNotSupported"),
             tx_error_bundler_fund: s("send.txErrorBundlerFund"),
             previous_pending: s(vela_core::app::sign_confirm::PREVIOUS_PENDING_KEY),
             try_again: s("common.tryAgain"),

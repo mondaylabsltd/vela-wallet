@@ -321,7 +321,8 @@ class SignExecutor(
             SignSubmitOutcome.AskerGone
         } catch (refused: UserOpSpine.Refused) {
             when (val failure = refused.failure) {
-                UserOpSpine.Failure.PasskeyCancelled, is UserOpSpine.Failure.Other, is UserOpSpine.Failure.Signer,
+                UserOpSpine.Failure.PasskeyCancelled, UserOpSpine.Failure.PasskeyTimedOut,
+                is UserOpSpine.Failure.Other, is UserOpSpine.Failure.Signer,
                 is UserOpSpine.Failure.VenueBlocked, UserOpSpine.Failure.PreviousPending,
                 UserOpSpine.Failure.PageDeclined, is UserOpSpine.Failure.PageFailed -> outcomeOf(failure)
                 else -> SignSubmitOutcome.Failed("Signing failed")
@@ -399,6 +400,8 @@ class SignExecutor(
          */
         fun outcomeOf(failure: UserOpSpine.Failure): SignSubmitOutcome = when (failure) {
             UserOpSpine.Failure.PasskeyCancelled -> SignSubmitOutcome.PasskeyCancelled
+            // send-11: out of time — handled as a cancel; the sheet says which.
+            UserOpSpine.Failure.PasskeyTimedOut -> SignSubmitOutcome.PasskeyTimedOut
             is UserOpSpine.Failure.Signer -> SignSubmitOutcome.Failed(failure.message, signer = failure.kind)
             UserOpSpine.Failure.BundlerUnderfunded -> SignSubmitOutcome.Underfunded("The relay's gas account is underfunded", null)
             UserOpSpine.Failure.RelayerUnavailable -> SignSubmitOutcome.Failed("The gas relayer is unavailable right now")
@@ -423,6 +426,10 @@ class SignExecutor(
             // 083: another operation of the account holds the nonce — the page
             // is told the core's fixed detail, as before.
             UserOpSpine.Failure.PreviousPending -> SignSubmitOutcome.Failed(uniffi.vela_core_uniffi.userOpPreviousPendingDetail())
+            // send-15: another transaction of the account spent the nonce
+            // first — a refusal of THIS operation (the web's `isRelayRefusal`),
+            // and the page is told the core's fixed detail, never the relay's.
+            UserOpSpine.Failure.NonceUsed -> SignSubmitOutcome.Failed(uniffi.vela_core_uniffi.userOpNonceUsedDetail(), refused = true)
         }
 
         /**

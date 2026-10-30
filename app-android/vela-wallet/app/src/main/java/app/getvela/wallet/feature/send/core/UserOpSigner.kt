@@ -46,6 +46,9 @@ class PasskeyUserOpSigner(private val passkey: PasskeyExecutor) : UserOpSigner {
         credentialIdHex = credentialIdHex,
         transports = transports,
         method = method,
+        // send-11: the prompt is asked for the core's signing deadline, the
+        // clock `passkey_ceremony_end` reads a cancel against.
+        timeoutMs = uniffi.vela_core_uniffi.passkeySignTimeoutMs().toLong(),
     )
 }
 

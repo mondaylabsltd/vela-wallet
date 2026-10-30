@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.settings.components
 
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -211,7 +212,7 @@ fun SigningPageItem(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = model.title,
-                    color = if (selected == true) colors.accentBase else colors.fgBase,
+                    color = colors.fgBase,
                     fontFamily = VelaFontFamily,
                     fontWeight = VelaFontWeight.semibold,
                     fontSize = VelaTextSize.lg,
@@ -267,13 +268,13 @@ internal fun RowGlyph(icon: ImageVector, enabled: Boolean = true) {
     )
 }
 
-/** The venue in force: the accent check at the row's end. */
+/** The venue in force: the ink check at the row's end (a selected state moves no value). */
 @Composable
 internal fun ChosenMark() {
     Icon(
         imageVector = VelaIcons.Check,
         contentDescription = null,
-        tint = VelaTheme.colors.accentBase,
+        tint = VelaTheme.colors.fgBase,
         modifier = Modifier.padding(top = VelaSpacing.xs).size(VelaIconSize.md),
     )
 }
@@ -319,14 +320,15 @@ fun SigningPageTextAction(label: String, onClick: () -> Unit) {
  * A self-hosted page's own build asks to be trusted on this device: its line
  * is the question ("Version 3f9a1c22 is new to Vela. Trust it on this
  * device?"), this the answer (`settings.signing.pageTrust`) — under the row's
- * words, past the glyph and its gap. One quiet accent word, never a button
+ * words, past the glyph and its gap. One quiet ink word, underlined, never a button
  * that outshouts the line it answers.
  */
 @Composable
 fun TrustAnswer(label: String, modifier: Modifier = Modifier, indent: Boolean = true, onClick: () -> Unit) {
     Text(
         text = label,
-        color = VelaTheme.colors.accentBase,
+        color = VelaTheme.colors.fgBase,
+        textDecoration = TextDecoration.Underline,
         fontFamily = VelaFontFamily,
         fontWeight = VelaFontWeight.semibold,
         fontSize = VelaTextSize.base,

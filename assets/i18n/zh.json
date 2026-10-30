@@ -538,6 +538,7 @@
   "submitSlow": "正在等待 {{network}} 回应，已过 {{seconds}} 秒。尚未签署任何内容。",
   "txErrorChainBusy": "{{network}} 的节点繁忙，未能及时回应，因此没有签署或发送任何内容。请稍后再试。",
   "txErrorChainUnreachable": "无法连接 {{network}}，因此没有签署或发送任何内容。请稍后再试。",
+  "txErrorProposalNotSupported": "此应用暂时还不能发起多签提案，因此没有签署或发起任何内容。",
   "maxMoved": "最大金额现在是 {{to}} {{symbol}}（原为 {{from}}）：网络手续费重新报价，为手续费预留的金额随之变化。",
   "txReviewAgain": "重新确认",
   "txSendAgain": "重新发送",
@@ -612,7 +613,11 @@
    "amount": "金额",
    "anyAmount": "任意金额",
    "invalidTitle": "无效的收款链接",
-   "invalidBody": "此链接缺少有效的收款地址或网络，请向发送方索取新链接。"
+   "invalidBody": "此链接缺少有效的收款地址或网络，请向发送方索取新链接。",
+   "invalidToken": "此链接中的代币不是合约地址，请向发送方索取新链接。",
+   "invalidAmount": "无法准确读取此链接中的金额，请向发送方索取新链接。",
+   "noWalletBody": "这台设备上还没有 Vela 钱包。创建钱包或登录后，这笔付款会等你核对。",
+   "home": "前往 Vela Wallet"
   },
   "addressLabel": "你的收款地址",
   "searchNetworkPlaceholder": "搜索网络",
@@ -1864,7 +1869,28 @@
    "fullScreen": "切换全屏幕",
    "window": "窗口",
    "minimize": "最小化",
-   "closeWindow": "关闭窗口"
+   "closeWindow": "关闭窗口",
+   "find": "查找",
+   "commandPalette": "命令面板"
+  },
+  "appUpdate": {
+   "title": "有可用更新",
+   "install": "安装",
+   "later": "稍后"
+  },
+  "dropOverlay": {
+   "title": "拖放地址、付款链接或二维码图片"
+  },
+  "shortcuts": {
+   "send": "用{{app}}转账",
+   "receive": "用{{app}}收款",
+   "scan": "用{{app}}扫码"
+  },
+  "linkSheet": {
+   "multisigOnWeb": "多签链接目前会在网页版钱包中打开。"
+  },
+  "widget": {
+   "balanceDescription": "一眼看到余额，以 Vela 最近一次更新为准。"
   },
   "browserStatus": {
    "title": "标签页状态",
@@ -2044,6 +2070,11 @@
    "attestation": "认证声明",
    "userVerified": "使用时需验证",
    "signsHere": "当前登录"
+  },
+  "appearance": {
+   "menuBar": "在菜单栏中显示",
+   "trayIcon": "在系统托盘中显示",
+   "statusItemHint": "总额和快捷转账、收款，取自最近一次加载的数据，不会额外联网。"
   }
  },
  "contacts": {

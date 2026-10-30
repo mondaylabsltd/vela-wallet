@@ -20,7 +20,10 @@ final class AgentPage {
     /// The page in front: `wallet`, `contacts`, `explore`, `settings`, or
     /// `welcome` while nobody is in.
     var name: () -> String = { "welcome" }
-    /// The dApp signing request on its sheet (`SignRequestView` JSON), if any.
+    /// The dApp signing request on its sheet (`SignRequestView` JSON), if any
+    /// — with what the sheet reads beside it as its `sheet` member
+    /// (`agent_review::SheetFacts`: the reading, the guard, the fee an
+    /// opinion is bound to, the simulation).
     var signing: () -> String? = { nil }
     /// A send, opened as every entry into Send opens one (a new journey), on
     /// `params` (`SendOpenParams`).

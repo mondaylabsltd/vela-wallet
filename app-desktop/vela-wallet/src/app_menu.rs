@@ -204,6 +204,11 @@ pub fn wallet_key_bindings(mac: bool) -> Vec<KeyBinding> {
 
 /// Run `command` on the wallet's page, in its window — when there is one: a
 /// shortcut pressed on onboarding has nothing to act on.
+/// A command from outside the window's own keys (the menu-bar extra).
+pub(crate) fn run_on_page(command: Command, cx: &mut App) {
+    on_page(command, cx);
+}
+
 fn on_page(command: Command, cx: &mut App) {
     let Some(page) = crate::agent::page(cx) else {
         return;
@@ -214,6 +219,25 @@ fn on_page(command: Command, cx: &mut App) {
     window
         .update(cx, |_, window, cx| {
             let _ = page.update(cx, |page, cx| page.run_command(command, window, cx));
+        })
+        .ok();
+}
+
+/// The clipboard's text, to the wallet page — only when no field took the
+/// paste (that is when this action reaches the app).
+fn paste_onto_page(cx: &mut App) {
+    let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) else {
+        return;
+    };
+    let Some(page) = crate::agent::page(cx) else {
+        return;
+    };
+    let Some(window) = cx.active_window().or_else(|| cx.windows().first().copied()) else {
+        return;
+    };
+    window
+        .update(cx, |_, window, cx| {
+            let _ = page.update(cx, |page, cx| page.take_inbound(&text, window, cx));
         })
         .ok();
 }
@@ -265,7 +289,7 @@ pub fn menus(loc: &Loc) -> Vec<Menu> {
             MenuItem::action(loc.t("componentsUi.dock.receive"), Receive),
             MenuItem::action(loc.t("explore.refresh"), Refresh),
             MenuItem::separator(),
-            MenuItem::action(loc.t("componentsUi.commandBar.placeholder"), CommandPalette),
+            MenuItem::action(t("commandPalette"), CommandPalette),
         ]),
         Menu::new(t("edit")).items(vec![
             MenuItem::os_action(t("undo"), Undo, OsAction::Undo),
@@ -275,6 +299,10 @@ pub fn menus(loc: &Loc) -> Vec<Menu> {
             MenuItem::os_action(t("copy"), Copy, OsAction::Copy),
             MenuItem::os_action(t("paste"), Paste, OsAction::Paste),
             MenuItem::os_action(t("selectAll"), SelectAll, OsAction::SelectAll),
+            // ⌘F, where every Mac app keeps Find: the section's search (the
+            // palette where it has none).
+            MenuItem::separator(),
+            MenuItem::action(t("find"), Find),
         ]),
         // The sections, ⌘1–⌘4, as the sidebar orders them.
         Menu::new(t("view")).items(vec![
@@ -388,7 +416,9 @@ pub fn register(cx: &mut App) {
     // report an action without a handler; nothing to do.
     cx.on_action(|_: &Cut, _| {});
     cx.on_action(|_: &Copy, _| {});
-    cx.on_action(|_: &Paste, _| {});
+    // N-D3: a Paste no field took is a link or an address pasted onto the
+    // window — the wallet reads it (`WalletPage::take_inbound`).
+    cx.on_action(|_: &Paste, cx| paste_onto_page(cx));
     cx.on_action(|_: &SelectAll, _| {});
 }
 
@@ -561,6 +591,23 @@ mod tests {
         assert_eq!(about, "About Vela Wallet");
         assert_eq!(en[1].name.to_string(), "Wallet");
         assert_eq!(en[2].name.to_string(), "Edit");
+        // Find (Edit) and the command palette (Wallet), in their own words.
+        let named = |menu: &Menu, action: &dyn gpui::Action| {
+            menu.items.iter().find_map(|item| match item {
+                MenuItem::Action {
+                    name, action: own, ..
+                } if own.partial_eq(action) => Some(name.to_string()),
+                _ => None,
+            })
+        };
+        assert_eq!(named(&en[2], &Find).as_deref(), Some("Find"));
+        assert_eq!(
+            named(&en[1], &CommandPalette).as_deref(),
+            Some("Command Palette")
+        );
+        let zh = menus(&Loc::for_tag("zh"));
+        assert_eq!(named(&zh[2], &Find).as_deref(), Some("查找"));
+        assert_eq!(named(&zh[1], &CommandPalette).as_deref(), Some("命令面板"));
     }
 
     /// N-D2: the wallet's shortcuts — ⌘1–4, ⌘N, ⇧⌘R, ⌘R, ⌘,, ⌘K, ⌘F on

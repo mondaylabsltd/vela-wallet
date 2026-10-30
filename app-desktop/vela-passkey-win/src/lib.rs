@@ -187,11 +187,20 @@ impl core::fmt::Display for WinError {
     }
 }
 
-/// How long Windows waits for the person before giving up.
-///
-/// Matches the CTAP2 path's own exchange budget, so the two platforms feel the
-/// same and neither is the one that "gives up too fast".
-pub const TIMEOUT_MS: u32 = 120_000;
+/// How long Windows waits for the person before giving up: the core's
+/// prompt deadline (`passkey_end::SIGN_TIMEOUT_MS`), which is also the clock
+/// the core reads a cancel against — a cancel at it is "timed out", before it
+/// the person's. The CTAP2 path's exchange budget is the same figure, so the
+/// two platforms feel the same and neither is the one that "gives up too
+/// fast".
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "a whole, positive number of milliseconds, far below u32::MAX"
+)]
+pub const TIMEOUT_MS: u32 = vela_core::app::passkey_end::SIGN_TIMEOUT_MS as u32;
+
+const _: () = assert!(TIMEOUT_MS == 120_000, "the core's deadline, whole");
 
 #[cfg(windows)]
 mod api;

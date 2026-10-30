@@ -168,8 +168,15 @@ function ports(extra: Partial<SendShellPorts> = {}): SendShellPorts {
 
 const fetchTokens = { id: 1, operation: { type: 'fetch_tokens' as const, address: ACCOUNT } };
 
+// Each submit drives the core's machines through the wasm; on a loaded
+// machine one can run past vitest's 5 s default. Give them room, so a slow
+// run is slow — not a timed-out test whose submit lives on into the next.
+vi.setConfig({ testTimeout: 30_000 });
+
 beforeEach(() => {
 	for (const seam of Object.values(seams)) seam.mockReset();
+	// A test that stopped early must not hand its queued answers to the next.
+	vi.mocked(sendBatchCalls).mockReset();
 	seams.fetchTokens.mockResolvedValue([]);
 	for (const read of [seams.deployed, seams.gasSignals, seams.bundlerQuote, seams.inBand]) {
 		read.mockResolvedValue(null);
@@ -610,18 +617,24 @@ describe('the wallet’s own Send writes ahead (spec 082 RJ1)', () => {
 		const executor = createSendExecutor(ports({ credentialId: () => 'cred-1' }), {
 			dispatch: () => {}
 		});
-		for (const words of [
-			'Transaction nonce mismatch. Please try again.',
-			'AA25 invalid account nonce'
-		]) {
-			vi.mocked(sendBatchCalls).mockRejectedValueOnce(
-				new UserOpNotSentError({ other: words }, words)
-			);
-			await expect(executor.execute(submit)).resolves.toEqual({
-				type: 'submit_failed',
-				failure: { type: 'nonce_used' }
-			});
-		}
+		// The core reads the relay's AA25 (`RelayRejection::NonceUsed`); the
+		// executor only says what it read.
+		vi.mocked(sendBatchCalls).mockRejectedValueOnce(
+			new UserOpNotSentError('nonce_used', 'Transaction nonce mismatch. Please try again.')
+		);
+		await expect(executor.execute(submit)).resolves.toEqual({
+			type: 'submit_failed',
+			failure: { type: 'nonce_used' }
+		});
+		// The relay's words are never read here again: a refusal the core left
+		// as `other` stays the relay's.
+		vi.mocked(sendBatchCalls).mockRejectedValueOnce(
+			new UserOpNotSentError({ other: 'AA25 invalid account nonce' }, 'AA25 invalid account nonce')
+		);
+		await expect(executor.execute(submit)).resolves.toMatchObject({
+			type: 'submit_failed',
+			failure: { type: 'other' }
+		});
 	});
 
 	/** send-11: a prompt that ran out of time is told apart from one closed. */

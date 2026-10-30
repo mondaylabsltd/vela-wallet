@@ -75,7 +75,7 @@ import app.getvela.wallet.feature.flows.FactLead
 
 internal fun SigningTone.color(colors: VelaColors): Color = when (this) {
     SigningTone.Neutral -> colors.fgBase
-    SigningTone.Accent -> colors.accentBase
+    SigningTone.Accent -> colors.fgBase
     SigningTone.Success -> colors.successBase
     SigningTone.Caution -> colors.warningBase
     SigningTone.Danger -> colors.errorBase
@@ -873,7 +873,7 @@ fun AllowanceEditor(
                             .height(VelaSizing.controlSm)
                             .border(
                                 VelaBorder.hairline,
-                                if (selected) colors.accentBase else colors.borderStrong,
+                                if (selected) colors.fgBase else colors.borderStrong,
                                 CircleShape,
                             )
                             .alpha(if (disabled) VelaOpacity.disabled else 1f)
@@ -883,7 +883,7 @@ fun AllowanceEditor(
                     ) {
                         Text(
                             text = chip.label,
-                            color = if (selected) colors.accentBase else colors.fgBase,
+                            color = colors.fgBase,
                             fontFamily = VelaFontFamily,
                             fontSize = VelaTextSize.base,
                         )
@@ -1209,7 +1209,8 @@ fun HandoffCard(
                 )
             }
         }
-        app.getvela.wallet.core.designsystem.components.VelaPrimaryButton(
+        // Opening the page is where this signature is given (web HandoffCard `value`).
+        app.getvela.wallet.core.designsystem.components.VelaValueButton(
             text = model.open,
             onClick = onOpen,
             enabled = enabled,

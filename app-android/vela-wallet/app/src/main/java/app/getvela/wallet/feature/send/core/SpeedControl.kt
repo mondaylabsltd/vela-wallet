@@ -409,6 +409,35 @@ class SpeedControl(
         scope.launch { askInForce(next) }
     }
 
+    /**
+     * A fee coin picked in the send flow (`null` = the native coin) — the web's
+     * `FeeQuote.selectAsset`: the session in force is told `select_fee_asset`,
+     * and the core switches its quote to that coin itself (a local re-price
+     * from the readings it holds, or a re-measure / full re-quote where it
+     * must). On the confirm step this is the ONLY thing that moves the fee:
+     * the send machine's `choose_fee_token` re-estimates on the form alone.
+     *
+     * The question in force is rewritten to the picked coin first (the web's
+     * `#lastRequest`), under a new generation, so every speed preview is
+     * re-asked in that coin — never left pricing the coin walked away from,
+     * which a speed tapped next would otherwise promote back into force.
+     * Nothing asked yet: there is no quote to switch, and the next question
+     * carries the coin anyway (the send machine's `gas_fee_token`).
+     */
+    fun selectFeeAsset(feeToken: String?) {
+        val told = synchronized(sessionLock) {
+            val session = inForce.value
+            val ask = session.ask ?: return@synchronized false
+            generation += 1
+            session.ask = ask.copy(feeToken = feeToken, autoFeeToken = false)
+            session.generation = generation
+            session.host.dispatch(FeeEvent.SelectFeeAsset(feeToken), FeeEvent.serializer())
+            true
+        }
+        VelaLog.event("$area.fee", "fee coin selected", "told" to told)
+        if (told) speedPass()
+    }
+
     /** A question dispatched: to which session, the estimate it held before, and the question's event number there (`CoreHost.dispatchNumbered`). */
     private class Asked(
         val session: FeeSession,

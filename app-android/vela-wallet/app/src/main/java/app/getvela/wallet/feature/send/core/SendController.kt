@@ -364,6 +364,20 @@ class SendController(
         answered = { chainId -> chainAnswered(chainId) },
     )
 
+    /**
+     * What this send journey was last told of the fee card's coin; [open] forgets it.
+     *
+     * Declared BEFORE `init`: the collectors `init` launches run on the
+     * scope's own threads and may reach [tellFeeToken] before a property
+     * declared below `init` is assigned — a `synchronized` on null, which
+     * crashed a cold start on a loaded device (native parity Phase 3,
+     * emulator-found: NullPointerException at tellFeeToken).
+     */
+    private val feeTokenWord = FeeTokenWord()
+
+    /** The event number of this journey's `Open` — under [feeTokenWord]'s lock. */
+    private var openEvent = 0L
+
     init {
         sendHost.start()
         speedControl.start()
@@ -457,12 +471,6 @@ class SendController(
     private fun tellFeeFailed() = synchronized(feeFailedWord) {
         feeFailedWord.news(FeeFailedWord.failed(fee.value, send.value))?.let(::dispatch)
     }
-
-    /** What this send journey was last told of the fee card's coin; [open] forgets it. */
-    private val feeTokenWord = FeeTokenWord()
-
-    /** The event number of this journey's `Open` — under [feeTokenWord]'s lock. */
-    private var openEvent = 0L
 
     /**
      * `FeeTokenChanged` under the core's bridge rule ([FeeTokenWord]): the
@@ -801,6 +809,17 @@ class SendController(
     fun editAmount() = dispatch(SendEvent.EditAmount)
 
     fun chooseFeeToken(token: String?) = dispatch(SendEvent.ChooseFeeToken(token))
+
+    /**
+     * A coin picked in the fee-coin sheet, as the web's `pickFeeToken` does it:
+     * the fee session is told `select_fee_asset` (it re-prices in that coin —
+     * the only thing that does on the confirm step), then the send machine
+     * `choose_fee_token` (the coin rides its later estimates and its submit).
+     */
+    fun pickFeeCoin(token: String?) {
+        speedControl.selectFeeAsset(token)
+        chooseFeeToken(token)
+    }
 
     /** The confirm, naming the review it was drawn on (`review_digest`). */
     fun slideConfirm(review: String? = null) = dispatch(SendEvent.SlideConfirm(review))

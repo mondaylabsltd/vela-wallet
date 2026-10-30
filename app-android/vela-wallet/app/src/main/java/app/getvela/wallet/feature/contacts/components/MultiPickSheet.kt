@@ -189,7 +189,7 @@ private fun PickRow(row: MultiPickRowModel, onToggle: () -> Unit) {
         Icon(
             imageVector = if (row.picked) VelaIcons.Check else VelaIcons.Plus,
             contentDescription = null,
-            tint = if (row.picked) colors.accentBase else colors.fgSubtle,
+            tint = if (row.picked) colors.fgBase else colors.fgSubtle,
             modifier = Modifier.size(VelaIconSize.base),
         )
     }

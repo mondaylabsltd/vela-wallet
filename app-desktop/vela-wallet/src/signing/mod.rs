@@ -343,7 +343,7 @@ pub struct SigningStrings {
 
 /// The certain decode's corpus keys under `componentsUi.signing.certain.` —
 /// the web's `CERTAIN_KEYS` that this shell draws (P2.3).
-pub const CERTAIN_KEYS: [&str; 19] = [
+pub const CERTAIN_KEYS: [&str; 20] = [
     "readByVela",
     "readByVelaSignature",
     "describedBuiltIn",
@@ -363,6 +363,7 @@ pub const CERTAIN_KEYS: [&str; 19] = [
     "contradiction",
     "elsewhere",
     "dustMinimum",
+    "tokenByContract",
 ];
 
 impl SigningStrings {

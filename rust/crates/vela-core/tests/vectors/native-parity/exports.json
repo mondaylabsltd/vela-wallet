@@ -2897,6 +2897,418 @@
    "expect": {
     "value": 2
    }
+  },
+  {
+   "name": "classify_relay_rejection/relayer_unavailable",
+   "fn": "classify_relay_rejection",
+   "input": {
+    "message": "The gas relayer is unavailable right now."
+   },
+   "expect": {
+    "value": "relayer_unavailable"
+   }
+  },
+  {
+   "name": "classify_relay_rejection/underfunded",
+   "fn": "classify_relay_rejection",
+   "input": {
+    "message": "dedicated bundler gas account is short. Deposit to: 0x1111111111111111111111111111111111111111 required: 1"
+   },
+   "expect": {
+    "value": "bundler_underfunded"
+   }
+  },
+  {
+   "name": "classify_relay_rejection/aa25",
+   "fn": "classify_relay_rejection",
+   "input": {
+    "message": "AA25 invalid account nonce"
+   },
+   "expect": {
+    "value": "nonce_used"
+   }
+  },
+  {
+   "name": "classify_relay_rejection/nonce_mismatch",
+   "fn": "classify_relay_rejection",
+   "input": {
+    "message": "Transaction nonce mismatch. Please try again."
+   },
+   "expect": {
+    "value": "nonce_used"
+   }
+  },
+  {
+   "name": "classify_relay_rejection/nonce_too_low",
+   "fn": "classify_relay_rejection",
+   "input": {
+    "message": "nonce too low"
+   },
+   "expect": {
+    "value": "nonce_used"
+   }
+  },
+  {
+   "name": "classify_relay_rejection/aa250_is_not_aa25",
+   "fn": "classify_relay_rejection",
+   "input": {
+    "message": "AA250 something"
+   },
+   "expect": {
+    "value": {
+     "other": "AA250 something"
+    }
+   }
+  },
+  {
+   "name": "classify_relay_rejection/other",
+   "fn": "classify_relay_rejection",
+   "input": {
+    "message": "Transaction reverted during simulation. Check recipient address and amount."
+   },
+   "expect": {
+    "value": {
+     "other": "Transaction reverted during simulation. Check recipient address and amount."
+    }
+   }
+  },
+  {
+   "name": "is_localhost_http/localhost_port_path",
+   "fn": "is_localhost_http",
+   "input": {
+    "url": "http://localhost:3000/api"
+   },
+   "expect": {
+    "value": true
+   }
+  },
+  {
+   "name": "is_localhost_http/loopback_v4",
+   "fn": "is_localhost_http",
+   "input": {
+    "url": "http://127.0.0.1:8080"
+   },
+   "expect": {
+    "value": true
+   }
+  },
+  {
+   "name": "is_localhost_http/loopback_v6",
+   "fn": "is_localhost_http",
+   "input": {
+    "url": "http://[::1]:8545/"
+   },
+   "expect": {
+    "value": true
+   }
+  },
+  {
+   "name": "is_localhost_http/https_localhost",
+   "fn": "is_localhost_http",
+   "input": {
+    "url": "https://localhost"
+   },
+   "expect": {
+    "value": false
+   }
+  },
+  {
+   "name": "is_localhost_http/suffix_attack",
+   "fn": "is_localhost_http",
+   "input": {
+    "url": "http://127.0.0.1.evil.com"
+   },
+   "expect": {
+    "value": false
+   }
+  },
+  {
+   "name": "is_localhost_http/bad_port",
+   "fn": "is_localhost_http",
+   "input": {
+    "url": "http://localhost:abc"
+   },
+   "expect": {
+    "value": false
+   }
+  },
+  {
+   "name": "passkey_ceremony_end/cancelled_early",
+   "fn": "passkey_ceremony_end",
+   "input": {
+    "kind": "cancelled",
+    "elapsed_ms": 3000
+   },
+   "expect": {
+    "value": "cancelled"
+   }
+  },
+  {
+   "name": "passkey_ceremony_end/cancelled_at_deadline",
+   "fn": "passkey_ceremony_end",
+   "input": {
+    "kind": "cancelled",
+    "elapsed_ms": 118000
+   },
+   "expect": {
+    "value": "timed_out"
+   }
+  },
+  {
+   "name": "passkey_ceremony_end/cancelled_just_before",
+   "fn": "passkey_ceremony_end",
+   "input": {
+    "kind": "cancelled",
+    "elapsed_ms": 117999
+   },
+   "expect": {
+    "value": "cancelled"
+   }
+  },
+  {
+   "name": "passkey_ceremony_end/failure_late",
+   "fn": "passkey_ceremony_end",
+   "input": {
+    "kind": "other",
+    "elapsed_ms": 130000
+   },
+   "expect": {
+    "value": "other"
+   }
+  },
+  {
+   "name": "passkey_ceremony_end/not_supported",
+   "fn": "passkey_ceremony_end",
+   "input": {
+    "kind": "not_supported",
+    "elapsed_ms": 0
+   },
+   "expect": {
+    "value": "not_supported"
+   }
+  },
+  {
+   "name": "passkey_ceremony_end/unknown_kind",
+   "fn": "passkey_ceremony_end",
+   "input": {
+    "kind": "shrug",
+    "elapsed_ms": 130000
+   },
+   "expect": {
+    "value": "other"
+   }
+  },
+  {
+   "name": "passkey_sign_timeout_ms",
+   "fn": "passkey_sign_timeout_ms",
+   "input": {},
+   "expect": {
+    "value": 120000
+   }
+  },
+  {
+   "name": "rpc_node_standing/own_node_unreached",
+   "fn": "rpc_node_standing",
+   "input": {
+    "view_json": "{\"failed_chains\":[1],\"rate_limited_chains\":[],\"banned\":[],\"unreached_chains\":[],\"fallback_chains\":[100],\"own_only_chains\":[1,10],\"own_node_unreached_chains\":[1],\"pending_urls\":{}}",
+    "chain_id": 1
+   },
+   "expect": {
+    "value": "own_node_unreached"
+   }
+  },
+  {
+   "name": "rpc_node_standing/own_only",
+   "fn": "rpc_node_standing",
+   "input": {
+    "view_json": "{\"failed_chains\":[1],\"rate_limited_chains\":[],\"banned\":[],\"unreached_chains\":[],\"fallback_chains\":[100],\"own_only_chains\":[1,10],\"own_node_unreached_chains\":[1],\"pending_urls\":{}}",
+    "chain_id": 10
+   },
+   "expect": {
+    "value": "own_only"
+   }
+  },
+  {
+   "name": "rpc_node_standing/falling_back",
+   "fn": "rpc_node_standing",
+   "input": {
+    "view_json": "{\"failed_chains\":[1],\"rate_limited_chains\":[],\"banned\":[],\"unreached_chains\":[],\"fallback_chains\":[100],\"own_only_chains\":[1,10],\"own_node_unreached_chains\":[1],\"pending_urls\":{}}",
+    "chain_id": 100
+   },
+   "expect": {
+    "value": "falling_back"
+   }
+  },
+  {
+   "name": "rpc_node_standing/pooled",
+   "fn": "rpc_node_standing",
+   "input": {
+    "view_json": "{\"failed_chains\":[1],\"rate_limited_chains\":[],\"banned\":[],\"unreached_chains\":[],\"fallback_chains\":[100],\"own_only_chains\":[1,10],\"own_node_unreached_chains\":[1],\"pending_urls\":{}}",
+    "chain_id": 8453
+   },
+   "expect": {
+    "value": "pooled"
+   }
+  },
+  {
+   "name": "rpc_node_standing/unreadable",
+   "fn": "rpc_node_standing",
+   "input": {
+    "view_json": "{",
+    "chain_id": 1
+   },
+   "expect": {
+    "value": ""
+   }
+  },
+  {
+   "name": "sim_outcome/unreachable",
+   "fn": "sim_outcome",
+   "input": {
+    "user": "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+    "reply_json": "{\"unreachable\":true}"
+   },
+   "expect": {
+    "value": {
+     "kind": "unreachable",
+     "deltas": [],
+     "revert_reason": null,
+     "notice_risk": "caution",
+     "notice_key": "componentsUi.signing.simUnavailableWarning",
+     "no_change_key": null,
+     "recheck": true
+    }
+   }
+  },
+  {
+   "name": "sim_outcome/not_offered",
+   "fn": "sim_outcome",
+   "input": {
+    "user": "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+    "reply_json": "{\"error\":{\"code\":-32601,\"message\":\"the method eth_simulateV1 does not exist\"}}"
+   },
+   "expect": {
+    "value": {
+     "kind": "not_offered",
+     "deltas": [],
+     "revert_reason": null,
+     "notice_risk": "caution",
+     "notice_key": "componentsUi.signing.simUnavailableWarning",
+     "no_change_key": null,
+     "recheck": false
+    }
+   }
+  },
+  {
+   "name": "sim_outcome/nothing_moves",
+   "fn": "sim_outcome",
+   "input": {
+    "user": "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+    "reply_json": "{\"result\":[{\"calls\":[{\"status\":\"0x1\",\"logs\":[]}]}]}"
+   },
+   "expect": {
+    "value": {
+     "kind": "deltas",
+     "deltas": [],
+     "revert_reason": null,
+     "notice_risk": null,
+     "notice_key": null,
+     "no_change_key": "componentsUi.signing.simResultNoChange",
+     "recheck": false
+    }
+   }
+  },
+  {
+   "name": "builtin_network_display_name/1",
+   "fn": "builtin_network_display_name",
+   "input": {
+    "chain_id": 1
+   },
+   "expect": {
+    "value": "Ethereum"
+   }
+  },
+  {
+   "name": "builtin_network_display_name/100",
+   "fn": "builtin_network_display_name",
+   "input": {
+    "chain_id": 100
+   },
+   "expect": {
+    "value": "Gnosis"
+   }
+  },
+  {
+   "name": "builtin_network_display_name/8453",
+   "fn": "builtin_network_display_name",
+   "input": {
+    "chain_id": 8453
+   },
+   "expect": {
+    "value": "Base"
+   }
+  },
+  {
+   "name": "builtin_network_display_name/5042002",
+   "fn": "builtin_network_display_name",
+   "input": {
+    "chain_id": 5042002
+   },
+   "expect": {
+    "value": "Arc Testnet"
+   }
+  },
+  {
+   "name": "builtin_network_display_name/999999",
+   "fn": "builtin_network_display_name",
+   "input": {
+    "chain_id": 999999
+   },
+   "expect": {
+    "value": null
+   }
+  },
+  {
+   "name": "builtin_network_ids",
+   "fn": "builtin_network_ids",
+   "input": {},
+   "expect": {
+    "value": [
+     1,
+     56,
+     8453,
+     137,
+     42161,
+     43114,
+     10,
+     143,
+     4663,
+     5042,
+     196,
+     5000,
+     100,
+     4217,
+     480,
+     42220,
+     130,
+     57073,
+     1868,
+     8217,
+     988,
+     4326,
+     98866,
+     1440000,
+     11155111,
+     84532,
+     421614,
+     11155420,
+     80002,
+     97,
+     43113,
+     5042002,
+     42431
+    ]
+   }
   }
  ]
 }

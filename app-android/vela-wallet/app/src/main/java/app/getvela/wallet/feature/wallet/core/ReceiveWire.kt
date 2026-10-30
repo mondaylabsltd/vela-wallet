@@ -270,4 +270,36 @@ data class PaymentRequestView(
     val has_amount: Boolean = false,
     val pay_valid: Boolean? = null,
     val pay: PayRequest? = null,
+    /** Why the `/pay` link was refused — present exactly when [pay_valid] is `false`. */
+    val pay_refusal: PayRefusal? = null,
 )
+
+/**
+ * Why a `/pay` link was refused (`payment_request::PayRefusal`) — the first
+ * rule it broke, in the order the link is read. Worded from the corpus
+ * (`receive.pay.*`), so the person is told what is wrong with the link they
+ * were sent rather than only that it is.
+ */
+@Serializable
+enum class PayRefusal {
+    @SerialName("recipient") Recipient,
+    @SerialName("network") Network,
+    @SerialName("token") Token,
+    @SerialName("amount") Amount,
+}
+
+/** The core's ruling on a `/pay` link: the request, or why it was refused. */
+sealed interface PayVerdict {
+    data class Valid(val pay: PayRequest) : PayVerdict
+
+    /** [refusal] `null`: no verdict came (a core that did not answer) — the general sentence is still true. */
+    data class Refused(val refusal: PayRefusal?) : PayVerdict
+
+    companion object {
+        /** A settled view's ruling on its `/pay` link (the web's `validatePayQuery`). */
+        fun of(view: PaymentRequestView): PayVerdict {
+            val pay = view.pay
+            return if (view.pay_valid == true && pay != null) Valid(pay) else Refused(view.pay_refusal)
+        }
+    }
+}

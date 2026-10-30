@@ -22,6 +22,7 @@
 //
 
 import Foundation
+import VelaCore
 
 @MainActor
 protocol UserOpSigner {
@@ -54,11 +55,14 @@ struct PasskeyUserOpSigner: UserOpSigner {
         transports: String,
         method: KeyMethod
     ) async throws -> Assertion {
+        // The core's deadline (send-11): the prompt is cancelled at it, so
+        // the spine's `passkey_ceremony_end` reads the end as timed out.
         try await passkey.assert(
             challenge: challenge,
             credentialIdHex: credentialIdHex,
             transports: transports,
-            method: method
+            method: method,
+            deadlineMs: passkeySignTimeoutMs()
         )
     }
 }

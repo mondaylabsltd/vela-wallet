@@ -125,6 +125,11 @@
       "attestation": "Doğrulama beyanı",
       "userVerified": "Kullanırken doğrulama gerekir",
       "signsHere": "Oturum açık"
+    },
+    "appearance": {
+      "menuBar": "Menü çubuğunda göster",
+      "trayIcon": "Sistem tepsisinde göster",
+      "statusItemHint": "Toplamınız ve hızlı Gönder ile Al, son yüklenen rakamlardan — ek bir şey çekilmez."
     }
   }
 }

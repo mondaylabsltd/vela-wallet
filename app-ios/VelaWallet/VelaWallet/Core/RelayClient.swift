@@ -654,6 +654,7 @@ final class RelayClient {
         case .relayerUnavailable: return "relayer_unavailable"
         case .bundlerUnderfunded: return "bundler_underfunded"
         case .nonceHeld: return "nonce_held"
+        case .nonceUsed: return "nonce_used"
         case .other: return "other"
         }
     }

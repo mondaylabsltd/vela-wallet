@@ -15,7 +15,6 @@ import app.getvela.wallet.core.designsystem.tokens.VelaColors
 import app.getvela.wallet.core.designsystem.tokens.VelaColorsDark
 import app.getvela.wallet.core.designsystem.tokens.VelaColorsLight
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFeatures
-import app.getvela.wallet.core.designsystem.tokens.VelaOnAccent
 
 val LocalVelaColors = staticCompositionLocalOf { VelaColorsLight }
 
@@ -102,9 +101,13 @@ internal val VelaTypography: Typography = Typography().let { scale ->
 private fun VelaColors.toMaterialScheme(dark: Boolean): ColorScheme {
     val base = if (dark) darkColorScheme() else lightColorScheme()
     return base.copy(
-        primary = accentBase,
-        onPrimary = VelaOnAccent,
-        primaryContainer = accentSoft,
+        // Neutral ink, as the web's: Material's `primary` paints selection
+        // controls, progress and focus — none of which moves value, so none
+        // wears the accent (web CLAUDE.md rule 4). The one accent surface is
+        // VelaValueButton, which draws its own fill.
+        primary = fgBase,
+        onPrimary = fgInverse,
+        primaryContainer = bgSunken,
         onPrimaryContainer = fgBase,
         secondary = fgMuted,
         onSecondary = fgInverse,

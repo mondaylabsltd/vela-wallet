@@ -1304,9 +1304,38 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `componentsUi.browserStatus.reason.signingPage` (the dApp record's line
 //   for a page that did not sign, r7-2 / r7-7). 2210 + 2 = 2212 paths, 2104
 //   leaves, 108 branches.
-if (PATHS.length !== 2212) fail(`expected 2212 paths (2104 leaf + 108 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2104) fail(`expected 2104 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 108) fail(`expected 108 branch paths, got ${branchSet.size}`);
+// 2215 (core asks 1, 2026-10-30): + `componentsUi.appMenu.find` and
+//   `componentsUi.appMenu.commandPalette` (the desktop's Edit ▸ Find and
+//   Wallet ▸ Command Palette menu items, until now a placeholder's words)
+//   and `send.txErrorProposalNotSupported` (a multisig proposal a shell
+//   cannot make yet, said as that — `SendProposeFailure::NotSupported` —
+//   never as a mailbox that could not be read). 2212 + 3 = 2215 paths,
+//   2107 leaves, 108 branches.
+// 2225 (core asks 1, desktop phase 3, 2026-10-31): + the menu-bar / tray
+//   switch (`settingsModals.appearance.{menuBar,trayIcon,statusItemHint}`:
+//   macOS's title, Windows' title, one hint for both), the update prompt
+//   (`componentsUi.appUpdate.{title,install,later}`) and the drop overlay's
+//   title (`componentsUi.dropOverlay.title`). 2215 + 7 leaves + 3 branches
+//   (`settingsModals.appearance`, `componentsUi.appUpdate`,
+//   `componentsUi.dropOverlay`) = 2225 paths, 2114 leaves, 111 branches.
+// 2233 (core asks 1, iOS phase 3, 2026-10-31): + Siri / Shortcuts phrases
+//   (`componentsUi.shortcuts.{send,receive,scan}`, each with `{{app}}` — the
+//   `${applicationName}` Apple requires in every phrase), the multisig link
+//   sheet's line (`componentsUi.linkSheet.multisigOnWeb`) and the widget's
+//   gallery line (`componentsUi.widget.balanceDescription`). 2225 + 5
+//   leaves + 3 branches = 2233 paths, 2119 leaves, 114 branches.
+// 2216 (the web wallet's `/pay`, spec 039 Part B, 2026-10-31): +
+//   `receive.pay.{invalidToken, invalidAmount}` (why the core refused a link
+//   whose token or amount is wrong — `invalidBody` already says recipient or
+//   network), `receive.pay.noWalletBody` (a link opened with no wallet on the
+//   device: kept while one is created or signed into) and `receive.pay.home`
+//   (the way home from a refused link). 2212 + 4 = 2216 paths, 2108 leaves,
+//   108 branches.
+// Merged (2026-10-31): core asks 1's 2233 and /pay's 4 leaves together:
+//   2233 + 4 = 2237 paths, 2123 leaves, 114 branches.
+if (PATHS.length !== 2237) fail(`expected 2237 paths (2123 leaf + 114 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2123) fail(`expected 2123 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 114) fail(`expected 114 branch paths, got ${branchSet.size}`);
 // The on-demand catalogs, pinned the same way (leaves of every locale's union):
 // a key dropped from one namespace and not landed in the other fails here.
 // 579 (round 6, the outside owner's connect page, 2026-10-30): + 17

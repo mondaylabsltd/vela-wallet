@@ -9,6 +9,7 @@ pub mod editor;
 pub mod editor_model;
 mod launch_animation;
 mod logo;
+pub mod motion;
 mod name_field;
 pub mod prose;
 mod rail;

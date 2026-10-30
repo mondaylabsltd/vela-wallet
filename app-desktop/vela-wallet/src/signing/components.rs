@@ -29,6 +29,56 @@ pub const CONFIRM_ID: &str = "signing-confirm";
 /// coin's name.
 const FEE_REASON_INDENT: f32 = 8. + theme::WALLET_ROW_ICON + 12.;
 
+/// [`crate::flows::panels::clickable`] that a screen reader can name: a
+/// Button called `words` when pressing it does something, else the same
+/// words as a Label — a fact stated, not a control that cannot act.
+fn named_control(
+    id: &'static str,
+    words: SharedString,
+    action: Option<crate::flows::panels::Click>,
+    body: impl gpui::IntoElement,
+) -> Div {
+    let node = div().id(id).aria_label(words).child(body);
+    div().flex().flex_col().child(match action {
+        Some(action) => node
+            .role(gpui::Role::Button)
+            .cursor_pointer()
+            .on_click(move |event, window, cx| action(event, window, cx)),
+        None => node.role(gpui::Role::Label),
+    })
+}
+
+/// An icon-only control, named by what it does: a Button either way (a
+/// refresh that is turning is still the refresh), pressable only with an
+/// `action`.
+fn named_button(
+    id: &'static str,
+    words: SharedString,
+    action: Option<crate::flows::panels::Click>,
+    body: impl gpui::IntoElement,
+) -> Div {
+    let node = div()
+        .id(id)
+        .role(gpui::Role::Button)
+        .aria_label(words)
+        .child(body);
+    div().flex().flex_col().child(match action {
+        Some(action) => node
+            .cursor_pointer()
+            .on_click(move |event, window, cx| action(event, window, cx)),
+        None => node,
+    })
+}
+
+/// A source line's ink: muted when it only informs, the tone's own colour
+/// when it warns (the web's `SourceLine` `data-tone`).
+fn source_color(theme: &Theme, tone: Tone) -> Hsla {
+    match tone {
+        Tone::Neutral | Tone::Accent | Tone::Success => theme.fg_muted,
+        Tone::Caution | Tone::Danger => tone_color(theme, tone),
+    }
+}
+
 fn tone_color(theme: &Theme, tone: Tone) -> Hsla {
     match tone {
         Tone::Neutral => theme.fg_base,
@@ -245,6 +295,7 @@ pub fn block_words(item: &Block) -> SharedString {
     let parts: Vec<String> = match item {
         Block::Intent { text, .. }
         | Block::Sentence { text, .. }
+        | Block::Source { text, .. }
         | Block::Warning { text, .. }
         | Block::Positive(text) => vec![text.to_string()],
         Block::Amount { line, note, .. } => vec![
@@ -473,6 +524,15 @@ fn block_inner(
         Block::Sentence { text, tone } => div()
             .text_size(theme::text_row_title())
             .text_color(tone_color(theme, *tone))
+            .child(crate::ui::prose(text.clone())),
+
+        // The web's `SourceLine`: `--text-sm` at `--leading-normal`, in
+        // `fg.muted` — information, not a mark (r4D-11: muted holds AA on
+        // every sheet, subtle did not) — or a caution/danger in its colour.
+        Block::Source { text, tone } => div()
+            .text_size(theme::text_source())
+            .line_height(theme::line_source())
+            .text_color(source_color(theme, *tone))
             .child(crate::ui::prose(text.clone())),
 
         Block::Allowance {
@@ -1199,6 +1259,16 @@ pub fn fee(
                             }),
                     );
                 let on_row = if *tappable { on_row } else { None };
+                // What a screen reader says: the row's words ("Network fee,
+                // 0.0004 xDAI ($0.01)"), with the reason it is late when
+                // the figure is from a while ago. A Button when pressing it
+                // does something (pick a coin, ask again), else a Label.
+                let words = crate::ui::a11y::sentence([
+                    label.as_ref(),
+                    value.as_ref(),
+                    stale_note.as_ref().map_or("", |note| note.as_ref()),
+                ]);
+                let row = named_control("signing-fee", words, on_row, row);
                 // One sunken surface, as the send form's `FeeRow` draws it:
                 // the row, and the refresh at its end — two controls side by
                 // side, not one inside the other.
@@ -1207,12 +1277,7 @@ pub fn fee(
                     .items_center()
                     .rounded(px(12.))
                     .bg(theme.bg_sunken)
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w(px(0.))
-                            .child(crate::flows::panels::clickable("signing-fee", on_row, row)),
-                    );
+                    .child(div().flex_1().min_w(px(0.)).child(row));
                 if refresh.is_some() {
                     // While a measurement is out the control turns — the row
                     // is working, not stuck.
@@ -1236,8 +1301,11 @@ pub fn fee(
                                 14.,
                             ))
                         });
-                    line = line.child(crate::flows::panels::clickable(
+                    // Named by what it does (`FeeModel::OnChain.refresh`),
+                    // never by its glyph.
+                    line = line.child(named_button(
                         "signing-fee-refresh",
+                        refresh.clone().unwrap_or_default(),
                         on_refresh.filter(|_| !*refreshing),
                         control,
                     ));
@@ -1284,8 +1352,9 @@ pub fn fee(
                 .bg(theme.bg_sunken)
                 .flex()
                 .flex_col()
-                .child(crate::flows::panels::clickable(
+                .child(named_control(
                     "signing-fee-title",
+                    title.clone(),
                     on_row,
                     header,
                 ));
@@ -1370,6 +1439,25 @@ pub fn fee(
 
 /// The signer row — whose key is about to sign.
 pub fn signer_row(
+    theme: &Theme,
+    identicons: &mut IdenticonCache,
+    label: SharedString,
+    name: SharedString,
+    seed: &str,
+) -> Div {
+    // One Label node, read as the line a sighted person reads: "Signing
+    // with, Interleave".
+    let words = crate::ui::a11y::sentence([label.as_ref(), name.as_ref()]);
+    div().child(
+        div()
+            .id("signing-signer-row")
+            .role(gpui::Role::Label)
+            .aria_label(words)
+            .child(signer_row_body(theme, identicons, label, name, seed)),
+    )
+}
+
+fn signer_row_body(
     theme: &Theme,
     identicons: &mut IdenticonCache,
     label: SharedString,

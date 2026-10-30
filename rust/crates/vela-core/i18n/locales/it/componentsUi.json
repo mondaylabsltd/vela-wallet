@@ -558,7 +558,28 @@
       "fullScreen": "Attiva/disattiva tutto schermo",
       "window": "Finestra",
       "minimize": "Contrai",
-      "closeWindow": "Chiudi finestra"
+      "closeWindow": "Chiudi finestra",
+      "find": "Trova",
+      "commandPalette": "Tavolozza comandi"
+    },
+    "appUpdate": {
+      "title": "Aggiornamento disponibile",
+      "install": "Installa",
+      "later": "Più tardi"
+    },
+    "dropOverlay": {
+      "title": "Trascina qui un indirizzo, un link di pagamento o un'immagine QR"
+    },
+    "shortcuts": {
+      "send": "Invia con {{app}}",
+      "receive": "Ricevi con {{app}}",
+      "scan": "Scansiona con {{app}}"
+    },
+    "linkSheet": {
+      "multisigOnWeb": "Per ora i link multisig si aprono nel wallet web."
+    },
+    "widget": {
+      "balanceDescription": "Il tuo saldo a colpo d'occhio, all'ultimo aggiornamento di Vela."
     },
     "browserStatus": {
       "title": "Stato della scheda",

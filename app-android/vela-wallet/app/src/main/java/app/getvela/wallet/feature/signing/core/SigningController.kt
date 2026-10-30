@@ -649,7 +649,7 @@ class SigningController(
      * POL, held at 0, because nobody told the machine what the swap leaves.
      * A revert or a run nobody could check tells it nothing.
      */
-    private suspend fun simulated(chainId: Int, params: List<Any?>?, feeCalls: List<FeeCall>): SimOutcome? {
+    private suspend fun simulated(requestId: String, chainId: Int, params: List<Any?>?, feeCalls: List<FeeCall>): SimOutcome? {
         val answer = if (params == null) {
             null
         } else {
@@ -660,6 +660,9 @@ class SigningController(
         }
         val record = SimDeltas.outcome(wallet.address, answer)
         VelaLog.event("signing.sim", "outcome", "chain" to chainId, "kind" to record.kind)
+        // Spec 103: what the agent's review reads of it — the core's record
+        // as it came, and the judged moves once there are any.
+        simFacts = requestId to SimDeltas.ended(record, null)
         val notice = SimDeltas.notice(record)
         if (notice != null) return notice
         // Moves this build cannot read are not "nothing moves".
@@ -668,10 +671,19 @@ class SigningController(
         val judged = runCatching { ports.judgeDeltas(chainId, wallet.address, deltas) }
             .onFailure { VelaLog.failure("signing.sim", "the trust machine could not judge the deltas", it) }
             .getOrNull()
+        simFacts = requestId to SimDeltas.ended(record, judged)
         // Checked, but nothing could say what the moves are: "could not check".
         // Whether it is "no asset changes" is the judged view's to say.
         return judged?.let { SimOutcome.Ready(it.judgments, noChangeKey = it.no_change_key) } ?: SimDeltas.couldNotCheck()
     }
+
+    /**
+     * Spec 103: the simulation of a request as the agent's review reads it
+     * (`agent_review::SimEnded`, `{verdict, judged}`), with the request it
+     * was for — never another request's.
+     */
+    @Volatile
+    private var simFacts: Pair<String, kotlinx.serialization.json.JsonElement>? = null
 
     /**
      * PR 3: the simulation of request [id] has ended — a verdict, a notice,
@@ -726,7 +738,7 @@ class SigningController(
         scope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
             val outcome = try {
                 // No simulator on this host: nothing to wait for, the place is given back.
-                simulated(request.chainId, simParams, feeCalls)
+                simulated(request.id, request.chainId, simParams, feeCalls)
             } catch (error: Throwable) {
                 // A reading that threw — or was cancelled with the request
                 // still open — is not a verdict: "could not check". And
@@ -890,31 +902,24 @@ class SigningController(
 
     // -- the agent's opinion (spec 103) ----------------------------------------------
 
-    private val _advice = MutableStateFlow<app.getvela.wallet.feature.signing.SigningAdvice.Accepted?>(null)
-
-    /** The AI agent's opinion on THIS request, as the core accepted it — it goes with the request. */
-    val advice: StateFlow<app.getvela.wallet.feature.signing.SigningAdvice.Accepted?> = _advice
-
-    /** The review on this sheet now, as the agent reads it (`vela_review`) — JSON. */
-    fun review(): String? = app.getvela.wallet.feature.signing.SigningAdvice.currentReview(signJson.value, wallet.address)
-
     /**
-     * `vela_advise` on this sheet: the agent's arguments ([argsJson]),
-     * judged by the core against [worldJson] and the review on screen (its
-     * digest and fee). An accepted opinion is held for this request and drawn
-     * in its own card; a refusal says why, and nothing changes.
+     * The request on this sheet as the agent's core reads it
+     * (`AgentShell.signing`): the `SignRequestView`, with a `sheet` member —
+     * what the sheet reads beside it (`agent_review::SheetFacts`: the
+     * clear-signing and guard views, this request's simulation and fee, the
+     * descriptor service). The fee an opinion is bound to comes from there
+     * (`AgentCore.advice`), so a card greys once the fee moved past its band.
+     * `null` with no request on the sheet. The web's `sheetFacts`.
      */
-    fun advise(worldJson: String, argsJson: String): app.getvela.wallet.feature.signing.SigningAdvice.Answer {
-        val review = review()
-        val answer = app.getvela.wallet.feature.signing.SigningAdvice.accept(
-            worldJson,
-            app.getvela.wallet.feature.signing.SigningAdvice.digestOf(review),
-            app.getvela.wallet.feature.signing.SigningAdvice.reviewFee(review),
-            argsJson,
-        )
-        if (answer is app.getvela.wallet.feature.signing.SigningAdvice.Answer.Ok) _advice.value = answer.advice
-        return answer
-    }
+    fun agentSigningJson(): String? = SheetFacts.signing(
+        signJson = signJson.value,
+        clearJson = clearJson.value,
+        guardJson = guardJson.value,
+        feeJson = feeJson.value,
+        sim = sim.value,
+        simFacts = simFacts,
+        descriptorBase = runCatching { ports.dataBase() }.getOrNull(),
+    )
 
     /** cs-17: one batch leg's deliberate "Allow all" — the core's consent for THAT leg alone. */
     fun guardLegGrant(index: Int) = guardHost.dispatch(GuardEvent.LegGrantDeliberatelyChosen(index), GuardEvent.serializer())

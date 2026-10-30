@@ -8,4 +8,7 @@
          value. -->
     <color name="vela_splash_bg">#FAFAF8</color>
     <color name="vela_window_bg">#FAFAF8</color>
+    <!-- Launcher shortcut icons (native parity Phase 3): color.bg.sunken / color.fg.base (light). -->
+    <color name="vela_shortcut_bg">#F5F3EF</color>
+    <color name="vela_shortcut_fg">#1A1A18</color>
 </resources>

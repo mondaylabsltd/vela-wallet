@@ -229,7 +229,7 @@ private fun CardFrame(selected: Boolean, modifier: Modifier = Modifier, content:
             .background(colors.bgSunken)
             .border(
                 VelaBorder.emphasis,
-                if (selected) colors.accentBase else Color.Transparent,
+                if (selected) colors.fgBase else Color.Transparent,
                 RoundedCornerShape(VelaRadius.xl),
             )
             .then(modifier),

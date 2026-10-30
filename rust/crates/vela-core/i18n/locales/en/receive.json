@@ -65,7 +65,11 @@
       "amount": "Amount",
       "anyAmount": "Any amount",
       "invalidTitle": "Invalid payment link",
-      "invalidBody": "This link is missing a valid recipient or network. Ask the sender for a new one."
+      "invalidBody": "This link is missing a valid recipient or network. Ask the sender for a new one.",
+      "invalidToken": "The token in this link isn't a contract address. Ask the sender for a new one.",
+      "invalidAmount": "The amount in this link can't be read exactly. Ask the sender for a new one.",
+      "noWalletBody": "There's no Vela wallet on this device yet. Create one or sign in, and this payment will be waiting for you to review.",
+      "home": "Go to Vela Wallet"
     },
     "addressLabel": "Your receive address",
     "searchNetworkPlaceholder": "Search networks",

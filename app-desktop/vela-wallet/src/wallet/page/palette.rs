@@ -113,11 +113,10 @@ impl WalletPage {
             Command::Receive => self.strings.action_receive.clone(),
             Command::Scan => self.strings.action_scan.clone(),
             Command::Refresh => self.loc.t("explore.refresh"),
-            Command::Find => match self.section {
-                Section::Contacts => self.contacts.search_placeholder.clone(),
-                _ => self.loc.t("explore.searchPlaceholder"),
-            },
-            Command::Palette => self.loc.t("componentsUi.commandBar.placeholder"),
+            // The menu bar's own words for the two (`componentsUi.appMenu`),
+            // so the palette and the menu name them alike.
+            Command::Find => self.loc.t("componentsUi.appMenu.find"),
+            Command::Palette => self.loc.t("componentsUi.appMenu.commandPalette"),
         }
     }
 

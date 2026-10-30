@@ -125,6 +125,11 @@
       "attestation": "认证声明",
       "userVerified": "使用时需验证",
       "signsHere": "当前登录"
+    },
+    "appearance": {
+      "menuBar": "在菜单栏中显示",
+      "trayIcon": "在系统托盘中显示",
+      "statusItemHint": "总额和快捷转账、收款，取自最近一次加载的数据，不会额外联网。"
     }
   }
 }

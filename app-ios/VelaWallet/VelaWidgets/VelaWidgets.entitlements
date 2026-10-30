@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  The one entitlement the widgets need: the App Group the app writes the
+	  balance snapshot into (`WidgetSnapshotStore.appGroup`). Nothing else —
+	  no keychain group, no associated domains, no network.
+	-->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.app.getvela.VelaWallet</string>
+	</array>
+</dict>
+</plist>

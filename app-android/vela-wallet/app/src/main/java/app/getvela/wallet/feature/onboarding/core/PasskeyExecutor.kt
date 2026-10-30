@@ -419,6 +419,13 @@ class PasskeyExecutor(
          * use it.
          */
         method: KeyMethod = KeyMethod.Platform,
+        /**
+         * send-11: the prompt's deadline, ms — WebAuthn's `timeout`, the core's
+         * signing deadline (`passkey_sign_timeout_ms`) for a signature, so a
+         * provider that honours it closes its prompt on the clock the core
+         * reads (`passkey_ceremony_end`). `null`: the platform's own.
+         */
+        timeoutMs: Long? = null,
     ): Assertion {
         // The scan method reaches the credential on the OTHER phone over caBLE —
         // a sign-in (no credential id) offers whatever it holds, a proof
@@ -447,7 +454,7 @@ class PasskeyExecutor(
             "Credential Manager is unavailable on this device",
         )
 
-        val request = assertionRequest(challenge, relyingPartyId, credentialIdHex, transports)
+        val request = assertionRequest(challenge, relyingPartyId, credentialIdHex, transports, timeoutMs)
 
         val options = listOf(GetPublicKeyCredentialOption(request.toString()))
         VelaLog.event(
@@ -1042,11 +1049,19 @@ internal fun presentedKeyPath(transports: String, method: KeyMethod): Boolean =
  * there is one. [transports] go into its one allow-list entry exactly as given
  * — the route's list, never re-derived from the method.
  */
-internal fun assertionRequest(challenge: ByteArray, rpId: String, credentialIdHex: String?, transports: String): JSONObject =
+internal fun assertionRequest(
+    challenge: ByteArray,
+    rpId: String,
+    credentialIdHex: String?,
+    transports: String,
+    /** The prompt's deadline, ms (send-11) — WebAuthn's `timeout`; `null` leaves it to the platform. */
+    timeoutMs: Long? = null,
+): JSONObject =
     JSONObject().apply {
         put("challenge", toBase64url(challenge))
         put("rpId", rpId)
         put("userVerification", "required")
+        timeoutMs?.takeIf { it > 0 }?.let { put("timeout", it) }
         if (credentialIdHex != null) {
             val descriptor = JSONObject()
                 .put("type", PUBLIC_KEY)

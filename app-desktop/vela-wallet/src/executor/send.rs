@@ -938,10 +938,12 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
         }
 
         // Multisig accounts are web-only for now: the desktop never opens a
-        // send for one, so no proposal is ever asked of it.
+        // send for one. Were a proposal ever asked of it, it says what is
+        // true — this app cannot propose one yet — never a mailbox that could
+        // not be read (`send.txErrorProposalNotSupported`, no retry).
         SendOperation::ProposeSafeTx { .. } => SendAnswer::Now(SendShellResult::ProposeFailed {
             cancelled: false,
-            reason: None,
+            reason: Some(vela_core::app::send::SendProposeFailure::NotSupported),
         }),
 
         SendOperation::PersistTxRecords { records } => {

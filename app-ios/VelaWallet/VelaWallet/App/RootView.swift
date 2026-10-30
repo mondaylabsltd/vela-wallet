@@ -72,6 +72,9 @@ struct RootView: View {
     @State private var receiveNetwork = 0
     /// The identicon viewer, hosted once for the whole app.
     @State private var identiconViewer: IdenticonSubject?
+    /// A multisig link the app was opened with (native parity N-I3), as the
+    /// core read it — shown in its sheet once the launch is over.
+    @State private var multisigLink: PendingMultisigLink?
     /// Bumped when storage is cleared, so the measured page re-reads the store.
     @State private var storageTick = 0
     /// The settings page a screen elsewhere is sending somebody to. Cleared
@@ -296,6 +299,8 @@ struct RootView: View {
     private var camera: CameraScanner { graph.camera }
     /// What the photo library had to say, when it had nothing.
     @State private var scanNotice: (title: String, body: String)?
+    /// A `/pay` link the core refused, said until the person dismisses it.
+    @State private var payRefusal: PayRefusalNotice?
     /// Whether the app is inside the parallel space, for the badge.
     ///
     /// Mirrored into view state rather than read from the hook on every render:
@@ -371,10 +376,54 @@ struct RootView: View {
         if GalleryMode.isEnabled {
             OnboardingGalleryScreen(loc: loc)
         } else {
-            appBody
+            nativeDoors(appBody)
         }
         #else
-        appBody
+        nativeDoors(appBody)
+        #endif
+    }
+
+    /// Native parity Phase 3: the doors from outside the app (N-I2), the
+    /// links it claims (N-I3), the widgets' snapshot and the landing's
+    /// haptic — apart from `appBody`'s chain, which the type checker can
+    /// no longer take in one expression.
+    private func nativeDoors(_ content: some View) -> some View {
+        content
+        // Native parity N-I3: a multisig link, as the core read it — shown
+        // once the launch is over, never under the animation.
+        .sheet(item: Binding(
+            get: { launching ? nil : multisigLink },
+            set: { if $0 == nil { multisigLink = nil } }
+        )) { pending in
+            multisigLinkSheet(pending)
+        }
+        // Native parity N-I2: a door from outside — a quick action, a
+        // widget, a Shortcut — opened when the wallet can open it.
+        .onChange(of: AppEntryInbox.shared.pending, initial: true) { _, _ in openPendingEntry() }
+        .onChange(of: session.view.allowedRoute, initial: true) { _, _ in
+            openPendingEntry()
+            refreshQuickActions()
+        }
+        .onChange(of: launching) { _, _ in openPendingEntry() }
+        .onChange(of: signing == nil) { _, _ in openPendingEntry() }
+        .onChange(of: loc.resolvedLanguage) { _, _ in refreshQuickActions() }
+        // The widgets draw what the hero drew, and nothing once nobody is
+        // signed in.
+        .onChange(of: widgetSnapshot, initial: true) { _, snapshot in
+            if PageOverride.page == nil { WidgetPublisher.publish(snapshot) }
+        }
+        // A signature that landed is an outcome, and the finger hears it —
+        // once, as the tick lands (the send's own success is the core's
+        // `haptic` effect).
+        .velaHaptic(trigger: signingEnding?.id) { old, new in
+            old == nil && new != nil ? .success : nil
+        }
+        #if DEBUG
+            // `VELA_OPEN_LINK` (native parity N-I3): a UI test's universal
+            // link, through the same handler iOS hands one to.
+            .task {
+                if let link = DevLaunchInputs.launchLink { openLink(link) }
+            }
         #endif
     }
 
@@ -506,12 +555,32 @@ struct RootView: View {
             }
             .themed(scheme)
         }
-        // The core's verdict on a `/pay` link. Watched rather than awaited,
-        // because a link can arrive before the wallet has finished opening and
-        // the answer has to survive that.
-        .onChange(of: paymentRequest.view?.pay) { _, request in
-            guard let request else { return }
-            prefillSend(from: request)
+        // The core's verdict on a `/pay` link — a link opened or a code
+        // scanned. Watched rather than awaited, because a link can arrive
+        // before the wallet has finished opening and the answer has to
+        // survive that. Accepted: Send, with the request in. Refused: said,
+        // in the web's words for the core's reason — never dropped.
+        .onChange(of: paymentRequest.linkVerdict) { _, verdict in
+            guard let verdict else { return }
+            if let request = verdict.accepted {
+                prefillSend(from: request)
+            } else {
+                payRefusal = PayRefusalNotice(
+                    serial: verdict.serial,
+                    body: PayLinkVerdict.refusalBody(verdict.refusal, loc: loc)
+                )
+            }
+        }
+        // A `/pay` link the core refused: "Invalid payment link", and why.
+        .alert(
+            PayLinkVerdict.refusalTitle(loc: loc),
+            isPresented: Binding(get: { payRefusal != nil }, set: { if !$0 { payRefusal = nil } }),
+            presenting: payRefusal
+        ) { _ in
+            Button(loc.t("common.gotIt"), role: .cancel) { payRefusal = nil }
+                .accessibilityIdentifier("payRefusal.ok")
+        } message: { notice in
+            Text(verbatim: notice.body)
         }
         // Spec 079: a tick is seen, then it goes — nobody should have to
         // close a success. Here at the root so a tab switch cannot strand it.
@@ -605,19 +674,127 @@ struct RootView: View {
         // callback nothing is waiting for is dropped here in silence. Every
         // other URL is routed exactly as before.
         if TrustedSignerCallbacks.deliver(url) { return }
-        switch PayLink.parse(url.absoluteString) {
-        case .pay:
-            guard let event = PayLink.parse(url.absoluteString)?.linkOpened else { return }
-            // The CORE validates. Seven strings and whether they add up to a
-            // request this wallet can honour is 600 lines that already exist.
-            paymentRequest.linkOpened(event)
-        case .open(let page):
-            // Spec 088 FR-004: a link from outside only ASKS. The sheet shows
-            // the host the core named; nothing loads before the person says yes.
-            browser.askToOpen(page)
+        // Native parity N-I3: every link the app claims, read by the core
+        // (`AppLink`) — a door, a payment, a multisig link.
+        switch AppLink.read(url) {
+        case .entry(let entry):
+            // A widget's button: the same inbox a quick action fills.
+            AppEntryInbox.shared.deliver(entry)
+        case .pay(let link):
+            switch link {
+            case .pay:
+                openPayLink(link)
+            case .open(let page):
+                // Spec 088 FR-004: a link from outside only ASKS. The sheet shows
+                // the host the core named; nothing loads before the person says yes.
+                browser.askToOpen(page)
+            }
+        case .some(let link):
+            // A multisig link: what the core read in it, and the web wallet
+            // to act on it in (`MultisigLinkSheet`).
+            multisigLink = PendingMultisigLink(link: link)
         case nil:
             break
         }
+    }
+
+    /// The multisig link's sheet, from what the core read.
+    @ViewBuilder
+    private func multisigLinkSheet(_ pending: PendingMultisigLink) -> some View {
+        if let model = MultisigLinkModel.of(pending.link, loc: loc, chainName: { chainId in
+            walletNetworks.chains.first { $0.chainId == chainId }?.displayName
+                ?? ChainCatalog.meta(chainId)?.displayName
+        }) {
+            MultisigLinkSheet(
+                model: model,
+                onOpen: {
+                    VelaHaptic.press.play()
+                    multisigLink = nil
+                    // The system browser: the web wallet, where the same link
+                    // opens the same transaction. iOS does not hand a link
+                    // back to the app that opened it.
+                    UIApplication.shared.open(model.url)
+                },
+                onCopy: { velaCopy(model.url.absoluteString) },
+                onClose: { multisigLink = nil }
+            )
+            .themed(scheme)
+        }
+    }
+
+    // MARK: - Doors from outside (native parity N-I2)
+
+    /// Open the door waiting in the inbox, when the wallet can: somebody is
+    /// signed in, the launch is over, and no signature is being asked for.
+    private func openPendingEntry() {
+        guard AppEntryInbox.canOpen(
+            signedIn: session.view.allowedRoute == .wallet,
+            launching: launching,
+            signing: signing != nil,
+            pageOverride: PageOverride.page != nil
+        ), let entry = AppEntryInbox.shared.take() else { return }
+        // Whatever was on top goes, as the agent's "home" does: the person
+        // asked for this screen from outside the app.
+        identiconViewer = nil
+        multisigLink = nil
+        homeSwitcherOpen = false
+        flows.close()
+        section = .wallet
+        switch entry {
+        case .send: enterFlow(.send)
+        case .receive: enterFlow(.receive)
+        case .scan: enterFlow(.scan)
+        }
+    }
+
+    /// The Home Screen's quick actions, in the language the app speaks, and
+    /// none while nobody is signed in.
+    private func refreshQuickActions() {
+        UIApplication.shared.shortcutItems = QuickActions.items(
+            signedIn: session.view.allowedRoute == .wallet,
+            title: { loc.t($0.titleKey) }
+        )
+    }
+
+    /// The hero, as the widgets draw it — `nil` while nobody is signed in,
+    /// so a Lock Screen keeps no figure for a wallet that is gone.
+    private var widgetSnapshot: WidgetSnapshot? {
+        guard session.view.allowedRoute == .wallet, PageOverride.page == nil,
+              let view = wallet.balance
+        else { return nil }
+        let display = WalletLive.Display.from(settings.currency ?? .unread, language: loc.resolvedLanguage)
+        // The hero's own words; the figure, its state and its line are the
+        // core's view's, as the home draws them.
+        let fallback = BalanceModel(
+            label: loc.t("home.totalBalance"), currency: "", state: .loading,
+            a11yHide: loc.t("home.a11yHideBalance"), a11yShow: loc.t("home.a11yShowBalance")
+        )
+        let hero = WalletLive.balance(
+            view, display: display, fallback: fallback, loc: loc, networks: walletNetworks,
+            noValue: space.testnet ? loc.t("networkSpace.noValue") : nil
+        )
+        return WidgetPublisher.snapshot(
+            balance: hero, asOfMs: view.lastRefreshedAtMs,
+            accountName: session.view.activeName, loc: loc
+        )
+    }
+
+    /// A `/pay` link — opened, or scanned — handed to the core, which says
+    /// whether it is a request this wallet can honour (`linkVerdict`). Seven
+    /// strings and whether they add up to one is 600 lines that already
+    /// exist; nothing here rules on it.
+    private func openPayLink(_ link: PayLink) {
+        guard let event = link.linkOpened else { return }
+        paymentRequest.linkOpened(event)
+    }
+
+    /// A scanned code that is a Vela payment link (`/pay?…`): read by the
+    /// core as the link itself is — the same verdict, the same Send, the
+    /// same refusal. `false` for any other code.
+    private func scannedPayLink(_ text: String) -> Bool {
+        guard let link = PayLink.parse(text), case .pay = link else { return false }
+        openPayLink(link)
+        return true
     }
 
     /// A `/pay` link the core accepted, as a send with the fields already in.
@@ -1277,6 +1454,7 @@ struct RootView: View {
                         onSigningExplorer: { openSigningExplorer() },
                         onRefreshFee: { signing?.refreshFee() },
                         onSigningRetry: { signing?.retry() },
+                        onSimRecheck: { signing?.simulateAgain() },
                         chainNotice: ExploreLive.chainNotice(
                             chainId: browser.current == nil ? nil : browser.currentTab?.chainId,
                             failed: pool.failedChains, unreached: pool.unreachedChains,
@@ -1625,6 +1803,7 @@ struct RootView: View {
     /// A payment code scanned in 探索: 发送, through the same door a contact
     /// and the home scanner use — the core's `scan_resolved`.
     private func sendFromScan(_ payload: String) {
+        if scannedPayLink(payload) { return }
         section = .wallet
         enterSend(handingIn: true)
         Task {
@@ -2928,7 +3107,7 @@ struct RootView: View {
             transportId: "", chainId: chain
         )
         let context = signingContext(chain: chain, live: live)
-        return SigningLive.model(
+        var model = SigningLive.model(
             fallback: SigningFixtures.build(.cs1, loc: loc),
             request: request,
             sign: live.shownSign,
@@ -2940,6 +3119,27 @@ struct RootView: View {
             // Spec 099 R7: the core's one gate, and why it is shut.
             gate: live.confirmState
         )
+        // Spec 103 (P2.3): the agent's opinion on THIS request — the core
+        // holds it for the request it was given on and says whether it still
+        // stands (`AgentCore::advice()`); a refusal or a receipt has none.
+        if model.receipt == nil, model.confirm != nil, let advice = agent.advice {
+            model.advice = AgentAdviceCardModel.of(advice, loc: loc)
+        }
+        return model
+    }
+
+    /// What the advisor's card stands against on the sheet now: the request,
+    /// its fee, its simulation. A change re-reads the card
+    /// (`AgentStore.refreshAdvice`), as the core's `changed` does.
+    private var adviceSheetKey: String {
+        guard let live = liveSigning else { return "" }
+        return [
+            live.request?.id ?? "",
+            live.signJson ?? "",
+            live.feeViewJson ?? "",
+            live.simVerdict == nil ? "" : "judged",
+            String(describing: live.simulation),
+        ].joined(separator: "|")
     }
 
     /// The facts the signing sheet is drawn from, for the request's chain.
@@ -2961,6 +3161,8 @@ struct RootView: View {
             // judge's last session, which may be another transaction's.
             sim: live?.simVerdict,
             simulation: live?.simulation ?? .pending,
+            simRecheck: live?.simRecheck ?? false,
+            simRechecking: live?.simRechecking ?? false,
             feeOpen: live?.feeOpen ?? false,
             trustedSignerNotice: live?.trustedSignerNotice,
             // Spec 079: the receipt — the explorer for its link, the tracker's
@@ -3211,7 +3413,7 @@ struct RootView: View {
     /// preview layer attached to a session with no frames is a black rectangle
     /// where the drawn placeholder belongs.
     private func scanInputs() -> ScanInputs {
-        let live: AVCaptureSession? = (camera.refusal == nil && camera.running)
+        let live: AVCaptureSession? = (camera.refusal == nil && camera.running && !camera.usesDataScanner)
             ? camera.session : nil
         var inputs = ScanInputs(
             session: live,
@@ -3222,6 +3424,10 @@ struct RootView: View {
         // A gallery / board / dev session: the drawn viewfinder, never a
         // camera (PR 3 note 7).
         inputs.fixture = camera.fixtureOnly
+        // Native parity N-I2: VisionKit reads the codes where the phone has it.
+        if camera.refusal == nil, camera.running, camera.usesDataScanner {
+            inputs.dataScanner = { text in camera.deliver(text) }
+        }
         if camera.refusal == .denied {
             inputs.refusalAction = (
                 label: loc.t("componentsUi.scanner.grantPermission"),
@@ -3254,6 +3460,13 @@ struct RootView: View {
     /// decoder. The CORE decides what it means.
     private func scannedCode(_ text: String) {
         camera.stop()
+        // A Vela payment link: the scanner goes, and the core's verdict on
+        // the link opens Send — or says why it cannot.
+        if PayLink.parse(text).map({ if case .pay = $0 { true } else { false } }) == true {
+            flows.back()
+            _ = scannedPayLink(text)
+            return
+        }
         // The home's 扫码 is not inside a send: the code OPENS one, through the
         // same door 探索's scanner uses (Android: the home's scanner enters the
         // send with the viewfinder on top). It used to hand the code to
@@ -3603,7 +3816,8 @@ struct RootView: View {
                     onClose: { closeSigningSheet() },
                     onExplorer: { openSigningExplorer() },
                     onRefreshFee: { signing?.refreshFee() },
-                    onRetry: { signing?.retry() }
+                    onRetry: { signing?.retry() },
+                    onSimRecheck: { signing?.simulateAgain() }
                 )
                     .presentationDragIndicator(.hidden)
                     .presentationDetents([.large])
@@ -3612,6 +3826,9 @@ struct RootView: View {
                     .themed(scheme)
             }
         }
+        // Spec 103: the advisor's card stands against the sheet — read again
+        // whenever its request, fee or simulation moves.
+        .onChange(of: adviceSheetKey) { _, _ in agent.refreshAdvice() }
         .onChange(of: signing?.closed) { _, closed in
             guard closed == true else { return }
             signingClosed()
@@ -3677,7 +3894,7 @@ struct RootView: View {
                 view, on: model, loc: loc, space: space.current,
                 // The pool's word on the person's own nodes (owner decision
                 // 2026-10-28): read here, so a change re-draws the rows.
-                nodes: SettingsLive.OwnNodes(fallback: pool.fallbackChains, unreached: pool.ownNodeUnreachedChains)
+                nodes: pool.viewJson.map(SettingsLive.OwnNodes.init(viewJson:))
             )
             // 端点 offered a dead host as the person's passkey index with an
             // invented latency beside it (spec 081 FR-001): the same machine's
@@ -4028,7 +4245,9 @@ struct RootView: View {
         let page = AgentPage()
         page.show = { screen in agentShow(screen) }
         page.name = { agentPageName() }
-        page.signing = { signing?.signViewJson }
+        // The REQUEST and the sheet's facts beside it (spec 103): what the
+        // agent's review reads and an opinion's fee is bound to.
+        page.signing = { [trust] in signing?.agentSigningJson(judged: trust.simJson) }
         page.openSend = { params in
             enterSend()
             send.handIn(params)
@@ -4579,4 +4798,10 @@ private struct SpeedBridge: ViewModifier {
             .onChange(of: onForm) { _, onForm in stageChanged(onForm ?? false) }
             .onChange(of: preferred) { _, _ in preferenceChanged() }
     }
+}
+
+/// A refused `/pay` link's notice, keyed per verdict.
+struct PayRefusalNotice: Equatable {
+    let serial: Int
+    let body: String
 }

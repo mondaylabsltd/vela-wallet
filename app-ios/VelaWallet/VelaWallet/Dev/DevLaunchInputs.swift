@@ -47,6 +47,16 @@ enum DevLaunchInputs {
     static let peerconnectRelayVar = "VELA_PEERCONNECT_RELAY"
     /// The web's key for the relay (harness.ts `vela.peerconnectRelay`).
     static let peerconnectRelayKey = "vela.peerconnectRelay"
+    /// Native parity N-I3: a link the app is "opened with" at launch, through
+    /// the very handler a universal link reaches (`openLink`). A simulator
+    /// build is unsigned, so iOS never hands it a universal link of its own;
+    /// this is how a UI test opens one. Debug only, like every input here.
+    static let openLinkVar = "VELA_OPEN_LINK"
+
+    /// The launch link, when one was given and it is a URL.
+    static var launchLink: URL? {
+        nonEmpty(ProcessInfo.processInfo.environment[openLinkVar]).flatMap(URL.init(string:))
+    }
 
     /// Read the launch environment and write what it names. Once, from the
     /// app's init.

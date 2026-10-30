@@ -454,8 +454,11 @@ struct WireParityI1Tests {
     }
 
     @Test func ownNodeChainsAreTheFailedOnesTheOwnNodeAlonesServes() {
-        #expect(BalanceExecutor.ownNodeChains(failed: [1, 10, 137], unreached: [10, 8453]) == [10])
-        #expect(BalanceExecutor.ownNodeChains(failed: [], unreached: [10]).isEmpty)
+        let view = SettingsLive.OwnNodes(fallback: [1], unreached: [10, 8453]).viewJson
+        #expect(BalanceExecutor.ownNodeChains(failed: [1, 10, 137], poolViewJson: view) == [10])
+        #expect(BalanceExecutor.ownNodeChains(failed: [], poolViewJson: view).isEmpty)
+        // No view yet: nothing is said about anybody's node.
+        #expect(BalanceExecutor.ownNodeChains(failed: [10], poolViewJson: nil).isEmpty)
     }
 
     // MARK: Net — the regenerated view

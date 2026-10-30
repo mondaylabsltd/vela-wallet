@@ -140,7 +140,10 @@ class NetworkSpacePreference(
     fun load() {
         scope.launch {
             val stored = runCatching { store.read(KEY) }.getOrNull()
-            if (!chosen) _space.value = NetworkSpace.of(networkSpaceRead(stored))
+            // Read through the core first (its first call can be slow), then
+            // decide under the lock — a switch made meanwhile wins.
+            val read = NetworkSpace.of(networkSpaceRead(stored))
+            synchronized(this@NetworkSpacePreference) { if (!chosen) _space.value = read }
             loaded.complete(Unit)
         }
     }
@@ -156,8 +159,10 @@ class NetworkSpacePreference(
     fun set(space: NetworkSpace) {
         VelaLog.event("network.space", "set", "space" to space.wire)
         if (space != _space.value) settle.switchedNow()
-        chosen = true
-        _space.value = space
+        synchronized(this) {
+            chosen = true
+            _space.value = space
+        }
         scope.launch {
             if (!store.write(KEY, space.wire)) VelaLog.event("network.space", "not stored")
         }

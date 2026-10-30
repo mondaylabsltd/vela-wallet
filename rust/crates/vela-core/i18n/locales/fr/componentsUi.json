@@ -558,7 +558,28 @@
       "fullScreen": "Activer/désactiver le plein écran",
       "window": "Fenêtre",
       "minimize": "Placer dans le Dock",
-      "closeWindow": "Fermer la fenêtre"
+      "closeWindow": "Fermer la fenêtre",
+      "find": "Rechercher",
+      "commandPalette": "Palette de commandes"
+    },
+    "appUpdate": {
+      "title": "Mise à jour disponible",
+      "install": "Installer",
+      "later": "Plus tard"
+    },
+    "dropOverlay": {
+      "title": "Déposez une adresse, un lien de paiement ou une image QR"
+    },
+    "shortcuts": {
+      "send": "Envoyer avec {{app}}",
+      "receive": "Recevoir avec {{app}}",
+      "scan": "Scanner avec {{app}}"
+    },
+    "linkSheet": {
+      "multisigOnWeb": "Pour l’instant, les liens multisig s’ouvrent dans le portefeuille web."
+    },
+    "widget": {
+      "balanceDescription": "Votre solde en un coup d’œil, tel que Vela l’a mis à jour la dernière fois."
     },
     "browserStatus": {
       "title": "État de l'onglet",

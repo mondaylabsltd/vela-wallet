@@ -126,6 +126,10 @@ class AppContainer(private val app: Application) {
     val pendingSendParams = MutableStateFlow<SendOpenParams?>(null)
     /** Spec 048: a wallet flow another route asked for (contacts: 转账 / 收款 / 群发转账), entered once the wallet is back on top. */
     val pendingFlow = MutableStateFlow<WalletFlowEntry?>(null)
+    /** Phase 3: the flow a launcher shortcut or the Scan tile asked for — entered once a wallet is in front. */
+    val pendingLaunch = MutableStateFlow<app.getvela.wallet.core.platform.LaunchEntry.Flow?>(null)
+    /** Phase 3: an address or `ethereum:` request shared into Vela — Send's `scan_resolved` reads it once a wallet is in front. */
+    val pendingShare = MutableStateFlow<String?>(null)
     /** Spec 048: split rows to seed into the send machine right after it opens (a group's 群发转账). */
     val pendingSplitSeed = MutableStateFlow<List<SendRecipientDraft>?>(null)
 
@@ -646,7 +650,9 @@ class AppContainer(private val app: Application) {
         override val theme get() = themeRepository.current
         override suspend fun setTheme(value: ThemePreference) = themeRepository.setThemePreference(value)
         override fun applyLanguage(tag: String) = this@AppContainer.applyLanguage(tag)
-        override fun signingJson(): String? = signing.value?.signJson?.value
+        // The request with its sheet's facts (spec 103): what the agent reviews,
+        // and the fee its opinion is bound to.
+        override fun signingJson(): String? = signing.value?.agentSigningJson()
         override val browser get() = this@AppContainer.browser
         override fun signingSheet() = signing.value
         override fun agentWallets() = agent.config.value.wallets

@@ -1244,7 +1244,8 @@ enum SendLive {
                 } else if view.txError == "nonce_used" {
                     // A fresh quote, nonce and signature (send-15).
                     loc.t("send.txReviewAgain")
-                } else if let error = view.txError, error != "venue_blocked", error != "page_refused" {
+                } else if let error = view.txError, error != "venue_blocked", error != "page_refused",
+                          error != "proposal_not_supported" {
                     // A venue that cannot be used here is not retried, nor a
                     // request the page's own rules refused: the same attempt
                     // would be refused the same way.
@@ -1406,6 +1407,10 @@ enum SendLive {
         case "page_mismatch": return loc.t("componentsUi.signing.trustedSignerMismatch")
         case "page_not_opened": return loc.t("componentsUi.signing.integrity.couldNotCheck")
         case "page_refused": return loc.t("componentsUi.signing.trustedSignerRefused")
+        // A multisig's proposal this app cannot make yet: nothing was signed
+        // or proposed — said as that, never as a mailbox that could not be
+        // read, and not retried (the same attempt meets the same answer).
+        case "proposal_not_supported": return loc.t("send.txErrorProposalNotSupported")
         default: return view.txStatus == "signing" ? loc.t("send.txPreparingBiometric") : nil
         }
     }

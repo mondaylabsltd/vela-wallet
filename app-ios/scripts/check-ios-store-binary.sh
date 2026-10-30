@@ -6,7 +6,7 @@
 # Run on a RELEASE build — the archive ios-package.yml makes, or
 #   xcodebuild -scheme VelaWallet -configuration Release -sdk iphonesimulator build
 # — the iOS sibling of app-desktop/vela-wallet/scripts/check-store-binary.sh.
-# Two assertions:
+# Three assertions:
 #
 #   1. None of the Debug-only launch inputs is in the binary, by NAME: every
 #      `VELA_*` literal in the files Release excludes
@@ -16,6 +16,9 @@
 #      so a new input there is covered the moment it is written.
 #   2. None of the parallel space's fixture symbols is linked
 #      (`vela_dev_fixtures`' uniffi exports): the keyset is not in the app.
+#   3. The widget extension (native parity N-I2) links no core and no network,
+#      keychain, passkey or camera framework, calls no URL session, keychain
+#      item or biometry, and — when signed — is entitled to its App Group only.
 #
 # Pure inspection: strings, nm and grep — no signing identity, no network.
 set -euo pipefail
@@ -69,7 +72,53 @@ if [[ "$fixtures" != 0 ]]; then
   fail "$fixtures parallel-space fixture symbol(s) linked"
 fi
 
+# 3. The widget extension (native parity N-I2) holds no key, links no core
+#    and makes no request: it reads the snapshot the app writes into the App
+#    Group and draws it. Read from the built extension, so a convenience
+#    import in a shared file cannot slip a network stack or a keychain into
+#    a process that runs on the Lock Screen.
+appex_dir="$(dirname "$target")/PlugIns/VelaWidgetsExtension.appex"
+appex="$appex_dir/VelaWidgetsExtension"
+if [[ ! -f "$appex" ]]; then
+  fail "the widget extension is not embedded (PlugIns/VelaWidgetsExtension.appex)"
+else
+  ext=("$appex")
+  [[ -f "$appex_dir/VelaWidgetsExtension.debug.dylib" ]] && ext+=("$appex_dir/VelaWidgetsExtension.debug.dylib")
+  ext_hits() { local n=0 b; for b in "${ext[@]}"; do n=$((n + $(LC_ALL=C grep -a -c -- "$1" "$b" || true))); done; echo "$n"; }
+  # The core: none of its exports, and not its Swift module.
+  core="$(for b in "${ext[@]}"; do nm -arch all "$b" 2>/dev/null; done | grep -cE 'uniffi_vela_core|ffi_vela_core' || true)"
+  [[ "$core" == 0 ]] || fail "the widget extension links the core ($core symbol(s))"
+  [[ "$(ext_hits VelaCoreFFI)" == 0 ]] || fail "the widget extension carries VelaCoreFFI"
+  # Linked frameworks: nothing that talks to a network, a key or a passkey.
+  linked="$(for b in "${ext[@]}"; do otool -L "$b" 2>/dev/null; done)"
+  for framework in Network CFNetwork WebKit AuthenticationServices LocalAuthentication CryptoTokenKit \
+                   CoreBluetooth AVFoundation VisionKit; do
+    if grep -q "/$framework.framework/" <<<"$linked"; then
+      fail "the widget extension links $framework.framework"
+    fi
+  done
+  # Symbols it calls: no URL session, no keychain item, no biometry.
+  undefined="$(for b in "${ext[@]}"; do nm -u -arch all "$b" 2>/dev/null; done)"
+  for symbol in NSURLSession URLSession SecItemCopyMatching SecItemAdd SecKeyCreate LAContext ASAuthorization \
+                nw_connection nw_endpoint CFStreamCreatePairWithSocket; do
+    if grep -q -- "$symbol" <<<"$undefined"; then
+      fail "the widget extension calls $symbol"
+    fi
+  done
+  # Signed: its only entitlement is the App Group (no keychain group, no
+  # associated domains). An unsigned simulator build carries none to read.
+  if entitlements="$(codesign -d --entitlements - --xml "$appex_dir" 2>/dev/null)" && [[ -n "$entitlements" ]]; then
+    for key in keychain-access-groups com.apple.developer.associated-domains \
+               com.apple.developer.authentication-services.autofill-credential-provider; do
+      if grep -q "$key" <<<"$entitlements"; then
+        fail "the widget extension is entitled to $key"
+      fi
+    done
+  fi
+fi
+
 if (( failed )); then
   exit 1
 fi
-echo "ok: none of $count developer inputs, no fixture symbol, no parallel-space binding"
+echo "ok: none of $count developer inputs, no fixture symbol, no parallel-space binding;" \
+  "the widget extension links no core, no network stack, no keychain"

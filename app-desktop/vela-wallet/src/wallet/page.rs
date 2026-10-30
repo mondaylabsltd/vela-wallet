@@ -15,7 +15,7 @@ use gpui::AnimationExt as _;
 use gpui::AppContext as _;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    Anchor, Context, Div, ElementId, FocusHandle, InteractiveElement as _, IntoElement,
+    Anchor, Context, Div, ElementId, ExternalPaths, FocusHandle, InteractiveElement as _, IntoElement,
     KeyDownEvent, MouseButton, MouseDownEvent, ParentElement, Pixels, Point, Render, SharedString,
     Stateful, StatefulInteractiveElement as _, Styled, Window, anchored, deferred, div, point, px,
 };
@@ -128,7 +128,7 @@ use vela_core::app::sign_request::{SignErrorKind, SignResponsePayload};
 use super::WalletStrings;
 use super::components::{
     action_pill, activity_row, asset_row, asset_sub, balance_display, chain_row, empty_state,
-    icon_img, identicon_avatar, nav_row, qr_placeholder, section_header, section_header_parts,
+    icon_img, identicon_avatar, nav_row, qr_placeholder, section_header_parts,
     section_header_row, skeleton_row, token_icon, token_icon_logos, wallet_header,
 };
 use super::fixtures::{self, ADDRESS_FULL, IDENTICON_BOARD_SEEDS, WALLET_NAME};
@@ -352,6 +352,26 @@ pub enum Section {
 }
 
 impl Section {
+    /// The section a saved name or `VELA_SECTION` names; the home otherwise.
+    fn from_name(name: Option<&str>) -> Self {
+        match name {
+            Some("settings") => Section::Settings,
+            Some("contacts") => Section::Contacts,
+            Some("explore") => Section::Explore,
+            _ => Section::Wallet,
+        }
+    }
+
+    /// Its name in [`crate::window_state::Saved::section`].
+    const fn name(self) -> &'static str {
+        match self {
+            Section::Wallet => "wallet",
+            Section::Contacts => "contacts",
+            Section::Explore => "explore",
+            Section::Settings => "settings",
+        }
+    }
+
     /// Whether THIS build has the destination — the web's rule
     /// (`app-web/.../wallet/destinations.ts`), for the same reason.
     ///
@@ -791,6 +811,9 @@ pub struct WalletPage {
     /// two-second re-arm after an unusable code, so the same poster in frame
     /// is not refused thirty times a second.
     scan_quiet_until: Option<std::time::Instant>,
+    /// N-D3: what a drop or a paste has to say, for the scanner it opens —
+    /// set before that scanner's first frame, which clears the last one's.
+    scan_notice_on_open: Option<ScanNotice>,
     /// Why the camera is not running, as the last frame reported it.
     scan_camera_failure: Option<crate::executor::camera::CameraFailure>,
     /// A once-a-second redraw is running for a waiting receipt (078 F-04):
@@ -1477,13 +1500,12 @@ impl WalletPage {
     /// same thing and must not become it — that route has no session behind it
     /// and renders the mocks on purpose.
     pub fn signed_in(identity: Identity, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let section = match crate::dev_env::var!("VELA_SECTION").as_deref() {
-            Some("settings") => Section::Settings,
-            Some("contacts") => Section::Contacts,
-            Some("explore") => Section::Explore,
-            _ => Section::Wallet,
-        }
-        .or_wallet();
+        // N-D3: the section the window showed when it was last closed — on
+        // the launch's first wallet only (a later account switch starts on
+        // the home, as it always has). `VELA_SECTION` wins in a dev build.
+        let wanted = crate::dev_env::var!("VELA_SECTION")
+            .or_else(crate::window_state::take_launch_section);
+        let section = Section::from_name(wanted.as_deref()).or_wallet();
         // perf-10: a window opened on a screen that draws no balance of its
         // own notes the account and reads no network until the home shows.
         if section != Section::Wallet {
@@ -1491,6 +1513,22 @@ impl WalletPage {
         }
         let mut page = Self::with_section(section, false, window, cx);
         page.identity = Some(identity);
+        // `VELA_DROP_FILE=<path>` (developer builds): that file dropped on
+        // the window once it is up — the `VELA_SCAN_FILE` seam, for the same
+        // reason: a drag from the Finder is a gesture no headless pass makes.
+        if let Some(path) = crate::dev_env::var_os!("VELA_DROP_FILE") {
+            let path = std::path::PathBuf::from(path);
+            cx.spawn_in(window, async move |page, cx| {
+                cx.background_executor()
+                    .timer(std::time::Duration::from_secs(2))
+                    .await;
+                page.update_in(cx, |this, window, cx| {
+                    this.take_dropped(vec![path], window, cx);
+                })
+                .ok();
+            })
+            .detach();
+        }
         // `VELA_PALETTE=<query>` (developer builds): the command palette open,
         // narrowed by `<query>` — a keystroke a screenshot pass cannot press.
         if let Some(query) = crate::dev_env::var!("VELA_PALETTE") {
@@ -1786,6 +1824,7 @@ impl WalletPage {
             flow_query_focus: cx.focus_handle(),
             scan_notice: None,
             scan_quiet_until: None,
+            scan_notice_on_open: None,
             scan_camera_failure: None,
             receipt_ticking: false,
             dapp_landing: None,
@@ -4278,6 +4317,8 @@ impl WalletPage {
             activity_col = activity_col.child(
                 div()
                     .id(ElementId::from(("activity", i)))
+                    // N-D1: one row, read as one sentence, as an asset is.
+                    .a11y_item(crate::wallet::components::activity_row_words(row))
                     .cursor_pointer()
                     .when(fresh == Some(i), |el| {
                         // A tint behind the row, not a border or a badge:
@@ -4454,27 +4495,47 @@ impl WalletPage {
                         div()
                             .max_w(px(WALLET_ROW_MEASURE))
                             .child(pills)
-                            .child(
-                                div()
-                                    .id("section-activity")
-                                    .cursor_pointer()
-                                    .child(section_header(
-                                        theme,
-                                        &mut self.icons,
-                                        s_activity,
-                                        s_all,
-                                    ))
-                                    .on_click(cx.listener(|this, _, _, cx| {
-                                        this.enter_flow(FlowEntry::Activity, cx);
-                                        cx.notify();
-                                    })),
-                            )
+                            .child({
+                                // Both halves open the activity, as the whole
+                                // row did; taken apart so a screen reader meets
+                                // the web's `<h2>` and then its button.
+                                let all_label = s_all.clone();
+                                let (title, action) = section_header_parts(
+                                    theme,
+                                    &mut self.icons,
+                                    s_activity,
+                                    s_all,
+                                );
+                                section_header_row()
+                                    .child(
+                                        div()
+                                            .id("section-activity")
+                                            .cursor_pointer()
+                                            .child(title)
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.enter_flow(FlowEntry::Activity, cx);
+                                                cx.notify();
+                                            })),
+                                    )
+                                    .child(
+                                        div()
+                                            .id("section-activity-all")
+                                            .cursor_pointer()
+                                            .a11y_button(all_label)
+                                            .child(action)
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.enter_flow(FlowEntry::Activity, cx);
+                                                cx.notify();
+                                            })),
+                                    )
+                            })
                             .child(activity_col)
                             .child({
                                 // The two halves lead to two different panels: the title names
                                 // the assets list, and the action reads 添加, so it opens the
                                 // add-token panel stacked on it — which is what makes DT3L's
                                 // back chevron lead somewhere.
+                                let add_label = s_add.clone();
                                 let (title, action) =
                                     section_header_parts(theme, &mut self.icons, s_assets, s_add);
                                 section_header_row()
@@ -4492,6 +4553,7 @@ impl WalletPage {
                                         div()
                                             .id("section-assets-add")
                                             .cursor_pointer()
+                                            .a11y_button(add_label)
                                             .child(action)
                                             .on_click(cx.listener(|this, _, _, cx| {
                                                 this.enter_flow(FlowEntry::AddToken, cx);
@@ -5395,6 +5457,37 @@ impl WalletPage {
             model = wallet_live::no_value(model, self.loc.t("networkSpace.noValue"));
         }
         model
+    }
+
+    /// What the menu-bar extra shows: the hero's figure as it is drawn
+    /// (the mask while hidden, nothing while there is no figure) and its
+    /// "Updated <ago>".
+    fn tray_model(&mut self, cx: &mut Context<Self>) -> crate::tray::TrayModel {
+        let hero = self.balance_model(cx);
+        let figure = match hero.state {
+            fixtures::BalanceState::Loading | fixtures::BalanceState::NoValue => None,
+            fixtures::BalanceState::Hidden => Some(hero.integer.to_string()),
+            fixtures::BalanceState::Normal | fixtures::BalanceState::ZeroLive => {
+                Some(match hero.decimals.as_ref() {
+                    Some(decimals) => format!(
+                        "{}{}{decimals}",
+                        hero.integer,
+                        crate::executor::format_prefs::current()
+                            .number
+                            .separators()
+                            .decimal
+                    ),
+                    None => hero.integer.to_string(),
+                })
+            }
+        };
+        crate::tray::TrayModel {
+            figure: figure.filter(|figure| !figure.is_empty()),
+            updated: hero.updated.map(|updated| updated.to_string()),
+            send: self.strings.action_send.to_string(),
+            receive: self.strings.action_receive.to_string(),
+            open: "Vela Wallet".to_owned(),
+        }
     }
 
     /// The hero's ↻ pressed (issues #443, 462): the balances as the
@@ -6319,6 +6412,28 @@ impl WalletPage {
         reason = "the scaffold and its one extra slot"
     )]
     fn panel_scaffold_placed(
+        &mut self,
+        theme: &Theme,
+        title: SharedString,
+        lead: Option<gpui::AnyElement>,
+        underline: bool,
+        body: Div,
+        foot: Option<(Div, FootPlace)>,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        // N-ALL motion: the column slides in from its edge as it fades, the
+        // web's `panel-in` (240 ms ease-out); a crossfade under Reduce Motion.
+        // Keyed by its place, so it moves when the column OPENS — not when
+        // one panel in it gives way to the next.
+        let column = self.panel_scaffold_column(theme, title, lead, underline, body, foot, cx);
+        crate::ui::motion::panel_in(column, THIRD_PANEL_W, crate::ui::motion::reduced())
+    }
+
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the scaffold and its one extra slot"
+    )]
+    fn panel_scaffold_column(
         &mut self,
         theme: &Theme,
         title: SharedString,
@@ -8876,6 +8991,7 @@ impl WalletPage {
             tx = tx.child(
                 div()
                     .id(ElementId::from(("detail-activity", i)))
+                    .a11y_item(crate::wallet::components::activity_row_words(row))
                     .when(id.is_some(), |el| el.cursor_pointer())
                     .child(activity_row(theme, &mut self.icons, row))
                     .on_click(cx.listener(move |this, _, _, cx| {
@@ -11850,6 +11966,36 @@ impl WalletPage {
             .child(form_row(theme, language, language_control))
             .child(form_row(theme, scale_label, scale_control))
             .child(form_row(theme, theme_label, theme_control))
+            .children(self.menu_bar_row(theme, cx))
+    }
+
+    /// N-D3: the menu-bar extra (Windows: the notification-area icon), off
+    /// until switched on here. Drawn only where the platform has one, and
+    /// only once the corpus has its words (`crate::tray::SWITCH_KEYS`) — a
+    /// switch labelled with its own key path is not shipped.
+    fn menu_bar_row(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Option<Div> {
+        if !crate::tray::supported() || self.identity.is_none() {
+            return None;
+        }
+        let (title_key, hint_key) = crate::tray::SWITCH_KEYS;
+        let title = self.loc.t(title_key);
+        let hint = self.loc.t(hint_key);
+        if title.as_ref() == title_key || hint.as_ref() == hint_key {
+            return None;
+        }
+        let on = crate::tray::wanted();
+        let page = cx.entity();
+        Some(crate::settings::components::toggle_row(
+            "settings-menu-bar",
+            theme,
+            title,
+            hint,
+            on,
+            move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                crate::tray::set_wanted(!on);
+                page.update(cx, |_, cx| cx.notify());
+            },
+        ))
     }
 
     /// What the 货币 row shows — the core's committed currency for a real
@@ -17858,6 +18004,7 @@ impl WalletPage {
                     this.explore_groups = true;
                     cx.notify();
                 }))
+                .a11y_button(self.explore.edit.clone())
                 .into_any_element()
         } else {
             edit_half.into_any_element()
@@ -17942,12 +18089,14 @@ impl WalletPage {
             };
             // The Clear on the live Recent heading clears the core's history.
             let clearable = group.id == "recent" && matches!(group.action, GroupAction::Clear);
+            let action_label = action.clone();
             let (title_half, action_half) =
                 section_header_parts(theme, &mut self.icons, group.title.clone(), action);
             let action_half = if clearable {
                 action_half
                     .id("recent-clear")
                     .cursor_pointer()
+                    .a11y_button(action_label)
                     .on_click(cx.listener(|_, _: &gpui::ClickEvent, _, cx| {
                         resident::resident::<BrowserHistory>(cx).update(cx, |resident, cx| {
                             resident.dispatch(vela_core::app::browser_history::Event::ClearAll, cx);
@@ -18894,9 +19043,14 @@ impl WalletPage {
         // its words, and whether they are said now. A pinned answer's
         // (`VELA_SIM`) is held the same way.
         let mut held_note: Option<Option<(SharedString, bool)>> = pinned_note.map(Some);
+        // dapp-15: "Check again" under a verdict the core says is the
+        // network's — `Some(checking)` while offered.
+        #[cfg_attr(target_os = "linux", allow(unused_mut))]
+        let mut sim_recheck: Option<bool> = None;
         #[cfg(not(target_os = "linux"))]
         if let Some(host) = self.signing_host.as_ref() {
             let host = host.read(cx);
+            sim_recheck = host.sim_recheck_offer();
             let fee = host.fee_view();
             // Where the executor will sign, from the same context it reads
             // (`SignContext::follow_venue`).
@@ -19099,12 +19253,18 @@ impl WalletPage {
                         measuring,
                         signing_live::reserve_warning(fee, &self.signing),
                     );
+                    // A shut confirm says why; an open one after a prompt
+                    // that signed nothing says that, calmly — closed, or run
+                    // out at its deadline (signer-11, the core's note).
+                    let passkey = signing_live::passkey_note_key(host.view.passkey_note)
+                        .map(|key| gpui::SharedString::from(self.loc.t(key).to_string()));
                     held_note = Some(
                         held.note(
                             confirm
                                 .note
                                 .clone()
-                                .filter(|_| !confirm.enabled && !confirm.label.is_empty()),
+                                .filter(|_| !confirm.enabled && !confirm.label.is_empty())
+                                .or(passkey),
                         ),
                     );
                 }
@@ -19489,6 +19649,32 @@ impl WalletPage {
                     item,
                     signing_components::verdict_room(theme, &mut self.icons, inner, Some(laid_out)),
                 ));
+                // dapp-15: no node answered — the core's `recheck` — so the
+                // person may ask again; while asked, the verdict above stays
+                // and the button says it is checking.
+                if let Some(checking) = sim_recheck {
+                    let label = self.loc.t(if checking {
+                        "componentsUi.signing.simRechecking"
+                    } else {
+                        "componentsUi.signing.simRecheck"
+                    });
+                    let button = crate::flows::components::ghost_button(theme, label)
+                        .id("signing-sim-recheck");
+                    column = column.child(div().flex().child(if checking {
+                        button.opacity(theme::OPACITY_DISABLED)
+                    } else {
+                        button
+                            .cursor_pointer()
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                #[cfg(not(target_os = "linux"))]
+                                if let Some(host) = this.signing_host.clone() {
+                                    host.update(cx, |host, cx| host.sim_again(cx));
+                                }
+                                #[cfg(target_os = "linux")]
+                                let _ = (this, cx);
+                            }))
+                    }));
+                }
             } else if let (true, signing_fixtures::Block::Intent { text, tone }) =
                 (model.first_party, item)
             {
@@ -20933,14 +21119,13 @@ impl WalletPage {
                 .right_0()
                 .flex()
                 .justify_center()
-                .child(
-                    pill.with_animation(
-                        "receipt-toast",
-                        gpui::Animation::new(std::time::Duration::from_millis(320))
-                            .with_easing(gpui::ease_out_quint()),
-                        |pill, delta| pill.opacity(delta).top(px((delta - 1.) * 12.)),
-                    ),
-                )
+                // The web's `toast-in` (`ui::motion`): 220 ms ease-out, a
+                // 12 px drop; a fade alone under Reduce Motion.
+                .child(crate::ui::motion::toast_in(
+                    pill,
+                    "receipt-toast",
+                    crate::ui::motion::reduced(),
+                ))
                 .into_any_element(),
         )
     }
@@ -21033,6 +21218,9 @@ impl WalletPage {
         match (self.scan_notice, self.scan_camera_failure) {
             (Some(ScanNotice::Unusable), _) => Some(s.scan_invalid.clone()),
             (Some(ScanNotice::NothingFound), _) => Some(s.scan_no_qr.clone()),
+            (Some(ScanNotice::Said(key)), _) => {
+                Some(crate::loc::Loc::for_language(&crate::loc::app_language()).t(key))
+            }
             (None, Some(CameraFailure::Denied)) => Some(s.scan_permission.clone()),
             (None, Some(CameraFailure::Absent)) => Some(s.scan_no_camera.clone()),
             (None, Some(CameraFailure::Unavailable)) => Some(s.scan_unavailable.clone()),
@@ -21068,8 +21256,9 @@ impl WalletPage {
     /// stack (`VELA_FLOW=DS1`) where no click happened.
     fn pump_camera(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.scan_camera.is_none() {
-            // A scanner just opened: what the last one said is not true of it.
-            self.scan_notice = None;
+            // A scanner just opened: what the last one said is not true of it
+            // — unless a drop or a paste opened it to say something (N-D3).
+            self.scan_notice = self.scan_notice_on_open.take();
             self.scan_quiet_until = None;
             // The one place a scanner's frames start — and the real camera
             // only for a signed-in person's own scanner (PR 3 note 7). The
@@ -21254,9 +21443,161 @@ impl WalletPage {
     /// form opens, prefilled and locked to the link's chain, and nothing is
     /// sent until the person confirms.
     pub(crate) fn open_pay_link(&mut self, url: &str, cx: &mut Context<Self>) {
-        if self.scan_resolved(url.to_owned(), cx) {
+        if self.pay_refused(url, cx) || self.scan_resolved(url.to_owned(), cx) {
             cx.activate(true);
         }
+    }
+
+    /// A payment link the core refused, said where the person can see it —
+    /// the scanner, up with the core's reason (`pay_refusal`) in the web's
+    /// words (`receive.pay.*`) — whether it was pasted, dropped or opened by
+    /// the OS. `true` when `text` was such a link.
+    fn pay_refused(&mut self, text: &str, cx: &mut Context<Self>) -> bool {
+        let Some(Err(refusal)) = crate::executor::payment_request::pay_link(text) else {
+            return false;
+        };
+        self.show_scan_notice(
+            ScanNotice::Said(crate::executor::payment_request::refusal_key(refusal)),
+            cx,
+        );
+        true
+    }
+
+    /// N-D3: text that arrived from outside a field — pasted onto the window
+    /// with no field taking it, or read out of a dropped file — routed by
+    /// what the core says it is (`crate::inbound`). `true` when something
+    /// took it. Nothing here moves value: every path ends at a form.
+    pub(crate) fn take_inbound(
+        &mut self,
+        text: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        use crate::inbound::Inbound;
+        // A signed-in wallet only, and never under a request being signed:
+        // a paste is not an answer to a site.
+        if self.identity.is_none() || self.panel == PanelId::Signing {
+            return false;
+        }
+        match crate::inbound::classify(text, &crate::loc::app_language()) {
+            Inbound::Payment(text) => {
+                // On the address book a bare address is a contact to add.
+                if self.section == Section::Contacts
+                    && crate::flows::eip681::is_hex_address(&text)
+                    && self.contact_form.is_none()
+                {
+                    self.contact_form = Some(ContactForm {
+                        address: text,
+                        ..ContactForm::default()
+                    });
+                    // The address is given: the name is what is left to type.
+                    window.focus(&self.contact_form_name_focus, cx);
+                    cx.notify();
+                    return true;
+                }
+                if self.pay_refused(&text, cx) || self.scan_resolved(text, cx) {
+                    return true;
+                }
+                // Read and not a payment: the scanner says so, where a scan
+                // of the same text would have said it.
+                self.show_scan_notice(ScanNotice::Unusable, cx);
+                true
+            }
+            Inbound::Multisig { url, .. } => {
+                // Multisig runs on the web wallet until it lands here; the
+                // link the CORE rebuilt opens there.
+                crate::executor::opener::open(&url, cx);
+                true
+            }
+            Inbound::Damaged { key } => {
+                self.show_scan_notice(ScanNotice::Said(key), cx);
+                true
+            }
+            Inbound::Nothing => false,
+        }
+    }
+
+    /// The scanner, up with `notice` on it: what was dropped or pasted, said
+    /// where the person can pick another picture or close it.
+    fn show_scan_notice(&mut self, notice: ScanNotice, cx: &mut Context<Self>) {
+        if self.flows.last() == Some(&FlowPanel::Ds1) && self.scan_camera.is_some() {
+            self.scan_notice = Some(notice);
+        } else {
+            // Its first frame clears the notice it opens with: hand it over.
+            self.scan_notice_on_open = Some(notice);
+            if self.flows.last() != Some(&FlowPanel::Ds1) {
+                if self.send_host.is_none() {
+                    self.section = Section::Wallet;
+                    self.enter_flow(FlowEntry::Scan, cx);
+                } else {
+                    self.flows.push(FlowPanel::Ds1);
+                }
+            }
+        }
+        cx.notify();
+    }
+
+    /// N-D3: files dropped onto the window. A picture is read for a QR code
+    /// (off the UI thread — a photo is megabytes); a saved link
+    /// (`.webloc`, `.url`, `.txt`) for its link. The first that says
+    /// something is taken; a picture with no code says "No QR found".
+    pub(crate) fn take_dropped(
+        &mut self,
+        paths: Vec<std::path::PathBuf>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.identity.is_none() || paths.is_empty() {
+            return;
+        }
+        cx.spawn_in(window, async move |page, cx| {
+            let found = cx
+                .background_executor()
+                .spawn(async move {
+                    let mut saw_image = false;
+                    for path in paths {
+                        let name = path
+                            .file_name()
+                            .map(|name| name.to_string_lossy().into_owned())
+                            .unwrap_or_default();
+                        let image = crate::inbound::is_image(&name);
+                        // A link file is small; a picture is read whole.
+                        let Ok(meta) = std::fs::metadata(&path) else {
+                            continue;
+                        };
+                        if !meta.is_file() || meta.len() > 64 * 1024 * 1024 {
+                            continue;
+                        }
+                        let Ok(bytes) = std::fs::read(&path) else {
+                            continue;
+                        };
+                        let text = if image {
+                            saw_image = true;
+                            crate::executor::qr::decode_first(&bytes)
+                        } else {
+                            crate::inbound::text_of_link_file(&name, &bytes)
+                        };
+                        if let Some(text) = text {
+                            return (Some(text), saw_image);
+                        }
+                    }
+                    (None, saw_image)
+                })
+                .await;
+            page.update_in(cx, |this, window, cx| match found {
+                (Some(text), _) => {
+                    if !this.take_inbound(&text, window, cx) {
+                        this.show_scan_notice(ScanNotice::Unusable, cx);
+                    }
+                }
+                (None, true) => this.show_scan_notice(ScanNotice::NothingFound, cx),
+                // Nothing this wallet reads (a PDF, a folder): the drop is
+                // refused as the drag already showed — no tint on the target.
+                (None, false) => {}
+            })
+            .ok();
+        })
+        .detach();
     }
 
     fn scan_resolved(&mut self, text: String, cx: &mut Context<Self>) -> bool {
@@ -21266,14 +21607,18 @@ impl WalletPage {
         // a valid one is the request it names — always on its chain, so the
         // send locks to it — and a malformed one is refused, never guessed.
         let request = match crate::executor::payment_request::pay_link(&text) {
-            Some(Some(pay)) => Some(crate::flows::eip681::Eip681 {
+            Some(Ok(pay)) => Some(crate::flows::eip681::Eip681 {
                 recipient: pay.recipient,
                 chain_id: Some(pay.chain_id),
                 token_address: pay.token_address,
                 amount_base_units: pay.amount_base,
             }),
-            Some(None) => {
-                self.scan_notice = Some(ScanNotice::Unusable);
+            // Refused, and the scanner says why — the first rule the link
+            // broke, in the web's words (`pay_refusal`, `receive.pay.*`).
+            Some(Err(refusal)) => {
+                self.scan_notice = Some(ScanNotice::Said(
+                    crate::executor::payment_request::refusal_key(refusal),
+                ));
                 self.scan_quiet_until =
                     Some(std::time::Instant::now() + std::time::Duration::from_secs(2));
                 cx.notify();
@@ -22066,6 +22411,21 @@ impl Render for WalletPage {
         self.watch_field_blurs(window, cx);
         // N-D1: `VELA_A11Y_DUMP` (developer builds) — the last frame's tree.
         crate::ui::a11y::dump_tree(window);
+        // N-D3: the section on screen, for the next launch (a signed-in
+        // wallet only; a drawn route remembers nothing).
+        if self.identity.is_some() && !self.gallery {
+            crate::window_state::note_section(self.section.name(), cx);
+        }
+        // N-D3: the menu-bar extra, when the person turned it on — the
+        // hero's figure (masked when the hero is), never a drawn route's.
+        if crate::tray::supported() && !self.gallery {
+            if self.identity.is_some() && crate::tray::wanted() {
+                let model = self.tray_model(cx);
+                crate::tray::show(model);
+            } else {
+                crate::tray::hide();
+            }
+        }
         self.watch_money(cx);
         self.watch_send_display(cx);
         // An identicon somewhere was pressed (078 H-02): open the viewer on
@@ -22356,6 +22716,25 @@ impl Render for WalletPage {
                 },
             ));
         }
+        // N-D3: a QR picture or a saved link dropped on the home or the
+        // address book (`take_dropped`). Elsewhere a drop means something
+        // else (the feedback form's screenshots) or nothing.
+        let drop_target = self.identity.is_some()
+            && matches!(self.section, Section::Wallet | Section::Contacts)
+            && self.panel != PanelId::Signing;
+        let root = if drop_target {
+            root.group("wallet-drop")
+                .on_drop(cx.listener(|this, paths: &ExternalPaths, window, cx| {
+                    this.take_dropped(paths.paths().to_vec(), window, cx);
+                }))
+                .child(drop_overlay(
+                    &theme,
+                    &mut self.icons,
+                    self.loc.t("componentsUi.dropOverlay.title"),
+                ))
+        } else {
+            root
+        };
         let root = root
             .track_focus(&self.focus_handle)
             // ⌘V / Ctrl+V with an image on the clipboard, while the Feedback
@@ -22399,6 +22778,16 @@ impl Render for WalletPage {
                 if ks.key == "f11" {
                     window.toggle_fullscreen();
                 }
+                // N-D3, Windows and Linux: Ctrl+V that no field took (a
+                // field stops it) — a link or an address pasted onto the
+                // window. macOS hears ⌘V through the Edit menu instead
+                // (`app_menu`'s Paste fallback), never here.
+                if !cfg!(target_os = "macos")
+                    && crate::ui::edit_chord(ks) == Some(crate::ui::EditChord::Paste)
+                    && let Some(text) = cx.read_from_clipboard().and_then(|item| item.text())
+                {
+                    this.take_inbound(&text, window, cx);
+                }
             }));
 
         // Square corners would poke out of the frame's rounded border.
@@ -22415,6 +22804,61 @@ impl Render for WalletPage {
 
         window_frame(root, &theme, window)
     }
+}
+
+/// N-D3: the drop target, drawn over the window while files are dragged over
+/// it (`group_drag_over` on the page's `wallet-drop` group) and invisible
+/// otherwise — no listener, so it never takes a click. Its own words
+/// (`componentsUi.dropOverlay.title`: "Drop an address, payment link or QR
+/// image") under the scanner's glyph: what a drop does is what a scan of the
+/// picture does.
+fn drop_overlay(theme: &Theme, icons: &mut crate::icons::IconCache, title: SharedString) -> Div {
+    let tint = theme.backdrop;
+    div()
+        .absolute()
+        .inset_0()
+        .flex()
+        .items_center()
+        .justify_center()
+        // `VELA_DROP_PREVIEW=1` (developer builds): drawn as a drag shows it,
+        // for a screenshot pass that cannot hold a file over the window.
+        .opacity(if crate::dev_env::var_os!("VELA_DROP_PREVIEW").is_some() {
+            1.
+        } else {
+            0.
+        })
+        .when(crate::dev_env::var_os!("VELA_DROP_PREVIEW").is_some(), |el| {
+            el.bg(tint)
+        })
+        .group_drag_over::<ExternalPaths>("wallet-drop", move |style| style.opacity(1.).bg(tint))
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .items_center()
+                .gap(px(16.))
+                .px(px(48.))
+                .py(px(36.))
+                .rounded(px(16.))
+                .bg(theme.bg_raised)
+                .border_2()
+                .border_color(theme.border_strong)
+                .shadow(crate::ui::dialog::shadow_lg())
+                .child(crate::wallet::components::icon_img(
+                    icons,
+                    crate::icons::Icon::ScanLine,
+                    false,
+                    theme.fg_base,
+                    36.,
+                ))
+                .child(
+                    div()
+                        .text_size(theme::text_panel_title())
+                        .font_weight(gpui::FontWeight::BOLD)
+                        .text_color(theme.fg_base)
+                        .child(title),
+                ),
+        )
 }
 
 /// What a key in the address bar was (spec 082 RD5).
@@ -22451,6 +22895,9 @@ enum ScanNotice {
     Unusable,
     /// A picked picture had no code in it.
     NothingFound,
+    /// N-D3: what the core says about a dropped or pasted multisig link
+    /// that does not read — the corpus key (`crate::inbound`).
+    Said(&'static str),
 }
 
 /// The contacts route's copies (078 X-06): the toast's key, and the QR

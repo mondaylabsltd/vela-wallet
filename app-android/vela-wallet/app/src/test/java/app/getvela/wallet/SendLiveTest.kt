@@ -715,6 +715,57 @@ class SendLiveTest {
     }
 
     /**
+     * send-15: the relay's bare AA25, as the core reads it — another
+     * transaction of this account spent the nonce first. Nothing was sent:
+     * "Not sent", calmly, over "went first", and Review again (a fresh quote,
+     * nonce and signature) — the web's `nonce_used`, never "couldn't submit".
+     */
+    @Test
+    fun `a nonce another transaction spent first is said calmly, with Review again`() {
+        val drawn = (FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm).model
+        val confirm = SendView(stage = SendStage.Confirm, selected_token = xdai, recipient = recipient, confirm_amount = "0.001", fee = fee())
+        val wentFirst = SendLive.confirm(drawn, confirm.copy(tx_status = SendTxStatus.Error, tx_error = SendTxErrorKey.NonceUsed), ctx())
+        assertEquals(strings.t(I18nKeys.Flows.RECEIPT_NOT_SENT), wentFirst.noticeTitle)
+        assertEquals(strings.t(I18nKeys.Flows.WENT_FIRST), wentFirst.notice)
+        assertTrue("calm, never the warning tone", wentFirst.noticeCalm)
+        assertEquals(strings.t(I18nKeys.Flows.TX_REVIEW_AGAIN), wentFirst.noticeAction)
+        // The words are the corpus's, in the person's language — not a key.
+        assertTrue(wentFirst.notice!!.contains("went first"))
+        // A relay stop over it is said in its own words instead.
+        val stopped = SendLive.confirm(
+            drawn,
+            confirm.copy(
+                tx_status = SendTxStatus.Error, tx_error = SendTxErrorKey.NonceUsed,
+                relay_unreachable = app.getvela.wallet.feature.send.core.SendRelayUnreachable(chain_id = 100, operator_served = true),
+            ),
+            ctx(),
+        )
+        assertNull(stopped.noticeTitle)
+        // The core's view decodes it.
+        val wire = app.getvela.wallet.core.crux.Wire.json.decodeFromString(SendView.serializer(), """{"tx_error":"nonce_used"}""")
+        assertEquals(SendTxErrorKey.NonceUsed, wire.tx_error)
+    }
+
+    /**
+     * A multisig's proposal this shell cannot make (`SendProposeFailure::
+     * NotSupported`): said as that, in the corpus's own sentence — never the
+     * mailbox's or the generic line — and with no retry that would meet the
+     * same answer.
+     */
+    @Test
+    fun `a proposal this phone cannot make says so, and offers no retry`() {
+        val drawn = (FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm).model
+        val confirm = SendView(stage = SendStage.Confirm, selected_token = xdai, recipient = recipient, confirm_amount = "0.001", fee = fee())
+        val refused = SendLive.confirm(drawn, confirm.copy(tx_status = SendTxStatus.Error, tx_error = SendTxErrorKey.ProposalNotSupported), ctx())
+        assertEquals(strings.t(I18nKeys.Flows.TX_ERROR_PROPOSAL_NOT_SUPPORTED), refused.notice)
+        assertFalse(refused.notice == strings.t(I18nKeys.Flows.TX_ERROR_GENERIC))
+        assertFalse("a real sentence, not the key", refused.notice!!.startsWith("send."))
+        assertNull("no retry", refused.noticeAction)
+        val wire = app.getvela.wallet.core.crux.Wire.json.decodeFromString(SendView.serializer(), """{"tx_error":"proposal_not_supported"}""")
+        assertEquals(SendTxErrorKey.ProposalNotSupported, wire.tx_error)
+    }
+
+    /**
      * Spec 097 F (S3): a two-coin sweep's success screen said "Send ETH |
      * Sent 0.000418 ETH | To Wallet · Base" although 0.034929 USDC moved in
      * the same operation (Android captioned it "2 recipients" besides — a

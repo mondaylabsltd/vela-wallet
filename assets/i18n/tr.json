@@ -538,6 +538,7 @@
   "submitSlow": "{{network}} yanıtı bekleniyor — şu ana kadar {{seconds}} sn. Henüz hiçbir şey imzalanmadı.",
   "txErrorChainBusy": "{{network}} düğümleri yoğun ve zamanında yanıt vermedi, bu yüzden hiçbir şey imzalanmadı ya da gönderilmedi. Biraz sonra yeniden deneyin.",
   "txErrorChainUnreachable": "{{network}} ağına ulaşılamadı, bu yüzden hiçbir şey imzalanmadı ya da gönderilmedi. Biraz sonra yeniden deneyin.",
+  "txErrorProposalNotSupported": "Bu uygulama henüz multisig işlemi öneremiyor, bu yüzden hiçbir şey imzalanmadı ya da önerilmedi.",
   "maxMoved": "Maksimum artık {{to}} {{symbol}} (önceden {{from}}): ağ ücreti yeniden hesaplandı, bu yüzden onun için ayrılan tutar değişti.",
   "txReviewAgain": "Tekrar incele",
   "txSendAgain": "Tekrar gönder",
@@ -612,7 +613,11 @@
    "amount": "Tutar",
    "anyAmount": "Herhangi bir tutar",
    "invalidTitle": "Geçersiz ödeme bağlantısı",
-   "invalidBody": "Bu bağlantıda geçerli bir alıcı veya ağ eksik. Gönderenden yeni bir bağlantı isteyin."
+   "invalidBody": "Bu bağlantıda geçerli bir alıcı veya ağ eksik. Gönderenden yeni bir bağlantı isteyin.",
+   "invalidToken": "Bu bağlantıdaki token bir sözleşme adresi değil. Gönderenden yeni bir bağlantı isteyin.",
+   "invalidAmount": "Bu bağlantıdaki tutar tam olarak okunamıyor. Gönderenden yeni bir bağlantı isteyin.",
+   "noWalletBody": "Bu cihazda henüz bir Vela cüzdanı yok. Bir tane oluşturun veya giriş yapın; bu ödeme incelemeniz için sizi bekliyor olacak.",
+   "home": "Vela Wallet'a git"
   },
   "addressLabel": "Alma adresiniz",
   "searchNetworkPlaceholder": "Ağ ara",
@@ -1864,7 +1869,28 @@
    "fullScreen": "Tam Ekranı Aç/Kapat",
    "window": "Pencere",
    "minimize": "Küçült",
-   "closeWindow": "Pencereyi Kapat"
+   "closeWindow": "Pencereyi Kapat",
+   "find": "Bul",
+   "commandPalette": "Komut Paleti"
+  },
+  "appUpdate": {
+   "title": "Güncelleme var",
+   "install": "Yükle",
+   "later": "Sonra"
+  },
+  "dropOverlay": {
+   "title": "Adres, ödeme bağlantısı veya QR görseli bırakın"
+  },
+  "shortcuts": {
+   "send": "{{app}} ile gönder",
+   "receive": "{{app}} ile al",
+   "scan": "{{app}} ile tara"
+  },
+  "linkSheet": {
+   "multisigOnWeb": "Multisig bağlantıları şimdilik web cüzdanında açılır."
+  },
+  "widget": {
+   "balanceDescription": "Bakiyeniz bir bakışta, Vela'nın son güncellediği haliyle."
   },
   "browserStatus": {
    "title": "Sekme durumu",
@@ -2044,6 +2070,11 @@
    "attestation": "Doğrulama beyanı",
    "userVerified": "Kullanırken doğrulama gerekir",
    "signsHere": "Oturum açık"
+  },
+  "appearance": {
+   "menuBar": "Menü çubuğunda göster",
+   "trayIcon": "Sistem tepsisinde göster",
+   "statusItemHint": "Toplamınız ve hızlı Gönder ile Al, son yüklenen rakamlardan — ek bir şey çekilmez."
   }
  },
  "contacts": {

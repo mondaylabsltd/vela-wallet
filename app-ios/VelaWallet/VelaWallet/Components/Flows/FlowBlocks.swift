@@ -461,7 +461,15 @@ struct StatusHeroView: View {
         Circle()
             .fill(discFill)
             .frame(width: WalletFlowGeometry.statusHero, height: WalletFlowGeometry.statusHero)
-            .overlay { mark }
+            // The disc's colour moves with the stage instead of jumping.
+            .animation(reduceMotion ? nil : .easeOut(duration: Tokens.Motion.slow), value: stage)
+            .overlay {
+                mark
+                    // A new mark per stage, so the tick LANDS (the web's
+                    // `.landed`) rather than replacing the clock in place.
+                    .id(stage)
+                    .modifier(StatusLand(active: stage == .confirmed && !reduceMotion))
+            }
             // Issue #444: a submitted disc breathes, so the wait reads as
             // progress rather than a frozen screen (the web's and Android's).
             .modifier(StatusBreath(active: stage == .submitted && !reduceMotion))
@@ -564,6 +572,10 @@ private struct StatusRing: View {
                 .rotationEffect(.degrees(-90))
                 // One second per step, linear: the screen ticks once a second.
                 .animation(reduceMotion ? nil : .linear(duration: 1), value: progress)
+                // The confirmation CLOSES the ring the person was watching,
+                // and turns it green, over the web's slow beat — the tick
+                // arrives as the end of the wait, not as a new screen.
+                .animation(reduceMotion ? nil : .easeOut(duration: Tokens.Motion.slow), value: stage)
                 .rotationEffect(.degrees(roaming && turned ? 360 : 0))
         }
         .onAppear(perform: roam)
@@ -583,6 +595,29 @@ private struct StatusRing: View {
         withAnimation(.linear(duration: WalletFlowGeometry.statusRoamPeriod).repeatForever(autoreverses: false)) {
             turned = true
         }
+    }
+}
+
+/// The tick's landing: from `statusLandFrom`, faded, to its own size, with
+/// the web's overshoot. Reduce Motion: it is simply there.
+struct StatusLand: ViewModifier {
+    let active: Bool
+    @State private var landed = false
+
+    /// The web's `cubic-bezier(0.2, 1.4, 0.4, 1)` over the slow beat.
+    static var animation: Animation {
+        let c = WalletFlowGeometry.statusLandCurve
+        return .timingCurve(c.x1, c.y1, c.x2, c.y2, duration: Tokens.Motion.slow)
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(active && !landed ? WalletFlowGeometry.statusLandFrom : 1)
+            .opacity(active && !landed ? 0 : 1)
+            .onAppear {
+                guard active else { return }
+                withAnimation(Self.animation) { landed = true }
+            }
     }
 }
 

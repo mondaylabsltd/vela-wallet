@@ -2049,6 +2049,12 @@ pub enum RelayRejection {
     NonceHeld {
         user_op_hash: String,
     },
+    /// The nonce this operation signed was spent already — another
+    /// transaction of the account went first (the relay's bare AA25,
+    /// send-15). Nothing was sent; the send says so calmly
+    /// (`SendSubmitFailure::NonceUsed`, "went first") and signs anew; a dApp
+    /// hears [`user_op_nonce_used_detail`].
+    NonceUsed,
     Other {
         message: String,
     },
@@ -2061,6 +2067,7 @@ impl From<vela_core::user_op::RelayRejection> for RelayRejection {
             R::RelayerUnavailable => RelayRejection::RelayerUnavailable,
             R::BundlerUnderfunded => RelayRejection::BundlerUnderfunded,
             R::NonceHeld { user_op_hash } => RelayRejection::NonceHeld { user_op_hash },
+            R::NonceUsed => RelayRejection::NonceUsed,
             R::Other(message) => RelayRejection::Other { message },
         }
     }
@@ -2070,6 +2077,15 @@ impl From<vela_core::user_op::RelayRejection> for RelayRejection {
 #[uniffi::export]
 pub fn classify_relay_rejection(message: String) -> RelayRejection {
     vela_core::user_op::classify_relay_rejection(&message).into()
+}
+
+/// The dApp's `-32603` detail for a request whose nonce another transaction
+/// of the account spent first ([`RelayRejection::NonceUsed`]) — a fixed
+/// sentence, never the relay's.
+#[uniffi::export]
+#[must_use]
+pub fn user_op_nonce_used_detail() -> String {
+    vela_core::user_op::NONCE_USED_DETAIL.to_owned()
 }
 
 /// `parseBundlerError`: the JSON-RPC `error` member as one sentence.
@@ -2399,6 +2415,13 @@ pub struct SimOutcomeRecord {
     /// the verdict's place says then; `None` otherwise. The judged view
     /// (`TrustSimView.no_change_key`) carries the same line.
     pub no_change_key: Option<String>,
+    /// No node answered (`unreachable`): the could-not-check line is about
+    /// the network, not the transaction — the sheet asks again once the
+    /// chain answers, and offers the person "Check again"
+    /// (`componentsUi.signing.simRecheck`, dapp-15). `false` for every other
+    /// kind: a node that spoke and did not simulate would say the same.
+    #[uniffi(default = false)]
+    pub recheck: bool,
 }
 
 /// What the pool's `eth_simulateV1` answer means for `user` (the signing
@@ -2434,6 +2457,7 @@ pub fn sim_outcome(user: String, reply_json: String) -> SimOutcomeRecord {
         notice_risk: read.notice_risk.as_ref().map(snake_name),
         notice_key: read.notice_key,
         no_change_key: read.no_change_key,
+        recheck: read.recheck,
     }
 }
 
@@ -3293,12 +3317,14 @@ mod tests_082 {
         let aa25 = || UserOpSubmitReply::RpcError {
             error_json: r#"{"code":-32500,"message":"AA25 invalid account nonce"}"#.into(),
         };
+        // send-15: the bare AA25 is a nonce another transaction spent.
         assert!(matches!(
             step(aa25(), 1, false),
             UserOpSubmitStep::NotSent {
-                rejection: Some(RelayRejection::Other { .. })
+                rejection: Some(RelayRejection::NonceUsed)
             }
         ));
+        assert!(user_op_nonce_used_detail().contains("went first"));
         // A refusal after a lost reply proves nothing about the first POST.
         assert!(matches!(
             step(aa25(), 1, true),
@@ -3478,6 +3504,10 @@ mod tests_082 {
         let unreachable = sim_outcome(user.into(), r#"{"unreachable":true}"#.into());
         assert_eq!(unreachable.kind, "unreachable");
         assert_eq!(unreachable.notice_risk.as_deref(), Some("caution"));
+        // dapp-15: only a network that did not answer is asked again ("Check
+        // again"); a node that spoke and did not simulate would say the same.
+        assert!(unreachable.recheck);
+        assert!(!crashed.recheck);
 
         let reason = format!(
             "0x08c379a0{:0>64}{:0>64}{:0<64}",
@@ -3498,6 +3528,7 @@ mod tests_082 {
             Some("componentsUi.signing.simWillFailReason")
         );
         assert_eq!(reverts.deltas_json, "[]");
+        assert!(!reverts.recheck);
         // A revert moves nothing and is not "no asset changes": only a
         // check that found nothing is.
         assert_eq!(reverts.no_change_key, None);

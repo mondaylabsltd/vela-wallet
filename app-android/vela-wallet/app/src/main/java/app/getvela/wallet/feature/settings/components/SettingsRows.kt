@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.settings.components
 
+import androidx.compose.ui.text.style.TextDecoration
 import kotlin.math.roundToInt
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -91,7 +92,7 @@ fun VelaSettingsRow(
     val colors = VelaTheme.colors
     val tint = when (row.tone) {
         RowTone.Default -> colors.fgBase
-        RowTone.Accent -> colors.accentBase
+        RowTone.Accent -> colors.fgBase
         RowTone.Danger -> colors.errorBase
     }
     Column(modifier = modifier.fillMaxWidth().testTag(settingsRowTag(row.id))) {
@@ -526,7 +527,8 @@ fun VelaNetworkRow(
                 if (row.move != null) {
                     Text(
                         text = row.move,
-                        color = colors.infoBase,
+                        color = colors.fgBase,
+                        textDecoration = TextDecoration.Underline,
                         fontFamily = VelaFontFamily,
                         fontWeight = VelaFontWeight.semibold,
                         fontSize = VelaTextSize.sm,
@@ -718,7 +720,8 @@ fun VelaStorageGroup(
         if (group.action != null) {
             Text(
                 text = group.action,
-                color = colors.infoBase,
+                color = colors.fgBase,
+                textDecoration = TextDecoration.Underline,
                 fontFamily = VelaFontFamily,
                 fontSize = VelaTextSize.base,
                 // Centred, so it reads as the group's own action rather than as

@@ -271,7 +271,7 @@ fun FlowSearchField(
                     // A contract address pasted into a search is literal: "0x", never "0×".
                     fontFeatureSettings = VelaFontFeatures,
                 ),
-                cursorBrush = SolidColor(colors.accentBase),
+                cursorBrush = SolidColor(colors.fgBase),
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -446,7 +446,7 @@ fun FlowMonoField(
                     fontFamily = VelaMonoFontFamily,
                     fontSize = VelaTextSize.base,
                 ),
-                cursorBrush = SolidColor(colors.accentBase),
+                cursorBrush = SolidColor(colors.fgBase),
                 modifier = Modifier.fillMaxWidth(),
             )
         }

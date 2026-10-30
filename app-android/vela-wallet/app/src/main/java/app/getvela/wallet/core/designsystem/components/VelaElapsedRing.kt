@@ -60,7 +60,7 @@ fun VelaElapsedRing(
                 style = Stroke(width = strokeWidth),
             )
             drawArc(
-                color = colors.accentBase,
+                color = colors.fgBase,
                 startAngle = RING_START_DEGREES,
                 sweepAngle = RING_SWEEP_DEGREES,
                 useCenter = false,

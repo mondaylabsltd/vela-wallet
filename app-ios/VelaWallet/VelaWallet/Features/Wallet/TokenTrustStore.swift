@@ -75,8 +75,17 @@ final class TokenTrustStore {
             bridge: TokenTrustCore(),
             perform: { [executor] operation in await executor.perform(operation) },
             onView: { [weak self] view in self?.commit(view) },
-            onFault: { print("[vela-wallet] token_trust fault: \($0)") }
+            onFault: { print("[vela-wallet] token_trust fault: \($0)") },
+            keepsJson: true
         )
+    }
+
+    /// The simulation session's judged view (`TrustSimView`) as the core
+    /// wrote it — what the AI agent's review of the signing sheet reads
+    /// (`agent_review::SheetFacts.simulation.judged`). Read on demand only.
+    var simJson: Any? {
+        guard let json = core.json, let view = try? CoreJSON.object(json) else { return nil }
+        return view["sim"].flatMap { $0 is NSNull ? nil : $0 }
     }
 
     private func commit(_ view: TrustViewWire) {

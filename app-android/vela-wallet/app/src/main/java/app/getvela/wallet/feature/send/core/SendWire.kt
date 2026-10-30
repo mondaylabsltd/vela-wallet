@@ -311,9 +311,9 @@ sealed class SendSubmitFailure {
     data object PreviousPending : SendSubmitFailure()
 
     /**
-     * send-11: the passkey prompt timed out — nothing was signed. Declared so
-     * the shell can say it; this shell's ceremony does not yet tell a timeout
-     * from a cancel (Phase 2, send round 3-6).
+     * send-11: the passkey prompt timed out — nothing was signed. The prompt
+     * runs to the core's deadline (`passkey_sign_timeout_ms`), and a cancel at
+     * it is a timeout by the core's rule (`passkey_ceremony_end`).
      */
     @Serializable
     @SerialName("passkey_timed_out")
@@ -414,6 +414,9 @@ enum class SendTxErrorKey {
 
     @SerialName("proposal_offline") ProposalOffline,
 
+    /** A multisig's proposal this shell cannot make yet (`SendProposeFailure::NotSupported`): nothing was proposed. */
+    @SerialName("proposal_not_supported") ProposalNotSupported,
+
     /** r5reg-3: the reads before the passkey did not get through — the chain's nodes were busy. */
     @SerialName("chain_busy") ChainBusy,
 
@@ -497,6 +500,8 @@ data class SendRecipientRisk(
 enum class SendProposeFailure {
     @SerialName("mailbox_down") MailboxDown,
     @SerialName("offline") Offline,
+    /** This shell cannot propose a multisig's transaction yet — said as that, never as the mailbox. */
+    @SerialName("not_supported") NotSupported,
 }
 
 /** One transfer the review showed (`ReviewedTransfer`): base units, `token` `null` for the native coin. */

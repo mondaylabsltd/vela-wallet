@@ -153,6 +153,7 @@ import app.getvela.wallet.feature.onboarding.placeholder.ImportPlaceholderScreen
 import androidx.activity.compose.BackHandler
 import app.getvela.wallet.feature.flows.FlowFixtures
 import app.getvela.wallet.feature.flows.FlowHost
+import app.getvela.wallet.core.designsystem.motion.flowMotion
 import app.getvela.wallet.feature.flows.gallery.FlowGalleryScreen
 import app.getvela.wallet.feature.flows.WalletFlowEntry
 import app.getvela.wallet.feature.flows.rememberFlowNavState
@@ -471,6 +472,44 @@ fun VelaNavHost(
         }
     }
 
+    // Phase 3: no wallet left on this device (signed out, erased) — the
+    // home-screen widget forgets the figure it was showing.
+    val widgetAppContext = LocalContext.current.applicationContext
+    LaunchedEffect(session.allowedRoute) {
+        if (session.allowedRoute == SessionRoute.Onboarding &&
+            app.getvela.wallet.core.widget.BalanceWidgetSnapshot.clear(widgetAppContext)
+        ) {
+            app.getvela.wallet.core.widget.VelaBalanceWidget.refresh(widgetAppContext)
+        }
+    }
+
+    // Phase 3: a launcher shortcut, the Scan tile or text shared into Vela
+    // asked for the wallet. Brought in front once the session knows there is
+    // one (the wallet route then enters the flow, or reads the shared text);
+    // with no wallet there is nothing to send from, and the ask is dropped.
+    val pendingLaunch by application.container.pendingLaunch.collectAsStateWithLifecycle()
+    val pendingShare by application.container.pendingShare.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingLaunch, pendingShare, session.allowedRoute) {
+        if (pendingLaunch == null && pendingShare == null) return@LaunchedEffect
+        if (startDestination in DEVELOPER_ROUTES) return@LaunchedEffect
+        when (session.allowedRoute) {
+            SessionRoute.Loading -> Unit
+            SessionRoute.Onboarding -> {
+                VelaLog.event("launch", "dropped: no wallet yet")
+                application.container.pendingLaunch.value = null
+                application.container.pendingShare.value = null
+            }
+            SessionRoute.Wallet -> {
+                section = VelaTab.Wallet
+                navController.popBackStack(VelaDestinations.WALLET, inclusive = false)
+                pendingLaunch?.let { flow ->
+                    application.container.pendingFlow.value = launchFlowEntry(flow)
+                    application.container.pendingLaunch.value = null
+                }
+            }
+        }
+    }
+
     // Spec 105: the testnet space's bar over every route, in the flow of the
     // layout — it takes the status bar's inset, and the routes under it lay
     // out as if the bar were the top of the screen (their `statusBarsPadding`
@@ -715,6 +754,10 @@ fun VelaNavHost(
                 )
             }
             val flows = rememberFlowNavState()
+            // Phase 3: the flow in front follows a held back gesture, and a
+            // level entered settles in from its side — still under "Remove animations".
+            val flowBack = app.getvela.wallet.core.designsystem.motion.rememberPredictiveBackState()
+            val reducedMotion = app.getvela.wallet.core.designsystem.motion.rememberReducedMotion()
             // Spec 048: a flow another route asked for (contacts: 转账 / 收款 / 群发转账)
             // opens once the wallet is back on top. Entered first, cleared after —
             // clearing the trigger first would cancel this very effect.
@@ -722,8 +765,27 @@ fun VelaNavHost(
             LaunchedEffect(pendingFlow) {
                 val entry = pendingFlow ?: return@LaunchedEffect
                 VelaLog.event("flows", "pending flow", "entry" to entry.name, "top" to flows.top?.name)
+                val sendWasOpen = flows.top in SEND_STATES
                 flows.enter(entry)
+                // Phase 3 (device-found): the Scan tile over a Send already open —
+                // that Send does not open again, so its scanner opens on it now.
+                if (entry == WalletFlowEntry.Scan && sendWasOpen) application.container.send.openScanner()
                 application.container.pendingFlow.value = null
+            }
+            // Phase 3: an address or an `ethereum:` request shared into Vela —
+            // read by Send as its own scanner's would be (`scan_resolved`): now
+            // when Send is open, else parked for the Send it opens (no camera).
+            val sharedPayment by application.container.pendingShare.collectAsStateWithLifecycle()
+            LaunchedEffect(sharedPayment) {
+                val text = sharedPayment ?: return@LaunchedEffect
+                VelaLog.event("share", "payment", "top" to flows.top?.name)
+                application.container.paymentHandOff.scan(
+                    text = text,
+                    sendOpen = flows.top in SEND_STATES,
+                    scanNow = { application.container.send.scanned(it) },
+                    enterScanner = { flows.enter(WalletFlowEntry.Send) },
+                )
+                application.container.pendingShare.value = null
             }
             // A flow's own button sits low on its page: the agent's capsule
             // floats above it while one is up.
@@ -792,6 +854,11 @@ fun VelaNavHost(
                     )
                 }
                 val payLink by application.container.pendingPayLink.collectAsStateWithLifecycle()
+                // A link the core refused, and why (`pay_refusal`) — said, never dropped in silence.
+                var payRefused by remember { mutableStateOf<app.getvela.wallet.feature.wallet.PayLinkRefusalModel?>(null) }
+                payRefused?.let { refused ->
+                    app.getvela.wallet.feature.wallet.PayLinkRefusalDialog(refused) { payRefused = null }
+                }
                 LaunchedEffect(payLink) {
                     val uri = payLink ?: return@LaunchedEffect
                     // Consumed at the END: clearing the trigger here re-keys this
@@ -800,9 +867,12 @@ fun VelaNavHost(
                     // nothing, because the wait for the core's verdict was cancelled).
                     VelaLog.event("paylink", "received", "uri" to uri.toString().take(80))
                     val pay = PayLink.parse(uri.toString()) as? PayLink.Pay
-                    val request = pay?.let { wallet.validatePayLink(it.to, it.chain, it.token, it.amount, it.sym, it.dec, it.net) }
+                    val verdict = pay?.let { wallet.validatePayLink(it.to, it.chain, it.token, it.amount, it.sym, it.dec, it.net) }
+                    val request = (verdict as? app.getvela.wallet.feature.wallet.core.PayVerdict.Valid)?.pay
                     if (request == null) {
-                        VelaLog.event("paylink", "refused by the core", "uri" to uri.toString().take(80))
+                        val refusal = (verdict as? app.getvela.wallet.feature.wallet.core.PayVerdict.Refused)?.refusal
+                        VelaLog.event("paylink", "refused by the core", "reason" to (refusal?.name ?: "none"))
+                        payRefused = app.getvela.wallet.feature.wallet.PayLinkRefusalWords.model(refusal, strings)
                         application.container.pendingPayLink.compareAndSet(uri, null)
                         return@LaunchedEffect
                     }
@@ -939,7 +1009,7 @@ fun VelaNavHost(
                 }
                 // Back unwinds the flow stack first, then leaves 探索 for 钱包 —
                 // Back out of a browser should land on the wallet, not on Welcome.
-                BackHandler(enabled = flows.isOpen) { flows.back() }
+                app.getvela.wallet.core.designsystem.motion.VelaBackHandler(enabled = flows.isOpen, state = flowBack) { flows.back() }
                 // Spec 044: a page asked for a signature — the sheet over whatever is
                 // showing, read from the four machines; dismissing is the refusal.
                 val signingController by application.container.signing.collectAsStateWithLifecycle()
@@ -988,6 +1058,13 @@ fun VelaNavHost(
                     val signSpeed by controller.speed.collectAsStateWithLifecycle()
                     val signSim by controller.sim.collectAsStateWithLifecycle()
                     val signRequest by controller.request.collectAsStateWithLifecycle()
+                    // Phase 3: a request the core judged dangerous buzzes a warning
+                    // once, as its sheet opens (SigningHaptics) — never again for it.
+                    val signHaptic = rememberVelaHaptic()
+                    val warnOnOpen = app.getvela.wallet.feature.signing.SigningHaptics.warnOnOpen(clearView, guardView)
+                    LaunchedEffect(signRequest?.id, warnOnOpen) {
+                        if (signRequest != null && warnOnOpen) signHaptic(VelaHaptic.Reject)
+                    }
                     val feeOpen by controller.feeOpen.collectAsStateWithLifecycle()
                     // Spec 102 D4: the account signs on a page — the sheet is the
                     // hand-off card, whose line is the page's check as it stands.
@@ -1004,21 +1081,14 @@ fun VelaNavHost(
                     // dapp-15: "Check again", and a check out again.
                     val simAgain by controller.simAgainOffered.collectAsStateWithLifecycle()
                     val simRechecking by controller.simRechecking.collectAsStateWithLifecycle()
-                    // Spec 103: the agent's opinion, read against the review on screen now.
-                    val heldAdvice by controller.advice.collectAsStateWithLifecycle()
-                    val adviceCard = remember(heldAdvice, signJson, strings) {
-                        heldAdvice?.let { held ->
-                            val review = controller.review()
-                            app.getvela.wallet.feature.signing.SigningAdvice.card(
-                                held,
-                                app.getvela.wallet.feature.signing.SigningAdvice.standing(
-                                    held,
-                                    app.getvela.wallet.feature.signing.SigningAdvice.digestOf(review),
-                                    app.getvela.wallet.feature.signing.SigningAdvice.reviewFee(review),
-                                ),
-                                strings,
-                            )
-                        }
+                    // Spec 103: the agent's opinion, as the phone agent (the core's) holds
+                    // it for this request — read again when it says so, and whenever the
+                    // sheet redraws: a request changed, or a fee moved past the opinion's
+                    // band, greys the card (the core's standing, never this screen's).
+                    val agentStore = application.container.agent
+                    val adviceHeard by agentStore.adviceHeard.collectAsStateWithLifecycle()
+                    val adviceCard = remember(adviceHeard, signJson, feeJson, clearJson, guardJson, signSim, strings) {
+                        app.getvela.wallet.feature.signing.SigningAdvice.cardOf(agentStore.advice(), strings)
                     }
                     val signChain = signRequest?.chainId ?: 0
                     val signCtx = app.getvela.wallet.feature.signing.SigningLive.Context(
@@ -1205,6 +1275,9 @@ fun VelaNavHost(
                         if (flows.top == FlowState.S1) {
                             send.openScanner()
                             application.container.paymentHandOff.takeScan()?.let { text -> send.scanned(text) }
+                        } else {
+                            // Phase 3: text shared into Vela, read as a scan would be — no camera.
+                            application.container.paymentHandOff.takeScan()?.let { text -> send.scanned(text) }
                         }
                     }
                 }
@@ -1316,7 +1389,7 @@ fun VelaNavHost(
                     // The system back key on a live send page is the header's back —
                     // the drawn stack's `flows.back()` closed the whole flow from
                     // any page, confirm included (device-found, phase 6).
-                    BackHandler(enabled = sendOpen) {
+                    app.getvela.wallet.core.designsystem.motion.VelaBackHandler(enabled = sendOpen, state = flowBack) {
                         when {
                             feeSheetOpen -> feeSheetOpen = false
                             // The scanner closes first; entered from home, the whole flow goes with it.
@@ -1434,6 +1507,7 @@ fun VelaNavHost(
                     }
                     FlowHost(
                         model = flowModel,
+                        modifier = Modifier.flowMotion(level = sendView.stage, depth = sendView.stage.ordinal, back = flowBack, reduced = reducedMotion),
                         sendHandoff = sendHandoff,
                         onBack = {
                             if (sendView.stage == SendStage.SelectToken || sendView.stage == SendStage.Receipt) {
@@ -1484,7 +1558,17 @@ fun VelaNavHost(
                             onRecipientPick = { index -> sendView.recipients.getOrNull(index)?.id?.let { send.openRowPicker(it) } },
                             onRecipientScan = { index -> sendView.recipients.getOrNull(index)?.id?.let { send.openRowScanner(it) } },
                             scan = ScanCallbacks(
-                                onDecoded = { text -> send.scanned(text) },
+                                onDecoded = { text ->
+                                    // A `/pay` link is the core's `payment_request` to rule on
+                                    // (as an App Link or a share is) — never a recipient's text.
+                                    if (PayLink.parse(text) is PayLink.Pay) {
+                                        VelaLog.event("paylink", "scanned")
+                                        send.closeScanner()
+                                        application.container.pendingPayLink.value = android.net.Uri.parse(text.trim())
+                                    } else {
+                                        send.scanned(text)
+                                    }
+                                },
                                 onClose = {
                                     send.closeScanner()
                                     if (sendView.stage == SendStage.SelectToken && flowState == FlowState.S1) flows.close()
@@ -1511,7 +1595,7 @@ fun VelaNavHost(
                             onConfirm = { confirmTransfer(agent, send, drawnReview) },
                             onFeeSelect = { index ->
                                 haptic(VelaHaptic.Select)
-                                feeView.options.getOrNull(index)?.let { send.chooseFeeToken(it.contract) }
+                                feeView.options.getOrNull(index)?.let { send.pickFeeCoin(it.contract) }
                                 feeSheetOpen = false
                             },
                             // Issue #467: the row says WHO — its address. An index into
@@ -1655,6 +1739,8 @@ fun VelaNavHost(
                     LaunchedEffect(flowState) { if (flowState == FlowState.T3) wallet.openAddToken() }
                     FlowHost(
                         model = flowModel,
+                        // A sheet over the screen is not a new level: the base's own kind and item are.
+                        modifier = Modifier.flowMotion(level = flowModel.base::class to flows.selected, depth = flows.depth, back = flowBack, reduced = reducedMotion),
                         onBack = { flows.back() },
                         onOpen = { step, id -> VelaLog.event("flows", "open", "step" to step.name, "id" to id.take(24)); flows.push(step, id) },
                         onOpenUrl = { context.openUrl(it) },
@@ -1963,7 +2049,24 @@ fun VelaNavHost(
                                     callbacks = ScanCallbacks(
                                         onDecoded = { text ->
                                             when (val scanned = app.getvela.wallet.feature.browser.ExploreLive.scanned(text)) {
-                                                is app.getvela.wallet.feature.browser.ExploreLive.Scanned.Url -> onUrl(scanned.url)
+                                                is app.getvela.wallet.feature.browser.ExploreLive.Scanned.Url -> {
+                                                    // Phase 3: a web-wallet multisig or connect link is the
+                                                    // browser's (read by the core's codec), never the dApp browser's.
+                                                    val route = app.getvela.wallet.feature.wallet.core.AppLinks.classify(scanned.url)
+                                                    if (route is app.getvela.wallet.feature.wallet.core.AppLinks.Route.Web) {
+                                                        onClose()
+                                                        val tab = application.container.trustedSignerTab
+                                                        if (tab?.open(scanned.url) != true) application.container.browser.askToOpen(scanned.url)
+                                                    } else if (route is app.getvela.wallet.feature.wallet.core.AppLinks.Route.Pay) {
+                                                        // A `/pay` link: the wallet's, ruled on by the core
+                                                        // as an App Link is — a request, or why not.
+                                                        onClose()
+                                                        section = VelaTab.Wallet
+                                                        application.container.pendingPayLink.value = android.net.Uri.parse(scanned.url)
+                                                    } else {
+                                                        onUrl(scanned.url)
+                                                    }
+                                                }
                                                 is app.getvela.wallet.feature.browser.ExploreLive.Scanned.Payment -> {
                                                     onClose()
                                                     section = VelaTab.Wallet
@@ -2018,6 +2121,19 @@ fun VelaNavHost(
                         }
                         val syncRounds by application.container.session.syncRoundsSeen.collectAsStateWithLifecycle()
                         val homeNow = remember(balances, ageTick) { System.currentTimeMillis() }
+                        // Phase 3: the home-screen widget repeats this hero — the whole
+                        // account's (no chain filter), as last drawn, with the core's
+                        // time of the read. Written off the frame; redrawn on change.
+                        val widgetContext = LocalContext.current.applicationContext
+                        LaunchedEffect(balances, currency, space.testnet, session.activeName, strings.language) {
+                            val hero = WalletLive.home(model, balances, feed, currency, strings, chainNames, now = homeNow, chainFilter = null).balance
+                            val write = app.getvela.wallet.core.widget.BalanceWidgetSnapshot.of(hero, balances.last_refreshed_at_ms, session.activeName, space.testnet)
+                            if (write is app.getvela.wallet.core.widget.BalanceWidgetSnapshot.Write.Save &&
+                                app.getvela.wallet.core.widget.BalanceWidgetSnapshot.save(widgetContext, write.snapshot)
+                            ) {
+                                app.getvela.wallet.core.widget.VelaBalanceWidget.refresh(widgetContext)
+                            }
+                        }
                         WalletScreen(
                             model = WalletLive.home(
                                 model, balances, feed, currency, strings, chainNames, now = homeNow, chainFilter = chainFilter,
@@ -3390,4 +3506,11 @@ private fun addCheckedNetwork(agent: AgentStore, settings: app.getvela.wallet.fe
 private fun confirmTransfer(agent: AgentStore, send: app.getvela.wallet.feature.send.core.SendController, review: String?) {
     val operation = agent.reviewing() ?: return send.slideConfirm(review)
     agent.person(intent("submit_transfer", "operation" to operation, "review" to review))
+}
+
+/** Phase 3: the wallet flow a launcher shortcut or the Scan tile names. */
+internal fun launchFlowEntry(flow: app.getvela.wallet.core.platform.LaunchEntry.Flow): WalletFlowEntry = when (flow) {
+    app.getvela.wallet.core.platform.LaunchEntry.Flow.Send -> WalletFlowEntry.Send
+    app.getvela.wallet.core.platform.LaunchEntry.Flow.Receive -> WalletFlowEntry.Receive
+    app.getvela.wallet.core.platform.LaunchEntry.Flow.Scan -> WalletFlowEntry.Scan
 }

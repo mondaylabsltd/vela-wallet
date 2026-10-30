@@ -40,6 +40,11 @@ enum SigningLive {
         var sim: TrustSimViewWire?
         /// Where the simulation has got to. Three states, three sentences.
         var simulation: SigningController.Simulation = .pending
+        /// dapp-15: the could-not-check line is about the network (the core's
+        /// `SimOutcomeRecord.recheck`): "Check again" is offered under it.
+        var simRecheck = false
+        /// dapp-15: a new check is out; the last line stays, marked stale.
+        var simRechecking = false
         /// Whether the fee row's coin list is open (issue #262).
         var feeOpen = false
         /// How the Trusted Signer last ended for this request without signing.
@@ -369,6 +374,17 @@ enum SigningLive {
         // the core's line for it — never a dead control with no reason.
         if !refused, let gate, !gate.enabled, let key = gate.key {
             model.confirmBlockLine = loc.t(key)
+        }
+        // signer-11: an open confirm after a prompt that signed nothing says
+        // so — closed, or out of time — and the confirm is the way to try
+        // again (the web's `passkeyNote`).
+        if !refused {
+            model.passkeyNote = passkeyNote(sign, loc: loc)
+        }
+        // dapp-15: "Check again" under a could-not-check line about the
+        // network — only where the verdict's place is kept for it.
+        if model.verdictPlace != nil {
+            model.simRecheck = simRecheck(sign: sign, context: context)
         }
         // The wallet's own request (the key backup) is not a site: no
         // requester header at all — "getvela.app" under a letter read as a
@@ -857,6 +873,32 @@ enum SigningLive {
             ),
             .party(label: s(loc, "recipientLabel"), name: AddressText.short(plain.to), address: plain.to),
         ]
+    }
+
+    /// dapp-15 (the web's `withRecheck`): a could-not-check line whose node
+    /// nobody reached (`SimOutcomeRecord.recheck`, the core's) offers "Check
+    /// again" — and while a new check is out the line it is about to replace
+    /// stays, marked stale ("Checking again…"), rather than reading as the
+    /// current verdict or vanishing. Not while the core still holds the
+    /// confirm for the first check, or says its wait ran out: the line the
+    /// person reads is the one the core's step says.
+    static func simRecheck(sign: SignViewWire, context: Context) -> SimRecheckModel? {
+        guard case .notice(let risk, _, _) = context.simulation, risk != "danger" else { return nil }
+        if context.simRechecking {
+            return SimRecheckModel(label: s(context.loc, "simRechecking"), checking: true)
+        }
+        guard context.simRecheck, !sign.checkingSim, sign.simWaitedOutKey == nil else { return nil }
+        return SimRecheckModel(label: s(context.loc, "simRecheck"), checking: false)
+    }
+
+    /// The line an open confirm says after a passkey prompt that signed
+    /// nothing (signer-11): the core's `passkey_note`, in the corpus's words.
+    static func passkeyNote(_ sign: SignViewWire, loc: Loc) -> String? {
+        switch sign.passkeyNote {
+        case "timed_out": s(loc, "passkeyTimedOut")
+        case "cancelled": s(loc, "passkeyClosed")
+        default: nil
+        }
     }
 
     /// The verdict's quiet line — "No asset changes" — when this request's

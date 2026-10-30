@@ -8,7 +8,8 @@ mod support;
 
 use support::DomainDriver;
 use vela_core::app::payment_request::{
-    Event, Mode, PaymentRequest, PaymentRequestOperation as Op, PaymentRequestShellResult as Res,
+    Event, Mode, PayRefusal, PaymentRequest, PaymentRequestOperation as Op,
+    PaymentRequestShellResult as Res,
 };
 use vela_core::app::send::{
     Event as SendEvent, Send, SendAccountRef, SendDisplayContext, SendOpenParams,
@@ -326,6 +327,7 @@ fn malformed_amounts_are_invalid_not_crashes() {
             Some(false),
             "amount {bad:?} must be invalid"
         );
+        assert_eq!(view.pay_refusal, Some(PayRefusal::Amount), "amount {bad:?}");
         assert!(view.pay.is_none());
     }
 }
@@ -351,13 +353,14 @@ fn builder_emittable_shapes_stay_valid() {
 /// numeric chain); garbage yields the invalid surface exactly as today.
 #[test]
 fn bad_recipient_or_chain_is_invalid() {
-    let cases: [(Option<&str>, Option<&str>); 4] = [
-        (None, Some("8453")),
-        (Some("0x1234"), Some("8453")),
-        (Some(ADDR), None),
-        (Some(ADDR), Some("84x3")),
+    let cases: [(Option<&str>, Option<&str>, PayRefusal); 5] = [
+        (None, Some("8453"), PayRefusal::Recipient),
+        (Some("0x1234"), Some("8453"), PayRefusal::Recipient),
+        (Some(ADDR), None, PayRefusal::Network),
+        (Some(ADDR), Some("84x3"), PayRefusal::Network),
+        (Some(ADDR), Some("99999999999"), PayRefusal::Network),
     ];
-    for (to, chain) in cases {
+    for (to, chain, why) in cases {
         let mut sut = Sut::new();
         sut.dispatch(Event::LinkOpened {
             to: to.map(str::to_owned),
@@ -373,7 +376,57 @@ fn bad_recipient_or_chain_is_invalid() {
             Some(false),
             "to={to:?} chain={chain:?}"
         );
+        assert_eq!(sut.view().pay_refusal, Some(why), "to={to:?} chain={chain:?}");
     }
+}
+
+/// A `token` that is not an address names no contract: refused where the
+/// link is read, with its own reason — never handed to Send to look up.
+#[test]
+fn a_token_that_is_not_an_address_is_refused() {
+    for token in ["USDC", "0x1234", "0x833589fcd6edb6e08f4c7c32d4f71b54bda0291z"] {
+        let mut sut = Sut::new();
+        sut.dispatch(Event::LinkOpened {
+            to: Some(ADDR.to_owned()),
+            chain: Some("8453".to_owned()),
+            token: Some(token.to_owned()),
+            amount: Some("1".to_owned()),
+            sym: None,
+            dec: Some("6".to_owned()),
+            net: None,
+        });
+        let view = sut.view();
+        assert_eq!(view.pay_valid, Some(false), "token {token:?}");
+        assert_eq!(view.pay_refusal, Some(PayRefusal::Token), "token {token:?}");
+        assert!(view.pay.is_none());
+    }
+}
+
+/// The first broken rule is the one named, in reading order: a link with a
+/// bad recipient AND a bad amount is refused for its recipient.
+#[test]
+fn the_first_broken_rule_is_the_reason() {
+    let mut sut = Sut::new();
+    sut.dispatch(Event::LinkOpened {
+        to: Some("nope".to_owned()),
+        chain: Some("nope".to_owned()),
+        token: Some("nope".to_owned()),
+        amount: Some("1e18".to_owned()),
+        sym: None,
+        dec: None,
+        net: None,
+    });
+    assert_eq!(sut.view().pay_refusal, Some(PayRefusal::Recipient));
+}
+
+/// A valid link, and a session that never opened one, carry no reason.
+#[test]
+fn no_reason_without_a_refusal() {
+    let mut sut = Sut::new();
+    assert_eq!(sut.view().pay_refusal, None);
+    sut.dispatch(pay_query(Some("1.5")));
+    assert_eq!(sut.view().pay_valid, Some(true));
+    assert_eq!(sut.view().pay_refusal, None);
 }
 
 /// Display-hint defaults survive: no `sym` reads "tokens", no `net` reads

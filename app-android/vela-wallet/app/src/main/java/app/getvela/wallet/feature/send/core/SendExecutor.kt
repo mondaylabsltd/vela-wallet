@@ -618,6 +618,9 @@ class SendExecutor(
             chainRead = refused.chainRead,
             failure = when (val failure = refused.failure) {
                 UserOpSpine.Failure.PasskeyCancelled -> SendSubmitFailure.PasskeyCancelled
+                // send-11: out of time, by the core's clock rule — the confirm
+                // stays, and says "timed out" rather than "closed".
+                UserOpSpine.Failure.PasskeyTimedOut -> SendSubmitFailure.PasskeyTimedOut
                 // Nothing left the device (spec 082 RA1): "the relayer could not
                 // be reached — try again" is true of exactly this.
                 UserOpSpine.Failure.RelayerUnavailable, UserOpSpine.Failure.NotSent -> SendSubmitFailure.RelayerUnavailable
@@ -640,6 +643,9 @@ class SendExecutor(
                 // (the relay's `nonce_in_flight`): the core's own words for it,
                 // with Try again — never "other".
                 UserOpSpine.Failure.PreviousPending -> SendSubmitFailure.PreviousPending
+                // send-15: another transaction of this account went first —
+                // nothing was sent; the core says it calmly, "Review again".
+                UserOpSpine.Failure.NonceUsed -> SendSubmitFailure.NonceUsed
             },
         )
     }

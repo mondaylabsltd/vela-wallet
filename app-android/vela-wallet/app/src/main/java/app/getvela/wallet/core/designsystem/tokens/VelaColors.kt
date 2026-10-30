@@ -53,6 +53,14 @@ data class VelaFixedColors(
  */
 val VelaOnAccent: Color = Color(0xFFFFFFFF)
 
+/**
+ * The value button's fill (web `--color-accent-fill`, r4D-11): accent.base one
+ * step darker, so its white 17-point label reads 4.5:1 or more in both themes.
+ * Not in the DTCG export — a web addition the shells share; the same value in
+ * both modes. Pinned by DesignTokenDriftTest against the web's tokens.css.
+ */
+val VelaAccentFill: Color = Color(0xFFBF441C)
+
 val VelaColorsLight: VelaColors = VelaColors(
     fgBase = Color(0xFF1A1A18),
     fgMuted = Color(0xFF6E6B62),

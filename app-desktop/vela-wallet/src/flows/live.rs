@@ -3973,9 +3973,14 @@ fn tx_error_text(send: &SendView, s: &FlowStrings) -> Option<SharedString> {
             )
         }
         // A multisig's proposal: the desktop never makes one (multisig
-        // accounts are web-only), so these are never set here.
+        // accounts are web-only), so these two are never set here.
         vela_core::app::send::SendTxErrorKey::ProposalMailboxDown
         | vela_core::app::send::SendTxErrorKey::ProposalOffline => s.tx_error_generic.clone(),
+        // …and were one asked of it, it says so (`ProposeSafeTx` answers
+        // `NotSupported`): nothing was signed or proposed.
+        vela_core::app::send::SendTxErrorKey::ProposalNotSupported => {
+            s.tx_error_proposal_not_supported.clone()
+        }
         // r5reg-3: the reads before the passkey did not get through — the
         // network's failure, by its name, never the passkey's.
         vela_core::app::send::SendTxErrorKey::ChainBusy => {
@@ -4008,7 +4013,9 @@ fn tx_error_retry(send: &SendView, s: &FlowStrings) -> Option<SharedString> {
         return None;
     }
     match send.tx_error? {
-        SendTxErrorKey::VenueBlocked | SendTxErrorKey::PageRefused => None,
+        SendTxErrorKey::VenueBlocked
+        | SendTxErrorKey::PageRefused
+        | SendTxErrorKey::ProposalNotSupported => None,
         SendTxErrorKey::NonceUsed => Some(s.tx_review_again.clone()),
         _ => Some(s.tx_retry.clone()),
     }
@@ -5467,6 +5474,38 @@ mod tests {
 
     fn strings() -> FlowStrings {
         FlowStrings::resolve(&crate::loc::Loc::from_env())
+    }
+
+    /// The failed submit's notice for `key`, over a real view.
+    fn failed_with(key: vela_core::app::send::SendTxErrorKey) -> Option<SendNotice> {
+        use vela_core::app::send::{Send as SendMachine, SendTxStatus};
+        let view = SendView {
+            tx_status: SendTxStatus::Error,
+            tx_error: Some(key),
+            ..CoreHost::<SendMachine>::new().view()
+        };
+        tx_error_notice(&view, &strings())
+    }
+
+    /// send-15: another transaction of this account spent the nonce first.
+    /// Said as that — "Not sent", calmly, "went first", and Review again (a
+    /// fresh quote, nonce and signature) — never the red "couldn't be sent".
+    /// And a multisig proposal this app cannot make is said as that, with no
+    /// retry that would meet the same answer.
+    #[test]
+    fn a_spent_nonce_went_first_and_a_proposal_is_not_supported() {
+        use vela_core::app::send::SendTxErrorKey;
+        let s = strings();
+        let went = failed_with(SendTxErrorKey::NonceUsed).expect("a notice");
+        assert_eq!(went.title, Some(s.status_not_sent.clone()));
+        assert_eq!(went.body, s.went_first);
+        assert_eq!(went.action, Some(s.tx_review_again.clone()));
+        assert!(went.calm && !went.error);
+
+        let proposal = failed_with(SendTxErrorKey::ProposalNotSupported).expect("a notice");
+        assert_eq!(proposal.body, s.tx_error_proposal_not_supported);
+        assert_ne!(proposal.body, s.tx_error_generic);
+        assert_eq!(proposal.action, None);
     }
 
     fn wallet_strings() -> crate::wallet::WalletStrings {

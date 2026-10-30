@@ -935,9 +935,15 @@ final class SendExecutor {
         }
     }
 
-    private static func failureWire(_ failure: UserOpSpine.Failure) -> [String: Any] {
+    static func failureWire(_ failure: UserOpSpine.Failure) -> [String: Any] {
         switch failure {
         case .passkeyCancelled: return ["type": "passkey_cancelled"]
+        // send-11: the prompt ran out of the core's time — the confirm says
+        // "timed out", calmly (`passkey_note`).
+        case .passkeyTimedOut: return ["type": "passkey_timed_out"]
+        // send-15: another transaction of this account went first. Nothing
+        // was sent: "Not sent", "went first", Review again (`nonce_used`).
+        case .nonceUsed: return ["type": "nonce_used"]
         // Closed unsigned: the core's cancelled ceremony, which keeps the
         // confirmation on screen. Anything else the page did not sign is the
         // core's to word (round 7, `SendSubmitFailure::PageFailed`).

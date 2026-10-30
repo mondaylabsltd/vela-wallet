@@ -165,6 +165,12 @@ class NetworkLedgerTest {
         assertEquals("MegaETH", names[MEGAETH])
         assertTrue(names.values.all { it.isNotBlank() })
         assertTrue("an id the core does not name is left out", VelaNetworkNames.of(listOf(7_777L)).isEmpty())
+        // The core's own table, the same one its built-in list is read from.
+        val builtin = uniffi.vela_core_uniffi.builtinNetworkIds().map { it.toLong() }
+        assertTrue(hidden.all { it in builtin })
+        assertEquals("Gnosis", VelaNetworkNames.of(listOf(100L))[100L])
+        // An id no chain can have is no name, never a crash.
+        assertTrue(VelaNetworkNames.of(listOf(-1L, 1L shl 40)).isEmpty())
     }
 
     // -- "Only use my node" ----------------------------------------------------

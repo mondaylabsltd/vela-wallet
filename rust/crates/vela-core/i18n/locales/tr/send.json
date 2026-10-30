@@ -186,6 +186,7 @@
     "submitSlow": "{{network}} yanıtı bekleniyor — şu ana kadar {{seconds}} sn. Henüz hiçbir şey imzalanmadı.",
     "txErrorChainBusy": "{{network}} düğümleri yoğun ve zamanında yanıt vermedi, bu yüzden hiçbir şey imzalanmadı ya da gönderilmedi. Biraz sonra yeniden deneyin.",
     "txErrorChainUnreachable": "{{network}} ağına ulaşılamadı, bu yüzden hiçbir şey imzalanmadı ya da gönderilmedi. Biraz sonra yeniden deneyin.",
+    "txErrorProposalNotSupported": "Bu uygulama henüz multisig işlemi öneremiyor, bu yüzden hiçbir şey imzalanmadı ya da önerilmedi.",
     "maxMoved": "Maksimum artık {{to}} {{symbol}} (önceden {{from}}): ağ ücreti yeniden hesaplandı, bu yüzden onun için ayrılan tutar değişti.",
     "txReviewAgain": "Tekrar incele",
     "txSendAgain": "Tekrar gönder",

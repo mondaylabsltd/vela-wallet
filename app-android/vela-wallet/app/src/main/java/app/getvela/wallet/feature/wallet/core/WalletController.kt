@@ -785,10 +785,10 @@ class WalletController(
 
     /**
      * Spec 047 D8: the `/pay` grammar is the core's — `LinkOpened` on the
-     * request machine, the answer read from `pay` / `pay_valid`. `null` = not a
-     * request this wallet honours.
+     * request machine, the answer read from `pay` / `pay_valid`, and why not
+     * from `pay_refusal` — the person is told what is wrong with the link.
      */
-    suspend fun validatePayLink(to: String?, chain: String?, token: String?, amount: String?, sym: String?, dec: String?, net: String?): PayRequest? {
+    suspend fun validatePayLink(to: String?, chain: String?, token: String?, amount: String?, sym: String?, dec: String?, net: String?): PayVerdict {
         val before = requestHost.view.value
         requestHost.dispatch(
             PaymentRequestEvent.LinkOpened(to = to, chain = chain, token = token, amount = amount, sym = sym, dec = dec, net = net),
@@ -801,9 +801,9 @@ class WalletController(
             ?: kotlinx.coroutines.withTimeoutOrNull(5_000L) { requestHost.view.first { it !== before } }
         if (settled == null) {
             VelaLog.event("paylink", "no verdict from the core within 5 s")
-            return null
+            return PayVerdict.Refused(null)
         }
-        return if (settled.pay_valid == true) settled.pay else null
+        return PayVerdict.of(settled)
     }
 
     /**

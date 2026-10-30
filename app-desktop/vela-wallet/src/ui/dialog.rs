@@ -157,14 +157,26 @@ pub fn dialog(
         ))
         .children(crate::ui::vertical_scrollbar(theme, scroll));
 
+    // N-ALL motion: the scrim fades and the card rises, as the web's
+    // `scrim-in` / `card-in` (`ui::motion`); the backdrop is its own layer so
+    // it can fade while the scrim keeps taking every click.
+    let reduce = crate::ui::motion::reduced();
     scrim(id, theme)
+        .bg(gpui::transparent_black())
         .on_click(move |event, window, cx| close(event, window, cx))
-        .child(
+        .child(crate::ui::motion::scrim_in(
+            div().absolute().inset_0().bg(theme.backdrop),
+            (id, 3u64),
+            reduce,
+        ))
+        .child(crate::ui::motion::card_in(
             card((id, 0u64), theme, DIALOG_W)
                 .a11y_dialog(name)
                 .child(header)
                 .child(content),
-        )
+            (id, 4u64),
+            reduce,
+        ))
 }
 
 /// The web's dialog paragraph (`.dialog-body`): 13, muted, `leading-normal`,

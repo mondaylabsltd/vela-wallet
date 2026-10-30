@@ -119,7 +119,7 @@ private fun TabItem(
     modifier: Modifier = Modifier,
 ) {
     val colors = VelaTheme.colors
-    val tint = if (selected) colors.accentBase else colors.fgSubtle
+    val tint = if (selected) colors.fgBase else colors.fgSubtle
     val interaction = remember { MutableInteractionSource() }
     // Compose, like the platform's own tab bars, hands TalkBack a SELECTED
     // tab as not clickable and without its click action — right for a tab

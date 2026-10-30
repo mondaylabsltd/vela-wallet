@@ -131,6 +131,7 @@ private let CALLS: [String: Place] = [
     "browser.snapshot": .view("a tab's picture for the tab strip"),
     "browser.start": .machine(BOOT),
     "browser.startConnections": .machine(BOOT),
+    "camera.deliver": .none(CAMERA),
     "camera.flip": .none(CAMERA),
     "camera.start": .none(CAMERA),
     "camera.stop": .none(CAMERA),
@@ -258,6 +259,11 @@ private let CALLS: [String: Place] = [
     "settings.search": .step("add_network"),
     "settings.selectChain": .step("add_network"),
     "signing.approve": .later(SIGN),
+    // Spec 103: what the agent's review reads of the sheet — the request and
+    // the sheet's facts beside it.
+    "signing.agentSigningJson": .machine(READ),
+    // dapp-15: the verdict's "Check again" — asks the chain again, signs nothing.
+    "signing.simulateAgain": .later(SIGN),
     // Spec 107: the agent's reject, through the sheet's own.
     "signing.reject": .intent("reject_dapp_request"),
     "signing.feeTapped": .later(SIGN),

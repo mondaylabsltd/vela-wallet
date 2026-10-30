@@ -1285,9 +1285,12 @@ object SettingsFixtures {
      * its node alone and that node cannot be reached; Arbitrum's node is
      * silent and public nodes serve it for now.
      */
-    val LEDGER_NODES = SettingsLive.OwnNodes(
-        fallback = listOf(app.getvela.wallet.feature.settings.core.NetBoards.OWN_CHAIN),
-        unreached = listOf(app.getvela.wallet.feature.settings.core.NetBoards.OWN_ONLY_CHAIN),
+    val LEDGER_NODES = SettingsLive.OwnNodes.of(
+        app.getvela.wallet.feature.wallet.core.RpcPoolView(
+            fallback_chains = listOf(app.getvela.wallet.feature.settings.core.NetBoards.OWN_CHAIN.toInt()),
+            own_only_chains = listOf(app.getvela.wallet.feature.settings.core.NetBoards.OWN_ONLY_CHAIN.toInt()),
+            own_node_unreached_chains = listOf(app.getvela.wallet.feature.settings.core.NetBoards.OWN_ONLY_CHAIN.toInt()),
+        ),
     )
 
     /**

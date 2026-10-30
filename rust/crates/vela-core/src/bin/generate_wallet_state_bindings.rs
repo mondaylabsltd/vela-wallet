@@ -256,6 +256,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     vela_core::app::sign_confirm::HandoffFee::export_all(&config)?;
     LandingPace::export_all(&config)?; // landingPace (spec 099 R6)
     vela_core::app::sim_outcome::SimVerdict::export_all(&config)?; // simOutcome
+    vela_core::app::passkey_end::CeremonyEnd::export_all(&config)?; // passkeyCeremonyEnd
+    vela_core::app::rpc_pool::NodeStanding::export_all(&config)?; // rpcNodeStanding
     MarkView::export_all(&config)?; // tokenMark, chainMark (DESIGN L, 2026-10-08)
     ExploreEntry::export_all(&config)?; // exploreLanding's question
     ExploreLanding::export_all(&config)?; // exploreLanding
