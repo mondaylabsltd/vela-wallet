@@ -358,16 +358,73 @@ pub fn unreached_chains() -> Vec<u32> {
     answer.recv().unwrap_or_default()
 }
 
-/// The pool's own-node lists, as one answer ([`own_node_chains`]).
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+/// The pool's own-node lists, as one answer ([`own_node_chains`]) — read
+/// only through the core's one reading of them
+/// ([`rpc_pool::node_standing`](vela_core::app::rpc_pool::node_standing)),
+/// so no list is ordered or combined here.
+#[derive(Clone, Debug, PartialEq)]
 pub struct OwnNodeChains {
-    /// Chains whose person's own RPC is not answering and whose reads public
-    /// nodes are serving for now (`RpcPoolView.fallback_chains`).
-    pub fallback: Vec<u32>,
-    /// "Only use my node" chains that cannot be read right now
-    /// (`RpcPoolView.own_node_unreached_chains`): nothing went to another
-    /// node, so the person's node is the whole story.
-    pub own_node_unreached: Vec<u32>,
+    /// The pool's view, its own-node lists in it.
+    view: vela_core::app::rpc_pool::RpcPoolView,
+}
+
+impl Default for OwnNodeChains {
+    fn default() -> Self {
+        Self {
+            view: vela_core::app::rpc_pool::RpcPoolView {
+                failed_chains: Vec::new(),
+                rate_limited_chains: Vec::new(),
+                banned: Vec::new(),
+                unreached_chains: Vec::new(),
+                fallback_chains: Vec::new(),
+                own_only_chains: Vec::new(),
+                own_node_unreached_chains: Vec::new(),
+                pending_urls: Default::default(),
+            },
+        }
+    }
+}
+
+impl OwnNodeChains {
+    /// The lists of a view, as a test hands them.
+    #[cfg(test)]
+    pub fn of(fallback: &[u32], own_only: &[u32], own_node_unreached: &[u32]) -> Self {
+        let mut chains = Self::default();
+        chains.view.fallback_chains = fallback.to_vec();
+        chains.view.own_only_chains = own_only.to_vec();
+        chains.view.own_node_unreached_chains = own_node_unreached.to_vec();
+        chains
+    }
+
+    /// Where `chain_id`'s reads stand — the core's reading.
+    #[must_use]
+    pub fn standing(&self, chain_id: u32) -> vela_core::app::rpc_pool::NodeStanding {
+        vela_core::app::rpc_pool::node_standing(&self.view, chain_id)
+    }
+
+    /// Of `chains`, those whose standing is `standing`, in their order.
+    #[must_use]
+    pub fn standing_as(
+        &self,
+        chains: &[u32],
+        standing: vela_core::app::rpc_pool::NodeStanding,
+    ) -> Vec<u32> {
+        chains
+            .iter()
+            .copied()
+            .filter(|chain| self.standing(*chain) == standing)
+            .collect()
+    }
+
+    /// The chains public nodes serve because the person's node is not
+    /// answering (`NodeStanding::FallingBack`), ascending.
+    #[must_use]
+    pub fn falling_back(&self) -> Vec<u32> {
+        self.standing_as(
+            &self.view.fallback_chains,
+            vela_core::app::rpc_pool::NodeStanding::FallingBack,
+        )
+    }
 }
 
 /// The web's `getFallbackChains` / `getOwnNodeUnreachedChains`, from the
@@ -778,11 +835,7 @@ fn run(rx: &std::sync::mpsc::Receiver<Message>, workers: &Sender<Message>) {
                 let _ = reply.send(host.view().unreached_chains);
             }
             Request::OwnNode { reply } => {
-                let view = host.view();
-                let _ = reply.send(OwnNodeChains {
-                    fallback: view.fallback_chains,
-                    own_node_unreached: view.own_node_unreached_chains,
-                });
+                let _ = reply.send(OwnNodeChains { view: host.view() });
             }
             #[cfg(test)]
             Request::Open { reply } => {

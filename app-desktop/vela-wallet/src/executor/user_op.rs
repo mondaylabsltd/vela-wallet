@@ -78,6 +78,10 @@ const MAX_QUOTE_VS_CHAIN_MULTIPLE: u128 = 3;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SubmitFailure {
     PasskeyCancelled,
+    /// The passkey prompt ran out at its deadline (the core's
+    /// `SIGN_TIMEOUT_MS`, read by `passkey_end::ceremony_end`): nothing was
+    /// signed, and it is said as that — never as the person's close.
+    PasskeyTimedOut,
     RelayerUnavailable,
     BundlerUnderfunded,
     /// The relay was never reached (`NotSent { rejection: None }`), or the
@@ -106,6 +110,13 @@ pub enum SubmitFailure {
     /// (`SendSubmitFailure::PreviousPending`); a page hears
     /// `PREVIOUS_PENDING_DETAIL`.
     PreviousPending,
+    /// The relay refused it because the nonce it signed was spent already —
+    /// another transaction of this account went first (the core's
+    /// `RelayRejection::NonceUsed`, a bare AA25, send-15). Nothing was sent
+    /// and it can never go out as signed: Send says "went first" with Review
+    /// again (`SendSubmitFailure::NonceUsed`); a page hears the core's
+    /// `NONCE_USED_DETAIL`, as the relay's refusal it is.
+    NonceUsed,
     /// Spec 102: the account's venue cannot be used here — nothing on this
     /// device can reach its keys (`SigningPlan::blocked`). No prompt was
     /// raised and no page opened; the core says why, in the person's
@@ -131,6 +142,7 @@ impl From<SubmitFailure> for SendSubmitFailure {
     fn from(failure: SubmitFailure) -> Self {
         match failure {
             SubmitFailure::PasskeyCancelled => SendSubmitFailure::PasskeyCancelled,
+            SubmitFailure::PasskeyTimedOut => SendSubmitFailure::PasskeyTimedOut,
             SubmitFailure::RelayerUnavailable => SendSubmitFailure::RelayerUnavailable,
             SubmitFailure::BundlerUnderfunded => SendSubmitFailure::BundlerUnderfunded,
             SubmitFailure::NotSent => SendSubmitFailure::Other {
@@ -143,6 +155,7 @@ impl From<SubmitFailure> for SendSubmitFailure {
             },
             SubmitFailure::VenueBlocked(block) => SendSubmitFailure::VenueBlocked { block },
             SubmitFailure::PreviousPending => SendSubmitFailure::PreviousPending,
+            SubmitFailure::NonceUsed => SendSubmitFailure::NonceUsed,
             // The core's own reading (`SendSubmitFailure::PageFailed` doc):
             // a decline on the page is the closed prompt; anything else the
             // page did is said as the page's.
@@ -393,7 +406,14 @@ impl Signer<'_> {
             return Err(SubmitFailure::VenueBlocked((*block).clone()));
         }
         match self {
-            Self::Passkey(sign) => sign(digest),
+            Self::Passkey(sign) => {
+                // The prompt's clock: a cancel at its deadline is the
+                // deadline's (the core's `ceremony_end`), never the person's.
+                let raised = std::time::Instant::now();
+                sign(digest).map_err(|failure| {
+                    passkey_failure(failure, raised.elapsed().as_secs_f64() * 1_000.0)
+                })
+            }
             Self::TrustedPage {
                 ask,
                 page,
@@ -412,34 +432,42 @@ impl Signer<'_> {
                     None => keys.to_vec(),
                 };
                 let request = ask.request(chain_id, safe, &allowed, *key_route, operation);
-                return trusted_signer::sign(&request, page, digest, &allowed, channel).map_err(
-                    |end| match end {
-                        trusted_signer::PageEnd::Passkey(failure) => passkey_failure(failure),
+                trusted_signer::sign(&request, page, digest, &allowed, channel).map_err(|end| {
+                    match end {
+                        // The page ran its own prompt, on its own clock:
+                        // its cancel is the person's.
+                        trusted_signer::PageEnd::Passkey(failure) => passkey_failure(failure, 0.0),
                         trusted_signer::PageEnd::Declined => SubmitFailure::PageDeclined,
                         trusted_signer::PageEnd::Failed(failure) => {
                             SubmitFailure::PageFailed(failure)
                         }
-                    },
-                );
+                    }
+                })
             }
             Self::Unreachable { .. } => unreachable!("answered above"),
         }
-        .map_err(passkey_failure)
     }
 }
 
-/// A passkey ceremony that signed nothing, as the submit says it.
-fn passkey_failure(failure: PasskeyFailure) -> SubmitFailure {
-    match failure.kind {
-        FailureKind::Cancelled => SubmitFailure::PasskeyCancelled,
+/// A passkey ceremony that signed nothing, `elapsed_ms` after its prompt was
+/// raised, as the submit says it: closed by the person, or run out at its
+/// deadline — the core's rule (`passkey_end::ceremony_end`), so the
+/// platforms' one "cancelled" is told apart the same way on every shell.
+fn passkey_failure(failure: PasskeyFailure, elapsed_ms: f64) -> SubmitFailure {
+    use vela_core::app::passkey_end::{CeremonyEnd, ceremony_end};
+    match ceremony_end(failure.kind, elapsed_ms) {
+        CeremonyEnd::Cancelled => SubmitFailure::PasskeyCancelled,
+        CeremonyEnd::TimedOut => SubmitFailure::PasskeyTimedOut,
         // Spec 099 R8: how it failed travels on, so the sheet and the
         // page's record name the passkey, not "couldn't submit".
-        kind => SubmitFailure::Signer {
-            kind,
-            message: failure
-                .message
-                .unwrap_or_else(|| "the passkey ceremony failed".to_owned()),
-        },
+        CeremonyEnd::NotSupported | CeremonyEnd::NotDiscoverable | CeremonyEnd::Other => {
+            SubmitFailure::Signer {
+                kind: failure.kind,
+                message: failure
+                    .message
+                    .unwrap_or_else(|| "the passkey ceremony failed".to_owned()),
+            }
+        }
     }
 }
 
@@ -1161,12 +1189,9 @@ fn clear_and_post(
             // of the network — "previous transaction pending" (Send) or the
             // core's detail for it (a dApp).
             Some(RelayRejection::NonceHeld { .. }) => SubmitFailure::PreviousPending,
-            // The core's reading of a bare AA25 (send-15): refused, as the
-            // relay's sentence was before — the desktop lane words it as
-            // "went first" (`SendSubmitFailure::NonceUsed`).
-            Some(RelayRejection::NonceUsed) => {
-                SubmitFailure::Refused(vela_core::user_op::NONCE_USED_DETAIL.to_owned())
-            }
+            // The core's reading of a bare AA25 (send-15): another transaction
+            // of this account went first — said as that, never "refused".
+            Some(RelayRejection::NonceUsed) => SubmitFailure::NonceUsed,
             Some(RelayRejection::Other(message)) => SubmitFailure::Refused(message),
         }),
     }
@@ -1447,6 +1472,58 @@ mod tests {
         );
         assert!(PREVIOUS_PENDING.starts_with("Another transaction from this account"));
         let _ = accepted(OWN);
+    }
+
+    /// The platforms say one "cancelled" for a closed prompt and one that
+    /// ran out; the core's clock tells them apart (`ceremony_end`), and the
+    /// send and the sheet hear which (WIRE-AUDIT A6, A10). A failure that is
+    /// no cancel is never a timeout, whenever it came.
+    #[test]
+    fn a_cancel_at_the_deadline_is_timed_out_and_before_it_the_persons() {
+        use vela_core::app::passkey_end::{SIGN_TIMEOUT_MS, SIGN_TIMEOUT_SLACK_MS};
+        let at = SIGN_TIMEOUT_MS - SIGN_TIMEOUT_SLACK_MS;
+        assert_eq!(
+            passkey_failure(PasskeyFailure::cancelled(), 4_000.0),
+            SubmitFailure::PasskeyCancelled
+        );
+        assert_eq!(
+            passkey_failure(PasskeyFailure::cancelled(), at),
+            SubmitFailure::PasskeyTimedOut
+        );
+        assert!(matches!(
+            passkey_failure(PasskeyFailure::other("broken"), SIGN_TIMEOUT_MS),
+            SubmitFailure::Signer { kind: FailureKind::Other, .. }
+        ));
+        assert_eq!(
+            SendSubmitFailure::from(SubmitFailure::PasskeyTimedOut),
+            SendSubmitFailure::PasskeyTimedOut
+        );
+        // The deadline every prompt is given is the core's.
+        assert_eq!(vela_passkey_win::TIMEOUT_MS, 120_000);
+    }
+
+    /// The relay's bare AA25, as the core reads it (`NonceUsed`): another
+    /// transaction of the account went first. Send says so ("went first",
+    /// Review again) — never the relay's refusal of a bad operation.
+    #[test]
+    fn a_spent_nonce_is_went_first_never_a_refusal() {
+        let refused = clear_and_post(
+            OWN,
+            None,
+            &|_, _| true,
+            &|| true,
+            || SubmitVerdict::NotSent {
+                rejection: Some(vela_core::user_op::classify_relay_rejection(
+                    "AA25 invalid account nonce",
+                )),
+            },
+            |_| unreachable!("not accepted"),
+        );
+        assert_eq!(refused, Err(SubmitFailure::NonceUsed));
+        assert_eq!(
+            SendSubmitFailure::from(SubmitFailure::NonceUsed),
+            SendSubmitFailure::NonceUsed
+        );
     }
 
     /// The floor a landed operation leaves — and none from one that has not

@@ -192,12 +192,13 @@ pub fn sync(cx: &mut App) {
     }
     let (url, token) = dial.split_once('\n').unwrap_or_default();
     let mut definitions = vela_agent::tools::definitions();
-    // P2.3: the advisor's tool, as the web exposes it beside the shared ones.
-    definitions.push(advisor::definition());
+    // P2.3: the advisor's two tools and its paragraph, the core's — as the
+    // web exposes them beside the shared ones.
+    definitions.extend(vela_agent::tools::advisor_definitions());
     let instructions = format!(
         "{}\n{}",
         vela_agent::tools::instructions("computer"),
-        advisor::INSTRUCTIONS
+        vela_agent::tools::ADVISOR_INSTRUCTIONS
     );
     let status_events = events.clone();
     let opened = Connection::open(

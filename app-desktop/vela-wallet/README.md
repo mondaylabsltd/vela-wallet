@@ -823,8 +823,8 @@ it names — Send opens the form, nothing moves until the person confirms.
 | Send | ⌘N | Ctrl+N | Wallet |
 | Receive | ⇧⌘R | Ctrl+Shift+R | Wallet |
 | Refresh balances | ⌘R | Ctrl+R, F5 | Wallet |
-| Find (the section's search; the palette where it has none) | ⌘F | Ctrl+F | — (palette) |
-| Command palette ("Search or run") | ⌘K | Ctrl+K | Wallet |
+| Find (the section's search; the palette where it has none) | ⌘F | Ctrl+F | Edit |
+| Command Palette (`componentsUi.appMenu.commandPalette`) | ⌘K | Ctrl+K | Wallet |
 | Close window / Minimize / Full screen | ⌘W / ⌘M / ⌃⌘F | — | Window / View |
 
 gpui draws no menu bar on Windows and Linux, so the command palette is the
@@ -890,8 +890,12 @@ N-D3 and the motion pass, all on every desktop unless said otherwise.
   proposal, invite or connect link that the core reads opens on the web
   wallet — the CORE's rebuilt link at `wallet.getvela.app`, never the pasted
   text — until multisig lands here; one that does not read is said in the
-  web's words. gpui delivers dropped FILES only: text dragged out of a
-  browser is pasted, not dropped.
+  web's words. A payment link the core refuses says why (`pay_refusal`:
+  recipient, network, token or amount, in the web's `receive.pay.*` words)
+  on the scanner — scanned, pasted, dropped or opened by the OS. While
+  files are dragged over the window it says what a drop takes
+  (`componentsUi.dropOverlay.title`). gpui delivers dropped FILES only:
+  text dragged out of a browser is pasted, not dropped.
 
 ## Menu bar and tray
 
@@ -903,11 +907,12 @@ last-known rows included — with the hero's "Updated <ago>"; while balances
 are hidden it is the mask. Send, Receive and the window are one click away;
 each is the press of the control it names.
 
-**Off by default** (`vela.desktop.menuBar`). The Settings → Appearance
-switch is drawn once the corpus has its words — `settingsModals.appearance.
-menuBar` (macOS), `settingsModals.appearance.trayIcon` (Windows) and
-`settingsModals.appearance.statusItemHint` — which the I18N lane adds; until
-then the extra stays off. `VELA_MENU_BAR=1` turns it on in a developer build.
+**Off by default** (`vela.desktop.menuBar`), and turned on with the Settings →
+Appearance switch — "Show in menu bar" (macOS, `settingsModals.appearance.
+menuBar`) or "Show in system tray" (Windows, `settingsModals.appearance.
+trayIcon`), over `settingsModals.appearance.statusItemHint`. A switch whose
+words were missing would not be drawn. `VELA_MENU_BAR=1` turns it on in a
+developer build.
 Linux has none yet: a StatusNotifierItem needs a `com.canonical.dbusmenu`
 menu over D-Bus, and GNOME shows none without an extension. Closing the
 window still quits (see the reopen quirk below), and the extra goes with it.
@@ -942,8 +947,9 @@ To turn it on, the owner provides:
    Authenticode certificate (Windows) the release builds are already signed
    with — the install hand-off (not built yet: it is the step after a
    verified download, and needs these to be tested against) checks them.
-4. The words for "Update available / Install / Later" in the corpus (the
-   prompt is drawn only once they exist).
+4. Nothing more for the words: "Update available / Install / Later" are
+   in the corpus (`componentsUi.appUpdate.*`, `updater::PromptWords`) for
+   the prompt, which is drawn with the install hand-off its Install presses.
 
 ## Known gpui quirks
 

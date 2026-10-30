@@ -820,6 +820,9 @@ fn submit_failure_with(
         // response: the person did not decide, and a 4001 would report that
         // they declined.
         user_op::SubmitFailure::PasskeyCancelled => SignSubmitOutcome::PasskeyCancelled,
+        // …nor is a prompt that ran out at its deadline: handled as the
+        // close, and the sheet says which (signer-11).
+        user_op::SubmitFailure::PasskeyTimedOut => SignSubmitOutcome::PasskeyTimedOut,
         user_op::SubmitFailure::BundlerUnderfunded => SignSubmitOutcome::Underfunded {
             message: "the relay's gas account is underfunded".to_owned(),
             // The live account: where to send, what it holds, and the web's
@@ -856,6 +859,15 @@ fn submit_failure_with(
         user_op::SubmitFailure::PreviousPending => SignSubmitOutcome::Failed {
             message: user_op::PREVIOUS_PENDING.to_owned(),
             refused: false,
+            signer: None,
+        },
+        // Another transaction of this account spent the nonce first: the
+        // relay refused the op, as the web answers it (`isRelayRefusal`) —
+        // the page hears the core's refusal, its detail the core's
+        // `NONCE_USED_DETAIL`; the sheet offers no Retry of the same op.
+        user_op::SubmitFailure::NonceUsed => SignSubmitOutcome::Failed {
+            message: vela_core::user_op::NONCE_USED_DETAIL.to_owned(),
+            refused: true,
             signer: None,
         },
         // Spec 099 R8: the passkey failed, and the core is told how.
@@ -1421,6 +1433,11 @@ mod tests {
             submit_failure(100, "0xabc", user_op::SubmitFailure::PasskeyCancelled),
             SignSubmitOutcome::PasskeyCancelled,
             "…which the core answers with nothing while the form is up"
+        );
+        // A prompt that ran out at its deadline is told as that (signer-11).
+        assert_eq!(
+            submit_failure(100, "0xabc", user_op::SubmitFailure::PasskeyTimedOut),
+            SignSubmitOutcome::PasskeyTimedOut,
         );
 
         ctx.prompt_reset();
@@ -2332,6 +2349,9 @@ mod tests {
                     REFUSED_KEY,
                     false,
                 ),
+                // A spent nonce is the relay's refusal of this op, as the web
+                // answers it: no retry of the same signature.
+                (user_op::SubmitFailure::NonceUsed, REFUSED_KEY, false),
             ] {
                 let (mut host, submit, ops) = signed("rid-held");
                 let persist = only(&ops, "the record");

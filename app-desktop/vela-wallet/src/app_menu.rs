@@ -289,7 +289,7 @@ pub fn menus(loc: &Loc) -> Vec<Menu> {
             MenuItem::action(loc.t("componentsUi.dock.receive"), Receive),
             MenuItem::action(loc.t("explore.refresh"), Refresh),
             MenuItem::separator(),
-            MenuItem::action(loc.t("componentsUi.commandBar.placeholder"), CommandPalette),
+            MenuItem::action(t("commandPalette"), CommandPalette),
         ]),
         Menu::new(t("edit")).items(vec![
             MenuItem::os_action(t("undo"), Undo, OsAction::Undo),
@@ -299,6 +299,10 @@ pub fn menus(loc: &Loc) -> Vec<Menu> {
             MenuItem::os_action(t("copy"), Copy, OsAction::Copy),
             MenuItem::os_action(t("paste"), Paste, OsAction::Paste),
             MenuItem::os_action(t("selectAll"), SelectAll, OsAction::SelectAll),
+            // ⌘F, where every Mac app keeps Find: the section's search (the
+            // palette where it has none).
+            MenuItem::separator(),
+            MenuItem::action(t("find"), Find),
         ]),
         // The sections, ⌘1–⌘4, as the sidebar orders them.
         Menu::new(t("view")).items(vec![
@@ -587,6 +591,23 @@ mod tests {
         assert_eq!(about, "About Vela Wallet");
         assert_eq!(en[1].name.to_string(), "Wallet");
         assert_eq!(en[2].name.to_string(), "Edit");
+        // Find (Edit) and the command palette (Wallet), in their own words.
+        let named = |menu: &Menu, action: &dyn gpui::Action| {
+            menu.items.iter().find_map(|item| match item {
+                MenuItem::Action {
+                    name, action: own, ..
+                } if own.partial_eq(action) => Some(name.to_string()),
+                _ => None,
+            })
+        };
+        assert_eq!(named(&en[2], &Find).as_deref(), Some("Find"));
+        assert_eq!(
+            named(&en[1], &CommandPalette).as_deref(),
+            Some("Command Palette")
+        );
+        let zh = menus(&Loc::for_tag("zh"));
+        assert_eq!(named(&zh[2], &Find).as_deref(), Some("查找"));
+        assert_eq!(named(&zh[1], &CommandPalette).as_deref(), Some("命令面板"));
     }
 
     /// N-D2: the wallet's shortcuts — ⌘1–4, ⌘N, ⇧⌘R, ⌘R, ⌘,, ⌘K, ⌘F on

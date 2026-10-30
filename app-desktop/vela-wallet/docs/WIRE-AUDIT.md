@@ -25,11 +25,11 @@ no such surface).
 | A3 | `executor/relay.rs` `parse_quote_row` | `InBandQuotes` → `native_usd_floor_price` | `None` | `fee-executor.ts:128-136,206` (`getCachedNativePriceUsd`) | **fixed** — added per answer in `executor/fee.rs` from the last settled balances |
 | A4 | `executor/network_admin.rs` `read_store` | `StoreLoaded` → `shown_networks` | read the record, never settled one | `services/shown-networks.ts:127-140` | **fixed** — `settle_shown_networks` at launch and in `read_store` |
 | A5 | `executor/tracker.rs` `ReadNonce` | `NonceRead` → `nonce`, `head_block` | `None`, `None` | `tracker-executor.ts:214-233` | **fixed** — `EntryPoint.getNonce` at the head (`chain::nonce_at`) |
-| A6 | `executor/user_op.rs` `SubmitFailure` → `SendSubmitFailure` | `SubmitFailed` | never `ChainUnreachable{busy}`, `PasskeyTimedOut`, `NonceUsed` | `send-executor.ts:914-976` + `prepare-bound.ts` | **partly fixed** — `ChainUnreachable{busy}` via `executor/prepare_bound.rs`. Open: `PasskeyTimedOut` (the ceremony has no own deadline signal yet), `NonceUsed` (the relay's bare AA25 is not classified apart from `Refused`) |
+| A6 | `executor/user_op.rs` `SubmitFailure` → `SendSubmitFailure` | `SubmitFailed` | never `ChainUnreachable{busy}`, `PasskeyTimedOut`, `NonceUsed` | `send-executor.ts:914-976` + `prepare-bound.ts` | **fixed** — `ChainUnreachable{busy}` via `executor/prepare_bound.rs`; `NonceUsed` from the core's `RelayRejection::NonceUsed` (`nat-desktop-4`); `PasskeyTimedOut` by the core's `passkey_end::ceremony_end` over the prompt's clock, every prompt given `SIGN_TIMEOUT_MS` (Windows `dwTimeoutMilliseconds`, the USB exchange, macOS's sheet cancelled at it) |
 | A7 | `executor/send.rs` `SimulateCalls` | `SimResolved` → `sim_json` | `None` ("no simulation engine") | `simulateAssetChanges` (`send-executor.ts:859-871`) | **fixed** (`nat-desktop-2`) — `sim::simulate` through the pool, stored as the web's `StoredAssetSim` (a token's direction only; its figure is `token_trust`'s) |
 | A8 | `executor/balance_dashboard.rs` `settled_result` | `FetchSettled` → `own_node_chain_ids`, `fallback_chain_ids` | `vec![]`, `vec![]` | `balance-executor.ts:159-160` from the pool view | **fixed** — `pool::own_node_chains()` reads `fallback_chains` / `own_node_unreached_chains` off the in-process pool view (no core accessor needed); the breakdown lists public-node networks with `fallback_status_key` |
 | A9 | `executor/sign_request.rs` `submit_failure` | `SignSubmitOutcome::Underfunded.funding` | `None` | `sign-executor.ts:639-668` | **fixed** — the live gas account (cache cleared first), the web's reactive margin and buffer |
-| A10 | `executor/sign_request.rs` `submit_failure` | `SignSubmitOutcome` | never `PasskeyTimedOut` / `PageDeclined` | `sign-executor.ts:615-619` | **fixed** for `PageDeclined` / `PageFailed` (`trusted_signer::PageEnd`; answers accepted through `accept_signature`). Open: `PasskeyTimedOut` — the native ceremony has no deadline signal |
+| A10 | `executor/sign_request.rs` `submit_failure` | `SignSubmitOutcome` | never `PasskeyTimedOut` / `PageDeclined` | `sign-executor.ts:615-619` | **fixed** for `PageDeclined` / `PageFailed` (`trusted_signer::PageEnd`; answers accepted through `accept_signature`), and `PasskeyTimedOut` as A6 (`nat-desktop-4`); the sheet says the core's `passkey_note` under its confirm |
 | A11 | `wallet/signing_host.rs` `clear_kickoff` | `ResolveTransaction/Batch/TypedData` → `from`, `probe_code` | `None`, `false` | `signing/core/sheet.svelte.ts:107,120-121` | **fixed** — the wallet as `from`, `probe_code` on the live sheet |
 | A12 | `executor/clear_signing.rs` | `RpcGetCode` → `result` | `None` | `clear-executor.ts:121-138` | **fixed** — `eth_getCode` through the pool, raw; the blind rung says "no code here" |
 | A13 | `wallet/money.rs` `add_network_settled` | `NetworkAdded` | `CheckFailed` → `NotCompatible` | `send-executor.ts:437-441` (`unverified` → `error`) | **fixed** — `CheckFailed` → `Error` |
@@ -40,7 +40,7 @@ no such surface).
 | A18 | `executor/send.rs` `ClearTokenCache` | `TokenCacheCleared` | no-op | clears + forces (`send-executor.ts:411-415`) | **by design** — the desktop keeps no token cache (`balances::fetch_all` reads live every time): nothing to clear |
 | A19 | `executor/token_trust.rs:597` | `InvalidateTokenCache` | ack only | `clearTokenCache(address)` | **by design** — as A18 |
 | A20 | `executor/relay.rs` `read_in_band_quotes` | `InBandQuotes` | drops every stablecoin row when the native row is unpriced | hands every row over UNFILTERED (`fee-executor.ts:70-77`) | **fixed** — every row unfiltered; `picker_rows` and the native-price floor decide |
-| A21 | `executor/send.rs` `ProposeSafeTx` | `ProposeFailed` | always | `proposeTransfers` | **by design until multisig lands** (F0.4) — kept honest |
+| A21 | `executor/send.rs` `ProposeSafeTx` | `ProposeFailed` | always | `proposeTransfers` | **by design until multisig lands** (F0.4) — kept honest: answered `SendProposeFailure::NotSupported` (`send.txErrorProposalNotSupported`, `nat-desktop-4`) |
 | A22 | `executor/network_admin.rs` `read_store` | `multisig_service`, `genesis_service_url` | `false`, `None` | `true`, stored URL | **by design until multisig lands** |
 | — | `relay.rs` `operator_served: false`, `coin: None`; `network_admin.rs` `vela: false`; `signing_host.rs` `bundler_cost_wei`/`fee_collector: None`, `dapp`/`requested_address`/`request_ts_ms: None`; `balances.rs` `spam: false` | | | the web hardcodes the same | **by design** |
 | — | contacts `note: None` (`contacts/live.rs:274`) | | | | not a finding: inside `#[cfg(test)]`; the live path keeps the stored note |
@@ -78,12 +78,12 @@ desktop's non-test, non-fixture sources.
 
 ## 3. Core changes these need (not made here — CORE lane)
 
-- **rpc_pool**: an own-node / fallback accessor for a shell that runs the pool
-  in-process (A8), or the pool view's `own_node_chain_ids`/`fallback_chain_ids`
-  exported as a pure function of the pool state.
-- **user_op / relay**: a `RelayRejection::NonceUsed` (bare AA25) so a shell can
-  answer `SendSubmitFailure::NonceUsed` (A6) — today only the web's TS classifier
-  knows it.
+- ~~**rpc_pool**: an own-node / fallback accessor~~ — landed (core-asks-1) as
+  `rpc_pool::node_standing`; A8 reads each chain through it (`nat-desktop-4`).
+- ~~**user_op / relay**: a `RelayRejection::NonceUsed`~~ — landed (core-asks-1);
+  A6 answers `SendSubmitFailure::NonceUsed` from it (`nat-desktop-4`).
+- ~~A passkey prompt's deadline~~ — landed as `passkey_end` (core-asks-1); A6
+  and A10 answer `PasskeyTimedOut` (`nat-desktop-4`).
 - **send**: `SendRecipientRisk.own`/`known_name` for multisig members arrive with
   F0.4 (the members list is web-only state).
 - None of the fixed rows needed a core change.

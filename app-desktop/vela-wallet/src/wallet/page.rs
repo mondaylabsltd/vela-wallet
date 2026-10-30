@@ -19043,9 +19043,14 @@ impl WalletPage {
         // its words, and whether they are said now. A pinned answer's
         // (`VELA_SIM`) is held the same way.
         let mut held_note: Option<Option<(SharedString, bool)>> = pinned_note.map(Some);
+        // dapp-15: "Check again" under a verdict the core says is the
+        // network's — `Some(checking)` while offered.
+        #[cfg_attr(target_os = "linux", allow(unused_mut))]
+        let mut sim_recheck: Option<bool> = None;
         #[cfg(not(target_os = "linux"))]
         if let Some(host) = self.signing_host.as_ref() {
             let host = host.read(cx);
+            sim_recheck = host.sim_recheck_offer();
             let fee = host.fee_view();
             // Where the executor will sign, from the same context it reads
             // (`SignContext::follow_venue`).
@@ -19248,12 +19253,18 @@ impl WalletPage {
                         measuring,
                         signing_live::reserve_warning(fee, &self.signing),
                     );
+                    // A shut confirm says why; an open one after a prompt
+                    // that signed nothing says that, calmly — closed, or run
+                    // out at its deadline (signer-11, the core's note).
+                    let passkey = signing_live::passkey_note_key(host.view.passkey_note)
+                        .map(|key| gpui::SharedString::from(self.loc.t(key).to_string()));
                     held_note = Some(
                         held.note(
                             confirm
                                 .note
                                 .clone()
-                                .filter(|_| !confirm.enabled && !confirm.label.is_empty()),
+                                .filter(|_| !confirm.enabled && !confirm.label.is_empty())
+                                .or(passkey),
                         ),
                     );
                 }
@@ -19638,6 +19649,32 @@ impl WalletPage {
                     item,
                     signing_components::verdict_room(theme, &mut self.icons, inner, Some(laid_out)),
                 ));
+                // dapp-15: no node answered — the core's `recheck` — so the
+                // person may ask again; while asked, the verdict above stays
+                // and the button says it is checking.
+                if let Some(checking) = sim_recheck {
+                    let label = self.loc.t(if checking {
+                        "componentsUi.signing.simRechecking"
+                    } else {
+                        "componentsUi.signing.simRecheck"
+                    });
+                    let button = crate::flows::components::ghost_button(theme, label)
+                        .id("signing-sim-recheck");
+                    column = column.child(div().flex().child(if checking {
+                        button.opacity(theme::OPACITY_DISABLED)
+                    } else {
+                        button
+                            .cursor_pointer()
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                #[cfg(not(target_os = "linux"))]
+                                if let Some(host) = this.signing_host.clone() {
+                                    host.update(cx, |host, cx| host.sim_again(cx));
+                                }
+                                #[cfg(target_os = "linux")]
+                                let _ = (this, cx);
+                            }))
+                    }));
+                }
             } else if let (true, signing_fixtures::Block::Intent { text, tone }) =
                 (model.first_party, item)
             {
@@ -21406,9 +21443,24 @@ impl WalletPage {
     /// form opens, prefilled and locked to the link's chain, and nothing is
     /// sent until the person confirms.
     pub(crate) fn open_pay_link(&mut self, url: &str, cx: &mut Context<Self>) {
-        if self.scan_resolved(url.to_owned(), cx) {
+        if self.pay_refused(url, cx) || self.scan_resolved(url.to_owned(), cx) {
             cx.activate(true);
         }
+    }
+
+    /// A payment link the core refused, said where the person can see it —
+    /// the scanner, up with the core's reason (`pay_refusal`) in the web's
+    /// words (`receive.pay.*`) — whether it was pasted, dropped or opened by
+    /// the OS. `true` when `text` was such a link.
+    fn pay_refused(&mut self, text: &str, cx: &mut Context<Self>) -> bool {
+        let Some(Err(refusal)) = crate::executor::payment_request::pay_link(text) else {
+            return false;
+        };
+        self.show_scan_notice(
+            ScanNotice::Said(crate::executor::payment_request::refusal_key(refusal)),
+            cx,
+        );
+        true
     }
 
     /// N-D3: text that arrived from outside a field — pasted onto the window
@@ -21443,7 +21495,7 @@ impl WalletPage {
                     cx.notify();
                     return true;
                 }
-                if self.scan_resolved(text, cx) {
+                if self.pay_refused(&text, cx) || self.scan_resolved(text, cx) {
                     return true;
                 }
                 // Read and not a payment: the scanner says so, where a scan
@@ -21555,14 +21607,18 @@ impl WalletPage {
         // a valid one is the request it names — always on its chain, so the
         // send locks to it — and a malformed one is refused, never guessed.
         let request = match crate::executor::payment_request::pay_link(&text) {
-            Some(Some(pay)) => Some(crate::flows::eip681::Eip681 {
+            Some(Ok(pay)) => Some(crate::flows::eip681::Eip681 {
                 recipient: pay.recipient,
                 chain_id: Some(pay.chain_id),
                 token_address: pay.token_address,
                 amount_base_units: pay.amount_base,
             }),
-            Some(None) => {
-                self.scan_notice = Some(ScanNotice::Unusable);
+            // Refused, and the scanner says why — the first rule the link
+            // broke, in the web's words (`pay_refusal`, `receive.pay.*`).
+            Some(Err(refusal)) => {
+                self.scan_notice = Some(ScanNotice::Said(
+                    crate::executor::payment_request::refusal_key(refusal),
+                ));
                 self.scan_quiet_until =
                     Some(std::time::Instant::now() + std::time::Duration::from_secs(2));
                 cx.notify();
@@ -22671,7 +22727,11 @@ impl Render for WalletPage {
                 .on_drop(cx.listener(|this, paths: &ExternalPaths, window, cx| {
                     this.take_dropped(paths.paths().to_vec(), window, cx);
                 }))
-                .child(drop_overlay(&theme, &mut self.icons, self.flow_strings.scan_title.clone()))
+                .child(drop_overlay(
+                    &theme,
+                    &mut self.icons,
+                    self.loc.t("componentsUi.dropOverlay.title"),
+                ))
         } else {
             root
         };
@@ -22748,8 +22808,10 @@ impl Render for WalletPage {
 
 /// N-D3: the drop target, drawn over the window while files are dragged over
 /// it (`group_drag_over` on the page's `wallet-drop` group) and invisible
-/// otherwise — no listener, so it never takes a click. The scanner's own
-/// words and glyph: what a drop does is what a scan of the picture does.
+/// otherwise — no listener, so it never takes a click. Its own words
+/// (`componentsUi.dropOverlay.title`: "Drop an address, payment link or QR
+/// image") under the scanner's glyph: what a drop does is what a scan of the
+/// picture does.
 fn drop_overlay(theme: &Theme, icons: &mut crate::icons::IconCache, title: SharedString) -> Div {
     let tint = theme.backdrop;
     div()
