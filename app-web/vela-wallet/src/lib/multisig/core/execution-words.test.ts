@@ -122,4 +122,3 @@ describe('the fee line (r4-7)', () => {
 		expect(shown.items).toEqual(['activating Alice’s account, which pays the fee']);
 	});
 });
-

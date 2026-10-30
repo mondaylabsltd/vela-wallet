@@ -732,7 +732,8 @@ fn an_execution_writes_one_row_per_transfer_else_one_for_its_proposal() {
     assert_eq!(rows[0]["amount"], "16", "base units, decimal");
     let transfer = json!({"kind": "transfer", "token": CAROL, "to": BOB, "amount": "5"});
     let leg = |action: Value| json!({"to": CAROL, "value": "0", "data": "0x", "action": action});
-    let only = with(json!({"kind": "batch", "calls": [leg(transfer.clone()), leg(transfer.clone())]}));
+    let only =
+        with(json!({"kind": "batch", "calls": [leg(transfer.clone()), leg(transfer.clone())]}));
     let rows = execution_rows(SAFE, &only);
     assert_eq!(rows.len(), 2, "{rows:?}");
     assert!(rows.iter().all(|r| r["kind"] == "send"));

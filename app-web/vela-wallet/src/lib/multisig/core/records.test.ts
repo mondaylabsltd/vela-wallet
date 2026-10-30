@@ -45,10 +45,10 @@ describe('an executed proposal in Activity', () => {
 	it('words a proposal row by its title, moving only what a call sends', async () => {
 		useRecordWords({ action: { cancel: '' } } as never);
 		const [row] = await executionRows(
-			executed(
-				[{ index: 0, kind: 'call', to: SAFE, sends: '0', calls: 1, contract: SAFE }],
-				{ kind: 'changeThreshold', threshold: '1' }
-			)
+			executed([{ index: 0, kind: 'call', to: SAFE, sends: '0', calls: 1, contract: SAFE }], {
+				kind: 'changeThreshold',
+				threshold: '1'
+			})
 		);
 		expect(row).toMatchObject({
 			type: 'dapp_tx',
