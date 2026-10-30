@@ -71,6 +71,7 @@ pub mod manage_tokens;
 pub mod method_words;
 pub mod money;
 pub mod multisig_accounts;
+pub mod multisig_members;
 pub mod multisig_proposals;
 /// The multisig machines (F0.4): one shell vocabulary, four machines.
 pub mod multisig_shell;
