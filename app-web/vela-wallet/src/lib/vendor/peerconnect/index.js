@@ -115,6 +115,22 @@ export class Connection extends EventTarget {
     this.#pump();
   }
 
+  /**
+   * Vela (local change, see README): offline and waiting to try the relay
+   * again — the network came back — tries now instead of at the end of its
+   * backoff (up to 30 s). Its clock moves on to that moment, as if the wait
+   * had passed. Does nothing while connecting, connected or closed.
+   */
+  reconnectNow() {
+    if (this.state !== "offline" || this.#socket) return;
+    const at = this.#peer.pollTimeout();
+    if (at === undefined) return;
+    const ahead = at - this.#now();
+    if (ahead > 0) this.#epoch -= ahead;
+    this.#peer.handleTimeout(this.#now());
+    this.#pump();
+  }
+
   #now() {
     return performance.now() - this.#epoch;
   }

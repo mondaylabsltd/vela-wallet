@@ -354,4 +354,30 @@ function followState(connection: RelayConnection, watch: RelayWatch, accepted?: 
 	};
 	connection.addEventListener('state', check);
 	queueMicrotask(check);
+	backOnline(connection);
+}
+
+/**
+ * r4C-15: the network back (or the page in front again): a connection
+ * waiting out its backoff — up to 30 s between tries — tries the relay at
+ * once, so the other side sees it back within a second or two rather than
+ * "went offline — reconnecting…" for half a minute. Stops once it is left or closed.
+ */
+function backOnline(connection: RelayConnection) {
+	if (typeof window === 'undefined') return;
+	const over = () => connection.state === 'closed' || connection.reason === 'left';
+	const nudge = () => {
+		if (over()) return stop();
+		if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+		connection.reconnectNow?.();
+	};
+	const stop = () => {
+		window.removeEventListener('online', nudge);
+		document.removeEventListener('visibilitychange', nudge);
+	};
+	window.addEventListener('online', nudge);
+	document.addEventListener('visibilitychange', nudge);
+	connection.addEventListener('state', () => {
+		if (over()) stop();
+	});
 }

@@ -90,6 +90,8 @@ export class Connection extends EventTarget {
    * so that connecting with it later finishes the job; delete it once closed.
    */
   close(): void;
+  /** Vela (local change): offline and waiting out its backoff — try the relay now. */
+  reconnectNow(): void;
   /** Replaces the relay token: used from the next connection on, at once after `unauthorized`. */
   setToken(token: string): void;
 

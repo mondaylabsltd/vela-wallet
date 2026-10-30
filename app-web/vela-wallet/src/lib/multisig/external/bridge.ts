@@ -410,6 +410,17 @@ export class Bridge extends EventTarget {
 			entry.walletAt = Date.now();
 			return true;
 		}
+		// r4C-15: Vela asking again for the same transaction (back after going
+		// offline, the sheet opened again) replaces what it asked before, which
+		// nobody waits on any more: that one is withdrawn, never shown first.
+		const again = hashOf(entry.safeTx);
+		if (again) {
+			for (const held of [...this.#queue]) {
+				if (held.entry.session !== saved.id || hashOf(held.entry.safeTx) !== again) continue;
+				held.entry.outcome = 'withdrawn';
+				this.#settle(held.entry, false);
+			}
+		}
 		const onCancel = () => {
 			entry.outcome = 'withdrawn';
 			this.#settle(entry, false);
@@ -561,6 +572,16 @@ export class Bridge extends EventTarget {
 
 	#changed(): void {
 		this.dispatchEvent(new Event('change'));
+	}
+}
+
+/** A request's safeTxHash, lowercase; `null` when it is not a SafeTx the core read. */
+function hashOf(request: SafeTxRequest | null | undefined): string | null {
+	if (!request) return null;
+	try {
+		return safeTxHash(request.chainId, request.safe, request.tx).toLowerCase();
+	} catch {
+		return null;
 	}
 }
 

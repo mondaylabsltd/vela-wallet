@@ -122,9 +122,41 @@ export type OutsideStep =
 			problem: WalletProblem | null;
 			/** Why, when it is not the wallet's: the mailbox's refusal, a check that failed. */
 			reason: string;
+			/** r5reg-12: the mailbox refused it — what kind of refusal, said in plain words. */
+			refused?: RefusalKind;
 			/** A signed approval the mailbox has not taken: Send again re-sends it, nothing re-signed. */
 			unsent: boolean;
 	  };
+
+/**
+ * r5reg-12: a mailbox refusal as the page says it — never its raw text (a
+ * factory's address, a chain id). `setupUnchecked`: it could not read what
+ * it checks the multisig's setup against (a passing failure: try again);
+ * `setup`: the setup sent does not match; `signature`: not a member's
+ * approval as it reads it; `full`: it holds as many waiting transactions as
+ * it can; `transaction`: a transaction it does not take; `other`: anything
+ * else it answered.
+ */
+export type RefusalKind =
+	'setupUnchecked' | 'setup' | 'signature' | 'full' | 'transaction' | 'other';
+
+/** The kind of a mailbox's refusal (the service's `Refusal`, or the client's `{ kind: 'error' }`). */
+export function refusalKind(refusal: unknown): RefusalKind {
+	const r = (refusal ?? {}) as { kind?: unknown; detail?: unknown };
+	switch (r.kind) {
+		case 'genesis':
+			return /could not be read/i.test(String(r.detail ?? '')) ? 'setupUnchecked' : 'setup';
+		case 'approval':
+			return 'signature';
+		case 'full':
+		case 'tooManyProposals':
+			return 'full';
+		case 'transaction':
+			return 'transaction';
+		default:
+			return 'other';
+	}
+}
 
 /** What an execution costs the owner's wallet, before it is sent. */
 export interface ExecutionFee {
@@ -138,6 +170,39 @@ export interface ExecutionFee {
 
 /** The mailbox: how long a signed approval is sent again on its own. */
 export const POST_PATIENCE_MS = 120_000;
+
+/**
+ * r5reg-12: what this page signed and the mailbox has not taken — kept on
+ * this device (as Vela's own outbox keeps it) until the mailbox takes it or
+ * its number is used, so a refusal, a reload or a closed tab never loses an
+ * approval or a rejection, and nothing is signed twice. Keyed by the link's
+ * transaction and the owner.
+ */
+const KEPT_KEY = 'vela.connect.unsent.v1';
+
+interface Kept {
+	safeTx: SafeTx;
+	approval: EcdsaApproval;
+	then: Extract<OutsideStep, { kind: 'approved' | 'rejected' }>;
+}
+
+function readKept(): Record<string, Kept> {
+	try {
+		const kept = JSON.parse(localStorage.getItem(KEPT_KEY) ?? '{}') as unknown;
+		return kept && typeof kept === 'object' ? (kept as Record<string, Kept>) : {};
+	} catch {
+		return {};
+	}
+}
+
+function writeKept(kept: Record<string, Kept>): void {
+	try {
+		if (Object.keys(kept).length === 0) localStorage.removeItem(KEPT_KEY);
+		else localStorage.setItem(KEPT_KEY, JSON.stringify(kept));
+	} catch {
+		// private mode: kept for as long as the page is open
+	}
+}
 const RECEIPT_TIMEOUT_MS = 180_000;
 
 class Cancelled extends Error {
@@ -167,6 +232,33 @@ function race<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * The registry's genesis for `safe`, only if the core derives that address
+ * from it — the multisig's name rides on it (r5reg-23: Vela's request
+ * reviewed on the paired page names it as the link's own review does).
+ */
+export async function verifiedGenesis(safe: string): Promise<Genesis | null> {
+	try {
+		const answer = await fetchGenesis(safe);
+		if (!answer.found || !answer.genesis) return null;
+		return sameAddress(genesisAddress(answer.genesis), safe) ? answer.genesis : null;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * r4C-14: a transaction as the mailbox and the chain hold it now — read for
+ * Vela's request on a paired page, so the page knows its approvals before it
+ * offers to sign. `null`: not readable (not in the mailbox yet: Vela is
+ * proposing it, or the service did not answer).
+ */
+export async function readTransaction(link: ProposalLink): Promise<OutsideTransaction | null> {
+	const tx = new OutsideTransaction(link);
+	await tx.refresh();
+	return tx.view ? tx : null;
+}
+
 /** The proposal the mailbox holds under the link's hash, re-hashed by the core. */
 export function matchProposal(
 	link: ProposalLink,
@@ -184,10 +276,36 @@ export class OutsideTransaction {
 	readonly link: ProposalLink;
 	#controller = new AbortController();
 	/** A signed approval not taken by the mailbox yet (Send again). */
-	#unsent: { safeTx: SafeTx; approval: EcdsaApproval; then: OutsideStep } | null = null;
+	#unsent: Kept | null = null;
+	/** What was kept from before is sent again once, when it is first read. */
+	#resumed = false;
 
 	constructor(link: ProposalLink) {
 		this.link = link;
+	}
+
+	/** This link's kept approvals' prefix (`<chain>:<multisig>:<link hash>:`). */
+	get #keptPrefix(): string {
+		return `${this.link.chainId}:${this.link.multisig.toLowerCase()}:${this.link.safeTxHash.toLowerCase()}:`;
+	}
+
+	#keep(kept: Kept): void {
+		this.#unsent = kept;
+		writeKept({ ...readKept(), [`${this.#keptPrefix}${kept.approval.owner.toLowerCase()}`]: kept });
+	}
+
+	#drop(): void {
+		const prefix = this.#keptPrefix;
+		const left = Object.fromEntries(
+			Object.entries(readKept()).filter(([key]) => !key.startsWith(prefix))
+		);
+		writeKept(left);
+		this.#unsent = null;
+	}
+
+	/** Stop this transaction's waits (another link opened in the same tab). */
+	dispose(): void {
+		this.#controller.abort();
 	}
 
 	/** Read it again: the mailbox's copy, the chain's members, what the chain approved. */
@@ -246,19 +364,40 @@ export class OutsideTransaction {
 				findings
 			}
 		};
+		this.#resume(item.status === 'done');
+	}
+
+	/**
+	 * r5reg-12: an approval or rejection signed here before and not taken by
+	 * the mailbox: said as not sent, and sent again once, on its own. Once its
+	 * number is used there is nothing left to send it for.
+	 */
+	#resume(used: boolean): void {
+		const kept = Object.entries(readKept()).find(([key]) => key.startsWith(this.#keptPrefix));
+		if (used) {
+			if (kept || this.#unsent) this.#drop();
+			if (this.step.kind === 'failed' && this.step.unsent) this.step = { kind: 'idle' };
+			return;
+		}
+		if (this.#resumed) return;
+		this.#resumed = true;
+		if (!kept || this.step.kind !== 'idle') return;
+		// Only what this page wrote reads back: anything else is left alone.
+		if (!kept[1]?.safeTx || !kept[1].approval?.signature || !kept[1].then?.kind) return;
+		this.#unsent = kept[1];
+		this.step = {
+			kind: 'failed',
+			what: kept[1].then.kind === 'rejected' ? 'reject' : 'approve',
+			problem: null,
+			reason: 'notSent',
+			unsent: true
+		};
+		void this.sendAgain();
 	}
 
 	/** The registry's genesis for the multisig, only if the core derives its address from it. */
-	async #genesis(): Promise<Genesis | null> {
-		try {
-			const answer = await fetchGenesis(this.link.multisig);
-			if (!answer.found || !answer.genesis) return null;
-			return sameAddress(genesisAddress(answer.genesis), this.link.multisig)
-				? answer.genesis
-				: null;
-		} catch {
-			return null;
-		}
+	#genesis(): Promise<Genesis | null> {
+		return verifiedGenesis(this.link.multisig);
 	}
 
 	get view(): OutsideView | null {
@@ -297,8 +436,17 @@ export class OutsideTransaction {
 		);
 	}
 
+	/**
+	 * r4C-14: its approvals already meet the threshold — nothing more to sign;
+	 * executing is what is left.
+	 */
+	get enough(): boolean {
+		const v = this.view;
+		return !!v && v.item.approved >= v.item.threshold;
+	}
+
 	canApprove(account: string | null): boolean {
-		return this.open && this.isOwner(account) && !this.hasApproved(account);
+		return this.open && this.isOwner(account) && !this.hasApproved(account) && !this.enough;
 	}
 
 	/**
@@ -346,6 +494,8 @@ export class OutsideTransaction {
 			} catch (error) {
 				// r4C-16: a mailbox that takes only typed data: said as that, with approving on chain.
 				if (signed === 'ethSign' && error instanceof MailboxRefused && refusedForm(error.refusal)) {
+					// It never will take this form: nothing is kept to send again.
+					this.#drop();
 					throw new HashFormRefused();
 				}
 				throw error;
@@ -473,6 +623,21 @@ export class OutsideTransaction {
 		}
 	}
 
+	/**
+	 * r5reg-13: what `account` holds of the network's own coin, which pays the
+	 * fee of an execution from here; `null`: the network did not say.
+	 */
+	async balance(account: string): Promise<bigint | null> {
+		const v = this.view;
+		if (!v) return null;
+		try {
+			const answer = await poolRpcCall('eth_getBalance', [account, 'latest'], v.chainId);
+			return typeof answer.result === 'string' ? BigInt(answer.result) : null;
+		} catch {
+			return null;
+		}
+	}
+
 	async execute(provider: Eip1193Provider, account: string): Promise<void> {
 		const v = this.view;
 		if (!v || !this.open) return;
@@ -584,12 +749,20 @@ export class OutsideTransaction {
 
 	// -- the mailbox ----------------------------------------------------------------
 
-	/** Hand a verified approval to the mailbox: sent again while it is busy or away, then said. */
-	async #post(safeTx: SafeTx, approval: EcdsaApproval, then: OutsideStep): Promise<void> {
+	/**
+	 * Hand a verified approval to the mailbox: kept on this device first
+	 * (r5reg-12), sent again while the mailbox is busy or away, then said. A
+	 * refusal keeps it too — Send again, nothing signed twice. The multisig's
+	 * setup goes with it; refused for that alone, it is sent once more without
+	 * it — the registry holds the setup the page read it from.
+	 */
+	async #post(safeTx: SafeTx, approval: EcdsaApproval, then: Kept['then']): Promise<void> {
 		const v = this.view;
 		if (!v) return;
-		this.#unsent = { safeTx, approval, then };
+		this.#keep({ safeTx, approval, then });
 		const started = Date.now();
+		let genesis = !!v.genesis;
+		let first: unknown = null;
 		for (let tries = 0; ; tries += 1) {
 			this.step = { kind: 'sending', retryAt: null };
 			try {
@@ -598,10 +771,17 @@ export class OutsideTransaction {
 					safe: v.safe,
 					safeTx,
 					approval,
-					...(v.genesis ? { genesis: namedGenesis(v.genesis) } : {})
+					...(genesis && v.genesis ? { genesis: namedGenesis(v.genesis) } : {})
 				});
-				if (!answer.ok) throw new MailboxRefused(answer.refusal);
-				this.#unsent = null;
+				if (!answer.ok) {
+					if (genesis && (answer.refusal as { kind?: unknown } | null)?.kind === 'genesis') {
+						first = answer.refusal;
+						genesis = false;
+						continue;
+					}
+					throw new MailboxRefused(first ?? answer.refusal);
+				}
+				this.#drop();
 				this.step = then;
 				return;
 			} catch (error) {
@@ -649,7 +829,9 @@ export class OutsideTransaction {
 			what,
 			problem: ours ? null : walletProblem(error),
 			reason: ours ? (error as Error).message : '',
-			unsent: error instanceof NotSent
+			...(error instanceof MailboxRefused ? { refused: refusalKind(error.refusal) } : {}),
+			// r5reg-12: signed and kept — a refusal as much as a mailbox that did not answer.
+			unsent: (error instanceof NotSent || error instanceof MailboxRefused) && this.#unsent !== null
 		};
 	}
 }

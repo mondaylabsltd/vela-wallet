@@ -22,7 +22,7 @@
 	 * with this sheet closed; while it is open, an approval that reaches the
 	 * mailbox that way ends it here too.
 	 */
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import { fillTemplate } from '$lib/i18n/fill';
 	import { chainName } from '$lib/services/networks';
@@ -60,8 +60,17 @@
 		closeLabel: string;
 	}
 
-	let { m, signing, locale, request, wide, closeLabel }: Props = $props();
+	let { m, signing, locale, request: asked, wide, closeLabel }: Props = $props();
 	const w = $derived(m.external);
+	/**
+	 * r5reg-11: the request this sheet was opened for, kept. The host opens
+	 * one sheet per request (`{#key}`), and once it is answered or closed the
+	 * host's request is gone (`null`) while a wallet's answer may still be on
+	 * its way here — the room left by "Use another wallet", or by closing, on
+	 * a relay that does not answer. Read live, that answer read `null`:
+	 * "Cannot read properties of null (reading 'chainId')".
+	 */
+	const request = untrack(() => asked);
 
 	/** r4C-3: a wallet still silent after this long is said to be waiting, maybe in another window. */
 	const STILL_WAITING_MS = 20_000;
@@ -107,7 +116,7 @@
 			status.why === 'refused'
 				? w.relayRefused
 				: status.why === 'noToken'
-					? fillTemplate(w.relayNoToken, { detail: status.detail })
+					? w.relayNoToken
 					: status.detail;
 		if (status.kind === 'failed') return fillTemplate(w.velaRelayFailed, { reason });
 		if (status.at === null) return fillTemplate(w.velaRelayUnreachable, { reason });

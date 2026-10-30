@@ -2,8 +2,11 @@
 
 The transport under WalletPair (`src/lib/walletpair/`): end-to-end encrypted
 two-peer rooms through a relay that reads nothing and keeps nothing. Copied
-unmodified from PeerConnect's built `js/` package, because PeerConnect is not
-yet published to a registry.
+from PeerConnect's built `js/` package, because PeerConnect is not yet
+published to a registry — with one local addition, `Connection.reconnectNow()`
+(r4C-15: when the network comes back, a connection waiting out its backoff,
+up to 30 s, tries the relay at once). Keep it when updating, until PeerConnect
+has its own.
 
 | | |
 | --- | --- |

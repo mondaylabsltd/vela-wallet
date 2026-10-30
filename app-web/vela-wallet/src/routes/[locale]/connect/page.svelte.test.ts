@@ -12,6 +12,14 @@
  * (r4C-3); "Signed ✓" and each request's outcome (r4C-12); the relay's
  * refusal said with Retry (r4C-1); and the link's own transaction approved
  * or executed from here (r4C-2, r4C-9).
+ *
+ * Round 6: a new link in the same tab is read at once (r5reg-2); one
+ * transaction card and one message for where the page stands (r5reg-7);
+ * nothing to sign once the approvals are enough (r4C-14); Execute steps back
+ * for a wallet that can't pay (r5reg-13); refusals in plain words, what was
+ * signed kept (r5reg-12); each request named by what it was (r4C-12); the
+ * relay's trouble without hosts (r4C-1); the review numbered "#3" and named
+ * (r5reg-23).
  */
 import { tick } from 'svelte';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -19,7 +27,7 @@ import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
 import { loadCore } from '$lib/core/client';
 import { MULTISIG_SHAPE, type MultisigMessages } from '$lib/multisig/messages';
-import { safeTxHashes, type SafeTx } from '$lib/multisig/core/kernel';
+import { cancelTx, safeTxHashes, type SafeTx } from '$lib/multisig/core/kernel';
 
 const MEMBER = '0x70997970c51812dc3a010c7d01b50e0d17dc79c8';
 const STRANGER = '0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc';
@@ -48,7 +56,14 @@ const fake = vi.hoisted(() => ({
 	stateSince: 0,
 	retried: 0,
 	discover: null as null | Promise<void>,
-	outside: null as any
+	outside: null as any,
+	/** Every transaction the page read, in order. */
+	made: [] as any[],
+	/** An execution's fee and the wallet's coin, as the page reads them (`null`: unknown). */
+	fee: null as null | { wei: bigint; count: number; partial: boolean },
+	balance: null as null | bigint,
+	/** Vela's request as the mailbox counts it (`readTransaction`); `null`: not in the mailbox. */
+	counted: null as any
 }));
 
 vi.mock('$lib/ui/history', () => ({ replaceUrl: () => {} }));
@@ -108,12 +123,29 @@ vi.mock('$lib/multisig/external/outside.svelte', async () => {
 	>('$lib/multisig/external/outside.svelte');
 	return {
 		OutsideTransaction: class extends Real {
+			disposed = false;
+			refreshed = 0;
 			constructor(link: never) {
 				super(link);
 				fake.outside = this;
+				fake.made.push(this);
 			}
-			async refresh() {}
-		}
+			async refresh() {
+				this.refreshed += 1;
+			}
+			async fee() {
+				return fake.fee;
+			}
+			async balance() {
+				return fake.balance;
+			}
+			dispose() {
+				this.disposed = true;
+			}
+		},
+		// r5reg-23: the registry names the multisig.
+		verifiedGenesis: async () => ({ name: 'R5 Team' }),
+		readTransaction: async () => fake.counted
 	};
 });
 
@@ -137,6 +169,13 @@ function words(): MultisigMessages {
 	out.status.progress = '{{approved}} of {{threshold}}';
 	out.action.send = 'Send {{amount}} {{symbol}}';
 	out.external.tokenNative = '{{symbol}} native on {{network}}';
+	out.action.numberValue = '#{{nonce}}';
+	out.external.rowApprove = 'Approve {{number}} · {{what}}';
+	out.external.rowApproveTo = 'Approve {{number}} · {{what}} to {{to}}';
+	out.external.rowExecute = 'Execute {{number}}';
+	out.external.rowReject = 'Reject {{number}}';
+	out.external.executeNeedsGas = 'needs {{fee}}, holds {{balance}}';
+	out.external.relayRetrying = "Can't connect ({{reason}}) — in {{seconds}} s";
 	return out;
 }
 
@@ -178,6 +217,10 @@ afterEach(() => {
 	fake.bridge = null;
 	fake.outside = null;
 	fake.discover = null;
+	fake.made = [];
+	fake.fee = null;
+	fake.balance = null;
+	fake.counted = null;
 });
 
 describe('the connect page names who connects (ms-14)', () => {
@@ -470,6 +513,313 @@ describe("the link's own transaction, from here (r4C-2, r4C-9)", () => {
 		ready(0, [STRANGER]);
 		await vi.waitFor(() => expect(testid('outside-not-owner')).not.toBeNull());
 		expect(button('Sign with MetaMask')).toBeUndefined();
+		await screen.unmount();
+	});
+});
+
+const txHash = () => safeTxHashes(5042002, SAFE, TX).safeTxHash;
+/** A request Vela sent through the pairing, as the bridge holds it. */
+function asked(over: Record<string, unknown> = {}) {
+	return {
+		id: `r-${Math.random()}`,
+		at: Date.now(),
+		session: 's',
+		method: 'eth_signTypedData_v4',
+		account: MEMBER,
+		safeTx: { chainId: 5042002, safe: SAFE, tx: TX },
+		stage: 'review',
+		...over
+	};
+}
+
+function readyView(approved: number, approvals: unknown[] = []) {
+	const hashes = safeTxHashes(5042002, SAFE, TX);
+	fake.outside.load = {
+		kind: 'ready',
+		view: {
+			chainId: 5042002,
+			safe: SAFE,
+			tx: TX,
+			hashes,
+			genesis: null,
+			findings: [],
+			members: { deployed: true, owners: [MEMBER, STRANGER, ALSO], threshold: 2, nonce: 3n },
+			item: {
+				safeTxHash: hashes.safeTxHash,
+				status: approved >= 2 ? 'ready' : 'pending',
+				approved,
+				threshold: 2,
+				nonce: 3n,
+				renameUndeployed: false,
+				review: { action: { kind: 'transfer' }, refusal: null },
+				approvals
+			}
+		}
+	};
+}
+const ALSO = '0x90f79bf6eb2c4f870365e785982e1f101e93b906';
+const approval = (owner: string) => ({ owner, counts: true, approval: { owner }, createdMs: 1 });
+
+describe('round 6: a new link in the same tab (r5reg-2)', () => {
+	it("reads the new link's transaction — never keeps showing the one before", async () => {
+		const other = `0x${'cd'.repeat(32)}`;
+		const screen = await open(
+			[MEMBER],
+			`#for=${MEMBER}&ms=5042002.${SAFE.toLowerCase()}.${txHash()}`
+		);
+		await vi.waitFor(() => expect(fake.outside).not.toBeNull());
+		const first = fake.outside;
+		readyView(0);
+		await vi.waitFor(() => expect(testid('connect-outside')?.textContent).toContain('0 of 2'));
+		location.hash = `#for=${MEMBER}&ms=5042002.${SAFE.toLowerCase()}.${other}`;
+		await vi.waitFor(() => expect(fake.outside).not.toBe(first));
+		expect(first.disposed).toBe(true);
+		expect(fake.outside.link.safeTxHash).toBe(other);
+		await vi.waitFor(() =>
+			expect(testid('connect-outside')?.textContent).toContain('external.loadingTx')
+		);
+		expect(testid('connect-outside')?.textContent).not.toContain('0 of 2');
+		await screen.unmount();
+	});
+
+	it('a new invite in the same tab joins its room', async () => {
+		const screen = await open([MEMBER], `#${encodeURIComponent(INVITE)}&for=${MEMBER}`);
+		const next = `wss://relay.getvela.app/r/def#${'B'.repeat(86)}`;
+		location.hash = `#${encodeURIComponent(next)}&for=${MEMBER}`;
+		await vi.waitFor(() => expect(fake.joined).toHaveLength(2));
+		expect(fake.joined[1]).toEqual([next, [MEMBER]]);
+		await screen.unmount();
+	});
+});
+
+describe('round 6: one card, one message (r5reg-7)', () => {
+	it('signed on a paired page: "Signed ✓" with keep-open — never "you can close this page"', async () => {
+		const screen = await open([MEMBER], `#${encodeURIComponent(INVITE)}&for=${MEMBER}`);
+		fake.bridge.prompt = undefined;
+		fake.approved = true;
+		fake.bridge.activity = [asked({ stage: 'answered', outcome: 'done', form: 'typedData' })];
+		fake.bridge.dispatchEvent(new Event('activity'));
+		await vi.waitFor(() =>
+			expect(testid('connect-signed')?.textContent).toContain('external.signedPaired')
+		);
+		expect(testid('connect-connected')?.textContent).toContain('external.keepOpen');
+		expect(document.body.textContent).not.toContain('external.signedClose');
+		await screen.unmount();
+	});
+
+	it("the link's transaction, once the pairing handled it, is not a second card", async () => {
+		const screen = await open(
+			[MEMBER],
+			`#${encodeURIComponent(INVITE)}&for=${MEMBER}&ms=5042002.${SAFE.toLowerCase()}.${txHash()}`
+		);
+		await vi.waitFor(() => expect(fake.outside).not.toBeNull());
+		readyView(1, [approval(STRANGER)]);
+		fake.bridge.prompt = undefined;
+		fake.approved = true;
+		// Vela asks for another transaction: its review is the one card.
+		const next = { ...TX, nonce: '0x4' };
+		fake.bridge.activity = [asked({ safeTx: { chainId: 5042002, safe: SAFE, tx: next } })];
+		fake.bridge.request = { entry: fake.bridge.activity[0], answer: () => {} };
+		fake.bridge.dispatchEvent(new Event('prompt'));
+		await vi.waitFor(() => expect(testid('connect-request')).not.toBeNull());
+		expect(testid('connect-outside')).toBeNull();
+		expect(document.querySelectorAll('[data-testid="connect-review"]')).toHaveLength(1);
+		// The link's own transaction signed through the pairing: read again, and not shown twice.
+		const refreshed = fake.outside.refreshed;
+		fake.bridge.request = undefined;
+		fake.bridge.activity = [
+			asked({ stage: 'answered', outcome: 'done', form: 'typedData' }),
+			{ ...fake.bridge.activity[0], stage: 'answered', outcome: 'withdrawn' }
+		];
+		fake.bridge.dispatchEvent(new Event('activity'));
+		await vi.waitFor(() => expect(fake.outside.refreshed).toBeGreaterThan(refreshed));
+		await vi.waitFor(() => expect(testid('connect-signed')).not.toBeNull());
+		expect(testid('connect-outside')).toBeNull();
+		await screen.unmount();
+	});
+});
+
+describe("round 6: Vela's request already has enough approvals (r4C-14)", () => {
+	it('nothing to sign: said, and only Decline is offered', async () => {
+		fake.counted = { enough: true, hasApproved: () => false };
+		const screen = await open([MEMBER], `#${encodeURIComponent(INVITE)}&for=${MEMBER}`);
+		fake.bridge.prompt = undefined;
+		fake.approved = true;
+		const entry = asked();
+		fake.bridge.activity = [entry];
+		fake.bridge.request = { entry, answer: () => {} };
+		fake.bridge.dispatchEvent(new Event('prompt'));
+		await vi.waitFor(() =>
+			expect(testid('connect-request-enough')?.textContent).toBe('external.enoughApprovals')
+		);
+		expect(button('Sign with MetaMask')).toBeUndefined();
+		expect(button('external.decline')).toBeDefined();
+		await screen.unmount();
+	});
+
+	it('still needing approvals (or not in the mailbox yet): Sign is offered', async () => {
+		fake.counted = { enough: false, hasApproved: () => false };
+		const screen = await open([MEMBER], `#${encodeURIComponent(INVITE)}&for=${MEMBER}`);
+		fake.bridge.prompt = undefined;
+		fake.approved = true;
+		const entry = asked();
+		fake.bridge.activity = [entry];
+		fake.bridge.request = { entry, answer: () => {} };
+		fake.bridge.dispatchEvent(new Event('prompt'));
+		await vi.waitFor(() => expect(button('Sign with MetaMask')).toBeDefined());
+		expect(testid('connect-request-enough')).toBeNull();
+		await screen.unmount();
+	});
+});
+
+describe('round 6: the link transaction from here', () => {
+	const link = () => `#for=${MEMBER}&ms=5042002.${SAFE.toLowerCase()}.${txHash()}`;
+
+	it('r4C-14: approvals already enough — nothing to sign; Execute is what is left', async () => {
+		const screen = await open([MEMBER], link());
+		await vi.waitFor(() => expect(fake.outside).not.toBeNull());
+		readyView(2, [approval(STRANGER), approval(ALSO)]);
+		await vi.waitFor(() => expect(testid('outside-enough')).not.toBeNull());
+		expect(testid('outside-enough')?.textContent).toBe('external.enoughApprovals');
+		expect(button('Sign with MetaMask')).toBeUndefined();
+		expect(button('external.approveOnly')).toBeUndefined();
+		expect(button('Execute with MetaMask')).toBeDefined();
+		await screen.unmount();
+	});
+
+	it("r5reg-13: a wallet that can't pay the fee: told what it needs, Execute steps back", async () => {
+		fake.fee = { wei: 21000n * 1_000_000_000n, count: 1, partial: false };
+		fake.balance = 0n;
+		const screen = await open([MEMBER], link());
+		await vi.waitFor(() => expect(fake.outside).not.toBeNull());
+		readyView(1, [approval(STRANGER)]);
+		await vi.waitFor(() =>
+			expect(testid('outside-cannot-pay')?.textContent).toContain('needs 0.000021')
+		);
+		expect(testid('outside-cannot-pay')?.textContent).toContain('holds 0');
+		const execute = button('Execute with MetaMask')!;
+		expect(execute.disabled).toBe(true);
+		expect(execute.className).not.toContain('value');
+		// Approving is the main action instead.
+		expect(button('Sign with MetaMask')).toBeDefined();
+		await screen.unmount();
+	});
+
+	it('r5reg-13: a wallet that can pay: Execute is the main action, its fee said', async () => {
+		fake.fee = { wei: 21000n * 1_000_000_000n, count: 1, partial: false };
+		fake.balance = 10n ** 18n;
+		const screen = await open([MEMBER], link());
+		await vi.waitFor(() => expect(fake.outside).not.toBeNull());
+		readyView(1, [approval(STRANGER)]);
+		await vi.waitFor(() => expect(testid('outside-fee')?.textContent).toContain('fee 0.000021'));
+		expect(button('Execute with MetaMask')!.disabled).toBe(false);
+		expect(testid('outside-cannot-pay')).toBeNull();
+		expect(button('external.approveOnly')).toBeDefined();
+		await screen.unmount();
+	});
+
+	it("r5reg-12: a refusal in plain words, never the service's text; what was signed kept, Send again", async () => {
+		const screen = await open([MEMBER], link());
+		await vi.waitFor(() => expect(fake.outside).not.toBeNull());
+		readyView(0);
+		fake.outside.step = {
+			kind: 'failed',
+			what: 'reject',
+			problem: null,
+			reason: 'refused: the proxy code of factory 0x4e1D on chain 5042002 could not be read',
+			refused: 'setupUnchecked',
+			unsent: true
+		};
+		await vi.waitFor(() =>
+			expect(testid('outside-failed')?.textContent).toBe('external.refusedSetupUnchecked')
+		);
+		expect(document.body.textContent).not.toContain('proxy code');
+		expect(testid('outside-kept')?.textContent).toBe('external.keptSigned');
+		expect(button('external.sendAgain')).toBeDefined();
+		await screen.unmount();
+	});
+
+	it('r4C-12: each row says what it was — the number, what it does, and how it ended', async () => {
+		const screen = await open(
+			[MEMBER],
+			`#${encodeURIComponent(INVITE)}&for=${MEMBER}&ms=5042002.${SAFE.toLowerCase()}.${txHash()}`
+		);
+		await vi.waitFor(() => expect(fake.outside).not.toBeNull());
+		fake.bridge.prompt = undefined;
+		fake.approved = true;
+		fake.bridge.activity = [
+			asked({
+				id: 'reject',
+				stage: 'answered',
+				outcome: 'rejected',
+				problem: { kind: 'declined' },
+				safeTx: { chainId: 5042002, safe: SAFE, tx: cancelTx(SAFE, '0x8') }
+			}),
+			asked({ id: 'approve', stage: 'answered', outcome: 'done', form: 'typedData' })
+		];
+		fake.bridge.dispatchEvent(new Event('activity'));
+		await vi.waitFor(() =>
+			expect(testid('connect-activity')?.textContent).toMatch(
+				/Approve #3 · Send 0\.01 \S+ to 0x0000\S*dEaD/
+			)
+		);
+		const list = testid('connect-activity')!.textContent ?? '';
+		expect(list).toContain('Reject #8');
+		expect(list).toContain('external.walletDeclined');
+		expect(list).toContain('external.outcomeDone');
+		expect(list).not.toContain('external.signTx');
+		// What was done from here is a row too.
+		readyView(0);
+		fake.outside.step = { kind: 'executed', txHash: `0x${'77'.repeat(32)}` };
+		await vi.waitFor(() => expect(testid('connect-activity')?.textContent).toContain('Execute #3'));
+		await screen.unmount();
+	});
+});
+
+describe('round 6: the relay and Vela, said plainly', () => {
+	it('r4C-1: no pass for the relay — plain words, no hosts, with Retry', async () => {
+		const screen = await open([MEMBER], `#${encodeURIComponent(INVITE)}`);
+		fake.bridge.relay = {
+			kind: 'retrying',
+			why: 'noToken',
+			detail: '127.0.0.1:5191: no token in the answer · peerconnect.dev: no token in the answer',
+			at: Date.now() + 20_000
+		};
+		fake.bridge.dispatchEvent(new Event('change'));
+		await vi.waitFor(() =>
+			expect(testid('connect-relay')?.textContent).toContain('external.relayNoToken')
+		);
+		expect(testid('connect-relay')?.textContent).not.toContain('peerconnect.dev');
+		expect(testid('connect-relay')?.textContent).not.toContain('127.0.0.1');
+		expect(button('external.retry')).toBeDefined();
+		await screen.unmount();
+	});
+
+	it('r4C-15: "Vela went offline" clears as soon as Vela is back', async () => {
+		const screen = await open([MEMBER], `#${encodeURIComponent(INVITE)}&for=${MEMBER}`);
+		fake.bridge.prompt = undefined;
+		fake.approved = true;
+		fake.bridge.activity = [asked({ stage: 'wallet', walletAt: Date.now() })];
+		fake.state = 'waiting';
+		fake.bridge.dispatchEvent(new Event('change'));
+		await vi.waitFor(() => expect(testid('connect-vela-gone')).not.toBeNull());
+		fake.state = 'connected';
+		fake.bridge.dispatchEvent(new Event('change'));
+		await vi.waitFor(() => expect(testid('connect-vela-gone')).toBeNull(), { timeout: 2_000 });
+		await screen.unmount();
+	});
+
+	it("r5reg-23: Vela's request reviewed as the link's is — named, numbered #3", async () => {
+		const screen = await open([MEMBER], `#${encodeURIComponent(INVITE)}&for=${MEMBER}`);
+		fake.bridge.prompt = undefined;
+		fake.approved = true;
+		const entry = asked();
+		fake.bridge.activity = [entry];
+		fake.bridge.request = { entry, answer: () => {} };
+		fake.bridge.dispatchEvent(new Event('prompt'));
+		await vi.waitFor(() => expect(testid('review-name')?.textContent).toBe('R5 Team'));
+		expect(testid('review-name-source')?.textContent).toBe('external.nameFromRecord');
+		expect(testid('review-nonce')?.textContent?.trim()).toBe('#3');
 		await screen.unmount();
 	});
 });
