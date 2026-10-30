@@ -1,9 +1,13 @@
 /**
  * r4C-11: a wallet's refusal in words a person acts on, never its raw text.
+ * What an EIP-1193 error means is the core's reading (pinned by
+ * `tests/app_multisig_outside.rs`: `a_wallet_error_by_its_eip1193_code`,
+ * `anything_else_in_the_wallets_own_words_cut_to_one_readable_line`); this
+ * pins how each is said.
  */
 import { describe, expect, it } from 'vitest';
 import { fillTemplate } from '$lib/i18n/fill';
-import { problemText, shortReason, walletProblem } from './errors';
+import { problemText, type WalletProblem } from './errors';
 
 const WORDS = {
 	walletDeclined: 'Declined in the wallet.',
@@ -14,30 +18,20 @@ const WORDS = {
 	walletFailed: "{{wallet}} couldn't sign: {{reason}}"
 };
 
-const say = (error: unknown) =>
-	problemText(walletProblem(error), WORDS, fillTemplate, 'Rabby', 'Arc Testnet');
+const say = (p: WalletProblem) => problemText(p, WORDS, fillTemplate, 'Rabby', 'Arc Testnet');
 
 describe('a wallet error, said', () => {
-	it('by its EIP-1193 code, with what to do', () => {
-		expect(say({ code: 4001, message: 'User rejected the request.' })).toBe(
-			'Declined in the wallet.'
-		);
-		expect(say({ code: 4100, message: 'Unauthorized' })).toBe(WORDS.walletUnauthorized);
-		// Some wallets say it without the code.
-		expect(say(new Error('Unauthorized'))).toBe(WORDS.walletUnauthorized);
-		expect(say({ code: 4200, message: 'x' })).toBe("Rabby can't do this request.");
-		expect(say({ code: -32601, message: 'the method eth_signTypedData_v4 does not exist' })).toBe(
-			"Rabby can't do this request."
-		);
-		expect(say({ code: 4901, message: 'x' })).toBe('Switch it to Arc Testnet.');
-		expect(say({ code: 4900, message: 'x' })).toBe('Rabby disconnected.');
+	it('by what it means, with what to do', () => {
+		expect(say({ kind: 'declined' })).toBe('Declined in the wallet.');
+		expect(say({ kind: 'unauthorized' })).toBe(WORDS.walletUnauthorized);
+		expect(say({ kind: 'unsupported' })).toBe("Rabby can't do this request.");
+		expect(say({ kind: 'otherChain' })).toBe('Switch it to Arc Testnet.');
+		expect(say({ kind: 'disconnected' })).toBe('Rabby disconnected.');
 	});
 
-	it("anything else in the wallet's own words, cut to one readable line", () => {
-		expect(
-			say({ code: -32603, message: '{"message":"Ledger: \\"0x6985\\" denied by the user"}' })
-		).toBe('Rabby couldn\'t sign: Ledger: "0x6985" denied by the user');
-		expect(shortReason('Error: Error: something\nstack line 1\nstack line 2')).toBe('something');
-		expect(shortReason('x'.repeat(400))).toHaveLength(120);
+	it("anything else in the wallet's own words", () => {
+		expect(say({ kind: 'unknown', reason: 'Ledger: "0x6985" denied by the user' })).toBe(
+			'Rabby couldn\'t sign: Ledger: "0x6985" denied by the user'
+		);
 	});
 });
