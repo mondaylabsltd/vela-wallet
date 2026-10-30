@@ -77,7 +77,9 @@ struct AgentPerform {
             graph.space.set(space)
             return Self.done
         case "save_contact":
-            graph.contacts.save(address: text("address"), name: text("name"))
+            // The note rides along when it was given (`nil` keeps the one
+            // the contact has).
+            graph.contacts.save(address: text("address"), name: text("name"), note: action["note"] as? String)
             return Self.done
         case "delete_contact":
             graph.contacts.delete(address: action["address"] as? String ?? "")

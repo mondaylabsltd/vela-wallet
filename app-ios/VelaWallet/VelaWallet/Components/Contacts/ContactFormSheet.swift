@@ -28,6 +28,7 @@ struct ContactFormSheet: View {
     /// fields render exactly as drawn.
     var nameText: Binding<String>?
     var addressText: Binding<String>?
+    var noteText: Binding<String>?
     var onSave: () -> Void = {}
     var onCancel: () -> Void = {}
 
@@ -36,9 +37,19 @@ struct ContactFormSheet: View {
     /// a caller to own state for a picture.
     @State private var drawnName = ""
     @State private var drawnAddress = ""
+    @State private var drawnNote = ""
 
     private var name: Binding<String> { nameText ?? $drawnName }
     private var address: Binding<String> { addressText ?? $drawnAddress }
+    /// The note, held to the core's cap as it is typed — a field that took a
+    /// 281st character and then dropped it on save would lose words silently.
+    private var note: Binding<String> {
+        let base = noteText ?? $drawnNote
+        return Binding(
+            get: { base.wrappedValue },
+            set: { base.wrappedValue = String($0.prefix(ContactsStore.noteMaxChars)) }
+        )
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s0) {
@@ -94,6 +105,29 @@ struct ContactFormSheet: View {
             }
             .padding(.top, Tokens.Space.s16)
 
+            // Only the person sees it: optional, three lines tall, the core's
+            // cap (the web's ContactForm textarea).
+            if let noteLabel = model.noteLabel {
+                VStack(alignment: .leading, spacing: Tokens.Space.s4) {
+                    Text(verbatim: noteLabel)
+                        .typeRole(Typography.rowSub.scaled(textScale))
+                        .foregroundStyle(theme.fgSubtle)
+                    TextField(
+                        "", text: note,
+                        prompt: Text(model.notePlaceholder ?? "").foregroundStyle(theme.fgSubtle),
+                        axis: .vertical
+                    )
+                        .font(Typography.body.scaled(textScale).font)
+                        .foregroundStyle(theme.fgBase)
+                        .lineLimit(3...6)
+                        .padding(Tokens.Space.s12)
+                        .background(RoundedRectangle(cornerRadius: Tokens.Radius.r12).fill(theme.bgSunken))
+                        .accessibilityLabel(noteLabel)
+                        .accessibilityIdentifier("contacts.form.note")
+                }
+                .padding(.top, Tokens.Space.s16)
+            }
+
             VelaButton(title: model.save, kind: .primary, enabled: model.saveEnabled, action: onSave)
                 .padding(.top, Tokens.Space.s20)
 
@@ -121,6 +155,7 @@ struct ContactFormSheet: View {
         .onAppear {
             drawnName = model.name
             drawnAddress = model.address
+            drawnNote = model.note
         }
         .presentationDetents([.height(max(contentHeight, 1))])
         .presentationDragIndicator(.hidden)

@@ -181,6 +181,17 @@ struct ContactFormModel {
     /// Editing an existing contact: the address IS the contact's identity in
     /// the address book, so it stays put and a new address means a new person.
     var addressLocked = false
+    /// The note — only the person sees it. `nil` labels draw no field (a
+    /// drawing from before notes).
+    var noteLabel: String? = nil
+    var notePlaceholder: String? = nil
+    var note: String = ""
+}
+
+/// The contact's note on its page — the label and the words.
+struct ContactNoteModel: Equatable {
+    let label: String
+    let text: String
 }
 
 /// The star on a contact's detail. `on` is the core's `favorite`.
@@ -232,6 +243,8 @@ struct ContactDetailModel {
     var favourite: FavouriteControlModel?
     /// The core's reading of this address (C9).
     var inspection: ContactInspectionModel?
+    /// The person's own note about them, when there is one.
+    var note: ContactNoteModel? = nil
     var sheet: ActionMenuModel?
     /// The add/edit form, over this screen (C8).
     var form: ContactFormModel?

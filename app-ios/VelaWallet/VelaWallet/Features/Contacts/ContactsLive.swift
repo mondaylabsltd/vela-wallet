@@ -237,6 +237,8 @@ enum ContactsLive {
             // asked about this one: a projection left over from the previous
             // recipient would tag the wrong person.
             inspection: inspection(view.recipient, of: contact.address, loc: loc),
+            // The person's own note, on the page only (never the list's row).
+            note: noteModel(contact.note, loc: loc),
             // 删除联系人's second confirmation. Drawn as C2s; live it was `nil`,
             // so the button raised an empty sheet and the contact stayed.
             sheet: ContactsFixtures.deleteConfirm(loc: loc, name: displayName(contact)),
@@ -309,6 +311,8 @@ enum ContactsLive {
         var address: String
         /// The core's refusal, once there is something to refuse.
         var error: String?
+        /// The note as it is being typed.
+        var note: String = ""
 
         var isEdit: Bool { editing != nil }
     }
@@ -332,8 +336,17 @@ enum ContactsLive {
             save: loc.t("contacts.save"),
             cancel: loc.t("contacts.cancel"),
             saveEnabled: draft.isEdit || isAddress(draft.address),
-            addressLocked: draft.isEdit
+            addressLocked: draft.isEdit,
+            noteLabel: loc.t("contacts.noteLabel"),
+            notePlaceholder: loc.t("contacts.notePlaceholder"),
+            note: draft.note
         )
+    }
+
+    /// The note under the address, or none for a blank one.
+    static func noteModel(_ note: String?, loc: Loc) -> ContactNoteModel? {
+        guard let text = note?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return nil }
+        return ContactNoteModel(label: loc.t("contacts.noteLabel"), text: text)
     }
 
     /// The shell's cheap shape check — 0x and forty hex digits. Not a

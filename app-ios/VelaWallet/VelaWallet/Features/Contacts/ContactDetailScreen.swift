@@ -28,6 +28,7 @@ struct ContactDetailScreen: View {
     /// is a picture.
     var formName: Binding<String>?
     var formAddress: Binding<String>?
+    var formNote: Binding<String>?
     var onSaveForm: () -> Void = {}
     var onCancelForm: () -> Void = {}
     /// + 分组 — open the group picker, tick a row, commit the set.
@@ -91,6 +92,24 @@ struct ContactDetailScreen: View {
                     )
                     .padding(.top, Tokens.Space.s24)
 
+                    // The person's own note: on the page, open — no box.
+                    if let note = model.note {
+                        VStack(alignment: .leading, spacing: Tokens.Space.s4) {
+                            Text(verbatim: note.label)
+                                .typeRole(Typography.rowSub.scaled(model.textScale))
+                                .foregroundStyle(theme.fgSubtle)
+                            Text(verbatim: note.text)
+                                .typeRole(Typography.body.scaled(model.textScale))
+                                .foregroundStyle(theme.fgBase)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .textSelection(.enabled)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, Tokens.Space.s16)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier("contacts.detail.note")
+                    }
+
                     hairline.padding(.top, Tokens.Space.s24)
 
                     WalletSectionHeader(title: model.activityTitle, action: model.activityAction)
@@ -134,6 +153,7 @@ struct ContactDetailScreen: View {
                     model: form,
                     nameText: formName,
                     addressText: formAddress,
+                    noteText: formNote,
                     onSave: onSaveForm,
                     onCancel: { onCancelForm() }
                 )
