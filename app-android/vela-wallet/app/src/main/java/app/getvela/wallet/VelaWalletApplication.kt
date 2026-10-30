@@ -1024,9 +1024,18 @@ class AppContainer(private val app: Application) {
      * a composable: the question is about the PROCESS, and a composable that
      * leaves the composition answers nothing at all.
      */
+    /** An activity has been in front once: a later first start is a return. */
+    private var everStarted = false
+
     private val activityCounter = object : Application.ActivityLifecycleCallbacks {
         override fun onActivityStarted(activity: android.app.Activity) {
             foregroundActivities += 1
+            // ob-2: back in front — a wallet saved here whose registration has
+            // not landed may land now (the web's `online`). The core ignores it
+            // when nothing is owed or a round is already running. Not on the
+            // first start: the boot's own round is that one.
+            if (foregroundActivities == 1 && everStarted) session.syncPending()
+            everStarted = true
             wallet.focused()
             // The AI agent answers only while the wallet is in front.
             agent.sceneActive(true)

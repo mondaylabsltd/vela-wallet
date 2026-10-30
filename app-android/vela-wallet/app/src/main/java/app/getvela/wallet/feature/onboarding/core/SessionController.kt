@@ -1,9 +1,15 @@
 package app.getvela.wallet.feature.onboarding.core
 
 import app.getvela.wallet.core.crux.CoreDriver
+import app.getvela.wallet.core.crux.JsonShell
+import app.getvela.wallet.core.crux.Wire
 import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.core.crux.asBridge
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonObject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -23,9 +29,11 @@ import uniffi.vela_core_uniffi.SessionCore
  * The division of labour is the contract's: **the core decides WHAT is allowed,
  * this class decides nothing, and the navigation host decides WHEN to move.**
  */
-class SessionController(private val store: AccountStore, scope: CoroutineScope) {
-
-    private val executor = SessionExecutor(store)
+class SessionController(
+    private val store: AccountStore,
+    private val scope: CoroutineScope,
+    private val executor: SessionExecutor = SessionExecutor(store),
+) {
     private val _view = MutableStateFlow(
         SessionView(
             loading = true,
@@ -41,6 +49,10 @@ class SessionController(private val store: AccountStore, scope: CoroutineScope) 
     /** The current view. `loading` until storage has been read. */
     val view: StateFlow<SessionView> = _view
 
+    /** The retry timer (the web's `#scheduleSync`): armed while the core says a wallet is owed and it can finish it. */
+    private var syncTimer: Job? = null
+    private var syncRounds = 0
+
     private val bridge = SessionCore().asBridge()
 
     // Before its first event the machine's view is its own idle one.
@@ -52,10 +64,12 @@ class SessionController(private val store: AccountStore, scope: CoroutineScope) 
     private val driver = CoreDriver(
         bridge = bridge,
         scope = scope,
-        perform = { operation -> executor.perform(operation) },
+        perform = JsonShell.perform(SessionOperation.serializer(), SessionShellResult.serializer(), executor::perform),
         onView = { json ->
             _viewJson.value = json.toString()
-            _view.value = SessionView.from(json)
+            val view = SessionView.from(json)
+            _view.value = view
+            scheduleSync(view)
         },
         escapedFailure = SessionExecutor::escapedFailure,
         // Spec 048: a session fault — the store's records refused by the core,
@@ -66,7 +80,38 @@ class SessionController(private val store: AccountStore, scope: CoroutineScope) 
     )
 
     /** Read storage and settle on a route. Called once, at launch. */
-    fun boot() = driver.dispatch(event("boot"))
+    fun boot() = send(SessionEvent.Boot)
+
+    /**
+     * ob-2: ask the core to try the outbox again — a wallet saved here whose
+     * registration has not landed. A round already running is the core's to
+     * refuse, so this may be called freely (the app coming back to the front,
+     * a screen that names unsynced wallets).
+     */
+    fun syncPending() = send(SessionEvent.SyncPending)
+
+    /**
+     * Keep asking while the core says a wallet is still owed and it can finish
+     * it on its own (`retrying`), on a widening timer; stop once none is.
+     */
+    private fun scheduleSync(view: SessionView) {
+        if (view.unsynced.none { it.retrying }) {
+            syncTimer?.cancel()
+            syncTimer = null
+            syncRounds = 0
+            return
+        }
+        if (syncTimer?.isActive == true) return
+        val wait = SYNC_RETRY_MS[syncRounds.coerceAtMost(SYNC_RETRY_MS.lastIndex)]
+        syncTimer = scope.launch {
+            delay(wait)
+            syncRounds += 1
+            syncTimer = null
+            syncPending()
+            // The round may end without a new view; the chain must not.
+            scheduleSync(_view.value)
+        }
+    }
 
     /**
      * Hand a finished onboarding over.
@@ -78,11 +123,9 @@ class SessionController(private val store: AccountStore, scope: CoroutineScope) 
      * the field-by-field copy that drops `keys` and re-derives a different,
      * wrong, single-key wallet.
      */
-    fun accountEstablished(mode: JSONObject) =
-        driver.dispatch(JSONObject().put("type", "account_established").put("mode", mode).toString())
+    fun accountEstablished(mode: JSONObject) = send(SessionEvent.AccountEstablished(jsonObject(mode)))
 
-    fun switchAccount(index: Int) =
-        driver.dispatch(JSONObject().put("type", "switch_account").put("index", index).toString())
+    fun switchAccount(index: Int) = send(SessionEvent.SwitchAccount(index))
 
     /**
      * Drop ONE wallet from this device and stay on the others (2026-09-23).
@@ -92,8 +135,7 @@ class SessionController(private val store: AccountStore, scope: CoroutineScope) 
      * Removing the last one signs this device out, which the core decides, not
      * this call.
      */
-    fun removeAccount(index: Int) =
-        driver.dispatch(JSONObject().put("type", "remove_account").put("index", index).toString())
+    fun removeAccount(index: Int) = send(SessionEvent.RemoveAccount(index))
 
     /**
      * Append an account the ONBOARDING machines did not write (spec 043's
@@ -150,16 +192,14 @@ class SessionController(private val store: AccountStore, scope: CoroutineScope) 
      */
     fun chooseSigningVenue(address: String, venueJson: String) {
         val venue = runCatching { JSONObject(venueJson) }.getOrNull() ?: return
-        driver.dispatch(
-            JSONObject().put("type", "signing_venue_chosen").put("address", address).put("venue", venue).toString(),
-        )
+        send(SessionEvent.SigningVenueChosen(address, jsonObject(venue)))
     }
 
-    fun signOut() = driver.dispatch(event("sign_out"))
+    fun signOut() = send(SessionEvent.SignOut)
 
-    fun signOutConfirmed() = driver.dispatch(event("sign_out_confirmed"))
+    fun signOutConfirmed() = send(SessionEvent.SignOutConfirmed)
 
-    fun signOutDismissed() = driver.dispatch(event("sign_out_dismissed"))
+    fun signOutDismissed() = send(SessionEvent.SignOutDismissed)
 
     /** The endpoint override, for the surface an unreachable index opens. */
     suspend fun registryUrl(): String = store.loadRegistryUrl() ?: RegistryClient.DEFAULT_REGISTRY_URL
@@ -168,9 +208,16 @@ class SessionController(private val store: AccountStore, scope: CoroutineScope) 
         store.saveRegistryUrl(url.takeIf { it.isNotBlank() && it != RegistryClient.DEFAULT_REGISTRY_URL })
     }
 
-    private fun event(type: String): String = JSONObject().put("type", type).toString()
+    private fun send(event: SessionEvent) =
+        driver.dispatch(Wire.json.encodeToString(SessionEvent.serializer(), event))
+
+    private fun jsonObject(json: JSONObject): JsonObject =
+        Wire.json.parseToJsonElement(json.toString()) as JsonObject
 
     internal companion object {
+        /** The web's `SYNC_RETRY_MS`: the widening wait between outbox retries. */
+        val SYNC_RETRY_MS = longArrayOf(15_000, 30_000, 60_000, 120_000, 300_000)
+
         /** The position of the record at [address] in [accounts]; 0 when it is not there (or none was given). */
         fun indexOfAddress(accounts: JSONArray, address: String?): Int {
             if (address.isNullOrBlank()) return 0
