@@ -1170,6 +1170,11 @@ object SettingsLive {
             val usd = (token.balance.toDoubleOrNull() ?: Double.NaN) * (token.price_usd ?: 0.0)
             if (usd.isFinite()) perChain[token.chain_id] = (perChain[token.chain_id] ?: 0.0) + usd
         }
+        // P2.4 (owner decision 2026-10-28, web `liveBalanceDetail`): a network
+        // read through public nodes because the person's own is not answering
+        // is listed as such — its figure is real, and where it came from is said.
+        val publicNodes = view.fallback_chain_ids.toSet()
+        for (id in publicNodes) if (id !in perChain) perChain[id] = 0.0
         val done = perChain.entries
             .filter { (id, _) -> pending.none { it.id == id.toString() } }
             .sortedByDescending { it.value }
@@ -1183,6 +1188,8 @@ object SettingsLive {
                     // the display currency is not the person's yet.
                     amount = if (view.hidden) MASK else money.fiat(usd),
                     amountWithheld = !view.hidden && !money.settled,
+                    status = if (id in publicNodes) strings.t(I18nKeys.SettingsUi.BALANCE_DETAIL_PUBLIC_NODES) else null,
+                    tone = if (id in publicNodes) SettingsTone.Warn else SettingsTone.Neutral,
                 )
             }
         val total = view.display_total_usd ?: view.cached_total_usd
@@ -1215,6 +1222,31 @@ object SettingsLive {
         )
     }
 
+    /**
+     * ob-2 (P2.4, the web's `withEraseUnsynced`): erasing means everything,
+     * the pending-upload outbox included — so a wallet on this device whose
+     * registration has not landed would go with it, and no other device can
+     * find it yet. The sheet names every such wallet (the session core's
+     * `unsynced`, by the name this device shows) and its confirm waits for an
+     * explicit acknowledgement. Nothing owed: the sheet as it was.
+     */
+    fun withEraseUnsynced(
+        model: SettingsScreenModel,
+        unsynced: List<app.getvela.wallet.feature.onboarding.core.SessionUnsynced>,
+        strings: VelaStrings,
+        /** "A, B and C" in the person's language — the platform's list formatter on a device. */
+        listOf: (List<String>) -> String = { it.joinToString(", ") },
+    ): SettingsScreenModel {
+        if (unsynced.isEmpty()) return model
+        val names = unsynced.map { wallet -> wallet.name.trim().ifEmpty { app.getvela.wallet.feature.browser.ExploreLive.shortAddress(wallet.address) } }
+        return model.copy(
+            eraseSheet = model.eraseSheet.copy(
+                warning = strings.t(I18nKeys.SettingsUi.ERASE_UNSYNCED, mapOf("names" to listOf(names))),
+                ack = strings.t(I18nKeys.SettingsUi.ERASE_UNSYNCED_ACK),
+            ),
+        )
+    }
+
     private const val MASK = "••••"
 
     /**
@@ -1230,8 +1262,10 @@ object SettingsLive {
         switcher: app.getvela.wallet.feature.wallet.core.BalanceSwitcherView,
         currency: app.getvela.wallet.feature.settings.core.CurrencyView,
         strings: VelaStrings,
+        /** ob-2 (P2.4): the wallets saved here not synced yet. */
+        unsynced: List<app.getvela.wallet.feature.onboarding.core.SessionUnsynced> = emptyList(),
     ): SettingsScreenModel = model.copy(
-        accountsSheet = app.getvela.wallet.feature.wallet.WalletLive.accountSwitcher(accounts, activeIndex, switcher, currency, strings),
+        accountsSheet = app.getvela.wallet.feature.wallet.WalletLive.accountSwitcher(accounts, activeIndex, switcher, currency, strings, unsynced),
     )
 
     /**

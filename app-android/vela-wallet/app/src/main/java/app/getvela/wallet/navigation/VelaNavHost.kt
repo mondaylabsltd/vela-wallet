@@ -905,6 +905,7 @@ fun VelaNavHost(
                             if (space.testnet) balances.switcher.copy(balances = emptyList()) else balances.switcher,
                             currency,
                             strings,
+                            unsynced = session.unsynced,
                         ),
                         onDismiss = { switcherOpen = false; wallet.switcherClosed() },
                         onSelect = { index ->
@@ -1989,6 +1990,7 @@ fun VelaNavHost(
                                 value += 1
                             }
                         }
+                        val syncRounds by application.container.session.syncRoundsSeen.collectAsStateWithLifecycle()
                         val homeNow = remember(balances, ageTick) { System.currentTimeMillis() }
                         WalletScreen(
                             model = WalletLive.home(
@@ -2003,9 +2005,12 @@ fun VelaNavHost(
                                     header = home.header.copy(
                                         space = strings.t(if (space.testnet) I18nKeys.NetworkSpace.TESTNET else I18nKeys.NetworkSpace.MAINNET),
                                         testnet = space.testnet,
+                                        // ob-2 (P2.4): saved here, not synced yet.
+                                        sync = WalletLive.syncLine(session.unsynced, session.address, strings, syncRounds),
                                     ),
                                 )
                             },
+                            onSyncRetry = { application.container.session.syncPending() },
                             onSpace = { application.container.networkSpace.switcherOpen.value = true },
                             onSelectTab = select,
                             // The id says WHICH row was tapped. Without it every row
@@ -2539,6 +2544,9 @@ fun VelaNavHost(
                 LaunchedEffect(session.address) {
                     val address = session.address
                     if (address.isBlank()) return@LaunchedEffect
+                    // P2.4 (perf-10): Settings draws no balance of its own — the
+                    // account is noted, not read (the web's `noteAccount`).
+                    application.container.wallet.noteAccount(address)
                     val device = application.container.deviceKeysOf(address, session.activeName)
                     val signIn = application.container.signInCredentialOf(address)
                     // The record as it stands NOW — a key added since the
@@ -2589,7 +2597,8 @@ fun VelaNavHost(
                     m = SettingsLive.withRelayer(m, chainNamesNow[100] ?: "Gnosis", 100, "xDAI", treasury, strings)
                     m = SettingsLive.withAccounts(m, sessionView.accounts.map { it.name to it.address }, sessionView.activeIndex,
                         // Spec 105: no account is worth anything in the testnet space.
-                        if (space.testnet) balanceView.switcher.copy(balances = emptyList()) else balanceView.switcher, currency, strings)
+                        if (space.testnet) balanceView.switcher.copy(balances = emptyList()) else balanceView.switcher, currency, strings,
+                        unsynced = sessionView.unsynced)
                     // Spec 048: the network detail is THIS network's, not the fixture's.
                     openNetworkId?.let { id ->
                         networks.networks.firstOrNull { it.id == id }?.let { row ->
@@ -2607,6 +2616,10 @@ fun VelaNavHost(
                     requestedPage?.let { m = m.copy(page = it) }
                     // A partial wipe names what stayed, in the sheet itself (028's rule: the person stays signed in).
                     eraseFailed?.let { left -> m = m.copy(eraseSheet = m.eraseSheet.copy(body = m.eraseSheet.body + "\n\n" + left.joinToString(", "))) }
+                    // ob-2 (P2.4): the wallets an erase would lose before they synced, named.
+                    m = SettingsLive.withEraseUnsynced(m, sessionView.unsynced, strings) { names ->
+                        android.icu.text.ListFormatter.getInstance(java.util.Locale.forLanguageTag(strings.language)).format(names)
+                    }
                     m
                 }
                 // Spec 081 FR-016: the device lines go in `environment`, by the

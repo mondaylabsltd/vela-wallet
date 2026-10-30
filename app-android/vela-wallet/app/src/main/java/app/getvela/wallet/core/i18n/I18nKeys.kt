@@ -315,6 +315,9 @@ object I18nKeys {
          * `{{name}}`. The core picks it (`BalanceView.unreachable_key`).
          */
         const val TOKEN_LIST_UNREACHABLE = "assets.tokenListUnreachable"
+        /** ob-2 (P2.4): the header line under a wallet saved here, not yet synced. */
+        const val SYNCING = "home.syncingLine"
+        const val SYNC_STALLED = "home.syncStalledLine"
         /**
          * The hero's reason when a first load could read nothing and nothing is
          * cached (#188, spec 038 finding 15). Borrowed from the onboarding
@@ -1191,6 +1194,9 @@ object I18nKeys {
         const val ERASE_KEEPS = "settings.eraseDevice.keeps"
         const val ERASE_CONFIRM = "settings.eraseDevice.confirm"
         const val ERASE_CANCEL = "settings.eraseDevice.cancel"
+        /** ob-2 (P2.4): the wallets an erase would lose before they synced, and the tick it waits for. */
+        const val ERASE_UNSYNCED = "settings.eraseDevice.unsynced"
+        const val ERASE_UNSYNCED_ACK = "settings.eraseDevice.unsyncedAck"
 
         // Feedback.
         const val BUG_TITLE = "componentsUi.bugReport.title"
@@ -1258,6 +1264,8 @@ object I18nKeys {
         const val BALANCE_DETAIL_FAILED = "home.balanceDetailStatusFailed"
         const val BALANCE_DETAIL_UPDATED = "home.balanceDetailUpdatedLabel"
         const val BALANCE_DETAIL_RETRY = "home.balanceDetailRetry"
+        /** P2.4: a network read through public nodes while the person's own does not answer. */
+        const val BALANCE_DETAIL_PUBLIC_NODES = "home.balanceDetailStatusPublicNodes"
         const val RELAYER_TITLE = "componentsUi.treasuryBootstrap.title"
         const val RELAYER_LEAD = "componentsUi.treasuryBootstrap.lead"
         const val RELAYER_AMOUNT_HINT = "componentsUi.treasuryBootstrap.amountHint"

@@ -406,6 +406,8 @@ data class AccountsSheetRowModel(
     val addressFull: String,
     val amount: String,
     val selected: Boolean,
+    /** ob-2 (P2.4): saved here, not yet findable elsewhere — "Saved on this device · syncing…". */
+    val note: String? = null,
 )
 
 @Immutable
@@ -437,6 +439,13 @@ data class ConfirmSheetModel(
     /** Second, quieter paragraph — the sign-out sheet's "keeps" line. */
     val note: String? = null,
     val callout: CalloutModel? = null,
+    /**
+     * ob-2 (P2.4): a loss nothing brings back — the erase's unsynced wallets,
+     * by name — drawn first as a danger callout (the web's `warning`).
+     */
+    val warning: String? = null,
+    /** With it, the confirm waits for this acknowledgement to be ticked (the web's `ack`). */
+    val ack: String? = null,
 )
 
 /** A chain's circular avatar: a letter over a fixture-supplied brand colour. */

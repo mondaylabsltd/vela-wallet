@@ -95,16 +95,18 @@ fun WalletScreen(
     onRefresh: (() -> Unit)? = null,
     /** Spec 105: the header's space label — the switch prompt. */
     onSpace: () -> Unit = {},
+    /** ob-2 (P2.4): the header's sync line "try now". */
+    onSyncRetry: (() -> Unit)? = null,
 ) {
     if (model.textScale != 1f) {
         val density = LocalDensity.current
         CompositionLocalProvider(
             LocalDensity provides Density(density.density, density.fontScale * model.textScale),
         ) {
-            WalletHomeContent(model, modifier, onSelectTab, onFlow, onSwitcher, onToggleVisibility, onStatusClick, onRefresh, onSpace)
+            WalletHomeContent(model, modifier, onSelectTab, onFlow, onSwitcher, onToggleVisibility, onStatusClick, onRefresh, onSpace, onSyncRetry)
         }
     } else {
-        WalletHomeContent(model, modifier, onSelectTab, onFlow, onSwitcher, onToggleVisibility, onStatusClick, onRefresh, onSpace)
+        WalletHomeContent(model, modifier, onSelectTab, onFlow, onSwitcher, onToggleVisibility, onStatusClick, onRefresh, onSpace, onSyncRetry)
     }
 
     model.sheet?.let { sheet ->
@@ -135,6 +137,7 @@ private fun WalletHomeContent(
     onStatusClick: () -> Unit = {},
     onRefresh: (() -> Unit)? = null,
     onSpace: () -> Unit = {},
+    onSyncRetry: (() -> Unit)? = null,
 ) {
     val colors = VelaTheme.colors
     val strings = LocalVelaStrings.current
@@ -201,6 +204,7 @@ private fun WalletHomeContent(
                         onSwitcher = onSwitcher,
                         identiconLabel = strings.t(I18nKeys.Wallet.IDENTICON_A11Y_OPEN),
                         onSpace = onSpace,
+                        onSyncRetry = onSyncRetry,
                     )
                     Spacer(modifier = Modifier.height(VelaSpacing.xl3))
                     BalanceDisplay(

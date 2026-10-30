@@ -66,6 +66,7 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import android.net.Uri
 import androidx.compose.foundation.border
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import app.getvela.wallet.core.designsystem.tokens.VelaRadius
 import app.getvela.wallet.core.designsystem.tokens.VelaBorder
@@ -1865,6 +1866,8 @@ private fun ConfirmSheetBody(
     onCancel: () -> Unit,
 ) {
     val colors = VelaTheme.colors
+    // ob-2 (P2.4): the acknowledgement the confirm waits for, per sheet shown.
+    var acknowledged by remember(sheet.ack) { mutableStateOf(false) }
     SheetTitle(sheet.title)
     Text(
         text = sheet.body,
@@ -1873,6 +1876,10 @@ private fun ConfirmSheetBody(
         fontSize = VelaTextSize.lg,
         modifier = Modifier.padding(bottom = VelaSpacing.xl),
     )
+    if (sheet.warning != null) {
+        VelaCallout(CalloutModel(CalloutTone.Danger, sheet.warning))
+        Spacer(modifier = Modifier.height(VelaSpacing.xl))
+    }
     if (sheet.note != null) {
         Text(
             text = sheet.note,
@@ -1886,16 +1893,55 @@ private fun ConfirmSheetBody(
         VelaCallout(sheet.callout)
         Spacer(modifier = Modifier.height(VelaSpacing.xl))
     }
+    if (sheet.ack != null) {
+        AckRow(text = sheet.ack, checked = acknowledged, onChange = { acknowledged = it })
+        Spacer(modifier = Modifier.height(VelaSpacing.xl))
+    }
+    val blocked = sheet.ack != null && !acknowledged
     // The tone picks the CTA's colour, so "清除缓存" is accent and "全部清除" is
     // red without either screen owning a button of its own.
     if (sheet.danger) {
-        VelaDangerButton(sheet.confirm, onClick = onConfirm, modifier = Modifier.fillMaxWidth())
+        VelaDangerButton(sheet.confirm, onClick = onConfirm, modifier = Modifier.fillMaxWidth(), enabled = !blocked)
     } else {
-        VelaPrimaryButton(sheet.confirm, onClick = onConfirm, modifier = Modifier.fillMaxWidth())
+        VelaPrimaryButton(sheet.confirm, onClick = onConfirm, modifier = Modifier.fillMaxWidth(), enabled = !blocked)
     }
     Spacer(modifier = Modifier.height(VelaSpacing.lg))
     VelaSecondaryButton(sheet.cancel, onClick = onCancel, modifier = Modifier.fillMaxWidth())
 }
+
+/**
+ * ob-2 (P2.4): "I understand…" — a checkbox row the confirm waits for. A
+ * check is a selected state: neutral ink, never the accent (web `.ack`).
+ */
+@Composable
+private fun AckRow(text: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    val colors = VelaTheme.colors
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(CONFIRM_ACK_TAG)
+            .toggleable(value = checked, role = Role.Checkbox, onValueChange = onChange)
+            .padding(vertical = VelaSpacing.sm),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(VelaSpacing.xl)
+                .background(if (checked) colors.fgBase else colors.bgBase, RoundedCornerShape(VelaRadius.sm))
+                .border(VelaBorder.hairline, if (checked) colors.fgBase else colors.borderStrong, RoundedCornerShape(VelaRadius.sm)),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (checked) {
+                Icon(VelaIcons.Check, contentDescription = null, tint = colors.fgInverse, modifier = Modifier.size(VelaSpacing.lg))
+            }
+        }
+        Text(text = text, color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.base)
+    }
+}
+
+/** The confirm sheet's acknowledgement row (ob-2). */
+const val CONFIRM_ACK_TAG = "confirm-ack"
 
 @Composable
 internal fun AccountsSheetBody(
@@ -1955,6 +2001,15 @@ internal fun AccountsSheetBody(
                     fontFamily = VelaMonoFontFamily,
                     fontSize = VelaTextSize.sm,
                 )
+                // ob-2 (P2.4): this wallet's registration has not landed yet.
+                row.note?.let { note ->
+                    Text(
+                        text = note,
+                        color = colors.fgMuted,
+                        fontFamily = VelaFontFamily,
+                        fontSize = VelaTextSize.xs,
+                    )
+                }
             }
             Text(
                 text = row.amount,
@@ -2810,7 +2865,12 @@ private fun BalanceDetailRow(row: BalanceDetailRowModel, onRetry: (String) -> Un
                 // resolves itself; a dead RPC gets red and 立即重试.
                 Text(
                     text = row.status,
-                    color = if (row.tone == SettingsTone.Error) colors.errorBase else colors.fgSubtle,
+                    color = when (row.tone) {
+                        SettingsTone.Error -> colors.errorBase
+                        // P2.4: read through public nodes (web `.status.warn`).
+                        SettingsTone.Warn -> colors.warningBase
+                        else -> colors.fgSubtle
+                    },
                     fontFamily = VelaFontFamily,
                     fontSize = VelaTextSize.sm,
                 )
