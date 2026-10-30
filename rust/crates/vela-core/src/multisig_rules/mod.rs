@@ -11,10 +11,15 @@
 
 use crate::CoreError;
 
+mod names;
+mod networks;
+
 /// A method this door knows, answered; `None` when no area claims it.
 pub fn call_json(method: &str, args: &serde_json::Value) -> Option<Result<String, CoreError>> {
     let (area, name) = method.split_once('.')?;
     match area {
+        "networks" => Some(networks::call(name, args)),
+        "names" => Some(names::call(name, args)),
         _ => {
             let _ = (name, args);
             None
