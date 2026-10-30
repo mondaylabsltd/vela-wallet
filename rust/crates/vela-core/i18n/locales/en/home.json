@@ -335,7 +335,10 @@
         "firstRunFund": "Add funds",
         "firstRunFundNote": "Send to its address on {{network}}.",
         "firstRunCost": "Its first transfer out also sets it up on {{network}}: a one-time network fee, paid with that transfer and shown before it's executed.",
-        "firstRunDismiss": "Got it"
+        "firstRunDismiss": "Got it",
+        "otherSpace": "Also on this device, in {{space}}: {{networks}}. To create the multisig on one of them, switch to {{space}} first.",
+        "draftKept": "Picked up where you left off.",
+        "discardDraft": "Start over"
       },
       "invite": {
         "body": "Members scan the code or open the link: it adds the multisig in Vela with its network and the members' names.",
@@ -598,7 +601,8 @@
         "removed": "Removed",
         "thresholdChanged": "Approvals needed: {{was}} originally, {{is}} now.",
         "undeployedOn": "Not deployed on {{network}} yet: it will start there with the original members.",
-        "renameNotRecorded": "It can be renamed once its record is saved with the multisig service."
+        "renameNotRecorded": "It can be renamed once its record is saved with the multisig service.",
+        "renamePending": "It can be renamed once its record lands on {{network}}. That can take a while — nothing is lost meanwhile."
       },
       "service": {
         "customNote": "Using a custom multisig service ({{host}})",

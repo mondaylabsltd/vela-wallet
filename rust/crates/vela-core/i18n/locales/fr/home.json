@@ -337,7 +337,10 @@
         "firstRunFund": "Ajouter des fonds",
         "firstRunFundNote": "Envoyez à son adresse sur {{network}}.",
         "firstRunCost": "Son premier transfert sortant le met aussi en place sur {{network}} : des frais de réseau uniques, payés avec ce transfert et affichés avant son exécution.",
-        "firstRunDismiss": "Compris"
+        "firstRunDismiss": "Compris",
+        "otherSpace": "Aussi sur cet appareil, dans {{space}} : {{networks}}. Pour y créer le multisig, passez d’abord à {{space}}.",
+        "draftKept": "Vous reprenez là où vous vous étiez arrêté.",
+        "discardDraft": "Recommencer"
       },
       "invite": {
         "body": "Les membres scannent le code ou ouvrent le lien : il ajoute le multisig dans Vela avec son réseau et les noms des membres.",
@@ -603,7 +606,8 @@
         "removed": "Retirés",
         "thresholdChanged": "Approbations requises : {{was}} à l’origine, {{is}} maintenant.",
         "undeployedOn": "Pas encore déployé sur {{network}} : il y démarrera avec les membres d’origine.",
-        "renameNotRecorded": "Il pourra être renommé une fois son enregistrement sauvegardé auprès du service multisig."
+        "renameNotRecorded": "Il pourra être renommé une fois son enregistrement sauvegardé auprès du service multisig.",
+        "renamePending": "Il pourra être renommé une fois son enregistrement arrivé sur {{network}}. Cela peut prendre un moment — rien n’est perdu entre-temps."
       },
       "service": {
         "customNote": "Service multisig personnalisé utilisé ({{host}})",

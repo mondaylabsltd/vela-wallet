@@ -28,6 +28,8 @@ const seams = vi.hoisted(() => ({
 	renamed: [] as [string, number, string][],
 	opened: [] as unknown[],
 	sharedAgain: 0,
+	/** How often where it can be renamed was asked (`plan_rename`). */
+	planned: 0,
 	/** A creation's proof is kept here: its record is on its way (r4a-12). */
 	waiting: false,
 	/** Whether it is deployed on the chain holding its record (this wallet's RPC). */
@@ -57,6 +59,7 @@ vi.mock('$lib/services/networks', async (importOriginal) => ({
 }));
 vi.mock('../core/display', () => ({
 	chainName: (id: number) => `Chain ${id}`,
+	multisigName: (a: { genesis: { name?: string | null } }) => a.genesis.name ?? '',
 	shortenAddress: (a: string) => `${a.slice(0, 8)}…${a.slice(-6)}`,
 	ruleTitle: (m: MultisigMessages, r: { m: number; n: number }) =>
 		r.n === 1
@@ -96,8 +99,8 @@ vi.mock('../core/names.svelte', () => ({
 vi.mock('../core/store.svelte', () => ({
 	MULTISIG_ACCOUNTS_KEY: 'vela.multisigAccounts',
 	ACTIVE_MULTISIG_KEY: 'vela.activeMultisig',
-	isShared: () => seams.shared,
 	multisig: {
+		shared: () => seams.shared,
 		accounts: [],
 		attach: () => {},
 		find: () => null,
@@ -114,14 +117,23 @@ vi.mock('../core/store.svelte', () => ({
 						chain_id: chain,
 						deployed: chain === null ? null : seams.deployed,
 						blocked:
-							chain !== null ? null : seams.recordedOn.length > 0 ? 'elsewhere' : 'unrecorded'
+							chain !== null
+								? null
+								: seams.waiting
+									? 'pending'
+									: seams.recordedOn.length > 0
+										? 'elsewhere'
+										: 'unrecorded',
+						lands_on: seams.waiting ? 100 : null
 					}
 				},
 				share_again: {},
 				share_again_failure: {}
 			};
 		},
-		send: () => {},
+		send: (event: { type: string }) => {
+			if (event.type === 'plan_rename') seams.planned += 1;
+		},
 		request: async (event: { type: string }) => {
 			if (event.type === 'share_again') {
 				seams.sharedAgain += 1;
@@ -304,10 +316,22 @@ describe('the name in the registry (v4)', () => {
 		const screen = shown(MultisigSettings, { props: props() });
 		await expect.element(screen.getByText('create.savedLater')).toBeVisible();
 		expect(screen.getByText('settings.shareAgainNote').elements()).toHaveLength(0);
+		// r7-10: on its way, said as such — not "once its record is saved".
 		await expect
 			.element(screen.getByTestId('rename-blocked'))
-			.toHaveTextContent('settings.renameNotRecorded');
+			.toHaveTextContent('settings.renamePending');
 		expect(screen.getByText('settings.renameUnavailable').elements()).toHaveLength(0);
+		expect(seams.planned).toBeGreaterThan(0);
+	});
+
+	it('r4D-12: the remove buttons name the multisig they remove', async () => {
+		const screen = shown(MultisigSettings, {
+			props: { ...props(), removeNamed: 'Remove {{name}} from this device' }
+		});
+		await screen.getByRole('button', { name: 'Remove Team fund from this device' }).click();
+		await expect
+			.element(screen.getByRole('button', { name: 'Remove Team fund from this device' }))
+			.toBeVisible();
 	});
 });
 

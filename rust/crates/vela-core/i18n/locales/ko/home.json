@@ -335,7 +335,10 @@
         "firstRunFund": "자금 추가",
         "firstRunFundNote": "{{network}}의 주소로 보내세요.",
         "firstRunCost": "첫 출금 때 {{network}}에서의 설정도 함께 이루어집니다. 한 번만 내는 네트워크 수수료로, 그 출금과 함께 지불되며 실행 전에 표시됩니다.",
-        "firstRunDismiss": "확인"
+        "firstRunDismiss": "확인",
+        "otherSpace": "이 기기에는 {{space}} 네트워크도 있습니다: {{networks}}. 그중 하나에서 멀티시그를 만들려면 먼저 {{space}}(으)로 전환하세요.",
+        "draftKept": "이전에 입력하던 내용에서 이어갑니다.",
+        "discardDraft": "처음부터 다시"
       },
       "invite": {
         "body": "멤버는 코드를 스캔하거나 링크를 열면 됩니다. 네트워크와 멤버 이름과 함께 Vela에 멀티시그가 추가됩니다.",
@@ -598,7 +601,8 @@
         "removed": "제거됨",
         "thresholdChanged": "필요한 승인 수: 원래 {{was}}, 현재 {{is}}.",
         "undeployedOn": "아직 {{network}}에 배포되지 않았습니다. 그곳에서는 원래 멤버로 시작합니다.",
-        "renameNotRecorded": "멀티시그 서비스에 기록이 저장되면 이름을 바꿀 수 있습니다."
+        "renameNotRecorded": "멀티시그 서비스에 기록이 저장되면 이름을 바꿀 수 있습니다.",
+        "renamePending": "기록이 {{network}}에 반영되면 이름을 바꿀 수 있습니다. 시간이 걸릴 수 있지만 그동안 사라지는 것은 없습니다."
       },
       "service": {
         "customNote": "사용자 지정 멀티시그 서비스 사용 중({{host}})",

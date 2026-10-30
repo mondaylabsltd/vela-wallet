@@ -335,7 +335,10 @@
         "firstRunFund": "Tambah dana",
         "firstRunFundNote": "Kirim ke alamatnya di {{network}}.",
         "firstRunCost": "Transfer keluar pertamanya juga menyiapkannya di {{network}}: biaya jaringan satu kali, dibayar bersama transfer itu dan ditampilkan sebelum dieksekusi.",
-        "firstRunDismiss": "Mengerti"
+        "firstRunDismiss": "Mengerti",
+        "otherSpace": "Juga di perangkat ini, di {{space}}: {{networks}}. Untuk membuat multisig di salah satunya, beralih dulu ke {{space}}.",
+        "draftKept": "Melanjutkan dari yang terakhir Anda isi.",
+        "discardDraft": "Mulai dari awal"
       },
       "invite": {
         "body": "Anggota memindai kode atau membuka tautan: multisig ditambahkan di Vela dengan jaringan dan nama anggotanya.",
@@ -598,7 +601,8 @@
         "removed": "Dihapus",
         "thresholdChanged": "Persetujuan yang diperlukan: awalnya {{was}}, sekarang {{is}}.",
         "undeployedOn": "Belum di-deploy di {{network}}: di sana multisig akan dimulai dengan anggota awal.",
-        "renameNotRecorded": "Namanya bisa diganti setelah catatannya tersimpan di layanan multisig."
+        "renameNotRecorded": "Namanya bisa diganti setelah catatannya tersimpan di layanan multisig.",
+        "renamePending": "Namanya dapat diubah setelah catatannya tiba di {{network}}. Ini bisa memakan waktu — sementara itu tidak ada yang hilang."
       },
       "service": {
         "customNote": "Menggunakan layanan multisig khusus ({{host}})",

@@ -366,6 +366,12 @@ export interface MultisigMessages {
 		/** The first transfer out sets it up there (`{{network}}`). */
 		firstRunCost: string;
 		firstRunDismiss: string;
+		/** r7-9: this device's networks of the other space (`{{networks}}`, `{{space}}`). */
+		otherSpace: string;
+		/** r7-9: the sheet opened on what was entered before. */
+		draftKept: string;
+		/** r7-9: drop the kept draft and start a fresh one. */
+		discardDraft: string;
 	};
 	/** r4D-16: the invite sheet. */
 	invite: {
@@ -585,6 +591,8 @@ export interface MultisigMessages {
 		renameNotDeployed: string;
 		/** r4a-12: its record is not saved yet — nothing to rename. */
 		renameNotRecorded: string;
+		/** r7-10: its record is on its way to `{{network}}` (not landed yet). */
+		renamePending: string;
 		originalMembers: string;
 		originalNote: string;
 		/** `{{network}}` */
@@ -1116,7 +1124,10 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		firstRunFund: '',
 		firstRunFundNote: '',
 		firstRunCost: '',
-		firstRunDismiss: ''
+		firstRunDismiss: '',
+		otherSpace: '',
+		draftKept: '',
+		discardDraft: ''
 	},
 	invite: {
 		body: '',
@@ -1311,6 +1322,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		renameUnavailable: '',
 		renameNotDeployed: '',
 		renameNotRecorded: '',
+		renamePending: '',
 		originalMembers: '',
 		originalNote: '',
 		currentOn: '',

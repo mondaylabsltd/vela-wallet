@@ -335,7 +335,10 @@
         "firstRunFund": "加值",
         "firstRunFundNote": "轉入它在 {{network}} 上的地址。",
         "firstRunCost": "它的第一筆轉出還會在 {{network}} 上完成部署：一次性網路費，隨這筆轉帳支付，執行前會顯示。",
-        "firstRunDismiss": "知道了"
+        "firstRunDismiss": "知道了",
+        "otherSpace": "此裝置在{{space}}中還有：{{networks}}。若要在其中之一建立多簽，請先切換到{{space}}。",
+        "draftKept": "已恢復你上次填寫的內容。",
+        "discardDraft": "重新開始"
       },
       "invite": {
         "body": "成員掃描條碼或開啟連結即可：在 Vela 中新增這個多簽，並帶上網路和成員名稱。",
@@ -598,7 +601,8 @@
         "removed": "已移除",
         "thresholdChanged": "所需核准數：最初 {{was}}，現在 {{is}}。",
         "undeployedOn": "尚未部署在 {{network}} 上：在那裡將以初始成員開始。",
-        "renameNotRecorded": "它的記錄儲存到多簽服務後即可重新命名。"
+        "renameNotRecorded": "它的記錄儲存到多簽服務後即可重新命名。",
+        "renamePending": "記錄寫入 {{network}} 後即可重新命名。這可能需要一些時間，期間不會遺失任何內容。"
       },
       "service": {
         "customNote": "正在使用自訂多簽服務（{{host}}）",

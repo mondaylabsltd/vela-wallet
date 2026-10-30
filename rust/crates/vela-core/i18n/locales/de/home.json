@@ -335,7 +335,10 @@
         "firstRunFund": "Guthaben hinzufügen",
         "firstRunFundNote": "An seine Adresse auf {{network}} senden.",
         "firstRunCost": "Seine erste ausgehende Überweisung richtet es auch auf {{network}} ein: eine einmalige Netzwerkgebühr, mit dieser Überweisung bezahlt und vor dem Ausführen angezeigt.",
-        "firstRunDismiss": "Verstanden"
+        "firstRunDismiss": "Verstanden",
+        "otherSpace": "Ebenfalls auf diesem Gerät, unter {{space}}: {{networks}}. Um das Multisig in einem davon zu erstellen, wechseln Sie zuerst zu {{space}}.",
+        "draftKept": "Sie machen dort weiter, wo Sie aufgehört haben.",
+        "discardDraft": "Neu beginnen"
       },
       "invite": {
         "body": "Mitglieder scannen den Code oder öffnen den Link: Er fügt das Multisig in Vela mit seinem Netzwerk und den Namen der Mitglieder hinzu.",
@@ -598,7 +601,8 @@
         "removed": "Entfernt",
         "thresholdChanged": "Nötige Genehmigungen: ursprünglich {{was}}, jetzt {{is}}.",
         "undeployedOn": "Auf {{network}} noch nicht bereitgestellt: Dort beginnt es mit den ursprünglichen Mitgliedern.",
-        "renameNotRecorded": "Es kann umbenannt werden, sobald sein Eintrag beim Multisig-Dienst gespeichert ist."
+        "renameNotRecorded": "Es kann umbenannt werden, sobald sein Eintrag beim Multisig-Dienst gespeichert ist.",
+        "renamePending": "Es kann umbenannt werden, sobald sein Eintrag auf {{network}} angekommen ist. Das kann eine Weile dauern – bis dahin geht nichts verloren."
       },
       "service": {
         "customNote": "Eigener Multisig-Dienst in Verwendung ({{host}})",

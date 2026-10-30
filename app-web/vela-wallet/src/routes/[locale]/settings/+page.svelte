@@ -1453,6 +1453,7 @@
 	<MultisigRows
 		m={data.multisigMessages}
 		removeLabel={data.multisigMessages.settings.remove}
+		removeNamed={liveHome.accountsSheet.removeNamed}
 		cancelLabel={liveHome.accountsSheet.removeCancel ?? ''}
 		amount={(address) => accountAmount(accountsInput, address)}
 		loading={(address) => accountLoading(accountsInput, address)}
@@ -1479,6 +1480,7 @@
 			account={shownMultisig}
 			payer={view.address || null}
 			cancelLabel={liveHome.accountsSheet.removeCancel ?? ''}
+			removeNamed={liveHome.accountsSheet.removeNamed}
 		/>
 	{/if}
 {/snippet}

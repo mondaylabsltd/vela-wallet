@@ -335,7 +335,10 @@
         "firstRunFund": "Fon ekle",
         "firstRunFundNote": "{{network}} üzerindeki adresine gönderin.",
         "firstRunCost": "İlk giden transferi onu {{network}} üzerinde de kurar: tek seferlik bir ağ ücreti, o transferle ödenir ve yürütülmeden önce gösterilir.",
-        "firstRunDismiss": "Anladım"
+        "firstRunDismiss": "Anladım",
+        "otherSpace": "Bu cihazda {{space}} altında da var: {{networks}}. Multisig’i bunlardan birinde oluşturmak için önce {{space}} alanına geçin.",
+        "draftKept": "Kaldığınız yerden devam ediliyor.",
+        "discardDraft": "Baştan başla"
       },
       "invite": {
         "body": "Üyeler kodu tarar veya bağlantıyı açar: multisig, ağı ve üye adlarıyla Vela'ya eklenir.",
@@ -598,7 +601,8 @@
         "removed": "Çıkarılanlar",
         "thresholdChanged": "Gereken onay: başlangıçta {{was}}, şimdi {{is}}.",
         "undeployedOn": "Henüz {{network}} üzerinde dağıtılmadı: orada ilk üyelerle başlayacak.",
-        "renameNotRecorded": "Kaydı multisig hizmetinde saklandığında yeniden adlandırılabilir."
+        "renameNotRecorded": "Kaydı multisig hizmetinde saklandığında yeniden adlandırılabilir.",
+        "renamePending": "Kaydı {{network}} ağına ulaştığında yeniden adlandırılabilir. Bu biraz sürebilir; bu sırada hiçbir şey kaybolmaz."
       },
       "service": {
         "customNote": "Özel bir çoklu imza hizmeti kullanılıyor ({{host}})",

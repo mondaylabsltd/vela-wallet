@@ -25,7 +25,7 @@
 	import Identicon from '$lib/wallet/ui/Identicon.svelte';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import type { MultisigMessages } from '../messages';
-	import { chainName, ruleTitle, shortenAddress } from '../core/display';
+	import { chainName, multisigName, ruleTitle, shortenAddress } from '../core/display';
 	import { sameAddress, validName } from '../core/kernel';
 	import { names } from '../core/names.svelte';
 	import { localOwners } from '../core/owners';
@@ -35,7 +35,7 @@
 		SigningRefusedError,
 		SigningUncheckedError
 	} from '../core/gate.svelte';
-	import { isShared, multisig, type MultisigAccount } from '../core/store.svelte';
+	import { multisig, type MultisigAccount } from '../core/store.svelte';
 	import { failureText } from '../shell/failure';
 	import { localAccounts } from '../shell/local-accounts';
 	import { machines } from '../shell/machines.svelte';
@@ -51,9 +51,15 @@
 		/** A Vela account on this device that pays for the Ethereum record. */
 		payer: string | null;
 		cancelLabel: string;
+		/** r4D-12: the remove button's accessible name, naming the multisig (`{{name}}`). */
+		removeNamed?: string;
 	}
 
-	let { m, account, payer, cancelLabel }: Props = $props();
+	let { m, account, payer, cancelLabel, removeNamed }: Props = $props();
+	/** r4D-12: the remove buttons say which multisig goes (their name, for assistive tech too). */
+	const removeLabel = $derived(
+		removeNamed ? fillTemplate(removeNamed, { name: multisigName(account, m) }) : undefined
+	);
 
 	/**
 	 * Owners are each network's (owner, 2026-10-29): the original members (its
@@ -90,7 +96,8 @@
 	const key = $derived(account.address.toLowerCase());
 	/** The machine's row: whether it is shared, whether its record is on its way (r4a-12). */
 	const row = $derived(multisig.row(account.address));
-	const shared = $derived(row?.shared ?? isShared(account));
+	// Not read yet (`null`): nothing is said of its sharing.
+	const shared = $derived(multisig.shared(account.address) !== false);
 	const recordWaiting = $derived(row?.record_waiting ?? false);
 
 	/**
@@ -139,6 +146,12 @@
 
 	onMount(() => {
 		check();
+	});
+	// r7-10: where it can be renamed is asked again whenever its record moves
+	// (shared now, no longer on its way) — not only when Settings opens.
+	$effect(() => {
+		void shared;
+		void recordWaiting;
 		findRenameChain();
 	});
 
@@ -356,11 +369,15 @@
 		</span>
 		{#if renameChain === null}
 			<p class="note" data-testid="rename-blocked">
-				{renameBlocked === 'unrecorded'
-					? m.settings.renameNotRecorded
-					: renameBlocked === 'unreachable'
-						? m.add.unavailable
-						: m.settings.renameUnavailable}
+				{renameBlocked === 'pending'
+					? fillTemplate(m.settings.renamePending, {
+							network: chainName(plan?.lands_on ?? 100)
+						})
+					: renameBlocked === 'unrecorded'
+						? m.settings.renameNotRecorded
+						: renameBlocked === 'unreachable'
+							? m.add.unavailable
+							: m.settings.renameUnavailable}
 			</p>
 		{:else if renameChain !== undefined && renameDeployed === false}
 			<!-- A rename never deploys it: only the deployed multisig renames its record. -->
@@ -442,7 +459,7 @@
 				onclick={() => {
 					removing = false;
 					multisig.remove(account.address);
-				}}>{m.settings.remove}</Button
+				}}>{removeLabel ?? m.settings.remove}</Button
 			>
 			<Button variant="secondary" shape="rounded" onclick={() => (removing = false)}
 				>{cancelLabel}</Button
@@ -451,7 +468,7 @@
 	{:else}
 		<div class="row-actions">
 			<Button variant="secondary" shape="rounded" onclick={() => (removing = true)}
-				>{m.settings.remove}</Button
+				>{removeLabel ?? m.settings.remove}</Button
 			>
 		</div>
 	{/if}

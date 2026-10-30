@@ -38,7 +38,8 @@
 	import { fillTemplate } from '$lib/i18n/fill';
 	import { pluralForm } from '$lib/i18n/plural';
 	import { loadAccounts } from '$lib/onboarding/core/storage';
-	import { spaceNetworksSync } from '$lib/services/networks';
+	import { networkSpace } from '$lib/network-space/network-space.svelte';
+	import { isHiddenNetwork, spaceNetworksSync } from '$lib/services/networks';
 	import { loadTransactions } from '$lib/services/records';
 	import { chainFilter } from '$lib/wallet/chain-filter.svelte';
 	import { balance } from '$lib/wallet/core/balance.svelte';
@@ -47,7 +48,7 @@
 	import Identicon from '$lib/wallet/ui/Identicon.svelte';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import type { MultisigMessages } from '../messages';
-	import { localName, ruleTitle, shortenAddress } from '../core/display';
+	import { chainName, localName, ruleTitle, shortenAddress } from '../core/display';
 	import { looksLikeEns, resolveEns, type EnsAnswer } from '../core/ens-name';
 	import { inviteLink } from '../core/invite';
 	import { sameAddress, validName } from '../core/kernel';
@@ -99,12 +100,13 @@
 			.filter(([, verdict]) => (verdict as { kind?: string } | null)?.kind === 'missing')
 			.map(([id]) => Number(id))
 	);
-	/** r5reg-19: the networks this device's own transactions were on, newest first. */
-	let recent = $state<number[]>([]);
+	/** r5reg-19: this device's own transactions (the core reads where they were, newest first). */
+	let records = $state<{ chainId: number; timestamp: number }[]>([]);
 	void loadTransactions().then(
-		(records) => (recent = recentChains(records)),
+		(read) => (records = read),
 		() => {}
 	);
+	const recent = $derived(recentChains(records));
 	// r5reg-19: read as they come — the wallet's network now, then where this
 	// device was last used and holds funds (balances and records land after
 	// the sheet opens; Arc read under "More networks" when they had not yet).
@@ -150,7 +152,7 @@
 		if (chainId !== null && !networks.some((n) => n.chainId === chainId)) chainId = null;
 	});
 	/** The person picked a network: what lands later never picks over them. */
-	let chose = false;
+	let chose = $state(false);
 	$effect(() => {
 		const likely = firstNetworkDefault(networks, hints);
 		untrack(() => {
@@ -173,6 +175,77 @@
 		// The address book, for the contacts picker (read once per app).
 		void contactsBook.ensure(current);
 	});
+
+	/**
+	 * r7-9: what was entered before is the machine's draft (kept until it is
+	 * created or discarded): the sheet opens on it — once the machine has read
+	 * the store, and only over a sheet nobody has typed in yet. Until then
+	 * nothing is kept, so a blank sheet never replaces it.
+	 */
+	let draftRead = $state(false);
+	/** The sheet opened on a kept draft: said, with Start over. */
+	let resumed = $state(false);
+	$effect(() => {
+		const view = multisig.view;
+		if (!view || draftRead) return;
+		untrack(() => {
+			const kept = view.create.kept;
+			if (kept && name.trim() === '' && owners.length <= 1) {
+				owners = [...kept.owners];
+				info = Object.fromEntries(
+					Object.entries(kept.members)
+						.filter(([, i]) => !!i.name)
+						.map(([a, i]) => [a.toLowerCase(), { name: i.name ?? undefined }])
+				);
+				name = kept.name;
+				threshold = kept.threshold;
+				thresholdFor = kept.owners.length;
+				if (kept.chainId !== null) {
+					chainId = kept.chainId;
+					chose = true;
+				}
+				resumed = true;
+			}
+			draftRead = true;
+		});
+	});
+	// Every change is kept by the machine (a blank sheet keeps nothing).
+	$effect(() => {
+		if (!draftRead || step === 'created') return;
+		const members = Object.fromEntries(
+			owners.flatMap((o) => {
+				const said = info[o.toLowerCase()]?.name;
+				return said ? [[o, { name: said }]] : [];
+			})
+		);
+		multisig.send({
+			type: 'keep_draft',
+			draft: { owners: [...owners], members, name, threshold, chainId: chose ? chainId : null }
+		});
+	});
+
+	/** r7-9: start over — the kept draft goes, the sheet is fresh. */
+	function discardDraft() {
+		multisig.send({ type: 'discard_draft' });
+		owners = current ? [current] : accounts.slice(0, 1).map((a) => a.address);
+		info = {};
+		name = '';
+		threshold = 1;
+		thresholdFor = 0;
+		nameAsked = false;
+		chose = false;
+		chainId = firstNetworkDefault(networks, hints);
+		resumed = false;
+	}
+
+	/**
+	 * r7-9: this device's networks of the other space (testnets on mainnet,
+	 * and back), which this sheet does not offer — said, with the way there.
+	 */
+	const otherSpace = $derived(
+		(sheet?.other_space ?? []).filter((id) => !isHiddenNetwork(id)).map(chainName)
+	);
+	const spaceWords = $derived(networkSpace.words);
 
 	const local = $derived(localOwners(owners));
 	const creator = $derived(local.find((o) => o.address === creatorChoice) ?? local[0] ?? null);
@@ -287,7 +360,7 @@
 	);
 
 	/** The member count the threshold was last set for: back and Next keep the person's pick. */
-	let thresholdFor = 0;
+	let thresholdFor = $state(0);
 
 	function toThreshold() {
 		if (!membersOk) {
@@ -406,15 +479,25 @@
 >
 	{#if step === 'members'}
 		<p class="intro">{m.create.intro}</p>
+		{#if resumed}
+			<!-- r7-9: what was entered before, kept by the machine: said, and undone in one tap. -->
+			<div class="resumed" role="status" data-testid="draft-kept">
+				<p class="hint flush">{m.create.draftKept}</p>
+				<button type="button" class="text-button" onclick={discardDraft}
+					>{m.create.discardDraft}</button
+				>
+			</div>
+		{/if}
 		<!-- First, as a Vela account's name is: it is part of the address. -->
 		<label class="select">
+			<!-- S4: the byte count only where it matters — near or over the limit. -->
 			<span class="field-head"
-				><span>{m.create.name}</span><span
-					class="count"
-					class:over={nameBytes > NAME_LIMIT}
-					data-testid="name-bytes"
-					>{fillTemplate(m.create.nameBytes, { bytes: nameBytes, limit: NAME_LIMIT })}</span
-				></span
+				><span>{m.create.name}</span>{#if nameBytes >= NAME_LIMIT - 8}<span
+						class="count"
+						class:over={nameBytes > NAME_LIMIT}
+						data-testid="name-bytes"
+						>{fillTemplate(m.create.nameBytes, { bytes: nameBytes, limit: NAME_LIMIT })}</span
+					>{/if}</span
 			>
 			<input
 				class="name-field"
@@ -637,7 +720,7 @@
 				>
 				<p class="hero-name">{cleanName}</p>
 				<p class="hero-rule">{ruleTitle(m, { m: threshold, n: owners.length })}</p>
-				<p class="hero-address">{draft.address}</p>
+				<p class="hero-address">{checksumAddress(draft.address)}</p>
 				<p class="hint">{m.create.sameEverywhere}</p>
 			</div>
 		{/if}
@@ -652,7 +735,8 @@
 						     where it is checked before the passkey signs. -->
 						{#if mine}{#if label(o) !== shortenAddress(o)}<span class="address"
 									>{shortenAddress(o)}</span
-								>{/if}{:else}<span class="address full" data-testid="review-full">{o}</span
+								>{/if}{:else}<span class="address full" data-testid="review-full"
+								>{checksumAddress(o)}</span
 							>{/if}</span
 					>
 				</li>
@@ -679,6 +763,20 @@
 		</div>
 		{#if networks.length === 0}
 			<p class="error" role="alert">{m.create.noSafeNetworks}</p>
+		{/if}
+		{#if otherSpace.length > 0 && spaceWords}
+			<!-- r7-9: the other space's networks are not offered here — said, with the way there. -->
+			<div class="other-space" data-testid="other-space">
+				<p class="hint flush">
+					{fillTemplate(m.create.otherSpace, {
+						space: networkSpace.testnet ? spaceWords.mainnet : spaceWords.testnet,
+						networks: otherSpace.join(', ')
+					})}
+				</p>
+				<button type="button" class="text-button" onclick={() => networkSpace.openSwitcher()}
+					>{networkSpace.testnet ? spaceWords.toMainnet : spaceWords.toTestnet}</button
+				>
+			</div>
 		{/if}
 		{#if local.length > 1}
 			<div class="select">
@@ -726,7 +824,7 @@
 			<span class="hero-avatar"
 				><Identicon svg={identiconSvgForClient(created)} size="detail" address={created} /></span
 			>
-			<p class="hero-address">{created}</p>
+			<p class="hero-address">{checksumAddress(created)}</p>
 			{#if sharedState}
 				<!-- r4a-12, r4a-13: kept here first; shared when the service has it — said as it is. -->
 				<p
@@ -758,6 +856,26 @@
 </Sheet>
 
 <style>
+	.resumed,
+	.other-space {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: var(--space-xs) var(--space-sm);
+	}
+
+	.text-button {
+		padding: 0;
+		border: none;
+		background: none;
+		font: inherit;
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		color: var(--color-fg-base);
+		text-decoration: underline;
+		text-underline-offset: var(--space-xs);
+		cursor: pointer;
+	}
+
 	.field-head {
 		display: flex;
 		justify-content: space-between;
