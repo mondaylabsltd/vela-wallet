@@ -32,6 +32,8 @@ use std::collections::BTreeMap;
 
 use alloy_primitives::{keccak256, Address, B256, U256};
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "bindings")]
+use ts_rs::TS;
 
 use crate::error::CoreError;
 use crate::primitives;
@@ -1970,19 +1972,23 @@ pub(crate) fn read_owner_management(data: &[u8]) -> Option<Action> {
 // that chain — never the genesis', never another network's.
 
 /// A change to a multisig's members or the approvals it needs, as the person
-/// asks for it. Built per network ([`member_change_tx`]).
+/// asks for it. Built per network ([`member_change_tx`]). The one name for
+/// it everywhere: the members machine's plan carries it per network, inside
+/// the proposals machine's `ProposalKind::MemberChange { change }`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
     rename_all_fields = "camelCase"
 )]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "MultisigMemberChange"))]
 pub enum MemberChange {
     /// `addOwnerWithThreshold(owner, threshold)`; no threshold keeps the
     /// network's.
     Add {
         owner: String,
         #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(type = "number | null"))]
         threshold: Option<u64>,
     },
     /// `removeOwner(prevOwner, owner, threshold)`; no threshold keeps the
@@ -1990,6 +1996,7 @@ pub enum MemberChange {
     Remove {
         owner: String,
         #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(type = "number | null"))]
         threshold: Option<u64>,
     },
     /// `swapOwner(prevOwner, oldOwner, newOwner)`: the way back from a lost
@@ -1999,7 +2006,10 @@ pub enum MemberChange {
         new_owner: String,
     },
     /// `changeThreshold(threshold)`.
-    Threshold { threshold: u64 },
+    Threshold {
+        #[cfg_attr(feature = "bindings", ts(type = "number"))]
+        threshold: u64,
+    },
 }
 
 /// One network's members as they stand now: `owners` in the order

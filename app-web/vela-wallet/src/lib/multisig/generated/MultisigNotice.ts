@@ -5,4 +5,4 @@ import type { MultisigAccountUpdate } from "./MultisigAccountUpdate";
  * What a machine tells the shell to route (one machine's change another
  * must hear of — the web's single store, split across cores).
  */
-export type MultisigNotice = { "kind": "account", address: string, update: MultisigAccountUpdate, } | { "kind": "activity_rows", rows: unknown[], } | { "kind": "mailbox_took", safe: string, } | { "kind": "activated", address: string | null, };
+export type MultisigNotice = { "kind": "account", address: string, update: MultisigAccountUpdate, } | { "kind": "activity_rows", rows: unknown[], } | { "kind": "mailbox_took", safe: string, } | { "kind": "activated", address: string | null, } | { "kind": "open_proposal", address: string, chain_id: number, safe_tx_hash: string, preview: unknown, } | { "kind": "outside_sign", request: unknown, };

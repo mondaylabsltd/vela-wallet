@@ -2522,73 +2522,69 @@ fn anything_else_in_the_wallets_own_words_cut_to_one_readable_line() {
 // Who an outside wallet may sign for (`signers`)
 // ---------------------------------------------------------------------------
 
-fn facts(f: impl FnOnce(&mut SignerFacts)) -> SignerFacts {
-    let mut out = SignerFacts::default();
-    f(&mut out);
-    out
-}
-
+/// The one rule of what a member is and how it signs, replayed from
+/// `tests/vectors/multisig/signers.json` (signers.test.ts, member-kind.test.ts,
+/// and the owner's signer-configuration rule).
 #[test]
-fn only_plain_accounts_never_this_devices_a_smart_account_or_a_vela_account() {
-    let owners: Vec<String> = ["here", "deployed", "indexed", "plain", "carol", "kept"]
-        .iter()
-        .map(|s| (*s).to_owned())
-        .collect();
-    let plain = outside::plain_accounts(&owners, |o| match o {
-        "here" => facts(|f| f.local = true),
-        "deployed" => facts(|f| f.code = Some(true)),
-        "indexed" => facts(|f| f.indexed = true),
-        "carol" => facts(|f| f.approved_with = Some(outside::ApprovedWith::Passkey)),
-        "kept" => facts(|f| f.kept = Some("passkey".into())),
-        _ => facts(|f| f.code = Some(false)),
-    });
-    assert_eq!(plain, vec!["plain".to_owned()]);
-}
-
-#[test]
-fn how_a_member_signs() {
-    use outside::signer_kind as kind;
-    assert_eq!(kind(&facts(|f| f.local = true)), Some(SignerKind::Here));
-    assert_eq!(kind(&facts(|f| f.indexed = true)), Some(SignerKind::Vela));
-    // Code there: a smart account — but nothing is offered on a guess.
-    assert_eq!(kind(&facts(|_| {})), None);
-    assert_eq!(
-        kind(&facts(|f| f.code = Some(true))),
-        Some(SignerKind::Vela)
+fn the_signer_vectors_hold() {
+    use vela_core::app::multisig_signers::{kind_choice, kind_evidence, KindEvidence, MemberKind};
+    let path = format!(
+        "{}/tests/vectors/multisig/signers.json",
+        env!("CARGO_MANIFEST_DIR")
     );
-    // No code, the index not answered yet: still unknown.
-    assert_eq!(kind(&facts(|f| f.code = Some(false))), None);
-    // Approved with her passkey anywhere: a Vela account, before the code read too.
+    let v: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let facts = |v: &Value| -> SignerFacts { serde_json::from_value(v.clone()).unwrap() };
+    let kinds = v["signerKind"].as_array().unwrap();
+    assert!(kinds.len() >= 20);
+    for case in kinds {
+        let got = outside::signer_kind(&facts(&case["facts"]));
+        assert_eq!(json!(got), case["expect"], "{}", case["name"]);
+    }
+    let evidence = v["evidence"].as_array().unwrap();
+    assert!(evidence.len() >= 10);
+    for case in evidence {
+        let got = kind_evidence(&facts(&case["facts"]));
+        assert_eq!(json!(got), case["expect"], "{}", case["name"]);
+    }
+    let choices = v["kindChoice"].as_array().unwrap();
+    assert!(choices.len() >= 11);
+    for case in choices {
+        let e: Option<KindEvidence> = serde_json::from_value(case["evidence"].clone()).unwrap();
+        let said: Option<MemberKind> = serde_json::from_value(case["said"].clone()).unwrap();
+        assert_eq!(
+            serde_json::to_value(kind_choice(e, said)).unwrap(),
+            case["expect"],
+            "{}",
+            case["name"]
+        );
+    }
+    for case in v["plainAccounts"].as_array().unwrap() {
+        let owners: Vec<(String, SignerFacts)> = case["owners"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|o| {
+                (
+                    o["address"].as_str().unwrap().to_owned(),
+                    facts(&o["facts"]),
+                )
+            })
+            .collect();
+        let names: Vec<String> = owners.iter().map(|(a, _)| a.clone()).collect();
+        let plain = outside::plain_accounts(&names, |a| {
+            owners.iter().find(|(o, _)| o == a).unwrap().1.clone()
+        });
+        assert_eq!(json!(plain), case["expect"], "{}", case["name"]);
+    }
+    // A Vela member on this device is never anything but `here`.
     assert_eq!(
-        kind(&facts(
-            |f| f.approved_with = Some(outside::ApprovedWith::Passkey)
-        )),
-        Some(SignerKind::Vela)
-    );
-    assert_eq!(
-        kind(&facts(|f| f.kept = Some("passkey".into()))),
-        Some(SignerKind::Vela)
-    );
-    assert_eq!(
-        kind(&facts(|f| {
-            f.code = Some(false);
-            f.index_answered = true;
-        })),
-        Some(SignerKind::Unsure)
-    );
-    assert_eq!(
-        kind(&facts(|f| {
-            f.code = Some(false);
-            f.approved_with = Some(outside::ApprovedWith::Wallet);
-        })),
-        Some(SignerKind::Wallet)
-    );
-    assert_eq!(
-        kind(&facts(|f| {
-            f.code = Some(false);
-            f.kept = Some("wallet".into());
-        })),
-        Some(SignerKind::Wallet)
+        outside::signer_kind(&SignerFacts {
+            local: true,
+            code: Some(true),
+            configured: Some(false),
+            ..SignerFacts::default()
+        }),
+        Some(SignerKind::Here)
     );
 }
 

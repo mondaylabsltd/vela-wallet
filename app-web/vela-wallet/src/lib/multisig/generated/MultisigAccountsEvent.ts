@@ -2,8 +2,10 @@
 import type { MultisigAccountUpdate } from "./MultisigAccountUpdate";
 import type { MultisigCreateChoice } from "./MultisigCreateChoice";
 import type { MultisigInvitedMember } from "./MultisigInvitedMember";
+import type { MultisigKindAsk } from "./MultisigKindAsk";
 import type { MultisigLocalAccount } from "./MultisigLocalAccount";
 import type { MultisigMemberInfo } from "./MultisigMemberInfo";
+import type { MultisigMemberKind } from "./MultisigMemberKind";
 
 export type MultisigAccountsEvent = { "type": "start", service_url: string, accounts: Array<MultisigLocalAccount>, 
 /**
@@ -18,4 +20,4 @@ chain_ids: number[] | null,
 /**
  * How long before a record not there yet is asked for once more.
  */
-wait_ms: number | null, } | { "type": "keep_found", accept_risks: boolean, } | { "type": "keep_invited", address: string, chain_ids: number[], members: Array<MultisigInvitedMember>, } | { "type": "parse_export", json: string, } | { "type": "import", address: string, accept_risks: boolean, } | { "type": "share_again", address: string, owner: string, } | { "type": "check_backup", address: string, } | { "type": "save_to_ethereum", address: string, from: string, } | { "type": "plan_rename", address: string, } | { "type": "activate", address: string | null, } | { "type": "remove", address: string, } | { "type": "set_label", address: string, label: string | null, } | { "type": "name_members", address: string, members: { [key in string]: MultisigMemberInfo }, typed: boolean, } | { "type": "set_first_run", address: string, on: boolean, } | { "type": "apply", address: string, update: MultisigAccountUpdate, };
+wait_ms: number | null, } | { "type": "keep_found", accept_risks: boolean, } | { "type": "keep_invited", address: string, chain_ids: number[], members: Array<MultisigInvitedMember>, } | { "type": "parse_export", json: string, } | { "type": "import", address: string, accept_risks: boolean, } | { "type": "share_again", address: string, owner: string, } | { "type": "check_backup", address: string, } | { "type": "save_to_ethereum", address: string, from: string, } | { "type": "plan_rename", address: string, } | { "type": "activate", address: string | null, } | { "type": "remove", address: string, } | { "type": "set_label", address: string, label: string | null, } | { "type": "name_members", address: string, members: { [key in string]: MultisigMemberInfo }, typed: boolean, } | { "type": "set_first_run", address: string, on: boolean, } | { "type": "apply", address: string, update: MultisigAccountUpdate, } | { "type": "open_link", hash: string, take_kept: boolean, } | { "type": "keep_link", hash: string, } | { "type": "close_link" } | { "type": "read_kinds", members: Array<MultisigKindAsk>, } | { "type": "pick_kind", address: string, kind: MultisigMemberKind | null, };

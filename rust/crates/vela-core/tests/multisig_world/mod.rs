@@ -369,6 +369,13 @@ pub struct World {
     pub wallet: Option<WalletSim>,
     /// The passkey fails with this detail (neither signed nor cancelled).
     pub passkey_fails: Option<String>,
+    /// What `eth_estimateGas` answers for any call (`None`: an RPC error).
+    pub estimate_gas: Option<u64>,
+    /// Accounts Vela's shared passkey signer is configured for, per chain
+    /// (`getConfiguration` non-empty there).
+    pub configured: BTreeSet<(u64, String)>,
+    /// What `RecipientRisk` answers per address (lowercase): (contract, first time).
+    pub recipients: BTreeMap<String, (Option<bool>, Option<bool>)>,
 }
 
 impl Default for World {
@@ -416,6 +423,9 @@ impl Default for World {
             peer: PeerSim::default(),
             wallet: None,
             passkey_fails: None,
+            estimate_gas: None,
+            configured: BTreeSet::new(),
+            recipients: BTreeMap::new(),
         }
     }
 }
@@ -709,6 +719,13 @@ impl World {
                 )))
             }
             "eth_call" => self.eth_call(chain, &params[0]),
+            "eth_estimateGas" => match self.estimate_gas {
+                Some(g) => ok(json!(format!("0x{g:x}"))),
+                None => Res::RpcError {
+                    code: Some(-32000),
+                    message: "gas required exceeds allowance".to_owned(),
+                },
+            },
             "eth_getBlockByNumber" => ok(json!({
                 "number": "0x64",
                 "timestamp": format!("0x{:x}", (self.now / 1000.0) as u64),
@@ -759,6 +776,19 @@ impl World {
                 code: Some(3),
                 message: "execution reverted".to_owned(),
             };
+        }
+        // `getConfiguration(address)` on Vela's shared passkey signer: a key
+        // for an account configured there, zeros for every other address.
+        if to == vela_core::safe::WEBAUTHN_SIGNER.to_ascii_lowercase()
+            && data.starts_with("0xc44b11f7")
+        {
+            let account = format!("0x{}", &data[10 + 24..10 + 64]);
+            let word = |b: &str| b.repeat(32);
+            return ok(if self.configured.contains(&(chain, account)) {
+                format!("0x{}{}{}", word("1a"), word("2b"), "0".repeat(64))
+            } else {
+                format!("0x{}", "0".repeat(192))
+            });
         }
         let Some(s) = self.safes.get(&(chain, to)) else {
             return ok("0x".to_owned());
@@ -888,10 +918,17 @@ impl World {
             Op::Simulate { .. } => Res::Simulated {
                 reply: self.sim_reply.clone(),
             },
-            Op::RecipientRisk { .. } => Res::RecipientFacts {
-                is_contract: Some(false),
-                first_time: Some(false),
-            },
+            Op::RecipientRisk { address, .. } => {
+                let (is_contract, first_time) = self
+                    .recipients
+                    .get(&address.to_ascii_lowercase())
+                    .copied()
+                    .unwrap_or((Some(false), Some(false)));
+                Res::RecipientFacts {
+                    is_contract,
+                    first_time,
+                }
+            }
             Op::UserOpStatus { .. } => match &self.user_op {
                 Some((s, tx)) => Res::UserOpStatus {
                     status: Some(s.clone()),

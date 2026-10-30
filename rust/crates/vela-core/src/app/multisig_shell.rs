@@ -250,6 +250,28 @@ pub enum Notice {
     MailboxTook { safe: String },
     /// The multisig shown is this one now (`None`: the Vela account).
     Activated { address: Option<String> },
+    /// A proposal link opened (`multisig_accounts::Event::OpenLink`): the
+    /// proposals machine opens that proposal's sheet
+    /// (`multisig_proposals::Event::OpenLinked` with these fields). `preview`:
+    /// no member of it is on this device — the multisig as read, kept
+    /// nowhere and not shown, its transaction read only (ms-21); `None`: it
+    /// is `address`, on this device and activated.
+    OpenProposal {
+        address: String,
+        #[cfg_attr(feature = "bindings", ts(type = "number"))]
+        chain_id: u64,
+        safe_tx_hash: String,
+        #[cfg_attr(feature = "bindings", ts(type = "unknown"))]
+        preview: Option<Box<MultisigAccount>>,
+    },
+    /// No member is on this device: an outside member's wallet signs this
+    /// SafeTx over a live session — the shell starts the session machine
+    /// (`multisig_outside::session::Event::Start` with this `request`) and
+    /// hands its outcome back (`multisig_proposals::Event::OutsideAnswered`).
+    OutsideSign {
+        #[cfg_attr(feature = "bindings", ts(type = "unknown"))]
+        request: Box<super::multisig_outside::session::SessionRequest>,
+    },
 }
 
 /// One change to a stored multisig, made by a machine that does not own
@@ -1683,17 +1705,7 @@ impl Chain {
                 chain_id,
                 detail: e.message(),
             })?;
-        let Some(code) = code.as_str() else {
-            return Ok(false);
-        };
-        if code == "0x" || code == "0x0" {
-            return Ok(false);
-        }
-        let lower = code.to_ascii_lowercase();
-        let delegated = lower.len() == 2 + 6 + 40
-            && lower.starts_with("0xef0100")
-            && lower[8..].bytes().all(|b| b.is_ascii_hexdigit());
-        Ok(!delegated)
+        Ok(is_contract_code(&code))
     }
 
     /// Whether `chain_id` holds the Safe v1.4.1 contracts a new multisig
@@ -1842,6 +1854,23 @@ async fn read_string<Ev: Send + 'static>(
         .await
         .ok()
         .and_then(|r| r.as_str().map(str::to_owned))
+}
+
+/// Whether an `eth_getCode` answer is contract code (`hasContractCode`):
+/// none, `0x`, and an EIP-7702 delegation (a person's wallet, which signs)
+/// are not.
+pub fn is_contract_code(code: &Value) -> bool {
+    let Some(code) = code.as_str() else {
+        return false;
+    };
+    if code == "0x" || code == "0x0" {
+        return false;
+    }
+    let lower = code.to_ascii_lowercase();
+    let delegated = lower.len() == 2 + 6 + 40
+        && lower.starts_with("0xef0100")
+        && lower[8..].bytes().all(|b| b.is_ascii_hexdigit());
+    !delegated
 }
 
 /// `eth_getCode` of each address, as the core takes it.
