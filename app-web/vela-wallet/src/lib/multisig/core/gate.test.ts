@@ -9,7 +9,7 @@
  * `a_risk_is_asked_every_signature`, `an_unchecked_network_signs_nothing_yet`).
  */
 import { readFileSync } from 'node:fs';
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { initSync } from '../../../../../../rust/pkg-web/vela_core.js';
 import { WASM_URL } from '../../../../../../rust/pkg-web/vela_core_wasm_url.js';
 

@@ -2057,7 +2057,9 @@ describe('how each missing member approves (r4-9, r4D-6)', () => {
 		expect(either).not.toBeNull();
 		// The outside wallet's link is still there, after the Vela one.
 		expect(outside).not.toBeNull();
-		expect(either!.compareDocumentPosition(outside!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(
+			either!.compareDocumentPosition(outside!) & Node.DOCUMENT_POSITION_FOLLOWING
+		).toBeTruthy();
 		// The row's live pairing is the outside wallet's own way (r7).
 		[...row.querySelectorAll('button')]
 			.find((b) => b.textContent?.trim() === 'external.signWithWallet')

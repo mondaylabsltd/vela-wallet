@@ -129,7 +129,6 @@
 	import type { ExecutionVerdict } from '../core/kernel';
 	import { memberDrift, readMemberChanges, sameAddress, transfersOf } from '../core/kernel';
 	import { connectLink, proposalLink, shareOrigin } from '../core/link';
-	import { eip55 } from '../external/eip55';
 	import { localOwners, type LocalOwner } from '../core/owners';
 	import { itemOf, linkedSource, proposals, type ProposalItem } from '../core/proposals.svelte';
 	import { multisig, type MultisigAccount } from '../core/store.svelte';
