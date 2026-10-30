@@ -261,6 +261,8 @@ struct RootView: View {
     /// "Vela 054 探针" arrived as "Va 054 探针" and an address lost its 0x.
     @State private var contactDraft: ContactsLive.ContactDraft?
     @State private var contactName = ""
+    /// The contact form's note, as typed.
+    @State private var contactNote = ""
     @State private var contactAddress = ""
     /// What is being typed into the address book's search field.
     @State private var contactQuery = ""
@@ -517,7 +519,7 @@ struct RootView: View {
             guard let key = signingTickKey, let ending = signingEnding else { return }
             try? await Task.sleep(for: .seconds(ending.aftercare.tickSeconds))
             guard !Task.isCancelled, signingEnding?.id == key else { return }
-            signingEnding = nil
+            closeLanding(ending)
         }
         // A request that asks to sign closes the account switcher it would
         // otherwise queue behind (spec 079; Android found the same stacking).
@@ -1053,6 +1055,9 @@ struct RootView: View {
                             model: walletModel,
                             loc: loc,
                             onSelectTab: selectTab,
+                            // ob-2: "Retry now" — the session publishes the
+                            // pending record again (`sync_pending`).
+                            onSyncRetry: { session.syncPending() },
                             onFlow: { enterFlow($0) },
                             onOpenActivity: { activityItemId = $0 },
                             onToggleBalance: {
@@ -1163,7 +1168,7 @@ struct RootView: View {
                     // and the balances are its alone.
                     .onChange(of: walletNetworks.chains.map(\.chainId), initial: true) { _, chains in
                         activity.spaceChains(chains)
-                        wallet.spaceChanged(chains)
+                        wallet.spaceChanged(chains, space: space.current.rawValue)
                     }
                     .task {
                         activity.open(address: session.view.address,
@@ -1204,13 +1209,23 @@ struct RootView: View {
                     .onDisappear { wallet.homePoller.homeVisible(false) }
                 case .contacts:
                     contactsSection
+                        .onAppear {
+                            // The web's contacts page: the account in front is
+                            // noted (no network read), and the send history
+                            // the suggestions come from is read again.
+                            wallet.note(address: session.view.address)
+                            contacts.historyChanged()
+                        }
                 case .settings:
                     settingsScreen()
                         // The steer is spent on arrival: the screen has
                         // already seeded its page from it, and leaving it set
                         // would send the NEXT visit to the same place for no
                         // reason.
-                        .onAppear { pendingSettingsPage = nil }
+                        .onAppear {
+                            pendingSettingsPage = nil
+                            wallet.note(address: session.view.address)
+                        }
                         .id(settingsVisit)
                 case .explore:
                     // Spec 053: 探索 is a browser. Its start page is this
@@ -1251,9 +1266,9 @@ struct RootView: View {
                         // answer, and the chip silently does nothing.
                         // Device-found: 撤销 was tapped, the sheet kept saying
                         // 无限额, and the confirm stayed shut.
-                        onAllowanceChip: { chip in signing?.guardPreset(chip) },
+                        onAllowanceChip: { chip in signing?.guardChip(chip) },
                         onAllowanceAmount: { text in signing?.guardCustomAmount(text) },
-                        onAllowanceLegChip: { leg, chip in signing?.guardLegPreset(leg, chip) },
+                        onAllowanceLegChip: { leg, chip in signing?.guardChip(chip, leg: leg) },
                         onAllowanceLegAmount: { leg, text in signing?.guardLegCustomAmount(leg, text) },
                         onFee: { signing?.feeTapped() },
                         onFeePick: { id in signing?.pickFee(id) },
@@ -1533,9 +1548,16 @@ struct RootView: View {
     private func closeSigningSheet() {
         if let live = liveSigning {
             live.swipeDismissed()
-        } else {
-            signingEnding = nil
+        } else if let ending = signingEnding {
+            closeLanding(ending)
         }
+    }
+
+    /// The ending goes, and the core hears it (`landing_closed`) while its
+    /// controller is still here — the web's `closeLanding`.
+    private func closeLanding(_ ending: SigningEnding) {
+        if let op = ending.aftercare.userOpHash { signing?.landingClosed(userOpHash: op) }
+        signingEnding = nil
     }
 
     /// The landed receipt's explorer link, on the request's own chain.
@@ -1845,6 +1867,7 @@ struct RootView: View {
                             onEdit: {
                                 contactName = contact.name ?? ""
                                 contactAddress = contact.address
+                                contactNote = contact.note ?? ""
                                 contactDraft = ContactsLive.ContactDraft(
                                     editing: contact.address,
                                     name: contactName,
@@ -1863,6 +1886,7 @@ struct RootView: View {
                             },
                             formName: $contactName,
                             formAddress: $contactAddress,
+                            formNote: $contactNote,
                             onSaveForm: { saveContactDraft() },
                             onCancelForm: { contactDraft = nil },
                             onOpenGroups: {
@@ -2013,6 +2037,7 @@ struct RootView: View {
             onAdd: {
                 contactName = ""
                 contactAddress = ""
+                contactNote = ""
                 contactDraft = ContactsLive.ContactDraft(editing: nil, name: "", address: "")
             },
             onImport: { importContacts() },
@@ -2022,6 +2047,7 @@ struct RootView: View {
             onAcknowledge: { contacts.importAcknowledged() },
             formName: $contactName,
             formAddress: $contactAddress,
+            formNote: $contactNote,
             onSaveForm: { saveContactDraft() },
             onCancelForm: { contactDraft = nil }
         )
@@ -2039,6 +2065,7 @@ struct RootView: View {
         guard var draft = contactDraft else { return nil }
         draft.name = contactName
         draft.address = contactAddress
+        draft.note = contactNote
         return draft
     }
 
@@ -2048,7 +2075,12 @@ struct RootView: View {
         guard !address.isEmpty else { return }
         // Through the intents: done once the book shows the contact; the
         // form stays open with the words in it otherwise.
-        agent.person(["type": "save_contact", "address": address, "name": contactName]) { outcome in
+        agent.person([
+            "type": "save_contact", "address": address, "name": contactName,
+            // The note as typed, cleaned as the web cleans it; an empty one
+            // clears the contact's.
+            "note": ContactsStore.cleanNote(contactNote),
+        ]) { outcome in
             if outcome.done {
                 contactDraft = nil
             } else {
@@ -2296,6 +2328,11 @@ struct RootView: View {
             .buildMobileState(.h1, loc: loc)
             .withAddress(session.view.address)
             .withName(session.view.activeName)
+            // ob-2: the wallet in front whose public record has not synced.
+            .withSync(WalletSyncLine.of(
+                unsynced: session.view.unsynced ?? [], address: session.view.address,
+                failedRounds: session.syncRounds, loc: loc
+            ))
         guard let view = wallet.balance else {
             // The drawing's "Updated 2m" is a fixture's; nothing has been read.
             base.balance.refresh = nil
@@ -2731,6 +2768,9 @@ struct RootView: View {
         sweepPicking = false
         // A journey that starts fresh starts unfiltered too.
         sendClassFilter = "all"
+        // The picker's suggestions come from the send history: read it again
+        // (the web's `openSend`, `history_changed`).
+        contacts.historyChanged()
         let record = await accounts.loadAccounts().first {
             ($0["address"] as? String)?.lowercased() == session.view.address.lowercased()
         }
@@ -2933,7 +2973,11 @@ struct RootView: View {
             handoffKeyLabel: live?.venueKeyLabel,
             handoffLine: live?.venuePage.map { SignerPageChecks.shared.line(for: $0) },
             handoffPageName: live?.venuePage.flatMap(savedPageName),
-            networks: walletNetworks
+            networks: walletNetworks,
+            // cs-14: a fetched description names the descriptor service —
+            // the person's chain-data endpoint, else Vela's.
+            descriptorHost: URL(string: (shelf.readObject(VelaStore.Key.serviceEndpoints)["ethereumDataURL"] as? String)
+                .flatMap { $0.isEmpty ? nil : $0 } ?? NetDefaults.ethereumDataURL)?.host ?? ""
         )
     }
 
@@ -3549,9 +3593,9 @@ struct RootView: View {
                 SigningSheet(
                     model: model,
                     onConfirm: { signing?.approve() },
-                    onAllowanceChip: { chip in signing?.guardPreset(chip) },
+                    onAllowanceChip: { chip in signing?.guardChip(chip) },
                     onAllowanceAmount: { text in signing?.guardCustomAmount(text) },
-                    onAllowanceLegChip: { leg, chip in signing?.guardLegPreset(leg, chip) },
+                    onAllowanceLegChip: { leg, chip in signing?.guardChip(chip, leg: leg) },
                     onAllowanceLegAmount: { leg, text in signing?.guardLegCustomAmount(leg, text) },
                     onFee: { signing?.feeTapped() },
                     onFeePick: { id in signing?.pickFee(id) },

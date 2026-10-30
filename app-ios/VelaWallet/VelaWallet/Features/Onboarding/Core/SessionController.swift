@@ -133,7 +133,10 @@ final class SessionController {
     static let syncRetryMs: [UInt64] = [15_000, 30_000, 60_000, 120_000, 300_000]
 
     /// How many automatic rounds ran since the last time nothing was owed.
-    @ObservationIgnored private(set) var syncRounds = 0
+    /// How many of the widening retries have failed — read by the home's
+    /// sync line (ob-2: "syncing…" turns "not synced yet" after two), so
+    /// observed.
+    private(set) var syncRounds = 0
     @ObservationIgnored private var syncTimer: Task<Void, Never>?
 
     /// Keep asking while the core says a wallet is still owed and it can

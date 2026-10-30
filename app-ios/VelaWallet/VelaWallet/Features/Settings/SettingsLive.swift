@@ -1248,12 +1248,21 @@ enum SettingsLive {
             guard usd.isFinite else { continue }
             perChain[token.chainId, default: 0] += usd
         }
+        // Owner decision 2026-10-28: a chain public nodes serve because the
+        // person's own is not answering is read — and said: listed with what
+        // it holds (nothing, if nothing), "Using public nodes" beside it.
+        let fallback = Set(balance.fallbackChainIds ?? [])
+        for id in fallback where perChain[id] == nil { perChain[id] = 0 }
         let done = perChain
             .filter { id, _ in !pending.contains(where: { $0.id == String(id) }) }
             .sorted { $0.value > $1.value }
             .map { id, usd in
                 BalanceDetailRowModel(
                     id: String(id), mark: row(id), name: chainName(id),
+                    status: fallback.contains(id)
+                        ? loc.t(balance.fallbackStatusKey ?? "home.balanceDetailStatusPublicNodes")
+                        : nil,
+                    tone: fallback.contains(id) ? .warn : .neutral,
                     // Withheld: the row is its mark and its name, at the same
                     // height — the figure lands beside them.
                     amount: balance.hidden ? mask : money(usd)

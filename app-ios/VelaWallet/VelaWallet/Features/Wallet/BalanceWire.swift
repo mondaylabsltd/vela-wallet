@@ -193,6 +193,11 @@ struct BalanceViewWire: Decodable, Equatable {
     /// in `unreachableNetworks`: nothing there is the network's doing. The
     /// core always sends it; absent (a hand-written view) reads as none.
     var internalChainIds: [Int]? = nil
+    /// "Only use my node" off and the person's node not answering (owner
+    /// decision 2026-10-28): the chains public nodes serve for now, and the
+    /// breakdown's short status for them ("Using public nodes").
+    var fallbackChainIds: [Int]? = nil
+    var fallbackStatusKey: String? = nil
     /// The home's line when a read failed INSIDE Vela
     /// (`componentsUi.gas.reasonInternal`, the fee's own sentence for the same
     /// fault): drawn where the unreachable line goes, in place of any "Can't

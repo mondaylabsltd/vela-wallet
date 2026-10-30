@@ -160,6 +160,10 @@ final class UserOpSpine {
         /// The chain head read before the first POST (ruling 8); `nil` when
         /// the chain could not say.
         let submitBlock: UInt64?
+        /// The EntryPoint nonce the op was signed with (round 3, send-5): what
+        /// lets the tracker read the account's nonce while a may-have-been-
+        /// sent op is in doubt (`submit_facts`).
+        var nonce: String? = nil
     }
 
     struct Refused: Error {
@@ -517,9 +521,9 @@ final class UserOpSpine {
             chainId: chainId, opJson: signedJson, localHash: localHash, tier: quoted.tier
         ) {
         case .accepted(let hash):
-            return Submitted(userOpHash: hash, maybeSent: false, submitBlock: submitBlock)
+            return Submitted(userOpHash: hash, maybeSent: false, submitBlock: submitBlock, nonce: nonce)
         case .maybeSent(let hash):
-            return Submitted(userOpHash: hash, maybeSent: true, submitBlock: submitBlock)
+            return Submitted(userOpHash: hash, maybeSent: true, submitBlock: submitBlock, nonce: nonce)
         case .notSent(nil):
             throw Refused(failure: .notSent)
         case .notSent(.relayerUnavailable?):

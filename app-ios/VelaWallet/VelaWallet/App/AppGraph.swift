@@ -359,6 +359,9 @@ final class AppGraph {
                 // and its answer is the send machine's outcome.
                 addNetwork: { [weak settingsStore] chainId in
                     await settingsStore?.addNetworkForSend(chainId: chainId) ?? ["type": "error"]
+                },
+                submitFacts: { [weak trackerStore] hash, nonce in
+                    trackerStore?.submitFacts(userOpHash: hash, nonce: nonce)
                 }
             )
         )

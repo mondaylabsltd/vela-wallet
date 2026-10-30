@@ -101,6 +101,10 @@ final class SendExecutor {
         /// adds the chain by id and says how it went, as a
         /// `SendAddNetworkOutcome`. Unwired, the add did not happen.
         var addNetwork: (_ chainId: Int) async -> [String: Any] = { _ in ["type": "error"] }
+        /// Round 3 (send-5): what a may-have-been-sent submit knew of its op —
+        /// the nonce it signed — to the tracker, after the hand-off that
+        /// named its records (`submit_facts`).
+        var submitFacts: (_ userOpHash: String, _ nonce: String) -> Void = { _, _ in }
     }
 
     /// How long `fetch_tokens` waits for the asset list's first round before
@@ -138,6 +142,10 @@ final class SendExecutor {
 
     /// The reads-before-the-passkey bounds (r5reg-3). A test seam.
     private let prepare: PrepareBounds
+
+    /// The nonce each may-have-been-sent op was signed with, by its hash, until
+    /// the tracker has been handed it (`submit_facts`).
+    private var signedNonces: [String: String] = [:]
 
     /// The core's clearance for each POST (RJ1).
     private let gate = WriteAheadGate()
@@ -281,6 +289,12 @@ final class SendExecutor {
                 // Who signed it (PR 2 §3) — what holds this account's nonce.
                 sender: operation["sender"] as? String
             ))
+            // Round 3: the nonce a may-have-been-sent op signed, after the
+            // hand-off — the tracker reads the account's nonce while in doubt.
+            let handed = (operation["user_op_hash"] as? String ?? "").lowercased()
+            if let nonce = signedNonces.removeValue(forKey: handed), operation["maybe_sent"] as? Bool == true {
+                ports.submitFacts(handed, nonce)
+            }
             return CoreJSON.string(["type": "track_handed_off"])
 
         // The records are on disk and the tracker has the op (RJ1): the
@@ -736,6 +750,9 @@ final class SendExecutor {
         defer { watch.cancel() }
         do {
             let submitted = try await task.value
+            if submitted.maybeSent, let nonce = submitted.nonce {
+                signedNonces[submitted.userOpHash.lowercased()] = nonce
+            }
             // A lost reply is not a failure (spec 082 RA4): the payment may be
             // on its way, so it is recorded and followed under the local hash,
             // and the core words it "may have been sent" with no success buzz.
