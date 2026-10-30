@@ -16,7 +16,11 @@
 //!   is read or kept, and the add sheet says why;
 //! - a link opened with no Vela account yet is kept for a day
 //!   ([`Event::KeepLink`]) and opened once the wallet is there
-//!   (`OpenLink { take_kept: true }`).
+//!   (`OpenLink { take_kept: true }`);
+//! - a proposal link waiting for its network is the machine's record
+//!   ([`link::PENDING_LINK_KEY`], a day): a reload still waits for it, the
+//!   network added after the reload opens it, and the person closing its
+//!   sheet lets it go ([`Event::DropLink`]).
 
 use serde::{Deserialize, Serialize};
 
@@ -72,6 +76,86 @@ pub struct LinkState {
     pub stand: Option<LinkStand>,
     /// A link waiting for its network (or for its multisig to be added).
     pending: Option<ProposalLink>,
+    /// The pending link is in the store (it waits for its network).
+    held: bool,
+}
+
+/// ms-22: `l` waits for its network — kept in the store, so a reload (the
+/// Add network wizard, another tab) still opens it once the network is here.
+async fn hold(io: &Io<Event>, st: &Shared<State>, l: &ProposalLink) {
+    let now = io.now().await;
+    {
+        let mut s = lock(st);
+        s.link.pending = Some(l.clone());
+        s.link.held = true;
+        s.link.stand = Some(LinkStand::MissingNetwork { link: l.clone() });
+    }
+    io.store(
+        link::PENDING_LINK_KEY,
+        link::keep_link(&link::proposal_hash(l), now),
+    )
+    .await;
+}
+
+/// The stored link waiting for its network is no longer (opened, replaced
+/// or let go).
+pub async fn forget(io: &Io<Event>, st: &Shared<State>) {
+    let held = std::mem::take(&mut lock(st).link.held);
+    if held {
+        io.store(link::PENDING_LINK_KEY, None).await;
+    }
+}
+
+/// The person closed the missing network's sheet: the link waiting for it
+/// is let go (they open it again by hand).
+pub async fn drop_pending(io: &Io<Event>, st: &Shared<State>) {
+    {
+        let mut s = lock(st);
+        s.link.pending = None;
+        s.link.held = false;
+    }
+    io.store(link::PENDING_LINK_KEY, None).await;
+}
+
+/// On start (and a reload): the link that waited for its network before —
+/// opened now if the network is here, else waited for again, quietly (its
+/// sheet was closed for the wizard); one older than a day is dropped.
+pub async fn restore(io: &Io<Event>, st: &Shared<State>) {
+    let stored = io
+        .load(&[link::PENDING_LINK_KEY])
+        .await
+        .get(link::PENDING_LINK_KEY)
+        .cloned()
+        .flatten();
+    let Some(stored) = stored else {
+        // Let go in another document: not waited for here either.
+        let mut s = lock(st);
+        if std::mem::take(&mut s.link.held) {
+            s.link.pending = None;
+        }
+        return;
+    };
+    let now = io.now().await;
+    let waiting = link::take_kept_link(Some(&stored), now)
+        .as_deref()
+        .and_then(link::parse_proposal_link);
+    let Some(waiting) = waiting else {
+        lock(st).link.held = false;
+        io.store(link::PENDING_LINK_KEY, None).await;
+        return;
+    };
+    let here = {
+        let mut s = lock(st);
+        s.link.held = true;
+        let here = s.has_network(waiting.chain_id);
+        if !here {
+            s.link.pending = Some(waiting.clone());
+        }
+        here
+    };
+    if here {
+        open_proposal(io, st, waiting).await;
+    }
 }
 
 /// The pending link, once its network is on this device.
@@ -167,11 +251,10 @@ pub async fn open(io: &Io<Event>, st: &Shared<State>, hash: String, take_kept: b
 /// A proposal link's transaction (`openProposal` + `openProposalLink`).
 pub async fn open_proposal(io: &Io<Event>, st: &Shared<State>, l: ProposalLink) {
     if !lock(st).has_network(l.chain_id) {
-        let mut s = lock(st);
-        s.link.pending = Some(l.clone());
-        s.link.stand = Some(LinkStand::MissingNetwork { link: l });
-        return;
+        return hold(io, st, &l).await;
     }
+    // One link waits at a time: this one is in front now.
+    forget(io, st).await;
     say(st, LinkStand::Opening { link: l.clone() });
     io.emit(Event::Changed);
     let (stored, locals) = {

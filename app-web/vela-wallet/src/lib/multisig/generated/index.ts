@@ -19,6 +19,7 @@ export * from './MultisigChainState';
 export * from './MultisigChangeGroup';
 export * from './MultisigChangePart';
 export * from './MultisigCreateChoice';
+export * from './MultisigCreateDraft';
 export * from './MultisigCreateView';
 export * from './MultisigDappAnswer';
 export * from './MultisigDappError';

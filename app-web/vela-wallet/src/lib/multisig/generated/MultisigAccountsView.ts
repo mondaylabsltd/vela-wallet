@@ -6,6 +6,7 @@ import type { MultisigCreateView } from "./MultisigCreateView";
 import type { MultisigImportView } from "./MultisigImportView";
 import type { MultisigKindChoice } from "./MultisigKindChoice";
 import type { MultisigLinkStand } from "./MultisigLinkStand";
+import type { MultisigMemberInfo } from "./MultisigMemberInfo";
 import type { MultisigPhase } from "./MultisigPhase";
 import type { MultisigRenamePlan } from "./MultisigRenamePlan";
 
@@ -29,4 +30,10 @@ link: MultisigLinkStand | null,
  * found, a smart contract account, "Other wallet" hinted, or asked
  * (`kindChoice`).
  */
-member_kinds: { [key in string]: MultisigKindChoice }, };
+member_kinds: { [key in string]: MultisigKindChoice }, 
+/**
+ * r4D-5: what the multisigs here keep of each member, by lowercase
+ * address — the first that names it, the first that says its kind
+ * (`keptMember`). Labels only, never authority.
+ */
+known_members: { [key in string]: MultisigMemberInfo }, };

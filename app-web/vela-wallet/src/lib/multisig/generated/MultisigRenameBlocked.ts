@@ -3,4 +3,4 @@
 /**
  * Why a record cannot be renamed from here (`renameBlocked`).
  */
-export type MultisigRenameBlocked = "unrecorded" | "unreachable" | "elsewhere";
+export type MultisigRenameBlocked = "unrecorded" | "pending" | "unreachable" | "elsewhere";

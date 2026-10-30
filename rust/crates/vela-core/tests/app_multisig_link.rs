@@ -20,7 +20,9 @@ use vela_core::app::multisig_proposals::flows::LinkedStand;
 use vela_core::app::multisig_proposals::{self as proposals, MultisigProposals};
 use vela_core::app::multisig_shell::{keys, MultisigAccount, Notice};
 use vela_core::multisig;
-use vela_core::multisig_link::{AddLinkFault, BrokenLink, KEPT_LINK_KEY};
+use vela_core::multisig_link::{
+    AddLinkFault, BrokenLink, KEPT_LINK_KEY, KEPT_LINK_MS, PENDING_LINK_KEY,
+};
 use world::{fixture, genesis, settle, stored_row, DeployedSafe, World, SERVICE};
 
 type Sut = DomainDriver<MultisigAccounts>;
@@ -346,6 +348,105 @@ fn a_link_kept_through_sign_in_opens_once() {
     );
     assert!(matches!(sut.view().link, Some(LinkStand::Preview { .. })));
     assert!(!world.store.contains_key(KEPT_LINK_KEY), "taken once");
+}
+
+/// ms-22 (a regression): a link waiting for a network this device lacks is
+/// the machine’s record — a reload still waits for it, and the network
+/// added after the reload opens it, once.
+#[test]
+fn a_link_waiting_for_its_network_survives_a_reload() {
+    let g = genesis(&[OUTSIDE], 1, "0x5a");
+    let mut world = World::default();
+    world.record(&g.address, &g.genesis, false);
+    let mut sut = started(&mut world, vec![100]);
+    run(&mut sut, &mut world, open(&link(8453, &g.address, HASH)));
+    assert!(matches!(
+        sut.view().link,
+        Some(LinkStand::MissingNetwork { .. })
+    ));
+    assert!(world.store.contains_key(PENDING_LINK_KEY));
+    // The page reloads (the Add network wizard): still waiting, said nowhere.
+    let mut sut = started(&mut world, vec![100]);
+    assert_eq!(sut.view().link, None, "its sheet was closed for the wizard");
+    assert!(world.store.contains_key(PENDING_LINK_KEY), "still waiting");
+    assert!(opened(&world).is_empty());
+    run(
+        &mut sut,
+        &mut world,
+        Event::Networks {
+            networks: vec![100, 8453],
+        },
+    );
+    assert!(matches!(sut.view().link, Some(LinkStand::Preview { .. })));
+    assert_eq!(opened(&world).len(), 1);
+    assert!(
+        !world.store.contains_key(PENDING_LINK_KEY),
+        "opened: let go"
+    );
+    run(
+        &mut sut,
+        &mut world,
+        Event::Networks {
+            networks: vec![100, 8453, 10],
+        },
+    );
+    assert_eq!(opened(&world).len(), 1, "opened once");
+}
+
+/// The network was added and the page came back with it: opened on start.
+#[test]
+fn a_network_added_before_the_reload_opens_the_link_on_start() {
+    let g = genesis(&[OUTSIDE], 1, "0x5b");
+    let mut world = World::default();
+    world.record(&g.address, &g.genesis, false);
+    let mut sut = started(&mut world, vec![100]);
+    run(&mut sut, &mut world, open(&link(8453, &g.address, HASH)));
+    let sut2 = started(&mut world, vec![100, 8453]);
+    drop(sut);
+    assert!(matches!(sut2.view().link, Some(LinkStand::Preview { .. })));
+    assert_eq!(opened(&world).len(), 1);
+    assert!(!world.store.contains_key(PENDING_LINK_KEY));
+}
+
+/// A day later it is no longer waited for; closing its sheet lets it go too.
+#[test]
+fn a_waiting_link_is_dropped_after_a_day_or_when_its_sheet_is_closed() {
+    let g = genesis(&[OUTSIDE], 1, "0x5c");
+    let mut world = World::default();
+    world.record(&g.address, &g.genesis, false);
+    let mut sut = started(&mut world, vec![100]);
+    run(&mut sut, &mut world, open(&link(8453, &g.address, HASH)));
+    world.now += KEPT_LINK_MS + 1.0;
+    let mut sut = started(&mut world, vec![100]);
+    assert!(
+        !world.store.contains_key(PENDING_LINK_KEY),
+        "expired: dropped"
+    );
+    run(
+        &mut sut,
+        &mut world,
+        Event::Networks {
+            networks: vec![100, 8453],
+        },
+    );
+    assert!(opened(&world).is_empty());
+
+    let mut sut = started(&mut world, vec![100]);
+    run(&mut sut, &mut world, open(&link(42161, &g.address, HASH)));
+    assert!(world.store.contains_key(PENDING_LINK_KEY));
+    run(&mut sut, &mut world, Event::DropLink);
+    assert!(!world.store.contains_key(PENDING_LINK_KEY), "let go");
+    run(
+        &mut sut,
+        &mut world,
+        Event::Networks {
+            networks: vec![100, 42161],
+        },
+    );
+    assert!(
+        opened(&world).is_empty(),
+        "the person closed it: nothing opens"
+    );
 }
 
 // -- the proposals machine's side: the linked proposal's sheet ------------------------------

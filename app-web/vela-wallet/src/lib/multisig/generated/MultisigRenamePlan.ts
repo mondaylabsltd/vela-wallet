@@ -9,4 +9,8 @@ export type MultisigRenamePlan = { chain_id: number | null, deployed: boolean | 
 /**
  * r4a-12: why there is no chain — each said as itself.
  */
-blocked: MultisigRenameBlocked | null, };
+blocked: MultisigRenameBlocked | null, 
+/**
+ * r7-10: where a record on its way lands (the service's home chain).
+ */
+lands_on: number | null, };

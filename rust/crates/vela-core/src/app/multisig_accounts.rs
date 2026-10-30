@@ -63,6 +63,9 @@ pub const DISCOVER_EVERY_MS: f64 = 60.0 * 60.0 * 1000.0;
 const MAILBOX_READS_AT_ONCE: usize = 3;
 /// Ethereum, where a backup of the record goes.
 pub const ETHEREUM: u64 = 1;
+/// r7-9: where the create sheet's draft is kept until it is created or
+/// discarded (leaving the sheet loses nothing).
+pub const CREATE_DRAFT_KEY: &str = "vela.multisigCreateDraft";
 const GET_THRESHOLD_CALL: &str = "0xe75235b8";
 const IS_RECORDED: &str = "0xba340d1c";
 
@@ -161,6 +164,15 @@ pub enum Event {
     Create {
         choice: CreateChoice,
     },
+    /// r7-9: what the create sheet holds now — kept (in the store) until it
+    /// is created or discarded, and handed back when the sheet opens again
+    /// ([`CreateView::kept`]). The members' kinds are the machine's own
+    /// picks ([`Event::PickKind`]); a blank sheet keeps nothing.
+    KeepDraft {
+        draft: CreateDraft,
+    },
+    /// r7-9: the person started over: the kept draft goes.
+    DiscardDraft,
     /// Resolve an ENS name typed as an address or a member.
     ResolveEns {
         name: String,
@@ -272,6 +284,19 @@ pub enum Event {
     },
     /// The link's sheet closed.
     CloseLink,
+    /// The person closed the missing network's sheet: the link waiting for
+    /// that network is let go (it is opened again by hand).
+    DropLink,
+    /// §3.5: who can act for `address` on `chain_id`, read now unless it was
+    /// this session (or is being read) — also a network it is not used on
+    /// yet. A network that does not answer is no verdict: asked again next
+    /// time. Where it stands: [`AccountRow::checked_on`] /
+    /// [`AccountRow::checking_on`], its findings in the account's.
+    CheckOn {
+        address: String,
+        #[cfg_attr(feature = "bindings", ts(type = "number"))]
+        chain_id: u64,
+    },
     /// r7: read what the chain says of members being added (the create
     /// sheet's owners on the networks it may be used on; an import's members
     /// on the networks the export lists them on): their kind choices are
@@ -285,6 +310,40 @@ pub enum Event {
         address: String,
         kind: Option<MemberKind>,
     },
+}
+
+/// r7-9: the create sheet's draft, as the person left it.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "MultisigCreateDraft"))]
+pub struct CreateDraft {
+    /// The members, in their order.
+    pub owners: Vec<String>,
+    /// What the person said of each (a name; the kind picked), by address.
+    #[serde(default)]
+    pub members: BTreeMap<String, MemberInfo>,
+    #[serde(default)]
+    pub name: String,
+    #[cfg_attr(feature = "bindings", ts(type = "number"))]
+    pub threshold: u64,
+    /// The first network picked, if any.
+    #[serde(default)]
+    #[cfg_attr(feature = "bindings", ts(type = "number | null"))]
+    pub chain_id: Option<u64>,
+}
+
+impl CreateDraft {
+    /// Nothing the person entered: no name, no member besides the one the
+    /// sheet starts with, nothing said of anyone, no network picked.
+    pub fn is_blank(&self) -> bool {
+        self.name.trim().is_empty()
+            && self.owners.len() <= 1
+            && self.chain_id.is_none()
+            && self
+                .members
+                .values()
+                .all(|m| m.name.as_deref().is_none_or(|n| n.trim().is_empty()) && m.kind.is_none())
+    }
 }
 
 /// A member whose kind is read, and the networks to read it on.
@@ -426,6 +485,14 @@ pub struct CreateView {
     /// The Safe contracts per network asked about (`present` / `missing` / `unknown`).
     #[cfg_attr(feature = "bindings", ts(type = "Record<string, unknown>"))]
     pub networks: BTreeMap<u64, Value>,
+    /// r7-9: this device's networks of the OTHER space (mainnets or
+    /// testnets), which the sheet does not offer: said, with how to get there.
+    #[serde(default)]
+    #[cfg_attr(feature = "bindings", ts(type = "number[]"))]
+    pub other_space: Vec<u64>,
+    /// r7-9: the draft kept from before (`None`: none) — the sheet opens on it.
+    #[serde(default)]
+    pub kept: Option<CreateDraft>,
 }
 
 /// The add sheet (and a link's read without keeping).
@@ -463,6 +530,10 @@ pub struct RenamePlan {
     /// r4a-12: why there is no chain — each said as itself.
     #[serde(default)]
     pub blocked: Option<RenameBlocked>,
+    /// r7-10: where a record on its way lands (the service's home chain).
+    #[serde(default)]
+    #[cfg_attr(feature = "bindings", ts(type = "number | null"))]
+    pub lands_on: Option<u64>,
 }
 
 /// Why a record cannot be renamed from here (`renameBlocked`).
@@ -470,8 +541,12 @@ pub struct RenamePlan {
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "MultisigRenameBlocked"))]
 pub enum RenameBlocked {
-    /// Its record is not saved yet: nothing to rename.
+    /// Its record is not saved: nothing to rename.
     Unrecorded,
+    /// r7-10: its record is on its way (held by the service, or asked for
+    /// from this device) and has not landed on chain yet: renamed once it
+    /// lands ([`RenamePlan::lands_on`]) — nothing is lost.
+    Pending,
     /// The service could not be asked.
     Unreachable,
     /// Held only on chains this device lacks.
@@ -497,6 +572,13 @@ pub struct AccountRow {
     /// Networks where its genesis is refused: read-only there.
     #[cfg_attr(feature = "bindings", ts(type = "number[]"))]
     pub refused_on: Vec<u64>,
+    /// §3.5: networks whose verdict is this session's ([`Event::CheckOn`],
+    /// the re-check, another machine's): its findings there are current.
+    #[cfg_attr(feature = "bindings", ts(type = "number[]"))]
+    pub checked_on: Vec<u64>,
+    /// Networks being read now.
+    #[cfg_attr(feature = "bindings", ts(type = "number[]"))]
+    pub checking_on: Vec<u64>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -524,6 +606,10 @@ pub struct MultisigAccountsView {
     /// found, a smart contract account, "Other wallet" hinted, or asked
     /// (`kindChoice`).
     pub member_kinds: BTreeMap<String, KindChoice>,
+    /// r4D-5: what the multisigs here keep of each member, by lowercase
+    /// address — the first that names it, the first that says its kind
+    /// (`keptMember`). Labels only, never authority.
+    pub known_members: BTreeMap<String, MemberInfo>,
 }
 
 // ---------------------------------------------------------------------------
@@ -549,6 +635,10 @@ pub struct State {
     checked: BTreeSet<String>,
     discovered: BTreeSet<String>,
     verdicts: BTreeMap<String, Vec<Value>>,
+    /// Verdicts being read (`address:chain`): one read per question.
+    checking: BTreeSet<String>,
+    /// r7-9: the create sheet's draft, kept in the store.
+    kept_draft: Option<CreateDraft>,
     salt: Option<String>,
     draft: Option<(Vec<String>, u64, String)>,
     found: Option<(MultisigAccount, Vec<Value>)>,
@@ -631,6 +721,36 @@ impl State {
                 ))
             })
             .collect()
+    }
+
+    /// `draft` with each member's kind as the person picked it here (only
+    /// a pick: what the chains say is read again when the sheet opens).
+    fn with_picks(&self, mut draft: CreateDraft) -> CreateDraft {
+        let mut members = BTreeMap::new();
+        for o in &draft.owners {
+            let said = draft
+                .members
+                .iter()
+                .find(|(a, _)| same_address(a, o))
+                .map(|(_, i)| i.clone())
+                .unwrap_or_default();
+            let info = MemberInfo {
+                name: said
+                    .name
+                    .map(|n| n.trim().to_owned())
+                    .filter(|n| !n.is_empty()),
+                kind: self
+                    .kind_picks
+                    .get(&o.to_ascii_lowercase())
+                    .map(|k| k.stored().to_owned()),
+                typed: None,
+            };
+            if info.name.is_some() || info.kind.is_some() {
+                members.insert(o.clone(), info);
+            }
+        }
+        draft.members = members;
+        draft
     }
 
     fn find(&self, address: &str) -> Option<&MultisigAccount> {
@@ -924,13 +1044,48 @@ impl App for MultisigAccounts {
                 })
             }
             Event::PickKind { address, kind } => {
-                let mut s = lock(&model.state);
-                let key = address.to_ascii_lowercase();
-                match kind {
-                    Some(k) => s.kind_picks.insert(key, k),
-                    None => s.kind_picks.remove(&key),
+                let drafted = {
+                    let mut s = lock(&model.state);
+                    let key = address.to_ascii_lowercase();
+                    match kind {
+                        Some(k) => s.kind_picks.insert(key, k),
+                        None => s.kind_picks.remove(&key),
+                    };
+                    // A member of the kept draft: kept with it.
+                    match s.kept_draft.clone() {
+                        Some(d) if d.owners.iter().any(|o| same_address(o, &address)) => {
+                            let d = s.with_picks(d);
+                            s.kept_draft = Some(d.clone());
+                            Some(d)
+                        }
+                        _ => None,
+                    }
                 };
-                render()
+                match drafted {
+                    Some(d) => flow(model, move |io, _| async move {
+                        store_draft(&io, Some(&d)).await;
+                    }),
+                    None => render(),
+                }
+            }
+            Event::KeepDraft { draft } => {
+                let draft = {
+                    let mut s = lock(&model.state);
+                    let draft = s.with_picks(draft);
+                    let draft = (!draft.is_blank()).then_some(draft);
+                    if s.kept_draft == draft {
+                        return render();
+                    }
+                    s.kept_draft.clone_from(&draft);
+                    draft
+                };
+                flow(model, move |io, _| async move {
+                    store_draft(&io, draft.as_ref()).await;
+                })
+            }
+            Event::DiscardDraft => {
+                lock(&model.state).kept_draft = None;
+                flow(model, |io, _| async move { store_draft(&io, None).await })
             }
             Event::Start {
                 service_url,
@@ -972,6 +1127,44 @@ impl App for MultisigAccounts {
             Event::CloseLink => {
                 lock(&model.state).link.stand = None;
                 render()
+            }
+            Event::DropLink => flow(model, |io, st| async move {
+                link::drop_pending(&io, &st).await;
+            }),
+            Event::CheckOn { address, chain_id } => {
+                let key = verdict_key(&address, chain_id);
+                let account = {
+                    let mut s = lock(&model.state);
+                    let account = s.find(&address).cloned();
+                    match account {
+                        Some(a)
+                            if s.has_network(chain_id)
+                                && !s.verdicts.contains_key(&key)
+                                && s.checking.insert(key.clone()) =>
+                        {
+                            a
+                        }
+                        _ => return render(),
+                    }
+                };
+                flow(model, move |io, st| async move {
+                    let found =
+                        shell::judge(&io, chain_id, &account.address, &account.genesis).await;
+                    let changed = {
+                        let mut s = lock(&st);
+                        s.checking.remove(&key);
+                        match found {
+                            Some(found) => {
+                                s.verdicts.insert(key, found.clone());
+                                s.set_findings_on(&account.address, chain_id, &found)
+                            }
+                            None => false,
+                        }
+                    };
+                    if changed {
+                        save(&io, &st).await;
+                    }
+                })
             }
             Event::Space { chain_ids } => {
                 lock(&model.state).space = Some(chain_ids);
@@ -1331,7 +1524,14 @@ impl App for MultisigAccounts {
                         }
                         ids
                     };
+                    let prefix = format!("{}:", a.address.to_ascii_lowercase());
+                    let session = |keys: &mut dyn Iterator<Item = &String>| -> Vec<u64> {
+                        keys.filter_map(|k| k.strip_prefix(&prefix)?.parse().ok())
+                            .collect()
+                    };
                     AccountRow {
+                        checked_on: session(&mut s.verdicts.keys()),
+                        checking_on: session(&mut s.checking.iter()),
                         name: a
                             .genesis
                             .name
@@ -1351,7 +1551,21 @@ impl App for MultisigAccounts {
                 })
                 .collect(),
             active: s.active.clone(),
-            create: s.create.clone(),
+            create: CreateView {
+                other_space: s
+                    .space
+                    .as_ref()
+                    .map(|space| {
+                        s.networks
+                            .iter()
+                            .filter(|id| !space.contains(id))
+                            .copied()
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                kept: s.kept_draft.clone(),
+                ..s.create.clone()
+            },
             add: s.add.clone(),
             import: s.import.clone(),
             backup: s.backup.clone(),
@@ -1361,6 +1575,7 @@ impl App for MultisigAccounts {
             service_down,
             link: s.link.stand.clone(),
             member_kinds: s.member_kinds(),
+            known_members: known_members(&s.accounts),
         }
     }
 }
@@ -1368,6 +1583,21 @@ impl App for MultisigAccounts {
 // ---------------------------------------------------------------------------
 // Store
 // ---------------------------------------------------------------------------
+
+/// What the multisigs here keep of each member (`kept_member` for every one).
+fn known_members(accounts: &[MultisigAccount]) -> BTreeMap<String, MemberInfo> {
+    let mut out: BTreeMap<String, MemberInfo> = BTreeMap::new();
+    for (key, info) in accounts.iter().filter_map(|a| a.members.as_ref()).flatten() {
+        let known = out.entry(key.to_ascii_lowercase()).or_default();
+        if known.name.is_none() {
+            known.name.clone_from(&info.name);
+        }
+        if known.kind.is_none() {
+            known.kind.clone_from(&info.kind);
+        }
+    }
+    out
+}
 
 fn hex_prefixed(hex: &str) -> String {
     if hex.starts_with("0x") {
@@ -1396,6 +1626,7 @@ async fn start(io: &Io<Event>, st: &Shared<State>) {
             keys::PENDING_PROOFS,
             keys::DISCOVERED,
             keys::DEPLOYED,
+            CREATE_DRAFT_KEY,
         ])
         .await;
     let get = |k: &str| loaded.get(k).cloned().flatten();
@@ -1410,9 +1641,28 @@ async fn start(io: &Io<Event>, st: &Shared<State>) {
             .and_then(|r| serde_json::from_str(&r).ok())
             .unwrap_or_default();
         s.chain.seed_deployed(get(keys::DEPLOYED).as_deref());
+        s.kept_draft = get(CREATE_DRAFT_KEY)
+            .and_then(|r| serde_json::from_str::<CreateDraft>(&r).ok())
+            .filter(|d| !d.is_blank());
+        // The kinds the person picked in it are their word again.
+        if let Some(d) = s.kept_draft.clone() {
+            for (address, info) in &d.members {
+                if let Some(kind) = info.kind.as_deref().and_then(MemberKind::from_stored) {
+                    s.kind_picks.insert(address.to_ascii_lowercase(), kind);
+                }
+            }
+        }
         s.loaded = true;
     }
     io.emit(Event::Changed);
+    // ms-22: a link that waited for its network before the reload.
+    link::restore(io, st).await;
+}
+
+/// r7-9: the create sheet's draft in the store (`None`: none).
+async fn store_draft(io: &Io<Event>, draft: Option<&CreateDraft>) {
+    let json = draft.and_then(|d| serde_json::to_string(d).ok());
+    io.store(CREATE_DRAFT_KEY, json).await;
 }
 
 async fn save(io: &Io<Event>, st: &Shared<State>) {
@@ -1640,6 +1890,10 @@ async fn create(io: &Io<Event>, st: &Shared<State>, choice: CreateChoice) {
     save_proofs(io, st).await;
     save(io, st).await;
     activate(io, st, Some(kept.address.clone())).await;
+    // r7-9: created: its draft is done with.
+    if lock(st).kept_draft.take().is_some() {
+        store_draft(io, None).await;
+    }
     io.emit(Event::Changed);
     let mut refused = None;
     let recorded = match record(io, &service, &draft.address, &draft.genesis, Some(&proof)).await {
@@ -2463,14 +2717,20 @@ async fn recheck_stored(io: &Io<Event>, st: &Shared<State>) {
                 .chain_ids
                 .iter()
                 .filter(|id| {
+                    let key = verdict_key(&account.address, **id);
                     s.has_network(**id)
-                        && !s
-                            .verdicts
-                            .contains_key(&verdict_key(&account.address, **id))
+                        && !s.verdicts.contains_key(&key)
+                        && !s.checking.contains(&key)
                 })
                 .copied()
                 .collect()
         };
+        {
+            let mut s = lock(st);
+            for id in &due {
+                s.checking.insert(verdict_key(&account.address, *id));
+            }
+        }
         let checks = due.iter().map(|id| {
             let account = account.clone();
             async move {
@@ -2485,6 +2745,7 @@ async fn recheck_stored(io: &Io<Event>, st: &Shared<State>) {
         {
             let mut s = lock(st);
             for (id, found) in results {
+                s.checking.remove(&verdict_key(&account.address, id));
                 let Some(found) = found else { continue };
                 s.verdicts
                     .insert(verdict_key(&account.address, id), found.clone());
@@ -2874,11 +3135,30 @@ async fn plan_rename(io: &Io<Event>, st: &Shared<State>, address: &str) -> Renam
         chain_id: None,
         deployed: None,
         blocked: Some(why),
+        lands_on: None,
     };
     let Ok(known) = service.fetch_genesis(io, address, false).await else {
         return blocked(RenameBlocked::Unreachable);
     };
     let home = record_home_chain(io, &service).await;
+    // r7-10: on its way — the service holds it (queued, not landed), or this
+    // device asked for it and is asking again — is not "never recorded".
+    let asked_here = {
+        let s = lock(st);
+        let key = address.to_ascii_lowercase();
+        s.proofs.contains_key(&key) || s.recording.contains(&key)
+    };
+    let on_its_way = if known.found {
+        known.pending == Some(true) || known.recorded_on.as_ref().is_none_or(Vec::is_empty)
+    } else {
+        asked_here
+    };
+    if on_its_way {
+        return RenamePlan {
+            lands_on: Some(home),
+            ..blocked(RenameBlocked::Pending)
+        };
+    }
     let recorded_on: Vec<u64> = if known.found && known.pending != Some(true) {
         known.recorded_on.clone().unwrap_or_default()
     } else {
@@ -2909,6 +3189,7 @@ async fn plan_rename(io: &Io<Event>, st: &Shared<State>, address: &str) -> Renam
         chain_id: Some(chain_id),
         deployed,
         blocked: None,
+        lands_on: None,
     }
 }
 
