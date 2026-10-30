@@ -1,0 +1,1627 @@
+[
+ {
+  "name": "the zero address can never be a member",
+  "input": {
+   "fn": "memberProblem",
+   "typed": "0x0000000000000000000000000000000000000000",
+   "owners": [
+    "0x1111111111111111111111111111111111111111"
+   ]
+  },
+  "expect": "notMember"
+ },
+ {
+  "name": "Safe's sentinel can never be a member",
+  "input": {
+   "fn": "memberProblem",
+   "typed": "0x0000000000000000000000000000000000000001",
+   "owners": [
+    "0x1111111111111111111111111111111111111111"
+   ]
+  },
+  "expect": "notMember"
+ },
+ {
+  "name": "a short hex is no address",
+  "input": {
+   "fn": "memberProblem",
+   "typed": "0x12",
+   "owners": [
+    "0x1111111111111111111111111111111111111111"
+   ]
+  },
+  "expect": "invalidAddress"
+ },
+ {
+  "name": "a member already there, in another case",
+  "input": {
+   "fn": "memberProblem",
+   "typed": "0x1111111111111111111111111111111111111111",
+   "owners": [
+    "0x1111111111111111111111111111111111111111"
+   ]
+  },
+  "expect": "duplicate"
+ },
+ {
+  "name": "an address with spaces around it can join",
+  "input": {
+   "fn": "memberProblem",
+   "typed": " 0x2222222222222222222222222222222222222222 ",
+   "owners": [
+    "0x1111111111111111111111111111111111111111"
+   ]
+  },
+  "expect": null
+ },
+ {
+  "name": "a mixed case that is not the checksum is refused (send-2)",
+  "input": {
+   "fn": "memberProblem",
+   "typed": "0xD9c79Cc5C3DE9858E8767BB702DB5FfE51a20432",
+   "owners": []
+  },
+  "expect": "checksum"
+ },
+ {
+  "name": "an EIP-55 address can join",
+  "input": {
+   "fn": "memberProblem",
+   "typed": "0xd9c79Cc5C3DE9858E8767BB702DB5FfE51a20432",
+   "owners": []
+  },
+  "expect": null
+ },
+ {
+  "name": "a multisig's name: plain words",
+  "input": {
+   "fn": "validName",
+   "name": "Team fund"
+  },
+  "expect": true
+ },
+ {
+  "name": "a multisig's name: a right-to-left override",
+  "input": {
+   "fn": "validName",
+   "name": "Team‮dnuf"
+  },
+  "expect": false
+ },
+ {
+  "name": "a multisig's name: a zero-width space",
+  "input": {
+   "fn": "validName",
+   "name": "Team​fund"
+  },
+  "expect": false
+ },
+ {
+  "name": "a multisig's name: isolates",
+  "input": {
+   "fn": "validName",
+   "name": "⁦Team⁩"
+  },
+  "expect": false
+ },
+ {
+  "name": "a multisig's name: a byte-order mark",
+  "input": {
+   "fn": "validName",
+   "name": "﻿Team"
+  },
+  "expect": false
+ },
+ {
+  "name": "a multisig's name: an emoji's own joiner",
+  "input": {
+   "fn": "validName",
+   "name": "Family 👨‍👩‍👧"
+  },
+  "expect": true
+ },
+ {
+  "name": "looks like a name: vitalik.eth",
+  "input": {
+   "fn": "looksLikeName",
+   "typed": "vitalik.eth"
+  },
+  "expect": true
+ },
+ {
+  "name": "looks like a name: bob.base.eth",
+  "input": {
+   "fn": "looksLikeName",
+   "typed": "bob.base.eth"
+  },
+  "expect": true
+ },
+ {
+  "name": "looks like a name: 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+  "input": {
+   "fn": "looksLikeName",
+   "typed": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"
+  },
+  "expect": false
+ },
+ {
+  "name": "looks like a name: vitalik",
+  "input": {
+   "fn": "looksLikeName",
+   "typed": "vitalik"
+  },
+  "expect": false
+ },
+ {
+  "name": "looks like a name: a b.eth",
+  "input": {
+   "fn": "looksLikeName",
+   "typed": "a b.eth"
+  },
+  "expect": false
+ },
+ {
+  "name": "vitalik.eth is looked up on chain 1",
+  "input": {
+   "fn": "nameService",
+   "name": "vitalik.eth"
+  },
+  "expect": 1
+ },
+ {
+  "name": "Bob.Base.eth is looked up on chain 8453",
+  "input": {
+   "fn": "nameService",
+   "name": "Bob.Base.eth"
+  },
+  "expect": 8453
+ },
+ {
+  "name": "pay.vitalik.eth is looked up on chain 1",
+  "input": {
+   "fn": "nameService",
+   "name": "pay.vitalik.eth"
+  },
+  "expect": 1
+ },
+ {
+  "name": "one action builds each network's change against that network's own list",
+  "input": {
+   "fn": "plan",
+   "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+   "chains": [
+    {
+     "chain_id": 5042002,
+     "members": {
+      "deployed": true,
+      "owners": [
+       "0x1111111111111111111111111111111111111111",
+       "0x2222222222222222222222222222222222222222",
+       "0x3333333333333333333333333333333333333333"
+      ],
+      "threshold": 2,
+      "nonce": "3"
+     },
+     "items": []
+    },
+    {
+     "chain_id": 8453,
+     "members": {
+      "deployed": true,
+      "owners": [
+       "0x4444444444444444444444444444444444444444",
+       "0x1111111111111111111111111111111111111111",
+       "0x2222222222222222222222222222222222222222"
+      ],
+      "threshold": 2,
+      "nonce": "3"
+     },
+     "items": []
+    },
+    {
+     "chain_id": 100,
+     "members": {
+      "deployed": false,
+      "owners": [
+       "0x1111111111111111111111111111111111111111",
+       "0x2222222222222222222222222222222222222222",
+       "0x3333333333333333333333333333333333333333"
+      ],
+      "threshold": 2,
+      "nonce": "3"
+     },
+     "items": []
+    }
+   ],
+   "change": {
+    "kind": "remove",
+    "owner": "0x2222222222222222222222222222222222222222"
+   }
+  },
+  "expect": {
+   "ready": [
+    5042002,
+    8453
+   ],
+   "undeployed": [
+    100
+   ],
+   "networks": [
+    {
+     "chain_id": 5042002,
+     "verdict": {
+      "kind": "ready",
+      "tx": {
+       "data": "0xf8dc5dd9000000000000000000000000111111111111111111111111111111111111111100000000000000000000000022222222222222222222222222222222222222220000000000000000000000000000000000000000000000000000000000000002"
+      },
+      "before": {
+       "threshold": 2
+      },
+      "after": {
+       "threshold": 2,
+       "owners": [
+        "0x1111111111111111111111111111111111111111",
+        "0x3333333333333333333333333333333333333333"
+       ]
+      }
+     },
+     "propose": {
+      "kind": "remove",
+      "owner": "0x2222222222222222222222222222222222222222"
+     }
+    },
+    {
+     "chain_id": 8453,
+     "verdict": {
+      "kind": "ready"
+     },
+     "dataPrefix": "0xf8dc5dd90000000000000000000000001111111111111111111111111111111111111111"
+    }
+   ],
+   "reviewed": "removeOwner"
+  }
+ },
+ {
+  "name": "a network refuses in its own terms: C is no member on Base",
+  "input": {
+   "fn": "plan",
+   "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+   "chains": [
+    {
+     "chain_id": 5042002,
+     "members": {
+      "deployed": true,
+      "owners": [
+       "0x1111111111111111111111111111111111111111",
+       "0x2222222222222222222222222222222222222222",
+       "0x3333333333333333333333333333333333333333"
+      ],
+      "threshold": 2,
+      "nonce": "3"
+     },
+     "items": []
+    },
+    {
+     "chain_id": 8453,
+     "members": {
+      "deployed": true,
+      "owners": [
+       "0x4444444444444444444444444444444444444444",
+       "0x1111111111111111111111111111111111111111",
+       "0x2222222222222222222222222222222222222222"
+      ],
+      "threshold": 2,
+      "nonce": "3"
+     },
+     "items": []
+    },
+    {
+     "chain_id": 100,
+     "members": {
+      "deployed": false,
+      "owners": [
+       "0x1111111111111111111111111111111111111111",
+       "0x2222222222222222222222222222222222222222",
+       "0x3333333333333333333333333333333333333333"
+      ],
+      "threshold": 2,
+      "nonce": "3"
+     },
+     "items": []
+    }
+   ],
+   "change": {
+    "kind": "replace",
+    "oldOwner": "0x3333333333333333333333333333333333333333",
+    "newOwner": "0x4444444444444444444444444444444444444444"
+   }
+  },
+  "expect": {
+   "ready": [
+    5042002
+   ],
+   "networks": [
+    {
+     "chain_id": 5042002,
+     "verdict": {
+      "kind": "ready"
+     }
+    },
+    {
+     "chain_id": 8453,
+     "verdict": {
+      "kind": "refused",
+      "refusal": {
+       "kind": "notMember"
+      }
+     },
+     "propose": null
+    }
+   ]
+  }
+ },
+ {
+  "name": "the multisig can't be its own member, on any network",
+  "input": {
+   "fn": "plan",
+   "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+   "chains": [
+    {
+     "chain_id": 5042002,
+     "members": {
+      "deployed": true,
+      "owners": [
+       "0x1111111111111111111111111111111111111111",
+       "0x2222222222222222222222222222222222222222",
+       "0x3333333333333333333333333333333333333333"
+      ],
+      "threshold": 2,
+      "nonce": "3"
+     },
+     "items": []
+    },
+    {
+     "chain_id": 8453,
+     "members": {
+      "deployed": true,
+      "owners": [
+       "0x4444444444444444444444444444444444444444",
+       "0x1111111111111111111111111111111111111111",
+       "0x2222222222222222222222222222222222222222"
+      ],
+      "threshold": 2,
+      "nonce": "3"
+     },
+     "items": []
+    },
+    {
+     "chain_id": 100,
+     "members": {
+      "deployed": false,
+      "owners": [
+       "0x1111111111111111111111111111111111111111",
+       "0x2222222222222222222222222222222222222222",
+       "0x3333333333333333333333333333333333333333"
+      ],
+      "threshold": 2,
+      "nonce": "3"
+     },
+     "items": []
+    }
+   ],
+   "change": {
+    "kind": "add",
+    "owner": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83"
+   }
+  },
+  "expect": {
+   "ready": [],
+   "networks": [
+    {
+     "verdict": {
+      "refusal": {
+       "kind": "theMultisig"
+      }
+     }
+    },
+    {
+     "verdict": {
+      "refusal": {
+       "kind": "theMultisig"
+      }
+     }
+    }
+   ]
+  }
+ },
+ {
+  "name": "more approvals than members",
+  "input": {
+   "fn": "plan",
+   "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+   "chains": [
+    {
+     "chain_id": 5042002,
+     "members": {
+      "deployed": true,
+      "owners": [
+       "0x1111111111111111111111111111111111111111",
+       "0x2222222222222222222222222222222222222222",
+       "0x3333333333333333333333333333333333333333"
+      ],
+      "threshold": 2,
+      "nonce": "3"
+     },
+     "items": []
+    },
+    {
+     "chain_id": 8453,
+     "members": {
+      "deployed": true,
+      "owners": [
+       "0x4444444444444444444444444444444444444444",
+       "0x1111111111111111111111111111111111111111",
+       "0x2222222222222222222222222222222222222222"
+      ],
+      "threshold": 2,
+      "nonce": "3"
+     },
+     "items": []
+    },
+    {
+     "chain_id": 100,
+     "members": {
+      "deployed": false,
+      "owners": [
+       "0x1111111111111111111111111111111111111111",
+       "0x2222222222222222222222222222222222222222",
+       "0x3333333333333333333333333333333333333333"
+      ],
+      "threshold": 2,
+      "nonce": "3"
+     },
+     "items": []
+    }
+   ],
+   "change": {
+    "kind": "threshold",
+    "threshold": 4
+   }
+  },
+  "expect": {
+   "networks": [
+    {
+     "verdict": {
+      "kind": "refused",
+      "refusal": {
+       "kind": "thresholdTooHigh",
+       "threshold": 4,
+       "owners": 3
+      }
+     }
+    },
+    {
+     "verdict": {
+      "kind": "refused"
+     }
+    }
+   ]
+  }
+ },
+ {
+  "name": "the zero address is proposed nowhere",
+  "input": {
+   "fn": "plan",
+   "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+   "chains": [
+    {
+     "chain_id": 5042002,
+     "members": {
+      "deployed": true,
+      "owners": [
+       "0x1111111111111111111111111111111111111111",
+       "0x2222222222222222222222222222222222222222",
+       "0x3333333333333333333333333333333333333333"
+      ],
+      "threshold": 2,
+      "nonce": "3"
+     },
+     "items": []
+    },
+    {
+     "chain_id": 8453,
+     "members": {
+      "deployed": true,
+      "owners": [
+       "0x4444444444444444444444444444444444444444",
+       "0x1111111111111111111111111111111111111111",
+       "0x2222222222222222222222222222222222222222"
+      ],
+      "threshold": 2,
+      "nonce": "3"
+     },
+     "items": []
+    },
+    {
+     "chain_id": 100,
+     "members": {
+      "deployed": false,
+      "owners": [
+       "0x1111111111111111111111111111111111111111",
+       "0x2222222222222222222222222222222222222222",
+       "0x3333333333333333333333333333333333333333"
+      ],
+      "threshold": 2,
+      "nonce": "3"
+     },
+     "items": []
+    }
+   ],
+   "change": {
+    "kind": "add",
+    "owner": "0x0000000000000000000000000000000000000000"
+   }
+  },
+  "expect": {
+   "ready": []
+  }
+ },
+ {
+  "name": "a second member change is refused while one waits on that network",
+  "input": {
+   "fn": "plan",
+   "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+   "chains": [
+    {
+     "chain_id": 5042002,
+     "members": {
+      "deployed": true,
+      "owners": [
+       "0x1111111111111111111111111111111111111111",
+       "0x2222222222222222222222222222222222222222",
+       "0x3333333333333333333333333333333333333333"
+      ],
+      "threshold": 2,
+      "nonce": "3"
+     },
+     "items": [
+      {
+       "chain_id": 5042002,
+       "safe_tx_hash": "0x5042002",
+       "nonce": "3",
+       "action": {
+        "kind": "changeThreshold",
+        "threshold": "3"
+       },
+       "approved": 0,
+       "threshold": 2,
+       "status": "pending"
+      }
+     ]
+    },
+    {
+     "chain_id": 8453,
+     "members": {
+      "deployed": true,
+      "owners": [
+       "0x4444444444444444444444444444444444444444",
+       "0x1111111111111111111111111111111111111111",
+       "0x2222222222222222222222222222222222222222"
+      ],
+      "threshold": 2,
+      "nonce": "3"
+     },
+     "items": []
+    }
+   ],
+   "change": {
+    "kind": "add",
+    "owner": "0x3333333333333333333333333333333333333333"
+   }
+  },
+  "expect": {
+   "ready": [
+    8453
+   ],
+   "networks": [
+    {
+     "chain_id": 5042002,
+     "verdict": {
+      "refusal": {
+       "kind": "changeWaiting"
+      }
+     }
+    },
+    {
+     "chain_id": 8453,
+     "verdict": {
+      "kind": "ready"
+     }
+    }
+   ]
+  }
+ },
+ {
+  "name": "nothing is offered where it is not deployed (a change there would deploy it)",
+  "input": {
+   "fn": "plan",
+   "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+   "chains": [
+    {
+     "chain_id": 100,
+     "members": {
+      "deployed": false,
+      "owners": [
+       "0x1111111111111111111111111111111111111111",
+       "0x2222222222222222222222222222222222222222",
+       "0x3333333333333333333333333333333333333333"
+      ],
+      "threshold": 2,
+      "nonce": "3"
+     },
+     "items": []
+    }
+   ],
+   "change": {
+    "kind": "threshold",
+    "threshold": 3
+   }
+  },
+  "expect": {
+   "networks": [],
+   "ready": [],
+   "undeployed": [
+    100
+   ]
+  }
+ },
+ {
+  "name": "a member change waiting makes its network busy",
+  "input": {
+   "fn": "memberState",
+   "members": {
+    "deployed": true,
+    "owners": [
+     "0x1111111111111111111111111111111111111111",
+     "0x2222222222222222222222222222222222222222",
+     "0x3333333333333333333333333333333333333333"
+    ],
+    "threshold": 2,
+    "nonce": "3"
+   },
+   "items": [
+    {
+     "chain_id": 5042002,
+     "safe_tx_hash": "0x5042002",
+     "nonce": "3",
+     "action": {
+      "kind": "changeThreshold",
+      "threshold": "3"
+     },
+     "approved": 0,
+     "threshold": 2,
+     "status": "pending"
+    }
+   ]
+  },
+  "expect": {
+   "owners": [
+    "0x1111111111111111111111111111111111111111",
+    "0x2222222222222222222222222222222222222222",
+    "0x3333333333333333333333333333333333333333"
+   ],
+   "threshold": 2,
+   "changeWaiting": true
+  }
+ },
+ {
+  "name": "a transfer waiting is no member change",
+  "input": {
+   "fn": "memberState",
+   "members": {
+    "deployed": true,
+    "owners": [
+     "0x1111111111111111111111111111111111111111",
+     "0x2222222222222222222222222222222222222222",
+     "0x3333333333333333333333333333333333333333"
+    ],
+    "threshold": 2,
+    "nonce": "3"
+   },
+   "items": [
+    {
+     "chain_id": 5042002,
+     "safe_tx_hash": "0x5042002",
+     "nonce": "3",
+     "action": {
+      "kind": "transfer",
+      "token": null,
+      "to": "0x4444444444444444444444444444444444444444",
+      "amount": "1"
+     },
+     "approved": 0,
+     "threshold": 2,
+     "status": "pending"
+    }
+   ]
+  },
+  "expect": {
+   "changeWaiting": false
+  }
+ },
+ {
+  "name": "a member change executed or voided waits no more",
+  "input": {
+   "fn": "memberState",
+   "members": {
+    "deployed": true,
+    "owners": [
+     "0x1111111111111111111111111111111111111111",
+     "0x2222222222222222222222222222222222222222",
+     "0x3333333333333333333333333333333333333333"
+    ],
+    "threshold": 2,
+    "nonce": "3"
+   },
+   "items": [
+    {
+     "chain_id": 5042002,
+     "safe_tx_hash": "0x5042002",
+     "nonce": "3",
+     "action": {
+      "kind": "changeThreshold",
+      "threshold": "3"
+     },
+     "approved": 0,
+     "threshold": 2,
+     "status": "done"
+    }
+   ]
+  },
+  "expect": {
+   "changeWaiting": false
+  }
+ },
+ {
+  "name": "every deployed network's members once, the first network's order first",
+  "input": {
+   "fn": "deployedMembers",
+   "chains": [
+    {
+     "chain_id": 5042002,
+     "members": {
+      "deployed": true,
+      "owners": [
+       "0x1111111111111111111111111111111111111111",
+       "0x2222222222222222222222222222222222222222",
+       "0x3333333333333333333333333333333333333333"
+      ],
+      "threshold": 2,
+      "nonce": "3"
+     },
+     "items": []
+    },
+    {
+     "chain_id": 8453,
+     "members": {
+      "deployed": true,
+      "owners": [
+       "0x4444444444444444444444444444444444444444",
+       "0x1111111111111111111111111111111111111111",
+       "0x2222222222222222222222222222222222222222"
+      ],
+      "threshold": 2,
+      "nonce": "3"
+     },
+     "items": []
+    },
+    {
+     "chain_id": 100,
+     "members": {
+      "deployed": false,
+      "owners": [
+       "0x1111111111111111111111111111111111111111",
+       "0x2222222222222222222222222222222222222222",
+       "0x3333333333333333333333333333333333333333"
+      ],
+      "threshold": 2,
+      "nonce": "3"
+     },
+     "items": []
+    }
+   ]
+  },
+  "expect": [
+   "0x1111111111111111111111111111111111111111",
+   "0x2222222222222222222222222222222222222222",
+   "0x3333333333333333333333333333333333333333",
+   "0x4444444444444444444444444444444444444444"
+  ]
+ },
+ {
+  "name": "the networks of one change group, and read their progress",
+  "input": {
+   "fn": "groups",
+   "items": [
+    {
+     "chain_id": 5042002,
+     "safe_tx_hash": "0x5042002",
+     "nonce": "3",
+     "action": {
+      "kind": "addOwner",
+      "owner": "0x4444444444444444444444444444444444444444",
+      "threshold": "2"
+     },
+     "approved": 1,
+     "threshold": 2,
+     "status": "pending"
+    },
+    {
+     "chain_id": 8453,
+     "safe_tx_hash": "0x8453",
+     "nonce": "3",
+     "action": {
+      "kind": "addOwner",
+      "owner": "0x4444444444444444444444444444444444444444",
+      "threshold": "2"
+     },
+     "approved": 0,
+     "threshold": 2,
+     "status": "pending"
+    },
+    {
+     "chain_id": 5042002,
+     "safe_tx_hash": "0x5042002",
+     "nonce": "3",
+     "action": {
+      "kind": "transfer",
+      "token": null,
+      "to": "0x4444444444444444444444444444444444444444",
+      "amount": "5"
+     },
+     "approved": 0,
+     "threshold": 2,
+     "status": "pending"
+    },
+    {
+     "chain_id": 100,
+     "safe_tx_hash": "0x100",
+     "nonce": "3",
+     "action": {
+      "kind": "addOwner",
+      "owner": "0x4444444444444444444444444444444444444444",
+      "threshold": "2"
+     },
+     "approved": 2,
+     "threshold": 2,
+     "status": "done"
+    }
+   ],
+   "order": [],
+   "names": {
+    "5042002": "Arc",
+    "8453": "Base"
+   }
+  },
+  "expect": {
+   "count": 1,
+   "progress": [
+    "Arc 1/2 · Base 0/2"
+   ]
+  }
+ },
+ {
+  "name": "the networks in the wallet's order, whichever was proposed first",
+  "input": {
+   "fn": "groups",
+   "items": [
+    {
+     "chain_id": 8453,
+     "safe_tx_hash": "0x8453",
+     "nonce": "3",
+     "action": {
+      "kind": "addOwner",
+      "owner": "0x4444444444444444444444444444444444444444",
+      "threshold": "2"
+     },
+     "approved": 0,
+     "threshold": 2,
+     "status": "pending"
+    },
+    {
+     "chain_id": 5042002,
+     "safe_tx_hash": "0x5042002",
+     "nonce": "3",
+     "action": {
+      "kind": "addOwner",
+      "owner": "0x4444444444444444444444444444444444444444",
+      "threshold": "2"
+     },
+     "approved": 1,
+     "threshold": 2,
+     "status": "pending"
+    }
+   ],
+   "order": [
+    5042002,
+    8453
+   ],
+   "names": {}
+  },
+  "expect": {
+   "count": 1,
+   "chains": [
+    [
+     5042002,
+     8453
+    ]
+   ]
+  }
+ },
+ {
+  "name": "approvals past the threshold are shown as the threshold",
+  "input": {
+   "fn": "groups",
+   "items": [
+    {
+     "chain_id": 5042002,
+     "safe_tx_hash": "0x5042002",
+     "nonce": "3",
+     "action": {
+      "kind": "addOwner",
+      "owner": "0x4444444444444444444444444444444444444444",
+      "threshold": "2"
+     },
+     "approved": 3,
+     "threshold": 2,
+     "status": "pending"
+    }
+   ],
+   "order": [],
+   "names": {
+    "5042002": "Arc"
+   }
+  },
+  "expect": {
+   "count": 1,
+   "progress": [
+    "Arc 2/2"
+   ]
+  }
+ },
+ {
+  "name": "the change key of a threshold",
+  "input": {
+   "fn": "changeKey",
+   "action": {
+    "kind": "changeThreshold",
+    "threshold": "3"
+   }
+  },
+  "expect": "threshold:3"
+ },
+ {
+  "name": "the change key of a transfer",
+  "input": {
+   "fn": "changeKey",
+   "action": {
+    "kind": "transfer",
+    "token": null,
+    "to": "0x4444444444444444444444444444444444444444",
+    "amount": "1"
+   }
+  },
+  "expect": null
+ },
+ {
+  "name": "the change key of an add, whatever its case",
+  "input": {
+   "fn": "changeKey",
+   "action": {
+    "kind": "addOwner",
+    "owner": "0xABCDEFabcdef0000000000000000000000000000",
+    "threshold": "2"
+   }
+  },
+  "expect": "add:0xabcdefabcdef0000000000000000000000000000"
+ },
+ {
+  "name": "the change key of a replace",
+  "input": {
+   "fn": "changeKey",
+   "action": {
+    "kind": "swapOwner",
+    "oldOwner": "0x3333333333333333333333333333333333333333",
+    "newOwner": "0x4444444444444444444444444444444444444444"
+   }
+  },
+  "expect": "replace:0x3333333333333333333333333333333333333333:0x4444444444444444444444444444444444444444"
+ },
+ {
+  "name": "a batch with a member change changes the members",
+  "input": {
+   "fn": "changesMembers",
+   "action": {
+    "kind": "batch",
+    "calls": [
+     {
+      "to": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "value": "0",
+      "data": "0x",
+      "action": {
+       "kind": "addOwner",
+       "owner": "0x4444444444444444444444444444444444444444",
+       "threshold": "2"
+      }
+     }
+    ]
+   }
+  },
+  "expect": true
+ },
+ {
+  "name": "a transfer changes no member",
+  "input": {
+   "fn": "changesMembers",
+   "action": {
+    "kind": "transfer",
+    "token": null,
+    "to": "0x4444444444444444444444444444444444444444",
+    "amount": "1"
+   }
+  },
+  "expect": false
+ },
+ {
+  "name": "nothing read changes no member",
+  "input": {
+   "fn": "changesMembers",
+   "action": null
+  },
+  "expect": false
+ },
+ {
+  "name": "adding one names who, and the rule before and after",
+  "input": {
+   "fn": "reading",
+   "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+   "chainId": 5042002,
+   "calls": [
+    {
+     "to": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+     "value": "0",
+     "data": "0x0d582f1300000000000000000000000044444444444444444444444444444444444444440000000000000000000000000000000000000000000000000000000000000002"
+    }
+   ],
+   "owners": [
+    "0x1111111111111111111111111111111111111111",
+    "0x2222222222222222222222222222222222222222",
+    "0x3333333333333333333333333333333333333333"
+   ],
+   "threshold": 2
+  },
+  "expect": {
+   "changes": [
+    {
+     "kind": "add",
+     "added": "0x4444444444444444444444444444444444444444",
+     "call": null
+    }
+   ],
+   "before": {
+    "threshold": 2,
+    "owners": 3
+   },
+   "after": {
+    "threshold": 2,
+    "owners": 4
+   },
+   "fits": true
+  }
+ },
+ {
+  "name": "removing one",
+  "input": {
+   "fn": "reading",
+   "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+   "chainId": 5042002,
+   "calls": [
+    {
+     "to": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+     "value": "0",
+     "data": "0xf8dc5dd9000000000000000000000000111111111111111111111111111111111111111100000000000000000000000022222222222222222222222222222222222222220000000000000000000000000000000000000000000000000000000000000001"
+    }
+   ],
+   "owners": [
+    "0x1111111111111111111111111111111111111111",
+    "0x2222222222222222222222222222222222222222",
+    "0x3333333333333333333333333333333333333333"
+   ],
+   "threshold": 2
+  },
+  "expect": {
+   "changes": [
+    {
+     "kind": "remove",
+     "removed": "0x2222222222222222222222222222222222222222"
+    }
+   ],
+   "after": {
+    "threshold": 1,
+    "owners": 2
+   },
+   "fits": true
+  }
+ },
+ {
+  "name": "replacing one",
+  "input": {
+   "fn": "reading",
+   "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+   "chainId": 5042002,
+   "calls": [
+    {
+     "to": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+     "value": "0",
+     "data": "0xe318b52b000000000000000000000000000000000000000000000000000000000000000100000000000000000000000011111111111111111111111111111111111111110000000000000000000000004444444444444444444444444444444444444444"
+    }
+   ],
+   "owners": [
+    "0x1111111111111111111111111111111111111111",
+    "0x2222222222222222222222222222222222222222",
+    "0x3333333333333333333333333333333333333333"
+   ],
+   "threshold": 2
+  },
+  "expect": {
+   "changes": [
+    {
+     "kind": "replace",
+     "removed": "0x1111111111111111111111111111111111111111",
+     "added": "0x4444444444444444444444444444444444444444"
+    }
+   ],
+   "after": {
+    "threshold": 2,
+    "owners": 3
+   }
+  }
+ },
+ {
+  "name": "changing the threshold",
+  "input": {
+   "fn": "reading",
+   "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+   "chainId": 5042002,
+   "calls": [
+    {
+     "to": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+     "value": "0",
+     "data": "0x694e80c30000000000000000000000000000000000000000000000000000000000000003"
+    }
+   ],
+   "owners": [
+    "0x1111111111111111111111111111111111111111",
+    "0x2222222222222222222222222222222222222222",
+    "0x3333333333333333333333333333333333333333"
+   ],
+   "threshold": 2
+  },
+  "expect": {
+   "changes": [
+    {
+     "kind": "threshold"
+    }
+   ],
+   "after": {
+    "threshold": 3,
+    "owners": 3
+   }
+  }
+ },
+ {
+  "name": "one the Safe would refuse does not fit: a member twice",
+  "input": {
+   "fn": "reading",
+   "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+   "chainId": 5042002,
+   "calls": [
+    {
+     "to": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+     "value": "0",
+     "data": "0x0d582f1300000000000000000000000011111111111111111111111111111111111111110000000000000000000000000000000000000000000000000000000000000002"
+    }
+   ],
+   "owners": [
+    "0x1111111111111111111111111111111111111111",
+    "0x2222222222222222222222222222222222222222",
+    "0x3333333333333333333333333333333333333333"
+   ],
+   "threshold": 2
+  },
+  "expect": {
+   "fits": false
+  }
+ },
+ {
+  "name": "one the Safe would refuse does not fit: more approvals than members",
+  "input": {
+   "fn": "reading",
+   "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+   "chainId": 5042002,
+   "calls": [
+    {
+     "to": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+     "value": "0",
+     "data": "0x694e80c30000000000000000000000000000000000000000000000000000000000000004"
+    }
+   ],
+   "owners": [
+    "0x1111111111111111111111111111111111111111",
+    "0x2222222222222222222222222222222222222222",
+    "0x3333333333333333333333333333333333333333"
+   ],
+   "threshold": 2
+  },
+  "expect": {
+   "fits": false
+  }
+ },
+ {
+  "name": "a batch reads each, numbered by its call, against what the ones before left",
+  "input": {
+   "fn": "reading",
+   "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+   "chainId": 5042002,
+   "calls": [
+    {
+     "to": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+     "value": "0",
+     "data": "0x0d582f1300000000000000000000000044444444444444444444444444444444444444440000000000000000000000000000000000000000000000000000000000000002"
+    },
+    {
+     "to": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+     "value": "0",
+     "data": "0xf8dc5dd9000000000000000000000000444444444444444444444444444444444444444400000000000000000000000011111111111111111111111111111111111111110000000000000000000000000000000000000000000000000000000000000003"
+    },
+    {
+     "to": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+     "value": "0",
+     "data": "0x694e80c30000000000000000000000000000000000000000000000000000000000000002"
+    },
+    {
+     "to": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+     "value": "0",
+     "data": "0xe318b52b000000000000000000000000000000000000000000000000000000000000000100000000000000000000000022222222222222222222222222222222222222220000000000000000000000001111111111111111111111111111111111111111"
+    }
+   ],
+   "owners": [
+    "0x1111111111111111111111111111111111111111",
+    "0x2222222222222222222222222222222222222222",
+    "0x3333333333333333333333333333333333333333"
+   ],
+   "threshold": 2
+  },
+  "expect": {
+   "changes": [
+    {
+     "call": 1,
+     "kind": "add"
+    },
+    {
+     "call": 2,
+     "kind": "remove",
+     "removed": "0x1111111111111111111111111111111111111111"
+    },
+    {
+     "call": 3,
+     "kind": "threshold"
+    },
+    {
+     "call": 4,
+     "kind": "replace",
+     "removed": "0x2222222222222222222222222222222222222222",
+     "added": "0x1111111111111111111111111111111111111111"
+    }
+   ],
+   "before": {
+    "threshold": 2,
+    "owners": 3
+   },
+   "after": {
+    "threshold": 2,
+    "owners": 3
+   },
+   "fits": true
+  }
+ },
+ {
+  "name": "only the member changes of a batch that also pays",
+  "input": {
+   "fn": "reading",
+   "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+   "chainId": 5042002,
+   "calls": [
+    {
+     "to": "0x2222222222222222222222222222222222222222",
+     "value": "0x5",
+     "data": "0x"
+    },
+    {
+     "to": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+     "value": "0",
+     "data": "0x0d582f1300000000000000000000000044444444444444444444444444444444444444440000000000000000000000000000000000000000000000000000000000000003"
+    }
+   ],
+   "owners": [
+    "0x1111111111111111111111111111111111111111",
+    "0x2222222222222222222222222222222222222222",
+    "0x3333333333333333333333333333333333333333"
+   ],
+   "threshold": 2
+  },
+  "expect": {
+   "changes": [
+    {
+     "call": 2,
+     "kind": "add",
+     "added": "0x4444444444444444444444444444444444444444"
+    }
+   ],
+   "after": {
+    "threshold": 3,
+    "owners": 4
+   }
+  }
+ },
+ {
+  "name": "a transaction that changes no member reads none",
+  "input": {
+   "fn": "reading",
+   "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+   "chainId": 5042002,
+   "calls": [
+    {
+     "to": "0x2222222222222222222222222222222222222222",
+     "value": "0x5",
+     "data": "0x"
+    }
+   ],
+   "owners": [
+    "0x1111111111111111111111111111111111111111",
+    "0x2222222222222222222222222222222222222222",
+    "0x3333333333333333333333333333333333333333"
+   ],
+   "threshold": 2
+  },
+  "expect": null
+ },
+ {
+  "name": "a network's members against the original: added, removed, threshold",
+  "input": {
+   "fn": "drift",
+   "original": [
+    "0x00000000000000000000000000000000000000AA",
+    "0x00000000000000000000000000000000000000BB"
+   ],
+   "threshold": 2,
+   "current": [
+    "0x00000000000000000000000000000000000000AA",
+    "0x00000000000000000000000000000000000000CC"
+   ],
+   "currentThreshold": 1
+  },
+  "expect": {
+   "same": false,
+   "added": [
+    "0x00000000000000000000000000000000000000CC"
+   ],
+   "removed": [
+    "0x00000000000000000000000000000000000000BB"
+   ],
+   "thresholdWas": 2,
+   "thresholdIs": 1
+  }
+ },
+ {
+  "name": "the same members, in another case, are the same",
+  "input": {
+   "fn": "drift",
+   "original": [
+    "0x00000000000000000000000000000000000000AA",
+    "0x00000000000000000000000000000000000000BB"
+   ],
+   "threshold": 2,
+   "current": [
+    "0x00000000000000000000000000000000000000bb",
+    "0x00000000000000000000000000000000000000AA"
+   ],
+   "currentThreshold": 2
+  },
+  "expect": {
+   "same": true,
+   "added": [],
+   "removed": []
+  }
+ },
+ {
+  "name": "rules differ by network",
+  "input": {
+   "fn": "rules",
+   "owners": [
+    "0x00000000000000000000000000000000000000AA",
+    "0x00000000000000000000000000000000000000BB"
+   ],
+   "threshold": 2,
+   "chains": [
+    {
+     "deployed": true,
+     "owners": [
+      "0x00000000000000000000000000000000000000AA",
+      "0x00000000000000000000000000000000000000CC"
+     ],
+     "threshold": 1,
+     "nonce": "3"
+    },
+    {
+     "deployed": false,
+     "owners": [
+      "0x00000000000000000000000000000000000000AA",
+      "0x00000000000000000000000000000000000000BB"
+     ],
+     "threshold": 2,
+     "nonce": "3"
+    },
+    {
+     "deployed": true,
+     "owners": [
+      "0x00000000000000000000000000000000000000AA",
+      "0x00000000000000000000000000000000000000BB"
+     ],
+     "threshold": 2,
+     "nonce": "3"
+    }
+   ]
+  },
+  "expect": {
+   "rules": [
+    {
+     "m": 1,
+     "n": 2,
+     "solo": false
+    },
+    {
+     "m": 2,
+     "n": 2,
+     "solo": false
+    }
+   ],
+   "chip": {
+    "kind": "differs"
+   }
+  }
+ },
+ {
+  "name": "the original rule before any network is read",
+  "input": {
+   "fn": "rules",
+   "owners": [
+    "0x00000000000000000000000000000000000000AA",
+    "0x00000000000000000000000000000000000000BB"
+   ],
+   "threshold": 2,
+   "chains": []
+  },
+  "expect": {
+   "rules": [
+    {
+     "m": 2,
+     "n": 2,
+     "solo": false
+    }
+   ],
+   "chip": {
+    "kind": "needs",
+    "rule": {
+     "m": 2,
+     "n": 2
+    }
+   }
+  }
+ },
+ {
+  "name": "a multisig of one is one member, never 1 of 1",
+  "input": {
+   "fn": "rules",
+   "owners": [
+    "0x00000000000000000000000000000000000000AA"
+   ],
+   "threshold": 1,
+   "chains": [
+    {
+     "deployed": true,
+     "owners": [
+      "0x00000000000000000000000000000000000000AA"
+     ],
+     "threshold": 1,
+     "nonce": "3"
+    }
+   ]
+  },
+  "expect": {
+   "rules": [
+    {
+     "m": 1,
+     "n": 1,
+     "solo": true
+    }
+   ],
+   "chip": {
+    "kind": "needs",
+    "rule": {
+     "solo": true
+    }
+   }
+  }
+ },
+ {
+  "name": "members anywhere: each deployed network's, and the original where one is not deployed",
+  "input": {
+   "fn": "anywhere",
+   "owners": [
+    "0x00000000000000000000000000000000000000AA",
+    "0x00000000000000000000000000000000000000BB"
+   ],
+   "chains": [
+    {
+     "deployed": true,
+     "owners": [
+      "0x00000000000000000000000000000000000000AA",
+      "0x00000000000000000000000000000000000000CC"
+     ],
+     "threshold": 1,
+     "nonce": "3"
+    },
+    {
+     "deployed": false,
+     "owners": [
+      "0x00000000000000000000000000000000000000AA",
+      "0x00000000000000000000000000000000000000BB"
+     ],
+     "threshold": 2,
+     "nonce": "3"
+    }
+   ]
+  },
+  "expect": [
+   "0x00000000000000000000000000000000000000AA",
+   "0x00000000000000000000000000000000000000CC",
+   "0x00000000000000000000000000000000000000BB"
+  ]
+ },
+ {
+  "name": "members anywhere: only the deployed networks' when every one is",
+  "input": {
+   "fn": "anywhere",
+   "owners": [
+    "0x00000000000000000000000000000000000000AA",
+    "0x00000000000000000000000000000000000000BB"
+   ],
+   "chains": [
+    {
+     "deployed": true,
+     "owners": [
+      "0x00000000000000000000000000000000000000AA",
+      "0x00000000000000000000000000000000000000CC"
+     ],
+     "threshold": 1,
+     "nonce": "3"
+    }
+   ]
+  },
+  "expect": [
+   "0x00000000000000000000000000000000000000AA",
+   "0x00000000000000000000000000000000000000CC"
+  ]
+ }
+]

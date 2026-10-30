@@ -636,3 +636,31 @@ where
     }
     answered
 }
+
+/// As [`settle`], with waits answered last: every other operation is
+/// answered first, and an [`Op::Wait`] only when nothing else is outstanding
+/// — a shell's clock, where a bound of seconds runs out after the reads it
+/// bounds have answered (a machine racing a read against a wait).
+pub fn settle_reads_first<A>(sut: &mut DomainDriver<A>, world: &mut World, limit: usize) -> usize
+where
+    A: crux_core::App + Default,
+    A::Model: Default,
+    A::Effect: SplitEffect<Op = Op>,
+{
+    let mut answered = 0;
+    while answered < limit {
+        let outstanding = sut.outstanding();
+        let Some(op) = outstanding
+            .iter()
+            .find(|op| !matches!(op, Op::Wait { .. }))
+            .or_else(|| outstanding.first())
+            .cloned()
+        else {
+            break;
+        };
+        let res = world.answer(&op);
+        sut.resolve_matching(|o| *o == op, res);
+        answered += 1;
+    }
+    answered
+}
