@@ -267,6 +267,24 @@ pub fn send_state_pin(
             other => other,
         };
     }
+    // `nonce-used` — with the mock confirm (`VELA_FLOW=DSD3`): the relay
+    // refused the submit because another transaction of this account spent
+    // the nonce first (the core's `RelayRejection::NonceUsed`, send-15) —
+    // "Not sent", calmly, "went first", and Review again — through the real
+    // send core's error and the live notice.
+    if want.trim() == "nonce-used" {
+        return match body {
+            FlowBody::SendConfirm(mut confirm) => {
+                let mut send =
+                    crate::core_host::CoreHost::<vela_core::app::send::Send>::new().view();
+                send.tx_status = vela_core::app::send::SendTxStatus::Error;
+                send.tx_error = Some(vela_core::app::send::SendTxErrorKey::NonceUsed);
+                confirm.notice = crate::flows::live::tx_error_notice(&send, s);
+                FlowBody::SendConfirm(confirm)
+            }
+            other => other,
+        };
+    }
     let reason = match want.trim() {
         "held" => {
             return match body {
