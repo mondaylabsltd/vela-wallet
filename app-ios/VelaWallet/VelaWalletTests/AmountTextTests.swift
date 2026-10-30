@@ -28,8 +28,15 @@ struct AmountTextTests {
         #expect(AmountText.clean("0x10", previous: "2") == nil)
     }
 
+    /// A second decimal mark TYPED is kept as typed (the core's
+    /// `amount_text` module note): there is no one figure in "1.234,56", so
+    /// neither 1234.56 (a thousandfold) nor a silently dropped key is a safe
+    /// reading. The field shows what was typed and the send machine refuses
+    /// it with a sentence (`AmountIssue::Unreadable`) until it is one figure.
     @Test func aKeyTypedIntoAFigureNeverMovesItAThousandfold() {
-        #expect(AmountText.clean("1.234,56", previous: "1.23456") == "1.23456")
+        let kept = AmountText.clean("1.234,56", previous: "1.23456")
+        #expect(kept == "1.234,56")
+        #expect(kept != "1234.56")
     }
 
     @Test func aCleanFigureIsLeftAsTyped() {

@@ -151,6 +151,12 @@ struct FlowHost: View {
     /// The confirm page's CTA, and the receipt's exit. Absent where the flow is
     /// a picture, where the CTA still just navigates.
     var onConfirm: (() -> Void)?
+    /// Round 4: the receipt's "Send again" / "Review again" (`send_again`).
+    var onReceiptRetry: (() -> Void)?
+    /// Round 3: the confirm's "Check again" (`retry_risk_check`).
+    var onRiskRetry: (() -> Void)?
+    /// Round 4: the lock's "Add this network" (`add_network_tapped`).
+    var onAddNetworkTapped: ((Int) -> Void)?
     var onReceiptDone: (() -> Void)?
     /// The form's 继续. The CORE owns the step, so this dispatches rather than
     /// navigates — pushing a screen the machine has not moved to renders the
@@ -372,6 +378,7 @@ struct FlowHost: View {
                 SendPickBody(
                     model: m,
                     onFilter: { id in onSendFilter?(id) },
+                    onNoticeAction: { chainId in onAddNetworkTapped?(chainId) },
                     onSelect: { index in
                         if let onSelectToken { onSelectToken(index) }
                         else { onNavigate(.sendForm) }
@@ -430,6 +437,7 @@ struct FlowHost: View {
                 SendConfirmBody(
                     model: m,
                     onNoticeAction: { onNoticeAction?() },
+                    onRiskRetry: { onRiskRetry?() },
                     onNoticeSecondary: { onNoticeSecondary?() },
                     onNoticeReport: { onRelayReport?() },
                     onRefreshFee: onRefreshFee,
@@ -479,9 +487,19 @@ struct FlowHost: View {
                 SendReceiptBody(model: m, onExplorer: { onExplorer?() })
             } footer: {
                 FlowFooter {
+                    // Nothing left the account: the way on, above the way out
+                    // (send-5) — a fresh quote, nonce and signature.
+                    if let retry = m.retry, let onReceiptRetry {
+                        VelaButton(title: retry, kind: .primary) {
+                            VelaHaptic.press.play()
+                            onReceiptRetry()
+                        }
+                        .accessibilityIdentifier("send.receipt.retry")
+                        .padding(.bottom, Tokens.Space.s8)
+                    }
                     VelaButton(
                         title: m.cta,
-                        kind: m.ctaAccent ? .primary : .secondary
+                        kind: m.ctaAccent && m.retry == nil ? .primary : .secondary
                     ) {
                         // 关闭 · 后台继续 and 完成 are the same button in two
                         // states, and both mean "I am done looking". The core

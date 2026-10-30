@@ -60,6 +60,7 @@ final class WalletStore {
     /// stablecoins and wrapped coin from (spec 082 RE9); `nil` reads the
     /// native coin and the person's own tokens only (tests, a gallery).
     init(store: VelaStore, pool: RpcPool, held: HeldTokens, registry: ChainTokens? = nil) {
+        self.shelf = store
         self.executor = BalanceExecutor(store: store, pool: pool, held: held)
         if let registry {
             executor.chainDocument = { [registry] chainId in await registry.document(chainId: chainId) }
@@ -80,6 +81,14 @@ final class WalletStore {
         homePoller = HomeBalancePoller { [weak self] in self?.autoRefresh() }
     }
 
+    /// Where the last-known rows are kept (`HoldingsCache`).
+    @ObservationIgnored private let shelf: VelaStore
+    /// The space in front, by name (`mainnet` / `testnet`): the rows kept
+    /// are this space's.
+    @ObservationIgnored private(set) var spaceName = NetworkSpaceKind.mainnet.rawValue
+    /// The round the rows were last kept after, so one round is kept once.
+    @ObservationIgnored private var keptAt: Double?
+
     /// The core's view as it came, before the space's filter (spec 105).
     @ObservationIgnored private var unfiltered: BalanceViewWire?
     /// The space in front's chains; `nil` until the screen says.
@@ -87,13 +96,54 @@ final class WalletStore {
 
     /// The space in front changed (spec 105), or its networks did: the other
     /// space's holdings go now, and every chain of this one is read again.
-    func spaceChanged(_ chainIds: [Int]) {
+    func spaceChanged(_ chainIds: [Int], space: String? = nil) {
         let chains = Set(chainIds)
-        guard chains != spaceChains else { return }
+        let named = space ?? spaceName
+        guard chains != spaceChains || named != spaceName else { return }
         let first = spaceChains == nil
+        let switched = named != spaceName
         spaceChains = chains
+        spaceName = named
         if let unfiltered { balance = inSpace(unfiltered) }
-        if !first, scopedTo != nil { refresh(pull: false) }
+        guard !first, scopedTo != nil else { return }
+        if switched {
+            // A switch of space starts the account over in the core (home-7):
+            // nothing the other space failed or held is said here — and the
+            // rows this space showed last time open the list.
+            core.dispatch(CoreJSON.string(["type": "space_changed"]))
+            restoreRows()
+        } else {
+            refresh(pull: false)
+        }
+    }
+
+    /// The rows the home showed last time for the account and space in
+    /// front, handed to the core, which lets them stand until each chain
+    /// answers (home-1, the web's `#restoreRows`).
+    private func restoreRows() {
+        guard let address = scopedTo else { return }
+        let tokens = HoldingsCache.load(address: address, space: spaceName, store: shelf)
+        guard !tokens.isEmpty else { return }
+        core.dispatch(CoreJSON.string(["type": "holdings_restored", "address": address, "tokens": tokens]))
+    }
+
+    /// A round settled for the account in front: the rows it left are kept
+    /// for the next visit, exactly as the core wrote them.
+    private func keepSettledRows(_ view: BalanceViewWire) {
+        guard let at = view.lastRefreshedAtMs, at != keptAt, let address = view.address, !address.isEmpty,
+              let json = core.json, let object = try? CoreJSON.object(json),
+              let tokens = object["tokens"] as? [[String: Any]]
+        else { return }
+        keptAt = at
+        HoldingsCache.save(address: address, space: spaceName, tokens: tokens, store: shelf)
+    }
+
+    /// Another screen names the account in front (Settings, Contacts — the
+    /// web's `noteAccount`): the core sets it and reads its cached total,
+    /// and asks no network. The same account is a no-op in the core.
+    func note(address: String) {
+        guard !address.isEmpty else { return }
+        core.dispatch(CoreJSON.string(["type": "account_noted", "address": address]))
     }
 
     /// `view` with only the space in front's holdings; a total that counted
@@ -118,6 +168,7 @@ final class WalletStore {
         guard let at = view.lastRefreshedAtMs, at != countedRefreshAt,
               let address = view.address, !address.isEmpty
         else { return }
+        keepSettledRows(view)
         countedRefreshAt = at
         settledAddress = address.lowercased()
         round += 1
@@ -150,6 +201,8 @@ final class WalletStore {
         guard scopedTo != address else { return }
         scopedTo = address
         core.dispatch(CoreJSON.string(["type": "account_changed", "address": address]))
+        // Assets opens on the rows kept from the last visit, not a skeleton.
+        restoreRows()
     }
 
     /// Pull to refresh. `pull` is carried so the core can tell a person's own

@@ -264,6 +264,37 @@ struct SigningPlanWire: Decodable, Equatable {
     }
 }
 
+/// R7 (owner 2026-10-30, "the page everywhere"): where ONE request goes —
+/// `signing_venue::signing_route` for the stored account and the JSON-RPC
+/// method (`""` for the wallet's own send). The page applies on every
+/// surface; a method no venue signs is `nil` from the core and is refused.
+enum SigningRouteWire: Equatable {
+    case inVela
+    case page(url: String)
+    case blocked(VenueBlockWire)
+
+    /// The core's route for `accountJson` and `method`, or `nil` — a record
+    /// this build cannot read, or a method no venue signs.
+    static func of(accountJson: String, method: String) -> SigningRouteWire? {
+        guard let json = signingRoute(accountJson: accountJson, method: method),
+              let object = try? CoreJSON.object(json)
+        else { return nil }
+        switch object["type"] as? String {
+        case "in_vela": return .inVela
+        case "page":
+            guard let url = object["url"] as? String, !url.isEmpty else { return nil }
+            return .page(url: url)
+        case "blocked":
+            guard let block = object["block"],
+                  let data = try? JSONSerialization.data(withJSONObject: block, options: [.fragmentsAllowed]),
+                  let decoded = try? CoreJSON.decoder.decode(VenueBlockWire.self, from: data)
+            else { return nil }
+            return .blocked(decoded)
+        default: return nil
+        }
+    }
+}
+
 /// `signing_venue::SigningPage` — one saved page.
 struct SigningPageWire: Codable, Equatable, Hashable {
     let url: String

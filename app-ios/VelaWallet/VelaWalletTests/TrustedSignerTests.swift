@@ -89,16 +89,28 @@ struct TrustedSignerFixture {
 
     /// The page's `personal_sign` request, built by the core.
     @MainActor
-    func messageRequest() throws -> String {
+    func messageRequest(_ message: String = "0x68656c6c6f") throws -> String {
         try trustedSignerRequest(
             input: UserOpSpine.trustedSignerInput(
                 asked: .init(method: "personal_sign",
-                              paramsJson: #"["0x68656c6c6f","\#(account)"]"#,
+                              paramsJson: #"["\#(message)","\#(account)"]"#,
                               origin: "https://app.example"),
                 chainId: 100, account: account, accountName: "Mine", keys: keys, calls: []
             ),
             draft: nil
         )
+    }
+
+    /// The bytes the core computes from `messageRequest(message)` — what the
+    /// wallet signs: the Safe's EIP-1271 message hash of the EIP-191 digest
+    /// on chain 100, as `UserOpSpine.signMessage` builds it. Since F0.2 the
+    /// page's answer is held to the REQUEST (`trustedSignerSignatureAccept`),
+    /// so a digest the request does not describe is `wrongChallenge`.
+    func messageDigest(_ message: String = "0x68656c6c6f") throws -> Data {
+        guard let original = signMessageHash(
+            method: "personal_sign", paramsJson: #"["\#(message)","\#(account)"]"#
+        ) else { throw CocoaError(.coderInvalidValue) }
+        return try safeMessageHash(originalHash: original, chainId: 100, safeAddress: account)
     }
 
     static func hex(_ data: Data) -> String { data.map { String(format: "%02x", $0) }.joined() }
@@ -241,7 +253,7 @@ struct TrustedSignerChannelTests {
     /// which builds the same EIP-1271 envelope a passkey's assertion does.
     @Test @MainActor func thePageReadsTheRequestFromTheUrlAndItsSignatureIsAccepted() async throws {
         let fixture = TrustedSignerFixture()
-        let digest = Data(repeating: 0xAB, count: 32)
+        let digest = try fixture.messageDigest()
         let channel = try channel(fixture, digest: digest)
         let url = try #require(channel.start())
 
@@ -289,7 +301,7 @@ struct TrustedSignerChannelTests {
     /// was aimed at is still waiting.
     @Test @MainActor func aCallbackForAnotherAttemptReachesNothing() async throws {
         let fixture = TrustedSignerFixture()
-        let digest = Data(repeating: 0xCD, count: 32)
+        let digest = try fixture.messageDigest()
         let channel = try channel(fixture, digest: digest)
         let url = try #require(channel.start())
         let page = try PageVisit(url)
@@ -327,9 +339,23 @@ struct TrustedSignerChannelTests {
     /// signing" would turn a signature the person just approved into a
     /// refusal — measured on a real phone, the tab is still up when the
     /// callback arrives.
+    /// F0.2: the answer is held to the REQUEST. A valid signature by this
+    /// wallet's key over bytes the request does not describe — the shell about
+    /// to sign one thing while the page was shown another — is refused as a
+    /// wrong challenge before the answer is even read.
+    @Test @MainActor func anAnswerOverBytesTheRequestDoesNotDescribeIsRefused() async throws {
+        let fixture = TrustedSignerFixture()
+        let other = Data(repeating: 0xAB, count: 32)
+        let channel = try channel(fixture, digest: other)
+        let url = try #require(channel.start())
+        #expect(try PageVisit(url).answer(fixture.result(for: other)))
+        #expect(await channel.ending() == .outcome(.refused(refusal: .wrongChallenge)))
+        channel.end()
+    }
+
     @Test @MainActor func closingTheTabDoesNotRefuseAnAnswerThatIsOnItsWay() async throws {
         let fixture = TrustedSignerFixture()
-        let digest = Data(repeating: 0xAB, count: 32)
+        let digest = try fixture.messageDigest()
         let channel = try channel(fixture, digest: digest)
         let url = try #require(channel.start())
         let page = try PageVisit(url)
@@ -390,8 +416,8 @@ struct TrustedSignerChannelTests {
     /// visit, with its own one-time token, and the page is opened again.
     @Test @MainActor func aFlowsNextRequestIsANewVisitWithANewToken() async throws {
         let fixture = TrustedSignerFixture()
-        let first = Data(repeating: 0xAB, count: 32)
-        let second = Data(repeating: 0xCD, count: 32)
+        let first = try fixture.messageDigest()
+        let second = try fixture.messageDigest("0x776f726c64")
         let channel = try channel(fixture, digest: first)
         var opened: [URL] = []
         let url = try #require(channel.start())
@@ -411,7 +437,7 @@ struct TrustedSignerChannelTests {
             _ = try? PageVisit(url).answer(fixture.result(for: second))
         }
         let ending = await channel.send(.signature(
-            request: try fixture.messageRequest(), digest: second, keys: fixture.keys
+            request: try fixture.messageRequest("0x776f726c64"), digest: second, keys: fixture.keys
         ))
         #expect(opened == [try #require(channel.launchUrl)], "the next request opens the page again")
         #expect(channel.token != firstToken, "one-time means one request")

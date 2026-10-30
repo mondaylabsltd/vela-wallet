@@ -58,25 +58,13 @@ struct RpcEndpointsTests {
         #expect(ChainCatalog.meta(1)?.gasModel == .native)
     }
 
-    // MARK: - Provider URLs
-
-    @Test func providerUrlsAreBuiltOnlyWhereTheProviderServesTheChain() {
-        #expect(RpcProvider.alchemy.url(chainId: 100, key: "k")
-            == "https://gnosis-mainnet.g.alchemy.com/v2/k")
-        #expect(RpcProvider.drpc.url(chainId: 1, key: "k")
-            == "https://lb.drpc.org/ogrpc?network=ethereum&dkey=k")
-        #expect(RpcProvider.ankr.url(chainId: 56, key: "k") == "https://rpc.ankr.com/bsc/k")
-
-        // Ankr does not serve Unichain, and inventing a slug would produce an
-        // endpoint that 404s on every call.
-        #expect(RpcProvider.ankr.url(chainId: 130, key: "k") == nil)
-        #expect(RpcProvider.alchemy.url(chainId: 1, key: "") == nil)
-    }
-
     // MARK: - Collection
 
-    /// The cold-start order: the person's own endpoint first, then a paid
-    /// provider, then the built-in, then curated public.
+    /// The cold-start order: the person's own endpoint first, then the
+    /// built-in, then curated public. No keyed provider tier sits between the
+    /// first two (owner decision 2026-10-29): a key a person saved was retired
+    /// into exactly such an override, and a key still on the shelf is read by
+    /// nothing here.
     @Test func tiersComeInTheColdStartOrder() async {
         let (store, accounts, _) = fresh()
         store.writeList(VelaStore.Key.networkConfig,
@@ -87,10 +75,11 @@ struct RpcEndpointsTests {
         let sources = collected.map(\.source)
         #expect(collected.first?.url == "https://mine.example")
         #expect(sources.first == "user")
-        #expect(sources.contains("provider"))
-        #expect(sources.contains("default"))
+        #expect(sources.dropFirst().first == "default", "something sits between the person's RPC and Vela's: \(sources)")
+        #expect(!sources.contains("provider"))
+        #expect(!collected.contains { $0.url.contains("abc") }, "a retired key was read")
         // The order is monotonic through the tiers it has.
-        let rank = ["user": 0, "provider": 1, "default": 2, "public": 3, "builtin": 4, "fallback": 5]
+        let rank = ["user": 0, "default": 2, "public": 3, "builtin": 4, "fallback": 5]
         let ranks = sources.compactMap { rank[$0] }
         #expect(ranks == ranks.sorted(), "tiers came out of order: \(sources)")
     }

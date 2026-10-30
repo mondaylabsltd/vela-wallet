@@ -781,6 +781,15 @@ final class SigningController {
     }
 
     func fundingCancelled() { dispatchSign(["type": "funding_cancelled"]) }
+
+    /// The landing for `userOpHash` was closed — the tick ran out, or the
+    /// person closed it (`landing_closed`). The core holds it closed while
+    /// its tracker handoff names that operation (`SignView.landing_closed`),
+    /// so a host that mounts later does not raise the same landing again.
+    func landingClosed(userOpHash: String) {
+        guard !userOpHash.isEmpty else { return }
+        dispatchSign(["type": "landing_closed", "user_op_hash": userOpHash])
+    }
     func fundingComplete() { dispatchSign(["type": "funding_complete_tapped"]) }
 
     func guardPreset(_ mode: String) {
@@ -816,6 +825,23 @@ final class SigningController {
     /// preselected and must be tapped deliberately, and that surface is owed.
     func guardRevoke() { dispatch(guardCore, ["type": "revoke_chosen"]) }
     func guardGrant() { dispatch(guardCore, ["type": "grant_deliberately_chosen"]) }
+    /// One batch leg's grant-all, tapped deliberately (cs-17, per leg).
+    func guardLegGrant(_ index: Int) {
+        dispatch(guardCore, ["type": "leg_grant_deliberately_chosen", "index": index])
+    }
+
+    /// The chip ids the drawn editor emits, in the guard's vocabulary (the
+    /// web's `guardChip`): "grant" is the deliberate consent to allow all;
+    /// the rest are the editor's presets — the single approval's, or a
+    /// leg's own.
+    func guardChip(_ id: String, leg: Int? = nil) {
+        if id == "grant" {
+            if let leg { guardLegGrant(leg) } else { guardGrant() }
+            return
+        }
+        guard ["requested", "balance", "custom", "revoke"].contains(id) else { return }
+        if let leg { guardLegPreset(leg, id) } else { guardPreset(id) }
+    }
 
     /// The one gate the sheet reads — the core's, over the views the sheet
     /// draws (`shownSign`) and the speed in force. See the file header.

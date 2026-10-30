@@ -190,6 +190,12 @@ struct NetworkChoiceModel: Identifiable, Equatable {
 /// Spec 100: the add-network sheet a page opened (`NetView.dapp_add`), in
 /// words — `ExploreLive.addNetwork` picks Settings' own line for each part.
 struct AddNetworkSheetModel {
+    struct Unverified: Equatable {
+        let open: String
+        let warning: String
+        let confirm: String
+    }
+
     struct Row: Identifiable {
         var id: String { label }
         let label: String
@@ -212,6 +218,9 @@ struct AddNetworkSheetModel {
     let note: String?
     /// "Add Network" — only where the core says it can act.
     let add: String?
+    /// dapp-13: "Add without verifying", the risk said, then the explicit
+    /// confirmation — only where the core allows it (`can_add_unverified`).
+    var unverified: Unverified? = nil
     let retry: String?
     /// "Open Chain Setup Tool" and where it goes — the core's `setup_url`
     /// for this chain, so both are present or neither is.

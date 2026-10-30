@@ -71,6 +71,9 @@ enum SigningLive {
         /// The wallet's networks, the person's own included — what names the
         /// native coin a fee figure is in.
         var networks: WalletNetworks = .builtin
+        /// The descriptor service's host — the person's chain-data endpoint —
+        /// named in a fetched description's provenance line (cs-14).
+        var descriptorHost: String = URL(string: NetDefaults.ethereumDataURL)?.host ?? ""
 
         /// The Trusted Signer's waiting card is up: the account signs on the
         /// page and the signature is under way. The card speaks for the
@@ -1063,7 +1066,15 @@ enum SigningLive {
             .intent(text: s(loc, "batchIntent"), tone: tone(of: batch.risk)),
             .sentence(text: s(loc, "batchSubtitle", ["count": String(batch.calls.count)]), tone: .accent),
         ]
-        blocks += batch.calls.map { batchCallCard($0, context: context) }
+        for call in batch.calls {
+            blocks.append(batchCallCard(call, context: context))
+            // cs-1…cs-4, per leg, marked with its number (the web's
+            // `certainLines(result, inputs, '#n ')`).
+            if call.surface == .clearSign, let result = call.result {
+                blocks += certainLines(result, reading: result.reading ?? .ungraded,
+                                       loc: context.loc, prefix: "#\(call.index) ")
+            }
+        }
         if let total = batch.totalAmount, batch.totalValueWei != "0" {
             blocks.append(.rows([SigningRow(
                 label: loc.t("send.splitTotalLabel"), value: "−\(total) \(context.nativeSymbol)"
@@ -1121,7 +1132,7 @@ enum SigningLive {
         } ?? []
         if call.surface == .clearSign, let result = call.result {
             return .card(title: step(result.intent),
-                         rows: result.fields.filter { !$0.detail }.map { row(of: $0) } + coin + target,
+                         rows: result.fields.filter { !$0.detail }.map { row(of: $0, loc: loc) } + coin + target,
                          tone: tone)
         }
         if call.surface == .plainSend, let plain = call.plainSend {
@@ -1173,14 +1184,134 @@ enum SigningLive {
         _ result: ClearSignResultWire, native: ClearNativeValueWire?, context: Context
     ) -> [SigningBlock] {
         let loc = context.loc
-        var blocks: [SigningBlock] = [.intent(text: result.intent, tone: tone(of: result.risk))]
+        let reading = result.reading ?? .ungraded
+        // cs-7: a name from the public database is no headline; an approve-all
+        // the core read itself names its collection.
+        let intent: String
+        if reading.selectorName != nil {
+            intent = s(loc, "intentContractCall")
+        } else if result.intentTerm == "intentApproveAllNfts", reading.source == "vela" {
+            intent = c(loc, "approveAllYour", ["collection": collection(of: result, reading: reading)])
+        } else {
+            intent = result.intent
+        }
+        var blocks: [SigningBlock] = [.intent(text: intent, tone: tone(of: result.risk))]
+        // cs-14: where the reading came from — the one small line under it.
+        blocks.append(provenance(result, reading: reading, context: context))
+        // cs-18: an approval's amount is a ceiling somebody else may spend,
+        // never an amount leaving now.
+        if reading.allowance, let send = result.fields.first(where: { $0.role == .sendAmount }) {
+            let spender = result.fields.first { $0.role == .spender }
+            blocks.append(.sentence(
+                text: c(loc, reading.allowanceAdds ? "allowsMore" : "allowsUpTo", [
+                    "spender": spender.map { $0.thisAccount == true ? c(loc, "thisAccount") : $0.value } ?? "—",
+                    "amount": send.value,
+                ]),
+                tone: send.warning ? .danger : .neutral
+            ))
+        }
+        // Whatever the certain decode flagged, said once, in its own words.
+        blocks += certainLines(result, reading: reading, loc: loc)
         blocks += warnings(result, loc: loc)
         // Spec 096 F4: the coin the call sends leads the rows, in a batch
         // call's own words, when the reading does not say it itself.
         let coin = native.map { [coinRow($0, context: context)] } ?? []
-        let rows = coin + result.fields.filter { !$0.detail }.map { row(of: $0) }
+        let rows = coin + result.fields.filter { !$0.detail }.map { row(of: $0, loc: loc) }
         if !rows.isEmpty { blocks.append(.rows(rows)) }
+        // cs-8 / cs-14: the contract, on the card's face — its address, and
+        // its name with who called it so, or that nobody named it.
+        if let contract = contractLine(result, reading: reading, context: context) { blocks.append(contract) }
         return blocks
+    }
+
+    private static func c(_ loc: Loc, _ key: String, _ vars: [String: String] = [:]) -> String {
+        s(loc, "certain.\(key)", vars)
+    }
+
+    /// Who a line's label is from, as a row's marker says it — `nil` for
+    /// Vela's own read.
+    private static func sourceName(_ source: String?, loc: Loc, host: String) -> String? {
+        switch source ?? "vela" {
+        case "built_in": c(loc, "sourceBuiltIn")
+        case "fetched": c(loc, "sourceFetched", ["host": host])
+        case "selector_db": c(loc, "sourceSelectorDb")
+        case "shape": c(loc, "sourceShape")
+        default: nil
+        }
+    }
+
+    /// cs-14: what Vela read from the bytes, or whose description it is — and
+    /// a description is not a guarantee. A name anyone can register is a
+    /// caution in itself (cs-7).
+    static func provenance(_ result: ClearSignResultWire, reading: ClearReadingWire, context: Context) -> SigningBlock {
+        let loc = context.loc
+        let owner = reading.descriptorOwner
+        switch reading.source {
+        case "built_in":
+            return .source(text: owner.map { c(loc, "describedBuiltIn", ["owner": $0]) }
+                ?? c(loc, "describedBuiltInPlain"), tone: .neutral)
+        case "fetched":
+            let host = context.descriptorHost
+            return .source(text: owner.map { c(loc, "describedFetched", ["owner": $0, "host": host]) }
+                ?? c(loc, "describedFetchedPlain", ["host": host]), tone: .neutral)
+        case "shape":
+            return .source(text: c(loc, "shapeOnly", ["intent": result.intent]), tone: .neutral)
+        case "selector_db":
+            return .warning(tone: .caution, text: c(loc, "selectorName", ["name": reading.selectorName ?? ""]))
+        default:
+            return .source(
+                text: c(loc, result.signType == .signature ? "readByVelaSignature" : "readByVela"),
+                tone: .neutral
+            )
+        }
+    }
+
+    /// cs-1…cs-4: what a description said against the reading, an output
+    /// paid to a stranger, a dust minimum, and each token whose name is only
+    /// its own contract's word. `prefix` marks a batch leg ("#3 ").
+    static func certainLines(_ result: ClearSignResultWire, reading: ClearReadingWire, loc: Loc, prefix: String = "") -> [SigningBlock] {
+        var blocks: [SigningBlock] = reading.contradictions.map {
+            .warning(tone: .danger, text: prefix + c(loc, "contradiction", ["words": $0]))
+        }
+        if reading.goesElsewhere { blocks.append(.warning(tone: .danger, text: prefix + c(loc, "elsewhere"))) }
+        if reading.dustMinimum { blocks.append(.warning(tone: .caution, text: prefix + c(loc, "dustMinimum"))) }
+        var seen = Set<String>()
+        for field in result.fields where field.tokenNamedByContract == true {
+            guard let token = field.tokenAddress, !seen.contains(token) else { continue }
+            seen.insert(token)
+            let symbol = field.value.components(separatedBy: " (").first?
+                .trimmingCharacters(in: .whitespaces).components(separatedBy: " ").last ?? field.value
+            blocks.append(.source(
+                text: prefix + c(loc, "tokenByContract", ["symbol": symbol, "address": AddressText.short(token)]),
+                tone: .caution
+            ))
+        }
+        return blocks
+    }
+
+    /// An approve-all's collection: the name a list or a description gave
+    /// its contract; else its own `name()` beside its short address — the
+    /// contract's word, so never alone; else the short address.
+    private static func collection(of result: ClearSignResultWire, reading: ClearReadingWire) -> String {
+        if let name = result.contractName, !name.isEmpty { return name }
+        let short = result.contractAddress.map(AddressText.short) ?? ""
+        return reading.collectionName.map { "\($0) (\(short))" } ?? short
+    }
+
+    /// cs-8 / cs-14: "Contract · 0x1234…abcd · Uniswap, called so by …".
+    static func contractLine(_ result: ClearSignResultWire, reading: ClearReadingWire, context: Context) -> SigningBlock? {
+        guard let address = result.contractAddress, !address.isEmpty else { return nil }
+        let loc = context.loc
+        let short = AddressText.short(address)
+        guard let name = result.contractName, !name.isEmpty else {
+            return .source(text: c(loc, "contractUnnamed", ["address": short]), tone: .neutral)
+        }
+        let namedBy = reading.contractNamedBy
+        let source = namedBy == "fetched"
+            ? c(loc, "sourceFetched", ["host": context.descriptorHost])
+            : (namedBy != nil && namedBy != "built_in"
+                ? sourceName(namedBy, loc: loc, host: context.descriptorHost) : nil) ?? c(loc, "sourceList")
+        return .source(text: c(loc, "contractNamed", ["address": short, "name": name, "source": source]), tone: .neutral)
     }
 
     /// "Amount −0.003 BNB" — the core's `nativeValue`, as a batch call's coin
@@ -1221,10 +1352,11 @@ enum SigningLive {
         return blocks
     }
 
-    private static func row(of field: ClearSignFieldWire) -> SigningRow {
+    private static func row(of field: ClearSignFieldWire, loc: Loc) -> SigningRow {
         SigningRow(
             label: field.label,
-            value: field.value,
+            // cs-2: an address that IS this account says so.
+            value: field.thisAccount == true ? c(loc, "thisAccount") : field.value,
             valueTone: field.warning ? .danger : (field.unverified || field.expired ? .caution : .neutral),
             // An address reads as monospace; a contract the core names
             // ("PancakeSwap Permit2", 096 F5) is a name, in the text face.
@@ -1335,7 +1467,7 @@ enum SigningLive {
                 blocks.append(allowanceBlock(
                     editor: editor, meta: guardView.meta, increase: guardView.increaseTotal,
                     decimalsUnverified: guardView.decimalsUnverified, expired: guardView.expired,
-                    loc: loc
+                    loc: loc, boolean: guardView.detected?.isBooleanGrant == true
                 ))
             }
             if let detected = guardView.detected {
@@ -1357,7 +1489,10 @@ enum SigningLive {
                     blocks.append(allowanceBlock(
                         editor: editor, meta: leg.meta, increase: nil,
                         decimalsUnverified: false, expired: false, loc: loc,
-                        prefix: "#\(index + 1) ", leg: index
+                        prefix: "#\(index + 1) ", leg: index,
+                        // A grant-all leg is its own deliberate choice
+                        // (`leg_grant_deliberately_chosen`), never preset.
+                        boolean: leg.approval?.isBooleanGrant == true
                     ))
                 }
                 if let approval = leg.approval {
@@ -1373,7 +1508,7 @@ enum SigningLive {
         }
     }
 
-    private static func allowanceBlock(
+    static func allowanceBlock(
         editor: GuardEditorViewWire,
         meta: GuardTokenMetaViewWire,
         increase: GuardIncreaseTotalViewWire?,
@@ -1381,8 +1516,26 @@ enum SigningLive {
         expired: Bool,
         loc: Loc,
         prefix: String = "",
-        leg: Int? = nil
+        leg: Int? = nil,
+        boolean: Bool = false
     ) -> SigningBlock {
+        // cs-17: a grant-all (setApprovalForAll, a DAI permit) has no amount
+        // to cap — its choice is to allow all or to revoke, and the core
+        // waits for that deliberate tap. Nothing is preselected.
+        if boolean {
+            let picked = editor.choice
+            func state(_ mode: GuardEditorMode) -> AllowanceChip.State { editor.mode == mode ? .selected : .idle }
+            return .allowance(
+                label: prefix + s(loc, "labelOperator"),
+                value: picked == .grant ? s(loc, "certain.chipGrantAll") : picked == .revoke ? a(loc, "revoke") : "—",
+                valueTone: picked == .grant ? .danger : .neutral,
+                chips: [
+                    AllowanceChip(id: "grant", label: s(loc, "certain.chipGrantAll"), state: state(.grant)),
+                    AllowanceChip(id: "revoke", label: a(loc, "revoke"), state: state(.revoke)),
+                ],
+                leg: leg
+            )
+        }
         func chip(_ id: String, _ label: String, _ mode: GuardEditorMode, offered: Bool) -> AllowanceChip {
             AllowanceChip(
                 id: id, label: label,

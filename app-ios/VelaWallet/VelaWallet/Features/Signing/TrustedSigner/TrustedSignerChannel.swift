@@ -308,9 +308,15 @@ final class TrustedSignerChannel: TrustedSignerConversation {
             // signature's `result` object, or a ceremony's own envelope
             // (`intake.js`: `body.result !== undefined ? body.result : body`).
             switch current {
-            case .signature(_, let digest, let keys):
-                deliver(.outcome(trustedSignerVerify(
-                    resultJson: answerJson, digest: digest, keys: keys
+            case .signature(let request, let digest, let keys):
+                // Held to the REQUEST (F0.2, the web's
+                // `trustedSignerSignatureAccept`): the bytes the core
+                // computes from what the page was handed must be `digest` —
+                // the bytes about to be signed — before the answer is read.
+                // A request that describes one thing while the shell signs
+                // another is a mismatch, whatever the page answers.
+                deliver(.outcome(trustedSignerSignatureAccept(
+                    requestJson: request, resultJson: answerJson, keys: keys, digest: digest
                 )))
             case .ceremony(_, let operationJson, let memberChallenge):
                 deliver(.ceremony(trustedSignerVerifyCeremony(

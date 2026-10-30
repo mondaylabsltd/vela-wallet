@@ -327,7 +327,7 @@ struct SigningVenueSettingsTests {
         #expect(blocks.contains { if case .warning(_, let text) = $0 { return text == block.text(zh) }; return false })
         // The wire the executors send, read back by the core's own JSON.
         #expect(CoreJSON.string(SignExecutor.venueBlocked(block)).contains(#""type":"venue_blocked""#))
-        #expect(VenueBlockWire.notOnWeb.text(zh) == "签名页只能从 Vela 应用打开，网页版不支持。")
+        #expect(VenueBlockWire.notOnWeb.text(zh) == "网页版不能用，请在 Vela 应用里打开。")
     }
 
     /// In Vela: the sheet as it always was — no card.

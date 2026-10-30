@@ -65,10 +65,30 @@ struct BatchImportTests {
 
     /// Open the sheet AND answer the rate it asks for.
     ///
-    /// The unit starts at `fiat` — the payroll case — so every amount is a
-    /// fiat figure awaiting a multiplier, and until one lands the machine
-    /// prices nothing and applies nothing. A test that skipped this would be
-    /// reading a machine that is still waiting.
+    /// The sheet opens in the coin being sent (the core's send-16: "100"
+    /// beside USDC is 100 USDC); reading the figures as fiat is the person's
+    /// choice (`fiatUnit`). The rate is asked for at open either way, so a
+    /// test that skipped this would be reading a machine still waiting.
+    /// The payroll case: figures read as fiat, priced by the rate.
+    private func fiatUnit(_ core: BatchImportCore) throws {
+        _ = try core.dispatch(eventJson: CoreJSON.string(["type": "set_unit", "unit": "fiat"]))
+    }
+
+    /// The sheet opens in the coin, whatever the rate says: an unpriceable
+    /// currency stops nothing a person typed in USDC.
+    @Test func theSheetOpensInTheCoinBeingSent() throws {
+        let core = BatchImportCore()
+        try priced(core, currency: "VND", rate: nil)
+        let pasted = try core.dispatch(eventJson: CoreJSON.string([
+            "type": "set_raw_text",
+            "text": "0x1111111111111111111111111111111111111111,10",
+        ]))
+        let parsed = try CoreJSON.decode(BatchViewWire.self, from: try view(from: pasted))
+        #expect(parsed.unit == .token)
+        #expect(parsed.recipients.map(\.amount) == ["10"])
+        #expect(parsed.canApply)
+    }
+
     @discardableResult
     private func priced(_ core: BatchImportCore, currency: String = "USD", rate: Double? = 1)
         throws -> BatchViewWire
@@ -171,6 +191,7 @@ struct BatchImportTests {
     @Test func anUnpriceableCurrencyCannotBeApplied() throws {
         let core = BatchImportCore()
         try priced(core, currency: "VND", rate: nil)
+        try fiatUnit(core)
         let pasted = try core.dispatch(eventJson: CoreJSON.string([
             "type": "set_raw_text",
             "text": "0x1111111111111111111111111111111111111111,10",
@@ -275,6 +296,7 @@ struct BatchImportTests {
         let model = sheetModel(loc: loc)
         let core = BatchImportCore()
         try priced(core)
+        try fiatUnit(core)
         let pasted = try core.dispatch(eventJson: CoreJSON.string([
             "type": "set_raw_text", "text": "0x1111111111111111111111111111111111111111,10",
         ]))

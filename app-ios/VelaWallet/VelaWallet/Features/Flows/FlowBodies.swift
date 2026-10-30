@@ -789,6 +789,8 @@ struct SendPickBody: View {
 
     let model: SendPickModel
     var onFilter: (String) -> Void = { _ in }
+    /// The lock's way out, by the chain it names (round 4).
+    var onNoticeAction: (Int) -> Void = { _ in }
     var onSelect: (Int) -> Void = { _ in }
     /// **The rows that are on screen**, by index. A search narrows the list,
     /// and "select all valuable" must not sweep holdings a person cannot see.
@@ -821,6 +823,27 @@ struct SendPickBody: View {
             FlowFilterChips(options: model.filters, onSelect: onFilter)
             if let notice = model.notice {
                 NoticeBannerView(text: notice.text, mark: notice.mark)
+                // Round 4: "Add this network" — a link-weight action under the
+                // notice it answers (navigation, not value: no accent).
+                if let action = notice.action, let chainId = notice.actionChainId {
+                    Button {
+                        VelaHaptic.press.play()
+                        onNoticeAction(chainId)
+                    } label: {
+                        HStack(spacing: Tokens.Space.s8) {
+                            if notice.busy { ProgressView().controlSize(.small) }
+                            Text(verbatim: action)
+                                .typeRole(Typography.rowSub.scaled(textScale))
+                                .fontWeight(.semibold)
+                                .foregroundStyle(theme.infoBase)
+                        }
+                        .frame(minHeight: Tokens.Layout.hitTarget)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(notice.busy)
+                    .accessibilityIdentifier("send.lock.addNetwork")
+                }
             }
             VStack(spacing: Tokens.Space.s0) {
                 ForEach(Array(shown.enumerated()), id: \.element.offset) { position, entry in
@@ -1430,6 +1453,8 @@ struct SendConfirmBody: View {
     let model: SendConfirmModel
     var onConfirm: () -> Void = {}
     var onNoticeAction: () -> Void = {}
+    /// Round 3: "Check again" on the recipient check.
+    var onRiskRetry: () -> Void = {}
     var onNoticeSecondary: () -> Void = {}
     /// Issue #466: the stop's "Report this".
     var onNoticeReport: () -> Void = {}
@@ -1467,6 +1492,17 @@ struct SendConfirmBody: View {
                 Text(verbatim: model.subline)
                     .typeRole(Typography.body.scaled(textScale))
                     .foregroundStyle(theme.fgSubtle)
+                // r5reg-3: the Max moved with a newer quote — said where the
+                // figure is, so the number read is the number signed.
+                if let max = model.maxNote {
+                    Text(verbatim: max)
+                        .typeRole(Typography.rowSub.scaled(textScale))
+                        .foregroundStyle(theme.warningBase)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, Tokens.Space.s8)
+                        .accessibilityIdentifier("send.confirm.maxMoved")
+                }
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, Tokens.Space.s16)
@@ -1503,6 +1539,40 @@ struct SendConfirmBody: View {
                     .foregroundStyle(theme.warningBase)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, Tokens.Space.s12)
+            }
+
+            // Round 3 (send-18): the check the confirm opened without, in
+            // neutral ink — what is unknown is not a warning — and its retry.
+            if let check = model.recipientCheck {
+                HStack(alignment: .firstTextBaseline, spacing: Tokens.Space.s8) {
+                    Text(verbatim: check.text)
+                        .typeRole(Typography.rowSub.scaled(textScale))
+                        .foregroundStyle(theme.fgMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: Tokens.Space.s8)
+                    Button {
+                        VelaHaptic.press.play()
+                        onRiskRetry()
+                    } label: {
+                        Text(verbatim: check.retry)
+                            .typeRole(Typography.rowSub.scaled(textScale))
+                            .fontWeight(.semibold)
+                            .foregroundStyle(theme.infoBase)
+                            .frame(minHeight: Tokens.Layout.hitTarget)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("send.confirm.riskRetry")
+                }
+                .padding(.horizontal, Tokens.Space.s12)
+                .accessibilityElement(children: .contain)
+            }
+
+            // send-11: the prompt signed nothing — calmly, over the confirm
+            // that is the way to try again.
+            if model.notice == nil, let passkey = model.passkeyNote {
+                NoticeBannerView(text: passkey)
+                    .accessibilityIdentifier("send.confirm.passkeyNote")
             }
 
             if let notice = model.notice {

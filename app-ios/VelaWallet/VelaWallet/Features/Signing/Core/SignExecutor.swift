@@ -400,9 +400,12 @@ final class SignExecutor {
                 return ["type": "passkey_cancelled"]
             case .signer(let kind, let message):
                 return Self.signerFailed(kind, message)
+            // Round 7: the page is the venue, so its ending is the answer —
+            // declined there (the core answers 4001 and clears the sheet), or
+            // the page's failure, which the core says on the sheet and to the
+            // site (`SignErrorKind::page_*`). Never "cancelled".
             case .trustedSigner(let notice):
-                ports.trustedSignerEnded(notice)
-                return ["type": "passkey_cancelled"]
+                return notice.signOutcome
             // Spec 102: this account cannot sign here. The core answers the
             // page and draws the reason (`SignErrorNotice.venue_block`).
             case .venueBlocked(let block):
@@ -509,10 +512,7 @@ final class SignExecutor {
             if case .passkeyCancelled = refused.failure { return ["type": "passkey_cancelled"] }
             if case .signer(let kind, let message) = refused.failure { return Self.signerFailed(kind, message) }
             if case .askerGone = refused.failure { return ["type": "asker_gone"] }
-            if case .trustedSigner(let notice) = refused.failure {
-                ports.trustedSignerEnded(notice)
-                return ["type": "passkey_cancelled"]
-            }
+            if case .trustedSigner(let notice) = refused.failure { return notice.signOutcome }
             if case .venueBlocked(let block) = refused.failure { return Self.venueBlocked(block) }
             if case .other(let message) = refused.failure {
                 return Self.failed(message ?? "Signing failed")

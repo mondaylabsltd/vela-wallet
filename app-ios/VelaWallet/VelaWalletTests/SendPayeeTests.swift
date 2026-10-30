@@ -294,7 +294,10 @@ struct SendPayeeTests {
         try run(["type": "set_recipient", "recipient": Self.devWallet])
 
         let view = try CoreJSON.decode(SendViewWire.self, from: latest)
-        #expect(view.payees == [SendPayeeWire(address: Self.devWallet, name: "Wallet", nameSource: .registry)])
+        // `first_time` rides along since the core judges it per payee (send-20).
+        #expect(view.payees == [SendPayeeWire(address: Self.devWallet, name: "Wallet", nameSource: .registry,
+                                              firstTime: view.payees?.first?.firstTime)])
+        #expect(view.payees?.first?.firstTime != nil, "the core judged first-time for the payee")
         let row = try toRow(try confirm(view))
         #expect(row.value == "Wallet")
         #expect(row.detail == "Vela User · 0x14fB…eA5c")

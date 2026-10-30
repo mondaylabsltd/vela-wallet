@@ -165,6 +165,39 @@ enum TrustedSignerNotice: Equatable {
     /// Closed is the person's own decision, told calmly; everything else is
     /// not.
     var calm: Bool { self == .closed }
+
+    /// Round 7 (`PageFailure`): why the account's trusted signing page did
+    /// not sign, when the person did not decline there — the core's word,
+    /// which it says on the sheet and to the site. `nil` for `.closed`: that
+    /// is the person's answer (`SignSubmitOutcome::PageDeclined`).
+    ///
+    /// The web's mapping (`PageSignFailedError.page`): silent → unanswered,
+    /// an answer that is not this request's → mismatch, the check that did
+    /// not admit the page → not_opened, anything else the page refused. A
+    /// page that could not be put on screen at all opened nothing:
+    /// not_opened.
+    var pageFailure: String? {
+        switch self {
+        case .closed: nil
+        case .timeout: "unanswered"
+        case .mismatch: "mismatch"
+        case .notOpened, .unavailable: "not_opened"
+        case .refused: "refused"
+        }
+    }
+
+    /// The dApp request's outcome for this ending (`SignSubmitOutcome`):
+    /// declined on the page, or the page's failure.
+    var signOutcome: [String: Any] {
+        pageFailure.map { ["type": "page_failed", "failure": $0] } ?? ["type": "page_declined"]
+    }
+
+    /// The wallet's own send's (`SendSubmitFailure`): the send has no site to
+    /// answer, so a page closed unsigned keeps the confirmation on screen
+    /// (the core's cancelled ceremony), and a failure is the core's to word.
+    var sendFailure: [String: Any] {
+        pageFailure.map { ["type": "page_failed", "failure": $0] } ?? ["type": "passkey_cancelled"]
+    }
 }
 
 final class TrustedSigner: NSObject, TrustedSignerPort, TrustedSignerCeremonyPort, SFSafariViewControllerDelegate {

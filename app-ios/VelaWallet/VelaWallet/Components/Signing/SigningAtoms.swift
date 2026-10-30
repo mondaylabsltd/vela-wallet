@@ -424,6 +424,27 @@ struct SigningWarning: View {
     }
 }
 
+/// cs-14: where a reading came from, or what the contract is called and by
+/// whom — one small line under the intent (or at the card's foot), in its
+/// tone and no box. A neutral line is muted: it is a fact, not a finding.
+struct SigningSourceLine: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.walletTextScale) private var textScale
+
+    let text: String
+    let tone: SigningTone
+
+    var body: some View {
+        Text(verbatim: text)
+            .typeRole(Typography.label.scaled(textScale))
+            .foregroundStyle(tone == .neutral ? theme.fgSubtle : tone.color(theme))
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, Tokens.Space.s4)
+            .accessibilityIdentifier("signing.source")
+    }
+}
+
 struct SigningPositive: View {
     @Environment(\.theme) private var theme
     @Environment(\.walletTextScale) private var textScale

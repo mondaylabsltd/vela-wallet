@@ -73,27 +73,17 @@ final class SettingsParityDeviceTests: XCTestCase {
         app.terminate()
     }
 
-    /// RPC 供应商 and 服务节点 are the core's view: nobody's fixture key, the
-    /// saved state per provider, and the four endpoints' own pills.
+    /// There is no RPC 供应商 row (owner 2026-10-29: a network's own RPC is
+    /// the one setting), and 服务节点 is the core's view: the four endpoints'
+    /// own pills.
     func testProvidersAndEndpointsAreTheCoresView() {
         let app = launch(page: "settings-live")
         XCTAssertTrue(app.staticTexts["高级"].waitForExistence(timeout: 20))
         settle()
-        if !app.staticTexts["RPC 供应商"].exists { app.staticTexts["高级"].tap(); settle(1) }
+        if !app.staticTexts["服务节点"].exists { app.staticTexts["高级"].tap(); settle(1) }
         attach(app.screenshot(), named: "parity-advanced-rows")
+        XCTAssertFalse(app.staticTexts["RPC 供应商"].exists, "the retired provider-key row is back")
 
-        open(row: "RPC 供应商", in: app)
-        settle(1.5)
-        attach(app.screenshot(), named: "parity-providers")
-        XCTAssertFalse(
-            app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "alch_k3y")).firstMatch.exists,
-            "the providers page still shows the fixture's key"
-        )
-        XCTAssertTrue(app.staticTexts["未设置"].firstMatch.exists || app.textFields["未设置"].firstMatch.exists,
-                      "no provider says it is not set")
-
-        back(in: app)
-        settle(1)
         open(row: "服务节点", in: app)
         settle(3)
         attach(app.screenshot(), named: "parity-endpoints")
