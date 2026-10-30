@@ -558,7 +558,9 @@
       "fullScreen": "Alternar Tela Cheia",
       "window": "Janela",
       "minimize": "Minimizar",
-      "closeWindow": "Fechar Janela"
+      "closeWindow": "Fechar Janela",
+      "find": "Buscar",
+      "commandPalette": "Paleta de Comandos"
     },
     "browserStatus": {
       "title": "Status da aba",

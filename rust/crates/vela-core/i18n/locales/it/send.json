@@ -189,6 +189,7 @@
     "submitSlow": "In attesa di una risposta da {{network}}: {{seconds}} s finora. Non è ancora stato firmato nulla.",
     "txErrorChainBusy": "I nodi di {{network}} sono sovraccarichi e non hanno risposto in tempo, quindi non è stato firmato né inviato nulla. Riprova tra poco.",
     "txErrorChainUnreachable": "Impossibile raggiungere {{network}}, quindi non è stato firmato né inviato nulla. Riprova tra poco.",
+    "txErrorProposalNotSupported": "Questa app non può ancora proporre transazioni multisig, quindi non è stato firmato né proposto nulla.",
     "maxMoved": "Il massimo ora è {{to}} {{symbol}} (prima {{from}}): la commissione di rete è stata ricalcolata, quindi è cambiato l’importo tenuto da parte per pagarla.",
     "txReviewAgain": "Rivedi",
     "txSendAgain": "Invia di nuovo",

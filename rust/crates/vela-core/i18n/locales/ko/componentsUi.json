@@ -558,7 +558,9 @@
       "fullScreen": "전체 화면 전환",
       "window": "윈도우",
       "minimize": "최소화",
-      "closeWindow": "윈도우 닫기"
+      "closeWindow": "윈도우 닫기",
+      "find": "찾기",
+      "commandPalette": "명령 팔레트"
     },
     "browserStatus": {
       "title": "탭 상태",

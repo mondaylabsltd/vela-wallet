@@ -558,7 +558,9 @@
       "fullScreen": "Attiva/disattiva tutto schermo",
       "window": "Finestra",
       "minimize": "Contrai",
-      "closeWindow": "Chiudi finestra"
+      "closeWindow": "Chiudi finestra",
+      "find": "Trova",
+      "commandPalette": "Tavolozza comandi"
     },
     "browserStatus": {
       "title": "Stato della scheda",

@@ -17,12 +17,13 @@ use support::DomainDriver;
 use vela_core::app::rpc_pool::{
     backoff_with_jitter_ms, cooldown_ms, early_verdict, endpoint_score, get_logs_range_cap,
     is_ban_active, is_hedged_read, is_log_range_error, is_optional_method, is_permanent_rpc_error,
-    is_rate_limit_signal, is_transient_server_error, may_have_delivered, qualifies_for_perma_ban,
-    record_failure, record_success, select_urls, source_priority, strip_chain_suffix, Event,
-    RpcBanEntry, RpcCallVerdict, RpcEndpointSeed, RpcEndpointStats, RpcErrorInfo, RpcKind,
-    RpcOperation as Op, RpcPool, RpcPoolView, RpcShellResult as Res, RpcSource,
-    RpcTransportOutcome as Out, BUNDLER_RPC_TIMEOUT_MS, HEDGE_AFTER_MS, OPTIONAL_METHODS,
-    PERMA_BAN_TTL_MS, PING_TIMEOUT_MS, POOL_REFRESH_MS, RPC_READ_TIMEOUT_MS, TEMP_BAN_TTL_MS,
+    is_rate_limit_signal, is_transient_server_error, may_have_delivered, node_standing,
+    qualifies_for_perma_ban, record_failure, record_success, select_urls, source_priority,
+    strip_chain_suffix, Event, NodeStanding, RpcBanEntry, RpcCallVerdict, RpcEndpointSeed,
+    RpcEndpointStats, RpcErrorInfo, RpcKind, RpcOperation as Op, RpcPool, RpcPoolView,
+    RpcShellResult as Res, RpcSource, RpcTransportOutcome as Out, BUNDLER_RPC_TIMEOUT_MS,
+    HEDGE_AFTER_MS, OPTIONAL_METHODS, PERMA_BAN_TTL_MS, PING_TIMEOUT_MS, POOL_REFRESH_MS,
+    RPC_READ_TIMEOUT_MS, TEMP_BAN_TTL_MS,
 };
 
 type Sut = DomainDriver<RpcPool>;
@@ -3348,6 +3349,7 @@ fn an_own_node_that_does_not_answer_falls_back_and_says_so_until_it_answers() {
     assert_eq!(view.fallback_chains, vec![CHAIN]);
     assert!(view.failed_chains.is_empty(), "the wallet reads on");
     assert!(view.own_only_chains.is_empty());
+    assert_eq!(node_standing(&view, CHAIN), NodeStanding::FallingBack);
 
     // Still cooling down: the public node answers again, still said.
     let (_, posted) = sweep_with(
@@ -3420,6 +3422,26 @@ fn only_my_node_never_asks_another_node_and_its_failure_is_said_as_theirs() {
     let view = sut.view();
     assert_eq!(view.own_only_chains, vec![CHAIN]);
     assert!(view.own_node_unreached_chains.is_empty());
+    assert_eq!(node_standing(&view, CHAIN), NodeStanding::OwnOnly);
+}
+
+/// One reading of the three lists for every shell: unreached before own-only
+/// (an own-only chain is in both), falling back, else the usual pool.
+#[test]
+fn a_chain_s_node_standing_reads_the_view_s_lists_in_one_order() {
+    let view: RpcPoolView = serde_json::from_value(serde_json::json!({
+        "failed_chains": [1],
+        "rate_limited_chains": [],
+        "banned": [],
+        "fallback_chains": [100],
+        "own_only_chains": [1, 10],
+        "own_node_unreached_chains": [1],
+    }))
+    .expect("a view");
+    assert_eq!(node_standing(&view, 1), NodeStanding::OwnNodeUnreached);
+    assert_eq!(node_standing(&view, 10), NodeStanding::OwnOnly);
+    assert_eq!(node_standing(&view, 100), NodeStanding::FallingBack);
+    assert_eq!(node_standing(&view, 8453), NodeStanding::Pooled);
 }
 
 /// The switch is about the person's node: with none configured it means

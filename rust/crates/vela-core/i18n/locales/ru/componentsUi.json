@@ -558,7 +558,9 @@
       "fullScreen": "Полноэкранный режим",
       "window": "Окно",
       "minimize": "Свернуть",
-      "closeWindow": "Закрыть окно"
+      "closeWindow": "Закрыть окно",
+      "find": "Найти",
+      "commandPalette": "Палитра команд"
     },
     "browserStatus": {
       "title": "Состояние вкладки",

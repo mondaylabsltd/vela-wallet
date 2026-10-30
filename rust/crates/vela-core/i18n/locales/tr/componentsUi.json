@@ -558,7 +558,9 @@
       "fullScreen": "Tam Ekranı Aç/Kapat",
       "window": "Pencere",
       "minimize": "Küçült",
-      "closeWindow": "Pencereyi Kapat"
+      "closeWindow": "Pencereyi Kapat",
+      "find": "Bul",
+      "commandPalette": "Komut Paleti"
     },
     "browserStatus": {
       "title": "Sekme durumu",

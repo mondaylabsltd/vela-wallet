@@ -1304,8 +1304,15 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `componentsUi.browserStatus.reason.signingPage` (the dApp record's line
 //   for a page that did not sign, r7-2 / r7-7). 2210 + 2 = 2212 paths, 2104
 //   leaves, 108 branches.
-if (PATHS.length !== 2212) fail(`expected 2212 paths (2104 leaf + 108 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2104) fail(`expected 2104 leaf paths, got ${leafSet.size}`);
+// 2215 (core asks 1, 2026-10-30): + `componentsUi.appMenu.find` and
+//   `componentsUi.appMenu.commandPalette` (the desktop's Edit ▸ Find and
+//   Wallet ▸ Command Palette menu items, until now a placeholder's words)
+//   and `send.txErrorProposalNotSupported` (a multisig proposal a shell
+//   cannot make yet, said as that — `SendProposeFailure::NotSupported` —
+//   never as a mailbox that could not be read). 2212 + 3 = 2215 paths,
+//   2107 leaves, 108 branches.
+if (PATHS.length !== 2215) fail(`expected 2215 paths (2107 leaf + 108 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2107) fail(`expected 2107 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 108) fail(`expected 108 branch paths, got ${branchSet.size}`);
 // The on-demand catalogs, pinned the same way (leaves of every locale's union):
 // a key dropped from one namespace and not landed in the other fails here.

@@ -198,13 +198,33 @@ fn an_error_with_nothing_delivered_is_not_sent_with_the_rejection() {
             rejection: Some(RelayRejection::BundlerUnderfunded)
         })
     );
+    // send-15: the bare AA25 is the nonce spent by another transaction of
+    // the account — its own rejection, so every shell can say so (never the
+    // relay's sentence as a refusal).
     assert_eq!(
         submit_step(&error("AA25 invalid account nonce"), 0, false, LOCAL),
         done(SubmitVerdict::NotSent {
+            rejection: Some(RelayRejection::NonceUsed)
+        })
+    );
+    assert_eq!(
+        submit_step(&error("AA23 reverted"), 0, false, LOCAL),
+        done(SubmitVerdict::NotSent {
             rejection: Some(RelayRejection::Other(
-                "Transaction nonce mismatch. Please try again.".to_owned()
+                "Transaction reverted during simulation. Check recipient address and amount."
+                    .to_owned()
             ))
         })
+    );
+}
+
+/// A spent nonce after an earlier POST that may have delivered proves
+/// nothing about that POST (rule 4): the op may be the one that spent it.
+#[test]
+fn a_spent_nonce_after_a_lost_reply_may_have_been_sent() {
+    assert_eq!(
+        submit_step(&error("AA25 invalid account nonce"), 1, true, LOCAL),
+        maybe_sent()
     );
 }
 

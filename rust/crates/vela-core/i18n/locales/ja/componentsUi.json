@@ -558,7 +558,9 @@
       "fullScreen": "フルスクリーンを切り替え",
       "window": "ウインドウ",
       "minimize": "しまう",
-      "closeWindow": "ウインドウを閉じる"
+      "closeWindow": "ウインドウを閉じる",
+      "find": "検索",
+      "commandPalette": "コマンドパレット"
     },
     "browserStatus": {
       "title": "タブの状態",

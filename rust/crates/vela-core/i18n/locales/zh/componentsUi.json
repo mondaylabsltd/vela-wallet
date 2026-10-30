@@ -558,7 +558,9 @@
       "fullScreen": "切换全屏幕",
       "window": "窗口",
       "minimize": "最小化",
-      "closeWindow": "关闭窗口"
+      "closeWindow": "关闭窗口",
+      "find": "查找",
+      "commandPalette": "命令面板"
     },
     "browserStatus": {
       "title": "标签页状态",

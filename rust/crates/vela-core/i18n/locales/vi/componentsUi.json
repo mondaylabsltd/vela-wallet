@@ -558,7 +558,9 @@
       "fullScreen": "Bật/tắt toàn màn hình",
       "window": "Cửa sổ",
       "minimize": "Thu nhỏ",
-      "closeWindow": "Đóng cửa sổ"
+      "closeWindow": "Đóng cửa sổ",
+      "find": "Tìm",
+      "commandPalette": "Bảng lệnh"
     },
     "browserStatus": {
       "title": "Trạng thái tab",

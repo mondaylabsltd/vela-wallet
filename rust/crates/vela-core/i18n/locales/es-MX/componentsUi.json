@@ -558,7 +558,9 @@
       "fullScreen": "Activar o desactivar pantalla completa",
       "window": "Ventana",
       "minimize": "Minimizar",
-      "closeWindow": "Cerrar ventana"
+      "closeWindow": "Cerrar ventana",
+      "find": "Buscar",
+      "commandPalette": "Paleta de comandos"
     },
     "browserStatus": {
       "title": "Estado de la pestaña",
