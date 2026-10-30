@@ -562,6 +562,14 @@
       "find": "Bul",
       "commandPalette": "Komut Paleti"
     },
+    "appUpdate": {
+      "title": "Güncelleme var",
+      "install": "Yükle",
+      "later": "Sonra"
+    },
+    "dropOverlay": {
+      "title": "Adres, ödeme bağlantısı veya QR görseli bırakın"
+    },
     "browserStatus": {
       "title": "Sekme durumu",
       "page": {

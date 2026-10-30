@@ -562,6 +562,14 @@
       "find": "検索",
       "commandPalette": "コマンドパレット"
     },
+    "appUpdate": {
+      "title": "アップデートがあります",
+      "install": "インストール",
+      "later": "後で"
+    },
+    "dropOverlay": {
+      "title": "アドレス、支払いリンク、QR画像をドロップ"
+    },
     "browserStatus": {
       "title": "タブの状態",
       "page": {

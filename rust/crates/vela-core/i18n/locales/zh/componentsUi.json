@@ -562,6 +562,14 @@
       "find": "查找",
       "commandPalette": "命令面板"
     },
+    "appUpdate": {
+      "title": "有可用更新",
+      "install": "安装",
+      "later": "稍后"
+    },
+    "dropOverlay": {
+      "title": "拖放地址、付款链接或二维码图片"
+    },
     "browserStatus": {
       "title": "标签页状态",
       "page": {

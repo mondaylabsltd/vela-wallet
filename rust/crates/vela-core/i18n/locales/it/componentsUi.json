@@ -562,6 +562,14 @@
       "find": "Trova",
       "commandPalette": "Tavolozza comandi"
     },
+    "appUpdate": {
+      "title": "Aggiornamento disponibile",
+      "install": "Installa",
+      "later": "Più tardi"
+    },
+    "dropOverlay": {
+      "title": "Trascina qui un indirizzo, un link di pagamento o un'immagine QR"
+    },
     "browserStatus": {
       "title": "Stato della scheda",
       "page": {

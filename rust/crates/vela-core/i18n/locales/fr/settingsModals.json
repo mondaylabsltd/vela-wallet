@@ -125,6 +125,11 @@
       "attestation": "Attestation",
       "userVerified": "Vérification à chaque utilisation",
       "signsHere": "Connectée"
+    },
+    "appearance": {
+      "menuBar": "Afficher dans la barre des menus",
+      "trayIcon": "Afficher dans la zone de notification",
+      "statusItemHint": "Votre total et Envoyer et Recevoir en un clic, d’après les derniers montants chargés : rien de plus n’est récupéré."
     }
   }
 }

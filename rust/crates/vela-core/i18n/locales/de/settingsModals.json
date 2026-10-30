@@ -125,6 +125,11 @@
       "attestation": "Attestierung",
       "userVerified": "Bestätigung bei Nutzung",
       "signsHere": "Angemeldet"
+    },
+    "appearance": {
+      "menuBar": "In der Menüleiste anzeigen",
+      "trayIcon": "Im Infobereich anzeigen",
+      "statusItemHint": "Dein Gesamtwert und schnelles Senden und Empfangen, aus den zuletzt geladenen Werten – dafür wird nichts zusätzlich abgerufen."
     }
   }
 }

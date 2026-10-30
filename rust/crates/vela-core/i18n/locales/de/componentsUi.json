@@ -562,6 +562,14 @@
       "find": "Suchen",
       "commandPalette": "Befehlspalette"
     },
+    "appUpdate": {
+      "title": "Update verfügbar",
+      "install": "Installieren",
+      "later": "Später"
+    },
+    "dropOverlay": {
+      "title": "Adresse, Zahlungslink oder QR-Bild hier ablegen"
+    },
     "browserStatus": {
       "title": "Tab-Status",
       "page": {

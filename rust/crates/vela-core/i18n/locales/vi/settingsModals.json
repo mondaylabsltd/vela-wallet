@@ -125,6 +125,11 @@
       "attestation": "Chứng thực",
       "userVerified": "Cần xác minh khi dùng",
       "signsHere": "Đang đăng nhập"
+    },
+    "appearance": {
+      "menuBar": "Hiển thị trên thanh menu",
+      "trayIcon": "Hiển thị trong khay hệ thống",
+      "statusItemHint": "Tổng số dư cùng Gửi và Nhận nhanh, từ số liệu tải gần nhất — không tải thêm gì."
     }
   }
 }

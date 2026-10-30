@@ -562,6 +562,14 @@
       "find": "Tìm",
       "commandPalette": "Bảng lệnh"
     },
+    "appUpdate": {
+      "title": "Có bản cập nhật",
+      "install": "Cài đặt",
+      "later": "Để sau"
+    },
+    "dropOverlay": {
+      "title": "Thả địa chỉ, liên kết thanh toán hoặc ảnh QR vào đây"
+    },
     "browserStatus": {
       "title": "Trạng thái tab",
       "page": {

@@ -562,6 +562,14 @@
       "find": "Cari",
       "commandPalette": "Palet Perintah"
     },
+    "appUpdate": {
+      "title": "Pembaruan tersedia",
+      "install": "Instal",
+      "later": "Nanti"
+    },
+    "dropOverlay": {
+      "title": "Letakkan alamat, tautan pembayaran, atau gambar QR"
+    },
     "browserStatus": {
       "title": "Status tab",
       "page": {

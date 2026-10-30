@@ -562,6 +562,14 @@
       "find": "Find",
       "commandPalette": "Command Palette"
     },
+    "appUpdate": {
+      "title": "Update available",
+      "install": "Install",
+      "later": "Later"
+    },
+    "dropOverlay": {
+      "title": "Drop an address, payment link or QR image"
+    },
     "browserStatus": {
       "title": "Tab status",
       "page": {

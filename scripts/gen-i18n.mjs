@@ -1311,9 +1311,16 @@ for (let i = 1; i < PATHS.length; i++) {
 //   cannot make yet, said as that — `SendProposeFailure::NotSupported` —
 //   never as a mailbox that could not be read). 2212 + 3 = 2215 paths,
 //   2107 leaves, 108 branches.
-if (PATHS.length !== 2215) fail(`expected 2215 paths (2107 leaf + 108 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2107) fail(`expected 2107 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 108) fail(`expected 108 branch paths, got ${branchSet.size}`);
+// 2225 (core asks 1, desktop phase 3, 2026-10-31): + the menu-bar / tray
+//   switch (`settingsModals.appearance.{menuBar,trayIcon,statusItemHint}`:
+//   macOS's title, Windows' title, one hint for both), the update prompt
+//   (`componentsUi.appUpdate.{title,install,later}`) and the drop overlay's
+//   title (`componentsUi.dropOverlay.title`). 2215 + 7 leaves + 3 branches
+//   (`settingsModals.appearance`, `componentsUi.appUpdate`,
+//   `componentsUi.dropOverlay`) = 2225 paths, 2114 leaves, 111 branches.
+if (PATHS.length !== 2225) fail(`expected 2225 paths (2114 leaf + 111 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2114) fail(`expected 2114 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 111) fail(`expected 111 branch paths, got ${branchSet.size}`);
 // The on-demand catalogs, pinned the same way (leaves of every locale's union):
 // a key dropped from one namespace and not landed in the other fails here.
 // 579 (round 6, the outside owner's connect page, 2026-10-30): + 17

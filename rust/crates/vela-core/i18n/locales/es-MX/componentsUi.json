@@ -562,6 +562,14 @@
       "find": "Buscar",
       "commandPalette": "Paleta de comandos"
     },
+    "appUpdate": {
+      "title": "Actualización disponible",
+      "install": "Instalar",
+      "later": "Más tarde"
+    },
+    "dropOverlay": {
+      "title": "Suelta una dirección, un enlace de pago o una imagen QR"
+    },
     "browserStatus": {
       "title": "Estado de la pestaña",
       "page": {

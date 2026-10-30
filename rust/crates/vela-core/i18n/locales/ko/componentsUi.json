@@ -562,6 +562,14 @@
       "find": "찾기",
       "commandPalette": "명령 팔레트"
     },
+    "appUpdate": {
+      "title": "업데이트 가능",
+      "install": "설치",
+      "later": "나중에"
+    },
+    "dropOverlay": {
+      "title": "주소, 결제 링크 또는 QR 이미지를 놓으세요"
+    },
     "browserStatus": {
       "title": "탭 상태",
       "page": {
