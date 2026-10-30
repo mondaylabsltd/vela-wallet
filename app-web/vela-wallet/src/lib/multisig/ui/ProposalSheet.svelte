@@ -979,10 +979,12 @@
 	/**
 	 * Owners still to approve whose wallets are elsewhere: an outside wallet
 	 * can sign for a plain account — a queued transaction too (its approval
-	 * waits like any other). Never for a smart account (ms-11, r4-9): code at
-	 * its address on this network, a Vela account the index knows, one that
-	 * approved with its passkey or this device keeps as one (r4a-9) — its key
-	 * is a passkey, and it approves in Vela, from the link. One nothing says
+	 * waits like any other). Never for a Vela account (ms-11, r4-9): one the
+	 * index knows, one that approved with its passkey or this device keeps as
+	 * one (r4a-9) — its key is a passkey, and it approves in Vela, from the
+	 * link. Never for a smart contract account either (r7: code at its
+	 * address, no index record) — it approves from its own app, which Vela
+	 * can't collect yet, and that is said (`contractMissing`). One nothing says
 	 * (`unsure`) is offered the Vela way first and the outside wallet's beside
 	 * it — never alone: its row's "Send link", then "Approve with another
 	 * wallet" (r7, restored beside it). Nothing is offered once enough have
@@ -1019,9 +1021,18 @@
 			: (members?.owners ?? []).filter(
 					(o) =>
 						localOwners([o]).length === 0 &&
+						kinds.get(o) !== 'contract' &&
 						(!outside.some((x) => sameAddress(x, o)) || elsewhere.some((x) => sameAddress(x, o))) &&
 						!item.approvals.some((a) => a.counts && sameAddress(a.owner, o))
 				)
+	);
+	/**
+	 * r7: smart contract members still to approve — they approve from their
+	 * own app (EIP-1271), which Vela can't collect yet: said, and neither the
+	 * Vela link nor an outside wallet offered for them.
+	 */
+	const contractMissing = $derived(
+		enough ? [] : missingOwners.filter((o) => kinds.get(o) === 'contract')
 	);
 	let outsideCopied = $state(false);
 	async function copyOutsideLink() {
@@ -1560,6 +1571,11 @@
 									<button type="button" class="external" onclick={onExternal}
 										>{m.external.signWithWallet}</button
 									>{/if}
+							{:else if !drafting && kinds.get(owner) === 'contract'}
+								<!-- r7: approves from its own app; nothing here can collect it yet. -->
+								<span data-testid="contract-member"
+									>{m.proposal.waiting} · {m.members.kindContract}</span
+								>
 							{:else if item.status !== 'done'}
 								{m.proposal.waiting}
 							{/if}
@@ -1585,6 +1601,15 @@
 			</p>
 		{:else if executedTx && phase.kind !== 'sent'}
 			<p class="fine" data-testid="executed-facts-unknown">{m.proposal.approvalsSigned}</p>
+		{/if}
+
+		{#if !drafting && contractMissing.length > 0 && item.status !== 'done'}
+			<!-- r7: said honestly — their approvals (EIP-1271) aren't collected yet. -->
+			<p class="fine" data-testid="contract-members">
+				{fillTemplate(m.proposal.contractMembers, {
+					names: contractMissing.map((o) => names.label(o)).join(', ')
+				})}
+			</p>
 		{/if}
 
 		{#if notCounted.length > 0 && item.status !== 'done'}
@@ -2008,7 +2033,7 @@
 		{/if}
 
 		<!-- Only while approvals are missing: not once it is being executed. -->
-		{#if !drafting && item.status !== 'done' && phase.kind !== 'sent' && phase.kind !== 'ended' && shownApproved < item.threshold && (velaMissing.length > 0 || outside.length === 0)}
+		{#if !drafting && item.status !== 'done' && phase.kind !== 'sent' && phase.kind !== 'ended' && shownApproved < item.threshold && (velaMissing.length > 0 || (outside.length === 0 && contractMissing.length === 0))}
 			<section class="invite">
 				<h3>{m.proposal.invite}</h3>
 				<p class="fine">{m.proposal.inviteHint}</p>

@@ -17,9 +17,9 @@
 	 * core on this device, the person picks the Safes, and each is imported
 	 * with a genesis the core re-derives its address from (`importExported`).
 	 * r7: before that, each member not on this device is asked its kind —
-	 * "Vela account" or "Other wallet", pre-filled where Vela can tell — and
-	 * the answer kept with each Safe it is a member of: a label, never
-	 * authority.
+	 * "Vela account" or "Other wallet", shown as found where Vela can tell
+	 * (or a smart contract account), "Other wallet" only hinted — and the
+	 * answer kept with each Safe it is a member of: a label, never authority.
 	 *
 	 * Who can act for it is the chain's, or the core's counterfactual rule
 	 * (§3.5): a genesis it refuses is said with every reason and nothing adds
@@ -517,7 +517,11 @@
 										<span class="who">{member.name ?? you}</span>
 										{#if you}<span class="you">{m.add.thatsYou}</span>{/if}
 										{#if member.kind}<span class="kind"
-												>{member.kind === 'passkey' ? m.add.kindPasskey : m.add.kindWallet}</span
+												>{member.kind === 'passkey'
+													? m.add.kindPasskey
+													: member.kind === 'contract'
+														? m.members.kindContract
+														: m.add.kindWallet}</span
 											>{/if}
 									</li>
 								{/if}

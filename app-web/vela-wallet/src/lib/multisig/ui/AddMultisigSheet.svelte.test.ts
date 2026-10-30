@@ -94,7 +94,7 @@ vi.mock('../core/display', () => ({
 /** r7: the import's seams — the export read, what Vela can tell, what is kept, what is imported. */
 const io = vi.hoisted(() => ({
 	exported: [] as unknown[],
-	evidence: {} as Record<string, 'vela' | 'wallet' | null>,
+	evidence: {} as Record<string, 'vela' | 'contract' | 'wallet' | null>,
 	named: [] as [string, Record<string, unknown>, unknown][],
 	imported: [] as string[]
 }));
@@ -170,7 +170,9 @@ const m = {
 		kindWallet: 'Other wallet',
 		kindKnown: 'Vela found a Vela account',
 		kindLikely: 'likely another wallet',
-		kindAsk: 'Vela can’t tell'
+		kindAsk: 'Vela can’t tell',
+		kindContract: 'Smart contract account',
+		kindContractNote: 'Approves from its own app'
 	},
 	authority: {
 		refusedTitle: 'Vela won’t use this multisig',
@@ -504,8 +506,10 @@ describe('the Safe{Wallet} import asks each member’s kind (r7)', () => {
 		const kinds = rows.map(
 			(r) => r.querySelector<HTMLElement>('[data-testid="member-kind"]')?.dataset.kind
 		);
-		expect(kinds).toEqual(['wallet', 'passkey', 'unknown']);
+		// Bob: "Other wallet" only hinted — nothing picked.
+		expect(kinds).toEqual(['unknown', 'passkey', 'unknown']);
 		expect(rows[0].textContent).toContain('likely another wallet');
+		expect(rows[0].querySelector('[data-suggested]')?.textContent?.trim()).toBe('Other wallet');
 		expect(rows[1].querySelectorAll('[role="radio"]')).toHaveLength(0);
 		expect(rows[2].textContent).toContain('Vela can’t tell');
 		await screen.unmount();
@@ -532,6 +536,29 @@ describe('the Safe{Wallet} import asks each member’s kind (r7)', () => {
 		]);
 		// Back on the list, each Safe's outcome.
 		expect(root().textContent).toContain('Imported');
+		await screen.unmount();
+	});
+
+	it('another Safe as a member: a smart contract account, kept as one; the unpicked hint keeps nothing', async () => {
+		io.evidence = { [BOB]: 'wallet', [DAN]: 'vela', [ERIN]: 'contract' };
+		const screen = await chooseFile();
+		button('Next')!.click();
+		await settle();
+		const rows = [
+			...screen.container.querySelectorAll<HTMLElement>('[data-testid="import-kinds"] li')
+		];
+		expect(rows[2].querySelector<HTMLElement>('[data-testid="member-kind"]')?.dataset.kind).toBe(
+			'contract'
+		);
+		expect(rows[2].textContent).toContain('Smart contract account');
+		expect(rows[2].textContent).toContain('Approves from its own app');
+		expect(rows[2].querySelectorAll('[role="radio"]')).toHaveLength(0);
+		button('Import 2')!.click();
+		await settle();
+		expect(io.named).toEqual([
+			[ONE, { [DAN]: { kind: 'passkey' } }, { typed: true }],
+			[TWO, { [ERIN]: { kind: 'contract' } }, { typed: true }]
+		]);
 		await screen.unmount();
 	});
 

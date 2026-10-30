@@ -268,6 +268,8 @@ export interface MultisigMessages {
 		sendLink: string;
 		/** r4-9: Vela members elsewhere approve from the link (`{{names}}`). */
 		approvesInVela: string;
+		/** r7: smart contract members still to approve (`{{names}}`): from their own app, not collected yet. */
+		contractMembers: string;
 		/** r4D-14: the way back from Reject. */
 		rejectCancel: string;
 		/** r4C-10: no member here, and none can sign through an outside wallet. */
@@ -793,10 +795,14 @@ export interface MemberMessages {
 	kindWallet: string;
 	/** r7: evidence says a Vela account (code, the passkey index, this device): no choice. */
 	kindKnown: string;
-	/** r7: no code anywhere and no index record — "Other wallet" pre-filled, the person confirms. */
+	/** r7: no code anywhere and no index record — "Other wallet" only hinted; kept if picked. */
 	kindLikely: string;
 	/** r7: the wallet can't tell — the person is asked; left unsaid, both ways are offered. */
 	kindAsk: string;
+	/** r7: code at the address and no index record — a smart contract account. */
+	kindContract: string;
+	/** r7: …which approves from its own app (EIP-1271), which Vela can't collect yet. */
+	kindContractNote: string;
 	newAccount: string;
 	/** `{{name}}` */
 	replaceIntro: string;
@@ -1036,6 +1042,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		notNeeded: '',
 		sendLink: '',
 		approvesInVela: '',
+		contractMembers: '',
 		rejectCancel: '',
 		noOutsideSigner: ''
 	},
@@ -1399,6 +1406,8 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		kindKnown: '',
 		kindLikely: '',
 		kindAsk: '',
+		kindContract: '',
+		kindContractNote: '',
 		newAccount: '',
 		replaceIntro: '',
 		removeIntro: '',

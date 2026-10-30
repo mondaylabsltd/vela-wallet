@@ -56,7 +56,7 @@ class Names {
 	 * multisig here keeps it as, or `null`: not known (the index's silence is
 	 * no answer — it may only have been out of reach).
 	 */
-	kindOf(address: string): 'passkey' | 'wallet' | null {
+	kindOf(address: string): NonNullable<MemberInfo['kind']> | null {
 		if (localName(address)) return 'passkey';
 		void this.label(address);
 		const key = address.toLowerCase();

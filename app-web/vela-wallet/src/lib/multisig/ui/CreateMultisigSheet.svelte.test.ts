@@ -33,7 +33,7 @@ const seams = vi.hoisted(() => ({
 	contracts: {} as Record<number, 'present' | 'missing' | 'unknown'>,
 	created: [] as { chainId: number }[],
 	/** r7: what the wallet can tell of each address (`signers.evidence`), and the networks asked. */
-	evidence: {} as Record<string, 'vela' | 'wallet' | null>,
+	evidence: {} as Record<string, 'vela' | 'contract' | 'wallet' | null>,
 	evidenceOn: [] as number[][]
 }));
 vi.mock('../core/signers.svelte', async (importOriginal) => ({
@@ -455,18 +455,20 @@ describe('r4a-14: what a creation can be, and how its members come', () => {
 		await screen.unmount();
 	});
 
-	it('r7: each added member’s kind — found, pre-filled to confirm, or asked — kept as declared', async () => {
+	it('r7: each added member’s kind — found, a smart contract, hinted, or asked — kept only as declared', async () => {
 		const BOB = '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC';
 		const CAROL = '0x90F79bf6EB2c4f870365E785982E1f101E93b906';
+		/** Another Safe as a member: code, no index record. */
+		const SAFE_MEMBER = '0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc';
 		seams.networks = [
 			{ chainId: 100, displayName: 'Gnosis' },
 			{ chainId: 8453, displayName: 'Base' }
 		];
-		seams.evidence = { [BOB]: 'wallet', [DAN]: 'vela' };
+		seams.evidence = { [BOB]: 'wallet', [DAN]: 'vela', [SAFE_MEMBER]: 'contract' };
 		const screen = open();
 		await settle();
 		type('.name-field', 'Team');
-		for (const address of [BOB, CAROL, DAN]) {
+		for (const address of [BOB, CAROL, DAN, SAFE_MEMBER]) {
 			type('input.mono', address);
 			await settle();
 			addPressed();
@@ -476,14 +478,22 @@ describe('r4a-14: what a creation can be, and how its members come', () => {
 		const kindOf = (row: HTMLElement) =>
 			row.querySelector<HTMLElement>('[data-testid="member-kind"]')?.dataset.kind ?? null;
 		// This device's account is a Vela account here: nothing asked of it.
-		expect(rows.map(kindOf)).toEqual([null, 'wallet', 'unknown', 'passkey']);
-		// Bob: no Vela account found — "Other wallet" pre-filled, and said so.
+		expect(rows.map(kindOf)).toEqual([null, 'unknown', 'unknown', 'passkey', 'contract']);
+		// Bob: no Vela account found — "Other wallet" only hinted, and said so.
 		expect(rows[1].querySelector('[data-testid="member-kind-likely"]')).not.toBeNull();
+		expect(rows[1].querySelectorAll('[aria-checked="true"]')).toHaveLength(0);
+		expect(rows[1].querySelector('[data-suggested]')?.textContent?.trim()).toBe(
+			'members.kindWallet'
+		);
 		// Carol: it can't tell — asked, nothing picked.
 		expect(rows[2].querySelector('[data-testid="member-kind-ask"]')).not.toBeNull();
 		expect(rows[2].querySelectorAll('[aria-checked="true"]')).toHaveLength(0);
 		// Dan: Vela found a Vela account — shown, nothing to pick.
 		expect(rows[3].querySelectorAll('[role="radio"]')).toHaveLength(0);
+		// The other Safe: a smart contract account, never "Vela account" — said honestly.
+		expect(rows[4].querySelectorAll('[role="radio"]')).toHaveLength(0);
+		expect(rows[4].textContent).toContain('members.kindContractNote');
+		expect(rows[4].textContent).not.toContain('members.kindVela');
 		// Looked for on every network it may be used on: the same address on each.
 		expect([...(seams.evidenceOn.at(-1) ?? [])].sort()).toEqual([100, 8453]);
 		// The person says Carol is a Vela account.
@@ -503,9 +513,11 @@ describe('r4a-14: what a creation can be, and how its members come', () => {
 		expect(seams.created[0]).toEqual(
 			expect.objectContaining({
 				members: expect.objectContaining({
-					[BOB]: { kind: 'wallet' },
+					// Bob's hint was not picked: nothing kept, unsure.
+					[BOB]: {},
 					[CAROL]: { kind: 'passkey' },
-					[DAN]: { kind: 'passkey' }
+					[DAN]: { kind: 'passkey' },
+					[SAFE_MEMBER]: { kind: 'contract' }
 				})
 			})
 		);

@@ -104,9 +104,10 @@
 	});
 	/**
 	 * r7: the member's kind — Vela's finding where it has one (an account
-	 * here, the index, code on one of the multisig's networks), else the
-	 * person's word (here, or kept on this device), else "Other wallet"
-	 * pre-filled when no Vela account is found, else nothing: asked, never
+	 * here or the index: a Vela account; code on one of the multisig's
+	 * networks and no index record: a smart contract account), else the
+	 * person's word (here, or kept on this device), else nothing: asked,
+	 * "Other wallet" only hinted when no Vela account is found — never
 	 * guessed (it used to read "Other wallet" whenever nothing said).
 	 */
 	const kindShown = $derived(

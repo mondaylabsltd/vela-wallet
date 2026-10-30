@@ -2,11 +2,13 @@
 	/**
 	 * r7: a member's kind — "Vela account" or "Other wallet" — where a member
 	 * is added (Create, the Safe{Wallet} import, Settings → Add member). Shown
-	 * as Vela's finding when evidence says a Vela account (nothing to ask);
-	 * else the two choices, "Other wallet" pre-filled when no Vela account is
-	 * found at the address (the person confirms or changes it), nothing picked
-	 * when the wallet can't tell. A label that steers what the member is
-	 * offered, never authority (`member-kind.ts`).
+	 * as found when evidence says what it is (a Vela account the index knows,
+	 * or a smart contract account — code and no index record — which approves
+	 * from its own app, said honestly); else the two choices. "Other wallet"
+	 * is drawn as a hint, not picked, when no Vela account is found (kept only
+	 * if the person picks it); nothing is picked when the wallet can't tell.
+	 * A label that steers what the member is offered, never authority
+	 * (`member-kind.ts`).
 	 */
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
@@ -34,9 +36,13 @@
 <div class="kind" data-testid="member-kind" data-kind={choice.kind ?? 'unknown'}>
 	{#if choice.locked}
 		<p class="known">
-			<Icon icon={UTILITY_ICONS.check} size="sm" /><span>{mm.kindVela}</span>
+			{#if choice.kind === 'passkey'}<Icon icon={UTILITY_ICONS.check} size="sm" />{/if}<span
+				>{choice.kind === 'contract' ? mm.kindContract : mm.kindVela}</span
+			>
 		</p>
-		<p class="note">{mm.kindKnown}</p>
+		<p class="note" data-testid="member-kind-{choice.note}">
+			{choice.note === 'contract' ? mm.kindContractNote : mm.kindKnown}
+		</p>
 	{:else}
 		<div class="kinds" role="radiogroup" aria-label={name ? `${mm.kind} · ${name}` : mm.kind}>
 			{#each options as [value, label] (value)}
@@ -45,6 +51,8 @@
 					role="radio"
 					aria-checked={choice.kind === value}
 					class:on={choice.kind === value}
+					class:hint={choice.suggested === value}
+					data-suggested={choice.suggested === value ? '' : undefined}
 					onclick={() => onpick(value)}>{label}</button
 				>
 			{/each}
@@ -98,7 +106,15 @@
 		cursor: pointer;
 	}
 
+	/* The wallet's hint, not a pick: a dashed edge, the label in full ink. */
+	.kinds button.hint {
+		border-style: dashed;
+		border-color: var(--color-fg-muted);
+		color: var(--color-fg-base);
+	}
+
 	.kinds button.on {
+		border-style: solid;
 		border-color: var(--color-fg-base);
 		color: var(--color-fg-base);
 		font-weight: var(--weight-semibold);

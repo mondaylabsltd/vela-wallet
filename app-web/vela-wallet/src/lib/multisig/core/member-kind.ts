@@ -1,29 +1,38 @@
 /**
  * r7: a member's kind, declared then verified — "Vela account" or "Other
  * wallet", asked where a member is added (Create, Safe{Wallet} import,
- * Settings → Add member). The wallet pre-fills it where it can tell
- * (`signers.evidence`) and asks where it can't. What is kept is a label that
- * steers what each member is offered (it travels in invites as p/w), never
- * authority, and evidence beats it: the index, code at the address on one of
- * the multisig's networks, or a passkey approval make it a Vela account.
+ * Settings → Add member). What the wallet can tell (`signers.evidence`)
+ * shows where it can, and the person is asked where it can't. What is kept
+ * is a label that steers what each member is offered (it travels in invites
+ * as p/w/c), never authority, and evidence beats it: the index or a passkey
+ * approval make it a Vela account; code at its address with no index
+ * record, a smart contract account.
+ *
+ * "Other wallet" from evidence is only a hint (no code anywhere, no index
+ * record — but a Vela account not yet set up anywhere reads the same): it is
+ * shown and said, and kept only if the person picks it. Left unsaid, the
+ * member is offered both ways to approve.
  */
 import type { KindEvidence } from './signers.svelte';
 import type { MemberInfo } from './store.svelte';
 
-/** A Vela account (its key a passkey) or an outside wallet, as kept with a member. */
+/** A Vela account, an outside wallet, or a smart contract account — as kept with a member. */
 export type MemberKind = NonNullable<MemberInfo['kind']>;
 
 export interface KindChoice {
-	/** What the choice shows picked; `null`: nothing — the person is asked. */
+	/** What is kept (and drawn picked); `null`: nothing — the member stays unsure. */
 	kind: MemberKind | null;
-	/** Evidence says a Vela account: shown, not asked. */
+	/** What the wallet suggests without keeping it: "Other wallet", drawn as a hint. */
+	suggested: 'wallet' | null;
+	/** Evidence (or a kept contract) says what it is: shown, not asked. */
 	locked: boolean;
 	/**
-	 * The line under it: `known` (evidence), `likely` (pre-filled "Other
-	 * wallet", for the person to confirm), `ask` (it can't tell), or `null`
-	 * (the person's own word).
+	 * The line under it: `known` (a Vela account, found), `contract` (a smart
+	 * contract account: approves from its own app, which Vela can't collect
+	 * yet), `likely` (the "Other wallet" hint), `ask` (it can't tell), or
+	 * `null` (the person's own word).
 	 */
-	note: 'known' | 'likely' | 'ask' | null;
+	note: 'known' | 'contract' | 'likely' | 'ask' | null;
 }
 
 /**
@@ -31,8 +40,12 @@ export interface KindChoice {
  * the person said (here, or on this device before — `said`).
  */
 export function kindChoice(evidence: KindEvidence, said: MemberKind | undefined): KindChoice {
-	if (evidence === 'vela') return { kind: 'passkey', locked: true, note: 'known' };
-	if (said) return { kind: said, locked: false, note: null };
-	if (evidence === 'wallet') return { kind: 'wallet', locked: false, note: 'likely' };
-	return { kind: null, locked: false, note: 'ask' };
+	if (evidence === 'vela') return { kind: 'passkey', suggested: null, locked: true, note: 'known' };
+	if (evidence === 'contract' || (said === 'contract' && evidence === null))
+		return { kind: 'contract', suggested: null, locked: true, note: 'contract' };
+	if (said && said !== 'contract')
+		return { kind: said, suggested: null, locked: false, note: null };
+	if (evidence === 'wallet')
+		return { kind: null, suggested: 'wallet', locked: false, note: 'likely' };
+	return { kind: null, suggested: null, locked: false, note: 'ask' };
 }

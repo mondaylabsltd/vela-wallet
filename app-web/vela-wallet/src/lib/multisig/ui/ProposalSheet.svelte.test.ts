@@ -37,6 +37,8 @@ const fake = vi.hoisted(() => ({
 	vela: [] as string[],
 	/** r4a-9: owners nothing says how they sign (no code, the index holds none). */
 	unsure: [] as string[],
+	/** r7: smart contract members (code, no index record) — another Safe. */
+	contract: [] as string[],
 	/** What the chain says executed a done proposal (ms-9, ms-10). */
 	executed: undefined as string | null | undefined,
 	/** What the chain says executed another hash (the cancellation's, ms-9). */
@@ -278,7 +280,9 @@ vi.mock('../core/signers.svelte', () => ({
 					? 'vela'
 					: fake.unsure.includes(a)
 						? 'unsure'
-						: 'wallet'
+						: fake.contract.includes(a)
+							? 'contract'
+							: 'wallet'
 	}
 }));
 vi.mock('../core/owners', () => ({
@@ -464,6 +468,7 @@ beforeEach(() => {
 	fake.refused = false;
 	fake.vela = [];
 	fake.unsure = [];
+	fake.contract = [];
 	fake.executed = undefined;
 	fake.executedBy = {};
 	fake.chains = [];
@@ -1899,6 +1904,25 @@ describe('how each missing member approves (r4-9, r4D-6)', () => {
 			?.click();
 		await settle();
 		expect(fake.calls).toContain('external');
+		await screen.unmount();
+	});
+
+	it('r7: another Safe as a member — a smart contract account: said honestly, no wallet or Vela link offered', async () => {
+		fake.contract = [OTHER];
+		fake.chain.items = [item()];
+		const screen = show();
+		await settle();
+		const row = document.querySelector('[data-testid="contract-member"]');
+		expect(row?.textContent).toContain('members.kindContract');
+		expect(row?.closest('li')?.querySelectorAll('.state button')).toHaveLength(0);
+		expect(buttons()).not.toContain('external.signWithWallet');
+		expect(buttons()).not.toContain('proposal.sendLink');
+		expect(document.querySelector('[data-testid="contract-members"]')?.textContent).toContain(
+			'proposal.contractMembers'
+		);
+		// Neither an outside wallet's link nor the Vela invite is offered for it.
+		expect(document.querySelector('[data-testid="outside-invite"]')).toBeNull();
+		expect(document.querySelector('[data-testid="approves-in-vela"]')).toBeNull();
 		await screen.unmount();
 	});
 

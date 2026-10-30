@@ -209,10 +209,12 @@
 	});
 
 	/**
-	 * r7: a member's kind — Vela's finding (code at the address on any network
-	 * it may be used on, the index, an account here), else the person's word
-	 * (here, or kept on this device), else "Other wallet" pre-filled when no
-	 * Vela account is found, else asked. The same address on every network.
+	 * r7: a member's kind — Vela's finding (the index or an account here: a
+	 * Vela account; code at the address on any network it may be used on and
+	 * no index record: a smart contract account), else the person's word
+	 * (here, or kept on this device), else asked — "Other wallet" hinted when
+	 * no Vela account is found, kept only if picked. The same address on
+	 * every network.
 	 */
 	function kindOf(address: string) {
 		return kindChoice(

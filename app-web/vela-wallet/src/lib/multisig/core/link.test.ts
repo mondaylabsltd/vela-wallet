@@ -191,6 +191,36 @@ describe('the invite link', () => {
 		expect(parseAddLink(`#msa=5042002:${SAFE}&a=12pAlice`)?.multisig).toBe(SAFE);
 	});
 
+	it('r7: carries a smart contract member as `c`, and reads the links from before as they were', () => {
+		const ALICE = '0xe331F2Ef7A6f4ED426529c8C10642b68084771A2';
+		const BOB = '0x412f2165f299Dfc2363ED08F8Fc6DE4353E81fF6';
+		const link = addLink('https://x', 'en', SAFE, {
+			chainIds: [100],
+			members: [
+				{ address: ALICE, kind: 'contract', name: 'Treasury Safe' },
+				{ address: BOB, kind: 'wallet' }
+			]
+		});
+		const hash = new URL(link).hash;
+		expect(hash).toBe(
+			`#msa=100:${SAFE}&a=${ALICE.slice(2).toLowerCase()}cTreasury%20Safe,` +
+				`${BOB.slice(2).toLowerCase()}w`
+		);
+		expect(parseAddLink(hash)?.members).toEqual([
+			{ address: ALICE, name: 'Treasury Safe', kind: 'contract' },
+			{ address: BOB, kind: 'wallet' }
+		]);
+		// A link from before r7 (p, w, -) reads unchanged; the genesis-order form too.
+		expect(parseAddLink(`#msa=100:${SAFE}&m=pAlice,wBob,-`)?.members).toEqual([
+			{ name: 'Alice', kind: 'passkey' },
+			{ name: 'Bob', kind: 'wallet' },
+			{}
+		]);
+		expect(parseAddLink(`#msa=100:${SAFE}&m=cSafe`)?.members).toEqual([
+			{ name: 'Safe', kind: 'contract' }
+		]);
+	});
+
 	it('refuses an address whose letter case was changed on the way (r5reg-22)', () => {
 		// One letter's case flipped: not its checksum.
 		const flipped = SAFE.replace('aEF', 'AEF');
