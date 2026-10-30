@@ -79,7 +79,11 @@ final class ActivityStore {
             onView: { [weak self] view in self?.commit(view) },
             onFault: { print("[vela-wallet] activity_feed fault: \($0)") },
             // The view as the core wrote it, for the AI agent's world (spec 104).
-            keepsJson: true
+            keepsJson: true,
+            // Every name looked up for a row comes back as a whole view, and
+            // most change nothing (native parity Phase 4). `commit` only
+            // mirrors it, and an arrival is a CHANGED `new_item_id`.
+            skipsUnchanged: true
         )
     }
 

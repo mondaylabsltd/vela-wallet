@@ -267,7 +267,10 @@ struct HistoryBody: View {
     var onSelect: (Int, Int) -> Void = { _, _ in }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Tokens.Space.s0) {
+        // Lazy (native parity Phase 4): the history holds up to 200 records,
+        // and an eager stack built — and measured, four type sizes a title —
+        // every row on opening and on every change, on screen or not.
+        LazyVStack(alignment: .leading, spacing: Tokens.Space.s0) {
             if model.mode == .empty {
                 // A filtered-empty history is a narrowing, not a problem: one
                 // quiet line rather than the illustrated empty state the home
@@ -288,6 +291,7 @@ struct HistoryBody: View {
                             ActivityRowView(model: row).contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .accessibilityIdentifier("history.row")
                     }
                 }
             }

@@ -623,6 +623,7 @@ final class UserOpSpine {
         guard let request = try? buildRequest(accountName, offered, plan.key?.json) else {
             throw Refused(failure: .trustedSigner(.unavailable))
         }
+        PerfMarks.passkeyRaised()
         let ending = await trustedSigner.sign(
             requestJson: request, digest: challenge, keys: offered, page: page,
             keyLabel: plan.keyLabel
@@ -708,6 +709,7 @@ final class UserOpSpine {
         // The prompt's clock (send-11): a cancel at the core's deadline is
         // the deadline's, any other the person's — the core's rule.
         let raised = Date()
+        PerfMarks.passkeyRaised()
         do {
             return try await signer().sign(
                 challenge: challenge,

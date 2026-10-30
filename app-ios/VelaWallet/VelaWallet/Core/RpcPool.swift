@@ -120,7 +120,15 @@ final class RpcPool {
     /// `rpc_node_standing` reads a chain's standing from, so Settings' rows
     /// and the balance read the person's node by one rule. `nil` before the
     /// first view.
-    private(set) var viewJson: String?
+    ///
+    /// Written out when read (native parity Phase 4): `viewRevision` is what
+    /// a reader observes, so it is still redrawn when the view moves.
+    var viewJson: String? {
+        _ = viewRevision
+        return core.json
+    }
+    /// Bumped at every view that changed — the observable half of `viewJson`.
+    private(set) var viewRevision = 0
 
     /// One in-flight call: what to send, what came back from where, and who is
     /// waiting.
@@ -165,17 +173,30 @@ final class RpcPool {
             perform: { [weak self] operation in
                 await self?.perform(operation) ?? CoreJSON.string(["type": "concluded"])
             },
-            onView: { [weak self] view in
-                self?.failedChains = view.failedChains
-                self?.rateLimitedChains = view.rateLimitedChains
-                self?.unreachedChains = view.unreachedChains
-                self?.fallbackChains = view.fallbackChains
-                self?.ownNodeUnreachedChains = view.ownNodeUnreachedChains
-                self?.viewJson = self?.core.json
-            },
+            onView: { [weak self] view in self?.viewArrived(view) },
             onFault: { VelaLog.failure(.rpc, kind: "pool_fault", VelaLog.error($0)) },
-            keepsJson: true
+            keepsJson: true,
+            // Every call settles through this machine, and most leave its
+            // view as it was: those are not decoded, and nobody watching the
+            // pool is woken for them (native parity Phase 4). `pending_urls`
+            // is the hedging shells' (desktop, web): this one never reads it,
+            // and it moves at every step of every call.
+            skipsUnchanged: true,
+            ignoringKeys: ["pending_urls"]
         )
+    }
+
+    /// The pool's view, mirrored — each field written only when it moved, so
+    /// a screen that reads one list is not redrawn for another's change.
+    private func viewArrived(_ view: RpcPoolViewWire) {
+        if failedChains != view.failedChains { failedChains = view.failedChains }
+        if rateLimitedChains != view.rateLimitedChains { rateLimitedChains = view.rateLimitedChains }
+        if unreachedChains != view.unreachedChains { unreachedChains = view.unreachedChains }
+        if fallbackChains != view.fallbackChains { fallbackChains = view.fallbackChains }
+        if ownNodeUnreachedChains != view.ownNodeUnreachedChains {
+            ownNodeUnreachedChains = view.ownNodeUnreachedChains
+        }
+        viewRevision &+= 1
     }
 
     /// Whether the routing core has been given its ban map.
