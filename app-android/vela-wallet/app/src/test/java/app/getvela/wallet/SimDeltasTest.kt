@@ -63,9 +63,11 @@ class SimDeltasTest {
     @Test
     fun `a node that could not check is a caution, never a danger and never nothing-moves`() {
         val unavailable = SigningController.SimOutcome.Notice(ClearRisk.Caution, "componentsUi.signing.simUnavailableWarning")
-        assertEquals("the pool gave up", unavailable, noticeOf(RpcResult.Failed(rateLimited = false)))
-        assertEquals("nothing was asked", unavailable, noticeOf(null))
+        // dapp-15: no node answered — about the network, so it may be checked again.
+        assertEquals("the pool gave up", unavailable.copy(recheck = true), noticeOf(RpcResult.Failed(rateLimited = false)))
+        assertEquals("nothing was asked", unavailable.copy(recheck = true), noticeOf(null))
         val refused = RpcResult.Body(JSONObject().put("error", JSONObject().put("code", -32601).put("message", "the method eth_simulateV1 does not exist")))
+        // A node that spoke and does not simulate would say the same again.
         assertEquals("the node does not offer it", unavailable, noticeOf(refused))
         val crashed = RpcResult.Body(JSONObject().put("error", JSONObject().put("code", -32603).put("message", "method handler crashed")))
         assertEquals(unavailable, noticeOf(crashed))

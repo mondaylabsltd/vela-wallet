@@ -73,6 +73,7 @@ import app.getvela.wallet.feature.send.core.SendNameSource
 import app.getvela.wallet.feature.send.core.SendPayee
 import app.getvela.wallet.feature.send.core.SendHoldReason
 import app.getvela.wallet.feature.send.core.SendReceiptStatus
+import app.getvela.wallet.feature.send.core.SendReceiptView
 import app.getvela.wallet.feature.send.core.SendStage
 import app.getvela.wallet.feature.send.core.SendToken
 import app.getvela.wallet.feature.send.core.SendTxStatus
@@ -231,7 +232,16 @@ object SendLive {
                     // coin is not known here, so no coin's letters stand in
                     // for it ("ETH" under "Network not supported" was a guess).
                     mark = WalletLive.chainMark(lock.chain_id, ctx.chainNames[lock.chain_id]?.let { nativeSymbol(lock.chain_id, ctx) } ?: UNKNOWN_MARK),
-                    text = attempt ?: "${s.t(I18nKeys.Flows.LOCK_NET_TITLE)} — ${s.t(I18nKeys.Flows.LOCK_NET_BODY, mapOf("chainId" to lock.chain_id.toString()))}",
+                    text = "${s.t(I18nKeys.Flows.LOCK_NET_TITLE)} — ${s.t(I18nKeys.Flows.LOCK_NET_BODY, mapOf("chainId" to lock.chain_id.toString()))}",
+                    // The one way on (the web's `liveSendLock`): "Add this
+                    // network" — busy while the core's add runs — and, once
+                    // tried, why it did not happen, under the button.
+                    add = app.getvela.wallet.feature.flows.SendLockAddModel(
+                        label = s.t(I18nKeys.Flows.LOCK_ADD_NETWORK),
+                        chainId = lock.chain_id,
+                        busy = view.adding_network,
+                        failed = attempt.takeIf { !view.adding_network },
+                    ),
                 )
                 SendLockError.Token -> SendNoticeModel(
                     mark = (view.request_chain_id ?: chainFilter)?.let { WalletLive.chainMark(it, nativeSymbol(it, ctx)) }
@@ -761,7 +771,7 @@ object SendLive {
         // `open_scanner` (FlowHost → onScanOpen), with nothing to tap.
         scanLabel = ctx.strings.t(I18nKeys.Flows.SCAN_ARIA),
         note = recipientNote(view, ctx),
-        noteWarning = view.recipient_is_token_contract,
+        noteWarning = view.recipient_is_token_contract || recipientCaution(view, ctx.strings) != null,
         raw = view.recipient,
     )
 
@@ -774,6 +784,7 @@ object SendLive {
     internal fun recipientNote(view: SendView, ctx: Context): String? {
         // Spec 096 F12: a token's own contract, said before anything else.
         if (view.recipient_is_token_contract) return ctx.strings.t(I18nKeys.Flows.RECIPIENT_TOKEN_CONTRACT)
+        recipientCaution(view, ctx.strings)?.let { return it }
         payeeName(singlePayee(view), ctx.strings)?.let { return it }
         if (view.recipient_risk?.first_time == true && view.recipient_risk.own != true) return ctx.strings.t(I18nKeys.Flows.FIRST_TIME_SEND)
         return null
@@ -1256,6 +1267,12 @@ object SendLive {
         // The fee card's failure, only when it is for this send's chain (PR 2
         // polish): another chain's is not drawn — no figure, no reason, no line.
         val failure = FeeFailureRow.forChain(fee, formChain(view))
+        // r7-6: while the confirmed operation is out to be signed — its
+        // passkey, or the page it was handed to, and the POST after — the row
+        // draws the core's figure, the fee being signed (`SendView.fee`, which
+        // the core freezes then): never the fee machine's failure in its
+        // place, so nothing on the row moves while the passkey sheet is up.
+        val rowFailure = failure.takeIf { !outToSign(view) }
         val split = view.split_mode && view.recipients.isNotEmpty()
         // SD3c — a sweep has no one figure (`confirm_amount` is empty): its
         // coins are the rows below, each the amount the signature moves.
@@ -1284,11 +1301,17 @@ object SendLive {
                 }
                 ?: fiat,
             sublineWithheld = view.confirm_amount_issue == null && !ctx.money.settled && (sweep != null || worth != null),
+            // r5reg-3: a Max filled again from a newer quote after the person saw it.
+            maxNote = maxMovedNote(view, ctx),
             // The core's own verdicts: a token's own contract (spec 096 F12)
             // first, else the first time, resolved on this page only (single
             // recipient).
             recipientTag = when {
                 view.recipient_is_token_contract -> s.t(I18nKeys.Flows.RECIPIENT_TOKEN_CONTRACT)
+                // The address money must not go to, or a checksum that does
+                // not hold — said before any first-time tell (the web's
+                // `recipientCaution`).
+                recipientCaution(view, s) != null -> recipientCaution(view, s)
                 // Never on one of the person's own accounts (r4a-18) — the core
                 // already withholds `first_time` there; this only reads it.
                 !split && view.recipient_risk?.first_time == true && view.recipient_risk.own != true -> s.t(I18nKeys.Flows.FIRST_TIME_SEND)
@@ -1330,16 +1353,16 @@ object SendLive {
                     // said as the row says it (its figure, its reason), never
                     // the figure the session dropped.
                     value = when {
-                        failure != null -> FeeFailureRow.figure(failure, s)
+                        rowFailure != null -> FeeFailureRow.figure(rowFailure, s)
                         view.fee != null -> "~$feeLine"
                         else -> s.t(I18nKeys.Flows.FEE_ESTIMATING)
                     },
-                    note = failure?.reason_key?.let { s.t(it, mapOf("chain" to chain)) },
+                    note = rowFailure?.reason_key?.let { s.t(it, mapOf("chain" to chain)) },
                     // PR 2 polish: the line that shows the failure is its
                     // control, as the form's row is — "Tap to retry" asks
                     // again, "Pay with another coin" opens the coins — so the
                     // "Tap it to retry" under the confirm is true here too.
-                    tap = failure != null && FeeFailureRow.isControl(failure),
+                    tap = rowFailure != null && FeeFailureRow.isControl(rowFailure),
                 ),
             ) + listOfNotNull(
                 // The speed, but only when it was CHOSEN for this send, or taken
@@ -1384,15 +1407,15 @@ object SendLive {
             // else a failed fee's — the core's `footer_key`, the very line
             // the signing sheet draws ("Retrying…" while the core asks again
             // by itself, "Tap it to retry" only when a tap is the one way).
-            ctaHold = view.previous_pending?.key?.takeIf { view.tx_error != SendTxErrorKey.PreviousPending }?.let { s.t(it) }
-                ?: failure?.let { FeeFailureRow.footer(it, s) },
+            ctaHold = confirmHold(view, ctx, failure),
             notice = confirmNotice(view, ctx),
             // PR 2 polish: a submit the relay turned back because the previous
             // transaction still holds the nonce is "Not sent yet" — its title
             // over its sentence, calm, with Try again (no error buzz either:
             // the core fires none for it).
             noticeTitle = if (notSent(view)) s.t(I18nKeys.Flows.NOT_SENT_TITLE) else null,
-            noticeCalm = notSent(view),
+            // send-11: a passkey that signed nothing is said calmly too.
+            noticeCalm = notSent(view) || passkeyNote(view, s) != null,
             noticeFund = fundAddress(view, ctx),
             noticeReport = reportLabel(view, ctx),
             // The treasury pause has two exits (spec 045 US4): the core's retry,
@@ -1452,6 +1475,66 @@ object SendLive {
     internal fun notSent(view: SendView): Boolean =
         view.tx_error == SendTxErrorKey.PreviousPending && view.relay_unreachable == null && view.treasury_bootstrap == null
 
+    /** r7-6: the confirmed operation is out to be signed — its passkey, its page, its POST. */
+    internal fun outToSign(view: SendView): Boolean =
+        view.tx_status == SendTxStatus.Signing || view.tx_status == SendTxStatus.Submitting
+
+    /**
+     * r5reg-3 (the web's `maxMovedNote`): a Max filled again from a newer fee
+     * quote after the person saw it — what it read, what is sent now, and why.
+     */
+    internal fun maxMovedNote(view: SendView, ctx: Context): String? = view.max_moved?.let { moved ->
+        ctx.strings.t(
+            I18nKeys.Flows.MAX_MOVED,
+            mapOf("from" to coinText(moved.from), "to" to coinText(moved.to), "symbol" to (view.selected_token?.symbol ?: "")),
+        )
+    }
+
+    /**
+     * The address money must not go to, or one whose capitals break its
+     * checksum (the web's `recipientCaution`) — the core's verdicts, worded.
+     */
+    internal fun recipientCaution(view: SendView, s: VelaStrings): String? = when {
+        view.recipient_checksum_mismatch -> s.t(I18nKeys.Flows.RECIPIENT_CHECKSUM)
+        view.recipient_warning == app.getvela.wallet.feature.send.core.SendRecipientWarning.ZeroAddress -> s.t(I18nKeys.Flows.RECIPIENT_ZERO_ADDRESS)
+        view.recipient_warning == app.getvela.wallet.feature.send.core.SendRecipientWarning.OwnAddress -> s.t(I18nKeys.Flows.RECIPIENT_SELF)
+        else -> null
+    }
+
+    /** send-11: the passkey prompt signed nothing — closed, or out of time — said calmly over the confirm. */
+    internal fun passkeyNote(view: SendView, s: VelaStrings): String? = when (view.passkey_note) {
+        app.getvela.wallet.feature.send.core.SendPasskeyNote.TimedOut -> s.t(I18nKeys.Flows.PASSKEY_TIMED_OUT)
+        app.getvela.wallet.feature.send.core.SendPasskeyNote.Cancelled -> s.t(I18nKeys.Flows.PASSKEY_CLOSED)
+        null -> null
+    }
+
+    /**
+     * The one line under the held confirm (the web's `confirmHolds`), first
+     * that applies: another sender of this account goes first (round 3); the
+     * reads before the passkey are slow — the network by name, busy or not
+     * answering, and for how long (r5reg-3); the account's previous
+     * transaction on this network (unless the refusal already says it); the
+     * fee's failure, in the signing sheet's words; the recipient's check
+     * still out (send-18).
+     */
+    internal fun confirmHold(view: SendView, ctx: Context, failure: app.getvela.wallet.feature.send.core.FeeFailureView?): String? {
+        val s = ctx.strings
+        if (view.queued_behind_tab) return s.t(I18nKeys.Flows.QUEUED_BEHIND_TAB)
+        view.submit_slow?.let { slow ->
+            return s.t(
+                if (slow.busy) I18nKeys.Flows.SUBMIT_SLOW_BUSY else I18nKeys.Flows.SUBMIT_SLOW,
+                mapOf("network" to formNetwork(view, ctx), "seconds" to slow.seconds.toString()),
+            )
+        }
+        view.previous_pending?.key?.takeIf { view.tx_error != SendTxErrorKey.PreviousPending }?.let { return s.t(it) }
+        failure?.let { FeeFailureRow.footer(it, s) }?.let { return it }
+        return if (view.risk_checking) s.t(I18nKeys.Flows.RISK_CHECKING) else null
+    }
+
+    /** The form's network by name (the core's `form_chain`) — what a network's failure names. */
+    private fun formNetwork(view: SendView, ctx: Context): String =
+        formChain(view)?.let { ctx.chainNames[it] ?: view.selected_token?.network } ?: ""
+
     /** What stopped the confirm page: the relay's treasury, or a submit the relay refused. */
     internal fun confirmNotice(view: SendView, ctx: Context): String? {
         val s = ctx.strings
@@ -1476,14 +1559,16 @@ object SendLive {
             // r5reg-3: the network's failure, by its name — never the passkey's.
             SendTxErrorKey.ChainBusy, SendTxErrorKey.ChainUnreachable -> s.t(
                 if (view.tx_error == SendTxErrorKey.ChainBusy) I18nKeys.Flows.TX_ERROR_CHAIN_BUSY else I18nKeys.Flows.TX_ERROR_CHAIN_UNREACHABLE,
-                mapOf("network" to (view.selected_token?.chain_id?.let { ctx.chainNames[it] } ?: "")),
+                mapOf("network" to formNetwork(view, ctx)),
             )
-            // Round 7: the web's trusted signing page. This app's page failures
-            // are said by its own trusted signer and never reach the core as
-            // these keys, so they are never set here.
-            SendTxErrorKey.PageUnanswered, SendTxErrorKey.PageMismatch,
-            SendTxErrorKey.PageRefused, SendTxErrorKey.PageNotOpened -> s.t(I18nKeys.Flows.TX_ERROR_GENERIC)
-            null -> if (view.tx_status == SendTxStatus.Signing) s.t(I18nKeys.Flows.TX_PREPARING_BIOMETRIC) else null
+            // Round 7 (r7-2, r7-7): the account's trusted signing page did not
+            // sign — said as what happened there, never "couldn't be
+            // submitted" (the web's `live-send.ts`). Nothing was signed or sent.
+            SendTxErrorKey.PageUnanswered -> s.t("componentsUi.signing.trustedSignerUnanswered")
+            SendTxErrorKey.PageMismatch -> s.t("componentsUi.signing.trustedSignerMismatch")
+            SendTxErrorKey.PageRefused -> s.t("componentsUi.signing.trustedSignerRefused")
+            SendTxErrorKey.PageNotOpened -> s.t("componentsUi.signing.integrity.couldNotCheck")
+            null -> if (view.tx_status == SendTxStatus.Signing) s.t(I18nKeys.Flows.TX_PREPARING_BIOMETRIC) else passkeyNote(view, s)
         }
     }
 
@@ -1579,6 +1664,18 @@ object SendLive {
         null -> ReceiptStage.Submitting
     }
 
+    /**
+     * Who was paid, on the receipt, as the confirm said it (vis-24, the web's
+     * `liveSendReceipt`): the core's name with its tag and the short address
+     * beside it — "Landlord (0xaaaa…aaaa)" — or the address alone. A contact
+     * the confirm named must not turn back into hex once the money left.
+     */
+    internal fun receiptPayee(view: SendView, receipt: SendReceiptView, s: VelaStrings): String {
+        val payee = singlePayee(view)
+        val short = shortAddress(payee?.address ?: view.recipient)
+        return payeeName(payee, s)?.let { "$it ($short)" } ?: receipt.transfers.firstOrNull()?.to_name ?: short
+    }
+
     internal fun receipt(fallback: SendReceiptModel, view: SendView, ctx: Context): SendReceiptModel {
         val s = ctx.strings
         val token = view.selected_token
@@ -1599,6 +1696,14 @@ object SendLive {
         val coinLines = if (sweep) coins.map { coin -> "${sentFigure(coin.amount, view)} ${coin.symbol}".trim() } else emptyList()
         val hash = view.tx_hash?.takeIf { it.isNotBlank() }
         val explorer = token?.let { ctx.explorers[it.chain_id] }?.takeIf { it.isNotBlank() }
+        // send-5: the way on over a payment proven never sent, offered by the
+        // core alone (`can_send_again`) — "Send again"; "Review again" when
+        // another send used the nonce (send-15). Never over one that may have left.
+        val again = if (receipt?.can_send_again == true) {
+            s.t(if (receipt.refusal_key == I18nKeys.Flows.SIGN_WENT_FIRST) I18nKeys.Flows.TX_REVIEW_AGAIN else I18nKeys.Flows.TX_SEND_AGAIN)
+        } else {
+            null
+        }
         return when {
             receipt == null -> fallback.copy(
                 header = header,
@@ -1637,7 +1742,7 @@ object SendLive {
                     ) + receipt.transfers.map { part -> "${part.to_name ?: shortAddress(part.to)} · ${sentFigure(part.amount, view)} ${part.symbol}".trim() }
                 } else {
                     listOf(
-                        "${s.t(I18nKeys.Flows.TO_NAME, mapOf("name" to (receipt.transfers.firstOrNull()?.to_name ?: shortAddress(view.recipient))))} · $chain",
+                        "${s.t(I18nKeys.Flows.TO_NAME, mapOf("name" to receiptPayee(view, receipt, s)))} · $chain",
                     ) + coinLines
                 },
                 hash = hash?.let { ReceiptHashModel(label = s.t(I18nKeys.Flows.TX_HASH), value = shortHash(it), copyLabel = s.t(I18nKeys.Flows.COPY_ADDRESS), copyValue = it) },
@@ -1660,16 +1765,35 @@ object SendLive {
                 cta = s.t(I18nKeys.Flows.TX_CLOSE_BACKGROUND),
                 ctaAccent = false,
             )
-            // The relay never had it: nothing was sent — the plain failure.
+            // RA4/RA10 (send-5): provably not sent — the relay never admitted
+            // it. Said plainly as "Not sent", never "Failed": nothing left the
+            // account, and the core's way on is Send again.
             receipt.status == SendReceiptStatus.NotSent -> fallback.copy(
                 header = header,
                 stage = ReceiptStage.Failed,
-                title = s.t(I18nKeys.Flows.STATUS_FAILED),
-                captions = listOf(s.t(I18nKeys.Flows.TX_ERROR_GENERIC)),
+                title = s.t(I18nKeys.Flows.RECEIPT_NOT_SENT),
+                captions = listOf(s.t(I18nKeys.Flows.RECEIPT_NOT_SENT_BODY)),
                 hash = null,
                 viewOnExplorer = null,
                 cta = s.t(I18nKeys.Flows.DONE),
-                ctaAccent = true,
+                ctaAccent = false,
+                retry = again,
+                retryAccent = false,
+            )
+            // The relay refused it before any block: nothing was sent
+            // (send-5) — "Not sent", by its reason, with the way on the core
+            // offers. Nothing was sent, so no hash.
+            receipt.status == SendReceiptStatus.Failed && receipt.refusal_key != null -> fallback.copy(
+                header = header,
+                stage = ReceiptStage.Failed,
+                title = s.t(I18nKeys.Flows.RECEIPT_NOT_SENT),
+                captions = listOf(s.t(receipt.refusal_key)),
+                hash = null,
+                viewOnExplorer = null,
+                cta = s.t(I18nKeys.Flows.DONE),
+                ctaAccent = false,
+                retry = again,
+                retryAccent = false,
             )
             receipt.status == SendReceiptStatus.Failed -> fallback.copy(
                 header = header,

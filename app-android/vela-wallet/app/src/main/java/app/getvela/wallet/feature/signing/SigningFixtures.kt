@@ -1437,6 +1437,11 @@ object SigningFixtures {
 
             SigningScreenState.CS69, SigningScreenState.CS70 -> simWait(state)
 
+            SigningScreenState.CS71, SigningScreenState.CS72, SigningScreenState.CS73,
+            SigningScreenState.CS74, SigningScreenState.CS75, SigningScreenState.CS76,
+            SigningScreenState.CS77, SigningScreenState.CS78 ->
+                SigningDepthBoards.build(state, this, build(SigningScreenState.CS1, this).copy(state = state, requestKey = state.name))
+
             SigningScreenState.CS37, SigningScreenState.CS38, SigningScreenState.CS39,
             SigningScreenState.CS40, SigningScreenState.CS41, SigningScreenState.CS42,
             SigningScreenState.CS43, SigningScreenState.CS44 -> handoff(state)

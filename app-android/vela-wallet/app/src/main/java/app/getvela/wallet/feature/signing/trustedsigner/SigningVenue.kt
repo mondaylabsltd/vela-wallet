@@ -6,6 +6,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import org.json.JSONObject
 import uniffi.vela_core_uniffi.signingPlan
+import uniffi.vela_core_uniffi.signingRoute
 import uniffi.vela_core_uniffi.trustedSignerCeremonyKeyLabel
 import uniffi.vela_core_uniffi.venueBlockLine
 
@@ -96,6 +97,69 @@ data class SigningPlan(
             )
         }
     }
+}
+
+/**
+ * R7 (owner, 2026-10-30: the page everywhere) — where ONE request goes: the
+ * core's `signing_route(account, method)` over the stored record, asked for
+ * every signature the app makes — the wallet's own send (`""`), a site's
+ * `eth_sendTransaction`, a batch (`wallet_sendCalls`), `personal_sign` and
+ * typed data — exactly as the web's `signChallenge` asks it. Nothing here
+ * decides where a signature goes; it only reads the core's answer.
+ */
+sealed interface SigningRoute {
+    /** Vela's own sheet already showed it: the account's passkey signs here. */
+    data object InVela : SigningRoute
+
+    /** The account's trusted signing page, at [url]: it reviews and signs. */
+    data class Page(val url: String) : SigningRoute
+
+    /** Nothing on this device can reach the keys: the core's `VenueBlock`. */
+    data class Blocked(val block: JSONObject) : SigningRoute
+
+    companion object {
+        /**
+         * The core's route for [method] by the account stored as
+         * [accountJson]; `null` when the core routes it nowhere — a method no
+         * venue signs (`eth_sign`) or a record it cannot read. A caller whose
+         * account reviews on a page refuses then, never signs in Vela behind
+         * the person's choice (the web's `unsupported`).
+         */
+        fun of(accountJson: String?, method: String): SigningRoute? {
+            val json = accountJson?.let { runCatching { signingRoute(it, method) }.getOrNull() } ?: return null
+            val route = runCatching { JSONObject(json) }.getOrNull() ?: return null
+            return when (route.optString("type")) {
+                "in_vela" -> InVela
+                "page" -> route.optString("url").ifEmpty { null }?.let(::Page)
+                "blocked" -> route.optJSONObject("block")?.let(::Blocked)
+                else -> null
+            }
+        }
+    }
+}
+
+/**
+ * The account's trusted signing page did not sign (spec 102, round 7) — the
+ * web's `PageDeclinedError` / `PageSignFailedError` in one shape. [page] is
+ * `null` when the PERSON said no there — declined on the page, or closed it
+ * unsigned (`SignSubmitOutcome.PageDeclined`; a send keeps its confirm open,
+ * `passkey_cancelled`) — and otherwise the core's `PageFailure`: it never
+ * answered, its answer was not this request's signature, its own rules
+ * refused, or its check failed so it was not opened. Nothing was signed.
+ *
+ * Still a [app.getvela.wallet.feature.onboarding.core.PasskeyFailure] of kind
+ * `Cancelled`, so a caller that only knows passkeys keeps the request open as
+ * before; the signing paths read [page] and tell the core which it was.
+ */
+class PageSignFailure(
+    val page: app.getvela.wallet.feature.signing.core.PageFailure?,
+    sentence: String,
+) : app.getvela.wallet.feature.onboarding.core.PasskeyFailure(
+    app.getvela.wallet.feature.onboarding.core.FailureKind.Cancelled,
+    sentence,
+) {
+    /** The person's own "no" on the page. */
+    val declined: Boolean get() = page == null
 }
 
 /**

@@ -245,8 +245,9 @@ class TrustedSignerChannel(
         try {
             val answer = put.answer
             val outcome = (answer as? TrustedSignerAnswer.Signed)?.outcome
-                // Nothing signed: a cancelled ceremony, so the request stays open.
-                ?: refuse(FailureKind.Cancelled, sentenceFor(answer))
+                // Nothing signed: the request stays open, and the caller is
+                // told WHY — the person's "no", or the page's failure.
+                ?: pageRefuse(pageFailureOf(answer), sentenceFor(answer))
             return when (outcome) {
                 is TrustedSignerOutcome.Accepted -> Assertion(
                     credentialIdHex = outcome.credentialIdHex,
@@ -256,7 +257,7 @@ class TrustedSignerChannel(
                     userIdHex = null,
                     authenticatorAttachment = "",
                 )
-                is TrustedSignerOutcome.Refused -> refuse(FailureKind.Cancelled, told(outcome.refusal))
+                is TrustedSignerOutcome.Refused -> pageRefuse(pageFailureOf(outcome.refusal), told(outcome.refusal))
             }
         } finally {
             if (put.ownsFlow) endFlow()
@@ -449,5 +450,48 @@ class TrustedSignerChannel(
         throw PasskeyFailure(kind, sentence)
     }
 
+    /**
+     * A signature the page did not make: [page] `null` is the person's "no"
+     * there (`SignSubmitOutcome.PageDeclined`), anything else the core's
+     * `PageFailure` — said by the core on the sheet and to the site, never
+     * as "couldn't submit". Still a cancelled passkey to any caller that
+     * knows only passkeys: the request stays open.
+     */
+    private fun pageRefuse(page: app.getvela.wallet.feature.signing.core.PageFailure?, sentence: String): Nothing {
+        notice.value = sentence
+        throw PageSignFailure(page, sentence)
+    }
+
     private fun hex(bytes: ByteArray): String = bytes.joinToString("") { "%02x".format(it) }
+
+    companion object {
+        /**
+         * What a signature that came back with nothing was, in the core's
+         * words (the web's `PageHandoffError.byPerson` / `PageSignFailedError.page`):
+         * the page closed, or the hand-off card cancelled, is the person's
+         * "no" (`null`); a page that never answered — the wait ran out, the
+         * channel could not carry it — is `unanswered`; one whose check did
+         * not admit it is `not_opened`.
+         */
+        fun pageFailureOf(answer: TrustedSignerAnswer): app.getvela.wallet.feature.signing.core.PageFailure? = when (answer) {
+            TrustedSignerAnswer.Cancelled -> null
+            TrustedSignerAnswer.TimedOut, is TrustedSignerAnswer.Unreachable -> app.getvela.wallet.feature.signing.core.PageFailure.Unanswered
+            is TrustedSignerAnswer.Unchecked -> app.getvela.wallet.feature.signing.core.PageFailure.NotOpened
+            is TrustedSignerAnswer.Signed -> (answer.outcome as? TrustedSignerOutcome.Refused)?.refusal?.let(::pageFailureOf)
+            is TrustedSignerAnswer.Ceremonial -> (answer.outcome as? TrustedSignerCeremonyOutcome.Refused)?.refusal?.let(::pageFailureOf)
+        }
+
+        /**
+         * The core's refusal of a page's answer: the person declined there
+         * (`null`), the page's own rules refused (`refused`), or what came
+         * back is not this account's signature of the core's bytes — a
+         * wrong challenge, a foreign key, a forged or replayed answer
+         * (`mismatch`).
+         */
+        fun pageFailureOf(refusal: TrustedSignerRefusal): app.getvela.wallet.feature.signing.core.PageFailure? = when (refusal) {
+            TrustedSignerRefusal.Declined -> null
+            is TrustedSignerRefusal.PageRefused -> app.getvela.wallet.feature.signing.core.PageFailure.Refused
+            else -> app.getvela.wallet.feature.signing.core.PageFailure.Mismatch
+        }
+    }
 }

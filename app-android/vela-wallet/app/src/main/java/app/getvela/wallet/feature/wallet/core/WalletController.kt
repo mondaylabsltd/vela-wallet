@@ -27,6 +27,7 @@ import app.getvela.wallet.feature.send.core.TrackRecordStatus
 import app.getvela.wallet.feature.send.core.TrackOperation
 import app.getvela.wallet.feature.send.core.TrackEvent
 import app.getvela.wallet.feature.send.core.TrackHandoff
+import app.getvela.wallet.feature.send.core.submitFacts
 import app.getvela.wallet.feature.send.core.TrackEntryView
 import app.getvela.wallet.feature.send.core.TrackOutcome
 import app.getvela.wallet.feature.send.core.RelayClient
@@ -128,7 +129,7 @@ class WalletController(
     /** Pending hashes remain and the app went to the background: keep polling from a worker. */
     backgroundPoll: () -> Unit = {},
     /** Spec 105: the testnet space is in front — no saved total is read or written. */
-    testnet: () -> Boolean = { false },
+    private val testnet: () -> Boolean = { false },
 ) {
 
     private val store = VelaStore(context)
@@ -155,6 +156,29 @@ class WalletController(
         mainnetPrices = ChainlinkPrices(pool)::prices,
         testnet = testnet,
     )
+
+    /**
+     * P2.4: the rows the home last showed, per account and space — handed
+     * to the core (`holdings_restored`) so the list opens on what was last
+     * known (the web's `holdings-cache.ts`).
+     */
+    private val holdingsCache = HoldingsCache(store)
+
+    /** The space in front, as the holdings cache keys it (`mainnet` / `testnet`). */
+    private fun spaceKey(): String = if (testnet()) "testnet" else "mainnet"
+
+    /**
+     * The rows kept for the account and space in front, handed to the core,
+     * which lets them stand until each chain answers (web `#restoreRows`).
+     * The core ignores them for another account, or once a round settled.
+     */
+    private suspend fun restoreRows(address: String? = balanceHost.view.value.address) {
+        if (address == null) return
+        val tokens = runCatching { holdingsCache.load(address, spaceKey()) }.getOrDefault(emptyList())
+        if (tokens.isNotEmpty()) {
+            balanceHost.dispatch(BalanceEvent.HoldingsRestored(address, tokens), BalanceEvent.serializer())
+        }
+    }
 
     /** The last `FetchSettled` the executor answered: whose, and its `now_ms`. */
     private val lastSettle = java.util.concurrent.atomic.AtomicReference<Pair<String, Double>?>(null)
@@ -570,6 +594,9 @@ class WalletController(
             "sender" to handoff.sender?.take(10),
         )
         host.dispatch(handoff.event(), TrackEvent.serializer())
+        // Round 3 (send-5): a lost reply's nonce — the tracker reads the chain
+        // with it instead of waiting the relay's grace out.
+        handoff.submitFacts()?.let { host.dispatch(it, TrackEvent.serializer()) }
         // Device-found (spec 043 phase 4): a person taps confirm and leaves
         // before the relay answers. `backgrounded()` ran with nothing pending,
         // the submit landed afterwards, and no clock ticked until the next
@@ -727,6 +754,9 @@ class WalletController(
                 ) {
                     _holdingsRound.value = HoldingsRound(address = address, atMs = stamp, view = inSpace(view, spaceChains(networks.value)))
                     noteHeldChains(view)
+                    // P2.4: a settled round's rows are kept for the next visit (home-1, home-3).
+                    val space = spaceKey()
+                    scope.launch { runCatching { holdingsCache.save(address, space, view.tokens) } }
                 }
             }
         }
@@ -746,7 +776,11 @@ class WalletController(
      */
     fun spaceChanged() {
         VelaLog.event("balance", "space changed")
-        refresh(force = true)
+        // P2.4: the core starts the account over for the new space (home-7) —
+        // its cache, a forced read — and the rows kept for that space open
+        // the list (web `networkSpace.subscribe` → `space_changed`).
+        balanceHost.dispatch(BalanceEvent.SpaceChanged, BalanceEvent.serializer())
+        scope.launch { restoreRows() }
     }
 
     /**
@@ -815,13 +849,36 @@ class WalletController(
         pool.start()
         val hidden = executor.storedPrivacy()
         balanceHost.dispatch(BalanceEvent.PrivacyHydrated(hidden), BalanceEvent.serializer())
+        val changed = balanceHost.view.value.address != address
         balanceHost.dispatch(BalanceEvent.AccountChanged(address), BalanceEvent.serializer())
+        // P2.4: the first frame of another account is what it held last time
+        // (web `setAccount` → `#restoreRows`). Queued after the switch, so the
+        // core reads it for this account.
+        if (changed) restoreRows(address)
         // The feed's own privacy rule: while figures are hidden the receipt
         // toast is suppressed — but the row still glows and the phone still
         // buzzes. That distinction is the core's, and it needs telling.
         feedHost.dispatch(FeedEvent.PrivacyChanged(hidden), FeedEvent.serializer())
         feedHost.dispatch(FeedEvent.AccountSwitched(address), FeedEvent.serializer())
         trackerResumed()
+    }
+
+    /**
+     * P2.4 (perf-10): the signed-in account, for a screen that draws no
+     * balance of its own — Settings, the address book (the web's
+     * `noteAccount`). The core sets it and reads its cached total, so the
+     * switcher and the privacy mask are right, but asks no network until
+     * something shows the balance. Nothing for the account already set.
+     */
+    suspend fun noteAccount(address: String) {
+        if (address.isBlank()) return
+        val changed = balanceHost.view.value.address != address
+        if (changed) {
+            val hidden = executor.storedPrivacy()
+            balanceHost.dispatch(BalanceEvent.PrivacyHydrated(hidden), BalanceEvent.serializer())
+        }
+        balanceHost.dispatch(BalanceEvent.AccountNoted(address), BalanceEvent.serializer())
+        if (changed) restoreRows(address)
     }
 
     /** Spec 048: a token detail's 收款 — the request machine shows THAT asset's code. */

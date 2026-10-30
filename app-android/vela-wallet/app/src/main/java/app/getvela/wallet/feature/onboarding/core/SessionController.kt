@@ -51,7 +51,18 @@ class SessionController(
 
     /** The retry timer (the web's `#scheduleSync`): armed while the core says a wallet is owed and it can finish it. */
     private var syncTimer: Job? = null
-    private var syncRounds = 0
+    private var syncRounds: Int
+        get() = _syncRounds.value
+        set(value) { _syncRounds.value = value }
+    private val _syncRounds = MutableStateFlow(0)
+
+    /**
+     * ob-2: how many of the widening retries have gone by while a wallet is
+     * still owed — what the home's line reads to say "not synced yet" rather
+     * than "syncing…" once it has failed a while (the web's `syncRounds`).
+     * Back to 0 when none is owed.
+     */
+    val syncRoundsSeen: StateFlow<Int> = _syncRounds
 
     private val bridge = SessionCore().asBridge()
 

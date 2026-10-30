@@ -279,8 +279,23 @@ val syncVelaI18nAssets = tasks.register<Sync>("syncVelaI18nAssets") {
     description = "Copies generated locale catalogs (assets/i18n) into build assets (research D3)."
     from(velaRepoRoot.resolve("assets/i18n")) {
         include("*.json")
+        // P2.6: the on-demand namespaces (gen-i18n's ON_DEMAND, e.g.
+        // multisig/<lng>.json = home.multisig), packaged beside the main
+        // catalogs and deep-merged in by I18nRuntime.include when a screen
+        // that draws them opens. A glob, so a new namespace needs no edit here.
+        include("*/*.json")
     }
     into(layout.buildDirectory.dir("generated/velaI18n/i18n"))
+    // An app that silently shipped without a namespace would show raw keys on
+    // the screens that need it — fail the build instead.
+    doLast {
+        val missing = listOf("multisig").filter { name ->
+            (destinationDir.resolve(name).listFiles { f -> f.name.endsWith(".json") }?.size ?: 0) == 0
+        }
+        check(missing.isEmpty()) {
+            "on-demand i18n namespaces missing from $destinationDir: $missing — is assets/i18n/<name>/ generated (npm --prefix scripts run gen:i18n)?"
+        }
+    }
 }
 
 // Launch animations (spec 012 FR-001/FR-002): docs/design/onboarding/launch is THE
