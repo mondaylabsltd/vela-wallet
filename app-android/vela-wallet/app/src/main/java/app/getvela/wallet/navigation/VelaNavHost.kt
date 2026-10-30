@@ -854,6 +854,11 @@ fun VelaNavHost(
                     )
                 }
                 val payLink by application.container.pendingPayLink.collectAsStateWithLifecycle()
+                // A link the core refused, and why (`pay_refusal`) — said, never dropped in silence.
+                var payRefused by remember { mutableStateOf<app.getvela.wallet.feature.wallet.PayLinkRefusalModel?>(null) }
+                payRefused?.let { refused ->
+                    app.getvela.wallet.feature.wallet.PayLinkRefusalDialog(refused) { payRefused = null }
+                }
                 LaunchedEffect(payLink) {
                     val uri = payLink ?: return@LaunchedEffect
                     // Consumed at the END: clearing the trigger here re-keys this
@@ -862,9 +867,12 @@ fun VelaNavHost(
                     // nothing, because the wait for the core's verdict was cancelled).
                     VelaLog.event("paylink", "received", "uri" to uri.toString().take(80))
                     val pay = PayLink.parse(uri.toString()) as? PayLink.Pay
-                    val request = pay?.let { wallet.validatePayLink(it.to, it.chain, it.token, it.amount, it.sym, it.dec, it.net) }
+                    val verdict = pay?.let { wallet.validatePayLink(it.to, it.chain, it.token, it.amount, it.sym, it.dec, it.net) }
+                    val request = (verdict as? app.getvela.wallet.feature.wallet.core.PayVerdict.Valid)?.pay
                     if (request == null) {
-                        VelaLog.event("paylink", "refused by the core", "uri" to uri.toString().take(80))
+                        val refusal = (verdict as? app.getvela.wallet.feature.wallet.core.PayVerdict.Refused)?.refusal
+                        VelaLog.event("paylink", "refused by the core", "reason" to (refusal?.name ?: "none"))
+                        payRefused = app.getvela.wallet.feature.wallet.PayLinkRefusalWords.model(refusal, strings)
                         application.container.pendingPayLink.compareAndSet(uri, null)
                         return@LaunchedEffect
                     }
@@ -1557,7 +1565,17 @@ fun VelaNavHost(
                             onRecipientPick = { index -> sendView.recipients.getOrNull(index)?.id?.let { send.openRowPicker(it) } },
                             onRecipientScan = { index -> sendView.recipients.getOrNull(index)?.id?.let { send.openRowScanner(it) } },
                             scan = ScanCallbacks(
-                                onDecoded = { text -> send.scanned(text) },
+                                onDecoded = { text ->
+                                    // A `/pay` link is the core's `payment_request` to rule on
+                                    // (as an App Link or a share is) — never a recipient's text.
+                                    if (PayLink.parse(text) is PayLink.Pay) {
+                                        VelaLog.event("paylink", "scanned")
+                                        send.closeScanner()
+                                        application.container.pendingPayLink.value = android.net.Uri.parse(text.trim())
+                                    } else {
+                                        send.scanned(text)
+                                    }
+                                },
                                 onClose = {
                                     send.closeScanner()
                                     if (sendView.stage == SendStage.SelectToken && flowState == FlowState.S1) flows.close()
@@ -2038,16 +2056,24 @@ fun VelaNavHost(
                                     callbacks = ScanCallbacks(
                                         onDecoded = { text ->
                                             when (val scanned = app.getvela.wallet.feature.browser.ExploreLive.scanned(text)) {
-                                                is app.getvela.wallet.feature.browser.ExploreLive.Scanned.Url ->
+                                                is app.getvela.wallet.feature.browser.ExploreLive.Scanned.Url -> {
                                                     // Phase 3: a web-wallet multisig or connect link is the
                                                     // browser's (read by the core's codec), never the dApp browser's.
-                                                    if (app.getvela.wallet.feature.wallet.core.AppLinks.classify(scanned.url) is app.getvela.wallet.feature.wallet.core.AppLinks.Route.Web) {
+                                                    val route = app.getvela.wallet.feature.wallet.core.AppLinks.classify(scanned.url)
+                                                    if (route is app.getvela.wallet.feature.wallet.core.AppLinks.Route.Web) {
                                                         onClose()
                                                         val tab = application.container.trustedSignerTab
                                                         if (tab?.open(scanned.url) != true) application.container.browser.askToOpen(scanned.url)
+                                                    } else if (route is app.getvela.wallet.feature.wallet.core.AppLinks.Route.Pay) {
+                                                        // A `/pay` link: the wallet's, ruled on by the core
+                                                        // as an App Link is — a request, or why not.
+                                                        onClose()
+                                                        section = VelaTab.Wallet
+                                                        application.container.pendingPayLink.value = android.net.Uri.parse(scanned.url)
                                                     } else {
                                                         onUrl(scanned.url)
                                                     }
+                                                }
                                                 is app.getvela.wallet.feature.browser.ExploreLive.Scanned.Payment -> {
                                                     onClose()
                                                     section = VelaTab.Wallet
