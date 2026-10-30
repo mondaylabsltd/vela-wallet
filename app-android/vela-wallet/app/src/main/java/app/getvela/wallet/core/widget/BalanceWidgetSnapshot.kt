@@ -17,7 +17,9 @@ import app.getvela.wallet.feature.wallet.WalletLive
  * the core's own time of that read (`BalanceView.last_refreshed_at_ms`), so
  * the widget can say honestly how old it is ("Updated 2h"). A hero that is
  * still reading, or the testnet space's "no value", writes nothing: the last
- * real figure stands, with its age. Hidden on the home is hidden here.
+ * real figure stands, with its age; so does a figure the core has not
+ * dated yet (the cached rows a cold start draws first). Hidden on the home is
+ * hidden here.
  */
 data class BalanceWidgetSnapshot(
     /** "$1,383" — the hero's integer part, currency sign included; `null` when masked. */
@@ -51,6 +53,10 @@ data class BalanceWidgetSnapshot(
             hero.state == BalanceStateKind.Hidden ->
                 Write.Save(BalanceWidgetSnapshot(null, null, hero.decimalMark, masked = true, atMs = atMs?.toLong(), account = account))
             hero.state == BalanceStateKind.Loading || hero.state == BalanceStateKind.NoValue || hero.integer == null -> Write.Keep
+            // A figure the core has not dated (the last visit's cached rows,
+            // drawn before this visit's first read settles) never replaces a
+            // dated one: the widget would lose the only honest thing it says.
+            atMs == null -> Write.Keep
             else -> Write.Save(
                 BalanceWidgetSnapshot(hero.integer, hero.decimals, hero.decimalMark, masked = false, atMs = atMs?.toLong(), account = account),
             )

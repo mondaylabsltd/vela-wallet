@@ -55,11 +55,15 @@ class BalanceWidgetTest {
     }
 
     @Test
-    fun `still reading, no value, or the testnet space keep the last real figure`() {
+    fun `still reading, undated, no value, or the testnet space keep the last real figure`() {
         assertEquals(Write.Keep, BalanceWidgetSnapshot.of(hero(BalanceStateKind.Loading, null, null), at, "Main", false))
         assertEquals(Write.Keep, BalanceWidgetSnapshot.of(hero(BalanceStateKind.NoValue, null, null), at, "Main", false))
         assertEquals(Write.Keep, BalanceWidgetSnapshot.of(hero(BalanceStateKind.Normal, null, null), at, "Main", false))
         assertEquals(Write.Keep, BalanceWidgetSnapshot.of(hero(BalanceStateKind.Normal), at, "Main", testnet = true))
+        // The cached figure a cold start draws before its first read is not dated: it never replaces a dated one.
+        assertEquals(Write.Keep, BalanceWidgetSnapshot.of(hero(BalanceStateKind.Normal), null, "Main", testnet = false))
+        // Hidden needs no date: the mask is saved at once.
+        assertTrue(BalanceWidgetSnapshot.of(hero(BalanceStateKind.Hidden, WalletLive.BALANCE_MASK, null), null, "Main", false) is Write.Save)
     }
 
     @Test
