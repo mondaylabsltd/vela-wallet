@@ -100,7 +100,7 @@ final class SendExecutor {
         /// Send's "Add this network" (`add_network`): the networks machine
         /// adds the chain by id and says how it went, as a
         /// `SendAddNetworkOutcome`. Unwired, the add did not happen.
-        var addNetwork: (_ chainId: Int) async -> [String: Any] = { _ in ["type": "error"] }
+        var addNetwork: @MainActor (_ chainId: Int) async -> [String: Any] = { _ in ["type": "error"] }
         /// Round 3 (send-5): what a may-have-been-sent submit knew of its op —
         /// the nonce it signed — to the tracker, after the hand-off that
         /// named its records (`submit_facts`).
@@ -658,7 +658,7 @@ final class SendExecutor {
     /// r5reg-3: whether the network that did not answer before the passkey
     /// answers now — one `eth_blockNumber` through the pool (the web's
     /// `watchChainRecovery`). A seam: a test's executor answers it.
-    var chainAnswers: (_ chainId: Int) async -> Bool = { _ in false }
+    var chainAnswers: @MainActor (_ chainId: Int) async -> Bool = { _ in false }
 
     /// The live answer, through this executor's pool.
     func installChainAnswers() {
