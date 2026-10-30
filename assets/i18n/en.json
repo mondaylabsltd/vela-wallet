@@ -538,6 +538,7 @@
   "submitSlow": "Waiting for {{network}} to answer — {{seconds}} s so far. Nothing is signed yet.",
   "txErrorChainBusy": "{{network}}'s nodes are busy and didn't answer in time, so nothing was signed or sent. Try again in a moment.",
   "txErrorChainUnreachable": "Couldn't reach {{network}}, so nothing was signed or sent. Try again in a moment.",
+  "txErrorProposalNotSupported": "This app can't propose multisig transactions yet, so nothing was signed or proposed.",
   "maxMoved": "Max is now {{to}} {{symbol}} (it was {{from}}): the network fee was quoted again, so the amount kept back for it changed.",
   "txReviewAgain": "Review again",
   "txSendAgain": "Send again",
@@ -1864,7 +1865,9 @@
    "fullScreen": "Toggle Full Screen",
    "window": "Window",
    "minimize": "Minimize",
-   "closeWindow": "Close Window"
+   "closeWindow": "Close Window",
+   "find": "Find",
+   "commandPalette": "Command Palette"
   },
   "browserStatus": {
    "title": "Tab status",

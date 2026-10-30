@@ -538,6 +538,7 @@
   "submitSlow": "Warte auf eine Antwort von {{network}} – bisher {{seconds}} s. Noch ist nichts signiert.",
   "txErrorChainBusy": "Die Knoten von {{network}} sind ausgelastet und haben nicht rechtzeitig geantwortet, daher wurde nichts signiert oder gesendet. Versuche es gleich noch einmal.",
   "txErrorChainUnreachable": "{{network}} ist nicht erreichbar, daher wurde nichts signiert oder gesendet. Versuche es gleich noch einmal.",
+  "txErrorProposalNotSupported": "Diese App kann noch keine Multisig-Transaktionen vorschlagen, daher wurde nichts signiert oder vorgeschlagen.",
   "maxMoved": "Max ist jetzt {{to}} {{symbol}} (vorher {{from}}): Die Netzwerkgebühr wurde neu berechnet, daher hat sich der dafür zurückgehaltene Betrag geändert.",
   "txReviewAgain": "Erneut überprüfen",
   "txSendAgain": "Erneut senden",
@@ -1864,7 +1865,9 @@
    "fullScreen": "Vollbildmodus ein/aus",
    "window": "Fenster",
    "minimize": "Im Dock ablegen",
-   "closeWindow": "Fenster schließen"
+   "closeWindow": "Fenster schließen",
+   "find": "Suchen",
+   "commandPalette": "Befehlspalette"
   },
   "browserStatus": {
    "title": "Tab-Status",

@@ -541,6 +541,7 @@
   "submitSlow": "En attente de la réponse de {{network}} — {{seconds}} s jusqu’ici. Rien n’est encore signé.",
   "txErrorChainBusy": "Les nœuds de {{network}} sont saturés et n’ont pas répondu à temps : rien n’a été signé ni envoyé. Réessayez dans un instant.",
   "txErrorChainUnreachable": "Impossible de joindre {{network}} : rien n’a été signé ni envoyé. Réessayez dans un instant.",
+  "txErrorProposalNotSupported": "Cette app ne peut pas encore proposer de transactions multisig : rien n’a été signé ni proposé.",
   "maxMoved": "Le max est maintenant de {{to}} {{symbol}} (au lieu de {{from}}) : les frais de réseau ont été recalculés, donc la part mise de côté pour eux a changé.",
   "txReviewAgain": "Revoir",
   "txSendAgain": "Renvoyer",
@@ -1869,7 +1870,9 @@
    "fullScreen": "Activer/désactiver le plein écran",
    "window": "Fenêtre",
    "minimize": "Placer dans le Dock",
-   "closeWindow": "Fermer la fenêtre"
+   "closeWindow": "Fermer la fenêtre",
+   "find": "Rechercher",
+   "commandPalette": "Palette de commandes"
   },
   "browserStatus": {
    "title": "État de l'onglet",

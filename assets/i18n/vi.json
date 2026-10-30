@@ -538,6 +538,7 @@
   "submitSlow": "Đang chờ {{network}} phản hồi — đã {{seconds}} giây. Chưa ký gì cả.",
   "txErrorChainBusy": "Các nút của {{network}} đang quá tải và không phản hồi kịp, nên chưa có gì được ký hay gửi. Hãy thử lại sau giây lát.",
   "txErrorChainUnreachable": "Không kết nối được với {{network}}, nên chưa có gì được ký hay gửi. Hãy thử lại sau giây lát.",
+  "txErrorProposalNotSupported": "Ứng dụng này chưa thể đề xuất giao dịch multisig, nên chưa có gì được ký hay đề xuất.",
   "maxMoved": "Mức tối đa giờ là {{to}} {{symbol}} (trước là {{from}}): phí mạng vừa được tính lại nên khoản giữ lại để trả phí đã thay đổi.",
   "txReviewAgain": "Xem lại",
   "txSendAgain": "Gửi lại",
@@ -1864,7 +1865,9 @@
    "fullScreen": "Bật/tắt toàn màn hình",
    "window": "Cửa sổ",
    "minimize": "Thu nhỏ",
-   "closeWindow": "Đóng cửa sổ"
+   "closeWindow": "Đóng cửa sổ",
+   "find": "Tìm",
+   "commandPalette": "Bảng lệnh"
   },
   "browserStatus": {
    "title": "Trạng thái tab",

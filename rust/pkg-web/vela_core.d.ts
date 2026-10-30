@@ -760,6 +760,19 @@ export function buildGroupProof(seed_hex: string, rp_id: string, challenge_hex: 
 export function buildMemberProof(authenticator_data_hex: string, client_data_json_hex: string, signature_der_hex: string): RegistryProofJs;
 
 /**
+ * A built-in network's name as the wallet writes it
+ * (`network_admin::builtin_display_name`), or `undefined` for a chain Vela
+ * does not ship.
+ */
+export function builtinNetworkDisplayName(chain_id: number): string | undefined;
+
+/**
+ * Every network Vela ships, by chain id, in list order
+ * (`network_admin::BUILTIN_CHAINS`).
+ */
+export function builtinNetworkIds(): Uint32Array;
+
+/**
  * Issue 212: may the relay's gas quote for one tier be held?
  */
 export function bundlerQuoteCacheable(max_fee_per_gas: string): boolean;
@@ -785,6 +798,14 @@ export function checksumAddress(address_hex: string): string;
  * The source ladder and its sanity band — `choose_native_price`.
  */
 export function chooseNativePrice(dex?: number | null, chainlink_local?: number | null, chainlink_eth?: number | null): NativePriceChoice;
+
+/**
+ * The relay's sentence as the core reads it — `user_op::classify_relay_rejection`
+ * — as the `RelayRejection` JSON a submit verdict carries
+ * (`"relayer_unavailable"`, `"nonce_used"`, `{"other": …}`, …). The one
+ * classifier: no shell keeps its own reading of the relay's words.
+ */
+export function classifyRelayRejection(message: string): string;
 
 /**
  * A new installation ID from 16 random bytes.
@@ -1211,6 +1232,13 @@ export function intentVerdict(action_json: string, world_json: string, baseline_
  */
 export function intentWorldNeeds(action_json: string): string;
 
+/**
+ * The HTTPS exception for an address a person types into Settings: plain
+ * `http://` to this computer (`localhost`, `127.0.0.1`, `[::1]`, any port)
+ * — `network_admin::is_localhost_http`.
+ */
+export function isLocalhostHttp(url: string): boolean;
+
 export function keccak256(data: Uint8Array): Uint8Array;
 
 /**
@@ -1309,6 +1337,14 @@ export function parsePublicKey(hex: string): P256PublicKey;
 export function parseUserOpStatus(json: string): string | undefined;
 
 /**
+ * How a passkey prompt that failed as `kind` (a `FailureKind` wire name),
+ * `elapsed_ms` after it was raised, ended — `passkey_end::ceremony_end`, as
+ * its wire name (`"cancelled"`, `"timed_out"`, …). A kind this build does
+ * not know is `"other"`.
+ */
+export function passkeyCeremonyEnd(kind: string, elapsed_ms: number): string;
+
+/**
  * **Read a directory answer.** `undefined` unless the body is about the AAGUID
  * that was asked about and carries a usable name; `iconUrl` is present only
  * when the path is the service's own shape.
@@ -1352,6 +1388,11 @@ export function passkeyProviderIconDataUri(aaguid: string, dark: boolean): strin
  * The provider's brand name, or an empty string when the catalog has no entry.
  */
 export function passkeyProviderName(aaguid: string): string;
+
+/**
+ * The signing prompt's deadline, ms (`passkey_end::SIGN_TIMEOUT_MS`).
+ */
+export function passkeySignTimeoutMs(): number;
 
 /**
  * The $1 peg for a native gas coin that IS a dollar stablecoin — Tempo's
@@ -1492,6 +1533,13 @@ export function rpcHedgeAfterMs(): number;
  * the wire word (`rpc` / `bundler`); anything else is not a read.
  */
 export function rpcIsHedgedRead(kind: string, method: string): boolean;
+
+/**
+ * Where `chain_id`'s reads stand in the pool's view — `rpc_pool::node_standing`:
+ * `"pooled"`, `"own_only"`, `"own_node_unreached"` or `"falling_back"`;
+ * `""` for a view the core cannot read.
+ */
+export function rpcNodeStanding(view_json: string, chain_id: number): string;
 
 /**
  * "Only use my node" applied to a collected endpoint list —
@@ -1897,6 +1945,12 @@ export function userOpGasLimits(chain_id: number, deployed: boolean, sub_calls: 
 export function userOpHash(op_json: string, chain_id: bigint): string;
 
 /**
+ * The dApp's `-32603` detail for a request whose nonce another transaction
+ * of the account spent first (send-15, `RelayRejection::NonceUsed`).
+ */
+export function userOpNonceUsedDetail(): string;
+
+/**
  * The dApp's `-32603` detail for a request that was not sent and has no
  * relay refusal to quote (RA10) — a fixed sentence, never the pool's text.
  */
@@ -2065,12 +2119,15 @@ export interface InitOutput {
     readonly browserhistorycore_view: (a: number) => [number, number, number, number];
     readonly buildGroupProof: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
     readonly buildMemberProof: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
+    readonly builtinNetworkDisplayName: (a: number) => [number, number];
+    readonly builtinNetworkIds: () => [number, number];
     readonly bundlerQuoteCacheable: (a: number, b: number) => number;
     readonly canonicalizeSignature: (a: number, b: number) => [number, number, number, number];
     readonly chainLogoUrl: (a: number, b: number, c: number) => [number, number];
     readonly chainMark: (a: number, b: number, c: number, d: number, e: number) => any;
     readonly checksumAddress: (a: number, b: number) => [number, number, number, number];
     readonly chooseNativePrice: (a: number, b: number, c: number, d: number, e: number, f: number) => any;
+    readonly classifyRelayRejection: (a: number, b: number) => [number, number];
     readonly clearsigningcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly clearsigningcore_new: () => number;
     readonly clearsigningcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
@@ -2201,6 +2258,7 @@ export interface InitOutput {
     readonly intentShows: (a: number, b: number) => [number, number];
     readonly intentVerdict: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly intentWorldNeeds: (a: number, b: number) => [number, number];
+    readonly isLocalhostHttp: (a: number, b: number) => number;
     readonly keccak256: (a: number, b: number) => [number, number];
     readonly keyMethodWords: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly landingPace: (a: number, b: number, c: number, d: number) => [number, number];
@@ -2248,11 +2306,13 @@ export interface InitOutput {
     readonly networkadmincore_view: (a: number) => [number, number, number, number];
     readonly parsePublicKey: (a: number, b: number) => [number, number, number];
     readonly parseUserOpStatus: (a: number, b: number) => [number, number];
+    readonly passkeyCeremonyEnd: (a: number, b: number, c: number) => [number, number];
     readonly passkeyDirectoryEntry: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number];
     readonly passkeyDirectoryUrl: (a: number, b: number, c: number, d: number) => [number, number];
     readonly passkeyFallbackIconDataUri: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number];
     readonly passkeyProviderIconDataUri: (a: number, b: number, c: number) => [number, number];
     readonly passkeyProviderName: (a: number, b: number) => [number, number];
+    readonly passkeySignTimeoutMs: () => number;
     readonly paymentrequestcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly paymentrequestcore_new: () => number;
     readonly paymentrequestcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
@@ -2279,6 +2339,7 @@ export interface InitOutput {
     readonly rpcEarlyVerdict: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
     readonly rpcHedgeAfterMs: () => number;
     readonly rpcIsHedgedRead: (a: number, b: number, c: number, d: number) => number;
+    readonly rpcNodeStanding: (a: number, b: number, c: number) => [number, number];
     readonly rpcOwnOnlyPool: (a: number, b: number, c: number) => [number, number];
     readonly rpcReadTimeoutMs: () => number;
     readonly rpcpoolcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
@@ -2360,6 +2421,7 @@ export interface InitOutput {
     readonly userOpEventTopic: () => [number, number];
     readonly userOpGasLimits: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number) => [number, number, number, number];
     readonly userOpHash: (a: number, b: number, c: bigint) => [number, number, number, number];
+    readonly userOpNonceUsedDetail: () => [number, number];
     readonly userOpNotSentDetail: () => [number, number];
     readonly userOpPreviousPendingDetail: () => [number, number];
     readonly userOpRefusedDappDetail: () => [number, number];

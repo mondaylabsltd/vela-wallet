@@ -538,6 +538,7 @@
   "submitSlow": "正在等待 {{network}} 回应，已过 {{seconds}} 秒。尚未签署任何内容。",
   "txErrorChainBusy": "{{network}} 的节点繁忙，未能及时回应，因此没有签署或发送任何内容。请稍后再试。",
   "txErrorChainUnreachable": "无法连接 {{network}}，因此没有签署或发送任何内容。请稍后再试。",
+  "txErrorProposalNotSupported": "此应用暂时还不能发起多签提案，因此没有签署或发起任何内容。",
   "maxMoved": "最大金额现在是 {{to}} {{symbol}}（原为 {{from}}）：网络手续费重新报价，为手续费预留的金额随之变化。",
   "txReviewAgain": "重新确认",
   "txSendAgain": "重新发送",
@@ -1864,7 +1865,9 @@
    "fullScreen": "切换全屏幕",
    "window": "窗口",
    "minimize": "最小化",
-   "closeWindow": "关闭窗口"
+   "closeWindow": "关闭窗口",
+   "find": "查找",
+   "commandPalette": "命令面板"
   },
   "browserStatus": {
    "title": "标签页状态",

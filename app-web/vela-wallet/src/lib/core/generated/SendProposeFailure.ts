@@ -3,4 +3,4 @@
 /**
  * Why a multisig's proposal was not made, as the shell knows it.
  */
-export type SendProposeFailure = "mailbox_down" | "offline";
+export type SendProposeFailure = "mailbox_down" | "offline" | "not_supported";

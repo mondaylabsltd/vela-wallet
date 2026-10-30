@@ -822,6 +822,24 @@ public protocol AgentCoreProtocol: AnyObject, Sendable {
     func activity()  -> String
     
     /**
+     * The agent's opinion (spec 103, `vela_advise`) for the dApp request on
+     * the signing sheet now, as its card draws it — JSON
+     * `{advice, standing, fee_when_given}`: `advice` as the core accepted it
+     * (`verdict` looks_fine/caution/danger/unsure, `summary`, `points`,
+     * `source_hosts`, `review_digest`, `fee`), `standing` `current`,
+     * `earlier_version` or `fee_changed` (greyed but for `current`, the
+     * stale line `componentsUi.signing.agentAdvice.stale` /
+     * `…feeChanged`), `fee_when_given` `{amount, symbol}` or `null`
+     * (`…feeWhenGiven`). `None` with no request on the sheet or no opinion
+     * on this one. Read it again on [`AgentShell::changed`] and whenever the
+     * sheet redraws; it changes nothing else of the sheet. The fee it binds
+     * to is the request's `sheet.fee` in [`AgentShell::signing`]'s JSON
+     * (`agent_review::SheetFacts`), when the shell hands one over. Calls the
+     * shell's `signing`, `views`, `send_open` and `account` on this thread.
+     */
+    func advice()  -> String?
+    
+    /**
      * The person answered an agent's request.
      */
     func answer(id: UInt64, approved: Bool) 
@@ -945,6 +963,31 @@ open func activity() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_method_agentcore_activity(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * The agent's opinion (spec 103, `vela_advise`) for the dApp request on
+     * the signing sheet now, as its card draws it — JSON
+     * `{advice, standing, fee_when_given}`: `advice` as the core accepted it
+     * (`verdict` looks_fine/caution/danger/unsure, `summary`, `points`,
+     * `source_hosts`, `review_digest`, `fee`), `standing` `current`,
+     * `earlier_version` or `fee_changed` (greyed but for `current`, the
+     * stale line `componentsUi.signing.agentAdvice.stale` /
+     * `…feeChanged`), `fee_when_given` `{amount, symbol}` or `null`
+     * (`…feeWhenGiven`). `None` with no request on the sheet or no opinion
+     * on this one. Read it again on [`AgentShell::changed`] and whenever the
+     * sheet redraws; it changes nothing else of the sheet. The fee it binds
+     * to is the request's `sheet.fee` in [`AgentShell::signing`]'s JSON
+     * (`agent_review::SheetFacts`), when the shell hands one over. Calls the
+     * shell's `signing`, `views`, `send_open` and `account` on this thread.
+     */
+open func advice() -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_agentcore_advice(
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
@@ -1345,13 +1388,17 @@ public protocol AgentShell: AnyObject, Sendable {
     func page()  -> String
     
     /**
-     * The dApp signing request on its sheet (`SignRequestView` JSON), if any.
+     * The dApp signing request on its sheet (`SignRequestView` JSON), if any
+     * — with, optionally, a `sheet` member: what the sheet reads beside it
+     * (`agent_review::SheetFacts`: `fee` the `FeeView`, `clear`, `guard`,
+     * `simulation`), which the review and the advisor's fee binding read.
      */
     func signing()  -> String?
     
     /**
-     * What the agent's screens show changed: its link, its requests. Read
-     * them again (on the main thread).
+     * What the agent's screens show changed: its link, its requests, the
+     * advisor's opinion ([`AgentCore::advice`]). Read them again (on the
+     * main thread).
      */
     func changed() 
     
@@ -1520,7 +1567,10 @@ open func page() -> String  {
 }
     
     /**
-     * The dApp signing request on its sheet (`SignRequestView` JSON), if any.
+     * The dApp signing request on its sheet (`SignRequestView` JSON), if any
+     * — with, optionally, a `sheet` member: what the sheet reads beside it
+     * (`agent_review::SheetFacts`: `fee` the `FeeView`, `clear`, `guard`,
+     * `simulation`), which the review and the advisor's fee binding read.
      */
 open func signing() -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
@@ -1532,8 +1582,9 @@ open func signing() -> String?  {
 }
     
     /**
-     * What the agent's screens show changed: its link, its requests. Read
-     * them again (on the main thread).
+     * What the agent's screens show changed: its link, its requests, the
+     * advisor's opinion ([`AgentCore::advice`]). Read them again (on the
+     * main thread).
      */
 open func changed()  {try! rustCall() {
         uniffiCallStatus in
@@ -12178,6 +12229,14 @@ public struct SimOutcomeRecord: Equatable, Hashable {
      * (`TrustSimView.no_change_key`) carries the same line.
      */
     public var noChangeKey: String?
+    /**
+     * No node answered (`unreachable`): the could-not-check line is about
+     * the network, not the transaction — the sheet asks again once the
+     * chain answers, and offers the person "Check again"
+     * (`componentsUi.signing.simRecheck`, dapp-15). `false` for every other
+     * kind: a node that spoke and did not simulate would say the same.
+     */
+    public var recheck: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -12207,13 +12266,21 @@ public struct SimOutcomeRecord: Equatable, Hashable {
          * answer was a check and nothing of the user's moves — the quiet line
          * the verdict's place says then; `None` otherwise. The judged view
          * (`TrustSimView.no_change_key`) carries the same line.
-         */noChangeKey: String?) {
+         */noChangeKey: String?, 
+        /**
+         * No node answered (`unreachable`): the could-not-check line is about
+         * the network, not the transaction — the sheet asks again once the
+         * chain answers, and offers the person "Check again"
+         * (`componentsUi.signing.simRecheck`, dapp-15). `false` for every other
+         * kind: a node that spoke and did not simulate would say the same.
+         */recheck: Bool = false) {
         self.kind = kind
         self.deltasJson = deltasJson
         self.revertReason = revertReason
         self.noticeRisk = noticeRisk
         self.noticeKey = noticeKey
         self.noChangeKey = noChangeKey
+        self.recheck = recheck
     }
 
     
@@ -12237,7 +12304,8 @@ public struct FfiConverterTypeSimOutcomeRecord: FfiConverterRustBuffer {
                 revertReason: FfiConverterOptionString.read(from: &buf), 
                 noticeRisk: FfiConverterOptionString.read(from: &buf), 
                 noticeKey: FfiConverterOptionString.read(from: &buf), 
-                noChangeKey: FfiConverterOptionString.read(from: &buf)
+                noChangeKey: FfiConverterOptionString.read(from: &buf), 
+                recheck: FfiConverterBool.read(from: &buf)
         )
     }
 
@@ -12248,6 +12316,7 @@ public struct FfiConverterTypeSimOutcomeRecord: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.noticeRisk, into: &buf)
         FfiConverterOptionString.write(value.noticeKey, into: &buf)
         FfiConverterOptionString.write(value.noChangeKey, into: &buf)
+        FfiConverterBool.write(value.recheck, into: &buf)
     }
 }
 
@@ -14329,6 +14398,114 @@ public func FfiConverterTypeHidReadOutcome_lower(_ value: HidReadOutcome) -> Rus
 
 
 /**
+ * How a passkey prompt ended without a signature — `passkey_end::CeremonyEnd`.
+ * Closed and out of time are the same refusal to every rule (the confirm
+ * stays for another try); only the words differ.
+ */
+
+public enum PasskeyCeremonyEnd: Equatable, Hashable {
+    
+    /**
+     * The person closed it: report `passkey_cancelled`.
+     */
+    case cancelled
+    /**
+     * It ran out of time: report `passkey_timed_out` (the send's
+     * `SendSubmitFailure`, the sheet's `SignSubmitOutcome`).
+     */
+    case timedOut
+    /**
+     * No passkey can be used here.
+     */
+    case notSupported
+    /**
+     * A credential sign-in would never offer.
+     */
+    case notDiscoverable
+    /**
+     * Any other failure.
+     */
+    case other
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension PasskeyCeremonyEnd: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePasskeyCeremonyEnd: FfiConverterRustBuffer {
+    typealias SwiftType = PasskeyCeremonyEnd
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PasskeyCeremonyEnd {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .cancelled
+        
+        case 2: return .timedOut
+        
+        case 3: return .notSupported
+        
+        case 4: return .notDiscoverable
+        
+        case 5: return .other
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: PasskeyCeremonyEnd, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .cancelled:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .timedOut:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .notSupported:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .notDiscoverable:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .other:
+            writeInt(&buf, Int32(5))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePasskeyCeremonyEnd_lift(_ buf: RustBuffer) throws -> PasskeyCeremonyEnd {
+    return try FfiConverterTypePasskeyCeremonyEnd.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePasskeyCeremonyEnd_lower(_ value: PasskeyCeremonyEnd) -> RustBuffer {
+    return FfiConverterTypePasskeyCeremonyEnd.lower(value)
+}
+
+
+
+/**
  * Why the relay refused a submit, on the axis the send machine speaks.
  */
 
@@ -14342,6 +14519,14 @@ public enum RelayRejection: Equatable, Hashable {
      */
     case nonceHeld(userOpHash: String
     )
+    /**
+     * The nonce this operation signed was spent already — another
+     * transaction of the account went first (the relay's bare AA25,
+     * send-15). Nothing was sent; the send says so calmly
+     * (`SendSubmitFailure::NonceUsed`, "went first") and signs anew; a dApp
+     * hears [`user_op_nonce_used_detail`].
+     */
+    case nonceUsed
     case other(message: String
     )
 
@@ -14372,7 +14557,9 @@ public struct FfiConverterTypeRelayRejection: FfiConverterRustBuffer {
         case 3: return .nonceHeld(userOpHash: try FfiConverterString.read(from: &buf)
         )
         
-        case 4: return .other(message: try FfiConverterString.read(from: &buf)
+        case 4: return .nonceUsed
+        
+        case 5: return .other(message: try FfiConverterString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -14396,8 +14583,12 @@ public struct FfiConverterTypeRelayRejection: FfiConverterRustBuffer {
             FfiConverterString.write(userOpHash, into: &buf)
             
         
-        case let .other(message):
+        case .nonceUsed:
             writeInt(&buf, Int32(4))
+        
+        
+        case let .other(message):
+            writeInt(&buf, Int32(5))
             FfiConverterString.write(message, into: &buf)
             
         }
@@ -18990,6 +19181,18 @@ public func userOpHash(draft: UserOpDraft, chainId: UInt32)throws  -> String  {
 })
 }
 /**
+ * The dApp's `-32603` detail for a request whose nonce another transaction
+ * of the account spent first ([`RelayRejection::NonceUsed`]) — a fixed
+ * sentence, never the relay's.
+ */
+public func userOpNonceUsedDetail() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_user_op_nonce_used_detail(uniffiCallStatus
+    )
+})
+}
+/**
  * The dApp's `-32603` detail when nothing was sent and the relay gave no
  * refusal to quote (RA10): a fixed sentence, never the pool's raw text.
  */
@@ -19841,6 +20044,31 @@ public func multisigLinkCall(method: String, argsJson: String)throws  -> String 
 })
 }
 /**
+ * A built-in network's name as the wallet writes it ("Ethereum", "Gnosis")
+ * — `network_admin::builtin_display_name` — or `None` for a chain Vela does
+ * not ship (a network someone added is named by its own record). No core
+ * instance needed to look one up.
+ */
+public func builtinNetworkDisplayName(chainId: UInt32) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_builtin_network_display_name(
+        FfiConverterUInt32.lower(chainId),uniffiCallStatus
+    )
+})
+}
+/**
+ * Every network Vela ships, by chain id, in the order every list of
+ * networks shows them (`network_admin::BUILTIN_CHAINS`).
+ */
+public func builtinNetworkIds() -> [UInt32]  {
+    return try!  FfiConverterSequenceUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_builtin_network_ids(uniffiCallStatus
+    )
+})
+}
+/**
  * How many fraction digits a fiat figure in `code` carries
  * (`l10n::currency_fraction_digits`): none for the yen, the won and the
  * other zero-decimal currencies, three for the dinars, two otherwise.
@@ -19906,6 +20134,21 @@ public func feeQuoteDeadlineMs() -> UInt32  {
     return try!  FfiConverterUInt32.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_fee_quote_deadline_ms(uniffiCallStatus
+    )
+})
+}
+/**
+ * The HTTPS exception for an address a person types into Settings — a
+ * network's RPC or explorer, a service endpoint: plain `http://` to this
+ * computer (`localhost`, `127.0.0.1`, `[::1]`, any port), anchored on the
+ * whole host (`http://127.0.0.1.evil.com` is not) —
+ * `network_admin::is_localhost_http`.
+ */
+public func isLocalhostHttp(url: String) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_is_localhost_http(
+        FfiConverterString.lower(url),uniffiCallStatus
     )
 })
 }
@@ -19992,6 +20235,26 @@ public func rpcIsHedgedRead(kind: String, method: String) -> Bool  {
     uniffi_vela_core_uniffi_fn_func_rpc_is_hedged_read(
         FfiConverterString.lower(kind),
         FfiConverterString.lower(method),uniffiCallStatus
+    )
+})
+}
+/**
+ * Where `chain_id`'s reads stand in the pool's view (`view_json`, the
+ * `RpcPoolView` the read path's machine hands back) —
+ * `rpc_pool::node_standing`: `"pooled"` (nothing to say), `"own_only"`
+ * ("Only use my node", answering), `"own_node_unreached"` ("Can't reach
+ * your node for …": nothing went to another node), or `"falling_back"`
+ * (their node is not answering; public nodes serve the reads for now).
+ * `""` for a view the core cannot read. One reading of the view's
+ * `own_only_chains`, `own_node_unreached_chains` and `fallback_chains` for
+ * a network's row, the balance breakdown and the one-time notice.
+ */
+public func rpcNodeStanding(viewJson: String, chainId: UInt32) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_rpc_node_standing(
+        FfiConverterString.lower(viewJson),
+        FfiConverterUInt32.lower(chainId),uniffiCallStatus
     )
 })
 }
@@ -20229,6 +20492,37 @@ public func multisigApprovalRoute(accountJson: String) -> String?  {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_multisig_approval_route(
         FfiConverterString.lower(accountJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * How a passkey prompt that failed as `kind` — the platform error's
+ * classification, a `FailureKind` wire name (`cancelled`, `not_supported`,
+ * `not_discoverable`, `other`) — `elapsed_ms` after it was raised, ended:
+ * a cancel at the prompt's deadline ([`passkey_sign_timeout_ms`]) is a
+ * timeout, any other the person's (`passkey_end::ceremony_end`). Android's
+ * `GetCredentialCancellationException` and iOS's
+ * `ASAuthorizationError.canceled` say both the same way; this tells them
+ * apart. A kind this build does not know is `Other`.
+ */
+public func passkeyCeremonyEnd(kind: String, elapsedMs: Double) -> PasskeyCeremonyEnd  {
+    return try!  FfiConverterTypePasskeyCeremonyEnd_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_passkey_ceremony_end(
+        FfiConverterString.lower(kind),
+        FfiConverterDouble.lower(elapsedMs),uniffiCallStatus
+    )
+})
+}
+/**
+ * The signing prompt's deadline, ms — what a shell asks its platform's
+ * prompt for, so [`passkey_ceremony_end`] reads the same clock
+ * (`passkey_end::SIGN_TIMEOUT_MS`).
+ */
+public func passkeySignTimeoutMs() -> Double  {
+    return try!  FfiConverterDouble.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_passkey_sign_timeout_ms(uniffiCallStatus
     )
 })
 }
@@ -21226,6 +21520,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_user_op_hash() != 51781) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_user_op_nonce_used_detail() != 4224) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_user_op_not_sent_detail() != 40191) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -21412,6 +21709,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_multisig_link_call() != 29990) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_builtin_network_display_name() != 32122) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_builtin_network_ids() != 30869) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_currency_fraction_digits() != 30271) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -21425,6 +21728,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_fee_quote_deadline_ms() != 29736) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_is_localhost_http() != 38256) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_min_gas_price_wei() != 54568) {
@@ -21443,6 +21749,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_rpc_is_hedged_read() != 43846) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_rpc_node_standing() != 23404) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_rpc_own_only_pool() != 60479) {
@@ -21500,6 +21809,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_multisig_approval_route() != 29971) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_passkey_ceremony_end() != 19399) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_passkey_sign_timeout_ms() != 55664) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_sign_answered() != 50979) {
@@ -21640,6 +21955,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_agentcore_activity() != 11811) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_agentcore_advice() != 59720) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_agentcore_answer() != 14687) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -21679,10 +21997,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_agentshell_page() != 54259) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_method_agentshell_signing() != 15618) {
+    if (uniffi_vela_core_uniffi_checksum_method_agentshell_signing() != 27388) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_method_agentshell_changed() != 39137) {
+    if (uniffi_vela_core_uniffi_checksum_method_agentshell_changed() != 17352) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_agentshell_send_open() != 39770) {
