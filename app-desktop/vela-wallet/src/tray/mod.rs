@@ -240,6 +240,6 @@ mod tests {
         let mut presses = take_commands().unwrap_or_else(|| unreachable!("taken once"));
         assert!(take_commands().is_none(), "one window end");
         press(TrayCommand::Send);
-        assert_eq!(presses.try_next().ok().flatten(), Some(TrayCommand::Send));
+        assert_eq!(presses.try_recv().ok(), Some(TrayCommand::Send));
     }
 }

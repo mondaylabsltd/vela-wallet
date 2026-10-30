@@ -62,8 +62,9 @@ thread_local! {
 
 /// `NSVariableStatusItemLength`.
 const VARIABLE_LENGTH: f64 = -1.;
-/// `NSImageLeading`: the mark before the figure.
-const IMAGE_LEADING: isize = 7;
+/// `NSImageLeading` (an `NSCellImagePosition`, NSUInteger): the mark before
+/// the figure.
+const IMAGE_LEADING: usize = 7;
 
 fn ns(text: &str) -> Retained<NSString> {
     NSString::from_str(text)
