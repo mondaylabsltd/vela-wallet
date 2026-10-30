@@ -58,7 +58,7 @@ class ContactsController(
         escapedFailure = JsonShell.escapedFailure(
             ContactOperation.serializer(),
             ContactShellResult.serializer(),
-            fallback = ContactShellResult.StoreLoaded(),
+            fallback = ContactShellResult.StoreUnreadable,
             answer = executor::neutralAnswer,
         ),
         onFault = { error -> VelaLog.failure("contacts.fault", "core fault", error) },

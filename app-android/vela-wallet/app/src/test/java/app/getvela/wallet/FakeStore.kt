@@ -21,8 +21,13 @@ class FakeStore(initial: Map<String, String> = emptyMap()) : KeyValueStore {
     /** When true, reads report "nothing stored" — a corrupt or unreadable file. */
     var refuseReads: Boolean = false
 
-    override suspend fun read(key: String): String? =
-        if (refuseReads) null else values[key]
+    /** When true, every read THROWS — a store that would not open at all. */
+    var failReads: Boolean = false
+
+    override suspend fun read(key: String): String? {
+        if (failReads) throw java.io.IOException("the store would not open")
+        return if (refuseReads) null else values[key]
+    }
 
     override suspend fun write(key: String, value: String): Boolean {
         if (refuseWrites) return false
