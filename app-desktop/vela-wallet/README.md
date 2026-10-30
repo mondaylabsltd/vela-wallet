@@ -24,6 +24,7 @@ matrix, and the Linux packages.
 - [What the first build does](#what-the-first-build-does)
 - [Environment pins](#environment-pins)
 - [Tests](#tests)
+- [Performance](#performance)
 - [Known gpui quirks](#known-gpui-quirks)
 - [Troubleshooting](#troubleshooting)
 
@@ -764,6 +765,9 @@ VELA_THEME=light VELA_LANG=zh cargo run    # both
 | `VELA_SERVICE_ENDPOINTS` | [dev_seed.rs](src/dev_seed.rs) | JSON object of stored endpoint names (`bundlerServiceURL`, `genesisServiceURL`, `passkeyIndexURL`, `ethereumDataURL`, `fiatRatesURL`) merged into `vela.serviceEndpoints` at launch — a local relay or mailbox |
 | `VELA_RPC_OVERRIDES` | [dev_seed.rs](src/dev_seed.rs) | JSON object chain id → RPC URL written into `vela.networkConfig` at launch (each chain's other settings kept) — a fork |
 | `VELA_PEERCONNECT_RELAY` | [dev_seed.rs](src/dev_seed.rs) | Written to `vela.peerconnectRelay` (the web's key), for multisig once it lands here |
+| `VELA_PERF=1` | [perf.rs](src/perf.rs) | The performance recorder: `[vela-perf]` lines on stderr — see [Performance](#performance) |
+| `VELA_PERF_ACTIVITY=<n>` | [dev_seed.rs](src/dev_seed.rs) | The signed-in account's history topped up to `n` transfers, and a last-known hero total and rows when it has none — the harness's 200-row History |
+| `VELA_PERF_SCROLL=1` | [page.rs](src/wallet/page.rs) | With `VELA_PERF=1`: History opens `VELA_PERF_SCROLL_AFTER` s (default 4) after launch and scrolls itself end to end and back for 6 s, recording every frame |
 
 The last three are writes into the store, as Settings would write them —
 pair them with `VELA_STATE_DIR=<scratch dir>`. Against the multisig fork
@@ -804,6 +808,58 @@ If you touch the localization corpus, the round-trip runs from the repo root:
 node scripts/gen-i18n.mjs                      # regenerate catalogs + paths.rs
 cargo test -p vela-core --features i18n-all    # conformance corpus stays green
 ```
+
+---
+
+## Performance
+
+Targets (native parity Phase 4, Apple silicon): first painted home ≤ 1.0 s,
+120 fps scroll, RSS ≤ 300 MB, core dispatch p95 < 4 ms. They are measured, not
+guessed, by the app itself: `VELA_PERF=1` in a developer build (or
+`--features perf`, which records with no switch) writes `[vela-perf]` lines —
+
+- **marks**, once each, timed from the kernel's own process start (dyld and
+  all) and from `main`, with the RSS: `app_run`, `window_opened`,
+  `first_paint`, `home_painted` (the frame a signed-in home first reaches the
+  screen) and `home_figure` (the frame its total does — from the stored one on
+  any launch after the first), plus how many store reads and parses it took;
+- **histograms** (p50/p95/p99/max), written at 10 s, 60 s and 5 min and on
+  quit: `dispatch/<Machine>`, `resolve/<Machine>`, `view/<Machine>` for every
+  Crux machine (`core_host.rs`), `store/read` and `store/parse`,
+  `frame/build` (root render → last paint) and `scroll/interval`.
+
+The harness runs the release build through all of it against a throwaway
+state directory, signed in through the parallel space:
+
+```sh
+cargo build --release --features dev-fixtures
+./scripts/perf-run.sh --runs 5          # launches + the 200-row scroll
+./scripts/perf-run.sh --runs 5 --idle   # … and RSS after 5 idle minutes
+```
+
+It seeds the account (`VELA_PERF_ACTIVITY=200`), launches five times without
+taking the keyboard, then once in front for the scroll (gpui holds an inactive
+window at 30 fps), and prints `summary.txt`. gpui's own per-frame draw +
+present time is in the scroll log too (`ZED_MEASUREMENTS=1`). For a profile,
+the same launch under Instruments' Time Profiler
+(`xctrace record --template 'Time Profiler' --launch -- target/release/vela-wallet`)
+names the Rust frames: a release build keeps its symbols.
+
+Measured 2026-10-31, M2 Pro, built-in 120 Hz display, 200 transfers:
+
+| | before | after |
+|---|---|---|
+| exec → home painted from the stored total (median of 5) | 175 ms | 162 ms |
+| store parses before the first frame | 35 | 3 |
+| History scroll, 200 rows | 78 fps, frame build p50 12.1 ms | 120 fps, 0 dropped, build p50 2.3 ms |
+| RSS: first frame / idle 10 s / 60 s / 5 min | 78 / 83 / 76 / 69 MB | 78 / 87 / 77 / 66 MB |
+| core dispatch p95, every machine | < 0.25 ms | < 0.25 ms |
+
+What moved them: History draws a window of its rows inside its scrolling
+column (`ui/windowed.rs`) and builds them once per feed rather than once per
+frame; a resident machine's view is shared (`ResidentCore::shared`) rather than
+copied on every read; the wallet document is parsed once per change rather
+than once per read (`executor/storage.rs`).
 
 ---
 
