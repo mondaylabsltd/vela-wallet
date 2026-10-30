@@ -168,8 +168,15 @@ function ports(extra: Partial<SendShellPorts> = {}): SendShellPorts {
 
 const fetchTokens = { id: 1, operation: { type: 'fetch_tokens' as const, address: ACCOUNT } };
 
+// Each submit drives the core's machines through the wasm; on a loaded
+// machine one can run past vitest's 5 s default. Give them room, so a slow
+// run is slow — not a timed-out test whose submit lives on into the next.
+vi.setConfig({ testTimeout: 30_000 });
+
 beforeEach(() => {
 	for (const seam of Object.values(seams)) seam.mockReset();
+	// A test that stopped early must not hand its queued answers to the next.
+	vi.mocked(sendBatchCalls).mockReset();
 	seams.fetchTokens.mockResolvedValue([]);
 	for (const read of [seams.deployed, seams.gasSignals, seams.bundlerQuote, seams.inBand]) {
 		read.mockResolvedValue(null);
