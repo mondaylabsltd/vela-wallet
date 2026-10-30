@@ -313,8 +313,10 @@ fn settled_result(
     // through the person's own node alone, and the chains public nodes served
     // because theirs is not answering — the pool's lists, as the web's
     // `getOwnNodeUnreachedChains` / `getFallbackChains`.
+    // Each chain's standing is the core's one reading of the pool's lists
+    // (`rpc_pool::node_standing`).
     let own = pool::own_node_chains();
-    let own_node_chain_ids = failed_own_node(&failed, &own.own_node_unreached);
+    let own_node_chain_ids = failed_own_node(&failed, &own);
     BalanceShellResult::FetchSettled {
         address: address.to_owned(),
         pull,
@@ -341,19 +343,18 @@ fn settled_result(
         // and no RPC fix offered for an endpoint that is working.
         registry_chain_ids: registry,
         own_node_chain_ids,
-        fallback_chain_ids: own.fallback,
+        fallback_chain_ids: own.falling_back(),
         now_ms: crate::executor::now_ms(),
     }
 }
 
 /// The failed chains that were read through the person's own node alone —
-/// `failed.filter((id) => getOwnNodeUnreachedChains().includes(id))`.
-fn failed_own_node(failed: &[u32], own_node_unreached: &[u32]) -> Vec<u32> {
-    failed
-        .iter()
-        .copied()
-        .filter(|chain| own_node_unreached.contains(chain))
-        .collect()
+/// those whose standing is `OwnNodeUnreached`, by the core's reading.
+fn failed_own_node(failed: &[u32], own: &pool::OwnNodeChains) -> Vec<u32> {
+    own.standing_as(
+        failed,
+        vela_core::app::rpc_pool::NodeStanding::OwnNodeUnreached,
+    )
 }
 
 impl Machine for BalanceDashboard {
@@ -1161,8 +1162,24 @@ mod tests {
     /// person's own node alone — never a chain that answered.
     #[test]
     fn own_node_rows_are_the_failed_chains_read_through_the_own_node() {
-        assert_eq!(failed_own_node(&[1, 100, 137], &[100, 8453]), vec![100]);
-        assert!(failed_own_node(&[], &[100]).is_empty());
-        assert!(failed_own_node(&[1], &[]).is_empty());
+        let own = |unreached: &[u32]| pool::OwnNodeChains::of(&[], &[100, 8453], unreached);
+        assert_eq!(
+            failed_own_node(&[1, 100, 137], &own(&[100, 8453])),
+            vec![100]
+        );
+        assert!(failed_own_node(&[], &own(&[100])).is_empty());
+        assert!(failed_own_node(&[1], &own(&[])).is_empty());
+    }
+
+    /// The breakdown's "using public nodes" chains are the core's
+    /// `FallingBack` standing — never an own-only chain that cannot be
+    /// read, where nobody else is asked.
+    #[test]
+    fn public_nodes_serve_only_a_chain_the_core_says_is_falling_back() {
+        use vela_core::app::rpc_pool::NodeStanding;
+        let own = pool::OwnNodeChains::of(&[10, 100], &[100], &[100]);
+        assert_eq!(own.falling_back(), vec![10]);
+        assert_eq!(own.standing(100), NodeStanding::OwnNodeUnreached);
+        assert_eq!(own.standing(1), NodeStanding::Pooled);
     }
 }
