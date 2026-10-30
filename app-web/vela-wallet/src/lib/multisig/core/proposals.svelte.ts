@@ -16,7 +16,6 @@
 import { untrack } from 'svelte';
 import type { ChainMembers } from './chain';
 import { sameAddress, type Approval, type Review, type SafeTx } from './kernel';
-import type { ExecutionInput } from './execute';
 import { localOwners, type LocalOwner } from './owners';
 import { multisig, type MultisigAccount } from './store.svelte';
 import { networkForChainId } from '$lib/services/networks';
@@ -557,22 +556,3 @@ export function proposeRename(
 	return proposeThrough(address, chainId, { kind: 'rename', name });
 }
 
-/** What `executor` executing `item` is, for its preview and its submit alike. */
-export function executionInput(
-	account: Pick<MultisigAccount, 'address' | 'genesis'>,
-	item: ProposalItem,
-	executor: LocalOwner,
-	members: ChainMembers
-): ExecutionInput {
-	return {
-		chainId: item.chainId,
-		multisig: account.address,
-		genesis: account.genesis,
-		members,
-		tx: item.tx,
-		approvals: item.approvals.filter((a) => a.counts).map((a) => a.approval),
-		executor,
-		action: item.review.action,
-		name: account.genesis.name ?? null
-	};
-}

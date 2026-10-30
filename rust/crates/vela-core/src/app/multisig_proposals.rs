@@ -3614,7 +3614,71 @@ fn execution_row(
         "safeTxHash": item.safe_tx_hash,
         "nonce": item.nonce.to_string(),
         "action": item.review.action,
+        "rows": execution_rows(multisig, item),
     })
+}
+
+/// The Activity rows executing `item` writes (`executionRows`, W9): one per
+/// transfer — a transfer, or a batch of transfers alone, is said by its
+/// transfers — and otherwise one more row titled as its proposal (a call,
+/// calls in a batch, a member change, a rename, a cancellation), moving only
+/// the coin a call sends, to what it calls (a batch's own target, else the
+/// multisig). Amounts are base units in decimal; the shell only words them
+/// (a token's symbol and decimals, the proposal's title).
+pub fn execution_rows(multisig: &str, item: &ProposalItem) -> Vec<Value> {
+    let action = item.review.action.as_ref();
+    let mut rows: Vec<Value> = Vec::new();
+    let send = |token: &Option<String>, to: &str, value: &str, rows: &mut Vec<Value>| {
+        rows.push(json!({
+            "index": rows.len(),
+            "kind": "send",
+            "to": to,
+            "token": token,
+            "amount": shell::quantity(value).map(|a| a.to_string()).unwrap_or_default(),
+        }));
+    };
+    match action {
+        Some(Action::Transfer { token, to, amount }) => {
+            send(token, to, amount, &mut rows);
+            return rows;
+        }
+        Some(Action::Batch { calls }) => {
+            for c in calls {
+                if let Action::Transfer { token, to, amount } = &c.action {
+                    send(token, to, amount, &mut rows);
+                }
+            }
+            let only_transfers = calls
+                .iter()
+                .all(|c| matches!(c.action, Action::Transfer { .. }));
+            if only_transfers && !rows.is_empty() {
+                return rows;
+            }
+        }
+        _ => {}
+    }
+    let to = match action {
+        Some(Action::Call { to, .. }) => to.clone(),
+        Some(Action::Batch { .. }) => item.tx.to.clone(),
+        _ => multisig.to_owned(),
+    };
+    let sends = match action {
+        Some(Action::Call { value, .. }) => shell::quantity(value).unwrap_or(0),
+        _ => 0,
+    };
+    let calls = match action {
+        Some(Action::Batch { calls }) => calls.len(),
+        _ => 1,
+    };
+    rows.push(json!({
+        "index": rows.len(),
+        "kind": "call",
+        "to": to,
+        "sends": sends.to_string(),
+        "calls": calls,
+        "contract": to.to_ascii_lowercase(),
+    }));
+    rows
 }
 
 // ---------------------------------------------------------------------------

@@ -33,7 +33,7 @@ import {
 	ExecutorCannotPayError,
 	type ExecutionBlock,
 	type ExecutionPreview
-} from '../core/execute';
+} from '../core/execution';
 import { GenesisRefusedError, type Finding } from '../core/refusal';
 import { PasskeyCheckError } from '../core/owners';
 import {

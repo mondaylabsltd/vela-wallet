@@ -96,7 +96,7 @@
 		ExecutorCannotPayError,
 		stoppedBeforeSigning,
 		type ExecutionPreview
-	} from '../core/execute';
+	} from '../core/execution';
 	import { feeCoin, feeWords, whyText } from '../core/execution-words';
 	import {
 		declinedRisk,
@@ -125,7 +125,6 @@
 	import { PageApprovalError } from '../core/page-approval.svelte';
 	import { PageDeclinedError, PageSignFailedError } from '$lib/signing/sign-challenge';
 	import { integrityLineModel } from '$lib/settings/venue';
-	import { ServiceUnavailableError } from '../core/service';
 	import { PasskeyError } from '$lib/onboarding/core/passkey';
 	import type { ExecutionVerdict } from '../core/kernel';
 	import { memberDrift, readMemberChanges, sameAddress, transfersOf } from '../core/kernel';
@@ -772,9 +771,6 @@
 		if (cancelled(error)) return m.proposal.reason.passkeyClosed;
 		if (error instanceof PasskeyCheckError) return m.proposal.reason.passkeyFailed;
 		if (error instanceof MailboxRefusedError) return m.proposal.reason.serviceRefused;
-		if (error instanceof ServiceUnavailableError) {
-			return offline() ? m.proposal.reason.offline : m.proposal.reason.serviceKept;
-		}
 		// The relay provably never took it (refused, or out of reach): nothing was sent.
 		if (error instanceof Error && error.name === 'UserOpNotSentError') return m.proposal.notSent;
 		if (error instanceof ChainUnavailableError || offline()) {

@@ -404,32 +404,7 @@ vi.mock('$lib/agent/advice.svelte', () => ({
 	openReview: () => null,
 	adviceStanding: () => ({ standing: 'current' })
 }));
-vi.mock('../core/execute', () => {
-	class ExecutorCannotPayError extends Error {}
-	class ExecutionWouldFailError extends Error {
-		constructor(readonly why: unknown) {
-			super('would fail');
-		}
-	}
-	class ExecutionUnpricedError extends Error {}
-	class ExecutionUncheckedError extends Error {}
-	class ExecutionSpentError extends Error {}
-	return {
-		ExecutionSpentError,
-		ExecutorCannotPayError,
-		ExecutionWouldFailError,
-		ExecutionUnpricedError,
-		ExecutionUncheckedError,
-		stoppedBeforeSigning: (e: unknown) =>
-			e instanceof ExecutorCannotPayError ||
-			e instanceof ExecutionWouldFailError ||
-			e instanceof ExecutionUnpricedError ||
-			e instanceof ExecutionUncheckedError,
-		relayRefused: async () => fake.refused
-	};
-});
 vi.mock('../core/chain', () => ({ ChainUnavailableError: class extends Error {} }));
-vi.mock('../core/service', () => ({ ServiceUnavailableError: class extends Error {} }));
 vi.mock('../core/owners', () => ({
 	PasskeyCheckError: class extends Error {},
 	localOwners: (owners: string[]) =>
@@ -2018,7 +1993,7 @@ describe('who proposes, on the review before the passkey (r5reg-5)', () => {
 describe('"Approve and execute" whose execute part cannot run (r4-11)', () => {
 	it('keeps the approval, and says only executing could not run', async () => {
 		fake.chain.items = [item({ approved: 1, canExecute: [local], canApprove: [local] })];
-		const { ExecutorCannotPayError } = await import('../core/execute');
+		const { ExecutorCannotPayError } = await import('../core/execution');
 		fake.executeThrows = new ExecutorCannotPayError(1n, 0n);
 		const screen = show();
 		await settle();

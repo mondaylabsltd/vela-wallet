@@ -710,3 +710,47 @@ fn the_followed_ones_presence_standing_and_timeline() {
             }
         )));
 }
+
+// -- what an executed proposal writes in Activity (records.ts executionRows, W9) ----------
+
+/// One row per transfer; a transfer or a batch of transfers alone is said by
+/// its transfers; anything else adds one row titled as its proposal, moving
+/// only the coin a call sends, to what it calls.
+#[test]
+fn an_execution_writes_one_row_per_transfer_else_one_for_its_proposal() {
+    use vela_core::app::multisig_proposals::execution_rows;
+    let with = |action: Value| {
+        let mut i = item(0, ProposalStatus::Done);
+        i.review.action = Some(serde_json::from_value(action).unwrap());
+        i.tx.to = CAROL.to_owned();
+        i
+    };
+    let send = with(json!({"kind": "transfer", "token": null, "to": BOB, "amount": "0x10"}));
+    let rows = execution_rows(SAFE, &send);
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["kind"], "send");
+    assert_eq!(rows[0]["amount"], "16", "base units, decimal");
+    let transfer = json!({"kind": "transfer", "token": CAROL, "to": BOB, "amount": "5"});
+    let leg = |action: Value| json!({"to": CAROL, "value": "0", "data": "0x", "action": action});
+    let only = with(json!({"kind": "batch", "calls": [leg(transfer.clone()), leg(transfer.clone())]}));
+    let rows = execution_rows(SAFE, &only);
+    assert_eq!(rows.len(), 2, "{rows:?}");
+    assert!(rows.iter().all(|r| r["kind"] == "send"));
+    let call = json!({"kind": "call", "to": ALICE, "value": "0x0", "data": "0x095ea7b3"});
+    let mixed = with(json!({"kind": "batch", "calls": [leg(transfer), leg(call)]}));
+    let rows = execution_rows(SAFE, &mixed);
+    assert_eq!(rows.len(), 2, "{rows:?}");
+    assert_eq!(rows[1]["kind"], "call");
+    assert_eq!(rows[1]["calls"], 2);
+    assert_eq!(rows[1]["to"], CAROL, "a batch: its own target");
+    let paying = with(json!({"kind": "call", "to": ALICE, "value": "0x5", "data": "0x"}));
+    let rows = execution_rows(SAFE, &paying);
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["sends"], "5");
+    assert_eq!(rows[0]["contract"], ALICE.to_ascii_lowercase());
+    let change = with(json!({"kind": "changeThreshold", "threshold": "1"}));
+    let rows = execution_rows(SAFE, &change);
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["to"], SAFE, "a member change: the multisig itself");
+    assert_eq!(rows[0]["sends"], "0");
+}

@@ -8,7 +8,7 @@ import { MULTISIG_SHAPE, type MultisigMessages } from '../messages';
 
 const { feeCoin, feeWords, whyText } = await import('./execution-words');
 
-type Priced = Extract<import('./execute').ExecutionPreview, { kind: 'priced' }>;
+type Priced = Extract<import('./execution').ExecutionPreview, { kind: 'priced' }>;
 
 const USDC = 10n ** 18n;
 const ALICE = '0x00000000000000000000000000000000000000a1';

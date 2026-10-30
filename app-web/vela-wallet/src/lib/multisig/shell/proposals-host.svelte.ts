@@ -19,6 +19,7 @@
  */
 import type { JsonWasmCore } from '$lib/core/json-shell';
 import type { LocalTransaction } from '$lib/services/transactions-model';
+import type { Executed } from '../core/records';
 import type { MultisigAccount } from '../core/store.svelte';
 import type { MultisigActionState } from '../generated/MultisigActionState';
 import type { MultisigNotice } from '../generated/MultisigNotice';
@@ -79,44 +80,21 @@ export class ProposeFailedError extends Error {
 }
 
 /**
- * The machine's executed rows are facts (the proposal, the transaction that
- * ran it, when): titled and worded as Activity rows by the app's own
- * `executionRows` — one per transfer, else one titled as its proposal. A
- * row already a transaction's is kept as it is.
+ * The machine's executed rows: which rows each writes is its plan (`rows`,
+ * the core's `execution_rows`), worded as Activity rows by `executionRows`
+ * (a token's symbol, the proposal's title). A row already a transaction's
+ * is kept as it is.
  */
 async function activityRows(rows: unknown[]): Promise<LocalTransaction[]> {
 	const out: LocalTransaction[] = [];
 	for (const raw of rows) {
-		const row = raw as {
-			from?: string;
-			chainId?: number;
-			safeTxHash?: string;
-			nonce?: string;
-			action?: unknown;
-			txHash?: string;
-			userOpHash?: string;
-			timestamp?: number;
-		};
-		if (!row.safeTxHash || row.chainId === undefined || !row.from || !row.txHash) {
+		const row = raw as { rows?: unknown };
+		if (!Array.isArray(row.rows)) {
 			out.push(raw as LocalTransaction);
 			continue;
 		}
 		const { executionRows } = await import('../core/records');
-		const item = {
-			chainId: row.chainId,
-			safeTxHash: row.safeTxHash,
-			nonce: BigInt(row.nonce ?? '0'),
-			review: { action: row.action ?? null }
-		};
-		out.push(
-			...(await executionRows(
-				row.from,
-				item as never,
-				row.txHash,
-				row.userOpHash ?? '',
-				row.timestamp ?? Math.floor(Date.now() / 1000)
-			))
-		);
+		out.push(...(await executionRows(raw as Executed)));
 	}
 	return out;
 }
