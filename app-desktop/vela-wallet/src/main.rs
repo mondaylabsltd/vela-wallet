@@ -324,9 +324,11 @@ fn open_window_with<V: gpui::Render + 'static>(
         // in use is due a re-check (the desktop's "foreground"), whichever
         // screen the window shows.
         root.update(cx, |_, cx| {
-            cx.observe_window_activation(window, |_, window, _| {
+            cx.observe_window_activation(window, |_, window, cx| {
                 if window.is_window_active() {
                     executor::trusted_signer::prime_in_background();
+                    // A Reduce Motion changed while away is in force now.
+                    ui::motion::sync_system(cx);
                 }
             })
             .detach();
@@ -484,6 +486,8 @@ fn main() {
         // style removed), then the theme, the language and the text size are
         // in force for the first frame rather than the second.
         crate::executor::preferences::boot();
+        // The system's Reduce Motion, before the first movement.
+        ui::motion::sync_system(cx);
         // F0.5: a developer build pointed at a local harness writes its
         // endpoints, RPC overrides and relay into the store first, so every
         // reader below sees them.

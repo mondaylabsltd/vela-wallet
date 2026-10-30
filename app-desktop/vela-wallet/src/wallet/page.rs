@@ -6368,6 +6368,28 @@ impl WalletPage {
         foot: Option<(Div, FootPlace)>,
         cx: &mut Context<Self>,
     ) -> Div {
+        // N-ALL motion: the column slides in from its edge as it fades, the
+        // web's `panel-in` (240 ms ease-out); a crossfade under Reduce Motion.
+        // Keyed by its place, so it moves when the column OPENS — not when
+        // one panel in it gives way to the next.
+        let column = self.panel_scaffold_column(theme, title, lead, underline, body, foot, cx);
+        crate::ui::motion::panel_in(column, THIRD_PANEL_W, crate::ui::motion::reduced())
+    }
+
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the scaffold and its one extra slot"
+    )]
+    fn panel_scaffold_column(
+        &mut self,
+        theme: &Theme,
+        title: SharedString,
+        lead: Option<gpui::AnyElement>,
+        underline: bool,
+        body: Div,
+        foot: Option<(Div, FootPlace)>,
+        cx: &mut Context<Self>,
+    ) -> Div {
         // The web's `ThirdPanel` (`wallet/ui/ThirdPanel.svelte`): header
         // 16/24 with a gap of 8 — its top here is the caption strip's
         // clearance, which the browser does not have — a 36px close with a
@@ -20976,14 +20998,13 @@ impl WalletPage {
                 .right_0()
                 .flex()
                 .justify_center()
-                .child(
-                    pill.with_animation(
-                        "receipt-toast",
-                        gpui::Animation::new(std::time::Duration::from_millis(320))
-                            .with_easing(gpui::ease_out_quint()),
-                        |pill, delta| pill.opacity(delta).top(px((delta - 1.) * 12.)),
-                    ),
-                )
+                // The web's `toast-in` (`ui::motion`): 220 ms ease-out, a
+                // 12 px drop; a fade alone under Reduce Motion.
+                .child(crate::ui::motion::toast_in(
+                    pill,
+                    "receipt-toast",
+                    crate::ui::motion::reduced(),
+                ))
                 .into_any_element(),
         )
     }
