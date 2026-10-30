@@ -217,6 +217,9 @@ private let CALLS: [String: Place] = [
     "session.signOutConfirmed": .step("sign_out"),
     "session.signOutDismissed": .step("sign_out"),
     "session.switchAccount": .intent("switch_account"),
+    // ob-2: the outbox tried again as the app comes to the front — the
+    // session machine's own retry, nothing a person asks.
+    "session.syncPending": .machine("the registry outbox (ob-2)"),
     "settings.addSigningPage": .none(BOUNDARY),
     "settings.blurEndpoint": .intent("set_service_endpoint"),
     "settings.blurOverride": .intent("set_network_endpoint"),

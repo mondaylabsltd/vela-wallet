@@ -41,9 +41,10 @@ struct OnboardingExecutorTests {
     /// Eight since 2026-09-23: `remove_account`, one wallet leaving a device
     /// that keeps the others. Eleven since issue #409: the landing watch's
     /// outbox read, its wait on a registry task, and the removal of a record
-    /// whose landing was confirmed.
-    @Test func sessionOperationsAreAllEleven() {
-        #expect(SessionExecutor.operations.count == 11)
+    /// whose landing was confirmed. Twelve since ob-2: a publish that never
+    /// landed, replayed with its creation proofs (`publish_pending_upload`).
+    @Test func sessionOperationsAreAllTwelve() {
+        #expect(SessionExecutor.operations.count == 12)
     }
 
     /// Issue #409: a one-key create is answered at the registry's 202 with the

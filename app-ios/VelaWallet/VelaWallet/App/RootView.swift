@@ -842,7 +842,10 @@ struct RootView: View {
                 // front (spec 079).
                 browser.appActive(phase == .active)
                 switch phase {
-                case .active: tracker.foregrounded()
+                // ob-2: back in front, an unsynced wallet's publish may land
+                // now — the web's `online`. The core ignores it when nothing
+                // is owed or a round is running.
+                case .active: tracker.foregrounded(); session.syncPending()
                 case .background: tracker.backgrounded()
                 default: break
                 }

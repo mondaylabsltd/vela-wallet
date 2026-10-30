@@ -2,7 +2,7 @@
 //  SessionExecutor.swift
 //  VelaWallet
 //
-//  The session machine's eleven operations.
+//  The session machine's twelve operations.
 //
 //  A separate vocabulary from onboarding's eighteen, and a separate executor,
 //  because the session machine is **app-resident** — one per process, outliving
@@ -19,6 +19,7 @@
 //
 
 import Foundation
+import VelaCore
 
 @MainActor
 final class SessionExecutor {
@@ -36,16 +37,25 @@ final class SessionExecutor {
         "load_pending_uploads",
         "await_registry_landing",
         "remove_pending_upload",
+        "publish_pending_upload",
     ]
 
     private let store: AccountStore
     /// How the landing watch reaches the registry — the app's session, or a
     /// test's answers from memory.
     private let registryTransport: RegistryClient.Transport
+    /// The wallet's own relying party — a replayed unit filed under no page
+    /// is this domain's, as the create's was.
+    private let relyingPartyId: String
 
-    init(store: AccountStore, registryTransport: @escaping RegistryClient.Transport = RegistryClient.urlSession) {
+    init(
+        store: AccountStore,
+        registryTransport: @escaping RegistryClient.Transport = RegistryClient.urlSession,
+        relyingPartyId: String = PasskeyExecutor.relyingParty
+    ) {
         self.store = store
         self.registryTransport = registryTransport
+        self.relyingPartyId = relyingPartyId
     }
 
     func perform(_ operation: [String: Any]) async -> String {
@@ -121,11 +131,90 @@ final class SessionExecutor {
             await store.removePendingUpload(credentialIdHex: operation["credential_id"] as? String ?? "")
             return CoreJSON.string(["type": "pending_upload_removed"])
 
+        // ob-2: a wallet's publish that never landed, replayed as the create
+        // would have sent it. Every member carries its creation-time proof,
+        // so no authenticator is asked; it waits for the landing on the
+        // registry's own budget, like the wait above. Never answered at
+        // acceptance — the record goes only once the group landed.
+        case "publish_pending_upload":
+            let registry = RegistryClient(
+                baseURL: await store.loadRegistryURL() ?? RegistryClient.defaultURL,
+                transport: registryTransport
+            )
+            do {
+                try await Self.replay(
+                    operation["publish"] as? [String: Any] ?? [:],
+                    registry: registry,
+                    walletRpId: relyingPartyId
+                )
+                return CoreJSON.string(["type": "registry_landed"])
+            } catch {
+                return CoreJSON.string([
+                    "type": "registry_landing_unconfirmed",
+                    "message": (error as? RegistryFailure)?.message ?? error.localizedDescription,
+                ])
+            }
+
         default:
             // Fail closed: an unknown session operation must not silently
             // succeed. `accounts_unavailable` is the variant that leaves the app
             // in onboarding rather than in a wallet it cannot prove exists.
             return CoreJSON.string(["type": "accounts_unavailable"])
+        }
+    }
+
+    /// The replayed publish (ob-2), under the relying party the create would
+    /// have used: the domain of the page the unit is filed under, else the
+    /// wallet's own. A member without its creation proof cannot be replayed
+    /// without a prompt, so it is refused here rather than signed live — that
+    /// is a sign-in's publish, not this one.
+    static func replay(
+        _ pending: [String: Any],
+        registry: RegistryClient,
+        walletRpId: String
+    ) async throws {
+        let members = (pending["members"] as? [[String: Any]] ?? []).map(PublishMember.init(json:))
+        guard !members.isEmpty else {
+            throw RegistryFailure(message: "the pending publish has no member", network: false)
+        }
+        let proven = try members.map { member -> ProvenMember in
+            guard let proof = member.proof else {
+                throw RegistryFailure(message: "a pending member carries no creation proof", network: false)
+            }
+            return ProvenMember(member: member, proof: proof)
+        }
+        let seedHex = pending["group_seed_hex"] as? String ?? ""
+        let groupPublicKey = pending["group_public_key_hex"] as? String ?? ""
+        guard !seedHex.isEmpty, !groupPublicKey.isEmpty else {
+            throw RegistryFailure(message: "the pending publish carries no group key", network: false)
+        }
+        let metadataHex = pending["metadata_hex"] as? String ?? ""
+        let page = (pending["page"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        let rpId = trustedSignerRegistryRpId(signerOrigin: page) ?? walletRpId
+
+        let challenge = try await registry.groupChallenge(
+            metadataHex: metadataHex, groupPublicKey: groupPublicKey, members: members, rpId: rpId
+        )
+        let groupJSON = try registryBuildGroupProof(
+            seedHex: seedHex, rpId: rpId, challengeHex: challenge.groupChallenge
+        )
+        guard let group = try? CoreJSON.object(groupJSON),
+              let groupProof = group["proof"] as? [String: Any]
+        else {
+            throw RegistryFailure(message: "the group proof did not parse", network: false)
+        }
+        let ack = try await registry.registerGroup(
+            metadataHex: metadataHex,
+            groupPublicKey: groupPublicKey,
+            groupProof: groupProof,
+            members: proven,
+            rpId: rpId
+        )
+        switch try OnboardingExecutor.afterRegister(ack, answerWhenAccepted: false) {
+        case .landed, .accepted:
+            return
+        case .awaitLanding(let taskId):
+            try await registry.awaitTask(id: taskId)
         }
     }
 }
