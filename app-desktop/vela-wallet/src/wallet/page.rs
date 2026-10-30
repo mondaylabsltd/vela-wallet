@@ -1034,6 +1034,11 @@ pub struct WalletPage {
     site_networks: Vec<explore_fixtures::NetworkPick>,
     /// `VELA_BROWSER_URL` is applied once, not on every frame the column draws.
     browser_url_pinned: bool,
+    /// `VELA_SEND_TO` was applied (once); `true` while its send is still to be
+    /// carried to the confirm.
+    send_to_pinned: Option<bool>,
+    /// `VELA_SETTINGS_NETWORK` was looked at (once).
+    settings_network_pinned: bool,
     send_amount_focus: gpui::FocusHandle,
     send_recipient_focus: gpui::FocusHandle,
     /// DSD2cL, live: the rate field's focus.
@@ -1865,6 +1870,8 @@ impl WalletPage {
             pick_scroll: crate::ui::SmoothScroll::new(),
             site_networks: Vec::new(),
             browser_url_pinned: false,
+            send_to_pinned: None,
+            settings_network_pinned: false,
             send_amount_focus: cx.focus_handle(),
             send_recipient_focus: cx.focus_handle(),
             send_rate_focus: cx.focus_handle(),
@@ -12070,8 +12077,22 @@ impl WalletPage {
 
     fn settings_networks(&mut self, theme: &Theme, window: &Window, cx: &mut Context<Self>) -> Div {
         let page = cx.entity();
-        let expanded = self.settings_expanded_network.clone();
         let rows = self.network_rows(cx);
+        // `VELA_SETTINGS_NETWORK=<chain id>`: that network's card opens on the
+        // first live frame that lists it — expanding is a click no screenshot
+        // pass can make (the `VELA_SETTINGS_PAGE` family). Once.
+        if !self.settings_network_pinned && self.identity.is_some() && !rows.is_empty() {
+            self.settings_network_pinned = true;
+            if let Some(want) = crate::dev_env::var!("VELA_SETTINGS_NETWORK")
+                .and_then(|id| id.trim().parse::<u64>().ok())
+            {
+                self.settings_expanded_network = rows
+                    .iter()
+                    .find(|row| row.chain_id == want)
+                    .map(|row| row.id.clone());
+            }
+        }
+        let expanded = self.settings_expanded_network.clone();
         let mut col = div()
             .flex()
             .flex_col()
@@ -14467,6 +14488,36 @@ impl WalletPage {
     /// signing sheet) can only ever be verified by a person with a keyboard.
     ///
     /// Applied once, on the first frame the browser column draws.
+    /// `VELA_SEND_TO=<address | EIP-681 URI>` opens the LIVE send on that
+    /// request, as a scanned code would (`scan_resolved`), and — once the core
+    /// lets it — presses Continue, so the confirm a person would reach is on
+    /// screen. Same env-pin family as `VELA_SCAN_FILE` and `VELA_BROWSER_URL`,
+    /// for the same reason: no screenshot pass on a machine somebody is using
+    /// may click into it. Nothing is signed: the confirm's own button is never
+    /// pressed. Applied once, on the first signed-in frame of the home.
+    fn send_to_from_env(&mut self, cx: &mut Context<Self>) {
+        match self.send_to_pinned {
+            None => {
+                let Some(text) = crate::dev_env::var!("VELA_SEND_TO") else {
+                    self.send_to_pinned = Some(false);
+                    return;
+                };
+                self.send_to_pinned = Some(self.scan_resolved(text, cx));
+            }
+            Some(true) => {
+                let Some(host) = self.send_host.clone() else {
+                    return;
+                };
+                let view = host.read(cx).view.clone();
+                if view.stage == vela_core::app::send::SendStage::EnterDetails && view.can_continue {
+                    self.send_to_pinned = Some(false);
+                    host.update(cx, |host, cx| host.dispatch(SendEvent::Continue, cx));
+                }
+            }
+            Some(false) => {}
+        }
+    }
+
     fn browser_url_from_env(&mut self, cx: &mut Context<Self>) {
         if self.browser_url_pinned {
             return;
@@ -19676,6 +19727,7 @@ impl WalletPage {
                 // The home is on screen: an account only noted is read now.
                 if self.identity.is_some() {
                     crate::executor::balance_dashboard::shown(cx);
+                    self.send_to_from_env(cx);
                 }
                 columns.child(self.content(theme, cx))
             }

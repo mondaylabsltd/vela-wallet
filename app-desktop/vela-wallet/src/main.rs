@@ -453,6 +453,12 @@ fn main() {
         // reader below sees them.
         #[cfg(any(test, debug_assertions, feature = "dev-fixtures"))]
         crate::dev_seed::apply();
+        // The parallel space's fixture wallets, into an empty store, on
+        // `VELA_PARALLEL_SEED=1` (dev-fixtures only).
+        #[cfg(feature = "dev-fixtures")]
+        if crate::parallel_space::seed_wallets() > 0 {
+            crate::diag::vlog!("parallel", "seeded the fixture wallets");
+        }
         // Which of Vela's networks the person's lists show, settled once
         // per device (owner decision 2026-10-29) before anything lists or
         // reads networks — never a network read and then hidden.
