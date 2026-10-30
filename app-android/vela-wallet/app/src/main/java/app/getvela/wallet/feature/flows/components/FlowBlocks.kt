@@ -8,7 +8,6 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
@@ -70,6 +69,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.Role
@@ -683,13 +683,15 @@ fun StatusHero(
             label = "receiptRingColor",
         )
         val wait = rememberInfiniteTransition(label = "receiptWait")
-        val roam by wait.animateFloat(
+        // Read in the layers below, not in composition (Phase 4): a waiting
+        // receipt redraws two layers a frame instead of recomposing the screen.
+        val roam = wait.animateFloat(
             initialValue = 0f,
             targetValue = 360f,
             animationSpec = infiniteRepeatable(animation = tween(durationMillis = 2400, easing = LinearEasing)),
             label = "receiptRingRoam",
         )
-        val breathe by wait.animateFloat(
+        val breathe = wait.animateFloat(
             initialValue = 1f,
             targetValue = 1.04f,
             animationSpec = infiniteRepeatable(
@@ -709,7 +711,7 @@ fun StatusHero(
                 Canvas(
                     modifier = Modifier
                         .matchParentSize()
-                        .rotate(if (stage == ReceiptStage.Submitted && progress == null) roam else 0f),
+                        .graphicsLayer { rotationZ = if (stage == ReceiptStage.Submitted && progress == null) roam.value else 0f },
                 ) {
                     val stroke = VelaBorder.emphasis.toPx() * 1.25f
                     val inset = stroke / 2f
@@ -739,7 +741,11 @@ fun StatusHero(
         Box(
             modifier = Modifier
                 .size(VelaSizing.statusHero)
-                .scale(if (stage == ReceiptStage.Submitted) breathe else 1f)
+                .graphicsLayer {
+                    val s = if (stage == ReceiptStage.Submitted) breathe.value else 1f
+                    scaleX = s
+                    scaleY = s
+                }
                 .background(disc, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
@@ -815,7 +821,8 @@ private fun SpinnerArc(color: Color, modifier: Modifier = Modifier) {
     Canvas(
         modifier = modifier
             .size(VelaIconSize.xl2)
-            .rotate(angle.value),
+            // Turned in the layer: no recomposition per frame (Phase 4).
+            .graphicsLayer { rotationZ = angle.value },
     ) {
         drawArc(
             color = color,
@@ -1321,14 +1328,6 @@ fun FeeRow(
 @Composable
 internal fun FeeRefreshButton(label: String, refreshing: Boolean, onRefresh: (() -> Unit)?) {
     val colors = VelaTheme.colors
-    val turn = rememberInfiniteTransition(label = "fee-refresh")
-    val angle by turn.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        // The balance refresh's pace (motion slow × 2), as web and iOS turn it.
-        animationSpec = infiniteRepeatable(tween(durationMillis = VelaMotion.durationSlow * 2, easing = LinearEasing)),
-        label = "fee-refresh-angle",
-    )
     Box(
         modifier = Modifier
             .size(VelaSizing.feeRefresh)
@@ -1338,13 +1337,41 @@ internal fun FeeRefreshButton(label: String, refreshing: Boolean, onRefresh: (()
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            imageVector = VelaIcons.RefreshCw,
-            contentDescription = null,
-            tint = colors.fgMuted,
-            modifier = Modifier.size(VelaIconSize.sm).rotate(if (refreshing) angle else 0f),
-        )
+        if (refreshing) {
+            FeeRefreshTurning(tint = colors.fgMuted)
+        } else {
+            Icon(
+                imageVector = VelaIcons.RefreshCw,
+                contentDescription = null,
+                tint = colors.fgMuted,
+                modifier = Modifier.size(VelaIconSize.sm),
+            )
+        }
     }
+}
+
+/**
+ * The turning glyph — composed only while the fee refreshes, and turned in
+ * the layer (Phase 4). The transition used to run for as long as the Send
+ * form was open, its angle read in composition: the button recomposed every
+ * frame of a form nobody was touching, refreshing or not.
+ */
+@Composable
+private fun FeeRefreshTurning(tint: Color) {
+    val turn = rememberInfiniteTransition(label = "fee-refresh")
+    val angle = turn.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        // The balance refresh's pace (motion slow × 2), as web and iOS turn it.
+        animationSpec = infiniteRepeatable(tween(durationMillis = VelaMotion.durationSlow * 2, easing = LinearEasing)),
+        label = "fee-refresh-angle",
+    )
+    Icon(
+        imageVector = VelaIcons.RefreshCw,
+        contentDescription = null,
+        tint = tint,
+        modifier = Modifier.size(VelaIconSize.sm).graphicsLayer { rotationZ = angle.value },
+    )
 }
 
 /**

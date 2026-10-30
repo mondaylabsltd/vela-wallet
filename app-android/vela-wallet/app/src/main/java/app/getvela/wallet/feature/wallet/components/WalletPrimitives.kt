@@ -14,6 +14,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.runtime.State
 import androidx.compose.ui.unit.Dp
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.marks.RemoteLogo
@@ -105,11 +107,25 @@ internal fun ChainBadge(color: Color, modifier: Modifier = Modifier, logoUrl: St
     }
 }
 
-/** Shared skeleton/live-dot pulse: opacity.disabled → 1, gentle loop. */
+/**
+ * Shared skeleton/live-dot pulse: opacity.disabled → 1, gentle loop.
+ *
+ * Applied in the DRAW phase (Phase 4): the value is read inside the layer, so
+ * a frame of the pulse redraws one small layer. It used to be read in
+ * composition (`alpha(rememberPulseAlpha())`), which recomposed, measured and
+ * laid out the whole hero every frame for as long as "Checking…" or "Live"
+ * stood on the home — 60 frames a second on an idle home, measured.
+ */
 @Composable
-internal fun rememberPulseAlpha(): Float {
+internal fun Modifier.pulsing(): Modifier {
+    val alpha = rememberPulseAlpha()
+    return this.graphicsLayer { this.alpha = alpha.value }
+}
+
+@Composable
+private fun rememberPulseAlpha(): State<Float> {
     val transition = rememberInfiniteTransition(label = "walletPulse")
-    val alpha = transition.animateFloat(
+    return transition.animateFloat(
         initialValue = VelaOpacity.disabled,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
@@ -121,5 +137,4 @@ internal fun rememberPulseAlpha(): Float {
         ),
         label = "walletPulseAlpha",
     )
-    return alpha.value
 }
