@@ -33,11 +33,14 @@
 //!   the accounts machine, `typed`), never authority.
 //!
 //! **Proposing is not here.** The view says, per deployed network, the
-//! [`MemberChange`] to propose there ([`PlanNetwork::propose`]); the shell
-//! hands it to the proposals machine's `ProposeMemberChange { chain_id,
-//! change }`, which builds the transaction AGAIN against that chain at propose
-//! time (its members and nonce read then) — the plan here is the picture
-//! shown before anything is signed, not the transaction.
+//! proposal to make there ([`PlanNetwork::proposal`]: a
+//! [`ProposalKind::MemberChange`] carrying the [`MemberChange`]); the shell
+//! dispatches it as it is into the proposals machine's
+//! `Event::Draft { chain_id, proposal }` (`chain_id` and `proposal` both
+//! taken from the [`PlanNetwork`]), which builds the transaction AGAIN
+//! against that chain at propose time (its members and nonce read then) —
+//! the plan here is the picture shown before anything is signed, not the
+//! transaction.
 
 use std::collections::BTreeMap;
 
@@ -50,10 +53,12 @@ use serde_json::{json, Value};
 #[cfg(feature = "bindings")]
 use ts_rs::TS;
 
+use super::multisig_proposals::ProposalKind;
 use super::multisig_shell::{
     checksummed, keys, local_owners, lock, same_address, AccountUpdate, Chain, ChainMembers, Io,
     LocalAccount, MemberInfo, MultisigAccount, MultisigEffect, Notice, Shared,
 };
+use super::multisig_signers::{self as signers, KindChoice, SignerFacts, SignerRead};
 use super::name_verify::{self, ResolveState, ResolveStep};
 use crate::multisig::{self, Action, MemberChange, MemberRefusal, MemberState, MemberVerdict};
 use crate::primitives::{address_entry, AddressEntry};
@@ -163,7 +168,7 @@ pub struct NetworkMembers {
 }
 
 /// One deployed network's part of a plan.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "MultisigPlanNetwork"))]
 pub struct PlanNetwork {
     #[cfg_attr(feature = "bindings", ts(type = "number"))]
@@ -171,16 +176,16 @@ pub struct PlanNetwork {
     /// Before → after where the core builds it; its refusal where it does not.
     #[cfg_attr(feature = "bindings", ts(type = "unknown"))]
     pub verdict: MemberVerdict,
-    /// The request to propose on this network (where the core built it):
-    /// the shell hands it to the proposals machine's `ProposeMemberChange {
-    /// chain_id, change }`, which builds the transaction again against the
-    /// chain then.
-    #[cfg_attr(feature = "bindings", ts(type = "unknown"))]
-    pub propose: Option<MemberChange>,
+    /// The proposal to make on this network (where the core built it):
+    /// always a [`ProposalKind::MemberChange`]. The shell dispatches it as
+    /// it is — `{ type: "draft", chain_id, proposal }`, both fields from
+    /// this row — into the proposals machine's `Event::Draft`, which builds
+    /// the transaction again against the chain then.
+    pub proposal: Option<ProposalKind>,
 }
 
 /// What a change would be on each network (`MemberPlan`).
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "MultisigMemberPlan"))]
 pub struct MemberPlan {
     /// Each network it is deployed on, and what the change is there (or why not).
@@ -218,18 +223,22 @@ pub fn plan_member_change(
                         address: multisig.to_owned(),
                     },
                 });
-            let propose = matches!(verdict, MemberVerdict::Ready { .. }).then(|| change.clone());
+            let proposal = matches!(verdict, MemberVerdict::Ready { .. }).then(|| {
+                ProposalKind::MemberChange {
+                    change: change.clone(),
+                }
+            });
             PlanNetwork {
                 chain_id: c.chain_id,
                 verdict,
-                propose,
+                proposal,
             }
         })
         .collect();
     MemberPlan {
         ready: networks
             .iter()
-            .filter(|n| n.propose.is_some())
+            .filter(|n| n.proposal.is_some())
             .map(|n| n.chain_id)
             .collect(),
         undeployed: chains
@@ -509,24 +518,9 @@ pub fn members_anywhere(original: &[String], chains: &[&ChainMembers]) -> Vec<St
     out
 }
 
-/// A Vela account (approves with its passkey, in Vela) or an outside wallet.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "MultisigMemberKind"))]
-pub enum MemberKind {
-    Vela,
-    Wallet,
-}
-
-impl MemberKind {
-    /// How a multisig keeps it (`MemberInfo.kind`).
-    pub fn stored(self) -> &'static str {
-        match self {
-            Self::Vela => "passkey",
-            Self::Wallet => "wallet",
-        }
-    }
-}
+/// A Vela account, an outside wallet or a smart contract account: the one
+/// rule's kind ([`super::multisig_signers`]).
+pub use super::multisig_signers::MemberKind;
 
 /// A contact, as much of it as a member entry reads.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -651,10 +645,7 @@ pub enum Event {
     Step { by: i64 },
     /// A change composed by the shell itself (a sheet of its own, a link):
     /// checked the same way. `None` clears it.
-    Draft {
-        #[cfg_attr(feature = "bindings", ts(type = "unknown"))]
-        change: Option<MemberChange>,
-    },
+    Draft { change: Option<MemberChange> },
     /// What is typed in the member entry.
     Entry { text: String },
     /// The entry is read (blur, Enter): an address checked, a name resolved.
@@ -808,7 +799,7 @@ pub enum EntryNote {
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "MultisigEntryView"))]
 pub struct EntryView {
     pub typed: String,
@@ -818,21 +809,14 @@ pub struct EntryView {
     pub resolving: bool,
     /// The name kept for it on this device.
     pub name: String,
-    pub kind: MemberKind,
-}
-
-impl Default for EntryView {
-    fn default() -> Self {
-        Self {
-            typed: String::new(),
-            suggestions: Vec::new(),
-            entry: None,
-            note: None,
-            resolving: false,
-            name: String::new(),
-            kind: MemberKind::Wallet,
-        }
-    }
+    /// The kind kept for it when it is proposed (`choice.kind`); `None`:
+    /// nothing kept — the member stays unsure.
+    pub kind: Option<MemberKind>,
+    /// r7: what its kind choice shows (`kindChoice`) — found as a Vela
+    /// account, a smart contract account, "Other wallet" hinted, or asked —
+    /// from what the chain says of it ([`signers::kind_evidence`]) and the
+    /// person's word. `None` without an entry.
+    pub choice: Option<KindChoice>,
 }
 
 /// "Replace C with Dana": who replaces whom, before anything is proposed.
@@ -874,8 +858,8 @@ pub struct MultisigMembersView {
     pub compose: Option<Compose>,
     pub stepper: Option<Stepper>,
     pub entry: EntryView,
-    /// The change as it stands.
-    #[cfg_attr(feature = "bindings", ts(type = "unknown"))]
+    /// The change as it stands (each ready network's
+    /// [`PlanNetwork::proposal`] carries it).
     pub change: Option<MemberChange>,
     /// What it is on each network.
     pub plan: Option<MemberPlan>,
@@ -905,6 +889,8 @@ struct Entry {
     resolving: bool,
     name: String,
     kind_pick: Option<MemberKind>,
+    /// What the chains said of the entry's address (lowercase), once read.
+    read: Option<(String, SignerRead)>,
     /// Bumped by every new text and read: a late answer for older text is dropped.
     ask: u64,
 }
@@ -996,19 +982,33 @@ impl State {
         }
     }
 
-    fn entry_kind(&self) -> MemberKind {
-        self.entry.kind_pick.unwrap_or_else(|| {
-            let local = self.entry.entry.as_ref().is_some_and(|e| {
-                self.local
-                    .iter()
-                    .any(|l| same_address(&l.address, &e.address))
-            });
-            if local {
-                MemberKind::Vela
-            } else {
-                MemberKind::Wallet
-            }
-        })
+    /// The entry's kind choice (`kindChoice(signers.evidence(chainIds,
+    /// address), kindPick ?? keptMember(address).kind)`).
+    fn entry_choice(&self) -> Option<KindChoice> {
+        let e = self.entry.entry.as_ref()?;
+        let local = self
+            .local
+            .iter()
+            .any(|l| same_address(&l.address, &e.address));
+        let kept = kept_member(&self.kept_from(), &e.address).kind;
+        let facts = match self
+            .entry
+            .read
+            .as_ref()
+            .filter(|(a, _)| same_address(a, &e.address))
+        {
+            Some((_, read)) => read.facts(None, local, None, kept.clone()),
+            None => SignerFacts {
+                local,
+                kept: kept.clone(),
+                ..SignerFacts::default()
+            },
+        };
+        let said = self
+            .entry
+            .kind_pick
+            .or_else(|| kept.as_deref().and_then(MemberKind::from_stored));
+        Some(signers::kind_choice(signers::kind_evidence(&facts), said))
     }
 
     /// The change as it stands: the shell's draft, else what is composed.
@@ -1203,7 +1203,8 @@ impl State {
                 note: entry.note.clone(),
                 resolving: entry.resolving,
                 name: entry.name.clone(),
-                kind: self.entry_kind(),
+                kind: self.entry_choice().and_then(|c| c.kind),
+                choice: self.entry_choice(),
             },
             can_propose: plan.as_ref().is_some_and(|p| !p.ready.is_empty()),
             change,
@@ -1393,7 +1394,9 @@ impl App for MultisigMembers {
                     }
                 }
                 e.kind_pick = Some(c.kind);
-                render()
+                let (ask, address) = (e.ask, c.address.clone());
+                drop(s);
+                read_kind(model, ask, address)
             }
             Event::EntryName { name } => {
                 lock(&model.state).entry.name = name;
@@ -1421,7 +1424,12 @@ impl App for MultisigMembers {
                                     who,
                                     MemberInfo {
                                         name,
-                                        kind: Some(s.entry_kind().stored().to_owned()),
+                                        // Only what the choice keeps: an
+                                        // unsure member keeps no kind.
+                                        kind: s
+                                            .entry_choice()
+                                            .and_then(|c| c.kind)
+                                            .map(|k| k.stored().to_owned()),
                                         typed: None,
                                     },
                                 )]),
@@ -1523,36 +1531,48 @@ fn read_entry(model: &Model) -> Cmd {
         drop(s);
         return flow(model, move |io, st| async move {
             let answer = resolve_typed_name(&io, &value).await;
-            let mut s = lock(&st);
-            if s.entry.ask != ask {
-                return;
-            }
-            s.entry.resolving = false;
-            match answer {
-                NameAnswer::Resolved { address, name } => {
-                    if s.entry.name.is_empty() {
-                        s.entry.name.clone_from(&name);
+            let found = {
+                let mut s = lock(&st);
+                if s.entry.ask != ask {
+                    return;
+                }
+                s.entry.resolving = false;
+                match answer {
+                    NameAnswer::Resolved { address, name } => {
+                        if s.entry.name.is_empty() {
+                            s.entry.name.clone_from(&name);
+                        }
+                        s.entry.entry = Some(MemberEntry {
+                            address: address.clone(),
+                            name: Some(name),
+                        });
+                        Some((address, s.chain_ids.clone()))
                     }
-                    s.entry.entry = Some(MemberEntry {
-                        address,
-                        name: Some(name),
-                    });
+                    NameAnswer::NotFound => {
+                        s.entry.note = Some(EntryNote::NameNotFound { name: value });
+                        None
+                    }
+                    NameAnswer::Unavailable => {
+                        s.entry.note = Some(EntryNote::NameUnavailable { name: value });
+                        None
+                    }
                 }
-                NameAnswer::NotFound => {
-                    s.entry.note = Some(EntryNote::NameNotFound { name: value });
-                }
-                NameAnswer::Unavailable => {
-                    s.entry.note = Some(EntryNote::NameUnavailable { name: value });
-                }
+            };
+            if let Some((address, chain_ids)) = found {
+                io.emit(Event::Changed);
+                read_kind_now(&io, &st, ask, &address, &chain_ids).await;
             }
         });
     }
     match member_problem(&value, &[]) {
         None => {
             s.entry.entry = Some(MemberEntry {
-                address: value,
+                address: value.clone(),
                 name: None,
             });
+            let ask = s.entry.ask;
+            drop(s);
+            return read_kind(model, ask, value);
         }
         Some(MemberProblem::InvalidAddress)
             if !suggestions(&value, &s.local, &s.contacts).is_empty() => {}
@@ -1561,6 +1581,37 @@ fn read_entry(model: &Model) -> Cmd {
         Some(_) => s.entry.note = Some(EntryNote::InvalidAddress),
     }
     render()
+}
+
+/// r7: what the chains say of the entry's address — its code on the
+/// multisig's networks and Vela's passkey signer configuration for it — read
+/// once it is an address (an account here needs none).
+fn read_kind(model: &Model, ask: u64, address: String) -> Cmd {
+    let chain_ids = lock(&model.state).chain_ids.clone();
+    flow(model, move |io, st| async move {
+        read_kind_now(&io, &st, ask, &address, &chain_ids).await;
+    })
+}
+
+async fn read_kind_now(
+    io: &Io<Event>,
+    st: &Shared<State>,
+    ask: u64,
+    address: &str,
+    chain_ids: &[u64],
+) {
+    let local = lock(st)
+        .local
+        .iter()
+        .any(|l| same_address(&l.address, address));
+    if local {
+        return;
+    }
+    let read = signers::read_signer(io, chain_ids, address).await;
+    let mut s = lock(st);
+    if s.entry.ask == ask {
+        s.entry.read = Some((address.to_ascii_lowercase(), read));
+    }
 }
 
 /// What a typed name resolved to (`NameAnswer`).

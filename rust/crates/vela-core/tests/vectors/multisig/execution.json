@@ -1,0 +1,127 @@
+{
+ "about": "An execution's plan and price, as the proposals machine's preview says them (execute.ts carriedApprovals and look's setup share; execute.test.ts). `carried`: the approvals besides the executor's own, each with whether it needs nothing deployed (`ready`), in the mailbox's order. `setupShare`: about how much of the quoted fee is the one-time setup — each deployment's eth_estimateGas less the 21,000 it carries alone, as a share of the quote's totalGas, never more than the fee; null when unmeasured. Amounts decimal.",
+ "carried": [
+  {
+   "name": "carries only what the threshold needs, those needing no deployment first",
+   "threshold": 2,
+   "executorIsOwner": true,
+   "others": [
+    { "owner": "alice", "ready": false },
+    { "owner": "bob", "ready": true }
+   ],
+   "expect": { "carries": ["bob"], "executorApproves": true }
+  },
+  {
+   "name": "a plain account's approval needs nothing deployed",
+   "threshold": 2,
+   "executorIsOwner": true,
+   "others": [
+    { "owner": "alice", "ready": false },
+    { "owner": "carol", "ready": true }
+   ],
+   "expect": { "carries": ["carol"], "executorApproves": true }
+  },
+  {
+   "name": "the passkey member it needs is carried (and activated) when nothing else is given",
+   "threshold": 2,
+   "executorIsOwner": true,
+   "others": [{ "owner": "alice", "ready": false }],
+   "expect": { "carries": ["alice"], "executorApproves": true }
+  },
+  {
+   "name": "r7-3: approvals that meet the threshold are all carried, an outside wallet's too; the executor only sends it",
+   "threshold": 2,
+   "executorIsOwner": true,
+   "others": [
+    { "owner": "alice", "ready": true },
+    { "owner": "bob", "ready": true }
+   ],
+   "expect": { "carries": ["alice", "bob"], "executorApproves": false }
+  },
+  {
+   "name": "r7-3: one short, an owner executing approves by sending it",
+   "threshold": 2,
+   "executorIsOwner": true,
+   "others": [{ "owner": "bob", "ready": true }],
+   "expect": { "carries": ["bob"], "executorApproves": true }
+  },
+  {
+   "name": "an executor that is no owner carries the threshold's approvals, and approves nothing",
+   "threshold": 2,
+   "executorIsOwner": false,
+   "others": [
+    { "owner": "alice", "ready": true },
+    { "owner": "bob", "ready": true }
+   ],
+   "expect": { "carries": ["alice", "bob"], "executorApproves": false }
+  },
+  {
+   "name": "an executor that is no owner: a member deployed for nothing never — the ready ones first",
+   "threshold": 1,
+   "executorIsOwner": false,
+   "others": [
+    { "owner": "alice", "ready": false },
+    { "owner": "bob", "ready": true }
+   ],
+   "expect": { "carries": ["bob"], "executorApproves": false }
+  }
+ ],
+ "setupShare": [
+  {
+   "name": "two deployments of 221k each, less the 21k each carries alone: 400k of 500k",
+   "fee": "50000000000000000",
+   "totalGas": "500000",
+   "executorDeployed": true,
+   "gas": ["221000", "221000"],
+   "expect": "40000000000000000"
+  },
+  {
+   "name": "the executor's own account deployed by it too: no share said",
+   "fee": "50000000000000000",
+   "totalGas": "500000",
+   "executorDeployed": false,
+   "gas": ["221000"],
+   "expect": null
+  },
+  {
+   "name": "nothing deployed: no share",
+   "fee": "50000000000000000",
+   "totalGas": "500000",
+   "executorDeployed": true,
+   "gas": [],
+   "expect": null
+  },
+  {
+   "name": "a quote without its gas: unmeasured",
+   "fee": "50000000000000000",
+   "totalGas": "0",
+   "executorDeployed": true,
+   "gas": ["221000"],
+   "expect": null
+  },
+  {
+   "name": "one gas read that did not answer: unmeasured, never a part",
+   "fee": "50000000000000000",
+   "totalGas": "500000",
+   "executorDeployed": true,
+   "gas": ["221000", null],
+   "expect": null
+  },
+  {
+   "name": "never more than the fee",
+   "fee": "100",
+   "totalGas": "1000",
+   "executorDeployed": true,
+   "gas": ["100000"],
+   "expect": "100"
+  },
+  {
+   "name": "a call under 21k adds nothing",
+   "fee": "50000000000000000",
+   "totalGas": "500000",
+   "executorDeployed": true,
+   "gas": ["20000", "121000"],
+   "expect": "10000000000000000"
+  }
+ ]
+}

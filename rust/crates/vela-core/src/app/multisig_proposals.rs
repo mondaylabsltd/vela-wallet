@@ -51,14 +51,16 @@ use serde_json::{json, Value};
 #[cfg(feature = "bindings")]
 use ts_rs::TS;
 
+use super::multisig_gather;
 use super::multisig_shell::{
     self as shell, keys, local_owners, lock, same_address, AccountUpdate, ApprovalRoute, Chain,
     ChainMembers, Io, LocalAccount, MultisigAccount, MultisigEffect, MultisigOperation,
     MultisigShellResult, Notice, PasskeyPurpose, Proposal, Service, ServiceFail, Shared,
     StoredApproval, Submission, SubmitAnswer,
 };
+use super::multisig_signers::{self as signers, SignerKind, SignerRead};
 use crate::multisig::{self, Action, Approval, Call, SafeTx};
-use crate::multisig_review::{self, Known, ReadsInput, RecipientFacts, ReviewInput};
+use crate::multisig_review::{self, Known, ReviewInput};
 use crate::multisig_watch::{
     self, ExecutedIn, ExecutionFacts, ExecutionVerdict, OurOp, OurReceipt,
 };
@@ -427,11 +429,10 @@ pub enum ProposalKind {
     },
     /// Rename the record (a transaction of the multisig's own).
     Rename { name: String },
-    /// A change of members or rule, built against the chain's members now.
-    MemberChange {
-        #[cfg_attr(feature = "bindings", ts(type = "unknown"))]
-        change: multisig::MemberChange,
-    },
+    /// A change of members or rule, built against the chain's members now
+    /// (the members machine's [`super::multisig_members::PlanNetwork::proposal`]
+    /// is this, per network).
+    MemberChange { change: multisig::MemberChange },
     /// A dApp's calls, as one transaction.
     Calls {
         #[cfg_attr(feature = "bindings", ts(type = "unknown[]"))]
@@ -636,6 +637,37 @@ pub enum Event {
     IndexedMembers {
         addresses: Vec<String>,
     },
+    /// r7: how each member still to approve this proposal signs (its sheet
+    /// opened): the chain read for each — code on the multisig's networks,
+    /// Vela's passkey signer configuration — and the one rule
+    /// ([`ProposalsView::signers`]).
+    ReadSigners {
+        #[cfg_attr(feature = "bindings", ts(type = "number"))]
+        chain_id: u64,
+        safe_tx_hash: String,
+    },
+}
+
+/// One member still to approve, and how it signs (`signers.kindOf`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "MultisigSignerRow"))]
+pub struct SignerRow {
+    pub owner: String,
+    /// `None` while that is still being read: nothing is offered on a guess.
+    pub kind: Option<SignerKind>,
+}
+
+/// How a proposal's remaining approvals can come (r4C-10, r7).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "MultisigItemSigners"))]
+pub struct ItemSigners {
+    /// The members on its network that have not approved yet, in the
+    /// chain's order, each with how it signs.
+    pub rows: Vec<SignerRow>,
+    /// Of them, those an outside wallet may be asked to sign for
+    /// (`plainAccounts`): never this device's, a Vela account, or a smart
+    /// contract account.
+    pub outside: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -785,6 +817,9 @@ pub struct ProposalsView {
     pub calls_status: BTreeMap<String, super::multisig_dapp::DappAnswer>,
     /// The proposal a link opened.
     pub linked: Option<flows::LinkedView>,
+    /// r7: per `<chainId>:<safeTxHash>` asked ([`Event::ReadSigners`]), how
+    /// its remaining approvals can come.
+    pub signers: BTreeMap<String, ItemSigners>,
 }
 
 // ---------------------------------------------------------------------------
@@ -876,9 +911,69 @@ pub struct State {
     verdicts: BTreeMap<String, Value>,
     /// Presence, timelines, dApp requests, links, outside wallets.
     more: flows::More,
+    /// r7: the proposals whose signers were asked (`<chainId>:<safeTxHash>`).
+    signers_asked: BTreeSet<(u64, String)>,
+    /// What the chains said of each member read (lowercase address).
+    signer_reads: BTreeMap<String, SignerRead>,
 }
 
 impl State {
+    /// How each member still to approve `hash` on `chain_id` signs, and who
+    /// an outside wallet may sign for (`kindOf`, `plainAccounts`).
+    fn item_signers(
+        &self,
+        items: &[ProposalItem],
+        chain_id: u64,
+        hash: &str,
+    ) -> Option<ItemSigners> {
+        let (item, members) = self.item(chain_id, hash)?;
+        let account = self.account.as_ref()?;
+        let rows_of = items.iter().flat_map(|i| {
+            i.approvals
+                .iter()
+                .map(|a| (a.owner.as_str(), a.counts, &a.approval))
+        });
+        let facts = |owner: &str| {
+            let local = self.locals.iter().any(|l| same_address(&l.address, owner));
+            let kept = account
+                .members
+                .as_ref()
+                .and_then(|m| m.get(&owner.to_ascii_lowercase()))
+                .and_then(|i| i.kind.clone());
+            let approved = signers::approved_with_in(rows_of.clone(), owner);
+            match self.signer_reads.get(&owner.to_ascii_lowercase()) {
+                Some(read) => read.facts(Some(chain_id), local, approved, kept),
+                None => signers::SignerFacts {
+                    local,
+                    approved_with: approved,
+                    kept,
+                    ..signers::SignerFacts::default()
+                },
+            }
+        };
+        let missing: Vec<String> = members
+            .owners
+            .iter()
+            .filter(|o| {
+                !item
+                    .approvals
+                    .iter()
+                    .any(|a| a.counts && same_address(&a.owner, o))
+            })
+            .cloned()
+            .collect();
+        Some(ItemSigners {
+            rows: missing
+                .iter()
+                .map(|o| SignerRow {
+                    owner: o.clone(),
+                    kind: signers::signer_kind(&facts(o)),
+                })
+                .collect(),
+            outside: signers::plain_accounts(&missing, |o| facts(o)),
+        })
+    }
+
     fn followed(&self, address: &str) -> bool {
         self.account
             .as_ref()
@@ -998,6 +1093,8 @@ impl App for MultisigProposals {
                         s.draft = None;
                         s.reviews.clear();
                         s.previews.clear();
+                        s.signers_asked.clear();
+                        s.signer_reads.clear();
                     }
                     s.account = account.clone();
                     if account.is_some() && s.chains.is_empty() {
@@ -1100,6 +1197,46 @@ impl App for MultisigProposals {
                     .reviews
                     .insert(format!("{chain_id}:{}", item.safe_tx_hash), out);
             }),
+            Event::ReadSigners {
+                chain_id,
+                safe_tx_hash,
+            } => {
+                let asked = {
+                    let mut s = lock(&model.state);
+                    let found = s.item(chain_id, &safe_tx_hash).zip(s.account.clone());
+                    found.map(|((item, members), account)| {
+                        s.signers_asked
+                            .insert((chain_id, item.safe_tx_hash.clone()));
+                        let owners: Vec<String> = members
+                            .owners
+                            .iter()
+                            .filter(|o| !s.locals.iter().any(|l| same_address(&l.address, o)))
+                            .cloned()
+                            .collect();
+                        let mut chain_ids = vec![chain_id];
+                        for id in &account.chain_ids {
+                            if !chain_ids.contains(id) {
+                                chain_ids.push(*id);
+                            }
+                        }
+                        (owners, chain_ids)
+                    })
+                };
+                let Some((owners, chain_ids)) = asked else {
+                    return render();
+                };
+                flow(model, move |io, st| async move {
+                    let reads = owners.iter().map(|o| {
+                        let (io, st, chain_ids) = (&io, &st, &chain_ids);
+                        async move {
+                            let read = signers::read_signer(io, chain_ids, o).await;
+                            lock(st).signer_reads.insert(o.to_ascii_lowercase(), read);
+                            io.emit(Event::Changed);
+                        }
+                    });
+                    future::join_all(reads).await;
+                })
+            }
             Event::Draft { chain_id, proposal } => {
                 {
                     let mut s = lock(&model.state);
@@ -1279,6 +1416,14 @@ impl App for MultisigProposals {
             dapp: more.dapp,
             calls_status: more.calls_status,
             linked: more.linked,
+            signers: s
+                .signers_asked
+                .iter()
+                .filter_map(|(chain_id, hash)| {
+                    let signers = s.item_signers(&items, *chain_id, hash)?;
+                    Some((format!("{chain_id}:{hash}"), signers))
+                })
+                .collect(),
         }
     }
 }
@@ -1838,20 +1983,6 @@ async fn refresh_once(io: &Io<Event>, st: &Shared<State>, tick: bool) {
 // The review's reads (`gatherReview`)
 // ---------------------------------------------------------------------------
 
-/// An RPC answer as the review takes it: `{result}`, `{error}`, `{unreachable: true}`.
-async fn envelope(io: &Io<Event>, chain_id: u64, method: &str, params: Value) -> Value {
-    match io
-        .rpc_within(chain_id, method, params, Some(REVIEW_READ_MS))
-        .await
-    {
-        Ok(result) => json!({ "result": result }),
-        Err(shell::RpcFail::Error { code, message }) => {
-            json!({ "error": { "code": code, "message": message } })
-        }
-        Err(shell::RpcFail::Unanswered(_)) => json!({ "unreachable": true }),
-    }
-}
-
 fn subject_key(
     chain_id: u64,
     safe: &str,
@@ -1876,6 +2007,8 @@ fn subject_key(
     .to_string()
 }
 
+/// The one review's reads ([`multisig_gather::gather_review`], the very reads
+/// the connect page makes for an outside owner), kept a moment for the gate.
 async fn gather_review(
     io: &Io<Event>,
     st: &Shared<State>,
@@ -1885,103 +2018,25 @@ async fn gather_review(
     members: &ChainMembers,
     origin: Option<String>,
 ) -> ReviewInput {
-    let mut base = ReadsInput {
+    let subject = multisig_gather::ReviewSubject {
         chain_id,
         safe: account.address.clone(),
-        tx: Some(tx.clone()),
-        owners: members.owners.clone(),
-        threshold: members.threshold,
-        deployed: members.deployed,
+        tx: tx.clone(),
+        members: members.clone(),
         genesis: Some(account.genesis.clone()),
-        ..ReadsInput::default()
-    };
-    let mut reads = multisig_review::review_reads(&base).unwrap_or_default();
-    if !reads.need_code.is_empty() {
-        let codes = future::join_all(reads.need_code.iter().map(|a| async move {
-            let e = envelope(io, chain_id, "eth_getCode", json!([a, "latest"])).await;
-            (
-                a.clone(),
-                e.get("result").and_then(Value::as_str).map(str::to_owned),
-            )
-        }))
-        .await;
-        base.codes = codes.into_iter().collect();
-        reads = multisig_review::review_reads(&base).unwrap_or_default();
-    }
-    let simulate = async {
-        if reads.sim_calls.is_empty() {
-            return None;
-        }
-        match io
-            .ask(MultisigOperation::Simulate {
-                chain_id,
-                from: account.address.clone(),
-                calls: reads.sim_calls.clone(),
+        known: lock(st).known.clone(),
+        member_names: account
+            .members
+            .as_ref()
+            .map(|ms| {
+                ms.iter()
+                    .filter_map(|(a, i)| Some((a.to_ascii_lowercase(), i.name.clone()?)))
+                    .collect()
             })
-            .await
-        {
-            MultisigShellResult::Simulated { reply } => reply,
-            _ => None,
-        }
-    };
-    let state = async {
-        let trace = match &reads.trace {
-            Some(r) => Some(envelope(io, chain_id, &r.method, r.params.clone()).await),
-            None => None,
-        };
-        let probe = match &reads.probe {
-            Some(r) => Some(envelope(io, chain_id, &r.method, r.params.clone()).await),
-            None => None,
-        };
-        (trace, probe)
-    };
-    let facts = future::join_all(reads.recipients.iter().map(|address| async move {
-        match io
-            .ask(MultisigOperation::RecipientRisk {
-                chain_id,
-                address: address.clone(),
-            })
-            .await
-        {
-            MultisigShellResult::RecipientFacts {
-                is_contract,
-                first_time,
-            } => RecipientFacts {
-                address: address.clone(),
-                is_contract,
-                first_time,
-            },
-            _ => RecipientFacts {
-                address: address.clone(),
-                is_contract: None,
-                first_time: None,
-            },
-        }
-    }));
-    let ((trace, probe), sim_reply, recipient_facts) = futures::join!(state, simulate, facts);
-    let mut known = lock(st).known.clone();
-    for m in &members.owners {
-        known.push(Known {
-            address: m.clone(),
-            label: account
-                .members
-                .as_ref()
-                .and_then(|ms| ms.get(&m.to_ascii_lowercase()))
-                .and_then(|i| i.name.clone())
-                .unwrap_or_else(|| m.clone()),
-            kind: multisig_review::KnownKind::Member,
-        });
-    }
-    let input = ReviewInput {
-        reads: base,
-        sim_reply,
-        trace,
-        probe,
-        recipient_facts,
-        known,
-        blind: false,
+            .unwrap_or_default(),
         origin: origin.clone(),
     };
+    let input = multisig_gather::gather_review(io, &subject).await;
     let key = subject_key(chain_id, &account.address, tx, members, origin.as_deref());
     let now = io.now().await;
     let mut s = lock(st);
@@ -2029,12 +2084,10 @@ async fn authorize_signing(
             Some(i) => i,
             None => gather_review(io, st, account, chain_id, tx, &members, None).await,
         };
-        multisig_review::multisig_review(&input)
-            .ok()
-            .map(|r| r.sign)
+        Some(multisig_gather::review_of(&input))
     };
-    let (found, sign) = futures::join!(found, rule);
-    let (Some(found), Some(sign)) = (found, sign) else {
+    let (found, review) = futures::join!(found, rule);
+    let (Some(found), Some(review)) = (found, review) else {
         return Err(Stop::State(ActionState::SigningUnchecked));
     };
     io.notice(Notice::Account {
@@ -2045,11 +2098,7 @@ async fn authorize_signing(
         },
     })
     .await;
-    match multisig_review::signing_gate(&multisig_review::GateInput {
-        chain_id,
-        findings: Some(found),
-        sign: Some(sign),
-    }) {
+    match multisig_gather::decide(chain_id, &account.address, tx, Some(found), review.as_ref()) {
         multisig_review::Gate::Open => Ok(()),
         multisig_review::Gate::Unchecked => Err(Stop::State(ActionState::SigningUnchecked)),
         multisig_review::Gate::Refused { findings } => {
@@ -2666,7 +2715,63 @@ fn execution_input(
 pub struct Planned {
     pub calls: Vec<Call>,
     pub deploys_multisig: bool,
+    /// Approving members whose Vela account this execution deploys (their
+    /// passkey approval is checked through it).
     pub activates: Vec<String>,
+    /// The members whose given approvals it carries (the executor's own is
+    /// never one).
+    pub carries: Vec<String>,
+    /// The executor approves by sending it (`msg.sender`), one approval
+    /// besides `carries`.
+    pub executor_approves: bool,
+}
+
+/// Which approvals an execution carries (`carriedApprovals`, r4-7, r7-3):
+/// only the approvals the threshold needs — those needing nothing deployed
+/// first (`ready`: a plain account's, or a Vela account with code there) —
+/// and the executor (an owner) approves as `msg.sender` only when those that
+/// need nothing deployed fall short, never in place of one given. `others`:
+/// the approvals besides the executor's own, each with whether it is ready.
+/// Returns the chosen approvals (with their readiness) and whether the
+/// executor approves.
+pub fn carried_approvals<T: Clone>(
+    threshold: u64,
+    executor_is_owner: bool,
+    others: Vec<(T, bool)>,
+) -> (Vec<(T, bool)>, bool) {
+    let ready_count = others.iter().filter(|(_, r)| *r).count() as u64;
+    let executor_approves = executor_is_owner && ready_count < threshold;
+    let needed = threshold.saturating_sub(u64::from(executor_approves));
+    let mut chosen = others;
+    // Ready first, the given order kept within each (a stable sort).
+    chosen.sort_by_key(|(_, r)| !*r);
+    chosen.truncate(usize::try_from(needed).unwrap_or(usize::MAX));
+    (chosen, executor_approves)
+}
+
+/// About how much of `fee` is the one-time setup (`look`'s `setup.amount`):
+/// each deployment call's `eth_estimateGas` (`gas`), less the 21,000 each
+/// carries alone (inside the one operation they do not), as a share of the
+/// quote's `total_gas`, never more than the fee. `None` (unmeasured) with no
+/// deployment, a quote without its gas, an executor whose own first
+/// deployment rides in its initCode (unmeasured here), or a gas read that
+/// did not answer.
+pub fn setup_share(
+    fee: u128,
+    total_gas: u128,
+    executor_deployed: bool,
+    gas: &[Option<u128>],
+) -> Option<u128> {
+    use alloy_primitives::U256;
+    if gas.is_empty() || total_gas == 0 || !executor_deployed {
+        return None;
+    }
+    let mut setup_gas = U256::ZERO;
+    for g in gas {
+        setup_gas += U256::from(g.as_ref()?.saturating_sub(21_000));
+    }
+    let share = U256::from(fee) * setup_gas / U256::from(total_gas);
+    Some(u128::try_from(share).unwrap_or(u128::MAX).min(fee))
 }
 
 enum PlanFail {
@@ -2695,10 +2800,11 @@ async fn plan_execution(io: &Io<Event>, input: &ExecutionInput) -> Result<Planne
         }
     }))
     .await;
-    let needed = input.members.threshold.saturating_sub(u64::from(owner));
-    let mut chosen: Vec<(Approval, bool)> = others.into_iter().zip(ready).collect();
-    chosen.sort_by_key(|(_, r)| !*r);
-    chosen.truncate(usize::try_from(needed).unwrap_or(usize::MAX));
+    let (chosen, executor_approves) = carried_approvals(
+        input.members.threshold,
+        owner,
+        others.into_iter().zip(ready).collect(),
+    );
     let mut deploy_owners = Vec::new();
     let mut activates = Vec::new();
     for (a, ready) in &chosen {
@@ -2718,8 +2824,8 @@ async fn plan_execution(io: &Io<Event>, input: &ExecutionInput) -> Result<Planne
         deploy_multisig: deploy_multisig.clone(),
         deploy_owners,
         tx: input.item.tx.clone(),
-        approvals: chosen.into_iter().map(|(a, _)| a).collect(),
-        executor: owner.then(|| input.executor.address.clone()),
+        approvals: chosen.iter().map(|(a, _)| a.clone()).collect(),
+        executor: executor_approves.then(|| input.executor.address.clone()),
         deploy_facts,
     })
     .map_err(|_| PlanFail::Other)?;
@@ -2727,6 +2833,8 @@ async fn plan_execution(io: &Io<Event>, input: &ExecutionInput) -> Result<Planne
         calls,
         deploys_multisig: deploy_multisig.is_some(),
         activates,
+        carries: chosen.iter().map(|(a, _)| a.owner().to_owned()).collect(),
+        executor_approves,
     })
 }
 
@@ -2766,6 +2874,8 @@ pub enum Preview {
         balance: Option<u128>,
         can_pay: bool,
         executor_deployed: bool,
+        /// About how much of the fee is the one-time setup ([`setup_share`]).
+        setup_amount: Option<u128>,
     },
 }
 
@@ -2783,16 +2893,21 @@ impl Preview {
                 balance,
                 can_pay,
                 executor_deployed,
+                setup_amount,
             } => json!({
                 "kind": "priced",
                 "calls": planned.calls,
                 "fee": fee,
                 "balance": balance.map(|b| b.to_string()),
                 "canPay": can_pay,
+                "carries": planned.carries,
+                "executorApproves": planned.executor_approves,
                 "setup": {
                     "multisig": planned.deploys_multisig,
                     "members": planned.activates,
                     "executor": !executor_deployed,
+                    // Decimal, as `balance`; `null` when unmeasured.
+                    "amount": setup_amount.map(|a| a.to_string()),
                 },
             }),
         }
@@ -2982,16 +3097,60 @@ async fn look(io: &Io<Event>, input: &ExecutionInput) -> Preview {
         (Some(b), Some(a)) if is_native => b >= a,
         _ => true,
     };
+    let executor_deployed = quote
+        .get("executorDeployed")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+    let total_gas = quote
+        .get("totalGas")
+        .and_then(|g| {
+            g.as_str()
+                .and_then(shell::quantity)
+                .or_else(|| g.as_u64().map(u128::from))
+        })
+        .unwrap_or(0);
+    // The deployments: every call before execTransaction, each measured on
+    // its own — only when a share could be said at all.
+    let deployments = &planned.calls[..planned.calls.len().saturating_sub(1)];
+    let setup_amount = match amount {
+        Some(fee) if !deployments.is_empty() && total_gas > 0 && executor_deployed => {
+            let gas = future::join_all(
+                deployments
+                    .iter()
+                    .map(|c| gas_of(io, input.chain_id, &executor, c)),
+            )
+            .await;
+            setup_share(fee, total_gas, executor_deployed, &gas)
+        }
+        _ => None,
+    };
     Preview::Priced {
         planned,
         fee,
         balance,
         can_pay,
-        executor_deployed: quote
-            .get("executorDeployed")
-            .and_then(Value::as_bool)
-            .unwrap_or(true),
+        executor_deployed,
+        setup_amount,
     }
+}
+
+/// One call's gas on its own (`readGas`): `eth_estimateGas` from `from`,
+/// bounded; `None` when unmeasured.
+async fn gas_of(io: &Io<Event>, chain_id: u64, from: &str, call: &Call) -> Option<u128> {
+    let answer = io
+        .rpc_within(
+            chain_id,
+            "eth_estimateGas",
+            json!([{ "from": from, "to": call.to, "value": call.value, "data": call.data }]),
+            Some(REVIEW_READ_MS),
+        )
+        .await
+        .ok()?;
+    let raw = answer.as_str()?;
+    if !raw.starts_with("0x") || raw.len() < 3 {
+        return None;
+    }
+    shell::quantity(raw)
 }
 
 async fn execute(

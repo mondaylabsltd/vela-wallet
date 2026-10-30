@@ -4,6 +4,7 @@ import type { MultisigAddView } from "./MultisigAddView";
 import type { MultisigBackupState } from "./MultisigBackupState";
 import type { MultisigCreateView } from "./MultisigCreateView";
 import type { MultisigImportView } from "./MultisigImportView";
+import type { MultisigKindChoice } from "./MultisigKindChoice";
 import type { MultisigLinkStand } from "./MultisigLinkStand";
 import type { MultisigPhase } from "./MultisigPhase";
 import type { MultisigRenamePlan } from "./MultisigRenamePlan";
@@ -16,4 +17,11 @@ service_down: boolean,
 /**
  * Where the multisig link opened here stands.
  */
-link: MultisigLinkStand | null, };
+link: MultisigLinkStand | null, 
+/**
+ * r7: each member asked about ([`Event::ReadKinds`], [`Event::PickKind`]),
+ * by lowercase address: what its kind choice shows — a Vela account
+ * found, a smart contract account, "Other wallet" hinted, or asked
+ * (`kindChoice`).
+ */
+member_kinds: { [key in string]: MultisigKindChoice }, };

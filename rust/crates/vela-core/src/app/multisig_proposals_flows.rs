@@ -1259,6 +1259,7 @@ async fn plain_owners(
                 index_answered: true,
                 kept,
                 code,
+                configured: None,
             },
         );
     }

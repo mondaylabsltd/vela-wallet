@@ -52,9 +52,10 @@ use serde_json::{json, Value};
 #[cfg(feature = "bindings")]
 use ts_rs::TS;
 
+use super::multisig_gather;
 use super::multisig_shell::{
     self as shell, lock, same_address, ChainMembers, Io, MultisigEffect, MultisigOperation,
-    MultisigShellResult, Proposal, RpcFail, Service, ServiceFail, Shared,
+    MultisigShellResult, Proposal, Service, ServiceFail, Shared,
 };
 use crate::multisig::{self, Approval, EcdsaApproval, EcdsaForm, Genesis, SafeTx};
 
@@ -683,109 +684,22 @@ pub fn read_item(
 // Who may be asked to sign through an outside wallet (`signers.svelte.ts`)
 // ---------------------------------------------------------------------------
 
-/// How a member signs, as this device can tell (ms-11, r4-9, r4a-9).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "OutsideSignerKind"))]
-pub enum SignerKind {
-    /// A Vela account on this device.
-    Here,
-    /// A smart account elsewhere: it approves in Vela; never an outside wallet.
-    Vela,
-    /// A plain account: its own wallet signs.
-    Wallet,
-    /// Nothing says: the Vela way first, the outside wallet's beside it.
-    Unsure,
-}
-
-/// What a counted approval says of how an address approved.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "OutsideApprovedWith"))]
-pub enum ApprovedWith {
-    Passkey,
-    Wallet,
-}
+// The one rule of what a member is and how it signs lives in
+// `multisig_signers` (every machine uses it); these are its names here.
+pub use super::multisig_signers::{
+    plain_accounts, signer_kind, ApprovedWith, SignerFacts, SignerKind,
+};
 
 /// What the proposals this device reads say of how `address` approved, if it
 /// did (r4a-9): only a counted approval is evidence.
 pub fn approved_with(items: &[Vec<ApprovalRow>], address: &str) -> Option<ApprovedWith> {
-    let mut wallet = false;
-    for rows in items {
-        for a in rows {
-            if !a.counts || !same_address(&a.owner, address) {
-                continue;
-            }
-            match a.approval {
-                Approval::Passkey(_) => return Some(ApprovedWith::Passkey),
-                Approval::Ecdsa(_) => wallet = true,
-                Approval::OnChain(_) => {}
-            }
-        }
-    }
-    wallet.then_some(ApprovedWith::Wallet)
-}
-
-/// What is known of one member, read by the shell.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", default)]
-#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "OutsideSignerFacts"))]
-pub struct SignerFacts {
-    /// A Vela account on this device.
-    pub local: bool,
-    pub approved_with: Option<ApprovedWith>,
-    /// The passkey index knows it as a Vela account.
-    pub indexed: bool,
-    /// The passkey index answered for it (either way).
-    pub index_answered: bool,
-    /// This device's word: `passkey` or `wallet`.
-    pub kept: Option<String>,
-    /// Contract code at its address there (an EIP-7702 delegation is none);
-    /// `None` while it is read.
-    pub code: Option<bool>,
-}
-
-/// How a member signs (`kindOf`); `None` while that is still being read:
-/// nothing is offered on a guess.
-pub fn signer_kind(f: &SignerFacts) -> Option<SignerKind> {
-    if f.local {
-        return Some(SignerKind::Here);
-    }
-    if f.approved_with == Some(ApprovedWith::Passkey) || f.indexed {
-        return Some(SignerKind::Vela);
-    }
-    match f.code {
-        Some(true) => return Some(SignerKind::Vela),
-        _ if f.kept.as_deref() == Some("passkey") => return Some(SignerKind::Vela),
-        None => return None,
-        Some(false) => {}
-    }
-    if f.approved_with == Some(ApprovedWith::Wallet) || f.kept.as_deref() == Some("wallet") {
-        return Some(SignerKind::Wallet);
-    }
-    if !f.index_answered {
-        return None;
-    }
-    Some(SignerKind::Unsure)
-}
-
-/// Of `owners`, those an outside wallet may be asked to sign for (r4C-10):
-/// not this device's, no code at their address, not a Vela account the index
-/// knows, none that approved with a passkey. A read that failed is no code
-/// and no index entry (`plainAccounts`).
-pub fn plain_accounts(owners: &[String], facts: impl Fn(&str) -> SignerFacts) -> Vec<String> {
-    owners
-        .iter()
-        .filter(|o| {
-            let f = facts(o);
-            !f.local
-                && f.approved_with != Some(ApprovedWith::Passkey)
-                && f.kept.as_deref() != Some("passkey")
-                && f.code != Some(true)
-                && !f.indexed
-        })
-        .cloned()
-        .collect()
+    super::multisig_signers::approved_with_in(
+        items
+            .iter()
+            .flatten()
+            .map(|a| (a.owner.as_str(), a.counts, &a.approval)),
+        address,
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -1338,19 +1252,10 @@ async fn wallet_chain<Ev: Send + 'static>(io: &Io<Ev>) -> Result<u64, (Option<i6
         .ok_or_else(|| (None, "the wallet named no network".to_owned()))
 }
 
-/// A JSON-RPC answer as the review takes it (`{result}`, `{error}`, `{unreachable}`).
-fn envelope(answer: Result<Value, RpcFail>) -> Value {
-    match answer {
-        Ok(result) => json!({ "result": result }),
-        Err(RpcFail::Error { code, message }) => {
-            json!({ "error": { "code": code, "message": message } })
-        }
-        Err(RpcFail::Unanswered(_)) => json!({ "unreachable": true }),
-    }
-}
-
-/// The one review of `tx` (§3.6): the core's reading, the three hashes, the
-/// state-diff guard (trace and probe asked together, each bounded) — what
+/// The one review of `tx` (§3.6), as a Vela member gets it — the very reads
+/// the proposals machine makes ([`multisig_gather::gather_review`]): the
+/// core's reading, the three hashes, the state-diff guard (trace and
+/// probe), the signing sheet's simulation and each recipient's facts. What
 /// the page draws and the sign rule its gate uses. `None`: the core cannot
 /// read the transaction at all.
 pub async fn review_now<Ev: Send + 'static>(
@@ -1361,46 +1266,18 @@ pub async fn review_now<Ev: Send + 'static>(
     members: &ChainMembers,
     genesis: Option<&Genesis>,
 ) -> Option<crate::multisig_review::MultisigReview> {
-    use crate::multisig_review as mr;
-    let mut input = mr::ReadsInput {
+    let subject = multisig_gather::ReviewSubject {
         chain_id,
         safe: safe.to_owned(),
-        tx: Some(tx.clone()),
-        owners: members.owners.clone(),
-        threshold: members.threshold,
-        deployed: members.deployed,
+        tx: tx.clone(),
+        members: members.clone(),
         genesis: genesis.cloned(),
-        codes: BTreeMap::new(),
-        tokens: Vec::new(),
+        // The page knows no contacts: the members are who it knows.
+        known: Vec::new(),
+        member_names: BTreeMap::new(),
+        origin: None,
     };
-    let mut reads = mr::review_reads(&input).ok()?;
-    for _ in 0..3 {
-        if reads.need_code.is_empty() {
-            break;
-        }
-        input
-            .codes
-            .extend(shell::codes_of(io, chain_id, &reads.need_code).await);
-        reads = mr::review_reads(&input).ok()?;
-    }
-    let ask = |r: Option<mr::RpcRequest>| async move {
-        match r {
-            Some(r) => Some(envelope(
-                io.rpc_within(chain_id, &r.method, r.params, Some(REVIEW_READ_MS))
-                    .await,
-            )),
-            None => None,
-        }
-    };
-    let (trace, probe) = futures::join!(ask(reads.trace.clone()), ask(reads.probe.clone()));
-    mr::multisig_review(&mr::ReviewInput {
-        reads: input,
-        sim_reply: None,
-        trace,
-        probe,
-        ..mr::ReviewInput::default()
-    })
-    .ok()
+    multisig_gather::review_of(&multisig_gather::gather_review(io, &subject).await)
 }
 
 /// The registry's genesis for `safe`, only if the core derives that address
@@ -2619,7 +2496,13 @@ pub mod page {
             Ok(h) => h,
             Err(_) => return set_load(OutsideLoad::Mismatch),
         };
-        let gate = gate_of(link.chain_id, findings.clone(), review.as_ref(), &item);
+        let gate = gate_of(
+            link.chain_id,
+            &link.safe,
+            &p.safe_tx,
+            findings.clone(),
+            review.as_ref(),
+        );
         if !still(st) {
             return;
         }
@@ -2653,25 +2536,15 @@ pub mod page {
     }
 
     /// The gate's verdict for what the page shows: §3.5's findings and the
-    /// review's sign rule (a transaction the core does not read is blocked).
+    /// review, decided as for a Vela member ([`multisig_gather::decide`]).
     fn gate_of(
         chain_id: u64,
+        safe: &str,
+        tx: &SafeTx,
         findings: Option<Vec<Value>>,
         review: Option<&crate::multisig_review::MultisigReview>,
-        item: &OutsideItem,
     ) -> PageGate {
-        let sign = review
-            .map(|r| r.sign)
-            .or(Some(crate::multisig_review::SignRule {
-                allowed: item.review.action.is_some(),
-                anyway: false,
-            }));
-        crate::multisig_review::signing_gate(&crate::multisig_review::GateInput {
-            chain_id,
-            findings,
-            sign,
-        })
-        .into()
+        multisig_gather::decide(chain_id, safe, tx, findings, review).into()
     }
 
     fn kept_prefix(link: &TxLink) -> String {
@@ -2852,24 +2725,11 @@ pub mod page {
         let mut members = v.members.clone();
         members.deployed = deployed;
         let review = review_now(io, v.chain_id, &v.safe, tx, &members, v.genesis.as_ref()).await;
-        // No review at all: the decoding rule alone (a transaction the core
-        // does not read is never signed).
-        let sign = review.as_ref().map_or_else(
-            || crate::multisig_review::SignRule {
-                allowed: multisig::review(v.chain_id, &v.safe, tx)
-                    .is_ok_and(|r| r.action.is_some()),
-                anyway: false,
-            },
-            |r| r.sign,
-        );
         if !current(st, run) {
             return Err(Stop::Quiet);
         }
-        let gate = crate::multisig_review::signing_gate(&crate::multisig_review::GateInput {
-            chain_id: v.chain_id,
-            findings,
-            sign: Some(sign),
-        });
+        // The one gate, as a Vela member's signature gets it.
+        let gate = multisig_gather::decide(v.chain_id, &v.safe, tx, findings, review.as_ref());
         use crate::multisig_review::Gate;
         match gate {
             Gate::Open => Ok(()),

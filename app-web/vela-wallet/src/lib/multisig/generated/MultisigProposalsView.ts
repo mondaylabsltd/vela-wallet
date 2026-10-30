@@ -4,6 +4,7 @@ import type { MultisigChainState } from "./MultisigChainState";
 import type { MultisigDappAnswer } from "./MultisigDappAnswer";
 import type { MultisigDraft } from "./MultisigDraft";
 import type { MultisigHeldRequest } from "./MultisigHeldRequest";
+import type { MultisigItemSigners } from "./MultisigItemSigners";
 import type { MultisigLinkedView } from "./MultisigLinkedView";
 import type { MultisigMissingChain } from "./MultisigMissingChain";
 import type { MultisigOutboxEntry } from "./MultisigOutboxEntry";
@@ -85,4 +86,9 @@ calls_status: { [key in string]: MultisigDappAnswer },
 /**
  * The proposal a link opened.
  */
-linked: MultisigLinkedView | null, };
+linked: MultisigLinkedView | null, 
+/**
+ * r7: per `<chainId>:<safeTxHash>` asked ([`Event::ReadSigners`]), how
+ * its remaining approvals can come.
+ */
+signers: { [key in string]: MultisigItemSigners }, };

@@ -73,6 +73,8 @@ pub mod money;
 pub mod multisig_accounts;
 /// A dApp's request from a multisig (docs/multisig-vault-design.md §6).
 pub mod multisig_dapp;
+/// The one review's reads and the one gate, shared by every multisig signer (§3.5, §3.6).
+pub mod multisig_gather;
 pub mod multisig_members;
 /// An owner whose wallet is not Vela: the connect page and Vela's live session (§11.2, §11.3).
 pub mod multisig_outside;
@@ -81,6 +83,8 @@ pub mod multisig_presence;
 pub mod multisig_proposals;
 /// The multisig machines (F0.4): one shell vocabulary, four machines.
 pub mod multisig_shell;
+/// What a multisig member is and how it signs: one rule over facts, for every machine.
+pub mod multisig_signers;
 pub mod name_verify;
 pub mod net_health;
 pub mod network_admin;

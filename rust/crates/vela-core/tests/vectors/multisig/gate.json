@@ -1,0 +1,121 @@
+{
+ "about": "The one gate before a multisig signature (multisig_gather::decide_with), the same for a Vela member (the proposals machine) and an outside owner (the connect page): the findings the chain gave just now on chainId (null: it did not answer; §3.5), the one review's sign rule (null: no review could be built; §3.6), and whether the core reads the transaction at all. Order: unread, refused network, refused transaction, risk, open — and nothing is signed on the decoding alone.",
+ "cases": [
+  {
+   "name": "the chain did not answer: unchecked",
+   "chainId": 100,
+   "findings": null,
+   "sign": { "allowed": true, "anyway": false },
+   "decodable": true,
+   "expect": { "kind": "unchecked" }
+  },
+  {
+   "name": "nothing found, a review that signs: open",
+   "chainId": 100,
+   "findings": [],
+   "sign": { "allowed": true, "anyway": false },
+   "decodable": true,
+   "expect": { "kind": "open" }
+  },
+  {
+   "name": "a sign-anyway review still opens: its friction is the page's",
+   "chainId": 100,
+   "findings": [],
+   "sign": { "allowed": true, "anyway": true },
+   "decodable": true,
+   "expect": { "kind": "open" }
+  },
+  {
+   "name": "a refused genesis here: read-only, before the transaction's own rule",
+   "chainId": 100,
+   "findings": [{ "from": "genesis", "chainId": 100, "reason": { "kind": "notSetup" } }],
+   "sign": { "allowed": false, "anyway": false },
+   "decodable": false,
+   "expect": {
+    "kind": "refused",
+    "findings": [{ "from": "genesis", "chainId": 100, "reason": { "kind": "notSetup" } }]
+   }
+  },
+  {
+   "name": "a transaction Vela does not sign: blocked, no override",
+   "chainId": 100,
+   "findings": [],
+   "sign": { "allowed": false, "anyway": false },
+   "decodable": true,
+   "expect": { "kind": "blocked" }
+  },
+  {
+   "name": "blocked before risk",
+   "chainId": 100,
+   "findings": [{ "from": "chain", "chainId": 100, "risk": { "kind": "module", "address": "0x9813461E88aDD60D0eC0943B74A83368CA2E36D1" } }],
+   "sign": { "allowed": false, "anyway": false },
+   "decodable": true,
+   "expect": { "kind": "blocked" }
+  },
+  {
+   "name": "something besides the members can act here: risk, asked every time",
+   "chainId": 100,
+   "findings": [{ "from": "chain", "chainId": 100, "risk": { "kind": "module", "address": "0x9813461E88aDD60D0eC0943B74A83368CA2E36D1" } }],
+   "sign": { "allowed": true, "anyway": false },
+   "decodable": true,
+   "expect": {
+    "kind": "risk",
+    "findings": [{ "from": "chain", "chainId": 100, "risk": { "kind": "module", "address": "0x9813461E88aDD60D0eC0943B74A83368CA2E36D1" } }]
+   }
+  },
+  {
+   "name": "another network's findings say nothing here",
+   "chainId": 100,
+   "findings": [
+    { "from": "chain", "chainId": 8453, "risk": { "kind": "module", "address": "0x9813461E88aDD60D0eC0943B74A83368CA2E36D1" } },
+    { "from": "genesis", "chainId": 8453, "reason": { "kind": "notSetup" } }
+   ],
+   "sign": { "allowed": true, "anyway": false },
+   "decodable": true,
+   "expect": { "kind": "open" }
+  },
+  {
+   "name": "no review of a transaction the core reads: unchecked, never signed on the decoding alone",
+   "chainId": 100,
+   "findings": [],
+   "sign": null,
+   "decodable": true,
+   "expect": { "kind": "unchecked" }
+  },
+  {
+   "name": "no review, and a risk: still unchecked",
+   "chainId": 100,
+   "findings": [{ "from": "chain", "chainId": 100, "risk": { "kind": "module", "address": "0x9813461E88aDD60D0eC0943B74A83368CA2E36D1" } }],
+   "sign": null,
+   "decodable": true,
+   "expect": { "kind": "unchecked" }
+  },
+  {
+   "name": "no review of a transaction the core cannot read: blocked",
+   "chainId": 100,
+   "findings": [],
+   "sign": null,
+   "decodable": false,
+   "expect": { "kind": "blocked" }
+  },
+  {
+   "name": "no review on a refused network: refused is said",
+   "chainId": 100,
+   "findings": [{ "from": "genesis", "chainId": 100, "reason": { "kind": "notSetup" } }],
+   "sign": null,
+   "decodable": true,
+   "expect": {
+    "kind": "refused",
+    "findings": [{ "from": "genesis", "chainId": 100, "reason": { "kind": "notSetup" } }]
+   }
+  },
+  {
+   "name": "no findings read and no review: unchecked",
+   "chainId": 100,
+   "findings": null,
+   "sign": null,
+   "decodable": false,
+   "expect": { "kind": "unchecked" }
+  }
+ ]
+}
