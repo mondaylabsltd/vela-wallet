@@ -1500,6 +1500,48 @@ fn a_look_at_a_number_used_by_another_says_it_was_executed_by_another() {
     assert!(world.sent.is_empty());
 }
 
+/// r8-17: a proposal another member executed is handed to Activity dated by
+/// the block it ran in, not when this device found it.
+#[test]
+fn an_execution_found_later_is_dated_when_it_ran() {
+    let (mut world, mut sut, account) = setup(&[0, 1]);
+    let hash = approved_twice(&mut world, &mut sut);
+    after_first(&mut world, &account);
+    world.receipts.insert(
+        OTHER_TX.to_owned(),
+        json!({"logs": [{"address": account.address, "topics": [
+            vela_core::app::multisig_proposals::EXECUTION_SUCCESS, hash
+        ], "data": "0x"}]}),
+    );
+    // It ran an hour before this device looks; the block says so.
+    let ran_s = (world::T0 / 1000.0) as u64 - 3600;
+    world.now = world::T0 + 600_000.0;
+    world.rpc_hooks.push(Box::new(move |_, method, params| {
+        (method == "eth_getBlockByNumber" && params[0] == "0x64").then(|| {
+            vela_core::app::multisig_shell::MultisigShellResult::RpcResult {
+                result: json!({"number": "0x64", "timestamp": format!("0x{ran_s:x}")}),
+            }
+        })
+    }));
+    let notices = world.notices.len();
+    run(&mut sut, &mut world, Event::Refresh { fresh: true });
+    let row = world.notices[notices..]
+        .iter()
+        .find_map(|n| match n {
+            Notice::ActivityRows { rows } => rows
+                .iter()
+                .find(|r| {
+                    r["safeTxHash"]
+                        .as_str()
+                        .is_some_and(|h| h.eq_ignore_ascii_case(&hash))
+                })
+                .cloned(),
+            _ => None,
+        })
+        .expect("the executed row is handed to Activity");
+    assert_eq!(row["timestamp"].as_f64(), Some(ran_s as f64), "{row}");
+}
+
 /// C5 (r4b-7): an execution this device sent before a reload, whose user
 /// operation landed, is watched again once its multisig is followed —
 /// judged executed with no Execute, ended in flight, its activity row

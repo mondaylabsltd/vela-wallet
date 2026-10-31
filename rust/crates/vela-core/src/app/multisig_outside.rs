@@ -1607,32 +1607,49 @@ pub mod reading {
         chain_id: u64,
         action: Option<&Action>,
     ) -> BTreeMap<String, TokenFacts> {
-        let mut out = BTreeMap::new();
-        for token in unknown_tokens(chain_id, action) {
+        read_these(io, chain_id, unknown_tokens(chain_id, action), None).await
+    }
+
+    /// The symbol and decimals of `tokens` (lowercase), asked of their
+    /// contracts on `chain_id`, each read waited for at most `bound_ms`. A
+    /// token whose contract did not answer is left out: it is unread, never
+    /// read as 18 decimals (r8-2).
+    pub async fn read_these<Ev: Send + 'static>(
+        io: &Io<Ev>,
+        chain_id: u64,
+        tokens: Vec<String>,
+        bound_ms: Option<u32>,
+    ) -> BTreeMap<String, TokenFacts> {
+        let reads = futures::future::join_all(tokens.into_iter().map(|token| async move {
             let call = |data: &str| json!([{ "to": token, "data": data }, "latest"]);
-            let symbol = io
-                .rpc(chain_id, "eth_call", call(SYMBOL))
-                .await
-                .ok()
-                .and_then(|v| v.as_str().and_then(abi_string));
-            let decimals = io
-                .rpc(chain_id, "eth_call", call(DECIMALS))
-                .await
+            let (symbol, decimals) = futures::join!(
+                io.rpc_within(chain_id, "eth_call", call(SYMBOL), bound_ms),
+                io.rpc_within(chain_id, "eth_call", call(DECIMALS), bound_ms)
+            );
+            let symbol = symbol.ok().and_then(|v| v.as_str().and_then(abi_string));
+            let decimals = decimals
                 .ok()
                 .and_then(|v| v.as_str().and_then(shell::quantity))
                 .and_then(|d| u32::try_from(d).ok())
                 .filter(|d| *d <= 36);
-            out.insert(
-                token.clone(),
-                TokenFacts {
-                    token: Some(token),
-                    symbol,
-                    decimals,
-                    known: false,
-                },
-            );
-        }
-        out
+            (token, symbol, decimals)
+        }))
+        .await;
+        reads
+            .into_iter()
+            .filter(|(_, symbol, decimals)| symbol.is_some() || decimals.is_some())
+            .map(|(token, symbol, decimals)| {
+                (
+                    token.clone(),
+                    TokenFacts {
+                        token: Some(token),
+                        symbol,
+                        decimals,
+                        known: false,
+                    },
+                )
+            })
+            .collect()
     }
 
     // -- the rows of what was asked and done (r4C-12) -----------------------------

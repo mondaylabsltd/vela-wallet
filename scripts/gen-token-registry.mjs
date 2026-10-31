@@ -63,7 +63,10 @@ const CURATED = [
 	[137, '0x2791bca1f2de4661ed88a30c99a7a9449aa84174', 'USDC.e', 6],
 	// ---- Arbitrum ----
 	[42161, '0xaf88d065e77c8cc2239327c5edb3a432268e5831', 'USDC', 6],
-	[42161, '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9', 'USDT', 6]
+	[42161, '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9', 'USDT', 6],
+	// ---- Arc Testnet (r8-20): its own USDC's ERC-20 interface, 6 decimals
+	// (the native coin is the same USDC at 18) ----
+	[5042002, '0x3600000000000000000000000000000000000000', 'USDC', 6]
 ];
 
 const DECIMALS = '0x313ce567';

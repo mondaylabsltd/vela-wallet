@@ -3223,7 +3223,7 @@ async fn call_refusal(io: &Io<Event>, input: &ExecutionInput) -> Option<Value> {
         )
         .await
     {
-        Err(shell::RpcFail::Error { code, message }) => {
+        Err(shell::RpcFail::Error { code, message, .. }) => {
             if code != Some(3) && !message.to_ascii_lowercase().contains("revert") {
                 return None;
             }
@@ -4463,13 +4463,31 @@ async fn lookup_execution(
     is_final: bool,
     nonce: Option<u128>,
 ) -> Result<Option<String>, HistoryUnreadable> {
+    lookup_execution_at(io, st, multisig, chain_id, hash, since_ms, is_final, nonce)
+        .await
+        .map(|found| found.map(|(tx, _)| tx))
+}
+
+/// [`lookup_execution`], with the block it ran in when the search found it
+/// now (`None` for one this device already knew).
+#[allow(clippy::too_many_arguments)]
+async fn lookup_execution_at(
+    io: &Io<Event>,
+    st: &Shared<State>,
+    multisig: &str,
+    chain_id: u64,
+    hash: &str,
+    since_ms: f64,
+    is_final: bool,
+    nonce: Option<u128>,
+) -> Result<Option<(String, Option<u64>)>, HistoryUnreadable> {
     let kept = lock(st)
         .lookups
         .get(&lookup_key(chain_id, multisig, hash))
         .cloned();
     match kept.as_deref() {
         Some("none") => return Ok(None),
-        Some(tx) => return Ok(Some(tx.to_owned())),
+        Some(tx) => return Ok(Some((tx.to_owned(), None))),
         None => {}
     }
     let (from, head) = if since_ms > 0.0 {
@@ -4507,7 +4525,7 @@ async fn lookup_execution(
         )
         .await;
     }
-    Ok(found.map(|(t, _)| t))
+    Ok(found.map(|(t, b)| (t, (b > 0).then_some(b))))
 }
 
 /// Executions on another member's device: found by their `ExecutionSuccess`
@@ -4535,7 +4553,7 @@ async fn record_remote_executions(io: &Io<Event>, st: &Shared<State>, account: &
         if known {
             continue;
         }
-        match lookup_execution(
+        match lookup_execution_at(
             io,
             st,
             &account.address,
@@ -4547,9 +4565,20 @@ async fn record_remote_executions(io: &Io<Event>, st: &Shared<State>, account: &
         )
         .await
         {
-            Ok(Some(tx)) => {
-                let now = io.now().await;
-                rows.push(execution_row(&account.address, &item, &tx, "", now));
+            Ok(Some((tx, block))) => {
+                // r8-17: dated when it ran (its block's time), not when this
+                // device found it; now only when the block's time can't be read.
+                let ran = match block {
+                    Some(b) => {
+                        flows::block_time(io, item.chain_id, Some(&json!(format!("0x{b:x}")))).await
+                    }
+                    None => None,
+                };
+                let at = match ran {
+                    Some(at) => at,
+                    None => io.now().await,
+                };
+                rows.push(execution_row(&account.address, &item, &tx, "", at));
             }
             Ok(None) => {}
             Err(_) => unreadable.push(item.chain_id),

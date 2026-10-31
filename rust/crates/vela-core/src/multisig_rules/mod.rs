@@ -15,6 +15,7 @@ mod calls;
 mod names;
 pub mod networks;
 mod relay;
+pub mod review;
 
 /// A method this door knows, answered; `None` when no area claims it.
 pub fn call_json(method: &str, args: &serde_json::Value) -> Option<Result<String, CoreError>> {
@@ -24,6 +25,7 @@ pub fn call_json(method: &str, args: &serde_json::Value) -> Option<Result<String
         "calls" => Some(calls::call(name, args)),
         "networks" => Some(networks::call(name, args)),
         "names" => Some(names::call(name, args)),
+        "review" => Some(review::call(name, args)),
         _ => {
             let _ = (name, args);
             None

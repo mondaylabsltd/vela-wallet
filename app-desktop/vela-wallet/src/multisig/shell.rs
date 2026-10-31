@@ -44,7 +44,8 @@ pub struct HttpReply {
 #[derive(Clone, Debug, PartialEq)]
 pub enum RpcReply {
     Result(Value),
-    Error { code: Option<i64>, message: String },
+    /// The node's error; `data` as it gave it (r8-4: the state probe's payload).
+    Error { code: Option<i64>, message: String, data: Option<Value> },
 }
 
 /// The facts the send flow knows of a recipient (`None`: unread).
@@ -285,7 +286,7 @@ pub fn perform(op: &Op, deps: &Arc<dyn Deps>, rooms: &Arc<dyn Rooms>) -> Perform
             Perform::Blocking(Box::new(move || {
                 match deps.rpc(chain_id, &method, &params, bound) {
                     Ok(RpcReply::Result(result)) => Res::RpcResult { result },
-                    Ok(RpcReply::Error { code, message }) => Res::RpcError { code, message },
+                    Ok(RpcReply::Error { code, message, data }) => Res::RpcError { code, message, data },
                     Err(detail) => Res::RpcUnanswered { detail },
                 }
             }))
@@ -681,12 +682,14 @@ mod tests {
         *fake.rpc.lock().unwrap() = Some(Ok(RpcReply::Error {
             code: Some(-32000),
             message: "execution reverted".to_owned(),
+            data: Some(serde_json::json!("0x01")),
         }));
         assert_eq!(
             run(fake, &op).0,
             Res::RpcError {
                 code: Some(-32000),
-                message: "execution reverted".to_owned()
+                message: "execution reverted".to_owned(),
+                data: Some(serde_json::json!("0x01")),
             }
         );
 
