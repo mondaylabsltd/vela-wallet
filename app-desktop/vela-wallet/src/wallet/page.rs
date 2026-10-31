@@ -5578,6 +5578,8 @@ impl WalletPage {
                 &self.loc.relative_time(at, crate::executor::now_ms()),
             ))
         });
+        // r9-3: never "Updated now" over a network that did not answer.
+        let ago = ago.filter(|_| !wallet_live::figure_stale(&view));
         model.updated = wallet_live::updated_line(&model, ago);
         // Issue 462: the core's "a read they asked for is out", held for at
         // least the press's minimum turn.

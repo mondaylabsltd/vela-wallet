@@ -223,6 +223,21 @@ impl WalletPage {
                 self.open_multisig_sheet(chain_id, hash, cx);
             }
             Some("close_sheet") => self.close_multisig_sheet(cx),
+            // The Send pill, as the person presses it (r9-6: documented,
+            // never wired): the recipient filled where the script names one.
+            Some("send") => {
+                let params = vela_core::app::send::SendOpenParams {
+                    prefilled_recipient: ask.get("to").and_then(Value::as_str).map(str::to_owned),
+                    ..Default::default()
+                };
+                self.enter_flow_with(FlowEntry::Send, params, cx);
+                crate::multisig::dev_script::note(&format!(
+                    "page send: panel {:?}, flows {:?}, send open {}",
+                    self.panel,
+                    self.flows,
+                    self.send_host.is_some()
+                ));
+            }
             Some("approve_as") => {
                 self.multisig.approve_as = ask.get("member").and_then(Value::as_str).map(str::to_owned);
             }
@@ -898,11 +913,17 @@ impl WalletPage {
                 view.standings.get(&key),
                 Some(Standing::YourTurn | Standing::Ready)
             );
-            let sub = format!(
-                "{} · {}",
-                network(item.chain_id),
-                words::tv(&loc, "action.numberValue", &[("nonce", &item.nonce.to_string())])
-            );
+            // r4b-6: proposals at one number — only one of them can run.
+            let conflict = (!item.same_nonce.is_empty()).then(|| words::t(&loc, "status.conflict"));
+            let sub = [
+                Some(network(item.chain_id)),
+                Some(words::tv(&loc, "action.numberValue", &[("nonce", &item.nonce.to_string())])),
+                conflict,
+            ]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join(" · ");
             let (chain_id, hash) = (item.chain_id, item.safe_tx_hash.clone());
             group = group.child(
                 div()
@@ -1272,7 +1293,9 @@ impl WalletPage {
             body = body.child(ms_note(theme, &text, Tone::Neutral));
         }
         if let Some(entry) = view.outbox.get(&key) {
+            // r8-16: on its way now — "Sending…", never "Not sent yet".
             let text = match (entry.why.as_str(), entry.retry_at) {
+                _ if entry.sending || entry.why == "sending" => words::t(&loc, "proposal.outboxSending"),
                 ("busy", Some(at)) => words::tv(
                     &loc,
                     "proposal.outboxBusy",
@@ -1686,7 +1709,8 @@ impl WalletPage {
             foot = foot.child(self.ms_outside_press(theme, item, crate::ui::ButtonVariant::Secondary, cx));
         }
 
-        if view.outbox.contains_key(&key) {
+        // Nothing to send again while it is on its way (r8-16).
+        if view.outbox.get(&key).is_some_and(|e| !(e.sending || e.why == "sending")) {
             let (chain_id, hash) = (item.chain_id, item.safe_tx_hash.clone());
             foot = foot.child(crate::ui::vela_button(
                 "ms-send-again",

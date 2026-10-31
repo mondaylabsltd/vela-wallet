@@ -59,6 +59,11 @@ fn log_line(line: &str) {
     }
 }
 
+/// A line in the script's log from the page (what a page step came to).
+pub fn note(line: &str) {
+    log_line(line);
+}
+
 fn substitute(value: &Value, captured: &BTreeMap<String, Value>) -> Value {
     match value {
         Value::String(text) => {

@@ -637,7 +637,9 @@ impl WalletPage {
                             .w_auto(),
                         );
                 }
-                if named {
+                // r8-12, r9-11: every member the invite names, with its kind —
+                // one with no label by its address, never left out.
+                if link.members.as_ref().is_some_and(|ms| !ms.is_empty()) {
                     card = card.child(
                         div()
                             .text_size(theme::text_row_sub())
@@ -647,7 +649,12 @@ impl WalletPage {
                     for (i, member) in link.members.iter().flatten().enumerate() {
                         // r5reg-24: the one of them that is this device's own account, said.
                         let you = mine(member);
-                        let Some(who) = member.name.clone().or_else(|| you.clone()) else {
+                        let Some(who) = member
+                            .name
+                            .clone()
+                            .or_else(|| you.clone())
+                            .or_else(|| member.address.as_deref().map(words::short))
+                        else {
                             continue;
                         };
                         let kind = member.kind.map(|k| match k {
