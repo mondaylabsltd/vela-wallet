@@ -703,7 +703,7 @@ final class UserOpSpine {
             return (assertion, credentialIdHex)
         case .outcome(.refused(let refusal)):
             throw Refused(failure: .trustedSigner(TrustedSignerNotice(refusal)))
-        case .ceremony:
+        case .ceremony, .approval:
             // A signature was asked for; a ceremony verdict is a shell bug,
             // and an answer that is not the one asked for is a mismatch.
             throw Refused(failure: .trustedSigner(.mismatch))
@@ -718,6 +718,21 @@ final class UserOpSpine {
         case .notOpened(let line):
             throw Refused(failure: .trustedSigner(.notOpened(line)))
         }
+    }
+
+    /// A multisig member's own passkey over `challenge`, in Vela (native
+    /// multisig: an approval, or the owner proof a creation asks). The key is
+    /// the account's plan's, as for every signature; WHERE it signs — in
+    /// Vela, on its page, or not from here — is the caller's to have asked
+    /// the core first (`multisigApprovalRoute`, `signingRoute`).
+    func assertInVela(account: String, challenge: Data) async throws -> Assertion {
+        let keys = await accounts.keys(of: account)
+        guard let pinned = keys.first else {
+            throw other("No passkey credential for this account")
+        }
+        let plan = await plan(account: account)
+        if let blocked = plan?.blocked { throw Refused(failure: .venueBlocked(blocked)) }
+        return try await assert(account: account, pinned: pinned, key: plan?.key, challenge: challenge)
     }
 
     /// Where this account's signatures go — the core's plan, the one

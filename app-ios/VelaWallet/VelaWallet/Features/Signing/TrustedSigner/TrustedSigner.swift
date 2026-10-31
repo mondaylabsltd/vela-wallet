@@ -133,8 +133,9 @@ enum TrustedSignerNotice: Equatable {
     /// The notice for a whole ending — `nil` when something was signed.
     init?(ending: TrustedSignerChannel.Ending) {
         switch ending {
-        case .outcome(.accepted), .ceremony(.registered), .ceremony(.asserted): return nil
-        case .outcome(.refused(let refusal)), .ceremony(.refused(let refusal)): self.init(refusal)
+        case .outcome(.accepted), .ceremony(.registered), .ceremony(.asserted), .approval(.accepted): return nil
+        case .outcome(.refused(let refusal)), .ceremony(.refused(let refusal)), .approval(.refused(let refusal)):
+            self.init(refusal)
         case .timedOut: self = .timeout
         case .unavailable: self = .unavailable
         case .cancelled: self = .closed
@@ -243,6 +244,27 @@ final class TrustedSigner: NSObject, TrustedSignerPort, TrustedSignerCeremonyPor
         let ending = await run(ask, page: page, title: nil, keyLabel: keyLabel, waitForOpen: false)
         // A signature is a flow of one: the page is told so rather than left
         // on its waiting screen.
+        endFlow()
+        return ending
+    }
+
+    // MARK: - The multisig's door (native multisig M2)
+
+    /// A multisig member approves `safeTxHash` on its trusted page (the
+    /// owner's Bybit lesson: a signer reviews and signs on a surface
+    /// independent of this app's code). The page decodes the SafeTx itself;
+    /// the answer is accepted only as the core accepts it.
+    func approve(
+        requestJson: String, chainId: UInt64, member: String, safeTxHash: String,
+        keys: [WalletKeyRecord], page: String, keyLabel: KeyLabelWire?
+    ) async -> TrustedSignerChannel.Ending {
+        let ask = TrustedSignerAsk.approval(
+            request: requestJson, chainId: chainId, member: member, safeTxHash: safeTxHash, keys: keys
+        )
+        // The proposal's sheet is the review; its Approve is what asked: a
+        // page that is admitted opens at once, one that is not keeps the card
+        // up with the line that says why.
+        let ending = await run(ask, page: page, title: nil, keyLabel: keyLabel, waitForOpen: false)
         endFlow()
         return ending
     }
