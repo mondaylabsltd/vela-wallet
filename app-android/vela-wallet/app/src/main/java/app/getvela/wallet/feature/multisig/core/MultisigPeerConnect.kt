@@ -207,7 +207,7 @@ class MultisigPeerConnect(
         }
 
         private suspend fun loop() {
-            pump()
+            safePump()
             while (true) {
                 val wait = peer.pollTimeout()?.let { (it.toLong() - now().toLong()).coerceAtLeast(0) }
                 val input = if (wait == null) inputs.receive() else withTimeoutOrNull(wait) { inputs.receive() }
@@ -220,6 +220,7 @@ class MultisigPeerConnect(
                             peer.handleOpen(t)
                         }
                         is Input.Closed -> if (input.attempt == attempt && (connecting || socket != null)) {
+                            VelaLog.event("multisig.peer", "socket closed", "room" to handle, "code" to input.code)
                             connecting = false
                             socket = null
                             peer.handleClose(t, input.code?.toUShort())
@@ -246,7 +247,15 @@ class MultisigPeerConnect(
                 } catch (e: Exception) {
                     VelaLog.failure("multisig.peer", "room input", e, "room" to handle)
                 }
+                safePump()
+            }
+        }
+
+        private fun safePump() {
+            try {
                 pump()
+            } catch (e: Exception) {
+                VelaLog.failure("multisig.peer", "room output", e, "room" to handle)
             }
         }
 
@@ -273,6 +282,7 @@ class MultisigPeerConnect(
                         attempt += 1
                     }
                     is PeerOutput.State -> {
+                        VelaLog.event("multisig.peer", "state", "room" to handle, "state" to out.state, "reason" to out.reason)
                         state = out.state
                         checkState()
                         say(ev("peer_state", "room" to handle, "state" to out.state))
@@ -283,7 +293,10 @@ class MultisigPeerConnect(
                         inbox.trySend(runCatching { Wire.json.parseToJsonElement(text) }.getOrElse { JsonPrimitive(text) })
                     }
                     is PeerOutput.Delivered, PeerOutput.Replaced -> Unit
-                    is PeerOutput.Paired -> say(ev("paired", "room" to handle, "pairing" to out.record))
+                    is PeerOutput.Paired -> {
+                        VelaLog.event("multisig.peer", "paired", "room" to handle)
+                        say(ev("paired", "room" to handle, "pairing" to out.record))
+                    }
                     PeerOutput.Unauthorized -> if (needsToken) {
                         // Before the next token is asked for: that one must not be the one just refused.
                         val refused = watch.unauthorized()
@@ -309,6 +322,7 @@ class MultisigPeerConnect(
         }
 
         private fun connect(url: String) {
+            VelaLog.event("multisig.peer", "connect", "room" to handle, "relay" to relay)
             attempt += 1
             val mine = attempt
             connecting = true

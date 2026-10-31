@@ -83,7 +83,10 @@ fun MultisigHomeCard(
         for (chainId in row.refusedOn) MsNote(words.t("authority.refusedOn", "network" to words.network(chainId)), tone = MsTone.Danger)
         MsNavRow(
             words.t("panel.members"),
-            subtitle = words.ruleTitle(account.threshold, account.owners.size),
+            // The rule in force as the machine read it (`rule_chip`); the record's before.
+            subtitle = view.ruleChip?.takeIf { following && it.kind == "needs" }?.get("rule")
+                ?.let { r -> words.ruleTitle(r["m"].int ?: account.threshold, r["n"].int ?: account.owners.size) }
+                ?: words.ruleTitle(account.threshold, account.owners.size),
             icon = VelaIcons.UsersRound,
             tag = "multisig.home.settings",
         ) { onOpen(MultisigSheet.Settings(account.address)) }
