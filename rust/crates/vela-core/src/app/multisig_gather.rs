@@ -21,6 +21,7 @@ use std::collections::BTreeMap;
 use futures::future;
 use serde_json::{json, Value};
 
+use super::multisig_outside::reading::TokenFacts;
 use super::multisig_shell::{ChainMembers, Io, MultisigOperation, MultisigShellResult, RpcFail};
 use crate::multisig::{self, Genesis, SafeTx};
 use crate::multisig_review::{
@@ -52,6 +53,9 @@ pub struct ReviewSubject {
     pub member_names: BTreeMap<String, String>,
     /// The site that asked, for a dApp's calls.
     pub origin: Option<String>,
+    /// Tokens this device already read (lowercase address → facts): never
+    /// read again, so a read that fails now cannot unsay one (r8-2).
+    pub tokens: BTreeMap<String, TokenFacts>,
 }
 
 /// A JSON-RPC answer as the review takes it: `{result}`, `{error}`,
@@ -196,11 +200,19 @@ pub async fn gather_review<Ev: Send + 'static>(
     // unknown — its amount is said raw, never as 18 decimals.
     let tokens = async {
         let review = multisig::review(chain_id, &subject.safe, &subject.tx).ok();
-        let names = review
+        let names: Vec<String> = review
             .map(|r| mr::reading::tokens_to_read(chain_id, &subject.tx, &r))
-            .unwrap_or_default();
-        super::multisig_outside::reading::read_these(io, chain_id, names, Some(REVIEW_READ_MS))
-            .await
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|t| !subject.tokens.contains_key(t))
+            .collect();
+        let mut read =
+            super::multisig_outside::reading::read_these(io, chain_id, names, Some(REVIEW_READ_MS))
+                .await;
+        for (k, v) in &subject.tokens {
+            read.entry(k.clone()).or_insert_with(|| v.clone());
+        }
+        read
     };
     let ((trace, probe), sim_reply, recipient_facts, tokens) =
         futures::join!(state, simulate, facts, tokens);

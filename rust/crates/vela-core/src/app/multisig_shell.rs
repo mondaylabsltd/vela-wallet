@@ -327,6 +327,9 @@ pub enum AccountUpdate {
         members: BTreeMap<String, MemberInfo>,
         typed: bool,
     },
+    /// r8-7: its members as the chains say now — its members where it is
+    /// deployed, its founding ones where it is not (`members_anywhere`).
+    MembersNow { members: Vec<String> },
 }
 
 /// What the shell answers.

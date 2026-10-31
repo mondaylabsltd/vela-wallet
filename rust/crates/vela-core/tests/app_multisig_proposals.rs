@@ -1500,6 +1500,59 @@ fn a_look_at_a_number_used_by_another_says_it_was_executed_by_another() {
     assert!(world.sent.is_empty());
 }
 
+/// r8-2: a token a proposal moves is named by its contract's own decimals,
+/// never 18 assumed; a read that fails later never unsays it.
+#[test]
+fn a_tokens_decimals_once_read_stay_read() {
+    const TOKEN: &str = "0x00000000000000000000000000000000000b0b0b";
+    let (mut world, mut sut, _account) = setup(&[0, 1]);
+    let answers = std::rc::Rc::new(std::cell::Cell::new(false));
+    let on = answers.clone();
+    world.rpc_hooks.push(Box::new(move |_, method, params| {
+        let call = &params[0];
+        if method != "eth_call" || !call["to"].as_str()?.eq_ignore_ascii_case(TOKEN) {
+            return None;
+        }
+        Some(if !on.get() {
+            vela_core::app::multisig_shell::MultisigShellResult::RpcUnanswered {
+                detail: "the node is away".into(),
+            }
+        } else if call["data"] == "0x313ce567" {
+            vela_core::app::multisig_shell::MultisigShellResult::RpcResult {
+                result: json!(format!("0x{:064x}", 6)),
+            }
+        } else {
+            vela_core::app::multisig_shell::MultisigShellResult::RpcResult {
+                result: json!(format!("0x{:064x}{:064x}{:0<64}", 32, 3, "4f4444")),
+            }
+        })
+    }));
+    let kind = ProposalKind::Transfers {
+        transfers: vec![Transfer {
+            token: Some(TOKEN.to_owned()),
+            to: B.to_owned(),
+            amount: "10000".to_owned(),
+        }],
+    };
+    let _ = propose(&mut sut, &mut world, kind, None);
+    run(&mut sut, &mut world, Event::Refresh { fresh: true });
+    let key = format!("100:{TOKEN}");
+    let unread = sut.view().tokens[&key].clone();
+    assert_eq!(unread.decimals, None, "unread is unknown, never 18");
+    answers.set(true);
+    run(&mut sut, &mut world, Event::Refresh { fresh: true });
+    let read = sut.view().tokens[&key].clone();
+    assert_eq!(read.decimals, Some(6));
+    assert_eq!(read.symbol.as_deref(), Some("ODD"));
+    answers.set(false);
+    run(&mut sut, &mut world, Event::Refresh { fresh: true });
+    assert_eq!(
+        sut.view().tokens[&key],
+        read,
+        "a failed read never unsays it"
+    );
+}
+
 /// r8-17: a proposal another member executed is handed to Activity dated by
 /// the block it ran in, not when this device found it.
 #[test]

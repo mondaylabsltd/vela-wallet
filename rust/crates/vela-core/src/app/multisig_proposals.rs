@@ -52,6 +52,7 @@ use serde_json::{json, Value};
 use ts_rs::TS;
 
 use super::multisig_gather;
+use super::multisig_outside::reading::TokenFacts;
 use super::multisig_shell::{
     self as shell, keys, local_owners, lock, same_address, AccountUpdate, ApprovalRoute, Chain,
     ChainMembers, Io, LocalAccount, MultisigAccount, MultisigEffect, MultisigOperation,
@@ -920,6 +921,11 @@ pub struct ProposalsView {
     /// core-ms-2: the followed multisig is deployed on a network read (its
     /// first steps are behind it).
     pub set_up: bool,
+    /// r8-2: every token the proposals shown move, per `<chainId>:<token
+    /// lowercase>` — the wallet's registry, else its contract's own answer;
+    /// `decimals` `None` (not read yet, or it did not say): an amount in it is
+    /// said raw, never in 18 decimals. A shell words a title from this alone.
+    pub tokens: BTreeMap<String, TokenFacts>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1020,6 +1026,12 @@ pub struct State {
     signers_asked: BTreeSet<(u64, String)>,
     /// What the chains said of each member read (lowercase address).
     signer_reads: BTreeMap<String, SignerRead>,
+    /// r8-2: each token a proposal moves, as its contract answered
+    /// (`(chain, lowercase address)`): kept for the session, never unsaid by
+    /// a read that fails later.
+    tokens: BTreeMap<(u64, String), TokenFacts>,
+    /// r8-7: the members last told to the accounts machine, per multisig.
+    members_told: BTreeMap<String, Vec<String>>,
 }
 
 impl State {
@@ -1635,6 +1647,18 @@ impl App for MultisigProposals {
             waiting_parts: presence_parts,
             banner,
             set_up: s.account.is_some() && s.chains.iter().any(|c| c.members.deployed),
+            tokens: tokens_moved(&items)
+                .into_iter()
+                .map(|(c, t)| {
+                    let read: BTreeMap<String, TokenFacts> = s
+                        .tokens
+                        .get(&(c, t.clone()))
+                        .map(|f| (t.clone(), f.clone()))
+                        .into_iter()
+                        .collect();
+                    (format!("{c}:{t}"), TokenFacts::of(c, Some(&t), &read))
+                })
+                .collect(),
         }
     }
 }
@@ -2187,7 +2211,94 @@ async fn refresh_once(io: &Io<Event>, st: &Shared<State>, tick: bool) {
         save_json(io, keys::WAITING, &waiting, false).await;
     }
     save_json(io, EXECUTING_KEY, &executing, true).await;
+    tell_members(io, st, &account).await;
+    read_tokens(io, st).await;
     record_remote_executions(io, st, &account).await;
+}
+
+/// r8-7: tell the accounts machine who the members are now — once every
+/// network it is used on was read (an unread one could hide its founding
+/// members), and only when that changed.
+async fn tell_members(io: &Io<Event>, st: &Shared<State>, account: &MultisigAccount) {
+    let members = {
+        let mut s = lock(st);
+        if !s.followed(&account.address)
+            || !s.unreadable.is_empty()
+            || s.chains.is_empty()
+            || s.chains.iter().all(|c| !c.members.deployed)
+        {
+            return;
+        }
+        let chains: Vec<&ChainMembers> = s.chains.iter().map(|c| &c.members).collect();
+        let members = super::multisig_members::members_anywhere(&account.owners, &chains);
+        let key = account.address.to_ascii_lowercase();
+        if s.members_told.get(&key) == Some(&members) {
+            return;
+        }
+        s.members_told.insert(key, members.clone());
+        members
+    };
+    io.notice(Notice::Account {
+        address: account.address.clone(),
+        update: AccountUpdate::MembersNow { members },
+    })
+    .await;
+}
+
+/// The tokens a proposal on the list moves (ERC-20 transfers, alone or in a
+/// batch), per chain, lowercase.
+fn tokens_moved(items: &[ProposalItem]) -> BTreeSet<(u64, String)> {
+    let mut out = BTreeSet::new();
+    for i in items {
+        let legs: Vec<&Action> = match &i.review.action {
+            Some(Action::Batch { calls }) => calls.iter().map(|c| &c.action).collect(),
+            Some(a) => vec![a],
+            None => Vec::new(),
+        };
+        for leg in legs {
+            if let Action::Transfer { token: Some(t), .. } = leg {
+                out.insert((i.chain_id, t.to_ascii_lowercase()));
+            }
+        }
+    }
+    out
+}
+
+/// r8-2: read each token the list moves that neither the registry names nor
+/// this session read yet; one that does not answer is asked again on the
+/// next read, and one read stays read.
+async fn read_tokens(io: &Io<Event>, st: &Shared<State>) {
+    let wanted: Vec<(u64, String)> = {
+        let s = lock(st);
+        tokens_moved(&s.items())
+            .into_iter()
+            .filter(|(c, t)| {
+                !s.tokens.contains_key(&(*c, t.clone()))
+                    && !TokenFacts::of(*c, Some(t), &BTreeMap::new()).known
+            })
+            .collect()
+    };
+    let mut by_chain: BTreeMap<u64, Vec<String>> = BTreeMap::new();
+    for (c, t) in wanted {
+        by_chain.entry(c).or_default().push(t);
+    }
+    for (chain_id, tokens) in by_chain {
+        let read = super::multisig_outside::reading::read_these(
+            io,
+            chain_id,
+            tokens,
+            Some(multisig_gather::REVIEW_READ_MS),
+        )
+        .await;
+        let mut s = lock(st);
+        for (t, facts) in read {
+            // A decimals answer is what an amount needs; a symbol alone is
+            // asked again later for its decimals.
+            if facts.decimals.is_some() {
+                s.tokens.insert((chain_id, t), facts);
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2229,13 +2340,24 @@ async fn gather_review(
     members: &ChainMembers,
     origin: Option<String>,
 ) -> ReviewInput {
+    // One lock, read before: a guard held in the literal would be held to
+    // its end, and a second `lock` there would wait for ever.
+    let (known, tokens) = {
+        let s = lock(st);
+        let tokens: BTreeMap<String, TokenFacts> = s
+            .tokens
+            .iter()
+            .filter_map(|((c, t), f)| (*c == chain_id).then(|| (t.clone(), f.clone())))
+            .collect();
+        (s.known.clone(), tokens)
+    };
     let subject = multisig_gather::ReviewSubject {
         chain_id,
         safe: account.address.clone(),
         tx: tx.clone(),
         members: members.clone(),
         genesis: Some(account.genesis.clone()),
-        known: lock(st).known.clone(),
+        known,
         member_names: account
             .members
             .as_ref()
@@ -2246,6 +2368,7 @@ async fn gather_review(
             })
             .unwrap_or_default(),
         origin: origin.clone(),
+        tokens,
     };
     let input = multisig_gather::gather_review(io, &subject).await;
     let key = subject_key(chain_id, &account.address, tx, members, origin.as_deref());

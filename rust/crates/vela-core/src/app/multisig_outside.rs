@@ -1291,6 +1291,7 @@ pub async fn review_now<Ev: Send + 'static>(
         known: Vec::new(),
         member_names: BTreeMap::new(),
         origin: None,
+        tokens: BTreeMap::new(),
     };
     multisig_gather::review_of(&multisig_gather::gather_review(io, &subject).await)
 }
