@@ -175,7 +175,7 @@ class MultisigLive(
                 val body = runCatching { Wire.json.parseToJsonElement(answer.json.toString()) }.getOrNull()
                 val error = body["error"]
                 when {
-                    error != null -> MultisigRpcReply.Error(error["code"].long, error["message"].str ?: "error")
+                    error != null -> MultisigRpcReply.Error(error["code"].long, error["message"].str ?: "error", (error as? JsonObject)?.get("data")?.takeUnless { it is JsonNull })
                     body is JsonObject && body.containsKey("result") -> MultisigRpcReply.Result(body["result"] ?: JsonNull)
                     else -> MultisigRpcReply.Unanswered("no result from chain $chainId")
                 }
