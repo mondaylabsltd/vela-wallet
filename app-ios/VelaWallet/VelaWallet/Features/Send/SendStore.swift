@@ -50,6 +50,9 @@ final class SendStore {
     /// The passkey's ceremony moved — `started` (its prompt is up) or
     /// `signed` — for the agent's transfers to follow (spec 104).
     var onCeremony: ((String) -> Void)?
+    /// A multisig's confirm proposed (native multisig M2): the chain and the
+    /// safeTxHash, for the transaction's own sheet.
+    var onProposed: ((_ chainId: Int, _ safeTxHash: String) -> Void)?
     /// r5reg-3: the network answered again after a submit it did not answer
     /// (`chain_answered`) — the app re-asks the fee, as the web does.
     var onChainAnswered: (() -> Void)?
@@ -216,14 +219,21 @@ final class SendStore {
         name: String?,
         displayCode: String,
         displayRate: Double?,
-        fiatDecimals: Int
+        fiatDecimals: Int,
+        multisig: (threshold: Int, owners: Int)? = nil
     ) {
+        var accountObject: [String: Any] = [
+            "id": accountId, "address": address,
+            "name": name.map { $0 as Any } ?? NSNull(),
+        ]
+        // A multisig sends by proposing (its confirm proposes; the members
+        // approve): the core's `SendMultisigRef`.
+        if let multisig {
+            accountObject["multisig"] = ["threshold": multisig.threshold, "owners": multisig.owners]
+        }
         let event = CoreJSON.string([
             "type": "open",
-            "account": [
-                "id": accountId, "address": address,
-                "name": name.map { $0 as Any } ?? NSNull(),
-            ] as [String: Any],
+            "account": accountObject,
             "params": handedIn.map { Self.noParams.merging($0) { _, given in given } } ?? Self.noParams,
             "display": Self.display(code: displayCode, rate: displayRate, decimals: fiatDecimals),
         ])
@@ -504,7 +514,12 @@ final class SendStore {
     /// verdict so far is handed over at once.
     private func commit(_ next: SendViewWire) {
         let before = view?.userOpHash
+        let proposedBefore = view?.proposed
         view = next
+        // A multisig's send proposed: the transaction's own sheet takes over.
+        if let proposed = next.proposed, proposedBefore == nil {
+            onProposed?(proposed.chainId, proposed.safeTxHash)
+        }
         watchChainRecovery(next)
         guard let op = next.userOpHash, !op.isEmpty,
               op.caseInsensitiveCompare(before ?? "") != .orderedSame,

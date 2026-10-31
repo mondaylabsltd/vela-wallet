@@ -52,6 +52,7 @@ struct WalletHeaderView: View {
                 .ifLet(onName) { view, open in
                     Button(action: open) { view }
                         .buttonStyle(.plain)
+                        .accessibilityIdentifier("wallet.header.name")
                         // The whole block, not the glyph: a chevron is a
                         // 12-point target, and the thing a person aims at is
                         // the name beside it.

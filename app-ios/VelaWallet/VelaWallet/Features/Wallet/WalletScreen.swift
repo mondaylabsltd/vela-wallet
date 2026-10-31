@@ -71,6 +71,9 @@ struct WalletScreen: View {
     /// pull, without the gesture. Absent in the gallery, where the control is
     /// drawn and takes no tap.
     var onRefreshNow: (() -> Void)?
+    /// The multisig shown's own lines (native multisig): its rule, what
+    /// waits on it, its first steps. Absent for a Vela account.
+    var multisigCard: AnyView?
     @State private var sheetShown = false
     @State private var viewingIdenticon = false
 
@@ -89,6 +92,10 @@ struct WalletScreen: View {
                         onScan: onFlow.map { flow in { flow(.scan) } }
                     )
                     .padding(.top, Tokens.Space.s24)
+                    if let multisigCard {
+                        multisigCard
+                            .padding(.top, Tokens.Space.s16)
+                    }
                     section(model.activitySection, isActivity: true)
                         .padding(.top, Tokens.Space.s32)
                     section(model.assetsSection, isActivity: false)

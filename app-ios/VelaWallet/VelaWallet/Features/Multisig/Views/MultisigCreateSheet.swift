@@ -1,0 +1,599 @@
+//
+//  MultisigCreateSheet.swift
+//  VelaWallet
+//
+//  Creating a multisig (M1) — the web's `CreateMultisigSheet`, on the
+//  accounts machine: its name and members (the order is part of the
+//  address; the name is a label written with its record), how many must
+//  approve, a review that shows the address before anything is signed, then
+//  ONE passkey — the creator's proof, with which the service records it.
+//  Nothing is deployed and no fee is paid until its first transfer out.
+//
+//  The machine does it: `new_draft` (the salt, fixed per draft), `draft`
+//  (the address the review shows), `check_networks`, `read_kinds` (what each
+//  member is), `create` (one passkey, the account kept, then its record).
+//  The form is kept by the machine (`keep_draft`) until created or
+//  discarded, and the sheet opens on it (r7-9). The networks of the other
+//  space are said, with the way there (r7-9).
+//
+
+import SwiftUI
+import UIKit
+import VelaCore
+
+struct MultisigCreateSheet: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.walletTextScale) private var textScale
+    let hub: MultisigHub
+    let words: MsWords
+    /// This device's Vela accounts (address, name), the one shown first.
+    let accounts: [(address: String, name: String)]
+    /// The contacts that may be members (address, name).
+    let contacts: [(address: String, name: String)]
+    /// The space in front's networks, in the wallet's order.
+    let spaceNetworks: [Int]
+    var onClose: () -> Void
+    var onCreated: (String) -> Void
+    var onInvite: (String) -> Void
+
+    enum Step { case members, threshold, review, created }
+
+    @State private var step: Step = .members
+    @State private var owners: [String] = []
+    @State private var names: [String: String] = [:]
+    @State private var name = ""
+    @State private var nameAsked = false
+    @State private var typed = ""
+    @State private var typedName = ""
+    @State private var typedError: String?
+    @State private var threshold = 1
+    @State private var thresholdFor = 0
+    @State private var chainId: Int?
+    @State private var chose = false
+    @State private var creator: String?
+    @State private var started = false
+    @State private var resumed = false
+    @State private var created: String?
+    @State private var pickingContact = false
+    @State private var ensAsked: String?
+
+    private var sheet: MsCreateView { hub.accountsView.create }
+
+    var body: some View {
+        MsSheet(title: words.t("create.title"), closeLabel: words.loc.t("common.done"), tall: true, onClose: close) {
+            switch step {
+            case .members: membersStep
+            case .threshold: thresholdStep
+            case .review: reviewStep
+            case .created: createdStep
+            }
+        }
+        .interactiveDismissDisabled(sheet.phase == .working)
+        .onAppear(perform: start)
+        .onChange(of: draftKey) { _, _ in keep() }
+        .onChange(of: draftAddressKey) { _, _ in askAddress() }
+        .onChange(of: owners) { _, _ in readKinds() }
+        .onChange(of: hub.accountsView.add.ens) { _, ens in ensArrived(ens) }
+    }
+
+    // MARK: - Start, the kept draft
+
+    private func start() {
+        guard !started else { return }
+        started = true
+        hub.send(["type": "new_draft"])
+        hub.send(["type": "check_networks", "chain_ids": spaceNetworks])
+        if let kept = sheet.kept, !kept.owners.isEmpty {
+            owners = kept.owners
+            names = kept.members.compactMapValues { $0.name }.reduce(into: [:]) { $0[$1.key.lowercased()] = $1.value }
+            name = kept.name
+            threshold = kept.threshold
+            thresholdFor = kept.owners.count
+            if let chain = kept.chainId { chainId = chain; chose = true }
+            resumed = true
+        } else if let first = accounts.first {
+            owners = [first.address]
+        }
+        if chainId == nil { chainId = firstDefault }
+    }
+
+    private var draftKey: String {
+        "\(owners)|\(names)|\(name)|\(threshold)|\(chose ? chainId ?? 0 : 0)"
+    }
+
+    /// Every change is kept by the machine (a blank sheet keeps nothing).
+    private func keep() {
+        guard started, step != .created else { return }
+        let members = owners.reduce(into: [String: Any]()) { out, owner in
+            if let said = names[owner.lowercased()], !said.isEmpty { out[owner] = ["name": said] }
+        }
+        hub.send(["type": "keep_draft", "draft": [
+            "owners": owners, "members": members, "name": name, "threshold": threshold,
+            "chainId": chose ? (chainId.map { $0 as Any } ?? NSNull()) : NSNull(),
+        ]])
+    }
+
+    private func discard() {
+        hub.send(["type": "discard_draft"])
+        owners = accounts.first.map { [$0.address] } ?? []
+        names = [:]
+        name = ""
+        threshold = 1
+        thresholdFor = 0
+        nameAsked = false
+        chose = false
+        chainId = firstDefault
+        resumed = false
+    }
+
+    // MARK: - Name
+
+    private var cleanName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var nameBytes: Int { cleanName.utf8.count }
+    private static let nameLimit = 64
+    private var nameOk: Bool { !cleanName.isEmpty && MsWords.validName(cleanName) }
+    private var nameError: String? {
+        if cleanName.isEmpty { return nameAsked ? words.t("create.nameNeeded") : nil }
+        if nameBytes > Self.nameLimit {
+            return words.t("create.nameTooLong", ["bytes": String(nameBytes), "limit": String(Self.nameLimit)])
+        }
+        return nameOk ? nil : words.t("create.nameInvalid")
+    }
+
+    // MARK: - Members
+
+    private var local: [String] {
+        owners.filter { owner in accounts.contains { $0.address.caseInsensitiveCompare(owner) == .orderedSame } }
+    }
+
+    private func label(_ address: String) -> String {
+        accounts.first { $0.address.caseInsensitiveCompare(address) == .orderedSame }?.name
+            ?? names[address.lowercased()]
+            ?? words.label(address)
+    }
+
+    private var membersStep: some View {
+        VStack(alignment: .leading, spacing: Tokens.Space.s16) {
+            Text(verbatim: words.t("create.intro"))
+                .typeRole(Typography.body.scaled(textScale))
+                .foregroundStyle(theme.fgMuted)
+                .fixedSize(horizontal: false, vertical: true)
+            if resumed {
+                HStack {
+                    MsNote(text: words.t("create.draftKept"))
+                    Button(words.t("create.discardDraft"), action: discard)
+                        .font(Typography.actionLabel.scaled(textScale).font)
+                        .foregroundStyle(theme.fgBase)
+                        .accessibilityIdentifier("multisig.create.discard")
+                }
+            }
+            MsField(
+                label: nameBytes >= Self.nameLimit - 8
+                    ? "\(words.t("create.name")) · \(words.t("create.nameBytes", ["bytes": String(nameBytes), "limit": String(Self.nameLimit)]))"
+                    : words.t("create.name"),
+                placeholder: words.t("create.namePlaceholder"), text: $name, error: nameError,
+                identifier: "multisig.create.name"
+            )
+            if nameError == nil {
+                MsNote(text: words.t("create.nameHint"))
+            }
+            MsSection(title: words.t("create.yourAccounts")) {
+                ForEach(accounts, id: \.address) { account in
+                    let on = owners.contains { $0.caseInsensitiveCompare(account.address) == .orderedSame }
+                    Toggle(isOn: Binding(
+                        get: { on },
+                        set: { _ in toggle(account.address) }
+                    )) {
+                        VStack(alignment: .leading, spacing: Tokens.Space.s2) {
+                            Text(verbatim: account.name).typeRole(Typography.fieldLabel.scaled(textScale))
+                            Text(verbatim: MsWords.short(account.address))
+                                .typeRole(Typography.monoSmall.scaled(textScale))
+                                .foregroundStyle(theme.fgSubtle)
+                        }
+                    }
+                    .tint(theme.fgBase)
+                    .accessibilityIdentifier("multisig.create.account")
+                }
+            }
+            MsSection(title: words.t("create.members")) {
+                ForEach(owners.filter { o in !accounts.contains { $0.address.caseInsensitiveCompare(o) == .orderedSame } }, id: \.self) { owner in
+                    memberRow(owner)
+                }
+                MsField(label: words.t("create.byAddress"), placeholder: words.t("create.addressPlaceholder"), text: $typed, mono: true, error: typedError, identifier: "multisig.create.address")
+                if let ens = ensLine {
+                    MsNote(text: ens.text, tone: ens.tone, identifier: "multisig.create.ens")
+                }
+                MsField(label: words.t("create.memberName"), placeholder: words.t("create.memberNamePlaceholder"), text: $typedName, identifier: "multisig.create.memberName")
+                HStack(spacing: Tokens.Space.s16) {
+                    Button(words.t("create.addMember"), action: addTyped)
+                        .disabled(typed.trimmingCharacters(in: .whitespaces).isEmpty)
+                        .accessibilityIdentifier("multisig.create.addMember")
+                    if !contacts.isEmpty {
+                        Button(words.t("create.fromContacts")) { pickingContact = true }
+                            .accessibilityIdentifier("multisig.create.fromContacts")
+                    }
+                }
+                .font(Typography.actionLabel.scaled(textScale).font)
+                .foregroundStyle(theme.fgBase)
+                MsNote(text: words.t("create.order"))
+            }
+            if local.isEmpty {
+                MsNote(text: words.t("create.needLocal"), tone: .warning, identifier: "multisig.create.needLocal")
+            }
+            VelaButton(title: words.t("create.next"), kind: .ink, enabled: !owners.isEmpty && !local.isEmpty) {
+                toThreshold()
+            }
+            .accessibilityIdentifier("multisig.create.next")
+        }
+        .confirmationDialog(words.t("create.fromContacts"), isPresented: $pickingContact) {
+            ForEach(contacts.filter { c in !owners.contains { $0.caseInsensitiveCompare(c.address) == .orderedSame } }, id: \.address) { contact in
+                Button(contact.name.isEmpty ? MsWords.short(contact.address) : contact.name) {
+                    _ = addMember(contact.address, name: contact.name)
+                }
+            }
+        }
+    }
+
+    private func memberRow(_ owner: String) -> some View {
+        let kind = hub.accountsView.memberKinds[owner.lowercased()]
+        return HStack(alignment: .top, spacing: Tokens.Space.s12) {
+            IdenticonAvatar(seed: owner, size: 28, tappable: false)
+            VStack(alignment: .leading, spacing: Tokens.Space.s4) {
+                Text(verbatim: label(owner)).typeRole(Typography.fieldLabel.scaled(textScale)).foregroundStyle(theme.fgBase)
+                Text(verbatim: MsRules.eip55(owner))
+                    .typeRole(Typography.monoSmall.scaled(textScale))
+                    .foregroundStyle(theme.fgSubtle)
+                    .fixedSize(horizontal: false, vertical: true)
+                MultisigKindChoiceView(hub: hub, words: words, address: owner, choice: kind)
+            }
+            Spacer(minLength: 0)
+            Button { toggle(owner) } label: {
+                LucideIcon(.close, size: LucideIconSize.action).foregroundStyle(theme.fgSubtle)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(words.t("members.remove"))
+        }
+        .padding(.vertical, Tokens.Space.s8)
+    }
+
+    private func toggle(_ address: String) {
+        if owners.contains(where: { $0.caseInsensitiveCompare(address) == .orderedSame }) {
+            owners.removeAll { $0.caseInsensitiveCompare(address) == .orderedSame }
+        } else {
+            owners.append(address)
+        }
+    }
+
+    /// Add `address` (any case) as a member, checksummed, with what is known of it.
+    @discardableResult
+    private func addMember(_ address: String, name memberName: String?) -> Bool {
+        let value = address.trimmingCharacters(in: .whitespaces)
+        switch addressEntry(address: value) {
+        case "checksum": typedError = words.t("send.invalidChecksum"); return false
+        case "valid": break
+        default: typedError = words.t("send.invalidAddress"); return false
+        }
+        guard (try? multisigCall(method: "validOwner", argsJson: CoreJSON.string(["address": value]))) == "true" else {
+            typedError = words.t("create.notMember")
+            return false
+        }
+        guard !owners.contains(where: { $0.caseInsensitiveCompare(value) == .orderedSame }) else {
+            typedError = words.t("create.duplicate")
+            return false
+        }
+        let member = (try? checksumAddress(addressHex: value)) ?? value
+        if let clean = memberName?.trimmingCharacters(in: .whitespaces), !clean.isEmpty {
+            names[member.lowercased()] = String(clean.prefix(MsRules.memberNameMax))
+        }
+        owners.append(member)
+        typed = ""
+        typedName = ""
+        typedError = nil
+        ensAsked = nil
+        return true
+    }
+
+    private func addTyped() {
+        let value = typed.trimmingCharacters(in: .whitespaces)
+        // A name is read on Ethereum and shown as its address first.
+        if value.contains("."), !value.hasPrefix("0x") {
+            ensAsked = value
+            typedError = nil
+            hub.send(["type": "resolve_ens", "name": value])
+            return
+        }
+        addMember(value, name: typedName)
+    }
+
+    private var ensLine: (text: String, tone: MsNote.Tone)? {
+        guard let asked = ensAsked, let ens = hub.accountsView.add.ens, ens["name"]?.string == asked else { return nil }
+        switch ens.kind {
+        case "found": return (words.t("create.ensResolved", ["name": asked]) + " " + (ens["address"]?.string ?? ""), .neutral)
+        case "none": return (words.t("create.ensNotFound", ["name": asked]), .warning)
+        case "unavailable": return (words.t("create.ensUnavailable", ["name": asked]), .warning)
+        default: return (words.t("create.ensUnsupported", ["name": asked]), .warning)
+        }
+    }
+
+    private func ensArrived(_ ens: MsJSON?) {
+        guard let asked = ensAsked, ens?["name"]?.string == asked, ens?.kind == "found",
+              let address = ens?["address"]?.string else { return }
+        typed = address
+        if typedName.isEmpty { typedName = asked }
+    }
+
+    /// r7: each member's kind, read once for the networks offered.
+    private func readKinds() {
+        let chainIds = networks
+        let members = owners.filter { o in !accounts.contains { $0.address.caseInsensitiveCompare(o) == .orderedSame } }
+            .filter { hub.accountsView.memberKinds[$0.lowercased()] == nil }
+            .map { ["address": $0, "chain_ids": chainIds] as [String: Any] }
+        guard !members.isEmpty else { return }
+        hub.send(["type": "read_kinds", "members": members])
+    }
+
+    private func toThreshold() {
+        guard nameOk else { nameAsked = true; return }
+        if thresholdFor != owners.count {
+            threshold = owners.count <= 2 ? owners.count : owners.count - 1
+            thresholdFor = owners.count
+        }
+        step = .threshold
+    }
+
+    // MARK: - Threshold and network
+
+    private var thresholdStep: some View {
+        VStack(alignment: .leading, spacing: Tokens.Space.s16) {
+            MsSection(title: words.t("create.threshold")) {
+                Stepper(value: $threshold, in: 1...max(1, owners.count)) {
+                    Text(verbatim: words.ruleText(m: threshold, n: owners.count))
+                        .typeRole(Typography.rowTitle.scaled(textScale))
+                        .foregroundStyle(theme.fgBase)
+                }
+                .accessibilityIdentifier("multisig.create.threshold")
+                MsNote(text: thresholdNote, tone: risky ? .warning : .neutral, identifier: "multisig.create.thresholdNote")
+            }
+            MsSection(title: words.t("create.network")) {
+                if networks.isEmpty {
+                    MsNote(text: words.t("create.noSafeNetworks"), tone: .warning)
+                } else {
+                    Picker(words.t("create.network"), selection: Binding(
+                        get: { chainId ?? -1 },
+                        set: { chainId = $0; chose = true }
+                    )) {
+                        if chainId == nil { Text(verbatim: words.t("create.networkNeeded")).tag(-1) }
+                        ForEach(networks, id: \.self) { id in Text(verbatim: words.network(id)).tag(id) }
+                    }
+                    .pickerStyle(.menu)
+                    .tint(theme.fgBase)
+                    .accessibilityIdentifier("multisig.create.network")
+                }
+                MsNote(text: words.t("create.networkHint"))
+                if let other = otherSpaceLine {
+                    MsNote(text: other, identifier: "multisig.create.otherSpace")
+                }
+            }
+            HStack(spacing: Tokens.Space.s12) {
+                VelaButton(title: words.t("create.back"), kind: .secondary) { step = .members }
+                VelaButton(title: words.t("create.next"), kind: .ink, enabled: chainId != nil) {
+                    askAddress()
+                    step = .review
+                }
+                .accessibilityIdentifier("multisig.create.toReview")
+            }
+        }
+    }
+
+    private var thresholdNote: String {
+        if owners.count == 1 { return words.t("create.solo") }
+        if threshold == owners.count { return words.t("create.thresholdAll") }
+        if threshold == 1 { return words.t("create.thresholdOne") }
+        let spare = owners.count - threshold
+        return words.t("create.thresholdSpare", count: spare, ["count": String(spare)])
+    }
+
+    private var risky: Bool { owners.count > 1 && (threshold == owners.count || threshold == 1) }
+
+    /// The networks offered: the space's, minus those found without the Safe
+    /// contracts, the likely ones first (the core's order).
+    private var networks: [Int] {
+        let without = Set(spaceNetworks.filter { sheet.contracts(on: $0) == "missing" })
+        let offered = spaceNetworks.filter { !without.contains($0) }
+        let ordered = MsRules.likelyNetworks(["networks": offered, "hints": hints])
+        return ordered.isEmpty ? offered : ordered
+    }
+
+    private var hints: [String: Any] {
+        let used = MsRules.call("networks.lastUsed", ["accounts": hub.accountsView.accounts.map {
+            ["chainIds": $0.account.chainIds, "addedMs": $0.account.raw["addedMs"]?.int ?? 0] as [String: Any]
+        }]) ?? []
+        return ["used": used]
+    }
+
+    private var firstDefault: Int? {
+        (MsRules.call("networks.firstDefault", ["networks": networks, "hints": hints]) as? NSNumber)?.intValue
+    }
+
+    private var otherSpaceLine: String? {
+        guard !sheet.otherSpace.isEmpty else { return nil }
+        let space = words.loc.t(NetworkSpace.read(VelaStore()) == .testnet ? "networkSpace.mainnet" : "networkSpace.testnet")
+        return words.t("create.otherSpace", ["space": space, "networks": sheet.otherSpace.map(words.network).joined(separator: ", ")])
+    }
+
+    // MARK: - Review
+
+    private var draftAddressKey: String { "\(owners)|\(threshold)|\(cleanName)" }
+
+    private func askAddress() {
+        guard !owners.isEmpty, nameOk else { return }
+        hub.send(["type": "draft", "owners": owners, "threshold": threshold, "name": cleanName])
+    }
+
+    private var reviewStep: some View {
+        let creators = local
+        let chosenCreator = creator.flatMap { c in creators.first { $0.caseInsensitiveCompare(c) == .orderedSame } } ?? creators.first
+        return VStack(alignment: .leading, spacing: Tokens.Space.s12) {
+            MsRow(label: words.t("create.name"), value: cleanName)
+            MsRow(label: words.t("create.threshold"), value: words.ruleText(m: threshold, n: owners.count))
+            MsSection(title: words.t("create.members")) {
+                ForEach(owners, id: \.self) { owner in
+                    MsRow(label: label(owner), value: MsRules.eip55(owner), mono: true)
+                }
+            }
+            if let address = sheet.draftAddress {
+                MsRow(label: words.t("create.address"), value: address, mono: true, copyable: true)
+                    .accessibilityIdentifier("multisig.create.draftAddress")
+                MsNote(text: words.t("create.sameEverywhere"))
+            } else if let error = sheet.draftError {
+                MsNote(text: error, tone: .danger)
+            } else {
+                ProgressView()
+            }
+            if let chainId {
+                MsRow(label: words.t("create.network"), value: words.network(chainId))
+            }
+            if creators.count > 1 {
+                Picker(words.t("create.creator"), selection: Binding(get: { chosenCreator }, set: { creator = $0 })) {
+                    ForEach(creators, id: \.self) { c in Text(verbatim: label(c)).tag(Optional(c)) }
+                }
+                .pickerStyle(.menu)
+                .tint(theme.fgBase)
+            } else if let chosenCreator {
+                MsRow(label: words.t("create.creator"), value: label(chosenCreator))
+            }
+            if sheet.phase == .failed, let error = sheet.error {
+                MsNote(text: words.failureText(error), tone: .danger, identifier: "multisig.create.failed")
+            }
+            HStack(spacing: Tokens.Space.s12) {
+                VelaButton(title: words.t("create.back"), kind: .secondary, enabled: sheet.phase != .working) { step = .threshold }
+                VelaButton(
+                    title: words.t("create.create"), kind: .primary,
+                    enabled: sheet.draftAddress != nil && chosenCreator != nil && chainId != nil,
+                    loading: sheet.phase == .working, haptic: .confirm
+                ) {
+                    create(creator: chosenCreator)
+                }
+                .accessibilityIdentifier("multisig.create.create")
+            }
+        }
+    }
+
+    private func create(creator: String?) {
+        guard let creator, let chainId else { return }
+        let members = owners.reduce(into: [String: Any]()) { out, owner in
+            var info: [String: Any] = [:]
+            if let said = names[owner.lowercased()], !said.isEmpty { info["name"] = said }
+            out[owner] = info
+        }
+        Task { @MainActor in
+            await hub.refreshLocal()
+            hub.send(["type": "create", "choice": [
+                "owners": owners, "threshold": threshold, "name": cleanName,
+                "chain_id": chainId, "creator": creator, "members": members,
+            ]])
+            let first = await hub.accounts.until(timeout: 300) { view -> MsCreateView? in
+                guard let create = MultisigMachine.decode(MsAccountsView.self, from: view)?.create else { return nil }
+                return create.address != nil || create.phase != .working ? create : nil
+            }
+            if let address = first?.address {
+                created = address
+                step = .created
+                VelaHaptic.success.play()
+            }
+        }
+    }
+
+    // MARK: - Created
+
+    private var createdStep: some View {
+        let row = hub.accountsView.row(created)
+        let solo = owners.count == 1
+        let shared: String = {
+            if row?.shared == true { return words.t(solo ? "create.sharedSolo" : "create.shared") }
+            if let refused = sheet.refused { return words.t("create.refused", ["reason": refused]) }
+            return sheet.phase == .working ? words.t("create.savedSharing") : words.t("create.savedLater")
+        }()
+        return VStack(alignment: .leading, spacing: Tokens.Space.s16) {
+            Text(verbatim: words.t("create.created"))
+                .typeRole(Typography.title.scaled(textScale))
+                .foregroundStyle(theme.fgBase)
+                .accessibilityIdentifier("multisig.create.created")
+            MsNote(text: shared, tone: row?.shared == true ? .positive : (sheet.refused != nil ? .warning : .neutral), identifier: "multisig.create.shared")
+            if let created {
+                MsRow(label: words.t("create.address"), value: created, mono: true, copyable: true)
+            }
+            MsNote(text: words.t(solo ? "create.createdBodySolo" : "create.createdBody"))
+            if !solo, let created {
+                VelaButton(title: words.t("create.copyInvite"), kind: .ink) { onInvite(created) }
+                    .accessibilityIdentifier("multisig.create.invite")
+            }
+            VelaButton(title: words.t("create.done"), kind: .secondary) {
+                if let created { onCreated(created) }
+            }
+            .accessibilityIdentifier("multisig.create.done")
+        }
+    }
+
+    private func close() {
+        if step == .created, let created { onCreated(created) } else { onClose() }
+    }
+}
+
+/// r7: a member's kind — the accounts machine's (`member_kinds`): what the
+/// chains say of it (a Vela account found, a smart contract account), else
+/// the person's word, else asked; "Other wallet" hinted when no Vela
+/// account is found, kept only if picked.
+struct MultisigKindChoiceView: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.walletTextScale) private var textScale
+    let hub: MultisigHub
+    let words: MsWords
+    let address: String
+    let choice: MsKindChoice?
+
+    var body: some View {
+        if let choice {
+            VStack(alignment: .leading, spacing: Tokens.Space.s4) {
+                if choice.locked {
+                    MsChip(text: kindLabel(choice.kind ?? "vela"))
+                } else {
+                    Picker(words.t("members.kind"), selection: Binding(
+                        get: { choice.kind ?? "" },
+                        set: { hub.send(["type": "pick_kind", "address": address, "kind": $0.isEmpty ? NSNull() : $0]) }
+                    )) {
+                        Text(verbatim: "—").tag("")
+                        Text(verbatim: words.t("members.kindVela")).tag("vela")
+                        Text(verbatim: words.t("members.kindWallet")).tag("wallet")
+                    }
+                    .pickerStyle(.segmented)
+                    .accessibilityIdentifier("multisig.kind")
+                }
+                if let note = noteText(choice.note) {
+                    Text(verbatim: note)
+                        .typeRole(Typography.rowSub.scaled(textScale))
+                        .foregroundStyle(theme.fgSubtle)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
+    private func kindLabel(_ kind: String) -> String {
+        switch kind {
+        case "wallet": words.t("members.kindWallet")
+        case "contract": words.t("members.kindContract")
+        default: words.t("members.kindVela")
+        }
+    }
+
+    private func noteText(_ note: String?) -> String? {
+        switch note {
+        case "known": words.t("members.kindKnown")
+        case "contract": words.t("members.kindContractNote")
+        case "likely": words.t("members.kindLikely")
+        case "ask": words.t("members.kindAsk")
+        default: nil
+        }
+    }
+}

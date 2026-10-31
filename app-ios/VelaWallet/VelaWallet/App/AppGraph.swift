@@ -99,6 +99,9 @@ final class AppGraph {
     /// The AI agent (spec 103, spec 104 phase 7): the core's, answering
     /// through this graph's stores. Off unless the person turns it on.
     let agent: AgentStore
+    /// The multisig machines (native multisig M1–M6): the same core the web
+    /// drives, over uniffi, on one shell.
+    let multisig: MultisigHub
 
     /// The launch sequence has started (`launch`).
     private(set) var launched = false
@@ -458,6 +461,37 @@ final class AppGraph {
                 onboarding.showSignInMethods = true
             }
         }
+        // The multisig: its own fee session (a quote here never supersedes the
+        // send screen's), the one spine, the one trusted page, the pool.
+        let multisigFees = FeeStore(relay: relay, accounts: port, measureCall: FeeExecutor.measuring(with: pool))
+        let multisigLive = MultisigLive(
+            deps: MultisigLive.Deps(
+                pool: pool, relay: relay, spine: spine, accounts: store, accountPort: port,
+                shelf: shelf, fees: multisigFees, trustedSigner: trustedSigner
+            ),
+            peer: MultisigPeerRooms.live(relay: shelf.readString(DevRelayKey.relay))
+        )
+        self.multisig = MultisigHub(
+            live: multisigLive, loc: loc, shelf: shelf, tokens: metadata,
+            facts: { [store, port, shelf] in
+                await MultisigFacts.read(accounts: store, port: port, shelf: shelf)
+            }
+        )
+        // A multisig's send proposes (its confirm): the proposals machine's
+        // draft, review and one passkey.
+        sendExecutor.ports.proposeSafeTx = { [weak multisig] operation in
+            await multisig?.proposeFromSend(operation)
+        }
+        // A multisig's send proposed: the send closes and the transaction's
+        // own sheet takes over (approve, execute, ask the others).
+        sendStore.onProposed = { [weak flowNav, weak multisig] chainId, hash in
+            flowNav?.close()
+            multisig?.sheet = .proposal(chainId: chainId, safeTxHash: hash)
+        }
+        multisig.onRecorded = { [weak activityStore, weak wallet] in
+            activityStore?.reconciled()
+            wallet?.refresh(pull: false)
+        }
         agent.graph = self
         Self.built += 1
     }
@@ -490,5 +524,8 @@ final class AppGraph {
         // The AI agent connects as set up — after the session, whose view its
         // first request reads.
         agent.start()
+        // The multisig machines read their stores now, so a link that opened
+        // the app, the switcher and the notifications find them loaded.
+        Task { [multisig] in await multisig.boot() }
     }
 }

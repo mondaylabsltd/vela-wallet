@@ -216,7 +216,7 @@ final class MultisigHub {
         if active {
             accounts.dispatch(["type": "tick"])
             proposals.dispatch(["type": "refresh", "fresh": false])
-            proposals.dispatch(["type": "online"])
+            proposals.dispatch(["type": "online", "online": true])
         }
         restartProposalTimer()
     }
@@ -289,6 +289,32 @@ final class MultisigHub {
         accounts.dispatch(["type": "open_link", "hash": hash, "take_kept": takeKept])
     }
 
+    // MARK: - Verbs (members)
+
+    /// The multisig Settings shows: its members read on each of its networks,
+    /// named from this device's accounts and what the multisigs here keep.
+    func showMembers(_ address: String) async {
+        guard let record = record(address) as? [String: Any] else { return }
+        let facts = await facts()
+        let chainIds = Array(Set((record["chainIds"] as? [Any] ?? []).compactMap { ($0 as? NSNumber)?.intValue }))
+            .sorted { (facts.networks.firstIndex(of: $0) ?? .max) < (facts.networks.firstIndex(of: $1) ?? .max) }
+        let known = (accounts.view["accounts"] as? [[String: Any]] ?? []).compactMap { $0["account"] }
+        members.dispatch([
+            "type": "show", "account": record, "chain_ids": chainIds, "local": facts.accounts, "known": known,
+        ])
+        let contacts = shelf.readList(VelaStore.Key.contacts).compactMap { contact -> [String: Any]? in
+            guard let address = contact["address"] as? String,
+                  address.range(of: "^0x[0-9a-fA-F]{40}$", options: .regularExpression) != nil else { return nil }
+            return [
+                "address": address, "name": contact["name"] ?? NSNull(),
+                "resolved_name": contact["resolved_name"] ?? NSNull(), "kind": contact["kind"] ?? NSNull(),
+            ]
+        }
+        members.dispatch(["type": "contacts", "contacts": contacts])
+    }
+
+    func sendMembers(_ event: [String: Any]) { members.dispatch(event) }
+
     // MARK: - Verbs (proposals)
 
     func sendProposal(_ event: [String: Any]) { proposals.dispatch(event) }
@@ -297,32 +323,85 @@ final class MultisigHub {
     /// review first (`draft`); the person confirms it on the review sheet
     /// (`confirmDraft`). Answers once the machine settled it (`done`: its
     /// safeTxHash) or why not.
-    func propose(chainId: Int, proposal: [String: Any], address: String? = nil) async -> MsTagged? {
+    func propose(
+        chainId: Int, proposal: [String: Any], address: String? = nil,
+        review: Bool = true, as member: String? = nil
+    ) async -> MsTagged? {
         if let address, address.lowercased() != followed?.lowercased(), let record = record(address) {
             proposals.dispatch(["type": "follow", "account": record])
             followed = address
         }
+        func state(_ view: [String: Any]) -> MsTagged? {
+            ((view["actions"] as? [String: Any])?["propose"]).flatMap { MultisigMachine.decode(MsTagged.self, from: $0) }
+        }
+        let cancelled = MultisigMachine.decode(MsTagged.self, from: ["kind": "cancelled"])
         proposals.dispatch(["type": "draft", "chain_id": chainId, "proposal": proposal])
+        // Drawn (its draft up), or why not (its state).
         let drafted: MsTagged? = await proposals.until { view in
             if view["draft"] is [String: Any] { return MsTagged.drawn }
-            guard let state = (view["actions"] as? [String: Any])?["propose"] else { return nil }
-            let tagged = MultisigMachine.decode(MsTagged.self, from: state)
-            return tagged?.kind == "working" ? nil : tagged
+            guard let tagged = state(view), tagged.kind != "working" else { return nil }
+            return tagged
         }
         guard drafted?.kind == MsTagged.drawn.kind else { return drafted }
-        sheet = .review(chainId: chainId)
-        // The person's word on its review: confirmed (working), or withdrawn.
-        let settled: MsTagged? = await proposals.until { view in
-            guard let state = (view["actions"] as? [String: Any])?["propose"] else {
-                return view["draft"] is [String: Any] ? nil : MultisigMachine.decode(MsTagged.self, from: ["kind": "cancelled"])
+        if review {
+            drafting = chainId
+            reviewReturn = sheet
+            sheet = .review(chainId: chainId)
+            defer { if drafting == chainId { drafting = nil } }
+            // The person's word on its review: confirmed (working), or withdrawn.
+            let asked: MsTagged? = await proposals.until { view in
+                if state(view)?.kind == "working" || !(view["draft"] is [String: Any]) {
+                    return state(view) ?? cancelled
+                }
+                return nil
             }
-            let tagged = MultisigMachine.decode(MsTagged.self, from: state)
-            switch tagged?.kind {
-            case "working", "outsideAsked": return nil
-            default: return view["draft"] is [String: Any] && tagged?.kind != "done" ? nil : tagged
-            }
+            if sheet == .review(chainId: chainId) { sheet = reviewReturn }
+            reviewReturn = nil
+            guard asked?.kind == "working" || asked?.kind == "done" else { return asked }
+        } else {
+            // A cancellation asked from its sheet: signed at once, as `member`.
+            confirmDraft(as: member)
         }
-        return settled
+        // No member here: an outside member's wallet proposes it — its answer
+        // settles it.
+        let done: MsTagged? = await proposals.until { view in
+            guard let tagged = state(view), tagged.kind != "working", tagged.kind != "outsideAsked" else { return nil }
+            return tagged
+        }
+        if done?.kind != "done", proposals.view["draft"] is [String: Any] {
+            proposals.dispatch(["type": "withdraw"])
+        }
+        return done
+    }
+
+    /// The chain a proposal is drawn on for the person's review, while it is.
+    private(set) var drafting: Int?
+    /// The sheet the review covered, shown again once it is answered.
+    @ObservationIgnored private var reviewReturn: MultisigSheet?
+
+    /// The send machine's `propose_safe_tx` (a multisig's confirm): the
+    /// reviewed transfers, proposed — answered `proposed` / `propose_failed`.
+    func proposeFromSend(_ op: [String: Any]) async -> [String: Any] {
+        let chainId = MultisigExecutor.int(op["chain_id"]) ?? 0
+        let safe = op["multisig"] as? String
+        let transfers = (op["transfers"] as? [[String: Any]] ?? []).map { transfer -> [String: Any] in
+            ["token": transfer["token"] ?? NSNull(), "to": transfer["to"] ?? "", "amount": transfer["amount"] ?? "0"]
+        }
+        let settled = await propose(chainId: chainId, proposal: ["kind": "transfers", "transfers": transfers], address: safe)
+        if settled?.kind == "done", let hash = settled?["safe_tx_hash"]?.string {
+            return ["type": "proposed", "safe_tx_hash": hash]
+        }
+        switch settled?.kind {
+        case nil, "cancelled", "riskDeclined":
+            return ["type": "propose_failed", "cancelled": true, "reason": NSNull()]
+        case "mailboxUnreadable":
+            return ["type": "propose_failed", "cancelled": false, "reason": "mailbox_down"]
+        case "failed" where MultisigShellFailure.read(settled?["detail"]?.string)?["kind"] as? String == "passkey"
+            && MultisigShellFailure.read(settled?["detail"]?.string)?["failure"] as? String == "cancelled":
+            return ["type": "propose_failed", "cancelled": true, "reason": NSNull()]
+        default:
+            return ["type": "propose_failed", "cancelled": false, "reason": proposalsView.offline ? "offline" : NSNull()]
+        }
     }
 
     func confirmDraft(as member: String?) {
@@ -370,8 +449,8 @@ final class MultisigHub {
             let hash = notice["safe_tx_hash"] as? String ?? ""
             openedLink = (chainId, address, hash)
             proposals.dispatch([
-                "type": "open_linked", "safe": address, "chain_id": chainId, "safe_tx_hash": hash,
-                "preview": notice["preview"] as? Bool ?? false,
+                "type": "open_linked", "chain_id": chainId, "safe_tx_hash": hash,
+                "preview": notice["preview"] ?? NSNull(),
             ])
             sheet = .proposal(chainId: chainId, safeTxHash: hash)
         case "outside_sign":

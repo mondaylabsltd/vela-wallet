@@ -56,6 +56,27 @@ struct RootView: View {
     /// holdings, the cached total and a retry timer, and one that died with the
     /// screen would re-read twelve chains on every visit.
     private var wallet: WalletStore { graph.wallet }
+    /// The multisig machines (native multisig M1–M6).
+    private var multisig: MultisigHub { graph.multisig }
+    /// The multisig shown, when one is: the wallet wears its identity — its
+    /// address's balance and activity, its send proposes (the web's
+    /// `shownIdentity`). The session's own account is untouched underneath.
+    private var shownMultisig: MsAccountRow? { multisig.accountsView.activeRow }
+    /// Whose wallet the home shows: the multisig shown, else the session's.
+    private var shownAddress: String { shownMultisig?.account.address ?? session.view.address }
+    private var shownName: String {
+        shownMultisig.map { multisigWords.name(of: $0.account, rowName: $0.name) } ?? session.view.activeName
+    }
+    /// The multisig screens' words, with this device's account names.
+    private var multisigWords: MsWords {
+        MsWords(
+            loc: loc, hub: multisig,
+            localNames: Dictionary(
+                session.view.accounts.map { ($0.account.address.lowercased(), $0.account.name) },
+                uniquingKeysWith: { first, _ in first }
+            )
+        )
+    }
     /// The home header's account switcher (spec 047's rule, reached here at
     /// last). A flag rather than a route: it is a sheet over the wallet, the
     /// way the rescue overlays are.
@@ -385,12 +406,37 @@ struct RootView: View {
         #endif
     }
 
+    /// Native multisig: every multisig sheet, and the two a signature may
+    /// wait on — apart from `nativeDoors`' chain, for the type checker.
+    private func multisigDoors(_ content: some View) -> some View {
+        content
+        .modifier(MultisigHostModifier(
+            hub: multisig, words: multisigWords,
+            accounts: session.view.accounts.map { ($0.account.address, $0.account.name) },
+            contacts: shelf.readList(VelaStore.Key.contacts).compactMap { contact in
+                (contact["address"] as? String).map { ($0, contact["name"] as? String ?? "") }
+            },
+            spaceNetworks: walletNetworks.chains.map(\.chainId),
+            scheme: scheme,
+            onAddNetwork: { _ in
+                // Settings → Add network; a link waiting for it opens again
+                // once it is there (the accounts machine keeps it).
+                multisig.sheet = nil
+                flows.close()
+                pendingSettingsPage = .addNetwork
+                if section == .settings { settingsVisit += 1 } else { section = .settings }
+            },
+            onFund: { enterReceive() }
+        ))
+        .onChange(of: scenePhase) { _, phase in multisig.appActive(phase == .active) }
+    }
+
     /// Native parity Phase 3: the doors from outside the app (N-I2), the
     /// links it claims (N-I3), the widgets' snapshot and the landing's
     /// haptic — apart from `appBody`'s chain, which the type checker can
     /// no longer take in one expression.
     private func nativeDoors(_ content: some View) -> some View {
-        content
+        multisigDoors(content)
         // Native parity N-I3: a multisig link, as the core read it — shown
         // once the launch is over, never under the animation.
         .sheet(item: Binding(
@@ -691,12 +737,33 @@ struct RootView: View {
                 // the host the core named; nothing loads before the person says yes.
                 browser.askToOpen(page)
             }
+        case .some(.connect(let connect, let linkUrl)):
+            // The connect page is the OUTSIDE owner's (it runs in the browser
+            // where their wallet is): what the core read in it, and the page.
+            multisigLink = PendingMultisigLink(link: .connect(connect, url: linkUrl))
         case .some(let link):
-            // A multisig link: what the core read in it, and the web wallet
-            // to act on it in (`MultisigLinkSheet`).
-            multisigLink = PendingMultisigLink(link: link)
+            // A proposal or an invite (or one of them damaged): the accounts
+            // machine's one link flow, here (native multisig M1/M2).
+            openMultisigLink(link)
         case nil:
             break
+        }
+    }
+
+    /// A multisig link, to the accounts machine's link flow: where it
+    /// stands is drawn by the multisig host (`MultisigLinkStandSheet`, or the
+    /// add sheet for an invite); a member's transaction opens as its sheet.
+    private func openMultisigLink(_ link: AppLink) {
+        let url: URL
+        switch link {
+        case .proposal(_, let u), .invite(_, let u), .broken(_, let u), .connect(_, let u): url = u
+        case .entry, .pay: return
+        }
+        guard let fragment = url.fragment, !fragment.isEmpty else { return }
+        Task { @MainActor in
+            await multisig.boot()
+            multisig.openLink(hash: "#" + fragment)
+            multisig.sheet = .link
         }
     }
 
@@ -940,6 +1007,10 @@ struct RootView: View {
             // it (`followAccountInFront`).
             .onChange(of: session.view.address) { _, address in
                 followAccountInFront(address)
+            }
+            // A multisig shown (or the account again): the home wears it.
+            .onChange(of: multisig.accountsView.active) { _, _ in
+                followShown()
             }
             .onChange(of: onboarding.finished) { _, finished in
                 if finished {
@@ -1200,7 +1271,7 @@ struct RootView: View {
                     // The watcher runs while a code is on screen — five
                     // minutes, at the core's own cadence, and it stops itself.
                     if state == .r2 || state == .r3 {
-                        deposits.open(address: session.view.address)
+                        deposits.open(address: shownAddress)
                     }
                 }
                 // Keyed on the DRAWN state, not the derived one.
@@ -1268,6 +1339,17 @@ struct RootView: View {
                             // this round settles, and the control turns until then.
                             onRefreshNow: {
                                 agent.person(["type": "refresh_balances"])
+                            },
+                            multisigCard: shownMultisig.map { row in
+                                AnyView(MultisigHomeCard(
+                                    hub: multisig, row: row, words: multisigWords,
+                                    funded: (wallet.balance?.tokens ?? []).contains { token in
+                                        token.chainId == row.account.chainIds.first && !token.spam
+                                            && token.balance.contains { "123456789".contains($0) }
+                                    },
+                                    onOpen: { multisig.sheet = $0 },
+                                    onFund: { enterReceive() }
+                                ))
                             }
                         )
                     }
@@ -1308,11 +1390,14 @@ struct RootView: View {
                     // accounts.
                     .sheet(isPresented: $homeSwitcherOpen) {
                         SettingsSheet(
-                            model: settingsModel(.st1),
+                            model: switcherModel,
                             overlay: .accounts,
                             onDismiss: { closeHomeSwitcher() },
                             onSignOut: {},
                             onSelectAccount: { address in
+                                // A Vela account picked: the multisig shown
+                                // (if any) steps aside — the web's overlay.
+                                multisig.activate(nil)
                                 switchToAccount(address)
                                 closeHomeSwitcher()
                             },
@@ -1331,7 +1416,23 @@ struct RootView: View {
                             onRemoveAccount: { index in
                                 closeHomeSwitcher()
                                 removeWallet(at: index)
-                            }
+                            },
+                            multisigSection: AnyView(MultisigSwitcherSection(
+                                hub: multisig, words: multisigWords,
+                                onSelect: { address in
+                                    VelaHaptic.select.play()
+                                    multisig.activate(address)
+                                    closeHomeSwitcher()
+                                },
+                                onCreate: {
+                                    closeHomeSwitcher()
+                                    multisig.sheet = .create
+                                },
+                                onAdd: {
+                                    closeHomeSwitcher()
+                                    multisig.sheet = .add(prefill: nil)
+                                }
+                            ))
                         )
                         .themed(scheme)
                     }
@@ -1350,7 +1451,7 @@ struct RootView: View {
                         wallet.spaceChanged(chains, space: space.current.rawValue)
                     }
                     .task {
-                        activity.open(address: session.view.address,
+                        activity.open(address: shownAddress,
                                       hidden: wallet.balance?.hidden ?? false)
                         // The display currency is app-wide: the hero is the
                         // figure it matters most on, and it must not wait for a
@@ -1374,7 +1475,7 @@ struct RootView: View {
                         // picker draws it, and a book first opened by the tap
                         // that raised the picker was a sheet of nobody.
                         contacts.open(myAddress: session.view.address)
-                        wallet.open(address: session.view.address)
+                        wallet.open(address: shownAddress)
                     }
                     // The 10-minute balance refresh runs exactly while this
                     // screen is showing and the app is active (the web's
@@ -2504,11 +2605,26 @@ struct RootView: View {
     /// drawing stands as drawn. That is the same rule the settings screen
     /// follows, and it matters more here: a fixture total under a real address
     /// is the app telling somebody their money is somewhere it is not.
+    /// The switcher's model: while a multisig is shown, no Vela account row
+    /// wears the check (the multisig's row does).
+    private var switcherModel: SettingsScreenModel {
+        var model = settingsModel(.st1)
+        if shownMultisig != nil {
+            model.accountsSheet.rows = model.accountsSheet.rows.map { row in
+                AccountsSheetRowModel(
+                    name: row.name, addressDisplay: row.addressDisplay,
+                    addressFull: row.addressFull, amount: row.amount, selected: false
+                )
+            }
+        }
+        return model
+    }
+
     private var walletModel: WalletHomeModel {
         var base = WalletFixtures
             .buildMobileState(.h1, loc: loc)
-            .withAddress(session.view.address)
-            .withName(session.view.activeName)
+            .withAddress(shownAddress)
+            .withName(shownName)
             // ob-2: the wallet in front whose public record has not synced.
             .withSync(WalletSyncLine.of(
                 unsynced: session.view.unsynced ?? [], address: session.view.address,
@@ -2562,7 +2678,7 @@ struct RootView: View {
         if state == .sd2f, let view = send.view, view.stage == .confirm {
             model.base = WalletFlowFixtures.build(SendLive.flowState(view, feeSheetOpen: false), loc: loc).base
         }
-        let address = session.view.address
+        let address = shownAddress
         // The receive screens first, because they are the ones where a fixture
         // is not embarrassing but dangerous: money sent to the drawn address is
         // money gone.
@@ -2577,7 +2693,7 @@ struct RootView: View {
             // chain's own coin.
             let asset = state == .r3 ? paymentRequest.view?.asset : nil
             model.sheet = .receiveQr(FlowsLive.receiveQr(
-                address, name: session.view.activeName,
+                address, name: shownName,
                 chain: asset.flatMap { walletNetworks.meta($0.chainId) } ?? receiveChain,
                 asset: asset,
                 pay: paymentRequest.view,
@@ -2962,6 +3078,20 @@ struct RootView: View {
         // upgrade and the fold all die with the send before it (spec 068).
         fees.resetSpeed()
         configureSpeed()
+        // A multisig sends by proposing: its address, no passkey of its own,
+        // its rule (the core's `SendMultisigRef`).
+        if let shown = shownMultisig {
+            send.open(
+                accountId: "",
+                address: shown.account.address,
+                name: shownName,
+                displayCode: told.code,
+                displayRate: told.rate,
+                fiatDecimals: Self.sendFiatDecimals,
+                multisig: (threshold: shown.account.threshold, owners: shown.account.owners.count)
+            )
+            return
+        }
         send.open(
             accountId: record?["id"] as? String ?? "",
             address: session.view.address,
@@ -3009,8 +3139,8 @@ struct RootView: View {
 
     private func startPaymentRequest() {
         paymentRequest.start(
-            account: session.view.address,
-            recipient: session.view.address,
+            account: shownAddress,
+            recipient: shownAddress,
             baseUrl: Self.payLinkBase
         )
     }
@@ -4442,6 +4572,15 @@ struct RootView: View {
     /// signing another in over the home did the same. Android keys these on
     /// the address (`LaunchedEffect(session.address)`), the web on an
     /// `$effect` over it, and the desktop rebuilds the page.
+    /// The multisig shown moved: the home's balance and activity follow it
+    /// (the session's own account stays in front underneath).
+    private func followShown() {
+        let address = shownAddress
+        guard !address.isEmpty else { return }
+        wallet.open(address: address)
+        activity.open(address: address, hidden: wallet.balance?.hidden ?? false)
+    }
+
     private func followAccountInFront(_ address: String) {
         guard !address.isEmpty else { return }
         wallet.open(address: address)
