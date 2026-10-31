@@ -29,6 +29,31 @@ pub fn multisig_link_call(method: String, args_json: String) -> Result<String, c
     Ok(vela_core::multisig_link::call_json(&method, &args_json)?)
 }
 
+/// The multisig's kernel (`vela_core::multisig::call_json`): `method` plus
+/// its arguments as JSON, the answer as JSON — the wasm `multisigCall`
+/// (`validName`, `validOwner`, `genesis`, `safeTxHash`, …), so a native
+/// create sheet asks the same rules the web's does.
+#[uniffi::export]
+pub fn multisig_call(method: String, args_json: String) -> Result<String, crate::CoreError> {
+    Ok(vela_core::multisig::call_json(&method, &args_json)?)
+}
+
+/// What an entered address reads as — `"valid"`, `"malformed"` or
+/// `"checksum"` (mixed case that is not its EIP-55 checksum): the one rule
+/// every field that takes an address refuses by (send-2), the wasm
+/// `addressEntry`. A multisig's member field reads it on every platform.
+#[uniffi::export]
+#[must_use]
+pub fn address_entry(address: String) -> String {
+    use vela_core::primitives::AddressEntry;
+    match vela_core::primitives::address_entry(&address) {
+        AddressEntry::Valid => "valid",
+        AddressEntry::Malformed => "malformed",
+        AddressEntry::BadChecksum => "checksum",
+    }
+    .to_owned()
+}
+
 /// One machine as a uniffi object over [`crate::onboarding_bridge::Bridge`].
 macro_rules! multisig_object {
     ($(#[$doc:meta])* $class:ident, $app:ty) => {
@@ -157,5 +182,45 @@ mod tests {
         let none = multisig_link_call("calls.readable".to_owned(), "{}".to_owned()).unwrap();
         assert_eq!(none, "null");
         assert!(multisig_link_call("nobody.knows".to_owned(), "{}".to_owned()).is_err());
+    }
+
+    /// The kernel door answers as the wasm's `multisigCall` does.
+    #[test]
+    fn the_kernel_answers_through_its_door() {
+        assert_eq!(
+            multisig_call("validName".to_owned(), r#"{"name":"Treasury"}"#.to_owned()).unwrap(),
+            "true"
+        );
+        assert_eq!(
+            multisig_call("validName".to_owned(), r#"{"name":" padded"}"#.to_owned()).unwrap(),
+            "false"
+        );
+        assert_eq!(
+            multisig_call(
+                "validOwner".to_owned(),
+                r#"{"address":"0x0000000000000000000000000000000000000001"}"#.to_owned()
+            )
+            .unwrap(),
+            "false"
+        );
+        assert!(multisig_call("nobody.knows".to_owned(), "{}".to_owned()).is_err());
+    }
+
+    /// The address rule, as the web's `addressEntry` says it.
+    #[test]
+    fn an_entered_address_reads_as_the_web_reads_it() {
+        assert_eq!(
+            address_entry("0x6813Eb9362372EEF6200f3b1dbC3f819671cBA69".to_owned()),
+            "valid"
+        );
+        assert_eq!(
+            address_entry("0x6813eb9362372eef6200f3b1dbc3f819671cba69".to_owned()),
+            "valid"
+        );
+        assert_eq!(
+            address_entry("0x6813Eb9362372EEF6200f3b1dbC3f819671cBA6A".to_owned()),
+            "checksum"
+        );
+        assert_eq!(address_entry("0x1234".to_owned()), "malformed");
     }
 }
