@@ -1,6 +1,9 @@
 package app.getvela.wallet
 
 import app.getvela.wallet.feature.send.SendLive
+import app.getvela.wallet.feature.multisig.MultisigWiring
+import app.getvela.wallet.feature.multisig.MultisigNotifier
+import app.getvela.wallet.feature.multisig.core.MultisigHub
 import app.getvela.wallet.core.format.Formats
 import kotlinx.coroutines.flow.MutableStateFlow
 import app.getvela.wallet.feature.settings.SettingsPage
@@ -535,6 +538,36 @@ class AppContainer(private val app: Application) {
         )
     }
 
+    /**
+     * Native multisig (M1–M6): the core's multisig machines over one shell —
+     * the same core the web drives, over uniffi. Built on first use; booted
+     * once a wallet is signed in (the wallet route), so a link that opened the
+     * app, the switcher and the notifications find it loaded.
+     */
+    val multisig: MultisigHub by lazy { MultisigWiring.build(this, app).also { MultisigWiring.attachNotifier(this, app, it) } }
+
+    /** M6: what changed while the app was away, said (local polling; no push service). */
+    val multisigNotifier: MultisigNotifier by lazy {
+        MultisigNotifier(
+            store = VelaStore(app),
+            words = { MultisigWiring.words(this) },
+            post = { note -> MultisigNotifier.postToSystem(app, MultisigWiring.words(this), note) },
+        )
+    }
+
+    /** An activity of this app is on screen (a notification is noise then: the screens say it). */
+    fun inForeground(): Boolean = foregroundActivities > 0
+
+    /**
+     * A multisig link (`#ms=…` / `#msa=…`, the fragment with its `#`) that
+     * reached the app — a verified App Link, text shared in, a code scanned —
+     * for the accounts machine's one link flow once the wallet is in front.
+     */
+    val pendingMultisigLink = MutableStateFlow<String?>(null)
+
+    /** A tapped multisig notification (M6): chain, safeTxHash, the multisig. */
+    val pendingMultisigOpen = MutableStateFlow<Triple<Int, String, String?>?>(null)
+
     /** Spec 045: the platform's documents (picker, creator, share sheet); the activity attaches them in onCreate. */
     @Volatile
     var documents: app.getvela.wallet.feature.documents.DocumentPorts? = null
@@ -632,6 +665,9 @@ class AppContainer(private val app: Application) {
             // The passkey's ceremony, for the AI agent's transfers to follow:
             // a transfer is awaiting its passkey once the prompt is up.
             controller.onCeremony = { event -> agent.ceremony(event) }
+            // Native multisig M2: a multisig's confirm proposes — the proposals
+            // machine's draft, its review, then one passkey.
+            controller.onProposeSafeTx = { op -> MultisigWiring.proposeFromSend(multisig, op) }
         }
     }
 

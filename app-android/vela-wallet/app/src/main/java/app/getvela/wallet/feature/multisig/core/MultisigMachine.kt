@@ -63,5 +63,19 @@ class MultisigMachine(
         }
     }
 
+    /**
+     * Send [event] and wait for the first view, from the one that applied it
+     * on, that [pick] finds something in — never a view from before the event
+     * (the driver applies its inbox in order, so a view read right after a
+     * dispatch may still be the last question's: a create's "idle", a
+     * proposal's last "done"). The web's `request`, which is synchronous there.
+     */
+    suspend fun <T : Any> request(event: JsonObject, timeoutMs: Long = 600_000, pick: (JsonObject) -> T?): T? {
+        val number = host.dispatchNumbered(event, JsonObject.serializer())
+        return withTimeoutOrNull(timeoutMs) {
+            host.commits.map { if (host.applied(number)) pick(host.view.value) else null }.first { it != null }
+        }
+    }
+
     fun dispose() = host.dispose()
 }

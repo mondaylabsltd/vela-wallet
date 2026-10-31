@@ -152,6 +152,7 @@ class MultisigHub(
     @Volatile private var checkedRecords = false
     @Volatile private var lastAccountsJson = ""
     @Volatile private var lastWaitingJson = ""
+    @Volatile private var lastRecheckKey = ""
     @Volatile private var appActive = true
     @Volatile private var lastPace = 12_000L
 
@@ -225,10 +226,20 @@ class MultisigHub(
                 proposals.dispatch(ev("account", "account" to shown))
             }
         }
+        // Who can act for each multisig, per network (§3.5): read again when
+        // the list or a multisig's networks move (the web's `recheck` effect).
+        val recheckKey = typed.accounts.joinToString(";") { "${it.account.address}:${it.account.chainIds.joinToString(",")}" }
+        if (recheckKey.isNotEmpty() && recheckKey != lastRecheckKey) {
+            lastRecheckKey = recheckKey
+            accounts.dispatch(ev("recheck"))
+        }
         val active = typed.active
         if (!active.equals(followed, ignoreCase = true)) {
             followed = active
             proposals.dispatch(ev("follow", "account" to (shownRecord() ?: JsonNull)))
+            // Once a session: networks another member made it used on (deployed
+            // there, or proposed there) become its networks here too.
+            if (active != null) scope.launch { accounts.dispatch(ev("discover", "address" to active, "chain_ids" to facts().space)) }
             onActive?.invoke(active)
             restartProposalTimer()
         }
@@ -393,11 +404,11 @@ class MultisigHub(
         }
         fun state(view: JsonObject): JsonElement? = view["actions"]["propose"]
         val cancelled = jo("kind" to "cancelled")
-        proposals.dispatch(ev("draft", "chain_id" to chainId, "proposal" to proposal))
-        // Drawn (its draft up), or why not (its state).
-        val drafted: JsonElement? = proposals.until { view ->
-            if (view["draft"] is JsonObject) return@until jo("kind" to DRAWN)
-            val tagged = state(view) ?: return@until null
+        // Drawn (its draft up), or why not (its state) — read from the views
+        // after the draft was applied, never the last proposal's "done".
+        val drafted: JsonElement? = proposals.request(ev("draft", "chain_id" to chainId, "proposal" to proposal)) { view ->
+            if (view["draft"] is JsonObject) return@request jo("kind" to DRAWN)
+            val tagged = state(view) ?: return@request null
             if (tagged.kind == "working") null else tagged
         }
         if (drafted.kind != DRAWN) return drafted
@@ -418,8 +429,9 @@ class MultisigHub(
                 if (drafting.value == chainId) drafting.value = null
             }
         } else {
-            // A cancellation asked from its sheet: signed at once, as [asMember].
-            confirmDraft(asMember)
+            // A cancellation asked from its sheet: signed at once, as [asMember] —
+            // the waits below read only views from after it.
+            proposals.request(ev("confirm_draft", "as_member" to asMember), 30_000) { true }
         }
         // No member here: an outside member's wallet proposes it — its answer settles it.
         val done: JsonElement? = proposals.until { view ->
@@ -514,8 +526,7 @@ class MultisigHub(
 
     /** `wallet_getCallsStatus` for a batch a multisig proposed: the machine's word (its `calls_status`). */
     suspend fun callsStatus(id: String): JsonElement? {
-        proposals.dispatch(ev("calls_status", "id" to id))
-        return proposals.until(15_000) { view -> view["calls_status"][id] }
+        return proposals.request(ev("calls_status", "id" to id), 15_000) { view -> view["calls_status"][id] }
     }
 
     /** Each held request the machine answered: to its site, once. */
@@ -648,6 +659,10 @@ class MultisigHub(
         }
         if (out.isEmpty()) return
         if (writeRows(out)) onRecorded?.invoke()
+        // A rename executed: the record's new name is read from the chain now.
+        for (e in executed) {
+            if (e["action"].kind == "rename") followed?.let { accounts.dispatch(ev("recheck_record", "address" to it)) }
+        }
         // Executed while away: said (M6).
         for (e in executed) {
             val chainId = e["chainId"].int ?: 0
