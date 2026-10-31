@@ -291,7 +291,8 @@ pub fn perform(op: &Op, deps: &Arc<dyn Deps>, rooms: &Arc<dyn Rooms>) -> Perform
             Perform::Blocking(Box::new(move || {
                 match deps.rpc(chain_id, &method, &params, bound) {
                     Ok(RpcReply::Result(result)) => Res::RpcResult { result },
-                    Ok(RpcReply::Error { code, message, .. }) => Res::RpcError { code, message },
+                    // r8-4: the node's data reaches the core (the state probe reads it there).
+                    Ok(RpcReply::Error { code, message, data }) => Res::RpcError { code, message, data },
                     Err(detail) => Res::RpcUnanswered { detail },
                 }
             }))
@@ -693,7 +694,8 @@ mod tests {
             run(fake, &op).0,
             Res::RpcError {
                 code: Some(-32000),
-                message: "execution reverted".to_owned()
+                message: "execution reverted".to_owned(),
+                data: Some(json!("0x08c379a0")),
             }
         );
 

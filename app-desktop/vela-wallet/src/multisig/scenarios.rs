@@ -121,7 +121,7 @@ impl Deps for Shared {
             bound_ms: bound.map(|b| b.as_millis() as u32),
         }) {
             Res::RpcResult { result } => Ok(RpcReply::Result(result)),
-            Res::RpcError { code, message, .. } => Ok(RpcReply::Error { code, message, data: None }),
+            Res::RpcError { code, message, data } => Ok(RpcReply::Error { code, message, data }),
             Res::RpcUnanswered { detail } => Err(detail),
             other => panic!("{other:?}"),
         }
