@@ -329,7 +329,7 @@ fun MultisigProposalSheet(
             } else if (!model.isReady) {
                 MsNote(words.t("proposal.feeNote"))
             }
-            if (item.unsent) {
+            if (item.unsent && !model.outboxSending) {
                 VelaPrimaryButton(
                     text = words.t("proposal.outboxSendAgain"),
                     onClick = { hub.sendProposal(ev("send_again", "chain_id" to chainId, "safe_tx_hash" to item.safeTxHash)) },

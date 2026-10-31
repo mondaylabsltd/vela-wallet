@@ -127,10 +127,17 @@ class MsProposalModel(
             return out
         }
 
+    /** r8-16: this one's outbox entry is being sent now (the core's `sending`): no Send again. */
+    val outboxSending: Boolean
+        get() = view.outbox.entries.firstOrNull { it.key.lowercase().endsWith(hash.lowercase()) }?.value
+            ?.let { it["sending"].bool == true || it["why"].str == "sending" } ?: false
+
     private val previousNonce: String get() = ((item.nonce.toLongOrNull() ?: 1L) - 1).coerceAtLeast(0).toString()
 
     private fun outboxLine(entry: JsonElement): String {
         val seconds = entry["retryAt"].long?.let { ((it - nowMs()) / 1000).coerceAtLeast(0) } ?: 0
+        // r8-16: on its way to the service right now — said so, and no Send again.
+        if (entry["sending"].bool == true || entry["why"].str == "sending") return words.t("proposal.outboxSending")
         return when (entry["why"].str) {
             "busy" -> words.t("proposal.outboxBusy", "seconds" to seconds.toString())
             "away", "unreachable" -> words.t("proposal.outboxAway", "seconds" to seconds.toString())

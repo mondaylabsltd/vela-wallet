@@ -36,6 +36,8 @@ class MultisigWords(
     private val networkName: (Int) -> String? = { null },
     /** A network's coin symbol. */
     private val nativeSymbol: (Int) -> String? = { null },
+    /** r8-2: the core's facts of a token (`tokens` in the proposals view): symbol and decimals, `null` decimals unknown. */
+    private val tokenFacts: (Int, String) -> JsonElement? = { _, _ -> null },
 ) {
     fun t(key: String, vararg vars: Pair<String, String>): String =
         if (vars.isEmpty()) strings.t("home.multisig.$key") else strings.t("home.multisig.$key", vars.toMap())
@@ -119,8 +121,17 @@ class MultisigWords(
         if (action.isNullish) return t("action.unsupported")
         return when (action.kind) {
             "transfer" -> {
-                val info = token ?: if (action["token"].str == null) symbol(chainId) to 18 else "" to 18
-                t("action.send", "amount" to MsRules.formatUnits(action["amount"].str ?: "0", info.second), "symbol" to info.first).trim()
+                val raw = action["amount"].str ?: "0"
+                val address = action["token"].str
+                if (address == null) return t("action.send", "amount" to MsRules.formatUnits(raw, 18), "symbol" to symbol(chainId)).trim()
+                // r8-2: a token's amount is worded with ITS decimals — the core's
+                // facts, else the caller's — and never with 18 assumed: unknown
+                // decimals say the base units and that they are unknown.
+                val facts = tokenFacts(chainId, address)
+                val decimals = facts?.get("decimals").int ?: token?.second?.takeIf { facts == null }
+                val sym = facts?.get("symbol").str?.takeIf { it.isNotBlank() } ?: token?.first?.takeIf { it.isNotBlank() } ?: short(address)
+                if (decimals == null) t("action.send", "amount" to t("review.reading.decimalsUnknown", "raw" to raw), "symbol" to sym).trim()
+                else t("action.send", "amount" to MsRules.formatUnits(raw, decimals), "symbol" to sym).trim()
             }
             "batch" -> {
                 val calls = action["calls"].arr

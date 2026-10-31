@@ -846,7 +846,15 @@ class AppContainer(private val app: Application) {
             // The chains a page may switch to are the space in front's
             // networks, live (spec 105): a switch of space is a change of them.
             follow.launch {
-                spaceNetworks.collect { view -> controller.networksChanged(view.networks.map { it.chain_id.toInt() }) }
+                // r8-21: with a multisig in front, its own networks of this
+                // space come first — a fact the browser machine's default
+                // site network reads (the core's rule: Ethereum only when the
+                // space has it, else the first of these), never a choice here.
+                kotlinx.coroutines.flow.combine(spaceNetworks, multisig.accountsView) { view, ms -> view to ms }.collect { (view, ms) ->
+                    val space = view.networks.map { it.chain_id.toInt() }
+                    val own = ms.activeRow?.account?.chainIds.orEmpty().filter { it in space }
+                    controller.networksChanged(own + space.filter { it !in own })
+                }
             }
             // Spec 091: Settings' debug mode, live — revealed, switched, or
             // hidden again by an erase, it is the preferences' to store and

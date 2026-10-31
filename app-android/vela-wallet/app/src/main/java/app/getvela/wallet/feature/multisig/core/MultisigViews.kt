@@ -494,6 +494,8 @@ data class MsProposalsView(
     val timelines: Map<String, List<JsonElement>> = emptyMap(),
     val dapp: Map<String, JsonElement> = emptyMap(),
     val callsStatus: Map<String, JsonElement> = emptyMap(),
+    /** r8-2: the token facts the core read, per `chainId:tokenLowercase` (symbol, decimals — null when unknown). */
+    val tokens: Map<String, JsonElement> = emptyMap(),
     val linked: MsLinkedView? = null,
     val signers: Map<String, MsSigners> = emptyMap(),
     val frozen: Map<String, JsonElement> = emptyMap(),
@@ -568,6 +570,7 @@ data class MsProposalsView(
             timelines = e["timelines"].obj.mapValues { it.value.arr },
             dapp = e["dapp"].obj,
             callsStatus = e["calls_status"].obj,
+            tokens = e["tokens"].obj,
             linked = e["linked"]?.let(MsLinkedView::of),
             signers = e["signers"].obj.mapValues { MsSigners.of(it.value) },
             frozen = e["frozen"].obj,
