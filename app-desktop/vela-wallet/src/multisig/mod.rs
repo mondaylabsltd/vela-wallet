@@ -11,6 +11,7 @@
 pub mod activity;
 #[cfg(feature = "dev-fixtures")]
 pub mod dev_script;
+pub mod dapp;
 pub mod findings;
 pub mod host;
 pub mod live;

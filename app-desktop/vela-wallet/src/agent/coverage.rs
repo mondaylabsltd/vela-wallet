@@ -456,6 +456,9 @@ const EVENTS: &[(&str, Place)] = &[
         "sign_request::Event::RejectTapped",
         Intent("reject_dapp_request"),
     ),
+    // AUDIT M5: a site's request to a multisig, left or told — the site's.
+    ("ms_proposals::Event::DappLeave", NotOne(DAPP)),
+    ("ms_proposals::Event::DappSettled", NotOne(DAPP)),
     ("login::Event::SignIn", Later(ONBOARD)),
     ("login::Event::Start", Later(ONBOARD)),
     (
