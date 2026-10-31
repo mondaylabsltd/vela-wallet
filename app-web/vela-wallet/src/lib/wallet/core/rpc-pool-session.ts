@@ -24,6 +24,8 @@ export function createRpcPoolSession(options: RpcPoolSessionOptions): RpcPoolSes
 			execute: (effect) => executor.execute(effect),
 			toFailure: (effect, error) => executor.toFailure(effect, error),
 			onError: options.onError
-		}
+		},
+		// The hedge reads `pending_urls`: it comes apart, as it moves.
+		{ skipUnchangedViews: { includeVolatile: true } }
 	);
 }
