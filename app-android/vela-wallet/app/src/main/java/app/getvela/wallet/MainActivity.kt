@@ -43,6 +43,7 @@ import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.onboarding.core.SecurityKeyCeremony
 import app.getvela.wallet.feature.onboarding.gallery.GalleryScreen
 import app.getvela.wallet.navigation.VelaNavHost
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
@@ -175,6 +176,9 @@ class MainActivity : ComponentActivity() {
      *
      *   adb shell am start -n app.getvela.wallet/.MainActivity --ez vela.skipLaunchAnimation true
      */
+    /** Whether this cold start's launch animation is due ([LaunchGate]); `null` until the core has said. */
+    private lateinit var launchDue: MutableStateFlow<Boolean?>
+
     private fun launchAnimationDisabled(): Boolean =
         intent?.getBooleanExtra("vela.skipLaunchAnimation", false) == true
 
@@ -301,6 +305,22 @@ class MainActivity : ComponentActivity() {
         // Phase 4: how long the launch animation covers the app, for the
         // startup benchmark (`TraceSectionMetric`); ended in its onFinished.
         if (coldStart) android.os.Trace.beginAsyncSection(LAUNCH_ANIMATION_TRACE, 0)
+        // core-perf-1: a cold start plays the launch animation only when the
+        // core's rule says it is due (once a week, the web's and the
+        // desktop's rule) — asked off the main thread, while the splash is
+        // still up (it waits for the answer below). `null`: not known yet.
+        launchDue = MutableStateFlow(if (coldStart) null else false)
+        if (coldStart) {
+            lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                launchDue.value = runCatching {
+                    app.getvela.wallet.core.platform.LaunchGate.decide(
+                        app.getvela.wallet.core.data.VelaStore(applicationContext),
+                        System.currentTimeMillis(),
+                        launchAnimationDisabled(),
+                    )
+                }.getOrDefault(true)
+            }
+        }
         // F0.5, debug builds only (the release binding is a no-op): the
         // harness's endpoints / RPCs / relay from the launch line. When they
         // changed the store, the process starts again to read them.
@@ -408,7 +428,7 @@ class MainActivity : ComponentActivity() {
             .stateIn(lifecycleScope, SharingStarted.Eagerly, null)
 
         splash.setKeepOnScreenCondition {
-            !container.i18nRuntime.state.value.ready || themePreferenceState.value == null
+            !container.i18nRuntime.state.value.ready || themePreferenceState.value == null || launchDue.value == null
         }
         // Issue #407: the splash's mark IS the launch animation's first frame, in
         // the same place, so when the app paints in the splash's appearance it
@@ -498,6 +518,27 @@ class MainActivity : ComponentActivity() {
                 // the animation never competes with i18n/theme readiness.
                 var launching by rememberSaveable { mutableStateOf(coldStart) }
                 var pageAlpha by remember { mutableFloatStateOf(if (coldStart) 0f else 1f) }
+                // The core's once-a-week rule (LaunchGate): known before the
+                // splash goes. Not due: the app shows at once. Due: it plays,
+                // and the week starts now (the web marks it as it starts).
+                val due by launchDue.collectAsStateWithLifecycle()
+                LaunchedEffect(due) {
+                    if (!launching) return@LaunchedEffect
+                    when (due) {
+                        false -> {
+                            launching = false
+                            pageAlpha = 1f
+                            android.os.Trace.endAsyncSection(LAUNCH_ANIMATION_TRACE, 0)
+                        }
+                        true -> lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                            app.getvela.wallet.core.platform.LaunchGate.played(
+                                app.getvela.wallet.core.data.VelaStore(applicationContext),
+                                System.currentTimeMillis(),
+                            )
+                        }
+                        null -> Unit
+                    }
+                }
 
                 CompositionLocalProvider(
                     LocalVelaStrings provides strings,
@@ -542,7 +583,7 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
 
-                            if (launching) {
+                            if (launching && due == true) {
                                 VelaLaunchAnimation(
                                     darkTheme = darkTheme,
                                     reduceMotion = reduceMotion(),
