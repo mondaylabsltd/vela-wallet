@@ -400,4 +400,26 @@ final class MultisigLiveUITests: XCTestCase {
         sleep(2)
         shot(app, "proposal-executed")
     }
+
+    // MARK: - core-ms-2: one press approves and executes
+
+    /// An outside owner proposed and approved (the driver, through the
+    /// mailbox); this device's approval reaches the threshold, so the
+    /// machine offers Approve and execute — one press, one passkey prompt.
+    func test9ApproveAndExecute() throws {
+        guard let link = env["VELA_MS_LINK"] else { throw XCTSkip("VELA_MS_LINK names the proposal") }
+        let app = try launch(link: link)
+        let button = app.buttons["multisig.proposal.approveExecute"].firstMatch
+        XCTAssertTrue(button.waitForExistence(timeout: 60), "no Approve and execute")
+        expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: button)
+        waitForExpectations(timeout: 60)
+        sleep(2)
+        shot(app, "approve-execute")
+        if !button.isHittable { app.swipeUp() }
+        button.tap()
+        let executed = app.descendants(matching: .any)["multisig.proposal.executed"].firstMatch
+        XCTAssertTrue(executed.waitForExistence(timeout: 180), "never executed")
+        sleep(2)
+        shot(app, "approve-executed")
+    }
 }

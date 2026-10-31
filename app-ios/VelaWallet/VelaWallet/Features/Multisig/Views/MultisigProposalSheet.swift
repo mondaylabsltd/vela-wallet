@@ -593,8 +593,11 @@ struct MultisigProposalSheet: View {
         hub.sendProposal(["type": "refresh", "fresh": false])
     }
 
+    /// Each executor's look, asked whenever the core read what it does —
+    /// not only once ready (the web's `looked`): the one-press
+    /// Approve and execute is offered only on a fresh look (core-ms-2).
     private func askPreviews(force: Bool = false) {
-        guard let item, item.status == "ready" else { return }
+        guard let item, item.status != "done", item.action != nil else { return }
         for executor in item.canExecute {
             hub.sendProposal(["type": "preview", "chain_id": chainId, "safe_tx_hash": item.safeTxHash, "executor": executor])
         }
