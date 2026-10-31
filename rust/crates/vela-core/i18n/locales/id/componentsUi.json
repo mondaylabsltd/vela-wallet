@@ -565,7 +565,28 @@
     "appUpdate": {
       "title": "Pembaruan tersedia",
       "install": "Instal",
-      "later": "Nanti"
+      "later": "Nanti",
+      "refused": {
+        "noKey": "Build ini tidak dapat memeriksa tanda tangan pembaruan, jadi tidak akan menginstalnya. Unduh versi terbaru dari situs web Vela.",
+        "unreadable": "Detail pembaruan tidak dapat dibaca, jadi tidak ada yang diinstal. Aplikasi Anda tidak berubah.",
+        "badSignature": "Pembaruan ini tidak ditandatangani oleh Vela, jadi tidak diinstal. Aplikasi Anda tidak berubah.",
+        "replayed": "Pembaruan ini lebih lama dari yang sudah pernah dilihat perangkat ini, jadi tidak diinstal. Aplikasi Anda tidak berubah.",
+        "notNewer": "Pembaruan ini tidak lebih baru dari versi Anda, jadi tidak ada yang perlu diinstal.",
+        "noArtifact": "Pembaruan ini tidak punya unduhan untuk komputer ini, jadi tidak ada yang diinstal.",
+        "insecureUrl": "Tautan unduhan pembaruan tidak aman, jadi tidak digunakan. Aplikasi Anda tidak berubah.",
+        "artifactMismatch": "Unduhan tidak cocok dengan rilis yang ditandatangani, jadi tidak diinstal. Coba lagi.",
+        "unreachable": "Unduhan tidak selesai. Periksa koneksi Anda dan coba lagi.",
+        "notInstalled": "Salinan ini bukan aplikasi yang terinstal, jadi tidak dapat memperbarui dirinya sendiri.",
+        "signatureMismatch": "Tanda tangan kode aplikasi baru tidak cocok dengan aplikasi ini, jadi tidak diinstal. Aplikasi Anda tidak berubah.",
+        "versionMismatch": "Aplikasi yang diunduh bukan versi yang ditandatangani, jadi tidak diinstal. Aplikasi Anda tidak berubah.",
+        "installFailed": "Sistem tidak dapat menginstal pembaruan. Aplikasi ini tidak berubah. Coba lagi."
+      }
+    },
+    "multisigNotify": {
+      "approvalNeeded": "Perlu persetujuanmu",
+      "approvalCounted": "Persetujuan dihitung: {{approved}} dari {{threshold}}",
+      "readyToExecute": "Siap dieksekusi",
+      "executed": "Dieksekusi"
     },
     "dropOverlay": {
       "title": "Letakkan alamat, tautan pembayaran, atau gambar QR"

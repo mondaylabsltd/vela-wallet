@@ -267,6 +267,16 @@ class ProposalsHost {
 		this.send({ type: 'confirm_draft', as_member: as });
 	}
 
+	/**
+	 * core-ms-2: propose the draft and, its proposer's approval making it
+	 * ready (`draft.executeNow`), execute it in the same press — the
+	 * machine's `propose_execute` (`execute:<hash>` working from the moment
+	 * it is proposed).
+	 */
+	proposeExecute(as: string | null): void {
+		this.send({ type: 'propose_execute', as_member: as });
+	}
+
 	/** The person withdrew the proposal on its review: nothing is signed or sent. */
 	withdrawDraft(): void {
 		this.reviewing = null;

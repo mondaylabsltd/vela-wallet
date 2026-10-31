@@ -17,6 +17,13 @@ members = [
   "crates/vela-agent",
   "vendor/clientmcp-client",
 ]
+# PeerConnect's protocol crate, vendored (see its manifest): the multisig's
+# outside-owner rooms on the phones (vela-core-uniffi `peer_bridge.rs`). It is
+# a path dependency, NOT a member: its upstream tests need dev-dependencies the
+# copy leaves out, and its source stays byte for byte upstream's — so the
+# workspace's test, clippy and fmt gates don't run over it. It is tested in
+# the PeerConnect repository and through the desktop's and Android's rooms.
+exclude = ["vendor/peerconnect"]
 default-members = [
   "crates/vela-core",
   "crates/vela-core-uniffi",

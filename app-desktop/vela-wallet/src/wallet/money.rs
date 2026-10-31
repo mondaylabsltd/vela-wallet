@@ -406,8 +406,13 @@ impl SendHost {
         self.submits.running()
     }
 
-    pub fn open(
+    /// Open the send journey from `account` — or from the multisig shown
+    /// when there is one (AUDIT
+    /// M2): the journey reads ITS holdings and its confirm proposes — the
+    /// members approve it — instead of sending (`ProposeSafeTx`).
+    pub fn open_as(
         account: Account,
+        multisig: Option<crate::multisig::shown::ShownAccount>,
         params: SendOpenParams,
         display: SendDisplayContext,
         window_handle: WindowHandle,
@@ -511,11 +516,22 @@ impl SendHost {
 
         host.dispatch(
             SendEvent::Open {
-                account: Some(SendAccountRef {
-                    id: account.id.clone(),
-                    address: account.address.clone(),
-                    name: (!account.name.is_empty()).then(|| account.name.clone()),
-                    multisig: None,
+                account: Some(match &multisig {
+                    Some(shown) => SendAccountRef {
+                        id: account.id.clone(),
+                        address: shown.address.clone(),
+                        name: shown.name.clone(),
+                        multisig: Some(vela_core::app::send::SendMultisigRef {
+                            threshold: u32::try_from(shown.threshold).unwrap_or(u32::MAX),
+                            owners: u32::try_from(shown.owners).unwrap_or(u32::MAX),
+                        }),
+                    },
+                    None => SendAccountRef {
+                        id: account.id.clone(),
+                        address: account.address.clone(),
+                        name: (!account.name.is_empty()).then(|| account.name.clone()),
+                        multisig: None,
+                    },
                 }),
                 params,
                 display,
@@ -1048,6 +1064,47 @@ impl SendHost {
                 if self.answer_tokens(id, cx) {
                     return;
                 }
+            }
+            // A multisig's confirm (AUDIT M2): the reviewed transfers,
+            // proposed through the proposals machine — its review first, then
+            // one passkey of a member here; nothing is sent until the
+            // members agree (docs/multisig-vault-design.md §5).
+            SendOperation::ProposeSafeTx {
+                chain_id,
+                multisig,
+                transfers,
+            } => {
+                let transfers: Vec<vela_core::multisig::Transfer> = transfers
+                    .iter()
+                    .map(|t| vela_core::multisig::Transfer {
+                        token: t.token.clone(),
+                        to: t.to.clone(),
+                        amount: t.amount.clone(),
+                    })
+                    .collect();
+                let host = crate::multisig::host::host(cx);
+                let (chain_id, multisig) = (u64::from(*chain_id), multisig.clone());
+                let answer = host.update(cx, |host, cx| {
+                    host.propose_for_send(chain_id, &multisig, transfers, cx)
+                });
+                cx.spawn(async move |this, cx| {
+                    use crate::multisig::host::ProposeEnd;
+                    let result = match answer.await {
+                        Ok(ProposeEnd::Proposed { safe_tx_hash }) => {
+                            SendShellResult::Proposed { safe_tx_hash }
+                        }
+                        Ok(ProposeEnd::Failed { cancelled, reason }) => {
+                            SendShellResult::ProposeFailed { cancelled, reason }
+                        }
+                        Err(_) => SendShellResult::ProposeFailed {
+                            cancelled: true,
+                            reason: None,
+                        },
+                    };
+                    this.update(cx, |host, cx| host.resolve_send(id, result, cx)).ok();
+                })
+                .detach();
+                return;
             }
             SendOperation::ShowAlert { kind } => {
                 self.alert = Some(kind.clone());

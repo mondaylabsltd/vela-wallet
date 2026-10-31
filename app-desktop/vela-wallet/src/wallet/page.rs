@@ -46,6 +46,18 @@ use crate::ui::Accessible as _;
 /// (078 S-03 and round 3) — kept beside this file rather than in it.
 mod agent;
 mod feedback;
+/// Multisig accounts on this page (AUDIT M1–M6).
+pub(crate) mod multisig;
+/// The invite sheet (AUDIT M1).
+mod multisig_sheets;
+/// Multisig notifications: the switch, the in-app line, a click's way in (M6).
+pub(crate) mod multisig_notify;
+/// The create sheet (AUDIT M1).
+mod multisig_create;
+/// The add sheet: an address, an invite, a Safe{Wallet} export (AUDIT M1).
+mod multisig_add;
+/// Where a multisig link opened here stands (AUDIT M1).
+mod multisig_links;
 mod palette;
 use feedback::FeedbackDraft;
 
@@ -157,6 +169,9 @@ pub enum PanelId {
     /// Spec 099 FR-014 — the shown tab's layers: its page, whether the wallet
     /// is offered to it, and every request it made with how it ended.
     BrowserStatus,
+    /// A multisig transaction's sheet (AUDIT M2): its one review beside the
+    /// home that lists it.
+    Multisig,
 }
 
 /// What the contacts header row adds on top so its search field, buttons and
@@ -853,6 +868,8 @@ pub struct WalletPage {
     add_unverified_open: bool,
     /// N-D2: the command palette (⌘K / Ctrl+K), while it is open.
     palette: Option<palette::Palette>,
+    /// The multisig surfaces' state (AUDIT M1–M6).
+    pub(crate) multisig: multisig::MultisigUi,
     palette_focus: gpui::FocusHandle,
     /// Spec 092: the list of networks the wallet cannot reach, which the
     /// hero's status line opens while any is.
@@ -1521,6 +1538,11 @@ impl WalletPage {
         }
         let mut page = Self::with_section(section, false, window, cx);
         page.identity = Some(identity);
+        // The multisig machines' screen asks reach this page (AUDIT M1–M6).
+        page.multisig_observe(cx);
+        // `VELA_MULTISIG_SCRIPT` (developer builds): the live proof's driver.
+        #[cfg(feature = "dev-fixtures")]
+        crate::multisig::dev_script::start(cx);
         // `VELA_DROP_FILE=<path>` (developer builds): that file dropped on
         // the window once it is up — the `VELA_SCAN_FILE` seam, for the same
         // reason: a drag from the Finder is a gesture no headless pass makes.
@@ -1542,6 +1564,7 @@ impl WalletPage {
         if let Some(query) = crate::dev_env::var!("VELA_PALETTE") {
             page.palette = Some(palette::Palette { query, selected: 0 });
         }
+        page.pin_multisig_sheet(cx);
         // Money in flight outlives every screen: the tracker runs from the
         // moment somebody is signed in, not from the moment a send opens.
         crate::executor::tracker::start(cx);
@@ -1775,6 +1798,10 @@ impl WalletPage {
                     cx,
                 );
                 crate::executor::activity_feed::focus_tick(cx);
+                // The multisig records and the list shown, read now (§1.4).
+                if let Some(host) = crate::multisig::host::booted(cx) {
+                    host.update(cx, |host, cx| host.shown_again(cx));
+                }
                 // A reconcile sweep, not a throttled poll: coming back is
                 // exactly when a submission somebody walked away from should
                 // be settled.
@@ -1880,6 +1907,7 @@ impl WalletPage {
             balance_detail_open: false,
             add_unverified_open: false,
             palette: None,
+            multisig: multisig::MultisigUi::default(),
             palette_focus: cx.focus_handle(),
             unreachable_open: false,
             refresh_hold: None,
@@ -3947,6 +3975,9 @@ impl WalletPage {
     /// Escape: the dialog on top goes, and only that one — the same order
     /// `render` stacks them in, read from the top. False when none was open.
     fn dismiss_top_dialog(&mut self, cx: &mut Context<Self>) -> bool {
+        if self.multisig_escape(cx) {
+            return true;
+        }
         if let Some(pending) = self.agent_pending(cx) {
             crate::agent::answer(pending.id, false, cx);
         } else if self.palette.is_some() {
@@ -3982,6 +4013,9 @@ impl WalletPage {
             self.close_settings_dialog(cx);
         } else if self.unreachable_open {
             self.close_unreachable(cx);
+        } else if self.multisig_settings_escape(cx) {
+            // AUDIT M1/M3: what Settings' multisig block has open — on the
+            // page itself, so under every dialog.
         } else {
             return false;
         }
@@ -4552,6 +4586,11 @@ impl WalletPage {
                         div()
                             .max_w(px(WALLET_ROW_MEASURE))
                             .child(pills)
+                            .children(if self.identity.is_some() {
+                                self.multisig_waiting_group(theme, cx)
+                            } else {
+                                None
+                            })
                             .child({
                                 // Both halves open the activity, as the whole
                                 // row did; taken apart so a screen reader meets
@@ -5146,6 +5185,8 @@ impl WalletPage {
             || self.palette.is_some()
             || self.feedback.viewer_open()
             || session::view(cx).sign_out.is_some()
+            // AUDIT M1–M6: a multisig's question, draft, session or sheet.
+            || self.multisig_layer_up(cx)
             || self.signing_host.as_ref().is_some_and(|host| {
                 let channel = host.read(cx).trusted_signer();
                 channel.waiting() || channel.ended().is_some()
@@ -7085,7 +7126,11 @@ impl WalletPage {
         });
         let display = self.send_display(cx);
         let window_handle = self.window_handle;
-        let host = cx.new(|cx| SendHost::open(account, params, display, window_handle, cx));
+        // AUDIT M2: a multisig shown sends as itself — its confirm proposes.
+        let multisig = crate::multisig::shown::current(cx);
+        let host = cx.new(|cx| {
+            SendHost::open_as(account, multisig, params, display, window_handle, cx)
+        });
         // A new send replaces one parked under a report.
         self.send_parked = false;
         cx.observe(&host, |page, _, cx| {
@@ -9941,7 +9986,7 @@ impl WalletPage {
         }
 
         let body = match self.settings_page {
-            SettingsPage::Account => self.settings_account(theme, cx),
+            SettingsPage::Account => self.settings_account(theme, window, cx),
             SettingsPage::Appearance => self.settings_appearance(theme, cx),
             SettingsPage::Localization => self.settings_localization(theme, cx),
             SettingsPage::Networks => self.settings_networks(theme, window, cx),
@@ -10092,6 +10137,7 @@ impl WalletPage {
         &mut self,
         theme: &Theme,
         session: &vela_core::app::session::SessionView,
+        window: &Window,
         cx: &mut Context<Self>,
     ) -> Div {
         self.ensure_backup_check(cx);
@@ -10112,6 +10158,7 @@ impl WalletPage {
                 erase_title,
                 erase_subtitle,
                 erase_confirm,
+                window,
                 cx,
             ))
     }
@@ -10193,8 +10240,10 @@ impl WalletPage {
         let cancel_label = self.strings.sign_out_cancel.clone();
 
         let mut list = div().flex().flex_col();
+        // A multisig shown (AUDIT M1): no Vela account is the one in front.
+        let multisig_shown = self.shown_multisig(cx).is_some();
         for (row, total) in session.accounts.iter().zip(row_totals) {
-            let active = row.index == session.active_index;
+            let active = row.index == session.active_index && !multisig_shown;
             // This account's own total, when the core has one for it (in the
             // chosen currency). A row with no cached figure says nothing
             // rather than $0 — the hero's invariant ② applies to every
@@ -10283,7 +10332,12 @@ impl WalletPage {
                 pick = pick.cursor_pointer().on_click(cx.listener({
                     let wallet = wallet.clone();
                     move |this, _, _, cx| {
-                        if !active {
+                        // A multisig was shown: the Vela account comes back
+                        // in front (the accounts machine's `activate`).
+                        if multisig_shown {
+                            this.ms_show_account(cx);
+                        }
+                        if !active && !wallet.eq_ignore_ascii_case(&session::view(cx).address) {
                             // Through the intents, the road an agent's takes too.
                             crate::agent::invoke_person(
                                 Action::SwitchAccount {
@@ -10411,13 +10465,16 @@ impl WalletPage {
                     .child(crate::ui::prose(summary)),
             )
             .child(list)
+            // AUDIT M1: the multisigs on this device, and the two ways to
+            // add one (the web switcher's "Multisig accounts").
+            .child(self.multisig_switcher_section(theme, in_dialog, cx))
             // Onboarding over this wallet (spec 072): the root shows it while
             // the session says an account is being added, and a new account
             // established — or "back" — returns here.
             .child(self.account_buttons(theme, true, cx))
     }
 
-    fn settings_account(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
+    fn settings_account(&mut self, theme: &Theme, window: &Window, cx: &mut Context<Self>) -> Div {
         let s = &self.settings;
         let summary = settings_fixtures::accounts_summary(s, &self.loc);
         let sign_out = s.sign_out_button.clone();
@@ -10432,7 +10489,7 @@ impl WalletPage {
         // strangers' under it.
         let session = session::view(cx);
         if !session.accounts.is_empty() {
-            return self.settings_account_live(theme, &session, cx);
+            return self.settings_account_live(theme, &session, window, cx);
         }
 
         let mut list = div().flex().flex_col();
@@ -11850,10 +11907,15 @@ impl WalletPage {
         erase_title: gpui::SharedString,
         erase_subtitle: gpui::SharedString,
         erase_confirm: gpui::SharedString,
+        window: &Window,
         cx: &mut Context<Self>,
     ) -> Div {
-        let venue = self.venue_block(theme, cx);
-        let keys = self.keys_block(theme, cx);
+        // AUDIT M1: a multisig shown has its own part here, in place of the
+        // Vela account's keys and signing venue (the web's `accountKeys`).
+        let (venue, keys) = match self.multisig_settings_block(theme, window, cx) {
+            Some(block) => (None, block),
+            None => (self.venue_block(theme, cx), self.keys_block(theme, cx)),
+        };
         div()
             .flex()
             .flex_col()
@@ -12047,6 +12109,7 @@ impl WalletPage {
             .child(form_row(theme, scale_label, scale_control))
             .child(form_row(theme, theme_label, theme_control))
             .children(self.menu_bar_row(theme, cx))
+            .children(self.ms_notify_row(theme, cx))
     }
 
     /// N-D3: the menu-bar extra (Windows: the notification-area icon), off
@@ -17309,9 +17372,10 @@ impl WalletPage {
 
     /// What the browser machine decided, acted on once.
     fn browser_host_changed(&mut self, host: gpui::Entity<BrowserHost>, cx: &mut Context<Self>) {
-        let (orders, consent) = host.update(cx, |host, _| {
+        let (orders, calls, consent) = host.update(cx, |host, _| {
             (
                 host.take_orders(),
+                host.take_multisig_calls(),
                 host.view
                     .consent
                     .as_ref()
@@ -17328,7 +17392,12 @@ impl WalletPage {
         for order in orders {
             match order {
                 SigningOrder::Forward(forwarded) => self.open_dapp_signing(forwarded, cx),
-                SigningOrder::Cancel { id, .. } => self.cancel_dapp_signing(&id, cx),
+                // AUDIT M5: a multisig's request is left with its machine.
+                SigningOrder::Cancel { tab, id } => {
+                    if !self.ms_dapp_cancel(&tab, &id, cx) {
+                        self.cancel_dapp_signing(&id, cx);
+                    }
+                }
                 // Spec 100: the add-network sheet is `network_admin`'s; this
                 // page only carries the request there and the ending back.
                 SigningOrder::AddNetwork {
@@ -17358,6 +17427,8 @@ impl WalletPage {
                 }
             }
         }
+        // AUDIT M5: a multisig batch's status, read by its machine.
+        self.ms_dapp_calls(calls, cx);
         cx.notify();
     }
 
@@ -17461,6 +17532,11 @@ impl WalletPage {
         // again" — so the line moves on.
         if self.signing_busy(cx) {
             self.answer_dapp_signing(&forwarded.tab, forwarded.id, busy_answer(), None, cx);
+            return;
+        }
+        // AUDIT M5: granted a multisig here, the site's request is its
+        // proposals machine's (a proposal, held until it executes).
+        if self.ms_dapp_take(&forwarded, cx) {
             return;
         }
         let Some(account) = money::account_by_address(&forwarded.granted_address) else {
@@ -18304,6 +18380,7 @@ impl WalletPage {
             // and the site's network, which can be changed right here.
             .child(row_divider(theme))
             .child(self.account_row(theme, consent.address.as_deref(), cx))
+            .children(self.ms_dapp_connect_note(theme, consent.address.as_deref(), cx))
             .child(row_divider(theme))
             .child(self.site_network_row(theme, consent.chain_id, Some(consent.origin.clone()), cx))
             .child(row_divider(theme))
@@ -20224,6 +20301,7 @@ impl WalletPage {
         // the web's page does each time it meets an account (078 S-02).
         if !(self.section == Section::Settings && self.settings_page == SettingsPage::Account) {
             self.backup_for = None;
+            self.multisig_settings_left();
         }
         columns = match self.section {
             Section::Wallet => {
@@ -20321,6 +20399,12 @@ impl WalletPage {
                 columns.child(self.panel_scaffold(theme, title, body, cx))
             }
             PanelId::BrowserStatus => columns,
+            PanelId::Multisig => match self.multisig_panel(theme, cx) {
+                Some((title, body, foot)) => {
+                    columns.child(self.panel_scaffold_foot(theme, title, None, false, body, foot, cx))
+                }
+                None => columns,
+            },
             PanelId::Signing if self.dapp_landing.is_some() && self.no_signing_host() => {
                 let body = self.dapp_receipt_body(theme, window, cx);
                 let title = self.signing.panel_title.clone();
@@ -21589,9 +21673,29 @@ impl WalletPage {
                 self.show_scan_notice(ScanNotice::Unusable, cx);
                 true
             }
+            // AUDIT §6.2: this app claims a proposal or invite link — the
+            // accounts machine's one link flow reads it (the core's rebuilt
+            // link, never the pasted text) and says where it stands.
+            Inbound::Multisig {
+                kind: crate::inbound::MultisigKind::Proposal | crate::inbound::MultisigKind::Invite,
+                url,
+            } => {
+                let hash = url.split_once('#').map_or(url.as_str(), |(_, h)| h).to_owned();
+                let host = self.ms_host(cx);
+                host.update(cx, |host, cx| {
+                    host.accounts(
+                        vela_core::app::multisig_accounts::Event::OpenLink {
+                            hash,
+                            take_kept: false,
+                        },
+                        cx,
+                    );
+                });
+                true
+            }
+            // A connect link is an outside owner's: it opens where their
+            // wallet is — a browser — never as this wallet.
             Inbound::Multisig { url, .. } => {
-                // Multisig runs on the web wallet until it lands here; the
-                // link the CORE rebuilt opens there.
                 crate::executor::opener::open(&url, cx);
                 true
             }
@@ -21634,6 +21738,14 @@ impl WalletPage {
         cx: &mut Context<Self>,
     ) {
         if self.identity.is_none() || paths.is_empty() {
+            return;
+        }
+        // A Safe{Wallet} export dropped on the open add sheet is imported.
+        let export = paths
+            .iter()
+            .find(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("json")));
+        if let Some(json) = export.filter(|_| self.multisig.add.is_some()) {
+            self.ms_import_file(json.clone(), cx);
             return;
         }
         cx.spawn_in(window, async move |page, cx| {
@@ -22541,6 +22653,8 @@ impl Render for WalletPage {
         }
         self.watch_money(cx);
         self.watch_send_display(cx);
+        #[cfg(feature = "dev-fixtures")]
+        self.ms_script_asks(cx);
         // An identicon somewhere was pressed (078 H-02): open the viewer on
         // its address. The artwork raised the request; the viewer lives here.
         if let Some(address) = cx
@@ -22693,6 +22807,7 @@ impl Render for WalletPage {
         let unreachable = self.unreachable_dialog(&theme, window, cx);
         let agent_bar = self.agent_bar(&theme, cx);
         let agent_approval = self.agent_approval_dialog(&theme, window, cx);
+        let multisig_layer = self.multisig_layer(&theme, window, cx);
         let mut root = div()
             .size_full()
             .font_family(theme::font_ui())
@@ -22717,6 +22832,10 @@ impl Render for WalletPage {
             root = root.child(toast);
         }
         if let Some(toast) = self.debug_notice_toast(&theme) {
+            root = root.child(toast);
+        }
+        // A multisig notification the platform could not show (M6).
+        if let Some(toast) = self.ms_notify_toast(&theme, cx) {
             root = root.child(toast);
         }
         // A report that ended while the person was elsewhere (078 round 3).
@@ -22779,6 +22898,11 @@ impl Render for WalletPage {
         }
         if let Some(account_switcher) = account_switcher {
             root = root.child(account_switcher);
+        }
+        // A multisig's question, its draft or its session: over the
+        // switcher, as the web closes that first (r4a-24).
+        if let Some(layer) = multisig_layer {
+            root = root.child(layer);
         }
         // Over everything, the switcher included: its rows' artwork opens it,
         // and a viewer under the surface that opened it is a click that did
@@ -23413,9 +23537,11 @@ mod tests {
         let agent = include_str!("page/agent.rs");
         // And the command palette from its own (N-D2).
         let palette = include_str!("page/palette.rs");
+        // And the multisig layer from its own (AUDIT M1–M6).
+        let multisig = include_str!("page/multisig.rs");
         let body_of = |name: &str| -> &str {
             let signature = ["fn ", name, "("].concat();
-            let (file, start) = [source, agent, palette]
+            let (file, start) = [source, agent, palette, multisig]
                 .into_iter()
                 .find_map(|file| file.find(&signature).map(|start| (file, start)))
                 .unwrap_or_else(|| unreachable!("fn {name}"));
@@ -23444,6 +23570,7 @@ mod tests {
             ("trusted_signer_prompt", "trusted_signer()"),
             ("agent_approval_dialog", "self.agent_pending(cx)"),
             ("palette_dialog", "self.palette"),
+            ("multisig_layer", "self.multisig_layer_up(cx)"),
         ];
         for (dialog, state) in raised_by {
             assert!(

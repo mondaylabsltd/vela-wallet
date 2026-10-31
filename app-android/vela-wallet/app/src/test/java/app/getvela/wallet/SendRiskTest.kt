@@ -207,8 +207,9 @@ class SendRiskTest {
 
     @Test
     fun `a multisig proposal is answered at once, never left to spin`() {
-        // Multisig orchestration is web-only until the core carries it; the
-        // answer is the wire's nearest reason, never silence.
+        // Native multisig M2: the send hands a multisig's transfer to the
+        // proposals machine (`SendPorts.proposeSafeTx`). A shell with none
+        // says so at once — not proposed, nothing signed — never silence.
         val answer = runBlocking {
             executor().perform(
                 SendOperation.ProposeSafeTx(
@@ -219,9 +220,13 @@ class SendRiskTest {
             )
         }
         assertEquals(
-            SendShellResult.ProposeFailed(cancelled = false, reason = app.getvela.wallet.feature.send.core.SendProposeFailure.MailboxDown),
+            SendShellResult.ProposeFailed(cancelled = false, reason = app.getvela.wallet.feature.send.core.SendProposeFailure.NotSupported),
             answer,
         )
-        assertEquals(answer, executor().neutralAnswer(SendOperation.ProposeSafeTx(100, "0x1", emptyList())))
+        // An escaped failure is still answered with the wire's nearest reason.
+        assertEquals(
+            SendShellResult.ProposeFailed(cancelled = false, reason = app.getvela.wallet.feature.send.core.SendProposeFailure.MailboxDown),
+            executor().neutralAnswer(SendOperation.ProposeSafeTx(100, "0x1", emptyList())),
+        )
     }
 }

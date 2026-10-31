@@ -997,10 +997,11 @@ internal fun classifyGet(error: GetCredentialException): PasskeyFailure = when (
  * Matched by TYPE STRING rather than by class: the `androidx.credentials` DOM
  * error classes are final and carry the spec name in `type`, so the string is
  * the stable identity — and it is the same three names the web path branches on.
+ * Read as the property it is, not by reflection: a release build is shrunk
+ * and renamed by R8, and a `getMethod("getType")` that finds nothing there
+ * would quietly turn every refusal into "other".
  */
-private fun domType(domError: Any): String = runCatching {
-    domError.javaClass.getMethod("getType").invoke(domError) as? String
-}.getOrNull() ?: domError.javaClass.simpleName
+private fun domType(domError: androidx.credentials.exceptions.domerrors.DomError): String = domError.type
 
 private const val DOM_INVALID_STATE = "androidx.credentials.TYPE_INVALID_STATE_ERROR"
 private const val DOM_NOT_SUPPORTED = "androidx.credentials.TYPE_NOT_SUPPORTED_ERROR"

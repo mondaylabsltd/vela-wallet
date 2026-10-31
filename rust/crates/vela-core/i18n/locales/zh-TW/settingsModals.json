@@ -129,7 +129,9 @@
     "appearance": {
       "menuBar": "在選單列中顯示",
       "trayIcon": "在系統匣中顯示",
-      "statusItemHint": "總額與快速發送、收款，取自最近一次載入的資料，不會另外連網。"
+      "statusItemHint": "總額與快速發送、收款，取自最近一次載入的資料，不會另外連網。",
+      "multisigNotifications": "多簽通知",
+      "multisigNotificationsHint": "當多簽交易需要你核准、收到一個核准、可以執行或已執行時通知你。Vela 開啟期間每分鐘檢查一次；通知由本裝置發出，不經推播服務。"
     }
   }
 }

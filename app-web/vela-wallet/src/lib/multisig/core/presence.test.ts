@@ -60,16 +60,16 @@ describe('what waits here, said (r4D-7)', () => {
 				)
 			}
 		} as unknown as MultisigMessages;
-		const w = (needsYou: number, ready: number, waitingPayer = 0) => ({
-			needsYou,
-			ready,
-			waitingPayer,
-			first: null
-		});
-		expect(waitingWords(w(1, 1), m)).toBe('1 needs your approval · 1 ready to execute');
-		expect(waitingWords(w(2, 0), m)).toBe('2 need your approval');
-		expect(waitingWords(w(0, 0), m)).toBe('');
-		expect(waitingWords(w(0, 0, 1), m)).toBe('1 waiting for a member who can pay');
+		// Which parts, in which order, is the machine's (`waiting_parts`).
+		const needsYou = (count: number) => ({ kind: 'needsYou' as const, count });
+		const ready = (count: number) => ({ kind: 'ready' as const, count });
+		const waitingPayer = (count: number) => ({ kind: 'waitingPayer' as const, count });
+		expect(waitingWords([needsYou(1), ready(1)], m)).toBe(
+			'1 needs your approval · 1 ready to execute'
+		);
+		expect(waitingWords([needsYou(2)], m)).toBe('2 need your approval');
+		expect(waitingWords([], m)).toBe('');
+		expect(waitingWords([waitingPayer(1)], m)).toBe('1 waiting for a member who can pay');
 	});
 });
 

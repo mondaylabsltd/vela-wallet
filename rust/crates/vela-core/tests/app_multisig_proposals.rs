@@ -1671,3 +1671,163 @@ fn an_executor_funded_after_its_look_executes() {
     execute_landed(&mut world, &mut sut, &account, &hash, &a);
     assert_eq!(world.sent.len(), 1, "{:?}", sut.view().actions);
 }
+
+// -- core-ms-2: "Approve and execute", one press ---------------------------------------------
+
+/// The member whose approval reaches the threshold, whose look says it can
+/// pay, is offered the one press — and it signs ONE operation, its approval
+/// counted as the executor's; the others approve only.
+#[test]
+fn approve_and_execute_is_offered_and_runs_in_one_press() {
+    let (mut world, mut sut, account) = setup(&[0, 1]);
+    let hash = hash_of(&propose(&mut sut, &mut world, transfer("1"), None));
+    let key = format!("100:{}", hash.to_ascii_lowercase());
+    assert!(
+        !sut.view().approve_execute.contains_key(&key),
+        "not before a look says it can pay"
+    );
+    let b = fixture(1).address;
+    let preview = preview_of(&mut sut, &mut world, &hash, &b);
+    assert_eq!(preview["kind"], "priced", "{preview}");
+    assert_eq!(sut.view().approve_execute[&key], vec![b.clone()]);
+    let passkeys = world.passkeys.len();
+    approve_execute_landed(&mut world, &mut sut, &account, &hash, &b);
+    assert_eq!(world.sent.len(), 1, "one user operation");
+    assert_eq!(world.passkeys.len(), passkeys, "no separate approval asked");
+    assert!(matches!(
+        sut.view().actions[&format!("execute:{}", hash.to_ascii_lowercase())],
+        ActionState::Done { .. }
+    ));
+    assert!(!sut
+        .view()
+        .actions
+        .contains_key(&format!("approve:{}", hash.to_ascii_lowercase())));
+    let verdict = sut.view().executions[&key].clone();
+    assert_eq!(verdict["kind"], "executed", "{verdict}");
+    assert!(sut.view().approve_execute.is_empty());
+}
+
+/// r4-11: stopped before any signature (here: it would fail), the approval
+/// is still given and kept; the execution says why it did not run.
+#[test]
+fn approve_and_execute_stopped_before_signing_still_approves() {
+    let (mut world, mut sut, account) = setup(&[0, 1]);
+    let hash = hash_of(&propose(&mut sut, &mut world, transfer("1000"), None));
+    world
+        .balances
+        .insert((100, account.address.to_ascii_lowercase()), 5);
+    let b = fixture(1).address;
+    // A look that says it would fail offers no one press.
+    assert_eq!(preview_of(&mut sut, &mut world, &hash, &b)["kind"], "fails");
+    assert!(sut.view().approve_execute.is_empty());
+    run(
+        &mut sut,
+        &mut world,
+        Event::ApproveExecute {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+            executor: b,
+        },
+    );
+    let lower = hash.to_ascii_lowercase();
+    let ActionState::Stopped { preview } = sut.view().actions[&format!("execute:{lower}")].clone()
+    else {
+        panic!("{:?}", sut.view().actions);
+    };
+    assert_eq!(preview["kind"], "fails");
+    assert!(matches!(
+        sut.view().actions[&format!("approve:{lower}")],
+        ActionState::Done { .. }
+    ));
+    assert!(world.sent.is_empty());
+    let item = sut
+        .view()
+        .items
+        .into_iter()
+        .find(|i| i.safe_tx_hash == hash)
+        .unwrap();
+    assert_eq!(item.approved, 2, "the approval was kept");
+}
+
+/// [`execute_landed`] through `ApproveExecute`.
+fn approve_execute_landed(
+    world: &mut World,
+    sut: &mut Sut,
+    account: &MultisigAccount,
+    hash: &str,
+    executor: &str,
+) {
+    let owners = owners_of_setup();
+    let mut after = DeployedSafe::clean(&owners.iter().map(String::as_str).collect::<Vec<_>>(), 2);
+    after.nonce = 1;
+    world.on_send = Some(Landing {
+        chain: 100,
+        safe: account.address.clone(),
+        after,
+        safe_tx_hash: hash.to_owned(),
+        tx_hash: format!("0x{}", "cd".repeat(32)),
+        user_op_hash: format!("0x{}", "ab".repeat(32)),
+    });
+    run(
+        sut,
+        world,
+        Event::ApproveExecute {
+            chain_id: 100,
+            safe_tx_hash: hash.to_owned(),
+            executor: executor.to_owned(),
+        },
+    );
+}
+
+// -- core-ms-2: the header chip and the home's line -------------------------------------------
+
+/// The rule chip is the rule in force where it is used (the original before
+/// it is deployed, its members now after); the home's line says what waits,
+/// in order, and opens the first; `set_up` once it is deployed somewhere.
+#[test]
+fn the_rule_chip_and_the_waiting_line_are_the_machines() {
+    use vela_core::app::multisig_members::{MemberRule, RuleChip};
+    use vela_core::app::multisig_presence::{WaitingKind, WaitingPart};
+    let (mut world, mut sut, account) = setup(&[0, 1]);
+    assert_eq!(
+        sut.view().rule_chip,
+        Some(RuleChip::Needs {
+            rule: MemberRule::of(2, 3)
+        })
+    );
+    assert!(!sut.view().set_up);
+    assert_eq!(sut.view().banner, None, "nothing waits");
+    let hash = hash_of(&propose(&mut sut, &mut world, transfer("1"), None));
+    let banner = sut.view().banner.clone().unwrap();
+    assert_eq!(
+        banner.parts,
+        vec![WaitingPart {
+            kind: WaitingKind::NeedsYou,
+            count: 1
+        }]
+    );
+    assert_eq!(
+        banner.first.safe_tx_hash.to_ascii_lowercase(),
+        hash.to_ascii_lowercase()
+    );
+    assert_eq!(
+        sut.view().waiting_parts[&account.address.to_ascii_lowercase()],
+        banner.parts
+    );
+    // Deployed with another member and rule since: its members now.
+    let mut owners = owners_of_setup();
+    owners.push("0x00000000000000000000000000000000000000ee".to_owned());
+    world.deploy(
+        100,
+        &account.address,
+        DeployedSafe::clean(&owners.iter().map(String::as_str).collect::<Vec<_>>(), 3),
+    );
+    run(&mut sut, &mut world, Event::Refresh { fresh: true });
+    assert!(sut.view().set_up);
+    assert_eq!(
+        sut.view().rule_chip,
+        Some(RuleChip::Needs {
+            rule: MemberRule::of(3, 4)
+        })
+    );
+}

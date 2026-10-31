@@ -565,7 +565,28 @@
     "appUpdate": {
       "title": "Aggiornamento disponibile",
       "install": "Installa",
-      "later": "Più tardi"
+      "later": "Più tardi",
+      "refused": {
+        "noKey": "Questa build non può verificare la firma di un aggiornamento, quindi non lo installerà. Scarica la versione più recente dal sito di Vela.",
+        "unreadable": "Non è stato possibile leggere i dati dell'aggiornamento, quindi non è stato installato nulla. La tua app non è cambiata.",
+        "badSignature": "L'aggiornamento non è firmato da Vela, quindi non è stato installato. La tua app non è cambiata.",
+        "replayed": "Questo aggiornamento è più vecchio di uno già visto su questo dispositivo, quindi non è stato installato. La tua app non è cambiata.",
+        "notNewer": "Questo aggiornamento non è più recente della tua versione: non c'è nulla da installare.",
+        "noArtifact": "Questo aggiornamento non ha un download per questo computer, quindi non è stato installato nulla.",
+        "insecureUrl": "Il link di download dell'aggiornamento non è sicuro, quindi non è stato usato. La tua app non è cambiata.",
+        "artifactMismatch": "Il download non corrispondeva alla versione firmata, quindi non è stato installato. Riprova.",
+        "unreachable": "Il download non è terminato. Controlla la connessione e riprova.",
+        "notInstalled": "Questa copia non è un'app installata, quindi non può aggiornarsi da sola.",
+        "signatureMismatch": "La firma del codice della nuova app non corrisponde a quella di questa, quindi non è stata installata. La tua app non è cambiata.",
+        "versionMismatch": "L'app scaricata non è la versione firmata, quindi non è stata installata. La tua app non è cambiata.",
+        "installFailed": "Il sistema non è riuscito a installare l'aggiornamento. Questa app non è cambiata. Riprova."
+      }
+    },
+    "multisigNotify": {
+      "approvalNeeded": "Serve la tua approvazione",
+      "approvalCounted": "Approvazione contata: {{approved}} su {{threshold}}",
+      "readyToExecute": "Pronta da eseguire",
+      "executed": "Eseguita"
     },
     "dropOverlay": {
       "title": "Trascina qui un indirizzo, un link di pagamento o un'immagine QR"

@@ -565,7 +565,28 @@
     "appUpdate": {
       "title": "Güncelleme var",
       "install": "Yükle",
-      "later": "Sonra"
+      "later": "Sonra",
+      "refused": {
+        "noKey": "Bu sürüm bir güncellemenin imzasını denetleyemiyor, bu yüzden yüklemeyecek. En son sürümü Vela web sitesinden indir.",
+        "unreadable": "Güncellemenin bilgileri okunamadı, hiçbir şey yüklenmedi. Uygulaman değişmedi.",
+        "badSignature": "Güncelleme Vela tarafından imzalanmamış, bu yüzden yüklenmedi. Uygulaman değişmedi.",
+        "replayed": "Bu güncelleme, bu cihazın daha önce gördüğünden eski, bu yüzden yüklenmedi. Uygulaman değişmedi.",
+        "notNewer": "Bu güncelleme kullandığın sürümden yeni değil, yüklenecek bir şey yok.",
+        "noArtifact": "Bu güncellemenin bu bilgisayar için bir indirmesi yok, hiçbir şey yüklenmedi.",
+        "insecureUrl": "Güncellemenin indirme bağlantısı güvenli değil, bu yüzden kullanılmadı. Uygulaman değişmedi.",
+        "artifactMismatch": "İndirilen dosya imzalı sürümle eşleşmedi, bu yüzden yüklenmedi. Tekrar dene.",
+        "unreachable": "İndirme tamamlanmadı. Bağlantını kontrol edip tekrar dene.",
+        "notInstalled": "Bu kopya yüklü bir uygulama değil, kendini güncelleyemez.",
+        "signatureMismatch": "Yeni uygulamanın kod imzası bu uygulamanınkiyle eşleşmiyor, bu yüzden yüklenmedi. Uygulaman değişmedi.",
+        "versionMismatch": "İndirilen uygulama imzalı sürüm değil, bu yüzden yüklenmedi. Uygulaman değişmedi.",
+        "installFailed": "Sistem güncellemeyi yükleyemedi. Bu uygulama değişmedi. Tekrar dene."
+      }
+    },
+    "multisigNotify": {
+      "approvalNeeded": "Onayın gerekiyor",
+      "approvalCounted": "Onay sayıldı: {{threshold}} onaydan {{approved}}",
+      "readyToExecute": "Yürütülmeye hazır",
+      "executed": "Yürütüldü"
     },
     "dropOverlay": {
       "title": "Adres, ödeme bağlantısı veya QR görseli bırakın"

@@ -4,6 +4,7 @@ import type { MultisigAddView } from "./MultisigAddView";
 import type { MultisigBackupState } from "./MultisigBackupState";
 import type { MultisigCreateView } from "./MultisigCreateView";
 import type { MultisigImportView } from "./MultisigImportView";
+import type { MultisigInviteView } from "./MultisigInviteView";
 import type { MultisigKindChoice } from "./MultisigKindChoice";
 import type { MultisigLinkStand } from "./MultisigLinkStand";
 import type { MultisigMemberInfo } from "./MultisigMemberInfo";
@@ -36,4 +37,23 @@ member_kinds: { [key in string]: MultisigKindChoice },
  * address — the first that names it, the first that says its kind
  * (`keptMember`). Labels only, never authority.
  */
-known_members: { [key in string]: MultisigMemberInfo }, };
+known_members: { [key in string]: MultisigMemberInfo }, 
+/**
+ * core-ms-2: the invite the add sheet shows (opened from a link, or
+ * waiting for its network since a reload): adding its multisig uses its
+ * networks and keeps what it says of the members — the shell sends
+ * only the person's tap ([`Event::Add`]). Closing its sheet: `drop_link`.
+ */
+invite: MultisigInviteView | null, 
+/**
+ * core-ms-2 (r5reg-19): the networks this device's own transactions were
+ * on, newest first (`vela.transactionHistory`, read on start, on a
+ * reload and when a create sheet opens) — the `recent` hint of
+ * `networks.likely` / `networks.firstDefault`.
+ */
+recent_networks: number[], 
+/**
+ * core-ms-2: the networks the multisigs here were first used on, newest
+ * first — the `used` hint (`networks.lastUsed` of this list).
+ */
+used_networks: number[], };

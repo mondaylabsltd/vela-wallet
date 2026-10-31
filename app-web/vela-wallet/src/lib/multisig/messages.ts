@@ -599,6 +599,8 @@ export interface MultisigMessages {
 		originalNote: string;
 		/** `{{network}}` */
 		currentOn: string;
+		/** core-ms-2: `{{network}}` — its chain did not answer: nothing said of its members there. */
+		unreadableOn: string;
 		sameAsOriginal: string;
 		added: string;
 		removed: string;
@@ -1329,6 +1331,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		originalMembers: '',
 		originalNote: '',
 		currentOn: '',
+		unreadableOn: '',
 		sameAsOriginal: '',
 		added: '',
 		removed: '',

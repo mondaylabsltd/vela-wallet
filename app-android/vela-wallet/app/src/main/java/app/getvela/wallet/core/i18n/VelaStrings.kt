@@ -12,6 +12,15 @@ interface VelaStrings {
     fun t(key: String, vars: Map<String, String>): String
 
     /**
+     * A screen's labels at once, in the order asked, each exactly what
+     * [t] answers for it (with [vars], what `t(key, vars)` answers): the
+     * engine answers them in one crossing (`I18n.t_many`) instead of one per
+     * label.
+     */
+    fun tMany(keys: List<String>, vars: Map<String, String> = emptyMap()): List<String> =
+        if (vars.isEmpty()) keys.map(::t) else keys.map { t(it, vars) }
+
+    /**
      * A PLURAL key: [count] chooses the form — `_one`, `_few`, `_many` or
      * `_other`, by the language's CLDR rule, in the core — and fills
      * `{{count}}`.

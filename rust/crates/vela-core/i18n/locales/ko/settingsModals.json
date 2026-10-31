@@ -129,7 +129,9 @@
     "appearance": {
       "menuBar": "메뉴 막대에 표시",
       "trayIcon": "시스템 트레이에 표시",
-      "statusItemHint": "총액과 빠른 보내기·받기. 마지막으로 불러온 수치를 쓰며 따로 가져오지 않습니다."
+      "statusItemHint": "총액과 빠른 보내기·받기. 마지막으로 불러온 수치를 쓰며 따로 가져오지 않습니다.",
+      "multisigNotifications": "멀티시그 알림",
+      "multisigNotificationsHint": "멀티시그 거래에 내 승인이 필요할 때, 승인을 받았을 때, 실행할 수 있을 때, 실행되었을 때 알려 드립니다. Vela는 열려 있는 동안 1분마다 확인하며, 알림은 푸시 서비스가 아닌 이 기기에서 보냅니다."
     }
   }
 }

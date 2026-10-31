@@ -715,7 +715,7 @@ fn stored_public_key(account_id: &str) -> Option<String> {
 
 /// `symbol()` and `decimals()` of one ERC-20, for a locked request's
 /// unknown token.
-fn token_metadata(chain_id: u32, address: &str) -> Option<SendTokenMeta> {
+pub(crate) fn token_metadata(chain_id: u32, address: &str) -> Option<SendTokenMeta> {
     let call = |data: String| {
         pool::call(
             chain_id,

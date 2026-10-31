@@ -2018,3 +2018,119 @@ fn an_invite_handed_on_is_kept_with_the_multisig() {
     );
     assert_eq!(world.store[INVITE_SHARED_KEY], "[]");
 }
+
+// -- core-ms-2: what the shells decided -------------------------------------------------------
+
+/// The threshold step starts sensible — all of two, else all but one — and
+/// keeps the person's pick for as long as the members are the ones it was
+/// picked for; a kept draft's threshold is the pick again.
+#[test]
+fn the_threshold_starts_sensible_and_keeps_the_persons_pick() {
+    use vela_core::app::multisig_accounts::ThresholdNote;
+    const C: &str = "0x00000000000000000000000000000000000000cc";
+    const D: &str = "0x00000000000000000000000000000000000000dd";
+    let mut world = World::default();
+    world.locals.push(fixture(0));
+    let me = world.locals[0].address.clone();
+    let mut sut = started(&mut world, vec![100]);
+    run(&mut sut, &mut world, Event::NewDraft);
+    assert!(sut.view().create.threshold.is_none(), "no members yet");
+    let draft_of = |owners: &[&str], threshold: u64| Event::Draft {
+        owners: owners.iter().map(|o| (*o).to_owned()).collect(),
+        threshold,
+        name: "Quiet Harbor".to_owned(),
+    };
+    run(&mut sut, &mut world, draft_of(&[&me], 1));
+    let t = sut.view().create.threshold.clone().unwrap();
+    assert_eq!((t.value, t.members, t.note), (1, 1, ThresholdNote::Solo));
+    assert!(!t.risky && !t.can_lower && !t.can_raise);
+    run(&mut sut, &mut world, draft_of(&[&me, B], 1));
+    let t = sut.view().create.threshold.clone().unwrap();
+    assert_eq!((t.value, t.note), (2, ThresholdNote::All), "all of two");
+    assert!(t.risky);
+    run(&mut sut, &mut world, draft_of(&[&me, B, C], 1));
+    let t = sut.view().create.threshold.clone().unwrap();
+    assert_eq!(
+        (t.value, t.note),
+        (2, ThresholdNote::Spare { count: 1 }),
+        "all but one"
+    );
+    // The person's pick, clamped to the members.
+    run(&mut sut, &mut world, Event::StepThreshold { up: true });
+    run(&mut sut, &mut world, Event::StepThreshold { up: true });
+    let t = sut.view().create.threshold.clone().unwrap();
+    assert_eq!(
+        (t.value, t.note, t.can_raise),
+        (3, ThresholdNote::All, false)
+    );
+    // The draft's address is the pick's.
+    let address = sut.view().create.draft_address.clone();
+    run(&mut sut, &mut world, draft_of(&[&me, B, C], 3));
+    assert_eq!(sut.view().create.draft_address, address);
+    // Other members: the sensible start again; the same ones back: the pick.
+    run(&mut sut, &mut world, draft_of(&[&me, B, C, D], 3));
+    assert_eq!(sut.view().create.threshold.clone().unwrap().value, 3);
+    for _ in 0..4 {
+        run(&mut sut, &mut world, Event::StepThreshold { up: false });
+    }
+    let t = sut.view().create.threshold.clone().unwrap();
+    assert_eq!(
+        (t.value, t.note, t.can_lower),
+        (1, ThresholdNote::One, false)
+    );
+    assert!(t.risky);
+    run(&mut sut, &mut world, draft_of(&[&me, B, C], 1));
+    assert_eq!(sut.view().create.threshold.clone().unwrap().value, 2);
+    run(&mut sut, &mut world, draft_of(&[&me, B, C, D], 1));
+    assert_eq!(sut.view().create.threshold.clone().unwrap().value, 1);
+    // A kept draft (1 of its 2): its threshold again on a new sheet.
+    let mut kept = draft(&world);
+    kept.threshold = 1;
+    run(&mut sut, &mut world, Event::KeepDraft { draft: kept });
+    run(&mut sut, &mut world, Event::NewDraft);
+    run(&mut sut, &mut world, draft_of(&[&me, B], 1));
+    assert_eq!(sut.view().create.threshold.clone().unwrap().value, 1);
+    // Started over: the sensible start.
+    run(&mut sut, &mut world, Event::DiscardDraft);
+    run(&mut sut, &mut world, Event::NewDraft);
+    run(&mut sut, &mut world, draft_of(&[&me, B], 1));
+    assert_eq!(sut.view().create.threshold.clone().unwrap().value, 2);
+}
+
+/// r5reg-19: where this device's transactions were, newest first, read from
+/// the wallet's history — and the networks the multisigs here were first
+/// used on: the hints the network order is asked with.
+#[test]
+fn the_network_hints_are_the_machines() {
+    use vela_core::app::multisig_accounts::TRANSACTIONS_KEY;
+    let mut world = World::default();
+    world.locals.push(fixture(0));
+    world.store.insert(
+        TRANSACTIONS_KEY.to_owned(),
+        json!([
+            { "chainId": 100, "timestamp": 1 },
+            { "chainId": 8453, "timestamp": 9 },
+            { "chainId": 100, "timestamp": 5 }
+        ])
+        .to_string(),
+    );
+    let g = genesis(&[A], 1, "0x71");
+    let h = genesis(&[A], 1, "0x72");
+    let mut older = stored_row(&g, &[42161, 100], true);
+    older["addedMs"] = json!(1.0);
+    let mut newer = stored_row(&h, &[10], true);
+    newer["addedMs"] = json!(2.0);
+    world
+        .store
+        .insert(keys::ACCOUNTS.to_owned(), json!([older, newer]).to_string());
+    let mut sut = started(&mut world, vec![100, 8453, 10, 42161]);
+    assert_eq!(sut.view().recent_networks, vec![8453, 100]);
+    assert_eq!(sut.view().used_networks, vec![10, 42161]);
+    // A transaction since: read again when a create sheet opens.
+    world.store.insert(
+        TRANSACTIONS_KEY.to_owned(),
+        json!([{ "chainId": 10, "timestamp": 20 }]).to_string(),
+    );
+    run(&mut sut, &mut world, Event::NewDraft);
+    assert_eq!(sut.view().recent_networks, vec![10]);
+}

@@ -100,6 +100,34 @@ data class FeeEstimateView(
     val quoted: Boolean,
     val fee_asset: FeeAssetView,
     val fee_recipient: String? = null,
+    /**
+     * What this quote measured (core-perf-1, `FeeEstimate::prepared`): the
+     * gas the fee on screen was priced on, which the submit signs instead of
+     * measuring again. Off the wire when the run did not simulate (the static
+     * fallback, Tempo). Decoded so the estimate handed back to the core
+     * (`SendEvent.FeeUpdated`) is whole: dropping it here would quietly cost
+     * every send its two slowest reads.
+     */
+    val prepared: PreparedGas? = null,
+)
+
+/**
+ * The gas a fee quote measured (`fee_policy::PreparedGas`): the limits the
+ * fee on screen was priced on, for exactly [calls] (before the fee leg), on
+ * an account [deployed] or not as that run read it. Decimal strings. The
+ * submit applies them as the relay's estimate (`userOpApplyEstimate`) and
+ * skips the inner calls' measurement — the floor is in [call_gas_limit]
+ * already. Never a nonce: that is read fresh at submit.
+ */
+@Serializable
+data class PreparedGas(
+    val calls: List<FeeCall> = emptyList(),
+    val deployed: Boolean,
+    val verification_gas_limit: String,
+    val call_gas_limit: String,
+    val pre_verification_gas: String,
+    /** The relay's `settlementGas`, when it gave one. */
+    val settlement_gas: String? = null,
 )
 
 @Serializable

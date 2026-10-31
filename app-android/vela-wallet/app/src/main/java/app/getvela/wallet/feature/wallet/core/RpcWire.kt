@@ -180,7 +180,11 @@ data class RpcPoolView(
      * already off the list. It is where a hedged read's early ask goes (the
      * web's `rpc-pool-executor.ts`, the desktop's spec 083 H6), past the
      * core's cooldowns and back-offs. The web draws it nowhere; it is decoded
-     * so this view is the core's whole view. This shell does not hedge yet.
+     * so this view is the core's whole view. This shell does not hedge yet,
+     * so it does not ask for it (core-perf-1: `pending_urls` is the pool's
+     * volatile field, sent only to a shell that opts in with
+     * `includeVolatile`): here it stays empty. A hedge would pass
+     * `includeVolatile = true` to the pool's `CoreHost`.
      */
     val pending_urls: Map<String, List<String>> = emptyMap(),
 ) {

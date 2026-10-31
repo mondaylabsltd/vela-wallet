@@ -182,6 +182,14 @@ class SendExecutor(
 
         /** `fetch_tokens` is being answered from THIS settled round — later rounds follow as `HoldingsUpdated`. */
         fun holdingsHanded(round: HoldingsRound?) {}
+
+        /**
+         * A multisig's confirm (native multisig M2): the reviewed transfers
+         * proposed through the proposals machine — its review first, then one
+         * passkey — answered `proposed` / `propose_failed`. `null`: this shell
+         * has no proposals machine, said as it is (nothing signed, nothing sent).
+         */
+        suspend fun proposeSafeTx(operation: SendOperation.ProposeSafeTx): SendShellResult? = null
     }
 
     /**
@@ -299,13 +307,12 @@ class SendExecutor(
                 ?: identity(operation.address),
         )
         is SendOperation.ResolveRisk -> SendShellResult.RiskResolved(risk(operation.chain_id, operation.address))
-        // A multisig's send becomes a proposal — orchestration is web-only
-        // until the core carries it (F0.4). Answered at once, never left to
-        // spin: `mailbox_down` is the nearest reason the wire has for "this
-        // shell has no multisig service" (CORE lane: a `not_supported` reason).
-        is SendOperation.ProposeSafeTx -> {
-            VelaLog.event("send.propose", "multisig is not on this shell yet", "chain" to operation.chain_id)
-            SendShellResult.ProposeFailed(cancelled = false, reason = SendProposeFailure.MailboxDown)
+        // A multisig's send becomes a proposal: the proposals machine's draft,
+        // its review, then one passkey (native multisig M2). A shell with no
+        // proposals machine says it as it is: not proposed, nothing signed.
+        is SendOperation.ProposeSafeTx -> ports.proposeSafeTx(operation) ?: run {
+            VelaLog.event("send.propose", "no multisig proposals machine", "chain" to operation.chain_id)
+            SendShellResult.ProposeFailed(cancelled = false, reason = SendProposeFailure.NotSupported)
         }
         // No simulation engine on this base (046).
         is SendOperation.SimulateCalls -> SendShellResult.SimResolved(null)
@@ -612,6 +619,9 @@ class SendExecutor(
                 ports.opSigned(localHash, submitBlock)
                 if (!clearance.await()) throw UserOpSpine.Refused(UserOpSpine.Failure.NotCleared)
             },
+            // core-perf-1: the gas the confirmed fee was priced on, when the
+            // core still holds it fresh for exactly these calls.
+            prepared = op.prepared,
         )
     } catch (refused: UserOpSpine.Refused) {
         throw SubmitRefused(

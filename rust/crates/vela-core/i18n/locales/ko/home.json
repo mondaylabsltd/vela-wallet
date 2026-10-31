@@ -597,6 +597,7 @@
         "originalMembers": "원래 멤버",
         "originalNote": "생성 당시의 멤버입니다. 배포되지 않은 네트워크는 이 멤버로 시작합니다.",
         "currentOn": "{{network}}의 현재 멤버",
+        "unreadableOn": "{{network}}의 멤버를 읽을 수 없습니다.",
         "sameAsOriginal": "원래 멤버와 같습니다.",
         "added": "추가됨",
         "removed": "제거됨",

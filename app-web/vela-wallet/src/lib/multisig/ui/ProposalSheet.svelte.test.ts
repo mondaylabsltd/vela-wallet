@@ -171,7 +171,32 @@ vi.mock('../core/proposals.svelte', async () => {
 			frozen: fake.frozen ? { [key]: fake.frozen } : {},
 			history_unreadable: fake.executed === undefined ? [100] : [],
 			draft: fake.machineDraft,
-			last_actor: null
+			last_actor: null,
+			// core-ms-2: who here one press approves and executes it, as the
+			// machine rules (app_multisig_proposals.rs
+			// `approve_and_execute_is_offered_and_runs_in_one_press`): short of
+			// one approval, theirs reaches it, their look does not say they cannot pay.
+			approve_execute: (() => {
+				if (!item || item.status !== 'pending') return {};
+				const who = (item.canExecute ?? [])
+					.map((e: any) => (typeof e === 'string' ? e : e.address))
+					.filter(
+						(a: string) =>
+							!(item.approvals ?? []).some((x: any) => x.counts && x.owner === a) &&
+							item.approved + 1 >= item.threshold
+					)
+					.filter((a: string) => {
+						const look = fake.previews[a] as { kind?: string; canPay?: boolean } | undefined;
+						// Round 5 (S2): a look that could not price or check it does
+						// not say they cannot pay — Execute looks again first.
+						return (
+							(look?.kind === 'priced' && look.canPay === true) ||
+							look?.kind === 'unpriced' ||
+							look?.kind === 'unchecked'
+						);
+					});
+				return who.length > 0 ? { [key]: who } : {};
+			})()
 		};
 	};
 	return {
@@ -231,6 +256,23 @@ vi.mock('../shell/proposals-host.svelte', async () => {
 	const settle = (key: string, state: unknown) => {
 		machineSeam.actions = { ...machineSeam.actions, [key]: state as never };
 	};
+	/** The machine's execution of `event` (`execute`), from the seams. */
+	const execute = (event: any) => {
+		const key = `${event.chain_id}:${String(event.safe_tx_hash ?? '').toLowerCase()}`;
+		const done = `execute:${event.safe_tx_hash.toLowerCase()}`;
+		fake.executedWith.push(fake.previews[event.executor]);
+		if (fake.executeThrows) return settle(done, stateOf(fake.executeThrows));
+		fake.calls.push('execute');
+		void (async () => {
+			const verdict =
+				fake.verdict ??
+				(fake.refused
+					? { kind: 'notSent' }
+					: { kind: 'executed', txHash: await fake.execution.waitForTxHash() });
+			machineSeam.executions = { ...machineSeam.executions, [key]: verdict };
+			settle(done, { kind: 'done', safe_tx_hash: event.safe_tx_hash, kept: false });
+		})();
+	};
 	const host = {
 		get view() {
 			return null;
@@ -266,20 +308,20 @@ vi.mock('../shell/proposals-host.svelte', async () => {
 					}
 					return;
 				}
-				case 'execute': {
-					const done = `execute:${event.safe_tx_hash.toLowerCase()}`;
-					fake.executedWith.push(fake.previews[event.executor]);
-					if (fake.executeThrows) return settle(done, stateOf(fake.executeThrows));
-					fake.calls.push('execute');
-					void (async () => {
-						const verdict =
-							fake.verdict ??
-							(fake.refused
-								? { kind: 'notSent' }
-								: { kind: 'executed', txHash: await fake.execution.waitForTxHash() });
-						machineSeam.executions = { ...machineSeam.executions, [key]: verdict };
-						settle(done, { kind: 'done', safe_tx_hash: event.safe_tx_hash, kept: false });
-					})();
+				case 'execute':
+					return execute(event);
+				case 'approve_execute': {
+					// core-ms-2: the machine's one press — stopped before any
+					// signature, it approves instead and keeps it (r4-11).
+					execute(event);
+					const lower = event.safe_tx_hash.toLowerCase();
+					const ran = machineSeam.actions[`execute:${lower}`] as
+						{ kind: string; preview?: { kind?: string } } | undefined;
+					const before = ['fails', 'unpriced', 'unchecked', 'priced'];
+					if (ran?.kind === 'stopped' && before.includes(ran.preview?.kind ?? '')) {
+						fake.calls.push('approve');
+						settle(`approve:${lower}`, { kind: 'done', kept: false });
+					}
 					return;
 				}
 				case 'send_again':
@@ -309,6 +351,23 @@ vi.mock('../shell/proposals-host.svelte', async () => {
 			fake.calls.push(proposal.kind === 'cancel' ? 'reject' : `propose:${opts?.as ?? ''}`);
 			if (fake.approveError) throw new ProposeFailedError(stateOf(fake.approveError), 100);
 			return { safeTxHash: HASH };
+		},
+		proposeExecute: (as: string | null) => {
+			fake.calls.push(`confirm:${as}`);
+			sentLog.push({ type: 'propose_execute', as_member: as });
+			// The machine proposes it, then executes it by its proposer (`execute:<hash>`
+			// working from the moment it is proposed).
+			if (fake.confirmed) {
+				const hash = String(fake.confirmed.safe_tx_hash ?? '').toLowerCase();
+				settle('propose', fake.confirmed);
+				if (fake.confirmed.kind === 'done') settle(`execute:${hash}`, { kind: 'working' });
+				void (async () => {
+					await fake.onConfirm?.();
+					if (fake.confirmed.kind === 'done') {
+						execute({ chain_id: 100, safe_tx_hash: fake.confirmed.safe_tx_hash, executor: as });
+					}
+				})();
+			}
 		},
 		confirmDraft: (as: string | null) => {
 			fake.calls.push(`confirm:${as}`);
@@ -498,7 +557,9 @@ const draftOf = (draft: unknown, here: string[]) => ({
 	item: draft,
 	review: REVIEW,
 	membersHere: here,
-	defaultMember: here[0] ?? null
+	defaultMember: here[0] ?? null,
+	// core-ms-2: the proposer's own approval makes it ready (the machine's word).
+	executeNow: ((draft as { canExecute?: unknown[] }).canExecute ?? []).length > 0
 });
 
 /** Every word is its own key, so a test names what it looks for. */
@@ -839,9 +900,11 @@ describe("a dApp's eth_sendTransaction its proposer alone makes ready (round 3, 
 		press('proposal.approveAndExecute');
 		await settle();
 		await settle();
-		// Proposed, then executed: the machine answers the site with the transaction.
+		// Proposed, then executed — one press, the machine's (`propose_execute`):
+		// it answers the site with the transaction.
 		expect(fake.calls).toEqual([`confirm:${ME}`, 'execute']);
-		expect(machineSent('execute')).toHaveLength(1);
+		expect(machineSent('propose_execute')).toHaveLength(1);
+		expect(machineSent('execute')).toHaveLength(0);
 		await screen.unmount();
 	});
 

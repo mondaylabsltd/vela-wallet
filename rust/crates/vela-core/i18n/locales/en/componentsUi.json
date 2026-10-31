@@ -565,7 +565,28 @@
     "appUpdate": {
       "title": "Update available",
       "install": "Install",
-      "later": "Later"
+      "later": "Later",
+      "refused": {
+        "noKey": "This build can't check an update's signature, so it won't install one. Download the latest version from the Vela website.",
+        "unreadable": "The update's details couldn't be read, so nothing was installed. Your app is unchanged.",
+        "badSignature": "The update isn't signed by Vela, so it wasn't installed. Your app is unchanged.",
+        "replayed": "This update is older than one this device already saw, so it wasn't installed. Your app is unchanged.",
+        "notNewer": "This update isn't newer than the version you have, so there's nothing to install.",
+        "noArtifact": "This update has no download for this computer, so nothing was installed.",
+        "insecureUrl": "The update's download link isn't secure, so it wasn't used. Your app is unchanged.",
+        "artifactMismatch": "The download didn't match the signed release, so it wasn't installed. Try again.",
+        "unreachable": "The download didn't finish. Check your connection and try again.",
+        "notInstalled": "This copy isn't an installed app, so it can't update itself.",
+        "signatureMismatch": "The new app's code signature doesn't match this one's, so it wasn't installed. Your app is unchanged.",
+        "versionMismatch": "The downloaded app isn't the signed version, so it wasn't installed. Your app is unchanged.",
+        "installFailed": "Your system couldn't install the update. This app is unchanged. Try again."
+      }
+    },
+    "multisigNotify": {
+      "approvalNeeded": "Needs your approval",
+      "approvalCounted": "Approval counted: {{approved}} of {{threshold}}",
+      "readyToExecute": "Ready to execute",
+      "executed": "Executed"
     },
     "dropOverlay": {
       "title": "Drop an address, payment link or QR image"

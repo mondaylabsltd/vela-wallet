@@ -81,6 +81,10 @@
 	const undeployedOn = $derived(
 		(members?.networks ?? []).filter((n) => n.state.kind === 'undeployed')
 	);
+	/** core-ms-2: networks whose chain did not answer: said, nothing claimed of their members. */
+	const unreadableOn = $derived(
+		(members?.networks ?? []).filter((n) => n.state.kind === 'unreadable')
+	);
 	/** None of its members (anywhere) is on this device. */
 	const readOnly = $derived(members?.read_only ?? localOwners(account.owners).length === 0);
 	/** §3.5: what the chain says, split: a genesis refused on a network, and a risk where it is deployed. */
@@ -329,6 +333,11 @@
 	{#each undeployedOn as c (c.chain_id)}
 		<p class="note" data-testid="members-undeployed">
 			{fillTemplate(m.settings.undeployedOn, { network: chainName(c.chain_id) })}
+		</p>
+	{/each}
+	{#each unreadableOn as c (c.chain_id)}
+		<p class="note" data-testid="members-unreadable">
+			{fillTemplate(m.settings.unreadableOn, { network: chainName(c.chain_id) })}
 		</p>
 	{/each}
 	{#if readOnly}

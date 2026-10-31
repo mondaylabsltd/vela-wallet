@@ -83,6 +83,19 @@ macro_rules! multisig_object {
             pub fn view(&self) -> Result<String, crate::CoreError> {
                 crate::onboarding_bridge::locked(&self.0)?.view()
             }
+
+            /// core-ms-2: opt in to lighter answers, as every other machine
+            /// can (`vela_core::app::view_host`): from the next one on, each
+            /// carries `view_version`, and `view` only when it differs from
+            /// the last one this object sent (no `view`: keep the one you
+            /// hold). The multisig machines name no volatile fields.
+            pub fn skip_unchanged_views(
+                &self,
+                include_volatile: bool,
+            ) -> Result<(), crate::CoreError> {
+                crate::onboarding_bridge::locked(&self.0)?.skip_unchanged_views(include_volatile);
+                Ok(())
+            }
         }
 
         impl Default for $class {
@@ -173,6 +186,23 @@ mod tests {
         assert_eq!(view["pace_ms"], 12_000);
         // W9: the machine's own words for the multisig it follows.
         assert_eq!(view["members_anywhere"], serde_json::json!([]));
+    }
+
+    /// core-ms-2: an opted-in multisig machine sends its view only when it
+    /// changed; `view_version` on every answer.
+    #[test]
+    fn a_multisig_machine_skips_unchanged_views_once_opted_in() {
+        let core = MultisigProposalsCore::new();
+        core.skip_unchanged_views(false).unwrap();
+        let tick = r#"{"type":"close_linked"}"#;
+        let first: serde_json::Value =
+            serde_json::from_str(&core.dispatch(tick.to_owned()).unwrap()).unwrap();
+        assert!(first.get("view").is_some(), "the first answer carries it");
+        let version = first["view_version"].as_u64().unwrap();
+        let again: serde_json::Value =
+            serde_json::from_str(&core.dispatch(tick.to_owned()).unwrap()).unwrap();
+        assert!(again.get("view").is_none(), "unchanged: not sent again");
+        assert_eq!(again["view_version"].as_u64(), Some(version));
     }
 
     /// W9: the natives ask the multisig's pure rules through the link door,

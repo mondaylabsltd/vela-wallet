@@ -23,7 +23,8 @@ import org.junit.runner.RunWith
  * which the home sends once it stands on rows (`ReportDrawnWhen` in
  * VelaNavHost). `vela.launchAnimation` is how long the spec 012 animation
  * keeps the home covered after that — the time a person who does not tap
- * waits to SEE the home.
+ * waits to SEE the home. Since core-perf-1 it plays once a week (the core's
+ * rule), so after an iteration's first launch the span is the not-due path.
  *
  * Two compilations: `shipped` is what a Play install runs (the baseline
  * profile, if the APK carries one); `noProfile` is the floor without it.
@@ -45,6 +46,12 @@ class StartupBenchmark {
         metrics = listOf(
             StartupTimingMetric(),
             TraceSectionMetric("vela.launchAnimation", TraceSectionMetric.Mode.First),
+            // core-perf-1: loading the core (JNA's registration, uniffi's
+            // checks) on its worker, and the main thread's two halves of
+            // the container — what the warm-up takes off the first frame.
+            TraceSectionMetric("vela.core.warm", TraceSectionMetric.Mode.First),
+            TraceSectionMetric("vela.AppContainer.init", TraceSectionMetric.Mode.First),
+            TraceSectionMetric("vela.AppContainer.start", TraceSectionMetric.Mode.First),
             MemoryUsageMetric(MemoryUsageMetric.Mode.Last),
         ),
         compilationMode = compilation,

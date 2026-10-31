@@ -62,5 +62,10 @@ crux_core = { workspace = true }
 # runs too. It brings tokio, rustls (ring) and a WebSocket into the phones'
 # library — the agent's own thread, idle until the person switches it on.
 vela-agent = { path = "../vela-agent" }
+# Native multisig M4 (`peer_bridge.rs`): PeerConnect's protocol crate, vendored
+# beside the core (rust/vendor/peerconnect) — the rooms an outside owner's
+# wallet and Vela meet in, the same Rust the web runs as wasm and the desktop
+# links. Default features only: no Tokio client, no relay tokens.
+peerconnect = { path = "../../vendor/peerconnect" }
 serde = { workspace = true }
 serde_json = { workspace = true }

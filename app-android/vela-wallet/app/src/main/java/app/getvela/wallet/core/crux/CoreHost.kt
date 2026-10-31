@@ -58,6 +58,8 @@ class CoreHost<V : Any>(
      * Must not block.
      */
     private val onCommit: (V) -> Unit = {},
+    /** core-perf-1: the machine's volatile view fields are wanted (see [CoreDriver]). */
+    includeVolatile: Boolean = false,
 ) {
     private val _view = MutableStateFlow(initial)
 
@@ -104,6 +106,8 @@ class CoreHost<V : Any>(
         onView = ::commit,
         escapedFailure = escapedFailure,
         onFault = onFault,
+        onUnchanged = ::unchanged,
+        includeVolatile = includeVolatile,
     )
 
     /** Emit the core's current view without sending anything. */
@@ -140,6 +144,17 @@ class CoreHost<V : Any>(
     fun applied(number: Long): Boolean = viewEvents >= number
 
     fun dispose() = driver.dispose()
+
+    /**
+     * The core applied an event and its view did not move (core-perf-1: the
+     * answer carried none). Nothing is decoded or drawn; the view held is
+     * now that event's, so [applied] says so, and [commits] ticks for a
+     * caller waiting on it — as it did when every answer re-sent the view.
+     */
+    private fun unchanged() {
+        viewEvents = driver.eventsApplied
+        _commits.value += 1
+    }
 
     /**
      * A view the shell cannot understand does not become a wrong screen.

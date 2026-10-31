@@ -20,7 +20,12 @@
 //! - a proposal link waiting for its network is the machine's record
 //!   ([`link::PENDING_LINK_KEY`], a day): a reload still waits for it, the
 //!   network added after the reload opens it, and the person closing its
-//!   sheet lets it go ([`Event::DropLink`]).
+//!   sheet lets it go ([`Event::DropLink`]);
+//! - core-ms-2: so is an invite naming only networks this device lacks —
+//!   the same record, its add sheet again once one is here; and the invite
+//!   the add sheet shows is the machine's ([`InviteView`]): adding its
+//!   multisig looks it up on the invite's first network here, uses it on
+//!   every one, and keeps what the invite says of its members.
 
 use serde::{Deserialize, Serialize};
 
@@ -78,6 +83,140 @@ pub struct LinkState {
     pending: Option<ProposalLink>,
     /// The pending link is in the store (it waits for its network).
     held: bool,
+    /// core-ms-2: the invite the add sheet shows, until its multisig is
+    /// added, another link is opened, or its sheet is closed.
+    invite: Option<Invite>,
+}
+
+/// core-ms-2: an invite opened here.
+#[derive(Clone)]
+struct Invite {
+    link: AddLink,
+    /// It waits for its network, in the store ([`link::PENDING_LINK_KEY`]).
+    waiting: bool,
+}
+
+/// core-ms-2: what adding an invite's multisig takes from the invite.
+pub struct InviteUse {
+    /// Its networks this device has: the first is where it is looked up,
+    /// and it is used on every one.
+    pub on_device: Vec<u64>,
+    /// Every network it names (members added since are read on those the
+    /// multisig is used on).
+    pub chain_ids: Vec<u64>,
+    /// What it says of the members, as `keep_invited` takes it.
+    pub members: Vec<super::InvitedMember>,
+}
+
+/// The invite's networks this device has, its first network first.
+fn on_device(s: &State, invite: &AddLink) -> Vec<u64> {
+    invite
+        .chain_ids
+        .iter()
+        .filter(|id| s.has_network(**id))
+        .copied()
+        .collect()
+}
+
+/// core-ms-2: the invite as its add sheet draws it.
+pub fn invite_view(s: &State) -> Option<super::InviteView> {
+    let invite = s.link.invite.as_ref()?;
+    let here = on_device(s, &invite.link);
+    let missing = (here.is_empty())
+        .then(|| invite.link.chain_ids.first().copied())
+        .flatten();
+    Some(super::InviteView {
+        link: invite.link.clone(),
+        on_device: here,
+        missing,
+        missing_name: missing
+            .and_then(crate::multisig_rules::networks::name)
+            .map(str::to_owned),
+    })
+}
+
+/// core-ms-2: the invite `address` was opened from — its address not edited
+/// away — and what adding it takes from it.
+pub fn invite_for(s: &State, address: &str) -> Option<InviteUse> {
+    let invite = s
+        .link
+        .invite
+        .as_ref()
+        .filter(|i| same_address(&i.link.multisig, address))?;
+    let members = invite
+        .link
+        .members
+        .iter()
+        .flatten()
+        .map(|m| super::InvitedMember {
+            address: m.address.clone(),
+            name: m.name.clone(),
+            kind: m
+                .kind
+                .and_then(|k| serde_json::to_value(k).ok())
+                .and_then(|k| k.as_str().map(str::to_owned)),
+        })
+        .collect();
+    Some(InviteUse {
+        on_device: on_device(s, &invite.link),
+        chain_ids: invite.link.chain_ids.clone(),
+        members,
+    })
+}
+
+/// core-ms-2: the invite's multisig was added: the invite is done. Whether
+/// it was the link waiting in the store (the caller lets that go).
+pub fn invite_added(s: &mut State) -> bool {
+    s.link.invite.take().is_some_and(|i| i.waiting)
+}
+
+/// core-ms-2: the invite waiting for its network, once one of them is on
+/// this device: its add sheet again (`true`: the caller lets the stored
+/// record go).
+pub fn invite_ready(s: &mut State) -> bool {
+    let ready = s
+        .link
+        .invite
+        .as_ref()
+        .is_some_and(|i| i.waiting && !on_device(s, &i.link).is_empty());
+    if !ready {
+        return false;
+    }
+    let Some(invite) = s.link.invite.as_mut() else {
+        return false;
+    };
+    invite.waiting = false;
+    s.link.stand = Some(LinkStand::Invite {
+        link: invite.link.clone(),
+    });
+    true
+}
+
+/// core-ms-2: an invite opened — in front now (one link waits at a time);
+/// one naming only networks this device lacks waits for them, kept in the
+/// store as a proposal link is: a reload (the Add network wizard) loses
+/// nothing, and the network added opens its add sheet again.
+async fn open_invite(io: &Io<Event>, st: &Shared<State>, invite: AddLink, hash: String) {
+    forget(io, st).await;
+    let lacks = {
+        let s = lock(st);
+        !invite.chain_ids.is_empty() && on_device(&s, &invite).is_empty()
+    };
+    {
+        let mut s = lock(st);
+        s.link.pending = None;
+        s.link.invite = Some(Invite {
+            link: invite.clone(),
+            waiting: lacks,
+        });
+        s.link.stand = Some(LinkStand::Invite { link: invite });
+    }
+    if lacks {
+        let now = io.now().await;
+        let record = link::keep_link(&hash, now);
+        lock(st).link.held = record.is_some();
+        io.store(link::PENDING_LINK_KEY, record).await;
+    }
 }
 
 /// ms-22: `l` waits for its network — kept in the store, so a reload (the
@@ -113,6 +252,8 @@ pub async fn drop_pending(io: &Io<Event>, st: &Shared<State>) {
         let mut s = lock(st);
         s.link.pending = None;
         s.link.held = false;
+        // core-ms-2: an invite's add sheet closed: the invite goes too.
+        s.link.invite = None;
     }
     io.store(link::PENDING_LINK_KEY, None).await;
 }
@@ -132,13 +273,37 @@ pub async fn restore(io: &Io<Event>, st: &Shared<State>) {
         let mut s = lock(st);
         if std::mem::take(&mut s.link.held) {
             s.link.pending = None;
+            if s.link.invite.as_ref().is_some_and(|i| i.waiting) {
+                s.link.invite = None;
+            }
         }
         return;
     };
     let now = io.now().await;
-    let waiting = link::take_kept_link(Some(&stored), now)
-        .as_deref()
-        .and_then(link::parse_proposal_link);
+    let kept = link::take_kept_link(Some(&stored), now);
+    // core-ms-2: an invite waiting for its network — its add sheet now if
+    // the network is here, else waited for again, quietly.
+    if let Some(invite) = kept.as_deref().and_then(link::parse_add_link) {
+        let here = {
+            let mut s = lock(st);
+            let here = !on_device(&s, &invite).is_empty();
+            s.link.pending = None;
+            s.link.held = !here;
+            s.link.invite = Some(Invite {
+                link: invite.clone(),
+                waiting: !here,
+            });
+            if here {
+                s.link.stand = Some(LinkStand::Invite { link: invite });
+            }
+            here
+        };
+        if here {
+            io.store(link::PENDING_LINK_KEY, None).await;
+        }
+        return;
+    }
+    let waiting = kept.as_deref().and_then(link::parse_proposal_link);
     let Some(waiting) = waiting else {
         lock(st).link.held = false;
         io.store(link::PENDING_LINK_KEY, None).await;
@@ -147,6 +312,7 @@ pub async fn restore(io: &Io<Event>, st: &Shared<State>) {
     let here = {
         let mut s = lock(st);
         s.link.held = true;
+        s.link.invite = None;
         let here = s.has_network(waiting.chain_id);
         if !here {
             s.link.pending = Some(waiting.clone());
@@ -241,9 +407,11 @@ pub async fn open(io: &Io<Event>, st: &Shared<State>, hash: String, take_kept: b
         );
     }
     if let Some(invite) = link::parse_add_link(&hash) {
-        return say(st, LinkStand::Invite { link: invite });
+        return open_invite(io, st, invite, hash).await;
     }
     if let Some(proposal) = link::parse_proposal_link(&hash) {
+        // core-ms-2: a proposal link is in front now; the invite before it goes.
+        lock(st).link.invite = None;
         open_proposal(io, st, proposal).await;
     }
 }

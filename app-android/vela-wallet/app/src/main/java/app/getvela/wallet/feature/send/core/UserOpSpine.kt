@@ -253,6 +253,34 @@ class UserOpSpine(
         throw Refused(Failure.Signer(failure.kind, failure.message ?: "the passkey ceremony failed"))
     }
 
+    /**
+     * A multisig member's own passkey over [challenge], in Vela (native
+     * multisig: an approval of a SafeTx, or the owner proof a creation asks).
+     * The key is the account's plan's, as for every signature; WHERE it signs
+     * — in Vela, on its page, or not from here — is the caller's to have
+     * asked the core first (`multisigApprovalRoute`, `signingRoute`). A plan
+     * that says nothing here can reach the keys is refused as it is for a send.
+     */
+    suspend fun assertInVela(account: String, challenge: ByteArray): Assertion {
+        val keys = accounts.keysOf(account)
+        val pinned = keys.firstOrNull() ?: other("No passkey credential for this account")
+        val picked = routeFor(account, pinned, "")
+        picked.blocked?.let { block ->
+            throw Refused(
+                VenueBlock.of(block)?.let(Failure::VenueBlocked)
+                    ?: Failure.Signer(FailureKind.Other, VenueWords.block(block, words)),
+            )
+        }
+        val raised = clock()
+        return try {
+            withTimeoutOrNull(signDeadlineMs) {
+                signer().sign(challenge, picked.credentialId, picked.transports, picked.method)
+            } ?: throw PasskeyFailure(FailureKind.Cancelled, "the passkey prompt ran out of time")
+        } catch (failure: PasskeyFailure) {
+            throw Refused(ceremonyFailure(failure, clock() - raised))
+        }
+    }
+
     /** The displayed fee, signed verbatim. */
     data class Quoted(val amount: String, val recipient: String, val tier: FeeTier? = null)
 
@@ -491,12 +519,19 @@ class UserOpSpine(
         /** Spec 082 RA9: the ceremony returned a signature (`CeremonyDone`). */
         ceremonyDone: () -> Unit = {},
         beforePost: suspend (localHash: String, submitBlock: Long?) -> Unit = { _, _ -> },
+        /**
+         * core-perf-1: the gas the confirmed fee was priced on
+         * (`SubmitUserOp.prepared`), fresh and for exactly these calls. Signed
+         * as measured — no second relay simulation, no second measurement of
+         * the inner calls — when it measured the account as it stands now.
+         */
+        prepared: PreparedGas? = null,
     ): Submitted = coroutineScope {
         // The head before the first POST (ruling 8): read beside the assembly
         // and the ceremony, taken only if it came back before the POST.
         val head = async { runCatching { relay.headBlock(chainId) }.getOrNull() }
         try {
-            submitSigned(chainId, account, calls, gasFeeToken, quotedFee, review, signingStarted, intent, ceremonyDone, beforePost) {
+            submitSigned(chainId, account, calls, gasFeeToken, quotedFee, review, signingStarted, intent, ceremonyDone, beforePost, prepared) {
                 withTimeoutOrNull(HEAD_WAIT_MS) { head.await() }
             }
         } finally {
@@ -515,6 +550,7 @@ class UserOpSpine(
         intent: TrustedSignerIntent?,
         ceremonyDone: () -> Unit,
         beforePost: suspend (localHash: String, submitBlock: Long?) -> Unit,
+        prepared: PreparedGas?,
         headBeforePost: suspend () -> Long?,
     ): Submitted {
         val keys = accounts.keysOf(account)
@@ -563,7 +599,25 @@ class UserOpSpine(
             )
         }.getOrElse { other(it.message ?: "The operation could not be assembled.") }
         val hasContractCall = userOpHasContractCall(calls)
-        when (val estimate = relay.estimateUserOpGas(chainId, userOpRelayJson(draft, feeToken.takeIf { tempo }))) {
+        // core-perf-1: the quote's own measurement, when it measured THIS
+        // account as it stands now (deployment read fresh above; the nonce
+        // too, never the quote's). Its limits already carry the inner calls'
+        // floor, and the core's one rule applies them as it applies the
+        // relay's. In-band only: Tempo's quote carries none.
+        val measured = prepared
+            ?.takeIf { !tempo && it.deployed == deployed }
+            ?.let { gas ->
+                runCatching {
+                    userOpApplyEstimate(draft, gas.verification_gas_limit, gas.call_gas_limit, gas.pre_verification_gas, gas.settlement_gas, floors)
+                }.onFailure { VelaLog.event("userop.submit", "the quote's gas could not be applied; measuring", "why" to (it.message ?: "")) }
+                    .getOrNull()
+            }
+        if (prepared != null) {
+            VelaLog.event("userop.submit", if (measured != null) "signing the quote's measured gas" else "the quote's gas is not for this account now; measuring", "deployed" to deployed, "quoted" to prepared.deployed)
+        }
+        if (measured != null) {
+            draft = measured
+        } else when (val estimate = relay.estimateUserOpGas(chainId, userOpRelayJson(draft, feeToken.takeIf { tempo }))) {
             is RelayClient.EstimateAnswer.Estimated -> {
                 // The core's one rule for the limits signed: the relay's as
                 // returned (an undeployed Safe's floors; the 2M verification

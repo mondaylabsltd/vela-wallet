@@ -98,16 +98,21 @@ fun WalletScreen(
     onSpace: () -> Unit = {},
     /** ob-2 (P2.4): the header's sync line "try now". */
     onSyncRetry: (() -> Unit)? = null,
+    /**
+     * Native multisig: the multisig shown's own lines (its rule, what waits on
+     * it, its first steps), under the actions. `null` for a Vela account.
+     */
+    multisigCard: (@Composable () -> Unit)? = null,
 ) {
     if (model.textScale != 1f) {
         val density = LocalDensity.current
         CompositionLocalProvider(
             LocalDensity provides Density(density.density, density.fontScale * model.textScale),
         ) {
-            WalletHomeContent(model, modifier, onSelectTab, onFlow, onSwitcher, onToggleVisibility, onStatusClick, onRefresh, onSpace, onSyncRetry)
+            WalletHomeContent(model, modifier, onSelectTab, onFlow, onSwitcher, onToggleVisibility, onStatusClick, onRefresh, onSpace, onSyncRetry, multisigCard)
         }
     } else {
-        WalletHomeContent(model, modifier, onSelectTab, onFlow, onSwitcher, onToggleVisibility, onStatusClick, onRefresh, onSpace, onSyncRetry)
+        WalletHomeContent(model, modifier, onSelectTab, onFlow, onSwitcher, onToggleVisibility, onStatusClick, onRefresh, onSpace, onSyncRetry, multisigCard)
     }
 
     model.sheet?.let { sheet ->
@@ -139,6 +144,7 @@ private fun WalletHomeContent(
     onRefresh: (() -> Unit)? = null,
     onSpace: () -> Unit = {},
     onSyncRetry: (() -> Unit)? = null,
+    multisigCard: (@Composable () -> Unit)? = null,
 ) {
     val colors = VelaTheme.colors
     val strings = LocalVelaStrings.current
@@ -223,6 +229,10 @@ private fun WalletHomeContent(
                         onSend = { onFlow(WalletFlowEntry.Send, null) },
                         onScan = { onFlow(WalletFlowEntry.Scan, null) },
                     )
+                    multisigCard?.let { card ->
+                        Spacer(modifier = Modifier.height(VelaSpacing.xl))
+                        card()
+                    }
                     Spacer(modifier = Modifier.height(VelaSpacing.xl4))
 
                     SectionHeader(

@@ -844,7 +844,17 @@ sealed class SendReceiptOutcome {
 }
 
 @Serializable
-data class SendAccountRef(val id: String, val address: String, val name: String? = null)
+data class SendAccountRef(
+    val id: String,
+    val address: String,
+    val name: String? = null,
+    /**
+     * A multisig account (docs/multisig-vault-design.md): its send is a
+     * proposal its members approve — no passkey and no fee of its own, the
+     * confirm proposes (native multisig M2). `null`: a Vela account.
+     */
+    val multisig: SendMultisigRef? = null,
+)
 
 @Serializable
 data class SendOpenParams(
@@ -1074,6 +1084,12 @@ sealed class SendOperation {
         val quoted_fee: SendQuotedFee? = null,
         /** The review the person confirmed; the passkey's hash is computed against it. */
         val review: JsonElement? = null,
+        /**
+         * core-perf-1: the gas the confirmed fee was priced on, fresh, for
+         * exactly these calls — signed without simulating and measuring
+         * again (`UserOpSpine.submit`). Absent: measured as always.
+         */
+        val prepared: PreparedGas? = null,
     ) : SendOperation()
 
     @Serializable

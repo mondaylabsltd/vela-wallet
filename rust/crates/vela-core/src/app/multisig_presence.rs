@@ -60,6 +60,67 @@ impl Waiting {
     pub fn any(&self) -> bool {
         self.needs_you + self.ready > 0
     }
+
+    /// core-ms-2: what is said of it, in order ("1 needs your approval ·
+    /// 1 ready to execute · 1 waiting for a member who can pay"): only the
+    /// counts that are not zero.
+    pub fn parts(&self) -> Vec<WaitingPart> {
+        [
+            (WaitingKind::NeedsYou, self.needs_you),
+            (WaitingKind::Ready, self.ready),
+            (WaitingKind::WaitingPayer, self.waiting_payer),
+        ]
+        .into_iter()
+        .filter(|(_, count)| *count > 0)
+        .map(|(kind, count)| WaitingPart { kind, count })
+        .collect()
+    }
+}
+
+/// core-ms-2: which count a part of the waiting line says.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "MultisigWaitingKind"))]
+pub enum WaitingKind {
+    /// `presence.needsYou`: short of approvals, a member here has not approved.
+    NeedsYou,
+    /// `presence.ready`: a member here can execute it now.
+    Ready,
+    /// `presence.waitingPayer`: ready, but no member here can pay its fee.
+    WaitingPayer,
+}
+
+/// core-ms-2: one part of the waiting line, its count (a plural's).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "MultisigWaitingPart"))]
+pub struct WaitingPart {
+    pub kind: WaitingKind,
+    #[cfg_attr(feature = "bindings", ts(type = "number"))]
+    pub count: u64,
+}
+
+/// core-ms-2: the multisig shown's line at the top of its home — "1 needs
+/// your approval · 1 ready to execute ›" — said only when something waits
+/// and there is one to open.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "MultisigWaitingBanner"))]
+pub struct WaitingBanner {
+    /// The words, in order: never empty.
+    pub parts: Vec<WaitingPart>,
+    /// The one the line opens.
+    pub first: WaitingFirst,
+}
+
+/// core-ms-2: the banner for `w`, when there is one to show.
+pub fn banner_of(w: &Waiting) -> Option<WaitingBanner> {
+    let parts = w.parts();
+    if parts.is_empty() {
+        return None;
+    }
+    Some(WaitingBanner {
+        parts,
+        first: w.first.clone()?,
+    })
 }
 
 /// Why a ready transaction cannot run here now (`blockOf`'s word).

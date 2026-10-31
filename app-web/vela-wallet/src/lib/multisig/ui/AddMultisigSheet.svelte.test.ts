@@ -57,8 +57,15 @@ const machine = vi.hoisted(() => ({
 							]
 						};
 			}
-			calls.push(network ?? undefined);
-			return network === null ? { kind: 'chooseNetwork' } : { kind: 'added', address };
+			// core-ms-2: the invite's own network, the machine's (`invite.on_device`).
+			const invited =
+				io.invite && address.toLowerCase() === io.invite.link.multisig.toLowerCase()
+					? io.invite.on_device[0]
+					: undefined;
+			const on = network ?? invited ?? null;
+			calls.push(on ?? undefined);
+			if (on !== null && invited !== undefined) used.push(...io.invite!.on_device);
+			return on === null ? { kind: 'chooseNetwork' } : { kind: 'added', address };
 		}
 		if (event.type === 'parse_export') {
 			return { safes: io.exported, error: null, busy: null, outcomes: {} };
@@ -102,7 +109,14 @@ const io = vi.hoisted(() => ({
 	asked: [] as [string, number[]][],
 	/** The kinds the person picked (`pick_kind`). */
 	picked: [] as [string, string | null][],
-	imported: [] as string[]
+	imported: [] as string[],
+	/** core-ms-2: the invite the accounts machine keeps (`view.invite`). */
+	invite: null as null | {
+		link: { multisig: string; chainIds: number[]; members: unknown };
+		on_device: number[];
+		missing: number | null;
+		missing_name: string | null;
+	}
 }));
 vi.mock('../core/store.svelte', async () => {
 	/**
@@ -127,9 +141,8 @@ vi.mock('../core/store.svelte', async () => {
 		multisig: {
 			accounts: [],
 			find: () => undefined,
-			useChain: (_a: string, id: number) => void used.push(id),
 			get view() {
-				return { member_kinds: Object.fromEntries(kinds) };
+				return { member_kinds: Object.fromEntries(kinds), invite: io.invite, used_networks: [] };
 			},
 			send: (event: {
 				type: string;
@@ -247,6 +260,7 @@ beforeAll(async () => {
 beforeEach(() => {
 	calls.length = 0;
 	used.length = 0;
+	io.invite = null;
 });
 
 describe('a multisig whose network nothing says', () => {
@@ -289,18 +303,20 @@ describe('a multisig whose network nothing says', () => {
 describe('an invite (r4D-4)', () => {
 	it('opens with its network and members, adds nothing until Add, then adds on its network', async () => {
 		const added: string[] = [];
+		const link = {
+			multisig: SAFE,
+			chainIds: [5042002],
+			members: [
+				{ name: 'Alice', kind: 'passkey' as const },
+				{ name: 'Bob', kind: 'wallet' as const }
+			]
+		};
+		io.invite = { link, on_device: [5042002], missing: null, missing_name: null };
 		const screen = render(AddMultisigSheet, {
 			props: {
 				m,
 				prefill: SAFE,
-				link: {
-					multisig: SAFE,
-					chainIds: [5042002],
-					members: [
-						{ name: 'Alice', kind: 'passkey' },
-						{ name: 'Bob', kind: 'wallet' }
-					]
-				},
+				link,
 				wide: true,
 				closeLabel: 'Close',
 				onclose: () => {},
@@ -316,9 +332,11 @@ describe('an invite (r4D-4)', () => {
 		expect(calls).toEqual([]);
 		addButton().click();
 		await settle();
-		// Its network is the one used: never a guess, never the person's chore.
+		// Its network is the one used — the machine's, from the invite it
+		// keeps: never a guess, never the person's chore.
 		expect(calls).toEqual([5042002]);
 		expect(used).toEqual([5042002]);
+		io.invite = null;
 		expect(added).toEqual([SAFE]);
 		await screen.unmount();
 	});

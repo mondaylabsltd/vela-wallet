@@ -428,3 +428,92 @@ fn a_request_the_core_cannot_read_is_answered_at_once() {
     assert_eq!(error.code, -32602);
     assert!(sut.view().draft.is_none());
 }
+
+// -- core-ms-2 -----------------------------------------------------------------------------
+
+/// A site's transaction the proposer's own approval makes ready (a 1-of-1):
+/// "Approve and execute" — proposed, then executed by the same member, and
+/// the site answered the transaction that ran it.
+#[test]
+fn a_site_transaction_ready_on_its_proposal_runs_in_one_press() {
+    let me = fixture(0).address;
+    let g = genesis(&[me.as_str()], 1, "0x3a");
+    let account: MultisigAccount =
+        serde_json::from_value(world::stored_row(&g, &[100], true)).unwrap();
+    let mut world = World {
+        locals: vec![fixture(0)],
+        ..World::default()
+    };
+    let mut sut = Sut::new();
+    let ev = Event::Start {
+        service_url: SERVICE.to_owned(),
+        accounts: world.locals.clone(),
+        networks: vec![100],
+        known: Vec::new(),
+    };
+    run(&mut sut, &mut world, ev);
+    run(&mut sut, &mut world, send_tx(&account));
+    let draft = sut.view().draft.clone().unwrap();
+    assert!(draft.execute_now, "its own approval makes it ready");
+    let hash = draft.item.safe_tx_hash.clone();
+    let mut after = DeployedSafe::clean(&[me.as_str()], 1);
+    after.nonce = 1;
+    let tx_hash = format!("0x{}", "cd".repeat(32));
+    world.on_send = Some(Landing {
+        chain: 100,
+        safe: account.address.clone(),
+        after,
+        safe_tx_hash: hash.clone(),
+        tx_hash: tx_hash.clone(),
+        user_op_hash: format!("0x{}", "ab".repeat(32)),
+    });
+    run_short(
+        &mut sut,
+        &mut world,
+        Event::ProposeExecute { as_member: None },
+    );
+    assert_eq!(world.sent.len(), 1, "{:?}", sut.view().actions);
+    assert!(matches!(
+        sut.view().actions[&format!("execute:{}", hash.to_ascii_lowercase())],
+        ActionState::Done { .. }
+    ));
+    assert_eq!(answer(&sut, "r1").unwrap().result, Some(json!(tx_hash)));
+}
+
+/// A 2-of-3's site transaction needs another approval: proposed only.
+#[test]
+fn a_site_transaction_short_of_approvals_is_not_offered_the_one_press() {
+    let (mut world, mut sut, account) = setup(&[0, 1]);
+    run(&mut sut, &mut world, send_tx(&account));
+    assert!(!sut.view().draft.unwrap().execute_now);
+}
+
+/// `wallet_getCallsStatus` answers go once taken, and those not taken are
+/// kept at most `CALLS_STATUS_KEPT`, the oldest going first.
+#[test]
+fn calls_status_answers_are_cleared_once_taken_and_bounded() {
+    use vela_core::app::multisig_proposals::flows::CALLS_STATUS_KEPT;
+    let (mut world, mut sut, _) = setup(&[0]);
+    let unknown = format!("0x{}", "12".repeat(32));
+    for i in 0..=CALLS_STATUS_KEPT {
+        run(
+            &mut sut,
+            &mut world,
+            Event::CallsStatus {
+                id: format!("s{i}"),
+                chain_id: 100,
+                calls_id: unknown.clone(),
+            },
+        );
+    }
+    let kept = sut.view().calls_status;
+    assert_eq!(kept.len(), CALLS_STATUS_KEPT);
+    assert!(!kept.contains_key("s0"), "the oldest went");
+    run(
+        &mut sut,
+        &mut world,
+        Event::CallsStatusTaken { id: "s3".into() },
+    );
+    assert!(!sut.view().calls_status.contains_key("s3"));
+    assert_eq!(sut.view().calls_status.len(), CALLS_STATUS_KEPT - 1);
+}

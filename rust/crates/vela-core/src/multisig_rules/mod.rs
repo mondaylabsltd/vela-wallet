@@ -13,7 +13,7 @@ use crate::CoreError;
 
 mod calls;
 mod names;
-mod networks;
+pub mod networks;
 mod relay;
 
 /// A method this door knows, answered; `None` when no area claims it.

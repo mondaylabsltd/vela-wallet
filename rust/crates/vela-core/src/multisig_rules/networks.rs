@@ -10,7 +10,11 @@
 //!
 //! The shell gathers the hints (its balances, its records, its multisigs)
 //! and asks here: `networks.likely`, `networks.firstDefault`,
-//! `networks.lastUsed`, `networks.recent`, `networks.held`.
+//! `networks.lastUsed`, `networks.recent`, `networks.held` — or reads the
+//! accounts machine's `used_networks` / `recent_networks`, which it keeps
+//! from its own list and this device's history ([`recent_of_history`]).
+//! `networks.name` is the core's catalog name for a network this device may
+//! not have ([`name`]).
 
 use serde::Deserialize;
 use serde_json::Value;
@@ -123,6 +127,37 @@ pub fn recent(records: &[Record]) -> Vec<u64> {
     out
 }
 
+/// r5reg-19: [`recent`] of the history as the store holds it
+/// (`vela.transactionHistory`, a JSON list of records): what does not read
+/// is no evidence, and a store that does not read says nothing.
+pub fn recent_of_history(raw: Option<&str>) -> Vec<u64> {
+    let rows: Vec<Value> = raw
+        .and_then(|r| serde_json::from_str(r).ok())
+        .unwrap_or_default();
+    let records: Vec<Record> = rows
+        .into_iter()
+        .filter_map(|r| serde_json::from_value(r).ok())
+        .collect();
+    recent(&records)
+}
+
+/// The catalog's name for `chain_id` — a network Vela ships, whether or not
+/// this device has it now (hidden, or never added): "On Base (chain 8453)"
+/// for a link or an invite naming a network the device lacks. `None` for a
+/// chain the catalog does not know; a shell may still ask the chain index.
+#[cfg(feature = "crux")]
+pub fn name(chain_id: u64) -> Option<&'static str> {
+    u32::try_from(chain_id)
+        .ok()
+        .and_then(crate::app::network_admin::builtin_display_name)
+}
+
+/// Without the app's table, no name.
+#[cfg(not(feature = "crux"))]
+pub fn name(_chain_id: u64) -> Option<&'static str> {
+    None
+}
+
 /// A token the account shown holds (the balance core’s view).
 #[derive(Clone, Debug, Deserialize)]
 pub struct Token {
@@ -168,6 +203,7 @@ pub fn call(name: &str, args: &Value) -> Result<String, CoreError> {
         "lastUsed" => to_json(&last_used(&arg::<Vec<UsedAccount>>(args, "accounts")?)),
         "recent" => to_json(&recent(&arg::<Vec<Record>>(args, "records")?)),
         "held" => to_json(&held(&arg::<Vec<Token>>(args, "tokens")?)),
+        "name" => to_json(&self::name(arg::<u64>(args, "chainId")?)),
         other => Err(CoreError::Multisig(format!(
             "unknown networks method: {other}"
         ))),
@@ -300,5 +336,24 @@ mod tests {
             ask("networks.firstDefault", json!({ "networks": [1, 100] })),
             "null"
         );
+        // The catalog's name, for a network a device may not have.
+        assert_eq!(ask("networks.name", json!({ "chainId": 8453 })), "\"Base\"");
+        assert_eq!(ask("networks.name", json!({ "chainId": 999_999 })), "null");
+    }
+
+    /// The history as the store holds it: a row that does not read is no
+    /// evidence, a store that does not read says nothing.
+    #[test]
+    fn recent_reads_the_stored_history() {
+        let raw = json!([
+            { "chainId": 100, "timestamp": 1, "hash": "0x1" },
+            { "chainId": "8453", "timestamp": 9 },
+            { "timestamp": 12 },
+            { "chainId": 10, "timestamp": 5 }
+        ])
+        .to_string();
+        assert_eq!(recent_of_history(Some(&raw)), vec![10, 100]);
+        assert!(recent_of_history(Some("{oops")).is_empty());
+        assert!(recent_of_history(None).is_empty());
     }
 }

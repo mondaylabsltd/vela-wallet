@@ -30,7 +30,7 @@
 	 * added nor shown: following it here, or signing with a member's wallet,
 	 * are offered — each only on the person's tap.
 	 */
-	import { onMount, tick, untrack } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import { hostLabel } from '$lib/dapp/host';
 	import { fillTemplate } from '$lib/i18n/fill';
@@ -95,7 +95,6 @@
 		ExecutionUnpricedError,
 		ExecutionWouldFailError,
 		ExecutorCannotPayError,
-		stoppedBeforeSigning,
 		type ExecutionPreview
 	} from '../core/execution';
 	import { feeCoin, feeWords, whyText } from '../core/execution-words';
@@ -608,6 +607,18 @@
 	const actorApproved = $derived(
 		!!item && !!actor && item.approvals.some((a) => a.counts && sameAddress(a.owner, actor.address))
 	);
+	/** The member shown has not approved it and it is short of approvals: a press approves first. */
+	const approveFirst = $derived(!!item && !actorApproved && item.approved < item.threshold);
+	/**
+	 * core-ms-2: the proposals machine offers this member "Approve and
+	 * execute" in one press (`approve_execute`): theirs reaches the threshold
+	 * and their look says they can pay.
+	 */
+	const oneTapOffered = $derived.by(() => {
+		if (!item || !actor) return false;
+		const offered = machine?.approve_execute[`${chainId}:${item.safeTxHash.toLowerCase()}`] ?? [];
+		return offered.some((e) => sameAddress(e, actor.address));
+	});
 
 	/**
 	 * Who can withdraw it: any member on this device, whether or not it has
@@ -806,9 +817,10 @@
 	 * A dApp's transaction that the proposer's own approval makes ready (a
 	 * one-approval multisig, nothing ahead of it): proposed and executed in
 	 * one go, so the site gets its transaction — not a wait for approvals
-	 * nobody else has to give.
+	 * nobody else has to give. The proposals machine's word
+	 * (`draft.executeNow`), and its one press (`propose_execute`).
 	 */
-	const executeNow = $derived(drafting && !!dapp && !!item && item.canExecute.length > 0);
+	const executeNow = $derived(drafting && !!dapp && (machineDraft?.executeNow ?? false));
 
 	/** Where one of this sheet's actions stands in the machine (`approve:<hash>`, `execute:<hash>`). */
 	const actionOf = (what: 'approve' | 'execute'): MultisigActionState | null => {
@@ -846,7 +858,9 @@
 			phase = { kind: 'idle' };
 			return;
 		}
-		proposalsHost.confirmDraft(actor?.address ?? null);
+		const by = actor?.address ?? null;
+		if (thenExecute) proposalsHost.proposeExecute(by);
+		else proposalsHost.confirmDraft(by);
 		// Proposed (by a member here, or an outside member's wallet), or why not.
 		const state = await proposalsHost.until((view) => {
 			const now = view.actions.propose;
@@ -856,15 +870,27 @@
 			phase = failedPhase(actionError(state ?? { kind: 'cancelled' }, chainId));
 			return;
 		}
-		phase = { kind: 'idle' };
-		// The proposal as the mailbox has it now: executed if it is ready.
-		const hash = state.safe_tx_hash.toLowerCase();
-		await proposalsHost.until(
-			(view) => (view.items.some((i) => i.safeTxHash.toLowerCase() === hash) ? true : null),
-			10_000
-		);
-		await tick();
-		if (thenExecute && item?.status === 'ready' && actor) await onExecute();
+		// Ready on its own approval: the machine executes it now, in the same
+		// press (`execute:<hash>`, working from the moment it was proposed).
+		const key = `execute:${state.safe_tx_hash.toLowerCase()}`;
+		if (!thenExecute || !machine?.actions[key]) {
+			phase = { kind: 'idle' };
+			return;
+		}
+		phase = { kind: 'busy', what: 'execute' };
+		executedBy = by;
+		ended = null;
+		const ran = await proposalsHost.until((view) => {
+			const now = view.actions[key];
+			return now === undefined ? ('notNow' as const) : now.kind !== 'working' ? now : null;
+		});
+		if (ran === 'notNow' || ran === null) {
+			phase = { kind: 'idle' };
+			return;
+		}
+		const error = actionError(ran, chainId);
+		if (error && !(error instanceof ExecutionSpentError)) phase = failedPhase(error);
+		else if (error) phase = { kind: 'idle' };
 	}
 
 	/** `owner` approves it (one passkey prompt); `null` when it went, else why not. */
@@ -895,22 +921,21 @@
 
 	async function onExecute() {
 		if (!item || !actor || !members) return;
-		// "Approve and execute": should only the execute part be unable to run
-		// (before its passkey — a fee it cannot pay, a transaction that would
-		// fail), the approval is still given and kept (r4-11).
-		const approving =
-			!actorApproved &&
-			item.approved < item.threshold &&
-			approvers.some((o) => sameAddress(o.address, actor.address));
+		// "Approve and execute" is the machine's one press (`approve_execute`):
+		// should only the execute part be unable to run (before its passkey —
+		// a fee it cannot pay, a transaction that would fail), the machine
+		// still gives and keeps the approval (r4-11).
+		const oneTap = oneTapOffered;
 		phase = { kind: 'busy', what: 'execute' };
 		const by = actor.address;
 		executedBy = by;
 		ended = null;
 		const hash = item.safeTxHash;
+		const lower = hash.toLowerCase();
 		// The machine looks again before the passkey unless its look is fresh,
 		// signs that look's calls and fee, and follows the operation to its end.
-		const { error } = await act(`execute:${hash.toLowerCase()}`, {
-			type: 'execute',
+		const { error } = await act(`execute:${lower}`, {
+			type: oneTap ? 'approve_execute' : 'execute',
 			chain_id: chainId,
 			safe_tx_hash: hash,
 			executor: by
@@ -921,11 +946,13 @@
 			phase = { kind: 'idle' };
 			return;
 		}
-		if (approving && stoppedBeforeSigning(error)) {
+		// The approval the machine gave instead: said as approved, not executed.
+		if (oneTap && machine?.actions[`approve:${lower}`]) {
 			const reason =
 				error instanceof ExecutionWouldFailError ? whyText(m, error.why) : reasonOf(error);
 			phase = { kind: 'busy', what: 'approve' };
-			const again = await approveAs(actor);
+			const approved = await proposalsHost.settled(`approve:${lower}`);
+			const again = approved ? actionError(approved, chainId) : null;
 			phase = again ? failedPhase(again) : { kind: 'partial', reason };
 			return;
 		}
@@ -1978,7 +2005,6 @@
 			<!-- r4D-19: in the desktop's capped dialog the actions stay in view. -->
 			<div class="primary" class:actions={wide} data-testid="proposal-actions">
 				{#if executors.length > 0 && actor}
-					{@const approveFirst = !actorApproved && item.approved < item.threshold}
 					{#if actorPreview?.kind === 'refused'}
 						<!-- §3.5: it would deploy from a genesis the core does not find Verified here. -->
 						<p class="warn" role="alert" data-testid="execute-refused">
@@ -2039,7 +2065,10 @@
 								variant={valueVariant}
 								shape="rounded"
 								loading={busy && phase.kind === 'busy' && phase.what === 'execute'}
-								disabled={busy || reviewHolding || actorPreview === null}
+								disabled={busy ||
+									reviewHolding ||
+									actorPreview === null ||
+									(approveFirst && !oneTapOffered)}
 								onclick={onExecute}
 							>
 								{approveFirst
