@@ -2572,6 +2572,12 @@ pub mod page {
         shown: Option<reading::TxShown>,
         /// The facts of the tokens it moves the registry does not name.
         tokens: BTreeMap<String, reading::TokenFacts>,
+        /// r8-11: what was asked, kept so a review that could not be
+        /// gathered is gathered again (the page's refresh) — a paired
+        /// request is never reviewed on its title and hashes alone.
+        request: Option<SafeTxRequest>,
+        /// Being read now: one read at a time.
+        reading: bool,
     }
 
     impl PageState {
@@ -3179,6 +3185,17 @@ pub mod page {
 
     /// Read it again: the mailbox's copy, the chain's members, what the chain approved.
     async fn refresh(io: &Io<Event>, st: &Shared<PageState>) {
+        // r8-11: a request whose review could not be gathered yet is read
+        // again: its warnings are the same as the link's own review's.
+        let unreviewed: Vec<SafeTxRequest> = lock(st)
+            .request_reads
+            .values()
+            .filter(|r| !r.reading && r.shown.as_ref().is_none_or(|x| x.review.is_none()))
+            .filter_map(|r| r.request.clone())
+            .collect();
+        for request in unreviewed {
+            read_request(io, st, request).await;
+        }
         let (link, service, seen) = {
             let s = lock(st);
             (s.link.clone(), s.service.clone(), s.seen.clone())
@@ -3366,15 +3383,21 @@ pub mod page {
             (
                 s.service.clone(),
                 s.seen.clone(),
-                s.request_reads.contains_key(&hash),
+                // Read already (with its review), or being read: nothing to do.
+                s.request_reads.get(&hash).is_some_and(|r| {
+                    r.reading || r.shown.as_ref().is_some_and(|x| x.review.is_some())
+                }),
             )
         };
         if known {
             return;
         }
-        lock(st)
-            .request_reads
-            .insert(hash.clone(), RequestRead::default());
+        {
+            let mut s = lock(st);
+            let entry = s.request_reads.entry(hash.clone()).or_default();
+            entry.reading = true;
+            entry.request = Some(request.clone());
+        }
         let genesis = verified_genesis(io, &service, &request.safe).await;
         let (chain_id, safe, tx) = (request.chain_id, request.safe.clone(), request.tx.clone());
         let read = multisig::review(chain_id, &safe, &tx).ok();
@@ -3403,6 +3426,8 @@ pub mod page {
                 tx: None,
                 shown: shown(None, None),
                 tokens: tokens.clone(),
+                request: Some(request.clone()),
+                reading: true,
             },
         );
         let link = TxLink {
@@ -3437,6 +3462,8 @@ pub mod page {
                 tx: view,
                 shown,
                 tokens,
+                request: Some(request),
+                reading: false,
             },
         );
     }
