@@ -146,7 +146,12 @@ fun MultisigAppLayer(
     }
     if (route != SessionRoute.Wallet) return
 
-    val words = MultisigWiring.words(container, hub)
+    // r8-18: the words name members from what the multisigs here keep
+    // (`known_members`) — read again whenever the accounts view moves. Built
+    // once (the view not read in composition), a cold start kept the empty
+    // first view for good: every member a bare address twice, the invite's
+    // names lost on the sheets.
+    val words = remember(accounts, session.accounts, networks, strings) { MultisigWiring.words(container, hub) }
     val hostContext = MultisigHostContext(
         words = words,
         accounts = session.accounts.map { MsLocal(it.address, it.name) },

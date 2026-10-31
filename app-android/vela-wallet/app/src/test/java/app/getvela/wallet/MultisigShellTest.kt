@@ -366,6 +366,19 @@ class MultisigShellTest {
         assertEquals(4100L, other.single()["error"]["code"].long)
     }
 
+    /** r8-18: the names a multisig keeps for its members reach the view every sheet names them from. */
+    @Test
+    fun a_stored_multisigs_member_names_are_known_after_a_boot() = runBlocking {
+        val ports = FakePorts()
+        val safe = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
+        val bob = "0x031d7D57c99CAF891e1C250554691Fd12D84772b"
+        ports.store["vela.multisigAccounts"] = """[{"address":"$safe","owners":["0xD400866e00B055B20752a826CD5C89b811de130b","$bob"],"threshold":2,"chainIds":[100],"recorded":true,"addedMs":1,"members":{"${bob.lowercase()}":{"name":"Bob","kind":"wallet"}},"genesis":{"factory":"0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67","singleton":"0x41675C099F32341bf84BFc5382aF534df5C7461a","saltNonce":"0x1","initializer":"0x","name":"Treasury"}}]"""
+        val hub = hub(ports)
+        withTimeout(20_000) { hub.boot() }
+        withTimeout(10_000) { while (hub.accountsView.value.knownMembers.isEmpty()) delay(20) }
+        assertEquals("Bob", hub.accountsView.value.lookup(hub.accountsView.value.knownMembers, bob)?.name)
+    }
+
     /**
      * r8-10: a site's transaction to a multisig opened no sheet and its
      * promise hung — the sheet read "not in the machine's view yet" as
