@@ -1097,9 +1097,7 @@ fn a_sites_transaction_from_a_multisig_is_proposed_held_and_answered() {
 
     // Proposed: its sheet opens on it, the site still waits.
     sim.proposals(ProposalsEvent::ConfirmDraft { as_member: None });
-    // Its approval is the execution's own sender (`msg.sender`): no
-    // separate signature is asked.
-    assert_eq!(sim.world().passkeys.len(), passkeys, "no separate approval");
+    assert_eq!(sim.world().passkeys.len(), passkeys + 1, "one passkey");
     let hash = sim.machines.proposals_view.dapp[&rid]
         .safe_tx_hash
         .clone()
