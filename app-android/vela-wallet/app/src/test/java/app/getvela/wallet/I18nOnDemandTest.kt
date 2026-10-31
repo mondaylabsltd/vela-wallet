@@ -94,6 +94,25 @@ class I18nOnDemandTest {
         assertEquals(english, strings.t(key))
     }
 
+    /**
+     * core-perf-1: many keys in one ask answer exactly as `t` does, one by
+     * one — plain keys, keys nothing resolves, a branch, and a key with vars —
+     * and follow a language change.
+     */
+    @Test
+    fun manyKeysAtOnceAnswerAsOneAtATime() {
+        val strings = runtime().apply { initialize("en") }
+        val keys = listOf("home.totalBalance", "no.such.key", "home", "home.totalBalance", sample)
+        for (tag in listOf("en", "zh", "de")) {
+            strings.setLocale(tag)
+            assertEquals(tag, keys.map(strings::t), strings.tMany(keys))
+        }
+        val vars = mapOf("ago" to "5m")
+        val withVars = listOf("home.lastUpdated", "home.totalBalance")
+        assertEquals(withVars.map { strings.t(it, vars) }, strings.tMany(withVars, vars))
+        assertEquals(emptyList<String>(), strings.tMany(emptyList()))
+    }
+
     @Test
     fun aNamespaceAskedForBeforeTheEngineIsBuiltLoadsWithIt() {
         val strings = runtime()
