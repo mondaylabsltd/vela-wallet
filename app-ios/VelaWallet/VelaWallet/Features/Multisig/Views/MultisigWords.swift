@@ -52,8 +52,14 @@ struct MsWords {
     /// r9-12: the core's ONE name for a member (`member_labels`: kept, then
     /// the passkey index, then this device's own name, then the short
     /// address) — the same on every device.
+    /// A member with no name at all is labelled by the core with its own
+    /// short address (`names.short`): that is no name — the row draws the
+    /// address as it always does, not the address twice.
     func coreLabel(_ address: String) -> String? {
-        (labels ?? hub?.accountsView.memberLabels)?[address.lowercased()].flatMap { $0.isEmpty ? nil : $0 }
+        guard let label = (labels ?? hub?.accountsView.memberLabels)?[address.lowercased()], !label.isEmpty,
+              label != MsRules.string("names.short", ["address": address])
+        else { return nil }
+        return label
     }
 
     /// A member as a line names it: its name and short address, never the

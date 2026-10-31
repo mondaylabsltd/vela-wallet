@@ -301,7 +301,7 @@ struct MultisigR9FixTests {
 
     // MARK: - r9-12: one name per member, the core's
 
-    @Test func aMemberIsNamedByTheCoreNotByThisDevice() {
+    @Test func aMemberIsNamedByTheCoreNotByThisDevice() throws {
         // This device calls its account "Parallel One"; the passkey index
         // (the core's rule) says "Interleave" — the core's name is drawn.
         let named = MsWords(loc: loc, hub: nil, localNames: [Self.one.lowercased(): "Parallel One"],
@@ -313,6 +313,11 @@ struct MultisigR9FixTests {
         #expect(named.localName(Self.one) == "Parallel One")
         // A member the core has not named yet: as before.
         #expect(named.label(Self.three) == MsWords.short(Self.three))
+        // One the core names by its short address only: no name, the address once.
+        let short = try #require(MsRules.string("names.short", ["address": Self.three]))
+        let unnamed = MsWords(loc: loc, hub: nil, labels: [Self.three.lowercased(): short])
+        #expect(unnamed.coreLabel(Self.three) == nil)
+        #expect(unnamed.who(Self.three) == MsWords.short(Self.three))
     }
 
     @Test func theAccountsViewCarriesTheNamesTheIndexWantsAndTheInvite() throws {

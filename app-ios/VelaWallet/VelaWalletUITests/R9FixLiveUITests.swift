@@ -40,7 +40,9 @@ final class R9FixLiveUITests: XCTestCase {
         return (rpc, relay, genesis, state, outside)
     }
 
-    private var safeFile: String { (env["VELA_R9_STATE"] ?? "/tmp") + "/safe-addr.txt" }
+    /// `VELA_R9_SAFE_FILE`: another multisig's (test5's, whose third member
+    /// never signed anything); else the run's.
+    private var safeFile: String { env["VELA_R9_SAFE_FILE"] ?? (env["VELA_R9_STATE"] ?? "/tmp") + "/safe-addr.txt" }
     private var safe: String {
         ((try? String(contentsOfFile: safeFile, encoding: .utf8)) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -174,11 +176,11 @@ final class R9FixLiveUITests: XCTestCase {
         let app = try launch()
         tap(app, "wallet.header.name")
         tap(app, "multisig.switcher.create")
-        type(app, "multisig.create.name", "R9 iOS")
+        type(app, "multisig.create.name", env["VELA_R9_NAME"] ?? "R9 iOS")
         type(app, "multisig.create.address", Self.parallelTwo)
         tap(app, "multisig.create.addMember")
         // The outside owner, its kind never said (the r9 "Eve").
-        type(app, "multisig.create.address", h.outside)
+        type(app, "multisig.create.address", env["VELA_R9_THIRD"] ?? h.outside)
         tap(app, "multisig.create.addMember")
         tap(app, "multisig.create.next")
         let picker = app.buttons["multisig.create.network"].firstMatch
@@ -197,10 +199,15 @@ final class R9FixLiveUITests: XCTestCase {
         // The system's question, once there is a multisig to say things about.
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         let allow = springboard.buttons["Allow"]
-        XCTAssertTrue(allow.waitForExistence(timeout: 60), "the app never asked for notifications")
-        sleep(1)
-        shot(app, "r9-8-asked-on-create")
-        allow.tap()
+        // `VELA_R9_ASKED`: a second multisig on this install — asked once already.
+        if env["VELA_R9_ASKED"] == nil {
+            XCTAssertTrue(allow.waitForExistence(timeout: 60), "the app never asked for notifications")
+            sleep(1)
+            shot(app, "r9-8-asked-on-create")
+            allow.tap()
+        } else {
+            XCTAssertFalse(allow.waitForExistence(timeout: 8), "asked a second time")
+        }
         XCTAssertTrue(element(app, "multisig.create.created").waitForExistence(timeout: 60), "not created")
         tap(app, "multisig.create.done")
         XCTAssertTrue(element(app, "multisig.home").waitForExistence(timeout: 20), "the home does not show the multisig")
@@ -295,6 +302,7 @@ final class R9FixLiveUITests: XCTestCase {
         let h = try required()
         guard let flaky = env["VELA_R9_FLAKY"] else { throw XCTSkip("no flaky proxy named (VELA_R9_FLAKY)") }
         let flag = "\(h.state)/fail-56"
+        try driver("fund")
         let app = try launch(flaky: flaky)
         XCTAssertTrue(element(app, "multisig.home").waitForExistence(timeout: 60), "the multisig is not shown")
         sleep(4)
