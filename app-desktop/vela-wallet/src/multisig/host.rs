@@ -77,6 +77,11 @@ pub struct MultisigHost {
     send_propose: Option<SendPropose>,
     /// The PeerConnect transport (its Retry; leaving every room).
     peer: Option<Arc<super::peer::PeerRooms>>,
+    /// M6: what the views said at the last look, for the notifications.
+    notifier: super::notify::Notifier,
+    /// When the others' presence was first asked for (ms): a full poll
+    /// later it is a live read, never the list an earlier session kept.
+    others_since: Option<f64>,
 }
 
 /// How a send flow's proposal ended (its `Proposed` / `ProposeFailed`).
@@ -289,6 +294,8 @@ impl MultisigHost {
             generation: 0,
             send_propose: None,
             peer: None,
+            notifier: super::notify::Notifier::default(),
+            others_since: None,
         }
     }
 
@@ -358,6 +365,7 @@ impl MultisigHost {
         }
         if now >= self.due.others {
             self.due.others = now + RECORD_EVERY.as_secs_f64() * 1000.0;
+            self.others_since.get_or_insert(now);
             jobs.extend(self.machines.proposals(proposals::Event::OthersTick));
         }
         if self.machines.proposals_view.followed.is_some() && now >= self.due.proposals {
@@ -567,7 +575,34 @@ impl MultisigHost {
         }
         self.follow_send_propose(cx);
         self.sync_shown(cx);
+        self.notice_moves(cx);
         self.touch(cx);
+    }
+
+    /// M6: what moved since the last look, posted as notifications — only
+    /// while the person has them on (`notify::deliver::wanted`). Off, the
+    /// memory goes, so turning them on again starts from a silent baseline.
+    fn notice_moves(&mut self, cx: &mut Context<Self>) {
+        if !super::notify::deliver::wanted() {
+            if !self.notifier.is_fresh() {
+                self.notifier.reset();
+            }
+            return;
+        }
+        if !self.machines.accounts_view.loaded {
+            return;
+        }
+        let now = crate::executor::now_ms();
+        let live = self
+            .others_since
+            .is_some_and(|since| now - since >= RECORD_EVERY.as_secs_f64() * 1000.0);
+        let snapshot = super::notify::Snapshot::of(
+            &self.machines.accounts_view,
+            &self.machines.proposals_view,
+            live,
+        );
+        let notices = self.notifier.observe(snapshot);
+        super::notify::deliver::post(notices, cx);
     }
 
     /// The multisig shown, carried to the window (`shown::Shown`): the root

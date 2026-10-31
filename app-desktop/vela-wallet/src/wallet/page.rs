@@ -50,6 +50,8 @@ mod feedback;
 pub(crate) mod multisig;
 /// The create, add and invite sheets (AUDIT M1).
 mod multisig_sheets;
+/// Multisig notifications: the switch, the in-app line, a click's way in (M6).
+pub(crate) mod multisig_notify;
 mod palette;
 use feedback::FeedbackDraft;
 
@@ -12088,6 +12090,7 @@ impl WalletPage {
             .child(form_row(theme, scale_label, scale_control))
             .child(form_row(theme, theme_label, theme_control))
             .children(self.menu_bar_row(theme, cx))
+            .children(self.ms_notify_row(theme, cx))
     }
 
     /// N-D3: the menu-bar extra (Windows: the notification-area icon), off
@@ -22787,6 +22790,10 @@ impl Render for WalletPage {
             root = root.child(toast);
         }
         if let Some(toast) = self.debug_notice_toast(&theme) {
+            root = root.child(toast);
+        }
+        // A multisig notification the platform could not show (M6).
+        if let Some(toast) = self.ms_notify_toast(&theme, cx) {
             root = root.child(toast);
         }
         // A report that ended while the person was elsewhere (078 round 3).

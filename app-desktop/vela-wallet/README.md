@@ -772,6 +772,8 @@ VELA_THEME=light VELA_LANG=zh cargo run    # both
 | `VELA_UPDATE_CHECK_AFTER_MS` | [updater/prompt.rs](src/updater/prompt.rs) | The first feed check this long after launch (default 8 s); only a build with a key asks at all |
 | `VELA_UPDATE_AUTO_INSTALL=1` | [updater/prompt.rs](src/updater/prompt.rs) | Presses Install 3 s after an offer — `scripts/update-e2e.sh`'s hand |
 | `VELA_UPDATE_RELAUNCH_LOG` | [updater/install_macos.rs](src/updater/install_macos.rs) | Where the relaunched app's stderr goes (`open --stderr`) |
+| `VELA_MULTISIG_NOTIFY=1` | [multisig/notify/deliver.rs](src/multisig/notify/deliver.rs) | Multisig notifications on, whatever the Settings switch says — see [Multisig notifications](#multisig-notifications) |
+| `VELA_MULTISIG_NOTIFY_TEST=1` | [multisig/notify/deliver.rs](src/multisig/notify/deliver.rs) | One sample notification ("Needs your approval · Send 1.5 xDAI") 4 s after launch, through the same words and the same door as a real one — to see delivery work on a machine |
 
 The last three are writes into the store, as Settings would write them —
 pair them with `VELA_STATE_DIR=<scratch dir>`. Against the multisig fork
@@ -976,6 +978,54 @@ developer build.
 Linux has none yet: a StatusNotifierItem needs a `com.canonical.dbusmenu`
 menu over D-Bus, and GNOME shows none without an extension. Closing the
 window still quits (see the reopen quirk below), and the extra goes with it.
+
+## Multisig notifications
+
+`src/multisig/notify.rs` (the rule) and `src/multisig/notify/` (words and
+delivery): "Needs your approval", "Approval counted: 2 of 3", "Ready to
+execute" and "Executed" for the multisigs on this device, titled with the
+multisig's name, the transaction's title after the words when the list
+says what it is. A click (or a press on the in-app line) brings the window
+forward, shows that multisig and opens the transaction's sheet.
+
+**Off by default** (`vela.desktop.multisigNotifications` = `"1"`), and
+turned on with the Settings → Appearance switch under the menu-bar one
+(`settingsModals.appearance.multisigNotifications`, over its `…Hint`); the
+web has no equivalent. A switch whose words are missing is not drawn.
+`VELA_MULTISIG_NOTIFY=1` turns them on in a developer build.
+
+There is no push service: the multisig host's own polls move the machines'
+views — the accounts and every other multisig's waiting list every 60 s,
+the multisig shown at its pace — and each move is compared with the last
+one. Nothing is decided here: "needs you", "ready" and "executed" are the
+core's views (`waiting_of`, the execution verdict, the timeline). The first
+look after launch (or after the switch is turned on), a multisig first
+seen, the multisig shown just switched to and a network read for the first
+time are a silent baseline; the others' lists count only from a full poll
+after the first round, never the list an earlier session kept. Each
+(multisig, transaction, kind) is said once a session. What the person did
+here — a proposal made here, an approval given by a member on this device,
+and the "ready" it caused — is not news. "Executed" is said only for a
+transaction seen open this session whose verdict or timeline says it ran;
+one that merely left a list may have been replaced, and is not said. For
+a multisig other than the one shown, the list names only the transaction
+waiting first, so a second one behind it is said when it comes first.
+
+Delivery is gpui's `show_system_notification` on every desktop:
+
+- **macOS** — `UNUserNotificationCenter`. It works only from the bundled,
+  signed app; the permission is asked when the switch is turned on (and at
+  launch while it is on). A bare `cargo run` binary has no bundle id, and a
+  refused permission is a refusal: either way the notice is shown as a line
+  at the bottom of the window for 8 s instead, and the log says why once.
+- **Windows** — a toast under the AppUserModelID `app.getvela.VelaWallet`,
+  set at launch; the installer's shortcuts carry the same id (one taskbar
+  button). Chosen over the tray icon's balloon, which needs the icon on and
+  becomes a toast on Windows 10 and 11 anyway.
+- **Linux** — `org.freedesktop.Notifications` over D-Bus. A session without
+  a notification daemon shows nothing (gpui logs it).
+
+The app polls only while it runs: closed, nothing is checked.
 
 ## Updates
 
