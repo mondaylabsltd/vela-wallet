@@ -76,6 +76,43 @@ final class UserOpSpine {
         var tier: String? = nil
     }
 
+    /// The gas the confirmed fee was priced on (`SubmitUserOp.prepared`,
+    /// core-perf-1): fresh, for exactly the calls submitted. Signed as it is
+    /// when the account is still in the deployment state it was measured in;
+    /// never the nonce, which is read before the prompt either way.
+    struct Prepared: Equatable {
+        let deployed: Bool
+        let verificationGasLimit: String
+        let callGasLimit: String
+        let preVerificationGas: String
+        let settlementGas: String?
+
+        /// `SubmitUserOp.prepared` as the core sends it; `nil` when absent.
+        init?(operation: [String: Any]?) {
+            guard let operation,
+                  let deployed = operation["deployed"] as? Bool,
+                  let verification = operation["verification_gas_limit"] as? String,
+                  let call = operation["call_gas_limit"] as? String,
+                  let preVerification = operation["pre_verification_gas"] as? String
+            else { return nil }
+            self.init(
+                deployed: deployed, verificationGasLimit: verification, callGasLimit: call,
+                preVerificationGas: preVerification, settlementGas: operation["settlement_gas"] as? String
+            )
+        }
+
+        init(
+            deployed: Bool, verificationGasLimit: String, callGasLimit: String,
+            preVerificationGas: String, settlementGas: String?
+        ) {
+            self.deployed = deployed
+            self.verificationGasLimit = verificationGasLimit
+            self.callGasLimit = callGasLimit
+            self.preVerificationGas = preVerificationGas
+            self.settlementGas = settlementGas
+        }
+    }
+
     /// The account store, as the submit path reads it.
     protocol AccountPort {
         /// The wallet's founding keys for `address`, pinned key first; empty
@@ -223,6 +260,56 @@ final class UserOpSpine {
         return (try? userOpRaiseCallGas(draft: draft, measured: measured, callCount: UInt32(calls.count))) ?? draft
     }
 
+    /// The relay's estimate of the draft, signed through the core's one rule,
+    /// raised to the inner calls' own measured floor — what every submit did
+    /// before the quote's measurement came down with it (core-perf-1), and
+    /// what one does still when it did not.
+    private func measureGas(
+        _ draft: inout UserOpDraft, chainId: Int, account: String, calls: [UserOpCall],
+        tempo: Bool, feeToken: String?, floors: GasFloorsRecord
+    ) async throws {
+        let hasContractCall = (try? userOpHasContractCall(calls: calls)) ?? false
+        let relayJson: String
+        do {
+            relayJson = try userOpRelayJson(draft: draft, feeToken: tempo ? feeToken : nil)
+        } catch {
+            throw other("The operation could not be encoded.")
+        }
+        switch await relay.estimateUserOpGas(chainId: chainId, opJson: relayJson) {
+        case .estimated(let verification, let call, let preVerification, let settlement):
+            // The core's one rule for the limits signed: the relay's as
+            // returned (an undeployed Safe's floors; the 2M verification floor
+            // only for a relay without `settlementGas`), then the inner calls'
+            // own measured floor.
+            if let applied = try? userOpApplyEstimate(
+                draft: draft,
+                verificationGasLimit: verification,
+                callGasLimit: call,
+                preVerificationGas: preVerification,
+                settlementGas: settlement,
+                floors: floors
+            ) {
+                draft = await raisedToMeasuredFloor(applied, chainId: chainId, account: account, calls: calls)
+            }
+        case .refused(let message):
+            // What the refusal says, in the core's classes (spec 082 RJ19):
+            // a revert the relay simulated, or nothing known. Logged only —
+            // this sheet's own simulation already warned about a revert.
+            let reading = userOpEstimateFailure(errorJson: CoreJSON.string(["message": message]))
+            VelaLog.failure(.relay, kind: "estimate_refused", "chain=\(chainId) class=\(reading.kind)")
+            if hasContractCall {
+                throw other("Could not estimate gas for this transaction. The network may be busy — please try again.")
+            }
+        case .unreachable:
+            // A plain transfer can ride the floors. A batch carrying a real
+            // contract call cannot: its gas is unknowable without the estimate,
+            // and submitting anyway spends a prompt on a rejection.
+            if hasContractCall {
+                throw other("Could not estimate gas for this transaction. The network may be busy — please try again.")
+            }
+        }
+    }
+
     /// A decimal wei string as bare hex. Values here are small enough for
     /// `UInt64`… except when they are not — then the measurement is skipped.
     static func decimalToHex(_ decimal: String) -> String? {
@@ -318,6 +405,7 @@ final class UserOpSpine {
         gasFeeToken: String?,
         quotedFee: Quoted?,
         review: String? = nil,
+        prepared: Prepared? = nil,
         asked: Asked? = nil,
         signingStarted: () -> Void = {},
         signingDone: () -> Void = {},
@@ -398,47 +486,29 @@ final class UserOpSpine {
             throw other("The operation could not be assembled.")
         }
 
-        let hasContractCall = (try? userOpHasContractCall(calls: calls)) ?? false
-        let relayJson: String
-        do {
-            relayJson = try userOpRelayJson(draft: draft, feeToken: tempo ? feeToken : nil)
-        } catch {
-            throw other("The operation could not be encoded.")
+        // The quote's measurement (core-perf-1), when it measured THIS account
+        // as it stands now — `deployed` was read fresh above — for an in-band
+        // fee: its limits are the ones the fee on screen was priced on, the
+        // inner calls' floor already in them. Signed as they are, through the
+        // core's one rule; the relay is not asked to simulate again, and the
+        // inner calls are not measured again.
+        if !tempo, let prepared, prepared.deployed == deployed,
+           let applied = try? userOpApplyEstimate(
+               draft: draft,
+               verificationGasLimit: prepared.verificationGasLimit,
+               callGasLimit: prepared.callGasLimit,
+               preVerificationGas: prepared.preVerificationGas,
+               settlementGas: prepared.settlementGas,
+               floors: floors
+           ) {
+            draft = applied
+            VelaLog.notice(.sign, "submit signs the quote's gas chain=\(chainId)")
+        } else {
+            try await measureGas(
+                &draft, chainId: chainId, account: account, calls: calls, tempo: tempo,
+                feeToken: feeToken, floors: floors
+            )
         }
-        switch await relay.estimateUserOpGas(chainId: chainId, opJson: relayJson) {
-        case .estimated(let verification, let call, let preVerification, let settlement):
-            // The core's one rule for the limits signed: the relay's as
-            // returned (an undeployed Safe's floors; the 2M verification floor
-            // only for a relay without `settlementGas`), then the inner calls'
-            // own measured floor.
-            if let applied = try? userOpApplyEstimate(
-                draft: draft,
-                verificationGasLimit: verification,
-                callGasLimit: call,
-                preVerificationGas: preVerification,
-                settlementGas: settlement,
-                floors: floors
-            ) {
-                draft = await raisedToMeasuredFloor(applied, chainId: chainId, account: account, calls: calls)
-            }
-        case .refused(let message):
-            // What the refusal says, in the core's classes (spec 082 RJ19):
-            // a revert the relay simulated, or nothing known. Logged only —
-            // this sheet's own simulation already warned about a revert.
-            let reading = userOpEstimateFailure(errorJson: CoreJSON.string(["message": message]))
-            VelaLog.failure(.relay, kind: "estimate_refused", "chain=\(chainId) class=\(reading.kind)")
-            if hasContractCall {
-                throw other("Could not estimate gas for this transaction. The network may be busy — please try again.")
-            }
-        case .unreachable:
-            // A plain transfer can ride the floors. A batch carrying a real
-            // contract call cannot: its gas is unknowable without the estimate,
-            // and submitting anyway spends a prompt on a rejection.
-            if hasContractCall {
-                throw other("Could not estimate gas for this transaction. The network may be busy — please try again.")
-            }
-        }
-
         do {
             draft = try userOpWithCalls(draft: draft, calls: calls, fee: settled)
         } catch {

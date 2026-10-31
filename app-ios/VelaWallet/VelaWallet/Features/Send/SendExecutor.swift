@@ -710,6 +710,10 @@ final class SendExecutor {
                 gasFeeToken: operation["gas_fee_token"] as? String,
                 quotedFee: quoted,
                 review: review,
+                // The gas the confirmed fee was priced on, when the core
+                // still holds it fresh for exactly these calls: signed
+                // without simulating again (core-perf-1).
+                prepared: UserOpSpine.Prepared(operation: operation["prepared"] as? [String: Any]),
                 signingStarted: {
                     bound.opened = true
                     ports.signingStarted()
