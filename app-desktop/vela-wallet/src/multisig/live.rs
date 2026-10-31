@@ -130,7 +130,7 @@ fn bytes(hex: &str) -> Option<Vec<u8>> {
 fn quantity(text: &str) -> Option<u128> {
     let text = text.trim();
     match text.strip_prefix("0x") {
-        Some(hex) if hex.is_empty() => Some(0),
+        Some("") => Some(0),
         Some(hex) => u128::from_str_radix(hex, 16).ok(),
         None if text.is_empty() => Some(0),
         None => text.parse().ok(),

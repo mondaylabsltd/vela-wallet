@@ -406,17 +406,8 @@ impl SendHost {
         self.submits.running()
     }
 
-    pub fn open(
-        account: Account,
-        params: SendOpenParams,
-        display: SendDisplayContext,
-        window_handle: WindowHandle,
-        cx: &mut Context<Self>,
-    ) -> Self {
-        Self::open_as(account, None, params, display, window_handle, cx)
-    }
-
-    /// [`Self::open`], from the multisig shown when there is one (AUDIT
+    /// Open the send journey from `account` — or from the multisig shown
+    /// when there is one (AUDIT
     /// M2): the journey reads ITS holdings and its confirm proposes — the
     /// members approve it — instead of sending (`ProposeSafeTx`).
     pub fn open_as(

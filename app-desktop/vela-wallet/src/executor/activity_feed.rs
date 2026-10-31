@@ -41,7 +41,6 @@ use vela_core::app::token_trust::{TrustSimDirection, TrustSimJudgment};
 
 use crate::executor::{identity, storage};
 use crate::resident::{self, Answer, Machine};
-use crate::session;
 
 /// `vela.transactionHistory` — the shared local store.
 pub(crate) const TX_KEY: &str = "vela.transactionHistory";

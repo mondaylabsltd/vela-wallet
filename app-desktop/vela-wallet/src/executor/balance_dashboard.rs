@@ -29,7 +29,6 @@ use vela_core::app::balance_dashboard::{
 
 use crate::executor::{balances, pool, storage};
 use crate::resident::{self, Answer, Machine};
-use crate::session;
 
 /// `vela.balanceCache` — `{ address: { usd, at } }`, the Expo bytes.
 const CACHE_KEY: &str = "vela.balanceCache";

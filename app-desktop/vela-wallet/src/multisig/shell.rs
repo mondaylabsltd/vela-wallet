@@ -184,6 +184,7 @@ impl Perform {
     /// Run it here, to completion (a test's synchronous shell): blocking
     /// work on this thread, a wait at once. The two the host owns —
     /// [`Perform::AskRisk`] and [`Perform::Notice`] — are handed back.
+    #[cfg(test)]
     pub fn run_inline(self) -> Result<Res, Self> {
         match self {
             Self::Now(res) | Self::After(_, res) => Ok(res),

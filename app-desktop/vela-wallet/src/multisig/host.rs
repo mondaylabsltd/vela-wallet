@@ -319,6 +319,15 @@ impl MultisigHost {
 
     fn beat(&mut self, cx: &mut Context<Self>) {
         let now = crate::executor::now_ms();
+        // A ceremony's question (a PIN, a touch, a QR) is drawn by the
+        // page: redraw while one may be up.
+        let asking = self.ceremony.pending_pin().is_some()
+            || self.ceremony.pending_choice().is_some()
+            || self.ceremony.qr_showing().is_some()
+            || self.ceremony.touch_waiting().is_some();
+        if asking || self.trusted.waiting() {
+            self.touch(cx);
+        }
         if !self.machines.accounts_view.loaded {
             return;
         }

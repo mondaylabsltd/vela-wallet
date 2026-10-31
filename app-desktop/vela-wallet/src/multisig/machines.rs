@@ -21,7 +21,7 @@ use vela_core::app::multisig_accounts::{
 };
 use vela_core::app::multisig_members::{self as members, MultisigMembers, MultisigMembersView};
 use vela_core::app::multisig_outside::session::{
-    self, OutsideSession, OutsideSessionView, SessionOutcome, SessionRequest,
+    self, OutsideSession, OutsideSessionView, SessionRequest,
 };
 use vela_core::app::multisig_proposals::{self as proposals, MultisigProposals, ProposalsView};
 use vela_core::app::multisig_shell::{
@@ -185,12 +185,6 @@ impl Machines {
         }));
         jobs.extend(self.feed());
         jobs
-    }
-
-    /// Whether [`Self::start`] ran.
-    #[must_use]
-    pub fn started(&self) -> bool {
-        self.started
     }
 
     /// The facts as they move (another account signed in, a network added,
@@ -584,14 +578,4 @@ fn waiting_of(view: &ProposalsView) -> Vec<members::WaitingProposal> {
             },
         })
         .collect()
-}
-
-/// What the session came to, as a word for logs and tests.
-#[must_use]
-pub fn outcome_word(outcome: &SessionOutcome) -> &'static str {
-    match outcome {
-        SessionOutcome::Approved { .. } => "approved",
-        SessionOutcome::Sent { .. } => "sent",
-        SessionOutcome::Cancelled => "cancelled",
-    }
 }

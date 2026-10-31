@@ -56,6 +56,9 @@ pub(crate) struct MultisigUi {
     pub previewed: BTreeMap<String, f64>,
     /// The words, for the language in force ([`WalletPage::ms_loc`]).
     pub loc: Option<std::rc::Rc<Loc>>,
+    /// A security key's PIN being typed for a multisig signature: what is
+    /// typed, and the field's focus.
+    pub pin: Option<(String, gpui::FocusHandle)>,
     /// The multisig whose removal is being asked about (the switcher row).
     pub removing: Option<String>,
     /// The create sheet is up (`multisig_create.rs`).
@@ -1011,16 +1014,20 @@ impl WalletPage {
             format!("approve:{}", item.safe_tx_hash),
             format!("execute:{}", item.safe_tx_hash),
         ] {
-            if let Some(state) = view.actions.get(&action) {
-                if let Some(text) = self.ms_action_words(state, chain_id) {
-                    body = body.child(ms_note(theme, &text, Tone::Caution));
-                }
+            if let Some(text) = view
+                .actions
+                .get(&action)
+                .and_then(|state| self.ms_action_words(state, chain_id))
+            {
+                body = body.child(ms_note(theme, &text, Tone::Caution));
             }
         }
-        if let Some(execution) = view.executions.get(&key) {
-            if let Some(text) = ms_execution_words(&loc, execution) {
-                body = body.child(ms_note(theme, &text, Tone::Neutral));
-            }
+        if let Some(text) = view
+            .executions
+            .get(&key)
+            .and_then(|execution| ms_execution_words(&loc, execution))
+        {
+            body = body.child(ms_note(theme, &text, Tone::Neutral));
         }
         if let Some(entry) = view.outbox.get(&key) {
             let text = match (entry.why.as_str(), entry.retry_at) {
@@ -1872,6 +1879,9 @@ impl WalletPage {
         cx: &mut Context<Self>,
     ) -> Option<gpui::AnyElement> {
         let host = ms_host::booted(cx)?;
+        if let Some(prompt) = self.ms_ceremony_layer(theme, window, &host, cx) {
+            return Some(prompt);
+        }
         if let Some(risk) = host.read(cx).risk.clone() {
             return Some(self.ms_risk_dialog(theme, window, &risk, cx));
         }
@@ -1893,6 +1903,108 @@ impl WalletPage {
         None
     }
 
+    /// A passkey ceremony a multisig signature runs (an approval, an
+    /// execution, a record's proof): a security key's PIN, the account to
+    /// pick, the phone's QR, the touch — the same cards the send flow draws
+    /// (`hardware::*`), over everything, as a ceremony's question is.
+    fn ms_ceremony_layer(
+        &mut self,
+        theme: &Theme,
+        window: &Window,
+        host: &gpui::Entity<MultisigHost>,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::AnyElement> {
+        let channel = host.read(cx).ceremony.clone();
+        let scrim = |id: &'static str| {
+            div()
+                .id(id)
+                .absolute()
+                .inset_0()
+                .flex()
+                .items_center()
+                .justify_center()
+                .bg(theme.backdrop)
+        };
+        if let Some(request) = channel.pending_pin() {
+            let focus = match &self.multisig.pin {
+                Some((_, focus)) => focus.clone(),
+                None => {
+                    let focus = cx.focus_handle();
+                    self.multisig.pin = Some((String::new(), focus.clone()));
+                    focus
+                }
+            };
+            let value = self.multisig.pin.as_ref().map(|(v, _)| v.clone()).unwrap_or_default();
+            let page = cx.entity().downgrade();
+            let on_change = {
+                let page = page.clone();
+                move |text: String, _: &mut Window, cx: &mut gpui::App| {
+                    let _ = page.update(cx, |page, cx| {
+                        if let Some((value, _)) = page.multisig.pin.as_mut() {
+                            *value = text;
+                        }
+                        cx.notify();
+                    });
+                }
+            };
+            let on_confirm = {
+                let (page, channel) = (page.clone(), channel.clone());
+                move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                    let value = page
+                        .update(cx, |page, _| page.multisig.pin.take().map(|(v, _)| v))
+                        .ok()
+                        .flatten();
+                    channel.answer_pin(value);
+                }
+            };
+            let on_cancel = {
+                let channel = channel.clone();
+                move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                    let _ = page.update(cx, |page, _| page.multisig.pin = None);
+                    channel.answer_pin(None);
+                }
+            };
+            let card = crate::hardware::pin_card(
+                theme, &self.loc, &request, &value, &focus, window, on_change, on_confirm, on_cancel,
+            );
+            return Some(scrim("ms-pin-scrim").child(card).into_any_element());
+        }
+        self.multisig.pin = None;
+        if let Some(choices) = channel.pending_choice() {
+            let (pick, cancel) = (channel.clone(), channel.clone());
+            let card = crate::hardware::pick_card(
+                theme,
+                &self.loc,
+                &choices,
+                move |index: &usize, _: &mut Window, _: &mut gpui::App| pick.answer_choice(Some(*index)),
+                move |_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| cancel.answer_choice(None),
+            );
+            return Some(scrim("ms-pick-scrim").child(card).into_any_element());
+        }
+        if let Some(payload) = channel.qr_showing() {
+            let cancel = channel.clone();
+            let card = crate::hardware::qr_card_with(
+                theme,
+                &self.loc,
+                &payload,
+                crate::hardware::scan_line(&self.loc),
+                move |_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| cancel.cancel_qr(),
+            );
+            return Some(scrim("ms-qr-scrim").child(card).into_any_element());
+        }
+        if let Some(waiting) = channel.touch_waiting() {
+            let cancel = channel.clone();
+            let card = crate::hardware::touch_card(
+                theme,
+                &self.loc,
+                &waiting,
+                move |_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| cancel.cancel_touch(),
+            );
+            return Some(scrim("ms-touch-scrim").child(card).into_any_element());
+        }
+        None
+    }
+
     fn ms_risk_dialog(
         &mut self,
         theme: &Theme,
@@ -1902,11 +2014,8 @@ impl WalletPage {
     ) -> gpui::AnyElement {
         let loc = self.ms_loc();
         let net = network(risk.chain_id);
-        let findings: Vec<String> = risk
-            .findings
-            .iter()
-            .map(|f| crate::multisig::findings::finding_words(&loc, f, &net))
-            .collect();
+        let findings: Vec<serde_json::Value> = risk.findings.clone();
+        let findings = crate::multisig::findings::finding_lines(&loc, &findings, &net);
         let body = div()
             .flex()
             .flex_col()
@@ -2109,6 +2218,24 @@ impl WalletPage {
         body = body.child(crate::ui::dialog::dialog_body(theme, crate::multisig::session_words::phase(&loc, &view)));
         if let Some(failure) = &view.failure {
             body = body.child(ms_note(theme, &crate::multisig::session_words::failure(&loc, failure), Tone::Caution));
+        }
+        // How this side is getting onto the relay, with its Retry.
+        if let Some(line) =
+            crate::multisig::session_words::relay(&loc, &view.relay, crate::executor::now_ms())
+        {
+            body = body.child(ms_note(theme, &line, Tone::Caution)).child(
+                text_action(
+                    "ms-session-relay-retry",
+                    theme,
+                    &mut self.icons,
+                    None,
+                    words::t(&loc, "external.retry").into(),
+                )
+                .on_click(cx.listener(|this, _, _, cx| {
+                    let host = this.ms_host(cx);
+                    host.update(cx, |host, cx| host.retry_relay(cx));
+                })),
+            );
         }
         if let Some(link) = &link {
             body = body.child(

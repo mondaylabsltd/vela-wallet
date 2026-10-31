@@ -14,7 +14,6 @@ use vela_core::app::payment_request::{
 
 use crate::executor::storage;
 use crate::resident::{Answer, Machine};
-use crate::session;
 
 /// A payment link (`/pay?to=…&chain=…`) — the one the receive screen shares
 /// (`build_pay_link`), opened here: by the OS (`velawallet://pay?…`), pasted

@@ -1789,6 +1789,10 @@ impl WalletPage {
                     cx,
                 );
                 crate::executor::activity_feed::focus_tick(cx);
+                // The multisig records and the list shown, read now (§1.4).
+                if let Some(host) = crate::multisig::host::booted(cx) {
+                    host.update(cx, |host, cx| host.shown_again(cx));
+                }
                 // A reconcile sweep, not a throttled poll: coming back is
                 // exactly when a submission somebody walked away from should
                 // be settled.
