@@ -7,6 +7,7 @@
 
 import Foundation
 import Testing
+import VelaCore
 @testable import VelaWallet
 
 @MainActor
@@ -34,20 +35,38 @@ struct IdentityTests {
         #expect(Ens.reverseNode(vitalik) == Ens.reverseNode(vitalik.lowercased()))
         #expect(Ens.reverseNode(vitalik) == Ens.reverseNode(vitalik.uppercased()
             .replacingOccurrences(of: "0X", with: "0x")))
-        #expect(Ens.reverseNode(vitalik).count == 32)
+        #expect(Ens.reverseNode(vitalik)?.count == 32)
         // And it is the namehash of the documented name, not of the address.
         let tail = String(vitalik.dropFirst(2)).lowercased()
         #expect(Ens.reverseNode(vitalik) == Ens.namehash("\(tail).addr.reverse"))
+        // Text that is not an address has no node — never the root's.
+        #expect(Ens.reverseNode("not an address") == nil)
     }
 
-    /// EIP-137's published vector, and the empty name's zero node — the same
-    /// hash the fiat feeds address their contracts with, now that both callers
-    /// share one implementation.
+    /// EIP-137's published vector, and the empty name's zero node — the
+    /// core's (`ens_namehash`), which the fiat feeds address their contracts
+    /// with too.
     @Test func namehashIsTheSharedOne() {
-        #expect(Ens.namehash("eth").hexString
+        #expect(Ens.namehash("eth")?.hexString
                 == "93cdeb708b7545dc668eb9280176169d1c33cfd8ed6f04690a0bcc88a93fc4ae")
-        #expect(Ens.namehash("").hexString == String(repeating: "0", count: 64))
-        #expect(Ens.namehash("gbp-usd.data.eth") == FiatRates.namehash("gbp-usd.data.eth"))
+        #expect(Ens.namehash("")?.hexString == String(repeating: "0", count: 64))
+    }
+
+    /// The core's node is the label fold this shell used to do itself, over
+    /// the core's keccak — the same bytes, so nothing stored or asked changes.
+    @Test func theCoresNodeIsTheFoldThisShellDid() {
+        func fold(_ name: String) -> Data {
+            var node = Data(repeating: 0, count: 32)
+            for label in name.split(separator: ".").reversed() {
+                node = keccak256(data: node + keccak256(data: Data(label.utf8)))
+            }
+            return node
+        }
+        for name in ["gbp-usd.data.eth", "eur-usd.data.eth", "vitalik.eth", "a.b.c.d"] {
+            #expect(Ens.namehash(name) == fold(name), "\(name)")
+        }
+        let tail = String(vitalik.dropFirst(2)).lowercased()
+        #expect(Ens.reverseNode(vitalik) == fold("\(tail).addr.reverse"))
     }
 
     @Test func anAddressWordIsItsLowTwentyBytes() {

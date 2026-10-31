@@ -21,8 +21,8 @@ struct FiatRateTests {
     /// the wallet silently falls back to a hard-coded list instead of asking
     /// the registry.
     @Test func namehashMatchesTheEip137Vector() {
-        #expect(FiatRates.namehash("").hexString == String(repeating: "0", count: 64))
-        #expect(FiatRates.namehash("eth").hexString
+        #expect(Ens.namehash("")?.hexString == String(repeating: "0", count: 64))
+        #expect(Ens.namehash("eth")?.hexString
                 == "93cdeb708b7545dc668eb9280176169d1c33cfd8ed6f04690a0bcc88a93fc4ae")
     }
 

@@ -298,7 +298,8 @@ final class RecipientIdentity {
             else { return nil }
             node = answer.prefix(32)
         } else {
-            node = Ens.reverseNode(address)
+            guard let reverse = Ens.reverseNode(address) else { return nil }
+            node = reverse
         }
 
         guard let resolverWord = await call(service.chainId, to: service.registry,
