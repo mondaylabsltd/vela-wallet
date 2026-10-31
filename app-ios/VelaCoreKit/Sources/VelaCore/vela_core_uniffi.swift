@@ -6579,6 +6579,15 @@ public protocol MultisigAccountsCoreProtocol: AnyObject, Sendable {
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
     
+    /**
+     * core-ms-2: opt in to lighter answers, as every other machine
+     * can (`vela_core::app::view_host`): from the next one on, each
+     * carries `view_version`, and `view` only when it differs from
+     * the last one this object sent (no `view`: keep the one you
+     * hold). The multisig machines name no volatile fields.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
+    
     func view() throws  -> String
     
 }
@@ -6667,6 +6676,22 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * core-ms-2: opt in to lighter answers, as every other machine
+     * can (`vela_core::app::view_host`): from the next one on, each
+     * carries `view_version`, and `view` only when it differs from
+     * the last one this object sent (no `view`: keep the one you
+     * hold). The multisig machines name no volatile fields.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigaccountscore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -6735,6 +6760,15 @@ public protocol MultisigMembersCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * core-ms-2: opt in to lighter answers, as every other machine
+     * can (`vela_core::app::view_host`): from the next one on, each
+     * carries `view_version`, and `view` only when it differs from
+     * the last one this object sent (no `view`: keep the one you
+     * hold). The multisig machines name no volatile fields.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -6825,6 +6859,22 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * core-ms-2: opt in to lighter answers, as every other machine
+     * can (`vela_core::app::view_host`): from the next one on, each
+     * carries `view_version`, and `view` only when it differs from
+     * the last one this object sent (no `view`: keep the one you
+     * hold). The multisig machines name no volatile fields.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigmemberscore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -6892,6 +6942,15 @@ public protocol MultisigOutsidePageCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * core-ms-2: opt in to lighter answers, as every other machine
+     * can (`vela_core::app::view_host`): from the next one on, each
+     * carries `view_version`, and `view` only when it differs from
+     * the last one this object sent (no `view`: keep the one you
+     * hold). The multisig machines name no volatile fields.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -6981,6 +7040,22 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * core-ms-2: opt in to lighter answers, as every other machine
+     * can (`vela_core::app::view_host`): from the next one on, each
+     * carries `view_version`, and `view` only when it differs from
+     * the last one this object sent (no `view`: keep the one you
+     * hold). The multisig machines name no volatile fields.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigoutsidepagecore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -7048,6 +7123,15 @@ public protocol MultisigOutsideSessionCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * core-ms-2: opt in to lighter answers, as every other machine
+     * can (`vela_core::app::view_host`): from the next one on, each
+     * carries `view_version`, and `view` only when it differs from
+     * the last one this object sent (no `view`: keep the one you
+     * hold). The multisig machines name no volatile fields.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -7137,6 +7221,22 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * core-ms-2: opt in to lighter answers, as every other machine
+     * can (`vela_core::app::view_host`): from the next one on, each
+     * carries `view_version`, and `view` only when it differs from
+     * the last one this object sent (no `view`: keep the one you
+     * hold). The multisig machines name no volatile fields.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigoutsidesessioncore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -7205,6 +7305,15 @@ public protocol MultisigProposalsCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * core-ms-2: opt in to lighter answers, as every other machine
+     * can (`vela_core::app::view_host`): from the next one on, each
+     * carries `view_version`, and `view` only when it differs from
+     * the last one this object sent (no `view`: keep the one you
+     * hold). The multisig machines name no volatile fields.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -7293,6 +7402,22 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
         FfiConverterString.lower(resultJson),uniffiCallStatus
     )
 })
+}
+    
+    /**
+     * core-ms-2: opt in to lighter answers, as every other machine
+     * can (`vela_core::app::view_host`): from the next one on, each
+     * carries `view_version`, and `view` only when it differs from
+     * the last one this object sent (no `view`: keep the one you
+     * hold). The multisig machines name no volatile fields.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigproposalscore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
 }
     
 open func view()throws  -> String  {
@@ -7717,6 +7842,316 @@ public func FfiConverterTypePaymentRequestCore_lift(_ handle: UInt64) throws -> 
 #endif
 public func FfiConverterTypePaymentRequestCore_lower(_ value: PaymentRequestCore) -> UInt64 {
     return FfiConverterTypePaymentRequestCore.lower(value)
+}
+
+
+
+
+
+
+/**
+ * One room's peer state machine. Time is the driver's monotonic clock in ms.
+ */
+public protocol PeerConnectPeerProtocol: AnyObject, Sendable {
+    
+    /**
+     * End the room for both peers (not `close`: a UniFFI object already has one, freeing it).
+     */
+    func end() 
+    
+    func handleBinary(nowMs: UInt64, frame: Data) 
+    
+    /**
+     * The socket closed or failed (with its close code when one came).
+     */
+    func handleClose(nowMs: UInt64, code: UInt16?) 
+    
+    /**
+     * The socket asked for opened.
+     */
+    func handleOpen(nowMs: UInt64) 
+    
+    func handleText(nowMs: UInt64, text: String) 
+    
+    func handleTimeout(nowMs: UInt64) 
+    
+    /**
+     * Leave (the room stays valid; reopen it from its record).
+     */
+    func leave() 
+    
+    /**
+     * The next thing to do, or `None` when nothing is asked.
+     */
+    func pollOutput()  -> PeerOutput?
+    
+    /**
+     * When [`Self::handle_timeout`] is next due (ms), if ever.
+     */
+    func pollTimeout()  -> UInt64?
+    
+    /**
+     * The room's record as it stands (paired or not).
+     */
+    func record()  -> String
+    
+    /**
+     * Queue a message for the other peer: its id, or why not.
+     */
+    func send(bytes: Data) throws  -> UInt64
+    
+    func setToken(nowMs: UInt64, token: String?) 
+    
+}
+/**
+ * One room's peer state machine. Time is the driver's monotonic clock in ms.
+ */
+open class PeerConnectPeer: PeerConnectPeerProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_vela_core_uniffi_fn_clone_peerconnectpeer(self.handle, $0) }
+    }
+    /**
+     * The peer for a kept room `record`; `awaiting_token`: the relay admits
+     * only a token-holder, so it stays offline until [`Self::set_token`].
+     */
+public convenience init(record: String, awaitingToken: Bool, nowMs: UInt64)throws  {
+    let handle =
+        try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_constructor_peerconnectpeer_new(
+        FfiConverterString.lower(record),
+        FfiConverterBool.lower(awaitingToken),
+        FfiConverterUInt64.lower(nowMs),uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_vela_core_uniffi_fn_free_peerconnectpeer(handle, $0) }
+    }
+
+    
+
+    
+    /**
+     * End the room for both peers (not `close`: a UniFFI object already has one, freeing it).
+     */
+open func end()  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_peerconnectpeer_end(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+}
+}
+    
+open func handleBinary(nowMs: UInt64, frame: Data)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_peerconnectpeer_handle_binary(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(nowMs),
+        FfiConverterData.lower(frame),uniffiCallStatus
+    )
+}
+}
+    
+    /**
+     * The socket closed or failed (with its close code when one came).
+     */
+open func handleClose(nowMs: UInt64, code: UInt16?)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_peerconnectpeer_handle_close(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(nowMs),
+        FfiConverterOptionUInt16.lower(code),uniffiCallStatus
+    )
+}
+}
+    
+    /**
+     * The socket asked for opened.
+     */
+open func handleOpen(nowMs: UInt64)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_peerconnectpeer_handle_open(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(nowMs),uniffiCallStatus
+    )
+}
+}
+    
+open func handleText(nowMs: UInt64, text: String)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_peerconnectpeer_handle_text(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(nowMs),
+        FfiConverterString.lower(text),uniffiCallStatus
+    )
+}
+}
+    
+open func handleTimeout(nowMs: UInt64)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_peerconnectpeer_handle_timeout(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(nowMs),uniffiCallStatus
+    )
+}
+}
+    
+    /**
+     * Leave (the room stays valid; reopen it from its record).
+     */
+open func leave()  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_peerconnectpeer_leave(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+}
+}
+    
+    /**
+     * The next thing to do, or `None` when nothing is asked.
+     */
+open func pollOutput() -> PeerOutput?  {
+    return try!  FfiConverterOptionTypePeerOutput.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_peerconnectpeer_poll_output(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * When [`Self::handle_timeout`] is next due (ms), if ever.
+     */
+open func pollTimeout() -> UInt64?  {
+    return try!  FfiConverterOptionUInt64.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_peerconnectpeer_poll_timeout(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * The room's record as it stands (paired or not).
+     */
+open func record() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_peerconnectpeer_record(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Queue a message for the other peer: its id, or why not.
+     */
+open func send(bytes: Data)throws  -> UInt64  {
+    return try  FfiConverterUInt64.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_peerconnectpeer_send(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(bytes),uniffiCallStatus
+    )
+})
+}
+    
+open func setToken(nowMs: UInt64, token: String?)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_peerconnectpeer_set_token(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(nowMs),
+        FfiConverterOptionString.lower(token),uniffiCallStatus
+    )
+}
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePeerConnectPeer: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = PeerConnectPeer
+
+    public static func lift(_ handle: UInt64) throws -> PeerConnectPeer {
+        return PeerConnectPeer(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: PeerConnectPeer) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PeerConnectPeer {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: PeerConnectPeer, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePeerConnectPeer_lift(_ handle: UInt64) throws -> PeerConnectPeer {
+    return try FfiConverterTypePeerConnectPeer.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePeerConnectPeer_lower(_ value: PeerConnectPeer) -> UInt64 {
+    return FfiConverterTypePeerConnectPeer.lower(value)
 }
 
 
@@ -12288,6 +12723,68 @@ public func FfiConverterTypePasskeyDirectoryEntry_lower(_ value: PasskeyDirector
 
 
 /**
+ * A room's record (`Room`'s string form, kept to reopen it), and — for a
+ * room just created — the invite to hand the other peer.
+ */
+public struct PeerRoomRecord: Equatable, Hashable {
+    public var record: String
+    public var invite: String?
+    public var relay: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(record: String, invite: String?, relay: String) {
+        self.record = record
+        self.invite = invite
+        self.relay = relay
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension PeerRoomRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePeerRoomRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PeerRoomRecord {
+        return
+            try PeerRoomRecord(
+                record: FfiConverterString.read(from: &buf), 
+                invite: FfiConverterOptionString.read(from: &buf), 
+                relay: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PeerRoomRecord, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.record, into: &buf)
+        FfiConverterOptionString.write(value.invite, into: &buf)
+        FfiConverterString.write(value.relay, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePeerRoomRecord_lift(_ buf: RustBuffer) throws -> PeerRoomRecord {
+    return try FfiConverterTypePeerRoomRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePeerRoomRecord_lower(_ value: PeerRoomRecord) -> RustBuffer {
+    return FfiConverterTypePeerRoomRecord.lower(value)
+}
+
+
+/**
  * The four display preferences, read from the store whatever its spelling.
  */
 public struct PrefsRecord: Equatable, Hashable {
@@ -15282,6 +15779,181 @@ public func FfiConverterTypePasskeyCeremonyEnd_lower(_ value: PasskeyCeremonyEnd
 
 
 /**
+ * What the peer asks of its driver, one at a time.
+ */
+
+public enum PeerOutput: Equatable, Hashable {
+    
+    /**
+     * Open a WebSocket to `url` (any previous one is already closed).
+     */
+    case connect(url: String
+    )
+    /**
+     * Send a binary frame.
+     */
+    case send(bytes: Data
+    )
+    /**
+     * Send the text frame `ping`.
+     */
+    case ping
+    /**
+     * Close the WebSocket (1000) after flushing; report nothing more of it.
+     */
+    case disconnect
+    /**
+     * The connection's state: `offline`, `waiting`, `connected`, or
+     * `closed` with `reason` (`left`, `closed`, `closed-by-peer`).
+     */
+    case state(state: String, reason: String?
+    )
+    /**
+     * A message from the other peer, authenticated, in order.
+     */
+    case message(bytes: Data
+    )
+    /**
+     * The other peer has every message with an id below `next`.
+     */
+    case delivered(next: UInt64
+    )
+    /**
+     * Pairing is complete: `record` reopens the room now (keep it).
+     */
+    case paired(record: String
+    )
+    /**
+     * Another connection took this seat (the room opened elsewhere).
+     */
+    case replaced
+    /**
+     * The relay wants a token (refused ours, or we have none).
+     */
+    case unauthorized
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension PeerOutput: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePeerOutput: FfiConverterRustBuffer {
+    typealias SwiftType = PeerOutput
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PeerOutput {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .connect(url: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 2: return .send(bytes: try FfiConverterData.read(from: &buf)
+        )
+        
+        case 3: return .ping
+        
+        case 4: return .disconnect
+        
+        case 5: return .state(state: try FfiConverterString.read(from: &buf), reason: try FfiConverterOptionString.read(from: &buf)
+        )
+        
+        case 6: return .message(bytes: try FfiConverterData.read(from: &buf)
+        )
+        
+        case 7: return .delivered(next: try FfiConverterUInt64.read(from: &buf)
+        )
+        
+        case 8: return .paired(record: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 9: return .replaced
+        
+        case 10: return .unauthorized
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: PeerOutput, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .connect(url):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(url, into: &buf)
+            
+        
+        case let .send(bytes):
+            writeInt(&buf, Int32(2))
+            FfiConverterData.write(bytes, into: &buf)
+            
+        
+        case .ping:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .disconnect:
+            writeInt(&buf, Int32(4))
+        
+        
+        case let .state(state,reason):
+            writeInt(&buf, Int32(5))
+            FfiConverterString.write(state, into: &buf)
+            FfiConverterOptionString.write(reason, into: &buf)
+            
+        
+        case let .message(bytes):
+            writeInt(&buf, Int32(6))
+            FfiConverterData.write(bytes, into: &buf)
+            
+        
+        case let .delivered(next):
+            writeInt(&buf, Int32(7))
+            FfiConverterUInt64.write(next, into: &buf)
+            
+        
+        case let .paired(record):
+            writeInt(&buf, Int32(8))
+            FfiConverterString.write(record, into: &buf)
+            
+        
+        case .replaced:
+            writeInt(&buf, Int32(9))
+        
+        
+        case .unauthorized:
+            writeInt(&buf, Int32(10))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePeerOutput_lift(_ buf: RustBuffer) throws -> PeerOutput {
+    return try FfiConverterTypePeerOutput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePeerOutput_lower(_ value: PeerOutput) -> RustBuffer {
+    return FfiConverterTypePeerOutput.lower(value)
+}
+
+
+
+/**
  * Why the relay refused a submit, on the axis the send machine speaks.
  */
 
@@ -17146,6 +17818,30 @@ fileprivate struct FfiConverterOptionTypeVenueBlockLine: FfiConverterRustBuffer 
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeVenueBlockLine.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypePeerOutput: FfiConverterRustBuffer {
+    typealias SwiftType = PeerOutput?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypePeerOutput.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypePeerOutput.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -20855,6 +21551,40 @@ public func multisigLinkCall(method: String, argsJson: String)throws  -> String 
 })
 }
 /**
+ * A new room on `relay` (`ws://` or `wss://`): this side is the inviter.
+ */
+public func peerconnectCreateRoom(relay: String)throws  -> PeerRoomRecord  {
+    return try  FfiConverterTypePeerRoomRecord_lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_peerconnect_create_room(
+        FfiConverterString.lower(relay),uniffiCallStatus
+    )
+})
+}
+/**
+ * Join the room an invite names: this side is the joiner. The record must
+ * be kept before connecting (joining again yields another identity).
+ */
+public func peerconnectJoinRoom(invite: String)throws  -> PeerRoomRecord  {
+    return try  FfiConverterTypePeerRoomRecord_lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_peerconnect_join_room(
+        FfiConverterString.lower(invite),uniffiCallStatus
+    )
+})
+}
+/**
+ * A kept room record, read again (its relay; whether it still reads).
+ */
+public func peerconnectRoomRelay(record: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_peerconnect_room_relay(
+        FfiConverterString.lower(record),uniffiCallStatus
+    )
+})
+}
+/**
  * A built-in network's name as the wallet writes it ("Ethereum", "Gnosis")
  * — `network_admin::builtin_display_name` — or `None` for a chain Vela does
  * not ship (a network someone added is named by its own record). No core
@@ -22574,6 +23304,15 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_multisig_link_call() != 2238) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_peerconnect_create_room() != 48634) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_peerconnect_join_room() != 11413) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_peerconnect_room_relay() != 8662) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_builtin_network_display_name() != 32122) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -22970,6 +23709,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_multisigaccountscore_resolve_effect() != 64603) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigaccountscore_skip_unchanged_views() != 60523) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_multisigaccountscore_view() != 52284) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -22977,6 +23719,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_multisigmemberscore_resolve_effect() != 7005) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigmemberscore_skip_unchanged_views() != 12504) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_multisigmemberscore_view() != 17720) {
@@ -22988,6 +23733,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_multisigoutsidepagecore_resolve_effect() != 28924) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigoutsidepagecore_skip_unchanged_views() != 38760) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_multisigoutsidepagecore_view() != 7267) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -22997,6 +23745,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_multisigoutsidesessioncore_resolve_effect() != 35149) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigoutsidesessioncore_skip_unchanged_views() != 56521) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_multisigoutsidesessioncore_view() != 16360) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -23004,6 +23755,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_multisigproposalscore_resolve_effect() != 19338) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigproposalscore_skip_unchanged_views() != 37500) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_multisigproposalscore_view() != 59246) {
@@ -23333,6 +24087,42 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_txtrackercore_view() != 58264) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_peerconnectpeer_end() != 3531) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_peerconnectpeer_handle_binary() != 34735) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_peerconnectpeer_handle_close() != 29919) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_peerconnectpeer_handle_open() != 16772) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_peerconnectpeer_handle_text() != 62087) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_peerconnectpeer_handle_timeout() != 63751) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_peerconnectpeer_leave() != 23002) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_peerconnectpeer_poll_output() != 61121) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_peerconnectpeer_poll_timeout() != 47533) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_peerconnectpeer_record() != 44906) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_peerconnectpeer_send() != 24567) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_peerconnectpeer_set_token() != 53277) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_signerpageadmission_checked_at_ms() != 29325) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -23493,6 +24283,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_constructor_txtrackercore_new() != 60048) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_constructor_peerconnectpeer_new() != 12308) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_constructor_signerpagetarget_choose() != 61824) {
