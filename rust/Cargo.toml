@@ -16,6 +16,9 @@ members = [
   # vendored (see its manifest).
   "crates/vela-agent",
   "vendor/clientmcp-client",
+  # PeerConnect's protocol crate, vendored (see its manifest): the multisig's
+  # outside-owner rooms on the phones (vela-core-uniffi `peer_bridge.rs`).
+  "vendor/peerconnect",
 ]
 default-members = [
   "crates/vela-core",
