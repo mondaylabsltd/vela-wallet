@@ -57,6 +57,14 @@ fun MultisigReviewBody(
     chainId: Int,
     words: MultisigWords,
     tokenInfo: suspend (Int, String) -> Pair<String, Int>,
+    /**
+     * S4 (r9): it ran. What it does stays (the reading, its recipients, its
+     * member change, the hashes); what was judged BEFORE it ran — whether it
+     * may be signed, the concerns, the simulated balance changes, the state
+     * guard's "running it changes nothing" — is not said of a transaction
+     * that already ran (the desktop's rule).
+     */
+    executed: Boolean = false,
 ) {
     val tokens = remember { mutableStateMapOf<String, Pair<String, Int>>() }
     val tokenAddresses = review["simulation"]["deltas"].arr.mapNotNull { it["token"].str }
@@ -68,15 +76,17 @@ fun MultisigReviewBody(
     val network = words.network(chainId)
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(VelaSpacing.lg)) {
         // Concerns, the core's, in order.
-        if (review["sign"]["allowed"].bool == false) MsNote(words.t("review.blocked"), tone = MsTone.Danger, tag = "multisig.review.blocked")
-        for (concern in shownConcerns(review)) {
-            reviewConcern(words, concern)?.let { (text, tone) -> MsNote(text, tone = tone, tag = "multisig.review.concern.${concern.kind}") }
+        if (!executed) {
+            if (review["sign"]["allowed"].bool == false) MsNote(words.t("review.blocked"), tone = MsTone.Danger, tag = "multisig.review.blocked")
+            for (concern in shownConcerns(review)) {
+                reviewConcern(words, concern)?.let { (text, tone) -> MsNote(text, tone = tone, tag = "multisig.review.concern.${concern.kind}") }
+            }
         }
         Reading(review, chainId, words)
-        Moves(review, chainId, words, tokens)
+        if (!executed) Moves(review, chainId, words, tokens)
         Recipients(review, words)
         MemberChanges(review, words, network)
-        StateGuard(review, words, network)
+        if (!executed) StateGuard(review, words, network)
         Technical(review, words)
     }
 }

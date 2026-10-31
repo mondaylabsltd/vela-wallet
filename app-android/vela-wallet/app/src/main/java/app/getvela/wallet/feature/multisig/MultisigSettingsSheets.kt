@@ -91,7 +91,8 @@ fun MultisigSettingsSheet(
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg)) {
             IdenticonAvatar(seed = row.account.address, size = VelaIconSize.xl * 1.5f, tappable = false)
             Column {
-                MsText(words.ruleTitle(row.account.threshold, row.account.owners.size), MsType.Field)
+                // r9-14: the members machine's `rule_chip` (each network's members now).
+                MsText(members.takeIf { it["address"].str.equals(address, ignoreCase = true) }?.let { words.ruleTitleOf(it["rule_chip"]) } ?: words.ruleTitle(row.account.threshold, row.account.owners.size), MsType.Field)
                 MsText(row.account.chainIds.joinToString(", ", transform = words::network), MsType.Sub, color = colors.fgSubtle)
             }
         }
