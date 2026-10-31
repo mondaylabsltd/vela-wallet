@@ -1039,6 +1039,53 @@ pub fn sign(
     }
 }
 
+/// A multisig member's approval through its Trusted Signer (AUDIT M2, the
+/// Bybit rule): the page is handed the SafeTx itself and the safeTxHash THE
+/// CORE computed (`vela_core::trusted_signer::approval::request`), reviews
+/// and signs there, and its answer is accepted only as the chain will accept
+/// it — a user-verified assertion over exactly the approval bytes this
+/// wallet computed, by one of the member's keys
+/// (`approval::accept`). Nothing the page says about what it signed is read.
+///
+/// The same visit, claim and waiting sheet as [`sign`]; a refusal is told to
+/// the screen and answered as [`PageEnd`].
+pub fn approve(
+    request: &Value,
+    page: &str,
+    chain_id: u64,
+    member: &str,
+    safe_tx_hash: &str,
+    keys: &[WalletKey],
+    channel: &Channel,
+) -> Result<vela_core::multisig::PasskeyApproval, PageEnd> {
+    let deadline = Instant::now() + TIMEOUT;
+    let Some(_claim) = channel.claim() else {
+        return Err(PageEnd::Passkey(busy()));
+    };
+    channel.entitle(None);
+    let mut line = open_line(page, channel, deadline).map_err(PageEnd::Passkey)?;
+    let id = line.next_id();
+    let answered = line.ask(&id, request, channel, deadline);
+    line.end();
+    let outcome = answered.and_then(|answer| {
+        vela_core::trusted_signer::approval::accept(&answer, chain_id, member, safe_tx_hash, keys)
+            .map_err(|error| {
+                eprintln!("[vela-wallet] trusted signer: approval not accepted: {error}");
+                Refusal::of(&error)
+            })
+    });
+    match outcome {
+        Ok(approval) => {
+            channel.end(None);
+            Ok(approval)
+        }
+        Err(refusal) => {
+            let failure = gave_up(channel, refusal);
+            Err(PageEnd::of(refusal, failure))
+        }
+    }
+}
+
 /// How a signature through the page ended without one (spec 102, round 7) —
 /// what the request is answered with, as opposed to what the sheet says
 /// ([`Refusal`]).

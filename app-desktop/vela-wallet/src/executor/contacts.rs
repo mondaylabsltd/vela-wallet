@@ -231,6 +231,20 @@ pub fn contact_name(address: &str) -> Option<String> {
         .filter(|name| !name.is_empty())
 }
 
+/// Every contact the person named, as (address, name): the multisig
+/// review's look-alikes and first sends (the web's `knownAddresses`). Only
+/// their own word, as [`contact_name`].
+#[must_use]
+pub fn named_contacts() -> Vec<(String, String)> {
+    read_list::<StoredContact, Contact>(storage::KEY_CONTACTS)
+        .into_iter()
+        .filter_map(|contact| {
+            let name = contact.name?.trim().to_owned();
+            (!name.is_empty()).then_some((contact.address, name))
+        })
+        .collect()
+}
+
 fn write_list<T, S: Serialize>(key: &str, items: &[T], to_stored: impl Fn(&T) -> S) -> bool {
     let encoded = Value::Array(
         items

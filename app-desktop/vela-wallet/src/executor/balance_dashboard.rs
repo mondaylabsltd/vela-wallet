@@ -29,7 +29,6 @@ use vela_core::app::balance_dashboard::{
 
 use crate::executor::{balances, pool, storage};
 use crate::resident::{self, Answer, Machine};
-use crate::session;
 
 /// `vela.balanceCache` — `{ address: { usd, at } }`, the Expo bytes.
 const CACHE_KEY: &str = "vela.balanceCache";
@@ -364,7 +363,8 @@ impl Machine for BalanceDashboard {
         // The core resets its state and paints the hero from cache on this
         // event, so it is the boot: an address, or the empty string, which is
         // what "no account yet" looks like on the way from Welcome.
-        let address = session::view(cx).address;
+        // Whose wallet: the multisig shown, else the session's account.
+        let address = crate::multisig::shown::address(cx);
         // perf-10: opened on a screen that draws no balance of its own
         // (Settings, the address book), the account is NOTED — its cached
         // total read for the switcher and the privacy mask — and no network
@@ -381,7 +381,7 @@ impl Machine for BalanceDashboard {
     /// front (home-1, home-3) — the web's `#restoreRows` after
     /// `account_changed`: the core lets them stand until each chain answers.
     fn boot_followups(cx: &App) -> Vec<Event> {
-        restored_holdings(&session::view(cx).address)
+        restored_holdings(&crate::multisig::shown::address(cx))
             .into_iter()
             .collect()
     }
@@ -679,7 +679,7 @@ pub fn shown(cx: &mut App) {
     if !BOOTED_NOTED.swap(false, Ordering::SeqCst) {
         return;
     }
-    let address = session::view(cx).address;
+    let address = crate::multisig::shown::address(cx);
     if !address.is_empty() {
         dispatch(Event::AccountChanged { address }, cx);
     }
@@ -690,7 +690,7 @@ pub fn shown(cx: &mut App) {
 /// forces a read — then the rows this space last showed for it.
 pub fn space_switched(cx: &mut App) {
     dispatch(Event::SpaceChanged, cx);
-    let address = session::view(cx).address;
+    let address = crate::multisig::shown::address(cx);
     if let Some(event) = restored_holdings(&address) {
         dispatch(event, cx);
     }

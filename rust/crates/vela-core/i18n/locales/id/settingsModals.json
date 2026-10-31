@@ -129,7 +129,9 @@
     "appearance": {
       "menuBar": "Tampilkan di bilah menu",
       "trayIcon": "Tampilkan di baki sistem",
-      "statusItemHint": "Total Anda serta Kirim dan Terima cepat, dari angka terakhir yang dimuat — tidak ada yang diambil tambahan."
+      "statusItemHint": "Total Anda serta Kirim dan Terima cepat, dari angka terakhir yang dimuat — tidak ada yang diambil tambahan.",
+      "multisigNotifications": "Notifikasi multisig",
+      "multisigNotificationsHint": "Beri tahu saat transaksi multisig perlu persetujuan Anda, mendapat persetujuan, siap dieksekusi, atau sudah dieksekusi. Vela memeriksa setiap menit selama terbuka; notifikasi dibuat di perangkat ini, bukan lewat layanan push."
     }
   }
 }

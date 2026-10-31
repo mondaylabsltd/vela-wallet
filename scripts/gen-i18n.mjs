@@ -1341,9 +1341,21 @@ for (let i = 1; i < PATHS.length; i++) {
 //   passkey Safari refused an extension page, said as that — never as
 //   "site access withheld", which is Chrome's). 2237 + 5 leaves + 1 branch
 //   (`settings.safariExtension`) = 2243 paths, 2128 leaves, 115 branches.
-if (PATHS.length !== 2243) fail(`expected 2243 paths (2128 leaf + 115 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2128) fail(`expected 2128 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 115) fail(`expected 115 branch paths, got ${branchSet.size}`);
+// 2264 (desktop multisig, 2026-10-31): + the update card's refusal, said
+//   under its red bar (`componentsUi.appUpdate.refused.{noKey, unreadable,
+//   badSignature, replayed, notNewer, noArtifact, insecureUrl,
+//   artifactMismatch, unreachable, notInstalled, signatureMismatch,
+//   versionMismatch, installFailed}` — what happened and what the person can
+//   do, never a bare bar), the multisig notifications switch
+//   (`settingsModals.appearance.{multisigNotifications,
+//   multisigNotificationsHint}`) and the notifications' lines
+//   (`componentsUi.multisigNotify.{approvalNeeded, approvalCounted,
+//   readyToExecute, executed}`). 2243 + 19 leaves + 2 branches
+//   (`componentsUi.appUpdate.refused`, `componentsUi.multisigNotify`) =
+//   2264 paths, 2147 leaves, 117 branches.
+if (PATHS.length !== 2264) fail(`expected 2264 paths (2147 leaf + 117 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2147) fail(`expected 2147 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 117) fail(`expected 117 branch paths, got ${branchSet.size}`);
 // The on-demand catalogs, pinned the same way (leaves of every locale's union):
 // a key dropped from one namespace and not landed in the other fails here.
 // 579 (round 6, the outside owner's connect page, 2026-10-30): + 17

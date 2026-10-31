@@ -129,7 +129,9 @@
     "appearance": {
       "menuBar": "Afficher dans la barre des menus",
       "trayIcon": "Afficher dans la zone de notification",
-      "statusItemHint": "Votre total et Envoyer et Recevoir en un clic, d’après les derniers montants chargés : rien de plus n’est récupéré."
+      "statusItemHint": "Votre total et Envoyer et Recevoir en un clic, d’après les derniers montants chargés : rien de plus n’est récupéré.",
+      "multisigNotifications": "Notifications multisig",
+      "multisigNotificationsHint": "Vous prévient quand une transaction multisig attend votre approbation, reçoit une approbation, est prête à être exécutée ou a été exécutée. Vela vérifie chaque minute tant qu’elle est ouverte ; les notifications viennent de cet appareil, pas d’un service push."
     }
   }
 }

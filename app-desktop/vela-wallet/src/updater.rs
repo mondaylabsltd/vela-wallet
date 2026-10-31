@@ -227,14 +227,16 @@ pub struct Release {
 }
 
 /// The update prompt's words (`componentsUi.appUpdate.*`): "Update
-/// available", Install, Later — and "Try again" after a download or an
-/// install that was refused — in the person's language.
+/// available", Install, Later — "Try again" after a download or an install
+/// that was refused, and why it was refused — in the person's language.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PromptWords {
     pub title: gpui::SharedString,
     pub install: gpui::SharedString,
     pub later: gpui::SharedString,
     pub retry: gpui::SharedString,
+    /// Each refusal's sentence, in [`Refusal::WORDS`] order.
+    refused: [gpui::SharedString; Refusal::WORDS.len()],
 }
 
 impl PromptWords {
@@ -245,13 +247,29 @@ impl PromptWords {
             install: loc.t("componentsUi.appUpdate.install"),
             later: loc.t("componentsUi.appUpdate.later"),
             retry: loc.t("componentsUi.relayUnreachable.retryBtn"),
+            refused: Refusal::WORDS
+                .map(|word| loc.t(&format!("componentsUi.appUpdate.refused.{word}"))),
         }
+    }
+
+    /// What happened, and what the person can do: the line under the red
+    /// bar.
+    #[must_use]
+    pub fn refusal(&self, refusal: &Refusal) -> gpui::SharedString {
+        let word = refusal.word();
+        Refusal::WORDS
+            .iter()
+            .position(|known| *known == word)
+            .and_then(|at| self.refused.get(at))
+            .cloned()
+            .unwrap_or_default()
     }
 }
 
 /// Why a manifest, a download or an install was not taken. None of these is
-/// shown as an update; each is logged, and the prompt shows a refused
-/// download or install as one that can be tried again.
+/// shown as an update; each is logged, and the prompt says a refused
+/// download or install in words under its red bar — offering "Try again"
+/// only where another attempt can go differently ([`Refusal::retryable`]).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Refusal {
     /// The updater has no key (this build).
@@ -284,6 +302,60 @@ pub enum Refusal {
     /// The OS refused a step of the install (a folder it may not write, a
     /// swap that failed); the running app is untouched.
     InstallFailed(String),
+}
+
+impl Refusal {
+    /// The corpus's word for each refusal
+    /// (`componentsUi.appUpdate.refused.<word>`).
+    pub const WORDS: [&'static str; 13] = [
+        "noKey",
+        "unreadable",
+        "badSignature",
+        "replayed",
+        "notNewer",
+        "noArtifact",
+        "insecureUrl",
+        "artifactMismatch",
+        "unreachable",
+        "notInstalled",
+        "signatureMismatch",
+        "versionMismatch",
+        "installFailed",
+    ];
+
+    /// This refusal's word in [`Self::WORDS`]. An install the OS refused
+    /// keeps its detail for the log (the OS's own text, not the person's
+    /// language); the card says the sentence.
+    #[must_use]
+    pub fn word(&self) -> &'static str {
+        match self {
+            Self::NoKey => "noKey",
+            Self::Unreadable => "unreadable",
+            Self::BadSignature => "badSignature",
+            Self::Replayed => "replayed",
+            Self::NotNewer => "notNewer",
+            Self::NoArtifact => "noArtifact",
+            Self::InsecureUrl => "insecureUrl",
+            Self::ArtifactMismatch => "artifactMismatch",
+            Self::Unreachable => "unreachable",
+            Self::NotInstalled => "notInstalled",
+            Self::SignatureMismatch => "signatureMismatch",
+            Self::VersionMismatch => "versionMismatch",
+            Self::InstallFailed(_) => "installFailed",
+        }
+    }
+
+    /// Whether another attempt can go differently: a download that stopped
+    /// or came in damaged, or an OS step that failed. The rest refuse the
+    /// same signed release the same way every time, so the card offers no
+    /// "Try again" that cannot work.
+    #[must_use]
+    pub fn retryable(&self) -> bool {
+        matches!(
+            self,
+            Self::Unreachable | Self::ArtifactMismatch | Self::InstallFailed(_)
+        )
+    }
 }
 
 /// `"1.10.2"` → `(1, 10, 2)`. A pre-release or build suffix is no release.
@@ -447,8 +519,11 @@ mod tests {
     }
 
     /// The prompt's words are the corpus's in every language — never a key.
+    /// Each refusal is its own sentence, and a language other than English
+    /// says it in that language (not English's, fallen back to).
     #[test]
     fn the_prompts_words_resolve_in_every_language() {
+        let en = PromptWords::of(&crate::loc::Loc::for_tag("en"));
         for (tag, loc) in crate::loc::Loc::every_language() {
             let words = PromptWords::of(&loc);
             for word in [&words.title, &words.install, &words.later, &words.retry] {
@@ -457,8 +532,35 @@ mod tests {
                     "{tag}: {word}"
                 );
             }
+            let mut seen = std::collections::HashSet::new();
+            for refusal in every_refusal() {
+                let word = words.refusal(&refusal);
+                assert!(
+                    !word.is_empty() && !word.contains("componentsUi."),
+                    "{tag}: {refusal:?}: {word}"
+                );
+                assert!(
+                    seen.insert(word.clone()),
+                    "{tag}: {refusal:?} says another refusal's {word}"
+                );
+                if tag != "en" {
+                    assert_ne!(word, en.refusal(&refusal), "{tag}: {refusal:?} is English");
+                }
+            }
         }
-        let en = PromptWords::of(&crate::loc::Loc::for_tag("en"));
+        assert_eq!(
+            en.refusal(&Refusal::ArtifactMismatch).as_ref(),
+            "The download didn't match the signed release, so it wasn't installed. Try again."
+        );
+        assert_eq!(
+            en.refusal(&Refusal::NotInstalled).as_ref(),
+            "This copy isn't an installed app, so it can't update itself."
+        );
+        assert_eq!(
+            en.refusal(&Refusal::InstallFailed("EACCES".to_owned())),
+            en.refusal(&Refusal::InstallFailed(String::new())),
+            "the OS's detail is the log's, not the card's"
+        );
         assert_eq!(
             (
                 en.title.as_ref(),
@@ -468,6 +570,58 @@ mod tests {
             ),
             ("Update available", "Install", "Later", "Try again")
         );
+    }
+
+    /// One refusal of each kind. The match makes a new variant a compile
+    /// error here until it is listed (and worded in the corpus).
+    fn every_refusal() -> Vec<Refusal> {
+        let all = vec![
+            Refusal::NoKey,
+            Refusal::Unreadable,
+            Refusal::BadSignature,
+            Refusal::Replayed,
+            Refusal::NotNewer,
+            Refusal::NoArtifact,
+            Refusal::InsecureUrl,
+            Refusal::ArtifactMismatch,
+            Refusal::Unreachable,
+            Refusal::NotInstalled,
+            Refusal::SignatureMismatch,
+            Refusal::VersionMismatch,
+            Refusal::InstallFailed("the OS's own words".to_owned()),
+        ];
+        for refusal in &all {
+            match refusal {
+                Refusal::NoKey
+                | Refusal::Unreadable
+                | Refusal::BadSignature
+                | Refusal::Replayed
+                | Refusal::NotNewer
+                | Refusal::NoArtifact
+                | Refusal::InsecureUrl
+                | Refusal::ArtifactMismatch
+                | Refusal::Unreachable
+                | Refusal::NotInstalled
+                | Refusal::SignatureMismatch
+                | Refusal::VersionMismatch
+                | Refusal::InstallFailed(_) => {}
+            }
+        }
+        all
+    }
+
+    /// Each refusal has its own word, the list's; "Try again" only where
+    /// another attempt can go differently.
+    #[test]
+    fn every_refusal_has_its_own_word() {
+        let words: Vec<_> = every_refusal().iter().map(Refusal::word).collect();
+        assert_eq!(words, Refusal::WORDS);
+        let retryable: Vec<_> = every_refusal()
+            .iter()
+            .filter(|refusal| refusal.retryable())
+            .map(Refusal::word)
+            .collect();
+        assert_eq!(retryable, ["artifactMismatch", "unreachable", "installFailed"]);
     }
 
     fn key_hex() -> String {

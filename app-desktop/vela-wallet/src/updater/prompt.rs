@@ -10,8 +10,10 @@
 //!   ([`super::download`]), keeps it only if it is the signed bytes, hands it
 //!   to the OS ([`super::install_macos`], [`super::install_windows`]) and
 //!   relaunches — never while a submit is out (`relay::may_close`), which it
-//!   waits for. A refusal at any step leaves the running app as it was and
-//!   offers "Try again"; the reason is in the log.
+//!   waits for. A refusal at any step leaves the running app as it was: the
+//!   card says why under its red bar, in words, and offers "Try again" when
+//!   another attempt can go differently ([`Refusal::retryable`]); the
+//!   detail is in the log.
 //!
 //! The state is a `Global` ([`UpdateState`]); its transitions are plain
 //! methods, tested without a window.
@@ -49,7 +51,8 @@ pub enum Phase {
     Downloading { received: u64 },
     /// The download is the signed bytes; the OS is taking it.
     Installing,
-    /// A step refused; the running app is unchanged. Try again / Later.
+    /// A step refused; the running app is unchanged. The refusal in words;
+    /// Try again (when it can go differently) / Later.
     Failed(Refusal),
 }
 
@@ -93,9 +96,15 @@ impl UpdateState {
         true
     }
 
-    /// Install (or Try again) was pressed: the download starts.
+    /// Install (or Try again) was pressed: the download starts — not after
+    /// a refusal that another attempt would only repeat.
     pub fn start(&mut self) -> Option<(Release, Arc<AtomicBool>)> {
-        if !matches!(self.phase, Phase::Offered | Phase::Failed(_)) {
+        let may = match &self.phase {
+            Phase::Offered => true,
+            Phase::Failed(refusal) => refusal.retryable(),
+            _ => false,
+        };
+        if !may {
             return None;
         }
         let release = self.release.clone()?;
@@ -442,7 +451,6 @@ fn card(
                 ),
         );
 
-    let failed = matches!(state.phase, Phase::Failed(_));
     let shown = match &state.phase {
         Phase::Downloading { received } => Some(*received),
         Phase::Installing => Some(release.artifact.size),
@@ -455,17 +463,24 @@ fn card(
             false,
             theme,
         ));
-    } else if failed {
-        card = card.child(progress(1., String::new(), true, theme));
+    } else if let Phase::Failed(refusal) = &state.phase {
+        card = card
+            .child(progress(1., String::new(), true, theme))
+            .child(refused_line(words.refusal(refusal), theme));
     }
 
     let actions = match &state.phase {
-        Phase::Offered => Some((words.install.clone(), true)),
-        Phase::Failed(_) => Some((words.retry.clone(), true)),
-        Phase::Downloading { .. } => Some((words.install.clone(), false)),
+        Phase::Offered => Some(Some((words.install.clone(), true))),
+        // A refusal another attempt would only repeat offers Later alone.
+        Phase::Failed(refusal) => Some(
+            refusal
+                .retryable()
+                .then(|| (words.retry.clone(), true)),
+        ),
+        Phase::Downloading { .. } => Some(Some((words.install.clone(), false))),
         Phase::Installing | Phase::Hidden => None,
     };
-    if let Some((answer, live)) = actions {
+    if let Some(answer) = actions {
         card = card.child(
             div()
                 .flex()
@@ -474,12 +489,26 @@ fn card(
                 .child(button("update-later", words.later.clone(), false, true, theme, |_, _, cx| {
                     later(cx);
                 }))
-                .child(button("update-install", answer, true, live, theme, |_, _, cx| {
-                    install(cx);
-                })),
+                .when_some(answer, |row, (answer, live)| {
+                    row.child(button("update-install", answer, true, live, theme, |_, _, cx| {
+                        install(cx);
+                    }))
+                }),
         );
     }
     card
+}
+
+/// Why the step was refused and what the person can do, under the red bar —
+/// in the error colour, and read on its own by a screen reader.
+fn refused_line(text: SharedString, theme: &Theme) -> gpui::Stateful<Div> {
+    div()
+        .id("update-refused")
+        .role(gpui::Role::Label)
+        .aria_label(text.clone())
+        .text_size(theme::text_row_sub())
+        .text_color(theme.error_base)
+        .child(text)
 }
 
 /// The bar and the line under it. A refused step shows the bar in the
@@ -608,6 +637,28 @@ mod tests {
         );
         assert_eq!(state.phase, Phase::Hidden);
         assert!(!state.offer(release()), "not again this launch");
+    }
+
+    /// A refusal another attempt would only repeat (this copy is not an
+    /// installed app; the update is not signed as this app) offers no Try
+    /// again: Install does nothing, Later still puts it away.
+    #[test]
+    fn a_refusal_that_cannot_go_differently_is_not_tried_again() {
+        for refusal in [Refusal::NotInstalled, Refusal::SignatureMismatch, Refusal::VersionMismatch] {
+            let mut state = UpdateState::default();
+            state.offer(release());
+            let _ = state.start();
+            state.fail(refusal.clone());
+            assert!(state.start().is_none(), "{refusal:?}");
+            assert_eq!(state.phase, Phase::Failed(refusal));
+            assert!(state.later());
+            assert_eq!(state.phase, Phase::Hidden);
+        }
+        let mut state = UpdateState::default();
+        state.offer(release());
+        let _ = state.start();
+        state.fail(Refusal::InstallFailed("EACCES".to_owned()));
+        assert!(state.start().is_some(), "an OS step that failed may not fail again");
     }
 
     #[test]

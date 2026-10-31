@@ -29,10 +29,18 @@ pub const HANDLER_141: &str = "0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99";
 pub const TO_L2_SETUP_141: &str = "0xBD89A1CE4DDe368FFAB0eC35506eEcE0b1fFdc54";
 
 fn code(name: &str) -> String {
-    let path = format!(
-        "{}/tests/vectors/safe-code/{name}.hex",
-        env!("CARGO_MANIFEST_DIR")
-    );
+    // This crate's own tests, or a shell that drives the machines through
+    // this same world from its own crate (the desktop's scenario tests
+    // include this file): the vectors stay here either way.
+    let manifest = env!("CARGO_MANIFEST_DIR");
+    let candidates = [
+        format!("{manifest}/tests/vectors/safe-code/{name}.hex"),
+        format!("{manifest}/../../rust/crates/vela-core/tests/vectors/safe-code/{name}.hex"),
+    ];
+    let path = candidates
+        .iter()
+        .find(|p| std::path::Path::new(p).exists())
+        .unwrap_or(&candidates[0]);
     std::fs::read_to_string(path).unwrap().trim().to_owned()
 }
 

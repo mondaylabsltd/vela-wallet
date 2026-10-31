@@ -1,0 +1,69 @@
+# Vendored copy of PeerConnect's protocol crate (`crates/peerconnect` in
+# github.com/atshelchin/peerconnect): the end-to-end encrypted two-peer rooms
+# under WalletPair, which the core's `multisig_outside` machines speak. The
+# web runs the same Rust compiled to wasm (app-web/vela-wallet/src/lib/vendor/
+# peerconnect, its README says which build); the desktop drives this crate's
+# sans-I/O `Peer` with its own blocking WebSocket (app-desktop/vela-wallet/
+# src/multisig/peer.rs). PeerConnect is not yet published to a registry, so a
+# copy, like `clientmcp-client` beside it.
+#
+# Source: PeerConnect crates/peerconnect at 11f8ca81a99172b1a38f76edce682e05b6118638
+# (main, 2026-10-29, "Admin audit log in words"). Its `src/` is byte for byte
+# the one at 977ec1e2175e32d5827c8646d1a9961cab3f0607 ("Relay tokens", the
+# first with the 4403 token refusal the public relay needs) apart from
+# `usage.rs` (the relay's metering, `tokens` feature only), so it speaks
+# exactly what the web's wasm build speaks.
+# `src/` and `README.md` are upstream's unchanged; `LICENSE` is the
+# repository's (upstream's crate LICENSE is a link to it). This manifest is
+# upstream's with the workspace inheritance written out and the
+# dev-dependencies, tests and examples left out (they run in the PeerConnect
+# repository, against its relay). Vela uses the default features only: no
+# `client` (Tokio driver) and no `tokens` (relay side); their optional
+# dependencies stay listed so the source compiles unchanged.
+#
+# TO REFRESH: copy crates/peerconnect/src/*.rs and README.md from the new
+# commit, re-derive [dependencies] and [features] below from its Cargo.toml,
+# update the commit above, then run the desktop's PeerConnect tests against
+# `peerconnect-relay` from the same commit (app-desktop/vela-wallet:
+# `PEERCONNECT_RELAY_BIN=… cargo test multisig::peer -- --include-ignored`)
+# and rebuild the web's vendored JS from that commit too — both sides of a
+# room must speak the same protocol.
+[package]
+name = "peerconnect"
+description = "PeerConnect: two peers, one room, end-to-end encrypted over an untrusted WebSocket relay"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/atshelchin/peerconnect"
+homepage = "https://peerconnect.dev"
+rust-version = "1.91"
+readme = "README.md"
+publish = false
+
+[dependencies]
+chacha20poly1305 = { version = "0.11", default-features = false }
+ed25519-dalek = { version = "3", default-features = false, features = ["zeroize"] }
+getrandom = "0.4"
+hmac = "0.13"
+sha2 = { version = "0.11", default-features = false }
+x25519-dalek = { version = "3", default-features = false, features = ["zeroize", "static_secrets"] }
+zeroize = { version = "1", features = ["derive"] }
+
+# The `tokens` feature: relay tokens (SPEC §4.1).
+serde = { version = "1", optional = true, features = ["derive"] }
+serde_json = { version = "1", optional = true }
+
+# The `client` feature: a Tokio WebSocket driver.
+futures-util = { version = "0.3", optional = true, default-features = false, features = ["sink", "std"] }
+rustls = { version = "0.23", optional = true, default-features = false, features = ["ring", "std", "tls12"] }
+tokio = { version = "1", optional = true, features = ["rt", "time", "sync", "macros"] }
+tokio-tungstenite = { version = "0.30", optional = true, default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
+
+[features]
+default = ["fast"]
+# Precomputed curve tables: faster key generation and signing, ~30 KB more code.
+fast = ["ed25519-dalek/fast", "x25519-dalek/precomputed-tables"]
+# Relay tokens and their generations (`peerconnect::token`), for relays.
+tokens = ["dep:serde", "dep:serde_json"]
+# A Tokio WebSocket driver (`peerconnect::client`).
+client = ["dep:futures-util", "dep:rustls", "dep:tokio", "dep:tokio-tungstenite"]
