@@ -321,6 +321,7 @@ export * from './PaymentRequestView';
 export * from './PendingPublish';
 export * from './PendingUpload';
 export * from './PendingUploadMember';
+export * from './PreparedGas';
 export * from './ReadKind';
 export * from './ReadSlot';
 export * from './ReceiveMode';
