@@ -472,6 +472,18 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
     }
 }
 
+/// The hero's "Updated <ago>" (issue #443) — only once a read of the
+/// account shown has ended: beside "Checking…" (its first read still out)
+/// it said "Updated now" of a figure nothing had read yet (r8 S4). `ago` is
+/// the page's words for when it was last read.
+#[must_use]
+pub fn updated_line(model: &BalanceModel, ago: Option<SharedString>) -> Option<SharedString> {
+    if model.checking.is_some() {
+        return None;
+    }
+    ago
+}
+
 /// The hero's line while the FIRST read of the account is still out (PR 3
 /// final note F19, `BalanceView.checking_key`): "Checking…". `None` from the
 /// first round's end on — a later refresh is not "checking".
@@ -2421,6 +2433,23 @@ mod tests {
         );
         assert_eq!(model.state, BalanceState::ZeroLive);
         assert_eq!(model.integer, SharedString::from("$0"));
+    }
+
+    /// r8 S4: "Checking…" (the first read still out) is never beside
+    /// "Updated now"; once the round ended, the time is said.
+    #[test]
+    fn checking_is_never_beside_updated() {
+        use crate::wallet::fixtures::{FirstRead, first_read_view};
+        let hero = |stage| balance(&first_read_view(stage), &strings(), "en", &Money::default());
+        let checking = hero(FirstRead::Checking);
+        assert!(checking.checking.is_some());
+        assert_eq!(updated_line(&checking, Some("Updated now".into())), None);
+        let live = hero(FirstRead::Live);
+        assert_eq!(live.checking, None);
+        assert_eq!(
+            updated_line(&live, Some("Updated now".into())),
+            Some(SharedString::from("Updated now"))
+        );
     }
 
     /// PR 3 final note F19. A wallet that held nothing last session opens on

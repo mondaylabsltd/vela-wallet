@@ -842,6 +842,8 @@
    "waitedSeconds": "In attesa da {{seconds}} secondi",
    "networkTitle": "Connessione di rete instabile",
    "networkBody": "La richiesta non è mai arrivata — controlla la rete e riprova.",
+   "proxyPacBody": "Questo computer è impostato per usare una configurazione automatica del proxy ({{proxy}}) che non è raggiungibile, quindi nessuna richiesta esce. Correggila o disattiva la configurazione automatica del proxy nella sezione Proxy delle impostazioni di rete del sistema, poi riprova.",
+   "proxyServerBody": "Il proxy che questo computer è impostato per usare ({{proxy}}) non risponde, quindi nessuna richiesta esce. Avvialo o disattivalo nella sezione Proxy delle impostazioni di rete del sistema, poi riprova.",
    "offline": "Sei offline. Vela si aggiorna di nuovo quando torni online.",
    "serverTitle": "Servizio temporaneamente non disponibile",
    "serverBody": "Il servizio Indice passkey non è raggiungibile — serve sia per creare il wallet sia per accedere.",

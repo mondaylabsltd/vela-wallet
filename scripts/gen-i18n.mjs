@@ -1353,11 +1353,17 @@ for (let i = 1; i < PATHS.length; i++) {
 //   readyToExecute, executed}`). 2243 + 19 leaves + 2 branches
 //   (`componentsUi.appUpdate.refused`, `componentsUi.multisigNotify`) =
 //   2264 paths, 2147 leaves, 117 branches.
-// 2265 (round 8, 2026-11-01): + `onboarding.welcomeWeb.linkWaiting` (Welcome
-//   says a multisig link opened here is waiting for a wallet, r5reg). 2264 +
-//   1 = 2265 paths, 2148 leaves, 117 branches.
-if (PATHS.length !== 2265) fail(`expected 2265 paths (2148 leaf + 117 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2148) fail(`expected 2148 leaf paths, got ${leafSet.size}`);
+// 2266 (desktop r8-23, 2026-11-01): + the welcome's word for a proxy that
+//   keeps every request in (`onboarding.common.{proxyPacBody,
+//   proxyServerBody}`: an automatic proxy configuration that can't be
+//   reached, a proxy that doesn't answer — and where to turn it off), in
+//   place of "check your network" when the network was never the problem.
+//   2264 + 2 leaves = 2266 paths, 2149 leaves, 117 branches.
+// 2267 (round 8 core, 2026-11-01): + `onboarding.welcomeWeb.linkWaiting`
+//   (Welcome says a multisig link opened here is waiting for a wallet,
+//   r5reg). 2266 + 1 = 2267 paths, 2150 leaves, 117 branches.
+if (PATHS.length !== 2267) fail(`expected 2267 paths (2150 leaf + 117 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2150) fail(`expected 2150 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 117) fail(`expected 117 branch paths, got ${branchSet.size}`);
 // The on-demand catalogs, pinned the same way (leaves of every locale's union):
 // a key dropped from one namespace and not landed in the other fails here.

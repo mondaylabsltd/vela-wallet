@@ -839,6 +839,8 @@
    "waitedSeconds": "{{seconds}} saniyedir bekleniyor",
    "networkTitle": "Ağ bağlantısı kararsız",
    "networkBody": "İstek yerine ulaşmadı — ağınızı kontrol edip tekrar deneyin.",
+   "proxyPacBody": "Bu bilgisayar, erişilemeyen bir otomatik proxy yapılandırmasını ({{proxy}}) kullanacak şekilde ayarlı, bu yüzden hiçbir istek dışarı çıkamıyor. Bunu düzeltin ya da sistemin ağ ayarlarındaki Proxy'ler bölümünden otomatik proxy yapılandırmasını kapatıp tekrar deneyin.",
+   "proxyServerBody": "Bu bilgisayarın kullanacak şekilde ayarlandığı proxy ({{proxy}}) yanıt vermiyor, bu yüzden hiçbir istek dışarı çıkamıyor. Proxy'yi başlatın ya da sistemin ağ ayarlarındaki Proxy'ler bölümünden kapatıp tekrar deneyin.",
    "offline": "Çevrimdışısınız. Yeniden çevrimiçi olduğunuzda Vela güncellenmeye devam eder.",
    "serverTitle": "Servis geçici olarak kullanılamıyor",
    "serverBody": "Passkey Dizini servisine ulaşılamıyor — hem cüzdan oluşturma hem giriş için gereklidir.",

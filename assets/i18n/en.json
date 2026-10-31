@@ -839,6 +839,8 @@
    "waitedSeconds": "Waited {{seconds}} seconds",
    "networkTitle": "Network connection is unstable",
    "networkBody": "The request never arrived — check your network and try again.",
+   "proxyPacBody": "This computer is set to use an automatic proxy configuration ({{proxy}}) that can't be reached, so no request gets out. Fix it, or turn automatic proxy configuration off in your system's network settings under Proxies, then try again.",
+   "proxyServerBody": "The proxy this computer is set to use ({{proxy}}) isn't responding, so no request gets out. Start it, or turn it off in your system's network settings under Proxies, then try again.",
    "offline": "You're offline. Vela updates again once you're back online.",
    "serverTitle": "Service temporarily unavailable",
    "serverBody": "The passkey index service is unreachable — both creating and signing in need it.",

@@ -479,7 +479,33 @@ pub fn with_routes<T>(
     timeout: Duration,
     call: impl FnMut(&Agent) -> Result<T, ureq::Error>,
 ) -> Result<T, Transport> {
-    over_routes(routes_for(url), timeout, call)
+    let outcome = over_routes(routes_for(url), timeout, call);
+    if !is_local(url) || dev_proxy().is_some() {
+        note(outcome.as_ref().err());
+    }
+    outcome
+}
+
+/// The proxy's own failure the last request out of this machine met, while
+/// no later one got out (r8-23): a screen that can only say "the request
+/// never arrived" says it was the system's proxy, and which, instead of
+/// "check your network". Loopback requests say nothing of it.
+static STUCK: Mutex<Option<ProxyFailure>> = Mutex::new(None);
+
+fn note(failure: Option<&Transport>) {
+    let Ok(mut stuck) = STUCK.lock() else {
+        return;
+    };
+    *stuck = failure
+        .and_then(|t| t.proxy.clone())
+        .filter(|p| p.kind.is_the_proxys());
+}
+
+/// What [`note`] holds: `Some` while the last request out was kept in by
+/// the proxy (or its PAC file) itself.
+#[must_use]
+pub fn stuck() -> Option<ProxyFailure> {
+    STUCK.lock().ok().and_then(|s| s.clone())
 }
 
 /// [`with_routes`] over routes already resolved — the seam the tests use.
@@ -682,6 +708,37 @@ fn parse_gvariant_list(value: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// r8-23: a request the proxy (or its PAC file) kept in is remembered
+    /// as the proxy's, until a request gets out; a tunnel the proxy refused
+    /// for the site, or a far end that did not answer, is not the proxy's.
+    #[test]
+    fn the_proxys_own_failure_is_remembered_until_a_request_gets_out() {
+        let pac = ProxyFailure {
+            proxy: "wpad.example".into(),
+            kind: ProxyFailureKind::PacFailed,
+        };
+        let kept_in = |proxy: Option<ProxyFailure>| Transport {
+            error: ureq::Error::ConnectionFailed,
+            local: true,
+            proxy,
+        };
+        note(Some(&kept_in(Some(pac.clone()))));
+        assert_eq!(stuck(), Some(pac));
+        note(Some(&kept_in(Some(ProxyFailure {
+            proxy: "10.0.0.1:3128".into(),
+            kind: ProxyFailureKind::RefusedTunnel,
+        }))));
+        assert_eq!(stuck(), None, "the proxy spoke for the site");
+        let dead = ProxyFailure {
+            proxy: "127.0.0.1:9".into(),
+            kind: ProxyFailureKind::Unreachable,
+        };
+        note(Some(&kept_in(Some(dead.clone()))));
+        assert_eq!(stuck(), Some(dead));
+        note(None);
+        assert_eq!(stuck(), None, "a request got out");
+    }
 
     /// A proxy is a way to reach the outside, and this machine is not outside.
     ///

@@ -839,6 +839,8 @@
    "waitedSeconds": "Đã chờ {{seconds}} giây",
    "networkTitle": "Kết nối mạng không ổn định",
    "networkBody": "Yêu cầu chưa đến được máy chủ — vui lòng kiểm tra mạng rồi thử lại.",
+   "proxyPacBody": "Máy tính này được đặt dùng cấu hình proxy tự động ({{proxy}}) nhưng không truy cập được, nên không yêu cầu nào đi ra ngoài được. Hãy sửa nó, hoặc tắt cấu hình proxy tự động trong phần Proxy của cài đặt mạng hệ thống, rồi thử lại.",
+   "proxyServerBody": "Proxy mà máy tính này được đặt dùng ({{proxy}}) không phản hồi, nên không yêu cầu nào đi ra ngoài được. Hãy khởi động nó, hoặc tắt nó trong phần Proxy của cài đặt mạng hệ thống, rồi thử lại.",
    "offline": "Bạn đang ngoại tuyến. Vela sẽ cập nhật lại khi bạn có mạng trở lại.",
    "serverTitle": "Dịch vụ tạm thời không khả dụng",
    "serverBody": "Không kết nối được dịch vụ Chỉ mục Passkey — cả việc tạo ví lẫn đăng nhập đều cần dịch vụ này.",

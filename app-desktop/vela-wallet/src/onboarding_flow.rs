@@ -1479,8 +1479,12 @@ fn render_done(host: &FlowHost<'_>) -> Div {
                 )
                 .child(done_address(theme, address, host.copied, loc, on_copy)),
         )
+        // The keys, each as it is (device-bound, synced, a security key):
+        // nothing more is claimed of them here. "Your passkey is verified
+        // and your key is synced" read as a synced passkey over device-bound
+        // keys (r8 S4); the line above says what is true, as the web's
+        // done screen does.
         .child(keys)
-        .child(caption(theme, loc.t("onboarding.create.verifyHint")))
         .child(vela_button_opts(
             "flow-enter-wallet",
             ButtonVariant::Primary,

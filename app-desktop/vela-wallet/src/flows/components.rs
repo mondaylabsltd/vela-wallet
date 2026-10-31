@@ -1743,6 +1743,16 @@ fn accent_fill(button: Div, theme: &Theme) -> Div {
         .text_color(gpui::Hsla::from(gpui::rgb(0xffffff)))
 }
 
+/// `primary` in ink: the base text colour's fill — the one answer of a
+/// question that moves no money (a switch of network space). The accent
+/// stays for what moves value (r8 S4).
+pub fn ink_button(theme: &Theme, label: SharedString) -> Div {
+    button_base(label)
+        .rounded(px(12.))
+        .bg(theme.fg_base)
+        .text_color(theme.fg_inverse)
+}
+
 /// A quiet text control: no fill, no outline, the muted colour — an action
 /// that is there but must not be the one a person reaches for (spec 082
 /// RJ18: a pending record's 删除记录, the "don't send it again" trace).
@@ -1780,6 +1790,19 @@ pub fn danger_button(theme: &Theme, label: SharedString) -> Div {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// r8 S4: the answer that moves no value (a switch of network space)
+    /// wears the ink, never the accent.
+    #[test]
+    fn the_ink_answer_is_not_the_accent() {
+        use gpui::Styled as _;
+        for theme in [Theme::light(), Theme::dark()] {
+            let mut ink = ink_button(&theme, "Switch".into());
+            let fill = ink.style().background.clone();
+            assert_eq!(fill, Some(theme.fg_base.into()));
+            assert_ne!(fill, Some(theme.accent.into()));
+        }
+    }
 
     /// A fact row's network (or coin) mark is its identicons' size: on the
     /// send confirm and the transaction detail the network row's mark was 26

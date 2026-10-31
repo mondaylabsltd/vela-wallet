@@ -121,7 +121,7 @@ impl Deps for Shared {
             bound_ms: bound.map(|b| b.as_millis() as u32),
         }) {
             Res::RpcResult { result } => Ok(RpcReply::Result(result)),
-            Res::RpcError { code, message, data } => Ok(RpcReply::Error { code, message, data }),
+            Res::RpcError { code, message, .. } => Ok(RpcReply::Error { code, message, data: None }),
             Res::RpcUnanswered { detail } => Err(detail),
             other => panic!("{other:?}"),
         }
@@ -577,6 +577,93 @@ fn proposed_approved_executed_and_recorded() {
     assert_eq!(rows.len(), 1, "one executed transaction");
     assert_eq!(rows[0]["rows"][0]["kind"], "send");
     assert_eq!(rows[0]["rows"][0]["amount"], "1");
+}
+
+/// r8-6: a transaction one approval short, whose approval here makes it
+/// ready, is looked at by that member as executor while its sheet is open
+/// (the sheet's asks, `sheet::looked`) — the look is priced through this
+/// shell's executor, the machine offers the one press, and "Approve and
+/// execute" runs it in one user operation.
+#[test]
+fn one_short_is_looked_at_and_approved_and_executed_in_one_press() {
+    let mut sim = booted(&[0, 1]);
+    let address = created(&mut sim);
+    let hash = propose(&mut sim, transfer("1"));
+    let item = sim
+        .machines
+        .proposals_view
+        .items
+        .iter()
+        .find(|i| i.safe_tx_hash == hash)
+        .cloned()
+        .unwrap();
+    assert_eq!((item.approved, item.status), (1, ProposalStatus::Pending));
+    let looked = super::sheet::looked(item.status, item.review.action.is_some(), &item.can_execute);
+    let second = fixture(1).address;
+    assert!(
+        looked.iter().any(|e| e.eq_ignore_ascii_case(&second)),
+        "the member whose approval completes it is looked at: {looked:?}"
+    );
+    for executor in looked {
+        sim.proposals(ProposalsEvent::Preview {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+            executor,
+        });
+    }
+    let view = sim.machines.proposals_view.clone();
+    let look = super::sheet::look_of(&view.previews, 100, &hash, &second);
+    assert!(
+        matches!(look, Some(super::sheet::Look::Priced { can_pay: true, .. })),
+        "priced: {look:?} {:?}",
+        view.previews
+    );
+    let approved_by: Vec<String> = item.approvals.iter().filter(|a| a.counts).map(|a| a.owner.clone()).collect();
+    let foot = super::sheet::foot(
+        &super::sheet::FootFacts {
+            chain_id: 100,
+            hash: &hash,
+            status: item.status,
+            readable: true,
+            approved: item.approved,
+            threshold: item.threshold,
+            approved_by: &approved_by,
+            can_approve: &item.can_approve,
+            can_execute: &item.can_execute,
+            previews: &view.previews,
+            approve_execute: &view.approve_execute,
+            last_actor: None,
+        },
+        Some(&second),
+    );
+    let super::sheet::FootKind::Execute { approve_first, one_tap, .. } = foot.kind else {
+        panic!("{foot:?}");
+    };
+    assert!(approve_first && one_tap, "Approve and execute is offered: {:?}", view.approve_execute);
+
+    let owners: Vec<String> = (0..3).map(|i| fixture(i).address).collect();
+    let mut after = DeployedSafe::clean(&owners.iter().map(String::as_str).collect::<Vec<_>>(), 2);
+    after.nonce = 1;
+    sim.world().on_send = Some(Landing {
+        chain: 100,
+        safe: address.clone(),
+        after,
+        safe_tx_hash: hash.clone(),
+        tx_hash: format!("0x{}", "cd".repeat(32)),
+        user_op_hash: format!("0x{}", "ab".repeat(32)),
+    });
+    let passkeys = sim.world().passkeys.len();
+    sim.proposals(ProposalsEvent::ApproveExecute {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor: second,
+    });
+    assert_eq!(sim.world().sent.len(), 1, "one user operation");
+    // Its approval is the execution's own sender (`msg.sender`): no
+    // separate signature is asked.
+    assert_eq!(sim.world().passkeys.len(), passkeys, "no separate approval");
+    let verdict = &sim.machines.proposals_view.executions[&format!("100:{hash}")];
+    assert_eq!(verdict["kind"], "executed", "{verdict}");
 }
 
 /// The members machine is fed the proposals waiting on the multisig shown

@@ -787,9 +787,10 @@ impl OnboardingPage {
                     .text_size(theme::text_flow_caption())
                     .line_height(theme::line_height_body())
                     .text_color(theme.warning_base)
-                    .child(crate::ui::prose(
-                        self.loc.t("onboarding.common.networkBody"),
-                    )),
+                    .child(crate::ui::prose(transport_words(
+                        &self.loc,
+                        crate::executor::proxy::stuck().as_ref(),
+                    ))),
             );
         } else if self.login_view.endpoint_unreachable {
             top = top.child(
@@ -1785,9 +1786,60 @@ fn endpoint_should_auto_open(
     unreachable && !open && !dismissed && !creating
 }
 
+/// Why nothing got out (r8-23): the system's proxy, when the proxy itself
+/// (or its automatic configuration) kept the requests in — which one, and
+/// where to turn it off — else the network.
+fn transport_words(
+    loc: &crate::loc::Loc,
+    stuck: Option<&crate::executor::proxy::ProxyFailure>,
+) -> SharedString {
+    use crate::executor::proxy::ProxyFailureKind;
+    match stuck {
+        Some(failure) if failure.kind == ProxyFailureKind::PacFailed => loc.t_texts(
+            "onboarding.common.proxyPacBody",
+            &[("proxy", failure.proxy.as_str())],
+        ),
+        Some(failure) if failure.kind.is_the_proxys() => loc.t_texts(
+            "onboarding.common.proxyServerBody",
+            &[("proxy", failure.proxy.as_str())],
+        ),
+        _ => loc.t("onboarding.common.networkBody"),
+    }
+}
+
 #[cfg(test)]
 mod endpoint_rule {
     use super::endpoint_should_auto_open;
+
+    /// r8-23: requests the system's proxy kept in are said as the proxy's —
+    /// which one, and where to turn it off — never "check your network".
+    #[test]
+    fn a_proxy_that_keeps_requests_in_is_named() {
+        use crate::executor::proxy::{ProxyFailure, ProxyFailureKind};
+        let loc = crate::loc::Loc::for_language("en");
+        let pac = ProxyFailure {
+            proxy: "wpad.corp.example".into(),
+            kind: ProxyFailureKind::PacFailed,
+        };
+        let said = super::transport_words(&loc, Some(&pac));
+        assert!(said.contains("automatic proxy configuration (wpad.corp.example)"), "{said}");
+        assert!(said.contains("Proxies"), "{said}");
+        let dead = ProxyFailure {
+            proxy: "127.0.0.1:9".into(),
+            kind: ProxyFailureKind::Unreachable,
+        };
+        let said = super::transport_words(&loc, Some(&dead));
+        assert!(said.contains("(127.0.0.1:9) isn't responding"), "{said}");
+        let network = super::transport_words(&loc, None);
+        assert_eq!(network, loc.t("onboarding.common.networkBody"));
+        // Every language says it, none echoes its key.
+        for tag in ["zh", "ja", "de", "ru", "it", "pt-BR"] {
+            let loc = crate::loc::Loc::for_language(tag);
+            let said = super::transport_words(&loc, Some(&pac));
+            assert!(!said.contains("onboarding.common"), "{tag}: {said}");
+            assert!(said.contains("wpad.corp.example"), "{tag}: {said}");
+        }
+    }
 
     #[test]
     fn opens_once_for_an_unreachable_index() {
