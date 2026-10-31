@@ -148,7 +148,11 @@ internal fun tokenName(facts: JsonElement?, words: MultisigWords, chainId: Int):
 internal fun amountText(amount: JsonElement?, symbol: String, words: MultisigWords): String {
     if (amount["unlimited"].bool == true) return words.t("review.reading.unlimited")
     amount["plain"].str?.let { return "${app.getvela.wallet.core.format.Formats.current.plain(it)} $symbol".trim() }
-    return words.t("review.reading.decimalsUnknown", "raw" to (amount["raw"].str ?: "0"))
+    val raw = amount["raw"].str ?: "0"
+    val said = words.t("review.reading.decimalsUnknown", "raw" to raw)
+    // The raw base units are said whatever the catalog holds (a catalog
+    // older than the key still never hides the figure, nor guesses it).
+    return if (said.contains(raw)) said else "$raw · ${words.raw("componentsUi.signingApprove.decimalsUnverified")}"
 }
 
 /**
