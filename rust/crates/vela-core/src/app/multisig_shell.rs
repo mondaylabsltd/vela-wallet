@@ -1684,6 +1684,12 @@ fn word(hex: &str, index: usize) -> &str {
 }
 
 /// The addresses in an `address[]` return (`decodeAddresses`), checksummed.
+/// A chain's answer for a deployed multisig's members is one only when it
+/// names at least one owner and a threshold those owners can meet.
+pub fn members_answer_valid(owners: &[String], threshold: u64) -> bool {
+    !owners.is_empty() && threshold >= 1 && threshold <= owners.len() as u64
+}
+
 pub fn decode_addresses(hex: &str) -> Vec<String> {
     let offset = usize::from_str_radix(word(hex, 0), 16).unwrap_or(0) / 32;
     let count = usize::from_str_radix(word(hex, offset), 16).unwrap_or(0);
@@ -1875,6 +1881,13 @@ impl Chain {
         let threshold = quantity(&threshold.map_err(|e| unavailable(e.message()))?)
             .and_then(|t| u64::try_from(t).ok())
             .ok_or_else(|| unavailable("threshold unreadable".to_owned()))?;
+        if !members_answer_valid(&owners, threshold) {
+            // A deployed multisig always has a member and a rule it can
+            // meet; "no owners, needs 0" is a node that answered nothing
+            // (behind, pruned, or a chain that lost the deploy) — unread,
+            // never "Needs 0 of 0" (r8-7).
+            return Err(unavailable("members unreadable".to_owned()));
+        }
         lock(&self.members_at).insert(key, (nonce, owners.clone(), threshold, now));
         Ok(ChainMembers {
             deployed: true,
@@ -2070,6 +2083,23 @@ pub async fn judge<Ev: Send + 'static>(
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_empty_member_answer_is_unread_not_needs_zero() {
+        let one = vec!["0x00000000000000000000000000000000000000aA".to_owned()];
+        let two = vec![
+            one[0].clone(),
+            "0x00000000000000000000000000000000000000bB".to_owned(),
+        ];
+        assert!(members_answer_valid(&one, 1));
+        assert!(members_answer_valid(&two, 2));
+        // What a node returns for an address with no code: "0x".
+        assert!(decode_addresses("0x").is_empty());
+        assert!(!members_answer_valid(&decode_addresses("0x"), 0));
+        assert!(!members_answer_valid(&[], 1));
+        assert!(!members_answer_valid(&two, 0));
+        assert!(!members_answer_valid(&two, 3));
+    }
 
     #[test]
     fn retry_after_reads_the_header_then_the_body() {

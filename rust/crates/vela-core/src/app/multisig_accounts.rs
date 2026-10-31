@@ -1726,7 +1726,12 @@ impl App for MultisigAccounts {
                 let json = {
                     let mut s = lock(&model.state);
                     let key = address.to_ascii_lowercase();
-                    if s.find(&address).is_none() || s.members_now.get(&key) == Some(&members) {
+                    // An empty list is no reading of who the members are
+                    // (r8-7): keep what was known, or the founding members.
+                    if members.is_empty()
+                        || s.find(&address).is_none()
+                        || s.members_now.get(&key) == Some(&members)
+                    {
                         return render();
                     }
                     s.members_now.insert(key, members);
@@ -1931,9 +1936,13 @@ async fn start(io: &Io<Event>, st: &Shared<State>) {
         s.kept_draft = get(CREATE_DRAFT_KEY)
             .and_then(|r| serde_json::from_str::<CreateDraft>(&r).ok())
             .filter(|d| !d.is_blank());
+        // An empty list kept by an earlier build is no reading (r8-7).
         s.members_now = get(MEMBERS_NOW_KEY)
-            .and_then(|r| serde_json::from_str(&r).ok())
-            .unwrap_or_default();
+            .and_then(|r| serde_json::from_str::<BTreeMap<String, Vec<String>>>(&r).ok())
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|(_, members)| !members.is_empty())
+            .collect();
         s.invite_shared = get(INVITE_SHARED_KEY)
             .and_then(|r| serde_json::from_str::<BTreeSet<String>>(&r).ok())
             .unwrap_or_default()
