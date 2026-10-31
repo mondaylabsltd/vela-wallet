@@ -597,6 +597,7 @@
         "originalMembers": "İlk üyeler",
         "originalNote": "Oluşturulduğu üyeler. Dağıtılmadığı bir ağ bu üyelerle başlar.",
         "currentOn": "{{network}} üzerindeki mevcut üyeler",
+        "unreadableOn": "{{network}} üzerindeki üyeleri okunamadı.",
         "sameAsOriginal": "İlk üyelerle aynı.",
         "added": "Eklenenler",
         "removed": "Çıkarılanlar",

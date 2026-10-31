@@ -523,6 +523,7 @@
     "originalMembers": "作成時のメンバー",
     "originalNote": "このマルチシグを作成したときのメンバーです。デプロイされていないネットワークでは、このメンバーで始まります。",
     "currentOn": "{{network}} での現在のメンバー",
+    "unreadableOn": "{{network}} のメンバーを読み取れませんでした。",
     "sameAsOriginal": "作成時のメンバーと同じです。",
     "added": "追加",
     "removed": "削除",

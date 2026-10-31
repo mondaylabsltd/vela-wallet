@@ -527,6 +527,7 @@
     "originalMembers": "Membros originais",
     "originalNote": "Os membros com que ele foi criado. Uma rede em que ele não está implantado começa com eles.",
     "currentOn": "Membros atuais na {{network}}",
+    "unreadableOn": "Não foi possível ler os membros na {{network}}.",
     "sameAsOriginal": "Os mesmos dos membros originais.",
     "added": "Adicionados",
     "removed": "Removidos",

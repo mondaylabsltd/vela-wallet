@@ -523,6 +523,7 @@
     "originalMembers": "Anggota awal",
     "originalNote": "Anggota saat multisig ini dibuat. Jaringan tempat multisig ini tidak di-deploy dimulai dengan anggota ini.",
     "currentOn": "Anggota saat ini di {{network}}",
+    "unreadableOn": "Tidak dapat membaca anggotanya di {{network}}.",
     "sameAsOriginal": "Sama dengan anggota awal.",
     "added": "Ditambahkan",
     "removed": "Dihapus",

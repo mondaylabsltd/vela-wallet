@@ -602,6 +602,7 @@
         "originalMembers": "Membres d’origine",
         "originalNote": "Les membres avec lesquels il a été créé. Un réseau où il n’est pas déployé démarre avec eux.",
         "currentOn": "Membres actuels sur {{network}}",
+        "unreadableOn": "Impossible de lire ses membres sur {{network}}.",
         "sameAsOriginal": "Les mêmes que les membres d’origine.",
         "added": "Ajoutés",
         "removed": "Retirés",
