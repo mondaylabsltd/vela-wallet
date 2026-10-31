@@ -9,9 +9,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-// @ts-expect-error — plain ESM beside the extension's scripts, no types.
 import * as derive from '../../../extension/lib/safari-manifest.js';
-// @ts-expect-error — plain ESM beside the extension's scripts, no types.
 import * as shim from '../../../extension/safari/shim.js';
 
 const APP_ROOT = join(import.meta.dirname, '../../..');
@@ -96,8 +94,9 @@ describe('the Safari manifest, derived from the Chrome one', () => {
 		// The attestation names this extension's per-launch origin: on the
 		// official page in what ships, plus the developer's loopback page in
 		// the development package — and on no other site.
-		const attestOn = (m: { content_scripts: { js: string[]; matches: string[] }[] }) =>
-			m.content_scripts.filter((s) => s.js.includes('safari-attest.js'));
+		type Script = { js: string[]; matches: string[] };
+		const attestOn = (m: typeof release) =>
+			(m.content_scripts as Script[]).filter((s) => s.js.includes('safari-attest.js'));
 		expect(attestOn(release)).toEqual([
 			{
 				matches: ['https://sign.getvela.app/*'],

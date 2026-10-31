@@ -96,6 +96,13 @@ jobs:
       # asserted on the packages just built.
       - name: The packages keep their measured constraints
         run: npx vitest run --project server src/lib/extension/package.test.ts
+      # Native AUDIT §6.5: the same code base, built for Safari (the iOS app's
+      # Safari Web Extension embeds dist-safari-release), and its constraints:
+      # the derived manifest, the adapter, no developer page in what ships.
+      - name: Build the Safari package
+        run: pnpm run build:extension:safari
+      - name: The Safari package keeps its measured constraints
+        run: npx vitest run --project server src/lib/extension/safari-package.test.ts src/lib/extension/safari-signer.test.ts
       # Spec 064 §3, asserted where it matters: in the package, not in a test beside it.
       - name: The extension says which build it is
         run: |
