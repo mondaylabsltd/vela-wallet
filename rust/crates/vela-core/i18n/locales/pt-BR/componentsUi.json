@@ -565,7 +565,28 @@
     "appUpdate": {
       "title": "Atualização disponível",
       "install": "Instalar",
-      "later": "Depois"
+      "later": "Depois",
+      "refused": {
+        "noKey": "Esta versão não consegue verificar a assinatura de uma atualização, então não vai instalá-la. Baixe a versão mais recente no site da Vela.",
+        "unreadable": "Não foi possível ler os dados da atualização, então nada foi instalado. Seu app continua igual.",
+        "badSignature": "A atualização não é assinada pela Vela, então não foi instalada. Seu app continua igual.",
+        "replayed": "Esta atualização é mais antiga que uma que este dispositivo já viu, então não foi instalada. Seu app continua igual.",
+        "notNewer": "Esta atualização não é mais nova que a sua versão, então não há nada para instalar.",
+        "noArtifact": "Esta atualização não tem download para este computador, então nada foi instalado.",
+        "insecureUrl": "O link de download da atualização não é seguro, então não foi usado. Seu app continua igual.",
+        "artifactMismatch": "O download não correspondeu à versão assinada, então não foi instalado. Tente de novo.",
+        "unreachable": "O download não terminou. Verifique sua conexão e tente de novo.",
+        "notInstalled": "Esta cópia não é um app instalado, então não pode se atualizar sozinha.",
+        "signatureMismatch": "A assinatura de código do novo app não corresponde à deste, então ele não foi instalado. Seu app continua igual.",
+        "versionMismatch": "O app baixado não é a versão assinada, então não foi instalado. Seu app continua igual.",
+        "installFailed": "Seu sistema não conseguiu instalar a atualização. Este app continua igual. Tente de novo."
+      }
+    },
+    "multisigNotify": {
+      "approvalNeeded": "Precisa da sua aprovação",
+      "approvalCounted": "Aprovação contada: {{approved}} de {{threshold}}",
+      "readyToExecute": "Pronta para executar",
+      "executed": "Executada"
     },
     "dropOverlay": {
       "title": "Solte um endereço, link de pagamento ou imagem QR"

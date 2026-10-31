@@ -129,7 +129,9 @@
     "appearance": {
       "menuBar": "Mostrar en la barra de menús",
       "trayIcon": "Mostrar en la bandeja del sistema",
-      "statusItemHint": "Tu total y Enviar y Recibir rápidos, con las últimas cifras cargadas; no se consulta nada más."
+      "statusItemHint": "Tu total y Enviar y Recibir rápidos, con las últimas cifras cargadas; no se consulta nada más.",
+      "multisigNotifications": "Notificaciones de multifirma",
+      "multisigNotificationsHint": "Te avisa cuando una transacción multifirma necesita tu aprobación, recibe una aprobación, está lista para ejecutarse o se ejecutó. Vela revisa cada minuto mientras está abierta; las notificaciones salen de este dispositivo, no de un servicio de push."
     }
   }
 }

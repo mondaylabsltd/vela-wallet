@@ -565,7 +565,28 @@
     "appUpdate": {
       "title": "Mise à jour disponible",
       "install": "Installer",
-      "later": "Plus tard"
+      "later": "Plus tard",
+      "refused": {
+        "noKey": "Cette version ne peut pas vérifier la signature d’une mise à jour : elle n’en installera pas. Téléchargez la dernière version sur le site de Vela.",
+        "unreadable": "Les informations de la mise à jour sont illisibles : rien n’a été installé. Votre app est inchangée.",
+        "badSignature": "La mise à jour n’est pas signée par Vela : elle n’a pas été installée. Votre app est inchangée.",
+        "replayed": "Cette mise à jour est plus ancienne qu’une autre déjà vue sur cet appareil : elle n’a pas été installée. Votre app est inchangée.",
+        "notNewer": "Cette mise à jour n’est pas plus récente que votre version : il n’y a rien à installer.",
+        "noArtifact": "Cette mise à jour n’a pas de téléchargement pour cet ordinateur : rien n’a été installé.",
+        "insecureUrl": "Le lien de téléchargement de la mise à jour n’est pas sécurisé : il n’a pas été utilisé. Votre app est inchangée.",
+        "artifactMismatch": "Le téléchargement ne correspondait pas à la version signée : il n’a pas été installé. Réessayez.",
+        "unreachable": "Le téléchargement ne s’est pas terminé. Vérifiez votre connexion et réessayez.",
+        "notInstalled": "Cette copie n’est pas une app installée : elle ne peut pas se mettre à jour elle-même.",
+        "signatureMismatch": "La signature de code de la nouvelle app ne correspond pas à celle-ci : elle n’a pas été installée. Votre app est inchangée.",
+        "versionMismatch": "L’app téléchargée n’est pas la version signée : elle n’a pas été installée. Votre app est inchangée.",
+        "installFailed": "Votre système n’a pas pu installer la mise à jour. Cette app est inchangée. Réessayez."
+      }
+    },
+    "multisigNotify": {
+      "approvalNeeded": "Votre approbation est requise",
+      "approvalCounted": "Approbation comptée : {{approved}} sur {{threshold}}",
+      "readyToExecute": "Prête à exécuter",
+      "executed": "Exécutée"
     },
     "dropOverlay": {
       "title": "Déposez une adresse, un lien de paiement ou une image QR"

@@ -129,7 +129,9 @@
     "appearance": {
       "menuBar": "In der Menüleiste anzeigen",
       "trayIcon": "Im Infobereich anzeigen",
-      "statusItemHint": "Dein Gesamtwert und schnelles Senden und Empfangen, aus den zuletzt geladenen Werten – dafür wird nichts zusätzlich abgerufen."
+      "statusItemHint": "Dein Gesamtwert und schnelles Senden und Empfangen, aus den zuletzt geladenen Werten – dafür wird nichts zusätzlich abgerufen.",
+      "multisigNotifications": "Multisig-Mitteilungen",
+      "multisigNotificationsHint": "Benachrichtigt dich, wenn eine Multisig-Transaktion deine Genehmigung braucht, eine Genehmigung erhält, zur Ausführung bereit ist oder ausgeführt wurde. Vela prüft jede Minute, solange es geöffnet ist; die Mitteilungen kommen von diesem Gerät, nicht von einem Push-Dienst."
     }
   }
 }

@@ -565,7 +565,28 @@
     "appUpdate": {
       "title": "有可用的更新",
       "install": "安裝",
-      "later": "稍後"
+      "later": "稍後",
+      "refused": {
+        "noKey": "此版本無法驗證更新的簽章，因此不會安裝。請從 Vela 官網下載最新版本。",
+        "unreadable": "無法讀取更新的資訊，未安裝任何內容。你的應用程式維持不變。",
+        "badSignature": "此更新沒有 Vela 的簽章，因此未安裝。你的應用程式維持不變。",
+        "replayed": "此更新比本裝置已看過的版本更舊，因此未安裝。你的應用程式維持不變。",
+        "notNewer": "此更新並不比你目前的版本新，無需安裝。",
+        "noArtifact": "此更新沒有適用於這台電腦的下載檔，未安裝任何內容。",
+        "insecureUrl": "此更新的下載連結不安全，因此未使用。你的應用程式維持不變。",
+        "artifactMismatch": "下載內容與簽章的版本不一致，因此未安裝。請重試。",
+        "unreachable": "下載未完成。請檢查網路連線後重試。",
+        "notInstalled": "這個副本不是已安裝的應用程式，無法自行更新。",
+        "signatureMismatch": "新應用程式的程式碼簽章與目前的不一致，因此未安裝。你的應用程式維持不變。",
+        "versionMismatch": "下載的應用程式不是簽章的那個版本，因此未安裝。你的應用程式維持不變。",
+        "installFailed": "系統未能安裝此更新。目前的應用程式維持不變，請重試。"
+      }
+    },
+    "multisigNotify": {
+      "approvalNeeded": "待你核准",
+      "approvalCounted": "已計入核准：{{approved}}/{{threshold}}",
+      "readyToExecute": "可以執行",
+      "executed": "已執行"
     },
     "dropOverlay": {
       "title": "拖放地址、付款連結或 QR 圖片"

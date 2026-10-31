@@ -129,7 +129,9 @@
     "appearance": {
       "menuBar": "Show in menu bar",
       "trayIcon": "Show in system tray",
-      "statusItemHint": "Your total and quick Send and Receive, from the figures last loaded — nothing extra is fetched."
+      "statusItemHint": "Your total and quick Send and Receive, from the figures last loaded — nothing extra is fetched.",
+      "multisigNotifications": "Multisig notifications",
+      "multisigNotificationsHint": "Get notified when a multisig transaction needs your approval, gets an approval, is ready to execute, or is executed. Vela checks every minute while it's open; notifications come from this device, not a push service."
     }
   }
 }
