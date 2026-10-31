@@ -1,9 +1,17 @@
 //! A member’s label and kind as this device can tell them (r4D-5) — labels
 //! only, never authority: who may act is the genesis’s and each chain’s
-//! owners. The order: this device’s own name for one of its accounts, else
-//! the name a multisig here keeps for it (typed by its creator, or carried
-//! by an invite), else the name the member registered for itself in the
-//! passkey index, else its short address (EIP-55).
+//! owners.
+//!
+//! r8-25 (owner, decided by best practice and the core principle): ONE name
+//! per member on every device. The order is the shared names first: the name
+//! a multisig here keeps for it (typed by its creator, or carried by an
+//! invite — the same words on every device that took the same invite), else
+//! the name the member registered for itself in the passkey index (public,
+//! the same everywhere), else this device’s own name for one of its accounts
+//! (a private nickname — two devices holding one key named it two ways:
+//! "Parallel One", "Parallel space"), else its short address (EIP-55). Every
+//! label is an unauthenticated hint: none of them decides anything, and a
+//! carried one never overwrites what this device keeps (`name_members`).
 //!
 //! The shell keeps the passkey index’s answers (its I/O and its reactive
 //! cache) and asks here: `names.label`, `names.kind`, `names.short`.
@@ -31,18 +39,18 @@ fn named(name: Option<&str>) -> Option<&str> {
     name.map(str::trim).filter(|n| !n.is_empty())
 }
 
-/// The name to show for `address`: `own` (this device’s account name),
-/// else `kept` (what a multisig here keeps), else `registered` (the passkey
-/// index’s), else its short address.
+/// The name to show for `address` (r8-25): `kept` (what a multisig here
+/// keeps), else `registered` (the passkey index’s), else `own` (this
+/// device’s account name), else its short address.
 pub fn label(
     address: &str,
     own: Option<&str>,
     kept: Option<&str>,
     registered: Option<&str>,
 ) -> String {
-    named(own)
-        .or_else(|| named(kept))
+    named(kept)
         .or_else(|| named(registered))
+        .or_else(|| named(own))
         .map_or_else(|| short_address(address), str::to_owned)
 }
 
@@ -107,11 +115,19 @@ mod tests {
     }
 
     #[test]
-    fn this_devices_own_name_for_its_accounts_comes_first() {
+    fn one_name_per_member_on_every_device_the_shared_names_first() {
+        // r8-25: what the multisig keeps (the invite's words), then the
+        // member's own registered name — the same on every device — before
+        // this device's private nickname for its account.
         assert_eq!(
-            label(BOB, Some("My account"), Some("Not me"), Some("x")),
-            "My account"
+            label(BOB, Some("Parallel space"), Some("Dana"), Some("x")),
+            "Dana"
         );
+        assert_eq!(
+            label(BOB, Some("Parallel space"), None, Some("Interleave")),
+            "Interleave"
+        );
+        assert_eq!(label(BOB, Some("My account"), None, None), "My account");
         assert_eq!(
             kind(true, false, Some("wallet")).as_deref(),
             Some("passkey")

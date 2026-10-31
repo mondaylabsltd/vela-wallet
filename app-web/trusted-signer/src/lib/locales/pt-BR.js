@@ -86,6 +86,7 @@ window.VelaCS.i18n.register('pt-BR', {
   'sentence.deploy': 'Você está implantando o código de um novo contrato. Código não pode ser lido como intenção.',
   'sentence.batch': '{count} transações, uma só assinatura.',
   'sentence.multiSend': '{count} chamadas reunidas em uma única assinatura.',
+  'sentence.multiSendOne': "Uma chamada reunida em uma única assinatura.",
   'sentence.safeExec': 'Uma chamada repassada pelo Safe — o que realmente é executado é a camada interna.',
   'sentence.burn': 'O destinatário é o próprio contrato do token. Moedas enviadas para lá não chegam a ninguém — ficam presas para sempre.',
   'sentence.abiOnly': 'O código-fonte deste contrato é verificado e todos os parâmetros são decodificados, mas ninguém escreveu o que eles significam. Abaixo estão fatos, não explicações.',

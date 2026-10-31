@@ -327,6 +327,9 @@ pub enum AccountUpdate {
         members: BTreeMap<String, MemberInfo>,
         typed: bool,
     },
+    /// r8-7: its members as the chains say now — its members where it is
+    /// deployed, its founding ones where it is not (`members_anywhere`).
+    MembersNow { members: Vec<String> },
 }
 
 /// What the shell answers.
@@ -349,10 +352,15 @@ pub enum MultisigShellResult {
         #[cfg_attr(feature = "bindings", ts(type = "unknown"))]
         result: Value,
     },
-    /// The node answered with a JSON-RPC error.
+    /// The node answered with a JSON-RPC error: its code, message and
+    /// `data` as the node gave it (r8-4: a revert's payload — the
+    /// state-diff probe reads its answer there). `data` absent: none.
     RpcError {
         code: Option<i64>,
         message: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "bindings", ts(optional, type = "unknown"))]
+        data: Option<Value>,
     },
     /// No node answered (or not within `bound_ms`).
     RpcUnanswered {
@@ -495,8 +503,12 @@ pub fn lock<T>(shared: &Shared<T>) -> MutexGuard<'_, T> {
 /// What a read through the RPC pool came to when it did not answer a result.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RpcFail {
-    /// The node answered an error.
-    Error { code: Option<i64>, message: String },
+    /// The node answered an error (its `data`, if any, kept: r8-4).
+    Error {
+        code: Option<i64>,
+        message: String,
+        data: Option<Value>,
+    },
     /// Nothing answered.
     Unanswered(String),
 }
@@ -632,9 +644,15 @@ impl<Ev: Send + 'static> Io<Ev> {
             .await
         {
             MultisigShellResult::RpcResult { result } => Ok(result),
-            MultisigShellResult::RpcError { code, message } => {
-                Err(RpcFail::Error { code, message })
-            }
+            MultisigShellResult::RpcError {
+                code,
+                message,
+                data,
+            } => Err(RpcFail::Error {
+                code,
+                message,
+                data,
+            }),
             MultisigShellResult::RpcUnanswered { detail } => Err(RpcFail::Unanswered(detail)),
             other => Err(RpcFail::Unanswered(format!("unexpected answer {other:?}"))),
         }

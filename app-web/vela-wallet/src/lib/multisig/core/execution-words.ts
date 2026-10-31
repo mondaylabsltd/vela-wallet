@@ -28,7 +28,7 @@ export function feeCoin(amount: bigint, symbol: string): string {
 export function whyText(m: MultisigMessages, why: ExecutionBlock): string {
 	if (why.kind === 'short') {
 		const amount = (v: bigint) =>
-			`${formatUnits(v, why.decimals)}${why.symbol ? ` ${why.symbol}` : ''}`;
+			`${why.decimals === null ? v.toString() : formatUnits(v, why.decimals)}${why.symbol ? ` ${why.symbol}` : ''}`;
 		return fillTemplate(m.proposal.whyShort, { have: amount(why.have), need: amount(why.need) });
 	}
 	return why.reason

@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-XY17cfddkwiEii9g3bvhuQ8AuzE0b7NVxdt9uY5w/zA='; style-src 'sha256-quufbRp70X1ExcmuXCfRs4b8t+LxIlSp4KE2iwzX0OE='; img-src data:; font-src data:; base-uri 'none'; form-action 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-mKfoafZcifj4zjnQYbTEeTXstr6I1DVu9o4c6izMnXU='; style-src 'sha256-S5bvn9F3yOYSNVDAmXppe3Quxt7Fn5LXbjBTZ260Rzo='; img-src data:; font-src data:; base-uri 'none'; form-action 'none'" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Vela</title>
     <style>
@@ -1100,6 +1100,13 @@ details.fee-wrap[open] summary.fee .chevron { transform: rotate(90deg); }
   color: var(--color-fg-muted);
 }
 
+/* r8-5: a danger is confirmed on the danger's own outlined button, never the accent. */
+.confirm-danger {
+  border: var(--border-emphasis) solid var(--color-error-base);
+  background: transparent;
+  color: var(--color-error-base);
+}
+
 .confirm-done {
   border: var(--border-hairline) solid var(--color-border-strong);
   background: transparent;
@@ -1406,6 +1413,7 @@ window.VelaCS.i18n.register('en', {
   'sentence.deploy': 'You are deploying new contract code. Code cannot be read as intent.',
   'sentence.batch': '{count} transactions, one signature.',
   'sentence.multiSend': '{count} calls packed into a single signature.',
+  'sentence.multiSendOne': "One call packed into a single signature.",
   'sentence.safeExec': 'A call forwarded through Safe — the inner layer is what actually runs.',
   'sentence.burn': 'The recipient is the token contract itself. Coins sent there reach nobody — they are stuck for good.',
   'sentence.abiOnly': 'This contract is source-verified and every parameter decodes, but nobody wrote down what they mean. Below are facts, not explanations.',
@@ -1818,6 +1826,7 @@ window.VelaCS.i18n.register('zh', {
   'sentence.deploy': '你要把一份新合约部署到链上。它的代码无法被解读为意图。',
   'sentence.batch': '{count} 笔交易，一并签名。',
   'sentence.multiSend': '{count} 笔调用被打包进一次签名。',
+  'sentence.multiSendOne': "1 笔调用被打包进一次签名。",
   'sentence.safeExec': '这是一笔通过 Safe 转发的调用 —— 真正执行的是里面那一层。',
   'sentence.burn': '接收方填的是这枚代币自己的合约地址。转进去的币不会到任何人手上 —— 它们会永久卡在那里。',
   'sentence.abiOnly': '这个合约的源码已验证，参数可以全部解开，但没有人为它写过含义说明。下面是事实，不是解释。',
@@ -2217,6 +2226,7 @@ window.VelaCS.i18n.register('zh-TW', {
   'sentence.deploy': '你正在部署一份新的合約程式碼。從程式碼無法解讀出它的意圖。',
   'sentence.batch': '{count} 筆交易，一併簽署。',
   'sentence.multiSend': '{count} 筆呼叫打包成一次簽署。',
+  'sentence.multiSendOne': "1 筆呼叫打包成一次簽署。",
   'sentence.safeExec': '這是一筆透過 Safe 轉發的呼叫——真正執行的是裡面那一層。',
   'sentence.burn': '接收方填的是這個代幣自己的合約地址。轉進去的幣不會到任何人手上——會永遠卡在那裡。',
   'sentence.abiOnly': '這個合約的原始碼已驗證，所有參數都能解碼，但沒有人寫下它們的含義。下面列的是事實，不是解釋。',
@@ -2600,6 +2610,7 @@ window.VelaCS.i18n.register('zh-HK', {
   'sentence.deploy': '你正在部署一份新的合約程式碼。從程式碼無法解讀出它的意圖。',
   'sentence.batch': '{count} 筆交易，一併簽署。',
   'sentence.multiSend': '{count} 筆呼叫打包成一次簽署。',
+  'sentence.multiSendOne': "1 筆呼叫打包成一次簽署。",
   'sentence.safeExec': '這是一筆經 Safe 轉發的呼叫——真正執行的是裏面那一層。',
   'sentence.burn': '接收方填的是這種代幣自己的合約地址。轉進去的幣不會到達任何人手上——會永遠卡在那裏。',
   'sentence.abiOnly': '這個合約的原始碼已驗證，所有參數都能解碼，但沒有人寫下它們的含義。以下是事實，不是解釋。',
@@ -2983,6 +2994,7 @@ window.VelaCS.i18n.register('ja', {
   'sentence.deploy': '新しいコントラクトのコードをデプロイします。コードからは意図を読み取れません。',
   'sentence.batch': '{count} 件の取引を、1 回の署名で。',
   'sentence.multiSend': '{count} 件の呼び出しを 1 回の署名にまとめています。',
+  'sentence.multiSendOne': "1 件の呼び出しを 1 回の署名にまとめています。",
   'sentence.safeExec': 'Safe を通して転送される呼び出しです — 実際に実行されるのは内側の層です。',
   'sentence.burn': '宛先はトークンのコントラクトそのものです。そこへ送ったコインは誰にも届かず、永久に動かせなくなります。',
   'sentence.abiOnly': 'このコントラクトはソース検証済みで、すべてのパラメータをデコードできますが、その意味を書き記した人はいません。以下は事実であり、説明ではありません。',
@@ -3364,6 +3376,7 @@ window.VelaCS.i18n.register('ko', {
   'sentence.deploy': '새 컨트랙트 코드를 배포합니다. 코드만으로는 의도를 읽을 수 없습니다.',
   'sentence.batch': '거래 {count}건, 서명은 한 번.',
   'sentence.multiSend': '호출 {count}건을 서명 한 번으로 묶었습니다.',
+  'sentence.multiSendOne': "호출 1건을 서명 한 번으로 묶었습니다.",
   'sentence.safeExec': 'Safe를 거쳐 전달되는 호출입니다 — 실제로 실행되는 것은 안쪽 계층입니다.',
   'sentence.burn': '받는 곳이 토큰 컨트랙트 자체입니다. 그곳으로 보낸 코인은 아무에게도 가지 않고 영원히 묶입니다.',
   'sentence.abiOnly': '이 컨트랙트는 소스가 검증되었고 모든 매개변수가 디코딩되지만, 그 의미를 적어 둔 사람은 없습니다. 아래는 설명이 아니라 사실입니다.',
@@ -3745,6 +3758,7 @@ window.VelaCS.i18n.register('vi', {
   'sentence.deploy': 'Bạn đang triển khai mã hợp đồng mới. Không thể đọc mã này ra thành ý định.',
   'sentence.batch': '{count} giao dịch, một chữ ký.',
   'sentence.multiSend': '{count} lệnh gọi được gói vào một chữ ký duy nhất.',
+  'sentence.multiSendOne': "Một lệnh gọi được gói vào một chữ ký duy nhất.",
   'sentence.safeExec': 'Một lệnh gọi được chuyển tiếp qua Safe — lớp bên trong mới là thứ thực sự chạy.',
   'sentence.burn': 'Người nhận chính là hợp đồng của token này. Coin gửi tới đó không đến tay ai cả — chúng bị kẹt vĩnh viễn.',
   'sentence.abiOnly': 'Hợp đồng này đã được xác minh mã nguồn và mọi tham số đều giải mã được, nhưng chưa ai ghi lại ý nghĩa của chúng. Bên dưới là dữ kiện, không phải lời giải thích.',
@@ -4126,6 +4140,7 @@ window.VelaCS.i18n.register('id', {
   'sentence.deploy': 'Anda menerapkan kode kontrak baru. Kode tidak bisa dibaca sebagai maksud.',
   'sentence.batch': '{count} transaksi, satu tanda tangan.',
   'sentence.multiSend': '{count} panggilan dikemas dalam satu tanda tangan.',
+  'sentence.multiSendOne': "Satu panggilan dikemas dalam satu tanda tangan.",
   'sentence.safeExec': 'Panggilan yang diteruskan lewat Safe — lapisan dalamnya yang benar-benar dijalankan.',
   'sentence.burn': 'Penerimanya adalah kontrak token itu sendiri. Koin yang dikirim ke sana tidak sampai ke siapa pun — terjebak selamanya.',
   'sentence.abiOnly': 'Kode sumber kontrak ini terverifikasi dan semua parameternya terbaca, tetapi tidak ada yang menuliskan artinya. Di bawah ini fakta, bukan penjelasan.',
@@ -4507,6 +4522,7 @@ window.VelaCS.i18n.register('tr', {
   'sentence.deploy': 'Yeni sözleşme kodu dağıtıyorsunuz. Kod, bir niyet olarak okunamaz.',
   'sentence.batch': '{count} işlem, tek imza.',
   'sentence.multiSend': '{count} çağrı tek bir imzada toplanmış.',
+  'sentence.multiSendOne': "Tek bir çağrı tek bir imzada toplanmış.",
   'sentence.safeExec': 'Safe üzerinden iletilen bir çağrı — asıl çalışan, içteki katmandır.',
   'sentence.burn': 'Alıcı, token\'ın kendi sözleşmesi. Oraya gönderilen coin\'ler kimseye ulaşmaz — sonsuza dek orada kalır.',
   'sentence.abiOnly': 'Bu sözleşmenin kaynak kodu doğrulanmış ve tüm parametreleri çözülüyor, ama ne anlama geldiklerini kimse yazmamış. Aşağıdakiler açıklama değil, yalnızca olgulardır.',
@@ -4888,6 +4904,7 @@ window.VelaCS.i18n.register('es-MX', {
   'sentence.deploy': 'Estás desplegando el código de un contrato nuevo. El código no se puede leer como una intención.',
   'sentence.batch': '{count} transacciones, una sola firma.',
   'sentence.multiSend': '{count} llamadas agrupadas en una sola firma.',
+  'sentence.multiSendOne': "Una llamada agrupada en una sola firma.",
   'sentence.safeExec': 'Una llamada que pasa a través de Safe — lo que de verdad se ejecuta es la capa interna.',
   'sentence.burn': 'El destinatario es el propio contrato del token. Las monedas que se envían ahí no le llegan a nadie — se quedan atrapadas para siempre.',
   'sentence.abiOnly': 'El código fuente de este contrato está verificado y todos sus parámetros se decodifican, pero nadie dejó escrito qué significan. Abajo hay hechos, no explicaciones.',
@@ -5269,6 +5286,7 @@ window.VelaCS.i18n.register('pt-BR', {
   'sentence.deploy': 'Você está implantando o código de um novo contrato. Código não pode ser lido como intenção.',
   'sentence.batch': '{count} transações, uma só assinatura.',
   'sentence.multiSend': '{count} chamadas reunidas em uma única assinatura.',
+  'sentence.multiSendOne': "Uma chamada reunida em uma única assinatura.",
   'sentence.safeExec': 'Uma chamada repassada pelo Safe — o que realmente é executado é a camada interna.',
   'sentence.burn': 'O destinatário é o próprio contrato do token. Moedas enviadas para lá não chegam a ninguém — ficam presas para sempre.',
   'sentence.abiOnly': 'O código-fonte deste contrato é verificado e todos os parâmetros são decodificados, mas ninguém escreveu o que eles significam. Abaixo estão fatos, não explicações.',
@@ -5650,6 +5668,7 @@ window.VelaCS.i18n.register('fr', {
   'sentence.deploy': 'Vous déployez le code d’un nouveau contrat. Un code ne peut pas être lu comme une intention.',
   'sentence.batch': '{count} transactions, une seule signature.',
   'sentence.multiSend': '{count} appels regroupés dans une seule signature.',
+  'sentence.multiSendOne': "Un appel regroupé dans une seule signature.",
   'sentence.safeExec': 'Un appel transmis via Safe — c’est la couche interne qui s’exécute réellement.',
   'sentence.burn': 'Le destinataire est le contrat du token lui-même. Les fonds envoyés là n’arrivent à personne — ils sont bloqués pour toujours.',
   'sentence.abiOnly': 'Le code source de ce contrat est vérifié et chaque paramètre se décode, mais personne n’a écrit ce qu’ils signifient. Ci-dessous : des faits, pas des explications.',
@@ -6033,6 +6052,7 @@ window.VelaCS.i18n.register('de', {
   'sentence.deploy': 'Du stellst neuen Vertragscode bereit. Code lässt sich nicht als Absicht lesen.',
   'sentence.batch': '{count} Transaktionen, eine Signatur.',
   'sentence.multiSend': '{count} Aufrufe, gebündelt in einer einzigen Signatur.',
+  'sentence.multiSendOne': "Ein Aufruf, verpackt in eine einzige Signatur.",
   'sentence.safeExec': 'Ein über Safe weitergeleiteter Aufruf — ausgeführt wird tatsächlich die innere Ebene.',
   'sentence.burn': 'Der Empfänger ist der Contract des Tokens selbst. Dorthin gesendete Coins erreichen niemanden — sie stecken für immer fest.',
   'sentence.abiOnly': 'Der Quellcode dieses Contracts ist verifiziert und jeder Parameter lässt sich dekodieren, aber niemand hat aufgeschrieben, was sie bedeuten. Unten stehen Fakten, keine Erklärungen.',
@@ -6416,6 +6436,7 @@ window.VelaCS.i18n.register('ru', {
   'sentence.deploy': 'Вы развёртываете код нового контракта. По коду нельзя прочитать намерение.',
   'sentence.batch': 'Транзакций: {count} — подпись одна.',
   'sentence.multiSend': 'Вызовов: {count} — все упакованы в одну подпись.',
+  'sentence.multiSendOne': "Один вызов, упакованный в одну подпись.",
   'sentence.safeExec': 'Вызов, переданный через Safe, — на деле выполняется его внутренний уровень.',
   'sentence.burn': 'Получатель — сам контракт токена. Монеты, отправленные туда, никому не достанутся — они застрянут навсегда.',
   'sentence.abiOnly': 'Исходный код этого контракта проверен, и все параметры декодируются, но никто не описал, что они означают. Ниже — факты, а не объяснения.',
@@ -6799,6 +6820,7 @@ window.VelaCS.i18n.register('it', {
   'sentence.deploy': 'Stai facendo il deploy del codice di un nuovo contratto. Il codice non si può leggere come un’intenzione.',
   'sentence.batch': '{count} transazioni, una sola firma.',
   'sentence.multiSend': '{count} chiamate raccolte in un’unica firma.',
+  'sentence.multiSendOne': "Una chiamata raccolta in un’unica firma.",
   'sentence.safeExec': 'Una chiamata inoltrata tramite Safe — ciò che viene davvero eseguito è il livello interno.',
   'sentence.burn': 'Il destinatario è il contratto del token stesso. Le monete inviate lì non arrivano a nessuno — restano bloccate per sempre.',
   'sentence.abiOnly': 'Il codice sorgente di questo contratto è verificato e ogni parametro viene decodificato, ma nessuno ha scritto cosa significano. Qui sotto ci sono fatti, non spiegazioni.',
@@ -7095,7 +7117,7 @@ window.VelaCS.i18n.register('it', {
 // @generated by samples/gen-catalog.mjs from vela-core — do not edit.
 //
 // 33 built-in networks (app/network_admin.rs BUILTIN_CHAINS) and
-// 108 tokens (app/token_registry/table.rs): the networks Vela ships and the
+// 109 tokens (app/token_registry/table.rs): the networks Vela ships and the
 // tokens it offers on them, exactly as the apps name them, then the
 // 3 ERC-20 interfaces onto a chain's own coin (app/manage_tokens.rs
 // native_alias_token). lib/registry.js
@@ -7249,6 +7271,7 @@ window.VelaCS.catalog = {
     [98866,'0xda6087e69c51e7d31b6dbad276a3c44703dfdcad','USDT',6],
     [1440000,'0x7c21a90e3ecd3215d16c3bbe76a491f8f792d4bf','WXRP',18],
     [1440000,'0xa16148c6ac9ede0d82f0c52899e22a575284f131','USDC',6],
+    [5042002,'0x3600000000000000000000000000000000000000','USDC',6],
     // the chain's own coin behind an ERC-20 interface: its symbol, 6 decimals
     [988,'0x779ded0c9e1022225f8e0630b35a9b54be713736','USDT0',6],
     [5042,'0x3600000000000000000000000000000000000000','USDC',6],
@@ -9194,7 +9217,7 @@ window.VelaCS = window.VelaCS || {};
       provenance(view, 'described', { contract: (known && known.name) || label(meta) });
     }
 
-    if (descriptor.nested) return applyNested(descriptor, values, call, ctx, view, meta);
+    if (descriptor.nested) return applyNested(descriptor, values, call, ctx, view, meta, isLeg);
 
     var hero = null;
     var rows = [];
@@ -9299,7 +9322,7 @@ window.VelaCS = window.VelaCS || {};
     provenance(view, 'shape', { whatKey: descriptor.shape });
     // A batch's legs are still read from its bytes — they are what the call
     // hands on — under the same "contract call" and the same line.
-    if (descriptor.nested) return applyNested(descriptor, values, call, ctx, view, meta);
+    if (descriptor.nested) return applyNested(descriptor, values, call, ctx, view, meta, isLeg);
     view.hero = { kind: 'code', title: parsed.name + '(…)', sub: label(meta) };
     view.sentence = text('sentence.shapeOnly');
     view.fields = values.map(function (v, i) {
@@ -9531,16 +9554,19 @@ window.VelaCS = window.VelaCS || {};
 
   // --- nested calldata -------------------------------------------------------
 
-  function applyNested(descriptor, values, call, ctx, view, meta) {
+  function applyNested(descriptor, values, call, ctx, view, meta, isLeg) {
     var inner = descriptor.nested === 'multiSend'
       ? decodeMultiSend(values[0])
       : [{ to: values[0], value: values[1], data: values[2] }];
     view.hero = null;
-    view.legs = inner.map(function (leg, i) {
+    var legs = inner.map(function (leg, i) {
       var legView = baseView(null, ctx);
       resolveCall({ to: leg.to, value: '0x' + BigInt(leg.value || 0n).toString(16), data: leg.data }, ctx, legView, true);
       return { index: i + 1, view: legView };
     });
+    // r8-5: the outermost card lists every level (a leg keeps its own legs
+    // for it to list); deeper than MAX_NESTING is refused there.
+    view.legs = isLeg ? legs : flattenLegs(legs, view);
     view.risk = view.legs.reduce(function (worst, leg) {
       return rank(leg.view.risk) > rank(worst) ? leg.view.risk : worst;
     }, rank(view.risk) > rank('caution') ? view.risk : 'caution');
@@ -9548,14 +9574,44 @@ window.VelaCS = window.VelaCS || {};
     // operation does not hold what was asked) must survive them.
     view.refuse = view.refuse || view.legs.some(function (leg) { return leg.view.refuse; });
     view.sentence = descriptor.nested === 'multiSend'
-      ? text('sentence.multiSend', { count: inner.length })
+      ? (inner.length === 1 ? text('sentence.multiSendOne') : text('sentence.multiSend', { count: inner.length }))
       : text('sentence.safeExec');
-    view.warnings.push({ tone: 'caution', key: 'warn.nested' });
+    // r8-5 (vela-core `reading`: a batch inside a batch asks for "… anyway"):
+    // every leg is listed below; the confirm is never the plain one.
+    view.warnings.push({ tone: isLeg ? 'danger' : 'caution', key: 'warn.nested' });
+    if (isLeg && rank(view.risk) < rank('danger')) view.risk = 'danger';
     liftLegWarnings(view);
     view.tech = techFor(descriptor.signature, values, call.data, {
       addresses: [{ roleKey: 'ui.outerContract', name: label(meta), address: call.to }],
     });
     return view;
+  }
+
+  /** The deepest batch inside a batch this page lists (vela-core `reading::MAX_NESTING`). */
+  var MAX_NESTING = 3;
+
+  /**
+   * r8-5: every leg of every level, in order — a leg that is itself a batch
+   * is followed by its own legs ("1.1", "1.2"), never a card with nothing
+   * under it. Deeper than MAX_NESTING, nothing is read: refused, as the
+   * wallet's core refuses it.
+   */
+  function flattenLegs(legs, view, prefix, depth) {
+    depth = depth || 1;
+    var out = [];
+    legs.forEach(function (leg) {
+      var index = prefix ? prefix + '.' + leg.index : String(leg.index);
+      out.push({ index: index, view: leg.view });
+      var inner = leg.view.legs || [];
+      if (!inner.length) return;
+      if (depth >= MAX_NESTING) {
+        refuseWith(view, 'refuse.msBatchUnreadable');
+        return;
+      }
+      out.push.apply(out, flattenLegs(inner, view, index, depth + 1));
+      leg.view.legs = [];
+    });
+    return out;
   }
 
   /**
@@ -10751,11 +10807,11 @@ window.VelaCS = window.VelaCS || {};
       view.sentence = text('sentence.msReject', { nonce: tx.nonce.toString() });
     } else if (reading.action.kind === 'batch') {
       view.intentKey = 'intent.batch';
-      view.legs = reading.action.calls.map(function (leg, i) {
+      view.legs = flattenLegs(reading.action.calls.map(function (leg, i) {
         var legView = baseView(intent, ctx);
         multisigAction(leg.action, { to: leg.to, value: hexValue(leg.value), data: leg.data }, ctx, legView, true);
         return { index: i + 1, view: legView };
-      });
+      }), view);
       view.sentence = text('sentence.msBatch', { count: reading.action.calls.length });
       view.risk = view.legs.reduce(function (worst, leg) {
         return rank(leg.view.risk) > rank(worst) ? leg.view.risk : worst;
@@ -11604,6 +11660,10 @@ window.VelaCS = window.VelaCS || {};
     if (view.refuse) {
       button.disabled = true;
       button.classList.add('confirm-off');
+    } else if (view.risk === 'danger' || view.risk === 'hard-danger') {
+      // r8-5: never the plain accent Approve over a danger (a batch inside a
+      // batch, a grant of everything): the danger's own outlined button.
+      button.classList.add('confirm-danger');
     }
     bar.appendChild(button);
     if (!view.refuse) bar.appendChild(el('p', 'confirm-hint', t('ui.closeRefuses')));

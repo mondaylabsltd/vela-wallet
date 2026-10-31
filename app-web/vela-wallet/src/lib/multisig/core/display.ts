@@ -7,6 +7,7 @@
  * with a link or a proposal (docs/multisig-vault-design.md §5.3).
  */
 import { fillTemplate } from '$lib/i18n/fill';
+import * as wasm from '../../../../../../rust/pkg-web/vela_core.js';
 import { loadAccounts } from '$lib/onboarding/core/storage';
 import { chainMeta } from '$lib/services/chains';
 import { poolRpcCall } from '$lib/services/rpc-pool';
@@ -41,7 +42,9 @@ export function shortenAddress(address: string): string {
  * the person's decimal mark and grouping), so "Send 1,000 USDC" on the sheet
  * and "1,000" on the confirm are one figure.
  */
-export function formatUnits(amount: string | bigint, decimals: number): string {
+export function formatUnits(amount: string | bigint, decimals: number | null): string {
+	// r8-2: unknown decimals are never assumed — the raw integer, as it is.
+	if (decimals === null) return amount.toString();
 	try {
 		return sentAmountText(plainUnits(amount.toString(), decimals));
 	} catch {
@@ -95,7 +98,25 @@ function displayable(name: string): boolean {
 
 export interface TokenInfo {
 	symbol: string;
-	decimals: number;
+	/** `null`: unknown (r8-2) — an amount is said raw, never in 18 decimals. */
+	decimals: number | null;
+}
+
+/** A token nothing could be read of: no symbol, no decimals (r8-2). */
+export const UNREAD_TOKEN: TokenInfo = { symbol: '', decimals: null };
+
+/** The wallet's registry's word on a token (the core's), or `null`. */
+function registryInfo(chainId: number, token: string): TokenInfo | null {
+	try {
+		const facts = JSON.parse(
+			wasm.multisigLinkCall('review.token', JSON.stringify({ chainId, token }))
+		) as { symbol: string | null; decimals: number | null; known: boolean };
+		return facts.known && facts.decimals !== null
+			? { symbol: facts.symbol ?? '', decimals: facts.decimals }
+			: null;
+	} catch {
+		return null;
+	}
 }
 
 const tokenCache = new Map<string, Promise<TokenInfo>>();
@@ -125,17 +146,32 @@ export function tokenInfo(chainId: number, token: string | null): Promise<TokenI
 	const key = `${chainId}:${token.toLowerCase()}`;
 	let hit = tokenCache.get(key);
 	if (!hit) {
+		const known = registryInfo(chainId, token);
+		if (known) {
+			hit = Promise.resolve(known);
+			tokenCache.set(key, hit);
+			return hit;
+		}
 		hit = (async () => {
 			const [symbol, decimals] = await Promise.all([
 				poolRpcCall('eth_call', [{ to: token, data: '0x95d89b41' }, 'latest'], chainId),
 				poolRpcCall('eth_call', [{ to: token, data: '0x313ce567' }, 'latest'], chainId)
 			]);
+			// r8-2: a contract that did not say its decimals (or a read that
+			// failed) is not a reading: nothing is kept, and it is asked again.
+			if (typeof decimals.result !== 'string' || decimals.result === '0x') {
+				throw new Error(`no decimals for ${token} on ${chainId}`);
+			}
+			const places = Number(BigInt(decimals.result));
+			if (!Number.isInteger(places) || places > 36) {
+				throw new Error(`no decimals for ${token} on ${chainId}`);
+			}
 			return {
 				symbol:
 					typeof symbol.result === 'string'
 						? decodeString(symbol.result) || shortenAddress(token)
 						: shortenAddress(token),
-				decimals: typeof decimals.result === 'string' ? Number(BigInt(decimals.result)) : 18
+				decimals: places
 			};
 		})();
 		hit.catch(() => tokenCache.delete(key));
@@ -156,13 +192,13 @@ export async function actionTitle(
 	if (action === null) return m.action.unsupported;
 	switch (action.kind) {
 		case 'transfer': {
-			const info = await tokenInfo(chainId, action.token).catch(() => ({
-				symbol: '',
-				decimals: 18
-			}));
+			const info = await tokenInfo(chainId, action.token).catch(() => UNREAD_TOKEN);
 			return fillTemplate(m.action.send, {
-				amount: formatUnits(action.amount, info.decimals),
-				symbol: info.symbol
+				amount:
+					info.decimals === null
+						? fillTemplate(m.review.reading.decimalsUnknown, { raw: action.amount })
+						: formatUnits(action.amount, info.decimals),
+				symbol: info.symbol || (action.token ? shortenAddress(action.token) : '')
 			});
 		}
 		case 'batch':

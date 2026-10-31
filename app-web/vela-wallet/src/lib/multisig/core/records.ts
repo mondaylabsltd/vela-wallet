@@ -8,7 +8,7 @@
 import { fillTemplate } from '$lib/i18n/fill';
 import type { LocalTransaction } from '$lib/services/transactions-model';
 import type { MultisigMessages } from '../messages';
-import { actionTitle, tokenInfo } from './display';
+import { actionTitle, shortenAddress, tokenInfo, UNREAD_TOKEN } from './display';
 import type { Action } from './kernel';
 import { executedRowId } from './row-id';
 import { plainUnits } from './units';
@@ -24,7 +24,32 @@ let cancelTitle = 'Cancel transaction #{{nonce}}';
 /** The page's words for the rows' titles. */
 export function useRecordWords(m: MultisigMessages): void {
 	words = m;
-	if (m.action.cancel) cancelTitle = m.action.cancel;
+	if (m.action.cancel) {
+		cancelTitle = m.action.cancel;
+		void rewordCancelRows(m.action.cancel).catch(() => {});
+	}
+}
+
+/** The fallback a cancellation row was titled with before the page's words were in. */
+const FALLBACK_CANCEL = /^Cancel transaction #(\d+)$/;
+
+/**
+ * r8-22: a cancellation's row written in English (before the page's words
+ * were in, or in another language since) reads in the page's words: the
+ * multisig's own rows (`multisig:` ids) whose title is the English fallback
+ * are titled again with `template`. Nothing else of a row changes.
+ */
+export async function rewordCancelRows(template: string): Promise<number> {
+	if (template === 'Cancel transaction #{{nonce}}') return 0;
+	const { loadTransactions, updateTransaction } = await import('$lib/services/records');
+	const rows = (await loadTransactions()).filter(
+		(t) => t.id.startsWith('multisig:') && FALLBACK_CANCEL.test(t.intent ?? '')
+	);
+	for (const row of rows) {
+		const nonce = (row.intent ?? '').match(FALLBACK_CANCEL)?.[1] ?? '';
+		await updateTransaction(row.id, { intent: fillTemplate(template, { nonce }) });
+	}
+	return rows.length;
 }
 
 /** One row the core planned (`execution_rows`). */
@@ -55,7 +80,7 @@ async function titleOf(e: Executed): Promise<string> {
 }
 
 const coin = (chainId: number, token: string | null) =>
-	tokenInfo(chainId, token).catch(() => ({ symbol: '', decimals: 18 }));
+	tokenInfo(chainId, token).catch(() => UNREAD_TOKEN);
 
 /** The core's rows of an executed proposal, worded as Activity rows. */
 export async function executionRows(e: Executed): Promise<LocalTransaction[]> {
@@ -73,11 +98,13 @@ export async function executionRows(e: Executed): Promise<LocalTransaction[]> {
 		};
 		if (row.kind === 'send') {
 			const info = await coin(e.chainId, row.token);
+			// r8-2: unknown decimals are kept raw (base units, decimals 0), never
+			// read as 18; the token is named by its contract when it said nothing.
 			out.push({
 				...base,
-				value: plainUnits(row.amount, info.decimals),
-				symbol: info.symbol,
-				decimals: info.decimals,
+				value: info.decimals === null ? row.amount : plainUnits(row.amount, info.decimals),
+				symbol: info.symbol || (row.token ? shortenAddress(row.token) : ''),
+				decimals: info.decimals ?? 0,
 				// Round 5: which token it was, for Activity's lookalike note.
 				...(row.token ? { token: row.token } : {}),
 				type: 'send'
@@ -86,11 +113,12 @@ export async function executionRows(e: Executed): Promise<LocalTransaction[]> {
 		}
 		const sends = BigInt(row.sends || '0');
 		const info = sends > 0n ? await coin(e.chainId, null) : { symbol: '', decimals: 18 };
+		const places = info.decimals ?? 18;
 		out.push({
 			...base,
-			value: sends > 0n ? plainUnits(row.sends, info.decimals) : '0',
+			value: sends > 0n ? plainUnits(row.sends, places) : '0',
 			symbol: info.symbol,
-			decimals: info.decimals,
+			decimals: places,
 			type: 'dapp_tx',
 			intent: await titleOf(e),
 			dappSummary: { action: 'call', calls: row.calls, contract: row.contract }

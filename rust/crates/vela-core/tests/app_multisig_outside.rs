@@ -705,6 +705,8 @@ fn executing_with_the_owners_own_wallet_after_its_fee_is_said() {
             wei: (21_000u64 * 1_000_000_000).to_string(),
             count: 1,
             partial: false,
+            // r8-15: the most it can take, said beside the estimate.
+            max_wei: (21_000u64 * 1_000_000_000 * 2).to_string(),
         }
     );
     run(
@@ -3105,6 +3107,32 @@ fn add_owner(owner: &str, threshold: u8, nonce: &str) -> SafeTx {
         ),
         ..tx(nonce)
     }
+}
+
+/// r8-11: a paired request whose review could not be gathered (the chain did
+/// not answer) is reviewed again on the page's next refresh — never left on
+/// its title and hashes alone, without the warnings the link's review says.
+#[test]
+fn a_request_reviewed_while_the_chain_is_away_is_reviewed_again() {
+    let member = addr(MEMBER_SEED);
+    let mut w = with_wallet(&[MEMBER_SEED]);
+    let mut safe = DeployedSafe::clean(&[&addr(SEED_A), &member, &addr(SEED_STRANGER)], 2);
+    safe.nonce = 3;
+    w.deploy(CHAIN, SAFE, safe);
+    let t = add_owner(&addr(43), 2, "0x3");
+    let (mut sut, room, _session) = joined(&mut w, vec![member.clone()]);
+    w.silent.insert(CHAIN);
+    w.peer.deliver(&room, typed_request("r1", &member, &t));
+    settle_ready(&mut sut, &mut w, 20_000);
+    let first = sut.view().request_review;
+    assert!(
+        first.as_ref().is_none_or(|s| s.review.is_none()),
+        "nothing could be read: {first:?}"
+    );
+    w.silent.remove(&CHAIN);
+    run(&mut sut, &mut w, page::Event::Refresh);
+    let shown = sut.view().request_review.expect("the request is reviewed");
+    assert!(shown.review.is_some(), "the review is gathered again");
 }
 
 /// Vela asks to approve adding a member: its row says what it is, and its

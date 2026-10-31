@@ -37,7 +37,7 @@ vi.mock('./proposals.svelte', () => ({
 	}
 }));
 vi.mock('./names.svelte', () => ({ names: { label: (a: string) => shortenAddress(a) } }));
-vi.mock('./call-review.svelte', () => ({ readCall: async () => null }));
+vi.mock('./reading', () => ({ readTx: () => null, asReview: () => null }));
 vi.mock('$lib/onboarding/core/storage', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/onboarding/core/storage')>()),
 	loadAccounts: () => []

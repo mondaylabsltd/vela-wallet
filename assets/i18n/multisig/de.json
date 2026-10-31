@@ -192,7 +192,8 @@
     "copy": "Kopieren",
     "executedBy": "Ausgeführt von {{name}}",
     "countedThen": "{{approved}} von {{threshold}} Genehmigungen zählten bei der Ausführung",
-    "approvalsSigned": "Diese Mitglieder haben genehmigt. Welche Genehmigungen bei der Ausführung zählten, ist auf diesem Gerät nicht festgehalten."
+    "approvalsSigned": "Diese Mitglieder haben genehmigt. Welche Genehmigungen bei der Ausführung zählten, ist auf diesem Gerät nicht festgehalten.",
+    "outboxSending": "Deine Genehmigung wird an die anderen Mitglieder gesendet …"
    },
    "send": {
     "propose": "Vorschlagen und genehmigen",
@@ -487,7 +488,9 @@
     "rowReject": "{{number}} ablehnen",
     "outcomeNotSent": "Signiert, noch nicht gesendet",
     "nameFromRecord": "Der Name, wie er mit seinem Eintrag gespeichert ist — signiert wird für die Adresse",
-    "linkDamaged": "Dieser Link ist beschädigt — bitte um einen neuen."
+    "linkDamaged": "Dieser Link ist beschädigt — bitte um einen neuen.",
+    "executeConfirms": "Deine Wallet fragt dich {{total}}-mal nacheinander nach einer Bestätigung.",
+    "executeFeeMax": "Netzwerkgebühr ≈ {{fee}}, höchstens {{max}}, bezahlt von deiner Wallet ({{account}})."
    },
    "import": {
     "or": "Oder aus Safe{Wallet} importieren",
@@ -645,7 +648,46 @@
     "approveExecuteAnyway": "Trotzdem freigeben und ausführen",
     "executeAnyway": "Trotzdem ausführen",
     "proposeAnyway": "Trotzdem vorschlagen und freigeben",
-    "blocked": "Vela signiert diese Transaktion nicht: Sie würde ändern, wer das Multisig kontrolliert."
+    "blocked": "Vela signiert diese Transaktion nicht: Sie würde ändern, wer das Multisig kontrolliert.",
+    "reading": {
+     "send": "Senden",
+     "sendFrom": "Token von einem anderen Konto bewegen",
+     "approve": "Genehmigen",
+     "increase": "Freigabe erhöhen",
+     "decrease": "Freigabe senken",
+     "permit": "Permit",
+     "daiPermit": "DAI-Permit",
+     "permit2": "Permit2-Freigabe",
+     "approveAll": "Alle Token einer Sammlung freigeben",
+     "revokeAll": "Zugriff auf eine Sammlung entziehen",
+     "batchOne": "Bündel mit 1 Aufruf",
+     "batchMany": "Bündel mit {{total}} Aufrufen",
+     "unreadable": "Nicht lesbar",
+     "call": "Vertragsaufruf",
+     "members": "Ändert die Mitglieder",
+     "rename": "Umbenennen in {{name}}",
+     "amount": "Betrag",
+     "allowance": "Freigabe",
+     "to": "An",
+     "from": "Von",
+     "spender": "Berechtigter",
+     "operator": "Operator",
+     "collection": "Sammlung",
+     "token": "Token",
+     "function": "Funktion",
+     "alsoSends": "Sendet zusätzlich",
+     "runner": "Ausgeführt von",
+     "runnerNote": "Seine Aufrufe laufen von diesem Vertrag aus, nicht vom Multisig.",
+     "unlimited": "Unbegrenzt",
+     "allOfIt": "Alles",
+     "decimalsUnknown": "{{raw}} Basiseinheiten · Dezimalstellen unbekannt",
+     "unlimitedLine": "Unbegrenzte Freigabe: {{spender}} könnte alles davon nehmen, was das Multisig hält – jetzt und später.",
+     "nestedLine": "Ein Bündel in einem Bündel. Jeder Aufruf steht unten; die inneren laufen vom Bündelvertrag aus.",
+     "unreadableLine": "Ein Teil dieses Bündels ist nicht lesbar (zu tief verschachtelt oder abgeschnitten). Vela signiert es nicht.",
+     "decimalsLine": "{{token}} hat seine Dezimalstellen nicht angegeben, daher werden Beträge in Basiseinheiten gezeigt.",
+     "ownTokenLine": "Das sendet Token an den eigenen Vertrag des Tokens ({{token}}). Sie wären verloren.",
+     "blindLine": "Vela kann nicht lesen, was dieser Aufruf tut. Genehmige ihn nur, wenn du genau weißt, was er ist."
+    }
    }
   }
  }

@@ -5,10 +5,17 @@
  */
 export type MultisigOutboxEntry = { 
 /**
- * `busy`: the service said wait; `away`: nothing answered.
+ * `busy`: the service said wait; `away`: nothing answered; `sending`
+ * (r8-16): on its way now — nothing was refused, nothing to send again.
  */
 why: string, 
 /**
- * When it is sent again; `None`: on the person's word (Send again).
+ * When it is sent again; `None`: on the person's word (Send again) —
+ * or, while `sending`, not needed.
  */
-retryAt: number | null, };
+retryAt: number | null, 
+/**
+ * r8-16: it is being handed to the mailbox right now. A shell says
+ * "Sending…", never "Not sent yet" and never offers Send again.
+ */
+sending: boolean, };

@@ -322,6 +322,14 @@ pub enum Event {
         #[serde(default)]
         space: bool,
     },
+    /// r8-21: the networks the active account lives on, in its own order —
+    /// a multisig's (where it is deployed or used: the accounts machine's
+    /// record), sent after [`Event::AccountSwitched`]; `[]` for an account
+    /// that lives everywhere (the default). A new site starts on the first
+    /// of them the space offers.
+    AccountNetworks {
+        networks: Vec<u32>,
+    },
     /// One string from the bridge. `frame_origin` is the PLATFORM's origin of
     /// the frame that sent it (Android `sourceOrigin`, iOS
     /// `frameInfo.securityOrigin`, desktop the webview's URL) — never
@@ -580,6 +588,8 @@ pub struct Model {
     chains: Vec<u32>,
     wallet_addresses: Option<Vec<String>>,
     active_address: Option<String>,
+    /// r8-21: the active account's own networks (a multisig's), or empty.
+    account_chains: Vec<u32>,
     /// Settings' debug mode (spec 091) — which origins [`offers_wallet`] lets in.
     debug_mode: bool,
     tabs: BTreeMap<String, Tab>,
@@ -729,6 +739,7 @@ impl App for DappBrowser {
                 }
             }
             Event::NetworksChanged { chain_ids } => model.chains = chain_ids,
+            Event::AccountNetworks { networks } => model.account_chains = networks,
             Event::DebugModeChanged { on } => debug_mode_changed(model, on, &mut out),
             Event::AccountsUpdated { addresses } => {
                 model.wallet_addresses = addresses;
@@ -739,6 +750,8 @@ impl App for DappBrowser {
                 now_ms,
                 space,
             } => {
+                // A new account: its networks are said again for it (r8-21).
+                model.account_chains.clear();
                 // The one spelling every page is given, whatever the shell
                 // sent (spec 082 RG10): the re-pinned grant, the
                 // `accountsChanged` it announces and every later connect
@@ -1008,7 +1021,7 @@ impl App for DappBrowser {
                         chain_id: origin
                             .as_deref()
                             .map(|origin| site_chain(model, origin))
-                            .unwrap_or(DEFAULT_CHAIN_ID),
+                            .unwrap_or_else(|| default_chain(model)),
                         secure: origin
                             .as_deref()
                             .is_some_and(|origin| !is_insecure_public_origin(origin)),
@@ -1235,6 +1248,25 @@ fn sites_listed(model: &mut Model, sites: Vec<DbrStoredSite>, out: &mut Out) {
     }
 }
 
+/// The chain a site starts on before it asks for one (r8-21): the active
+/// account's own network first (a multisig lives on its networks only) where
+/// the space offers it; else Ethereum when the space has it (or nothing is
+/// known yet), else the space's first network — never a network the space
+/// does not offer.
+fn default_chain(model: &Model) -> u32 {
+    if let Some(own) = model
+        .account_chains
+        .iter()
+        .find(|c| model.chains.is_empty() || model.chains.contains(c))
+    {
+        return *own;
+    }
+    match model.chains.first() {
+        Some(first) if !model.chains.contains(&DEFAULT_CHAIN_ID) => *first,
+        _ => DEFAULT_CHAIN_ID,
+    }
+}
+
 fn site_chain(model: &Model, origin: &str) -> u32 {
     model
         .sites
@@ -1244,7 +1276,7 @@ fn site_chain(model: &Model, origin: &str) -> u32 {
                 .or(site.grant.as_ref().map(|grant| grant.chain_id))
         })
         .filter(|chain| *chain > 0)
-        .unwrap_or(DEFAULT_CHAIN_ID)
+        .unwrap_or_else(|| default_chain(model))
 }
 
 /// The addresses this origin may see — the grant, unless its account left a
@@ -1367,6 +1399,7 @@ fn leave_space(model: &mut Model, out: &mut Out) {
     let space = std::mem::replace(&mut model.sites, own);
     let origins: std::collections::BTreeSet<String> =
         space.keys().chain(model.sites.keys()).cloned().collect();
+    let was_default = default_chain(model);
     for origin in origins {
         let was = space.get(&origin);
         let was_account = was.and_then(|site| site.grant.as_ref().map(|g| g.address.clone()));
@@ -1376,7 +1409,7 @@ fn leave_space(model: &mut Model, out: &mut Out) {
                     .or(site.grant.as_ref().map(|grant| grant.chain_id))
             })
             .filter(|chain| *chain > 0)
-            .unwrap_or(DEFAULT_CHAIN_ID);
+            .unwrap_or(was_default);
         let now_account = granted(model, &origin).into_iter().next();
         if !same_account(was_account.as_deref(), now_account.as_deref()) {
             let accounts: Vec<String> = now_account.into_iter().collect();
@@ -2829,7 +2862,7 @@ fn inspector_view(model: &Model, id: &str, tab: &Tab) -> DbrInspectorView {
         .is_some_and(|origin| !granted(model, origin).is_empty());
     let chain_id = origin
         .as_deref()
-        .map_or(DEFAULT_CHAIN_ID, |origin| site_chain(model, origin));
+        .map_or_else(|| default_chain(model), |origin| site_chain(model, origin));
     let rows: Vec<DbrRequestRow> = tab.rows.iter().map(|row| row.row.clone()).collect();
     let report = report(
         id,

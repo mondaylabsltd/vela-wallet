@@ -380,3 +380,62 @@ All additive (new events, operations and fields with defaults) except
 - `home.multisig.settings.unreadableOn` ("Couldn't read its members on
   {{network}}."), on-demand multisig namespace, all 15 locales: a network
   whose chain did not answer (`NetworkState::Unreadable`) in Settings.
+
+## 7. Round 8 — the review reads every call itself (r8-1, r8-2, r8-4, r8-5)
+
+All additive (new fields with defaults, new enum variants) except
+`RpcFail::Error`'s Rust shape.
+
+### 7.1 `MultisigReview.reading` — draw it, never decode
+
+The one review (`reviews[...]`, `draft.review`, the outside page's
+`tx.review` / `requestReview`) carries what each call does, read by the core
+from the SafeTx's bytes alone (`multisig_review::reading`) with token facts
+the core read itself (the registry — now with Arc Testnet's USDC, 6 decimals
+— else the contract's `symbol()` / `decimals()`, bounded; a token that did
+not answer stays unknown). No shell runs `clear_signing` / `approval_guard`
+over a multisig call any more (the web's `call-review.svelte.ts` is deleted).
+
+```text
+reading: { calls: Call[], nested, unreadable, unlimited, blind, decimalsUnknown: string[] }
+Call:    { path: number[], to, value: Amount, intent: Intent }   // path [] lone call, [2,1] leg 1 of leg 2's batch
+Amount:  { raw, decimals: number|null, plain: string|null, unlimited }
+Intent (tag kind): send {token, to, amount} | sendFrom {token, from, to, amount}
+       | approve {token, spender, grant: approve|increase|decrease|permit|daiPermit|permit2, amount, expires}
+       | approveAll {collection, operator, granted} | batch {runner, calls} | unreadable
+       | members {action} | rename {name} | call {selector}
+token:   OutsideTokenFacts {token (null = the coin), symbol, decimals, known}
+```
+
+Rules: decimals are never assumed (`decimals: null` → the raw integer and
+`reading.decimalsUnknown`, no friendly amount); unlimited is the guard's line
+(2^200 / Permit2 2^152, DAI `allowed`, `setApprovalForAll(true)`); a batch
+inside a batch is read leg by leg to `MAX_NESTING` (3), deeper → `unreadable`.
+
+New `concerns` (deduped by the core — say each once, r8-14):
+`unlimitedApproval {token, spender}`, `nestedBatch`, `toOwnToken {token}`
+(danger → `sign.anyway`), `unreadableBatch` (refused → `sign.allowed` false),
+`decimalsUnknown {token}` (caution); `blind` is raised by the core itself for
+a call it cannot read (a shell's `blind` can only add to it).
+
+Words: `home.multisig.review.reading.*` (intent titles, row labels,
+`unlimited`, `decimalsUnknown {{raw}}`, one line per concern); a leg is
+`review.callNumber` with `n` = the path joined by `.`. Reference drawing:
+`app-web/vela-wallet/src/lib/multisig/core/reading-blocks.ts`.
+
+Parity vectors: `rust/crates/vela-core/tests/vectors/multisig/reading.json`,
+replayed through the link door `review.reading {chainId, safe, tx,
+tokenFacts?}` → `{reading, concerns, anyway, refused}`. `review.token
+{chainId, token}` gives the registry's facts of a token.
+
+### 7.2 Elsewhere
+
+| Was | Now |
+| --- | --- |
+| `rpc_error {code, message}` | + `data?` — pass the node's `error.data`: the state probe's answer is a revert's payload (r8-4; Arc has no `debug_traceCall`). |
+| titles worded with a shell's own token read (18 decimals on a failure) | proposals view `tokens` per `chainId:token` (registry, else the contract; once read never unsaid) (r8-2). |
+| `OutboxEntry {why, retry_at}` | + `sending` (`why: "sending"`): on its way — say `proposal.outboxSending`, never "Not sent yet", no Send again (r8-16). |
+| `OutsideExecutionFee {wei, count, partial}` | + `max_wei` (the most it can take); say `external.executeFeeMax` and, with `count > 1`, `external.executeConfirms` before the first prompt (r8-15). |
+| `AccountRow.local_members` = founding members here | its members as the chains last said (`AccountUpdate::MembersNow` from proposals → accounts `apply`; stored `vela.multisigMembersNow`) (r8-7). |
+| an execution found later dated when found | dated by its block's time (r8-17). |
+| a dApp site's default chain 1 everywhere | Ethereum only when the space has it, else the space's first network (r8-21). |

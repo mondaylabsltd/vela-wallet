@@ -857,6 +857,47 @@ fn another_machines_update_is_applied() {
     assert!(!world.store.contains_key(keys::ACTIVE));
 }
 
+/// r8-7: a member added by a member change is on this device: the members
+/// on it are its members as the chains say now, kept across a reload.
+#[test]
+fn a_member_added_since_is_on_this_device() {
+    let g = genesis(&[A], 1, "0x17");
+    let added = fixture(0);
+    let mut world = World {
+        locals: vec![added.clone()],
+        ..World::default()
+    };
+    world.store.insert(
+        keys::ACCOUNTS.to_owned(),
+        json!([stored_row(&g, &[100], true)]).to_string(),
+    );
+    let mut sut = started(&mut world, vec![100]);
+    assert!(
+        sut.view().accounts[0].local_members.is_empty(),
+        "not a founding member"
+    );
+    run(
+        &mut sut,
+        &mut world,
+        Event::Apply {
+            address: g.address.clone(),
+            update: AccountUpdate::MembersNow {
+                members: vec![A.to_owned(), added.address.clone()],
+            },
+        },
+    );
+    assert_eq!(
+        sut.view().accounts[0].local_members,
+        vec![added.address.clone()]
+    );
+    let again = started(&mut world, vec![100]);
+    assert_eq!(
+        again.view().accounts[0].local_members,
+        vec![added.address.clone()],
+        "kept across a reload"
+    );
+}
+
 /// ens-name: a name with no resolver points nowhere; Ethereum not answering
 /// is said as that; a lookalike is not looked up.
 #[test]

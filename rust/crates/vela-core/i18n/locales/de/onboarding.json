@@ -64,7 +64,8 @@
           "title": "Gas mit Stablecoins zahlen",
           "description": "Die meisten Netzwerke akzeptieren Stablecoins für Gebühren — kein Vorrat an nativen Coins nötig."
         }
-      }
+      },
+      "linkWaiting": "Ein Multisig-Link wartet. Erstelle eine Wallet oder melde dich an, dann öffnet er sich."
     },
     "settings": {
       "title": "Einstellungen",
@@ -87,6 +88,8 @@
       "waitedSeconds": "Wartet seit {{seconds}} Sekunden",
       "networkTitle": "Netzwerkverbindung instabil",
       "networkBody": "Die Anfrage ist nie angekommen — prüfen Sie Ihr Netzwerk und versuchen Sie es erneut.",
+      "proxyPacBody": "Dieser Computer soll eine automatische Proxy-Konfiguration ({{proxy}}) verwenden, die nicht erreichbar ist – daher kommt keine Anfrage hinaus. Beheben Sie das oder schalten Sie die automatische Proxy-Konfiguration in den Netzwerkeinstellungen des Systems unter „Proxies“ aus und versuchen Sie es erneut.",
+      "proxyServerBody": "Der Proxy, den dieser Computer verwenden soll ({{proxy}}), antwortet nicht – daher kommt keine Anfrage hinaus. Starten Sie ihn oder schalten Sie ihn in den Netzwerkeinstellungen des Systems unter „Proxies“ aus und versuchen Sie es erneut.",
       "offline": "Sie sind offline. Vela aktualisiert wieder, sobald Sie online sind.",
       "serverTitle": "Dienst vorübergehend nicht verfügbar",
       "serverBody": "Der Passkey-Index-Dienst ist nicht erreichbar — sowohl Erstellung als auch Anmeldung benötigen ihn.",

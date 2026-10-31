@@ -267,7 +267,8 @@
         "copy": "Copier",
         "executedBy": "Exécutée par {{name}}",
         "countedThen": "{{approved}} approbations sur {{threshold}} comptaient à son exécution",
-        "approvalsSigned": "Ces membres l’ont approuvée. Quelles approbations comptaient à son exécution n’est pas enregistré sur cet appareil."
+        "approvalsSigned": "Ces membres l’ont approuvée. Quelles approbations comptaient à son exécution n’est pas enregistré sur cet appareil.",
+        "outboxSending": "Envoi de votre approbation aux autres membres…"
       },
       "send": {
         "propose": "Proposer et approuver",
@@ -566,7 +567,9 @@
         "rowReject": "Rejeter {{number}}",
         "outcomeNotSent": "Signé, pas encore envoyé",
         "nameFromRecord": "Son nom tel qu'enregistré avec sa fiche — vous signez pour l'adresse",
-        "linkDamaged": "Ce lien est endommagé — demandez-en un nouveau."
+        "linkDamaged": "Ce lien est endommagé — demandez-en un nouveau.",
+        "executeConfirms": "Votre wallet vous demandera de confirmer {{total}} transactions, l'une après l'autre.",
+        "executeFeeMax": "Frais de réseau ≈ {{fee}}, au plus {{max}}, payés par votre wallet ({{account}})."
       },
       "import": {
         "or": "Ou importer depuis Safe{Wallet}",
@@ -724,7 +727,46 @@
         "approveExecuteAnyway": "Approuver et exécuter quand même",
         "executeAnyway": "Exécuter quand même",
         "proposeAnyway": "Proposer et approuver quand même",
-        "blocked": "Vela ne signe pas cette transaction : l'exécuter changerait qui contrôle le multisig."
+        "blocked": "Vela ne signe pas cette transaction : l'exécuter changerait qui contrôle le multisig.",
+        "reading": {
+          "send": "Envoyer",
+          "sendFrom": "Déplacer des jetons d'un autre compte",
+          "approve": "Approuver",
+          "increase": "Augmenter une autorisation",
+          "decrease": "Réduire une autorisation",
+          "permit": "Permit",
+          "daiPermit": "Permit DAI",
+          "permit2": "Autorisation Permit2",
+          "approveAll": "Approuver tous les jetons d'une collection",
+          "revokeAll": "Retirer l'accès à une collection",
+          "batchOne": "Lot de 1 appel",
+          "batchMany": "Lot de {{total}} appels",
+          "unreadable": "Illisible",
+          "call": "Appel de contrat",
+          "members": "Modifie les membres",
+          "rename": "Renommer en {{name}}",
+          "amount": "Montant",
+          "allowance": "Autorisation",
+          "to": "À",
+          "from": "De",
+          "spender": "Bénéficiaire",
+          "operator": "Opérateur",
+          "collection": "Collection",
+          "token": "Jeton",
+          "function": "Fonction",
+          "alsoSends": "Envoie aussi",
+          "runner": "Exécuté par",
+          "runnerNote": "Ses appels partent de ce contrat, pas du multisig.",
+          "unlimited": "Illimité",
+          "allOfIt": "La totalité",
+          "decimalsUnknown": "{{raw}} unités de base · décimales inconnues",
+          "unlimitedLine": "Autorisation illimitée : {{spender}} pourrait prendre tout ce que le multisig en détient, maintenant et plus tard.",
+          "nestedLine": "Un lot dans un lot. Chaque appel est listé ci-dessous ; les appels internes partent du contrat du lot.",
+          "unreadableLine": "Une partie de ce lot est illisible (trop imbriquée ou tronquée). Vela ne la signera pas.",
+          "decimalsLine": "{{token}} n'a pas indiqué son nombre de décimales : ses montants sont affichés en unités de base.",
+          "ownTokenLine": "Ceci envoie des jetons au contrat du jeton lui-même ({{token}}). Ils seraient perdus.",
+          "blindLine": "Vela ne peut pas lire ce que fait cet appel. Ne l'approuvez que si vous savez exactement ce que c'est."
+        }
       }
     },
     "balanceDetailStatusOwnNode": "Votre nœud ne répond pas",

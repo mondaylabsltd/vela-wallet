@@ -3,7 +3,7 @@ import type { DappAddOutcome } from "./DappAddOutcome";
 import type { MultisigDappAnswer } from "./MultisigDappAnswer";
 import type { SignResponsePayload } from "./SignResponsePayload";
 
-export type DbrEvent = { "type": "start" } | { "type": "networks_changed", chain_ids: Array<number>, } | { "type": "accounts_updated", addresses: Array<string> | null, } | { "type": "debug_mode_changed", on: boolean, } | { "type": "account_switched", address: string, now_ms: number, space: boolean, } | { "type": "page_message", tab: string, frame_origin: string, is_main_frame: boolean, message_json: string, 
+export type DbrEvent = { "type": "start" } | { "type": "networks_changed", chain_ids: Array<number>, } | { "type": "accounts_updated", addresses: Array<string> | null, } | { "type": "debug_mode_changed", on: boolean, } | { "type": "account_switched", address: string, now_ms: number, space: boolean, } | { "type": "account_networks", networks: Array<number>, } | { "type": "page_message", tab: string, frame_origin: string, is_main_frame: boolean, message_json: string, 
 /**
  * The shell's clock (this core owns none): when the request arrived,
  * for its row in the record (spec 099). `0` = unknown.

@@ -1,7 +1,8 @@
 /**
- * r4D-5: members show by name on every device that keeps a multisig with
- * their labels — after this device's own account names, before the passkey
- * index's — and an invite's labels never overwrite what this device holds.
+ * r4D-5, r8-25: members show by ONE name on every device that keeps a
+ * multisig with their labels — the kept label (an invite's words), then the
+ * passkey index's, then this device's own account name — and an invite's
+ * labels never overwrite what this device holds.
  * The labels are kept by the core's accounts machine (`name_members`), read
  * through the store's facade (`known_members`); the order is the core's
  * (`names.label`, its cases in `multisig_rules/names.rs`).
@@ -61,14 +62,14 @@ describe("members' names (r4D-5)", () => {
 		expect(keptMember(BOB.toLowerCase())).toEqual({ name: 'Bob', kind: 'wallet' });
 	});
 
-	it("keeps this device's own name for its accounts over any label", () => {
+	it("r8-25: the multisig's shared label over this device's own nickname; the kind stays its own", () => {
 		multisig.send({
 			type: 'name_members',
 			address: SAFE,
-			members: { [MINE]: { name: 'Not me', kind: 'wallet' } },
+			members: { [MINE]: { name: 'Dana', kind: 'wallet' } },
 			typed: false
 		});
-		expect(names.label(MINE)).toBe('My account');
+		expect(names.label(MINE)).toBe('Dana');
 		expect(names.kindOf(MINE)).toBe('passkey');
 	});
 

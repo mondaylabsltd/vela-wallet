@@ -20,7 +20,8 @@
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import type { SigningMessages } from '$lib/signing/messages';
 	import type { MultisigMessages } from '../messages';
-	import { callTitle, type CallReading } from '../core/call-review.svelte';
+	import { readingTitle } from '../core/reading-blocks';
+	import { nativeSymbol } from '$lib/services/networks';
 	import { chainName, shortenAddress } from '../core/display';
 	import type { MultisigReviewOut, SafeTx, SafeTxHashes } from '../core/kernel';
 	import type { OutsideTxShown } from '../generated/OutsideTxShown';
@@ -64,17 +65,21 @@
 	/** Its number is used: a record of what it did, nothing checked before signing. */
 	const used = $derived(chainNonce !== null && nonce < chainNonce);
 
-	/** The call the signing sheet machines read, once started (`ReviewBody`). */
-	let reading = $state<CallReading | null>(null);
-	/** The core verb for a call it could read ("Approve"); else the multisig line. */
-	const shownTitle = $derived((reading && callTitle(reading.clear, signing)) || title);
-	/**
-	 * r5reg-15 / S4: a call read by the signing sheet machines heads itself,
-	 * and a lone member change is named by its own list: the verb is not said twice.
-	 */
-	const headed = $derived(
-		!reading && !(review?.memberChanges && review.memberChanges.changes.length === 1)
+	/** r8-1: the core's reading names a call or a batch; else the multisig's line. */
+	const shownTitle = $derived(
+		readingTitle(review, {
+			r: m.review.reading,
+			callNumber: m.review.callNumber,
+			nativeSymbol: nativeSymbol(chainId)
+		}) || title
 	);
+	/** The core read a call or a batch (the reading draws its legs). */
+	const reading = $derived((review?.reading?.calls.length ?? 0) > 0);
+	/**
+	 * r8-24: "What it does" always says it — a member change too ("Add
+	 * Bob"), never an empty line; the list below gives its rule.
+	 */
+	const headed = true;
 
 	/** The hashes a hardware wallet shows, to match (the review draws its own once gathered). */
 	const hashList = $derived([
@@ -158,7 +163,7 @@
 	{/if}
 
 	{#if review}
-		<ReviewBody {m} {signing} {chainId} safe={shown.safe} {tx} {review} {used} bind:reading />
+		<ReviewBody {m} {signing} {chainId} safe={shown.safe} {review} {used} />
 	{:else}
 		<!-- The review not gathered (yet): what it carries and its hashes, computed by the core, to match. -->
 		{#if tx.data !== '0x' && shown.title.kind !== 'send'}

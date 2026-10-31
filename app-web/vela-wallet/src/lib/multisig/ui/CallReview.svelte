@@ -1,19 +1,22 @@
 <script lang="ts">
 	/**
-	 * A multisig transaction's call to another contract, drawn by the signing
-	 * sheet's own renderer from the signing sheet's own blocks (cs-12): what
-	 * it does, what it grants, every warning the machines raised — or, when
-	 * nobody can read it, the blind warning and the coin it moves.
+	 * r8-1: a multisig transaction's calls as the core read them
+	 * (`MultisigReview.reading`) — every call, every leg of every batch —
+	 * drawn by the signing sheet's own renderer, with the lines the core's
+	 * concerns say about them (unlimited, nested, unreadable, decimals
+	 * unknown). The same reading every platform draws: nothing is decoded here.
 	 */
-	import { currency } from '$lib/settings/core/currency.svelte';
-	import type { SigningMessages } from '$lib/signing/messages';
 	import type { PartyBadge } from '$lib/signing/model';
 	import BlockList from '$lib/signing/ui/BlockList.svelte';
-	import { callReviewBlocks, type CallReading } from '../core/call-review.svelte';
+	import type { MultisigMessages } from '../messages';
+	import type { MultisigReviewOut } from '../core/kernel';
+	import { concernBlocks, readingBlocks, type ReadingContext } from '../core/reading-blocks';
 
 	interface Props {
-		reading: CallReading;
-		m: SigningMessages;
+		review: MultisigReviewOut | null;
+		m: MultisigMessages;
+		/** The network's coin, as a call's coin is named. */
+		nativeSymbol: string;
 		/** The multisig's own alarms, said first and in red (a batch call that changes its members). */
 		alerts?: string[];
 		/**
@@ -30,11 +33,17 @@
 		names?: Record<string, string>;
 	}
 
-	let { reading, m, alerts = [], badges = {}, names = {} }: Props = $props();
+	let { review, m, nativeSymbol, alerts = [], badges = {}, names = {} }: Props = $props();
 
+	const ctx = $derived<ReadingContext>({
+		r: m.review.reading,
+		callNumber: m.review.callNumber,
+		nativeSymbol
+	});
 	const blocks = $derived([
 		...alerts.map((text) => ({ kind: 'warning' as const, tone: 'danger' as const, text })),
-		...callReviewBlocks(reading, m, currency.view).map((block) => {
+		...concernBlocks(review, ctx),
+		...readingBlocks(review, ctx).map((block) => {
 			if (block.kind !== 'party' || !block.address) return block;
 			const key = block.address.toLowerCase();
 			const badge = block.badge ?? badges[key];
@@ -43,9 +52,11 @@
 	]);
 </script>
 
-<div class="review" data-testid="multisig-call-review">
-	<BlockList {blocks} />
-</div>
+{#if blocks.length > 0}
+	<div class="review" data-testid="multisig-call-review">
+		<BlockList {blocks} />
+	</div>
+{/if}
 
 <style>
 	.review {

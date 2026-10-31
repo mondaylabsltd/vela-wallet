@@ -27,7 +27,7 @@
 	 */
 	import { onMount } from 'svelte';
 	import { afterNavigate, goto, replaceState } from '$app/navigation';
-	import { keepLink } from '$lib/multisig/core/kept-link';
+	import { keepLink, linkWaiting } from '$lib/multisig/core/kept-link';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import type { PageProps } from './$types';
@@ -66,6 +66,8 @@
 
 	let { data }: PageProps = $props();
 
+	/** r5reg: a multisig link opened here (or sent here) is kept for the wallet. */
+	let waitingLink = $state(false);
 	const m = $derived(data.messages);
 	const locale = $derived(data.locale);
 
@@ -273,6 +275,7 @@
 		// by a wallet with no account yet, is kept and opened in the wallet —
 		// after creating or signing in, or at once for someone signed in.
 		keepLink(location.hash);
+		waitingLink = linkWaiting();
 		// ob-6: a signed-in person who opens `/`, `/en` or presses Back into
 		// Welcome is taken to the wallet. `app.html` already hid this page
 		// before paint on the same rule; the attribute goes once we have left.
@@ -356,6 +359,10 @@
 				<div class="hero">
 					<h1 class="headline" class:long={m.heroTitleFit === 'long'}>{m.heroTitle}</h1>
 					<p class="sub">{m.heroSubtitle}</p>
+					{#if waitingLink}
+						<!-- r5reg: a multisig link opened here waits for the wallet being made. -->
+						<p class="sub" role="status" data-testid="welcome-link-waiting">{m.linkWaiting}</p>
+					{/if}
 				</div>
 			</div>
 

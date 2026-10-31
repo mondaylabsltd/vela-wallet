@@ -192,7 +192,8 @@
     "copy": "Copy",
     "executedBy": "Executed by {{name}}",
     "countedThen": "{{approved}} of {{threshold}} approvals counted when it was executed",
-    "approvalsSigned": "These members approved it. Which approvals counted when it was executed isn’t recorded on this device."
+    "approvalsSigned": "These members approved it. Which approvals counted when it was executed isn’t recorded on this device.",
+    "outboxSending": "Sending your approval to the other members…"
    },
    "send": {
     "propose": "Propose and approve",
@@ -487,7 +488,9 @@
     "rowReject": "Reject {{number}}",
     "outcomeNotSent": "Signed, not sent yet",
     "nameFromRecord": "Its name as saved with its record — the address is what you sign for",
-    "linkDamaged": "This link is damaged — ask for a new one."
+    "linkDamaged": "This link is damaged — ask for a new one.",
+    "executeConfirms": "Your wallet will ask you to confirm {{total}} transactions, one after another.",
+    "executeFeeMax": "Network fee ≈ {{fee}}, at most {{max}}, paid by your wallet ({{account}})."
    },
    "import": {
     "or": "Or import from Safe{Wallet}",
@@ -645,7 +648,46 @@
     "approveExecuteAnyway": "Approve and execute anyway",
     "executeAnyway": "Execute anyway",
     "proposeAnyway": "Propose and approve anyway",
-    "blocked": "Vela won't sign this transaction: running it would change who controls the multisig."
+    "blocked": "Vela won't sign this transaction: running it would change who controls the multisig.",
+    "reading": {
+     "send": "Send",
+     "sendFrom": "Move tokens from another account",
+     "approve": "Approve",
+     "increase": "Add to an allowance",
+     "decrease": "Lower an allowance",
+     "permit": "Permit",
+     "daiPermit": "DAI permit",
+     "permit2": "Permit2 allowance",
+     "approveAll": "Approve every token of a collection",
+     "revokeAll": "Revoke access to a collection",
+     "batchOne": "Batch of 1 call",
+     "batchMany": "Batch of {{total}} calls",
+     "unreadable": "Can't be read",
+     "call": "Contract call",
+     "members": "Changes the members",
+     "rename": "Rename to {{name}}",
+     "amount": "Amount",
+     "allowance": "Allowance",
+     "to": "To",
+     "from": "From",
+     "spender": "Spender",
+     "operator": "Operator",
+     "collection": "Collection",
+     "token": "Token",
+     "function": "Function",
+     "alsoSends": "Also sends",
+     "runner": "Run by",
+     "runnerNote": "Its calls run from this contract, not from the multisig.",
+     "unlimited": "Unlimited",
+     "allOfIt": "All of it",
+     "decimalsUnknown": "{{raw}} base units · decimals unknown",
+     "unlimitedLine": "Unlimited allowance: {{spender}} could take all of it the multisig holds, now and later.",
+     "nestedLine": "A batch inside a batch. Every call is listed below; the inner ones run from the batch contract.",
+     "unreadableLine": "Part of this batch can't be read (nested too deep, or cut short). Vela won't sign it.",
+     "decimalsLine": "{{token}} didn't say how many decimals it has, so its amounts are shown in base units.",
+     "ownTokenLine": "This sends tokens to the token's own contract ({{token}}). They'd be lost.",
+     "blindLine": "Vela can't read what this call does. Approve it only if you know exactly what it is."
+    }
    }
   }
  }

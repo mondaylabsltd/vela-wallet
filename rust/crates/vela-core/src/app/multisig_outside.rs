@@ -1291,6 +1291,7 @@ pub async fn review_now<Ev: Send + 'static>(
         known: Vec::new(),
         member_names: BTreeMap::new(),
         origin: None,
+        tokens: BTreeMap::new(),
     };
     multisig_gather::review_of(&multisig_gather::gather_review(io, &subject).await)
 }
@@ -1607,32 +1608,49 @@ pub mod reading {
         chain_id: u64,
         action: Option<&Action>,
     ) -> BTreeMap<String, TokenFacts> {
-        let mut out = BTreeMap::new();
-        for token in unknown_tokens(chain_id, action) {
+        read_these(io, chain_id, unknown_tokens(chain_id, action), None).await
+    }
+
+    /// The symbol and decimals of `tokens` (lowercase), asked of their
+    /// contracts on `chain_id`, each read waited for at most `bound_ms`. A
+    /// token whose contract did not answer is left out: it is unread, never
+    /// read as 18 decimals (r8-2).
+    pub async fn read_these<Ev: Send + 'static>(
+        io: &Io<Ev>,
+        chain_id: u64,
+        tokens: Vec<String>,
+        bound_ms: Option<u32>,
+    ) -> BTreeMap<String, TokenFacts> {
+        let reads = futures::future::join_all(tokens.into_iter().map(|token| async move {
             let call = |data: &str| json!([{ "to": token, "data": data }, "latest"]);
-            let symbol = io
-                .rpc(chain_id, "eth_call", call(SYMBOL))
-                .await
-                .ok()
-                .and_then(|v| v.as_str().and_then(abi_string));
-            let decimals = io
-                .rpc(chain_id, "eth_call", call(DECIMALS))
-                .await
+            let (symbol, decimals) = futures::join!(
+                io.rpc_within(chain_id, "eth_call", call(SYMBOL), bound_ms),
+                io.rpc_within(chain_id, "eth_call", call(DECIMALS), bound_ms)
+            );
+            let symbol = symbol.ok().and_then(|v| v.as_str().and_then(abi_string));
+            let decimals = decimals
                 .ok()
                 .and_then(|v| v.as_str().and_then(shell::quantity))
                 .and_then(|d| u32::try_from(d).ok())
                 .filter(|d| *d <= 36);
-            out.insert(
-                token.clone(),
-                TokenFacts {
-                    token: Some(token),
-                    symbol,
-                    decimals,
-                    known: false,
-                },
-            );
-        }
-        out
+            (token, symbol, decimals)
+        }))
+        .await;
+        reads
+            .into_iter()
+            .filter(|(_, symbol, decimals)| symbol.is_some() || decimals.is_some())
+            .map(|(token, symbol, decimals)| {
+                (
+                    token.clone(),
+                    TokenFacts {
+                        token: Some(token),
+                        symbol,
+                        decimals,
+                        known: false,
+                    },
+                )
+            })
+            .collect()
     }
 
     // -- the rows of what was asked and done (r4C-12) -----------------------------
@@ -2230,7 +2248,17 @@ pub mod page {
         pub count: u32,
         /// Some could not be priced before the ones ahead of them land.
         pub partial: bool,
+        /// r8-15: the most it can cost (wei, decimal): every transaction at
+        /// twice the gas price now (a wallet's own ceiling while the price
+        /// moves), and one not priced yet at [`UNPRICED_GAS`] — said beside
+        /// the estimate, so what the wallet takes is never more than said.
+        #[serde(default)]
+        pub max_wei: String,
     }
+
+    /// The gas bound for a transaction that cannot be priced before the
+    /// ones ahead of it land (an `execTransaction` behind its deployment).
+    pub const UNPRICED_GAS: u64 = 600_000;
 
     /// The fee estimated for an account (`fee: None`: it cannot say).
     #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -2544,6 +2572,12 @@ pub mod page {
         shown: Option<reading::TxShown>,
         /// The facts of the tokens it moves the registry does not name.
         tokens: BTreeMap<String, reading::TokenFacts>,
+        /// r8-11: what was asked, kept so a review that could not be
+        /// gathered is gathered again (the page's refresh) — a paired
+        /// request is never reviewed on its title and hashes alone.
+        request: Option<SafeTxRequest>,
+        /// Being read now: one read at a time.
+        reading: bool,
     }
 
     impl PageState {
@@ -3151,6 +3185,17 @@ pub mod page {
 
     /// Read it again: the mailbox's copy, the chain's members, what the chain approved.
     async fn refresh(io: &Io<Event>, st: &Shared<PageState>) {
+        // r8-11: a request whose review could not be gathered yet is read
+        // again: its warnings are the same as the link's own review's.
+        let unreviewed: Vec<SafeTxRequest> = lock(st)
+            .request_reads
+            .values()
+            .filter(|r| !r.reading && r.shown.as_ref().is_none_or(|x| x.review.is_none()))
+            .filter_map(|r| r.request.clone())
+            .collect();
+        for request in unreviewed {
+            read_request(io, st, request).await;
+        }
         let (link, service, seen) = {
             let s = lock(st);
             (s.link.clone(), s.service.clone(), s.seen.clone())
@@ -3338,15 +3383,21 @@ pub mod page {
             (
                 s.service.clone(),
                 s.seen.clone(),
-                s.request_reads.contains_key(&hash),
+                // Read already (with its review), or being read: nothing to do.
+                s.request_reads.get(&hash).is_some_and(|r| {
+                    r.reading || r.shown.as_ref().is_some_and(|x| x.review.is_some())
+                }),
             )
         };
         if known {
             return;
         }
-        lock(st)
-            .request_reads
-            .insert(hash.clone(), RequestRead::default());
+        {
+            let mut s = lock(st);
+            let entry = s.request_reads.entry(hash.clone()).or_default();
+            entry.reading = true;
+            entry.request = Some(request.clone());
+        }
         let genesis = verified_genesis(io, &service, &request.safe).await;
         let (chain_id, safe, tx) = (request.chain_id, request.safe.clone(), request.tx.clone());
         let read = multisig::review(chain_id, &safe, &tx).ok();
@@ -3375,6 +3426,8 @@ pub mod page {
                 tx: None,
                 shown: shown(None, None),
                 tokens: tokens.clone(),
+                request: Some(request.clone()),
+                reading: true,
             },
         );
         let link = TxLink {
@@ -3409,6 +3462,8 @@ pub mod page {
                 tx: view,
                 shown,
                 tokens,
+                request: Some(request),
+                reading: false,
             },
         );
     }
@@ -4054,6 +4109,7 @@ pub mod page {
         let price = big(Some(&price))?;
         let mut gas = U256::ZERO;
         let mut partial = false;
+        let mut unpriced = 0u64;
         for call in &calls {
             let estimate = io
                 .rpc(
@@ -4064,16 +4120,22 @@ pub mod page {
                 .await;
             match estimate.ok().and_then(|e| big(Some(&e))) {
                 Some(g) => gas += g,
-                None => partial = true,
+                None => {
+                    partial = true;
+                    unpriced += 1;
+                }
             }
         }
         if gas.is_zero() {
             return None;
         }
+        let ceiling =
+            (gas + U256::from(unpriced) * U256::from(UNPRICED_GAS)) * price * U256::from(2);
         Some(ExecutionFee {
             wei: (gas * price).to_string(),
             count: u32::try_from(calls.len()).unwrap_or(u32::MAX),
             partial,
+            max_wei: ceiling.to_string(),
         })
     }
 

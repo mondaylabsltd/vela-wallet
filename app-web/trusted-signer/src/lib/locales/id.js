@@ -86,6 +86,7 @@ window.VelaCS.i18n.register('id', {
   'sentence.deploy': 'Anda menerapkan kode kontrak baru. Kode tidak bisa dibaca sebagai maksud.',
   'sentence.batch': '{count} transaksi, satu tanda tangan.',
   'sentence.multiSend': '{count} panggilan dikemas dalam satu tanda tangan.',
+  'sentence.multiSendOne': "Satu panggilan dikemas dalam satu tanda tangan.",
   'sentence.safeExec': 'Panggilan yang diteruskan lewat Safe — lapisan dalamnya yang benar-benar dijalankan.',
   'sentence.burn': 'Penerimanya adalah kontrak token itu sendiri. Koin yang dikirim ke sana tidak sampai ke siapa pun — terjebak selamanya.',
   'sentence.abiOnly': 'Kode sumber kontrak ini terverifikasi dan semua parameternya terbaca, tetapi tidak ada yang menuliskan artinya. Di bawah ini fakta, bukan penjelasan.',

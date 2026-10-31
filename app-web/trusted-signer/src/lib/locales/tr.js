@@ -86,6 +86,7 @@ window.VelaCS.i18n.register('tr', {
   'sentence.deploy': 'Yeni sözleşme kodu dağıtıyorsunuz. Kod, bir niyet olarak okunamaz.',
   'sentence.batch': '{count} işlem, tek imza.',
   'sentence.multiSend': '{count} çağrı tek bir imzada toplanmış.',
+  'sentence.multiSendOne': "Tek bir çağrı tek bir imzada toplanmış.",
   'sentence.safeExec': 'Safe üzerinden iletilen bir çağrı — asıl çalışan, içteki katmandır.',
   'sentence.burn': 'Alıcı, token\'ın kendi sözleşmesi. Oraya gönderilen coin\'ler kimseye ulaşmaz — sonsuza dek orada kalır.',
   'sentence.abiOnly': 'Bu sözleşmenin kaynak kodu doğrulanmış ve tüm parametreleri çözülüyor, ama ne anlama geldiklerini kimse yazmamış. Aşağıdakiler açıklama değil, yalnızca olgulardır.',

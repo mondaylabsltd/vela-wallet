@@ -813,6 +813,11 @@
 
 		{#if showOutside}
 			{@render fromHere()}
+		{:else if linked && !request && tx?.item.status === 'done'}
+			<!-- r8-24: a link to a transaction that already ran says so — never a page with nothing on it. -->
+			<section class="card" data-testid="connect-link-done">
+				<p class="muted" data-testid="outside-done">{m.doneTx}</p>
+			</section>
 		{/if}
 
 		{#if rows.length > 0}
@@ -1096,16 +1101,29 @@
 							</p>
 						{:else}
 							<p class="muted" data-testid="outside-fee">
+								<!-- r8-15: the estimate and the most it can take, never less than paid. -->
 								{fee
-									? fillTemplate(m.executeFee, {
-											fee: coinOf(fee.wei),
-											account: shortenAddress(eip55(account))
-										})
+									? fee.maxWei
+										? fillTemplate(m.executeFeeMax, {
+												fee: coinOf(fee.wei),
+												max: coinOf(fee.maxWei),
+												account: shortenAddress(eip55(account))
+											})
+										: fillTemplate(m.executeFee, {
+												fee: coinOf(fee.wei),
+												account: shortenAddress(eip55(account))
+											})
 									: m.executeFeeUnknown}
 								{#if fee && fee.count > 1}{fillTemplate(m.executeSteps, {
 										network: chainName(tx.chainId)
 									})}{/if}
 							</p>
+							{#if fee && fee.count > 1}
+								<!-- r8-15: how many wallet prompts are coming, said before the first. -->
+								<p class="muted" data-testid="outside-confirms">
+									{fillTemplate(m.executeConfirms, { total: fee.count })}
+								</p>
+							{/if}
 						{/if}
 						<Button
 							variant={cannotPay ? 'secondary' : 'value'}

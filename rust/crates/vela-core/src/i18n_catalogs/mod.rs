@@ -57,7 +57,7 @@ pub(crate) fn embedded(
         #[cfg(feature = "i18n-zh")]
         "zh" => Some((
             zh::BLOB,
-            crate::i18n::catalog::StaticOffsets::U16(&zh::OFFSETS),
+            crate::i18n::catalog::StaticOffsets::U32(&zh::OFFSETS),
             &zh::PRESENT,
         )),
         #[cfg(feature = "i18n-zh-tw")]
