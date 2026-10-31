@@ -196,6 +196,9 @@ struct ApprovalRequestArgs {
     credential_ids_hex: Vec<String>,
     #[serde(default)]
     key_route: Option<vela_core::signing_venue::KeyRoute>,
+    /// r9-10: the review asks for "… anyway" (the passkey purpose's `anyway`).
+    #[serde(default)]
+    anyway: bool,
 }
 
 /// The page's `{intent, context}` for a member's approval of a SafeTx
@@ -215,6 +218,7 @@ pub fn trusted_signer_approval_request(args_json: &str) -> Result<String, JsValu
         member_name: a.member_name.as_deref(),
         credential_ids_hex: &a.credential_ids_hex,
         key_route: a.key_route.as_ref(),
+        anyway: a.anyway,
     })
     .map_err(js)?;
     Ok(request.to_string())

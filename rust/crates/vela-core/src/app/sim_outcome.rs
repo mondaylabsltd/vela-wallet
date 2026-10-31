@@ -393,6 +393,40 @@ pub fn verdict_of(outcome: SimOutcome) -> SimVerdict {
     }
 }
 
+/// r9-2: one line per balance. A chain whose native coin also wears an
+/// ERC-20 interface (`manage_tokens::native_alias_token`: Arc's USDC at
+/// `0x3600…0000`, Stable's USDT0) moves ONE balance when either is used:
+/// the coin's line says it, and the interface's line — the same money in
+/// other units — is dropped. Without a coin line the interface's stays: it
+/// is then the only word about that balance.
+#[must_use]
+pub fn one_line_per_balance(chain_id: u64, verdict: SimVerdict) -> SimVerdict {
+    let Some(alias) = u32::try_from(chain_id)
+        .ok()
+        .and_then(super::manage_tokens::native_alias_token)
+    else {
+        return verdict;
+    };
+    if !verdict
+        .deltas
+        .iter()
+        .any(|d| d.kind == TrustDeltaKind::Native)
+    {
+        return verdict;
+    }
+    let mut verdict = verdict;
+    verdict.deltas.retain(|d| {
+        !(d.kind == TrustDeltaKind::Erc20
+            && d.token
+                .as_deref()
+                .is_some_and(|t| t.eq_ignore_ascii_case(alias)))
+    });
+    if verdict.kind == "deltas" && verdict.deltas.is_empty() {
+        return verdict_of(SimOutcome::Deltas { deltas: Vec::new() });
+    }
+    verdict
+}
+
 /// [`verdict`] over the reply's wire form ([`SimReply::from_json`]), as JSON
 /// — the wasm client's export. A record that cannot be written out is an
 /// answer nobody can read: the could-not-check line, never an empty list
