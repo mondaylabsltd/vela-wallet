@@ -1333,9 +1333,17 @@ for (let i = 1; i < PATHS.length; i++) {
 //   108 branches.
 // Merged (2026-10-31): core asks 1's 2233 and /pay's 4 leaves together:
 //   2233 + 4 = 2237 paths, 2123 leaves, 114 branches.
-if (PATHS.length !== 2237) fail(`expected 2237 paths (2123 leaf + 114 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2123) fail(`expected 2123 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 114) fail(`expected 114 branch paths, got ${branchSet.size}`);
+// 2243 (the Safari route, spec 102 R8, 2026-10-31): + the iOS app's
+//   "Turn on the Safari extension" row and its sheet
+//   (`settings.safariExtension.{title, subtitle, body, open}`: where Safari
+//   keeps the switch — iOS has no API to read whether it is on, nor a link
+//   into Safari's settings) and `onboarding.common.safariPasskeyBody` (a
+//   passkey Safari refused an extension page, said as that — never as
+//   "site access withheld", which is Chrome's). 2237 + 5 leaves + 1 branch
+//   (`settings.safariExtension`) = 2243 paths, 2128 leaves, 115 branches.
+if (PATHS.length !== 2243) fail(`expected 2243 paths (2128 leaf + 115 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2128) fail(`expected 2128 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 115) fail(`expected 115 branch paths, got ${branchSet.size}`);
 // The on-demand catalogs, pinned the same way (leaves of every locale's union):
 // a key dropped from one namespace and not landed in the other fails here.
 // 579 (round 6, the outside owner's connect page, 2026-10-30): + 17

@@ -91,6 +91,12 @@
       "pageProtects": "Una página de firma lee la solicitud por sí misma y firma exactamente lo que te muestra, así que una pantalla de Vela alterada no puede engañarte para firmar otra cosa.",
       "pageLimit": "No te protege si la propia billetera está comprometida: tus llaves de acceso firman para {{domain}}, y el código que se ejecute ahí aún podría pedirles una firma."
     },
+    "safariExtension": {
+      "title": "Activa la extensión de Safari",
+      "subtitle": "Usa Vela en sitios web en Safari",
+      "body": "En Configuración, abre Safari → Extensiones → Vela Wallet (en iOS 18 y posteriores: Apps → Safari → Extensiones → Vela Wallet). Activa Permitir extensión y después permítela en los sitios web que uses.",
+      "open": "Abrir Configuración"
+    },
     "advanced": {
       "networksTitle": "Redes",
       "networksSubtitle": "URLs de RPC, Explorador y Bundler",

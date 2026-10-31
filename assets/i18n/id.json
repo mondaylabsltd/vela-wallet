@@ -91,6 +91,12 @@
    "pageProtects": "Halaman penandatanganan membaca permintaan itu sendiri dan menandatangani persis apa yang ditampilkannya, jadi layar Vela yang dimanipulasi tidak bisa menipu Anda agar menandatangani hal lain.",
    "pageLimit": "Halaman ini tidak bisa melindungi Anda jika dompet ini sendiri telah dibobol: passkey Anda menandatangani untuk {{domain}}, dan kode yang berjalan di sana tetap bisa meminta tanda tangannya."
   },
+  "safariExtension": {
+   "title": "Aktifkan ekstensi Safari",
+   "subtitle": "Gunakan Vela di situs web di Safari",
+   "body": "Di Pengaturan, buka Safari → Ekstensi → Vela Wallet (iOS 18 dan yang lebih baru: Aplikasi → Safari → Ekstensi → Vela Wallet). Aktifkan Izinkan Ekstensi, lalu izinkan di situs web yang Anda gunakan.",
+   "open": "Buka Pengaturan"
+  },
   "advanced": {
    "networksTitle": "Jaringan",
    "networksSubtitle": "URL RPC, Explorer & Bundler",
@@ -875,6 +881,7 @@
    "copied": "Disalin",
    "close": "Tutup",
    "siteAccessBody": "Akses situs Vela dibatasi. Pilih Izinkan akses di bagian atas, lalu coba lagi.",
+   "safariPasskeyBody": "Safari tidak mengizinkan halaman ekstensi sendiri memakai passkey, jadi Vela melakukannya di halaman penandatanganan. Coba lagi.",
    "phoneLinkFailed": "Perangkat lain tidak terhubung, atau koneksinya terputus sebelum selesai. Pastikan kedua perangkat tetap online dan berdekatan, lalu pindai kodenya lagi.",
    "keyUnavailableTitle": "Kunci keamanan tidak tersedia",
    "keyUnavailableBody": "Perangkat ini tidak dapat memakai kunci keamanan tersebut. Coba kunci keamanan FIDO2 lain, atau pilih cara lain untuk melanjutkan."

@@ -91,6 +91,12 @@
       "pageProtects": "Una pagina di firma legge da sé la richiesta e firma esattamente ciò che ti mostra, quindi una schermata di Vela manomessa non può indurti a firmare altro.",
       "pageLimit": "Non ti protegge se è compromesso il wallet stesso: le tue passkey firmano per {{domain}}, e il codice in esecuzione lì potrebbe comunque chiedere loro una firma."
     },
+    "safariExtension": {
+      "title": "Attiva l'estensione di Safari",
+      "subtitle": "Usa Vela sui siti web in Safari",
+      "body": "In Impostazioni, apri Safari → Estensioni → Vela Wallet (da iOS 18 in poi: App → Safari → Estensioni → Vela Wallet). Attiva Consenti estensione, poi consentila sui siti web che usi.",
+      "open": "Apri Impostazioni"
+    },
     "advanced": {
       "networksTitle": "Reti",
       "networksSubtitle": "URL di RPC, explorer e Bundler",

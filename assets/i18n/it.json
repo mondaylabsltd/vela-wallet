@@ -91,6 +91,12 @@
    "pageProtects": "Una pagina di firma legge da sé la richiesta e firma esattamente ciò che ti mostra, quindi una schermata di Vela manomessa non può indurti a firmare altro.",
    "pageLimit": "Non ti protegge se è compromesso il wallet stesso: le tue passkey firmano per {{domain}}, e il codice in esecuzione lì potrebbe comunque chiedere loro una firma."
   },
+  "safariExtension": {
+   "title": "Attiva l'estensione di Safari",
+   "subtitle": "Usa Vela sui siti web in Safari",
+   "body": "In Impostazioni, apri Safari → Estensioni → Vela Wallet (da iOS 18 in poi: App → Safari → Estensioni → Vela Wallet). Attiva Consenti estensione, poi consentila sui siti web che usi.",
+   "open": "Apri Impostazioni"
+  },
   "advanced": {
    "networksTitle": "Reti",
    "networksSubtitle": "URL di RPC, explorer e Bundler",
@@ -878,6 +884,7 @@
    "copied": "Copiato",
    "close": "Chiudi",
    "siteAccessBody": "L'accesso di Vela ai siti è limitato. Scegli Consenti accesso in alto, poi riprova.",
+   "safariPasskeyBody": "Safari non consente alle pagine di un'estensione di usare una passkey, quindi Vela lo fa nella sua pagina di firma. Riprova.",
    "phoneLinkFailed": "L'altro dispositivo non si è collegato, oppure la connessione si è interrotta prima del termine. Tieni entrambi i dispositivi online e vicini, poi scansiona di nuovo il codice.",
    "keyUnavailableTitle": "Chiave di sicurezza non disponibile",
    "keyUnavailableBody": "Questo dispositivo non è riuscito a usare la chiave di sicurezza. Prova con un'altra chiave di sicurezza FIDO2 oppure scegli un altro modo per continuare."

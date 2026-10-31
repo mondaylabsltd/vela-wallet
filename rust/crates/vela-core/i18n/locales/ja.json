@@ -91,6 +91,12 @@
       "pageProtects": "署名ページはリクエストを自ら読み取り、表示した内容そのままに署名します。Vela の画面が改ざんされても、別のものに署名させることはできません。",
       "pageLimit": "ウォレットそのものが乗っ取られた場合は守れません。パスキーは {{domain}} のために署名するため、そこで動くコードは引き続き直接署名を求められます。"
     },
+    "safariExtension": {
+      "title": "Safari 機能拡張をオンにする",
+      "subtitle": "Safari の Web サイトで Vela を使う",
+      "body": "「設定」で Safari → 機能拡張 → Vela Wallet を開きます（iOS 18 以降：アプリ → Safari → 機能拡張 → Vela Wallet）。「機能拡張を許可」をオンにし、使う Web サイトで許可してください。",
+      "open": "設定を開く"
+    },
     "advanced": {
       "networksTitle": "ネットワーク",
       "networksSubtitle": "RPC・エクスプローラー・Bundler の URL",

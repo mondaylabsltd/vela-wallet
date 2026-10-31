@@ -91,6 +91,12 @@
       "pageProtects": "A signing page reads the request itself and signs exactly what it shows you, so a tampered Vela screen can't trick you into signing something else.",
       "pageLimit": "It can't protect you if this wallet itself is compromised: your passkeys sign for {{domain}}, and code running there could still ask them for a signature."
     },
+    "safariExtension": {
+      "title": "Turn on the Safari extension",
+      "subtitle": "Use Vela on websites in Safari",
+      "body": "In Settings, open Safari → Extensions → Vela Wallet (on iOS 18 and later: Apps → Safari → Extensions → Vela Wallet). Turn on Allow Extension, then allow it on the websites you use.",
+      "open": "Open Settings"
+    },
     "advanced": {
       "networksTitle": "Networks",
       "networksSubtitle": "RPC, Explorer & Bundler URLs",

@@ -91,6 +91,12 @@
    "pageProtects": "簽名頁自己讀取請求，顯示什麼就簽什麼——即使 Vela 的介面遭到竄改，也騙不了你簽別的東西。",
    "pageLimit": "如果錢包本身被完全攻破，它就保護不了你：你的通行密鑰為 {{domain}} 簽署，在那裡執行的程式碼仍然可以直接向它們要求簽名。"
   },
+  "safariExtension": {
+   "title": "開啟 Safari 延伸功能",
+   "subtitle": "在 Safari 的網站上使用 Vela",
+   "body": "在「設定」中打開 Safari → 延伸功能 → Vela Wallet（iOS 18 及更新版本：App → Safari → 延伸功能 → Vela Wallet）。開啟「允許延伸功能」，再允許它在你使用的網站上執行。",
+   "open": "打開設定"
+  },
   "advanced": {
    "networksTitle": "網路",
    "networksSubtitle": "RPC、區塊鏈瀏覽器與 Bundler 網址",
@@ -875,6 +881,7 @@
    "copied": "已複製",
    "close": "關閉",
    "siteAccessBody": "網站存取權受限。請點選頂端的「允許存取」，然後再試一次。",
+   "safariPasskeyBody": "Safari 不允許擴充功能自己的頁面使用通行密鑰，所以 Vela 改在簽署頁上完成這一步。請再試一次。",
    "phoneLinkFailed": "另一台裝置沒有連上，或連線在完成前中斷了。請讓兩台裝置保持連網並彼此靠近，然後重新掃描代碼。",
    "keyUnavailableTitle": "無法使用安全金鑰",
    "keyUnavailableBody": "這台裝置無法使用這把安全金鑰。請換一把 FIDO2 安全金鑰，或改用其他方式繼續。"

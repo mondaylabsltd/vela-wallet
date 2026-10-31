@@ -91,6 +91,12 @@
       "pageProtects": "Trang ký tự đọc yêu cầu và ký đúng những gì nó hiển thị cho bạn, nên một giao diện Vela bị sửa đổi không thể lừa bạn ký thứ khác.",
       "pageLimit": "Trang này không bảo vệ được bạn nếu chính ví đã bị xâm nhập: passkey của bạn ký cho {{domain}}, và mã chạy ở đó vẫn có thể trực tiếp yêu cầu chúng ký."
     },
+    "safariExtension": {
+      "title": "Bật tiện ích Safari",
+      "subtitle": "Dùng Vela trên các trang web trong Safari",
+      "body": "Trong Cài đặt, mở Safari → Tiện ích → Vela Wallet (iOS 18 trở lên: Ứng dụng → Safari → Tiện ích → Vela Wallet). Bật Cho phép tiện ích, rồi cho phép nó trên các trang web bạn dùng.",
+      "open": "Mở Cài đặt"
+    },
     "advanced": {
       "networksTitle": "Mạng lưới",
       "networksSubtitle": "URL của RPC, Explorer và Bundler",

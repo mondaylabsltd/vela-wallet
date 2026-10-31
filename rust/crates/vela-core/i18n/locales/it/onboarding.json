@@ -130,6 +130,7 @@
       "copied": "Copiato",
       "close": "Chiudi",
       "siteAccessBody": "L'accesso di Vela ai siti è limitato. Scegli Consenti accesso in alto, poi riprova.",
+      "safariPasskeyBody": "Safari non consente alle pagine di un'estensione di usare una passkey, quindi Vela lo fa nella sua pagina di firma. Riprova.",
       "phoneLinkFailed": "L'altro dispositivo non si è collegato, oppure la connessione si è interrotta prima del termine. Tieni entrambi i dispositivi online e vicini, poi scansiona di nuovo il codice.",
       "keyUnavailableTitle": "Chiave di sicurezza non disponibile",
       "keyUnavailableBody": "Questo dispositivo non è riuscito a usare la chiave di sicurezza. Prova con un'altra chiave di sicurezza FIDO2 oppure scegli un altro modo per continuare."

@@ -130,6 +130,7 @@
       "copied": "Disalin",
       "close": "Tutup",
       "siteAccessBody": "Akses situs Vela dibatasi. Pilih Izinkan akses di bagian atas, lalu coba lagi.",
+      "safariPasskeyBody": "Safari tidak mengizinkan halaman ekstensi sendiri memakai passkey, jadi Vela melakukannya di halaman penandatanganan. Coba lagi.",
       "phoneLinkFailed": "Perangkat lain tidak terhubung, atau koneksinya terputus sebelum selesai. Pastikan kedua perangkat tetap online dan berdekatan, lalu pindai kodenya lagi.",
       "keyUnavailableTitle": "Kunci keamanan tidak tersedia",
       "keyUnavailableBody": "Perangkat ini tidak dapat memakai kunci keamanan tersebut. Coba kunci keamanan FIDO2 lain, atau pilih cara lain untuk melanjutkan."

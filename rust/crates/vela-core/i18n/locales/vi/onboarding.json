@@ -130,6 +130,7 @@
       "copied": "Đã sao chép",
       "close": "Đóng",
       "siteAccessBody": "Quyền truy cập trang web bị giới hạn. Chọn Cho phép truy cập ở đầu trang rồi thử lại.",
+      "safariPasskeyBody": "Safari không cho trang riêng của tiện ích dùng khóa truy cập, nên Vela thực hiện bước này trên trang ký. Hãy thử lại.",
       "phoneLinkFailed": "Thiết bị kia không kết nối được, hoặc kết nối bị ngắt trước khi hoàn tất. Hãy giữ cả hai thiết bị trực tuyến và ở gần nhau, rồi quét lại mã.",
       "keyUnavailableTitle": "Không dùng được khóa bảo mật",
       "keyUnavailableBody": "Thiết bị này không dùng được khóa bảo mật. Hãy thử một khóa bảo mật FIDO2 khác, hoặc chọn cách khác để tiếp tục."
