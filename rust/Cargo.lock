@@ -922,7 +922,7 @@ dependencies = [
  "tokio",
  "tokio-tungstenite",
  "tokio-util",
- "webpki-roots 1.0.10",
+ "webpki-roots",
 ]
 
 [[package]]
@@ -2545,15 +2545,9 @@ version = "0.1.0"
 dependencies = [
  "chacha20poly1305",
  "ed25519-dalek",
- "futures-util",
  "getrandom 0.4.3",
  "hmac 0.13.0",
- "rustls",
- "serde",
- "serde_json",
  "sha2 0.11.0",
- "tokio",
- "tokio-tungstenite",
  "x25519-dalek",
  "zeroize",
 ]
@@ -3862,7 +3856,6 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "tungstenite",
- "webpki-roots 0.26.11",
 ]
 
 [[package]]
@@ -4402,15 +4395,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc1b4cb0cc549fcf58d7dfc081778139b3d283a081644e833e84682ad71cea24"
 dependencies = [
  "unicode-ident",
-]
-
-[[package]]
-name = "webpki-roots"
-version = "0.26.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "521bc38abb08001b01866da9f51eb7c5d647a19260e00054a8c7fd5f9e57f7a9"
-dependencies = [
- "webpki-roots 1.0.10",
 ]
 
 [[package]]
