@@ -1828,7 +1828,14 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
             model.suspect_chain_ids = doubted;
             model.tokens = live;
             model.failed_chain_ids = failed_chain_ids;
-            model.last_refreshed_at_ms = Some(now_ms);
+            // r9 (Android, desktop r9-3): "Updated now" only for a round a
+            // network answered — a round where every one failed reads nothing,
+            // so the stamp stays at the last that did, and the home says the
+            // networks it cannot reach (`unreachable_networks`). A round some
+            // answered moves it, and its failed ones are listed the same way.
+            if !nothing_answered {
+                model.last_refreshed_at_ms = Some(now_ms);
+            }
             model.rate_limited_chain_ids = rate_limited_chain_ids;
             model.internal_chain_ids = internal_chain_ids;
             // Only a chain that failed can have failed for this reason.
