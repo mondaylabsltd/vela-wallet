@@ -41,6 +41,9 @@ struct WalletScreen: View {
     var onFlow: ((WalletFlowEntry) -> Void)?
     /// Which record a home activity row opens — said before the detail shows.
     var onOpenActivity: ((String?) -> Void)?
+    /// A row that opens as something else than a transaction detail — a
+    /// multisig transaction opens as its own sheet (r8-17). `true`: it did.
+    var opensElsewhere: ((String?) -> Bool)?
     /// Tap the figure to hide it (spec 051). The drawing has carried
     /// `a11yHide` / `a11yShow` labels since spec 015 and the core has owned the
     /// state since phase 2b — this is the gesture that was missing between
@@ -240,6 +243,7 @@ struct WalletScreen: View {
                     }
                     if let onFlow {
                         Button {
+                            if opensElsewhere?(row.itemId) == true { return }
                             onOpenActivity?(row.itemId)
                             onFlow(.txDetail)
                         } label: {
