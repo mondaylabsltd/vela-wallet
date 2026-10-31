@@ -278,12 +278,29 @@ fn tell(event: Event) {
     }
 }
 
+/// The last held-chain snapshot told, per account (lowercase): what the scan
+/// asks before it chooses its chains (`activity_feed::scan_chains`).
+static HELD: Mutex<std::collections::BTreeMap<String, Vec<u32>>> =
+    Mutex::new(std::collections::BTreeMap::new());
+
+/// The chains `address` was last said to hold on (empty: none told, or none).
+#[must_use]
+pub fn held_of(address: &str) -> Vec<u32> {
+    HELD.lock()
+        .ok()
+        .and_then(|held| held.get(&address.to_ascii_lowercase()).cloned())
+        .unwrap_or_default()
+}
+
 /// Which chains this account holds anything on — the scan set.
 ///
 /// An empty list is not a gap the shell should paper over: the core reads it as
 /// "brand-new wallet" and falls back to the main payment chains, so a first
 /// receipt is still caught.
 pub fn held_chains(address: &str, chain_ids: Vec<u32>) {
+    if let Ok(mut held) = HELD.lock() {
+        held.insert(address.to_ascii_lowercase(), chain_ids.clone());
+    }
     tell(Event::HeldChainsSnapshot {
         address: address.to_owned(),
         chain_ids,

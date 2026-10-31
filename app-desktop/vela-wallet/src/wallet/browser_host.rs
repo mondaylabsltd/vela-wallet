@@ -80,6 +80,45 @@ pub struct BrowserDriver {
 /// follow at once; the oldest is forgotten first).
 const CALLS_REQUESTS_KEPT: usize = 64;
 
+/// r9-18: where the batches a multisig answered sites with are kept —
+/// `[[batch, chainId], …]`, the newest last.
+const MULTISIG_BATCHES_KEY: &str = "vela.desktop.multisigBatches";
+/// How many are kept (a site follows its batch for minutes, not months).
+const MULTISIG_BATCHES_KEPT: usize = 64;
+
+fn stored_multisig_batches() -> Vec<(String, u32)> {
+    let Ok(Some(serde_json::Value::Array(rows))) = crate::executor::storage::read_value(MULTISIG_BATCHES_KEY) else {
+        return Vec::new();
+    };
+    rows.iter()
+        .filter_map(|row| {
+            let batch = row.get(0)?.as_str()?.to_ascii_lowercase();
+            let chain = u32::try_from(row.get(1)?.as_u64()?).ok()?;
+            Some((batch, chain))
+        })
+        .collect()
+}
+
+fn load_multisig_batches() -> BTreeMap<String, u32> {
+    stored_multisig_batches().into_iter().collect()
+}
+
+fn save_multisig_batch(batch: &str, chain_id: u32) {
+    let mut rows = stored_multisig_batches();
+    rows.retain(|(b, _)| b != batch);
+    rows.push((batch.to_owned(), chain_id));
+    let skip = rows.len().saturating_sub(MULTISIG_BATCHES_KEPT);
+    let value = serde_json::Value::Array(
+        rows.into_iter()
+            .skip(skip)
+            .map(|(b, c)| serde_json::json!([b, c]))
+            .collect(),
+    );
+    if let Err(error) = crate::executor::storage::write_value(MULTISIG_BATCHES_KEY, value) {
+        crate::diag::vlog!("browser", "multisig batch not kept: {error}");
+    }
+}
+
 impl Default for BrowserDriver {
     fn default() -> Self {
         Self::new()
@@ -91,16 +130,21 @@ impl BrowserDriver {
     pub fn new() -> Self {
         Self {
             core: CoreHost::new(),
-            multisig_batches: BTreeMap::new(),
+            // r9-18: the batches answered before a restart are still the
+            // proposals machine's — a site that follows one after the app
+            // came back was told "Unknown bundle id".
+            multisig_batches: load_multisig_batches(),
             calls_requests: VecDeque::new(),
         }
     }
 
     /// AUDIT M5: a site was answered batch `id` by a multisig on `chain_id`:
-    /// its `wallet_getCallsStatus` is the proposals machine's from here.
+    /// its `wallet_getCallsStatus` is the proposals machine's from here —
+    /// across a restart too (kept, the newest [`MULTISIG_BATCHES_KEPT`]).
     pub fn multisig_batch(&mut self, id: &str, chain_id: u32) {
         self.multisig_batches
             .insert(id.to_ascii_lowercase(), chain_id);
+        save_multisig_batch(&id.to_ascii_lowercase(), chain_id);
     }
 
     #[must_use]
@@ -4017,6 +4061,27 @@ mod tests {
                 driver.dispatch(event);
             }
             assert_eq!(accounts_of(&mut driver, TAB, DAPP, "d1"), [A1]);
+        });
+    }
+
+    /// r9-18: a batch a multisig answered a site with is still the proposals
+    /// machine's after the app comes back — never "Unknown bundle id".
+    #[test]
+    fn a_multisig_batch_outlives_a_restart() {
+        let batch = format!("0x{}", "CD".repeat(32));
+        storage::tests::with_temp_state("dbr-host-multisig-restart", || {
+            let mut before = BrowserDriver::new();
+            before.multisig_batch(&batch, 100);
+            let after = BrowserDriver::new();
+            assert_eq!(after.multisig_batches.get(&batch.to_ascii_lowercase()), Some(&100));
+            // Kept bounded, the newest last.
+            let mut many = BrowserDriver::new();
+            for i in 0..(MULTISIG_BATCHES_KEPT + 3) {
+                many.multisig_batch(&format!("0x{i:064x}"), 100);
+            }
+            let kept = BrowserDriver::new().multisig_batches;
+            assert_eq!(kept.len(), MULTISIG_BATCHES_KEPT);
+            assert!(!kept.contains_key(&batch.to_ascii_lowercase()), "the oldest went first");
         });
     }
 

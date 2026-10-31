@@ -1353,6 +1353,22 @@ impl WalletPage {
                 executor,
             });
         }
+        // r9-18: who still approves, and how, asked again while the machine
+        // has no answer for it — a sheet opened the moment a site's proposal
+        // was made asked before the machine held the transaction, and drew
+        // only its own approval for good.
+        if item.status != ms_proposals::ProposalStatus::Done
+            && !view.signers.keys().any(|k| k.eq_ignore_ascii_case(&item_key(chain_id, &hash)))
+        {
+            let key = format!("signers:{}", item_key(chain_id, &hash.to_ascii_lowercase()));
+            if self.multisig.previewed.get(&key).is_none_or(|at| now - at >= LOOK_EVERY_MS) {
+                self.multisig.previewed.insert(key, now);
+                events.push(ms_proposals::Event::ReadSigners {
+                    chain_id,
+                    safe_tx_hash: hash.clone(),
+                });
+            }
+        }
         // Done (executed from this sheet, or found so): the machine reads how
         // it ran — who executed, which approvals counted (`frozen`) — once.
         if item.status == ms_proposals::ProposalStatus::Done {

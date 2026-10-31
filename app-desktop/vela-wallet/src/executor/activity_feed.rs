@@ -357,7 +357,70 @@ fn sync_received(address: &str) -> u32 {
 static SCANNING: AtomicBool = AtomicBool::new(false);
 
 fn scan(address: &str) -> u32 {
-    persist_incoming(address, &crate::executor::token_trust::poll(address))
+    use crate::executor::token_trust;
+    // r9-17, the web's `activity.ts` rule: the chains it holds on; else the
+    // main payment chains where the space in front has them; else that
+    // space's own networks (the ones added first, then its first six) — an
+    // account holding nothing yet in the testnet space gets its first coin
+    // on Arc, which the main payment chains never look at. Each scanned
+    // chain's registry is primed, as the web's `primeRegistry`, so its
+    // canonical stablecoin is a trusted token on the first receipt.
+    let held = token_trust::held_of(address);
+    let chains = scan_chains(
+        &held,
+        &crate::network_space::space_chain_ids(),
+        &crate::executor::network_admin::read_store_custom_chain_ids(),
+        &crate::network_space::in_space,
+    );
+    for chain_id in &chains {
+        let data = crate::executor::chain_tokens::cached(*chain_id).or_else(|| {
+            match crate::executor::chain_tokens::fetch_doc(*chain_id) {
+                crate::executor::chain_tokens::IndexDoc::Doc(data) => Some(data),
+                _ => None,
+            }
+        });
+        if let Some(data) = data {
+            token_trust::registry_tokens(
+                *chain_id,
+                data.stables.iter().map(|s| s.contract.clone()).collect(),
+                data.wrapped_native.clone(),
+            );
+        }
+    }
+    if held.is_empty() && !chains.is_empty() {
+        token_trust::held_chains(address, chains);
+    }
+    persist_incoming(address, &token_trust::poll(address))
+}
+
+/// How many of the space's own networks an empty account's scan reads
+/// (the web's `NATIVE_WATCH_FALLBACK`).
+const SPACE_SCAN_FIRST: usize = 6;
+
+/// The chains an incoming scan reads (the web's `activity.ts`): `held`, else
+/// the core's main payment chains when the space has any of them (an empty
+/// answer: the core falls back to them itself), else the space's networks —
+/// those the person added first, then its first [`SPACE_SCAN_FIRST`].
+fn scan_chains(
+    held: &[u32],
+    space: &[u32],
+    added: &[u32],
+    in_space: &dyn Fn(u32) -> bool,
+) -> Vec<u32> {
+    if !held.is_empty() {
+        return held.to_vec();
+    }
+    let defaults = vela_core::app::token_trust::DEFAULT_MONITOR_CHAINS;
+    if defaults.iter().any(|c| in_space(*c)) {
+        return defaults.to_vec();
+    }
+    let mut out: Vec<u32> = Vec::new();
+    for id in added.iter().copied().filter(|c| in_space(*c)).chain(space.iter().copied().take(SPACE_SCAN_FIRST)) {
+        if !out.contains(&id) {
+            out.push(id);
+        }
+    }
+    out
 }
 
 /// Store the transfers the scan admitted that the store does not hold yet,
@@ -795,6 +858,25 @@ pub fn privacy_changed(hidden: bool, cx: &mut App) {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// r9-17: an account holding nothing yet in the testnet space is scanned
+    /// on that space's networks (Arc), as the web scans it — never only the
+    /// main payment chains, which are not in that space.
+    #[test]
+    fn an_empty_account_in_the_testnet_space_is_scanned_on_its_networks() {
+        const ARC: u32 = 5_042_002;
+        let testnet = |c: u32| matches!(c, ARC | 11_155_111 | 84_532);
+        assert_eq!(scan_chains(&[ARC], &[11_155_111, ARC], &[], &testnet), vec![ARC]);
+        assert_eq!(
+            scan_chains(&[], &[11_155_111, 84_532, ARC], &[ARC], &testnet),
+            vec![ARC, 11_155_111, 84_532]
+        );
+        let mainnet = |c: u32| !testnet(c);
+        assert_eq!(
+            scan_chains(&[], &[1, 100], &[], &mainnet),
+            vela_core::app::token_trust::DEFAULT_MONITOR_CHAINS.to_vec()
+        );
+    }
 
     fn seed(rows: Value) {
         if storage::write_value(TX_KEY, rows).is_err() {
