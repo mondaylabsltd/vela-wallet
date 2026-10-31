@@ -2979,7 +2979,7 @@ fn getting_no_token_backs_off_to_30_s_then_stops() {
 
 #[test]
 fn up_once_on_the_relay_and_unreachable_when_a_token_does_not_get_it_there() {
-    use relay::{on_state, RelayStatus, RelayTrouble, UNREACHABLE_AFTER_MS};
+    use relay::{on_state, OnState, RelayStatus, RelayTrouble, UNREACHABLE_AFTER_MS};
     let s = on_state(
         &RelayStatus::Connecting,
         "offline",
@@ -2988,19 +2988,30 @@ fn up_once_on_the_relay_and_unreachable_when_a_token_does_not_get_it_there() {
     );
     assert_eq!(
         s,
-        RelayStatus::Retrying {
-            why: RelayTrouble::Unreachable,
-            detail: "relay.peerconnect.dev".into(),
-            at: None
+        OnState {
+            status: RelayStatus::Retrying {
+                why: RelayTrouble::Unreachable,
+                detail: "relay.peerconnect.dev".into(),
+                at: None
+            },
+            accepted: false
         }
     );
+    // core-ms-2: on the relay is accepted (its refusals forgotten), in Rust.
     assert_eq!(
-        on_state(&s, "waiting", 0.0, relay::DEFAULT_RELAY),
-        RelayStatus::Up
+        on_state(&s.status, "waiting", 0.0, relay::DEFAULT_RELAY),
+        OnState {
+            status: RelayStatus::Up,
+            accepted: true
+        }
     );
+    assert!(on_state(&RelayStatus::Up, "connected", 0.0, relay::DEFAULT_RELAY).accepted);
     assert_eq!(
         on_state(&RelayStatus::Up, "offline", 0.0, relay::DEFAULT_RELAY),
-        RelayStatus::Connecting
+        OnState {
+            status: RelayStatus::Connecting,
+            accepted: false
+        }
     );
 }
 

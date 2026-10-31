@@ -35,7 +35,7 @@
 	import Button from '$lib/ui/Button.svelte';
 	import { addressEntry } from '$lib/core/kernels';
 	import { fillTemplate } from '$lib/i18n/fill';
-	import { chainName, networkForChainId, spaceNetworksSync } from '$lib/services/networks';
+	import { chainName, spaceNetworksSync } from '$lib/services/networks';
 	import { balance } from '$lib/wallet/core/balance.svelte';
 	import { localName, shortenAddress } from '../core/display';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
@@ -44,8 +44,8 @@
 	import type { Finding } from '../core/refusal';
 	import { indexName, missingTitle } from '../core/activity.svelte';
 	import { sameAddress, type ExportedSafe } from '../core/kernel';
-	import { addLink, type AddLink, type InvitedMember } from '../core/link';
-	import { heldChains, lastUsedChains, likelyNetworks } from '../core/likely-networks';
+	import type { AddLink, InvitedMember } from '../core/link';
+	import { heldChains, likelyNetworks } from '../core/likely-networks';
 	import { names } from '../core/names.svelte';
 	import { multisig } from '../core/store.svelte';
 	import type { MultisigAddOutcome } from '../generated/MultisigAddOutcome';
@@ -110,16 +110,28 @@
 	const valid = $derived(entry === 'valid');
 
 	const networks = spaceNetworksSync();
+	/**
+	 * The invite this sheet shows, as the accounts machine keeps it
+	 * (`invite`): which of its networks this device has, the first it lacks
+	 * and that network's name. Adding its multisig uses its networks and
+	 * keeps what it says of the members — the machine's, on Add.
+	 */
+	const invite = $derived.by(() => {
+		const kept = multisig.view?.invite ?? null;
+		return link && kept && sameAddress(kept.link.multisig, link.multisig) ? kept : null;
+	});
 	/** The invite's networks this device has, its first network first. */
-	const linkHas = untrack(() =>
-		(link?.chainIds ?? []).filter((id) => networkForChainId(id) !== null)
-	);
+	const linkHas = $derived(invite?.on_device ?? []);
 	/** Its first network, which this device lacks: said, with Add network. */
-	const linkLacks = untrack(() =>
-		link && link.chainIds.length > 0 && linkHas.length === 0 ? link.chainIds[0] : null
-	);
-	let lackingName = $state<string | null>(null);
-	if (linkLacks !== null) void indexName(linkLacks).then((name) => (lackingName = name));
+	const linkLacks = $derived(invite?.missing ?? null);
+	/** The chain index's name, for a network the core's catalog does not know. */
+	let indexedName = $state<string | null>(null);
+	$effect(() => {
+		const lacks = linkLacks;
+		if (lacks === null || invite?.missing_name) return;
+		void indexName(lacks).then((name) => (indexedName = name));
+	});
+	const lackingName = $derived(invite?.missing_name ?? indexedName);
 	/**
 	 * r5reg-24: this device's own name for an invited member that is one of
 	 * its accounts (the invite names it by address), else `null`.
@@ -141,7 +153,7 @@
 	const offered = $derived(
 		likelyNetworks(networks, {
 			named: fromLink ? linkHas : [],
-			used: lastUsedChains(),
+			used: multisig.view?.used_networks ?? [],
 			held: heldChains(balance.view.tokens)
 		})
 	);
@@ -156,7 +168,8 @@
 		failure = null;
 		refused = null;
 		if (!acceptRisks) risky = null;
-		const named = choosing && chosen !== null ? chosen : fromLink ? linkHas[0] : undefined;
+		// The person's pick when asked; an invite's own network is the machine's.
+		const named = choosing && chosen !== null ? chosen : undefined;
 		const typed = address.trim();
 		const outcome = await multisig.request(
 			{ type: 'add', address: typed, network: named ?? null, accept_risks: acceptRisks },
@@ -172,9 +185,8 @@
 	function said(outcome: MultisigAddOutcome) {
 		switch (outcome.kind) {
 			case 'added':
-				// Every network the invite names is one it is used on (a link
-				// naming one is evidence, the core's rule).
-				if (fromLink) for (const id of linkHas) multisig.useChain(outcome.address, id);
+				// The invite's networks and its members' labels landed with it
+				// (the accounts machine's, on Add).
 				onadded(outcome.address);
 				return;
 			case 'chooseNetwork':
@@ -194,15 +206,12 @@
 		}
 	}
 
-	/** Settings → Add network for the invite's network; the invite opens again once it is added. */
+	/**
+	 * Settings → Add network for the invite's network. The invite waits for
+	 * it — the accounts machine's record, through a reload — and its sheet
+	 * opens again once the network is added.
+	 */
 	function addNetwork(chainId: number) {
-		if (link) {
-			const again = addLink('https://x', locale, link.multisig, {
-				chainIds: link.chainIds,
-				members: link.members ?? []
-			});
-			multisig.send({ type: 'keep_link', hash: new URL(again).hash });
-		}
 		// eslint-disable-next-line svelte/no-navigation-without-resolve -- Settings, resolved, with its query
 		void goto(`${resolve('/[locale]/settings', { locale })}?addNetwork=${chainId}`);
 	}

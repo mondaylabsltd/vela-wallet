@@ -18,6 +18,8 @@ import { fillTemplate } from '$lib/i18n/fill';
 import { pluralForm } from '$lib/i18n/plural';
 import type { MultisigMessages } from '../messages';
 import type { MultisigWaiting } from '../generated/MultisigWaiting';
+import type { MultisigWaitingBanner } from '../generated/MultisigWaitingBanner';
+import type { MultisigWaitingPart } from '../generated/MultisigWaitingPart';
 import { proposalsHost } from '../shell/proposals-host.svelte';
 
 export interface Waiting {
@@ -37,23 +39,23 @@ export interface Waiting {
 	first: { chainId: number; safeTxHash: string } | null;
 }
 
-/** "1 needs your approval · 1 ready to execute · 1 waiting for a member who can pay" — '' when nothing waits. */
-export function waitingWords(w: Waiting, m: MultisigMessages): string {
-	const parts: string[] = [];
-	if (w.needsYou > 0) {
-		parts.push(fillTemplate(pluralForm(m.presence.needsYou, w.needsYou), { count: w.needsYou }));
-	}
-	if (w.ready > 0) {
-		parts.push(fillTemplate(pluralForm(m.presence.ready, w.ready), { count: w.ready }));
-	}
-	if (w.waitingPayer > 0) {
-		parts.push(
-			fillTemplate(pluralForm(m.presence.waitingPayer, w.waitingPayer), {
-				count: w.waitingPayer
-			})
-		);
-	}
-	return parts.join(' · ');
+/**
+ * "1 needs your approval · 1 ready to execute · 1 waiting for a member who
+ * can pay" — '' when nothing waits. Which parts, in which order, is the
+ * proposals machine's (`waiting_parts`, `banner.parts`); here only words.
+ */
+export function waitingWords(parts: MultisigWaitingPart[], m: MultisigMessages): string {
+	return parts
+		.map(({ kind, count }) => {
+			const plural =
+				kind === 'needsYou'
+					? m.presence.needsYou
+					: kind === 'ready'
+						? m.presence.ready
+						: m.presence.waitingPayer;
+			return fillTemplate(pluralForm(plural, count), { count });
+		})
+		.join(' · ');
 }
 
 /** The machine's word for one multisig, in this module's shape. */
@@ -77,6 +79,24 @@ class Presence {
 	of(address: string): Waiting | null {
 		const read = proposalsHost.view?.presence[address.toLowerCase()];
 		return read ? fromMachine(read) : null;
+	}
+
+	/** The waiting line's parts for `address`, in order (the machine's `waiting_parts`). */
+	parts(address: string): MultisigWaitingPart[] {
+		return proposalsHost.view?.waiting_parts[address.toLowerCase()] ?? [];
+	}
+
+	/**
+	 * The line at the top of the followed multisig's home, when something
+	 * waits there: its parts and the transaction it opens (`banner`).
+	 */
+	get banner(): MultisigWaitingBanner | null {
+		return proposalsHost.view?.banner ?? null;
+	}
+
+	/** The followed multisig is deployed on a network read: its first steps are behind it. */
+	get setUp(): boolean {
+		return proposalsHost.view?.set_up ?? false;
 	}
 
 	/**

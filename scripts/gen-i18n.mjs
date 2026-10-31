@@ -1410,7 +1410,11 @@ if (branchSet.size !== 117) fail(`expected 117 branch paths, got ${branchSet.siz
   //   S4: a proposal not made yet is not withdrawn) and `home.multisig.create.
   //   {otherSpace, draftKept, discardDraft}` + `settings.renamePending` (r7-9,
   //   r7-10). 603 + 6 = 609.
-  const pins = { multisig: 609 };
+  // 610 (core-ms-2, 2026-10-31): + `home.multisig.settings.unreadableOn`
+  //   ("Couldn't read its members on {{network}}." — a network whose chain
+  //   did not answer, said in Settings on every platform, never left out).
+  //   609 + 1 = 610.
+  const pins = { multisig: 610 };
   for (const [name, docs] of Object.entries(onDemand)) {
     const leaves = new Set();
     for (const lng of LOCALES) walk(docs[lng], '', leaves, new Set());

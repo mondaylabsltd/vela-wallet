@@ -32,6 +32,7 @@ import type { MultisigStanding } from '../generated/MultisigStanding';
 import type { MultisigWaitingNote } from '../generated/MultisigWaitingNote';
 import { readCall } from './call-review.svelte';
 import { readChainDoc } from '$lib/services/chain-doc';
+import { catalogName } from './likely-networks';
 import type { SigningMessages } from '$lib/signing/messages';
 import { ROW_PREFIX, transactionOfRow, waitingRowId } from './row-id';
 import { progressLine } from './progress';
@@ -77,8 +78,14 @@ export function missingTitle(m: MultisigMessages, chainId: number, name: string 
 		: fillTemplate(m.proposal.missingNetwork, { chainId });
 }
 
-/** What the chain index calls `chainId`, or `null` (it does not know it, or did not answer). */
+/**
+ * What `chainId` is called: the core's catalog's name (`networks.name`),
+ * else the chain index's, or `null` (neither knows it, or the index did not
+ * answer).
+ */
 export async function indexName(chainId: number): Promise<string | null> {
+	const known = catalogName(chainId);
+	if (known) return known;
 	const doc = await readChainDoc(chainId).catch(() => null);
 	const name = doc?.kind === 'doc' ? doc.body.name : null;
 	return typeof name === 'string' && name.trim() !== '' ? name.trim() : null;

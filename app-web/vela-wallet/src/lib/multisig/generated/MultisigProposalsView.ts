@@ -10,10 +10,13 @@ import type { MultisigLinkedView } from "./MultisigLinkedView";
 import type { MultisigMissingChain } from "./MultisigMissingChain";
 import type { MultisigOutboxEntry } from "./MultisigOutboxEntry";
 import type { MultisigProposalItem } from "./MultisigProposalItem";
+import type { MultisigRuleChip } from "./MultisigRuleChip";
 import type { MultisigStanding } from "./MultisigStanding";
 import type { MultisigTimelineStep } from "./MultisigTimelineStep";
 import type { MultisigWaiting } from "./MultisigWaiting";
+import type { MultisigWaitingBanner } from "./MultisigWaitingBanner";
 import type { MultisigWaitingNote } from "./MultisigWaitingNote";
+import type { MultisigWaitingPart } from "./MultisigWaitingPart";
 
 export type MultisigProposalsView = { followed: string | null, chains: Array<MultisigChainState>, 
 /**
@@ -113,4 +116,36 @@ linked: MultisigLinkedView | null,
  * r7: per `<chainId>:<safeTxHash>` asked ([`Event::ReadSigners`]), how
  * its remaining approvals can come.
  */
-signers: { [key in string]: MultisigItemSigners }, };
+signers: { [key in string]: MultisigItemSigners }, 
+/**
+ * core-ms-2: per `<chainId>:<safeTxHash lowercase>`, the members here
+ * whose one press approves and executes it ([`Event::ApproveExecute`]):
+ * short of one approval, theirs reaches the threshold, and their last
+ * look (at these approvals) does not say they cannot pay (priced and
+ * payable, or not priced or checked in time: it looks again first). Any
+ * other member here approves only; an executor of a ready one executes.
+ */
+approve_execute: { [key in string]: Array<string> }, 
+/**
+ * core-ms-2: the header's rule chip for the multisig followed — the
+ * rule in force on each network it is used on (its members now where it
+ * is deployed, its original ones where not; the original alone before
+ * any is read): "Needs 2 of 3", or that it differs by network.
+ */
+rule_chip: MultisigRuleChip | null, 
+/**
+ * core-ms-2: per multisig here (lowercase address), the waiting line's
+ * parts in order, only the counts that are not zero ("1 needs your
+ * approval · 1 ready to execute") — the switcher's rows.
+ */
+waiting_parts: { [key in string]: Array<MultisigWaitingPart> }, 
+/**
+ * core-ms-2: the line at the top of the followed multisig's home, when
+ * something waits there — its parts and the transaction it opens.
+ */
+banner: MultisigWaitingBanner | null, 
+/**
+ * core-ms-2: the followed multisig is deployed on a network read (its
+ * first steps are behind it).
+ */
+set_up: boolean, };

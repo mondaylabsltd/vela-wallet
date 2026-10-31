@@ -110,11 +110,8 @@ pub fn call(name: &str, args: &Value) -> Result<String, CoreError> {
             let offline_ms = arg::<Option<f64>>(args, "offlineMs")?.unwrap_or(0.0);
             let relay_url = arg::<Option<String>>(args, "relay")?
                 .unwrap_or_else(|| relay::DEFAULT_RELAY.to_owned());
-            to_json(&json!({
-                "status": relay::on_state(&status, &state, offline_ms, &relay_url),
-                // On the relay: its refusals are forgotten.
-                "accepted": matches!(state.as_str(), "waiting" | "connected"),
-            }))
+            // `{status, accepted}`: on the relay, its refusals are forgotten.
+            to_json(&relay::on_state(&status, &state, offline_ms, &relay_url))
         }
         "worst" => to_json(&relay::worst(&arg::<Vec<RelayStatus>>(args, "statuses")?)),
         other => Err(err(format!("unknown relay rule: {other}"))),

@@ -607,3 +607,173 @@ fn a_previews_members_say_how_they_sign() {
     assert_eq!(signers.outside.len(), 1, "its own wallet may sign for it");
     assert_eq!(sut.view().followed, None, "nothing switched");
 }
+
+// -- core-ms-2: an invite is the machine's, from opening to adding --------------------------
+
+/// The hash of an invite naming `chain_ids` and Bo, `OUTSIDE`'s label.
+fn invite_hash(address: &str, chain_ids: &[u64]) -> String {
+    use vela_core::multisig_link::{add_link, InvitedMember, MemberKind};
+    let url = add_link(
+        "https://x",
+        "en",
+        address,
+        chain_ids,
+        &[InvitedMember {
+            address: Some(OUTSIDE.to_owned()),
+            name: Some("Bo".to_owned()),
+            kind: Some(MemberKind::Wallet),
+        }],
+    )
+    .unwrap();
+    url[url.find('#').unwrap()..].to_owned()
+}
+
+/// Adding an invite's multisig is the person's tap only: it is looked up on
+/// the invite's first network here, used on every network it names that
+/// this device has, and what it says of the members is kept (labels).
+#[test]
+fn an_invites_networks_and_members_land_with_the_add() {
+    let g = genesis(&[OUTSIDE], 1, "0x61");
+    let mut world = World::default();
+    world.record(&g.address, &g.genesis, false);
+    let mut sut = started(&mut world, vec![100, 8453, 10]);
+    run(
+        &mut sut,
+        &mut world,
+        open(&invite_hash(&g.address, &[42161, 8453, 100])),
+    );
+    let invite = sut.view().invite.clone().unwrap();
+    assert_eq!(invite.on_device, vec![8453, 100]);
+    assert_eq!(invite.missing, None);
+    assert!(!world.store.contains_key(PENDING_LINK_KEY), "nothing waits");
+    run(&mut sut, &mut world, Event::CloseLink);
+    assert!(sut.view().invite.is_some(), "its sheet is still open");
+    run(
+        &mut sut,
+        &mut world,
+        Event::Add {
+            address: g.address.clone(),
+            network: None,
+            accept_risks: false,
+        },
+    );
+    assert!(matches!(
+        sut.view().add.outcome,
+        Some(AddOutcome::Added { .. })
+    ));
+    let row = &world.stored_accounts()[0];
+    assert_eq!(row["chainIds"], json!([8453, 100]));
+    assert_eq!(row["members"][OUTSIDE.to_ascii_lowercase()]["name"], "Bo");
+    assert_eq!(
+        row["members"][OUTSIDE.to_ascii_lowercase()]["kind"],
+        "wallet"
+    );
+    assert!(sut.view().invite.is_none(), "done with");
+}
+
+/// Another address typed over the invite's: nothing of the invite lands.
+#[test]
+fn an_invite_edited_away_is_not_applied() {
+    let g = genesis(&[OUTSIDE], 1, "0x62");
+    let h = genesis(&[OUTSIDE], 1, "0x63");
+    let mut world = World::default();
+    world.record(&g.address, &g.genesis, false);
+    world.record(&h.address, &h.genesis, false);
+    world.deploy(100, &h.address, DeployedSafe::clean(&[OUTSIDE], 1));
+    let mut sut = started(&mut world, vec![100, 8453]);
+    run(
+        &mut sut,
+        &mut world,
+        open(&invite_hash(&g.address, &[8453, 100])),
+    );
+    run(
+        &mut sut,
+        &mut world,
+        Event::Add {
+            address: h.address.clone(),
+            network: None,
+            accept_risks: false,
+        },
+    );
+    let row = &world.stored_accounts()[0];
+    assert_eq!(row["chainIds"], json!([100]));
+    assert!(row.get("members").is_none());
+    assert!(
+        sut.view().invite.is_some(),
+        "the invite's sheet is the person's"
+    );
+}
+
+/// An invite naming only networks this device lacks waits for one — the
+/// machine's record, through a reload — and its add sheet opens again once
+/// one is added; closing its sheet lets it go.
+#[test]
+fn an_invite_waiting_for_its_network_survives_a_reload() {
+    let g = genesis(&[OUTSIDE], 1, "0x64");
+    let mut world = World::default();
+    world.record(&g.address, &g.genesis, false);
+    let mut sut = started(&mut world, vec![100]);
+    run(
+        &mut sut,
+        &mut world,
+        open(&invite_hash(&g.address, &[8453])),
+    );
+    assert!(matches!(sut.view().link, Some(LinkStand::Invite { .. })));
+    let invite = sut.view().invite.clone().unwrap();
+    assert_eq!(invite.missing, Some(8453));
+    assert_eq!(invite.missing_name.as_deref(), Some("Base"));
+    assert!(world.store.contains_key(PENDING_LINK_KEY));
+    // The page reloads (Add network): still waiting, said nowhere yet.
+    let mut sut = started(&mut world, vec![100]);
+    assert_eq!(sut.view().link, None);
+    assert_eq!(sut.view().invite.clone().unwrap().missing, Some(8453));
+    run(
+        &mut sut,
+        &mut world,
+        Event::Networks {
+            networks: vec![100, 8453],
+        },
+    );
+    assert!(matches!(sut.view().link, Some(LinkStand::Invite { .. })));
+    assert_eq!(sut.view().invite.clone().unwrap().on_device, vec![8453]);
+    assert!(!world.store.contains_key(PENDING_LINK_KEY), "let go");
+    run(
+        &mut sut,
+        &mut world,
+        Event::Add {
+            address: g.address.clone(),
+            network: None,
+            accept_risks: false,
+        },
+    );
+    assert_eq!(world.stored_accounts()[0]["chainIds"], json!([8453]));
+
+    // The network was added before the reload: the add sheet on start.
+    let h = genesis(&[OUTSIDE], 1, "0x65");
+    world.record(&h.address, &h.genesis, false);
+    let mut sut = started(&mut world, vec![100]);
+    run(&mut sut, &mut world, open(&invite_hash(&h.address, &[10])));
+    let sut = started(&mut world, vec![100, 10]);
+    assert!(matches!(sut.view().link, Some(LinkStand::Invite { .. })));
+    assert!(!world.store.contains_key(PENDING_LINK_KEY));
+
+    // Closed: let go, nothing opens.
+    let mut sut = started(&mut world, vec![100]);
+    run(
+        &mut sut,
+        &mut world,
+        open(&invite_hash(&h.address, &[42161])),
+    );
+    run(&mut sut, &mut world, Event::CloseLink);
+    run(&mut sut, &mut world, Event::DropLink);
+    assert!(!world.store.contains_key(PENDING_LINK_KEY));
+    assert!(sut.view().invite.is_none());
+    run(
+        &mut sut,
+        &mut world,
+        Event::Networks {
+            networks: vec![100, 42161],
+        },
+    );
+    assert_eq!(sut.view().link, None);
+}

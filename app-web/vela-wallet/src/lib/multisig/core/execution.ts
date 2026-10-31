@@ -106,13 +106,3 @@ export class ExecutionSpentError extends Error {
 		this.name = 'ExecutionSpentError';
 	}
 }
-
-/** Whether `error` stopped the execution before its passkey: nothing was signed or sent. */
-export function stoppedBeforeSigning(error: unknown): boolean {
-	return (
-		error instanceof ExecutorCannotPayError ||
-		error instanceof ExecutionWouldFailError ||
-		error instanceof ExecutionUnpricedError ||
-		error instanceof ExecutionUncheckedError
-	);
-}

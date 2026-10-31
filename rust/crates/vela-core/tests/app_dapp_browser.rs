@@ -2741,3 +2741,124 @@ fn loaded_lower_case_sites_are_normalised() {
         other => panic!("forwarded to signing: {other:?}"),
     }
 }
+
+/// core-ms-2: a multisig's answer reaches the page as the proposals machine
+/// formed it — a "proposed, waiting" error keeps its `data` (the proposal) —
+/// and a batch it answered is a multisig batch: its `wallet_getCallsStatus`
+/// is the proposals machine's, delivered as it is.
+#[test]
+fn a_multisigs_answer_and_its_batch_are_the_proposals_machines() {
+    use vela_core::app::dapp_browser::MULTISIG_CALLS_STATUS_METHOD;
+    use vela_core::app::multisig_dapp::{left_proposed, DappAnswer, DappError};
+    let hash = format!("0x{}", "Ab".repeat(32));
+    let mut sut = connected(DAPP);
+    hello(&mut sut, "t1", "d1", DAPP);
+    let ops = ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "1",
+        "eth_sendTransaction",
+        json!([{"to": A2, "value": "0x1"}]),
+    );
+    assert!(forwarded(&ops).is_some());
+    let ops = sut.dispatch(Event::MultisigAnswered {
+        tab: "t1".to_owned(),
+        id: "1".to_owned(),
+        answer: DappAnswer::err(left_proposed(&hash)),
+        now_ms: 0.0,
+    });
+    let answer = only_answer(&ops);
+    assert_eq!(error_code(&answer), -32000);
+    assert_eq!(answer["error"]["data"]["safeTxHash"], json!(hash));
+    assert_eq!(answer["error"]["data"]["status"], "proposed");
+
+    let ops = ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "2",
+        "wallet_sendCalls",
+        json!([{"version": "2.0.0", "calls": [{"to": A2}]}]),
+    );
+    assert!(forwarded(&ops).is_some());
+    let ops = sut.dispatch(Event::MultisigAnswered {
+        tab: "t1".to_owned(),
+        id: "2".to_owned(),
+        answer: DappAnswer::ok(json!({ "id": hash })),
+        now_ms: 0.0,
+    });
+    assert_eq!(only_answer(&ops)["result"], json!({ "id": hash }));
+
+    let ops = ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "3",
+        "wallet_getCallsStatus",
+        json!([hash]),
+    );
+    // The proposals machine's to answer: a read of its method, on its chain.
+    let asked = ops
+        .iter()
+        .find_map(|op| match op {
+            Op::Read {
+                id,
+                chain_id,
+                method,
+                params_json,
+                bundler: true,
+                ..
+            } if id == "3" => Some((*chain_id, method.clone(), params_json.clone())),
+            _ => None,
+        })
+        .expect("a read of the multisig batch's status");
+    assert_eq!(
+        asked,
+        (
+            100,
+            MULTISIG_CALLS_STATUS_METHOD.to_owned(),
+            json!([hash.to_ascii_lowercase()]).to_string()
+        )
+    );
+    // Its answer (`calls_status[id]`) is the body, delivered as it is.
+    let status = json!({ "version": "2.0.0", "id": hash, "chainId": "0x64", "status": 100 });
+    let ops = sut.resolve_matching(
+        |op| matches!(op, Op::Read { id, .. } if id == "3"),
+        Res::ReadAnswered {
+            body_json: Some(serde_json::to_string(&DappAnswer::ok(status.clone())).unwrap()),
+            failure: None,
+            now_ms: 0.0,
+        },
+    );
+    assert_eq!(only_answer(&ops)["result"], status);
+    // An error keeps its code and data.
+    ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "4",
+        "wallet_getCallsStatus",
+        json!([hash]),
+    );
+    let refused = DappAnswer::err(DappError {
+        code: 5730,
+        message: "Unknown bundle id".into(),
+        data: Some(json!({ "id": hash })),
+    });
+    let ops = sut.resolve_matching(
+        |op| matches!(op, Op::Read { id, .. } if id == "4"),
+        Res::ReadAnswered {
+            body_json: Some(serde_json::to_string(&refused).unwrap()),
+            failure: None,
+            now_ms: 0.0,
+        },
+    );
+    let answer = only_answer(&ops);
+    assert_eq!(error_code(&answer), 5730);
+    assert_eq!(answer["error"]["data"]["id"], json!(hash));
+}

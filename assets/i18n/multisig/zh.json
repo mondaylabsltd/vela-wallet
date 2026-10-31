@@ -523,6 +523,7 @@
     "originalMembers": "初始成员",
     "originalNote": "创建它时的成员。在它未部署的网络上，会以这些成员开始。",
     "currentOn": "{{network}} 上的当前成员",
+    "unreadableOn": "无法读取它在 {{network}} 上的成员。",
     "sameAsOriginal": "与初始成员相同。",
     "added": "已添加",
     "removed": "已移除",

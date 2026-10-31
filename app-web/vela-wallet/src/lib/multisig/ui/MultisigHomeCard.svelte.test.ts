@@ -25,10 +25,22 @@ import {
 	type AccountsMachineForTests
 } from '../shell/accounts.testing';
 
-vi.mock('../core/presence.svelte', () => ({
-	presence: { follow: () => () => {}, of: () => null },
-	waitingWords: () => ''
-}));
+// core-ms-2: whether it is set up is the proposals machine's word (`set_up`);
+// here it is what the test's stubbed chains say, read as the machine would.
+vi.mock('../core/presence.svelte', async () => {
+	const { proposals } = await import('../core/proposals.svelte');
+	return {
+		presence: {
+			follow: () => () => {},
+			of: () => null,
+			banner: null,
+			get setUp() {
+				return proposals.chains.some((c) => c.members.deployed);
+			}
+		},
+		waitingWords: () => ''
+	};
+});
 
 const { default: MultisigHomeCard } = await import('./MultisigHomeCard.svelte');
 const { machines } = await import('../shell/machines.svelte');

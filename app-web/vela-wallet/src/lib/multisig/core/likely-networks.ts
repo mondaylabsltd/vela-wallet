@@ -5,9 +5,11 @@
  * (`multisig_rules::networks`, asked through `multisigLinkCall`): what a link
  * named, the network the wallet is on now (r5reg-19), the networks the
  * multisigs here were last used on, where this device last transacted, where
- * the account shown holds funds, then the wallet's own order. Here only the
- * hints are gathered and the core asked. Only an order to offer them in: the
- * pick stays the person's.
+ * the account shown holds funds, then the wallet's own order. The multisigs'
+ * networks and this device's recent ones are the accounts machine's view
+ * (`used_networks`, `recent_networks`); here only the wallet's own hints are
+ * gathered and the core asked. Only an order to offer them in: the pick
+ * stays the person's.
  */
 import * as wasm from '../../../../../../rust/pkg-web/vela_core.js';
 import { multisig } from './store.svelte';
@@ -32,13 +34,6 @@ function rule<T>(method: string, args: Record<string, unknown>): T {
 /** Whether the core is here to ask (the accounts machine has read the store). */
 const ready = () => multisig.view !== null;
 
-/** The networks the multisigs here were first used on, the newest first. */
-export function lastUsedChains(): number[] {
-	if (!ready()) return [];
-	const accounts = multisig.accounts.map((a) => ({ chainIds: a.chainIds, addedMs: a.addedMs }));
-	return rule<number[]>('lastUsed', { accounts });
-}
-
 /** `networks`, the likely ones first, the rest in the wallet's order (the core's). */
 export function likelyNetworks<N extends { chainId: number }>(networks: N[], hints: Hints): N[] {
 	if (!ready()) return networks;
@@ -55,12 +50,17 @@ export function firstNetworkDefault(networks: { chainId: number }[], hints: Hint
 	return rule<number | null>('firstDefault', { networks: networks.map((n) => n.chainId), hints });
 }
 
-/** r5reg-19: the networks this device's transactions were on, the newest first. */
-export function recentChains(records: { chainId: number; timestamp: number }[]): number[] {
-	if (!ready()) return [];
-	return rule<number[]>('recent', {
-		records: records.map((r) => ({ chainId: r.chainId, timestamp: r.timestamp }))
-	});
+/**
+ * core-ms-2: the core's catalog's name for a network this device may not
+ * have (`networks.name`), or `null` when the catalog does not know it.
+ */
+export function catalogName(chainId: number): string | null {
+	try {
+		return rule<string | null>('name', { chainId });
+	} catch {
+		// The core is not loaded here (yet): the catalog says nothing.
+		return null;
+	}
 }
 
 /** The networks the account shown holds anything on, the most valuable first. */

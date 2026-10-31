@@ -47,6 +47,7 @@ use super::multisig_shell::{
 };
 use super::multisig_signers::{self as signers, KindChoice, MemberKind, SignerFacts, SignerRead};
 use crate::multisig::{self, ExportedSafe, Genesis};
+use crate::multisig_link::AddLink;
 
 /// The default service's home chain (Gnosis): where a record goes when the
 /// service in use names none.
@@ -69,6 +70,9 @@ pub const CREATE_DRAFT_KEY: &str = "vela.multisigCreateDraft";
 /// r4D-8: the multisigs whose invite was handed on from this device (its
 /// link copied or shared, its code shown) — lowercase addresses, a JSON array.
 pub const INVITE_SHARED_KEY: &str = "vela.multisigInviteShared";
+/// core-ms-2: this device's transaction history (the wallet's, read only
+/// here): where it was used is the `recent` hint ([`MultisigAccountsView::recent_networks`]).
+pub const TRANSACTIONS_KEY: &str = "vela.transactionHistory";
 const GET_THRESHOLD_CALL: &str = "0xe75235b8";
 const IS_RECORDED: &str = "0xba340d1c";
 
@@ -157,6 +161,13 @@ pub enum Event {
         #[cfg_attr(feature = "bindings", ts(type = "number"))]
         threshold: u64,
         name: String,
+    },
+    /// core-ms-2: the threshold stepper's − / + on the create sheet: one
+    /// fewer or one more, never below 1 nor above the draft's members. The
+    /// pick holds for these members; once they change, the sheet starts
+    /// again from the sensible start ([`CreateView::threshold`]).
+    StepThreshold {
+        up: bool,
     },
     /// Which of these networks hold the Safe contracts a new multisig needs.
     CheckNetworks {
@@ -502,6 +513,100 @@ pub struct CreateView {
     /// r7-9: the draft kept from before (`None`: none) — the sheet opens on it.
     #[serde(default)]
     pub kept: Option<CreateDraft>,
+    /// core-ms-2: how many must approve, for the draft's members (`None`
+    /// before a draft names any): the person's pick while the members are
+    /// the ones it was picked for, else the sensible start
+    /// ([`start_threshold`]). Send its `value` as the draft's threshold.
+    #[serde(default)]
+    pub threshold: Option<ThresholdView>,
+}
+
+/// core-ms-2: the create sheet's threshold step, decided here.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "MultisigThresholdView"))]
+pub struct ThresholdView {
+    /// How many must approve.
+    #[cfg_attr(feature = "bindings", ts(type = "number"))]
+    pub value: u64,
+    /// Of how many members.
+    #[cfg_attr(feature = "bindings", ts(type = "number"))]
+    pub members: u64,
+    /// What the threshold means, in which words.
+    pub note: ThresholdNote,
+    /// All of several, or one of several: said as a risk (one lost passkey
+    /// locks it, or one member alone moves its funds).
+    pub risky: bool,
+    pub can_lower: bool,
+    pub can_raise: bool,
+}
+
+/// What a threshold means for its members (the sheet's note).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "MultisigThresholdNote"))]
+pub enum ThresholdNote {
+    /// A multisig of one.
+    Solo,
+    /// Every member must approve.
+    All,
+    /// Any one member moves its funds.
+    One,
+    /// This many can lose access and the funds still move.
+    Spare {
+        #[cfg_attr(feature = "bindings", ts(type = "number"))]
+        count: u64,
+    },
+}
+
+/// A sensible first threshold for `members`: all of two, else all but one —
+/// one lost passkey is survivable.
+pub fn start_threshold(members: usize) -> u64 {
+    let n = (members as u64).max(1);
+    if n <= 2 {
+        n
+    } else {
+        n - 1
+    }
+}
+
+/// The threshold step for `value` of `members` (`value` clamped to them).
+pub fn threshold_view(value: u64, members: usize) -> ThresholdView {
+    let n = (members as u64).max(1);
+    let value = value.clamp(1, n);
+    let note = if members <= 1 {
+        ThresholdNote::Solo
+    } else if value >= n {
+        ThresholdNote::All
+    } else if value <= 1 {
+        ThresholdNote::One
+    } else {
+        ThresholdNote::Spare { count: n - value }
+    };
+    ThresholdView {
+        value,
+        members: n,
+        note,
+        risky: members > 1 && (value == n || value == 1),
+        can_lower: value > 1,
+        can_raise: value < n,
+    }
+}
+
+/// core-ms-2: an invite opened here, as its add sheet draws it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "MultisigInviteView"))]
+pub struct InviteView {
+    pub link: AddLink,
+    /// The invite's networks this device has, its first network first:
+    /// adding it uses the first, and the multisig is used on every one.
+    #[cfg_attr(feature = "bindings", ts(type = "number[]"))]
+    pub on_device: Vec<u64>,
+    /// Its first network, when this device has none of them: said, with
+    /// Add network — the invite waits for it, through a reload, a day.
+    #[cfg_attr(feature = "bindings", ts(type = "number | null"))]
+    pub missing: Option<u64>,
+    /// The catalog's name for `missing` (`None`: the catalog does not know it).
+    pub missing_name: Option<String>,
 }
 
 /// The add sheet (and a link's read without keeping).
@@ -621,6 +726,24 @@ pub struct MultisigAccountsView {
     /// address — the first that names it, the first that says its kind
     /// (`keptMember`). Labels only, never authority.
     pub known_members: BTreeMap<String, MemberInfo>,
+    /// core-ms-2: the invite the add sheet shows (opened from a link, or
+    /// waiting for its network since a reload): adding its multisig uses its
+    /// networks and keeps what it says of the members — the shell sends
+    /// only the person's tap ([`Event::Add`]). Closing its sheet: `drop_link`.
+    #[serde(default)]
+    pub invite: Option<InviteView>,
+    /// core-ms-2 (r5reg-19): the networks this device's own transactions were
+    /// on, newest first (`vela.transactionHistory`, read on start, on a
+    /// reload and when a create sheet opens) — the `recent` hint of
+    /// `networks.likely` / `networks.firstDefault`.
+    #[serde(default)]
+    #[cfg_attr(feature = "bindings", ts(type = "number[]"))]
+    pub recent_networks: Vec<u64>,
+    /// core-ms-2: the networks the multisigs here were first used on, newest
+    /// first — the `used` hint (`networks.lastUsed` of this list).
+    #[serde(default)]
+    #[cfg_attr(feature = "bindings", ts(type = "number[]"))]
+    pub used_networks: Vec<u64>,
 }
 
 // ---------------------------------------------------------------------------
@@ -654,6 +777,10 @@ pub struct State {
     invite_shared: BTreeSet<String>,
     salt: Option<String>,
     draft: Option<(Vec<String>, u64, String)>,
+    /// core-ms-2: the threshold the person picked, and for how many members.
+    threshold_pick: Option<(u64, usize)>,
+    /// core-ms-2: where this device's transactions were, newest first.
+    recent: Vec<u64>,
     found: Option<(MultisigAccount, Vec<Value>)>,
     exported: Vec<ExportedSafe>,
     // What the screens draw.
@@ -673,6 +800,19 @@ pub struct State {
 }
 
 impl State {
+    /// The create sheet's threshold step for the draft's members.
+    fn threshold(&self) -> Option<ThresholdView> {
+        let members = self.draft.as_ref()?.0.len();
+        if members == 0 {
+            return None;
+        }
+        let value = match self.threshold_pick {
+            Some((value, picked_for)) if picked_for == members => value,
+            _ => start_threshold(members),
+        };
+        Some(threshold_view(value, members))
+    }
+
     /// Where an address is looked up: the space in front, else every network here.
     fn lookup_chains(&self) -> Vec<u64> {
         self.space.clone().unwrap_or_else(|| self.networks.clone())
@@ -1097,7 +1237,11 @@ impl App for MultisigAccounts {
                 })
             }
             Event::DiscardDraft => {
-                lock(&model.state).kept_draft = None;
+                {
+                    let mut s = lock(&model.state);
+                    s.kept_draft = None;
+                    s.threshold_pick = None;
+                }
                 flow(model, |io, _| async move { store_draft(&io, None).await })
             }
             Event::Start {
@@ -1118,15 +1262,19 @@ impl App for MultisigAccounts {
                 render()
             }
             Event::Networks { networks } => {
-                let pending = {
+                let (pending, invite) = {
                     let mut s = lock(&model.state);
                     s.networks = networks;
-                    link::pending_ready(&mut s)
+                    (link::pending_ready(&mut s), link::invite_ready(&mut s))
                 };
-                flow(model, |io, st| async move {
+                flow(model, move |io, st| async move {
                     // ms-22: a link waiting for its network opens now.
                     if let Some(pending) = pending {
                         link::open_proposal(&io, &st, pending).await;
+                    }
+                    // core-ms-2: so does an invite — its add sheet again.
+                    if invite {
+                        link::forget(&io, &st).await;
                     }
                     recheck_stored(&io, &st).await;
                 })
@@ -1214,13 +1362,42 @@ impl App for MultisigAccounts {
                     s.salt = None;
                     s.draft = None;
                     s.create = CreateView::default();
+                    // The kept draft's threshold is the person's pick again.
+                    s.threshold_pick = s
+                        .kept_draft
+                        .as_ref()
+                        .map(|d| (d.threshold.max(1), d.owners.len()));
                 }
                 flow(model, |io, st| async move {
                     let salt = io.random_hex(32).await.map(|h| hex_prefixed(&h));
-                    let mut s = lock(&st);
-                    s.salt = salt;
-                    redraft(&mut s);
+                    {
+                        let mut s = lock(&st);
+                        s.salt = salt;
+                        redraft(&mut s);
+                    }
+                    // r5reg-19: where this device was used, as of now.
+                    read_recent(&io, &st).await;
                 })
+            }
+            Event::StepThreshold { up } => {
+                let mut s = lock(&model.state);
+                let (Some(now), Some(members)) =
+                    (s.threshold(), s.draft.as_ref().map(|d| d.0.len()))
+                else {
+                    return render();
+                };
+                let next = if up {
+                    now.value.saturating_add(1)
+                } else {
+                    now.value.saturating_sub(1)
+                }
+                .clamp(1, now.members);
+                s.threshold_pick = Some((next, members));
+                if let Some(d) = s.draft.as_mut() {
+                    d.1 = next;
+                }
+                redraft(&mut s);
+                render()
             }
             Event::Draft {
                 owners,
@@ -1274,12 +1451,39 @@ impl App for MultisigAccounts {
                     s.add.address = Some(address.clone());
                     s.add.outcome = None;
                 }
+                // core-ms-2: the invite it was opened from (its address still
+                // the invite's): its first network here is where it is looked
+                // up, unless the person picked one.
+                let invite = link::invite_for(&lock(&model.state), &address);
+                let network = network.or_else(|| invite.as_ref()?.on_device.first().copied());
                 flow(model, move |io, st| async move {
                     let outcome = add_multisig(&io, &st, &address, network, accept_risks).await;
                     let added = match &outcome {
                         AddOutcome::Added { address } => lock(&st).find(address).cloned(),
                         _ => None,
                     };
+                    // core-ms-2: every network the invite names that this
+                    // device has is one it is used on (a link naming one is
+                    // evidence), and what it says of the members is kept,
+                    // as labels on its members only.
+                    if let (Some(added), Some(invite)) = (&added, &invite) {
+                        let (used, waited) = {
+                            let mut s = lock(&st);
+                            let mut used = false;
+                            for id in &invite.on_device {
+                                used |= s.use_chain(&added.address, *id);
+                            }
+                            (used, link::invite_added(&mut s))
+                        };
+                        if used {
+                            save(&io, &st).await;
+                        }
+                        if waited {
+                            link::forget(&io, &st).await;
+                        }
+                        keep_invited(&io, &st, &added.address, &invite.chain_ids, &invite.members)
+                            .await;
+                    }
                     {
                         let mut s = lock(&st);
                         s.add.phase = Phase::Done;
@@ -1599,8 +1803,20 @@ impl App for MultisigAccounts {
                     })
                     .unwrap_or_default(),
                 kept: s.kept_draft.clone(),
+                threshold: s.threshold(),
                 ..s.create.clone()
             },
+            invite: link::invite_view(&s),
+            recent_networks: s.recent.clone(),
+            used_networks: crate::multisig_rules::networks::last_used(
+                &s.accounts
+                    .iter()
+                    .map(|a| crate::multisig_rules::networks::UsedAccount {
+                        chain_ids: a.chain_ids.clone(),
+                        added_ms: a.added_ms,
+                    })
+                    .collect::<Vec<_>>(),
+            ),
             add: s.add.clone(),
             import: s.import.clone(),
             backup: s.backup.clone(),
@@ -1663,11 +1879,14 @@ async fn start(io: &Io<Event>, st: &Shared<State>) {
             keys::DEPLOYED,
             CREATE_DRAFT_KEY,
             INVITE_SHARED_KEY,
+            TRANSACTIONS_KEY,
         ])
         .await;
     let get = |k: &str| loaded.get(k).cloned().flatten();
     {
         let mut s = lock(st);
+        s.recent =
+            crate::multisig_rules::networks::recent_of_history(get(TRANSACTIONS_KEY).as_deref());
         s.accounts = read_accounts(get(keys::ACCOUNTS).as_deref());
         s.active = get(keys::ACTIVE).filter(|a| !a.is_empty());
         s.proofs = get(keys::PENDING_PROOFS)
@@ -1686,6 +1905,14 @@ async fn start(io: &Io<Event>, st: &Shared<State>) {
             .into_iter()
             .map(|a| a.to_ascii_lowercase())
             .collect();
+        // core-ms-2: its threshold is the person's pick again (a sheet
+        // opened before the store answered included).
+        if s.threshold_pick.is_none() {
+            s.threshold_pick = s
+                .kept_draft
+                .as_ref()
+                .map(|d| (d.threshold.max(1), d.owners.len()));
+        }
         // The kinds the person picked in it are their word again.
         if let Some(d) = s.kept_draft.clone() {
             for (address, info) in &d.members {
@@ -1699,6 +1926,13 @@ async fn start(io: &Io<Event>, st: &Shared<State>) {
     io.emit(Event::Changed);
     // ms-22: a link that waited for its network before the reload.
     link::restore(io, st).await;
+}
+
+/// r5reg-19: where this device's transactions were, read again.
+async fn read_recent(io: &Io<Event>, st: &Shared<State>) {
+    let loaded = io.load(&[TRANSACTIONS_KEY]).await;
+    let raw = loaded.get(TRANSACTIONS_KEY).cloned().flatten();
+    lock(st).recent = crate::multisig_rules::networks::recent_of_history(raw.as_deref());
 }
 
 /// r7-9: the create sheet's draft in the store (`None`: none).

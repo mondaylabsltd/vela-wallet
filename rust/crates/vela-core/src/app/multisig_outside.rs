@@ -996,15 +996,28 @@ pub mod relay {
             .map_or(Before::Stop, |ms| Before::Wait { ms: *ms })
     }
 
+    /// Where a connection stands once its state moved ([`on_state`]).
+    #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+    pub struct OnState {
+        /// The status to say.
+        pub status: RelayStatus,
+        /// core-ms-2: it is on the relay (`waiting`/`connected`): its
+        /// refusals are forgotten ([`Refusals::accepted`]) — a connection
+        /// with a token tells its count so.
+        pub accepted: bool,
+    }
+
     /// The status once the connection is `state` (`waiting`/`connected`:
-    /// up), offline for `offline_ms` with a token: unreachable after
-    /// [`UNREACHABLE_AFTER_MS`].
-    pub fn on_state(
-        status: &RelayStatus,
-        state: &str,
-        offline_ms: f64,
-        relay: &str,
-    ) -> RelayStatus {
+    /// up, and accepted), offline for `offline_ms` with a token: unreachable
+    /// after [`UNREACHABLE_AFTER_MS`].
+    pub fn on_state(status: &RelayStatus, state: &str, offline_ms: f64, relay: &str) -> OnState {
+        OnState {
+            status: status_on(status, state, offline_ms, relay),
+            accepted: matches!(state, "waiting" | "connected"),
+        }
+    }
+
+    fn status_on(status: &RelayStatus, state: &str, offline_ms: f64, relay: &str) -> RelayStatus {
         match state {
             "waiting" | "connected" => RelayStatus::Up,
             "closed" => status.clone(),
@@ -2962,8 +2975,10 @@ pub mod page {
                             l.since = clock;
                         }
                         let was = s.relays.get(&id).cloned().unwrap_or_default();
-                        s.relays
-                            .insert(id, relay::on_state(&was, &state, 0.0, relay::DEFAULT_RELAY));
+                        s.relays.insert(
+                            id,
+                            relay::on_state(&was, &state, 0.0, relay::DEFAULT_RELAY).status,
+                        );
                     }
                     render()
                 }

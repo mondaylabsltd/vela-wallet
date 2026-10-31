@@ -40,8 +40,7 @@
 
 	/** "1 needs your approval · 1 ready to execute", or nothing (none, or not read yet). */
 	function waitingLine(address: string): string {
-		const w = presence.of(address);
-		return w ? waitingWords(w, m) : '';
+		return waitingWords(presence.parts(address), m);
 	}
 
 	// The rows are on screen: the multisigs not shown are read now, and again a while later.

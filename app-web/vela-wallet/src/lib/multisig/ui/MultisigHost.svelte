@@ -19,7 +19,8 @@
 	import type { SigningMessages } from '$lib/signing/messages';
 	import type { MultisigMessages } from '../messages';
 	import { chainName, spaceNetworksSync } from '$lib/services/networks';
-	import { isMultisigLink, type AddLink } from '../core/link';
+	import { isMultisigLink } from '../core/link';
+	import { catalogName } from '../core/likely-networks';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import Button from '$lib/ui/Button.svelte';
@@ -294,32 +295,16 @@
 	}
 
 	/**
-	 * r4D-5: what an invite says of the members	/**
-	 * r4D-5: what an invite says of the members, kept with the multisig on
-	 * this device — only for addresses that are its members (founding, or on
-	 * the invite's networks now), never over this device's own names. Labels
-	 * only.
+	 * The name of a network this device lacks, for its sheet: the core's
+	 * catalog's (`networks.name`), else the chain index's.
 	 */
-	function keepInvited(address: string, link: AddLink | undefined) {
-		if (!link?.members?.length) return;
-		multisig.send({
-			type: 'keep_invited',
-			address,
-			chain_ids: link.chainIds,
-			members: link.members.map((m) => ({
-				address: m.address ?? null,
-				name: m.name ?? null,
-				kind: m.kind ?? null
-			}))
-		});
-	}
-
-	/** The name the chain index gives a network this device lacks, for its sheet. */
 	let missingName = $state<string | null>(null);
 	$effect(() => {
 		const open = multisigUi.sheet;
 		missingName = null;
 		if (open?.kind !== 'missing') return;
+		missingName = catalogName(open.chainId);
+		if (missingName) return;
 		let live = true;
 		void indexName(open.chainId).then((name) => {
 			if (live) missingName = name;
@@ -396,12 +381,16 @@
 			onclose={() => {
 				addPrefill = '';
 				addFailure = null;
+				// An invite's sheet closed: the invite (waiting for its network,
+				// or not) is let go — the machine's record.
+				if (invite) multisig.send({ type: 'drop_link' });
 				multisigUi.close();
 			}}
-			onadded={(address) => {
+			onadded={() => {
 				addPrefill = '';
 				addFailure = null;
-				keepInvited(address, invite);
+				// The invite's networks and members' labels landed with the add
+				// (the accounts machine's).
 				// ms-22: added from a link's transaction: the machine opens that
 				// transaction now (`openedProposal`), over this sheet.
 				if (multisigUi.sheet?.kind === 'add') multisigUi.close();
