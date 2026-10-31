@@ -90,10 +90,12 @@ pub fn payload(answer: &DappAnswer) -> SignResponsePayload {
 }
 
 /// One request handed to the machine.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 struct Holding {
     tab: String,
     id: String,
+    /// What the machine was asked (asked again on the person's Retry).
+    ask: Event,
     /// Its proposal's sheet was opened.
     opened: bool,
 }
@@ -133,7 +135,7 @@ pub struct CallsRead {
 #[derive(Clone, Debug)]
 pub enum CallsNext {
     /// Ask the machine (`CallsStatus`).
-    Ask(Event),
+    Ask(Box<Event>),
     /// Answer the read now, from the machine's last word on the batch.
     Answer { read: u64, body_json: String },
 }
@@ -155,18 +157,33 @@ pub struct Holds {
 
 impl Holds {
     /// Hand `asked` over: the machine's id for it.
-    pub fn hold(&mut self, asked: &Forwarded) -> String {
+    /// Hand `asked`, granted `account`, over: the machine's event for it
+    /// ([`request_event`]), under an id of its own.
+    pub fn hold(
+        &mut self,
+        asked: &Forwarded,
+        account: &MultisigAccount,
+        limit_ms: Option<f64>,
+    ) -> Event {
         self.next += 1;
         let rid = format!("dapp-{}", self.next);
+        let ask = request_event(&rid, account, asked, limit_ms);
         self.held.insert(
-            rid.clone(),
+            rid,
             Holding {
                 tab: asked.tab.clone(),
                 id: asked.id.clone(),
+                ask: ask.clone(),
                 opened: false,
             },
         );
-        rid
+        ask
+    }
+
+    /// The person's Retry on a request whose reading failed: asked again.
+    #[must_use]
+    pub fn again(&self, rid: &str) -> Option<Event> {
+        self.held.get(rid).map(|h| h.ask.clone())
     }
 
     /// Nothing is held.
@@ -281,13 +298,13 @@ impl Holds {
     /// A batch read the browser asked: from the machine's last word on it
     /// when this is the read that follows one, else asked of the machine.
     pub fn calls(&mut self, read: CallsRead) -> CallsNext {
-        if read.method == dapp_rpc::USER_OP_STATUS_METHOD {
-            if let Some(last) = self.last.remove(&read.batch) {
-                return CallsNext::Answer {
-                    read: read.read,
-                    body_json: read_body(&read.method, &last),
-                };
-            }
+        if read.method == dapp_rpc::USER_OP_STATUS_METHOD
+            && let Some(last) = self.last.remove(&read.batch)
+        {
+            return CallsNext::Answer {
+                read: read.read,
+                body_json: read_body(&read.method, &last),
+            };
         }
         self.next += 1;
         let ask = format!("calls-{}", self.next);
@@ -297,7 +314,7 @@ impl Holds {
             calls_id: read.batch.clone(),
         };
         self.asks.insert(ask, read);
-        CallsNext::Ask(event)
+        CallsNext::Ask(Box::new(event))
     }
 
     /// The batch reads the machine answered: `(read, body)` each, once.
@@ -320,16 +337,6 @@ impl Holds {
             out.push((read.read, read_body(&read.method, answer)));
         }
         out
-    }
-
-    /// Every batch read still out (the machine went away): answered as
-    /// nothing known yet, never left hanging.
-    pub fn drop_calls(&mut self) -> Vec<(u64, String)> {
-        let unknown = DappAnswer::ok(Value::Null);
-        std::mem::take(&mut self.asks)
-            .into_values()
-            .map(|read| (read.read, read_body(&read.method, &unknown)))
-            .collect()
     }
 }
 
@@ -448,7 +455,7 @@ mod tests {
 
     #[test]
     fn a_grant_to_a_multisig_here_is_the_machines() {
-        let rows = vec![row("0xabc0000000000000000000000000000000000001")];
+        let rows = [row("0xabc0000000000000000000000000000000000001")];
         assert!(multisig_of("0xAbC0000000000000000000000000000000000001", &rows).is_some());
         assert!(multisig_of("0x0000000000000000000000000000000000000002", &rows).is_none());
         assert!(multisig_of("0xabc", &[]).is_none());
@@ -456,7 +463,7 @@ mod tests {
 
     #[test]
     fn the_request_event_carries_the_sites_chain_and_params() {
-        let rows = vec![row("0xabc0000000000000000000000000000000000001")];
+        let rows = [row("0xabc0000000000000000000000000000000000001")];
         let event = request_event(
             "dapp-1",
             &rows[0].account,
@@ -532,6 +539,18 @@ mod tests {
         assert_eq!(code, 4200);
     }
 
+    fn hold(holds: &mut Holds, method: &str) -> String {
+        let account = row("0xabc0000000000000000000000000000000000001").account;
+        let Event::DappRequest { id, .. } = holds.hold(&asked(method), &account, None) else {
+            panic!("not a dapp request");
+        };
+        assert!(
+            matches!(holds.again(&id), Some(Event::DappRequest { id: again, .. }) if again == id),
+            "asked again as it was"
+        );
+        id
+    }
+
     fn held(rid: &str, stage: HeldStage) -> HeldRequest {
         HeldRequest {
             id: rid.into(),
@@ -553,7 +572,7 @@ mod tests {
     #[test]
     fn a_held_request_opens_its_sheet_once_and_is_answered_once() {
         let mut holds = Holds::default();
-        let rid = holds.hold(&asked("eth_sendTransaction"));
+        let rid = hold(&mut holds, "eth_sendTransaction");
         assert_eq!(holds.find("t1", "7"), Some(rid.clone()));
         let mut view = ProposalsView::default();
         view.dapp
@@ -605,7 +624,7 @@ mod tests {
     #[test]
     fn a_batch_answered_is_followed_and_an_untold_error_takes_its_sheet() {
         let mut holds = Holds::default();
-        let rid = holds.hold(&asked("wallet_sendCalls"));
+        let rid = hold(&mut holds, "wallet_sendCalls");
         let mut view = ProposalsView::default();
         let mut h = held(&rid, HeldStage::Waiting);
         h.method = "wallet_sendCalls".into();
@@ -620,7 +639,7 @@ mod tests {
         };
         assert_eq!(batch, &Some((HASH.to_owned(), 100)));
 
-        let rid = holds.hold(&asked("eth_sendTransaction"));
+        let rid = hold(&mut holds, "eth_sendTransaction");
         let mut h = held(&rid, HeldStage::Waiting);
         h.safe_tx_hash = Some(HASH.into());
         h.settle(DappAnswer::err(DappError {
@@ -706,9 +725,10 @@ mod tests {
             batch: HASH.into(),
             chain_id: 100,
         };
-        let CallsNext::Ask(Event::CallsStatus { id, calls_id, .. }) =
-            holds.calls(read(1, "eth_getUserOperationReceipt"))
-        else {
+        let CallsNext::Ask(ask) = holds.calls(read(1, "eth_getUserOperationReceipt")) else {
+            panic!()
+        };
+        let Event::CallsStatus { id, calls_id, .. } = *ask else {
             panic!()
         };
         assert_eq!(calls_id, HASH);

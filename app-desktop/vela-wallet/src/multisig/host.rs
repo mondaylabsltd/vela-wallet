@@ -632,6 +632,13 @@ impl MultisigHost {
         answer
     }
 
+    /// The send flow is proposing (from its draft to its end): a site's
+    /// request to a multisig waits for it (AUDIT M5).
+    #[must_use]
+    pub fn send_proposing(&self) -> bool {
+        self.send_propose.is_some()
+    }
+
     /// The send flow's proposal is on its review: the screen draws the draft.
     #[must_use]
     pub fn send_reviewing(&self) -> bool {

@@ -154,11 +154,7 @@ impl BrowserDriver {
         else {
             return None;
         };
-        if !self
-            .calls_requests
-            .iter()
-            .any(|(t, i)| t == tab && i == id)
-        {
+        if !self.calls_requests.iter().any(|(t, i)| t == tab && i == id) {
             return None;
         }
         crate::multisig::dapp::batch_read(method, params_json, *bundler, &self.multisig_batches)
@@ -644,7 +640,12 @@ impl BrowserHost {
 
     /// AUDIT M5: a batch read answered by the proposals machine
     /// ([`crate::multisig::dapp::read_body`]).
-    pub fn multisig_calls_answered(&mut self, read: u64, body_json: String, cx: &mut Context<Self>) {
+    pub fn multisig_calls_answered(
+        &mut self,
+        read: u64,
+        body_json: String,
+        cx: &mut Context<Self>,
+    ) {
         self.resolve(
             read,
             DbrShellResult::ReadAnswered {
@@ -685,6 +686,7 @@ pub type ToldWallet = (Vec<String>, String);
 /// back exactly on the next switch to an account of theirs. Told `false` for
 /// a test wallet, every connection the person had followed it and was removed
 /// with it: the Arc Orbs connection lost on the 2026-10-11 phone walk.
+#[cfg(test)]
 #[must_use]
 pub fn wallet_news(
     session: &vela_core::app::session::SessionView,
@@ -3882,7 +3884,10 @@ mod tests {
             };
             assert_eq!(
                 told,
-                (vec![A1.to_owned(), MULTISIG.to_owned()], MULTISIG.to_owned())
+                (
+                    vec![A1.to_owned(), MULTISIG.to_owned()],
+                    MULTISIG.to_owned()
+                )
             );
             assert!(matches!(
                 events.as_slice(),
@@ -3995,12 +4000,8 @@ mod tests {
                 "status": "0x1",
                 "logs": [],
             });
-            let status = vela_core::app::dapp_rpc::multisig_calls_status(
-                &batch,
-                100,
-                Some(&receipt),
-                false,
-            );
+            let status =
+                vela_core::app::dapp_rpc::multisig_calls_status(&batch, 100, Some(&receipt), false);
             let body = crate::multisig::dapp::read_body(
                 &first.method,
                 &vela_core::app::multisig_dapp::DappAnswer::ok(status.clone()),

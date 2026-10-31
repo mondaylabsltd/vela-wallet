@@ -31,6 +31,10 @@ use crate::multisig::host::{self as ms_host, MultisigHost};
 use crate::multisig::machines::Screen;
 use crate::multisig::words;
 
+/// A site's request to a multisig (AUDIT M5).
+#[path = "multisig_dapp.rs"]
+mod dapp;
+
 /// The multisig surfaces' state on this page — which sheet is open, and
 /// what the person picked on it. What a machine holds is never copied here.
 #[derive(Default)]
@@ -64,6 +68,8 @@ pub(crate) struct MultisigUi {
     pub add: Option<String>,
     /// The invite sheet for this multisig is up.
     pub invite: Option<String>,
+    /// The sites' requests the proposals machine holds (AUDIT M5).
+    pub dapp: crate::multisig::dapp::Holds,
 }
 
 /// The one review, as drawn (`multisig_review::MultisigReview`'s JSON):
@@ -153,6 +159,7 @@ impl WalletPage {
                     Screen::Activated(_) | Screen::ActivityRows(_) => {}
                 }
             }
+            this.ms_dapp_follow(cx);
             cx.notify();
         }));
     }
@@ -236,9 +243,10 @@ impl WalletPage {
 
     /// The sheet went: the slower pace again, a link's transaction let go.
     pub(crate) fn close_multisig_sheet(&mut self, cx: &mut Context<Self>) {
-        if self.multisig.sheet.take().is_none() {
+        let Some((chain_id, hash)) = self.multisig.sheet.take() else {
             return;
-        }
+        };
+        self.ms_dapp_sheet_closed(chain_id, &hash, cx);
         if self.panel == PanelId::Multisig {
             self.panel = PanelId::None;
         }
@@ -266,6 +274,9 @@ impl WalletPage {
         }
         if host.read(cx).send_reviewing() {
             host.update(cx, |host, cx| host.withdraw_draft(cx));
+            return true;
+        }
+        if self.ms_dapp_escape(cx) {
             return true;
         }
         if self.multisig.create {
@@ -897,6 +908,9 @@ impl WalletPage {
                 })),
         );
 
+        if let Some(note) = self.ms_dapp_sheet_note(theme, &item, cx) {
+            body = body.child(note);
+        }
         if linked.as_ref().is_some_and(|l| l.preview) {
             body = body.child(ms_note(theme, &words::t(&loc, "proposal.previewNote"), Tone::Neutral));
         }
@@ -1825,10 +1839,13 @@ impl WalletPage {
             return Some(self.ms_risk_dialog(theme, window, &risk, cx));
         }
         if host.read(cx).send_reviewing() {
-            return self.ms_draft_dialog(theme, window, cx);
+            return self.ms_draft_dialog(theme, window, None, cx);
         }
         if self.multisig.session && host.read(cx).machines().session_view().is_some() {
             return Some(self.ms_session_dialog(theme, window, cx));
+        }
+        if let Some(layer) = self.ms_dapp_layer(theme, window, cx) {
+            return Some(layer);
         }
         if self.multisig.create {
             return self.ms_create_dialog(theme, window, cx);
@@ -1913,11 +1930,15 @@ impl WalletPage {
     }
 
     /// The send flow's proposal, on its review before any passkey (§3.6):
-    /// "Propose and approve" signs it once; closing withdraws it.
+    /// "Propose and approve" signs it once; closing withdraws it. A site's
+    /// request (`site`: the machine's id for it, and the site) is the same
+    /// review with the site said, and Decline or a close leaves it — the
+    /// machine answers the site (AUDIT M5).
     fn ms_draft_dialog(
         &mut self,
         theme: &Theme,
         window: &Window,
+        site: Option<(String, String)>,
         cx: &mut Context<Self>,
     ) -> Option<gpui::AnyElement> {
         let host = self.ms_host(cx);
@@ -1928,6 +1949,14 @@ impl WalletPage {
         let item = draft.item.clone();
         let review = draft.review.as_ref().and_then(ReviewDraw::of);
         let mut body = div().flex().flex_col().gap(px(14.));
+        if let Some((_, host)) = &site {
+            body = body.child(
+                div()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_muted)
+                    .child(words::tv(&loc, "proposal.siteAsks", &[("host", host)])),
+            );
+        }
         body = body
             .child(
                 div()
@@ -1957,8 +1986,18 @@ impl WalletPage {
             body = body.child(self.ms_member_picker(theme, "ms-draft-as", &draft.members_here, &picked, account.as_ref(), false, cx));
         }
         body = body.child(ms_note(theme, &words::t(&loc, "proposal.feeNote"), Tone::Neutral));
+        // A site's proposal stays on its review when it did not go: why.
+        if site.is_some()
+            && let Some(text) = view
+                .actions
+                .get("propose")
+                .and_then(|state| self.ms_action_words(state, item.chain_id))
+        {
+            body = body.child(ms_note(theme, &text, Tone::Caution));
+        }
         let sign = review.as_ref().map(|r| r.sign).unwrap_or_default();
         let working = matches!(view.actions.get("propose"), Some(ActionState::Working));
+        let leave = site.as_ref().map(|(rid, _)| rid.clone());
         let label = if draft.members_here.is_empty() {
             words::t(&loc, "send.proposeOnly")
         } else if sign.anyway {
@@ -1973,19 +2012,25 @@ impl WalletPage {
         };
         body = body.child(
             crate::ui::dialog::dialog_actions()
-                .child(
+                .child({
+                    let leave = leave.clone();
                     crate::ui::vela_button(
                         "ms-draft-withdraw",
                         crate::ui::ButtonVariant::Secondary,
-                        words::t(&loc, "proposal.dontPropose").into(),
+                        words::t(
+                            &loc,
+                            if leave.is_some() {
+                                "external.decline"
+                            } else {
+                                "proposal.dontPropose"
+                            },
+                        )
+                        .into(),
                         theme,
-                        cx.listener(|this, _, _, cx| {
-                            let host = this.ms_host(cx);
-                            host.update(cx, |host, cx| host.withdraw_draft(cx));
-                        }),
+                        cx.listener(move |this, _, _, cx| this.ms_draft_leave(leave.clone(), cx)),
                     )
-                    .w_auto(),
-                )
+                    .w_auto()
+                })
                 .child(
                     crate::ui::vela_button_state(
                         "ms-draft-propose",
@@ -2013,13 +2058,22 @@ impl WalletPage {
                 close_icon,
                 body,
                 &self.multisig.scroll,
-                cx.listener(|this, _, _, cx| {
-                    let host = this.ms_host(cx);
-                    host.update(cx, |host, cx| host.withdraw_draft(cx));
-                }),
+                cx.listener(move |this, _, _, cx| this.ms_draft_leave(leave.clone(), cx)),
             )
             .into_any_element(),
         )
+    }
+
+    /// The draft's way out: the send flow's proposal withdrawn, or a site's
+    /// request (`rid`) left — the machine answers the site.
+    fn ms_draft_leave(&mut self, rid: Option<String>, cx: &mut Context<Self>) {
+        match rid {
+            Some(rid) => self.ms_dapp_leave(rid, cx),
+            None => {
+                let host = self.ms_host(cx);
+                host.update(cx, |host, cx| host.withdraw_draft(cx));
+            }
+        }
     }
 
     /// Vela's side of an outside owner's session (M4): the connect link and

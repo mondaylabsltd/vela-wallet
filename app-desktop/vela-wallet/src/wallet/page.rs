@@ -17343,9 +17343,10 @@ impl WalletPage {
 
     /// What the browser machine decided, acted on once.
     fn browser_host_changed(&mut self, host: gpui::Entity<BrowserHost>, cx: &mut Context<Self>) {
-        let (orders, consent) = host.update(cx, |host, _| {
+        let (orders, calls, consent) = host.update(cx, |host, _| {
             (
                 host.take_orders(),
+                host.take_multisig_calls(),
                 host.view
                     .consent
                     .as_ref()
@@ -17362,7 +17363,12 @@ impl WalletPage {
         for order in orders {
             match order {
                 SigningOrder::Forward(forwarded) => self.open_dapp_signing(forwarded, cx),
-                SigningOrder::Cancel { id, .. } => self.cancel_dapp_signing(&id, cx),
+                // AUDIT M5: a multisig's request is left with its machine.
+                SigningOrder::Cancel { tab, id } => {
+                    if !self.ms_dapp_cancel(&tab, &id, cx) {
+                        self.cancel_dapp_signing(&id, cx);
+                    }
+                }
                 // Spec 100: the add-network sheet is `network_admin`'s; this
                 // page only carries the request there and the ending back.
                 SigningOrder::AddNetwork {
@@ -17392,6 +17398,8 @@ impl WalletPage {
                 }
             }
         }
+        // AUDIT M5: a multisig batch's status, read by its machine.
+        self.ms_dapp_calls(calls, cx);
         cx.notify();
     }
 
@@ -17495,6 +17503,11 @@ impl WalletPage {
         // again" — so the line moves on.
         if self.signing_busy(cx) {
             self.answer_dapp_signing(&forwarded.tab, forwarded.id, busy_answer(), None, cx);
+            return;
+        }
+        // AUDIT M5: granted a multisig here, the site's request is its
+        // proposals machine's (a proposal, held until it executes).
+        if self.ms_dapp_take(&forwarded, cx) {
             return;
         }
         let Some(account) = money::account_by_address(&forwarded.granted_address) else {
