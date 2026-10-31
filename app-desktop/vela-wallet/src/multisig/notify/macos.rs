@@ -108,6 +108,8 @@ pub fn ask() {
                 "multisig-notify",
                 "permission refused: the in-app line shows them"
             );
+        } else {
+            crate::diag::vlog!("multisig-notify", "permission granted: the system center shows them");
         }
         store(if granted.as_bool() {
             Permission::Granted

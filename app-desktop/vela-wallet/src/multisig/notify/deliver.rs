@@ -104,6 +104,36 @@ pub fn prepare() {
     super::macos::ask();
 }
 
+/// Where the platform's permission stands, for the log ("posted … (Granted)").
+fn permission_now() -> &'static str {
+    #[cfg(target_os = "macos")]
+    {
+        match super::macos::permission() {
+            super::macos::Permission::Granted => "granted",
+            super::macos::Permission::Denied => "denied",
+            super::macos::Permission::Unavailable => "unavailable",
+            super::macos::Permission::Unknown => "not answered yet",
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        "the platform's"
+    }
+}
+
+/// The platform said it shows them (macOS: the permission granted); else the
+/// in-app line says each one as well.
+fn system_confirmed() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        super::macos::permission() == super::macos::Permission::Granted
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        true
+    }
+}
+
 /// The platform's center can show it (else the in-app line does).
 #[must_use]
 pub fn system_can_show() -> bool {
@@ -322,21 +352,27 @@ pub fn post(notices: Vec<Notice>, cx: &mut App) {
 /// Post worded notifications now: the platform's center, else the line.
 pub fn show(worded: Vec<Worded>, cx: &mut App) {
     if system_can_show() {
-        for w in worded {
-            crate::diag::vlog!("multisig-notify", "posted {}", w.tag);
+        for w in &worded {
+            crate::diag::vlog!("multisig-notify", "posted {} ({})", w.tag, permission_now());
             cx.show_system_notification(SystemNotification {
-                tag: SharedString::from(w.tag),
-                title: SharedString::from(w.title),
-                body: SharedString::from(w.body),
+                tag: SharedString::from(w.tag.clone()),
+                title: SharedString::from(w.title.clone()),
+                body: SharedString::from(w.body.clone()),
                 actions: Vec::new(),
             });
         }
-        return;
+        // r9-8: posted while the person has not answered the permission yet
+        // (or the system has not told): the center may drop it — an ad-hoc
+        // bundle is refused outright — so the window says it too.
+        if system_confirmed() {
+            return;
+        }
     }
     // The newest one says it; the ones before it were the same moment's.
     let Some(last) = worded.into_iter().last() else {
         return;
     };
+    crate::diag::vlog!("multisig-notify", "in-app line {} ({})", last.tag, permission_now());
     let serial = in_app(cx).map_or(1, |l| l.serial.wrapping_add(1));
     let target = target_of(&last.tag);
     cx.set_global(InApp(Some(InAppLine {
