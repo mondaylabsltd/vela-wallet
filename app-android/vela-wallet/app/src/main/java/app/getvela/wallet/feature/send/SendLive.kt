@@ -925,6 +925,11 @@ object SendLive {
         ctx: Context,
         speed: SpeedInputs? = null,
     ): FeeRowModel {
+        // Native multisig M2: a multisig pays no fee of its own — the member
+        // who executes it does — so its row says that, with no control.
+        if (view.multisig != null) {
+            return fallback.copy(value = ctx.strings.t("home.multisig.proposal.feeNote"), refreshLabel = null, refreshing = false, staleNote = null)
+        }
         // NEVER ANOTHER TIER'S FIGURE WEARING THIS TIER'S NAME (issue 681):
         // on the path where a pick re-measures, the estimate in hand still
         // belongs to the speed just left — the send machine keeps it across a
@@ -1254,6 +1259,19 @@ object SendLive {
     // -- SD3 ---------------------------------------------------------------------
 
     internal fun confirm(fallback: SendConfirmModel, view: SendView, ctx: Context, fee: FeeView? = null, speed: FeeSpeedView? = null): SendConfirmModel {
+        val model = confirmBase(fallback, view, ctx, fee, speed)
+        if (view.multisig == null) return model
+        // Native multisig M2: a multisig pays no fee of its own (the member who
+        // executes it does), and its confirm proposes and approves.
+        val s = ctx.strings
+        val feeLabel = s.t(I18nKeys.Flows.EST_FEE)
+        return model.copy(
+            cta = s.t("home.multisig.send.propose"),
+            facts = model.facts.map { if (it.label == feeLabel) it.copy(value = s.t("home.multisig.proposal.feeNote"), note = null, tap = false) else it },
+        )
+    }
+
+    private fun confirmBase(fallback: SendConfirmModel, view: SendView, ctx: Context, fee: FeeView?, speed: FeeSpeedView?): SendConfirmModel {
         val s = ctx.strings
         val token = view.selected_token
         val symbol = token?.symbol ?: ""

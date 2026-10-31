@@ -155,7 +155,8 @@ fun MultisigDappSheet(hub: MultisigHub, id: String, context: MultisigHostContext
  */
 @Composable
 fun MultisigOutsideSheet(session: MultisigOutsideSessionModel, words: MultisigWords, onClose: () -> Unit) {
-    val view by session.view.collectAsStateWithLifecycle()
+    val viewState by session.view.collectAsStateWithLifecycle()
+    val view: JsonElement = viewState
     val colors = VelaTheme.colors
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) { while (true) { delay(1_000); now = System.currentTimeMillis() } }

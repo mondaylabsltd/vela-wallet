@@ -71,7 +71,9 @@ fun MultisigSettingsSheet(
     onRemoved: () -> Unit,
 ) {
     val view by hub.accountsView.collectAsStateWithLifecycle()
-    val members by hub.membersView.collectAsStateWithLifecycle()
+    val membersState by hub.membersView.collectAsStateWithLifecycle()
+    // Read through the lenient accessors (`MsJson.kt`): a JsonObject's own `get` would hand back JsonNull.
+    val members: kotlinx.serialization.json.JsonElement = membersState
     val scope = rememberCoroutineScope()
     val row = view.row(address)
     var removing by remember { mutableStateOf(false) }
@@ -198,7 +200,7 @@ fun MultisigSettingsSheet(
             }
         }
 
-        MsTextButton(words.t("settings.remove"), Modifier.padding(top = VelaSpacing.lg), tag = "multisig.settings.remove") { removing = true }
+        MsTextButton(words.t("settings.remove"), Modifier.padding(top = VelaSpacing.lg), tag = "multisig.settings.remove", danger = true) { removing = true }
         if (removing) {
             AlertDialog(
                 onDismissRequest = { removing = false },
@@ -255,7 +257,8 @@ private fun MemberLine(words: MultisigWords, member: JsonElement, added: Boolean
  */
 @Composable
 fun MultisigMembersSheet(hub: MultisigHub, words: MultisigWords, address: String, onClose: () -> Unit) {
-    val view by hub.membersView.collectAsStateWithLifecycle()
+    val viewState by hub.membersView.collectAsStateWithLifecycle()
+    val view: kotlinx.serialization.json.JsonElement = viewState
     val scope = rememberCoroutineScope()
     val haptic = rememberVelaHaptic()
     var entry by remember { mutableStateOf("") }
@@ -380,8 +383,8 @@ fun MultisigMembersSheet(hub: MultisigHub, words: MultisigWords, address: String
                             MsNote(
                                 words.t(
                                     "members.onNetwork", "network" to words.network(chainId),
-                                    "before" to words.ruleText(before["m"].int ?: before["threshold"].int ?: 0, before["n"].int ?: before["owners"].int ?: 0),
-                                    "after" to words.ruleText(after["m"].int ?: after["threshold"].int ?: 0, after["n"].int ?: after["owners"].int ?: 0),
+                                    "before" to words.t("members.ruleValue", "m" to (before["threshold"].int ?: 0).toString(), "n" to before["owners"].arr.size.toString()),
+                                    "after" to words.t("members.ruleValue", "m" to (after["threshold"].int ?: 0).toString(), "n" to after["owners"].arr.size.toString()),
                                 ),
                                 tag = "multisig.members.plan.$chainId",
                             )
@@ -430,7 +433,7 @@ private fun entryNote(words: MultisigWords, note: JsonElement?): String? = when 
 }
 
 internal fun memberRefusal(words: MultisigWords, verdict: JsonElement?): String {
-    val reason = verdict["reason"] ?: verdict
+    val reason = verdict["refusal"] ?: verdict["reason"] ?: verdict
     return when (reason.kind) {
         "alreadyMember" -> words.t("members.refuse.alreadyMember")
         "notMember" -> words.t("members.refuse.notMember")

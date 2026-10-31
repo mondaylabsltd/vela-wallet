@@ -247,7 +247,7 @@ fun MultisigProposalSheet(
                 item.action.kind != "cancel" && item.cancelledBy == null
             ) {
                 var confirming by remember { mutableStateOf(false) }
-                MsTextButton(words.t("proposal.reject"), tag = "multisig.proposal.reject") { confirming = true }
+                MsTextButton(words.t("proposal.reject"), tag = "multisig.proposal.reject", danger = true) { confirming = true }
                 if (confirming) {
                     AlertDialog(
                         onDismissRequest = { confirming = false },

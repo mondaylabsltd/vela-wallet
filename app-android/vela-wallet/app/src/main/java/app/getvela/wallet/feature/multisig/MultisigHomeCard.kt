@@ -157,14 +157,14 @@ fun MultisigHomeCard(
                 MsText(words.t("create.firstRunTitle"), MsType.RowTitle, Modifier.semantics { heading() })
                 val network = account.chainIds.firstOrNull()
                 if (account.owners.size > 1) {
-                    FirstStep(words.t("create.firstRunInvite"), words.t("create.firstRunInviteNote"), row.inviteShared, "multisig.home.firstRun.invite") {
+                    FirstStep(words.t("create.firstRunInvite"), words.t("create.firstRunInviteNote"), row.inviteShared, "multisig.home.firstRun.invite", VelaIcons.QrCode) {
                         onOpen(MultisigSheet.Invite(account.address))
                     }
                 }
                 FirstStep(
                     words.t("create.firstRunFund"),
                     network?.let { words.t("create.firstRunFundNote", "network" to words.network(it)) },
-                    funded, "multisig.home.firstRun.fund", onFund,
+                    funded, "multisig.home.firstRun.fund", onClick = onFund,
                 )
                 network?.let { MsNote(words.t("create.firstRunCost", "network" to words.network(it))) }
                 MsTextButton(words.t("create.firstRunDismiss"), tag = "multisig.home.firstRun.dismiss") {
@@ -176,7 +176,7 @@ fun MultisigHomeCard(
 }
 
 @Composable
-private fun FirstStep(title: String, note: String?, done: Boolean, tag: String, onClick: () -> Unit) {
+private fun FirstStep(title: String, note: String?, done: Boolean, tag: String, icon: androidx.compose.ui.graphics.vector.ImageVector = VelaIcons.ArrowDownLeft, onClick: () -> Unit) {
     val colors = VelaTheme.colors
     Row(
         Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick).padding(vertical = VelaSpacing.sm).testTag(tag)
@@ -184,7 +184,7 @@ private fun FirstStep(title: String, note: String?, done: Boolean, tag: String, 
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
     ) {
-        Icon(if (done) VelaIcons.Check else VelaIcons.ArrowDownLeft, null, tint = if (done) colors.successBase else colors.fgBase, modifier = Modifier.size(VelaIconSize.lg))
+        Icon(if (done) VelaIcons.Check else icon, null, tint = if (done) colors.successBase else colors.fgBase, modifier = Modifier.size(VelaIconSize.lg))
         Column(Modifier.weight(1f)) {
             MsText(title, MsType.Field)
             note?.let { MsText(it, MsType.Sub, color = colors.fgSubtle) }

@@ -96,7 +96,7 @@ class MultisigOutsideSessionModel(
         }
 
     val phase: String get() = view.value["phase"].str ?: "waiting"
-    val failure: JsonElement? get() = view.value["failure"]
+    val failure: JsonElement? get() = (view.value as JsonElement)["failure"]
 
     fun askAgain() = machine.dispatch(ev("ask_again"))
     fun stopWaiting() = machine.dispatch(ev("stop_waiting"))

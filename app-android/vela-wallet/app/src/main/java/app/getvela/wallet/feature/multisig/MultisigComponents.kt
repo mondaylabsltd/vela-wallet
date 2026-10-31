@@ -209,7 +209,7 @@ fun MsNavRow(
 
 /** A text action (ink, never the accent). */
 @Composable
-fun MsTextButton(text: String, modifier: Modifier = Modifier, enabled: Boolean = true, tag: String? = null, onClick: () -> Unit) {
+fun MsTextButton(text: String, modifier: Modifier = Modifier, enabled: Boolean = true, tag: String? = null, danger: Boolean = false, onClick: () -> Unit) {
     val colors = VelaTheme.colors
     Box(
         modifier
@@ -218,7 +218,7 @@ fun MsTextButton(text: String, modifier: Modifier = Modifier, enabled: Boolean =
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.CenterStart,
     ) {
-        MsText(text, MsType.Action, color = if (enabled) colors.fgBase else colors.fgSubtle)
+        MsText(text, MsType.Action, color = if (!enabled) colors.fgSubtle else if (danger) colors.errorBase else colors.fgBase)
     }
 }
 

@@ -268,7 +268,7 @@ data class MsAccountsView(
         map[address] ?: map[address.lowercase()] ?: map.entries.firstOrNull { it.key.equals(address, ignoreCase = true) }?.value
 
     companion object {
-        fun of(e: JsonObject) = MsAccountsView(
+        fun of(e: JsonElement) = MsAccountsView(
             loaded = e["loaded"].bool ?: false,
             accounts = e["accounts"].arr.map(MsAccountRow::of),
             active = e["active"].str,
@@ -492,7 +492,7 @@ data class MsProposalsView(
     fun action(key: String): JsonElement? = actions[key] ?: actions.entries.firstOrNull { it.key.equals(key, ignoreCase = true) }?.value
 
     companion object {
-        fun of(e: JsonObject) = MsProposalsView(
+        fun of(e: JsonElement) = MsProposalsView(
             followed = e["followed"].str,
             chains = e["chains"].arr.map(MsChainState::of),
             items = e["items"].arr.map(MsProposalItem::of),
