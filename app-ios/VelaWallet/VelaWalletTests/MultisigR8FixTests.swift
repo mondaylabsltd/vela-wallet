@@ -245,6 +245,26 @@ struct MultisigR8FixTests {
         #expect(MsReviewBody.concernText(MsJSON(any: ["kind": "blind"]), review: review, words: words) == r("blindLine"))
     }
 
+    /// r5reg-15: the reading's party is the recipient, said once — its name
+    /// short, its address whole, the review's cue on it.
+    @Test func theReadingNamesItsRecipientOnceWithTheReviewsCue() throws {
+        let c = try #require(try vectorCases().first { ($0["name"] as? String)?.hasPrefix("Arc's USDC ERC-20 transfer") == true })
+        let got = try #require(MsRules.call("review.reading", c["args"] as! [String: Any]) as? [String: Any])
+        let to = "0x4444444444444444444444444444444444444444"
+        let review = MsJSON(any: [
+            "reading": got["reading"]!, "concerns": got["concerns"]!,
+            "recipients": [["address": to, "role": "recipient", "firstTimeCue": true, "contractCue": false, "lookalike": NSNull(), "known": NSNull()]],
+        ])
+        let blocks = MsReading.blocks(review, chainId: 5_042_002, words: words)
+        let parties = blocks.compactMap { if case .party(_, let name, let address, let badge) = $0 { return (name, address, badge) } else { return nil } }
+        #expect(parties.count == 1)
+        #expect(parties.first?.0 == MsWords.short(to))
+        #expect(parties.first?.1 == MsRules.eip55(to))
+        #expect(parties.first?.2?.text == loc.t("componentsUi.signing.firstTimeTag"))
+        #expect(MsReading.partyAddresses(blocks) == [to])
+        #expect(rows(blocks).contains { $0.value == "0.01 USDC" }, "the core's decimals: never <0.000001")
+    }
+
     /// r8-2: a list title for a token nobody read is never "Send <0.000001".
     @Test func aTransferOfATokenNobodyReadIsTitledInBaseUnits() {
         let action = MsJSON(any: [

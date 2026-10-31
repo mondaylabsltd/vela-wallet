@@ -157,9 +157,16 @@ enum MsReading {
         let lone = calls.count == 1 && (only["path"]?.array.isEmpty ?? true) && only["intent"]?.kind != "batch"
         guard lone, let i = only["intent"] else { return cards(calls, chainId: chainId, words: words) }
         var out: [SigningBlock] = [.intent(text: intentTitle(i, words: words), tone: intentTone(i))]
+        // Who it reaches, once (r5reg-15): the name this device or the review
+        // knows, the full address under it, and the review's own cue for it
+        // ("First time sending here") — the recipient's row is not repeated.
         let party = { (label: String, key: String) -> SigningBlock in
             let address = MsRules.eip55(i[key]?.string ?? "")
-            return .party(label: r(label, words), name: address, address: address)
+            let recipient = (review["recipients"]?.array ?? [])
+                .first { $0["address"]?.string?.lowercased() == address.lowercased() }
+            let name = words.localName(address) ?? words.keptName(address) ?? recipient?["known"]?["label"]?.string
+            return .party(label: r(label, words), name: name ?? short(address), address: address,
+                          badge: recipient.flatMap { badge($0, words: words) })
         }
         switch i.kind {
         case "send":
@@ -178,6 +185,31 @@ enum MsReading {
             if !rows.isEmpty { out.append(.rows(rows)) }
         }
         return out
+    }
+
+    /// What the review knows of a recipient, as its row's badge: the core's
+    /// cues (first time, a contract), else whose it is (the web's
+    /// `recipientBadge`).
+    @MainActor
+    static func badge(_ recipient: MsJSON, words: MsWords) -> PartyBadge? {
+        var tags: [String] = []
+        if recipient["firstTimeCue"]?.bool == true { tags.append(words.loc.t("componentsUi.signing.firstTimeTag")) }
+        if recipient["contractCue"]?.bool == true { tags.append(words.loc.t("componentsUi.signing.contractTag")) }
+        if !tags.isEmpty {
+            let lookalike = recipient["lookalike"].map { !$0.isNull } ?? false
+            return PartyBadge(text: tags.joined(separator: " · "), tone: lookalike ? .danger : .caution)
+        }
+        switch recipient["known"]?["kind"]?.string {
+        case "own": return PartyBadge(text: words.t("review.knownOwn"), tone: .neutral)
+        case "member" where recipient["role"]?.string != "member": return PartyBadge(text: words.t("review.knownMember"), tone: .neutral)
+        default: return nil
+        }
+    }
+
+    /// The addresses the reading names as a party already (lowercased): the
+    /// review's recipient rows do not say them again (r5reg-15).
+    static func partyAddresses(_ blocks: [SigningBlock]) -> Set<String> {
+        Set(blocks.compactMap { if case .party(_, _, let address?, _) = $0 { return address.lowercased() } else { return nil } })
     }
 
     // MARK: - The concerns about the calls

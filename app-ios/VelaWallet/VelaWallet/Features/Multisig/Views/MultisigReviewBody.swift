@@ -159,9 +159,13 @@ struct MsReviewBody: View {
         let list = review["recipients"]?.array ?? []
         if !list.isEmpty {
             VStack(alignment: .leading, spacing: Tokens.Space.s0) {
+                let drawn = MsReading.partyAddresses(MsReading.blocks(review, chainId: chainId, words: words))
                 ForEach(Array(list.enumerated()), id: \.offset) { index, recipient in
-                    if index > 0 { MsDivider() }
-                    recipientRow(recipient)
+                    // One the reading names already is said once, there (r5reg-15).
+                    if !drawn.contains((recipient["address"]?.string ?? "").lowercased()) {
+                        if index > 0 { MsDivider() }
+                        recipientRow(recipient)
+                    }
                     // What is wrong with this recipient, under its own row
                     // (the web's `recipientBlocks`) — said once, here.
                     if let lookalike = recipient["lookalike"], !lookalike.isNull {
