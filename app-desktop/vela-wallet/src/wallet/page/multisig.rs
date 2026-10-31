@@ -64,6 +64,18 @@ pub(crate) struct MultisigUi {
     pub add: Option<String>,
     /// The invite sheet for this multisig is up.
     pub invite: Option<String>,
+    /// What the person typed and picked on the create sheet.
+    pub create_form: Option<super::multisig_create::CreateForm>,
+    /// What the person picked on the add sheet (its text is `add`).
+    pub add_form: Option<super::multisig_add::AddForm>,
+    /// A link's own sheet (`multisig_links.rs`).
+    pub link_sheet: Option<super::multisig_links::LinkSheet>,
+    /// The link stand last drawn (each is drawn once).
+    pub link_seen: Option<String>,
+    /// The multisig of a link's read-only transaction (ms-21).
+    pub preview_of: Option<String>,
+    /// A network the person went to add for a link.
+    pub network_wait: Option<super::multisig_links::NetworkWait>,
 }
 
 /// The one review, as drawn (`multisig_review::MultisigReview`'s JSON):
@@ -103,11 +115,11 @@ pub(crate) fn item_key(chain_id: u64, hash: &str) -> String {
     format!("{chain_id}:{hash}")
 }
 
-fn network(chain_id: u64) -> String {
+pub(crate) fn network(chain_id: u64) -> String {
     crate::executor::custom_tokens::network_name(u32::try_from(chain_id).unwrap_or_default())
 }
 
-fn same(a: &str, b: &str) -> bool {
+pub(crate) fn same(a: &str, b: &str) -> bool {
     a.eq_ignore_ascii_case(b)
 }
 
@@ -268,13 +280,16 @@ impl WalletPage {
             host.update(cx, |host, cx| host.withdraw_draft(cx));
             return true;
         }
+        if self.multisig.link_sheet.is_some() {
+            self.close_link_sheet(cx);
+            return true;
+        }
         if self.multisig.create {
             self.close_multisig_create(cx);
             return true;
         }
         if self.multisig.add.is_some() {
-            self.multisig.add = None;
-            cx.notify();
+            self.close_multisig_add(cx);
             return true;
         }
         if self.multisig.invite.is_some() {
@@ -543,14 +558,13 @@ impl WalletPage {
         self.multisig.scroll = crate::ui::SmoothScroll::new();
         let host = self.ms_host(cx);
         host.update(cx, |host, cx| host.accounts(ms_accounts::Event::NewDraft, cx));
+        self.ms_create_opened(cx);
         cx.notify();
     }
 
     /// Open the add sheet, filled with `text` (an address, or an invite).
     pub(crate) fn open_multisig_add(&mut self, text: Option<String>, cx: &mut Context<Self>) {
-        self.multisig.add = Some(text.unwrap_or_default());
-        self.multisig.scroll = crate::ui::SmoothScroll::new();
-        cx.notify();
+        self.ms_add_opened(text, None, None, cx);
     }
 
     // -- the home's waiting group -------------------------------------------
@@ -899,6 +913,7 @@ impl WalletPage {
 
         if linked.as_ref().is_some_and(|l| l.preview) {
             body = body.child(ms_note(theme, &words::t(&loc, "proposal.previewNote"), Tone::Neutral));
+            body = body.children(self.ms_preview_keep(theme, cx));
         }
         if item.status == ms_proposals::ProposalStatus::Queued {
             body = body.child(ms_note(
@@ -1491,7 +1506,7 @@ impl WalletPage {
     }
 
     /// A shell failure (`live::ShellFailure`) or the core's own words.
-    fn ms_failure_words(&self, detail: &str, chain_id: u64) -> String {
+    pub(crate) fn ms_failure_words(&self, detail: &str, chain_id: u64) -> String {
         use crate::multisig::live::{ShellFailure, read_failure};
         let loc = &self.loc;
         let reason = |key: &str| words::t(loc, &format!("proposal.reason.{key}"));
@@ -1830,6 +1845,12 @@ impl WalletPage {
         if self.multisig.session && host.read(cx).machines().session_view().is_some() {
             return Some(self.ms_session_dialog(theme, window, cx));
         }
+        // A link's stand (`multisig_links.rs`): drawn once, its own sheet first.
+        self.ms_take_link(cx);
+        self.ms_network_watch(cx);
+        if self.multisig.link_sheet.is_some() {
+            return self.ms_link_dialog(theme, window, cx);
+        }
         if self.multisig.create {
             return self.ms_create_dialog(theme, window, cx);
         }
@@ -2153,13 +2174,13 @@ impl WalletPage {
 
 /// How a line is said.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Tone {
+pub(crate) enum Tone {
     Neutral,
     Caution,
     Danger,
 }
 
-fn ms_note(theme: &Theme, text: &str, tone: Tone) -> Div {
+pub(crate) fn ms_note(theme: &Theme, text: &str, tone: Tone) -> Div {
     let (bg, fg) = match tone {
         Tone::Neutral => (theme.bg_sunken, theme.fg_muted),
         Tone::Caution => (theme.warning_soft, theme.fg_base),
@@ -2176,7 +2197,7 @@ fn ms_note(theme: &Theme, text: &str, tone: Tone) -> Div {
         .child(crate::ui::prose(text.to_owned()))
 }
 
-fn ms_label(theme: &Theme, text: &str) -> Div {
+pub(crate) fn ms_label(theme: &Theme, text: &str) -> Div {
     div()
         .text_size(theme::text_label())
         .font_weight(gpui::FontWeight::SEMIBOLD)
