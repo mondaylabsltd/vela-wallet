@@ -42,7 +42,9 @@ final class BatchStore {
             bridge: BatchImportCore(),
             perform: { operation in await executor.perform(operation) },
             onView: { [weak self] view in self?.view = view },
-            onFault: { print("[vela-wallet] batch_import fault: \($0)") }
+            onFault: { print("[vela-wallet] batch_import fault: \($0)") },
+            // `onView` mirrors: an answer that moved nothing redraws nothing.
+            skipsUnchanged: true
         )
     }
 

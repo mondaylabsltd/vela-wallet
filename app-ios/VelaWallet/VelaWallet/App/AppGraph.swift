@@ -45,6 +45,9 @@ final class AppGraph {
     /// `false` for the graph an erase rebuilt: no launch lockup, and no DEBUG
     /// account seed writing a wallet back into the store just emptied.
     let firstLaunch: Bool
+    /// This start plays the launch lockup: a first launch the core's replay
+    /// rule says is due (`LaunchAnimation.claim` — once a week).
+    let playsLaunchAnimation: Bool
     /// The `vela.*` shelf, for the reads that are not a machine's — the
     /// explorer bases of custom networks.
     let shelf: VelaStore
@@ -119,6 +122,9 @@ final class AppGraph {
         // first event, and a record written after that is not seen until a
         // relaunch. DEBUG-only, env-gated, and key-less (spec 051 D3).
         if firstLaunch { DevAccountSeed.applyIfRequested(store: shelf) }
+        // Decided once, here: `RootView.init` runs again whenever the scene's
+        // content is evaluated, and the decision writes the time it played.
+        self.playsLaunchAnimation = firstLaunch && LaunchAnimation.claim(store: shelf)
         // An older shell's spellings of the five preferences, brought to the
         // shared record before anything reads them (spec 072). Nothing to do
         // for a store that already agrees, so this is safe every launch.

@@ -122,7 +122,9 @@ final class SettingsStore {
             // how a screen stops responding with nothing in any log to say why.
             onFault: { print("[vela-wallet] network_admin fault: \($0)") },
             // The view as the core wrote it, for the AI agent's world (spec 104).
-            keepsJson: true
+            keepsJson: true,
+            // `onView` mirrors: an answer that moved nothing redraws nothing.
+            skipsUnchanged: true
         )
         self.currencyCore = CoreStore(
             bridge: DisplayCurrencyCore(),
@@ -130,7 +132,8 @@ final class SettingsStore {
             onView: { [weak self] view in self?.currency = view },
             onFault: { print("[vela-wallet] display_currency fault: \($0)") },
             // The view as the core wrote it, for the AI agent's world (spec 104).
-            keepsJson: true
+            keepsJson: true,
+            skipsUnchanged: true
         )
         let feeTierExecutor = FeeTierExecutor(store: store)
         self.feeTierCore = CoreStore(
@@ -139,7 +142,8 @@ final class SettingsStore {
             onView: { [weak self] view in self?.feeTier = view },
             onFault: { print("[vela-wallet] fee_tier_pref fault: \($0)") },
             // The view as the core wrote it, for the AI agent's world (spec 104).
-            keepsJson: true
+            keepsJson: true,
+            skipsUnchanged: true
         )
         self.signingPages = SigningPagesViewWire.initial
         let signingPagesExecutor = SigningPagesExecutor(store: store)
@@ -147,7 +151,8 @@ final class SettingsStore {
             bridge: SigningPagesCore(),
             perform: { operation in signingPagesExecutor.perform(operation) },
             onView: { [weak self] view in self?.signingPages = view },
-            onFault: { print("[vela-wallet] signing_pages fault: \($0)") }
+            onFault: { print("[vela-wallet] signing_pages fault: \($0)") },
+            skipsUnchanged: true
         )
         // Spec 100: the add-network sheet's endings, read when they happen so
         // the app can wire the browser after both exist.

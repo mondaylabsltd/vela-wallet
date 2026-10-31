@@ -72,7 +72,6 @@ final class CoreStore<View: Decodable> {
     private let driver: CoreDriver
     private let keepsJson: Bool
     private let skipsUnchanged: Bool
-    private let ignoredKeys: [String]
     private let onView: (View) -> Void
     private let onFault: (Error) -> Void
     private var booted = false
@@ -92,13 +91,17 @@ final class CoreStore<View: Decodable> {
     ///     result the core refused — see `CoreDriver.neutralAnswer`. `nil`
     ///     leaves the fault reported and nothing else.
     ///   - keepsJson: also keep each committed view as JSON text (`json`).
-    ///   - skipsUnchanged: a view equal to the last one committed is not
-    ///     decoded again and `onView` is not called for it (native parity
-    ///     Phase 4). Only for a store whose `onView` merely mirrors the view —
-    ///     one that resumes waiters or counts commits must hear every one.
-    ///   - ignoringKeys: top-level view fields this shell never reads, left
-    ///     out of that comparison — the pool's `pending_urls`, which moves at
-    ///     every step of every call for a hedging shell this one is not.
+    ///   - skipsUnchanged: an answer whose view did not move does not call
+    ///     `onView` (native parity Phase 4). Only for a store whose `onView`
+    ///     merely mirrors the view — one that resumes waiters or counts
+    ///     commits must hear every answer, and does: it is handed the view it
+    ///     already holds, decoded once.
+    ///
+    /// Either way the machine is opted in to the core's unchanged-view rule
+    /// (`skip_unchanged_views`, core-perf-1): an answer whose view did not
+    /// move carries none, so nothing is serialized, crossed, parsed or
+    /// decoded for it. Volatile fields are not asked for — the RPC pool's
+    /// `pending_urls` are a hedging shell's, and this one is not.
     init(
         bridge: CoreBridge,
         perform: @escaping @MainActor ([String: Any]) async -> String,
@@ -106,34 +109,35 @@ final class CoreStore<View: Decodable> {
         onFault: @escaping (Error) -> Void = { _ in },
         neutralAnswer: (([String: Any]) -> String?)? = nil,
         keepsJson: Bool = false,
-        skipsUnchanged: Bool = false,
-        ignoringKeys: [String] = []
+        skipsUnchanged: Bool = false
     ) {
         self.keepsJson = keepsJson
         self.skipsUnchanged = skipsUnchanged
-        self.ignoredKeys = ignoringKeys
         self.onView = onView
         self.onFault = onFault
         // `self` is captured after full initialisation, so the closures cannot
         // observe a half-built store.
         var commit: (([String: Any]) -> Void)!
         var fault: ((Error) -> Void)!
+        var unchanged: (() -> Void)!
         self.driver = CoreDriver(
             bridge: bridge,
             perform: perform,
             onView: { json in commit(json) },
-            onFault: { error in fault(error) }
+            onFault: { error in fault(error) },
+            includeVolatile: false
         )
         driver.neutralAnswer = neutralAnswer
-        // Byte-equal views — less the fields this shell never reads — are
-        // skipped before they are even parsed.
-        driver.skipsUnchangedView = skipsUnchanged
-        driver.ignoredViewKeys = ignoringKeys
+        // An answer without a view is the one this store holds: told from
+        // the decoded copy, or not at all.
+        driver.skipsUnchangedView = true
+        driver.onUnchanged = { unchanged() }
         // Before its first event a machine's view is its own idle one — what
         // a core function reading the views whole is handed until then.
         if keepsJson { jsonText = try? bridge.view() }
         commit = { [weak self] json in self?.commit(json) }
         fault = { [weak self] error in self?.onFault(error) }
+        unchanged = { [weak self] in self?.unchanged() }
     }
 
     /// Send the machine's first event, at most once for the life of the app.
@@ -181,23 +185,16 @@ final class CoreStore<View: Decodable> {
     /// Delete it when the toolchain is fixed, and let the guard tell you.
     nonisolated deinit {}
 
-    private static func same(_ a: [String: Any], _ b: [String: Any], ignoring keys: [String]) -> Bool {
-        guard !keys.isEmpty else { return NSDictionary(dictionary: a).isEqual(to: b) }
-        var a = a, b = b
-        for key in keys {
-            a.removeValue(forKey: key)
-            b.removeValue(forKey: key)
-        }
-        return NSDictionary(dictionary: a).isEqual(to: b)
+    /// An answer whose view did not move. A store that mirrors skips it; one
+    /// that must hear every answer is handed what it already holds — decoded
+    /// when it came, not again.
+    private func unchanged() {
+        guard !skipsUnchanged, let view else { return }
+        onView(view)
     }
 
+    /// A view the core sent because it moved.
     private func commit(_ json: [String: Any]) {
-        // The core hands its whole view back with every answer; most answers
-        // (a pool call settled, a name not found) leave it as it was. Equal
-        // to the last one: nothing to decode, nothing to tell.
-        if skipsUnchanged, view != nil, let lastView, Self.same(lastView, json, ignoring: ignoredKeys) {
-            return
-        }
         do {
             let decoded = try CoreJSON.decode(View.self, from: json)
             view = decoded

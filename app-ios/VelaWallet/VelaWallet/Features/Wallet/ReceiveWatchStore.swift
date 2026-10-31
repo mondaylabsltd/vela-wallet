@@ -69,7 +69,9 @@ final class ReceiveWatchStore {
                 await self?.perform(operation) ?? CoreJSON.string(["type": "inactive"])
             },
             onView: { [weak self] view in self?.view = view },
-            onFault: { print("[vela-wallet] receive_watch fault: \($0)") }
+            onFault: { print("[vela-wallet] receive_watch fault: \($0)") },
+            // `onView` mirrors: an answer that moved nothing redraws nothing.
+            skipsUnchanged: true
         )
     }
 

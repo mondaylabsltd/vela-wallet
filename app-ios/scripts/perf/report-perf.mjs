@@ -24,7 +24,7 @@ const jsonOut = rest[0] === '--json' ? rest[1] : null;
 // metric id fragment → { label, target, scale (to the target's unit), unit }
 const TARGETS = [
 	{ id: 'OSSignpost-HomeCachedPaint.duration', label: 'cold start → cached home', target: 1.2, unit: 's' },
-	{ id: 'ApplicationLaunch-ApplicationFirstFramePresentationResponsive', label: 'launch → first frame, responsive (lockup plays)', unit: 's' },
+	{ id: 'ApplicationLaunch-ApplicationFirstFramePresentationResponsive', label: 'launch → first frame, responsive (lockup as it ships: weekly)', unit: 's' },
 	{ id: 'ApplicationLaunch-ApplicationLaunch', label: 'launch → first frame', unit: 's' },
 	{ id: 'OSSignpost-ConfirmToPasskey.duration', label: 'Confirm → passkey', target: 300, scale: 1000, unit: 'ms' },
 	{ id: 'physical_peak', label: 'memory, peak physical', target: 180, scale: 1 / 1024, unit: 'MB' },

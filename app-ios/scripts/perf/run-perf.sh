@@ -25,6 +25,19 @@
 # PerfTests.swift).
 #
 # PERF_SKIP_SEED=1 skips step 1 (a simulator seeded within the last day).
+#
+# A live Confirm → passkey: point the seed at the multisig fork harness
+# (scripts/onchain/multisig-fork/up.sh), which funds the golden Safe on its
+# Gnosis fork, and the test no longer skips for want of a balance:
+#
+#   PERF_HARNESS_RPC=http://127.0.0.1:10045 PERF_HARNESS_RELAY=http://127.0.0.1:10090 \
+#     app-ios/scripts/perf/run-perf.sh <udid>
+#
+# The Debug seed launch writes them as the person's own node for Gnosis and
+# the relay (`DevLaunchInputs`: `VELA_RPC_OVERRIDES`, `VELA_SERVICE_ENDPOINTS`);
+# they persist, so the Release build reads the fork too. Without them the seed
+# REMOVES both, so a simulator once pointed at a harness is not measured
+# against a dead one.
 set -euo pipefail
 
 [[ $# -ge 1 ]] || { echo "usage: $0 <simulator-udid> [derived-data-dir] [result.xcresult]" >&2; exit 2; }
@@ -45,8 +58,17 @@ if [[ "${PERF_SKIP_SEED:-0}" != 1 ]]; then
   echo "run-perf: 1/3 seeding the wallet (Debug launch)"
   xcodebuild build -scheme VelaWallet -configuration Debug "${common[@]}" -quiet
   xcrun simctl install "$udid" "$dd/Build/Products/Debug-iphonesimulator/VelaWallet.app"
+  if [[ -n "${PERF_HARNESS_RPC:-}" && -n "${PERF_HARNESS_RELAY:-}" ]]; then
+    echo "run-perf: Gnosis through $PERF_HARNESS_RPC, the relay at $PERF_HARNESS_RELAY"
+    rpc_overrides="{\"100\":{\"rpcURL\":\"$PERF_HARNESS_RPC\",\"onlyMine\":true}}"
+    endpoints="{\"bundlerServiceURL\":\"$PERF_HARNESS_RELAY\"}"
+  else
+    rpc_overrides='{"100":null}'
+    endpoints='{"bundlerServiceURL":null}'
+  fi
   SIMCTL_CHILD_VELA_PARALLEL_SPACE=1 SIMCTL_CHILD_VELA_PERF_SEED=200 \
   SIMCTL_CHILD_VELA_PERF_ADDRESS="$golden" SIMCTL_CHILD_VELA_SKIP_LAUNCH_ANIMATION=1 \
+  SIMCTL_CHILD_VELA_RPC_OVERRIDES="$rpc_overrides" SIMCTL_CHILD_VELA_SERVICE_ENDPOINTS="$endpoints" \
     xcrun simctl launch --terminate-running-process "$udid" "$bundle" >/dev/null
   # The space's door opens after the first frame; give it, and the store, time.
   sleep 15
