@@ -84,6 +84,8 @@ final class ActivityExecutor {
     /// counterparty cannot be named one thing in the feed and another in the
     /// address book — and so the 24-hour cache is shared rather than doubled.
     private let identity: RecipientIdentity?
+    /// The space in front (spec 105), read at each scan: it can switch.
+    private let spaceChains: @MainActor () -> Space
     /// The chain, for a receipt's block time: the pool `token_trust` scans
     /// through (`TokenTrustStore.chainRead`), unless a test hands its own.
     private let read: ChainRead
@@ -99,9 +101,14 @@ final class ActivityExecutor {
         held: HeldTokens,
         trust: TokenTrustStore,
         identity: RecipientIdentity? = nil,
-        read: ChainRead? = nil
+        read: ChainRead? = nil,
+        spaceChains: (@MainActor () -> Space)? = nil
     ) {
         self.store = store
+        self.spaceChains = spaceChains ?? { [store] in
+            let all = NetworkSpace.chainIds(store: store)
+            return Space(all: all, added: all.filter { ChainCatalog.meta($0) == nil })
+        }
         self.accounts = accounts
         self.held = held
         self.trust = trust
@@ -196,6 +203,29 @@ final class ActivityExecutor {
 
     // MARK: - Receipt discovery
 
+    /// The chains a receipt scan reads (the web's `syncReceivedTransfers`):
+    /// those the account holds something on; else the main payment chains
+    /// if the space in front has any of them; else the space's own networks
+    /// — its first `nativeWatchFallback` and every one the person added.
+    static func scanChains(active: [Int], space: Space) -> [Int] {
+        if !active.isEmpty { return active }
+        if defaultMonitorChains.contains(where: space.all.contains) { return defaultMonitorChains }
+        var out: [Int] = []
+        for id in space.added + Array(space.all.prefix(nativeWatchFallback)) where !out.contains(id) {
+            out.append(id)
+        }
+        return out.isEmpty ? defaultMonitorChains : out
+    }
+
+    /// The space in front: every network, and those the person added.
+    struct Space: Equatable {
+        var all: [Int]
+        var added: [Int]
+    }
+
+    /// The web's `NATIVE_WATCH_FALLBACK`.
+    static let nativeWatchFallback = 6
+
     /// Discover and persist new receipts. Answers how many landed.
     private func scan(address: String) async -> Int {
         guard !address.isEmpty, !scanning.contains(address.lowercased()) else { return 0 }
@@ -204,8 +234,13 @@ final class ActivityExecutor {
 
         // Only the chains the wallet actually uses — twelve chains for an
         // account that holds one is twenty-four `eth_getLogs` nobody asked for.
-        let active = held.chainIds(address: address)
-        let chainIds = active.isEmpty ? Self.defaultMonitorChains : active
+        // With none held yet (a multisig just made, waiting for its first
+        // coin), the web's choice (r4a-17, r4D-18): the main payment chains
+        // when the space in front has them, else the space's own networks —
+        // never mainnets for an account that lives on Arc Testnet (r9-17).
+        let chainIds = Self.scanChains(
+            active: held.chainIds(address: address), space: spaceChains()
+        )
 
         let incoming = await trust.pollIncoming(address: address, chainIds: chainIds)
         return ingest(incoming, address: address)
