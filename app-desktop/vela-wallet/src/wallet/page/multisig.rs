@@ -31,6 +31,12 @@ use crate::multisig::host::{self as ms_host, MultisigHost};
 use crate::multisig::machines::Screen;
 use crate::multisig::words;
 
+/// A multisig's own part of Settings → Account (AUDIT M1, M3). A child of
+/// this module (its file beside this one) so it draws with the sheet's
+/// helpers without widening them.
+#[path = "multisig_settings.rs"]
+mod settings;
+
 /// The multisig surfaces' state on this page — which sheet is open, and
 /// what the person picked on it. What a machine holds is never copied here.
 #[derive(Default)]
@@ -64,6 +70,8 @@ pub(crate) struct MultisigUi {
     pub add: Option<String>,
     /// The invite sheet for this multisig is up.
     pub invite: Option<String>,
+    /// Settings → Account's multisig block (`multisig_settings.rs`).
+    pub settings: settings::SettingsUi,
 }
 
 /// The one review, as drawn (`multisig_review::MultisigReview`'s JSON):
@@ -291,7 +299,7 @@ impl WalletPage {
             self.close_multisig_sheet(cx);
             return true;
         }
-        false
+        self.multisig_settings_escape(cx)
     }
 
     // -- the switcher -------------------------------------------------------------
@@ -1544,30 +1552,44 @@ impl WalletPage {
             ));
         }
 
-        // A member change: the rule before and after, loudly.
+        // A member change, read before anything else (`MemberChangeRule`):
+        // the caution, each change with its address whole, the rule it meets
+        // and the one it leaves ("Approvals: 2 of 3 → 2 of 4").
         if let Some(changes) = &review.member_changes {
-            let rule = |r: &vela_core::multisig_reading::Rule| format!("{} / {}", r.threshold, r.owners);
-            col = col
-                .child(ms_note(
-                    theme,
-                    &words::tv(
-                        &loc,
-                        "change.rule",
-                        &[("before", &rule(&changes.before)), ("after", &rule(&changes.after))],
-                    ),
-                    Tone::Caution,
-                ))
-                .child(ms_note(
-                    theme,
-                    &words::tv(&loc, "change.caution", &[("network", &net)]),
-                    Tone::Caution,
-                ));
-            if !changes.fits {
-                col = col.child(ms_note(
-                    theme,
-                    &words::tv(&loc, "change.doesNotFit", &[("network", &net)]),
-                    Tone::Danger,
-                ));
+            let lines = crate::multisig::member_words::change_lines(&loc, changes, &net, &|a: &str| {
+                self.ms_member_name(a, account, cx)
+            });
+            col = col.child(ms_note(theme, &lines.caution, Tone::Caution));
+            for (c, line) in changes.changes.iter().zip(&lines.changes) {
+                let whole: Vec<String> = [c.removed.as_deref(), c.added.as_deref()]
+                    .into_iter()
+                    .flatten()
+                    .map(vela_core::multisig_link::eip55)
+                    .collect();
+                col = col.child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(2.))
+                        .child(
+                            div()
+                                .text_size(theme::text_row_sub())
+                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .text_color(theme.fg_base)
+                                .child(line.clone()),
+                        )
+                        .children(whole.into_iter().map(|a| {
+                            div()
+                                .font_family(theme::font_mono())
+                                .text_size(theme::text_label())
+                                .text_color(theme.fg_muted)
+                                .child(a)
+                        })),
+                );
+            }
+            col = col.child(ms_note(theme, &lines.rule, Tone::Caution));
+            if let Some(misfit) = &lines.does_not_fit {
+                col = col.child(ms_note(theme, misfit, Tone::Danger));
             }
         }
 

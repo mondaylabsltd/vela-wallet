@@ -9965,7 +9965,7 @@ impl WalletPage {
         }
 
         let body = match self.settings_page {
-            SettingsPage::Account => self.settings_account(theme, cx),
+            SettingsPage::Account => self.settings_account(theme, window, cx),
             SettingsPage::Appearance => self.settings_appearance(theme, cx),
             SettingsPage::Localization => self.settings_localization(theme, cx),
             SettingsPage::Networks => self.settings_networks(theme, window, cx),
@@ -10116,6 +10116,7 @@ impl WalletPage {
         &mut self,
         theme: &Theme,
         session: &vela_core::app::session::SessionView,
+        window: &Window,
         cx: &mut Context<Self>,
     ) -> Div {
         self.ensure_backup_check(cx);
@@ -10136,6 +10137,7 @@ impl WalletPage {
                 erase_title,
                 erase_subtitle,
                 erase_confirm,
+                window,
                 cx,
             ))
     }
@@ -10451,7 +10453,7 @@ impl WalletPage {
             .child(self.account_buttons(theme, true, cx))
     }
 
-    fn settings_account(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
+    fn settings_account(&mut self, theme: &Theme, window: &Window, cx: &mut Context<Self>) -> Div {
         let s = &self.settings;
         let summary = settings_fixtures::accounts_summary(s, &self.loc);
         let sign_out = s.sign_out_button.clone();
@@ -10466,7 +10468,7 @@ impl WalletPage {
         // strangers' under it.
         let session = session::view(cx);
         if !session.accounts.is_empty() {
-            return self.settings_account_live(theme, &session, cx);
+            return self.settings_account_live(theme, &session, window, cx);
         }
 
         let mut list = div().flex().flex_col();
@@ -11884,10 +11886,15 @@ impl WalletPage {
         erase_title: gpui::SharedString,
         erase_subtitle: gpui::SharedString,
         erase_confirm: gpui::SharedString,
+        window: &Window,
         cx: &mut Context<Self>,
     ) -> Div {
-        let venue = self.venue_block(theme, cx);
-        let keys = self.keys_block(theme, cx);
+        // AUDIT M1: a multisig shown has its own part here, in place of the
+        // Vela account's keys and signing venue (the web's `accountKeys`).
+        let (venue, keys) = match self.multisig_settings_block(theme, window, cx) {
+            Some(block) => (None, block),
+            None => (self.venue_block(theme, cx), self.keys_block(theme, cx)),
+        };
         div()
             .flex()
             .flex_col()
@@ -20258,6 +20265,7 @@ impl WalletPage {
         // the web's page does each time it meets an account (078 S-02).
         if !(self.section == Section::Settings && self.settings_page == SettingsPage::Account) {
             self.backup_for = None;
+            self.multisig_settings_left();
         }
         columns = match self.section {
             Section::Wallet => {
