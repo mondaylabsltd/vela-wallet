@@ -30,7 +30,9 @@ import Foundation
 /// `error`, or nobody answered.
 enum MultisigRpcReply {
     case result(Any?)
-    case error(code: Int?, message: String)
+    /// The node's JSON-RPC error — its `data` too (r8-4: the state-diff
+    /// probe's answer rides there; a chain with no trace has no other).
+    case error(code: Int?, message: String, data: Any? = nil)
     case unanswered(String)
 }
 
@@ -147,8 +149,11 @@ struct MultisigExecutor {
             switch reply {
             case .result(let value):
                 return ["type": "rpc_result", "result": value ?? NSNull()]
-            case .error(let code, let message):
-                return ["type": "rpc_error", "code": code.map { $0 as Any } ?? NSNull(), "message": message]
+            case .error(let code, let message, let data):
+                var answer: [String: Any] = ["type": "rpc_error", "code": code.map { $0 as Any } ?? NSNull(), "message": message]
+                // Absent stays absent: the core reads it as before.
+                if let data, !(data is NSNull) { answer["data"] = data }
+                return answer
             case .unanswered(let detail):
                 return ["type": "rpc_unanswered", "detail": detail]
             }

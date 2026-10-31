@@ -116,13 +116,26 @@ final class MultisigLive: MultisigPorts {
 
     func rpc(chainId: Int, method: String, params: Any) async -> MultisigRpcReply {
         let list = params as? [Any] ?? [params]
-        switch await deps.pool.call(chainId: chainId, method: method, params: list) {
+        let routed = await deps.pool.callDetailed(chainId: chainId, method: method, params: list)
+        switch routed.outcome {
         case .ok(let value): return .result(value)
-        case .rpcError(let code, let message): return .error(code: code, message: message)
+        case .rpcError(let code, let message):
+            // r8-4: the error's `data` as the node sent it (the held error).
+            return .error(code: code, message: message, data: Self.errorData(routed.heldErrorJson))
         case .failed(let rateLimited):
             return .unanswered(rateLimited ? "every node of \(chainId) is rate limiting" : "no node of \(chainId) answered")
         case .rangeCap: return .unanswered("the node capped the range")
         }
+    }
+
+    /// A JSON-RPC error object's `data`, as the node sent it; `nil` when it
+    /// carried none.
+    static func errorData(_ errorJson: String?) -> Any? {
+        guard let errorJson,
+              let object = try? JSONSerialization.jsonObject(with: Data(errorJson.utf8)) as? [String: Any],
+              let data = object["data"], !(data is NSNull)
+        else { return nil }
+        return data
     }
 
     // MARK: - Store
