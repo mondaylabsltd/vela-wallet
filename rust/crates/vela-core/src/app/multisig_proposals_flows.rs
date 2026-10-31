@@ -70,6 +70,10 @@ struct OutsidePending {
     round: Option<u64>,
 }
 
+/// core-ms-2: how many `wallet_getCallsStatus` answers wait to be taken
+/// ([`Event::CallsStatusTaken`]) before the oldest goes.
+pub const CALLS_STATUS_KEPT: usize = 16;
+
 /// What these rules keep in the machine's state.
 #[derive(Default)]
 pub struct More {
@@ -83,6 +87,8 @@ pub struct More {
     frozen: BTreeMap<String, FrozenFacts>,
     dapp: BTreeMap<String, Held>,
     calls_status: BTreeMap<String, DappAnswer>,
+    /// The ids of `calls_status`, oldest first (its bound).
+    calls_order: std::collections::VecDeque<String>,
     linked: Option<Linked>,
     outside: BTreeMap<String, OutsidePending>,
     indexed: Vec<String>,
@@ -486,8 +492,26 @@ pub(super) fn update(event: Event, model: &mut Model) -> Cmd {
             calls_id,
         } => flow(model, move |io, st| async move {
             let answer = calls_status(&io, &st, chain_id, &calls_id).await;
-            lock(&st).more.calls_status.insert(id, answer);
+            let mut s = lock(&st);
+            let more = &mut s.more;
+            more.calls_order.retain(|k| *k != id);
+            more.calls_order.push_back(id.clone());
+            more.calls_status.insert(id, answer);
+            // core-ms-2: answers not taken are kept at most CALLS_STATUS_KEPT.
+            while more.calls_order.len() > CALLS_STATUS_KEPT {
+                if let Some(old) = more.calls_order.pop_front() {
+                    more.calls_status.remove(&old);
+                }
+            }
         }),
+        Event::CallsStatusTaken { id } => {
+            let mut s = lock(&model.state);
+            s.more.calls_order.retain(|k| *k != id);
+            if s.more.calls_status.remove(&id).is_none() {
+                return Command::done();
+            }
+            render()
+        }
         Event::OpenLinked {
             chain_id,
             safe_tx_hash,
@@ -932,6 +956,11 @@ fn dapp_request(
         )
         .await;
     })
+}
+
+/// core-ms-2: the draft is a site's request under review.
+pub fn reviewing_request(s: &State) -> bool {
+    reviewing(s, s.draft_round).is_some()
 }
 
 fn reviewing(s: &State, round: u64) -> Option<String> {
