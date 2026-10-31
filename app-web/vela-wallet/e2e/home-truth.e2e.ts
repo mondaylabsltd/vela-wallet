@@ -292,6 +292,9 @@ test('the refresh under the total reads again, says so, and moves nothing (issue
 	const control = page.getByTestId('balance-refresh');
 	const updatedNow = en('home.lastUpdated').replace('{{ago}}', en('time.now'));
 	await expect(control).toHaveText(new RegExp(updatedNow));
+	// Measure once the web font is in: a late font swap resizes the label
+	// (seen ~1 px in Firefox), which is the font loading, not the refresh.
+	await page.evaluate(() => document.fonts.ready);
 	const before = await control.boundingBox();
 
 	// A deposit lands from somewhere else: Ethereum now holds 2 ETH.
