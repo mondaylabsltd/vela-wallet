@@ -3374,6 +3374,14 @@ fn propose_draft(model: &Model, as_member: Option<String>, then_execute: bool) -
     flow(model, move |io, st| async move {
         let claimed = flows::claim(&io, &st, round).await;
         let outcome = confirm_draft(&io, &st, as_member, round).await;
+        // `execute:<hash>` is working from the moment it is proposed (a
+        // sheet waits on it); it goes again when the execution is not for now.
+        let executing = match (&outcome, then_execute, chain_id) {
+            (ActionState::Done { safe_tx_hash, .. }, true, Some(chain_id)) => {
+                Some((chain_id, safe_tx_hash.clone()))
+            }
+            _ => None,
+        };
         {
             let mut s = lock(&st);
             if s.draft_round == round {
@@ -3382,28 +3390,32 @@ fn propose_draft(model: &Model, as_member: Option<String>, then_execute: bool) -
                 }
                 s.actions.insert("propose".to_owned(), outcome.clone());
             }
+            if let Some((_, hash)) = &executing {
+                s.actions.insert(
+                    format!("execute:{}", hash.to_ascii_lowercase()),
+                    ActionState::Working,
+                );
+            }
         }
         flows::on_proposed(&io, &st, round, &outcome, claimed).await;
-        let (Some(chain_id), true, ActionState::Done { safe_tx_hash, .. }) =
-            (chain_id, then_execute, &outcome)
-        else {
+        let Some((chain_id, hash)) = executing else {
             return;
         };
         // The proposal as the mailbox has it now: executed, by the member
         // who proposed it, if their approval made it ready.
         refresh(&io, &st, false, true).await;
-        let proposer = lock(&st).item(chain_id, safe_tx_hash).and_then(|(i, _)| {
+        let proposer = lock(&st).item(chain_id, &hash).and_then(|(i, _)| {
             (i.status == ProposalStatus::Ready
                 && i.can_execute.iter().any(|e| same_address(e, &i.proposer)))
             .then(|| i.proposer.clone())
         });
-        if let Some(proposer) = proposer {
-            lock(&st).actions.insert(
-                format!("execute:{}", safe_tx_hash.to_ascii_lowercase()),
-                ActionState::Working,
-            );
-            io.emit(Event::Changed);
-            approve_execute(&io, &st, chain_id, safe_tx_hash, &proposer).await;
+        match proposer {
+            Some(proposer) => approve_execute(&io, &st, chain_id, &hash, &proposer).await,
+            None => {
+                lock(&st)
+                    .actions
+                    .remove(&format!("execute:{}", hash.to_ascii_lowercase()));
+            }
         }
     })
 }

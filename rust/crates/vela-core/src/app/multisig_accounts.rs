@@ -1905,6 +1905,14 @@ async fn start(io: &Io<Event>, st: &Shared<State>) {
             .into_iter()
             .map(|a| a.to_ascii_lowercase())
             .collect();
+        // core-ms-2: its threshold is the person's pick again (a sheet
+        // opened before the store answered included).
+        if s.threshold_pick.is_none() {
+            s.threshold_pick = s
+                .kept_draft
+                .as_ref()
+                .map(|d| (d.threshold.max(1), d.owners.len()));
+        }
         // The kinds the person picked in it are their word again.
         if let Some(d) = s.kept_draft.clone() {
             for (address, info) in &d.members {
