@@ -1659,13 +1659,13 @@ impl WalletPage {
                     // It cannot run by this executor: approving is the one
                     // thing left to do.
                     if *approve_first && *can_approve_only && look != &Some(rule::Look::Spent) {
-                        presses = presses.child(div().flex_1().child(self.ms_approve_press(theme, item, actor.clone(), value_variant(sign), rule::approve_label(sign), reviewed && sign.allowed && !executing, approving, cx)));
+                        presses = presses.child(div().flex_1().min_w(px(0.)).child(self.ms_approve_press(theme, item, actor.clone(), value_variant(sign), rule::approve_label(sign), reviewed && sign.allowed && !executing, approving, cx)));
                     }
                 } else {
                     if *approve_first && *can_approve_only {
                         // Executing pays the fee; approving alone does not.
                         // As tall as the press beside it: one row of two answers.
-                        presses = presses.child(div().flex_1().child(
+                        presses = presses.child(div().flex_1().min_w(px(0.)).child(
                             self.ms_approve_press(theme, item, actor.clone(), crate::ui::ButtonVariant::Secondary, rule::approve_label(sign), reviewed && sign.allowed && !executing, approving, cx)
                                 .min_h(px(crate::theme::BTN_H_PRIMARY)),
                         ));
@@ -1678,7 +1678,7 @@ impl WalletPage {
                     };
                     let (chain_id, hash, one_tap) = (item.chain_id, item.safe_tx_hash.clone(), *one_tap);
                     let executor = actor.clone();
-                    presses = presses.child(div().flex_1().child(crate::ui::vela_button_state(
+                    presses = presses.child(div().flex_1().min_w(px(0.)).child(crate::ui::vela_button_state(
                         "ms-execute",
                         value_variant(sign),
                         words::t(&loc, rule::execute_label(*approve_first, sign)).into(),
