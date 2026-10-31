@@ -1353,8 +1353,11 @@ for (let i = 1; i < PATHS.length; i++) {
 //   readyToExecute, executed}`). 2243 + 19 leaves + 2 branches
 //   (`componentsUi.appUpdate.refused`, `componentsUi.multisigNotify`) =
 //   2264 paths, 2147 leaves, 117 branches.
-if (PATHS.length !== 2264) fail(`expected 2264 paths (2147 leaf + 117 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2147) fail(`expected 2147 leaf paths, got ${leafSet.size}`);
+// 2265 (round 8, 2026-11-01): + `onboarding.welcomeWeb.linkWaiting` (Welcome
+//   says a multisig link opened here is waiting for a wallet, r5reg). 2264 +
+//   1 = 2265 paths, 2148 leaves, 117 branches.
+if (PATHS.length !== 2265) fail(`expected 2265 paths (2148 leaf + 117 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2148) fail(`expected 2148 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 117) fail(`expected 117 branch paths, got ${branchSet.size}`);
 // The on-demand catalogs, pinned the same way (leaves of every locale's union):
 // a key dropped from one namespace and not landed in the other fails here.
@@ -1414,7 +1417,14 @@ if (branchSet.size !== 117) fail(`expected 117 branch paths, got ${branchSet.siz
   //   ("Couldn't read its members on {{network}}." — a network whose chain
   //   did not answer, said in Settings on every platform, never left out).
   //   609 + 1 = 610.
-  const pins = { multisig: 610 };
+  // 650 (round 8, 2026-11-01): + `home.multisig.review.reading.*` (37: the
+  //   words for the core's own reading of every call and its concerns —
+  //   r8-1 unlimited grants, r8-2 decimals unknown, r8-5 nested batches),
+  //   `home.multisig.proposal.outboxSending` (r8-16: an approval on its way
+  //   is "sending", never "not sent") and `home.multisig.external.
+  //   {executeConfirms, executeFeeMax}` (r8-15: how many wallet prompts are
+  //   coming, and the most the fee can be). 610 + 40 = 650.
+  const pins = { multisig: 650 };
   for (const [name, docs] of Object.entries(onDemand)) {
     const leaves = new Set();
     for (const lng of LOCALES) walk(docs[lng], '', leaves, new Set());

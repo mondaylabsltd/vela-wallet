@@ -705,6 +705,8 @@ fn executing_with_the_owners_own_wallet_after_its_fee_is_said() {
             wei: (21_000u64 * 1_000_000_000).to_string(),
             count: 1,
             partial: false,
+            // r8-15: the most it can take, said beside the estimate.
+            max_wei: (21_000u64 * 1_000_000_000 * 2).to_string(),
         }
     );
     run(

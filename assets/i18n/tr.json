@@ -815,7 +815,8 @@
      "title": "Gas ücretini stablecoin ile ödeyin",
      "description": "Çoğu ağ, ücretlerin stablecoin ile ödenmesini destekler — önceden yerel coin bulundurmanız gerekmez."
     }
-   }
+   },
+   "linkWaiting": "Bir multisig bağlantısı bekliyor. Cüzdan oluştur ya da giriş yap, açılsın."
   },
   "settings": {
    "title": "Ayarlar",

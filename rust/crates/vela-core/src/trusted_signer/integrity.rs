@@ -61,6 +61,12 @@
 /// Every entry is a page published at `sign.getvela.app/b/<hash>/sign.html`.
 /// An empty set would open nothing were it enforced — see [`ENFORCE`].
 pub const BUILD_ALLOWED: &[&str] = &[
+    // 879e715f's page, round 8 (r8-5): a batch inside a batch lists every
+    // leg of every level ("1.1", "1.2"), nested deeper than three is
+    // refused, and a danger is confirmed on the danger's outlined button —
+    // never the plain accent Approve; "One call packed" for one; the
+    // catalog knows Arc Testnet's USDC (6 decimals).
+    "e110d02c37422d1e1e152a113dfa2270195097342fb92473b1c701dbb4869d5f",
     // 126a267a's page plus the Safari Web Extension's hand-off: with no
     // `window.opener` (a page opened from an extension page), the answer
     // goes back through Vela's content script on the page; and an opener

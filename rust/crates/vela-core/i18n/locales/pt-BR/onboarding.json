@@ -64,7 +64,8 @@
           "title": "Pague o gas com stablecoins",
           "description": "A maioria das redes aceita stablecoins para as taxas — sem precisar ter a moeda nativa antes."
         }
-      }
+      },
+      "linkWaiting": "Um link de multisig está esperando. Crie uma carteira ou entre, e ele abre."
     },
     "settings": {
       "title": "Configurações",

@@ -797,10 +797,16 @@ pub enum ActionState {
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "MultisigOutboxEntry"))]
 pub struct OutboxEntry {
-    /// `busy`: the service said wait; `away`: nothing answered.
+    /// `busy`: the service said wait; `away`: nothing answered; `sending`
+    /// (r8-16): on its way now — nothing was refused, nothing to send again.
     pub why: String,
-    /// When it is sent again; `None`: on the person's word (Send again).
+    /// When it is sent again; `None`: on the person's word (Send again) —
+    /// or, while `sending`, not needed.
     pub retry_at: Option<f64>,
+    /// r8-16: it is being handed to the mailbox right now. A shell says
+    /// "Sending…", never "Not sent yet" and never offers Send again.
+    #[serde(default)]
+    pub sending: bool,
 }
 
 /// The draft the person reviews before the passkey.
@@ -2555,6 +2561,15 @@ async fn send_kept(io: &Io<Event>, st: &Shared<State>, req: Submission) -> Sent 
     let outbox = {
         let mut s = lock(st);
         s.outbox.insert(key.clone(), req.clone());
+        // r8-16: kept and on its way at once — never "not sent" meanwhile.
+        s.outbox_entries.insert(
+            key.clone(),
+            OutboxEntry {
+                why: "sending".to_owned(),
+                retry_at: None,
+                sending: true,
+            },
+        );
         s.outbox.clone()
     };
     save_json(io, keys::OUTBOX, &outbox, true).await;
@@ -2580,7 +2595,20 @@ async fn drop_kept(io: &Io<Event>, st: &Shared<State>, key: &str) {
 }
 
 async fn attempt(io: &Io<Event>, st: &Shared<State>, key: &str, req: &Submission) -> Sent {
-    let service = lock(st).service.clone();
+    // r8-16: on its way: said as sending until the mailbox answers.
+    let service = {
+        let mut s = lock(st);
+        s.outbox_entries.insert(
+            key.to_owned(),
+            OutboxEntry {
+                why: "sending".to_owned(),
+                retry_at: None,
+                sending: true,
+            },
+        );
+        s.service.clone()
+    };
+    io.emit(Event::Changed);
     match service.submit_approval(io, req).await {
         Ok(SubmitAnswer::Took { .. }) => {
             drop_kept(io, st, key).await;
@@ -2615,6 +2643,7 @@ async fn attempt(io: &Io<Event>, st: &Shared<State>, key: &str, req: &Submission
                 OutboxEntry {
                     why: why.to_owned(),
                     retry_at,
+                    sending: false,
                 },
             );
             Sent::Kept

@@ -64,6 +64,18 @@ pub fn call(method: &str, args: &Value) -> Result<String, CoreError> {
                 &facts.unwrap_or_default(),
             )?)
         }
+        // r8-2/r8-20: what the wallet's own registry says of a token on a
+        // chain (`known: false`, symbol and decimals null: ask its contract,
+        // and say its amounts raw until it answers — never 18 assumed).
+        "token" => {
+            let chain_id: u64 = arg(args, "chainId")?;
+            let token: Option<String> = arg(args, "token")?;
+            to_json(&TokenFacts::of(
+                chain_id,
+                token.as_deref(),
+                &BTreeMap::new(),
+            ))
+        }
         other => Err(CoreError::Multisig(format!("review.{other}: no such rule"))),
     }
 }

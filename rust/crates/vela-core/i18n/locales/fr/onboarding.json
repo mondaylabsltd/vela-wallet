@@ -64,7 +64,8 @@
           "title": "Payez le gas en stablecoins",
           "description": "La plupart des réseaux acceptent les stablecoins pour les frais — inutile de prévoir d'abord la monnaie native."
         }
-      }
+      },
+      "linkWaiting": "Un lien multisig vous attend. Créez un wallet ou connectez-vous, et il s'ouvrira."
     },
     "settings": {
       "title": "Réglages",

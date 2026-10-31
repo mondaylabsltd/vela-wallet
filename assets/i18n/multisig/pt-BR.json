@@ -192,7 +192,8 @@
     "copy": "Copiar",
     "executedBy": "Executada por {{name}}",
     "countedThen": "{{approved}} de {{threshold}} aprovações contaram na execução",
-    "approvalsSigned": "Estes membros aprovaram. Quais aprovações contaram na execução não está registrado neste dispositivo."
+    "approvalsSigned": "Estes membros aprovaram. Quais aprovações contaram na execução não está registrado neste dispositivo.",
+    "outboxSending": "Enviando sua aprovação aos outros membros…"
    },
    "send": {
     "propose": "Propor e aprovar",
@@ -491,7 +492,9 @@
     "rowReject": "Rejeitar {{number}}",
     "outcomeNotSent": "Assinado, ainda não enviado",
     "nameFromRecord": "O nome como foi salvo com o registro — você assina pelo endereço",
-    "linkDamaged": "Este link está danificado — peça um novo."
+    "linkDamaged": "Este link está danificado — peça um novo.",
+    "executeConfirms": "Sua carteira vai pedir para você confirmar {{total}} transações, uma depois da outra.",
+    "executeFeeMax": "Taxa de rede ≈ {{fee}}, no máximo {{max}}, paga pela sua carteira ({{account}})."
    },
    "import": {
     "or": "Ou importe do Safe{Wallet}",
@@ -649,7 +652,46 @@
     "approveExecuteAnyway": "Aprovar e executar mesmo assim",
     "executeAnyway": "Executar mesmo assim",
     "proposeAnyway": "Propor e aprovar mesmo assim",
-    "blocked": "A Vela não assina esta transação: executá-la mudaria quem controla o multisig."
+    "blocked": "A Vela não assina esta transação: executá-la mudaria quem controla o multisig.",
+    "reading": {
+     "send": "Enviar",
+     "sendFrom": "Mover tokens de outra conta",
+     "approve": "Aprovar",
+     "increase": "Aumentar uma permissão",
+     "decrease": "Reduzir uma permissão",
+     "permit": "Permit",
+     "daiPermit": "Permit da DAI",
+     "permit2": "Permissão Permit2",
+     "approveAll": "Aprovar todos os tokens de uma coleção",
+     "revokeAll": "Revogar o acesso a uma coleção",
+     "batchOne": "Lote de 1 chamada",
+     "batchMany": "Lote de {{total}} chamadas",
+     "unreadable": "Não dá para ler",
+     "call": "Chamada de contrato",
+     "members": "Muda os membros",
+     "rename": "Renomear para {{name}}",
+     "amount": "Valor",
+     "allowance": "Permissão",
+     "to": "Para",
+     "from": "De",
+     "spender": "Autorizado",
+     "operator": "Operador",
+     "collection": "Coleção",
+     "token": "Token",
+     "function": "Função",
+     "alsoSends": "Também envia",
+     "runner": "Executado por",
+     "runnerNote": "As chamadas saem deste contrato, não do multisig.",
+     "unlimited": "Ilimitado",
+     "allOfIt": "Tudo",
+     "decimalsUnknown": "{{raw}} unidades base · casas decimais desconhecidas",
+     "unlimitedLine": "Permissão ilimitada: {{spender}} poderia pegar tudo o que o multisig tiver disso, agora e depois.",
+     "nestedLine": "Um lote dentro de outro lote. Todas as chamadas estão abaixo; as internas saem do contrato do lote.",
+     "unreadableLine": "Parte deste lote não dá para ler (aninhado demais ou cortado). A Vela não vai assinar.",
+     "decimalsLine": "{{token}} não informou quantas casas decimais tem, então os valores aparecem em unidades base.",
+     "ownTokenLine": "Isto envia tokens para o próprio contrato do token ({{token}}). Eles seriam perdidos.",
+     "blindLine": "A Vela não consegue ler o que esta chamada faz. Aprove só se souber exatamente o que é."
+    }
    }
   }
  }

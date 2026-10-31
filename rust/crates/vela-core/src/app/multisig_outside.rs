@@ -2248,7 +2248,17 @@ pub mod page {
         pub count: u32,
         /// Some could not be priced before the ones ahead of them land.
         pub partial: bool,
+        /// r8-15: the most it can cost (wei, decimal): every transaction at
+        /// twice the gas price now (a wallet's own ceiling while the price
+        /// moves), and one not priced yet at [`UNPRICED_GAS`] — said beside
+        /// the estimate, so what the wallet takes is never more than said.
+        #[serde(default)]
+        pub max_wei: String,
     }
+
+    /// The gas bound for a transaction that cannot be priced before the
+    /// ones ahead of it land (an `execTransaction` behind its deployment).
+    pub const UNPRICED_GAS: u64 = 600_000;
 
     /// The fee estimated for an account (`fee: None`: it cannot say).
     #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -4072,6 +4082,7 @@ pub mod page {
         let price = big(Some(&price))?;
         let mut gas = U256::ZERO;
         let mut partial = false;
+        let mut unpriced = 0u64;
         for call in &calls {
             let estimate = io
                 .rpc(
@@ -4082,16 +4093,22 @@ pub mod page {
                 .await;
             match estimate.ok().and_then(|e| big(Some(&e))) {
                 Some(g) => gas += g,
-                None => partial = true,
+                None => {
+                    partial = true;
+                    unpriced += 1;
+                }
             }
         }
         if gas.is_zero() {
             return None;
         }
+        let ceiling =
+            (gas + U256::from(unpriced) * U256::from(UNPRICED_GAS)) * price * U256::from(2);
         Some(ExecutionFee {
             wei: (gas * price).to_string(),
             count: u32::try_from(calls.len()).unwrap_or(u32::MAX),
             partial,
+            max_wei: ceiling.to_string(),
         })
     }
 
