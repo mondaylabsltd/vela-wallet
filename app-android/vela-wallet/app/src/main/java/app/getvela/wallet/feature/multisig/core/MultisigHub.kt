@@ -490,6 +490,16 @@ class MultisigHub(
     fun dappProposal(id: String): Pair<Int, String>? = dappProposed[id]
 
     /**
+     * r8-10: the site behind [id] is still waiting for its answer. The
+     * machine applies its events in order and LATER than the dispatch, so
+     * right after [dappRequest] the view does not hold the request yet — and
+     * a sheet that read "not in the view" as "answered" closed itself before
+     * the machine saw the request: no sheet, and the site's promise pending
+     * for ever. Not answered is this: the answer not yet handed to the site.
+     */
+    fun dappWaiting(id: String): Boolean = dappAnswers.containsKey(id)
+
+    /**
      * A site's request to a multisig (`eth_sendTransaction`, `wallet_sendCalls`,
      * …): the machine decides everything — refused (a message), drafted with
      * its review, proposed on the person's word, held until executed, told

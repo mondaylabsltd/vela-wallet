@@ -366,6 +366,32 @@ class MultisigShellTest {
         assertEquals(4100L, other.single()["error"]["code"].long)
     }
 
+    /**
+     * r8-10: a site's transaction to a multisig opened no sheet and its
+     * promise hung — the sheet read "not in the machine's view yet" as
+     * "answered" and closed itself before the machine (which applies events
+     * after the dispatch) held the request. Waiting is the site not told.
+     */
+    @Test
+    fun a_sites_request_is_waiting_from_the_dispatch_until_the_site_is_answered() = runBlocking {
+        val ports = FakePorts()
+        val safe = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
+        ports.store["vela.multisigAccounts"] = """[{"address":"$safe","owners":["0xD400866e00B055B20752a826CD5C89b811de130b","0x031d7D57c99CAF891e1C250554691Fd12D84772b"],"threshold":2,"chainIds":[100],"recorded":true,"addedMs":1,"genesis":{"factory":"0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67","singleton":"0x41675C099F32341bf84BFc5382aF534df5C7461a","saltNonce":"0x1","initializer":"0x","name":"Treasury"}}]"""
+        val hub = hub(ports)
+        withTimeout(20_000) { hub.boot() }
+        val answers = java.util.concurrent.CopyOnWriteArrayList<JsonElement>()
+        hub.dappRequest("tab-1:9", safe, "personal_sign", jsonOf(listOf("0x68656c6c6f", safe)), "https://app.example", 100) { answers += it }
+        // At once — before the machine has applied it — the request is waiting, and its sheet is up.
+        assertTrue(hub.dappWaiting("tab-1:9"))
+        assertEquals(MultisigSheet.Dapp("tab-1:9"), hub.sheet.value)
+        withTimeout(10_000) { while (hub.proposalsView.value.dapp["tab-1:9"]["stage"].str != "refused") delay(20) }
+        assertTrue("held, not answered", hub.dappWaiting("tab-1:9"))
+        hub.dappLeave("tab-1:9")
+        withTimeout(10_000) { while (answers.isEmpty()) delay(20) }
+        assertFalse("answered once: no longer waiting", hub.dappWaiting("tab-1:9"))
+        assertEquals(1, answers.size)
+    }
+
     @Test
     fun a_batch_status_is_the_machines_body_and_is_then_let_go() = runBlocking {
         val ports = FakePorts()
