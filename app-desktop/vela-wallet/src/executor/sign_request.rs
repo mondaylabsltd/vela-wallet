@@ -548,7 +548,9 @@ fn sign_and_submit(
         &ctx.keys,
         signer,
         quoted,
-        // A site's request: reviewed on its own sheet.
+        // A site's request: reviewed on its own sheet, and its gas measured
+        // here — no quote of ours priced it.
+        None,
         None,
         &edges,
         &asked,

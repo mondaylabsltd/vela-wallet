@@ -37,7 +37,7 @@ use std::sync::Mutex;
 
 use vela_core::ClientDataKind;
 use vela_core::app::fee_policy::{
-    AssetPricing, FeeAssetKind, FeeAssetQuote, FeeCall, FeeGasOutcome, FeeTier,
+    AssetPricing, FeeAssetKind, FeeAssetQuote, FeeCall, FeeGasOutcome, FeeTier, PreparedGas,
     TEMPO_DEFAULT_FEE_TOKEN, TEMPO_FEE_TOKEN_DECIMALS, calculate_in_band_fee_amount,
     is_tempo_chain, tempo_expected_gas, tempo_minimum_fee_token_units, tempo_reimbursement,
     user_op_gas_floors,
@@ -49,8 +49,8 @@ use vela_core::primitives::{from_hex, to_hex};
 use vela_core::signed_review::{SignedReview, reviewed_safe_op_hash};
 use vela_core::signing_venue::{KeyRoute, VenueBlock};
 use vela_core::user_op::{
-    CALL_GAS_LIMIT, EstimateFailure, MultiSendCall, NOT_SENT_DAPP_DETAIL, PRE_VERIFICATION_GAS,
-    RelayRejection, SubmitVerdict, UserOperation, VERIFICATION_GAS_DEPLOYED,
+    CALL_GAS_LIMIT, EstimateFailure, GasEstimate, GasFloors, MultiSendCall, NOT_SENT_DAPP_DETAIL,
+    PRE_VERIFICATION_GAS, RelayRejection, SubmitVerdict, UserOperation, VERIFICATION_GAS_DEPLOYED,
     VERIFICATION_GAS_UNDEPLOYED, WRITE_AHEAD_WAIT_MS, WalletKey, apply_estimate,
     build_dummy_signature, build_in_band_fee_leg, build_init_code_for_keys,
     build_multi_send_execute_call_data, build_user_op_signature, calculate_safe_op_hash,
@@ -621,6 +621,7 @@ pub fn submit(
     signer: Signer<'_>,
     quoted_fee: Option<QuotedFee>,
     review: Option<&SignedReview>,
+    prepared: Option<&PreparedGas>,
     edges: Edges<'_>,
     asked: Asked<'_>,
     before_post: BeforePost<'_>,
@@ -636,6 +637,7 @@ pub fn submit(
         Tail {
             head: None,
             review,
+            prepared,
             edges,
             asked,
             before_post,
@@ -713,6 +715,11 @@ struct Tail<'a> {
     /// computed only for the operation that is exactly it; `None` for a
     /// site's request, reviewed on its sheet.
     review: Option<&'a SignedReview>,
+    /// A send: the gas its confirmed quote measured, still fresh, for
+    /// exactly these calls (the core's `SubmitUserOp.prepared`) — signed
+    /// without simulating again when the account is as the quote read it.
+    /// `None` for a site's request and for Tempo, which measure.
+    prepared: Option<&'a PreparedGas>,
     edges: Edges<'a>,
     asked: Asked<'a>,
     before_post: BeforePost<'a>,
@@ -903,27 +910,12 @@ fn submit_in_band(
         signature: build_dummy_signature().map_err(|e| other(e.to_string()))?,
     };
 
-    // A batch carrying a real contract call can burn far more than the
-    // defaults; if its estimate fails the op must not be submitted to OOG
-    // on-chain. Pure transfers keep the defaults, which cover them.
-    let has_contract_call = inner.iter().any(|call| !is_plain_transfer_call(&call.data));
-    match relay::estimate_user_op_gas(&op, chain_id) {
-        Ok(estimate) => {
-            // The relay's limits as returned (`user_op::in_band_gas_limits`):
-            // no second ×1.5, no 300k verification floor; an undeployed
-            // Safe's floors; then the inner calls' own measured floor.
-            apply_estimate(&mut op, estimate, floors);
-            raise_to_measured_floor(&mut op, chain_id, safe, inner, has_contract_call);
-        }
-        Err(error) => {
-            log_estimate_failure("in-band", chain_id, &error);
-            if has_contract_call {
-                return Err(other(
-                    "Could not estimate gas for this transaction. The network may be busy — please try again.",
-                ));
-            }
-        }
-    }
+    let mut reads = LiveGasReads {
+        chain_id,
+        safe,
+        inner,
+    };
+    size_in_band_gas(&mut op, deployed, floors, inner, tail.prepared, &mut reads)?;
 
     let fee = match usable(quoted_fee) {
         Some(fee) => {
@@ -1401,6 +1393,113 @@ fn raise_to_measured_floor(
     }
 }
 
+/// The two reads an in-band operation's gas is measured with before the
+/// prompt — the slowest two between Confirm and the passkey. A trait so the
+/// choice between them and the quote's own measurement is tested without a
+/// network.
+trait GasReads {
+    /// The relay's simulation (`eth_estimateUserOperationGas`).
+    fn estimate(&mut self, op: &UserOperation) -> Result<GasEstimate, relay::EstimateError>;
+    /// The inner contract calls, each measured on its own, as the call
+    /// limit's floor.
+    fn raise_to_measured_floor(&mut self, op: &mut UserOperation, has_contract_call: bool);
+    /// Where a failed estimate is logged.
+    fn chain_id(&self) -> u32;
+}
+
+/// [`GasReads`] on the network.
+struct LiveGasReads<'a> {
+    chain_id: u32,
+    safe: &'a str,
+    inner: &'a [MultiSendCall],
+}
+
+impl GasReads for LiveGasReads<'_> {
+    fn estimate(&mut self, op: &UserOperation) -> Result<GasEstimate, relay::EstimateError> {
+        relay::estimate_user_op_gas(op, self.chain_id)
+    }
+
+    fn raise_to_measured_floor(&mut self, op: &mut UserOperation, has_contract_call: bool) {
+        raise_to_measured_floor(op, self.chain_id, self.safe, self.inner, has_contract_call);
+    }
+
+    fn chain_id(&self) -> u32 {
+        self.chain_id
+    }
+}
+
+/// The quote's measurement as the relay's estimate, when it measured THIS
+/// account as it stands now (core-perf-1, `SubmitUserOp.prepared`): the core
+/// hands it only fresh and only for exactly these calls on this chain, and
+/// `deployed` — read again just now, with the nonce — must be what the quote
+/// read, or the limits were measured for an account that no longer exists in
+/// that shape (a first operation landed in between). A figure that does not
+/// read as a number is no measurement.
+fn prepared_estimate(prepared: Option<&PreparedGas>, deployed: bool) -> Option<GasEstimate> {
+    let prepared = prepared?;
+    if prepared.deployed != deployed {
+        return None;
+    }
+    Some(GasEstimate {
+        verification_gas_limit: prepared.verification_gas_limit.parse().ok()?,
+        call_gas_limit: prepared.call_gas_limit.parse().ok()?,
+        pre_verification_gas: prepared.pre_verification_gas.parse().ok()?,
+        settlement_gas: match &prepared.settlement_gas {
+            Some(gas) => Some(gas.parse().ok()?),
+            None => None,
+        },
+    })
+}
+
+/// Size an in-band draft's gas: the confirmed quote's limits when it still
+/// holds them for this account ([`prepared_estimate`]) — no simulation, no
+/// inner measurement, the limits the fee on screen was priced on — and
+/// otherwise the relay's estimate and the inner calls' floor, as always.
+///
+/// Either way the limits go through the core's one rule
+/// (`apply_estimate` → `in_band_gas_limits`), which leaves a prepared
+/// figure as it is: it is already past that rule and the inner floor.
+fn size_in_band_gas(
+    op: &mut UserOperation,
+    deployed: bool,
+    floors: GasFloors,
+    inner: &[MultiSendCall],
+    prepared: Option<&PreparedGas>,
+    reads: &mut dyn GasReads,
+) -> Result<(), SubmitFailure> {
+    if let Some(estimate) = prepared_estimate(prepared, deployed) {
+        vlog!(
+            "in-band",
+            "signing the quote's measured gas chain={} deployed={deployed}",
+            reads.chain_id()
+        );
+        apply_estimate(op, estimate, floors);
+        return Ok(());
+    }
+    // A batch carrying a real contract call can burn far more than the
+    // defaults; if its estimate fails the op must not be submitted to OOG
+    // on-chain. Pure transfers keep the defaults, which cover them.
+    let has_contract_call = inner.iter().any(|call| !is_plain_transfer_call(&call.data));
+    match reads.estimate(op) {
+        Ok(estimate) => {
+            // The relay's limits as returned (`user_op::in_band_gas_limits`):
+            // no second ×1.5, no 300k verification floor; an undeployed
+            // Safe's floors; then the inner calls' own measured floor.
+            apply_estimate(op, estimate, floors);
+            reads.raise_to_measured_floor(op, has_contract_call);
+        }
+        Err(error) => {
+            log_estimate_failure("in-band", reads.chain_id(), &error);
+            if has_contract_call {
+                return Err(other(
+                    "Could not estimate gas for this transaction. The network may be busy — please try again.",
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1831,6 +1930,132 @@ mod tests {
         });
         assert!(cleared);
         assert!(started.elapsed() < std::time::Duration::from_secs(2));
+    }
+
+    /// The network's two reads, counted, answering fixed figures.
+    #[derive(Default)]
+    struct CountedReads {
+        estimates: usize,
+        measured: usize,
+    }
+
+    impl GasReads for CountedReads {
+        fn estimate(&mut self, _: &UserOperation) -> Result<GasEstimate, relay::EstimateError> {
+            self.estimates += 1;
+            Ok(GasEstimate {
+                verification_gas_limit: 90_000,
+                call_gas_limit: 50_000,
+                pre_verification_gas: 48_000,
+                settlement_gas: Some(140_000),
+            })
+        }
+
+        fn raise_to_measured_floor(&mut self, op: &mut UserOperation, has_contract_call: bool) {
+            if has_contract_call {
+                self.measured += 1;
+                op.call_gas_limit = op.call_gas_limit.max(400_000);
+            }
+        }
+
+        fn chain_id(&self) -> u32 {
+            8453
+        }
+    }
+
+    fn contract_call() -> Vec<MultiSendCall> {
+        vec![MultiSendCall {
+            to: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913".to_owned(),
+            value_hex: "0x0".to_owned(),
+            data: vec![0x09, 0x5e, 0xa7, 0xb3, 0, 1],
+        }]
+    }
+
+    fn draft(deployed: bool, inner: &[MultiSendCall]) -> (UserOperation, GasFloors) {
+        let floors = user_op_gas_floors(8453, deployed, sub_call_count(inner));
+        let op = UserOperation {
+            sender: "0x88cca0eedbf2c4426110bbfc998f048689266894".to_owned(),
+            nonce: "0x7".to_owned(),
+            init_code: Vec::new(),
+            call_data: Vec::new(),
+            verification_gas_limit: floors.verification,
+            call_gas_limit: floors.call,
+            pre_verification_gas: PRE_VERIFICATION_GAS,
+            max_fee_per_gas: 0,
+            max_priority_fee_per_gas: 0,
+            paymaster_and_data: Vec::new(),
+            signature: Vec::new(),
+        };
+        (op, floors)
+    }
+
+    fn prepared(deployed: bool) -> PreparedGas {
+        PreparedGas {
+            calls: Vec::new(),
+            deployed,
+            verification_gas_limit: "88000".to_owned(),
+            call_gas_limit: "612000".to_owned(),
+            pre_verification_gas: "51000".to_owned(),
+            settlement_gas: Some("150000".to_owned()),
+        }
+    }
+
+    /// core-perf-1: the confirmed quote's measured gas is signed as it is —
+    /// the limits the fee on screen was priced on — and neither the relay's
+    /// simulation nor the inner calls' measurement runs again.
+    #[test]
+    fn the_quotes_gas_is_signed_without_measuring_again() {
+        let inner = contract_call();
+        let (mut op, floors) = draft(true, &inner);
+        let mut reads = CountedReads::default();
+        let gas = prepared(true);
+        assert_eq!(
+            size_in_band_gas(&mut op, true, floors, &inner, Some(&gas), &mut reads),
+            Ok(())
+        );
+        assert_eq!((reads.estimates, reads.measured), (0, 0), "nothing re-read");
+        assert_eq!(
+            (
+                op.verification_gas_limit,
+                op.call_gas_limit,
+                op.pre_verification_gas
+            ),
+            (88_000, 612_000, 51_000),
+            "exactly the quote's limits"
+        );
+        assert_eq!(op.nonce, "0x7", "the nonce is the fresh read's, untouched");
+    }
+
+    /// Without it — an older core, a site's request, a quote that re-quoted,
+    /// or an account whose deployment changed since the quote read it — the
+    /// submit measures as it always did.
+    #[test]
+    fn without_a_fresh_measurement_for_this_account_the_submit_measures() {
+        let inner = contract_call();
+        for (deployed, gas) in [
+            (true, None),
+            (false, Some(prepared(true))),
+            (true, Some(prepared(false))),
+        ] {
+            let (mut op, floors) = draft(deployed, &inner);
+            let mut reads = CountedReads::default();
+            assert_eq!(
+                size_in_band_gas(&mut op, deployed, floors, &inner, gas.as_ref(), &mut reads),
+                Ok(())
+            );
+            assert_eq!(
+                (reads.estimates, reads.measured),
+                (1, 1),
+                "deployed={deployed}"
+            );
+            assert!(op.call_gas_limit >= 400_000, "the inner floor applies");
+        }
+        // A figure that does not read as a number is no measurement.
+        let mut garbled = prepared(true);
+        garbled.call_gas_limit = "lots".to_owned();
+        assert_eq!(prepared_estimate(Some(&garbled), true), None);
+        let mut no_settlement = prepared(true);
+        no_settlement.settlement_gas = None;
+        assert!(prepared_estimate(Some(&no_settlement), true).is_some());
     }
 
     /// RJ19: a relay estimate that says the call reverts reads as such, and
