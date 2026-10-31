@@ -229,6 +229,36 @@ async fn run_step(
             }
         };
     }
+    if step.get("log_connect").is_some() {
+        // The connect link the session's sheet shows, for the scripted
+        // outside owner to open.
+        let link = cx.update(|cx| {
+            let host = host.read(cx);
+            let (view, _) = host.machines().session_view()?;
+            let tx = view.tx.as_ref().map(|t| vela_core::multisig_link::ProposalLink {
+                chain_id: t.chain_id,
+                multisig: t.safe.clone(),
+                safe_tx_hash: t.safe_tx_hash.clone(),
+            });
+            view.invite.as_ref()?;
+            Some(vela_core::multisig_link::connect_link(
+                &format!("{}/en/connect", vela_core::multisig_link::SITE_ORIGIN),
+                view.invite.as_deref(),
+                &view.members,
+                tx.as_ref(),
+            ))
+        });
+        return match link {
+            Some(link) => {
+                log_line(&format!("CONNECT {link}"));
+                true
+            }
+            None => {
+                log_line(&format!("step {i} log_connect: no session room yet"));
+                false
+            }
+        };
+    }
     if let Some(dump) = step.get("dump") {
         let machine = dump.get("machine").and_then(Value::as_str).unwrap_or("proposals").to_owned();
         let pointer = dump.get("pointer").and_then(Value::as_str).unwrap_or("").to_owned();
