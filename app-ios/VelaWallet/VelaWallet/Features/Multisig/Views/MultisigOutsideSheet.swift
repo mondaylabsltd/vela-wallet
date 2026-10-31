@@ -143,6 +143,7 @@ struct MultisigOutsideSheet: View {
                 Button(words.t("external.unpair")) { outside.anotherWallet(unpair: true) }
                     .font(Typography.actionLabel.scaled(textScale).font)
                     .foregroundStyle(theme.fgMuted)
+                    .accessibilityIdentifier("multisig.outside.unpair")
             }
         }
     }

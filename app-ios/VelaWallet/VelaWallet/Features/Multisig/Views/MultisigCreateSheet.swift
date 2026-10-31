@@ -361,19 +361,20 @@ struct MultisigCreateSheet: View {
                     // The machine's stepper (`step_threshold`), its bounds the core's.
                     Button { hub.send(["type": "step_threshold", "up": false]) } label: {
                         Text(verbatim: "−").font(Typography.rowTitle.scaled(textScale).font)
+                            .frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
                     }
                     .disabled(view?["can_lower"]?.bool != true)
                     .accessibilityLabel(words.t("create.fewer"))
                     .accessibilityIdentifier("multisig.create.fewer")
                     Button { hub.send(["type": "step_threshold", "up": true]) } label: {
                         Text(verbatim: "+").font(Typography.rowTitle.scaled(textScale).font)
+                            .frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
                     }
                     .disabled(view?["can_raise"]?.bool != true)
                     .accessibilityLabel(words.t("create.more"))
                     .accessibilityIdentifier("multisig.create.more")
                 }
                 .tint(theme.fgBase)
-                .accessibilityIdentifier("multisig.create.threshold")
                 if let view {
                     MsNote(text: thresholdNote(view["note"]), tone: view["risky"]?.bool == true ? .warning : .neutral,
                            identifier: "multisig.create.thresholdNote")

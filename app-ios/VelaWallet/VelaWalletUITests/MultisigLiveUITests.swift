@@ -74,6 +74,10 @@ final class MultisigLiveUITests: XCTestCase {
         let field = app.textFields[id].firstMatch
         XCTAssertTrue(field.waitForExistence(timeout: 10), "no field \(id)")
         field.tap()
+        // A kept draft (M1) may hold an earlier run's text: start from empty.
+        if let kept = field.value as? String, !kept.isEmpty, kept != field.placeholderValue {
+            field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: kept.count))
+        }
         field.typeText(text)
     }
 
@@ -104,6 +108,18 @@ final class MultisigLiveUITests: XCTestCase {
         picker.tap()
         let gnosis = app.buttons["Gnosis"].firstMatch
         if gnosis.waitForExistence(timeout: 5) { gnosis.tap() }
+        // The machine's stepper (core-ms-2 `step_threshold`): up to 3 of 3,
+        // no further, then back to the 2 of 3 this test creates.
+        let rule = app.descendants(matching: .any)["multisig.create.thresholdValue"].firstMatch
+        XCTAssertTrue(rule.waitForExistence(timeout: 10))
+        let start = rule.label
+        tap(app, "multisig.create.more")
+        XCTAssertTrue(rule.label.contains("3") && rule.label != start, "the stepper did not step up: \(rule.label)")
+        let top = rule.label
+        tap(app, "multisig.create.more")
+        XCTAssertEqual(rule.label, top, "the stepper went past the members")
+        tap(app, "multisig.create.fewer")
+        XCTAssertEqual(rule.label, start)
         shot(app, "create-threshold")
         tap(app, "multisig.create.toReview")
         XCTAssertTrue(app.descendants(matching: .any)["multisig.create.draftAddress"].waitForExistence(timeout: 20), "no address")
@@ -136,13 +152,27 @@ final class MultisigLiveUITests: XCTestCase {
         let link = app.staticTexts["multisig.outside.link"].firstMatch
         XCTAssertTrue(link.waitForExistence(timeout: 60), "no connect link")
         sleep(2)
+        // A wallet paired on an earlier run is asked in its old room (no
+        // invite in the link); the scripted wallet is a fresh browser, so
+        // pair anew ("another wallet").
+        if !link.label.contains("ws%3A") {
+            tap(app, "multisig.outside.unpair")
+            let fresh = NSPredicate(format: "label CONTAINS 'ws%3A'")
+            expectation(for: fresh, evaluatedWith: link)
+            waitForExpectations(timeout: 60)
+        }
         shot(app, "outside-sheet")
         try link.label.write(toFile: linkFile, atomically: true, encoding: .utf8)
         // The scripted wallet joins the room, connects and signs; the core
         // verifies its signature before the proposals machine counts it.
+        // The session sheet goes with its outcome (as on the web): its
+        // "signed by" note, or the proposal it counted toward, whichever shows.
         let approved = app.descendants(matching: .any)["multisig.outside.approved"].firstMatch
-        XCTAssertTrue(approved.waitForExistence(timeout: 240), "the outside wallet never approved")
-        sleep(2)
+        let counted = app.buttons["multisig.proposal.execute"].firstMatch
+        let either = NSPredicate { _, _ in approved.exists || counted.exists }
+        expectation(for: either, evaluatedWith: NSNull())
+        waitForExpectations(timeout: 240)
+        XCTAssertTrue(approved.exists || counted.exists, "the outside wallet never approved")
         shot(app, "outside-approved")
         // The session sheet goes with its outcome; the proposal's is under it.
         if app.descendants(matching: .any)["multisig.outside.link"].exists { tap(app, "multisig.sheet.close") }
