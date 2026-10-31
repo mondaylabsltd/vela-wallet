@@ -205,7 +205,10 @@ if (!process.argv.includes('--skip-build')) {
 		env: {
 			...process.env,
 			VELA_TARGET: 'extension',
-			VELA_EXTENSION_BROWSER: SAFARI ? 'safari' : 'chrome'
+			VELA_EXTENSION_BROWSER: SAFARI ? 'safari' : 'chrome',
+			// vite.config.ts writes the site where this says — the Safari
+			// package must never land in (and clobber) the Chrome one.
+			VELA_EXTENSION_DIST: relative(APP, DIST)
 		}
 	});
 }
