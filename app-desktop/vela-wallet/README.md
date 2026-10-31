@@ -768,6 +768,10 @@ VELA_THEME=light VELA_LANG=zh cargo run    # both
 | `VELA_PERF=1` | [perf.rs](src/perf.rs) | The performance recorder: `[vela-perf]` lines on stderr — see [Performance](#performance) |
 | `VELA_PERF_ACTIVITY=<n>` | [dev_seed.rs](src/dev_seed.rs) | The signed-in account's history topped up to `n` transfers, and a last-known hero total and rows when it has none — the harness's 200-row History |
 | `VELA_PERF_SCROLL=1` | [page.rs](src/wallet/page.rs) | With `VELA_PERF=1`: History opens `VELA_PERF_SCROLL_AFTER` s (default 4) after launch and scrolls itself end to end and back for 6 s, recording every frame |
+| `VELA_UPDATE_PREVIEW` | [updater/prompt.rs](src/updater/prompt.rs) | `offered` / `downloading` / `installing` / `failed`: the update card over a fixture release, no feed asked — for screenshots |
+| `VELA_UPDATE_CHECK_AFTER_MS` | [updater/prompt.rs](src/updater/prompt.rs) | The first feed check this long after launch (default 8 s); only a build with a key asks at all |
+| `VELA_UPDATE_AUTO_INSTALL=1` | [updater/prompt.rs](src/updater/prompt.rs) | Presses Install 3 s after an offer — `scripts/update-e2e.sh`'s hand |
+| `VELA_UPDATE_RELAUNCH_LOG` | [updater/install_macos.rs](src/updater/install_macos.rs) | Where the relaunched app's stderr goes (`open --stderr`) |
 
 The last three are writes into the store, as Settings would write them —
 pair them with `VELA_STATE_DIR=<scratch dir>`. Against the multisig fork
@@ -975,37 +979,85 @@ window still quits (see the reopen quirk below), and the extra goes with it.
 
 ## Updates
 
-`src/updater.rs` holds the whole verification path and ships **off**: no
+`src/updater.rs` and `src/updater/` hold the whole path and ship **off**: no
 feed is asked and nothing is offered while `UPDATE_KEY` is `None`, and store
 builds (the Mac App Store sandbox, a Flatpak, an RPM/DEB under `/usr`) never
-run it. The design, and why not Sparkle / WinSparkle / Velopack, is in the
-file's header. The trust chain: a manifest signed with the owner's
-**ECDSA P-256** release key (the public half compiled in), carrying the
-version, an issue time and per platform an `https` URL, SHA-256 and size; no
-downgrade, no replay of an older manifest; the download taken only when its
-size and hash are the signed ones. Built and tested here: the manifest and
-artifact verification. Not built: the download UI and the install hand-off,
-which add the OS's own signature checks (Developer ID team on macOS,
-Authenticode on Windows) on top and never install silently.
+run it; a Linux tarball has no install hand-off and is offered nothing. The
+design, and why not Sparkle / WinSparkle / Velopack, is in the file's header.
 
-To turn it on, the owner provides:
+- **Trust**: a manifest signed with the owner's **ECDSA P-256** release key
+  (the public half compiled in) carrying the version, an issue time and per
+  platform a URL, SHA-256 and size. No downgrade, no replay of a manifest
+  older than the last one this device took, `https` only.
+- **Prompt** (`updater/prompt.rs`): a card in the window's corner, never a
+  dialog in the way of a send — "Update available", `0.9.8 → 0.9.9`,
+  Install / Later. Install moves no money, so it is the neutral ink, not the
+  accent. Later puts it away until the next launch and stops a download.
+- **Download** (`updater/download.rs`): with its progress (percent and MB),
+  hashed as it arrives, never a byte past the signed size, kept only when it
+  is the signed size and SHA-256.
+- **macOS hand-off** (`updater/install_macos.rs`): the artifact is the app as
+  a `ditto` zip (`build-macos-app.sh --zip`). Unpacked beside the running
+  bundle, it must pass `codesign --verify --deep --strict`, carry
+  `app.getvela.VelaWallet` and **the running app's own team** (read from its
+  signature; `codesign -R` asks for Apple's anchor and that team's leaf),
+  pass Gatekeeper, and say the signed version. Then `renamex_np(RENAME_SWAP)`
+  exchanges it with the running bundle in one step and the app relaunches
+  (`open -n` once this process is gone). A release build never lets an
+  ad-hoc bundle replace anything.
+- **Windows hand-off** (`updater/install_windows.rs`, cross-checked by
+  `scripts/check-windows.sh`): the Inno Setup installer, started with its own
+  wizard (`/SP-`, never `/SILENT`); the app quits so `CloseApplications`
+  can replace it. When the app is Authenticode-signed the installer must
+  verify (`WinVerifyTrust`) too; while the installer ships unsigned by ruling,
+  the signed hash is the proof.
+- Nothing installs while a submit is out (`relay::may_close`). A refusal at
+  any step leaves the running app as it was and offers "Try again" (the
+  reason is logged, `update:`).
 
-1. A P-256 release key pair, made and kept OFFLINE (not the web host's, not
-   CI's): `openssl ecparam -name prime256v1 -genkey -noout -out release.pem`,
-   public half `openssl ec -in release.pem -pubout -conv_form uncompressed
-   -outform DER | tail -c 65 | xxd -p -c 65` → `UPDATE_KEY`.
-2. Hosting for `https://getvela.app/desktop/releases/stable.json` (or a new
-   `FEED_URL`): `{"payload": "<json text>", "signature": "<hex r‖s or DER>"}`,
-   the payload `{"version","issued_at","notes_url","platforms":{"macos-aarch64":
-   {"url","sha256","size"},…}}`, signed with `openssl dgst -sha256 -sign
-   release.pem`.
-3. The Developer ID Application identity and team (macOS) and the
-   Authenticode certificate (Windows) the release builds are already signed
-   with — the install hand-off (not built yet: it is the step after a
-   verified download, and needs these to be tested against) checks them.
-4. Nothing more for the words: "Update available / Install / Later" are
-   in the corpus (`componentsUi.appUpdate.*`, `updater::PromptWords`) for
-   the prompt, which is drawn with the install hand-off its Install presses.
+### The local proof
+
+`./scripts/update-e2e.sh <work dir>` proves the whole path on this Mac with
+nothing of the owner's: it makes a throwaway P-256 key under `<work>/keys`
+(never printed, never committed), builds the **test flavor** twice
+(`--features update-test,dev-fixtures`: the key and a loopback feed from the
+build's environment, loopback `http://` allowed, ad-hoc may replace ad-hoc,
+and `VELA_UPDATE_TEST_VERSION` making the "newer" build), bundles both with
+`build-macos-app.sh`, serves the signed manifest and the zip from
+`127.0.0.1` (slowly, so the progress shows), and runs v(N) through:
+a tampered manifest, a downgrade, a wrong hash, the update itself (prompt →
+Install → progress → swap → relaunch; the relaunched app logs `running
+v(N+1)` and its own prompt reads `N+1 → N+2`), a genuine older bundle under a
+newer manifest, and a replayed older manifest. `check-store-binary.sh`
+refuses any binary of the test flavor. `VELA_UPDATE_PREVIEW=offered|
+downloading|installing|failed` draws the card over a fixture release in a
+developer build, for screenshots.
+
+### Go-live (the owner, once)
+
+Three values, all in `src/updater.rs` / the signing environment; nothing else
+changes:
+
+1. **`UPDATE_KEY`**: the public half of a P-256 release key made and kept
+   OFFLINE (not the web host's, not CI's): `openssl ecparam -name prime256v1
+   -genkey -noout -out release.pem`; public half `openssl ec -in release.pem
+   -pubout -conv_form uncompressed -outform DER | tail -c 65 | xxd -p -c 65`.
+2. **`RELEASE_FEED_URL`** (today `https://getvela.app/desktop/releases/
+   stable.json`) and its hosting: `{"payload": "<json text>", "signature":
+   "<hex DER or r‖s>"}`, the payload `{"version","issued_at","notes_url",
+   "platforms":{"macos-aarch64": {"url","sha256","size"},…}}`, signed with
+   `openssl dgst -sha256 -sign release.pem` (`update-e2e.sh`'s `manifest`
+   function is the recipe). The macOS artifact is the notarized `.zip`, the
+   Windows one the `Setup.exe`.
+3. **The signing identity** the releases already carry: the Developer ID
+   Application team (macOS) — no team id is written in the source, the
+   update must simply be signed by the same team as the running app — and,
+   if Windows ever signs, the Authenticode certificate.
+
+The words are the corpus's (`componentsUi.appUpdate.*` and
+`componentsUi.relayUnreachable.retryBtn`, `updater::PromptWords`). A sentence
+saying WHY an update was refused would need a new corpus key (outside this
+crate), so the card shows a refusal as a red bar and "Try again".
 
 ## Known gpui quirks
 
