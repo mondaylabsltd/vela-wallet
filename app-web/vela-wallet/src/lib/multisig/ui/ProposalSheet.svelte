@@ -41,13 +41,7 @@
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import type { SigningMessages } from '$lib/signing/messages';
 	import type { MultisigMessages } from '../messages';
-	import {
-		CallReading,
-		callReviewBlocks,
-		callTitle,
-		readableCalls,
-		reviewedCalls
-	} from '../core/call-review.svelte';
+	import { readingBlocks, readingTitle, type ReadingContext } from '../core/reading-blocks';
 	import { REVIEW_FRESH_MS, REVIEW_RETRY_MS, simEndedOf } from '../core/proposal-review.svelte';
 	import type { SimEnded } from '$lib/signing/verdict';
 	import type { MultisigReviewOut } from '../core/kernel';
@@ -59,7 +53,6 @@
 		reviewBlocks,
 		reviewTech
 	} from '../core/review-blocks';
-	import { currency } from '$lib/settings/core/currency.svelte';
 	import BlockList from '$lib/signing/ui/BlockList.svelte';
 	import { resolvedFormatKeys } from '$lib/services/locale-format';
 	import {
@@ -82,7 +75,8 @@
 		localName,
 		memberWho,
 		shortenAddress,
-		tokenInfo
+		tokenInfo,
+		UNREAD_TOKEN
 	} from '../core/display';
 	import { GenesisRefusedError, type Finding } from '../core/refusal';
 	import type { MultisigFrozenFacts as FrozenFacts } from '../generated/MultisigFrozenFacts';
@@ -126,7 +120,7 @@
 	import { integrityLineModel } from '$lib/settings/venue';
 	import { PasskeyError } from '$lib/onboarding/core/passkey';
 	import type { ExecutionVerdict } from '../core/kernel';
-	import { memberDrift, readMemberChanges, sameAddress, transfersOf } from '../core/kernel';
+	import { memberDrift, readMemberChanges, sameAddress } from '../core/kernel';
 	import { connectLink, proposalLink, shareOrigin } from '../core/link';
 	import { localOwners, type LocalOwner } from '../core/owners';
 	import { itemOf, linkedSource, proposals, type ProposalItem } from '../core/proposals.svelte';
@@ -282,58 +276,14 @@
 		if (action?.kind === 'transfer' && action.token) {
 			const token = action.token;
 			void tokenInfo(chainId, token)
-				.catch(() => ({ symbol: '', decimals: 18 }))
+				.catch(() => UNREAD_TOKEN)
 				.then((info) => (tokenNote = provenanceNote(chainId, token, info.symbol, m.token)));
 		} else tokenNote = null;
-		// A batch of transfers alone keeps its lines; one with calls is read
-		// call by call below, as the signing sheet reads a batch.
-		if (action?.kind === 'batch' && readableCalls(action) === null) {
-			void Promise.all(
-				transfersOf(action).map(async (t) => {
-					const info = await tokenInfo(chainId, t.token).catch(() => ({
-						symbol: '',
-						decimals: 18
-					}));
-					return {
-						label: `${formatUnits(t.amount, info.decimals)} ${info.symbol}`,
-						to: t.to,
-						note: provenanceNote(chainId, t.token, info.symbol, m.token)
-					};
-				})
-			).then((l) => (lines = l));
-		} else lines = [];
+		// r8-1/r8-2: every batch is drawn from the core's reading (its tokens'
+		// decimals read by the core, never assumed): no lines of its own here.
+		lines = [];
 	});
 
-	/*
-	 * A call to another contract, read by the signing sheet's machines. Keyed
-	 * by the call itself: the list is re-read every few seconds, and the same
-	 * call must not be read again (and flash "Loading…") each time.
-	 */
-	const callKey = $derived.by(() => {
-		const calls = item ? reviewedCalls(item.review.action, item.tx) : null;
-		return calls
-			? `${chainId}:${account.address}:${calls.map((c) => `${c.to}:${c.value}:${c.data}`).join(';')}`
-			: '';
-	});
-	let reading = $state<CallReading | null>(null);
-	$effect(() => {
-		if (!callKey) return;
-		const { action, tx, chain, address } = untrack(() => ({
-			action: item?.review.action,
-			tx: item?.tx,
-			chain: chainId,
-			address: account.address
-		}));
-		const calls = tx ? reviewedCalls(action ?? null, tx) : null;
-		if (!calls) return;
-		const next = new CallReading(chain, address, calls);
-		reading = next;
-		void next.start();
-		return () => {
-			next.dispose();
-			if (reading === next) reading = null;
-		};
-	});
 	/**
 	 * r4a-1: what it changes about who controls the multisig — every member
 	 * change, alone or in a batch, read by the core against this network's
@@ -352,7 +302,6 @@
 		memberReading ? changeLines(m, memberReading, chainName(chainId), who) : null
 	);
 	/** The core's verb for a call it could read ("Approve"); else the multisig's line. */
-	const shownTitle = $derived((reading && callTitle(reading.clear, signing)) || title);
 
 	/*
 	 * §3.6: the one review — the same on every member's device, for every
@@ -366,8 +315,8 @@
 			? `${chainId}:${item.safeTxHash}:${members.deployed}:${members.threshold}:${members.owners.join(',')}:${item.status === 'done'}`
 			: ''
 	);
-	/** Whether a call Vela cannot read is in it: the review says "… anyway" (`blind`). */
-	const blind = $derived(reading?.clear.sign_anyway === true);
+	/** r8-1: the core reads every call itself (its own "… anyway"); the shell adds nothing. */
+	const blind = false;
 	/*
 	 * The shown multisig's: the machine's one review (`review`), asked when
 	 * the sheet opens and whenever what it is of changes, again every
@@ -433,6 +382,24 @@
 
 	/** The core's review now, with the call's reading: blind (`sign_anyway`) or not. */
 	const fullReview = $derived(machineReview ?? null);
+	/** r8-1: the core's reading names a call or a batch ("Approve · USDC"); else the multisig's line. */
+	const readingCtx = $derived<ReadingContext>({
+		r: m.review.reading,
+		callNumber: m.review.callNumber,
+		nativeSymbol: nativeSymbol(chainId)
+	});
+	const shownTitle = $derived(readingTitle(fullReview, readingCtx) || title);
+	/** The core read a call or a batch of calls: its reading heads the sheet. */
+	const reading = $derived((fullReview?.reading?.calls.length ?? 0) > 0);
+	/**
+	 * A lone call the reading heads itself ("Send" · its amount · To): its
+	 * verb and its recipient are not said twice above it (r5reg-15).
+	 */
+	const loneCall = $derived(
+		fullReview?.reading?.calls.length === 1 &&
+			fullReview.reading.calls[0].path.length === 0 &&
+			fullReview.reading.calls[0].intent.kind !== 'batch'
+	);
 	/** Its simulation, as the signing sheet draws it. */
 	const reviewSim = $derived(machineSim);
 	/** The review could not be gathered at all. */
@@ -462,9 +429,7 @@
 	 * "Recipient"): the review says each once — the call's row, wearing what
 	 * the review knows of it ("First time sending here").
 	 */
-	const drawnParties = $derived(
-		reading ? partyAddresses(callReviewBlocks(reading, signing, currency.view)) : []
-	);
+	const drawnParties = $derived(partyAddresses(readingBlocks(fullReview, readingCtx)));
 	const partyBadges = $derived(recipientBadges(fullReview, reviewContext));
 	const partyNames = $derived(recipientNames(fullReview, reviewContext));
 	const tech = $derived(fullReview ? reviewTech(fullReview, reviewContext) : null);
@@ -487,8 +452,8 @@
 			id: adviceId,
 			signing: fullReview.adviceRequest,
 			sheet: {
-				clear: reading?.clear ?? null,
-				guard: reading?.guard ?? null,
+				clear: null,
+				guard: null,
 				fee: null,
 				simulation: reviewSim,
 				simulation_pending: !reviewSim
@@ -563,7 +528,7 @@
 		const known = tokenWords[token.toLowerCase()];
 		if (!known) {
 			void tokenInfo(chainId, token)
-				.catch(() => ({ symbol: '', decimals: 18 }))
+				.catch(() => UNREAD_TOKEN)
 				.then((info) => (tokenWords = { ...tokenWords, [token.toLowerCase()]: info }));
 		}
 		return known ?? null;
@@ -1477,15 +1442,15 @@
 			<p class="site">{fillTemplate(m.proposal.siteAsks, { host: site })}</p>
 		{/if}
 		<header class="what">
-			{#if !reading && !(change && memberReading?.changes.length === 1)}
+			{#if !loneCall && !(change && memberReading?.changes.length === 1)}
 				<!-- r5reg-15: a call read by the signing sheet's machines heads itself
 				     ("Send −0.05 USDC"): its verb is not said twice above it. S4 (r7): nor
 				     is a lone member change, which its own list names ("Add Carol (…)"). -->
 				<p class="title">{shownTitle || '…'}</p>
 			{/if}
-			{#if recipient && !(reading && item.review.action?.kind === 'transfer')}
+			{#if recipient && !(loneCall && item.review.action?.kind === 'transfer')}
 				<!-- A transfer read by the signing sheet's machines names its own recipient (§3.6). -->
-				{@const named = reading?.clear.result?.contract_name ?? localName(recipient)}
+				{@const named = localName(recipient)}
 				<p class="to">
 					<Identicon svg={identiconSvgForClient(recipient)} size="compact" address={recipient} />
 					<!-- A call names the contract it calls, in the signing sheet's word. -->
@@ -1515,9 +1480,13 @@
 					done={item.status === 'done'}
 				/>
 			{/if}
-			{#if reading}
-				<CallReview {reading} m={signing} badges={partyBadges} names={partyNames} />
-			{/if}
+			<CallReview
+				review={fullReview}
+				{m}
+				nativeSymbol={nativeSymbol(chainId)}
+				badges={partyBadges}
+				names={partyNames}
+			/>
 			{#if lines.length > 0 && !reading}
 				<ul class="lines">
 					{#each lines as line, i (i)}
@@ -1775,7 +1744,10 @@
 		{#if item.unsent && phase.kind !== 'sent' && phase.kind !== 'ended'}
 			<!-- Signed here, not in the mailbox yet: kept, and sent again — said live. -->
 			<div class="unsent" role="status" data-testid="proposal-unsent">
-				{#if kept?.retryAt}
+				{#if kept?.sending}
+					<!-- r8-16: on its way now — nothing was refused, nothing to send again. -->
+					<p class="fine" data-testid="proposal-sending">{m.proposal.outboxSending}</p>
+				{:else if kept?.retryAt}
 					<p class="fine">
 						{fillTemplate(kept.why === 'busy' ? m.proposal.outboxBusy : m.proposal.outboxAway, {
 							seconds: Math.max(1, Math.ceil((kept.retryAt - clock) / 1000))

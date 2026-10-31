@@ -17,6 +17,7 @@ import type { MultisigWaiting } from "./MultisigWaiting";
 import type { MultisigWaitingBanner } from "./MultisigWaitingBanner";
 import type { MultisigWaitingNote } from "./MultisigWaitingNote";
 import type { MultisigWaitingPart } from "./MultisigWaitingPart";
+import type { OutsideTokenFacts } from "./OutsideTokenFacts";
 
 export type MultisigProposalsView = { followed: string | null, chains: Array<MultisigChainState>, 
 /**
@@ -148,4 +149,11 @@ banner: MultisigWaitingBanner | null,
  * core-ms-2: the followed multisig is deployed on a network read (its
  * first steps are behind it).
  */
-set_up: boolean, };
+set_up: boolean, 
+/**
+ * r8-2: every token the proposals shown move, per `<chainId>:<token
+ * lowercase>` — the wallet's registry, else its contract's own answer;
+ * `decimals` `None` (not read yet, or it did not say): an amount in it is
+ * said raw, never in 18 decimals. A shell words a title from this alone.
+ */
+tokens: { [key in string]: OutsideTokenFacts }, };

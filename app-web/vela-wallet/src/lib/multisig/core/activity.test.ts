@@ -6,13 +6,13 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import type { MultisigMessages } from '../messages';
-import type { SigningMessages } from '$lib/signing/messages';
 
 const MULTISIG = '0x' + 'cd'.repeat(20);
 const call = (data: string, value = '0') => ({
 	chainId: 100,
 	safeTxHash: `0x${data.slice(2, 10)}`,
 	review: { action: { kind: 'call', to: '0x' + 'ee'.repeat(20), value, data } },
+	tx: { to: '0x' + 'ee'.repeat(20), value, data },
 	nonce: 1n,
 	approved: 1,
 	threshold: 2,
@@ -81,14 +81,37 @@ vi.mock('./display', () => ({
 	formatUnits: (raw: string) => raw,
 	tokenInfo: async () => ({ symbol: 'xDAI', decimals: 0 })
 }));
-vi.mock('./call-review.svelte', () => ({
-	readCall: async (_chain: number, multisig: string, action: { data: string }) =>
-		multisig === MULTISIG && action.data === '0x095ea7b3'
-			? { title: 'Approve', source: 'Read by Vela, from the transaction' }
-			: null
+// r8-1: the core's reading (`review.reading`): an approve, read; a selector nobody reads.
+vi.mock('./reading', () => ({
+	readTx: (_chain: number, multisig: string, tx: { data: string }) =>
+		multisig === MULTISIG
+			? {
+					reading: {
+						calls: [
+							{
+								path: [],
+								to: '0x1',
+								value: { raw: '0', decimals: 18, plain: '0', unlimited: false },
+								intent: tx.data.startsWith('0x095ea7b3')
+									? {
+											kind: 'approve',
+											grant: 'approve',
+											spender: '0x2',
+											token: { token: '0x1', symbol: 'USDC', decimals: 6, known: true },
+											amount: { raw: '1', decimals: 6, plain: '0.000001', unlimited: false },
+											expires: null
+										}
+									: { kind: 'call', selector: tx.data.slice(0, 10) }
+							}
+						]
+					},
+					concerns: []
+				}
+			: null,
+	asReview: (a: unknown) => a
 }));
 vi.mock('$lib/flows/marks', () => ({ chainLogoURL: () => null }));
-vi.mock('$lib/services/networks', () => ({ chainName: () => 'Gnosis' }));
+vi.mock('$lib/services/networks', () => ({ chainName: () => 'Gnosis', nativeSymbol: () => 'xDAI' }));
 vi.mock('$lib/wallet/fixtures', () => ({ chainColor: () => 'var(--color-fg-muted)' }));
 // The chain index: it knows chain 77777 by name, and not 99999.
 vi.mock('$lib/services/chain-doc', () => ({
@@ -101,6 +124,7 @@ const { MULTISIG_RETRY, missingOfRow, proposalOfRow, waitingRows } =
 
 const m = {
 	action: { call: 'Contract call' },
+	review: { callNumber: 'Call {{n}}', reading: { approve: 'Approve', call: 'Contract call' } },
 	status: {
 		queued: 'Queued',
 		ready: 'Ready',
@@ -131,17 +155,16 @@ const m = {
 		chainUnreachable: "can't reach {{network}}"
 	}
 } as unknown as MultisigMessages;
-const signing = {} as SigningMessages;
 const settle = () => new Promise((done) => setTimeout(done, 0));
 
 describe('a waiting contract call in Activity', () => {
-	it('is titled by what the call is, and says who read it', async () => {
+	it('is titled by what the core read the call as (r8-1)', async () => {
 		seams.open = [call('0x095ea7b3'), call('0xdeadbeef')];
-		waitingRows.follow(m, signing, MULTISIG);
+		waitingRows.follow(m, MULTISIG);
 		await settle();
 		const rows = waitingRows.group(m)!.rows;
-		expect(rows[0].title).toBe('Approve');
-		expect(rows[0].subtitle).toBe('Read by Vela, from the transaction · 1/2 · Gnosis');
+		expect(rows[0].title).toBe('Approve · USDC');
+		expect(rows[0].subtitle).toBe('1/2 · Gnosis');
 		// Nobody could read it: the multisig's own line, and no source.
 		expect(rows[1].title).toBe('Contract call');
 		expect(rows[1].subtitle).toBe('1/2 · Gnosis');
@@ -149,7 +172,7 @@ describe('a waiting contract call in Activity', () => {
 
 	it('keeps the coin a call sends in its amount, not twice in its title', async () => {
 		seams.open = [call('0x0badc0de', '5')];
-		waitingRows.follow(m, signing, MULTISIG);
+		waitingRows.follow(m, MULTISIG);
 		await settle();
 		const row = waitingRows.group(m)!.rows[0];
 		expect(row.title).toBe('Contract call');
@@ -196,7 +219,7 @@ describe('proposals on a network this device does not have', () => {
 			{ chainId: 99999, count: 2 },
 			{ chainId: 77777, count: 1 }
 		];
-		waitingRows.follow(m, signing, MULTISIG);
+		waitingRows.follow(m, MULTISIG);
 		await settle();
 		const group = waitingRows.group(m)!;
 		expect(group.rows.map((r) => [r.id, r.title, r.subtitle])).toEqual([
@@ -295,7 +318,7 @@ describe('a waiting row (r4b-6, r4b-7, r4b-17, r4a-4)', () => {
 			[`100:${a.safeTxHash}`]: { kind: 'ready' },
 			[`100:${b.safeTxHash}`]: { kind: 'executing' }
 		};
-		waitingRows.follow(m, signing, MULTISIG);
+		waitingRows.follow(m, MULTISIG);
 		await settle();
 		const [first, second] = waitingRows.group(m)!.rows;
 		// r4D-13: one word on where it stands — a ready or executing row says no

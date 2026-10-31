@@ -18,7 +18,8 @@ import {
 	localName,
 	memberWho,
 	shortenAddress,
-	tokenInfo
+	tokenInfo,
+	UNREAD_TOKEN
 } from './display';
 import { checksumAddress } from '$lib/core/kernels';
 import { readMemberChanges } from './kernel';
@@ -30,10 +31,10 @@ import { blockOf as wordedBlock, type TokenWords } from '../shell/proposal-failu
 import { nativeSymbol } from '$lib/services/networks';
 import type { MultisigStanding } from '../generated/MultisigStanding';
 import type { MultisigWaitingNote } from '../generated/MultisigWaitingNote';
-import { readCall } from './call-review.svelte';
+import { asReview, readTx } from './reading';
+import { readingTitle } from './reading-blocks';
 import { readChainDoc } from '$lib/services/chain-doc';
 import { catalogName } from './likely-networks';
-import type { SigningMessages } from '$lib/signing/messages';
 import { ROW_PREFIX, transactionOfRow, waitingRowId } from './row-id';
 import { progressLine } from './progress';
 
@@ -130,33 +131,27 @@ class WaitingRows {
 		return this.#names[chainId] ?? null;
 	}
 
-	#draw(
-		m: MultisigMessages,
-		item: ProposalItem,
-		multisigAddress: string | null,
-		signing: SigningMessages | null
-	): void {
+	#draw(m: MultisigMessages, item: ProposalItem, multisigAddress: string | null): void {
 		const key = proposalRowId(item);
 		if (this.#drawn[key]) return;
 		this.#drawn = { ...this.#drawn, [key]: { title: '…', amount: '', unit: '' } };
 		const action = item.review.action;
 		// A contract call says what it is, as its proposal's sheet does — the
-		// core's reading of it, and who read it — never only "Contract call".
-		if (action?.kind === 'call' && signing !== null && multisigAddress !== null) {
-			void readCall(item.chainId, multisigAddress, action, signing)
-				.catch(() => null)
-				.then((read) => {
-					if (read === null) return;
-					const drawn = this.#drawn[key];
-					this.#drawn = {
-						...this.#drawn,
-						[key]: {
-							...(drawn ?? { amount: '', unit: '' }),
-							title: read.title,
-							source: read.source
-						}
-					};
-				});
+		// core's reading of it (r8-1, the same rule every platform reads) —
+		// never only "Contract call".
+		if (action?.kind === 'call' && multisigAddress !== null) {
+			const read = readTx(item.chainId, multisigAddress, item.tx);
+			const title = readingTitle(asReview(read), {
+				r: m.review.reading,
+				callNumber: m.review.callNumber,
+				nativeSymbol: nativeSymbol(item.chainId)
+			});
+			if (title !== null && read?.reading.calls[0]?.intent.kind !== 'call') {
+				this.#drawn = {
+					...this.#drawn,
+					[key]: { title, amount: '', unit: '', source: null }
+				};
+			}
 		}
 		void Promise.all([
 			actionTitle(m, item.chainId, action, item.nonce, who),
@@ -192,15 +187,11 @@ class WaitingRows {
 	}
 
 	/**
-	 * Read the titles of what is waiting. Call from an effect. With the
-	 * signing sheet's words, a contract call is read as its sheet reads it.
+	 * Read the titles of what is waiting. Call from an effect. A contract
+	 * call is titled by the core's reading of it (r8-1).
 	 */
-	follow(
-		m: MultisigMessages,
-		signing: SigningMessages | null = null,
-		multisigAddress: string | null = null
-	): void {
-		for (const item of proposals.open) this.#draw(m, item, multisigAddress, signing);
+	follow(m: MultisigMessages, multisigAddress: string | null = null): void {
+		for (const item of proposals.open) this.#draw(m, item, multisigAddress);
 		// r4-5: what is ready the machine looks at as it would run (each poll),
 		// so the row never says "Ready to execute" for one that cannot; a
 		// `short` look's token is worded here (its symbol and decimals).
@@ -211,7 +202,7 @@ class WaitingRows {
 			const token = why?.kind === 'short' ? (why.token ?? null) : undefined;
 			if (!token || this.#tokens[token.toLowerCase()]) continue;
 			void tokenInfo(item.chainId, token)
-				.catch(() => ({ symbol: '', decimals: 18 }))
+				.catch(() => UNREAD_TOKEN)
 				.then((info) => (this.#tokens = { ...this.#tokens, [token.toLowerCase()]: info }));
 		}
 		for (const missing of proposals.missing) {

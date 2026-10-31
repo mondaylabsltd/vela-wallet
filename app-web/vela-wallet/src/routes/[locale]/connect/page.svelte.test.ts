@@ -72,7 +72,7 @@ const fake = vi.hoisted(() => ({
 	links: [] as any[],
 	refreshed: 0,
 	/** An execution's fee and the wallet's coin, as the machine reads them (`null`: unknown). */
-	fee: null as null | { wei: string; count: number; partial: boolean },
+	fee: null as null | { wei: string; count: number; partial: boolean; maxWei: string },
 	balance: null as null | bigint,
 	/** §3.5: the machine asks about the risk before an action. */
 	risky: false,
@@ -196,6 +196,8 @@ function words(): MultisigMessages {
 	out.external.relayRefused = "it refused this device's pass";
 	out.external.executeWith = 'Execute with {{wallet}}';
 	out.external.executeFee = 'fee {{fee}} by {{account}}';
+	out.external.executeFeeMax = 'fee {{fee}} up to {{max}} by {{account}}';
+	out.external.executeConfirms = '{{total}} prompts';
 	out.status.progress = '{{approved}} of {{threshold}}';
 	out.action.send = 'Send {{amount}} {{symbol}}';
 	out.external.tokenNative = '{{symbol}} native on {{network}}';
@@ -567,7 +569,12 @@ describe("the link's own transaction, from here (r4C-2, r4C-9)", () => {
 	it('with the threshold met counting the owner: Execute, its fee said as paid by the wallet', async () => {
 		const screen = await open([MEMBER], link);
 		await vi.waitFor(() => expect(fake.links).toHaveLength(1));
-		fake.fee = { wei: String(21000n * 1_000_000_000n), count: 1, partial: false };
+		fake.fee = {
+			wei: String(21000n * 1_000_000_000n),
+			count: 1,
+			partial: false,
+			maxWei: String(2n * 21000n * 1_000_000_000n)
+		};
 		ready(1);
 		await vi.waitFor(() => expect(button('Execute with MetaMask')).toBeDefined());
 		await vi.waitFor(() => expect(testid('outside-fee')?.textContent).toContain('fee 0.000021'));
@@ -786,7 +793,12 @@ describe('round 6: the link transaction from here', () => {
 	});
 
 	it("r5reg-13: a wallet that can't pay the fee: told what it needs, Execute steps back", async () => {
-		fake.fee = { wei: String(21000n * 1_000_000_000n), count: 1, partial: false };
+		fake.fee = {
+			wei: String(21000n * 1_000_000_000n),
+			count: 1,
+			partial: false,
+			maxWei: String(2n * 21000n * 1_000_000_000n)
+		};
 		fake.balance = 0n;
 		const screen = await open([MEMBER], link());
 		await vi.waitFor(() => expect(fake.links).toHaveLength(1));
@@ -804,7 +816,12 @@ describe('round 6: the link transaction from here', () => {
 	});
 
 	it('r5reg-13: a wallet that can pay: Execute is the main action, its fee said', async () => {
-		fake.fee = { wei: String(21000n * 1_000_000_000n), count: 1, partial: false };
+		fake.fee = {
+			wei: String(21000n * 1_000_000_000n),
+			count: 1,
+			partial: false,
+			maxWei: String(2n * 21000n * 1_000_000_000n)
+		};
 		fake.balance = 10n ** 18n;
 		const screen = await open([MEMBER], link());
 		await vi.waitFor(() => expect(fake.links).toHaveLength(1));

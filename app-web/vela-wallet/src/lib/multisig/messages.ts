@@ -194,6 +194,8 @@ export interface MultisigMessages {
 		outboxAway: string;
 		/** Not sent after a while: kept, Send again. */
 		outboxNotSent: string;
+		/** r8-16: an approval on its way to the mailbox (never "not sent"). */
+		outboxSending: string;
 		/** The full hash's copy button. */
 		copy: string;
 		/** An executed transaction's sender (`{{name}}`). */
@@ -504,6 +506,10 @@ export interface MultisigMessages {
 		executeFee: string;
 		executeFeeUnknown: string;
 		executeSteps: string;
+		/** r8-15: `{{total}}` wallet prompts are coming, said before the first. */
+		executeConfirms: string;
+		/** r8-15: `{{fee}}`, `{{max}}` (the most it can take), `{{account}}`. */
+		executeFeeMax: string;
 		executeWith: string;
 		approveOnly: string;
 		keep: string;
@@ -779,6 +785,52 @@ export interface ReviewMessages {
 	proposeAnyway: string;
 	/** The gate refused a transaction right before signing. */
 	blocked: string;
+	/**
+	 * r8-1: the words for the core's reading of each call
+	 * (`MultisigReview.reading`) and for the concerns it raises.
+	 */
+	reading: ReadingMessages;
+}
+
+/** `home.multisig.review.reading` (r8-1, r8-2, r8-5). */
+export interface ReadingMessages {
+	send: string;
+	sendFrom: string;
+	approve: string;
+	increase: string;
+	decrease: string;
+	permit: string;
+	daiPermit: string;
+	permit2: string;
+	approveAll: string;
+	revokeAll: string;
+	batchOne: string;
+	batchMany: string;
+	unreadable: string;
+	call: string;
+	members: string;
+	rename: string;
+	amount: string;
+	allowance: string;
+	to: string;
+	from: string;
+	spender: string;
+	operator: string;
+	collection: string;
+	token: string;
+	function: string;
+	alsoSends: string;
+	runner: string;
+	runnerNote: string;
+	unlimited: string;
+	allOfIt: string;
+	decimalsUnknown: string;
+	unlimitedLine: string;
+	nestedLine: string;
+	unreadableLine: string;
+	decimalsLine: string;
+	ownTokenLine: string;
+	blindLine: string;
 }
 
 /** `home.multisig.members`: changing who the members are and how many must approve. */
@@ -1009,6 +1061,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		outboxBusy: '',
 		outboxAway: '',
 		outboxNotSent: '',
+		outboxSending: '',
 		outboxSendAgain: '',
 		copy: '',
 		executedBy: '',
@@ -1253,6 +1306,8 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		executeFee: '',
 		executeFeeUnknown: '',
 		executeSteps: '',
+		executeConfirms: '',
+		executeFeeMax: '',
 		executeWith: '',
 		approveOnly: '',
 		keep: '',
@@ -1509,6 +1564,45 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		approveExecuteAnyway: '',
 		executeAnyway: '',
 		proposeAnyway: '',
-		blocked: ''
+		blocked: '',
+		reading: {
+			send: '',
+			sendFrom: '',
+			approve: '',
+			increase: '',
+			decrease: '',
+			permit: '',
+			daiPermit: '',
+			permit2: '',
+			approveAll: '',
+			revokeAll: '',
+			batchOne: '',
+			batchMany: '',
+			unreadable: '',
+			call: '',
+			members: '',
+			rename: '',
+			amount: '',
+			allowance: '',
+			to: '',
+			from: '',
+			spender: '',
+			operator: '',
+			collection: '',
+			token: '',
+			function: '',
+			alsoSends: '',
+			runner: '',
+			runnerNote: '',
+			unlimited: '',
+			allOfIt: '',
+			decimalsUnknown: '',
+			unlimitedLine: '',
+			nestedLine: '',
+			unreadableLine: '',
+			decimalsLine: '',
+			ownTokenLine: '',
+			blindLine: ''
+		}
 	}
 };
