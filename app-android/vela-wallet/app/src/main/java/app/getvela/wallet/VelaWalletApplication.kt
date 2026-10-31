@@ -3,6 +3,7 @@ package app.getvela.wallet
 import app.getvela.wallet.feature.send.SendLive
 import app.getvela.wallet.feature.multisig.MultisigWiring
 import app.getvela.wallet.feature.multisig.MultisigNotifier
+import app.getvela.wallet.feature.multisig.MultisigWords
 import app.getvela.wallet.feature.multisig.core.MultisigHub
 import app.getvela.wallet.core.format.Formats
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -1204,6 +1205,7 @@ class AppContainer(private val app: Application) {
         app.registerActivityLifecycleCallbacks(activityCounter)
         i18nExecutor.execute {
             i18nRuntime.initialize(LocaleResolver.resolve(currentLocales()))
+            multisigChannels()
         }
         if (BuildConfig.DEBUG) {
             // Spec 048: a raw store seed for the device pass, applied before the
@@ -1226,10 +1228,23 @@ class AppContainer(private val app: Application) {
      */
     private fun startAgent() = agent.start(agentWallet)
 
+    /**
+     * r9-8: the multisig's notification channels, made at the app's start and
+     * named again in a new language (on the i18n thread, after its catalog):
+     * there before the first post, and listed in the system's settings.
+     */
+    private fun multisigChannels() {
+        runCatching {
+            i18nRuntime.include(I18nCatalogs.MULTISIG)
+            MultisigNotifier.ensureChannels(app, MultisigWords(i18nRuntime))
+        }.onFailure { VelaLog.failure("multisig.notify", "channels", it) }
+    }
+
     /** Re-resolves the system locale (activity recreation on locale change). */
     fun applySystemLocale() {
         i18nExecutor.execute {
             i18nRuntime.setLocale(LocaleResolver.resolve(currentLocales()))
+            multisigChannels()
         }
     }
 
@@ -1239,6 +1254,7 @@ class AppContainer(private val app: Application) {
         i18nExecutor.execute {
             runCatching { i18nRuntime.setLocale(LocaleResolver.resolve(listOf(java.util.Locale.forLanguageTag(choice)))) }
                 .onFailure { VelaLog.failure("i18n", "language preference failed", it) }
+            multisigChannels()
         }
     }
 

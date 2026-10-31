@@ -146,7 +146,7 @@ class MultisigNotifier(
                 return
             }
             val manager = context.getSystemService(NotificationManager::class.java) ?: return
-            createChannels(manager, words)
+            if (Build.VERSION.SDK_INT >= 26) createChannels(manager, words)
             val open = Intent(context, MainActivity::class.java)
                 .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                 .apply {
@@ -167,6 +167,25 @@ class MultisigNotifier(
             manager.notify(note.id.hashCode(), notification)
             VelaLog.event("multisig.notify", "posted", "channel" to note.channel.id, "id" to note.id.take(24))
         }
+
+        /**
+         * r9-8: the channels exist from the app's start (named in the
+         * person's language, renamed when it changes) — a person can see and
+         * set them in the system's settings before the first one is posted,
+         * and a post never meets a missing channel.
+         */
+        fun ensureChannels(context: Context, words: MultisigWords) {
+            if (Build.VERSION.SDK_INT < 26) return
+            val manager = context.getSystemService(NotificationManager::class.java) ?: return
+            createChannels(manager, words)
+            VelaLog.event("multisig.notify", "channels", "count" to Channel.entries.size)
+        }
+
+        /** r9-8: may this app post now (Android 13+ asks; before it, the app's switch in Settings). */
+        fun allowed(context: Context): Boolean =
+            (Build.VERSION.SDK_INT < 33 ||
+                ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) &&
+                androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled()
 
         /** The channels, named from the corpus (the screens' own words for each state). */
         fun createChannels(manager: NotificationManager, words: MultisigWords) {
@@ -194,8 +213,26 @@ class MultisigNotifier(
             }
             val request = PeriodicWorkRequestBuilder<MultisigPollWorker>(15, TimeUnit.MINUTES)
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .addTag(WORK_NAME)
                 .build()
             work.enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.KEEP, request)
+        }
+
+        /** The name a one-off round goes under (a debug build's trigger; never two at once). */
+        internal const val ONCE_NAME = "vela.multisig.poll.once"
+
+        /**
+         * One round now, as the periodic job runs it — WorkManager's own
+         * worker, in a process the system may have just started. A forced run
+         * of the PERIODIC job is refused by WorkManager before its period
+         * ("executed before schedule"), so a tester's trigger (debug builds
+         * only, `dev/MultisigPollTrigger`) asks for this instead.
+         */
+        fun runOnce(context: Context) {
+            val request = androidx.work.OneTimeWorkRequestBuilder<MultisigPollWorker>()
+                .addTag(ONCE_NAME)
+                .build()
+            WorkManager.getInstance(context).enqueueUniqueWork(ONCE_NAME, androidx.work.ExistingWorkPolicy.REPLACE, request)
         }
     }
 }
@@ -223,7 +260,14 @@ class MultisigPollWorker(context: Context, params: WorkerParameters) : Coroutine
                 return@withTimeoutOrNull true
             }
             hub.backgroundRound()
-            container.multisigNotifier.evaluate(hub.accountsView.value, hub.proposalsView.value, post = !container.inForeground())
+            val notes = container.multisigNotifier.evaluate(hub.accountsView.value, hub.proposalsView.value, post = !container.inForeground())
+            VelaLog.event(
+                "multisig.poll", "evaluated",
+                "multisigs" to hub.accountsView.value.accounts.size,
+                "notes" to notes.size,
+                "allowed" to MultisigNotifier.allowed(applicationContext),
+                "foreground" to container.inForeground(),
+            )
             true
         }
         VelaLog.event("multisig.poll", if (done == true) "round" else "timed out")
