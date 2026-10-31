@@ -133,7 +133,6 @@ fn run(func: &str, i: &Value) -> Value {
                 account_name: opt_s(i, "account_name"),
                 credential_ids_hex: strings(i, "credential_ids_hex"),
                 key_route_json: opt_s(i, "key_route_json"),
-                anyway: false,
                 calls: Vec::new(),
             };
             json_text(
@@ -173,6 +172,7 @@ fn run(func: &str, i: &Value) -> Value {
                 member_name: opt_s(i, "member_name"),
                 credential_ids_hex: strings(i, "credential_ids_hex"),
                 key_route_json: opt_s(i, "key_route_json"),
+                anyway: false,
             })
             .expect("approval request builds"),
         ),

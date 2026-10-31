@@ -1527,7 +1527,10 @@ fn an_address_with_no_code_has_no_decimals() {
     let _ = propose(&mut sut, &mut world, kind, None);
     run(&mut sut, &mut world, Event::Refresh { fresh: true });
     let facts = sut.view().tokens[&format!("100:{TOKEN}")].clone();
-    assert_eq!(facts.decimals, None, "\"0x\" is no answer: decimals unknown");
+    assert_eq!(
+        facts.decimals, None,
+        "\"0x\" is no answer: decimals unknown"
+    );
 }
 
 /// r8-2: a token a proposal moves is named by its contract's own decimals,

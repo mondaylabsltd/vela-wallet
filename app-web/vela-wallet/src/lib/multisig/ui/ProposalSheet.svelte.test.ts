@@ -595,7 +595,10 @@ function words(): MultisigMessages {
 			out[group][key] =
 				typeof value === 'object' && value !== null && !('forms' in value)
 					? Object.fromEntries(Object.keys(value).map((leaf) => [leaf, `${group}.${key}.${leaf}`]))
-					: `${group}.${key}`;
+					: typeof value === 'object' && value !== null
+						? // A plural copy: its forms, each the key.
+							{ locale: 'en', forms: { _one: `${group}.${key}`, _other: `${group}.${key}` } }
+						: `${group}.${key}`;
 		}
 	}
 	out.proposal.siteAsks = '{{host}} asks for this transaction.';
