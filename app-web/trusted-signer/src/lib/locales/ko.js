@@ -86,6 +86,7 @@ window.VelaCS.i18n.register('ko', {
   'sentence.deploy': '새 컨트랙트 코드를 배포합니다. 코드만으로는 의도를 읽을 수 없습니다.',
   'sentence.batch': '거래 {count}건, 서명은 한 번.',
   'sentence.multiSend': '호출 {count}건을 서명 한 번으로 묶었습니다.',
+  'sentence.multiSendOne': "호출 1건을 서명 한 번으로 묶었습니다.",
   'sentence.safeExec': 'Safe를 거쳐 전달되는 호출입니다 — 실제로 실행되는 것은 안쪽 계층입니다.',
   'sentence.burn': '받는 곳이 토큰 컨트랙트 자체입니다. 그곳으로 보낸 코인은 아무에게도 가지 않고 영원히 묶입니다.',
   'sentence.abiOnly': '이 컨트랙트는 소스가 검증되었고 모든 매개변수가 디코딩되지만, 그 의미를 적어 둔 사람은 없습니다. 아래는 설명이 아니라 사실입니다.',

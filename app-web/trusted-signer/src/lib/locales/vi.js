@@ -86,6 +86,7 @@ window.VelaCS.i18n.register('vi', {
   'sentence.deploy': 'Bạn đang triển khai mã hợp đồng mới. Không thể đọc mã này ra thành ý định.',
   'sentence.batch': '{count} giao dịch, một chữ ký.',
   'sentence.multiSend': '{count} lệnh gọi được gói vào một chữ ký duy nhất.',
+  'sentence.multiSendOne': "Một lệnh gọi được gói vào một chữ ký duy nhất.",
   'sentence.safeExec': 'Một lệnh gọi được chuyển tiếp qua Safe — lớp bên trong mới là thứ thực sự chạy.',
   'sentence.burn': 'Người nhận chính là hợp đồng của token này. Coin gửi tới đó không đến tay ai cả — chúng bị kẹt vĩnh viễn.',
   'sentence.abiOnly': 'Hợp đồng này đã được xác minh mã nguồn và mọi tham số đều giải mã được, nhưng chưa ai ghi lại ý nghĩa của chúng. Bên dưới là dữ kiện, không phải lời giải thích.',

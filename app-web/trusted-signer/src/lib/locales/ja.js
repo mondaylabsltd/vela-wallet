@@ -86,6 +86,7 @@ window.VelaCS.i18n.register('ja', {
   'sentence.deploy': '新しいコントラクトのコードをデプロイします。コードからは意図を読み取れません。',
   'sentence.batch': '{count} 件の取引を、1 回の署名で。',
   'sentence.multiSend': '{count} 件の呼び出しを 1 回の署名にまとめています。',
+  'sentence.multiSendOne': "1 件の呼び出しを 1 回の署名にまとめています。",
   'sentence.safeExec': 'Safe を通して転送される呼び出しです — 実際に実行されるのは内側の層です。',
   'sentence.burn': '宛先はトークンのコントラクトそのものです。そこへ送ったコインは誰にも届かず、永久に動かせなくなります。',
   'sentence.abiOnly': 'このコントラクトはソース検証済みで、すべてのパラメータをデコードできますが、その意味を書き記した人はいません。以下は事実であり、説明ではありません。',
