@@ -82,7 +82,9 @@ object MultisigWiring {
             handoffShown = true,
             words = { key, vars -> container.i18nRuntime.t(key, vars) },
         )
-        val peer = app.getvela.wallet.feature.multisig.core.NoPeer
+        // The hub's machines open no room of their own today (the web hands them
+        // rooms whose news goes nowhere); a session gets its own below.
+        val peer = app.getvela.wallet.feature.multisig.core.MultisigPeerConnect(scope, store)
         val live = MultisigLive(
             pool = container.pool,
             relay = container.relay,
@@ -116,7 +118,7 @@ object MultisigWiring {
             MultisigOutsideSessionModel(
                 request = request,
                 ports = live,
-                rooms = null,
+                rooms = app.getvela.wallet.feature.multisig.core.MultisigPeerConnect(scope, store),
                 relayUrl = runCatching { kotlinx.coroutines.runBlocking { store.read(RELAY_KEY) } }.getOrNull(),
                 serviceUrl = runCatching { kotlinx.coroutines.runBlocking { serviceUrl(container, store) } }.getOrDefault(DEFAULT_SERVICE),
                 connectPage = connectPage(container),
