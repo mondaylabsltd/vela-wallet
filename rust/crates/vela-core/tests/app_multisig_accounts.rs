@@ -16,7 +16,7 @@ use serde_json::{json, Value};
 use support::DomainDriver;
 use vela_core::app::multisig_accounts::{
     AddOutcome, BackupState, CreateChoice, CreateDraft, EnsAnswer, Event, ImportOutcome,
-    InvitedMember, KindAsk, MultisigAccounts, Phase, RenameBlocked, CREATE_DRAFT_KEY,
+    IndexAnswer, InvitedMember, KindAsk, MultisigAccounts, Phase, RenameBlocked, CREATE_DRAFT_KEY,
     INVITE_SHARED_KEY,
 };
 use vela_core::app::multisig_shell::{keys, AccountUpdate, MemberInfo, Notice};
@@ -2174,4 +2174,98 @@ fn the_network_hints_are_the_machines() {
     );
     run(&mut sut, &mut world, Event::NewDraft);
     assert_eq!(sut.view().recent_networks, vec![10]);
+}
+
+/// r9-12 (r8-25, r4D-5): one name per member, the core's rule, drawn from
+/// the view — what a multisig here keeps, else the passkey index's name,
+/// else this device's own name for its account, else the short address —
+/// and the invite carries every name known, with each kind.
+#[test]
+fn one_name_per_member_and_the_invite_carries_every_known_one() {
+    let mut world = World::default();
+    world.locals.push(fixture(0));
+    let me = world.locals[0].address.clone();
+    let own_name = world.locals[0].name.clone();
+    let g = genesis(&[&me, A, B], 2, "0x63");
+    let mut row = stored_row(&g, &[100], true);
+    row["members"] = json!({ B: { "name": "Bo", "kind": "wallet" } });
+    world
+        .store
+        .insert(keys::ACCOUNTS.to_owned(), json!([row]).to_string());
+    let mut sut = started(&mut world, vec![100]);
+    let view = sut.view();
+    let labels = &view.member_labels;
+    assert_eq!(
+        labels[&me.to_ascii_lowercase()],
+        own_name,
+        "this device's own name, last"
+    );
+    assert_eq!(labels[B], "Bo", "kept");
+    assert_eq!(labels[A], "0x000000…0000AA", "nothing names it");
+    let mut wanted = view.index_wanted.clone();
+    wanted.sort();
+    let mut want = vec![A.to_owned(), B.to_owned(), me.to_ascii_lowercase()];
+    want.sort();
+    assert_eq!(
+        wanted, want,
+        "this device's own too: its registered name is shared"
+    );
+
+    // The index answers: A registered "Interleave"; this device's account
+    // registered its own name too, which every device shows before its nickname.
+    run(
+        &mut sut,
+        &mut world,
+        Event::IndexNames {
+            answers: BTreeMap::from([
+                (
+                    A.to_owned(),
+                    IndexAnswer {
+                        vela: true,
+                        name: Some("Interleave".into()),
+                    },
+                ),
+                (
+                    me.clone(),
+                    IndexAnswer {
+                        vela: true,
+                        name: Some("Dana".into()),
+                    },
+                ),
+                (
+                    B.to_owned(),
+                    IndexAnswer {
+                        vela: false,
+                        name: None,
+                    },
+                ),
+            ]),
+        },
+    );
+    let view = sut.view();
+    assert_eq!(view.member_labels[A], "Interleave");
+    assert_eq!(view.member_labels[&me.to_ascii_lowercase()], "Dana");
+    assert_eq!(view.member_labels[B], "Bo", "kept before the index");
+    assert!(view.index_wanted.is_empty());
+
+    let invite = &view.accounts[0].invite_members;
+    let by = |a: &str| {
+        invite
+            .iter()
+            .find(|m| {
+                m.address
+                    .as_deref()
+                    .is_some_and(|x| x.eq_ignore_ascii_case(a))
+            })
+            .cloned()
+            .unwrap()
+    };
+    assert_eq!(invite.len(), 3);
+    assert_eq!(by(&me).name.as_deref(), Some("Dana"));
+    assert_eq!(by(A).name.as_deref(), Some("Interleave"));
+    assert_eq!(by(B).name.as_deref(), Some("Bo"));
+    let kind = |a: &str| serde_json::to_value(by(a).kind).unwrap();
+    assert_eq!(kind(&me), json!("passkey"));
+    assert_eq!(kind(A), json!("passkey"));
+    assert_eq!(kind(B), json!("wallet"));
 }

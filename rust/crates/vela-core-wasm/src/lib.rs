@@ -1123,6 +1123,24 @@ pub fn site_start_chain(space_chain_ids: Vec<u32>, last_used: Option<u32>) -> u3
     vela_core::app::network_space::site_start_chain(&space_chain_ids, last_used)
 }
 
+/// [`site_start_chain`] for an account (r9): `network_space::
+/// site_start_chain_for` — after the network last used, the first of
+/// `account_chains` (where the account holds something, or used) the space
+/// offers. The extension worker's twin is pinned to this.
+#[wasm_bindgen(js_name = siteStartChainFor)]
+#[must_use]
+pub fn site_start_chain_for(
+    space_chain_ids: Vec<u32>,
+    last_used: Option<u32>,
+    account_chains: Vec<u32>,
+) -> u32 {
+    vela_core::app::network_space::site_start_chain_for(
+        &space_chain_ids,
+        last_used,
+        &account_chains,
+    )
+}
+
 /// Whether `chain_id` is a testnet (spec 105).
 #[wasm_bindgen(js_name = networkChainIsTestnet)]
 #[must_use]

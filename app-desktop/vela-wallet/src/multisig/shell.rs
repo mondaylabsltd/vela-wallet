@@ -831,6 +831,7 @@ mod tests {
                         safe_tx_hash: "0xhash".to_owned(),
                         name: None,
                         tx: Box::new(tx()),
+                        anyway: false,
                     },
                 },
             );

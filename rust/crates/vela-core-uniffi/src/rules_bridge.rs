@@ -253,6 +253,24 @@ pub fn site_start_chain(space_chain_ids: Vec<u32>, last_used: Option<u32>) -> u3
     vela_core::app::network_space::site_start_chain(&space_chain_ids, last_used)
 }
 
+/// [`site_start_chain`] for an account (r9): after the network last used,
+/// the first of `account_chains` — where the account holds something, or
+/// used — that the space offers; then the space's first.
+#[uniffi::export]
+#[must_use]
+#[allow(clippy::needless_pass_by_value)]
+pub fn site_start_chain_for(
+    space_chain_ids: Vec<u32>,
+    last_used: Option<u32>,
+    account_chains: Vec<u32>,
+) -> u32 {
+    vela_core::app::network_space::site_start_chain_for(
+        &space_chain_ids,
+        last_used,
+        &account_chains,
+    )
+}
+
 /// **The address a typed name points to** (`alice.eth`, a member to add):
 /// `name_verify::resolve_step` over JSON — the same forward walk as
 /// `verified_name_step`, handing back the address (EIP-55) for the

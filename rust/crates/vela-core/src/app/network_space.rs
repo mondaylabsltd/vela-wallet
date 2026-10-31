@@ -114,10 +114,29 @@ pub fn space_chain_ids_json(space: &str, rows_json: &str) -> String {
 /// else Ethereum. A testnet-space wallet no longer starts a site on mainnet.
 #[must_use]
 pub fn site_start_chain(space_chain_ids: &[u32], last_used: Option<u32>) -> u32 {
-    match last_used {
-        Some(chain_id) if space_chain_ids.contains(&chain_id) => chain_id,
-        _ => space_chain_ids.first().copied().unwrap_or(1),
+    site_start_chain_for(space_chain_ids, last_used, &[])
+}
+
+/// [`site_start_chain`] for an account (r9, extension): after the network
+/// the person last put a site on, the first of `account_chains` — the
+/// networks the active account holds something on or used, most telling
+/// first — that the space offers; only then the space's first network. A
+/// plain account holding only Arc USDC no longer starts a site on Sepolia.
+#[must_use]
+pub fn site_start_chain_for(
+    space_chain_ids: &[u32],
+    last_used: Option<u32>,
+    account_chains: &[u32],
+) -> u32 {
+    if let Some(chain_id) = last_used.filter(|c| space_chain_ids.contains(c)) {
+        return chain_id;
     }
+    account_chains
+        .iter()
+        .find(|c| space_chain_ids.contains(c))
+        .or_else(|| space_chain_ids.first())
+        .copied()
+        .unwrap_or(1)
 }
 
 /// [`chain_is_testnet`] for a shell holding the stored `vela.customNetworks`
@@ -148,6 +167,24 @@ mod tests {
         );
         // A space with no network at all: Ethereum, as before.
         assert_eq!(site_start_chain(&[], Some(100)), 1);
+    }
+
+    #[test]
+    fn a_new_site_starts_where_the_account_holds_or_used_within_the_space() {
+        // r9: a plain account holding only Arc USDC, testnet space.
+        let space = [11_155_111, 84_532, 5_042_002];
+        assert_eq!(site_start_chain_for(&space, None, &[5_042_002]), 5_042_002);
+        // The network last used comes first; one outside the space never.
+        assert_eq!(
+            site_start_chain_for(&space, Some(84_532), &[5_042_002]),
+            84_532
+        );
+        assert_eq!(
+            site_start_chain_for(&space, None, &[8453, 5_042_002]),
+            5_042_002
+        );
+        assert_eq!(site_start_chain_for(&space, None, &[8453]), 11_155_111);
+        assert_eq!(site_start_chain_for(&[], None, &[8453]), 1);
     }
 
     fn custom(chain_id: u32, is_testnet: Option<bool>) -> NetCustomNetwork {
