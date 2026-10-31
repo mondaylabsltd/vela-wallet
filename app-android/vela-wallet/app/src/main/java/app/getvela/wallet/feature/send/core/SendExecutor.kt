@@ -612,6 +612,9 @@ class SendExecutor(
                 ports.opSigned(localHash, submitBlock)
                 if (!clearance.await()) throw UserOpSpine.Refused(UserOpSpine.Failure.NotCleared)
             },
+            // core-perf-1: the gas the confirmed fee was priced on, when the
+            // core still holds it fresh for exactly these calls.
+            prepared = op.prepared,
         )
     } catch (refused: UserOpSpine.Refused) {
         throw SubmitRefused(

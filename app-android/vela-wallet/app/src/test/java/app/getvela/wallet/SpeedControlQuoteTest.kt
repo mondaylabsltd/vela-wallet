@@ -145,7 +145,13 @@ class SpeedControlQuoteTest {
         assertNotNull(first)
         val seen = speed.watch()
         gwei = 2 // the next block is dearer
-        val next = runBlocking { withTimeout(20_000) { speed.fee.first { it.fee != null && it.fee != first } } }
+        // By its figure, not the whole estimate: since core-perf-1 the
+        // estimate also carries what the run measured (`prepared`), which
+        // every re-run clears before it reads — an estimate that differs
+        // from `first` in that alone is the same price, not the next block's.
+        val next = runBlocking {
+            withTimeout(20_000) { speed.fee.first { it.fee != null && it.fee!!.network_fee_per_gas != first!!.network_fee_per_gas } }
+        }
         assertTrue(
             "priced at the dearer block: $first → ${next.fee}",
             next.fee!!.network_fee_per_gas.toBigInteger() > first!!.network_fee_per_gas.toBigInteger(),
