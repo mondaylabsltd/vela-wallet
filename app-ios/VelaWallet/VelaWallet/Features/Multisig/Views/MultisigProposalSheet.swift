@@ -28,7 +28,6 @@ struct MsProposalModel {
 
     var chainId: Int { item.chainId }
     var hash: String { item.safeTxHash }
-    var review: MsJSON? { view.review(item) }
     var standing: MsTagged? { view.standing(item) }
     var timeline: [MsTagged] { view.timeline(item) }
     var signers: MsSigners? { view.signers(item) }
@@ -36,19 +35,73 @@ struct MsProposalModel {
     var approveState: MsTagged? { view.action("approve:\(hash)") }
     var executeState: MsTagged? { view.action("execute:\(hash)") }
 
+    // MARK: - The one review (§3.6)
+
+    /// Where the machine's review stands: not in yet (`holding` — every
+    /// signing control waits, as the signing sheet's confirm waits for its
+    /// reading), could not be gathered (`failed`: said, with Retry), or in.
+    enum ReviewState: Equatable {
+        case holding
+        case failed
+        case ready(MsJSON)
+    }
+
+    var reviewState: ReviewState {
+        guard let review = view.review(item) else { return .holding }
+        return review.isNull ? .failed : .ready(review)
+    }
+
+    /// The review, once in.
+    var review: MsJSON? {
+        if case .ready(let review) = reviewState { return review }
+        return nil
+    }
+
+    /// No signature is offered before the review says what is signed: the
+    /// web's `reviewHolding` (no blind signing).
+    var reviewHolding: Bool { reviewState == .holding }
+
+    /// The last review could not read the chain (its state, its simulation,
+    /// or the whole review): asked again soon (the web's `machineUnread`).
+    var reviewUnread: Bool {
+        switch reviewState {
+        case .holding: return false
+        case .failed: return true
+        case .ready(let review):
+            return review["state"]?["verdict"]?.kind == "unavailable"
+                || review["simulation"]?["kind"]?.string == "unreachable"
+        }
+    }
+
     var title: String { words.actionTitleNow(chainId: chainId, action: item.action, nonce: item.nonce) }
-    var statusLine: String { words.standing(standing, item: item) }
+
+    /// The chip under the title: a finished one says how it ended, never a
+    /// count against today's members (r4a-8, r8-17).
+    var statusLine: String {
+        if isDone, executedTx != nil { return words.t("proposal.executed") }
+        if isDone, replaced { return words.t("proposal.voided") }
+        return words.standing(standing, item: item)
+    }
 
     /// Who approved, by address (lowercased).
     var approvedBy: Set<String> { Set(item.approvals.map { $0.owner.lowercased() }) }
 
-    /// The members on this network now (the chain's word), else the original.
+    /// The members on this network now (the chain's word), else the link's
+    /// read, else the original.
     var members: [String] {
-        view.chain(chainId)?.members?.owners ?? account?.owners ?? []
+        view.chain(chainId)?.members?.owners
+            ?? view.linked.flatMap { $0.chainId == chainId ? $0.members?.owners : nil }
+            ?? account?.owners ?? []
     }
 
     var isDone: Bool { item.status == "done" }
     var isReady: Bool { item.status == "ready" }
+
+    /// It ran, or its number was used: nothing more to sign, ask or check.
+    var past: Bool { isDone || executedTx != nil }
+
+    /// Replaced at its number (the machine's timeline ends so).
+    var replaced: Bool { timeline.last?.kind == "replaced" }
 
     /// This device's members that can still approve.
     var canApprove: [String] { item.canApprove }
@@ -63,10 +116,96 @@ struct MsProposalModel {
         return canApprove.first
     }
 
-    /// The core's sign rule: may this be signed at all (the state guard, a
-    /// refusal) — `anyway`: only with the "… anyway" friction.
+    /// The core's sign rule, once the review is in: may this be signed at
+    /// all (`allowed` false: nothing signed, no override), and only with the
+    /// "… anyway" friction (`anyway`).
     var signAllowed: Bool { review?["sign"]?["allowed"]?.bool ?? true }
-    var signAnyway: Bool { review?["sign"]?["anyway"]?.bool ?? false }
+    var signAnyway: Bool { review.map { $0["sign"]?["anyway"]?.bool ?? false } ?? false }
+
+    /// A signing control may be pressed: the review is in (or could not be
+    /// gathered — the machine's gate reads it once more before the passkey)
+    /// and its rule does not refuse it.
+    var signable: Bool { !reviewHolding && signAllowed }
+
+    /// The label a signing control wears: "… anyway" when the core asks
+    /// for that friction (the web's `anywayLabel`).
+    func signLabel(_ plain: String, anyway: String) -> String {
+        words.t(signAnyway ? anyway : plain)
+    }
+
+    /// What the "… anyway" step names before it signs: the review's
+    /// concerns, in its words — said again where the person confirms.
+    var anywayReasons: [String] {
+        guard let review else { return [] }
+        return (review["concerns"]?.array ?? []).compactMap { MsReviewBody.concernText($0, words: words) }
+    }
+
+    // MARK: - An executed one (r8-17): as it was when it ran
+
+    /// The machine's frozen facts (its receipt's, else what this device
+    /// recorded sending it) — only once the chain says it ran.
+    var frozen: MsJSON? { executedTx == nil ? nil : view.frozen(item) }
+
+    /// Whom the approvals list names: the members whose approvals counted
+    /// when it ran; a finished one's verified approvals while those are not
+    /// known (never a "Waiting" row on a transaction that can no longer
+    /// move); else this network's members now. The web's `listed`.
+    var listed: [String] {
+        if let frozen { return frozen["approvers"]?.array.compactMap(\.string) ?? [] }
+        if isDone { return item.approvals.filter(\.counts).map(\.owner) }
+        return members
+    }
+
+    /// One member's line on the list.
+    enum MemberWord: Equatable {
+        case executed, approved, notNeeded, waiting
+
+        /// Its corpus key (`home.multisig.*`).
+        var key: String {
+            switch self {
+            case .executed: "proposal.executed"
+            case .approved: "proposal.approved"
+            case .notNeeded: "proposal.notNeeded"
+            case .waiting: "proposal.waiting"
+            }
+        }
+    }
+
+    func memberWord(_ owner: String) -> MemberWord {
+        if let frozen, frozen["executorApproved"]?.bool == true,
+           frozen["executor"]?.string?.caseInsensitiveCompare(owner) == .orderedSame {
+            return .executed
+        }
+        if frozen != nil || isDone { return .approved }
+        if item.approvals.contains(where: { $0.counts && $0.owner.caseInsensitiveCompare(owner) == .orderedSame }) {
+            return .approved
+        }
+        return item.approved >= item.threshold ? .notNeeded : .waiting
+    }
+
+    /// The approvals heading's count: "Executed" for one that ran (never
+    /// "1/2" against today's rule), nothing for one otherwise finished.
+    var approvalsCount: String {
+        if executedTx != nil { return words.t("proposal.executed") }
+        if isDone { return replaced ? words.t("proposal.voided") : "" }
+        return "\(item.approved)/\(item.threshold)"
+    }
+
+    /// "Executed by Eve · 2 of 2 approvals counted when it was executed" —
+    /// or, with no facts read, that which approvals counted isn't recorded.
+    var executedFacts: String? {
+        guard executedTx != nil else { return nil }
+        guard let frozen else { return words.t("proposal.approvalsSigned") }
+        var parts: [String] = []
+        if let executor = frozen["executor"]?.string {
+            parts.append(words.t("proposal.executedBy", ["name": words.label(executor)]))
+        }
+        parts.append(words.t("proposal.countedThen", [
+            "approved": String(frozen["approvers"]?.array.count ?? 0),
+            "threshold": frozen["threshold"]?.string ?? String(item.threshold),
+        ]))
+        return parts.joined(separator: " · ")
+    }
 
     /// The lines that say where it stands, in order.
     var notes: [(text: String, tone: MsNote.Tone, id: String)] {
@@ -207,24 +346,82 @@ struct MsProposalModel {
 
     // MARK: - Asking the others (`signers`)
 
+    /// The members still to approve (verified approvals count; nothing once
+    /// it can no longer move).
     var stillNeeded: [String] {
-        let have = approvedBy
+        guard !past else { return [] }
+        let have = Set(item.approvals.filter(\.counts).map { $0.owner.lowercased() })
         return members.filter { !have.contains($0.lowercased()) }
     }
 
+    /// Enough approved: nobody else is asked (r4D-6).
+    var enough: Bool { item.approved >= item.threshold || signers?.enough == true }
+
+    /// r7-8: the machine's one partition of the members still to approve —
+    /// each said once. Nothing once enough approved, or once it is past.
+    private func part(_ list: [String]?) -> [String] {
+        guard !past, !enough else { return [] }
+        let missing = Set(stillNeeded.map { $0.lowercased() })
+        return (list ?? []).filter { missing.contains($0.lowercased()) }
+    }
+
+    /// Outside wallets (a plain account, or one nothing shows is Vela's):
+    /// the outside-wallet link — never the Vela link they cannot use.
+    var outside: [String] { part(signers?.outside) }
+    /// Vela members elsewhere: they approve in Vela, from the link (r4-9).
+    var inVela: [String] { part(signers?.inVela) }
+    /// Nothing says yet how they sign: both ways, said once.
+    var either: [String] { part(signers?.either) }
+    /// Smart-contract members: they approve from their own app — said,
+    /// nothing offered.
+    var contract: [String] { part(signers?.contract) }
+
+    /// The members the Vela link is for: Vela's, nothing-says-yet ones, and
+    /// those still being read — never this device's, never a contract or a
+    /// surely outside wallet (the web's `velaMissing`).
+    var velaMissing: [String] {
+        guard !past, !enough else { return [] }
+        let rows = signers?.rows ?? []
+        let outsideSet = Set(outside.map { $0.lowercased() })
+        let contractSet = Set(contract.map { $0.lowercased() })
+        return stillNeeded.filter { owner in
+            let key = owner.lowercased()
+            guard words.localName(owner) == nil, !outsideSet.contains(key), !contractSet.contains(key) else { return false }
+            let kind = rows.first { $0.owner.lowercased() == key }?.kind
+            return inVela.contains { $0.lowercased() == key } || either.contains { $0.lowercased() == key }
+                || kind == nil
+        }
+    }
+
+    /// The Vela link section: while approvals are missing, for the Vela
+    /// members — or when nothing else asks anyone (the web's condition).
+    var showsVelaLink: Bool {
+        guard !past, item.approved < item.threshold, !stillNeeded.isEmpty else { return false }
+        return !velaMissing.isEmpty || (outside.isEmpty && contract.isEmpty)
+    }
+
     var signerLines: [(text: String, id: String)] {
-        guard let signers, !isDone else { return [] }
         var out: [(String, String)] = []
-        if !signers.inVela.isEmpty {
-            out.append((words.t("proposal.approvesInVela", ["names": signers.inVela.map(words.label).joined(separator: ", ")]), "inVela"))
+        if !inVela.isEmpty {
+            out.append((words.t("proposal.approvesInVela", ["names": inVela.map(words.label).joined(separator: ", ")]), "inVela"))
         }
-        if !signers.either.isEmpty {
-            out.append((words.t("proposal.eitherWay", ["names": signers.either.map(words.label).joined(separator: ", ")]), "either"))
-        }
-        if !signers.contract.isEmpty {
-            out.append((words.t("proposal.contractMembers", ["names": signers.contract.map(words.label).joined(separator: ", ")]), "contract"))
+        if !either.isEmpty {
+            out.append((words.t("proposal.eitherWay", ["names": either.map(words.label).joined(separator: ", ")]), "either"))
         }
         return out.map { (text: $0.0, id: $0.1) }
+    }
+
+    /// r7: smart-contract members still to approve, said honestly.
+    var contractLine: String? {
+        contract.isEmpty ? nil
+            : words.t("proposal.contractMembers", ["names": contract.map(words.label).joined(separator: ", ")])
+    }
+
+    /// The multisig this transaction is of: the one shown, else the link's.
+    var multisig: String {
+        account?.address
+            ?? view.linked.flatMap { $0.safeTxHash.caseInsensitiveCompare(hash) == .orderedSame ? $0.safe : nil }
+            ?? view.followed ?? ""
     }
 
     /// The proposal's link, for another member's Vela.
@@ -232,9 +429,25 @@ struct MsProposalModel {
         MsRules.proposalLink(
             origin: MsRules.string("shareOrigin", ["origin": "app://ios"]) ?? "https://getvela.app",
             locale: MultisigServiceURL.locale, chainId: chainId,
-            multisig: account?.address ?? view.followed ?? "", safeTxHash: hash
+            multisig: multisig, safeTxHash: hash
         )
     }
+
+    /// r8-8 (r4C-13): an outside member's own link — Vela's connect page,
+    /// naming the transaction, which it reads, reviews and signs from alone.
+    /// Only while approvals are missing and an outside member is among them.
+    var outsideLink: String? {
+        guard !past, item.approved < item.threshold, !outside.isEmpty, !multisig.isEmpty else { return nil }
+        return MsRules.connectLink(
+            page: MultisigServiceURL.connectPage(), invite: nil, members: outside,
+            tx: (chainId: chainId, multisig: multisig, safeTxHash: hash)
+        )
+    }
+
+    /// "Approve with another wallet" (M4): an outside member's wallet over a
+    /// live session — offered for a member the machine says signs outside,
+    /// or one nothing says yet (the web's `signWithWallet`).
+    var offersOutsideWallet: Bool { !(outside + either).isEmpty }
 
     // MARK: - History
 
@@ -276,8 +489,27 @@ struct MultisigProposalSheet: View {
     @State private var member: String?
     @State private var executor: String?
     @State private var copied = false
+    @State private var outsideCopied = false
     @State private var releaseWatch: (() -> Void)?
     @State private var confirmingReject = false
+    /// The "… anyway" step the core asked for, while it is up (r8-1).
+    @State private var anyway: MsAnywayStep?
+    /// r8-19: the review has been out longer than the machine's own cap on
+    /// a look: the sheet says it couldn't check, with Retry, not a spinner.
+    @State private var reviewWaitedOut = false
+
+    /// How long a review may be out before the sheet stops saying
+    /// "Checking…" — the machine's `PREVIEW_CAP_MS` (a look past it is
+    /// `unchecked`), so the sheet never outwaits the core.
+    static let reviewWaitCap: Duration = .seconds(15)
+    /// How often an open sheet asks for its review again (the web's
+    /// `REVIEW_FRESH_MS`), and while the last could not read the chain
+    /// (`REVIEW_RETRY_MS`).
+    static let reviewFreshSeconds: Double = 30
+    static let reviewRetrySeconds: Double = 5
+
+    /// Which signature an "… anyway" step is for.
+    enum SignKind { case approve, approveExecute, execute }
 
     private var view: MsProposalsView { hub.proposalsView }
     private var item: MsProposalItem? {
@@ -306,6 +538,75 @@ struct MultisigProposalSheet: View {
                 askPreviews()
                 try? await Task.sleep(nanoseconds: 4_000_000_000)
             }
+        }
+        // The review, its signers and (once done) how it ran, asked whenever
+        // what they are of changes: the item arriving (a link, a list read
+        // after the sheet opened), its members, it finishing (r8-17, r8-19).
+        .task(id: askKey) { await keepAsking() }
+        .msAnywayStep($anyway, cancel: words.t("proposal.rejectCancel"))
+    }
+
+    // MARK: - Asking the machine
+
+    /// What the asks are of: the item being there, its members, done or not.
+    private var askKey: String {
+        guard let item else { return "none" }
+        let members = view.chain(chainId)?.members
+        return "\(item.safeTxHash.lowercased()):\(item.status):\(members?.owners.joined(separator: ",") ?? ""):\(members?.threshold ?? 0)"
+    }
+
+    /// The review now, again every `reviewFreshSeconds` while the sheet is
+    /// up and every `reviewRetrySeconds` while the last could not read the
+    /// chain; the signers once per change; a finished one's facts once — and
+    /// its review once (its hashes and fields; nothing is re-checked).
+    private func keepAsking() async {
+        guard let item else { return }
+        reviewWaitedOut = false
+        askReview()
+        hub.sendProposal(["type": "read_signers", "chain_id": chainId, "safe_tx_hash": item.safeTxHash])
+        if item.status == "done" {
+            hub.sendProposal(["type": "timeline", "chain_id": chainId, "safe_tx_hash": item.safeTxHash])
+            return
+        }
+        let started = ContinuousClock.now
+        var lastAsk = ContinuousClock.now
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(1))
+            guard let current = self.item else { continue }
+            let model = MsProposalModel(item: current, view: view, words: words, account: nil)
+            if model.reviewHolding, ContinuousClock.now - started >= Self.reviewWaitCap {
+                reviewWaitedOut = true
+            }
+            let since = ContinuousClock.now - lastAsk
+            let due = model.reviewUnread || model.reviewHolding ? Self.reviewRetrySeconds : Self.reviewFreshSeconds
+            if since >= .seconds(due) {
+                askReview()
+                lastAsk = ContinuousClock.now
+            }
+        }
+    }
+
+    private func askReview() {
+        guard let item else { return }
+        hub.sendProposal(["type": "review", "chain_id": chainId, "safe_tx_hash": item.safeTxHash, "blind": false])
+    }
+
+    private func anywayTitle(_ kind: SignKind) -> String {
+        switch kind {
+        case .approve: words.t("review.approveAnyway")
+        case .approveExecute: words.t("review.approveExecuteAnyway")
+        case .execute: words.t("review.executeAnyway")
+        }
+    }
+
+    /// A signature: at once, or — when the core's rule asks for "… anyway"
+    /// — after the person confirms past the review's reasons (r8-1).
+    private func signing(_ model: MsProposalModel, _ kind: SignKind, _ run: @escaping () -> Void) {
+        guard model.signable else { return }
+        if model.signAnyway {
+            anyway = MsAnywayStep(title: anywayTitle(kind), reasons: model.anywayReasons, run: run)
+        } else {
+            run()
         }
     }
 
@@ -357,16 +658,7 @@ struct MultisigProposalSheet: View {
         if let tx = model.executedTx {
             executedRow(tx)
         }
-        if let review = model.review {
-            MsReviewBody(review: review, chainId: chainId, words: words)
-        } else {
-            HStack(spacing: Tokens.Space.s8) {
-                ProgressView()
-                Text(verbatim: words.loc.t("componentsUi.signing.simRechecking"))
-                    .typeRole(Typography.flowCaption.scaled(textScale))
-                    .foregroundStyle(theme.fgMuted)
-            }
-        }
+        reviewPart(model)
         approvals(model)
         actions(model)
         asking(model)
@@ -387,13 +679,51 @@ struct MultisigProposalSheet: View {
         }
     }
 
+    // MARK: - The review (§3.6)
+
+    /// The one review, in its states: a finished one draws only what was
+    /// signed (nothing is re-checked); one not in yet says so for at most
+    /// `reviewWaitCap` and then that it couldn't be checked, with Retry
+    /// (r8-19 — never a spinner without end); one that could not be
+    /// gathered says so, with Retry.
+    @ViewBuilder private func reviewPart(_ model: MsProposalModel) -> some View {
+        switch model.reviewState {
+        case .ready(let review):
+            MsReviewBody(review: review, chainId: chainId, words: words, past: model.past)
+        case .holding where model.past:
+            EmptyView()
+        case .holding where !reviewWaitedOut:
+            HStack(spacing: Tokens.Space.s8) {
+                ProgressView()
+                Text(verbatim: words.loc.t("componentsUi.funding.checking"))
+                    .typeRole(Typography.flowCaption.scaled(textScale))
+                    .foregroundStyle(theme.fgMuted)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("multisig.review.checking")
+        case .holding, .failed:
+            if !model.past {
+                HStack(alignment: .top, spacing: Tokens.Space.s8) {
+                    MsNote(text: words.t("proposal.cantCheck", ["network": words.network(chainId)]),
+                           tone: .warning, identifier: "multisig.review.unread")
+                    Button(words.t("service.retry")) { askReview() }
+                        .font(Typography.actionLabel.scaled(textScale).font)
+                        .foregroundStyle(theme.fgBase)
+                        .accessibilityIdentifier("multisig.review.retry")
+                }
+            }
+        }
+    }
+
     // MARK: - Approvals
 
     private func approvals(_ model: MsProposalModel) -> some View {
-        MsSection(title: "\(words.t("proposal.approvals")) · \(model.item.approved)/\(model.item.threshold)") {
+        let count = model.approvalsCount
+        return MsSection(title: count.isEmpty ? words.t("proposal.approvals") : "\(words.t("proposal.approvals")) · \(count)") {
             VStack(alignment: .leading, spacing: Tokens.Space.s0) {
-                ForEach(model.members, id: \.self) { member in
-                    let done = model.approvedBy.contains(member.lowercased())
+                ForEach(model.listed, id: \.self) { member in
+                    let word = model.memberWord(member)
+                    let done = word == .approved || word == .executed
                     HStack(spacing: Tokens.Space.s12) {
                         IdenticonAvatar(seed: member, size: 28, tappable: false)
                         VStack(alignment: .leading, spacing: Tokens.Space.s2) {
@@ -405,14 +735,19 @@ struct MultisigProposalSheet: View {
                                 .foregroundStyle(theme.fgSubtle)
                         }
                         Spacer(minLength: Tokens.Space.s8)
-                        Text(verbatim: words.t(done ? "proposal.approved"
-                            : (model.item.approved >= model.item.threshold ? "proposal.notNeeded" : "proposal.waiting")))
+                        Text(verbatim: words.t(word.key))
                             .typeRole(Typography.rowSub.scaled(textScale))
                             .foregroundStyle(done ? theme.successBase : theme.fgSubtle)
                     }
                     .padding(.vertical, Tokens.Space.s8)
                     .accessibilityElement(children: .combine)
                     .accessibilityIdentifier("multisig.proposal.member")
+                }
+                if let facts = model.executedFacts {
+                    MsNote(text: facts, identifier: "multisig.proposal.executedFacts")
+                }
+                if let line = model.contractLine {
+                    MsNote(text: line, identifier: "multisig.proposal.signers.contract")
                 }
             }
         }
@@ -439,29 +774,35 @@ struct MultisigProposalSheet: View {
                     let completes = !oneTouch.isEmpty
                     if completes {
                         VelaButton(
-                            title: words.t(model.signAllowed ? "proposal.approveAndExecute" : "review.approveExecuteAnyway"),
-                            kind: .primary,
-                            enabled: model.signAllowed || model.signAnyway,
+                            title: model.signLabel("proposal.approveAndExecute", anyway: "review.approveExecuteAnyway"),
+                            kind: model.signAnyway ? .danger : .primary,
+                            enabled: model.signable,
                             loading: approving || executing,
                             haptic: .confirm
                         ) {
                             let chosen = member.flatMap { m in oneTouch.first { $0.caseInsensitiveCompare(m) == .orderedSame } }
-                            hub.sendProposal([
-                                "type": "approve_execute", "chain_id": chainId, "safe_tx_hash": model.hash,
-                                "executor": chosen ?? oneTouch[0],
-                            ])
+                            let executor = chosen ?? oneTouch[0]
+                            signing(model, .approveExecute) {
+                                hub.sendProposal([
+                                    "type": "approve_execute", "chain_id": chainId, "safe_tx_hash": model.hash,
+                                    "executor": executor,
+                                ])
+                            }
                         }
                         .accessibilityIdentifier("multisig.proposal.approveExecute")
                         MsNote(text: words.t("proposal.feeNote"))
                     }
                     VelaButton(
-                        title: words.t(model.signAllowed ? "proposal.approve" : "review.approveAnyway"),
-                        kind: completes ? .secondary : .primary,
-                        enabled: model.signAllowed || model.signAnyway,
+                        // Approving alone beside the one press is the plain
+                        // second choice; alone, it wears the review's rule.
+                        title: completes ? words.t("proposal.approve")
+                            : model.signLabel("proposal.approve", anyway: "review.approveAnyway"),
+                        kind: completes ? .secondary : (model.signAnyway ? .danger : .primary),
+                        enabled: model.signable,
                         loading: approving && !completes,
                         haptic: .confirm
                     ) {
-                        approve(model)
+                        signing(model, .approve) { approve(model) }
                     }
                     .accessibilityIdentifier("multisig.proposal.approve")
                 }
@@ -477,13 +818,13 @@ struct MultisigProposalSheet: View {
                         MsNote(text: line)
                     }
                     VelaButton(
-                        title: words.t(model.signAllowed ? "proposal.execute" : "review.executeAnyway"),
-                        kind: .primary,
-                        enabled: !model.executeHeld(by: chosen) && (model.signAllowed || model.signAnyway),
+                        title: model.signLabel("proposal.execute", anyway: "review.executeAnyway"),
+                        kind: model.signAnyway ? .danger : .primary,
+                        enabled: !model.executeHeld(by: chosen) && model.signable,
                         loading: executing,
                         haptic: .confirm
                     ) {
-                        execute(model, executor: chosen)
+                        signing(model, .execute) { execute(model, executor: chosen) }
                     }
                     .accessibilityIdentifier("multisig.proposal.execute")
                     if model.preview(for: chosen)?.kind == "unpriced" || model.preview(for: chosen)?.kind == "unchecked" {
@@ -533,37 +874,75 @@ struct MultisigProposalSheet: View {
 
     // MARK: - Asking the others
 
+    /// Who still has to approve, and how each can — the machine's split
+    /// (r7-8, `signers`): the Vela link for Vela members (and those nothing
+    /// says yet), the outside-wallet link with its code for an outside
+    /// wallet, and "Approve with another wallet" for a member whose wallet
+    /// is at hand (r8-8: the web's and the desktop's sheet).
     @ViewBuilder private func asking(_ model: MsProposalModel) -> some View {
-        if !model.isDone, !model.stillNeeded.isEmpty, model.item.approved < model.item.threshold {
+        if model.showsVelaLink {
             MsSection(title: words.t("proposal.invite")) {
-                MsNote(text: words.t("proposal.stillNeeded", ["missing": model.stillNeeded.map(words.label).joined(separator: ", ")]))
+                MsNote(text: words.t("proposal.inviteHint"))
                 ForEach(model.signerLines, id: \.id) { line in
                     MsNote(text: line.text, identifier: "multisig.proposal.signers.\(line.id)")
                 }
                 if let link = model.link {
-                    HStack(spacing: Tokens.Space.s12) {
-                        ShareLink(item: link) {
-                            Label(words.t("proposal.sendLink"), systemImage: "square.and.arrow.up")
-                        }
-                        .accessibilityIdentifier("multisig.proposal.share")
-                        Button(copied ? words.t("proposal.copied") : words.t("proposal.copyLink")) {
-                            UIPasteboard.general.string = link
-                            copied = true
-                            VelaHaptic.select.play()
-                        }
-                        .accessibilityIdentifier("multisig.proposal.copyLink")
-                    }
-                    .font(Typography.actionLabel.scaled(textScale).font)
-                    .foregroundStyle(theme.fgBase)
-                }
-                if let signers = model.signers, !(signers.outside + signers.either).isEmpty {
-                    VelaButton(title: words.t("external.signWithWallet"), kind: .secondary) {
-                        hub.sendProposal(["type": "approve_outside", "chain_id": chainId, "safe_tx_hash": model.hash])
-                    }
-                    .accessibilityIdentifier("multisig.proposal.outside")
+                    linkActions(link, copiedFlag: $copied, share: "multisig.proposal.share", copy: "multisig.proposal.copyLink")
                 }
             }
+            .accessibilityIdentifier("multisig.proposal.invite")
         }
+        if let link = model.outsideLink {
+            // r4C-13: an outside member's own link — Vela's connect page, which
+            // reads, reviews and signs the transaction alone.
+            MsSection(title: words.t("external.outsideLinkTitle")) {
+                MsNote(text: words.t("external.outsideLinkHint"))
+                Text(verbatim: words.t("proposal.stillNeeded", ["missing": model.outside.map(words.label).joined(separator: ", ")]))
+                    .typeRole(Typography.rowSub.scaled(textScale))
+                    .foregroundStyle(theme.fgMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let modules = QrCode.modules(link) {
+                    MsQrView(modules: modules)
+                        .frame(maxWidth: 240)
+                        .aspectRatio(1, contentMode: .fit)
+                        .frame(maxWidth: .infinity)
+                        .accessibilityLabel(words.t("external.outsideLinkTitle"))
+                        .accessibilityIdentifier("multisig.proposal.outsideQr")
+                }
+                Text(verbatim: link)
+                    .typeRole(Typography.monoSmall.scaled(textScale))
+                    .foregroundStyle(theme.fgMuted)
+                    .textSelection(.enabled)
+                    .lineLimit(3)
+                    .truncationMode(.middle)
+                    .accessibilityIdentifier("multisig.proposal.outsideLink")
+                linkActions(link, copiedFlag: $outsideCopied, share: "multisig.proposal.outsideShare", copy: "multisig.proposal.outsideCopy")
+            }
+            .accessibilityIdentifier("multisig.proposal.outsideInvite")
+        }
+        if model.offersOutsideWallet {
+            VelaButton(title: words.t("external.signWithWallet"), kind: .secondary) {
+                hub.sendProposal(["type": "approve_outside", "chain_id": chainId, "safe_tx_hash": model.hash])
+            }
+            .accessibilityIdentifier("multisig.proposal.outside")
+        }
+    }
+
+    private func linkActions(_ link: String, copiedFlag: Binding<Bool>, share: String, copy: String) -> some View {
+        HStack(spacing: Tokens.Space.s12) {
+            ShareLink(item: link) {
+                Label(words.t("proposal.sendLink"), systemImage: "square.and.arrow.up")
+            }
+            .accessibilityIdentifier(share)
+            Button(copiedFlag.wrappedValue ? words.t("proposal.copied") : words.t("proposal.copyLink")) {
+                UIPasteboard.general.string = link
+                copiedFlag.wrappedValue = true
+                VelaHaptic.select.play()
+            }
+            .accessibilityIdentifier(copy)
+        }
+        .font(Typography.actionLabel.scaled(textScale).font)
+        .foregroundStyle(theme.fgBase)
     }
 
     // MARK: - History
@@ -587,8 +966,8 @@ struct MultisigProposalSheet: View {
 
     private func appeared() {
         releaseWatch = hub.watch()
-        hub.sendProposal(["type": "review", "chain_id": chainId, "safe_tx_hash": safeTxHash, "blind": false])
-        hub.sendProposal(["type": "read_signers", "chain_id": chainId, "safe_tx_hash": safeTxHash])
+        // The review, the signers and the timeline: `keepAsking`, once the
+        // item is there (a link's may still be opening).
         hub.sendProposal(["type": "timeline", "chain_id": chainId, "safe_tx_hash": safeTxHash])
         hub.sendProposal(["type": "refresh", "fresh": false])
     }

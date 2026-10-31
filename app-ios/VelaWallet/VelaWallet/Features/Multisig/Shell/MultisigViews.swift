@@ -384,10 +384,13 @@ struct MsAccountsView: Decodable, Equatable {
 
 struct MsApproval: Decodable, Equatable {
     var owner: String
+    /// Verified, and its owner is a member on this chain now (the core's).
+    var counts: Bool
     var raw: MsJSON
     init(from decoder: Decoder) throws {
         raw = try MsJSON(from: decoder)
         owner = raw["owner"]?.string ?? ""
+        counts = raw["counts"]?.bool ?? true
     }
 }
 
@@ -582,6 +585,10 @@ struct MsProposalsView: Decodable, Equatable {
     var reviews: [String: MsJSON] = [:]
     var previews: [String: MsJSON] = [:]
     var executions: [String: MsJSON] = [:]
+    /// An executed transaction's facts as they were when it ran
+    /// (`FrozenFacts`: executor, threshold, approvers, executorApproved,
+    /// atMs) — read by `timeline` once it is done; never re-counted.
+    var frozen: [String: MsJSON] = [:]
     var lastActor: String?
     var presence: [String: MsWaiting?] = [:]
     var othersWaiting = false
@@ -625,6 +632,7 @@ struct MsProposalsView: Decodable, Equatable {
         reviews = c.soft(MsKey("reviews"), [:])
         previews = c.soft(MsKey("previews"), [:])
         executions = c.soft(MsKey("executions"), [:])
+        frozen = c.soft(MsKey("frozen"), [:])
         lastActor = c.soft(MsKey("last_actor"))
         presence = c.soft(MsKey("presence"), [:])
         othersWaiting = c.soft(MsKey("others_waiting"), false)
@@ -667,6 +675,9 @@ struct MsProposalsView: Decodable, Equatable {
     func timeline(_ item: MsProposalItem) -> [MsTagged] { lookup(timelines, chainId: item.chainId, hash: item.safeTxHash) ?? [] }
     func signers(_ item: MsProposalItem) -> MsSigners? { lookup(signers, chainId: item.chainId, hash: item.safeTxHash) }
     func execution(_ item: MsProposalItem) -> MsJSON? { lookup(executions, chainId: item.chainId, hash: item.safeTxHash) }
+    func frozen(_ item: MsProposalItem) -> MsJSON? {
+        lookup(frozen, chainId: item.chainId, hash: item.safeTxHash).flatMap { $0.isNull ? nil : $0 }
+    }
     func preview(_ item: MsProposalItem, executor: String) -> MsJSON? {
         let key = "\(item.chainId):\(item.safeTxHash.lowercased()):\(executor.lowercased())"
         return previews[key] ?? previews.first { $0.key.lowercased() == key }?.value
