@@ -48,10 +48,16 @@ mod agent;
 mod feedback;
 /// Multisig accounts on this page (AUDIT M1–M6).
 pub(crate) mod multisig;
-/// The create, add and invite sheets (AUDIT M1).
+/// The invite sheet (AUDIT M1).
 mod multisig_sheets;
 /// Multisig notifications: the switch, the in-app line, a click's way in (M6).
 pub(crate) mod multisig_notify;
+/// The create sheet (AUDIT M1).
+mod multisig_create;
+/// The add sheet: an address, an invite, a Safe{Wallet} export (AUDIT M1).
+mod multisig_add;
+/// Where a multisig link opened here stands (AUDIT M1).
+mod multisig_links;
 mod palette;
 use feedback::FeedbackDraft;
 
@@ -1558,6 +1564,7 @@ impl WalletPage {
         if let Some(query) = crate::dev_env::var!("VELA_PALETTE") {
             page.palette = Some(palette::Palette { query, selected: 0 });
         }
+        page.pin_multisig_sheet(cx);
         // Money in flight outlives every screen: the tracker runs from the
         // moment somebody is signed in, not from the moment a send opens.
         crate::executor::tracker::start(cx);
@@ -21731,6 +21738,14 @@ impl WalletPage {
         cx: &mut Context<Self>,
     ) {
         if self.identity.is_none() || paths.is_empty() {
+            return;
+        }
+        // A Safe{Wallet} export dropped on the open add sheet is imported.
+        let export = paths
+            .iter()
+            .find(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("json")));
+        if let Some(json) = export.filter(|_| self.multisig.add.is_some()) {
+            self.ms_import_file(json.clone(), cx);
             return;
         }
         cx.spawn_in(window, async move |page, cx| {

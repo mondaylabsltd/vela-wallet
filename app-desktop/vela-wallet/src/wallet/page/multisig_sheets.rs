@@ -1,45 +1,16 @@
-//! The multisig sheets beyond the transaction's own (AUDIT M1): create, add
-//! (by address, an invite, or a Safe{Wallet} export) and invite. Each draws
-//! the accounts machine's view (`create`, `add`, `import`, `link`) and sends
-//! its events; nothing is decided here.
+//! The invite sheet (AUDIT M1): the link and code a multisig's members are
+//! sent. The create and add sheets are `multisig_create.rs` and
+//! `multisig_add.rs`; a link's stand is `multisig_links.rs`.
 
 use std::collections::BTreeMap;
 
 use vela_core::app::multisig_accounts as ms_accounts;
 use vela_core::multisig_link::{self as link, InviteAccount, MemberInfo};
 
-use super::multisig::item_key;
 use super::*;
 use crate::multisig::words;
 
 impl WalletPage {
-    /// The create sheet (filled in by the M1 sheets pass).
-    pub(crate) fn ms_create_dialog(
-        &mut self,
-        _theme: &Theme,
-        _window: &Window,
-        _cx: &mut Context<Self>,
-    ) -> Option<gpui::AnyElement> {
-        None
-    }
-
-    /// The create sheet closed: what it holds is kept (r7-9) by the sheet's
-    /// own `keep_draft`, so closing loses nothing.
-    pub(crate) fn close_multisig_create(&mut self, cx: &mut Context<Self>) {
-        self.multisig.create = false;
-        cx.notify();
-    }
-
-    /// The add sheet (filled in by the M1 sheets pass).
-    pub(crate) fn ms_add_dialog(
-        &mut self,
-        _theme: &Theme,
-        _window: &Window,
-        _cx: &mut Context<Self>,
-    ) -> Option<gpui::AnyElement> {
-        None
-    }
-
     /// The invite a multisig's members are sent (`#msa=`, the core's
     /// `invite_link`): its link and its code, copied or shown. Copying it
     /// ticks the home's first step (`invite_shared`).
@@ -145,7 +116,6 @@ impl WalletPage {
                     .child(crate::ui::prose(words::t(&loc, "invite.outsideHint"))),
             );
         let close_icon = icon_img(&mut self.icons, Icon::X, false, theme.fg_muted, 18.);
-        let _ = item_key;
         Some(
             crate::ui::dialog::dialog(
                 "ms-invite",

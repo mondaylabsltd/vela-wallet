@@ -70,6 +70,9 @@ const SIGN: &str = "answering a dApp's signing request";
 /// Spec 105: which space a network the person added belongs to is their word
 /// on what has real value. An agent that could move a testnet into the
 /// mainnet space could make test coins read as money.
+/// AUDIT M1: a multisig made, added, imported or followed is the person's
+/// own word (its members, its rule, one passkey) — not offered to an agent yet.
+const MULTISIG: &str = "creating or adding a multisig: the person's own word and passkey";
 const SPACE_OF: &str = "which space a network belongs to is the person's word on what has value";
 
 /// The core events the screens send, by the name a screen spells them.
@@ -548,6 +551,25 @@ const EVENTS: &[(&str, Place)] = &[
     ("ms_proposals::Event::Watch", View("a transaction's sheet opened")),
     ("ms_proposals::Event::Unwatch", View("a transaction's sheet closed")),
     ("session::Event::AskAgain", Later(MULTISIG_SIGNS)),
+    // AUDIT M1: the multisig create and add sheets, and a link's stand.
+    ("ms_accounts::Event::Add", Later(MULTISIG)),
+    ("ms_accounts::Event::Apply", Machine("an invite's networks, kept with what it added")),
+    ("ms_accounts::Event::CheckNetworks", Machine("which networks hold the Safe contracts")),
+    ("ms_accounts::Event::CloseLink", View("a link's stand, drawn")),
+    ("ms_accounts::Event::Create", Later(MULTISIG)),
+    ("ms_accounts::Event::DiscardDraft", Later(MULTISIG)),
+    ("ms_accounts::Event::Draft", Machine("the draft's address, as the form moves")),
+    ("ms_accounts::Event::DropLink", View("a link's missing-network sheet closed")),
+    ("ms_accounts::Event::Import", Later(MULTISIG)),
+    ("ms_accounts::Event::KeepDraft", Machine("the create form, kept as it moves")),
+    ("ms_accounts::Event::KeepFound", Later(MULTISIG)),
+    ("ms_accounts::Event::KeepInvited", Machine("an invite's labels, kept with what it added")),
+    ("ms_accounts::Event::KeepLink", Machine("an invite kept while its network is added")),
+    ("ms_accounts::Event::OpenLink", Later(MULTISIG)),
+    ("ms_accounts::Event::ParseExport", NotOne(FILE)),
+    ("ms_accounts::Event::PickKind", Later(MULTISIG)),
+    ("ms_accounts::Event::ReadKinds", Machine("what the chain says of a member")),
+    ("ms_accounts::Event::ResolveEns", Machine("an ENS name read on Ethereum")),
 ];
 
 /// Which account the wallet shows, among a person's multisigs.
