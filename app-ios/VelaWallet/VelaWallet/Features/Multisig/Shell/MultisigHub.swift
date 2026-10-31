@@ -645,10 +645,17 @@ final class MultisigHub {
         guard let token, !token.isEmpty else {
             return (ChainCatalog.meta(chainId)?.nativeSymbol ?? "ETH", 18)
         }
+        // r8-2: the core's facts first (its registry, else the contract).
+        let facts = proposalsView.tokens["\(chainId):\(token.lowercased())"]
+        if let decimals = facts?["decimals"]?.int {
+            return (facts?["symbol"]?.string ?? AddressText.short(token), decimals)
+        }
         if let meta = await tokens?.resolve(chainId: chainId, addresses: [token])[token.lowercased()] {
             return (meta.symbol, meta.decimals)
         }
-        return (AddressText.short(token), 18)
+        // Nobody read its decimals: its base units as they are — never a
+        // figure in 18 decimals assumed (r8-2).
+        return (AddressText.short(token), 0)
     }
 }
 

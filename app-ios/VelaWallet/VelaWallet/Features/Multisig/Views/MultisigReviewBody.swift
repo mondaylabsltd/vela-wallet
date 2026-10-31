@@ -30,8 +30,10 @@ struct MsReviewBody: View {
         VStack(alignment: .leading, spacing: Tokens.Space.s12) {
             if !past {
                 concerns
-                // What its calls do, every leg — the core's reading.
-                let reading = MsReading.blocks(review, chainId: chainId, words: words)
+                // What its calls do, every leg — the core's reading, under
+                // the lines its concerns say (the web's order).
+                let reading = MsReading.concernBlocks(review, words: words)
+                    + MsReading.blocks(review, chainId: chainId, words: words)
                 if !reading.isEmpty { MsReadingView(blocks: reading) }
                 stateGuard
                 recipients
@@ -48,23 +50,13 @@ struct MsReviewBody: View {
     /// Each thing the review says, said ONCE (r8-14): the block that carries
     /// it says it — the verdict's place a simulation that could not run or
     /// would revert, a recipient's row its first time, its contract and its
-    /// look-alike, the guard its own verdict; a refusal is the sheet's own
-    /// note. What no block carries is drawn here: nothing is signed (the
-    /// core's rule), and a call Vela cannot read.
+    /// look-alike, the guard its own verdict, the reading's lines what the
+    /// calls do (`MsReading.concernBlocks`); a refusal is the sheet's own
+    /// note. What no block carries is drawn here: nothing is signed.
     @ViewBuilder private var concerns: some View {
         if review["sign"]?["allowed"]?.bool == false {
             MsNote(text: words.t("review.blocked"), tone: .danger, identifier: "multisig.review.blocked")
         }
-        ForEach(Array(Self.ownLines(review).enumerated()), id: \.offset) { _, concern in
-            if let text = Self.concernText(concern, review: review, words: words) {
-                MsNote(text: text, tone: Self.tone(concern), identifier: "multisig.review.concern.\(concern.kind ?? "")")
-            }
-        }
-    }
-
-    /// The concerns no block of this review says (r8-14).
-    static func ownLines(_ review: MsJSON) -> [MsJSON] {
-        (review["concerns"]?.array ?? []).filter { $0.kind == "blind" }
     }
 
     /// A concern in words — every kind, for the "… anyway" step, which
@@ -91,19 +83,10 @@ struct MsReviewBody: View {
             return words.loc.t("componentsUi.signing.simWillFail")
         case "unsimulated":
             return words.loc.t("componentsUi.signing.simUnavailableWarning")
-        case "blind":
-            // Not read — signed only "anyway"; never "doesn't sign".
-            return words.loc.t("componentsUi.signing.blindDecodeWarning", vars: ["bytes": String(dataBytes(review))])
         default:
-            // The reading's own (r8-1, r8-2, r8-5).
-            return MsReading.concernText(concern, words: words)
+            // The reading's own (r8-1, r8-2, r8-5), a call nobody reads too.
+            return MsReading.concernLine(concern, review: review, words: words)?.text
         }
-    }
-
-    /// The bytes of call data the transaction carries (its `data` field).
-    static func dataBytes(_ review: MsJSON?) -> Int {
-        let data = (review?["fields"]?.array ?? []).first { $0["name"]?.string == "data" }?["value"]?.string ?? ""
-        return max(0, (data.hasPrefix("0x") ? data.count - 2 : data.count) / 2)
     }
 
     /// The core's tone for each (`Concern::tone`): refused and danger kinds

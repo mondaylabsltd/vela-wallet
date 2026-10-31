@@ -607,6 +607,9 @@ struct MsProposalsView: Decodable, Equatable {
     var waitingParts: [String: [MsJSON]] = [:]
     var banner: MsJSON?
     var setUp = false
+    /// r8-2: the tokens the proposals shown move, per `chainId:token`
+    /// (`TokenFacts`: symbol, decimals — either null when unread).
+    var tokens: [String: MsJSON] = [:]
 
     init() {}
     init(from decoder: Decoder) throws {
@@ -649,6 +652,7 @@ struct MsProposalsView: Decodable, Equatable {
         waitingParts = c.soft(MsKey("waiting_parts"), [:])
         banner = c.soft(MsKey("banner"))
         setUp = c.soft(MsKey("set_up"), false)
+        tokens = c.soft(MsKey("tokens"), [:])
     }
 
     /// The members here whose one press approves and executes `item`.

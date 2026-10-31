@@ -228,8 +228,9 @@ struct MsProposalModel {
         if standing?.kind == "blocked" {
             out.append((words.t("status.cannotRun", ["reason": words.blockReason(standing?["block"])]), .warning, "blocked"))
         }
-        if item.unsent, let entry = view.outbox.first(where: { $0.key.lowercased().hasSuffix(hash.lowercased()) })?.value {
-            out.append((outboxLine(entry), .warning, "outbox"))
+        if let entry = outboxEntry {
+            // r8-16: on its way now is no warning — nothing was refused.
+            out.append((outboxLine(entry), entry["sending"]?.bool == true ? .neutral : .warning, "outbox"))
         }
         if let line = executionLine { out.append(line) }
         if let failure = words.actionFailure(approveState, chainId: chainId) {
@@ -257,8 +258,32 @@ struct MsProposalModel {
         return String(max(0, n))
     }
 
-    private func outboxLine(_ entry: MsJSON) -> String {
-        let seconds = entry["retryAt"]?.int.map { max(0, ($0 - Int(Date().timeIntervalSince1970 * 1000)) / 1000) }
+    /// This transaction's entry in the machine's outbox (signed here, not in
+    /// the mailbox yet). Its key is `chainId:safe:safeTxHash:owner`.
+    var outboxEntry: MsJSON? {
+        guard item.unsent else { return nil }
+        let marker = ":\(hash.lowercased()):"
+        return view.outbox.first {
+            let key = $0.key.lowercased()
+            return key.hasPrefix("\(chainId):") && key.contains(marker)
+        }?.value
+    }
+
+    /// "Send again" only when nothing is on its way and no retry is due:
+    /// the web's (r8-16).
+    var offersSendAgain: Bool {
+        guard item.unsent else { return false }
+        guard let entry = outboxEntry else { return true }
+        return entry["sending"]?.bool != true && entry["retryAt"]?.int == nil
+    }
+
+    func outboxLine(_ entry: MsJSON) -> String {
+        if entry["sending"]?.bool == true || entry["why"]?.string == "sending" {
+            return words.t("proposal.outboxSending")
+        }
+        // Sent again on the person's word: "Not sent yet" (with Send again).
+        guard let retryAt = entry["retryAt"]?.int else { return words.t("proposal.outboxNotSent") }
+        let seconds: Int? = max(1, (retryAt - Int(Date().timeIntervalSince1970 * 1000) + 999) / 1000)
         switch entry["why"]?.string {
         case "busy": return words.t("proposal.outboxBusy", ["seconds": String(seconds ?? 0)])
         case "away", "unreachable": return words.t("proposal.outboxAway", ["seconds": String(seconds ?? 0)])
@@ -846,7 +871,7 @@ struct MultisigProposalSheet: View {
                 } else if !model.isReady {
                     MsNote(text: words.t("proposal.feeNote"))
                 }
-                if model.item.unsent {
+                if model.offersSendAgain {
                     VelaButton(title: words.t("proposal.outboxSendAgain"), kind: .ink) {
                         hub.sendProposal(["type": "send_again", "chain_id": chainId, "safe_tx_hash": model.hash])
                     }
