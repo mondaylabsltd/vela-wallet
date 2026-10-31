@@ -582,9 +582,14 @@ object BrowserAccounts {
         active: String?,
         nowMs: Double,
         isSpaceAccount: (String) -> Boolean = ParallelSpaceHook::isSpaceAccount,
+        /** r8-21: the account's own networks (a multisig's record), empty for one that lives everywhere. */
+        networks: List<Int> = emptyList(),
     ): List<DbrEvent> = buildList {
         add(DbrEvent.AccountsUpdated(addresses.takeIf { it.isNotEmpty() }))
-        if (!active.isNullOrBlank()) add(DbrEvent.AccountSwitched(active, nowMs, space = isSpaceAccount(active)))
+        if (!active.isNullOrBlank()) {
+            add(DbrEvent.AccountSwitched(active, nowMs, space = isSpaceAccount(active)))
+            add(DbrEvent.AccountNetworks(networks))
+        }
     }
 }
 
@@ -805,8 +810,8 @@ class BrowserController(
      * their active account — and stay exactly as they are while the parallel
      * space's test wallet is in front ([BrowserAccounts]).
      */
-    fun accountsChanged(addresses: List<String>, active: String?) {
-        BrowserAccounts.events(addresses, active, now()).forEach(::dispatch)
+    fun accountsChanged(addresses: List<String>, active: String?, networks: List<Int> = emptyList()) {
+        BrowserAccounts.events(addresses, active, now(), networks = networks).forEach(::dispatch)
     }
 
     /** The chains a site may switch or add to — the wallet's networks. */

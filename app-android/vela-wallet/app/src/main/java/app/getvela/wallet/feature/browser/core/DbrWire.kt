@@ -477,6 +477,15 @@ sealed class DbrEvent {
     @SerialName("account_switched")
     data class AccountSwitched(val address: String, val now_ms: Double, val space: Boolean = false) : DbrEvent()
 
+    /**
+     * r8-21: the networks the account in front lives on — a multisig's own
+     * (its record's), sent after [AccountSwitched]; empty for an account that
+     * lives everywhere. A new site starts on the first of them the space offers.
+     */
+    @Serializable
+    @SerialName("account_networks")
+    data class AccountNetworks(val networks: List<Int>) : DbrEvent()
+
     /** [now_ms] (spec 099): when the request arrived, for its row in the record — the shell's clock, ms since the epoch. */
     @Serializable
     @SerialName("page_message")

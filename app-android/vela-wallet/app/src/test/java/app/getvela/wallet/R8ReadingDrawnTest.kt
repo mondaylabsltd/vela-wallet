@@ -79,6 +79,10 @@ class R8ReadingDrawnTest {
             val lines = readingLines(review, 5042002, words)
             val batches = calls.count { it["intent"].kind == "batch" }
             assertEquals("$name: one line per call, plus each batch's runner note", calls.size + batches, lines.size)
+            for (l in lines) {
+                val said = listOf(l.label, l.text) + l.details.flatMap { listOf(it.first, it.second) }
+                assertTrue("$name: every word is the corpus's, never a key: $said", said.none { it.contains("home.multisig.") || it.contains("{{") })
+            }
             // (The state guard's two are its own block, not a concern line.)
             for (concern in expect["concerns"].arr.filter { it.kind != "stateChange" && it.kind != "stateUnread" }) {
                 assertNotNull("$name: ${concern.kind} has words", reviewConcern(words, concern))

@@ -255,6 +255,29 @@ class ParallelSpaceSitesTest {
         assertTrue(h.view.value.sites.all { it.address == bo })
     }
 
+    /**
+     * r8-21: a multisig on Arc only, in the testnet space: the app tells the
+     * browser machine its own networks after the switch (`account_networks`),
+     * and a new site is offered Arc — never Ethereum (1), which this space
+     * does not have.
+     */
+    @Test
+    fun `a new site starts on the shown multisig's own network`() = runBlocking<Unit> {
+        val store = personsStore()
+        val h = host(store)
+        h.dispatch(DbrEvent.Start, DbrEvent.serializer())
+        h.dispatch(DbrEvent.NetworksChanged(listOf(11155111, 84532, 5042002)), DbrEvent.serializer())
+        clock += 1_000
+        val events = BrowserAccounts.events(listOf(ann, bo), bo, clock, isSpaceAccount = { false }, networks = listOf(5042002))
+        assertTrue("the networks follow the switch", events.indexOfFirst { it is DbrEvent.AccountNetworks } > events.indexOfFirst { it is DbrEvent.AccountSwitched })
+        for (event in events) h.dispatch(event, DbrEvent.serializer())
+        settled("the stored sites were never read") { h.view.first { it.ready } }
+        page(h, "t-new", fresh, JSONObject().put("t", "hello").put("doc", "d-t-new"))
+        ask(h, "t-new", fresh, "r1", "eth_requestAccounts")
+        val consent = settled("no consent sheet") { h.view.first { it.consent?.origin == fresh } }.consent!!
+        assertEquals("the multisig's own network, not Ethereum", 5042002, consent.chain_id)
+    }
+
     @Test
     fun `a walk through the space leaves the person's sites byte for byte, accounts first`() = walk(switchFirst = false)
 
