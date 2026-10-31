@@ -664,6 +664,16 @@ public protocol ActivityFeedCoreProtocol: AnyObject, Sendable {
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
+    
     func view() throws  -> String
     
 }
@@ -750,6 +760,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
         FfiConverterString.lower(resultJson),uniffiCallStatus
     )
 })
+}
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_activityfeedcore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
 }
     
 open func view()throws  -> String  {
@@ -2198,6 +2225,16 @@ public protocol ApprovalGuardCoreProtocol: AnyObject, Sendable {
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
+    
     func view() throws  -> String
     
 }
@@ -2286,6 +2323,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_approvalguardcore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -2353,6 +2407,16 @@ public protocol BalanceDashboardCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -2442,6 +2506,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_balancedashboardcore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -2510,6 +2591,16 @@ public protocol BatchImportCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -2600,6 +2691,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_batchimportcore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -2667,6 +2775,16 @@ public protocol BrowserHistoryCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -2754,6 +2872,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
         FfiConverterString.lower(resultJson),uniffiCallStatus
     )
 })
+}
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_browserhistorycore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
 }
     
 open func view()throws  -> String  {
@@ -3443,6 +3578,16 @@ public protocol ClearSigningCoreProtocol: AnyObject, Sendable {
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
+    
     func view() throws  -> String
     
 }
@@ -3532,6 +3677,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_clearsigningcore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -3599,6 +3761,16 @@ public protocol ContactsCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -3688,6 +3860,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_contactscore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -3755,6 +3944,16 @@ public protocol CreateWalletCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -3842,6 +4041,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
         FfiConverterString.lower(resultJson),uniffiCallStatus
     )
 })
+}
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_createwalletcore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
 }
     
 open func view()throws  -> String  {
@@ -4296,6 +4512,16 @@ public protocol DappBrowserCoreProtocol: AnyObject, Sendable {
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
+    
     func view() throws  -> String
     
 }
@@ -4386,6 +4612,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_dappbrowsercore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -4455,6 +4698,16 @@ public protocol DappPermissionsCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -4546,6 +4799,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_dapppermissionscore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -4614,6 +4884,16 @@ public protocol DisplayCurrencyCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -4704,6 +4984,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_displaycurrencycore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -4771,6 +5068,16 @@ public protocol ExploreSitesCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -4860,6 +5167,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_exploresitescore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -4928,6 +5252,16 @@ public protocol FeePolicyCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -5018,6 +5352,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_feepolicycore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -5086,6 +5437,16 @@ public protocol FeeSpeedCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -5176,6 +5537,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_feespeedcore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -5245,6 +5623,16 @@ public protocol FeeTierPrefCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -5334,6 +5722,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
         FfiConverterString.lower(resultJson),uniffiCallStatus
     )
 })
+}
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_feetierprefcore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
 }
     
 open func view()throws  -> String  {
@@ -5442,6 +5847,14 @@ public protocol I18nProtocol: AnyObject, Sendable {
     func loadCatalog(lang: String, json: Data) throws 
     
     /**
+     * Every plain string of the active language under `prefix` (`""`: all),
+     * as `t(key)` with no options answers it: take it once per language
+     * change and draw plain labels from it without crossing per label. A
+     * key asked with a count, a context or variables still goes to `t`.
+     */
+    func plainStrings(prefix: String) throws  -> [String: String]
+    
+    /**
      * Release `lang` if it is the active catalog. Releasing `en` is not
      * expressible — it is a field, not a slot.
      */
@@ -5461,6 +5874,13 @@ public protocol I18nProtocol: AnyObject, Sendable {
      * First key that resolves wins; all-missing returns the **last** key.
      */
     func tFirst(keys: [String], opts: TOptions) throws  -> String
+    
+    /**
+     * Resolve many keys with the same options in ONE crossing: what a screen
+     * asks once instead of once per label. Answers in the order asked, each
+     * exactly what `t` answers for it.
+     */
+    func tMany(keys: [String], opts: TOptions) throws  -> [String]
     
 }
 /**
@@ -5642,6 +6062,22 @@ open func loadCatalog(lang: String, json: Data)throws   {try rustCallWithError(F
 }
     
     /**
+     * Every plain string of the active language under `prefix` (`""`: all),
+     * as `t(key)` with no options answers it: take it once per language
+     * change and draw plain labels from it without crossing per label. A
+     * key asked with a count, a context or variables still goes to `t`.
+     */
+open func plainStrings(prefix: String)throws  -> [String: String]  {
+    return try  FfiConverterDictionaryStringString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_i18n_plain_strings(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(prefix),uniffiCallStatus
+    )
+})
+}
+    
+    /**
      * Release `lang` if it is the active catalog. Releasing `en` is not
      * expressible — it is a field, not a slot.
      */
@@ -5695,6 +6131,22 @@ open func tFirst(keys: [String], opts: TOptions)throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_method_i18n_t_first(
+            self.uniffiCloneHandle(),
+        FfiConverterSequenceString.lower(keys),
+        FfiConverterTypeTOptions_lower(opts),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Resolve many keys with the same options in ONE crossing: what a screen
+     * asks once instead of once per label. Answers in the order asked, each
+     * exactly what `t` answers for it.
+     */
+open func tMany(keys: [String], opts: TOptions)throws  -> [String]  {
+    return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_i18n_t_many(
             self.uniffiCloneHandle(),
         FfiConverterSequenceString.lower(keys),
         FfiConverterTypeTOptions_lower(opts),uniffiCallStatus
@@ -5760,6 +6212,16 @@ public protocol LoginCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -5849,6 +6311,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_logincore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -5916,6 +6395,16 @@ public protocol ManageTokensCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -6003,6 +6492,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
         FfiConverterString.lower(resultJson),uniffiCallStatus
     )
 })
+}
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_managetokenscore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
 }
     
 open func view()throws  -> String  {
@@ -6858,6 +7364,16 @@ public protocol NetworkAdminCoreProtocol: AnyObject, Sendable {
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
+    
     func view() throws  -> String
     
 }
@@ -6947,6 +7463,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_networkadmincore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -7015,6 +7548,16 @@ public protocol PaymentRequestCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -7105,6 +7648,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_paymentrequestcore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -7173,6 +7733,16 @@ public protocol ReceiveWatchCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -7263,6 +7833,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_receivewatchcore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -7330,6 +7917,16 @@ public protocol RpcPoolCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -7419,6 +8016,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_rpcpoolcore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -7488,6 +8102,16 @@ public protocol SendCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -7579,6 +8203,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_sendcore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -7646,6 +8287,16 @@ public protocol SessionCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -7735,6 +8386,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_sessioncore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -7803,6 +8471,16 @@ public protocol SignRequestCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -7891,6 +8569,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
         FfiConverterString.lower(resultJson),uniffiCallStatus
     )
 })
+}
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_signrequestcore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
 }
     
 open func view()throws  -> String  {
@@ -8496,6 +9191,16 @@ public protocol SigningPagesCoreProtocol: AnyObject, Sendable {
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
+    
     func view() throws  -> String
     
 }
@@ -8586,6 +9291,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_signingpagescore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -8654,6 +9376,16 @@ public protocol TokenTrustCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -8742,6 +9474,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
         FfiConverterString.lower(resultJson),uniffiCallStatus
     )
 })
+}
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_tokentrustcore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
 }
     
 open func view()throws  -> String  {
@@ -9062,6 +9811,16 @@ public protocol TxTrackerCoreProtocol: AnyObject, Sendable {
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
+    
     func view() throws  -> String
     
 }
@@ -9149,6 +9908,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
         FfiConverterString.lower(resultJson),uniffiCallStatus
     )
 })
+}
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_txtrackercore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
 }
     
 open func view()throws  -> String  {
@@ -20033,6 +20809,12 @@ public func multicall3EncodeAggregate3(calls: [Multicall3Call])throws  -> Data  
 /**
  * The multisig links (`vela_core::multisig_link`): `method` plus its
  * arguments as JSON, the answer as JSON — the wasm `multisigLinkCall`.
+ *
+ * The same door answers the multisig's pure rules a screen asks one at a
+ * time (`vela_core::multisig_rules`), by `<area>.<method>`: `relay.*`
+ * (the PeerConnect token schedule), `names.*` (a member's label and kind),
+ * `networks.*` (the order networks are offered in), `calls.*` (which calls a
+ * review reads). docs/multisig-machines.md lists them.
  */
 public func multisigLinkCall(method: String, argsJson: String)throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
@@ -20478,6 +21260,54 @@ public func storageRecordsIn(value: String) -> UInt32?  {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_storage_records_in(
         FfiConverterString.lower(value),uniffiCallStatus
+    )
+})
+}
+/**
+ * EIP-137 namehash of `name`, `0x`-prefixed lower-case hex.
+ */
+public func ensNamehash(name: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_ens_namehash(
+        FfiConverterString.lower(name),uniffiCallStatus
+    )
+})
+}
+/**
+ * The reverse node of `address` (`<addr>.addr.reverse`), `0x`-prefixed.
+ */
+public func ensReverseNode(address: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_ens_reverse_node(
+        FfiConverterString.lower(address),uniffiCallStatus
+    )
+})
+}
+/**
+ * Does the launch animation play on this cold start? `stored_last_played_ms`:
+ * what is stored under [`launch_animation_storage_key`] (`None` when nothing,
+ * or nothing readable, is); `disabled`: turned off, or a start that never
+ * shows it. Write `now_ms` under the key when it plays.
+ */
+public func launchAnimationDue(storedLastPlayedMs: Double?, nowMs: Double, disabled: Bool) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_launch_animation_due(
+        FfiConverterOptionDouble.lower(storedLastPlayedMs),
+        FfiConverterDouble.lower(nowMs),
+        FfiConverterBool.lower(disabled),uniffiCallStatus
+    )
+})
+}
+/**
+ * Where the time the launch animation last played is stored (epoch ms).
+ */
+public func launchAnimationStorageKey() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_launch_animation_storage_key(uniffiCallStatus
     )
 })
 }
@@ -21706,7 +22536,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_multicall3_encode_aggregate3() != 41166) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_func_multisig_link_call() != 29990) {
+    if (uniffi_vela_core_uniffi_checksum_func_multisig_link_call() != 2238) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_builtin_network_display_name() != 32122) {
@@ -21806,6 +22636,18 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_storage_records_in() != 32407) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_ens_namehash() != 18291) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_ens_reverse_node() != 48082) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_launch_animation_due() != 57674) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_launch_animation_storage_key() != 35486) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_multisig_approval_route() != 29971) {
@@ -21937,6 +22779,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_i18n_load_catalog() != 5652) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_i18n_plain_strings() != 42587) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_i18n_release_catalog() != 27064) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -21950,6 +22795,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_i18n_t_first() != 10021) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_i18n_t_many() != 36126) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_agentcore_activity() != 11811) {
@@ -22132,6 +22980,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_activityfeedcore_resolve_effect() != 61528) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_activityfeedcore_skip_unchanged_views() != 35878) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_activityfeedcore_view() != 27349) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -22139,6 +22990,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_approvalguardcore_resolve_effect() != 50470) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_approvalguardcore_skip_unchanged_views() != 43) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_approvalguardcore_view() != 61401) {
@@ -22150,6 +23004,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_balancedashboardcore_resolve_effect() != 47473) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_balancedashboardcore_skip_unchanged_views() != 458) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_balancedashboardcore_view() != 9104) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -22157,6 +23014,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_batchimportcore_resolve_effect() != 17318) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_batchimportcore_skip_unchanged_views() != 64413) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_batchimportcore_view() != 18225) {
@@ -22168,6 +23028,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_browserhistorycore_resolve_effect() != 3385) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_browserhistorycore_skip_unchanged_views() != 27640) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_browserhistorycore_view() != 36777) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -22175,6 +23038,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_clearsigningcore_resolve_effect() != 56208) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_clearsigningcore_skip_unchanged_views() != 8120) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_clearsigningcore_view() != 9237) {
@@ -22186,6 +23052,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_contactscore_resolve_effect() != 28417) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_contactscore_skip_unchanged_views() != 38113) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_contactscore_view() != 58589) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -22193,6 +23062,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_createwalletcore_resolve_effect() != 7756) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_createwalletcore_skip_unchanged_views() != 48371) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_createwalletcore_view() != 40709) {
@@ -22204,6 +23076,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_dappbrowsercore_resolve_effect() != 4017) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_dappbrowsercore_skip_unchanged_views() != 42553) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_dappbrowsercore_view() != 50479) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -22211,6 +23086,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_dapppermissionscore_resolve_effect() != 587) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_dapppermissionscore_skip_unchanged_views() != 7891) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_dapppermissionscore_view() != 24845) {
@@ -22222,6 +23100,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_displaycurrencycore_resolve_effect() != 24482) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_displaycurrencycore_skip_unchanged_views() != 61285) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_displaycurrencycore_view() != 12425) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -22229,6 +23110,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_exploresitescore_resolve_effect() != 45965) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_exploresitescore_skip_unchanged_views() != 7441) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_exploresitescore_view() != 1612) {
@@ -22240,6 +23124,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_feepolicycore_resolve_effect() != 2172) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_feepolicycore_skip_unchanged_views() != 41579) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_feepolicycore_view() != 13790) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -22247,6 +23134,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_feespeedcore_resolve_effect() != 2711) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_feespeedcore_skip_unchanged_views() != 58797) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_feespeedcore_view() != 28979) {
@@ -22258,6 +23148,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_feetierprefcore_resolve_effect() != 13462) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_feetierprefcore_skip_unchanged_views() != 39582) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_feetierprefcore_view() != 22442) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -22265,6 +23158,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_logincore_resolve_effect() != 56513) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_logincore_skip_unchanged_views() != 43939) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_logincore_view() != 29556) {
@@ -22276,6 +23172,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_managetokenscore_resolve_effect() != 10920) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_managetokenscore_skip_unchanged_views() != 50613) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_managetokenscore_view() != 24891) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -22283,6 +23182,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_networkadmincore_resolve_effect() != 24508) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_networkadmincore_skip_unchanged_views() != 19503) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_networkadmincore_view() != 55500) {
@@ -22294,6 +23196,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_paymentrequestcore_resolve_effect() != 30758) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_paymentrequestcore_skip_unchanged_views() != 51076) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_paymentrequestcore_view() != 37072) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -22301,6 +23206,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_receivewatchcore_resolve_effect() != 24502) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_receivewatchcore_skip_unchanged_views() != 20809) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_receivewatchcore_view() != 22156) {
@@ -22312,6 +23220,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_rpcpoolcore_resolve_effect() != 27891) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_rpcpoolcore_skip_unchanged_views() != 35868) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_rpcpoolcore_view() != 42986) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -22319,6 +23230,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_sendcore_resolve_effect() != 7384) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_sendcore_skip_unchanged_views() != 27494) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_sendcore_view() != 39020) {
@@ -22330,6 +23244,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_sessioncore_resolve_effect() != 10350) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_sessioncore_skip_unchanged_views() != 50203) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_sessioncore_view() != 24600) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -22337,6 +23254,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_signrequestcore_resolve_effect() != 20586) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_signrequestcore_skip_unchanged_views() != 44172) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_signrequestcore_view() != 35002) {
@@ -22348,6 +23268,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_signingpagescore_resolve_effect() != 4560) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_signingpagescore_skip_unchanged_views() != 28857) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_signingpagescore_view() != 18029) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -22357,6 +23280,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_tokentrustcore_resolve_effect() != 211) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_tokentrustcore_skip_unchanged_views() != 44188) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_tokentrustcore_view() != 33625) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -22364,6 +23290,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_txtrackercore_resolve_effect() != 3400) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_txtrackercore_skip_unchanged_views() != 26389) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_txtrackercore_view() != 58264) {
