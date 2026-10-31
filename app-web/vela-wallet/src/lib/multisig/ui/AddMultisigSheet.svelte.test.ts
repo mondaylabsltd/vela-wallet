@@ -307,8 +307,8 @@ describe('an invite (r4D-4)', () => {
 			multisig: SAFE,
 			chainIds: [5042002],
 			members: [
-				{ name: 'Alice', kind: 'passkey' },
-				{ name: 'Bob', kind: 'wallet' }
+				{ name: 'Alice', kind: 'passkey' as const },
+				{ name: 'Bob', kind: 'wallet' as const }
 			]
 		};
 		io.invite = { link, on_device: [5042002], missing: null, missing_name: null };

@@ -55,7 +55,12 @@ export function firstNetworkDefault(networks: { chainId: number }[], hints: Hint
  * have (`networks.name`), or `null` when the catalog does not know it.
  */
 export function catalogName(chainId: number): string | null {
-	return rule<string | null>('name', { chainId });
+	try {
+		return rule<string | null>('name', { chainId });
+	} catch {
+		// The core is not loaded here (yet): the catalog says nothing.
+		return null;
+	}
 }
 
 /** The networks the account shown holds anything on, the most valuable first. */
