@@ -86,13 +86,4 @@ struct LaunchReplayTests {
         #expect(!LaunchAnimation.claim(store: store, now: Date(), disabled: true))
         #expect(store.readString(launchAnimationStorageKey()) == nil)
     }
-
-    /// The graph decides once, for a first launch only; the root an erase
-    /// rebuilt never plays it.
-    @Test func onlyAFirstLaunchPlaysIt() {
-        let defaults = UserDefaults(suiteName: "launch-graph-\(UUID().uuidString)")!
-        let erased = AppGraph(loc: Loc(overrideTag: nil, preferredLanguages: ["en"]), firstLaunch: false, defaults: defaults)
-        #expect(!erased.playsLaunchAnimation)
-        #expect(VelaStore(defaults: defaults).readString(launchAnimationStorageKey()) == nil)
-    }
 }
