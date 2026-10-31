@@ -1,0 +1,1257 @@
+{
+  "about": "Spec 102 R7 + R8: where each signature and key ceremony goes, per account record, JSON-RPC method and surface. 'standard' is the apps, the web wallet and the Chrome extension; 'safari_extension' is the Safari Web Extension, whose pages cannot use a getvela.app passkey (WebKit: SecurityError, RPID) - there nothing is signed in Vela. route null: a method no venue signs. ceremony_page: R3 on a surface (the machines' page for create, add a key, sign in, a proof), null = in the app. Read by vela-core (tests/signing_route_surface.rs) and by the web through the wasm (signingRoute).",
+  "accounts": {
+    "in_vela": {
+      "id": "5afa0001",
+      "name": "Spending",
+      "address": "0x3333333333333333333333333333333333333333",
+      "public_key_hex": "04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "created_at_iso": "2026-10-31T00:00:00.000Z",
+      "keys": [
+        {
+          "credential_id": "5afa0001",
+          "public_key_hex": "04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+          "name": "Spending",
+          "transports": "hybrid,internal"
+        }
+      ],
+      "signing_domain": "getvela.app",
+      "signing_venue": {
+        "type": "in_vela"
+      },
+      "sign_in_key": {
+        "credential_id": "5afa0001",
+        "method": "platform",
+        "transports": "internal"
+      }
+    },
+    "official_page": {
+      "id": "5afa0002",
+      "name": "Savings",
+      "address": "0x1111111111111111111111111111111111111111",
+      "public_key_hex": "04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "created_at_iso": "2026-10-31T00:00:00.000Z",
+      "keys": [
+        {
+          "credential_id": "5afa0002",
+          "public_key_hex": "04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+          "name": "Savings",
+          "transports": "hybrid,internal",
+          "signer_origin": "https://sign.getvela.app"
+        }
+      ],
+      "signing_domain": "getvela.app",
+      "signing_venue": {
+        "type": "page",
+        "url": "https://sign.getvela.app/"
+      },
+      "sign_in_key": {
+        "credential_id": "5afa0002",
+        "method": "platform",
+        "transports": "internal"
+      }
+    },
+    "other_getvela_page": {
+      "id": "5afa0003",
+      "name": "Staging",
+      "address": "0x4444444444444444444444444444444444444444",
+      "public_key_hex": "04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "created_at_iso": "2026-10-31T00:00:00.000Z",
+      "keys": [
+        {
+          "credential_id": "5afa0003",
+          "public_key_hex": "04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+          "name": "Staging",
+          "transports": "hybrid,internal"
+        }
+      ],
+      "signing_domain": "getvela.app",
+      "signing_venue": {
+        "type": "page",
+        "url": "https://staging.getvela.app/"
+      },
+      "sign_in_key": {
+        "credential_id": "5afa0003",
+        "method": "platform",
+        "transports": "internal"
+      }
+    },
+    "custom_domain": {
+      "id": "5afa0004",
+      "name": "Vault",
+      "address": "0x2222222222222222222222222222222222222222",
+      "public_key_hex": "04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "created_at_iso": "2026-10-31T00:00:00.000Z",
+      "keys": [
+        {
+          "credential_id": "5afa0004",
+          "public_key_hex": "04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+          "name": "Vault",
+          "transports": "hybrid,internal",
+          "signer_origin": "http://localhost:8140"
+        }
+      ],
+      "signing_domain": "localhost",
+      "signing_venue": {
+        "type": "page",
+        "url": "http://localhost:8140/"
+      },
+      "sign_in_key": {
+        "credential_id": "5afa0004",
+        "method": "platform",
+        "transports": "internal"
+      }
+    },
+    "blocked": {
+      "id": "5afa0005",
+      "name": "Lost",
+      "address": "0x5555555555555555555555555555555555555555",
+      "public_key_hex": "04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "created_at_iso": "2026-10-31T00:00:00.000Z",
+      "keys": [
+        {
+          "credential_id": "5afa0005",
+          "public_key_hex": "04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+          "name": "Lost",
+          "transports": "hybrid,internal"
+        }
+      ],
+      "signing_domain": "sign.example.com",
+      "signing_venue": {
+        "type": "in_vela"
+      },
+      "sign_in_key": {
+        "credential_id": "5afa0005",
+        "method": "platform",
+        "transports": "internal"
+      }
+    }
+  },
+  "cases": [
+    {
+      "account": "in_vela",
+      "method": "",
+      "surface": "standard",
+      "route": {
+        "type": "in_vela"
+      }
+    },
+    {
+      "account": "in_vela",
+      "method": "",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "https://sign.getvela.app/"
+      }
+    },
+    {
+      "account": "in_vela",
+      "method": "eth_sendTransaction",
+      "surface": "standard",
+      "route": {
+        "type": "in_vela"
+      }
+    },
+    {
+      "account": "in_vela",
+      "method": "eth_sendTransaction",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "https://sign.getvela.app/"
+      }
+    },
+    {
+      "account": "in_vela",
+      "method": "wallet_sendCalls",
+      "surface": "standard",
+      "route": {
+        "type": "in_vela"
+      }
+    },
+    {
+      "account": "in_vela",
+      "method": "wallet_sendCalls",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "https://sign.getvela.app/"
+      }
+    },
+    {
+      "account": "in_vela",
+      "method": "vela_multisigExecute",
+      "surface": "standard",
+      "route": {
+        "type": "in_vela"
+      }
+    },
+    {
+      "account": "in_vela",
+      "method": "vela_multisigExecute",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "https://sign.getvela.app/"
+      }
+    },
+    {
+      "account": "in_vela",
+      "method": "personal_sign",
+      "surface": "standard",
+      "route": {
+        "type": "in_vela"
+      }
+    },
+    {
+      "account": "in_vela",
+      "method": "personal_sign",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "https://sign.getvela.app/"
+      }
+    },
+    {
+      "account": "in_vela",
+      "method": "eth_signTypedData_v4",
+      "surface": "standard",
+      "route": {
+        "type": "in_vela"
+      }
+    },
+    {
+      "account": "in_vela",
+      "method": "eth_signTypedData_v4",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "https://sign.getvela.app/"
+      }
+    },
+    {
+      "account": "in_vela",
+      "method": "eth_signTypedData_v3",
+      "surface": "standard",
+      "route": {
+        "type": "in_vela"
+      }
+    },
+    {
+      "account": "in_vela",
+      "method": "eth_signTypedData_v3",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "https://sign.getvela.app/"
+      }
+    },
+    {
+      "account": "in_vela",
+      "method": "eth_signTypedData",
+      "surface": "standard",
+      "route": {
+        "type": "in_vela"
+      }
+    },
+    {
+      "account": "in_vela",
+      "method": "eth_signTypedData",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "https://sign.getvela.app/"
+      }
+    },
+    {
+      "account": "in_vela",
+      "method": "vela_multisigApprove",
+      "surface": "standard",
+      "route": {
+        "type": "in_vela"
+      }
+    },
+    {
+      "account": "in_vela",
+      "method": "vela_multisigApprove",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "https://sign.getvela.app/"
+      }
+    },
+    {
+      "account": "in_vela",
+      "method": "vela_multisigCreate",
+      "surface": "standard",
+      "route": {
+        "type": "in_vela"
+      }
+    },
+    {
+      "account": "in_vela",
+      "method": "vela_multisigCreate",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "https://sign.getvela.app/"
+      }
+    },
+    {
+      "account": "in_vela",
+      "method": "eth_sign",
+      "surface": "standard",
+      "route": null
+    },
+    {
+      "account": "in_vela",
+      "method": "eth_sign",
+      "surface": "safari_extension",
+      "route": null
+    },
+    {
+      "account": "in_vela",
+      "method": "eth_signTransaction",
+      "surface": "standard",
+      "route": null
+    },
+    {
+      "account": "in_vela",
+      "method": "eth_signTransaction",
+      "surface": "safari_extension",
+      "route": null
+    },
+    {
+      "account": "official_page",
+      "method": "",
+      "surface": "standard",
+      "route": {
+        "type": "page",
+        "url": "https://sign.getvela.app/"
+      }
+    },
+    {
+      "account": "official_page",
+      "method": "",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "https://sign.getvela.app/"
+      }
+    },
+    {
+      "account": "official_page",
+      "method": "eth_sendTransaction",
+      "surface": "standard",
+      "route": {
+        "type": "page",
+        "url": "https://sign.getvela.app/"
+      }
+    },
+    {
+      "account": "official_page",
+      "method": "eth_sendTransaction",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "https://sign.getvela.app/"
+      }
+    },
+    {
+      "account": "official_page",
+      "method": "wallet_sendCalls",
+      "surface": "standard",
+      "route": {
+        "type": "page",
+        "url": "https://sign.getvela.app/"
+      }
+    },
+    {
+      "account": "official_page",
+      "method": "wallet_sendCalls",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "https://sign.getvela.app/"
+      }
+    },
+    {
+      "account": "official_page",
+      "method": "vela_multisigExecute",
+      "surface": "standard",
+      "route": {
+        "type": "page",
+        "url": "https://sign.getvela.app/"
+      }
+    },
+    {
+      "account": "official_page",
+      "method": "vela_multisigExecute",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "https://sign.getvela.app/"
+      }
+    },
+    {
+      "account": "official_page",
+      "method": "personal_sign",
+      "surface": "standard",
+      "route": {
+        "type": "page",
+        "url": "https://sign.getvela.app/"
+      }
+    },
+    {
+      "account": "official_page",
+      "method": "personal_sign",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "https://sign.getvela.app/"
+      }
+    },
+    {
+      "account": "official_page",
+      "method": "eth_signTypedData_v4",
+      "surface": "standard",
+      "route": {
+        "type": "page",
+        "url": "https://sign.getvela.app/"
+      }
+    },
+    {
+      "account": "official_page",
+      "method": "eth_signTypedData_v4",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "https://sign.getvela.app/"
+      }
+    },
+    {
+      "account": "official_page",
+      "method": "eth_signTypedData_v3",
+      "surface": "standard",
+      "route": {
+        "type": "page",
+        "url": "https://sign.getvela.app/"
+      }
+    },
+    {
+      "account": "official_page",
+      "method": "eth_signTypedData_v3",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "https://sign.getvela.app/"
+      }
+    },
+    {
+      "account": "official_page",
+      "method": "eth_signTypedData",
+      "surface": "standard",
+      "route": {
+        "type": "page",
+        "url": "https://sign.getvela.app/"
+      }
+    },
+    {
+      "account": "official_page",
+      "method": "eth_signTypedData",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "https://sign.getvela.app/"
+      }
+    },
+    {
+      "account": "official_page",
+      "method": "vela_multisigApprove",
+      "surface": "standard",
+      "route": {
+        "type": "page",
+        "url": "https://sign.getvela.app/"
+      }
+    },
+    {
+      "account": "official_page",
+      "method": "vela_multisigApprove",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "https://sign.getvela.app/"
+      }
+    },
+    {
+      "account": "official_page",
+      "method": "vela_multisigCreate",
+      "surface": "standard",
+      "route": {
+        "type": "in_vela"
+      }
+    },
+    {
+      "account": "official_page",
+      "method": "vela_multisigCreate",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "https://sign.getvela.app/"
+      }
+    },
+    {
+      "account": "official_page",
+      "method": "eth_sign",
+      "surface": "standard",
+      "route": null
+    },
+    {
+      "account": "official_page",
+      "method": "eth_sign",
+      "surface": "safari_extension",
+      "route": null
+    },
+    {
+      "account": "official_page",
+      "method": "eth_signTransaction",
+      "surface": "standard",
+      "route": null
+    },
+    {
+      "account": "official_page",
+      "method": "eth_signTransaction",
+      "surface": "safari_extension",
+      "route": null
+    },
+    {
+      "account": "other_getvela_page",
+      "method": "",
+      "surface": "standard",
+      "route": {
+        "type": "page",
+        "url": "https://staging.getvela.app/"
+      }
+    },
+    {
+      "account": "other_getvela_page",
+      "method": "",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "https://staging.getvela.app/"
+      }
+    },
+    {
+      "account": "other_getvela_page",
+      "method": "eth_sendTransaction",
+      "surface": "standard",
+      "route": {
+        "type": "page",
+        "url": "https://staging.getvela.app/"
+      }
+    },
+    {
+      "account": "other_getvela_page",
+      "method": "eth_sendTransaction",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "https://staging.getvela.app/"
+      }
+    },
+    {
+      "account": "other_getvela_page",
+      "method": "wallet_sendCalls",
+      "surface": "standard",
+      "route": {
+        "type": "page",
+        "url": "https://staging.getvela.app/"
+      }
+    },
+    {
+      "account": "other_getvela_page",
+      "method": "wallet_sendCalls",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "https://staging.getvela.app/"
+      }
+    },
+    {
+      "account": "other_getvela_page",
+      "method": "vela_multisigExecute",
+      "surface": "standard",
+      "route": {
+        "type": "page",
+        "url": "https://staging.getvela.app/"
+      }
+    },
+    {
+      "account": "other_getvela_page",
+      "method": "vela_multisigExecute",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "https://staging.getvela.app/"
+      }
+    },
+    {
+      "account": "other_getvela_page",
+      "method": "personal_sign",
+      "surface": "standard",
+      "route": {
+        "type": "page",
+        "url": "https://staging.getvela.app/"
+      }
+    },
+    {
+      "account": "other_getvela_page",
+      "method": "personal_sign",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "https://staging.getvela.app/"
+      }
+    },
+    {
+      "account": "other_getvela_page",
+      "method": "eth_signTypedData_v4",
+      "surface": "standard",
+      "route": {
+        "type": "page",
+        "url": "https://staging.getvela.app/"
+      }
+    },
+    {
+      "account": "other_getvela_page",
+      "method": "eth_signTypedData_v4",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "https://staging.getvela.app/"
+      }
+    },
+    {
+      "account": "other_getvela_page",
+      "method": "eth_signTypedData_v3",
+      "surface": "standard",
+      "route": {
+        "type": "page",
+        "url": "https://staging.getvela.app/"
+      }
+    },
+    {
+      "account": "other_getvela_page",
+      "method": "eth_signTypedData_v3",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "https://staging.getvela.app/"
+      }
+    },
+    {
+      "account": "other_getvela_page",
+      "method": "eth_signTypedData",
+      "surface": "standard",
+      "route": {
+        "type": "page",
+        "url": "https://staging.getvela.app/"
+      }
+    },
+    {
+      "account": "other_getvela_page",
+      "method": "eth_signTypedData",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "https://staging.getvela.app/"
+      }
+    },
+    {
+      "account": "other_getvela_page",
+      "method": "vela_multisigApprove",
+      "surface": "standard",
+      "route": {
+        "type": "page",
+        "url": "https://staging.getvela.app/"
+      }
+    },
+    {
+      "account": "other_getvela_page",
+      "method": "vela_multisigApprove",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "https://staging.getvela.app/"
+      }
+    },
+    {
+      "account": "other_getvela_page",
+      "method": "vela_multisigCreate",
+      "surface": "standard",
+      "route": {
+        "type": "in_vela"
+      }
+    },
+    {
+      "account": "other_getvela_page",
+      "method": "vela_multisigCreate",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "https://staging.getvela.app/"
+      }
+    },
+    {
+      "account": "other_getvela_page",
+      "method": "eth_sign",
+      "surface": "standard",
+      "route": null
+    },
+    {
+      "account": "other_getvela_page",
+      "method": "eth_sign",
+      "surface": "safari_extension",
+      "route": null
+    },
+    {
+      "account": "other_getvela_page",
+      "method": "eth_signTransaction",
+      "surface": "standard",
+      "route": null
+    },
+    {
+      "account": "other_getvela_page",
+      "method": "eth_signTransaction",
+      "surface": "safari_extension",
+      "route": null
+    },
+    {
+      "account": "custom_domain",
+      "method": "",
+      "surface": "standard",
+      "route": {
+        "type": "page",
+        "url": "http://localhost:8140/"
+      }
+    },
+    {
+      "account": "custom_domain",
+      "method": "",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "http://localhost:8140/"
+      }
+    },
+    {
+      "account": "custom_domain",
+      "method": "eth_sendTransaction",
+      "surface": "standard",
+      "route": {
+        "type": "page",
+        "url": "http://localhost:8140/"
+      }
+    },
+    {
+      "account": "custom_domain",
+      "method": "eth_sendTransaction",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "http://localhost:8140/"
+      }
+    },
+    {
+      "account": "custom_domain",
+      "method": "wallet_sendCalls",
+      "surface": "standard",
+      "route": {
+        "type": "page",
+        "url": "http://localhost:8140/"
+      }
+    },
+    {
+      "account": "custom_domain",
+      "method": "wallet_sendCalls",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "http://localhost:8140/"
+      }
+    },
+    {
+      "account": "custom_domain",
+      "method": "vela_multisigExecute",
+      "surface": "standard",
+      "route": {
+        "type": "page",
+        "url": "http://localhost:8140/"
+      }
+    },
+    {
+      "account": "custom_domain",
+      "method": "vela_multisigExecute",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "http://localhost:8140/"
+      }
+    },
+    {
+      "account": "custom_domain",
+      "method": "personal_sign",
+      "surface": "standard",
+      "route": {
+        "type": "page",
+        "url": "http://localhost:8140/"
+      }
+    },
+    {
+      "account": "custom_domain",
+      "method": "personal_sign",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "http://localhost:8140/"
+      }
+    },
+    {
+      "account": "custom_domain",
+      "method": "eth_signTypedData_v4",
+      "surface": "standard",
+      "route": {
+        "type": "page",
+        "url": "http://localhost:8140/"
+      }
+    },
+    {
+      "account": "custom_domain",
+      "method": "eth_signTypedData_v4",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "http://localhost:8140/"
+      }
+    },
+    {
+      "account": "custom_domain",
+      "method": "eth_signTypedData_v3",
+      "surface": "standard",
+      "route": {
+        "type": "page",
+        "url": "http://localhost:8140/"
+      }
+    },
+    {
+      "account": "custom_domain",
+      "method": "eth_signTypedData_v3",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "http://localhost:8140/"
+      }
+    },
+    {
+      "account": "custom_domain",
+      "method": "eth_signTypedData",
+      "surface": "standard",
+      "route": {
+        "type": "page",
+        "url": "http://localhost:8140/"
+      }
+    },
+    {
+      "account": "custom_domain",
+      "method": "eth_signTypedData",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "http://localhost:8140/"
+      }
+    },
+    {
+      "account": "custom_domain",
+      "method": "vela_multisigApprove",
+      "surface": "standard",
+      "route": {
+        "type": "page",
+        "url": "http://localhost:8140/"
+      }
+    },
+    {
+      "account": "custom_domain",
+      "method": "vela_multisigApprove",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "http://localhost:8140/"
+      }
+    },
+    {
+      "account": "custom_domain",
+      "method": "vela_multisigCreate",
+      "surface": "standard",
+      "route": {
+        "type": "page",
+        "url": "http://localhost:8140/"
+      }
+    },
+    {
+      "account": "custom_domain",
+      "method": "vela_multisigCreate",
+      "surface": "safari_extension",
+      "route": {
+        "type": "page",
+        "url": "http://localhost:8140/"
+      }
+    },
+    {
+      "account": "custom_domain",
+      "method": "eth_sign",
+      "surface": "standard",
+      "route": null
+    },
+    {
+      "account": "custom_domain",
+      "method": "eth_sign",
+      "surface": "safari_extension",
+      "route": null
+    },
+    {
+      "account": "custom_domain",
+      "method": "eth_signTransaction",
+      "surface": "standard",
+      "route": null
+    },
+    {
+      "account": "custom_domain",
+      "method": "eth_signTransaction",
+      "surface": "safari_extension",
+      "route": null
+    },
+    {
+      "account": "blocked",
+      "method": "",
+      "surface": "standard",
+      "route": {
+        "type": "blocked",
+        "block": {
+          "type": "app_cannot_reach",
+          "domain": "sign.example.com"
+        }
+      }
+    },
+    {
+      "account": "blocked",
+      "method": "",
+      "surface": "safari_extension",
+      "route": {
+        "type": "blocked",
+        "block": {
+          "type": "app_cannot_reach",
+          "domain": "sign.example.com"
+        }
+      }
+    },
+    {
+      "account": "blocked",
+      "method": "eth_sendTransaction",
+      "surface": "standard",
+      "route": {
+        "type": "blocked",
+        "block": {
+          "type": "app_cannot_reach",
+          "domain": "sign.example.com"
+        }
+      }
+    },
+    {
+      "account": "blocked",
+      "method": "eth_sendTransaction",
+      "surface": "safari_extension",
+      "route": {
+        "type": "blocked",
+        "block": {
+          "type": "app_cannot_reach",
+          "domain": "sign.example.com"
+        }
+      }
+    },
+    {
+      "account": "blocked",
+      "method": "wallet_sendCalls",
+      "surface": "standard",
+      "route": {
+        "type": "blocked",
+        "block": {
+          "type": "app_cannot_reach",
+          "domain": "sign.example.com"
+        }
+      }
+    },
+    {
+      "account": "blocked",
+      "method": "wallet_sendCalls",
+      "surface": "safari_extension",
+      "route": {
+        "type": "blocked",
+        "block": {
+          "type": "app_cannot_reach",
+          "domain": "sign.example.com"
+        }
+      }
+    },
+    {
+      "account": "blocked",
+      "method": "vela_multisigExecute",
+      "surface": "standard",
+      "route": {
+        "type": "blocked",
+        "block": {
+          "type": "app_cannot_reach",
+          "domain": "sign.example.com"
+        }
+      }
+    },
+    {
+      "account": "blocked",
+      "method": "vela_multisigExecute",
+      "surface": "safari_extension",
+      "route": {
+        "type": "blocked",
+        "block": {
+          "type": "app_cannot_reach",
+          "domain": "sign.example.com"
+        }
+      }
+    },
+    {
+      "account": "blocked",
+      "method": "personal_sign",
+      "surface": "standard",
+      "route": {
+        "type": "blocked",
+        "block": {
+          "type": "app_cannot_reach",
+          "domain": "sign.example.com"
+        }
+      }
+    },
+    {
+      "account": "blocked",
+      "method": "personal_sign",
+      "surface": "safari_extension",
+      "route": {
+        "type": "blocked",
+        "block": {
+          "type": "app_cannot_reach",
+          "domain": "sign.example.com"
+        }
+      }
+    },
+    {
+      "account": "blocked",
+      "method": "eth_signTypedData_v4",
+      "surface": "standard",
+      "route": {
+        "type": "blocked",
+        "block": {
+          "type": "app_cannot_reach",
+          "domain": "sign.example.com"
+        }
+      }
+    },
+    {
+      "account": "blocked",
+      "method": "eth_signTypedData_v4",
+      "surface": "safari_extension",
+      "route": {
+        "type": "blocked",
+        "block": {
+          "type": "app_cannot_reach",
+          "domain": "sign.example.com"
+        }
+      }
+    },
+    {
+      "account": "blocked",
+      "method": "eth_signTypedData_v3",
+      "surface": "standard",
+      "route": {
+        "type": "blocked",
+        "block": {
+          "type": "app_cannot_reach",
+          "domain": "sign.example.com"
+        }
+      }
+    },
+    {
+      "account": "blocked",
+      "method": "eth_signTypedData_v3",
+      "surface": "safari_extension",
+      "route": {
+        "type": "blocked",
+        "block": {
+          "type": "app_cannot_reach",
+          "domain": "sign.example.com"
+        }
+      }
+    },
+    {
+      "account": "blocked",
+      "method": "eth_signTypedData",
+      "surface": "standard",
+      "route": {
+        "type": "blocked",
+        "block": {
+          "type": "app_cannot_reach",
+          "domain": "sign.example.com"
+        }
+      }
+    },
+    {
+      "account": "blocked",
+      "method": "eth_signTypedData",
+      "surface": "safari_extension",
+      "route": {
+        "type": "blocked",
+        "block": {
+          "type": "app_cannot_reach",
+          "domain": "sign.example.com"
+        }
+      }
+    },
+    {
+      "account": "blocked",
+      "method": "vela_multisigApprove",
+      "surface": "standard",
+      "route": {
+        "type": "blocked",
+        "block": {
+          "type": "app_cannot_reach",
+          "domain": "sign.example.com"
+        }
+      }
+    },
+    {
+      "account": "blocked",
+      "method": "vela_multisigApprove",
+      "surface": "safari_extension",
+      "route": {
+        "type": "blocked",
+        "block": {
+          "type": "app_cannot_reach",
+          "domain": "sign.example.com"
+        }
+      }
+    },
+    {
+      "account": "blocked",
+      "method": "vela_multisigCreate",
+      "surface": "standard",
+      "route": {
+        "type": "blocked",
+        "block": {
+          "type": "app_cannot_reach",
+          "domain": "sign.example.com"
+        }
+      }
+    },
+    {
+      "account": "blocked",
+      "method": "vela_multisigCreate",
+      "surface": "safari_extension",
+      "route": {
+        "type": "blocked",
+        "block": {
+          "type": "app_cannot_reach",
+          "domain": "sign.example.com"
+        }
+      }
+    },
+    {
+      "account": "blocked",
+      "method": "eth_sign",
+      "surface": "standard",
+      "route": null
+    },
+    {
+      "account": "blocked",
+      "method": "eth_sign",
+      "surface": "safari_extension",
+      "route": null
+    },
+    {
+      "account": "blocked",
+      "method": "eth_signTransaction",
+      "surface": "standard",
+      "route": null
+    },
+    {
+      "account": "blocked",
+      "method": "eth_signTransaction",
+      "surface": "safari_extension",
+      "route": null
+    }
+  ],
+  "ceremony_page": [
+    {
+      "page": null,
+      "surface": "standard",
+      "expect": null
+    },
+    {
+      "page": null,
+      "surface": "safari_extension",
+      "expect": "https://sign.getvela.app/"
+    },
+    {
+      "page": "https://sign.getvela.app",
+      "surface": "standard",
+      "expect": null
+    },
+    {
+      "page": "https://sign.getvela.app",
+      "surface": "safari_extension",
+      "expect": "https://sign.getvela.app/"
+    },
+    {
+      "page": "https://staging.getvela.app/",
+      "surface": "standard",
+      "expect": null
+    },
+    {
+      "page": "https://staging.getvela.app/",
+      "surface": "safari_extension",
+      "expect": "https://staging.getvela.app/"
+    },
+    {
+      "page": "sign.example.com",
+      "surface": "standard",
+      "expect": "https://sign.example.com/"
+    },
+    {
+      "page": "sign.example.com",
+      "surface": "safari_extension",
+      "expect": "https://sign.example.com/"
+    },
+    {
+      "page": "http://localhost:8140",
+      "surface": "safari_extension",
+      "expect": "http://localhost:8140/"
+    },
+    {
+      "page": "http://example.com",
+      "surface": "standard",
+      "expect": null
+    },
+    {
+      "page": "http://example.com",
+      "surface": "safari_extension",
+      "expect": "https://sign.getvela.app/"
+    }
+  ]
+}

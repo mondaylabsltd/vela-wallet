@@ -41,6 +41,12 @@
 //!   "the web opens no signing page" and its 2026-10-29 multisig-only
 //!   exception, spec 102 plan P2-11 / D-16). A shell that cannot carry a
 //!   kind to the page refuses; it never falls back to its own sheet.
+//! - **R8** [`SigningSurface`] — the one input R3 and R7 take about WHERE the
+//!   shell runs: a surface whose own pages cannot use `getvela.app` passkeys
+//!   (the Safari Web Extension — WebKit refuses the RP ID in an extension
+//!   page, measured on iOS 26) sends every signature and every key ceremony
+//!   to a page ([`signing_route_on`], [`ceremony_page_on`]). Every other
+//!   surface answers exactly as R3 and R7 always did.
 //!
 //! What this does NOT claim: the domain is shared (D2), so a page as venue
 //! assures *what you see is what you sign* against a tampered app interface;
@@ -499,7 +505,116 @@ pub fn signing_route(plan: &SigningPlan, kind: SignatureKind) -> SigningRoute {
 /// ([`SignatureKind::of_method`]), which the shell refuses.
 #[must_use]
 pub fn signing_route_for_method(plan: &SigningPlan, method: &str) -> Option<SigningRoute> {
-    SignatureKind::of_method(method).map(|kind| signing_route(plan, kind))
+    signing_route_for_method_on(plan, method, SigningSurface::Standard)
+}
+
+// ---------------------------------------------------------------------------
+// R8 — the surface
+// ---------------------------------------------------------------------------
+
+/// Where the shell asking runs, as far as passkeys decide (R8). Its JSON is
+/// `"standard"` | `"safari_extension"`.
+///
+/// Not a list of platforms: the one fact that changes a route is whether the
+/// shell's OWN page can run a `getvela.app` passkey ceremony. Every surface
+/// Vela ships can, except one.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum SigningSurface {
+    /// The apps (bound to `getvela.app` by their associated domain), the web
+    /// wallet (`wallet.getvela.app`, `getvela.app`) and the Chrome extension
+    /// (its host permission): Vela's own sheet reaches `getvela.app` keys.
+    #[default]
+    Standard,
+    /// The Safari Web Extension (iOS and macOS). Its pages are
+    /// `safari-web-extension://<UUID>`, and WebKit refuses them a
+    /// `getvela.app` passkey (`SecurityError: The requested RPID did not
+    /// match the origin`, measured on iOS 26.2) — for creating a key as for
+    /// using one. So nothing can be signed, and no key made or used, in
+    /// Vela's own sheet there: every signature and every ceremony goes to a
+    /// page, which is a real `https` origin of the key's domain.
+    SafariExtension,
+}
+
+impl SigningSurface {
+    /// Can this surface's own pages run a `getvela.app` passkey ceremony?
+    #[must_use]
+    pub const fn passkeys_in_wallet(self) -> bool {
+        matches!(self, Self::Standard)
+    }
+
+    /// The surface a shell names by its wire word (`"standard"`,
+    /// `"safari_extension"`); anything else — an absent word, an older shell
+    /// — is [`Self::Standard`], the answer every surface had before R8.
+    #[must_use]
+    pub fn of_name(name: Option<&str>) -> Self {
+        match name.map(str::trim) {
+            Some("safari_extension") => Self::SafariExtension,
+            _ => Self::Standard,
+        }
+    }
+}
+
+/// The page that runs what a surface without its own passkeys cannot (R8),
+/// for an account whose venue is `venue`: the venue itself when it is a page
+/// (whatever its domain — R1 already checked that it reaches the account's
+/// keys), else the official page, which reaches every `getvela.app` key.
+fn page_for(venue: &SigningVenue) -> String {
+    venue
+        .page_url()
+        .and_then(|url| trusted_signer::signer_url(url).ok())
+        .unwrap_or_else(|| trusted_signer::DEFAULT_SIGNER_URL.to_owned())
+}
+
+/// R7 on `surface` (R8). On a surface whose pages run `getvela.app` passkeys
+/// this is [`signing_route`], unchanged. On one that cannot (the Safari Web
+/// Extension), Vela's own sheet is never the answer — for any kind, a key
+/// ceremony included: what R7 would sign in Vela goes to the account's page,
+/// or, for an account that signs in Vela, to the official page (its keys are
+/// `getvela.app` keys, which the official page reaches). A blocked plan stays
+/// blocked, and a page stays that page.
+#[must_use]
+pub fn signing_route_on(
+    plan: &SigningPlan,
+    kind: SignatureKind,
+    surface: SigningSurface,
+) -> SigningRoute {
+    match signing_route(plan, kind) {
+        SigningRoute::InVela if !surface.passkeys_in_wallet() => SigningRoute::Page {
+            url: page_for(&plan.venue),
+        },
+        route => route,
+    }
+}
+
+/// [`signing_route_for_method`] on `surface` (R8).
+#[must_use]
+pub fn signing_route_for_method_on(
+    plan: &SigningPlan,
+    method: &str,
+    surface: SigningSurface,
+) -> Option<SigningRoute> {
+    SignatureKind::of_method(method).map(|kind| signing_route_on(plan, kind, surface))
+}
+
+/// R3 on `surface` (R8): the page a key ceremony runs on when the person's
+/// chosen page is `page`. On a surface whose pages run `getvela.app`
+/// passkeys this is [`ceremony_page`], unchanged — the app for `getvela.app`,
+/// the page for a custom domain. On one that cannot (the Safari Web
+/// Extension) every ceremony runs on a page: the chosen one when it is one a
+/// browser would sign on, else the official page — so creating a wallet,
+/// adding a key, signing in and every proof there mint and use `getvela.app`
+/// keys on `sign.getvela.app`, the same keys the apps use.
+#[must_use]
+pub fn ceremony_page_on(page: Option<&str>, surface: SigningSurface) -> Option<String> {
+    if surface.passkeys_in_wallet() {
+        return ceremony_page(page);
+    }
+    Some(
+        page.and_then(|page| trusted_signer::signer_url(page).ok())
+            .unwrap_or_else(|| trusted_signer::DEFAULT_SIGNER_URL.to_owned()),
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -976,6 +1091,168 @@ mod tests {
                 url: OWN.to_owned()
             }
         );
+    }
+
+    /// R8: on the Safari Web Extension nothing is signed in Vela — every kind,
+    /// a ceremony included, goes to a page; every other surface is R7 as it was.
+    #[test]
+    fn a_surface_without_its_own_passkeys_sends_everything_to_a_page() {
+        let plan = |domain: &str, venue: SigningVenue, blocked: Option<VenueBlock>| SigningPlan {
+            domain: domain.to_owned(),
+            venue,
+            blocked,
+            key: None,
+            key_label: KeyLabel::default(),
+        };
+        let every = [
+            SignatureKind::UserOperation,
+            SignatureKind::Batch,
+            SignatureKind::PersonalSign,
+            SignatureKind::TypedData,
+            SignatureKind::MultisigApproval,
+            SignatureKind::KeyCeremony,
+        ];
+        let official = trusted_signer::DEFAULT_SIGNER_URL.to_owned();
+        let staging = page("https://staging.getvela.app/");
+        let block = VenueBlock::AppCannotReach {
+            domain: "sign.example.com".to_owned(),
+        };
+        for kind in every {
+            for (plan, safari) in [
+                // In Vela → the official page, which reaches getvela.app keys.
+                (
+                    plan(APP_DOMAIN, SigningVenue::InVela, None),
+                    SigningRoute::Page {
+                        url: official.clone(),
+                    },
+                ),
+                // The official page → the official page (a ceremony too).
+                (
+                    plan(APP_DOMAIN, SigningVenue::official(), None),
+                    SigningRoute::Page {
+                        url: official.clone(),
+                    },
+                ),
+                // Another getvela.app page → that page.
+                (
+                    plan(APP_DOMAIN, staging.clone(), None),
+                    SigningRoute::Page {
+                        url: "https://staging.getvela.app/".to_owned(),
+                    },
+                ),
+                // A custom domain → its page, as everywhere.
+                (
+                    plan("sign.example.com", page(OWN), None),
+                    SigningRoute::Page {
+                        url: OWN.to_owned(),
+                    },
+                ),
+                // Blocked stays blocked.
+                (
+                    plan(
+                        "sign.example.com",
+                        SigningVenue::InVela,
+                        Some(block.clone()),
+                    ),
+                    SigningRoute::Blocked {
+                        block: block.clone(),
+                    },
+                ),
+            ] {
+                assert_eq!(
+                    signing_route_on(&plan, kind, SigningSurface::SafariExtension),
+                    safari,
+                    "{kind:?} {plan:?}"
+                );
+                assert_eq!(
+                    signing_route_on(&plan, kind, SigningSurface::Standard),
+                    signing_route(&plan, kind),
+                    "{kind:?} {plan:?}: every other surface is unchanged"
+                );
+            }
+        }
+        // By method, `eth_sign` is still nobody's.
+        let app = plan(APP_DOMAIN, SigningVenue::InVela, None);
+        assert_eq!(
+            signing_route_for_method_on(&app, "eth_sign", SigningSurface::SafariExtension),
+            None
+        );
+        assert_eq!(
+            signing_route_for_method_on(
+                &app,
+                MULTISIG_CREATE_METHOD,
+                SigningSurface::SafariExtension
+            ),
+            Some(SigningRoute::Page { url: official })
+        );
+    }
+
+    /// R3 on a surface (R8): the Safari Web Extension runs every ceremony on a
+    /// page — the chosen one, else the official page.
+    #[test]
+    fn a_ceremony_on_a_surface_without_its_own_passkeys_runs_on_a_page() {
+        let safari = SigningSurface::SafariExtension;
+        assert_eq!(
+            ceremony_page_on(None, safari).as_deref(),
+            Some("https://sign.getvela.app/")
+        );
+        assert_eq!(
+            ceremony_page_on(Some("https://sign.getvela.app"), safari).as_deref(),
+            Some("https://sign.getvela.app/")
+        );
+        assert_eq!(
+            ceremony_page_on(Some("sign.example.com"), safari).as_deref(),
+            Some(OWN)
+        );
+        assert_eq!(
+            ceremony_page_on(Some("http://localhost:8140"), safari).as_deref(),
+            Some("http://localhost:8140/")
+        );
+        // Not a page at all: the official one, never Vela's own sheet.
+        assert_eq!(
+            ceremony_page_on(Some("http://example.com"), safari).as_deref(),
+            Some("https://sign.getvela.app/")
+        );
+        for page in [
+            None,
+            Some("https://sign.getvela.app/"),
+            Some("sign.example.com"),
+            Some("http://example.com"),
+        ] {
+            assert_eq!(
+                ceremony_page_on(page, SigningSurface::Standard),
+                ceremony_page(page),
+                "{page:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_surface_is_named_on_the_wire() {
+        assert_eq!(
+            serde_json::to_value(SigningSurface::SafariExtension).unwrap_or_default(),
+            serde_json::json!("safari_extension")
+        );
+        assert_eq!(SigningSurface::default(), SigningSurface::Standard);
+        assert_eq!(
+            SigningSurface::of_name(Some("safari_extension")),
+            SigningSurface::SafariExtension
+        );
+        for other in [
+            None,
+            Some(""),
+            Some("standard"),
+            Some("chrome"),
+            Some("SAFARI"),
+        ] {
+            assert_eq!(
+                SigningSurface::of_name(other),
+                SigningSurface::Standard,
+                "{other:?}"
+            );
+        }
+        assert!(SigningSurface::Standard.passkeys_in_wallet());
+        assert!(!SigningSurface::SafariExtension.passkeys_in_wallet());
     }
 
     /// Every request a shell signs has a kind; `eth_sign` and the unknown none.

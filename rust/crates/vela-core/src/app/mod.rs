@@ -292,8 +292,29 @@ pub fn signing_plan_json(account_json: &str) -> Option<String> {
 /// (`eth_sign`, anything unknown) — the shell refuses it.
 #[must_use]
 pub fn signing_route_json(account_json: &str, method: &str) -> Option<String> {
+    signing_route_json_on(
+        account_json,
+        method,
+        crate::signing_venue::SigningSurface::Standard,
+    )
+}
+
+/// [`signing_route_json`] on `surface` (R8,
+/// [`crate::signing_venue::signing_route_for_method_on`]): on the Safari Web
+/// Extension, whose pages cannot use a `getvela.app` passkey, every method
+/// that R7 would sign in Vela goes to a page.
+#[must_use]
+pub fn signing_route_json_on(
+    account_json: &str,
+    method: &str,
+    surface: crate::signing_venue::SigningSurface,
+) -> Option<String> {
     let account: Account = serde_json::from_str(account_json).ok()?;
-    let route = crate::signing_venue::signing_route_for_method(&account.signing_plan(), method)?;
+    let route = crate::signing_venue::signing_route_for_method_on(
+        &account.signing_plan(),
+        method,
+        surface,
+    )?;
     serde_json::to_string(&route).ok()
 }
 

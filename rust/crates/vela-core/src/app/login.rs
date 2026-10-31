@@ -84,6 +84,18 @@ pub enum Event {
         #[serde(default)]
         page: Option<String>,
     },
+    /// Spec 102 R8: where this shell runs, said before signing in. On a
+    /// surface whose own pages cannot use a `getvela.app` passkey (the Safari
+    /// Web Extension) the sign-in, its recovery proofs and a recovery's
+    /// publish run on a page: the one chosen with [`Event::SignIn`]'s `page`,
+    /// else the official page ([`crate::signing_venue::ceremony_page_on`]).
+    /// A shell that never says it is
+    /// [`SigningSurface::Standard`](crate::signing_venue::SigningSurface),
+    /// exactly as before. Ignored while a sign-in is under way.
+    SurfaceKnown {
+        #[serde(default)]
+        surface: crate::signing_venue::SigningSurface,
+    },
     /// Internal: a sign-in effect resolved, tagged with the attempt that asked.
     #[serde(skip)]
     ShellCompleted { attempt: u64, result: ShellResult },
@@ -187,6 +199,8 @@ pub struct Model {
     method: KeyMethod,
     /// Spec 102: the signing page the person chose to sign in on, normalised.
     page: Option<String>,
+    /// Spec 102 R8: where this shell runs ([`Event::SurfaceKnown`]).
+    surface: crate::signing_venue::SigningSurface,
     /// Entering as the stored account at this index, whose record is being
     /// re-saved to name the key that just signed in ([`enter_known`]).
     entering: Option<usize>,
@@ -234,6 +248,12 @@ impl App for Login {
                 Command::all([probe_health(), render()])
             }
             Event::SignIn { method, page } => sign_in(model, method, page),
+            Event::SurfaceKnown { surface } => {
+                if model.stage == Stage::Idle {
+                    model.surface = surface;
+                }
+                Command::done()
+            }
             Event::HealthCompleted { result } => accept_health(model, result),
             Event::HealIgnored => Command::done(),
             Event::ShellCompleted { attempt, result } => {
@@ -760,10 +780,11 @@ fn sign_in_key(model: &Model) -> Option<SignInKey> {
     })
 }
 
-/// R3: the page this sign-in's ceremonies run on — the chosen page, when it is
-/// on a custom domain.
+/// R3 on this shell's surface (R8): the page this sign-in's ceremonies run on
+/// — the chosen page, when it is on a custom domain; on a surface whose pages
+/// cannot use a `getvela.app` passkey, always a page.
 fn ceremony_page(model: &Model) -> Option<String> {
-    crate::signing_venue::ceremony_page(model.page.as_deref())
+    crate::signing_venue::ceremony_page_on(model.page.as_deref(), model.surface)
 }
 
 /// Enter as an account this device already holds, found by credential or by

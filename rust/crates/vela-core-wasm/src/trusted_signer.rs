@@ -59,6 +59,96 @@ pub fn trusted_signer_ceremony_title_key(operation_json: &str) -> Option<String>
         .map(|ceremony| ceremony.title_key().to_owned())
 }
 
+/// The registry deployment a member proof is bound to (`/api/health`'s
+/// `chainId` and `domainRegistry`), as the web names it.
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DeploymentArgs {
+    chain_id: u64,
+    contract: String,
+}
+
+/// The page request for a key ceremony a machine sent to a page (spec 102 R3,
+/// R8) — `RegisterPasskey`, `AuthenticatePasskey`, `SignProof` or
+/// `SignMemberProof` as its wire JSON, handed over verbatim
+/// (`trusted_signer::ceremony::request`): `{id, intent, context}`, the key's
+/// place and hints riding along (R5). `deployment_json` is
+/// `{chainId, contract}` for a member proof (the page computes the challenge
+/// from it and reaches no network itself, 076), `null` otherwise. `null`
+/// for an operation that is not a ceremony.
+#[wasm_bindgen(js_name = trustedSignerCeremonyRequest)]
+#[must_use]
+pub fn trusted_signer_ceremony_request(
+    operation_json: &str,
+    id: &str,
+    wallet_name: &str,
+    registry: &str,
+    deployment_json: Option<String>,
+) -> Option<String> {
+    let ceremony = trusted_signer::ceremony::Ceremony::from_json(operation_json)?;
+    let deployment = deployment_json
+        .as_deref()
+        .and_then(|json| serde_json::from_str::<DeploymentArgs>(json).ok())
+        .map(|d| trusted_signer::ceremony::RegistryDeployment {
+            chain_id: d.chain_id,
+            contract: d.contract,
+        });
+    Some(
+        trusted_signer::ceremony::request(
+            &ceremony,
+            id,
+            wallet_name,
+            registry,
+            deployment.as_ref(),
+        )
+        .to_string(),
+    )
+}
+
+/// The page's answer to a ceremony, judged as the apps judge it
+/// (`trusted_signer::ceremony::verify`): the ceremony asked for, from
+/// `signer_origin` (the page the wallet opened — the origin the authenticator
+/// signed), over a challenge the page was allowed to sign, and for a member
+/// proof over `expected_member_challenge_hex` (the one the wallet fetched).
+/// `{type: 'registered', registration}` or `{type: 'asserted', assertion}` —
+/// the machines' own `Registration` / `Assertion` wire JSON — or an error
+/// whose message is the refusal's code (`declined`, `refused`,
+/// `wrong_challenge`, `foreign_key`, `not_verified`, `malformed`).
+#[wasm_bindgen(js_name = trustedSignerCeremonyVerify)]
+pub fn trusted_signer_ceremony_verify(
+    operation_json: &str,
+    answer_json: &str,
+    signer_origin: &str,
+    expected_member_challenge_hex: Option<String>,
+) -> Result<String, JsValue> {
+    use trusted_signer::ceremony::{verify, Answer, Ceremony};
+    let ceremony =
+        Ceremony::from_json(operation_json).ok_or_else(|| JsValue::from_str("malformed"))?;
+    let answer: serde_json::Value =
+        serde_json::from_str(answer_json).map_err(|_| JsValue::from_str("malformed"))?;
+    let expected = match expected_member_challenge_hex.as_deref() {
+        Some(hex) => Some(
+            vela_core::primitives::from_hex(hex.trim_start_matches("0x"))
+                .map_err(|_| JsValue::from_str("malformed"))?,
+        ),
+        None => None,
+    };
+    match verify(&ceremony, &answer, signer_origin, expected.as_deref())
+        .map_err(|error| JsValue::from_str(error.code()))?
+    {
+        Answer::Registration(registration) => Ok(serde_json::json!({
+            "type": "registered",
+            "registration": registration,
+        })
+        .to_string()),
+        Answer::Assertion(assertion) => Ok(serde_json::json!({
+            "type": "asserted",
+            "assertion": assertion,
+        })
+        .to_string()),
+    }
+}
+
 /// The key row of a ceremony's card, as JSON `KeyLabel`
 /// (`{place_key, label_key}`): "New key on | This device" while a key is made,
 /// "Confirm with | USB security key" when one signs in or proves — the page's
@@ -376,11 +466,16 @@ pub fn trusted_signer_signature_accept(args_json: &str) -> Result<String, JsValu
 /// Where a multisig member's approval goes — `signingRoute` for
 /// `vela_multisigApprove` (`trusted_signer::approval::approval_route`): `{type: 'in_vela'}`,
 /// `{type: 'page', url}` or `{type: 'blocked', block}` — `null` for a record
-/// this build cannot read. `account_json` is the member's record as stored.
+/// this build cannot read. `account_json` is the member's record as stored;
+/// `surface` as `signingRoute`'s (R8: on the Safari Web Extension an
+/// approval is never answered `in_vela`).
 #[wasm_bindgen(js_name = multisigApprovalRoute)]
 #[must_use]
-pub fn multisig_approval_route(account_json: &str) -> Option<String> {
-    approval::approval_route_json(account_json)
+pub fn multisig_approval_route(account_json: &str, surface: Option<String>) -> Option<String> {
+    approval::approval_route_json_on(
+        account_json,
+        vela_core::signing_venue::SigningSurface::of_name(surface.as_deref()),
+    )
 }
 
 /// The versions a deployment's `index.json` lists — `None` for a body that is
