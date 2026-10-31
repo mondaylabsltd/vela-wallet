@@ -237,9 +237,12 @@ class IdentityWaterfallTest {
         assertEquals("0x91d1777781884d03a6757a803996e38de2a42967fb37eeaca72729271025a9e2", IdentityResolver.namehash("addr.reverse"))
     }
 
-    /** Phase 4: namehash reuses the nodes of proper suffixes it has seen; the answers must not change. */
+    /**
+     * core-perf-1: the names are the core's (`ens_namehash`, `ens_reverse_node`)
+     * and still the plain EIP-137 fold, label by label — reverse names included.
+     */
     @Test
-    fun `namehash from a remembered suffix is the full fold`() {
+    fun `namehash and the reverse node are the full fold`() {
         fun fold(name: String): String {
             var node = ByteArray(32)
             for (label in name.split('.').asReversed()) {
@@ -252,8 +255,11 @@ class IdentityWaterfallTest {
             "d8da6bf26964af9d7eed9e03e53415d37aa96045.addr.reverse",
             "88cca0eedbf2c4426110bbfc998f048689266894.addr.reverse",
         )
-        // Twice: the first pass fills the suffixes, the second reads them.
-        repeat(2) { for (name in names) assertEquals(name, fold(name), IdentityResolver.namehash(name)) }
+        for (name in names) assertEquals(name, fold(name), IdentityResolver.namehash(name))
+        // The reverse node of an address, however it is cased.
+        val checksummed = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"
+        assertEquals(fold("d8da6bf26964af9d7eed9e03e53415d37aa96045.addr.reverse"), uniffi.vela_core_uniffi.ensReverseNode(checksummed))
+        assertEquals(uniffi.vela_core_uniffi.ensReverseNode(checksummed), uniffi.vela_core_uniffi.ensReverseNode(checksummed.lowercase()))
     }
 
     @Test
