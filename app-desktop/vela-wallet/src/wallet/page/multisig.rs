@@ -22,7 +22,9 @@ use vela_core::app::multisig_shell::MultisigAccount;
 use vela_core::app::sim_outcome::SimVerdict;
 use vela_core::multisig::SafeTxHashes;
 use vela_core::multisig_reading::MemberChanges;
-use vela_core::multisig_review::{Concern, Field, Recipient, RecipientRole, SignRule, StateGuard};
+use vela_core::multisig_review::{
+    Concern, Field, Recipient, RecipientRole, Refused, SignRule, StateGuard,
+};
 
 use gpui::App;
 
@@ -111,6 +113,8 @@ pub(crate) struct ReviewDraw {
     pub simulation_source: String,
     pub concerns: Vec<Concern>,
     pub sign: SignRule,
+    /// r9-9: why nothing is signed, the core's one line (its corpus key).
+    pub refused: Option<Refused>,
 }
 
 impl ReviewDraw {
@@ -1620,7 +1624,11 @@ impl WalletPage {
             _ => {}
         }
         if reviewed && !sign.allowed && !matches!(plan.kind, FootKind::Nothing) {
-            foot = foot.child(ms_note(theme, &words::t(&loc, "review.blocked"), Tone::Danger));
+            // r9-9: the refusal's own reason, as the core keys it.
+            let why = review
+                .and_then(|r| r.refused.as_ref())
+                .map_or_else(|| words::t(&loc, "review.blocked"), |r| loc.t(&r.key).to_string());
+            foot = foot.child(ms_note(theme, &why, Tone::Danger));
         }
 
         // An outside member's wallet, from here only when no member here
@@ -1972,7 +1980,8 @@ impl WalletPage {
                     ))
                 }
                 // The verdict's place says it fails; nothing would change.
-                StateVerdict::Reverts => None,
+                // r9-9: refused for another reason — said once, below.
+                StateVerdict::Reverts | StateVerdict::Withheld => None,
                 StateVerdict::Unavailable { .. } => {
                     Some((words::tv(&loc, "review.stateUnread", &[("network", &net)]), Tone::Caution))
                 }
