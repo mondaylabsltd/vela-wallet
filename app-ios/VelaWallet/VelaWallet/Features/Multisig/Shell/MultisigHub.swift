@@ -321,6 +321,9 @@ final class MultisigHub {
 
     func sendMembers(_ event: [String: Any]) { members.dispatch(event) }
 
+    /// A member change's proposals as they go, per network (its words).
+    var membersProposing: [Int: String] = [:]
+
     // MARK: - Verbs (proposals)
 
     func sendProposal(_ event: [String: Any]) { proposals.dispatch(event) }

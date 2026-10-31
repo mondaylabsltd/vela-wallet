@@ -265,7 +265,12 @@ struct MultisigMembersSheet: View {
     var onClose: () -> Void
 
     @State private var entry = ""
-    @State private var proposing: [Int: String] = [:]
+    /// Each network's proposal as it goes — the hub's, so the sheet that the
+    /// review covered finds it again.
+    private var proposing: [Int: String] {
+        get { hub.membersProposing }
+        nonmutating set { hub.membersProposing = newValue }
+    }
 
     private var view: MsJSON { hub.membersView }
 
@@ -277,6 +282,9 @@ struct MultisigMembersSheet: View {
             if let recovery = view["recovery"], !recovery.isNull {
                 MsNote(text: recovery.kind == "every_member" ? words.t("members.recoveryAll")
                     : words.t("members.recovery", ["m": recovery["m"]?.string ?? "", "n": recovery["n"]?.string ?? ""]))
+            }
+            ForEach(proposing.keys.sorted(), id: \.self) { chainId in
+                MsNote(text: proposing[chainId] ?? "", identifier: "multisig.members.proposing.\(chainId)")
             }
             groups
             compose
@@ -442,9 +450,7 @@ struct MultisigMembersSheet: View {
                 ForEach(Array(networks.enumerated()), id: \.offset) { _, network in
                     let chainId = network["chain_id"]?.int ?? 0
                     let verdict = network["verdict"]
-                    if let state = proposing[chainId] {
-                        MsNote(text: state, identifier: "multisig.members.proposing.\(chainId)")
-                    } else if verdict?.kind == "refused" || network["proposal"]?.isNull != false {
+                    if verdict?.kind == "refused" || network["proposal"]?.isNull != false {
                         MsNote(text: words.t("members.failedOn", ["network": words.network(chainId), "reason": refusal(verdict)]), tone: .warning)
                     } else {
                         let before = verdict?["before"], after = verdict?["after"]
@@ -482,6 +488,7 @@ struct MultisigMembersSheet: View {
     private func propose() {
         let networks = (view["plan"]?["networks"]?.array ?? []).filter { $0["proposal"]?.isNull == false }
         hub.sendMembers(["type": "proposing"])
+        proposing = [:]
         Task { @MainActor in
             for network in networks {
                 let chainId = network["chain_id"]?.int ?? 0

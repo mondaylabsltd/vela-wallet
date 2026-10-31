@@ -155,6 +155,38 @@ final class MultisigLiveUITests: XCTestCase {
         XCTAssertTrue(status.waitForExistence(timeout: 30))
     }
 
+    // MARK: - M3: a member change (an outside wallet joins: 2 of 3 → 2 of 4)
+
+    /// anvil's dev account #1: an outside owner whose wallet signs through the fork.
+    static let outsideOwner = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+
+    func test4ProposeAMemberChange() throws {
+        let app = try launch()
+        tap(app, "multisig.home.settings", timeout: 60)
+        sleep(3)
+        shot(app, "settings")
+        tap(app, "multisig.settings.members")
+        tap(app, "multisig.members.add")
+        let entry = app.textFields["multisig.members.entry"].firstMatch
+        XCTAssertTrue(entry.waitForExistence(timeout: 15))
+        entry.tap()
+        entry.typeText(Self.outsideOwner + "\n")
+        let rule = app.descendants(matching: .any)["multisig.members.plan.100"].firstMatch
+        XCTAssertTrue(rule.waitForExistence(timeout: 30), "no plan for Gnosis")
+        sleep(1)
+        shot(app, "members-plan")
+        tap(app, "multisig.members.propose")
+        XCTAssertTrue(app.descendants(matching: .any)["multisig.draft.propose"].waitForExistence(timeout: 60), "no review before the passkey")
+        sleep(3)
+        shot(app, "members-review")
+        XCTAssertTrue(app.descendants(matching: .any)["multisig.review.rule"].exists, "the rule the change leaves is not shown")
+        tap(app, "multisig.draft.propose")
+        let proposed = app.descendants(matching: .any)["multisig.members.proposing.100"].firstMatch
+        XCTAssertTrue(proposed.waitForExistence(timeout: 90))
+        sleep(3)
+        shot(app, "members-proposed")
+    }
+
     // MARK: - M2: execute (the second member approved on the web)
 
     func test3ExecuteWhenApproved() throws {
