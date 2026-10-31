@@ -20807,6 +20807,35 @@ public func multicall3EncodeAggregate3(calls: [Multicall3Call])throws  -> Data  
 })
 }
 /**
+ * What an entered address reads as — `"valid"`, `"malformed"` or
+ * `"checksum"` (mixed case that is not its EIP-55 checksum): the one rule
+ * every field that takes an address refuses by (send-2), the wasm
+ * `addressEntry`. A multisig's member field reads it on every platform.
+ */
+public func addressEntry(address: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_address_entry(
+        FfiConverterString.lower(address),uniffiCallStatus
+    )
+})
+}
+/**
+ * The multisig's kernel (`vela_core::multisig::call_json`): `method` plus
+ * its arguments as JSON, the answer as JSON — the wasm `multisigCall`
+ * (`validName`, `validOwner`, `genesis`, `safeTxHash`, …), so a native
+ * create sheet asks the same rules the web's does.
+ */
+public func multisigCall(method: String, argsJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_multisig_call(
+        FfiConverterString.lower(method),
+        FfiConverterString.lower(argsJson),uniffiCallStatus
+    )
+})
+}
+/**
  * The multisig links (`vela_core::multisig_link`): `method` plus its
  * arguments as JSON, the answer as JSON — the wasm `multisigLinkCall`.
  *
@@ -22534,6 +22563,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_multicall3_encode_aggregate3() != 41166) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_address_entry() != 54512) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_multisig_call() != 24073) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_multisig_link_call() != 2238) {
