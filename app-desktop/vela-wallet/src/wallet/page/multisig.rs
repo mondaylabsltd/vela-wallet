@@ -631,6 +631,183 @@ impl WalletPage {
 
     // -- the home's waiting group -------------------------------------------
 
+    /// The multisig's rule chip ("Needs 2 of 3", r8-13): the proposals
+    /// machine's `rule_chip` for the multisig it follows, else the rule it
+    /// was made with — with its title (each network's rule). `None`: the
+    /// Vela account is shown.
+    pub(crate) fn ms_rule_chip(&mut self, cx: &mut Context<Self>) -> Option<(String, String)> {
+        let row = self.shown_multisig(cx)?;
+        let loc = self.ms_loc();
+        let host = ms_host::booted(cx)?;
+        let view = &host.read(cx).machines().proposals_view;
+        let followed = view.followed.as_deref().is_some_and(|f| same(f, &row.account.address));
+        let chip = crate::multisig::sheet::home_chip(
+            view.rule_chip.as_ref().filter(|_| followed),
+            row.account.threshold,
+            row.account.owners.len(),
+        );
+        Some(crate::multisig::member_words::chip(&loc, &chip))
+    }
+
+    /// "Get it ready" (r4D-8, r8-13): a multisig just created here shows its
+    /// first steps — invite the members (ticked once the invite was handed
+    /// on), add funds (ticked once it holds something on its first
+    /// network), and what its first transfer out costs — until the person
+    /// dismisses them or the machine reads it set up (`set_up`).
+    pub(crate) fn multisig_get_ready(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Option<Div> {
+        let row = self.shown_multisig(cx)?;
+        let host = self.ms_host(cx);
+        let (followed, set_up) = {
+            let view = &host.read(cx).machines().proposals_view;
+            (
+                view.followed.as_deref().is_some_and(|f| same(f, &row.account.address)),
+                view.set_up,
+            )
+        };
+        let address = row.account.address.clone();
+        if row.account.first_run.unwrap_or(false) && followed && set_up {
+            // Set up (deployed, funded and used): its first steps are behind
+            // it for good (r5reg-17).
+            cx.defer(move |cx| {
+                ms_host::host(cx).update(cx, |host, cx| {
+                    host.accounts(ms_accounts::Event::SetFirstRun { address, on: false }, cx);
+                });
+            });
+            return None;
+        }
+        if !crate::multisig::sheet::get_ready_shown(row.account.first_run, followed, set_up) {
+            return None;
+        }
+        let loc = self.ms_loc();
+        let network_id = row.account.chain_ids.first().copied();
+        let funded = network_id.is_some_and(|chain| {
+            let view = crate::network_space::balance_view(cx);
+            view.address.as_deref().is_some_and(|a| same(a, &row.account.address))
+                && view.tokens.iter().any(|t| {
+                    u64::from(t.chain_id) == chain && !t.spam && t.balance.chars().any(|c| ('1'..='9').contains(&c))
+                })
+        });
+        let solo = row.account.owners.len() == 1;
+        let step = |this: &mut Self, id: &'static str, done: bool, icon: Icon, title: String, note: Option<String>| {
+            div()
+                .id(id)
+                .flex()
+                .items_center()
+                .gap(px(12.))
+                .py(px(8.))
+                .cursor_pointer()
+                .hover(|el| el.bg(theme.bg_sunken))
+                .child(icon_img(
+                    &mut this.icons,
+                    if done { Icon::Check } else { icon },
+                    false,
+                    if done { theme.success_base } else { theme.fg_base },
+                    20.,
+                ))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w(px(0.))
+                        .flex()
+                        .flex_col()
+                        .gap(px(2.))
+                        .child(
+                            div()
+                                .text_size(theme::text_row_title())
+                                .text_color(theme.fg_base)
+                                .child(title),
+                        )
+                        .children(note.map(|note| {
+                            div()
+                                .text_size(theme::text_label())
+                                .text_color(theme.fg_subtle)
+                                .child(crate::ui::prose(note))
+                        })),
+                )
+                .child(icon_img(&mut this.icons, Icon::ChevronRight, false, theme.fg_subtle, 16.))
+        };
+        let mut card = div()
+            .flex()
+            .flex_col()
+            .gap(px(4.))
+            .mb(px(16.))
+            .p(px(16.))
+            .rounded(px(12.))
+            .border_1()
+            .border_color(theme.divider)
+            .child(
+                div()
+                    .text_size(theme::text_row_title())
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .text_color(theme.fg_base)
+                    .child(words::t(&loc, "create.firstRunTitle")),
+            );
+        if !solo {
+            let invite = address.clone();
+            card = card.child(
+                step(
+                    self,
+                    "ms-get-ready-invite",
+                    row.invite_shared,
+                    Icon::QrCode,
+                    words::t(&loc, "create.firstRunInvite"),
+                    Some(words::t(&loc, "create.firstRunInviteNote")),
+                )
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.multisig.invite = Some(invite.clone());
+                    this.multisig.scroll = crate::ui::SmoothScroll::new();
+                    cx.notify();
+                })),
+            );
+        }
+        card = card.child(
+            step(
+                self,
+                "ms-get-ready-fund",
+                funded,
+                Icon::ArrowDownLeft,
+                words::t(&loc, "create.firstRunFund"),
+                network_id.map(|c| words::tv(&loc, "create.firstRunFundNote", &[("network", &network(c))])),
+            )
+            .on_click(cx.listener(|this, _, _, cx| {
+                this.enter_flow(FlowEntry::Receive, cx);
+                cx.notify();
+            })),
+        );
+        if let Some(chain) = network_id {
+            card = card.child(
+                div()
+                    .flex()
+                    .gap(px(12.))
+                    .py(px(4.))
+                    .child(icon_img(&mut self.icons, Icon::Info, false, theme.fg_subtle, 20.))
+                    .child(
+                        div()
+                            .flex_1()
+                            .text_size(theme::text_label())
+                            .text_color(theme.fg_subtle)
+                            .child(crate::ui::prose(words::tv(&loc, "create.firstRunCost", &[("network", &network(chain))]))),
+                    ),
+            );
+        }
+        let dismiss = address.clone();
+        card = card.child(
+            div().pt(px(8.)).child(crate::ui::vela_button(
+                "ms-get-ready-dismiss",
+                crate::ui::ButtonVariant::Secondary,
+                words::t(&loc, "create.firstRunDismiss").into(),
+                theme,
+                cx.listener(move |this, _, _, cx| {
+                    let address = dismiss.clone();
+                    this.ms_host(cx).update(cx, |host, cx| {
+                        host.accounts(ms_accounts::Event::SetFirstRun { address, on: false }, cx);
+                    });
+                }),
+            )),
+        );
+        Some(card)
+    }
+
     /// The multisig's transactions waiting, first on its home (the web's
     /// `waitingRows.group`): one row each with its one word, the group's
     /// note and its Retry; a network the mailbox holds proposals on that
