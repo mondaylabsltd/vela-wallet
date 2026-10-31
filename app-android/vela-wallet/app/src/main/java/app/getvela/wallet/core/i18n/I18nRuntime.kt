@@ -57,6 +57,7 @@ class I18nRuntime(
         applyLocale(localeTag)
         onLanguage(engine.language())
         publish()
+        snapshot()
     }
 
     /** Switches the active language (no-op when already active). */
@@ -67,6 +68,7 @@ class I18nRuntime(
         applyLocale(tag)
         onLanguage(engine.language())
         publish()
+        snapshot()
     }
 
     /**
@@ -85,8 +87,9 @@ class I18nRuntime(
         engine.loadCatalog(FALLBACK, catalog(FALLBACK))
         if (active != FALLBACK) engine.loadCatalog(active, catalog(active))
         engine.changeLanguage(active)
-        snapshot()
+        plain = emptyMap()
         publish()
+        snapshot()
     }
 
     private fun publish() {
@@ -107,12 +110,18 @@ class I18nRuntime(
             engine.loadCatalog(tag, catalog(tag))
         }
         engine.changeLanguage(tag)
-        snapshot()
+        // The old language's words go at once; until the new snapshot is in,
+        // every word is the core's, asked per label as before.
+        plain = emptyMap()
     }
 
     /**
      * The language's plain words, taken whole (`I18n.plain_strings("")`): one
      * crossing per language (or namespace) change instead of one per label.
+     * Taken AFTER [publish]: the splash waits for `ready`, not for this, and
+     * a word asked in between is answered by the core directly. Under the
+     * same lock as the change it follows, so it is always the language now
+     * active.
      */
     private fun snapshot() {
         plain = runCatching { engine.plainStrings("") }.getOrDefault(emptyMap())
