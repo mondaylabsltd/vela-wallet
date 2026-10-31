@@ -172,7 +172,9 @@ struct MsChip: View {
             .foregroundStyle(tone == .neutral ? theme.fgMuted : (tone == .danger ? theme.errorBase : theme.warningBase))
             .padding(.horizontal, Tokens.Space.s8)
             .padding(.vertical, Tokens.Space.s4)
-            .background(Capsule().fill(tone == .neutral ? theme.bgSunken : theme.warningSoft))
+            // The danger tag on the error tokens (soft fill, base ink) — a
+            // danger chip on the warning's fill read as a caution.
+            .background(Capsule().fill(tone == .neutral ? theme.bgSunken : (tone == .danger ? theme.errorSoft : theme.warningSoft)))
     }
 }
 

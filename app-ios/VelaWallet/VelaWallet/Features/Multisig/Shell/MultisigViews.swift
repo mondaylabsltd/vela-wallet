@@ -69,6 +69,15 @@ indirect enum MsJSON: Decodable, Equatable {
         }
     }
     var bool: Bool? { if case .bool(let b) = self { return b }; return nil }
+    /// A number as it is (a time in ms is past `Int`'s comfort on no platform,
+    /// but a fraction must not be cut).
+    var double: Double? {
+        switch self {
+        case .number(let n): return n
+        case .string(let s): return Double(s)
+        default: return nil
+        }
+    }
     var array: [MsJSON] { if case .array(let a) = self { return a }; return [] }
     var object: [String: MsJSON] { if case .object(let o) = self { return o }; return [:] }
     var isNull: Bool { self == .null }
