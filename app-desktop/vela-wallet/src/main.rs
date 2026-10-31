@@ -50,8 +50,8 @@ mod signing;
 mod theme;
 mod tray;
 mod ui;
-// N-D3: the signed-update check, OFF until the owner's key is compiled in.
-#[allow(dead_code, reason = "off until the README \"Updates\" steps are followed")]
+// N-D3: the signed update — check, prompt, download, install hand-off — OFF
+// until the owner's key is compiled in (README "Updates").
 mod updater;
 mod wallet;
 #[cfg(not(target_os = "linux"))]
@@ -197,6 +197,8 @@ impl Render for Root {
         // The parallel space's marker, over whichever screen is up. It renders
         // whenever the space is active and never behind a build flag alone —
         // a test wallet must never wear the real one's face.
+        // N-D3: the update prompt, in the corner of whichever screen is up.
+        let root = updater::prompt::overlay(root, window, cx);
         parallel_space::overlay(root, window).children(perf::frame_probe())
     }
 }
@@ -550,6 +552,10 @@ fn main() {
             perf::report("quit");
         })
         .detach();
+        // N-D3: the update prompt's state, and — when this build has a
+        // release key and updates itself — the first look at the feed, well
+        // after the first frame.
+        updater::prompt::boot(cx);
         perf::mark("window_open_requested");
         open_main_window(cx);
         perf::mark("window_opened");

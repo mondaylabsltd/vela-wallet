@@ -728,7 +728,8 @@ pub const APP_COMMIT: &str = "6ab8f";
 /// the mock's `6ab8f` — the half of that line that was still wrong.
 pub fn about_version(s: &SettingsStrings, live: bool) -> SharedString {
     let (version, commit) = if live {
-        (env!("CARGO_PKG_VERSION"), env!("VELA_GIT_COMMIT"))
+        // The version the updater compares with (N-D3): the crate's.
+        (crate::updater::current_version(), env!("VELA_GIT_COMMIT"))
     } else {
         (APP_VERSION, APP_COMMIT)
     };
