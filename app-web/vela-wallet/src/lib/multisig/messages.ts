@@ -73,7 +73,8 @@ export interface MultisigMessages {
 		addOwner: string;
 		removeOwner: string;
 		swapOwner: string;
-		changeThreshold: string;
+		/** r9: "Require 1 approval" — plural by the new threshold. */
+		changeThreshold: PluralCopy;
 		unsupported: string;
 		to: string;
 		network: string;
@@ -132,7 +133,8 @@ export interface MultisigMessages {
 		withdraw: string;
 		/** S4 (r7): the person's own proposal, not proposed yet: "Don't propose". */
 		dontPropose: string;
-		rejectHint: string;
+		/** r9: plural by the approvals the cancellation needs. */
+		rejectHint: PluralCopy;
 		cancelPending: string;
 		executing: string;
 		executed: string;
@@ -492,6 +494,10 @@ export interface MultisigMessages {
 		whatChain: string;
 		approvalsLabel: string;
 		doneTx: string;
+		/** r8-24: a link to a transaction whose number is used: it was executed… */
+		doneExecuted: string;
+		/** …or another transaction at its number ran. */
+		doneCancelled: string;
 		approvedClose: string;
 		rejectedHere: string;
 		mining: string;
@@ -785,6 +791,13 @@ export interface ReviewMessages {
 	proposeAnyway: string;
 	/** The gate refused a transaction right before signing. */
 	blocked: string;
+	/** r9-9: why nothing is signed, each reason its own (`MultisigReview.refused.key`). */
+	refusedWhy: {
+		delegatecall: string;
+		tooDeep: string;
+		refund: string;
+		other: string;
+	};
 	/**
 	 * r8-1: the words for the core's reading of each call
 	 * (`MultisigReview.reading`) and for the concerns it raises.
@@ -971,7 +984,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		addOwner: '',
 		removeOwner: '',
 		swapOwner: '',
-		changeThreshold: '',
+		changeThreshold: { locale: '', forms: {} },
 		unsupported: '',
 		to: '',
 		network: '',
@@ -1016,7 +1029,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		reject: '',
 		withdraw: '',
 		dontPropose: '',
-		rejectHint: '',
+		rejectHint: { locale: '', forms: {} },
 		cancelPending: '',
 		executing: '',
 		executed: '',
@@ -1292,6 +1305,8 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		whatChain: '',
 		approvalsLabel: '',
 		doneTx: '',
+		doneExecuted: '',
+		doneCancelled: '',
 		approvedClose: '',
 		rejectedHere: '',
 		mining: '',
@@ -1565,6 +1580,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		executeAnyway: '',
 		proposeAnyway: '',
 		blocked: '',
+		refusedWhy: { delegatecall: '', tooDeep: '', refund: '', other: '' },
 		reading: {
 			send: '',
 			sendFrom: '',

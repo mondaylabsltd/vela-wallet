@@ -8,6 +8,12 @@ export type MultisigProposalItem = { chainId: number, safeTxHash: string, tx: un
  */
 canApprove: Array<string>, 
 /**
+ * r9-9: every member of it on this device, approved or not, whatever
+ * the transaction is — "none is signed in on this device" is said only
+ * when this is empty.
+ */
+membersHere: Array<string>, 
+/**
  * Who on this device can execute it now.
  */
 canExecute: Array<string>, 

@@ -798,6 +798,8 @@ export function trustedSignerApprovalRequest(args: {
 	memberName?: string | null;
 	credentialIdsHex: string[];
 	keyRoute?: unknown;
+	/** r9-10: the review asks for "… anyway": the page says so, in the danger style. */
+	anyway?: boolean;
 }): { intent: unknown; context: unknown } {
 	return JSON.parse(wasm.trustedSignerApprovalRequest(JSON.stringify(args))) as {
 		intent: unknown;
@@ -1673,6 +1675,23 @@ export function signNotConfirmedDetail(userOpHash: string): string {
  */
 export function siteStartChain(spaceChainIds: number[], lastUsed: number | null): number {
 	return wasm.siteStartChain(Uint32Array.from(spaceChainIds), lastUsed ?? undefined);
+}
+
+/**
+ * r9: `network_space::site_start_chain_for` — after the network last used,
+ * the first of `accountChains` (where the account holds something, or used)
+ * the space offers; then the space's first.
+ */
+export function siteStartChainFor(
+	spaceChainIds: number[],
+	lastUsed: number | null,
+	accountChains: number[]
+): number {
+	return wasm.siteStartChainFor(
+		Uint32Array.from(spaceChainIds),
+		lastUsed ?? undefined,
+		Uint32Array.from(accountChains)
+	);
 }
 
 /** The extension's request lifetime — the core's `EXTENSION_REQUEST_TTL_MS` (RB11). */

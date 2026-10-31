@@ -123,6 +123,7 @@ async function passkey(op: Op<'passkey'>, signal: AbortSignal): Promise<Multisig
 					chainId: op.chain_id,
 					multisig: op.purpose.multisig,
 					multisigName: op.purpose.name,
+					anyway: op.purpose.anyway,
 					tx: op.purpose.tx as never,
 					safeTxHash: op.purpose.safe_tx_hash,
 					keys,
