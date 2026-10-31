@@ -551,7 +551,8 @@ impl Machine for ActivityFeed {
 
     fn boot_event(cx: &App) -> Event {
         Event::AccountSwitched {
-            address: session::view(cx).address,
+            // Whose activity: the multisig shown, else the session's.
+            address: crate::multisig::shown::address(cx),
         }
     }
 

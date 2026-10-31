@@ -91,10 +91,12 @@ impl Machine for PaymentRequest {
     const LABEL: &'static str = "payment_request";
 
     fn boot_event(cx: &App) -> Event {
-        let view = session::view(cx);
+        // Paid to whose wallet is shown: the multisig shown, else the
+        // session's account (AUDIT M1).
+        let address = crate::multisig::shown::address(cx);
         Event::Start {
-            account: view.address.clone(),
-            recipient: view.address,
+            account: address.clone(),
+            recipient: address,
             // The share base. A pay link points at the web wallet, which is
             // where a recipient can actually open it — a desktop URL scheme
             // would be a link most people cannot follow.

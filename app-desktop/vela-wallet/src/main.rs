@@ -102,6 +102,10 @@ impl Root {
         // navigation.
         cx.observe_global::<session::SessionState>(|_, cx| cx.notify())
             .detach();
+        // A multisig shown (AUDIT M1): the wallet page is rebuilt for its
+        // address, as an account switch rebuilds it for another account.
+        cx.observe_global::<multisig::shown::Shown>(|_, cx| cx.notify())
+            .detach();
         Self {
             onboarding: None,
             wallet: None,
@@ -128,6 +132,8 @@ impl Render for Root {
                 // fresh machine rather than resuming a finished one.
                 self.wallet = None;
                 self.adding = false;
+                // The multisig machines are the signed-out person's too.
+                multisig::host::forget(cx);
                 // And so do the resident machines. Contacts, networks and the
                 // chosen currency belong to the ACCOUNT; a resident that
                 // outlived a sign-out would show the previous person's address
@@ -156,6 +162,13 @@ impl Render for Root {
             SessionRoute::Wallet => {
                 self.onboarding = None;
                 let added = std::mem::take(&mut self.adding);
+                // The multisig machines, for the session (AUDIT M1–M6): the
+                // multisig they show is whose wallet this page is.
+                let _ = multisig::host::host(cx);
+                let shown = multisig::shown::current(cx);
+                let shown_address = shown
+                    .as_ref()
+                    .map_or_else(|| view.address.clone(), |s| s.address.clone());
                 // The active account changed under the page — one was added,
                 // or the switcher picked another. Everything the page and the
                 // resident machines hold was booted for the previous address
@@ -165,7 +178,7 @@ impl Render for Root {
                 // wallet.
                 let mut place = None;
                 if let Some((page, address)) = self.wallet.take() {
-                    if *address == view.address {
+                    if *address == shown_address {
                         self.wallet = Some((page, address));
                     } else {
                         if !added {
@@ -174,14 +187,30 @@ impl Render for Root {
                         resident::drop_all(cx);
                     }
                 }
-                let identity = Identity {
-                    name: view
-                        .accounts
-                        .get(view.active_index)
-                        .map_or_else(|| "".into(), |row| row.account.name.clone().into()),
-                    address: view.address.clone(),
+                let identity = match &shown {
+                    Some(shown) => Identity {
+                        name: shown
+                            .name
+                            .clone()
+                            .unwrap_or_else(|| {
+                                multisig::words::rule_chip(
+                                    &loc::Loc::from_env(),
+                                    shown.threshold,
+                                    shown.owners,
+                                )
+                            })
+                            .into(),
+                        address: shown.address.clone(),
+                    },
+                    None => Identity {
+                        name: view
+                            .accounts
+                            .get(view.active_index)
+                            .map_or_else(|| "".into(), |row| row.account.name.clone().into()),
+                        address: view.address.clone(),
+                    },
                 };
-                let address = view.address.clone();
+                let address = shown_address;
                 let (page, _) = self.wallet.get_or_insert_with(|| {
                     let page = cx.new(|cx| {
                         let mut page = WalletPage::signed_in(identity, window, cx);

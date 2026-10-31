@@ -98,7 +98,7 @@ pub fn service_url() -> String {
 /// `vela.peerconnectRelay`), if any.
 #[must_use]
 pub fn relay_url() -> Option<String> {
-    storage::read_value(crate::dev_seed::PEERCONNECT_KEY)
+    storage::read_value(super::peer::RELAY_KEY)
         .ok()
         .flatten()
         .and_then(|v| v.as_str().map(str::to_owned))

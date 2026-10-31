@@ -54,26 +54,6 @@ pub struct RiskAsk {
     pub findings: Vec<Value>,
 }
 
-/// The rooms nobody can open: until the PeerConnect transport is here, a
-/// session is said as what it is — no room.
-struct NoRooms;
-
-impl Rooms for NoRooms {
-    fn open(
-        &self,
-        _relay: Option<&str>,
-        _invite: Option<&str>,
-        _pairing: Option<&str>,
-    ) -> Result<shell::Opened, String> {
-        Err("no PeerConnect transport on this build".to_owned())
-    }
-    fn send(&self, _room: &str, _message: &Value) {}
-    fn receive(&self, _room: &str) -> shell::Arrival {
-        shell::Arrival::Closed("closed".to_owned())
-    }
-    fn close(&self, _room: &str, _end: bool) {}
-}
-
 /// The host: the machines and how their operations are performed.
 pub struct MultisigHost {
     machines: Machines,
@@ -93,6 +73,36 @@ pub struct MultisigHost {
     checked: bool,
     /// Bumped by every change the screens draw: a cheap "did it move".
     pub generation: u64,
+    /// The send flow's confirm, proposing through the proposals machine.
+    send_propose: Option<SendPropose>,
+    /// The PeerConnect transport (its Retry; leaving every room).
+    peer: Option<Arc<super::peer::PeerRooms>>,
+}
+
+/// How a send flow's proposal ended (its `Proposed` / `ProposeFailed`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ProposeEnd {
+    Proposed { safe_tx_hash: String },
+    Failed {
+        cancelled: bool,
+        reason: Option<vela_core::app::send::SendProposeFailure>,
+    },
+}
+
+/// Where the send flow's proposal stands (the web's `proposalsHost.propose`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ProposeStep {
+    /// Asked for its draft: its review comes first.
+    Drafting,
+    /// Its review is on screen: the person's word next.
+    Reviewing,
+    /// Confirmed: the passkey (or an outside wallet), then the mailbox.
+    Confirmed,
+}
+
+struct SendPropose {
+    step: ProposeStep,
+    reply: futures::channel::oneshot::Sender<ProposeEnd>,
 }
 
 #[derive(Default)]
@@ -119,11 +129,31 @@ pub fn host(cx: &mut App) -> Entity<MultisigHost> {
         ceremony.ceremony(0),
         Arc::clone(&trusted),
     ));
+    // The PeerConnect rooms an outside owner's session opens (M4): what a
+    // connection says of itself comes back here, as the session's events.
+    let (told, mut heard) = futures::channel::mpsc::unbounded::<super::peer::PeerEvent>();
+    let rooms = super::peer::PeerRooms::new(Arc::new(move |event| {
+        let _ = told.unbounded_send(event);
+    }));
     let entity = cx.new(|cx| {
-        let mut host = MultisigHost::new(live, Arc::new(NoRooms), ceremony, trusted);
+        let mut host = MultisigHost::new(live, rooms.clone(), ceremony, trusted);
+        host.peer = Some(rooms);
         host.boot(cx);
         host
     });
+    let weak_rooms = entity.downgrade();
+    cx.spawn(async move |cx| {
+        use futures::StreamExt as _;
+        while let Some(event) = heard.next().await {
+            let alive = weak_rooms
+                .update(cx, |host, cx| host.peer_event(event, cx))
+                .is_ok();
+            if !alive {
+                break;
+            }
+        }
+    })
+    .detach();
     // The trusted page asked to be opened, or its sheet moved.
     let weak = entity.downgrade();
     cx.spawn(async move |cx| {
@@ -159,6 +189,7 @@ pub fn forget(cx: &mut App) {
     if cx.has_global::<Handle>() {
         cx.remove_global::<Handle>();
     }
+    super::shown::set(None, cx);
 }
 
 /// This device's Vela accounts, as the multisig machines need them: the
@@ -256,6 +287,8 @@ impl MultisigHost {
             due: Due::default(),
             checked: false,
             generation: 0,
+            send_propose: None,
+            peer: None,
         }
     }
 
@@ -299,6 +332,19 @@ impl MultisigHost {
         }
         if now >= self.due.records {
             self.due.records = now + RECORD_EVERY.as_secs_f64() * 1000.0;
+            // The facts as they moved since (an account added, a network,
+            // another service in Settings): each change told as its event.
+            let multisigs: Vec<(String, String)> = self
+                .machines
+                .accounts_view
+                .accounts
+                .iter()
+                .map(|row| {
+                    let label = row.name.clone().or_else(|| row.account.label.clone());
+                    (row.account.address.clone(), label.unwrap_or_default())
+                })
+                .collect();
+            jobs.extend(self.machines.facts(facts_now(&multisigs)));
             jobs.extend(self.machines.accounts(accounts::Event::Tick));
         }
         if now >= self.due.others {
@@ -388,6 +434,27 @@ impl MultisigHost {
     pub fn session(&mut self, event: session::Event, cx: &mut Context<Self>) {
         let jobs = self.machines.session(event);
         self.run(jobs, cx);
+    }
+
+    /// What a room said of itself, for the session open now.
+    fn peer_event(&mut self, event: super::peer::PeerEvent, cx: &mut Context<Self>) {
+        use super::peer::PeerEvent;
+        let event = match event {
+            PeerEvent::State { room, state } => session::Event::PeerState { room, state },
+            PeerEvent::Paired { room, pairing } => session::Event::Paired { room, pairing },
+            PeerEvent::Relay { status, .. } => session::Event::Relay { status },
+        };
+        self.session(event, cx);
+    }
+
+    /// The person's Retry on the relay: try it again now, every room.
+    pub fn retry_relay(&mut self, cx: &mut Context<Self>) {
+        if let Some(peer) = &self.peer {
+            for room in self.machines.session_rooms() {
+                peer.retry(&room);
+            }
+        }
+        self.touch(cx);
     }
 
     /// The session's sheet closed.
@@ -489,7 +556,191 @@ impl MultisigHost {
                 other => self.screen.push(other),
             }
         }
+        self.follow_send_propose(cx);
+        self.sync_shown(cx);
         self.touch(cx);
+    }
+
+    /// The multisig shown, carried to the window (`shown::Shown`): the root
+    /// rebuilds the wallet page for it, as an account switch does.
+    fn sync_shown(&self, cx: &mut Context<Self>) {
+        let view = &self.machines.accounts_view;
+        if !view.loaded {
+            return;
+        }
+        let shown = view.active.as_deref().and_then(|active| {
+            view.accounts
+                .iter()
+                .find(|row| row.account.address.eq_ignore_ascii_case(active))
+                .map(|row| super::shown::ShownAccount {
+                    address: row.account.address.clone(),
+                    name: row.name.clone().or_else(|| row.account.label.clone()),
+                    threshold: row.account.threshold,
+                    owners: row.account.owners.len() as u64,
+                })
+        });
+        super::shown::set(shown, cx);
+    }
+
+    // -- the send flow's confirm (`ProposeSafeTx`) ----------------------------
+
+    /// Propose `transfers` on `chain_id` for the multisig shown, as the send
+    /// flow's confirm (§3.6): its review first — drawn by the screen while
+    /// [`Self::send_reviewing`] — then the person's word, one passkey, the
+    /// mailbox. Answered once, with how it ended.
+    pub fn propose_for_send(
+        &mut self,
+        chain_id: u64,
+        multisig: &str,
+        transfers: Vec<vela_core::multisig::Transfer>,
+        cx: &mut Context<Self>,
+    ) -> futures::channel::oneshot::Receiver<ProposeEnd> {
+        let (reply, answer) = futures::channel::oneshot::channel();
+        // One at a time: an earlier one nobody finished is withdrawn.
+        if let Some(earlier) = self.send_propose.take() {
+            let _ = earlier.reply.send(ProposeEnd::Failed {
+                cancelled: true,
+                reason: None,
+            });
+        }
+        let followed = self
+            .machines
+            .proposals_view
+            .followed
+            .as_deref()
+            .is_some_and(|f| f.eq_ignore_ascii_case(multisig));
+        let mut jobs = Vec::new();
+        if !followed {
+            let account = self
+                .machines
+                .accounts_view
+                .accounts
+                .iter()
+                .find(|row| row.account.address.eq_ignore_ascii_case(multisig))
+                .map(|row| row.account.clone());
+            jobs.extend(self.machines.proposals(proposals::Event::Follow { account }));
+        }
+        self.send_propose = Some(SendPropose {
+            step: ProposeStep::Drafting,
+            reply,
+        });
+        jobs.extend(self.machines.proposals(proposals::Event::Draft {
+            chain_id,
+            proposal: proposals::ProposalKind::Transfers { transfers },
+        }));
+        self.run(jobs, cx);
+        answer
+    }
+
+    /// The send flow's proposal is on its review: the screen draws the draft.
+    #[must_use]
+    pub fn send_reviewing(&self) -> bool {
+        self.send_propose
+            .as_ref()
+            .is_some_and(|p| p.step == ProposeStep::Reviewing)
+            && self.machines.proposals_view.draft.is_some()
+    }
+
+    /// The person's word on the review: propose it, as `as_member`.
+    pub fn confirm_draft(&mut self, as_member: Option<String>, cx: &mut Context<Self>) {
+        self.proposals(proposals::Event::ConfirmDraft { as_member }, cx);
+    }
+
+    /// The person withdrew it on its review: nothing is signed or sent.
+    pub fn withdraw_draft(&mut self, cx: &mut Context<Self>) {
+        let drawn = self.machines.proposals_view.draft.is_some()
+            || matches!(
+                self.machines.proposals_view.actions.get("propose"),
+                Some(proposals::ActionState::Working)
+            );
+        if drawn {
+            self.proposals(proposals::Event::Withdraw, cx);
+        }
+        if let Some(p) = self.send_propose.take() {
+            let _ = p.reply.send(ProposeEnd::Failed {
+                cancelled: true,
+                reason: None,
+            });
+        }
+        self.touch(cx);
+    }
+
+    /// Where the send flow's proposal stands now, from the machine's view.
+    fn follow_send_propose(&mut self, cx: &mut Context<Self>) {
+        let Some(step) = self.send_propose.as_ref().map(|p| p.step) else {
+            return;
+        };
+        let view = &self.machines.proposals_view;
+        let state = view.actions.get("propose").cloned();
+        let settled = |s: &Option<proposals::ActionState>| {
+            s.as_ref().is_some_and(|s| {
+                !matches!(
+                    s,
+                    proposals::ActionState::Working | proposals::ActionState::OutsideAsked { .. }
+                )
+            })
+        };
+        let end = match step {
+            ProposeStep::Drafting => {
+                if view.draft.is_some() {
+                    if let Some(p) = self.send_propose.as_mut() {
+                        p.step = ProposeStep::Reviewing;
+                    }
+                    None
+                } else if settled(&state) {
+                    Some(state)
+                } else {
+                    None
+                }
+            }
+            ProposeStep::Reviewing => {
+                if matches!(state, Some(proposals::ActionState::Working)) {
+                    if let Some(p) = self.send_propose.as_mut() {
+                        p.step = ProposeStep::Confirmed;
+                    }
+                    None
+                } else if view.draft.is_none() {
+                    Some(Some(proposals::ActionState::Cancelled))
+                } else {
+                    None
+                }
+            }
+            ProposeStep::Confirmed => settled(&state).then_some(state),
+        };
+        let Some(state) = end else {
+            return;
+        };
+        let offline = view.offline;
+        let Some(p) = self.send_propose.take() else {
+            return;
+        };
+        let answer = match state {
+            Some(proposals::ActionState::Done { safe_tx_hash, .. }) => {
+                ProposeEnd::Proposed { safe_tx_hash }
+            }
+            Some(proposals::ActionState::Cancelled | proposals::ActionState::RiskDeclined) => {
+                ProposeEnd::Failed {
+                    cancelled: true,
+                    reason: None,
+                }
+            }
+            Some(proposals::ActionState::MailboxUnreadable) => ProposeEnd::Failed {
+                cancelled: false,
+                reason: Some(vela_core::app::send::SendProposeFailure::MailboxDown),
+            },
+            _ => ProposeEnd::Failed {
+                cancelled: false,
+                reason: offline.then_some(vela_core::app::send::SendProposeFailure::Offline),
+            },
+        };
+        // Not proposed: its draft goes too (nothing more is asked or sent).
+        if !matches!(answer, ProposeEnd::Proposed { .. })
+            && self.machines.proposals_view.draft.is_some()
+        {
+            let jobs = self.machines.proposals(proposals::Event::Withdraw);
+            self.run(jobs, cx);
+        }
+        let _ = p.reply.send(answer);
     }
 
     /// Blocking work on a thread of its own; its answer back on this one.

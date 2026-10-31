@@ -9,10 +9,14 @@
 //!   router, what one machine's view tells another (no gpui).
 
 pub mod activity;
+pub mod findings;
 pub mod host;
 pub mod live;
 pub mod machines;
+pub mod peer;
 #[cfg(all(test, feature = "dev-fixtures"))]
 mod scenarios;
+pub mod session_words;
 pub mod shell;
+pub mod shown;
 pub mod words;

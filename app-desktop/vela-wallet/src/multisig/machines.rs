@@ -95,6 +95,8 @@ struct Open {
     view: OutsideSessionView,
     /// Its outcome was handed back to the proposals machine.
     answered: bool,
+    /// The rooms it opened (the transport's handles), for the person's Retry.
+    rooms: Vec<String>,
 }
 
 /// The machines and their latest views.
@@ -282,6 +284,12 @@ impl Machines {
         jobs
     }
 
+    /// The rooms the session open now opened.
+    #[must_use]
+    pub fn session_rooms(&self) -> Vec<String> {
+        self.session.as_ref().map(|s| s.rooms.clone()).unwrap_or_default()
+    }
+
     /// The session open now: its view and the request it asks.
     #[must_use]
     pub fn session_view(&self) -> Option<(&OutsideSessionView, &SessionRequest)> {
@@ -328,6 +336,9 @@ impl Machines {
                 else {
                     return Vec::new();
                 };
+                if let Res::PeerOpened { room, .. } = &result {
+                    open.rooms.push(room.clone());
+                }
                 let pending = open.host.resolve(id, result);
                 open.view = open.host.view();
                 let mut jobs = tag(which, pending, |op| op);
@@ -419,6 +430,7 @@ impl Machines {
             request: request.clone(),
             view,
             answered: false,
+            rooms: Vec::new(),
         });
         self.screen.push(Screen::OutsideSession);
         jobs.extend(self.session(session::Event::Start {

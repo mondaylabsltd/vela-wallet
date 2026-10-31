@@ -165,6 +165,8 @@ struct StoredEndpoints {
     bundler_service_url: Option<String>,
     #[serde(rename = "fiatRatesURL", skip_serializing_if = "Option::is_none")]
     fiat_rates_url: Option<String>,
+    #[serde(rename = "genesisServiceURL", skip_serializing_if = "Option::is_none")]
+    genesis_service_url: Option<String>,
 }
 
 /// The retired RPC provider keys (owner decision 2026-10-29), as a wallet
@@ -475,15 +477,17 @@ fn read_store() -> NetShellResult {
             passkey_index_url: endpoints.passkey_index_url,
             bundler_service_url: endpoints.bundler_service_url,
             fiat_rates_url: endpoints.fiat_rates_url,
-            // Multisig accounts are the web's: this shell has no such service.
-            genesis_service_url: None,
+            // AUDIT M1: the multisig service, as the web stores it.
+            genesis_service_url: endpoints.genesis_service_url,
         },
         provider_keys: NetProviderKeys {
             alchemy: provider_keys.alchemy,
             drpc: provider_keys.drpc,
             ankr: provider_keys.ankr,
         },
-        multisig_service: false,
+        // AUDIT M1: this shell has multisig accounts: Settings → Service
+        // endpoints shows, probes and resets the multisig service.
+        multisig_service: true,
         // Which Vela networks shown on the person's word they show — the
         // record settled above. None stored (a store that refused the write):
         // every one is shown.
@@ -882,7 +886,7 @@ pub fn take_dapp_add_settled() -> Vec<DappAddSettle> {
         .unwrap_or_default()
 }
 
-/// Write the four service endpoints, MERGING rather than replacing.
+/// Write the five service endpoints, MERGING rather than replacing.
 ///
 /// `vela.serviceEndpoints` has a second writer — onboarding's passkey-index
 /// override — and a whole-value write from either erases the other's fields.
@@ -903,6 +907,10 @@ fn write_service_endpoints(endpoints: &NetServiceEndpoints) -> Result<(), storag
         json!(endpoints.bundler_service_url),
     );
     fields.insert("fiatRatesURL".to_owned(), json!(endpoints.fiat_rates_url));
+    fields.insert(
+        "genesisServiceURL".to_owned(),
+        json!(endpoints.genesis_service_url),
+    );
     storage::merge_value(storage::KEY_SERVICE_ENDPOINTS, fields)
 }
 
