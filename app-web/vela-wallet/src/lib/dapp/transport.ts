@@ -59,7 +59,7 @@ function runtime(): ChromeRuntimeLike | null {
 
 /** True when this document is a page of the packaged extension. */
 export function inExtension(): boolean {
-	return runtime() !== null && location.protocol === 'chrome-extension:';
+	return runtime() !== null && location.protocol === __VELA_EXTENSION_PROTOCOL__;
 }
 
 /**

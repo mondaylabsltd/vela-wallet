@@ -15,7 +15,9 @@
  *   3. copies the manifest and the page-side scripts alongside;
  *   4. prints the package's size, which is a budget (SC-308).
  *
- * Usage: node extension/build.mjs [--skip-build] [--zip]
+ * Usage: node extension/build.mjs [--skip-build] [--zip] [--safari]
+ *
+ * `--safari` builds the Safari package instead (see `SAFARI` below).
  *
  * The package goes to `extension/dist`, or to `VELA_EXTENSION_DIST` (relative
  * to the app, or absolute) — the isolated e2e's own directory, so a test run
@@ -64,12 +66,25 @@ import {
 } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { DEV_PAGES, DEV_SCRIPTS, safariManifest } from './lib/safari-manifest.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const APP = join(HERE, '..');
+/**
+ * The Safari package (native AUDIT §6.5): `--safari`, or
+ * `VELA_EXTENSION_BROWSER=safari`. The same app build and the same scripts,
+ * with the manifest `lib/safari-manifest.js` derives, the adapter in
+ * `safari/` bundled in front of the worker, and the pages' scheme set to
+ * `safari-web-extension:` (`vite.config.ts`). It goes to `extension/dist-safari`
+ * (or `VELA_EXTENSION_DIST`), and its release twin — no developer pages, no
+ * harness doorway — to `<dist>-release`, which the iOS app's Safari Web
+ * Extension target embeds (`app-ios/VelaWallet/VelaSafariExtension`). There is
+ * no store package: the App Store ships it inside the app.
+ */
+const SAFARI = process.argv.includes('--safari') || process.env.VELA_EXTENSION_BROWSER === 'safari';
 const DIST = process.env.VELA_EXTENSION_DIST
 	? resolve(APP, process.env.VELA_EXTENSION_DIST)
-	: join(HERE, 'dist');
+	: join(HERE, SAFARI ? 'dist-safari' : 'dist');
 const SITE = DIST;
 /**
  * Where kit puts the client bundle — `kit.appDir`, which vite.config.ts moves
@@ -99,19 +114,48 @@ const PROVIDER = join(
 	'provider',
 	'inpage.js'
 );
-const ENTRIES = ['inpage.js', 'content.js', 'background.js', 'panel.js', 'open.js'];
-const SOURCES = { 'inpage.js': PROVIDER };
+const CHROME_ENTRIES = ['inpage.js', 'content.js', 'background.js', 'panel.js', 'open.js'];
+/**
+ * Safari's: the same five — the worker behind its adapter — plus the isolated
+ * injector that puts the provider in the page where Safari's MAIN world does
+ * not, and (development package only) the harness's doorway.
+ */
+const SAFARI_SOURCES = {
+	'background.js': join(HERE, 'safari', 'background.js'),
+	'safari-inject.js': join(HERE, 'safari', 'inject.js'),
+	'safari-attest.js': join(HERE, 'safari', 'attest.js'),
+	'dev-bridge.js': join(HERE, 'safari', 'dev-bridge.js'),
+	'dev-handoff.js': join(HERE, 'safari', 'dev-handoff.js')
+};
+const ENTRIES = SAFARI
+	? [...CHROME_ENTRIES, 'safari-inject.js', 'safari-attest.js', 'dev-bridge.js', 'dev-handoff.js']
+	: CHROME_ENTRIES;
+const SOURCES = { 'inpage.js': PROVIDER, ...(SAFARI ? SAFARI_SOURCES : {}) };
+/**
+ * Copied as they are into the Safari development package: the harness's
+ * pages, and the scripts that import nothing (`dev-probe.js` is a module with
+ * top-level await, which an iife bundle could not hold). `dev-bridge.js` and
+ * `dev-handoff.js` are bundled above; the release package drops them all.
+ */
+const SAFARI_DEV_FILES = [
+	'dev-seed.html',
+	'dev-seed.js',
+	'dev-probe.html',
+	'dev-probe.js',
+	'dev-handoff.html'
+];
 /** What must NOT be copied verbatim: build inputs and the bundler's own sources. */
 const SKIP_COPY = new Set([
-	'dist',
-	'dist-release',
-	'dist-store',
 	'build.mjs',
 	'README.md',
 	'release-notes.md',
 	'lib',
+	'safari',
+	'manifest.json',
 	...ENTRIES
 ]);
+/** Every package directory beside the sources (`dist`, `dist-store`, `dist-safari-release`, …). */
+const isPackageDir = (name) => name === 'dist' || name.startsWith('dist-');
 
 /** Route trees the extension has no entry point for. */
 const PRUNE = ['gallery', 'gallery.html'];
@@ -158,7 +202,11 @@ if (!process.argv.includes('--skip-build')) {
 	execFileSync('pnpm', ['exec', 'vite', 'build'], {
 		cwd: APP,
 		stdio: 'inherit',
-		env: { ...process.env, VELA_TARGET: 'extension' }
+		env: {
+			...process.env,
+			VELA_TARGET: 'extension',
+			VELA_EXTENSION_BROWSER: SAFARI ? 'safari' : 'chrome'
+		}
 	});
 }
 if (!existsSync(join(SITE, APP_DIR))) {
@@ -257,7 +305,8 @@ await esbuild({
 	outdir: DIST,
 	bundle: true,
 	format: 'iife',
-	target: ['chrome122'],
+	// Safari 17.4 is the iOS app's floor (`lib/safari-manifest.js`).
+	target: [SAFARI ? 'safari17.4' : 'chrome122'],
 	minify: false,
 	sourcemap: false,
 	logLevel: 'warning'
@@ -265,8 +314,19 @@ await esbuild({
 log(`bundled ${ENTRIES.join(', ')}`);
 
 for (const name of readdirSync(HERE)) {
-	if (SKIP_COPY.has(name)) continue;
+	if (SKIP_COPY.has(name) || isPackageDir(name)) continue;
 	cpSync(join(HERE, name), join(DIST, name), { recursive: true });
+}
+const sourceManifest = JSON.parse(readFileSync(join(HERE, 'manifest.json'), 'utf8'));
+if (SAFARI) {
+	writeFileSync(
+		join(DIST, 'manifest.json'),
+		JSON.stringify(safariManifest(sourceManifest, { development: true }), null, '\t') + '\n'
+	);
+	for (const name of SAFARI_DEV_FILES) cpSync(join(HERE, 'safari', name), join(DIST, name));
+	log(`safari: manifest derived, ${SAFARI_DEV_FILES.length} harness files (development only)`);
+} else {
+	cpSync(join(HERE, 'manifest.json'), join(DIST, 'manifest.json'));
 }
 
 // ---------------------------------------------------------------------------
@@ -304,19 +364,31 @@ function deriveReleasePackage(target, { keepKey }) {
 			rmSync(path, { recursive: true, force: true });
 		}
 	}
-	const released = { ...manifest };
+	let released = { ...manifest };
 	if (!keepKey) delete released.key;
+	if (SAFARI) {
+		// The harness's doorway goes with the parallel space: the manifest
+		// that names it, and the files.
+		released = safariManifest(sourceManifest, { development: false });
+		for (const name of [...DEV_PAGES, ...DEV_SCRIPTS]) {
+			const path = join(target, name);
+			bytes += du(path);
+			rmSync(path, { force: true });
+		}
+	}
 	writeFileSync(join(target, 'manifest.json'), JSON.stringify(released, null, '\t') + '\n');
 	log(
-		`${keepKey ? 'release package (key kept)' : 'store package: no key'}, ` +
+		`${SAFARI ? 'safari release package' : keepKey ? 'release package (key kept)' : 'store package: no key'}, ` +
 			`${(bytes / 1e3).toFixed(0)} kB of developer pages pruned · ` +
 			`${(du(target) / 1e6).toFixed(1)} MB · ${relative(APP, target)}`
 	);
 }
-deriveReleasePackage(RELEASE_DIST, { keepKey: true });
-deriveReleasePackage(STORE_DIST, { keepKey: false });
+deriveReleasePackage(RELEASE_DIST, { keepKey: !SAFARI });
+// Safari has no store package of its own: the App Store ships the release
+// package inside the iOS app.
+if (!SAFARI) deriveReleasePackage(STORE_DIST, { keepKey: false });
 
-if (ZIP) {
+if (ZIP && !SAFARI) {
 	const zipInto = (dir, name) => {
 		const target = join(APP, name);
 		rmSync(target, { force: true });

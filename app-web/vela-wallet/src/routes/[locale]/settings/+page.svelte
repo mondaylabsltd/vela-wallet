@@ -956,7 +956,7 @@
 	 * wallet" row). The extension only: nowhere else holds a grant. The
 	 * device-storage page keeps listing them under its connections group.
 	 */
-	const sitesShown = typeof location !== 'undefined' && location.protocol === 'chrome-extension:';
+	const sitesShown = typeof location !== 'undefined' && location.protocol === __VELA_EXTENSION_PROTOCOL__;
 	const sitesRow = $derived<SettingsRowModel>({
 		id: 'sites',
 		icon: 'globe',

@@ -26,7 +26,7 @@
 
 /** True when this document was loaded from the packaged extension. */
 export function isPackagedApp(): boolean {
-	return typeof location !== 'undefined' && location.protocol === 'chrome-extension:';
+	return typeof location !== 'undefined' && location.protocol === __VELA_EXTENSION_PROTOCOL__;
 }
 
 /**
