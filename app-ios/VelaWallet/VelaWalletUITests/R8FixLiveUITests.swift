@@ -212,6 +212,34 @@ final class R8FixLiveUITests: XCTestCase {
         shot(app, "r8-17-executed-sheet-2")
     }
 
+    // MARK: - r8-8: an outside owner opens a member's Vela link
+
+    /// A device with no Vela account (the host uninstalled the app first):
+    /// the transaction, read only, with the outside owner's way to sign —
+    /// never the plain Welcome.
+    func test4AnOutsideOwnerOpeningAVelaLinkSeesTheTransaction() throws {
+        let h = try required()
+        guard let link = try? String(contentsOfFile: "\(h.state)/p2-link.txt", encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines), !link.isEmpty
+        else { throw XCTSkip("no proposal link written by the driver") }
+        let app = XCUIApplication()
+        app.launchEnvironment["VELA_LANG"] = "en"
+        app.launchEnvironment["VELA_THEME"] = "light"
+        app.launchEnvironment["VELA_SKIP_LAUNCH_ANIMATION"] = "1"
+        app.launchEnvironment["VELA_RPC_OVERRIDES"] = #"{"100":{"rpcURL":"\#(h.rpc)","onlyMine":true}}"#
+        app.launchEnvironment["VELA_SERVICE_ENDPOINTS"] = #"{"bundlerServiceURL":"\#(h.relay)","genesisServiceURL":"\#(h.genesis)"}"#
+        if let peer = env["VELA_HARNESS_PEERCONNECT"] { app.launchEnvironment["VELA_PEERCONNECT_RELAY"] = peer }
+        app.launchEnvironment["VELA_OPEN_LINK"] = link
+        app.launch()
+        let title = element(app, "multisig.proposal.title")
+        let opened = title.waitForExistence(timeout: 90)
+        sleep(4)
+        shot(app, opened ? "r8-8-link-no-account" : "r8-8-link-no-account-failed")
+        XCTAssertTrue(opened, "the link landed on Welcome")
+        XCTAssertTrue(reveal(app, "multisig.proposal.outside"), "no way for the outside owner to sign")
+        shot(app, "r8-8-link-no-account-outside")
+    }
+
     // MARK: - Notifications: a new proposal from another member, while away
 
     func test3ANewProposalWhileAwayIsNotified() throws {

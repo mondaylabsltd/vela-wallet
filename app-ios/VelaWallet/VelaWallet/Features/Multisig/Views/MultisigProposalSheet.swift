@@ -652,6 +652,12 @@ struct MultisigProposalSheet: View {
                     .foregroundStyle(theme.fgSubtle)
             }
         }
+        // ms-21 / r8-8: a link's transaction read on a device with none of its
+        // members — said, and nothing was added or switched.
+        if let linked = view.linked, linked.preview,
+           linked.safeTxHash.caseInsensitiveCompare(model.hash) == .orderedSame {
+            MsNote(text: words.t("proposal.previewNote"), identifier: "multisig.proposal.preview")
+        }
         ForEach(model.notes, id: \.id) { note in
             MsNote(text: note.text, tone: note.tone, identifier: "multisig.proposal.note.\(note.id)")
         }
