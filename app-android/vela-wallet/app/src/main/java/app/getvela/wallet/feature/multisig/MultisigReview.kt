@@ -77,7 +77,10 @@ fun MultisigReviewBody(
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(VelaSpacing.lg)) {
         // Concerns, the core's, in order.
         if (!executed) {
-            if (review["sign"]["allowed"].bool == false) MsNote(words.t("review.blocked"), tone = MsTone.Danger, tag = "multisig.review.blocked")
+            // r9-9 (core §8): the refusal's own reason (`refused.key`, a full
+            // corpus key), said ONCE — never "would change who controls" for a
+            // delegatecall; `review.blocked` only from a core without it.
+            refusalLine(review, words)?.let { MsNote(it, tone = MsTone.Danger, tag = "multisig.review.blocked") }
             for (concern in shownConcerns(review)) {
                 reviewConcern(words, concern)?.let { (text, tone) -> MsNote(text, tone = tone, tag = "multisig.review.concern.${concern.kind}") }
             }
@@ -101,6 +104,7 @@ fun MultisigReviewBody(
  * time sending here" twice. Nothing is dropped that is not drawn elsewhere.
  */
 internal fun shownConcerns(review: JsonElement): List<JsonElement> {
+    val refused = review["refused"]["key"].str != null
     val recipients = review["recipients"].arr
     val sim = review["simulation"]
     val simNotice = sim["kind"].str != "deltas" && !sim["notice_key"].str.isNullOrEmpty()
@@ -110,11 +114,18 @@ internal fun shownConcerns(review: JsonElement): List<JsonElement> {
         val drawnElsewhere = when (concern.kind) {
             "firstTime" -> recipients.any { it["address"].str.equals(address, ignoreCase = true) && it["firstTimeCue"].bool == true }
             "unsimulated", "reverts" -> simNotice
+            // r9-9: the refusal line says why it is not signed — not its English again.
+            "notSigned" -> refused
             else -> false
         }
         !drawnElsewhere && said.add(concern.toString())
     }
 }
+
+/** r9-9: the review's one refusal line — the core's `refused.key`, else (an older core) `review.blocked` when it may not be signed. */
+internal fun refusalLine(review: JsonElement, words: MultisigWords): String? =
+    review["refused"]["key"].str?.takeIf { it.isNotBlank() }?.let { words.raw(it) }
+        ?: words.t("review.blocked").takeIf { review["sign"]["allowed"].bool == false }
 
 /** A concern in words (`stateChange` / `stateUnread` are the guard's own block). */
 internal fun reviewConcern(words: MultisigWords, concern: JsonElement): Pair<String, MsTone>? = when (concern.kind) {

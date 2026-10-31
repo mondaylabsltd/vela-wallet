@@ -271,6 +271,8 @@ class MultisigLive(
                     memberName = name,
                     credentialIdsHex = keys.map { it.credentialId },
                     keyRouteJson = plan?.keyRouteJson,
+                    // r9-10: the review asked for "… anyway" — the page says it too.
+                    anyway = purpose["anyway"].bool ?: false,
                 ),
             )
         }.getOrElse { return failed(MultisigShellFailure.PageSignFailed("not_opened")) }

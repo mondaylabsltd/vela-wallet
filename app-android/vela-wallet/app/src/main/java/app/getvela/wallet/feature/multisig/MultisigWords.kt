@@ -70,7 +70,10 @@ class MultisigWords(
      * every device. This shell only hands it what it knows.
      */
     fun label(address: String): String =
-        MsRules.string("names.label", mapOf("address" to address, "own" to localName(address), "kept" to keptName(address), "registered" to null))
+        // r9-12 (core §8): the accounts machine's one name per member — the
+        // passkey index's name included — before anything asked here.
+        accounts.memberLabels[address.lowercase()]?.takeIf { it.isNotBlank() }
+            ?: MsRules.string("names.label", mapOf("address" to address, "own" to localName(address), "kept" to keptName(address), "registered" to null))
             ?: localName(address) ?: keptName(address) ?: short(address)
 
     /** A multisig's name: its row's, its record's (when valid), its label, else its rule ("Multisig 2/3"). */
@@ -163,7 +166,9 @@ class MultisigWords(
             "addOwner" -> t("change.add", "member" to who(action["owner"].str.orEmpty()))
             "removeOwner" -> t("change.remove", "member" to who(action["owner"].str.orEmpty()))
             "swapOwner" -> t("change.replace", "old" to who(action["oldOwner"].str.orEmpty()), "new" to who(action["newOwner"].str.orEmpty()))
-            "changeThreshold" -> t("action.changeThreshold", "threshold" to (action["threshold"].str ?: ""))
+            // r9 words: "Require 1 approval" — the core's plural family (`_one`, `_other`, …).
+            "changeThreshold" -> action["threshold"].int?.let { plural("action.changeThreshold", it) }
+                ?: t("action.changeThreshold", "threshold" to (action["threshold"].str ?: ""))
             "rename" -> t("action.rename", "name" to (action["name"].str ?: ""))
             "call" -> {
                 val value = action["value"].str ?: "0"

@@ -774,10 +774,17 @@ fun MultisigInviteSheet(hub: MultisigHub, words: MultisigWords, address: String,
     val proposals by hub.proposalsView.collectAsStateWithLifecycle()
     val row = view.row(address)
     val link = row?.let { r ->
-        MsRules.inviteLink(
-            origin, locale, r.account.address, r.account.owners, r.account.chainIds, proposals.membersAnywhere,
-            inviteKnown(words, r.account, proposals.membersAnywhere),
-        )
+        // r9-12 (core §8): the invite the core composes (`invite_members`:
+        // every member, its name where one is known, its kind) through the
+        // link door's `addLink`; a core without the field: its inviteLink.
+        if (r.inviteMembers.isNotEmpty()) {
+            MsRules.addLink(origin, locale, r.account.address, r.account.chainIds, r.inviteMembers)
+        } else {
+            MsRules.inviteLink(
+                origin, locale, r.account.address, r.account.owners, r.account.chainIds, proposals.membersAnywhere,
+                inviteKnown(words, r.account, proposals.membersAnywhere),
+            )
+        }
     }
     LaunchedEffect(address) { hub.send(ev("invite_shared", "address" to address)) }
     MsSheet(words.t("panel.invite"), words.raw("common.done"), onClose = onClose, tag = "multisig.invite") {

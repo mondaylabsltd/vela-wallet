@@ -107,7 +107,11 @@ class MsProposalModel(
     val notes: List<MsLine>
         get() {
             val out = mutableListOf<MsLine>()
-            item.refusal?.takeIf { it.isNotEmpty() }?.let { out += MsLine(words.t("proposal.refused", "reason" to it), MsTone.Danger, "refused") }
+            // r9-9: a review that names its refusal (`refused.key`) says it in its
+            // body, once; the core's English `refusal` only from a core without it.
+            if (review["refused"]["key"].str == null) {
+                item.refusal?.takeIf { it.isNotEmpty() }?.let { out += MsLine(words.t("proposal.refused", "reason" to it), MsTone.Danger, "refused") }
+            }
             if (item.status == "queued") out += MsLine(words.t("proposal.queuedNote", "nonce" to previousNonce), MsTone.Neutral, "queued")
             if (item.renameUndeployed) out += MsLine(words.t("proposal.renameUndeployed", "network" to words.network(chainId)), MsTone.Warning, "renameUndeployed")
             if (standing.kind == "blocked") out += MsLine(words.t("status.cannotRun", "reason" to words.blockReason(standing["block"])), MsTone.Warning, "blocked")
@@ -117,7 +121,12 @@ class MsProposalModel(
                 }
             }
             executionLine?.let { out += it }
-            if (canApprove.isEmpty() && !approvedByHere && !isDone && account != null && account.owners.isNotEmpty() && canExecute.isEmpty()) {
+            // r9-9: "none is signed in on this device" only when the core says no
+            // member of it is here (`members_here`) — never because a refused
+            // transaction leaves nobody able to approve it.
+            val noMemberHere = item.membersHere?.isEmpty()
+                ?: (canApprove.isEmpty() && !approvedByHere && canExecute.isEmpty() && account != null && account.owners.isNotEmpty())
+            if (noMemberHere && !isDone) {
                 out += MsLine(words.t("proposal.notMember"), MsTone.Neutral, "notMember")
             }
             return out

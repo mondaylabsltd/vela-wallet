@@ -46,6 +46,24 @@ class RegistryNameLookup(
         data object Failed : IndexAnswer
     }
 
+    /**
+     * r9-12: the index's verdict for [address] as the multisig's accounts
+     * machine reads it (`index_names`): a Vela account it registered (`vela`,
+     * with its own public name), none (`vela` false), or `null` when nobody
+     * answered — not asked again until later, never a "no".
+     */
+    data class Verdict(val vela: Boolean, val name: String?)
+
+    suspend fun verdictFor(address: String): Verdict? {
+        if (!ADDRESS.matches(address)) return null
+        val key = address.lowercase()
+        cached(key)?.let { return Verdict(vela = it.name != null, name = it.name) }
+        val name = nameFor(address)
+        if (name != null) return Verdict(vela = true, name = name)
+        // A miss the core said to keep briefly is an answer; nothing kept is a silence.
+        return cached(key)?.let { Verdict(vela = false, name = null) }
+    }
+
     suspend fun nameFor(address: String): String? {
         if (!ADDRESS.matches(address)) return null
         val key = address.lowercase()

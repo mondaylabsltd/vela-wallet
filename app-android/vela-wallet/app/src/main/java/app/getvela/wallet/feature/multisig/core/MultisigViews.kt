@@ -71,6 +71,13 @@ data class MsAccountRow(
     val checkedOn: List<Int>,
     val checkingOn: List<Int>,
     val inviteShared: Boolean,
+    /**
+     * r9-12 (core §8): what its invite says of each member — founding
+     * members, then members now; a name only where one is known, and the
+     * kind (`InvitedMember[]`, as the link door's `addLink` takes them).
+     * Empty from a core without the field.
+     */
+    val inviteMembers: List<JsonElement> = emptyList(),
 ) {
     val id: String get() = account.id
 
@@ -86,6 +93,7 @@ data class MsAccountRow(
             checkedOn = e["checked_on"].ints(),
             checkingOn = e["checking_on"].ints(),
             inviteShared = e["invite_shared"].bool ?: false,
+            inviteMembers = e["invite_members"].arr,
         )
     }
 }
@@ -270,6 +278,14 @@ data class MsAccountsView(
     val recentNetworks: List<Int> = emptyList(),
     /** core-ms-2: where the multisigs here are used (`hints.used`). */
     val usedNetworks: List<Int> = emptyList(),
+    /**
+     * r9-12 (core §8): one name per member, by lowercase address — every
+     * member of every multisig here and this device's own accounts, by the
+     * core's `names::label` (kept, the passkey index's, own, short address).
+     */
+    val memberLabels: Map<String, String> = emptyMap(),
+    /** r9-12: the addresses to look up in the passkey index (`index_names` answers them). */
+    val indexWanted: List<String> = emptyList(),
 ) {
     /** The core's hints for `networks.likely` / `networks.firstDefault`, with the wallet's own. */
     fun networkHints(here: Int? = null): Map<String, Any?> = mapOf(
@@ -307,6 +323,8 @@ data class MsAccountsView(
             invite = e["invite"],
             recentNetworks = e["recent_networks"].ints(),
             usedNetworks = e["used_networks"].ints(),
+            memberLabels = e["member_labels"].obj.mapNotNull { (k, value) -> value.str?.let { k.lowercase() to it } }.toMap(),
+            indexWanted = e["index_wanted"].strings(),
         )
     }
 }
@@ -333,6 +351,11 @@ data class MsProposalItem(
     val unsent: Boolean,
     val renameUndeployed: Boolean,
     val raw: JsonElement?,
+    /**
+     * r9-9 (core §8): every member of it on this device, whatever the
+     * transaction (`members_here`); `null` from a core without the field.
+     */
+    val membersHere: List<String>? = null,
 ) {
     val id: String get() = "$chainId:${safeTxHash.lowercase()}"
 
@@ -362,6 +385,7 @@ data class MsProposalItem(
             unsent = e["unsent"].bool ?: false,
             renameUndeployed = e["renameUndeployed"].bool ?: false,
             raw = e,
+            membersHere = (e["membersHere"] ?: e["members_here"])?.takeIf { it is kotlinx.serialization.json.JsonArray }?.strings(),
         )
     }
 }

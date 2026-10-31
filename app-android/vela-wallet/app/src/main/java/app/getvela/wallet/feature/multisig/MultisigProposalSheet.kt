@@ -384,7 +384,7 @@ fun MultisigProposalSheet(
                     AlertDialog(
                         onDismissRequest = { confirming = false },
                         title = { Text(rejectWord) },
-                        text = { Text(words.t("proposal.rejectHint", "threshold" to item.threshold.toString())) },
+                        text = { Text(words.plural("proposal.rejectHint", item.threshold)) },
                         confirmButton = {
                             TextButton(onClick = {
                                 confirming = false

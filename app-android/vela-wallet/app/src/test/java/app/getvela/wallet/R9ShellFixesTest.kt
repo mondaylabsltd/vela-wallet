@@ -16,6 +16,9 @@ import app.getvela.wallet.feature.multisig.core.MsAccount
 import app.getvela.wallet.feature.multisig.core.MsAccountsView
 import app.getvela.wallet.feature.multisig.core.MsProposalsView
 import app.getvela.wallet.feature.multisig.inviteKnown
+import app.getvela.wallet.feature.multisig.refusalLine
+import app.getvela.wallet.feature.multisig.shownConcerns
+import app.getvela.wallet.feature.multisig.core.MsRules
 import app.getvela.wallet.feature.multisig.settledHaptic
 import app.getvela.wallet.feature.send.SendLive
 import app.getvela.wallet.feature.send.core.FeeAssetView
@@ -35,6 +38,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonElement
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -121,6 +125,7 @@ class R9ShellFixesTest {
         proposer: String = bob,
         ruleChip: String? = null,
         status: String = "pending",
+        membersHere: String? = null,
     ): MsProposalsView = MsProposalsView.of(
         json(
             """
@@ -128,7 +133,7 @@ class R9ShellFixesTest {
              "items":[{"chainId":100,"safeTxHash":"$hash","nonce":"4",
               "proposer":"$proposer","approvals":[{"owner":"$bob"}],"approved":1,"threshold":2,"status":"$status",
               "canApprove":$canApprove,"canExecute":[],"cancelledBy":${cancelledBy?.let { "\"$it\"" } ?: "null"},"sameNonce":$sameNonce,
-              "executing":false,"createdMs":1,"unsent":false,"renameUndeployed":false,
+              "executing":false,"createdMs":1,"unsent":false,"renameUndeployed":false,${membersHere?.let { "\"membersHere\":$it," }.orEmpty()}
               "review":{"action":{"kind":"transfer","to":"$bob","amount":"1","token":null},"sign":{"allowed":true,"anyway":false}}}],
              "chains":[{"chainId":100,"members":{"deployed":true,"owners":["$alice","$bob","$carol","0x00000000000000000000000000000000000000e5"],"threshold":2,"nonce":"4"},"items":[],"mailbox":true}]}
             """.trimIndent(),
@@ -318,5 +323,56 @@ class R9ShellFixesTest {
         assertFalse("the class lives in the debug source set only", File(app, "main/java").walkTopDown().any { it.isFile && it.readText().contains("class MultisigPollTrigger") })
         val check = File(repoRoot, "app-android/vela-wallet/scripts/check-release-apk.sh").readText()
         assertTrue("check-release-apk.sh refuses a package carrying it", check.contains("Lapp/getvela/wallet/dev/MultisigPollTrigger;"))
+    }
+
+    // -- the core's r9 fields (core §8), drawn not chosen ---------------------------------
+
+    @Test
+    fun a_refusal_is_said_once_by_its_own_reason() {
+        val w = words()
+        val delegate = json(
+            """{"sign":{"allowed":false,"anyway":false},"refused":{"why":"delegatecall","key":"home.multisig.review.refusedWhy.delegatecall"},
+               "concerns":[{"kind":"notSigned","why":"delegatecall to a contract Vela does not sign for"}],"recipients":[],
+               "simulation":{"kind":"deltas","deltas":[]},"state":{"verdict":{"kind":"withheld"}}}""",
+        )
+        assertEquals(strings.t("home.multisig.review.refusedWhy.delegatecall"), refusalLine(delegate, w))
+        assertNotEquals(strings.t("home.multisig.review.blocked"), refusalLine(delegate, w))
+        assertTrue("the English reason is not said again", shownConcerns(delegate).none { it.toString().contains("notSigned") })
+        // An older core: the old line, when it may not be signed; nothing when it may.
+        assertEquals(strings.t("home.multisig.review.blocked"), refusalLine(json("""{"sign":{"allowed":false}}"""), w))
+        assertNull(refusalLine(json("""{"sign":{"allowed":true}}"""), w))
+    }
+
+    @Test
+    fun not_a_member_here_only_when_the_core_says_none_is() {
+        // A refused delegatecall: nobody can approve it, but this device's member is one.
+        val refused = model(proposals(canApprove = "[]", membersHere = "[\"$alice\"]"))
+        assertTrue(refused.notes.none { it.id == "notMember" })
+        val none = model(proposals(canApprove = "[]", membersHere = "[]"))
+        assertTrue(none.notes.any { it.id == "notMember" })
+    }
+
+    @Test
+    fun one_name_per_member_from_the_accounts_machine() {
+        val labels = MsAccountsView.of(json("""{"loaded":true,"accounts":[],"member_labels":{"${bob.lowercase()}":"Interleave"},"index_wanted":["$carol"]}"""))
+        assertEquals(listOf(carol), labels.indexWanted)
+        val w = MultisigWords(strings = strings, accounts = labels, localNames = mapOf(bob.lowercase() to "Parallel space"))
+        assertEquals("the core's label, never this device's own name", "Interleave", w.label(bob))
+    }
+
+    @Test
+    fun the_invite_is_the_cores_members_through_add_link() {
+        val members = listOf(json("""{"address":"$alice","name":"Parallel One","kind":"passkey"}"""), json("""{"address":"$bob","kind":"wallet"}"""))
+        val link = MsRules.addLink("https://wallet.getvela.app", "en", safe, listOf(100), members)!!
+        assertTrue(link, link.startsWith("https://wallet.getvela.app/en/wallet#msa=100:$safe"))
+        assertTrue("its name travels: $link", link.contains("Parallel%20One"))
+    }
+
+    @Test
+    fun one_approval_is_one_approval() {
+        val w = words()
+        assertEquals("Require 1 approval", w.actionTitle(100, json("""{"kind":"changeThreshold","threshold":1}"""), "4"))
+        assertEquals("Require 3 approvals", w.actionTitle(100, json("""{"kind":"changeThreshold","threshold":3}"""), "4"))
+        assertTrue(w.plural("proposal.rejectHint", 1).contains("1 approval too"))
     }
 }

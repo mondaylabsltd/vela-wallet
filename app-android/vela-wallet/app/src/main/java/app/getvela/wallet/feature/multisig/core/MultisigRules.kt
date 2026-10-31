@@ -87,6 +87,15 @@ object MsRules {
         ),
     )
 
+    /** r9-12: an invite from the core's own members (`AccountRow.invite_members`). */
+    fun addLink(origin: String, locale: String, multisig: String, chainIds: List<Int>, members: List<JsonElement>): String? = string(
+        "addLink",
+        mapOf(
+            "origin" to origin, "locale" to locale, "multisig" to multisig,
+            "extra" to mapOf("chainIds" to chainIds, "members" to kotlinx.serialization.json.JsonArray(members)),
+        ),
+    )
+
     /** The connect link an outside owner opens in a browser with its wallet. */
     fun connectLink(page: String, invite: String?, members: List<String>, tx: Triple<Int, String, String>?): String? =
         string(
