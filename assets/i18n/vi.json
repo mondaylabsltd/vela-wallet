@@ -1883,7 +1883,28 @@
   "appUpdate": {
    "title": "Có bản cập nhật",
    "install": "Cài đặt",
-   "later": "Để sau"
+   "later": "Để sau",
+   "refused": {
+    "noKey": "Bản dựng này không kiểm tra được chữ ký của bản cập nhật nên sẽ không cài đặt. Hãy tải phiên bản mới nhất từ trang web Vela.",
+    "unreadable": "Không đọc được thông tin bản cập nhật nên chưa cài gì cả. Ứng dụng của bạn vẫn như cũ.",
+    "badSignature": "Bản cập nhật không có chữ ký của Vela nên không được cài. Ứng dụng của bạn vẫn như cũ.",
+    "replayed": "Bản cập nhật này cũ hơn bản thiết bị này đã thấy nên không được cài. Ứng dụng của bạn vẫn như cũ.",
+    "notNewer": "Bản cập nhật này không mới hơn phiên bản bạn đang dùng nên không có gì để cài.",
+    "noArtifact": "Bản cập nhật này không có bản tải cho máy tính này nên chưa cài gì cả.",
+    "insecureUrl": "Liên kết tải bản cập nhật không an toàn nên không được dùng. Ứng dụng của bạn vẫn như cũ.",
+    "artifactMismatch": "Bản tải về không khớp với bản phát hành đã ký nên không được cài. Hãy thử lại.",
+    "unreachable": "Việc tải về chưa xong. Hãy kiểm tra kết nối và thử lại.",
+    "notInstalled": "Bản này không phải ứng dụng đã cài đặt nên không tự cập nhật được.",
+    "signatureMismatch": "Chữ ký mã của ứng dụng mới không khớp với ứng dụng này nên không được cài. Ứng dụng của bạn vẫn như cũ.",
+    "versionMismatch": "Ứng dụng tải về không phải phiên bản đã ký nên không được cài. Ứng dụng của bạn vẫn như cũ.",
+    "installFailed": "Hệ thống không cài được bản cập nhật. Ứng dụng này vẫn như cũ. Hãy thử lại."
+   }
+  },
+  "multisigNotify": {
+   "approvalNeeded": "Cần bạn duyệt",
+   "approvalCounted": "Đã tính lượt duyệt: {{approved}}/{{threshold}}",
+   "readyToExecute": "Sẵn sàng thực thi",
+   "executed": "Đã thực thi"
   },
   "dropOverlay": {
    "title": "Thả địa chỉ, liên kết thanh toán hoặc ảnh QR vào đây"
@@ -2081,7 +2102,9 @@
   "appearance": {
    "menuBar": "Hiển thị trên thanh menu",
    "trayIcon": "Hiển thị trong khay hệ thống",
-   "statusItemHint": "Tổng số dư cùng Gửi và Nhận nhanh, từ số liệu tải gần nhất — không tải thêm gì."
+   "statusItemHint": "Tổng số dư cùng Gửi và Nhận nhanh, từ số liệu tải gần nhất — không tải thêm gì.",
+   "multisigNotifications": "Thông báo đa chữ ký",
+   "multisigNotificationsHint": "Báo cho bạn khi một giao dịch đa chữ ký cần bạn duyệt, nhận được một lượt duyệt, sẵn sàng thực thi hoặc đã được thực thi. Vela kiểm tra mỗi phút khi đang mở; thông báo do thiết bị này tạo, không qua dịch vụ đẩy."
   }
  },
  "contacts": {

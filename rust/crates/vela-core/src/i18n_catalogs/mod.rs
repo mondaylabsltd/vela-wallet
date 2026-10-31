@@ -51,7 +51,7 @@ pub(crate) fn embedded(
         #[cfg(feature = "i18n-en")]
         "en" => Some((
             en::BLOB,
-            crate::i18n::catalog::StaticOffsets::U16(&en::OFFSETS),
+            crate::i18n::catalog::StaticOffsets::U32(&en::OFFSETS),
             &en::PRESENT,
         )),
         #[cfg(feature = "i18n-zh")]
@@ -63,13 +63,13 @@ pub(crate) fn embedded(
         #[cfg(feature = "i18n-zh-tw")]
         "zh-TW" => Some((
             zh_tw::BLOB,
-            crate::i18n::catalog::StaticOffsets::U16(&zh_tw::OFFSETS),
+            crate::i18n::catalog::StaticOffsets::U32(&zh_tw::OFFSETS),
             &zh_tw::PRESENT,
         )),
         #[cfg(feature = "i18n-zh-hk")]
         "zh-HK" => Some((
             zh_hk::BLOB,
-            crate::i18n::catalog::StaticOffsets::U16(&zh_hk::OFFSETS),
+            crate::i18n::catalog::StaticOffsets::U32(&zh_hk::OFFSETS),
             &zh_hk::PRESENT,
         )),
         #[cfg(feature = "i18n-ja")]

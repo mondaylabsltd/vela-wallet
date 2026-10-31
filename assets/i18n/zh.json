@@ -1883,7 +1883,28 @@
   "appUpdate": {
    "title": "有可用更新",
    "install": "安装",
-   "later": "稍后"
+   "later": "稍后",
+   "refused": {
+    "noKey": "此版本无法校验更新的签名，因此不会安装。请从 Vela 官网下载最新版本。",
+    "unreadable": "无法读取更新的信息，未安装任何内容。你的应用保持不变。",
+    "badSignature": "此更新没有 Vela 的签名，因此未安装。你的应用保持不变。",
+    "replayed": "此更新比本设备已见过的版本更旧，因此未安装。你的应用保持不变。",
+    "notNewer": "此更新并不比你当前的版本新，无需安装。",
+    "noArtifact": "此更新没有适用于这台电脑的下载，未安装任何内容。",
+    "insecureUrl": "此更新的下载链接不安全，因此未使用。你的应用保持不变。",
+    "artifactMismatch": "下载内容与签名的版本不一致，因此未安装。请重试。",
+    "unreachable": "下载未完成。请检查网络连接后重试。",
+    "notInstalled": "这个副本不是已安装的应用，无法自行更新。",
+    "signatureMismatch": "新应用的代码签名与当前应用不一致，因此未安装。你的应用保持不变。",
+    "versionMismatch": "下载的应用不是签名的那个版本，因此未安装。你的应用保持不变。",
+    "installFailed": "系统未能安装此更新。当前应用保持不变，请重试。"
+   }
+  },
+  "multisigNotify": {
+   "approvalNeeded": "待你批准",
+   "approvalCounted": "已计入批准：{{approved}}/{{threshold}}",
+   "readyToExecute": "可以执行",
+   "executed": "已执行"
   },
   "dropOverlay": {
    "title": "拖放地址、付款链接或二维码图片"
@@ -2081,7 +2102,9 @@
   "appearance": {
    "menuBar": "在菜单栏中显示",
    "trayIcon": "在系统托盘中显示",
-   "statusItemHint": "总额和快捷转账、收款，取自最近一次加载的数据，不会额外联网。"
+   "statusItemHint": "总额和快捷转账、收款，取自最近一次加载的数据，不会额外联网。",
+   "multisigNotifications": "多签通知",
+   "multisigNotificationsHint": "当多签交易需要你批准、收到一个批准、可以执行或已执行时通知你。Vela 打开期间每分钟检查一次；通知由本设备发出，不经推送服务。"
   }
  },
  "contacts": {

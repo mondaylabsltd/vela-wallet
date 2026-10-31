@@ -129,7 +129,9 @@
     "appearance": {
       "menuBar": "Hiển thị trên thanh menu",
       "trayIcon": "Hiển thị trong khay hệ thống",
-      "statusItemHint": "Tổng số dư cùng Gửi và Nhận nhanh, từ số liệu tải gần nhất — không tải thêm gì."
+      "statusItemHint": "Tổng số dư cùng Gửi và Nhận nhanh, từ số liệu tải gần nhất — không tải thêm gì.",
+      "multisigNotifications": "Thông báo đa chữ ký",
+      "multisigNotificationsHint": "Báo cho bạn khi một giao dịch đa chữ ký cần bạn duyệt, nhận được một lượt duyệt, sẵn sàng thực thi hoặc đã được thực thi. Vela kiểm tra mỗi phút khi đang mở; thông báo do thiết bị này tạo, không qua dịch vụ đẩy."
     }
   }
 }
