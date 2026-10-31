@@ -126,6 +126,7 @@ fn gate(sign: SignView) -> ConfirmState {
         quoted: true,
         fee_asset: FeeAssetView::Native,
         fee_recipient: None,
+        prepared: None,
     });
     fee.confirm_fee_ready = true;
     confirm_state(&ConfirmInput {

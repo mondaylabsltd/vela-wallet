@@ -198,6 +198,7 @@ fn native_fee(chain_id: u32, total_wei: u128) -> FeeEstimateView {
         quoted: true,
         fee_asset: FeeAssetView::Native,
         fee_recipient: Some(FEE_COLLECTOR.to_owned()),
+        prepared: None,
     }
 }
 
@@ -223,6 +224,7 @@ fn usdc_fee(chain_id: u32, amount: u128) -> FeeEstimateView {
             symbol: Some("USDC".to_owned()),
         },
         fee_recipient: Some(FEE_COLLECTOR.to_owned()),
+        prepared: None,
     }
 }
 
@@ -10583,5 +10585,109 @@ fn a_split_share_with_too_many_places_is_refused_and_says_how_many() {
     assert_eq!(
         build_split_calls(None, 18, &[draft("a", RECIPIENT, "1.0000000000000000001")]),
         None
+    );
+}
+
+// ===========================================================================
+// The gas the quote measured, for the submit (core-perf-1): reused only
+// fresh, only for exactly these calls; never a reason to sign a figure
+// nobody saw
+// ===========================================================================
+
+fn measured_for(value: &str) -> vela_core::app::fee_policy::PreparedGas {
+    vela_core::app::fee_policy::PreparedGas {
+        calls: vec![vela_core::app::fee_policy::FeeCall {
+            to: RECIPIENT.to_owned(),
+            value: value.to_owned(),
+            data: "0x".to_owned(),
+        }],
+        deployed: true,
+        verification_gas_limit: "100000".to_owned(),
+        call_gas_limit: "310000".to_owned(),
+        pre_verification_gas: "40000".to_owned(),
+        settlement_gas: None,
+    }
+}
+
+fn quote_with(prepared: vela_core::app::fee_policy::PreparedGas) -> FeeEstimateView {
+    FeeEstimateView {
+        prepared: Some(prepared),
+        ..native_fee(1, 42_000_000_000_000)
+    }
+}
+
+fn submitted_prepared(op: &Op) -> Option<vela_core::app::fee_policy::PreparedGas> {
+    match op {
+        Op::SubmitUserOp { prepared, .. } => prepared.as_deref().cloned(),
+        other => panic!("not a submit: {other:?}"),
+    }
+}
+
+#[test]
+fn the_submit_is_handed_the_gas_its_fee_was_priced_on() {
+    let mut sut = boot(vec![eth("2")]);
+    let measured = measured_for("1000000000000000000");
+    to_confirm_native(&mut sut, "1", quote_with(measured.clone()));
+    let submit = slide_to_submit(&mut sut);
+    assert_eq!(submitted_prepared(&submit), Some(measured));
+}
+
+#[test]
+fn a_requote_takes_the_measured_gas_away_before_the_submit() {
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(
+        &mut sut,
+        "1",
+        quote_with(measured_for("1000000000000000000")),
+    );
+    // The fee card prices again (once a block): what it measured last is no
+    // longer fresh. The figure itself has not moved, so the review stands.
+    sut.dispatch(Event::FeeBusyChanged { busy: true });
+    sut.dispatch(Event::FeeBusyChanged { busy: false });
+    let submit = slide_to_submit(&mut sut);
+    assert_eq!(
+        submitted_prepared(&submit),
+        None,
+        "the submit measures again"
+    );
+}
+
+#[test]
+fn gas_measured_for_other_calls_is_never_handed_on() {
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(
+        &mut sut,
+        "1",
+        quote_with(measured_for("2000000000000000000")),
+    );
+    let submit = slide_to_submit(&mut sut);
+    assert_eq!(submitted_prepared(&submit), None);
+}
+
+#[test]
+fn a_new_figure_still_goes_back_to_the_person_unsigned() {
+    // The quote moved after the confirm: the existing re-confirm path, with
+    // or without measured gas. Nothing is submitted.
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(
+        &mut sut,
+        "1",
+        quote_with(measured_for("1000000000000000000")),
+    );
+    let ops = sut.dispatch(Event::SlideConfirm { review: None });
+    assert!(
+        matches!(ops.as_slice(), [Op::ProbeTreasury { .. }]),
+        "{ops:?}"
+    );
+    sut.dispatch(Event::FeeUpdated {
+        estimate: FeeEstimateView {
+            prepared: Some(measured_for("1000000000000000000")),
+            ..native_fee(1, 43_000_000_000_000)
+        },
+    });
+    let ops = sut.resolve(covered());
+    assert!(
+        !ops.iter().any(|op| matches!(op, Op::SubmitUserOp { .. })),
+        "a figure nobody confirmed is never submitted: {ops:?}"
     );
 }

@@ -2266,6 +2266,7 @@ mod tests {
                 transfers: Vec::new(),
                 fee: None,
             },
+            prepared: None,
         };
         assert!(submits.started(&submit));
         assert!(submits.running(), "closed now, it runs on unseen");

@@ -68,7 +68,7 @@ use super::fee_policy::{
     encode_erc20_transfer, from_base_units, is_tempo_chain, max_native_sendable,
     parse_amount_units, reserve_fee_token, reserve_native_gas, same_asset_fee_limit, to_base_units,
     AmountIssue, FeeAsset, FeeAssetView, FeeCall, FeeEstimate, FeeEstimateView, FeeFailure,
-    FeeTier, MultiTokenSpec, TEMPO_DEFAULT_FEE_TOKEN, TEMPO_FEE_TOKEN_DECIMALS,
+    FeeTier, MultiTokenSpec, PreparedGas, TEMPO_DEFAULT_FEE_TOKEN, TEMPO_FEE_TOKEN_DECIMALS,
 };
 use super::money::{js_parse_float, Denom, DenominatedAmount, TokenPrice};
 use super::tx_tracker::{TrackEntryView, TrackOutcome, TrackStatus};
@@ -1314,6 +1314,14 @@ pub enum SendOperation {
         /// with [`crate::signed_review::reviewed_safe_op_hash`] against it:
         /// an operation that is not exactly this is never signed.
         review: SignedReview,
+        /// The gas the confirmed fee was priced on, still fresh and for
+        /// exactly these calls ([`PreparedGas`]): sign these limits and skip
+        /// the relay's simulation and the inner calls' measurement before
+        /// the prompt. The nonce is read as always. Absent: measure as
+        /// before. Off the wire when absent.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "bindings", ts(optional))]
+        prepared: Option<Box<PreparedGas>>,
     },
     /// `Passkey.cancelSign()`.
     CancelPasskeySign,
@@ -3061,6 +3069,13 @@ impl Send {
             Event::FeeUpdated { estimate } => fee_updated(model, estimate),
             Event::FeeBusyChanged { busy } => {
                 model.fee_busy = busy;
+                if busy {
+                    // A re-quote reads again: what the last quote measured is
+                    // no longer fresh enough to sign without measuring.
+                    if let Some(fee) = &mut model.fee_estimate {
+                        fee.prepared = None;
+                    }
+                }
                 render()
             }
             Event::FeeFailedChanged { failed } => {
@@ -3072,6 +3087,11 @@ impl Send {
                     // The fee machine discarded its figure: so does the
                     // confirm, which draws the failure in its place.
                     model.fee_estimate = None;
+                }
+                if failed {
+                    if let Some(fee) = &mut model.fee_estimate {
+                        fee.prepared = None;
+                    }
                 }
                 render()
             }
@@ -6641,6 +6661,23 @@ fn review_digest(model: &Model) -> Option<String> {
         .map(|review| review.digest())
 }
 
+/// The gas the confirmed quote measured, handed to the submit only when it
+/// is still fresh (the send drops it the moment the fee card re-quotes or
+/// fails) and was measured for exactly these calls, on this chain, for an
+/// in-band fee the review shows ([`PreparedGas`]). Otherwise the submit
+/// measures as it always did.
+fn prepared_gas_for(
+    fee: Option<&FeeEstimate>,
+    chain_id: u32,
+    in_band: bool,
+    calls: &[FeeCall],
+) -> Option<Box<PreparedGas>> {
+    let fee = fee?;
+    let prepared = fee.prepared.as_ref()?;
+    (in_band && fee.chain_id == chain_id && prepared.calls == calls)
+        .then(|| Box::new(prepared.clone()))
+}
+
 /// Build the submit batch + activity lines and hand them to the shell's
 /// sign→submit orchestration — with the review the person confirmed, which
 /// the operation's hash is only computed against
@@ -6674,6 +6711,7 @@ fn submit_user_op(model: &mut Model, gen: u64, public_key_hex: String) -> Cmd {
         calls,
         lines,
     } = plan;
+    let prepared = prepared_gas_for(fee.as_ref(), chain_id, quoted_fee.is_some(), &calls);
 
     model.tx = SendTxStatus::Submitting;
     let id = next(model);
@@ -6696,6 +6734,7 @@ fn submit_user_op(model: &mut Model, gen: u64, public_key_hex: String) -> Cmd {
                 gas_fee_token,
                 quoted_fee,
                 review,
+                prepared,
             },
         ),
         render(),
@@ -8351,6 +8390,7 @@ fn fee_to_view(fee: &FeeEstimate) -> FeeEstimateView {
             },
         },
         fee_recipient: fee.fee_recipient.clone(),
+        prepared: fee.prepared.clone(),
     }
 }
 
@@ -8388,6 +8428,7 @@ fn parse_fee_view(view: &FeeEstimateView) -> Option<FeeEstimate> {
             },
         },
         fee_recipient: view.fee_recipient.clone(),
+        prepared: view.prepared.clone(),
     })
 }
 

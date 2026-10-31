@@ -3052,6 +3052,7 @@ mod approve_tests {
             quoted: true,
             fee_asset: FeeAssetView::Native,
             fee_recipient: Some("0xee2c".to_owned()),
+            prepared: None,
         };
 
         // What `approve` would put in the opts, from that view alone.
@@ -3116,6 +3117,7 @@ mod approve_tests {
                 symbol: Some("USDC".to_owned()),
             },
             fee_recipient: Some("0xee2c".to_owned()),
+            prepared: None,
         });
         let clear = crate::core_host::CoreHost::<ClearSigning>::new().view();
         let guard = crate::core_host::CoreHost::<ApprovalGuard>::new().view();
