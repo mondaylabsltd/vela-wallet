@@ -2353,7 +2353,8 @@ async fn gather_review(
         let tokens: BTreeMap<String, TokenFacts> = s
             .tokens
             .iter()
-            .filter_map(|((c, t), f)| (*c == chain_id).then(|| (t.clone(), f.clone())))
+            .filter(|((c, _), _)| *c == chain_id)
+            .map(|((_, t), f)| (t.clone(), f.clone()))
             .collect();
         (s.known.clone(), tokens)
     };
