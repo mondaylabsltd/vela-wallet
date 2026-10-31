@@ -190,9 +190,10 @@ for (const method of ['vela_proof', 'vela_memberProof']) {
     !sent.warnings.some((w) => w.key === 'warn.unverifiedDecimals'), `${sent.hero.amount.text} ${sent.hero.amount.symbol}`);
   const elsewhere = tx(transfer, 137);
   check('the same address on another chain is not that token',
-    elsewhere.hero.amount.symbol === '?' && elsewhere.warnings.some((w) => w.key === 'warn.unverifiedDecimals'));
+    // r9-10: said in its base units, "decimals unknown" — never a "?" for a symbol.
+    elsewhere.hero.amount.symbol === t('value.baseUnitsUnknown') && elsewhere.warnings.some((w) => w.key === 'warn.unverifiedDecimals'));
   check('an unknown token shows every digit in its smallest units, never a guessed decimal',
-    elsewhere.hero.amount.text === '250,000,000', elsewhere.hero.amount.text);
+    elsewhere.hero.amount.text === '250000000', elsewhere.hero.amount.text);
   check('the network is named as the apps name it', sent.chain === 'Base' && !sent.chainClaimed);
 }
 
