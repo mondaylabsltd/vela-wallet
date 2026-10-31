@@ -157,7 +157,9 @@ class R8ShellFixesTest {
         val form = SendLive.form(drawn.model, view, FeeView(), ctx(), speed)
         assertFalse("no coin is named for a fee the multisig does not pay", form.fee.showMark)
         assertFalse("no chevron into the coins", form.fee.opens)
-        assertEquals(strings.t("home.multisig.proposal.feeNote"), form.fee.value)
+        // r9-15: who must approve stands where the fee would; who pays it is the note.
+        assertEquals(strings.t("home.multisig.panel.title", mapOf("m" to "2", "n" to "3")), form.fee.value)
+        assertEquals(strings.t("home.multisig.proposal.feeNote"), form.fee.staleNote)
         assertNull("no speed for a proposal", form.speed)
         // A Vela account's send keeps both.
         val own = SendLive.form(drawn.model, view.copy(multisig = null), FeeView(), ctx(), speed)
