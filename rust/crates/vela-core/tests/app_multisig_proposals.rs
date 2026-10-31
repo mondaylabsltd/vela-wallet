@@ -1717,6 +1717,9 @@ fn approve_and_execute_stopped_before_signing_still_approves() {
         .balances
         .insert((100, account.address.to_ascii_lowercase()), 5);
     let b = fixture(1).address;
+    // A look that says it would fail offers no one press.
+    assert_eq!(preview_of(&mut sut, &mut world, &hash, &b)["kind"], "fails");
+    assert!(sut.view().approve_execute.is_empty());
     run(
         &mut sut,
         &mut world,

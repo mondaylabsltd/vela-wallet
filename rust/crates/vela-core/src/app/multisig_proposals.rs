@@ -901,8 +901,9 @@ pub struct ProposalsView {
     /// core-ms-2: per `<chainId>:<safeTxHash lowercase>`, the members here
     /// whose one press approves and executes it ([`Event::ApproveExecute`]):
     /// short of one approval, theirs reaches the threshold, and their last
-    /// look (at these approvals) says they can pay. Any other member here
-    /// approves only; an executor of a ready one executes.
+    /// look (at these approvals) does not say they cannot pay (priced and
+    /// payable, or not priced or checked in time: it looks again first). Any
+    /// other member here approves only; an executor of a ready one executes.
     pub approve_execute: BTreeMap<String, Vec<String>>,
     /// core-ms-2: the header's rule chip for the multisig followed — the
     /// rule in force on each network it is used on (its members now where it
@@ -3478,7 +3479,12 @@ async fn approve_execute(
 
 /// core-ms-2: the members here whose one press approves and executes `item`
 /// — short of one approval, theirs reaches the threshold, and their look at
-/// these approvals says they can pay.
+/// these approvals says they can pay. Round 5 (S2): a look that could not
+/// price or check it in time (`unpriced`, `unchecked`) does not say they
+/// cannot — the press is offered, and the execution looks again before any
+/// signature (stopped then, the approval is still given). A look still out,
+/// or one that says it would fail, cannot be paid, is refused or its number
+/// is used, offers nothing.
 fn approve_executors(s: &State, item: &ProposalItem) -> Vec<String> {
     if item.status != ProposalStatus::Pending {
         return Vec::new();
@@ -3487,15 +3493,20 @@ fn approve_executors(s: &State, item: &ProposalItem) -> Vec<String> {
         .iter()
         .filter(|e| item.can_approve.iter().any(|o| same_address(o, e)))
         .filter(|e| {
-            s.more
+            let key = preview_key(item.chain_id, &item.safe_tx_hash, e);
+            let fresh = s
+                .more
                 .looks
-                .get(&preview_key(item.chain_id, &item.safe_tx_hash, e))
-                .is_some_and(|(approved, look)| {
-                    *approved == item.approved
-                        && matches!(
-                            look,
-                            super::multisig_presence::Look::Priced { can_pay: true }
-                        )
+                .get(&key)
+                .is_some_and(|(approved, _)| *approved == item.approved);
+            fresh
+                && s.preview_plans.get(&key).is_some_and(|(_, p)| {
+                    matches!(
+                        p,
+                        Preview::Priced { can_pay: true, .. }
+                            | Preview::Unpriced
+                            | Preview::Unchecked
+                    )
                 })
         })
         .cloned()

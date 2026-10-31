@@ -116,6 +116,11 @@ use super::dapp_rpc::{
 };
 use super::sign_request::SignResponsePayload;
 
+/// core-ms-2: the bundler method a [`DbrOperation::Read`] names for a
+/// batch a multisig answered with — the proposals machine's
+/// `calls_status`, never a bundler's: its body is that machine's answer.
+pub const MULTISIG_CALLS_STATUS_METHOD: &str = "wallet_getCallsStatus";
+
 /// A site with no stored chain and no grant starts on Ethereum — the
 /// extension's `DEFAULT_EXT_CHAIN_ID` (research R5).
 pub const DEFAULT_CHAIN_ID: u32 = 1;
@@ -172,7 +177,13 @@ pub enum DbrOperation {
         message_json: String,
     },
     /// A node (`bundler: false`) or bundler read on `chain_id`, through the
-    /// person's own endpoints.
+    /// person's own endpoints. core-ms-2: a bundler read of
+    /// [`MULTISIG_CALLS_STATUS_METHOD`] (`wallet_getCallsStatus`, never a
+    /// bundler's method) is a batch a multisig answered the page with
+    /// ([`Event::MultisigAnswered`]): ask the proposals machine
+    /// (`calls_status {id, chain_id, calls_id: params[0]}`) and answer
+    /// `ReadAnswered` with its `calls_status[id]` as the body (it is a
+    /// JSON-RPC body: `{result}` or `{error}`), then `calls_status_taken`.
     Read {
         tab: String,
         id: String,
@@ -201,16 +212,6 @@ pub enum DbrOperation {
         chain_id: u32,
         /// The address the site was shown — the signer is pinned to it.
         granted_address: String,
-    },
-    /// core-ms-2: a `wallet_getCallsStatus` of a batch a multisig answered
-    /// the page with ([`Event::MultisigAnswered`]): ask the proposals machine
-    /// (`calls_status {id, chain_id, calls_id: batch}`) and answer with
-    /// [`Event::MultisigCallsStatusAnswered`] — exactly once, whatever happens.
-    MultisigCallsStatus {
-        tab: String,
-        id: String,
-        chain_id: u32,
-        batch: String,
     },
     /// The page that asked is gone (it already has its 4900): close the
     /// sheet for this request without answering it.
@@ -413,18 +414,9 @@ pub enum Event {
     /// error with its code, message and `data` (the proposal a "proposed,
     /// waiting" carries). A `wallet_sendCalls` answered its id is a
     /// multisig batch from then on: `wallet_getCallsStatus` of it is asked
-    /// of the proposals machine ([`DbrOperation::MultisigCallsStatus`]).
+    /// of the proposals machine (a [`DbrOperation::Read`] of
+    /// [`MULTISIG_CALLS_STATUS_METHOD`]).
     MultisigAnswered {
-        tab: String,
-        id: String,
-        answer: super::multisig_dapp::DappAnswer,
-        #[serde(default)]
-        now_ms: f64,
-    },
-    /// core-ms-2: the proposals machine's `calls_status[id]` for a
-    /// [`DbrOperation::MultisigCallsStatus`], delivered as it is. The shell
-    /// then tells the proposals machine `calls_status_taken`.
-    MultisigCallsStatusAnswered {
         tab: String,
         id: String,
         answer: super::multisig_dapp::DappAnswer,
@@ -932,12 +924,6 @@ impl App for DappBrowser {
                 answer,
                 now_ms: _,
             } => multisig_answered(model, &tab, &id, &answer, &mut out),
-            Event::MultisigCallsStatusAnswered {
-                tab,
-                id,
-                answer,
-                now_ms: _,
-            } => multisig_calls_answered(model, &tab, &id, &answer, &mut out),
             Event::ReadDone {
                 tab,
                 id,
@@ -1092,7 +1078,6 @@ impl Event {
             | Event::ConsentRejected { now_ms }
             | Event::SigningAnswered { now_ms, .. }
             | Event::MultisigAnswered { now_ms, .. }
-            | Event::MultisigCallsStatusAnswered { now_ms, .. }
             | Event::AddNetworkAnswered { now_ms, .. }
             | Event::ReadDone { now_ms, .. }
             | Event::UserOpDone { now_ms, .. } => Some(*now_ms),
@@ -1936,13 +1921,14 @@ fn handle_request(model: &mut Model, tab_id: &str, request: PageRequest, out: &m
             // core-ms-2: a batch a multisig answered with: its status is the
             // proposals machine's, from the proposal's state.
             if let Some(&chain) = model.multisig_batches.get(&batch) {
-                open(model, tab_id, &id, OpenKind::Read);
-                out.op(DbrOperation::MultisigCallsStatus {
-                    tab: tab_id.to_owned(),
+                let read = QueuedRead {
                     id: id.clone(),
                     chain_id: chain,
-                    batch,
-                });
+                    method: MULTISIG_CALLS_STATUS_METHOD.to_owned(),
+                    params: json!([batch]),
+                    bundler: true,
+                };
+                queue_read(model, tab_id, &doc, read, out);
                 return;
             }
             // Only a batch this wallet sent: a page answered with its id —
@@ -2448,36 +2434,6 @@ fn multisig_answered(
         }
     }
     forward_next(model, out);
-}
-
-/// core-ms-2: the proposals machine's `wallet_getCallsStatus` answer
-/// ([`Event::MultisigCallsStatusAnswered`]), to the page that asked.
-fn multisig_calls_answered(
-    model: &mut Model,
-    tab_id: &str,
-    id: &str,
-    answer: &super::multisig_dapp::DappAnswer,
-    out: &mut Out,
-) {
-    let Some(doc) = model.tabs.get(tab_id).and_then(|t| t.doc.clone()) else {
-        return;
-    };
-    if !close_open(model, tab_id, &doc, id) {
-        return;
-    }
-    let (code, why) = match &answer.error {
-        None => (None, None),
-        Some(error) => (
-            Some(error.code),
-            Some((DbrLayer::Wallet, DbrReason::UnknownBatch)),
-        ),
-    };
-    out.settle(tab_id, &doc, id, code, why);
-    out.op(DbrOperation::Deliver {
-        tab: tab_id.to_owned(),
-        doc: doc.clone(),
-        message_json: dapp_answer_json(&doc, id, answer),
-    });
 }
 
 // ---------------------------------------------------------------------------

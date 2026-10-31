@@ -2748,7 +2748,8 @@ fn loaded_lower_case_sites_are_normalised() {
 /// is the proposals machine's, delivered as it is.
 #[test]
 fn a_multisigs_answer_and_its_batch_are_the_proposals_machines() {
-    use vela_core::app::multisig_dapp::{left_proposed, DappAnswer};
+    use vela_core::app::dapp_browser::MULTISIG_CALLS_STATUS_METHOD;
+    use vela_core::app::multisig_dapp::{left_proposed, DappAnswer, DappError};
     let hash = format!("0x{}", "Ab".repeat(32));
     let mut sut = connected(DAPP);
     hello(&mut sut, "t1", "d1", DAPP);
@@ -2800,30 +2801,64 @@ fn a_multisigs_answer_and_its_batch_are_the_proposals_machines() {
         "wallet_getCallsStatus",
         json!([hash]),
     );
-    assert!(
-        !ops.iter().any(|op| matches!(op, Op::Read { .. })),
-        "no bundler read: {ops:?}"
+    // The proposals machine's to answer: a read of its method, on its chain.
+    let asked = ops
+        .iter()
+        .find_map(|op| match op {
+            Op::Read {
+                id,
+                chain_id,
+                method,
+                params_json,
+                bundler: true,
+                ..
+            } if id == "3" => Some((*chain_id, method.clone(), params_json.clone())),
+            _ => None,
+        })
+        .expect("a read of the multisig batch's status");
+    assert_eq!(
+        asked,
+        (
+            100,
+            MULTISIG_CALLS_STATUS_METHOD.to_owned(),
+            json!([hash.to_ascii_lowercase()]).to_string()
+        )
     );
-    assert!(ops.contains(&Op::MultisigCallsStatus {
-        tab: "t1".to_owned(),
-        id: "3".to_owned(),
-        chain_id: 100,
-        batch: hash.to_ascii_lowercase(),
-    }));
+    // Its answer (`calls_status[id]`) is the body, delivered as it is.
     let status = json!({ "version": "2.0.0", "id": hash, "chainId": "0x64", "status": 100 });
-    let ops = sut.dispatch(Event::MultisigCallsStatusAnswered {
-        tab: "t1".to_owned(),
-        id: "3".to_owned(),
-        answer: DappAnswer::ok(status.clone()),
-        now_ms: 0.0,
-    });
+    let ops = sut.resolve_matching(
+        |op| matches!(op, Op::Read { id, .. } if id == "3"),
+        Res::ReadAnswered {
+            body_json: Some(serde_json::to_string(&DappAnswer::ok(status.clone())).unwrap()),
+            failure: None,
+            now_ms: 0.0,
+        },
+    );
     assert_eq!(only_answer(&ops)["result"], status);
-    // Answered once: a late second answer is dropped.
-    let ops = sut.dispatch(Event::MultisigCallsStatusAnswered {
-        tab: "t1".to_owned(),
-        id: "3".to_owned(),
-        answer: DappAnswer::ok(status),
-        now_ms: 0.0,
+    // An error keeps its code and data.
+    ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "4",
+        "wallet_getCallsStatus",
+        json!([hash]),
+    );
+    let refused = DappAnswer::err(DappError {
+        code: 5730,
+        message: "Unknown bundle id".into(),
+        data: Some(json!({ "id": hash })),
     });
-    assert!(delivered(&ops).is_empty());
+    let ops = sut.resolve_matching(
+        |op| matches!(op, Op::Read { id, .. } if id == "4"),
+        Res::ReadAnswered {
+            body_json: Some(serde_json::to_string(&refused).unwrap()),
+            failure: None,
+            now_ms: 0.0,
+        },
+    );
+    let answer = only_answer(&ops);
+    assert_eq!(error_code(&answer), 5730);
+    assert_eq!(answer["error"]["data"]["id"], json!(hash));
 }
