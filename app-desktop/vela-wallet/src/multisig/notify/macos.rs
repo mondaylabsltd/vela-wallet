@@ -93,7 +93,22 @@ pub fn ask() {
         store(Permission::Unavailable);
         return;
     };
-    let answered = block2::RcBlock::new(|granted: Bool, _error: *mut AnyObject| {
+    let answered = block2::RcBlock::new(|granted: Bool, error: *mut AnyObject| {
+        if !error.is_null() {
+            // SAFETY: a non-nil `NSError` for the duration of the callback.
+            let why: Option<Retained<objc2_foundation::NSString>> =
+                unsafe { msg_send_id![error, localizedDescription] };
+            crate::diag::vlog!(
+                "multisig-notify",
+                "permission not given: {}",
+                why.map(|w| w.to_string()).unwrap_or_default()
+            );
+        } else if !granted.as_bool() {
+            crate::diag::vlog!(
+                "multisig-notify",
+                "permission refused: the in-app line shows them"
+            );
+        }
         store(if granted.as_bool() {
             Permission::Granted
         } else {
