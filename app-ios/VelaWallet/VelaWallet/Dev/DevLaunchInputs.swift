@@ -25,8 +25,7 @@
 //    `null` removes that chain's override.
 //  - `VELA_PEERCONNECT_RELAY` — the PeerConnect relay an outside signer's
 //    session goes through, stored at `vela.peerconnectRelay` as the web keeps
-//    it. Nothing on iOS opens a PeerConnect session yet (multisig is the
-//    web's until F0.4): it is stored so the first one that does finds it.
+//    it; the outside session's rooms (`MultisigPeerRooms`) go through it.
 //
 //  Applied in the app's init, before the object graph — and so before any
 //  machine has read a store. Persisted, like the parallel space: a relaunch
