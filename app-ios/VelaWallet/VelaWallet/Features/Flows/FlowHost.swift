@@ -79,6 +79,9 @@ struct FlowHost: View {
     var onSelectActivity: ((Int, Int) -> Void)?
     /// The record behind the tapped history row, by id (never by position).
     var onSelectActivityItem: ((String?) -> Void)?
+    /// A row that opens as something else than a transaction detail — a
+    /// multisig transaction opens as its own sheet (r8-17). `true`: it did.
+    var opensElsewhere: ((String?) -> Bool)?
     /// Which assets row opened the token sheet.
     var onSelectAsset: ((Int) -> Void)?
     /// 转账 from a token's own sheet, with that token preselected.
@@ -355,6 +358,7 @@ struct FlowHost: View {
                 HistoryBody(model: m, onSelect: { group, row in
                     let item = m.groups.indices.contains(group) && m.groups[group].rows.indices.contains(row)
                         ? m.groups[group].rows[row].itemId : nil
+                    if opensElsewhere?(item) == true { return }
                     onSelectActivityItem?(item)
                     onSelectActivity?(group, row)
                     onNavigate(.txDetail)

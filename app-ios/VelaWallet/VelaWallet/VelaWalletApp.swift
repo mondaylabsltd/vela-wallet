@@ -30,6 +30,9 @@ struct VelaWalletApp: App {
         // Local services for a harness run (native parity F0.5): written
         // before the graph, so no machine has read a store yet.
         DevLaunchInputs.install()
+        // `VELA_DEV_MULTISIG_POLL`: the multisig's background round on a
+        // Darwin notification, for a simulator iOS never refreshes.
+        DevMultisigPoll.install()
         // `VELA_PERF_SEED` (native parity Phase 4): the performance tests'
         // history and cached home, for a Release build to be measured on.
         PerfSeed.install()

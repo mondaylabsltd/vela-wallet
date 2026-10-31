@@ -71,6 +71,15 @@ while IFS= read -r name; do
   fi
 done <<<"$names"
 
+# 1b. The multisig's on-demand background poll (Dev/DevMultisigPoll.swift):
+#     its Darwin trigger and its type — the simulator's stand-in for
+#     BGAppRefresh is never a door in a store binary.
+for marker in "app.getvela.VelaWallet.dev.multisigPoll" "DevMultisigPoll"; do
+  if [[ "$(hits "$marker")" != 0 ]]; then
+    fail "developer trigger compiled in: $marker (Release must exclude Dev/DevMultisigPoll.swift)"
+  fi
+done
+
 # 2. The fixture keyset's exports.
 fixtures="$(for b in "${binaries[@]}"; do nm -arch all "$b" 2>/dev/null; done | grep -cE 'uniffi_vela_dev_fixtures|fixture_multi_address' || true)"
 if [[ "$fixtures" != 0 ]]; then

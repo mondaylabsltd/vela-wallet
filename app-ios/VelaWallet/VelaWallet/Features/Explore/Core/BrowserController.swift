@@ -318,9 +318,9 @@ final class BrowserController {
     /// Unless the account in front is the parallel space's test wallet
     /// (`accountEvents`' `space`): then the person's sites are not this
     /// switch's to move.
-    func accountsChanged(addresses: [String], active: String?) {
+    func accountsChanged(addresses: [String], active: String?, networks: [Int] = []) {
         for event in Self.accountEvents(
-            addresses: addresses, active: active, nowMs: now(), isSpaceAccount: isSpaceAccount
+            addresses: addresses, active: active, nowMs: now(), isSpaceAccount: isSpaceAccount, networks: networks
         ) {
             dbrCore.dispatch(CoreJSON.string(event))
         }
@@ -341,8 +341,15 @@ final class BrowserController {
     /// the space's own in memory, writes nothing to the site store while in
     /// there, and puts the person's back on the next switch that is not the
     /// space's.
+    ///
+    /// r8-21: then the networks the account in front lives on (`networks`, a
+    /// multisig's own, in its record's order; `[]` for an account that lives
+    /// everywhere) — a new site starts on the first of them the space
+    /// offers, never on Ethereum for a multisig deployed only on Arc. Which
+    /// one is the core's.
     static func accountEvents(
-        addresses: [String], active: String?, nowMs: Double, isSpaceAccount: @MainActor (String) -> Bool
+        addresses: [String], active: String?, nowMs: Double, isSpaceAccount: @MainActor (String) -> Bool,
+        networks: [Int] = []
     ) -> [[String: Any]] {
         var events: [[String: Any]] = [[
             "type": "accounts_updated",
@@ -353,6 +360,7 @@ final class BrowserController {
                 "type": "account_switched", "address": active, "now_ms": nowMs,
                 "space": isSpaceAccount(active),
             ])
+            events.append(["type": "account_networks", "networks": networks])
         }
         return events
     }

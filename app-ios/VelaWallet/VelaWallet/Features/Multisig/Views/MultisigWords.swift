@@ -103,10 +103,16 @@ struct MsWords {
     /// "Send 500 USDC", "Add Bob (0x12…34)" — the proposal's own title.
     func actionTitle(chainId: Int, action: MsJSON?, nonce: String) async -> String {
         guard let action, !action.isNull else { return t("action.unsupported") }
+        // r8-2: a token's facts are the core's (`tokens`) — read before any
+        // guess; one it could not read is said raw, never in 18 decimals.
+        if action.kind == "transfer", action["token"]?.string == nil || coreToken(chainId, action["token"]?.string) != nil {
+            return actionTitleNow(chainId: chainId, action: action, nonce: nonce)
+        }
         switch action.kind {
         case "transfer":
-            let fallback: (symbol: String, decimals: Int) = (symbol(chainId), 18)
-            let info = await hub?.tokenInfo(chainId: chainId, token: action["token"]?.string) ?? fallback
+            guard let info = await hub?.tokenInfo(chainId: chainId, token: action["token"]?.string),
+                  info.symbol != AddressText.short(action["token"]?.string ?? "")
+            else { return actionTitleNow(chainId: chainId, action: action, nonce: nonce) }
             return t("action.send", [
                 "amount": MsRules.formatUnits(action["amount"]?.string ?? "0", decimals: info.decimals),
                 "symbol": info.symbol,
@@ -116,17 +122,39 @@ struct MsWords {
         }
     }
 
+    /// The core's facts for a token the proposals shown move (r8-2,
+    /// `MultisigProposalsView.tokens`): symbol and decimals, either `nil`
+    /// when unread.
+    func coreToken(_ chainId: Int, _ token: String?) -> (symbol: String?, decimals: Int?)? {
+        guard let token, let facts = hub?.proposalsView.tokens["\(chainId):\(token.lowercased())"] else { return nil }
+        return (facts["symbol"]?.string, facts["decimals"]?.int)
+    }
+
     /// The same, without reading a token (a transfer of the chain's coin, or
     /// of a token whose symbol is not read yet, says the coin it knows).
     func actionTitleNow(chainId: Int, action: MsJSON?, nonce: String, token: (symbol: String, decimals: Int)? = nil) -> String {
         guard let action, !action.isNull else { return t("action.unsupported") }
         switch action.kind {
         case "transfer":
-            let info = token ?? ((action["token"]?.string).map { _ in ("", 18) } ?? (symbol(chainId), 18))
-            return t("action.send", [
-                "amount": MsRules.formatUnits(action["amount"]?.string ?? "0", decimals: info.decimals),
-                "symbol": info.symbol,
-            ]).trimmingCharacters(in: .whitespaces)
+            let amount = action["amount"]?.string ?? "0"
+            guard let address = action["token"]?.string else {
+                return t("action.send", ["amount": MsRules.formatUnits(amount, decimals: 18), "symbol": symbol(chainId)])
+                    .trimmingCharacters(in: .whitespaces)
+            }
+            if let token {
+                return t("action.send", ["amount": MsRules.formatUnits(amount, decimals: token.decimals), "symbol": token.symbol])
+                    .trimmingCharacters(in: .whitespaces)
+            }
+            // r8-2: the core's facts; decimals unread — the base units, said
+            // so, never a figure in 18 decimals ("Send <0.000001").
+            let facts = coreToken(chainId, address)
+            let name = facts?.symbol ?? Self.short(address)
+            guard let decimals = facts?.decimals else {
+                return t("action.send", ["amount": t("review.reading.decimalsUnknown", ["raw": amount]), "symbol": name])
+                    .trimmingCharacters(in: .whitespaces)
+            }
+            return t("action.send", ["amount": MsRules.formatUnits(amount, decimals: decimals), "symbol": name])
+                .trimmingCharacters(in: .whitespaces)
         case "batch":
             let calls = action["calls"]?.array ?? []
             let allTransfers = calls.allSatisfy { $0["action"]?.kind == "transfer" }

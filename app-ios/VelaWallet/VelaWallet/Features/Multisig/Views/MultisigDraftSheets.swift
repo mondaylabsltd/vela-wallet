@@ -27,6 +27,8 @@ struct MultisigDraftReviewSheet: View {
     var onWithdraw: (() -> Void)?
 
     @State private var member: String?
+    /// The "… anyway" step the core asked for, while it is up (r8-1).
+    @State private var anyway: MsAnywayStep?
 
     private var draft: MsDraft? { hub.proposalsView.draft }
     private var state: MsTagged? { hub.proposalsView.action("propose") }
@@ -60,11 +62,13 @@ struct MultisigDraftReviewSheet: View {
             }
         }
         .interactiveDismissDisabled(state?.kind == "working")
+        .msAnywayStep($anyway, cancel: words.t("proposal.rejectCancel"))
     }
 
     @ViewBuilder private func actions(_ draft: MsDraft) -> some View {
-        let allowed = draft.review["sign"]?["allowed"]?.bool ?? true
-        let anyway = draft.review["sign"]?["anyway"]?.bool ?? false
+        let rule = MsSignRule(review: draft.review)
+        let allowed = rule.allowed
+        let anyway = rule.anyway
         let working = state?.kind == "working"
         VStack(alignment: .leading, spacing: Tokens.Space.s12) {
             if draft.membersHere.count > 1 {
@@ -83,26 +87,32 @@ struct MultisigDraftReviewSheet: View {
             // core-ms-2: ready on its proposer's approval (a site's
             // transaction) — proposed and executed in one press.
             if draft.executeNow, !draft.membersHere.isEmpty {
+                let title = words.t(anyway ? "review.approveExecuteAnyway" : "proposal.approveAndExecute")
                 VelaButton(
-                    title: words.t(allowed ? "proposal.approveAndExecute" : "review.approveExecuteAnyway"),
-                    kind: .primary,
-                    enabled: allowed || anyway,
+                    title: title,
+                    kind: anyway ? .danger : .primary,
+                    enabled: allowed,
                     loading: working,
                     haptic: .confirm
                 ) {
-                    hub.sendProposal(["type": "propose_execute", "as_member": (member ?? draft.defaultMember).map { $0 as Any } ?? NSNull()])
+                    signing(rule, title: title, draft: draft) {
+                        hub.sendProposal(["type": "propose_execute", "as_member": (member ?? draft.defaultMember).map { $0 as Any } ?? NSNull()])
+                    }
                 }
                 .accessibilityIdentifier("multisig.draft.proposeExecute")
                 MsNote(text: words.t("proposal.feeNote"))
             }
+            let proposeTitle = words.t(draft.membersHere.isEmpty ? "send.proposeOnly" : (anyway ? "review.proposeAnyway" : "send.propose"))
             VelaButton(
-                title: words.t(draft.membersHere.isEmpty ? "send.proposeOnly" : (allowed ? "send.propose" : "review.proposeAnyway")),
-                kind: draft.executeNow && !draft.membersHere.isEmpty ? .secondary : .primary,
-                enabled: allowed || anyway,
+                title: proposeTitle,
+                kind: draft.executeNow && !draft.membersHere.isEmpty ? .secondary : (anyway ? .danger : .primary),
+                enabled: allowed,
                 loading: working && !draft.executeNow,
                 haptic: .confirm
             ) {
-                hub.confirmDraft(as: member ?? draft.defaultMember)
+                signing(rule, title: words.t(draft.membersHere.isEmpty ? "send.proposeOnly" : "review.proposeAnyway"), draft: draft) {
+                    hub.confirmDraft(as: member ?? draft.defaultMember)
+                }
             }
             .accessibilityIdentifier("multisig.draft.propose")
             VelaButton(title: words.t("proposal.dontPropose"), kind: .secondary, enabled: !working) {
@@ -115,6 +125,66 @@ struct MultisigDraftReviewSheet: View {
 
     private func withdraw() {
         if let onWithdraw { onWithdraw() } else { hub.withdrawDraft() }
+    }
+
+    /// At once, or — when the core's rule asks for "… anyway" — after the
+    /// person confirms past the review's reasons (r8-1).
+    private func signing(_ rule: MsSignRule, title: String, draft: MsDraft, _ run: @escaping () -> Void) {
+        guard rule.allowed else { return }
+        if rule.anyway {
+            anyway = MsAnywayStep(title: title, reasons: rule.reasons(draft.review, words: words), run: run)
+        } else {
+            run()
+        }
+    }
+}
+
+/// The core's sign rule over a review (`MultisigReview.sign`): `allowed`
+/// false — nothing is signed, no override; `anyway` — signed only past a
+/// danger-styled "… anyway" step that names the review's reasons.
+struct MsSignRule: Equatable {
+    let allowed: Bool
+    let anyway: Bool
+
+    init(review: MsJSON?) {
+        allowed = review?["sign"]?["allowed"]?.bool ?? true
+        anyway = review?["sign"]?["anyway"]?.bool ?? false
+    }
+
+    /// The review's concerns, each in its words.
+    @MainActor
+    func reasons(_ review: MsJSON?, words: MsWords) -> [String] {
+        (review?["concerns"]?.array ?? []).compactMap { MsReviewBody.concernText($0, review: review, words: words) }
+    }
+}
+
+/// One "… anyway" step waiting on the person.
+struct MsAnywayStep: Identifiable {
+    let id = UUID()
+    let title: String
+    let reasons: [String]
+    let run: () -> Void
+}
+
+extension View {
+    /// The "… anyway" step (r8-1): the reasons, then the danger confirm or
+    /// a way back. Nothing is signed until the person confirms.
+    func msAnywayStep(_ step: Binding<MsAnywayStep?>, cancel: String) -> some View {
+        confirmationDialog(
+            step.wrappedValue?.title ?? "",
+            isPresented: Binding(get: { step.wrappedValue != nil }, set: { if !$0 { step.wrappedValue = nil } }),
+            titleVisibility: .visible,
+            presenting: step.wrappedValue
+        ) { pending in
+            Button(pending.title, role: .destructive) {
+                step.wrappedValue = nil
+                pending.run()
+            }
+            .accessibilityIdentifier("multisig.anyway.confirm")
+            Button(cancel, role: .cancel) { step.wrappedValue = nil }
+        } message: { pending in
+            Text(verbatim: pending.reasons.joined(separator: "\n"))
+        }
     }
 }
 

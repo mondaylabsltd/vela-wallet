@@ -239,6 +239,31 @@ enum FlowsLive {
         readRequest: @escaping (String) -> String? = { _ in nil },
         networks: WalletNetworks = .builtin
     ) -> TxDetailModel {
+        var detail = recordDetail(item, record: record, on: model, loc: loc, hidden: hidden, display: display,
+                                  readRequest: readRequest, networks: networks)
+        // r4D-17 / r8-17: a multisig's execution happened on chain for every
+        // member — no local record to delete (its own sheet draws it).
+        if isMultisigRecord(item) { detail.deleteLabel = nil }
+        return detail
+    }
+
+    /// A multisig transaction's executed row (or a batch of them, folded):
+    /// the core's row-id scheme says so.
+    static func isMultisigRecord(_ item: FeedItemWire) -> Bool {
+        MsRules.transactionOfRow(item.id) != nil
+            || (item.batch?.ids ?? []).contains { MsRules.transactionOfRow($0) != nil }
+    }
+
+    private static func recordDetail(
+        _ item: FeedItemWire,
+        record: FeedTxRecordWire?,
+        on model: TxDetailModel,
+        loc: Loc,
+        hidden: Bool,
+        display: WalletLive.Display,
+        readRequest: @escaping (String) -> String?,
+        networks: WalletNetworks
+    ) -> TxDetailModel {
         if let dapp = item.dapp {
             return dappDetail(item, dapp: dapp, record: record, on: model, loc: loc, hidden: hidden,
                               display: display, readRequest: readRequest, networks: networks)

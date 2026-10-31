@@ -17,6 +17,9 @@ struct MsReviewBody: View {
     let review: MsJSON
     let chainId: Int
     let words: MsWords
+    /// A finished transaction: nothing is re-checked, only what was signed
+    /// (its fields and hashes) is drawn — the web's `past`.
+    var past = false
     /// A token's symbol and decimals, read once for the moves.
     @State private var tokens: [String: (symbol: String, decimals: Int)] = [:]
     @State private var techOpen = false
@@ -25,53 +28,73 @@ struct MsReviewBody: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s12) {
-            concerns
-            moves
-            recipients
-            memberChanges
-            stateGuard
+            if !past {
+                concerns
+                // What its calls do, every leg — the core's reading, under
+                // the lines its concerns say (the web's order).
+                let reading = MsReading.concernBlocks(review, words: words)
+                    + MsReading.blocks(review, chainId: chainId, words: words)
+                if !reading.isEmpty { MsReadingView(blocks: reading) }
+                stateGuard
+                recipients
+                memberChanges
+                moves
+            }
             technical
         }
         .task(id: tokenAddresses) { await readTokens() }
     }
 
-    // MARK: - Concerns (the core's, in order)
+    // MARK: - Concerns
 
+    /// Each thing the review says, said ONCE (r8-14): the block that carries
+    /// it says it — the verdict's place a simulation that could not run or
+    /// would revert, a recipient's row its first time, its contract and its
+    /// look-alike, the guard its own verdict, the reading's lines what the
+    /// calls do (`MsReading.concernBlocks`); a refusal is the sheet's own
+    /// note. What no block carries is drawn here: nothing is signed.
     @ViewBuilder private var concerns: some View {
-        let list = review["concerns"]?.array ?? []
         if review["sign"]?["allowed"]?.bool == false {
             MsNote(text: words.t("review.blocked"), tone: .danger, identifier: "multisig.review.blocked")
         }
-        ForEach(Array(list.enumerated()), id: \.offset) { _, concern in
-            if let line = concernLine(concern) {
-                MsNote(text: line.text, tone: line.tone, identifier: "multisig.review.concern.\(concern.kind ?? "")")
-            }
-        }
     }
 
-    private func concernLine(_ concern: MsJSON) -> (text: String, tone: MsNote.Tone)? {
+    /// A concern in words — every kind, for the "… anyway" step, which
+    /// names what the person is signing past.
+    static func concernText(_ concern: MsJSON, review: MsJSON? = nil, words: MsWords) -> String? {
         switch concern.kind {
         case "notSigned":
-            return (words.t("proposal.refused", ["reason": concern["why"]?.string ?? ""]), .danger)
+            return words.t("proposal.refused", ["reason": concern["why"]?.string ?? ""])
+        case "stateChange":
+            return words.t("review.stateTitle")
+        case "stateUnread":
+            return nil
         case "lookalike":
-            return (words.t("review.lookalike", [
+            return words.t("review.lookalike", [
                 "address": concern["address"]?.string ?? "",
                 "label": concern["label"]?.string ?? "",
                 "known": concern["of"]?.string ?? "",
-            ]), .danger)
+            ])
         case "toContract":
-            return (words.t("review.toContract", ["address": concern["address"]?.string ?? ""]), .warning)
+            return words.t("review.toContract", ["address": concern["address"]?.string ?? ""])
         case "firstTime":
-            return (words.loc.t("componentsUi.signing.firstTimeTag") + " · " + MsWords.short(concern["address"]?.string ?? ""), .warning)
+            return words.loc.t("componentsUi.signing.firstTimeTag") + " · " + MsWords.short(concern["address"]?.string ?? "")
         case "reverts":
-            return (words.loc.t("componentsUi.signing.simWillFail"), .danger)
+            return words.loc.t("componentsUi.signing.simWillFail")
         case "unsimulated":
-            return (words.loc.t("componentsUi.signing.simUnavailableWarning"), .warning)
-        case "blind":
-            return (words.t("action.unsupported"), .danger)
+            return words.loc.t("componentsUi.signing.simUnavailableWarning")
         default:
-            // `stateChange` and `stateUnread` are the guard's own block below.
-            return nil
+            // The reading's own (r8-1, r8-2, r8-5), a call nobody reads too.
+            return MsReading.concernLine(concern, review: review, words: words)?.text
+        }
+    }
+
+    /// The core's tone for each (`Concern::tone`): refused and danger kinds
+    /// in the danger ink, the cautions in the warning one.
+    static func tone(_ concern: MsJSON) -> MsNote.Tone {
+        switch concern.kind {
+        case "notSigned", "stateChange", "lookalike", "reverts": .danger
+        default: .warning
         }
     }
 
@@ -136,9 +159,26 @@ struct MsReviewBody: View {
         let list = review["recipients"]?.array ?? []
         if !list.isEmpty {
             VStack(alignment: .leading, spacing: Tokens.Space.s0) {
+                let drawn = MsReading.partyAddresses(MsReading.blocks(review, chainId: chainId, words: words))
                 ForEach(Array(list.enumerated()), id: \.offset) { index, recipient in
-                    if index > 0 { MsDivider() }
-                    recipientRow(recipient)
+                    // One the reading names already is said once, there (r5reg-15).
+                    if !drawn.contains((recipient["address"]?.string ?? "").lowercased()) {
+                        if index > 0 { MsDivider() }
+                        recipientRow(recipient)
+                    }
+                    // What is wrong with this recipient, under its own row
+                    // (the web's `recipientBlocks`) — said once, here.
+                    if let lookalike = recipient["lookalike"], !lookalike.isNull {
+                        MsNote(text: words.t("review.lookalike", [
+                            "address": recipient["address"]?.string ?? "",
+                            "label": lookalike["label"]?.string ?? "",
+                            "known": lookalike["address"]?.string ?? "",
+                        ]), tone: .danger, identifier: "multisig.review.lookalike")
+                    }
+                    if recipient["contractCue"]?.bool == true {
+                        MsNote(text: words.t("review.toContract", ["address": recipient["address"]?.string ?? ""]),
+                               tone: .warning, identifier: "multisig.review.toContract")
+                    }
                 }
             }
         }

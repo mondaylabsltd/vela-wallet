@@ -1311,6 +1311,7 @@ struct RootView: View {
                             onSyncRetry: { session.syncPending() },
                             onFlow: { enterFlow($0) },
                             onOpenActivity: { activityItemId = $0 },
+                            opensElsewhere: { openMultisigRow($0) },
                             onToggleBalance: {
                                 agent.person([
                                     "type": "set_balance_privacy",
@@ -1915,7 +1916,9 @@ struct RootView: View {
         browser.accountsChanged(
             addresses: accounts.loadAccounts().compactMap { $0["address"] as? String }
                 + multisig.accountsView.accounts.map(\.account.address),
-            active: shownAddress
+            active: shownAddress,
+            // r8-21: a multisig's own networks, in its record's order.
+            networks: shownMultisig?.account.chainIds ?? []
         )
     }
 
@@ -2789,10 +2792,22 @@ struct RootView: View {
                 ))
             }
             if case .sendConfirm(let confirm) = model.base {
+                // r8-9: a multisig's send moves the multisig's money — it is
+                // the source (its name, its face), never the member's account
+                // underneath; and its rule stands where the fee would.
+                let sendChain = (view.multiSelectMode ? view.multiChainId : nil) ?? view.selectedToken?.chainId
                 var live = SendLive.confirm(
-                    view, from: (session.view.address, session.view.activeName),
+                    view,
+                    from: view.multisig != nil
+                        ? (shownAddress, shownName)
+                        : (session.view.address, session.view.activeName),
                     display: display, on: confirm, loc: loc, fee: fees.view, speed: fees.speed,
-                    networks: walletNetworks
+                    networks: walletNetworks,
+                    multisig: view.multisig.map { ref in
+                        MultisigConfirmWords.of(
+                            ref: ref, members: sendChain.flatMap { multisig.proposalsView.chain($0)?.members }, loc: loc
+                        )
+                    }
                 )
                 // The Trusted Signer's ending (spec 071): the core heard a
                 // cancelled ceremony and kept the confirmation up; this says
@@ -3385,6 +3400,7 @@ struct RootView: View {
                         )
                     },
                     onSelectActivityItem: { activityItemId = $0 },
+                    opensElsewhere: { openMultisigRow($0) },
                     onSelectAsset: { selectAsset($0) },
                     onSendToken: { sendSelectedToken() },
                     onReceiveToken: { receiveSelectedToken() },
@@ -3768,6 +3784,34 @@ struct RootView: View {
         default:
             return nil
         }
+    }
+
+    /// r8-17 (r4D-17): a multisig transaction's Activity row opens as that
+    /// transaction — its sheet, the same every member sees — never a local
+    /// record's detail with "Delete record". `true`: it opened.
+    private func openMultisigRow(_ id: String?) -> Bool {
+        guard let tx = Self.multisigTransaction(ofRow: id, feed: activity.feed) else { return false }
+        // Not in the list read now (an older one): the machine reads it on
+        // the followed multisig, as a link's would be (`open_linked`).
+        if multisig.proposalsView.item(chainId: tx.chainId, hash: tx.safeTxHash) == nil {
+            multisig.sendProposal([
+                "type": "open_linked", "chain_id": tx.chainId, "safe_tx_hash": tx.safeTxHash, "preview": NSNull(),
+            ])
+        }
+        multisig.sheet = .proposal(chainId: tx.chainId, safeTxHash: tx.safeTxHash)
+        return true
+    }
+
+    /// The multisig transaction a row is (the core's row-id scheme), its
+    /// own id or a folded batch's — `nil` for any other row.
+    static func multisigTransaction(ofRow id: String?, feed: FeedViewWire?) -> (chainId: Int, safeTxHash: String)? {
+        guard let id else { return nil }
+        if let own = MsRules.transactionOfRow(id) { return own }
+        guard let item = feed.flatMap({ FlowsLive.items($0).first { $0.id == id } }) else { return nil }
+        for inner in item.batch?.ids ?? [] {
+            if let tx = MsRules.transactionOfRow(inner) { return tx }
+        }
+        return nil
     }
 
     /// The feed item behind the tapped activity row, by its id — the same

@@ -1080,7 +1080,10 @@ enum SendLive {
         loc: Loc,
         fee: FeeViewWire? = nil,
         speed: FeeSpeedViewWire? = nil,
-        networks: WalletNetworks = .builtin
+        networks: WalletNetworks = .builtin,
+        /// A multisig's send (`view.multisig`): who must approve, worded for
+        /// the send's network. `nil`: its own rule, from the core's ref.
+        multisig: MultisigConfirmWords? = nil
     ) -> SendConfirmModel {
         let live = model
         let token = view.selectedToken
@@ -1120,7 +1123,17 @@ enum SendLive {
                 value: networkChainId.flatMap { networks.meta($0)?.displayName } ?? chain,
                 lead: networkChainId.flatMap { networkMark($0, networks: networks) }.map { .token($0) }
             ),
-            FactRowModel(
+            // r8-9: a multisig pays no fee of its own — the member who
+            // executes it does. Where the fee would stand, its row says who
+            // must approve on the send's network, and why no fee is shown
+            // (the web's `liveSendConfirm`).
+            view.multisig.map { ref in
+                FactRowModel(
+                    label: multisig?.label ?? loc.t("home.multisig.proposal.approvals"),
+                    value: multisig?.rule ?? MultisigConfirmWords.rule(m: ref.threshold, n: ref.owners, loc: loc),
+                    note: loc.t("home.multisig.proposal.feeNote")
+                )
+            } ?? FactRowModel(
                 label: model.facts.count > 3 ? model.facts[3].label : "",
                 // With no estimate the row says so, as the form's row does —
                 // never the drawing's "~0.0021 ETH · ≈$0.55", a promise about
@@ -1128,9 +1141,7 @@ enum SendLive {
                 // A failure is no figure at all: its own (the dash, or "Tap to
                 // retry" only when a tap is the one way), kept through the
                 // core's re-ask — never "Estimating…" and back.
-                // A multisig pays no fee of its own: the member who executes
-                // it does (the web's `multisig.feeNote`).
-                value: view.multisig != nil ? loc.t("home.multisig.proposal.feeNote") : failure?.figure(loc)
+                value: failure?.figure(loc)
                     ?? (frozen ? view.fee ?? fee?.fee : view.fee ?? fee?.fee).map {
                         "~\(feeLine($0, view: view, fee: fee, display: display, networks: networks))"
                     }
@@ -1153,7 +1164,8 @@ enum SendLive {
         // because it was free (spec 068 / issue 686): the last screen before a
         // signature says so, and a free upgrade says why. A send at the stored
         // default adds no row.
-        if let speed, speed.picked || speed.free {
+        // A multisig has no speed: its fee is the executor's.
+        if view.multisig == nil, let speed, speed.picked || speed.free {
             facts.append(FactRowModel(
                 label: loc.t("send.feeSpeedLabel"),
                 value: tierName(speed.tier, loc: loc),
@@ -2258,5 +2270,30 @@ enum SendLive {
         while out.hasSuffix("0") { out.removeLast() }
         if out.hasSuffix(".") { out.removeLast() }
         return out.isEmpty ? "0" : out
+    }
+}
+
+/// r8-9: what a multisig's confirm says where a Vela account's says its fee —
+/// who must approve on the send's network (its members there now, else its
+/// own rule). The facts are the machines'; this only words them.
+struct MultisigConfirmWords: Equatable {
+    /// "Approvals"
+    let label: String
+    /// "Needs 2 of 4 members"
+    let rule: String
+
+    /// "Needs {{m}} of {{n}} members"; a multisig of one, its own sentence (r4D-13).
+    static func rule(m: Int, n: Int, loc: Loc) -> String {
+        n == 1 ? loc.t("home.multisig.panel.titleSolo")
+            : loc.t("home.multisig.panel.title", vars: ["m": String(m), "n": String(n)])
+    }
+
+    /// The rule on `chainId`: the members the proposals machine read there,
+    /// else the multisig's own (`ref`, what its record starts with).
+    static func of(ref: SendMultisigRefWire, members: MsChainMembers?, loc: Loc) -> MultisigConfirmWords {
+        MultisigConfirmWords(
+            label: loc.t("home.multisig.proposal.approvals"),
+            rule: rule(m: members?.threshold ?? ref.threshold, n: members?.owners.count ?? ref.owners, loc: loc)
+        )
     }
 }

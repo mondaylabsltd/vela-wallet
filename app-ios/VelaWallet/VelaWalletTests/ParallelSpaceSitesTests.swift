@@ -405,9 +405,11 @@ struct ParallelSpaceSitesTests {
         let events = BrowserController.accountEvents(
             addresses: [Self.annAddress, fixture], active: fixture, nowMs: t0, isSpaceAccount: hook
         )
-        #expect(events.map { $0["type"] as? String } == ["accounts_updated", "account_switched"])
+        // r8-21: then the networks the account lives on ([] — everywhere).
+        #expect(events.map { $0["type"] as? String } == ["accounts_updated", "account_switched", "account_networks"])
         #expect(events.first?["addresses"] as? [String] == [Self.annAddress, fixture])
-        #expect(events.last?["address"] as? String == fixture)
+        #expect(events[1]["address"] as? String == fixture)
+        #expect(events.last?["networks"] as? [Int] == [])
     }
 }
 
