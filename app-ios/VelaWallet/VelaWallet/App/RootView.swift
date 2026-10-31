@@ -1916,7 +1916,9 @@ struct RootView: View {
         browser.accountsChanged(
             addresses: accounts.loadAccounts().compactMap { $0["address"] as? String }
                 + multisig.accountsView.accounts.map(\.account.address),
-            active: shownAddress
+            active: shownAddress,
+            // r8-21: a multisig's own networks, in its record's order.
+            networks: shownMultisig?.account.chainIds ?? []
         )
     }
 

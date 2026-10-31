@@ -91,7 +91,7 @@ struct MultisigR8FixTests {
         // The step names what the person signs past, in the review's words.
         #expect(model.anywayReasons == [
             loc.t("componentsUi.signing.simUnavailableWarning"),
-            loc.t("componentsUi.signing.blindDecodeWarning", vars: ["bytes": "0"]),
+            words.t("review.reading.blindLine"),
         ])
         #expect(MsSignRule(review: model.review) == MsSignRule(review: model.review))
         #expect(MsSignRule(review: model.review).anyway)
@@ -131,99 +131,145 @@ struct MultisigR8FixTests {
         blocks.compactMap { if case .warning(let tone, let text) = $0 { return (tone, text) } else { return nil } }
     }
 
+    private func rows(_ blocks: [SigningBlock]) -> [SigningRow] {
+        blocks.flatMap { block -> [SigningRow] in
+            switch block {
+            case .rows(let rows): rows
+            case .card(_, let rows, _): rows
+            default: []
+            }
+        }
+    }
+
+    private func r(_ key: String, _ vars: [String: String] = [:]) -> String {
+        words.t("review.reading.\(key)", vars)
+    }
+
+    /// The core's own vectors (`tests/vectors/multisig/reading.json`).
+    private static let readingVectors = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .appendingPathComponent("rust/crates/vela-core/tests/vectors/multisig/reading.json")
+
+    private func vectorCases() throws -> [[String: Any]] {
+        let data = try Data(contentsOf: Self.readingVectors)
+        let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        return try #require(object["cases"] as? [[String: Any]])
+    }
+
+    /// Every vector, through the link door this app calls (`review.reading`):
+    /// the same reading, concerns, anyway and refusal the core's own test
+    /// expects — and each drawn without a raw key or an empty card.
+    @Test func everyReadingVectorReplaysThroughTheDoorAndDraws() throws {
+        let cases = try vectorCases()
+        #expect(cases.count >= 20)
+        for c in cases {
+            let name = c["name"] as? String ?? "?"
+            let args = try #require(c["args"] as? [String: Any])
+            let expect = try #require(c["expect"] as? [String: Any])
+            let got = try #require(MsRules.call("review.reading", args) as? [String: Any], "no answer for \(name)")
+            #expect(NSDictionary(dictionary: got).isEqual(to: expect), "\(name)")
+            // Drawn: a review carrying that reading and those concerns.
+            let review = MsJSON(any: ["reading": got["reading"] ?? NSNull(), "concerns": got["concerns"] ?? []])
+            let blocks = MsReading.concernBlocks(review, words: words)
+                + MsReading.blocks(review, chainId: args["chainId"] as? Int ?? 100, words: words)
+            for block in blocks {
+                let text: String = switch block {
+                case .warning(_, let t): t
+                case .intent(let t, _): t
+                case .card(let t, let rows, _): (t ?? "") + rows.map { $0.label + $0.value }.joined()
+                case .rows(let rows): rows.map { $0.label + $0.value }.joined()
+                case .source(let t, _): t
+                case .party(let l, let n, _, _): l + n
+                default: ""
+                }
+                #expect(!text.contains("home.multisig"), "a raw key in \(name): \(text)")
+                #expect(!text.contains("{{"), "an unfilled template in \(name): \(text)")
+            }
+            // The core's concerns about the calls each get their one line.
+            let lines = Set((got["concerns"] as? [[String: Any]] ?? []).compactMap { $0["kind"] as? String })
+                .intersection(MsReading.readingConcerns)
+            #expect(warnings(blocks).count == lines.count, "\(name): \(warnings(blocks).map(\.text))")
+        }
+    }
+
     /// The core's vector "approve(spender, 2^256-1) of Arc's USDC".
-    @Test func anUnlimitedApproveIsReadAsOneInTheDangerTone() {
-        let review = reviewJson(#"""
-        {"sign":{"allowed":true,"anyway":true},
-         "concerns":[{"kind":"unlimitedApproval","spender":"0x5555555555555555555555555555555555555555","token":"0x3600000000000000000000000000000000000000"}],
-         "reading":{"blind":false,"nested":false,"unlimited":true,"unreadable":false,"decimalsUnknown":[],
-          "calls":[{"path":[],"to":"0x3600000000000000000000000000000000000000",
-            "value":{"decimals":18,"plain":"0","raw":"0","unlimited":false},
-            "intent":{"kind":"approve","grant":"approve","expires":null,"spender":"0x5555555555555555555555555555555555555555",
-              "token":{"decimals":6,"known":true,"symbol":"USDC","token":"0x3600000000000000000000000000000000000000"},
-              "amount":{"decimals":6,"plain":null,"raw":"115792089237316195423570985008687907853269984665640564039457584007913129639935","unlimited":true}}}]}}
-        """#)
+    @Test func anUnlimitedApproveIsReadAsOneInTheDangerTone() throws {
+        let c = try #require(try vectorCases().first { ($0["name"] as? String)?.hasPrefix("approve(spender, 2^256-1) of Arc's USDC") == true })
+        let got = try #require(MsRules.call("review.reading", c["args"] as! [String: Any]) as? [String: Any])
+        let review = MsJSON(any: ["reading": got["reading"]!, "concerns": got["concerns"]!])
         let blocks = MsReading.blocks(review, chainId: 5_042_002, words: words)
-        let card = cards(blocks)
-        #expect(card.count == 1)
-        #expect(card[0].title == loc.t("componentsUi.signing.intentApprove"), "never \"Contract call\"")
-        #expect(card[0].tone == .danger)
-        #expect(card[0].rows.contains { $0.value == loc.t("componentsUi.signing.valueUnlimited") && $0.valueTone == .danger })
-        #expect(card[0].rows.contains { $0.value.hasPrefix("USDC") })
-        #expect(warnings(blocks).map(\.text) == [loc.t("componentsUi.signing.unlimitedWarning")])
-        // Said once: the reading's own concern is no second review line.
-        #expect(MsReviewBody.ownLines(review).isEmpty)
+        guard case .intent(let title, let tone)? = blocks.first else { Issue.record("no intent"); return }
+        #expect(title == r("approve"), "never \"Contract call\"")
+        #expect(tone == .danger)
+        #expect(rows(blocks).contains { $0.label == r("allowance") && $0.value == r("unlimited") && $0.valueTone == .danger })
+        #expect(rows(blocks).contains { $0.label == r("token") && $0.value == "USDC" })
+        #expect(warnings(MsReading.concernBlocks(review, words: words)).map(\.text)
+            == [r("unlimitedLine", ["spender": "0x5555555555555555555555555555555555555555"])])
+        #expect(got["anyway"] as? Bool == true)
     }
 
     /// The core's vector r8 #9: a batch whose leg calls multiSend of two transfers.
-    @Test func aNestedBatchShowsEveryLegOfEveryLevel() {
-        let leg = { (to: String, path: String) in
-            #"{"path":\#(path),"to":"0x3600000000000000000000000000000000000000","value":{"decimals":18,"plain":"0","raw":"0","unlimited":false},"intent":{"kind":"send","to":"\#(to)","token":{"decimals":6,"known":true,"symbol":"USDC","token":"0x3600000000000000000000000000000000000000"},"amount":{"decimals":6,"plain":"0.001","raw":"1000","unlimited":false}}}"#
-        }
-        let review = reviewJson(#"""
-        {"sign":{"allowed":true,"anyway":true},"concerns":[{"kind":"nestedBatch"}],
-         "reading":{"blind":false,"nested":true,"unlimited":false,"unreadable":false,"decimalsUnknown":[],
-          "calls":[{"path":[1],"to":"0x9641d764fc13c8B624c04430C7356C1C7C8102e2","value":{"decimals":18,"plain":"0","raw":"0","unlimited":false},
-            "intent":{"kind":"batch","runner":"0x9641d764fc13c8B624c04430C7356C1C7C8102e2",
-              "calls":[\#(leg("0x4444444444444444444444444444444444444444", "[1,1]")),\#(leg("0x5555555555555555555555555555555555555555", "[1,2]"))]}}]}}
-        """#)
+    @Test func aNestedBatchShowsEveryLegOfEveryLevel() throws {
+        let c = try #require(try vectorCases().first { ($0["name"] as? String)?.contains("r8 #9") == true })
+        let got = try #require(MsRules.call("review.reading", c["args"] as! [String: Any]) as? [String: Any])
+        let review = MsJSON(any: ["reading": got["reading"]!, "concerns": got["concerns"]!])
         let drawn = cards(MsReading.blocks(review, chainId: 5_042_002, words: words))
         #expect(drawn.count == 3, "the batch and both of its legs")
         #expect(drawn[0].tone == .danger)
         #expect(drawn[1].title?.hasPrefix(words.t("review.callNumber", ["n": "1.1"])) == true)
         #expect(drawn[2].title?.hasPrefix(words.t("review.callNumber", ["n": "1.2"])) == true)
         #expect(drawn[1].rows.contains { $0.value == "0.001 USDC" })
+        #expect(warnings(MsReading.concernBlocks(review, words: words)).map(\.text) == [r("nestedLine")])
     }
 
     /// The core's vector "a token nobody read": never 18 decimals assumed.
-    @Test func anAmountWithNoDecimalsReadIsNeverWordedAsOne() {
-        let review = reviewJson(#"""
-        {"sign":{"allowed":true,"anyway":false},"concerns":[{"kind":"decimalsUnknown","token":"0x00000000000000000000000000000000000b0b0b"}],
-         "reading":{"blind":false,"nested":false,"unlimited":false,"unreadable":false,"decimalsUnknown":["0x00000000000000000000000000000000000b0b0b"],
-          "calls":[{"path":[],"to":"0x00000000000000000000000000000000000b0B0b","value":{"decimals":18,"plain":"0","raw":"0","unlimited":false},
-            "intent":{"kind":"send","to":"0x4444444444444444444444444444444444444444",
-              "token":{"decimals":null,"known":false,"symbol":null,"token":"0x00000000000000000000000000000000000b0b0b"},
-              "amount":{"decimals":null,"plain":null,"raw":"10000","unlimited":false}}}]}}
-        """#)
-        let blocks = MsReading.blocks(review, chainId: 100, words: words)
-        let amount = cards(blocks).first?.rows.first
-        #expect(amount?.value.contains("10000") == true)
-        #expect(amount?.value.contains(loc.t("componentsUi.signing.amountUnknown")) == true)
-        #expect(amount?.valueTone == .caution)
-        #expect(warnings(blocks).map(\.text) == [loc.t("componentsUi.signingApprove.decimalsUnverified")])
+    @Test func anAmountWithNoDecimalsReadIsNeverWordedAsOne() throws {
+        let c = try #require(try vectorCases().first { ($0["name"] as? String)?.hasPrefix("a token nobody read") == true })
+        let got = try #require(MsRules.call("review.reading", c["args"] as! [String: Any]) as? [String: Any])
+        let review = MsJSON(any: ["reading": got["reading"]!, "concerns": got["concerns"]!])
+        let amount = rows(MsReading.blocks(review, chainId: 100, words: words)).first { $0.label == r("amount") }
+        #expect(amount?.value == "\(r("decimalsUnknown", ["raw": "10000"])) \(MsWords.short("0x00000000000000000000000000000000000b0b0b"))")
+        #expect(warnings(MsReading.concernBlocks(review, words: words)).map(\.tone) == [.caution])
     }
 
-    @Test func aCallNobodyReadsSaysWhatItCallsAndWhyItIsAnyway() {
-        let review = reviewJson(#"""
-        {"sign":{"allowed":true,"anyway":true},"concerns":[{"kind":"blind"}],
-         "fields":[{"name":"data","value":"0xdeadbeef00"}],
-         "reading":{"blind":true,"nested":false,"unlimited":false,"unreadable":false,"decimalsUnknown":[],
-          "calls":[{"path":[],"to":"0x5555555555555555555555555555555555555555","value":{"decimals":18,"plain":"0","raw":"0","unlimited":false},
-            "intent":{"kind":"call","selector":"0xdeadbeef"}}]}}
-        """#)
-        let card = cards(MsReading.blocks(review, chainId: 100, words: words))
-        #expect(card.first?.title == loc.t("componentsUi.signing.batchCall"))
-        #expect(card.first?.rows.contains { $0.value == "0xdeadbeef" } == true)
-        #expect(MsReviewBody.ownLines(review).map(\.kind) == ["blind"])
-        #expect(MsReviewBody.concernText(MsJSON(any: ["kind": "blind"]), review: review, words: words)
-            == loc.t("componentsUi.signing.blindDecodeWarning", vars: ["bytes": "5"]))
+    @Test func aCallNobodyReadsSaysWhatItCallsAndWhyItIsAnyway() throws {
+        let c = try #require(try vectorCases().first { ($0["name"] as? String)?.hasPrefix("a call nobody reads") == true })
+        let got = try #require(MsRules.call("review.reading", c["args"] as! [String: Any]) as? [String: Any])
+        let review = MsJSON(any: ["reading": got["reading"]!, "concerns": got["concerns"]!])
+        let blocks = MsReading.blocks(review, chainId: 100, words: words)
+        guard case .intent(let title, let tone)? = blocks.first else { Issue.record("no intent"); return }
+        #expect(title == r("call"))
+        #expect(tone == .caution)
+        #expect(rows(blocks).contains { $0.label == r("function") && $0.value == "0xdeadbeef" })
+        #expect(MsReviewBody.concernText(MsJSON(any: ["kind": "blind"]), review: review, words: words) == r("blindLine"))
+    }
+
+    /// r8-2: a list title for a token nobody read is never "Send <0.000001".
+    @Test func aTransferOfATokenNobodyReadIsTitledInBaseUnits() {
+        let action = MsJSON(any: [
+            "kind": "transfer", "token": "0x3600000000000000000000000000000000000000",
+            "to": Self.three, "amount": "10000",
+        ])
+        let title = words.actionTitleNow(chainId: 5_042_002, action: action, nonce: "1")
+        #expect(title.contains(r("decimalsUnknown", ["raw": "10000"])), "\(title)")
+        #expect(!title.contains("<0.000001"))
+        // With the token's facts handed in, its own decimals.
+        #expect(words.actionTitleNow(chainId: 5_042_002, action: action, nonce: "1", token: ("USDC", 6)) == "Send 0.01 USDC")
     }
 
     // MARK: - r8-14: each thing said once
 
-    @Test func onlyWhatNoBlockSaysIsAConcernLine() {
-        let review = MsJSON(any: ["concerns": [
-            ["kind": "unsimulated"], ["kind": "firstTime", "address": Self.three],
-            ["kind": "toContract", "address": Self.three], ["kind": "stateUnread", "reason": "x"],
-            ["kind": "notSigned", "why": "delegatecall"], ["kind": "blind"],
-        ]])
+    @Test func eachConcernHasOneLineAndTheReviewAddsNone() {
         // The verdict's place says "couldn't check", the recipient's row its
         // first time and its contract, the guard its own, the sheet's note
-        // the refusal: only the unread call is left for a line of its own.
-        #expect(MsReviewBody.ownLines(review).map(\.kind) == ["blind"])
+        // the refusal, the reading's lines the calls' — the review body adds
+        // no second line for any of them.
         #expect(MsReviewBody.concernText(MsJSON(any: ["kind": "stateUnread", "reason": "x"]), words: words) == nil)
         #expect(MsReviewBody.tone(MsJSON(any: ["kind": "lookalike"])) == .danger)
         #expect(MsReviewBody.tone(MsJSON(any: ["kind": "blind"])) == .warning)
+        let review = MsJSON(any: ["concerns": [["kind": "blind"], ["kind": "blind"], ["kind": "nestedBatch"]], "reading": ["calls": []]])
+        #expect(warnings(MsReading.concernBlocks(review, words: words)).count == 2, "the same line said twice")
     }
 
     // MARK: - r8-19: the review's wait is bounded
@@ -329,6 +375,39 @@ struct MultisigR8FixTests {
         #expect(tx?.safeTxHash.lowercased() == Self.hash.lowercased())
         #expect(RootView.multisigTransaction(ofRow: "0xabc", feed: nil) == nil)
         #expect(RootView.multisigTransaction(ofRow: nil, feed: nil) == nil)
+    }
+
+    // MARK: - r8-21: a site starts on the multisig's own network
+
+    @Test func theBrowserIsToldTheMultisigsNetworksAfterTheSwitch() throws {
+        let events = BrowserController.accountEvents(
+            addresses: [Self.one, Self.safe], active: Self.safe, nowMs: 1, isSpaceAccount: { _ in false },
+            networks: [5_042_002, 100]
+        )
+        #expect(events.map { $0["type"] as? String } == ["accounts_updated", "account_switched", "account_networks"])
+        #expect(events.last?["networks"] as? [Int] == [5_042_002, 100])
+        // The core takes them (an event it did not know would throw).
+        let core = DappBrowserCore()
+        for event in events { _ = try core.dispatch(eventJson: CoreJSON.string(event)) }
+        // No account in front: nothing to say about its networks.
+        let none = BrowserController.accountEvents(addresses: [], active: nil, nowMs: 1, isSpaceAccount: { _ in false })
+        #expect(none.map { $0["type"] as? String } == ["accounts_updated"])
+    }
+
+    // MARK: - r8-16: on its way is said, never "Send again"
+
+    @Test func anApprovalOnItsWayIsSaidAndNotSentAgain() throws {
+        var item = MultisigViewsTests.item(approved: 1, status: "pending", canApprove: [Self.one])
+        item = item.replacingOccurrences(of: #""unsent":false"#, with: #""unsent":true"#)
+        let key = "100:\(Self.safe.lowercased()):\(Self.hash.lowercased()):\(Self.one.lowercased())"
+        let sending = try model(view(item: item, replacing: ["outbox": #"{"\#(key)":{"why":"sending","retryAt":null,"sending":true}}"#]))
+        #expect(sending.notes.contains { $0.id == "outbox" && $0.text == words.t("proposal.outboxSending") && $0.tone == .neutral })
+        #expect(!sending.offersSendAgain)
+        let waiting = try model(view(item: item, replacing: ["outbox": #"{"\#(key)":{"why":"busy","retryAt":9999999999999,"sending":false}}"#]))
+        #expect(waiting.notes.contains { $0.id == "outbox" && $0.tone == .warning })
+        #expect(!waiting.offersSendAgain, "a retry is due by itself")
+        let refused = try model(view(item: item, replacing: ["outbox": #"{"\#(key)":{"why":"away","retryAt":null,"sending":false}}"#]))
+        #expect(refused.offersSendAgain)
     }
 
     // MARK: - Notifications: a second new proposal is said too
