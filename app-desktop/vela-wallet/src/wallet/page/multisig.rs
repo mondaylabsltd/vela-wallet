@@ -780,10 +780,11 @@ impl WalletPage {
                     .flex()
                     .gap(px(12.))
                     .py(px(4.))
-                    .child(icon_img(&mut self.icons, Icon::Info, false, theme.fg_subtle, 20.))
+                    .child(div().flex_none().child(icon_img(&mut self.icons, Icon::Info, false, theme.fg_subtle, 20.)))
                     .child(
                         div()
                             .flex_1()
+                            .min_w(px(0.))
                             .text_size(theme::text_label())
                             .text_color(theme.fg_subtle)
                             .child(crate::ui::prose(words::tv(&loc, "create.firstRunCost", &[("network", &network(chain))]))),
@@ -1189,7 +1190,12 @@ impl WalletPage {
 
         // Approvals: who has, and how each one still to approve signs (r7-8).
         let signers = view.signers.get(&key).cloned();
-        body = body.child(self.ms_approvals(theme, &item, signers.as_ref(), account.as_ref(), cx));
+        let frozen = view
+            .frozen
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case(&key))
+            .map(|(_, f)| f.clone());
+        body = body.child(self.ms_approvals(theme, &item, signers.as_ref(), frozen.as_ref(), account.as_ref(), cx));
 
         // What happened to the last press, said.
         for action in [
@@ -1269,6 +1275,18 @@ impl WalletPage {
                 safe_tx_hash: hash.clone(),
                 executor,
             });
+        }
+        // Done (executed from this sheet, or found so): the machine reads how
+        // it ran — who executed, which approvals counted (`frozen`) — once.
+        if item.status == ms_proposals::ProposalStatus::Done {
+            let key = format!("timeline-done:{}", item_key(chain_id, &hash.to_ascii_lowercase()));
+            if let std::collections::btree_map::Entry::Vacant(slot) = self.multisig.previewed.entry(key) {
+                slot.insert(now);
+                events.push(ms_proposals::Event::Timeline {
+                    chain_id,
+                    safe_tx_hash: hash.clone(),
+                });
+            }
         }
         // The review: read once for one done; again while it waits.
         if item.status != ms_proposals::ProposalStatus::Done {
@@ -1553,7 +1571,11 @@ impl WalletPage {
                 } else {
                     if *approve_first && *can_approve_only {
                         // Executing pays the fee; approving alone does not.
-                        presses = presses.child(div().flex_1().child(self.ms_approve_press(theme, item, actor.clone(), crate::ui::ButtonVariant::Secondary, rule::approve_label(sign), reviewed && sign.allowed && !executing, approving, cx)));
+                        // As tall as the press beside it: one row of two answers.
+                        presses = presses.child(div().flex_1().child(
+                            self.ms_approve_press(theme, item, actor.clone(), crate::ui::ButtonVariant::Secondary, rule::approve_label(sign), reviewed && sign.allowed && !executing, approving, cx)
+                                .min_h(px(crate::theme::BTN_H_PRIMARY)),
+                        ));
                     }
                     let enabled = rule::execute_enabled(reviewed, sign, look.as_ref(), *approve_first, *one_tap) && !approving;
                     let state = if executing {
@@ -2128,16 +2150,25 @@ impl WalletPage {
     /// (r7-8, the machine's `signers`): a member on this device waits for
     /// its own press here — never "another wallet"; an outside wallet's row
     /// offers "Approve with another wallet"; one nothing says yet, both.
+    #[allow(clippy::too_many_arguments, reason = "the sheet's facts")]
     fn ms_approvals(
         &mut self,
         theme: &Theme,
         item: &ProposalItem,
         signers: Option<&ms_proposals::ItemSigners>,
+        frozen: Option<&vela_core::app::multisig_presence::FrozenFacts>,
         account: Option<&MultisigAccount>,
         cx: &mut Context<Self>,
     ) -> Div {
         use crate::multisig::sheet::{MemberWay, member_way};
         let loc = self.ms_loc();
+        // Executed: what counted when it ran (the core's frozen facts — an
+        // executor's own approval by sending it included), never the list
+        // as it reads after (r8-13: "1/2 approved" over an executed one).
+        let done = item.status == ms_proposals::ProposalStatus::Done;
+        let ran = frozen.filter(|_| done);
+        let (shown_approved, shown_threshold) =
+            crate::multisig::sheet::approvals_shown(done, frozen, item.approved, item.threshold);
         let mut col = div().flex().flex_col().gap(px(4.)).child(ms_label(
             theme,
             &format!(
@@ -2147,8 +2178,8 @@ impl WalletPage {
                     &loc,
                     "status.progress",
                     &[
-                        ("approved", &item.approved.min(item.threshold).to_string()),
-                        ("threshold", &item.threshold.to_string())
+                        ("approved", &shown_approved.to_string()),
+                        ("threshold", &shown_threshold.to_string())
                     ]
                 )
             ),
@@ -2187,7 +2218,55 @@ impl WalletPage {
             };
             col = col.child(row(("ms-approval", i), name, quiet(note)));
         }
-        if item.status == ms_proposals::ProposalStatus::Done {
+        if done {
+            if let Some(f) = ran {
+                // Who approved by sending it, beside the signatures.
+                for (i, approver) in f
+                    .approvers
+                    .iter()
+                    .filter(|a| !item.approvals.iter().any(|x| same(&x.owner, a)))
+                    .enumerate()
+                {
+                    let name = mark(self.ms_member_name(approver, account, cx), approver);
+                    let note = if f.executor.as_deref().is_some_and(|e| same(e, approver)) && f.executor_approved {
+                        words::t(&loc, "proposal.executed")
+                    } else {
+                        words::t(&loc, "timeline.counted")
+                    };
+                    col = col.child(row(("ms-approval-ran", i), name, quiet(note)));
+                }
+                let mut facts: Vec<String> = Vec::new();
+                if let Some(executor) = &f.executor {
+                    facts.push(words::tv(
+                        &loc,
+                        "proposal.executedBy",
+                        &[("name", &self.ms_member_name(executor, account, cx))],
+                    ));
+                }
+                facts.push(words::tv(
+                    &loc,
+                    "proposal.countedThen",
+                    &[
+                        ("approved", &f.approvers.len().to_string()),
+                        ("threshold", &f.threshold.to_string()),
+                    ],
+                ));
+                col = col.child(
+                    div()
+                        .pt(px(4.))
+                        .text_size(theme::text_label())
+                        .text_color(theme.fg_subtle)
+                        .child(facts.join(" · ")),
+                );
+            } else {
+                col = col.child(
+                    div()
+                        .pt(px(4.))
+                        .text_size(theme::text_label())
+                        .text_color(theme.fg_subtle)
+                        .child(words::t(&loc, "proposal.approvalsSigned")),
+                );
+            }
             return col;
         }
         for (i, signer) in signers.map(|s| s.rows.clone()).unwrap_or_default().iter().enumerate() {
@@ -2737,8 +2816,14 @@ impl WalletPage {
         let sign = review.as_ref().map(|r| r.sign).unwrap_or_default();
         let working = matches!(view.actions.get("propose"), Some(ActionState::Working));
         let leave = site.as_ref().map(|(rid, _)| rid.clone());
+        // core-ms-2: a site's transaction its proposer's own approval makes
+        // ready runs in the same press ("Approve and execute",
+        // `propose_execute`) — the machine's `execute_now`, its fee said.
+        let execute_now = draft.execute_now && !draft.members_here.is_empty();
         let label = if draft.members_here.is_empty() {
             words::t(&loc, "send.proposeOnly")
+        } else if execute_now {
+            words::t(&loc, crate::multisig::sheet::execute_label(true, sign))
         } else if sign.anyway {
             words::t(&loc, "review.proposeAnyway")
         } else {
@@ -2749,7 +2834,8 @@ impl WalletPage {
         } else {
             crate::ui::ButtonState::from_enabled(review.is_some() && sign.allowed)
         };
-        body = body.child(
+        // r4D-19: the answers stay in view under a long review.
+        let foot = div().pt(px(12.)).child(
             crate::ui::dialog::dialog_actions()
                 .child({
                     let leave = leave.clone();
@@ -2780,7 +2866,13 @@ impl WalletPage {
                         cx.listener(move |this, _, _, cx| {
                             let host = this.ms_host(cx);
                             let as_member = as_member.clone();
-                            host.update(cx, |host, cx| host.confirm_draft(as_member, cx));
+                            host.update(cx, |host, cx| {
+                                if execute_now {
+                                    host.proposals(ms_proposals::Event::ProposeExecute { as_member }, cx);
+                                } else {
+                                    host.confirm_draft(as_member, cx);
+                                }
+                            });
                         }),
                     )
                     .w_auto(),
@@ -2788,7 +2880,7 @@ impl WalletPage {
         );
         let close_icon = icon_img(&mut self.icons, Icon::X, false, theme.fg_muted, 18.);
         Some(
-            crate::ui::dialog::dialog(
+            crate::ui::dialog::dialog_with_foot(
                 "ms-draft",
                 theme,
                 window,
@@ -2796,6 +2888,7 @@ impl WalletPage {
                 None,
                 close_icon,
                 body,
+                Some(foot.into_any_element()),
                 &self.multisig.scroll,
                 cx.listener(move |this, _, _, cx| this.ms_draft_leave(leave.clone(), cx)),
             )

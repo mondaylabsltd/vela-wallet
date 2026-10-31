@@ -321,6 +321,23 @@ pub fn outside_members(signers: Option<&ItemSigners>, here: &dyn Fn(&str) -> boo
         .unwrap_or_default()
 }
 
+/// The approvals line's count: an executed one says what counted when it
+/// ran (the core's `frozen`: the executor's approval by sending it
+/// included), never the list as it reads after — "1/2 approved" over an
+/// executed transaction (r8-13, r8-17). Open: the list's own count.
+#[must_use]
+pub fn approvals_shown(
+    done: bool,
+    frozen: Option<&vela_core::app::multisig_presence::FrozenFacts>,
+    approved: u64,
+    threshold: u64,
+) -> (u64, u64) {
+    match frozen.filter(|_| done) {
+        Some(f) => (f.approvers.len() as u64, f.threshold),
+        None => (approved.min(threshold), threshold),
+    }
+}
+
 /// The home's rule chip (r8-13, the web's `ruleChip`): the proposals
 /// machine's `rule_chip` for the multisig it follows (the rule in force on
 /// each network it is used on), else the rule it was made with.
@@ -538,5 +555,24 @@ mod tests {
         assert!(get_ready_shown(Some(true), false, true), "set_up is the followed one's");
         assert!(!get_ready_shown(Some(true), true, true));
         assert!(!get_ready_shown(None, true, false));
+    }
+
+    /// r8-13: an executed sheet counts what counted when it ran — the
+    /// executor's approval by sending it too — not the list after.
+    #[test]
+    fn an_executed_one_counts_what_counted_when_it_ran() {
+        let frozen: vela_core::app::multisig_presence::FrozenFacts = serde_json::from_value(json!({
+            "executor": DANA,
+            "threshold": 2,
+            "approvers": [ALICE, DANA],
+            "executorApproved": true,
+            "source": "chain",
+            "atMs": null
+        }))
+        .expect("frozen facts");
+        assert_eq!(approvals_shown(true, Some(&frozen), 1, 2), (2, 2));
+        assert_eq!(approvals_shown(false, Some(&frozen), 1, 2), (1, 2), "open: the list's own");
+        assert_eq!(approvals_shown(true, None, 1, 2), (1, 2));
+        assert_eq!(approvals_shown(false, None, 3, 2), (2, 2));
     }
 }
