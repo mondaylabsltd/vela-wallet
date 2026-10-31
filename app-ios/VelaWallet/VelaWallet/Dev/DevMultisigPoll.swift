@@ -19,10 +19,19 @@
 //    finishing task gets (about 30 s), so the app is still running when
 //  - the Darwin notification `app.getvela.VelaWallet.dev.multisigPoll`
 //    arrives (a UI test posts it: the runner and the app share the
-//    simulator's notify center) — and then runs THE SAME round the
-//    `BGAppRefreshTask` runs (`MultisigBackgroundBridge.run`): the proposals
-//    machine reads every multisig here, and what changed for this device is
-//    posted as a local notification by `MultisigNotifier`.
+//    simulator's notify center; by hand, `xcrun simctl spawn <device>
+//    notifyutil -p app.getvela.VelaWallet.dev.multisigPoll`) — and then runs
+//    THE SAME round the `BGAppRefreshTask` runs
+//    (`MultisigBackgroundBridge.run`): the proposals machine reads every
+//    multisig here, and what changed for this device is posted as a local
+//    notification by `MultisigNotifier`;
+//  - r9-8: while that background time lasts it also runs the round by
+//    itself every `awayEvery` seconds, so a tester who presses Home and has
+//    another member propose sees the banner without posting anything. A
+//    trigger posted after iOS suspended the app reaches nobody: the trace
+//    says when the time ran out (`away: the background time ran out`).
+//
+//  The steps a tester follows are in app-ios/docs/multisig-notifications.md.
 //
 //  Nothing here decides what is said or when: that is the notifier's and the
 //  machines', exactly as in the real refresh.
@@ -43,6 +52,10 @@ enum DevMultisigPoll {
     private static var armed = false
     private static var task: UIBackgroundTaskIdentifier = .invalid
     private static var observers: [NSObjectProtocol] = []
+    /// The rounds run by themselves while away (r9-8).
+    private static var awayLoop: Task<Void, Never>?
+    /// Seconds between those rounds.
+    static let awayEvery: UInt64 = 8
 
     /// Read the launch environment, once, from the app's init.
     static func install(environment: [String: String] = ProcessInfo.processInfo.environment) {
@@ -82,9 +95,19 @@ enum DevMultisigPoll {
         // `backgroundTimeRemaining` is `.greatestFiniteMagnitude` while the app
         // is still active: said as it is, never converted to an Int.
         trace("away: kept running (\(UIApplication.shared.backgroundTimeRemaining) s)")
+        awayLoop?.cancel()
+        awayLoop = Task { @MainActor in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: awayEvery * 1_000_000_000)
+                guard !Task.isCancelled, task != .invalid, UIApplicationStateProbe.isAway else { return }
+                await round()
+            }
+        }
     }
 
     private static func release() {
+        awayLoop?.cancel()
+        awayLoop = nil
         guard task != .invalid else { return }
         UIApplication.shared.endBackgroundTask(task)
         task = .invalid

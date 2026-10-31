@@ -14,8 +14,9 @@
 //  ## When it asks
 //
 //  Not at launch: when there is first something to say — the first multisig
-//  created or added here, or the first proposal made (`askOnce`). A refusal
-//  is answered; nothing asks again.
+//  created or added (by hand, from an invite, or found as a member here), or
+//  the first proposal made here, which needs the others (`askOnce`). A
+//  refusal is answered; nothing asks again.
 //
 //  ## Only when away
 //
@@ -58,6 +59,9 @@ final class MultisigNotifier {
     var post: (Note) -> Void = MultisigNotifier.postToCenter
     /// Whether the app is away from the screen (notes are only posted then).
     var isAway: () -> Bool = { UIApplicationStateProbe.isAway }
+    /// Whether the app is in the background — not merely inactive under a
+    /// system sheet or Control Center (r9-8: a read landing then is said).
+    var inBackground: () -> Bool = { UIApplication.shared.applicationState == .background }
 
     init(loc: Loc, defaults: UserDefaults = .standard) {
         self.loc = loc
