@@ -83,7 +83,8 @@ Any key-value store; the names are the web's `localStorage` keys.
 | Key                                                                                                                                                    | Owner                                                                  |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
 | `vela.multisigAccounts`, `vela.activeMultisig`, `vela.multisigPendingProofs`, `vela.multisigDiscovered`                                                | accounts                                                               |
-| `vela.multisigPendingLink` (W9: a link waiting for a network this device lacks, one day)                                                               | accounts                                                               |
+| `vela.multisigPendingLink` (W9: a link waiting for a network this device lacks, one day — a proposal link, or (core-ms-2) an invite)                   | accounts                                                               |
+| `vela.transactionHistory` (core-ms-2: read only, the `recent_networks` hint)                                                                           | the wallet (read by accounts)                                          |
 | `vela.multisigCreateDraft` (W9: the create form, until created or discarded)                                                                           | accounts                                                               |
 | `vela.multisigInviteShared` (W9: the invite was handed on, per multisig)                                                                               | accounts                                                               |
 | `vela.multisigKeptLink` (a link opened before any Vela account, one day)                                                                               | accounts (also written by the web's welcome page, which loads no core) |
@@ -271,7 +272,8 @@ door — uniffi `multisig_link_call(method, args_json)`, wasm
   name, the short EIP-55 address) and kind.
 - `networks.likely`, `networks.firstDefault`, `networks.lastUsed`,
   `networks.recent`, `networks.held`: the order networks are offered in, and
-  create's default network.
+  create's default network; core-ms-2 `networks.name {chainId}`: the core
+  catalog's name for a network this device may not have (§6).
 - `relay.*`: the PeerConnect relay's token schedule (which relay needs a
   token, which token to use, refusals, the back-off, the status).
 
@@ -321,3 +323,60 @@ What stays in a shell: drawing; its words (i18n keys from the corpus);
 performing operations (HTTP, RPC, storage, passkeys, rooms, the injected
 wallet); token metadata for wording an amount; the timers of 1.4; and the
 router of 1.2.
+
+## 6. core-ms-2 — rules the desktop lane found still in the web's TypeScript
+
+All additive (new events, operations and fields with defaults) except
+`relay::on_state`'s Rust return type. Wire names are the JSON ones.
+
+### 6.1 Accounts
+
+| Was the shell's                                                                                | Now                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| the create sheet's starting threshold (`toThreshold`), its note and risk, the stepper's bounds | `create.threshold` (`MultisigThresholdView` `{value, members, note: solo / all / one / spare {count}, risky, can_lower, can_raise}`), `None` before a draft names members. Event `step_threshold {up}`. The sensible start (all of two, else all but one) unless the person picked for these members; a kept draft's threshold is the pick again. Send `value` as `draft`'s / `keep_draft`'s / `create`'s threshold. |
+| applying an invite after Add (`useChain` per invite network, `keep_invited`)                   | The machine keeps the invite it opened: view `invite` (`MultisigInviteView` `{link, on_device, missing, missing_name}`). `add {address, network: null}` of the invite's address looks it up on its first network here, uses it on every invite network this device has, and keeps the invite's member labels. Send only the person's pick as `network`. Closing the invite's add sheet: `drop_link`.                 |
+| an invite waiting for a network (a `keep_link` record, reopened on the next wallet load)       | An invite naming only networks this device lacks waits in `vela.multisigPendingLink` (the proposal link's record, a day): a reload restores it quietly (`invite.missing` set, no stand), `networks` with one of them says `link: invite` again. Add network needs nothing from the shell.                                                                                                                            |
+| the `recent` / `used` hints (`loadTransactions` + `networks.recent`, `networks.lastUsed`)      | view `recent_networks` (read from `vela.transactionHistory` on `start`, `reload`, `new_draft`) and `used_networks`. Pass them as `hints.recent` / `hints.used` to `networks.likely` / `networks.firstDefault`.                                                                                                                                                                                                       |
+| a network's name the device lacks (the chain index only)                                       | `networks.name {chainId}` through the link door (the core's catalog, `BUILTIN_CHAINS`), and `invite.missing_name`; `null` → the shell may still ask the chain index.                                                                                                                                                                                                                                                 |
+
+`vela.transactionHistory` joins the accounts machine's `load_store` keys
+(read only).
+
+### 6.2 Proposals
+
+| Was the shell's                                                                                       | Now                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| "Approve and execute": execute, and on a stop before signing approve instead (`stoppedBeforeSigning`) | view `approve_execute` per `chainId:hash` (lowercase): the members here whose one press approves and executes it — short of one approval, theirs reaches the threshold, their look at these approvals does not say they cannot (priced and payable; or, Round 5 S2, unpriced or unchecked — the execution looks again first). A look still out, failing, unpayable, refused or spent offers nothing. Event `approve_execute {chain_id, safe_tx_hash, executor}`: `actions["execute:<hash>"]`; stopped before any signature, `actions["approve:<hash>"]` follows (the approval given and kept, r4-11). |
+| a site's transaction ready on its proposer's approval (`executeNow`, propose then execute)            | `draft.executeNow`; event `propose_execute {as_member}` — `actions["execute:<hash>"]` is `working` from the moment `propose` is `done`, and removed again if it is not ready.                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| the header chip (`currentRules`, `ruleChip`)                                                          | view `rule_chip` (`MultisigRuleChip`, as the members machine's) for the followed multisig.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| the waiting line's parts and the home's banner (`waitingWords`, `presence.of(first)`, `setUp`)        | view `waiting_parts` per multisig (`[{kind: needsYou / ready / waitingPayer, count}]`, in order, nonzero only), `banner` (`{parts, first}` for the followed multisig, only when there is one to open), `set_up` (deployed on a network read).                                                                                                                                                                                                                                                                                                                                                         |
+| `calls_status` answers kept for ever                                                                  | event `calls_status_taken {id}` once the site was answered; at most `CALLS_STATUS_KEPT` (16) kept, the oldest going first.                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+
+### 6.3 The in-app browser machine (`dapp_browser`)
+
+- Event `multisig_answered {tab, id, answer: MultisigDappAnswer}` in place of
+  `signing_answered` for a request forwarded from a multisig: delivered as
+  the proposals machine formed it — an error keeps its `data` (the proposal
+  a "proposed, waiting" `-32000` carries).
+- A `wallet_sendCalls` answered that way is a multisig batch:
+  `wallet_getCallsStatus` of it is an existing `read` operation with
+  `bundler: true` and `method: "wallet_getCallsStatus"`
+  (`MULTISIG_CALLS_STATUS_METHOD`, never a bundler's method) on the batch's
+  chain, `params: [batch]` — no new operation, so a shell that has not
+  adopted it answers nothing new. Ask the proposals machine `calls_status
+  {id, chain_id, calls_id: batch}`, answer `read_answered` with its
+  `calls_status[id]` as `body_json` (a `DappAnswer` is a JSON-RPC body:
+  `{result}` or `{error}`, delivered as it is, `data` kept), then send it
+  `calls_status_taken {id}`. (The desktop still answers with
+  `signing_answered` and reads its batches itself, unchanged.)
+
+### 6.4 Elsewhere
+
+- `relay::on_state` returns `OnState {status, accepted}` in Rust (the
+  `relay.onState` JSON is unchanged): `accepted` (on the relay) is when the
+  connection forgets its refusals.
+- The uniffi multisig objects have `skip_unchanged_views(include_volatile)`
+  (the wasm ones had it); the web's multisig machines opt in.
+- `home.multisig.settings.unreadableOn` ("Couldn't read its members on
+  {{network}}."), on-demand multisig namespace, all 15 locales: a network
+  whose chain did not answer (`NetworkState::Unreadable`) in Settings.
