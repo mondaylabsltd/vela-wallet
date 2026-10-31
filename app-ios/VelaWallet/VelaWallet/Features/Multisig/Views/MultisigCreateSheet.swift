@@ -74,6 +74,9 @@ struct MultisigCreateSheet: View {
         .onChange(of: draftAddressKey) { _, _ in askAddress() }
         .onChange(of: owners) { _, _ in readKinds() }
         .onChange(of: hub.accountsView.add.ens) { _, ens in ensArrived(ens) }
+        .onChange(of: sheet.threshold?["value"]?.int) { _, value in
+            if let value { threshold = value }
+        }
     }
 
     // MARK: - Start, the kept draft
@@ -332,27 +335,49 @@ struct MultisigCreateSheet: View {
         hub.send(["type": "read_kinds", "members": members])
     }
 
+    /// The machine's sensible start (all of two, else all but one) unless the
+    /// person picked for these members — core-ms-2's `create.threshold`.
     private func toThreshold() {
         guard nameOk else { nameAsked = true; return }
-        if thresholdFor != owners.count {
-            threshold = owners.count <= 2 ? owners.count : owners.count - 1
-            thresholdFor = owners.count
-        }
+        askAddress()
         step = .threshold
     }
+
+    /// The threshold as the machine holds it (`create.threshold.value`).
+    private var machineThreshold: MsJSON? { sheet.threshold.flatMap { $0.isNull ? nil : $0 } }
 
     // MARK: - Threshold and network
 
     private var thresholdStep: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s16) {
             MsSection(title: words.t("create.threshold")) {
-                Stepper(value: $threshold, in: 1...max(1, owners.count)) {
-                    Text(verbatim: words.ruleText(m: threshold, n: owners.count))
+                let view = machineThreshold
+                HStack {
+                    Text(verbatim: words.ruleText(m: view?["value"]?.int ?? threshold, n: view?["members"]?.int ?? owners.count))
                         .typeRole(Typography.rowTitle.scaled(textScale))
                         .foregroundStyle(theme.fgBase)
+                        .accessibilityIdentifier("multisig.create.thresholdValue")
+                    Spacer()
+                    // The machine's stepper (`step_threshold`), its bounds the core's.
+                    Button { hub.send(["type": "step_threshold", "up": false]) } label: {
+                        Text(verbatim: "−").font(Typography.rowTitle.scaled(textScale).font)
+                    }
+                    .disabled(view?["can_lower"]?.bool != true)
+                    .accessibilityLabel(words.t("create.fewer"))
+                    .accessibilityIdentifier("multisig.create.fewer")
+                    Button { hub.send(["type": "step_threshold", "up": true]) } label: {
+                        Text(verbatim: "+").font(Typography.rowTitle.scaled(textScale).font)
+                    }
+                    .disabled(view?["can_raise"]?.bool != true)
+                    .accessibilityLabel(words.t("create.more"))
+                    .accessibilityIdentifier("multisig.create.more")
                 }
+                .tint(theme.fgBase)
                 .accessibilityIdentifier("multisig.create.threshold")
-                MsNote(text: thresholdNote, tone: risky ? .warning : .neutral, identifier: "multisig.create.thresholdNote")
+                if let view {
+                    MsNote(text: thresholdNote(view["note"]), tone: view["risky"]?.bool == true ? .warning : .neutral,
+                           identifier: "multisig.create.thresholdNote")
+                }
             }
             MsSection(title: words.t("create.network")) {
                 if networks.isEmpty {
@@ -385,15 +410,17 @@ struct MultisigCreateSheet: View {
         }
     }
 
-    private var thresholdNote: String {
-        if owners.count == 1 { return words.t("create.solo") }
-        if threshold == owners.count { return words.t("create.thresholdAll") }
-        if threshold == 1 { return words.t("create.thresholdOne") }
-        let spare = owners.count - threshold
-        return words.t("create.thresholdSpare", count: spare, ["count": String(spare)])
+    /// The note the core chose (`MultisigThresholdNote`), in the corpus's words.
+    private func thresholdNote(_ note: MsJSON?) -> String {
+        switch note?.kind {
+        case "solo": return words.t("create.solo")
+        case "all": return words.t("create.thresholdAll")
+        case "one": return words.t("create.thresholdOne")
+        default:
+            let spare = note?["count"]?.int ?? 0
+            return words.t("create.thresholdSpare", count: spare, ["count": String(spare)])
+        }
     }
-
-    private var risky: Bool { owners.count > 1 && (threshold == owners.count || threshold == 1) }
 
     /// The networks offered: the space's, minus those found without the Safe
     /// contracts, the likely ones first (the core's order).
@@ -404,11 +431,10 @@ struct MultisigCreateSheet: View {
         return ordered.isEmpty ? offered : ordered
     }
 
+    /// core-ms-2: the hints are the accounts machine's (`recent_networks`,
+    /// read from this device's history; `used_networks`).
     private var hints: [String: Any] {
-        let used = MsRules.call("networks.lastUsed", ["accounts": hub.accountsView.accounts.map {
-            ["chainIds": $0.account.chainIds, "addedMs": $0.account.raw["addedMs"]?.int ?? 0] as [String: Any]
-        }]) ?? []
-        return ["used": used]
+        ["used": hub.accountsView.usedNetworks, "recent": hub.accountsView.recentNetworks]
     }
 
     private var firstDefault: Int? {

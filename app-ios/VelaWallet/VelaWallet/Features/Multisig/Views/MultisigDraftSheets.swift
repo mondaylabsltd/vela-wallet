@@ -80,11 +80,26 @@ struct MultisigDraftReviewSheet: View {
                 .tint(theme.fgBase)
                 .accessibilityIdentifier("multisig.draft.as")
             }
+            // core-ms-2: ready on its proposer's approval (a site's
+            // transaction) — proposed and executed in one press.
+            if draft.executeNow, !draft.membersHere.isEmpty {
+                VelaButton(
+                    title: words.t(allowed ? "proposal.approveAndExecute" : "review.approveExecuteAnyway"),
+                    kind: .primary,
+                    enabled: allowed || anyway,
+                    loading: working,
+                    haptic: .confirm
+                ) {
+                    hub.sendProposal(["type": "propose_execute", "as_member": (member ?? draft.defaultMember).map { $0 as Any } ?? NSNull()])
+                }
+                .accessibilityIdentifier("multisig.draft.proposeExecute")
+                MsNote(text: words.t("proposal.feeNote"))
+            }
             VelaButton(
                 title: words.t(draft.membersHere.isEmpty ? "send.proposeOnly" : (allowed ? "send.propose" : "review.proposeAnyway")),
-                kind: .primary,
+                kind: draft.executeNow && !draft.membersHere.isEmpty ? .secondary : .primary,
                 enabled: allowed || anyway,
-                loading: working,
+                loading: working && !draft.executeNow,
                 haptic: .confirm
             ) {
                 hub.confirmDraft(as: member ?? draft.defaultMember)

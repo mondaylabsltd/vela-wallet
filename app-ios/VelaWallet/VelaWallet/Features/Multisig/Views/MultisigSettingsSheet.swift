@@ -126,7 +126,7 @@ struct MultisigSettingsSheet: View {
             case "undeployed":
                 MsNote(text: words.t("settings.undeployedOn", ["network": words.network(chainId)]), identifier: "multisig.settings.undeployed")
             case "unreadable":
-                MsNote(text: words.t("proposal.cantCheck", ["network": words.network(chainId)]), tone: .warning)
+                MsNote(text: words.t("settings.unreadableOn", ["network": words.network(chainId)]), tone: .warning)
             default:
                 EmptyView()
             }

@@ -1707,8 +1707,8 @@ struct RootView: View {
             multisig.dappRequest(
                 id: forward.id, address: forward.grantedAddress, method: forward.method,
                 paramsJson: forward.paramsJson, origin: forward.origin, chainId: forward.chainId,
-                answer: { [browser] payload in
-                    browser.signingAnswered(tab: forward.tab, id: forward.id, payload: payload, userOpHash: nil)
+                answer: { [browser] answer in
+                    browser.multisigAnswered(tab: forward.tab, id: forward.id, answer: answer)
                 }
             )
             return

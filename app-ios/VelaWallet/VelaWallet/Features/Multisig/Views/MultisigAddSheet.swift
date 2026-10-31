@@ -42,7 +42,9 @@ struct MultisigAddSheet: View {
     @State private var results: [String: String] = [:]
 
     private var view: MsAccountsView { hub.accountsView }
-    private var linkChains: [Int] { invite?.chainIds ?? [] }
+    private var linkChains: [Int] {
+        (invite?.chainIds.isEmpty == false ? invite?.chainIds : nil) ?? hub.accountsView.invite?["link"]?["chainIds"]?.array.compactMap(\.int) ?? []
+    }
     private var fromLink: Bool {
         guard let multisig = invite?.multisig else { return false }
         return address.trimmingCharacters(in: .whitespaces).caseInsensitiveCompare(multisig) == .orderedSame
@@ -100,7 +102,17 @@ struct MultisigAddSheet: View {
     private func inviteFacts(_ invite: MsLinkStand) -> some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s8) {
             if !linkChains.isEmpty {
-                MsNote(text: words.t("add.usedOn", ["networks": linkChains.map(words.network).joined(separator: ", ")]))
+                MsNote(text: words.t("add.usedOn", ["networks": linkChains.map(networkName).joined(separator: ", ")]))
+            }
+            // core-ms-2: an invite naming a network this device lacks.
+            if let missing = hub.accountsView.invite?["missing"]?.int {
+                let name = hub.accountsView.invite?["missing_name"]?.string ?? networkName(missing)
+                MsNote(text: words.t("add.networkMissing", ["network": name]), tone: .warning, identifier: "multisig.add.networkMissing")
+                if let onAddNetwork {
+                    Button(words.t("proposal.addNetwork")) { onAddNetwork(missing) }
+                        .font(Typography.actionLabel.scaled(textScale).font)
+                        .foregroundStyle(theme.fgBase)
+                }
             }
             let members = invite.link?["members"]?.array ?? []
             if !members.isEmpty {
@@ -129,6 +141,14 @@ struct MultisigAddSheet: View {
             }
         }
         .accessibilityIdentifier("multisig.add.invite")
+    }
+
+    /// A network's name: this device's, else the core's catalog
+    /// (`networks.name`), else its id.
+    private func networkName(_ chainId: Int) -> String {
+        ChainCatalog.meta(chainId)?.displayName
+            ?? MsRules.string("networks.name", ["chainId": chainId])
+            ?? words.network(chainId)
     }
 
     // MARK: - The network, when nothing says
@@ -160,7 +180,9 @@ struct MultisigAddSheet: View {
         failure = nil
         refused = nil
         if !acceptRisks { risky = nil }
-        let named: Int? = choosing ? chosen : (fromLink ? linkChains.first : nil)
+        // core-ms-2: only the person's pick; an invite's networks are the
+        // machine's to apply after Add (`view.invite`).
+        let named: Int? = choosing ? chosen : nil
         hub.send(["type": "add", "address": typed, "network": named.map { $0 as Any } ?? NSNull(), "accept_risks": acceptRisks])
         Task { @MainActor in
             let outcome = await hub.accounts.until(timeout: 120) { view -> MsJSON? in
@@ -179,14 +201,6 @@ struct MultisigAddSheet: View {
         switch outcome.kind {
         case "added":
             let added = outcome["address"]?.string ?? address
-            if fromLink, let invite {
-                hub.send([
-                    "type": "keep_invited", "address": added, "chain_ids": linkChains,
-                    "members": (invite.link?["members"]?.array ?? []).map {
-                        ["address": $0["address"]?.any ?? NSNull(), "name": $0["name"]?.any ?? NSNull(), "kind": $0["kind"]?.any ?? NSNull()]
-                    },
-                ])
-            }
             VelaHaptic.success.play()
             onAdded(added)
         case "chooseNetwork": choosing = true

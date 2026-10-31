@@ -811,6 +811,15 @@ final class BrowserController {
         ]))
     }
 
+    /// A request forwarded from a multisig, answered as the proposals machine
+    /// formed it (core-ms-2's `multisig_answered`: an error keeps its `data`
+    /// — the proposal a "proposed, waiting" carries).
+    func multisigAnswered(tab: String, id: String, answer: [String: Any]) {
+        dbrCore.dispatch(CoreJSON.string([
+            "type": "multisig_answered", "tab": tab, "id": id, "answer": answer, "now_ms": now(),
+        ]))
+    }
+
     // MARK: - Adding a network (spec 100)
 
     /// The add-network sheet's ending for a forwarded request — `outcome` is

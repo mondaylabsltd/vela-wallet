@@ -24,6 +24,7 @@ protocol MultisigCore: AnyObject {
     func dispatch(eventJson: String) throws -> String
     func resolveEffect(effectId: UInt64, resultJson: String) throws -> String
     func view() throws -> String
+    func skipUnchangedViews(includeVolatile: Bool) throws
 }
 
 extension MultisigAccountsCore: MultisigCore {}
@@ -43,7 +44,10 @@ private final class MultisigBridge: CoreBridge {
         try core.resolveEffect(effectId: effectId, resultJson: resultJson)
     }
     func view() throws -> String { try core.view() }
-    func skipUnchangedViews(includeVolatile: Bool) throws {}
+    /// core-ms-2: the multisig objects send a view only when it moved.
+    func skipUnchangedViews(includeVolatile: Bool) throws {
+        try core.skipUnchangedViews(includeVolatile: includeVolatile)
+    }
 }
 
 @MainActor

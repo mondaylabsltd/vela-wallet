@@ -217,6 +217,8 @@ struct MsCreateView: Decodable, Equatable {
     var networks: [String: MsJSON] = [:]
     var otherSpace: [Int] = []
     var kept: MsCreateDraft?
+    /// core-ms-2: the threshold, its note and its bounds (`MultisigThresholdView`).
+    var threshold: MsJSON?
 
     init() {}
     init(from decoder: Decoder) throws {
@@ -230,6 +232,7 @@ struct MsCreateView: Decodable, Equatable {
         networks = c.soft(MsKey("networks"), [:])
         otherSpace = c.soft(MsKey("other_space"), [])
         kept = c.soft(MsKey("kept"))
+        threshold = c.soft(MsKey("threshold"))
     }
 
     /// The Safe contracts on `chainId`: `present`, `missing`, `unknown` or `nil` (not asked).
@@ -340,6 +343,11 @@ struct MsAccountsView: Decodable, Equatable {
     var link: MsLinkStand?
     var memberKinds: [String: MsKindChoice] = [:]
     var knownMembers: [String: MsMemberInfo] = [:]
+    /// core-ms-2: the invite the machine opened (`MultisigInviteView`).
+    var invite: MsJSON?
+    /// core-ms-2: the network hints, read by the core.
+    var recentNetworks: [Int] = []
+    var usedNetworks: [Int] = []
 
     init() {}
     init(from decoder: Decoder) throws {
@@ -358,6 +366,9 @@ struct MsAccountsView: Decodable, Equatable {
         link = c.soft(MsKey("link"))
         memberKinds = c.soft(MsKey("member_kinds"), [:])
         knownMembers = c.soft(MsKey("known_members"), [:])
+        invite = c.soft(MsKey("invite"))
+        recentNetworks = c.soft(MsKey("recent_networks"), [])
+        usedNetworks = c.soft(MsKey("used_networks"), [])
     }
 
     func row(_ address: String?) -> MsAccountRow? {
@@ -475,9 +486,12 @@ struct MsDraft: Decodable, Equatable {
     var review: MsJSON
     var membersHere: [String]
     var defaultMember: String?
+    /// core-ms-2: ready on its proposer's approval — propose and execute.
+    var executeNow: Bool
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: MsKey.self)
+        executeNow = c.soft(MsKey("executeNow"), false)
         item = try c.decode(MsProposalItem.self, forKey: MsKey("item"))
         review = c.soft(MsKey("review"), .null)
         membersHere = c.soft(MsKey("membersHere"), [])
@@ -579,6 +593,13 @@ struct MsProposalsView: Decodable, Equatable {
     var callsStatus: [String: MsJSON] = [:]
     var linked: MsLinkedView?
     var signers: [String: MsSigners] = [:]
+    /// core-ms-2: the members here whose one press approves and executes.
+    var approveExecute: [String: [String]] = [:]
+    /// core-ms-2: the header chip, the waiting line's parts, the banner.
+    var ruleChip: MsJSON?
+    var waitingParts: [String: [MsJSON]] = [:]
+    var banner: MsJSON?
+    var setUp = false
 
     init() {}
     init(from decoder: Decoder) throws {
@@ -615,6 +636,16 @@ struct MsProposalsView: Decodable, Equatable {
         callsStatus = c.soft(MsKey("calls_status"), [:])
         linked = c.soft(MsKey("linked"))
         signers = c.soft(MsKey("signers"), [:])
+        approveExecute = c.soft(MsKey("approve_execute"), [:])
+        ruleChip = c.soft(MsKey("rule_chip"))
+        waitingParts = c.soft(MsKey("waiting_parts"), [:])
+        banner = c.soft(MsKey("banner"))
+        setUp = c.soft(MsKey("set_up"), false)
+    }
+
+    /// The members here whose one press approves and executes `item`.
+    func approveExecute(_ item: MsProposalItem) -> [String] {
+        lookup(approveExecute, chainId: item.chainId, hash: item.safeTxHash) ?? []
     }
 
     func item(chainId: Int, hash: String) -> MsProposalItem? {

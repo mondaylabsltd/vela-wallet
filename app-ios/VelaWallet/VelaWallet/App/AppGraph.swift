@@ -488,6 +488,18 @@ final class AppGraph {
             flowNav?.close()
             multisig?.sheet = .proposal(chainId: chainId, safeTxHash: hash)
         }
+        // core-ms-2: a site's `wallet_getCallsStatus` of a multisig batch is
+        // a read the browser asks; the proposals machine answers it.
+        let plainCall = browserController.ports.poolCall
+        browserController.ports.poolCall = { [weak multisig] chainId, method, params, bundler in
+            if bundler, method == "wallet_getCallsStatus", let multisig, let batch = params.first as? String {
+                guard let answer = await multisig.callsStatus(chainId: chainId, batch: batch) else {
+                    return .unanswered(rateLimited: false)
+                }
+                return .answered(answer)
+            }
+            return await plainCall(chainId, method, params, bundler)
+        }
         // M6: what changed while the app was away, said; the background poll's seam.
         multisig.notifier = MultisigNotifier(loc: loc)
         MultisigBackgroundBridge.hub = multisig

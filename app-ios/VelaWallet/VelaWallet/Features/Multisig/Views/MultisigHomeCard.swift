@@ -35,10 +35,13 @@ struct MultisigHomeCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s12) {
             header
-            if let waiting = view.presence[account.address.lowercased()] ?? nil, let line = waitingLine(waiting) {
+            // core-ms-2: the banner — said only when something waits and there
+            // is one to open (`banner {parts, first}`).
+            if following, let banner = view.banner, !banner.isNull,
+               let line = Self.waitingLine(banner["parts"]?.array ?? [], words: words) {
                 Button {
-                    if let first = waiting.first, let chain = first["chainId"]?.int ?? first["chain_id"]?.int,
-                       let hash = first["safeTxHash"]?.string ?? first["safe_tx_hash"]?.string {
+                    let first = banner["first"]
+                    if let chain = first?["chain_id"]?.int, let hash = first?["safe_tx_hash"]?.string {
                         onOpen(.proposal(chainId: chain, safeTxHash: hash))
                     }
                 } label: {
@@ -117,29 +120,30 @@ struct MultisigHomeCard: View {
         }
     }
 
-    /// The rule in force on each network it is used on: its members now
-    /// where it is deployed, its original ones where it is not.
+    /// The rule in force (core-ms-2's `rule_chip` for the multisig followed:
+    /// its members now where it is deployed, its original ones where not).
     private var ruleChip: String {
-        let original = (m: account.threshold, n: account.owners.count)
-        guard following, !view.chains.isEmpty else { return words.ruleChip(m: original.m, n: original.n) }
-        var rules: [(Int, Int)] = []
-        for chain in view.chains {
-            let rule = chain.members.flatMap { $0.deployed ? ($0.threshold, $0.owners.count) : nil } ?? (original.m, original.n)
-            if !rules.contains(where: { $0 == rule }) { rules.append(rule) }
+        guard following, let chip = view.ruleChip, !chip.isNull else {
+            return words.ruleChip(m: account.threshold, n: account.owners.count)
         }
-        if rules.count > 1 { return words.t("presence.ruleDiffers") }
-        let rule = rules.first ?? (original.m, original.n)
-        return words.ruleChip(m: rule.0, n: rule.1)
+        if chip.kind == "differs" { return words.t("presence.ruleDiffers") }
+        let rule = chip["rule"]
+        return words.ruleChip(m: rule?["m"]?.int ?? account.threshold, n: rule?["n"]?.int ?? account.owners.count)
     }
 
-    private func waitingLine(_ waiting: MsWaiting) -> String? {
-        var parts: [String] = []
-        if waiting.needsYou > 0 { parts.append(words.t("presence.needsYou", count: waiting.needsYou, ["count": String(waiting.needsYou)])) }
-        if waiting.ready > 0 { parts.append(words.t("presence.ready", count: waiting.ready, ["count": String(waiting.ready)])) }
-        if waiting.waitingPayer > 0 {
-            parts.append(words.t("presence.waitingPayer", count: waiting.waitingPayer, ["count": String(waiting.waitingPayer)]))
+    /// The waiting line's parts as the core ordered them, in words.
+    static func waitingLine(_ parts: [MsJSON], words: MsWords) -> String? {
+        let said = parts.compactMap { part -> String? in
+            let count = part["count"]?.int ?? 0
+            guard count > 0 else { return nil }
+            switch part.kind {
+            case "needsYou": return words.t("presence.needsYou", count: count, ["count": String(count)])
+            case "ready": return words.t("presence.ready", count: count, ["count": String(count)])
+            case "waitingPayer": return words.t("presence.waitingPayer", count: count, ["count": String(count)])
+            default: return nil
+            }
         }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        return said.isEmpty ? nil : said.joined(separator: " · ")
     }
 
     // MARK: - The waiting list
@@ -207,10 +211,8 @@ struct MultisigHomeCard: View {
 
     // MARK: - First steps
 
-    /// Set up on a network already (read from the chain).
-    private var setUp: Bool {
-        following && view.chains.contains { $0.members?.deployed == true }
-    }
+    /// Set up on a network already (core-ms-2's `set_up`, read from the chain).
+    private var setUp: Bool { following && view.setUp }
 
     private var firstRun: some View {
         let network = account.chainIds.first
@@ -302,8 +304,9 @@ struct MultisigSwitcherSection: View {
 
     private func rowView(_ row: MsAccountRow) -> some View {
         let selected = hub.accountsView.active?.lowercased() == row.account.address.lowercased()
-        let waiting = hub.proposalsView.presence[row.account.address.lowercased()] ?? nil
-        let count = (waiting?.needsYou ?? 0) + (waiting?.ready ?? 0)
+        // core-ms-2: what waits on it, as the core counts it (`waiting_parts`).
+        let parts = hub.proposalsView.waitingParts[row.account.address.lowercased()] ?? []
+        let count = parts.filter { $0.kind != "waitingPayer" }.reduce(0) { $0 + ($1["count"]?.int ?? 0) }
         var tags: [String] = [words.ruleChip(m: row.account.threshold, n: row.account.owners.count)]
         if row.localMembers.isEmpty { tags.append(words.t("switcher.readOnly")) }
         if !row.shared { tags.append(words.t("switcher.notShared")) }

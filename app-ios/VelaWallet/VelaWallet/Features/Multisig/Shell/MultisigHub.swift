@@ -453,13 +453,15 @@ final class MultisigHub {
     /// `wallet_sendCalls`, …): the machine decides everything — refused (a
     /// message), drafted with its review, proposed on the person's word, held
     /// until executed, told "proposed" before the request's limit — and its
-    /// answer goes to the site exactly once (`answer`, the page's payload).
+    /// answer goes to the site exactly once (`answer`: the machine's
+    /// `MultisigDappAnswer`, delivered by the browser's `multisig_answered` —
+    /// an error keeps its `data`, core-ms-2).
     func dappRequest(
         id: String, address: String, method: String, paramsJson: String, origin: String, chainId: Int,
         answer: @escaping ([String: Any]) -> Void
     ) {
         guard let record = record(address) else {
-            answer(["type": "err", "code": 4100, "kind": "unauthorized_account", "message": "not a multisig on this device"])
+            answer(["error": ["code": 4100, "message": "not a multisig on this device"]])
             return
         }
         let params = (try? JSONSerialization.jsonObject(with: Data(paramsJson.utf8), options: [.fragmentsAllowed])) ?? []
@@ -482,25 +484,26 @@ final class MultisigHub {
         for (id, answer) in dappAnswers {
             guard let held = proposalsView.dapp[id], let result = held["answer"], !result.isNull else { continue }
             dappAnswers.removeValue(forKey: id)
-            let payload: [String: Any]
-            if let error = result["error"], !error.isNull {
-                let code = error["code"]?.int ?? 4001
-                let kind = switch code {
-                case 4001: "user_rejected"
-                case 4100: "unauthorized_account"
-                case -32602: "invalid_params"
-                case 4200: "unsupported_capability"
-                default: "submit_failed"
-                }
-                payload = ["type": "err", "code": code, "kind": kind, "message": error["message"]?.string ?? NSNull()]
-                // An error the site was not told of takes the sheet with it.
-                if held["told"]?.bool != true, sheet == .dapp(id: id) { sheet = nil }
-            } else {
-                payload = ["type": "ok", "result": result["result"]?.any ?? NSNull()]
+            // An error the site was not told of takes the sheet with it.
+            if let error = result["error"], !error.isNull, held["told"]?.bool != true, sheet == .dapp(id: id) {
+                sheet = nil
             }
-            answer(payload)
+            answer(result.any as? [String: Any] ?? [:])
             Task { @MainActor [weak self] in self?.proposals.dispatch(["type": "dapp_settled", "id": id]) }
         }
+    }
+
+    /// A site's `wallet_getCallsStatus` of a multisig batch (core-ms-2: the
+    /// browser asks it as a read): the proposals machine's answer — a
+    /// JSON-RPC body, `{result}` or `{error}` — then told it was taken.
+    func callsStatus(chainId: Int, batch: String) async -> [String: Any]? {
+        let id = "calls-\(UUID().uuidString)"
+        proposals.dispatch(["type": "calls_status", "id": id, "chain_id": chainId, "calls_id": batch])
+        let answer: [String: Any]? = await proposals.until(timeout: 30) { view in
+            (view["calls_status"] as? [String: Any])?[id] as? [String: Any]
+        }
+        proposals.dispatch(["type": "calls_status_taken", "id": id])
+        return answer
     }
 
     // MARK: - Risk (§3.5)

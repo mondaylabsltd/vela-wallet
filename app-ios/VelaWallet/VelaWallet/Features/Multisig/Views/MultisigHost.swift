@@ -60,8 +60,9 @@ struct MultisigHostModifier: ViewModifier {
             if hub.accountsView.link?.kind == "invite" {
                 MultisigAddSheet(
                     hub: hub, words: words, invite: hub.accountsView.link, prefill: nil,
+                    // core-ms-2: closing the invite's add sheet lets the invite go.
                     onClose: {
-                        hub.send(["type": "close_link"])
+                        hub.send(["type": "drop_link"])
                         hub.sheet = nil
                     },
                     onAdded: { _ in

@@ -110,6 +110,39 @@ struct MultisigViewsTests {
         #expect(view.chain(100)?.members?.deployed == true)
     }
 
+    /// core-ms-2: the rules the shells used to derive arrive in the views —
+    /// the one-press Approve and execute, the rule chip, the banner and its
+    /// parts, set up, the create sheet's threshold, the invite, the hints.
+    @Test func theCoresWordsForTheHeaderTheBannerAndTheStepperRead() throws {
+        var json = Self.proposalsJson(item: Self.item(approved: 1, status: "pending", canApprove: [Self.one]),
+                                      standing: #"{"kind":"yourTurn"}"#)
+        json = json.replacingOccurrences(of: #""signers":{}"#, with: """
+        "signers":{},"approve_execute":{"100:\(Self.hash)":["\(Self.one)"]},
+        "rule_chip":{"kind":"differs","rules":[{"m":2,"n":3,"solo":false},{"m":2,"n":4,"solo":false}]},
+        "waiting_parts":{"\(Self.safe.lowercased())":[{"kind":"needsYou","count":1},{"kind":"ready","count":2}]},
+        "banner":{"parts":[{"kind":"needsYou","count":1}],"first":{"chain_id":100,"safe_tx_hash":"\(Self.hash)"}},
+        "set_up":true
+        """)
+        let view = try #require(decode(MsProposalsView.self, json))
+        let item = try #require(view.items.first)
+        #expect(view.approveExecute(item) == [Self.one])
+        #expect(view.ruleChip?.kind == "differs")
+        #expect(view.setUp)
+        #expect(MultisigHomeCard.waitingLine(view.waitingParts[Self.safe.lowercased()] ?? [], words: words)
+            == "1 needs your approval · 2 ready to execute")
+        #expect(view.banner?["first"]?["safe_tx_hash"]?.string == Self.hash)
+
+        var accounts = Self.accountsJson
+        accounts = accounts.replacingOccurrences(of: #""kept":null}"#, with: #""kept":null,"threshold":{"value":2,"members":3,"note":{"kind":"spare","count":1},"risky":false,"can_lower":true,"can_raise":true}}"#)
+        accounts = accounts.replacingOccurrences(of: #""known_members":"#, with: #""invite":{"link":{"multisig":"\#(Self.safe)","chainIds":[100,8453],"members":null},"on_device":[100],"missing":8453,"missing_name":"Base"},"recent_networks":[100],"used_networks":[100,8453],"known_members":"#)
+        let accountsView = try #require(decode(MsAccountsView.self, accounts))
+        #expect(accountsView.create.threshold?["value"]?.int == 2)
+        #expect(accountsView.create.threshold?["note"]?.kind == "spare")
+        #expect(accountsView.invite?["missing"]?.int == 8453)
+        #expect(accountsView.recentNetworks == [100])
+        #expect(accountsView.usedNetworks == [100, 8453])
+    }
+
     // MARK: - Words
 
     @Test func aTransactionsOneLineIsTheCorpus() {
