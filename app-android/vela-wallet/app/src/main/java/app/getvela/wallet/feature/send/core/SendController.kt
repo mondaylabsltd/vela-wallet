@@ -133,7 +133,16 @@ class SendController(
     /** The speed control, as the core decided it — the send form draws this. */
     val speed: StateFlow<FeeSpeedView> = speedControl.speed
 
+    /**
+     * A multisig's confirm (native multisig M2): the app's proposals machine
+     * proposes the reviewed transfers. Unset: answered `propose_failed`.
+     */
+    @Volatile
+    var onProposeSafeTx: (suspend (SendOperation.ProposeSafeTx) -> SendShellResult?)? = null
+
     private val ports: SendExecutor.SendPorts = object : SendExecutor.SendPorts {
+        override suspend fun proposeSafeTx(operation: SendOperation.ProposeSafeTx): SendShellResult? = onProposeSafeTx?.invoke(operation)
+
         override suspend fun addNetwork(chainId: Long): SendAddNetworkOutcome = addNetwork(chainId)
         override fun signingStarted() {
             dispatch(SendEvent.SigningStarted)

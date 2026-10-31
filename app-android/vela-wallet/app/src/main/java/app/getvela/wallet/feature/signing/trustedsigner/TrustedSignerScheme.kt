@@ -5,6 +5,8 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeoutOrNull
 import uniffi.vela_core_uniffi.TrustedSignerCallback
 import uniffi.vela_core_uniffi.TrustedSignerCeremonyOutcome
+import uniffi.vela_core_uniffi.TrustedSignerApprovalOutcome
+import uniffi.vela_core_uniffi.trustedSignerApprovalAccept
 import uniffi.vela_core_uniffi.TrustedSignerOutcome
 import uniffi.vela_core_uniffi.TrustedSignerRefusal
 import uniffi.vela_core_uniffi.trustedSignerCallbackToken
@@ -163,6 +165,19 @@ class TrustedSignerScheme(
                         ask.expectedMemberChallenge,
                     ),
                 )
+
+                // A multisig approval: the core computes the approval bytes
+                // from the SafeTx hash IT made, and accepts only an assertion
+                // over them by one of the member's keys.
+                is TrustedSignerAsk.Approval -> TrustedSignerAnswer.Approved(
+                    trustedSignerApprovalAccept(
+                        callback.answerJson,
+                        ask.chainId.toULong(),
+                        ask.member,
+                        ask.safeTxHash,
+                        ask.keys,
+                    ),
+                )
             }
 
             is TrustedSignerCallback.Refused -> refused(ask, callback.refusal)
@@ -175,6 +190,9 @@ class TrustedSignerScheme(
 
             is TrustedSignerAsk.Ceremony ->
                 TrustedSignerAnswer.Ceremonial(TrustedSignerCeremonyOutcome.Refused(refusal))
+
+            is TrustedSignerAsk.Approval ->
+                TrustedSignerAnswer.Approved(TrustedSignerApprovalOutcome.Refused(refusal))
         }
 
     override fun cancel() {

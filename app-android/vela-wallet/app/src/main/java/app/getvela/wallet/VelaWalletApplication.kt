@@ -1,6 +1,9 @@
 package app.getvela.wallet
 
 import app.getvela.wallet.feature.send.SendLive
+import app.getvela.wallet.feature.multisig.MultisigWiring
+import app.getvela.wallet.feature.multisig.MultisigNotifier
+import app.getvela.wallet.feature.multisig.core.MultisigHub
 import app.getvela.wallet.core.format.Formats
 import kotlinx.coroutines.flow.MutableStateFlow
 import app.getvela.wallet.feature.settings.SettingsPage
@@ -535,6 +538,42 @@ class AppContainer(private val app: Application) {
         )
     }
 
+    /**
+     * Native multisig (M1–M6): the core's multisig machines over one shell —
+     * the same core the web drives, over uniffi. Built on first use; booted
+     * once a wallet is signed in (the wallet route), so a link that opened the
+     * app, the switcher and the notifications find it loaded.
+     */
+    val multisig: MultisigHub by lazy { MultisigWiring.build(this, app).also { MultisigWiring.attachNotifier(this, app, it); multisigBuilt = true } }
+
+    @Volatile
+    private var multisigBuilt = false
+
+    /** A page's request, as the proposals machine holds it: one id across tabs. */
+    private fun multisigDappId(tab: String, id: String) = "$tab:$id"
+
+    /** M6: what changed while the app was away, said (local polling; no push service). */
+    val multisigNotifier: MultisigNotifier by lazy {
+        MultisigNotifier(
+            store = VelaStore(app),
+            words = { MultisigWiring.words(this) },
+            post = { note -> MultisigNotifier.postToSystem(app, MultisigWiring.words(this), note) },
+        )
+    }
+
+    /** An activity of this app is on screen (a notification is noise then: the screens say it). */
+    fun inForeground(): Boolean = foregroundActivities > 0
+
+    /**
+     * A multisig link (`#ms=…` / `#msa=…`, the fragment with its `#`) that
+     * reached the app — a verified App Link, text shared in, a code scanned —
+     * for the accounts machine's one link flow once the wallet is in front.
+     */
+    val pendingMultisigLink = MutableStateFlow<String?>(null)
+
+    /** A tapped multisig notification (M6): chain, safeTxHash, the multisig. */
+    val pendingMultisigOpen = MutableStateFlow<Triple<Int, String, String?>?>(null)
+
     /** Spec 045: the platform's documents (picker, creator, share sheet); the activity attaches them in onCreate. */
     @Volatile
     var documents: app.getvela.wallet.feature.documents.DocumentPorts? = null
@@ -632,6 +671,9 @@ class AppContainer(private val app: Application) {
             // The passkey's ceremony, for the AI agent's transfers to follow:
             // a transfer is awaiting its passkey once the prompt is up.
             controller.onCeremony = { event -> agent.ceremony(event) }
+            // Native multisig M2: a multisig's confirm proposes — the proposals
+            // machine's draft, its review, then one passkey.
+            controller.onProposeSafeTx = { op -> MultisigWiring.proposeFromSend(multisig, op) }
         }
     }
 
@@ -755,11 +797,27 @@ class AppContainer(private val app: Application) {
             browserBuilt = true
             // The core forwards one signature at a time: the four signing
             // machines are born for it, answer it, and die with it.
-            controller.onForwardToSigning = { operation -> openSigning(controller, operation) }
+            controller.onForwardToSigning = { operation ->
+                // M5: a request to a multisig is the proposals machine's, never the
+                // Vela signing pipeline's — held until executed, answered as it formed it.
+                if (multisig.isMultisig(operation.granted_address)) {
+                    val params = runCatching { kotlinx.serialization.json.Json.parseToJsonElement(operation.params_json) }
+                        .getOrDefault(kotlinx.serialization.json.JsonNull)
+                    multisig.dappRequest(
+                        id = multisigDappId(operation.tab, operation.id), address = operation.granted_address,
+                        method = operation.method, params = params, origin = operation.origin, chainId = operation.chain_id,
+                    ) { answer -> controller.multisigAnswered(operation.tab, operation.id, answer) }
+                } else {
+                    openSigning(controller, operation)
+                }
+            }
             // The page behind the open sheet is gone and already answered.
             controller.onCancelSigning = { tab, id ->
                 signing.value?.takeIf { open -> open.request.value?.let { it.transportId == tab && it.id == id } == true }?.cancel()
+                if (multisigBuilt) multisig.dappGone(multisigDappId(tab, id))
             }
+            // core-ms-2: a multisig batch's status is the proposals machine's.
+            controller.onMultisigCallsStatus = { chainId, batch -> multisig.callsStatus(chainId, batch) }
             // Spec 100: a page asks to add a network. The sheet is
             // `network_admin`'s (the same check and save as Settings'); this
             // container only carries the request there and its ending back.
@@ -774,8 +832,15 @@ class AppContainer(private val app: Application) {
             val follow = CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate)
             // Every wallet address and the active one: every grant follows it.
             follow.launch {
-                session.view.collect { view ->
-                    if (!view.loading) controller.accountsChanged(view.accounts.map { it.address }, view.address.takeIf { it.isNotBlank() })
+                // A multisig shown is the account sites see, as on the wallet (M5).
+                kotlinx.coroutines.flow.combine(session.view, multisig.accountsView) { view, ms -> view to ms }.collect { (view, ms) ->
+                    if (!view.loading) {
+                        val shown = ms.activeRow?.account?.address
+                        controller.accountsChanged(
+                            view.accounts.map { it.address } + ms.accounts.map { it.account.address },
+                            shown ?: view.address.takeIf { it.isNotBlank() },
+                        )
+                    }
                 }
             }
             // The chains a page may switch to are the space in front's

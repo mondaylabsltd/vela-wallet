@@ -636,6 +636,18 @@ fun VelaNavHost(
 
             composable(VelaDestinations.WALLET) {
                 val strings = LocalVelaStrings.current
+                // Native multisig: the multisig shown, when one is — the wallet
+                // wears its identity (its address's balance and activity; its
+                // send proposes). The session's own account stays in front
+                // underneath (the web's `shownIdentity`).
+                val multisigHub = application.container.multisig
+                val msAccounts by multisigHub.accountsView.collectAsStateWithLifecycle()
+                val shownMultisig = msAccounts.activeRow
+                val msWords = remember(strings, msAccounts, session.accounts) {
+                    app.getvela.wallet.feature.multisig.MultisigWiring.words(application.container, multisigHub)
+                }
+                val shownAddress = shownMultisig?.account?.address ?: session.address
+                val shownName = shownMultisig?.let { msWords.name(it.account, it.name) } ?: session.activeName
                 // Fixture-driven still (spec 015 FR-005) apart from the two things
                 // that identify the wallet — its address and its name, both now the
                 // real ones. A home screen showing a fixture address after a real
@@ -647,9 +659,9 @@ fun VelaNavHost(
                 // pill; the pill is gone (founder call, 2026-08-26 — it cost the
                 // name and address their width), and with it this screen's H8
                 // state. The sheet keeps its fixtures for the gallery.
-                val model = remember(strings, session.address, session.activeName) {
+                val model = remember(strings, shownAddress, shownName) {
                     WalletFixtures.buildMobileState(WalletScreenState.H1, strings)
-                        .withAddress(session.address).withName(session.activeName)
+                        .withAddress(shownAddress).withName(shownName)
                 }
                 // Spec 021: Receive / Send / Activity / Assets, as pushed screens
                 // inside this route. The system Back unwinds the flow stack before
@@ -700,8 +712,8 @@ fun VelaNavHost(
                 val chainNames = remember(networks.networks) {
                     networks.networks.associate { it.chain_id.toInt() to it.display_name }
                 }
-                LaunchedEffect(session.address) {
-                    if (session.address.isEmpty()) return@LaunchedEffect
+                LaunchedEffect(shownAddress) {
+                    if (shownAddress.isEmpty()) return@LaunchedEffect
                     // Read the book as the wallet opens, not when 通讯录 is
                     // first tapped: that tap used to meet an unloaded book and
                     // draw title + search before the list popped in — the flash
@@ -726,7 +738,7 @@ fun VelaNavHost(
                     // still has a display currency — and until this runs the core
                     // has no rate and the wallet shows dollars.
                     settings.refreshCurrency()
-                    wallet.open(session.address)
+                    wallet.open(shownAddress)
                 }
 
                 // Spec 048: the 全部网络 pill and the SD1 class chips are shell render
@@ -845,7 +857,16 @@ fun VelaNavHost(
                 // Who the send is for and the money it shows — one definition for
                 // the open below and for a payment request that re-opens a Send
                 // already on screen.
-                fun sendAccount() = SendAccountRef(id = session.address, address = session.address, name = session.activeName)
+                // A multisig shown sends by proposing (its confirm proposes; the
+                // members approve): its address, no passkey of its own, its rule.
+                fun sendAccount() = SendAccountRef(
+                    id = shownAddress,
+                    address = shownAddress,
+                    name = shownName,
+                    multisig = shownMultisig?.let {
+                        app.getvela.wallet.feature.send.core.SendMultisigRef(threshold = it.account.threshold, owners = it.account.owners.size)
+                    },
+                )
                 fun sendDisplay(): SendDisplayContext {
                     val money = WalletLive.Money.of(currency, strings.language)
                     return SendDisplayContext(
@@ -907,7 +928,7 @@ fun VelaNavHost(
                             VelaLog.event("share", "render failed")
                         } else {
                             scope.launch {
-                                val name = "vela-receive-${session.address.takeLast(6)}.png"
+                                val name = "vela-receive-${shownAddress.takeLast(6)}.png"
                                 // Spec 048: 保存图片 saves — into the gallery, the way the web
                                 // downloads a file; the share sheet is the way out when the
                                 // gallery refuses.
@@ -971,7 +992,8 @@ fun VelaNavHost(
                     AccountSwitcherSheet(
                         sheet = WalletLive.accountSwitcher(
                             session.accounts.map { it.name to it.address },
-                            session.activeIndex,
+                            // A multisig shown: no Vela account row wears the check (its row does).
+                            if (shownMultisig != null) -1 else session.activeIndex,
                             // Spec 105: no account is worth anything in the testnet space.
                             if (space.testnet) balances.switcher.copy(balances = emptyList()) else balances.switcher,
                             currency,
@@ -983,6 +1005,8 @@ fun VelaNavHost(
                             switcherOpen = false
                             wallet.switcherClosed()
                             haptic(VelaHaptic.Select)
+                            // A Vela account picked: the multisig shown (if any) steps aside.
+                            multisigHub.activate(null)
                             session.addressAt(index)?.let { agent.person(intent("switch_account", "address" to it)) }
                         },
                         onPrimary = { switcherOpen = false; wallet.switcherClosed(); navController.push(VelaDestinations.CREATE) },
@@ -995,6 +1019,21 @@ fun VelaNavHost(
                             switcherOpen = false
                             wallet.switcherClosed()
                             session.addressAt(index)?.let { agent.person(intent("remove_wallet", "address" to it)) }
+                        },
+                        // Native multisig M1: every multisig here, Create and Add.
+                        multisigSection = {
+                            app.getvela.wallet.feature.multisig.MultisigSwitcherSection(
+                                hub = multisigHub,
+                                words = msWords,
+                                onSelect = { address ->
+                                    switcherOpen = false
+                                    wallet.switcherClosed()
+                                    haptic(VelaHaptic.Select)
+                                    multisigHub.activate(address)
+                                },
+                                onCreate = { switcherOpen = false; wallet.switcherClosed(); multisigHub.sheet.value = app.getvela.wallet.feature.multisig.core.MultisigSheet.Create },
+                                onAdd = { switcherOpen = false; wallet.switcherClosed(); multisigHub.sheet.value = app.getvela.wallet.feature.multisig.core.MultisigSheet.Add() },
+                            )
                         },
                     )
                 }
@@ -1251,8 +1290,8 @@ fun VelaNavHost(
                 // re-ask after a failure (PR 2 note 1) belong to a form or a
                 // confirm on screen. The next open asks afresh.
                 LaunchedEffect(sendOpen) { if (!sendOpen) send.left() }
-                LaunchedEffect(sendOpen, session.address) {
-                    if (sendOpen && session.address.isNotEmpty()) {
+                LaunchedEffect(sendOpen, shownAddress) {
+                    if (sendOpen && shownAddress.isNotEmpty()) {
                         feeSheetOpen = false
                         // Spec 047 D8: a validated /pay link opens the send locked —
                         // taken atomically, so it is applied once (spec 078 round 3).
@@ -1303,6 +1342,15 @@ fun VelaNavHost(
                 }
                 LaunchedEffect(sendClosed) {
                     if (sendClosed && flows.top in SEND_STATES) flows.close()
+                }
+                // Native multisig M2: a multisig's send proposed — the send closes
+                // and the transaction's own sheet takes over (approve, execute,
+                // ask the others).
+                val proposedNow = sendView.proposed
+                LaunchedEffect(proposedNow) {
+                    val proposed = proposedNow ?: return@LaunchedEffect
+                    if (flows.top in SEND_STATES) flows.close()
+                    multisigHub.sheet.value = app.getvela.wallet.feature.multisig.core.MultisigSheet.Proposal(proposed.chain_id, proposed.safe_tx_hash)
                 }
                 // The notification permission, asked at the first receipt and never at
                 // launch (research D6) — and once per install (087 F14): a refusal
@@ -1412,15 +1460,15 @@ fun VelaNavHost(
                     val sendRelaySentAt = sendView.user_op_hash?.let { op ->
                         trackView.entries.firstOrNull { it.user_op_hash.equals(op, ignoreCase = true) }?.relay_sent_at_ms
                     }
-                    val flowModel = remember(liveState, sendView, feeView, speedView, batchView, importReplaces, contactsBook, strings, currency, chainNames, explorers, session.address, sweepPicking, chainFilter, classFilter, Formats.current, sendRelaySentAt) {
+                    val flowModel = remember(liveState, sendView, feeView, speedView, batchView, importReplaces, contactsBook, strings, currency, chainNames, explorers, shownAddress, sweepPicking, chainFilter, classFilter, Formats.current, sendRelaySentAt) {
                         val drawn = FlowFixtures.build(liveState, strings)
                         val ctx = SendLive.Context(
                             strings = strings,
                             chainNames = chainNames,
                             explorers = explorers,
                             money = WalletLive.Money.of(currency, strings.language),
-                            fromName = session.activeName,
-                            fromAddress = session.address,
+                            fromName = shownName,
+                            fromAddress = shownAddress,
                             relaySentAtMs = sendRelaySentAt,
                         )
                         VelaLog.event("send.base", drawn.base::class.simpleName ?: "?", "state" to liveState.name, "top" to flowState.name)
@@ -1459,8 +1507,8 @@ fun VelaNavHost(
                     // (as on iOS and the desktop) — which page, with which key,
                     // and its check, before anything starts — and its Open
                     // (去签名页确认) is the confirm.
-                    val planHandoff by produceState<app.getvela.wallet.feature.send.core.UserOpSpine.Handoff?>(null, onConfirmPage, session.address) {
-                        value = if (onConfirmPage) runCatching { send.handoffFor(session.address) }.getOrNull() else null
+                    val planHandoff by produceState<app.getvela.wallet.feature.send.core.UserOpSpine.Handoff?>(null, onConfirmPage, shownAddress) {
+                        value = if (onConfirmPage) runCatching { send.handoffFor(shownAddress) }.getOrNull() else null
                     }
                     LaunchedEffect(planHandoff?.page) {
                         planHandoff?.page?.let { page -> runCatching { application.container.signerPages.ensure(page) } }
@@ -1662,7 +1710,7 @@ fun VelaNavHost(
                                 }
                             },
                             onExplorer = {
-                                val ctx = SendLive.Context(strings, chainNames, explorers, WalletLive.Money.of(currency, strings.language), session.activeName, session.address)
+                                val ctx = SendLive.Context(strings, chainNames, explorers, WalletLive.Money.of(currency, strings.language), shownName, shownAddress)
                                 SendLive.explorerUrl(sendView, ctx)?.let { url ->
                                     runCatching {
                                         activity.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
@@ -1680,9 +1728,9 @@ fun VelaNavHost(
                     // Keyed on being IN the receive flow, not on the step: a Start per
                     // step reset the asset a token detail's 收款 had just picked (spec 048).
                     val receiving = flowState in RECEIVE_STATES
-                    LaunchedEffect(receiving, session.address) {
-                        if (session.address.isNotEmpty() && receiving) {
-                            wallet.openReceive(session.address, PAY_LINK_BASE)
+                    LaunchedEffect(receiving, shownAddress) {
+                        if (shownAddress.isNotEmpty() && receiving) {
+                            wallet.openReceive(shownAddress, PAY_LINK_BASE)
                         }
                     }
                     // Spec 048: a token detail's 收款 — its asset, picked once the request
@@ -1696,7 +1744,7 @@ fun VelaNavHost(
                     val flowModel = remember(
                         flowState,
                         strings,
-                        session.address,
+                        shownAddress,
                         networks,
                         request,
                         balances,
@@ -1718,8 +1766,8 @@ fun VelaNavHost(
                         FlowFixtures.build(flowState, strings).let { drawn ->
                             liveFlow(
                                 drawn = drawn,
-                                address = session.address,
-                                name = session.activeName,
+                                address = shownAddress,
+                                name = shownName,
                                 networks = networks,
                                 request = request,
                                 balances = balances,
@@ -1797,7 +1845,7 @@ fun VelaNavHost(
                         },
                         onSaveImage = {
                             val drawn = (FlowFixtures.build(FlowState.R4, strings).base as? FlowBase.Share)?.model
-                            if (drawn != null) captureShare = FlowLive.shareCard(drawn, session.address, session.activeName, request.asset.network_name, strings, request.asset.chain_id, networks.networks.firstOrNull { it.chain_id.toInt() == request.asset.chain_id }?.native_symbol, code = request.qr_value)
+                            if (drawn != null) captureShare = FlowLive.shareCard(drawn, shownAddress, shownName, request.asset.network_name, strings, request.asset.chain_id, networks.networks.firstOrNull { it.chain_id.toInt() == request.asset.chain_id }?.native_symbol, code = request.qr_value)
                         },
                         addToken = AddTokenCallbacks(
                             onInput = { wallet.addTokenInput(it.trim()) },
@@ -1870,9 +1918,16 @@ fun VelaNavHost(
                         val networks by application.container.spaceNetworks.collectAsStateWithLifecycle()
                         val tabView = dapp.tabs.firstOrNull { it.tab == exploreView.selected_tab }
                         val siteChain = tabView?.chain_id ?: app.getvela.wallet.feature.browser.core.DbrTabView("").chain_id
+                        // M5: a multisig shown is the account sites see — named as the wallet names it.
+                        val exploreMsHub = application.container.multisig
+                        val exploreMs by exploreMsHub.accountsView.collectAsStateWithLifecycle()
+                        val exploreShown = exploreMs.activeRow
+                        val exploreShownName = remember(exploreShown, strings) {
+                            exploreShown?.let { app.getvela.wallet.feature.multisig.MultisigWiring.words(application.container, exploreMsHub).name(it.account, it.name) }
+                        }
                         val identity = app.getvela.wallet.feature.browser.ExploreLive.Identity(
-                            accountName = session.activeName,
-                            accountAddress = session.address,
+                            accountName = exploreShownName ?: session.activeName,
+                            accountAddress = exploreShown?.account?.address ?: session.address,
                             chainName = chainNames[siteChain] ?: siteChain.toString(),
                             chainDot = WalletLive.badge(siteChain.toLong()),
                             chainId = siteChain,
@@ -2054,7 +2109,15 @@ fun VelaNavHost(
                                                     // Phase 3: a web-wallet multisig or connect link is the
                                                     // browser's (read by the core's codec), never the dApp browser's.
                                                     val route = app.getvela.wallet.feature.wallet.core.AppLinks.classify(scanned.url)
-                                                    if (route is app.getvela.wallet.feature.wallet.core.AppLinks.Route.Web) {
+                                                    if (route is app.getvela.wallet.feature.wallet.core.AppLinks.Route.Web &&
+                                                        route.kind != app.getvela.wallet.feature.wallet.core.AppLinks.WebKind.Connect
+                                                    ) {
+                                                        // Native multisig: a proposal or an invite opens here, in
+                                                        // the accounts machine's one link flow.
+                                                        onClose()
+                                                        section = VelaTab.Wallet
+                                                        application.container.pendingMultisigLink.value = "#" + scanned.url.substringAfter('#', "")
+                                                    } else if (route is app.getvela.wallet.feature.wallet.core.AppLinks.Route.Web) {
                                                         onClose()
                                                         val tab = application.container.trustedSignerTab
                                                         if (tab?.open(scanned.url) != true) application.container.browser.askToOpen(scanned.url)
@@ -2163,6 +2226,21 @@ fun VelaNavHost(
                         WalletScreen(
                             model = homeModel,
                             onSyncRetry = { application.container.session.syncPending() },
+                            // Native multisig: the multisig shown's own lines.
+                            multisigCard = shownMultisig?.let { row ->
+                                {
+                                    val timeFormat = remember { java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT) }
+                                    app.getvela.wallet.feature.multisig.MultisigHomeCard(
+                                        hub = multisigHub,
+                                        row = row,
+                                        words = msWords,
+                                        funded = balances.tokens.any { !it.spam && it.balance.any { c -> c in '1'..'9' } },
+                                        time = { ms -> timeFormat.format(java.util.Date(ms)) },
+                                        onOpen = { multisigHub.sheet.value = it },
+                                        onFund = { flows.enter(WalletFlowEntry.Receive) },
+                                    )
+                                }
+                            },
                             onSpace = { application.container.networkSpace.switcherOpen.value = true },
                             onSelectTab = select,
                             // The id says WHICH row was tapped. Without it every row
@@ -3024,6 +3102,29 @@ fun VelaNavHost(
     }
     identiconViewer?.let { seed ->
         IdenticonViewerSheet(address = seed, onDismiss = { identiconViewer = null })
+    }
+
+    // Native multisig (M1–M6): one layer over every route — booted once a
+    // wallet is in front, a link handed to its one link flow, its sheets.
+    if (startDestination !in DEVELOPER_ROUTES) {
+        app.getvela.wallet.feature.multisig.MultisigAppLayer(
+            container = application.container,
+            route = session.allowedRoute,
+            accountsKey = session.accounts.map { it.address },
+            onAddNetwork = { _ ->
+                // Settings → Add network; a link waiting for it opens again
+                // once it is there (the accounts machine keeps it).
+                application.container.multisig.sheet.value = null
+                application.container.pendingSettingsPage.value = app.getvela.wallet.feature.settings.SettingsPage.AddNetwork
+                navController.swapOverWallet(VelaDestinations.SETTINGS)
+            },
+            onFund = {
+                application.container.multisig.sheet.value = null
+                application.container.pendingFlow.value = WalletFlowEntry.Receive
+                section = VelaTab.Wallet
+                navController.popBackStack(VelaDestinations.WALLET, inclusive = false)
+            },
+        )
     }
 
     // Hosted OUTSIDE the NavHost, deliberately. A prompt can be raised by either

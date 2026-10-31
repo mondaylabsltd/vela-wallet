@@ -9,7 +9,7 @@ import androidx.compose.ui.platform.LocalView
 import app.getvela.wallet.core.diagnostics.VelaLog
 
 /**
- * The five haptics this app performs — and the policy that says where
+ * The six haptics this app performs — and the policy that says where
  * (spec 048, `docs/design-system/haptics.md`):
  *
  * - [Press]   a button under the finger (the founder's rule: press = deformation + haptic),
@@ -18,6 +18,8 @@ import app.getvela.wallet.core.diagnostics.VelaLog
  * - [Select]  a selection that takes effect: a switch, a filter, a network / fee-token /
  *             account pick, a favourite, a copy
  * - [Success] / [Reject]  an outcome the core decided
+ * - [Counted] a multisig approval the core counted (native multisig M2): its own
+ *             mark, so a member feels "mine is in" apart from a send landing
  *
  * Never for scrolling, a row tap that navigates, re-tapping the tab in force, Back, a sheet
  * opening or closing, typing, animation, or a value the app changed itself.
@@ -31,6 +33,7 @@ enum class VelaHaptic {
     Select,
     Success,
     Reject,
+    Counted,
     ;
 
     internal val constant: Int
@@ -40,6 +43,7 @@ enum class VelaHaptic {
             Select -> if (Build.VERSION.SDK_INT >= 30) HapticFeedbackConstants.CONFIRM else HapticFeedbackConstants.KEYBOARD_TAP
             Success -> if (Build.VERSION.SDK_INT >= 30) HapticFeedbackConstants.CONFIRM else HapticFeedbackConstants.LONG_PRESS
             Reject -> if (Build.VERSION.SDK_INT >= 30) HapticFeedbackConstants.REJECT else HapticFeedbackConstants.LONG_PRESS
+            Counted -> if (Build.VERSION.SDK_INT >= 34) HapticFeedbackConstants.TOGGLE_ON else if (Build.VERSION.SDK_INT >= 30) HapticFeedbackConstants.CONFIRM else HapticFeedbackConstants.LONG_PRESS
         }
 }
 

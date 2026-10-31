@@ -339,6 +339,51 @@ for (const machine of machines) {
 	});
 }
 
+// The multisig shell (native multisig M1–M6): ONE operation family for the
+// five machines (`MultisigOperation` / `MultisigShellResult`, the multisig
+// mirror), and each machine's events — Android writes them as `ev("name", …)`
+// (`feature/multisig`), so an event is "dispatched" when that call names it.
+const MULTISIG_GEN = join(ROOT, 'app-web/vela-wallet/src/lib/multisig/generated');
+const multisigOps = firstSealed('MultisigOperation');
+if (multisigOps) {
+	const multisigRes = firstSealed('MultisigShellResult');
+	const opCmp = compareFamily('MultisigOperation', MULTISIG_GEN, multisigOps.variants);
+	const resCmp = compareFamily('MultisigShellResult', MULTISIG_GEN, multisigRes?.variants ?? null);
+	const required = resCmp.fields.filter((f) => !f.stale && !f.optional);
+	const optional = resCmp.fields.filter((f) => !f.stale && f.optional);
+	const multisigCode = androidFiles
+		.filter((f) => f.includes('/feature/multisig/'))
+		.map((f) => stripComments(readFileSync(f, 'utf8')))
+		.join('\n');
+	const sent = new Set([...multisigCode.matchAll(/\bev\(\s*"([a-z_]+)"/g)].map((m) => m[1]));
+	// The outside PAGE runs in a browser with the owner's wallet: no Android shell drives it.
+	const families = ['MultisigAccountsEvent', 'MultisigProposalsEvent', 'MultisigMembersEvent', 'OutsideSessionEvent'];
+	const evUndispatched = families.flatMap((family) =>
+		(tsMembers(MULTISIG_GEN, family) ?? [])
+			.map((m) => m.type)
+			.filter((v) => v && webDispatches(v) && !sent.has(v))
+			.map((v) => `${family.replace(/Event$/, '')}.${v}`)
+	);
+	totals.ops += opCmp.missing.length;
+	totals.staleOps += opCmp.stale.length;
+	totals.results += resCmp.missing.length;
+	totals.staleResults += resCmp.stale.length;
+	totals.requiredFields += required.length;
+	totals.optionalFields += optional.length;
+	totals.events += evUndispatched.length;
+	rows.push({
+		machine: 'Multisig (5 machines)',
+		kotlin: multisigOps.name,
+		ops: opCmp,
+		res: resCmp,
+		required,
+		optional,
+		opStaleFields: opCmp.fields.filter((f) => f.stale),
+		evUndispatched,
+		evStale: []
+	});
+}
+
 // Onboarding (org.json): `ShellOperation` / `ShellResult` in the onboarding mirror.
 const onboarding = (() => {
 	const { ops, results } = onboardingJson();

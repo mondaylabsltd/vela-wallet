@@ -844,7 +844,17 @@ sealed class SendReceiptOutcome {
 }
 
 @Serializable
-data class SendAccountRef(val id: String, val address: String, val name: String? = null)
+data class SendAccountRef(
+    val id: String,
+    val address: String,
+    val name: String? = null,
+    /**
+     * A multisig account (docs/multisig-vault-design.md): its send is a
+     * proposal its members approve — no passkey and no fee of its own, the
+     * confirm proposes (native multisig M2). `null`: a Vela account.
+     */
+    val multisig: SendMultisigRef? = null,
+)
 
 @Serializable
 data class SendOpenParams(

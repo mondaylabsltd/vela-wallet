@@ -553,4 +553,19 @@ sealed class DbrEvent {
         val user_op_hash: String? = null,
         val now_ms: Double = 0.0,
     ) : DbrEvent()
+
+    /**
+     * core-ms-2: the proposals machine's answer to a request forwarded from a
+     * multisig (`MultisigDappAnswer`: `{result}` or `{error: {code, message,
+     * data?}}`), delivered to the page as it is — an error keeps its `data`.
+     * A `wallet_sendCalls` answered this way is a multisig batch from then on.
+     */
+    @Serializable
+    @SerialName("multisig_answered")
+    data class MultisigAnswered(
+        val tab: String,
+        val id: String,
+        val answer: kotlinx.serialization.json.JsonElement,
+        val now_ms: Double = 0.0,
+    ) : DbrEvent()
 }

@@ -279,6 +279,13 @@ class MainActivity : ComponentActivity() {
      */
     private fun receiptRequested(): String? = intent?.getStringExtra("vela.receipt")?.takeIf { it.startsWith("0x") }
 
+    /** A tapped multisig notification (M6): its chain, transaction and multisig. */
+    private fun multisigTapped(intent: android.content.Intent?): Triple<Int, String, String?>? {
+        val hash = intent?.getStringExtra(app.getvela.wallet.feature.multisig.MultisigNotifier.EXTRA_HASH)?.takeIf { it.startsWith("0x") } ?: return null
+        val chain = intent.getIntExtra(app.getvela.wallet.feature.multisig.MultisigNotifier.EXTRA_CHAIN, 0).takeIf { it > 0 } ?: return null
+        return Triple(chain, hash, intent.getStringExtra(app.getvela.wallet.feature.multisig.MultisigNotifier.EXTRA_ADDRESS))
+    }
+
     /**
      * The parallel space's door (spec 043, research D2). Debug builds only —
      * release builds have no provider behind the hook, and the extra does
@@ -389,6 +396,7 @@ class MainActivity : ComponentActivity() {
             }
         }
         receiptRequested()?.let { container.pendingReceipt.value = it }
+        multisigTapped(intent)?.let { container.pendingMultisigOpen.value = it }
         debugOpenUrl(intent)?.let { container.browser.open(it, fromOutside = true) }
         routeDeepLink(intent, container)
         routeLaunch(intent, container)
@@ -620,6 +628,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         val container = (application as VelaWalletApplication).container
+        multisigTapped(intent)?.let { container.pendingMultisigOpen.value = it }
         debugOpenUrl(intent)?.let { container.browser.open(it, fromOutside = true) }
         routeDeepLink(intent, container)
         routeLaunch(intent, container)
@@ -632,6 +641,24 @@ class MainActivity : ComponentActivity() {
      * outside signer's connect page): the person's browser opens it, in a
      * named browser — never the chooser, and never back into this app.
      */
+    /**
+     * A web-wallet link (native multisig M1/M2): a proposal, an invite or a
+     * damaged multisig link opens the native flow — the accounts machine's
+     * one link flow, once the wallet is in front; the outside signer's
+     * connect page is for ANOTHER wallet's browser, and goes there.
+     */
+    internal fun routeWebLink(url: String, container: AppContainer) {
+        val route = app.getvela.wallet.feature.wallet.core.AppLinks.classify(url) as? app.getvela.wallet.feature.wallet.core.AppLinks.Route.Web
+        app.getvela.wallet.core.diagnostics.VelaLog.event("applink", "web link", "kind" to route?.kind?.name)
+        if (route == null || route.kind == app.getvela.wallet.feature.wallet.core.AppLinks.WebKind.Connect) {
+            openInBrowser(url, container)
+            return
+        }
+        val fragment = url.substringAfter('#', "")
+        if (fragment.isEmpty()) return
+        container.pendingMultisigLink.value = "#$fragment"
+    }
+
     internal fun openInBrowser(url: String, container: AppContainer) {
         val opened = container.trustedSignerTab?.open(url) == true
         if (!opened) container.browser.askToOpen(url)
@@ -656,7 +683,7 @@ class MainActivity : ComponentActivity() {
             is app.getvela.wallet.core.platform.LaunchEntry.Ask.Open -> container.pendingLaunch.value = ask.flow
             is app.getvela.wallet.core.platform.LaunchEntry.Ask.PayLinkShared -> container.pendingPayLink.value = android.net.Uri.parse(ask.url)
             is app.getvela.wallet.core.platform.LaunchEntry.Ask.PaymentShared -> container.pendingShare.value = ask.text
-            is app.getvela.wallet.core.platform.LaunchEntry.Ask.WebLinkShared -> openInBrowser(ask.url, container)
+            is app.getvela.wallet.core.platform.LaunchEntry.Ask.WebLinkShared -> routeWebLink(ask.url, container)
             null -> Unit
         }
         // Read once: a configuration change replays the same intent.
@@ -682,11 +709,7 @@ class MainActivity : ComponentActivity() {
                 return
             }
             is app.getvela.wallet.feature.wallet.core.AppLinks.Route.Web -> {
-                // Multisig is not in the phone app yet: the web wallet opens
-                // it as it always has, in a named browser — never the chooser,
-                // and never back into this app, which claims the link.
-                app.getvela.wallet.core.diagnostics.VelaLog.event("applink", "to the web", "kind" to route.kind.name)
-                openInBrowser(route.url, container)
+                routeWebLink(route.url, container)
                 return
             }
             app.getvela.wallet.feature.wallet.core.AppLinks.Route.Home -> return

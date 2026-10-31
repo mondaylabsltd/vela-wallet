@@ -253,6 +253,34 @@ class UserOpSpine(
         throw Refused(Failure.Signer(failure.kind, failure.message ?: "the passkey ceremony failed"))
     }
 
+    /**
+     * A multisig member's own passkey over [challenge], in Vela (native
+     * multisig: an approval of a SafeTx, or the owner proof a creation asks).
+     * The key is the account's plan's, as for every signature; WHERE it signs
+     * — in Vela, on its page, or not from here — is the caller's to have
+     * asked the core first (`multisigApprovalRoute`, `signingRoute`). A plan
+     * that says nothing here can reach the keys is refused as it is for a send.
+     */
+    suspend fun assertInVela(account: String, challenge: ByteArray): Assertion {
+        val keys = accounts.keysOf(account)
+        val pinned = keys.firstOrNull() ?: other("No passkey credential for this account")
+        val picked = routeFor(account, pinned, "")
+        picked.blocked?.let { block ->
+            throw Refused(
+                VenueBlock.of(block)?.let(Failure::VenueBlocked)
+                    ?: Failure.Signer(FailureKind.Other, VenueWords.block(block, words)),
+            )
+        }
+        val raised = clock()
+        return try {
+            withTimeoutOrNull(signDeadlineMs) {
+                signer().sign(challenge, picked.credentialId, picked.transports, picked.method)
+            } ?: throw PasskeyFailure(FailureKind.Cancelled, "the passkey prompt ran out of time")
+        } catch (failure: PasskeyFailure) {
+            throw Refused(ceremonyFailure(failure, clock() - raised))
+        }
+    }
+
     /** The displayed fee, signed verbatim. */
     data class Quoted(val amount: String, val recipient: String, val tier: FeeTier? = null)
 

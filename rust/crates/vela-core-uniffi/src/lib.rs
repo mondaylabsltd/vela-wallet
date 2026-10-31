@@ -24,6 +24,8 @@ mod multisig_bridge;
 #[cfg(test)]
 mod native_parity_tests;
 mod onboarding_bridge;
+// Native multisig M4: PeerConnect's sans-I/O peer, the rooms an outside owner's wallet meets Vela in.
+mod peer_bridge;
 /// Small core rules the web reads over wasm (F0.2): RPC clocks, fee figures,
 /// dApp RPC answers, provenance, names, currencies.
 mod rules_bridge;
