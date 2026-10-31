@@ -54,6 +54,8 @@ pub(crate) struct MultisigUi {
     pub tech: bool,
     /// "Copied" under the link, until the next sheet.
     pub copied: bool,
+    /// "Copied" under the outside-wallet link, until the next sheet.
+    pub outside_copied: bool,
     /// The outside owner's session sheet is up.
     pub session: bool,
     /// The person asked to reject: the question is up.
@@ -268,6 +270,7 @@ impl WalletPage {
         self.multisig.executor = None;
         self.multisig.tech = false;
         self.multisig.copied = false;
+        self.multisig.outside_copied = false;
         self.multisig.rejecting = false;
         self.multisig.scroll = crate::ui::SmoothScroll::new();
         self.account_switcher = false;
@@ -934,9 +937,12 @@ impl WalletPage {
             );
             return Some((title, body, None));
         };
-        // The sheet asks for the look now and then; the machine decides
-        // whether its last look is stale (W9).
-        self.ms_ask_preview(&item, cx);
+        // The sheet asks for each executor's look and the review now and
+        // then; the machine decides whether its last one is stale (W9).
+        self.ms_sheet_asks(&item, &view, cx);
+        // r8-13: executed — a past fact. Nothing on it is a check of what
+        // running it WOULD do any more (the web's `past`).
+        let past = item.status == ms_proposals::ProposalStatus::Done;
 
         let review = view.reviews.get(&key).and_then(ReviewDraw::of);
         let mut body = div().flex().flex_col().gap(px(16.)).pb(px(16.));
@@ -998,57 +1004,20 @@ impl WalletPage {
         // The one review (§3.6), or that it is being read: no Approve until
         // it is here (the Bybit rule).
         match &review {
-            Some(review) => body = body.child(self.ms_review_body(theme, review, chain_id, account.as_ref(), cx)),
+            Some(review) => body = body.child(self.ms_review_body(theme, review, chain_id, past, account.as_ref(), cx)),
             None => {
                 body = body.child(ms_note(theme, &words::t(&loc, "proposal.feeChecking"), Tone::Neutral));
             }
         }
 
-        // Approvals: who has, whether it counts on this network now.
-        body = body.child(self.ms_approvals(theme, &item, account.as_ref(), cx));
-
-        // How the remaining approvals can come (r7-8).
-        if let Some(signers) = view.signers.get(&key) {
-            let name_all = |list: &[String]| {
-                list.iter()
-                    .map(|a| self.ms_member_name(a, account.as_ref(), cx))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            };
-            if !signers.enough {
-                if !signers.in_vela.is_empty() {
-                    body = body.child(ms_note(
-                        theme,
-                        &words::tv(&loc, "proposal.approvesInVela", &[("names", &name_all(&signers.in_vela))]),
-                        Tone::Neutral,
-                    ));
-                }
-                if !signers.either.is_empty() {
-                    body = body.child(ms_note(
-                        theme,
-                        &words::tv(&loc, "proposal.eitherWay", &[("names", &name_all(&signers.either))]),
-                        Tone::Neutral,
-                    ));
-                }
-                if !signers.contract.is_empty() {
-                    body = body.child(ms_note(
-                        theme,
-                        &words::tv(&loc, "proposal.contractMembers", &[("names", &name_all(&signers.contract))]),
-                        Tone::Caution,
-                    ));
-                }
-            }
-        }
-
-        // Its executor's look: the fee and who pays, or why it cannot run.
-        if item.status == ms_proposals::ProposalStatus::Ready && !item.can_execute.is_empty() {
-            body = body.child(self.ms_preview_line(theme, &view, &item, account.as_ref(), cx));
-        }
+        // Approvals: who has, and how each one still to approve signs (r7-8).
+        let signers = view.signers.get(&key).cloned();
+        body = body.child(self.ms_approvals(theme, &item, signers.as_ref(), account.as_ref(), cx));
 
         // What happened to the last press, said.
         for action in [
-            format!("approve:{}", item.safe_tx_hash),
-            format!("execute:{}", item.safe_tx_hash),
+            format!("approve:{}", item.safe_tx_hash.to_ascii_lowercase()),
+            format!("execute:{}", item.safe_tx_hash.to_ascii_lowercase()),
         ] {
             if let Some(text) = view
                 .actions
@@ -1087,159 +1056,173 @@ impl WalletPage {
             body = body.child(self.ms_timeline(theme, steps, account.as_ref(), cx));
         }
 
-        // The link the members open it with.
+        // The links the members still to approve open it with (r7-8): the
+        // Vela link for Vela members and those nothing says yet; the
+        // outside-wallet link for an outside wallet; nothing for a smart
+        // contract account (said). Only while approvals are missing.
         if let Some(account) = &account {
-            let link = vela_core::multisig_link::proposal_link(
-                vela_core::multisig_link::SITE_ORIGIN,
-                self.loc.language(),
-                &vela_core::multisig_link::ProposalLink {
-                    chain_id,
-                    multisig: account.address.clone(),
-                    safe_tx_hash: item.safe_tx_hash.clone(),
-                },
-            );
-            let copied = self.multisig.copied;
-            body = body.child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap(px(6.))
-                    .child(ms_label(theme, &words::t(&loc, "proposal.invite")))
-                    .child(
-                        div()
-                            .text_size(theme::text_label())
-                            .text_color(theme.fg_subtle)
-                            .child(crate::ui::prose(words::t(&loc, "proposal.inviteHint"))),
-                    )
-                    .child(
-                        outline_button(
-                            "ms-copy-link",
-                            theme,
-                            &mut self.icons,
-                            Some(Icon::Copy),
-                            words::t(&loc, if copied { "proposal.copied" } else { "proposal.copyLink" }).into(),
-                        )
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            cx.write_to_clipboard(gpui::ClipboardItem::new_string(link.clone()));
-                            this.multisig.copied = true;
-                            cx.notify();
-                        })),
-                    ),
-            );
+            body = body.children(self.ms_invite_links(theme, &item, signers.as_ref(), account, cx));
         }
 
         let foot = self.ms_actions(theme, &view, &item, review.as_ref(), account.as_ref(), cx);
         Some((title, body, foot))
     }
 
-    /// Ask for the executor's look every few seconds while the sheet is up.
-    fn ms_ask_preview(&mut self, item: &ProposalItem, cx: &mut Context<Self>) {
-        if item.status != ms_proposals::ProposalStatus::Ready || item.can_execute.is_empty() {
-            return;
-        }
-        let executor = self
-            .multisig
-            .executor
-            .clone()
-            .filter(|e| item.can_execute.iter().any(|c| same(c, e)))
-            .unwrap_or_else(|| item.can_execute[0].clone());
-        let key = format!("{}:{}:{}", item.chain_id, item.safe_tx_hash, executor);
+    /// While the sheet is up (r8-6, the web's `look` and review asks):
+    /// every executor here is asked for its look every few seconds — also
+    /// while the transaction is one approval short, so the fee and
+    /// "Approve and execute" are known before any press — and the review
+    /// again every 30 s (5 s while the chain could not be read). The machine
+    /// decides whether its last one is stale; nothing is judged here.
+    fn ms_sheet_asks(&mut self, item: &ProposalItem, view: &ms_proposals::ProposalsView, cx: &mut Context<Self>) {
+        const LOOK_EVERY_MS: f64 = 5_000.;
+        const REVIEW_FRESH_MS: f64 = 30_000.;
+        const REVIEW_RETRY_MS: f64 = 5_000.;
         let now = crate::executor::now_ms();
-        if self.multisig.previewed.get(&key).is_some_and(|at| now - at < 4_000.) {
+        let (chain_id, hash) = (item.chain_id, item.safe_tx_hash.clone());
+        let mut events = Vec::new();
+        for executor in crate::multisig::sheet::looked(item.status, item.review.action.is_some(), &item.can_execute) {
+            let key = crate::multisig::sheet::look_key(chain_id, &hash, &executor);
+            if self.multisig.previewed.get(&key).is_some_and(|at| now - at < LOOK_EVERY_MS) {
+                continue;
+            }
+            self.multisig.previewed.insert(key, now);
+            events.push(ms_proposals::Event::Preview {
+                chain_id,
+                safe_tx_hash: hash.clone(),
+                executor,
+            });
+        }
+        // The review: read once for one done; again while it waits.
+        if item.status != ms_proposals::ProposalStatus::Done {
+            let review = view.reviews.get(&item_key(chain_id, &hash));
+            let unread = review.is_none_or(|r| {
+                r.is_null()
+                    || r.pointer("/state/verdict/kind").and_then(Value::as_str) == Some("unavailable")
+                    || r.pointer("/simulation/kind").and_then(Value::as_str) == Some("unreachable")
+            });
+            let every = if unread { REVIEW_RETRY_MS } else { REVIEW_FRESH_MS };
+            let key = format!("review:{}", item_key(chain_id, &hash.to_ascii_lowercase()));
+            match self.multisig.previewed.get(&key) {
+                // First drawn: the open asked for it already.
+                None => {
+                    self.multisig.previewed.insert(key, now);
+                }
+                Some(at) if now - at >= every => {
+                    self.multisig.previewed.insert(key, now);
+                    events.push(ms_proposals::Event::Review {
+                        chain_id,
+                        safe_tx_hash: hash.clone(),
+                        blind: false,
+                    });
+                }
+                Some(_) => {}
+            }
+        }
+        if events.is_empty() {
             return;
         }
-        self.multisig.previewed.insert(key, now);
-        let (chain_id, hash) = (item.chain_id, item.safe_tx_hash.clone());
         let host = self.ms_host(cx);
         cx.defer(move |cx| {
             host.update(cx, |host, cx| {
-                host.proposals(
-                    ms_proposals::Event::Preview {
-                        chain_id,
-                        safe_tx_hash: hash,
-                        executor,
-                    },
-                    cx,
-                );
+                for event in events {
+                    host.proposals(event, cx);
+                }
             });
         });
     }
 
-    fn ms_preview_line(
+    /// The actor's look, said under the execute press (r4-7, r8-6): the fee
+    /// and who pays, or why it cannot run, or that it is being checked —
+    /// with "Check again" where the look could not answer.
+    #[allow(clippy::too_many_arguments, reason = "the sheet's facts")]
+    fn ms_look_line(
         &mut self,
         theme: &Theme,
-        view: &ms_proposals::ProposalsView,
         item: &ProposalItem,
+        actor: &str,
+        look: Option<&crate::multisig::sheet::Look>,
+        payer: Option<&str>,
         account: Option<&MultisigAccount>,
         cx: &mut Context<Self>,
     ) -> Div {
+        use crate::multisig::sheet::Look;
         let loc = self.ms_loc();
-        let executor = self
-            .multisig
-            .executor
-            .clone()
-            .filter(|e| item.can_execute.iter().any(|c| same(c, e)))
-            .unwrap_or_else(|| item.can_execute[0].clone());
-        let key = format!(
-            "{}:{}:{}",
-            item.chain_id,
-            item.safe_tx_hash.to_ascii_lowercase(),
-            executor.to_ascii_lowercase()
-        );
-        let name = self.ms_member_name(&executor, account, cx);
-        let text = match view.previews.get(&key) {
-            None => words::t(&loc, "proposal.feeChecking"),
-            Some(p) => match p.get("kind").and_then(Value::as_str) {
-                Some("priced") => {
-                    let info = words::token_info(item.chain_id, None);
-                    let amount = p
-                        .get("fee")
-                        .and_then(|f| f.get("amount"))
-                        .map(|a| match a {
-                            Value::String(s) => vela_core::app::multisig_shell::quantity(s)
-                                .map(|v| v.to_string())
-                                .unwrap_or_default(),
-                            other => other.to_string(),
-                        })
-                        .unwrap_or_default();
-                    let fee = format!("{} {}", words::units(&amount, info.decimals), info.symbol);
-                    let can_pay = p.get("canPay").and_then(Value::as_bool).unwrap_or(true);
-                    if can_pay {
-                        words::tv(&loc, "proposal.feeLine", &[("fee", &fee), ("name", &name)])
-                    } else {
-                        let balance = p.get("balance").and_then(Value::as_str).unwrap_or("0");
-                        words::tv(
-                            &loc,
-                            "proposal.cannotPay",
-                            &[
-                                ("name", &name),
-                                ("symbol", &info.symbol),
-                                ("fee", &fee),
-                                ("balance", &format!("{} {}", words::units(balance, info.decimals), info.symbol)),
-                            ],
-                        )
-                    }
-                }
-                Some("fails") => words::tv(
-                    &loc,
-                    "proposal.wouldFail",
-                    &[("reason", &self.ms_why_words(p.get("why").unwrap_or(&Value::Null), item.chain_id))],
-                ),
-                Some("unpriced") => words::t(&loc, "proposal.feeUnpriced"),
-                Some("unchecked") => words::t(&loc, "proposal.feeUnchecked"),
-                _ => words::t(&loc, "proposal.feeChecking"),
-            },
+        let name = self.ms_member_name(actor, account, cx);
+        let info = words::token_info(item.chain_id, None);
+        let coin = |raw: &str| format!("{} {}", words::units(raw, info.decimals), info.symbol);
+        let (text, tone, retry) = match look {
+            None => (words::t(&loc, "proposal.feeChecking"), Tone::Neutral, false),
+            Some(Look::Priced { fee, can_pay: true, .. }) => (
+                words::tv(&loc, "proposal.feeLine", &[("fee", &coin(fee)), ("name", &name)]),
+                Tone::Neutral,
+                false,
+            ),
+            Some(Look::Priced { fee, can_pay: false, balance }) => (
+                match payer.filter(|p| !same(p, actor)) {
+                    Some(other) => words::tv(
+                        &loc,
+                        "proposal.cantPayOther",
+                        &[("name", &name), ("other", &self.ms_member_name(other, account, cx))],
+                    ),
+                    None => words::tv(
+                        &loc,
+                        "proposal.cannotPay",
+                        &[
+                            ("name", &name),
+                            ("symbol", &info.symbol),
+                            ("fee", &coin(fee)),
+                            ("balance", &coin(balance.as_deref().unwrap_or("0"))),
+                        ],
+                    ),
+                },
+                Tone::Caution,
+                false,
+            ),
+            Some(Look::Fails(why)) => (
+                words::tv(&loc, "proposal.wouldFail", &[("reason", &self.ms_why_words(why, item.chain_id))]),
+                Tone::Caution,
+                false,
+            ),
+            // §3.5: it would deploy from a genesis the core does not find
+            // verified here — Vela won't sign for it.
+            Some(Look::Refused(_)) => (
+                format!("{} {}", words::t(&loc, "authority.refusedTitle"), words::t(&loc, "authority.refusedBody")),
+                Tone::Danger,
+                false,
+            ),
+            Some(Look::Spent) => (words::t(&loc, "proposal.doneNote"), Tone::Neutral, false),
+            Some(Look::Unpriced) => (words::t(&loc, "proposal.feeUnpriced"), Tone::Neutral, true),
+            Some(Look::Unchecked) => (words::t(&loc, "proposal.feeUnchecked"), Tone::Neutral, true),
         };
-        let mut line = div().flex().flex_col().gap(px(6.)).child(ms_note(theme, &text, Tone::Neutral));
-        // Several members here can execute: the person picks who pays.
-        if item.can_execute.len() > 1 {
-            line = line.child(self.ms_member_picker(theme, "ms-executor", &item.can_execute, &executor, account, true, cx));
+        let mut line = div().flex().flex_col().gap(px(4.)).child(ms_note(theme, &text, tone));
+        if retry {
+            let executors = item.can_execute.clone();
+            let (chain_id, hash) = (item.chain_id, item.safe_tx_hash.clone());
+            line = line.child(
+                text_action("ms-look-again", theme, &mut self.icons, None, words::t(&loc, "proposal.feeRetry").into())
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        let host = this.ms_host(cx);
+                        let (hash, executors) = (hash.clone(), executors.clone());
+                        host.update(cx, |host, cx| {
+                            for executor in executors {
+                                host.proposals(
+                                    ms_proposals::Event::Preview {
+                                        chain_id,
+                                        safe_tx_hash: hash.clone(),
+                                        executor,
+                                    },
+                                    cx,
+                                );
+                            }
+                        });
+                    })),
+            );
         }
         line
     }
 
-    /// A row of members to pick from (`as` / the executor).
-    #[allow(clippy::too_many_arguments, reason = "one picker, named parts")]
+    /// A row of members to pick from: who acts (`As`).
     fn ms_member_picker(
         &mut self,
         theme: &Theme,
@@ -1247,7 +1230,6 @@ impl WalletPage {
         members: &[String],
         picked: &str,
         account: Option<&MultisigAccount>,
-        executor: bool,
         cx: &mut Context<Self>,
     ) -> Div {
         let mut row = div()
@@ -1281,11 +1263,9 @@ impl WalletPage {
                     .hover(|el| el.bg(theme.bg_sunken))
                     .child(name)
                     .on_click(cx.listener(move |this, _, _, cx| {
-                        if executor {
-                            this.multisig.executor = Some(member.clone());
-                        } else {
-                            this.multisig.approve_as = Some(member.clone());
-                        }
+                        // One hand does the work: it approves and executes.
+                        this.multisig.executor = Some(member.clone());
+                        this.multisig.approve_as = Some(member.clone());
                         cx.notify();
                     })),
             );
@@ -1311,137 +1291,146 @@ impl WalletPage {
         }
         let key = item_key(item.chain_id, &item.safe_tx_hash);
         let approving = matches!(
-            view.actions.get(&format!("approve:{}", item.safe_tx_hash)),
+            view.actions.get(&format!("approve:{}", item.safe_tx_hash.to_ascii_lowercase())),
             Some(ActionState::Working)
         );
         let executing = item.executing
             || matches!(
-                view.actions.get(&format!("execute:{}", item.safe_tx_hash)),
+                view.actions.get(&format!("execute:{}", item.safe_tx_hash.to_ascii_lowercase())),
                 Some(ActionState::Working)
             );
-        // The review decides whether a signature may be given at all.
+        // The review decides whether a signature may be given at all, and
+        // with what friction ("… anyway", r8-1): its rule, as it is.
         let sign = review.map(|r| r.sign).unwrap_or(SignRule {
             allowed: false,
             anyway: false,
         });
+        let reviewed = review.is_some();
         let mut foot = div().flex().flex_col().gap(px(8.));
 
-        if !item.can_approve.is_empty() {
-            let as_member = self
-                .multisig
-                .approve_as
-                .clone()
-                .filter(|a| item.can_approve.iter().any(|c| same(c, a)))
-                .unwrap_or_else(|| item.can_approve[0].clone());
-            if item.can_approve.len() > 1 {
-                foot = foot.child(self.ms_member_picker(theme, "ms-approve-as", &item.can_approve, &as_member, account, false, cx));
-            }
-            let label = if sign.anyway {
-                words::t(&loc, "review.approveAnyway")
-            } else {
-                words::t(&loc, "proposal.approve")
-            };
-            let state = if approving {
-                crate::ui::ButtonState::Busy
-            } else {
-                crate::ui::ButtonState::from_enabled(review.is_some() && sign.allowed)
-            };
-            let (chain_id, hash) = (item.chain_id, item.safe_tx_hash.clone());
-            foot = foot.child(crate::ui::vela_button_state(
-                "ms-approve",
-                crate::ui::ButtonVariant::Primary,
-                label.into(),
-                state,
-                theme,
-                cx.listener(move |this, _, _, cx| {
-                    let host = this.ms_host(cx);
-                    let (hash, owner) = (hash.clone(), as_member.clone());
-                    host.update(cx, |host, cx| {
-                        host.proposals(
-                            ms_proposals::Event::Approve {
-                                chain_id,
-                                safe_tx_hash: hash,
-                                owner,
-                            },
-                            cx,
-                        );
-                    });
-                }),
-            ));
-            if review.is_some() && !sign.allowed {
-                foot = foot.child(ms_note(theme, &words::t(&loc, "review.blocked"), Tone::Danger));
-            }
+        // Whose hand does the work (the web's actor): the person's pick,
+        // else an executor that can pay, else the member used last, else
+        // the first — executors first, else approvers. Every fact is the
+        // machine's (`can_*`, `previews`, `approve_execute`).
+        use crate::multisig::sheet::{self as rule, FootKind};
+        let approved_by: Vec<String> = item
+            .approvals
+            .iter()
+            .filter(|a| a.counts)
+            .map(|a| a.owner.clone())
+            .collect();
+        let picked = self.multisig.executor.clone().or_else(|| self.multisig.approve_as.clone());
+        let plan = rule::foot(
+            &rule::FootFacts {
+                chain_id: item.chain_id,
+                hash: &item.safe_tx_hash,
+                status: item.status,
+                readable: item.review.action.is_some(),
+                approved: item.approved,
+                threshold: item.threshold,
+                approved_by: &approved_by,
+                can_approve: &item.can_approve,
+                can_execute: &item.can_execute,
+                previews: &view.previews,
+                approve_execute: &view.approve_execute,
+                last_actor: view.last_actor.as_deref(),
+            },
+            picked.as_deref(),
+        );
+        if plan.candidates.len() > 1
+            && let Some(actor) = &plan.actor
+        {
+            foot = foot.child(self.ms_member_picker(theme, "ms-actor", &plan.candidates, actor, account, cx));
         }
-
-        if item.status == ms_proposals::ProposalStatus::Ready && !item.can_execute.is_empty() {
-            let executor = self
-                .multisig
-                .executor
-                .clone()
-                .filter(|e| item.can_execute.iter().any(|c| same(c, e)))
-                .unwrap_or_else(|| item.can_execute[0].clone());
-            let label = if sign.anyway {
-                words::t(&loc, "review.executeAnyway")
-            } else {
-                words::t(&loc, "proposal.execute")
-            };
-            let state = if executing {
-                crate::ui::ButtonState::Busy
-            } else {
-                crate::ui::ButtonState::from_enabled(review.is_some() && sign.allowed)
-            };
-            let (chain_id, hash) = (item.chain_id, item.safe_tx_hash.clone());
-            foot = foot.child(crate::ui::vela_button_state(
-                "ms-execute",
-                crate::ui::ButtonVariant::Primary,
-                label.into(),
-                state,
-                theme,
-                cx.listener(move |this, _, _, cx| {
-                    let host = this.ms_host(cx);
-                    let (hash, executor) = (hash.clone(), executor.clone());
-                    host.update(cx, |host, cx| {
-                        host.proposals(
-                            ms_proposals::Event::Execute {
-                                chain_id,
-                                safe_tx_hash: hash,
-                                executor,
-                            },
-                            cx,
-                        );
-                    });
-                }),
-            ));
-        }
-
-        // An outside member's wallet (no member here can approve).
-        let outside = view
-            .signers
-            .get(&key)
-            .is_some_and(|s| !s.enough && (!s.outside.is_empty() || !s.either.is_empty()));
-        if outside {
-            let (chain_id, hash) = (item.chain_id, item.safe_tx_hash.clone());
-            foot = foot.child(
-                crate::ui::vela_button(
-                    "ms-outside",
-                    crate::ui::ButtonVariant::Secondary,
-                    words::t(&loc, "external.signWithWallet").into(),
-                    theme,
-                    cx.listener(move |this, _, _, cx| {
-                        let host = this.ms_host(cx);
-                        let hash = hash.clone();
-                        host.update(cx, |host, cx| {
-                            host.proposals(
-                                ms_proposals::Event::ApproveOutside {
+        match (&plan.kind, plan.actor.clone()) {
+            (FootKind::Approve, Some(actor)) => {
+                foot = foot.child(self.ms_approve_press(theme, item, actor, crate::ui::ButtonVariant::Primary, rule::approve_label(sign), reviewed && sign.allowed && !executing, approving, cx));
+            }
+            (
+                FootKind::Execute {
+                    look,
+                    approve_first,
+                    can_approve_only,
+                    one_tap,
+                },
+                Some(actor),
+            ) => {
+                let payer = item
+                    .can_execute
+                    .iter()
+                    .find(|e| {
+                        matches!(
+                            rule::look_of(&view.previews, item.chain_id, &item.safe_tx_hash, e),
+                            Some(rule::Look::Priced { can_pay: true, .. })
+                        )
+                    })
+                    .cloned();
+                let blocked = look.as_ref().is_some_and(rule::Look::blocks);
+                let mut presses = div().flex().gap(px(8.));
+                if blocked {
+                    // It cannot run by this executor: approving is the one
+                    // thing left to do.
+                    if *approve_first && *can_approve_only && look != &Some(rule::Look::Spent) {
+                        presses = presses.child(div().flex_1().child(self.ms_approve_press(theme, item, actor.clone(), crate::ui::ButtonVariant::Primary, rule::approve_label(sign), reviewed && sign.allowed && !executing, approving, cx)));
+                    }
+                } else {
+                    if *approve_first && *can_approve_only {
+                        // Executing pays the fee; approving alone does not.
+                        presses = presses.child(div().flex_1().child(self.ms_approve_press(theme, item, actor.clone(), crate::ui::ButtonVariant::Secondary, rule::approve_label(sign), reviewed && sign.allowed && !executing, approving, cx)));
+                    }
+                    let enabled = rule::execute_enabled(reviewed, sign, look.as_ref(), *approve_first, *one_tap) && !approving;
+                    let state = if executing {
+                        crate::ui::ButtonState::Busy
+                    } else {
+                        crate::ui::ButtonState::from_enabled(enabled)
+                    };
+                    let (chain_id, hash, one_tap) = (item.chain_id, item.safe_tx_hash.clone(), *one_tap);
+                    let executor = actor.clone();
+                    presses = presses.child(div().flex_1().child(crate::ui::vela_button_state(
+                        "ms-execute",
+                        crate::ui::ButtonVariant::Primary,
+                        words::t(&loc, rule::execute_label(*approve_first, sign)).into(),
+                        state,
+                        theme,
+                        cx.listener(move |this, _, _, cx| {
+                            let host = this.ms_host(cx);
+                            let (hash, executor) = (hash.clone(), executor.clone());
+                            // "Approve and execute" is the machine's one press:
+                            // stopped before its signature, the approval is
+                            // still given and kept (r4-11).
+                            let event = if one_tap {
+                                ms_proposals::Event::ApproveExecute {
                                     chain_id,
                                     safe_tx_hash: hash,
-                                },
-                                cx,
-                            );
-                        });
-                    }),
-                ),
-            );
+                                    executor,
+                                }
+                            } else {
+                                ms_proposals::Event::Execute {
+                                    chain_id,
+                                    safe_tx_hash: hash,
+                                    executor,
+                                }
+                            };
+                            host.update(cx, |host, cx| host.proposals(event, cx));
+                        }),
+                    )));
+                }
+                foot = foot.child(presses);
+                foot = foot.child(self.ms_look_line(theme, item, &actor, look.as_ref(), payer.as_deref(), account, cx));
+            }
+            _ => {}
+        }
+        if reviewed && !sign.allowed && !matches!(plan.kind, FootKind::Nothing) {
+            foot = foot.child(ms_note(theme, &words::t(&loc, "review.blocked"), Tone::Danger));
+        }
+
+        // An outside member's wallet, from here only when no member here
+        // can act (ms-21): beside each outside member's row otherwise
+        // (r7-8 — never as if this device's member signed elsewhere).
+        let outside = matches!(plan.kind, FootKind::Nothing)
+            && !crate::multisig::sheet::outside_members(view.signers.get(&key), &|_| false).is_empty();
+        if outside {
+            foot = foot.child(self.ms_outside_press(theme, item, crate::ui::ButtonVariant::Secondary, cx));
         }
 
         if view.outbox.contains_key(&key) {
@@ -1535,6 +1524,82 @@ impl WalletPage {
         Some(foot)
     }
 
+    /// An approval by `owner`, in the review's words (r8-1: "Approve
+    /// anyway" where the review says so).
+    #[allow(clippy::too_many_arguments, reason = "one press, named parts")]
+    fn ms_approve_press(
+        &mut self,
+        theme: &Theme,
+        item: &ProposalItem,
+        owner: String,
+        variant: crate::ui::ButtonVariant,
+        label: &'static str,
+        enabled: bool,
+        busy: bool,
+        cx: &mut Context<Self>,
+    ) -> gpui::Stateful<Div> {
+        let loc = self.ms_loc();
+        let state = if busy {
+            crate::ui::ButtonState::Busy
+        } else {
+            crate::ui::ButtonState::from_enabled(enabled)
+        };
+        let (chain_id, hash) = (item.chain_id, item.safe_tx_hash.clone());
+        crate::ui::vela_button_state(
+            "ms-approve",
+            variant,
+            words::t(&loc, label).into(),
+            state,
+            theme,
+            cx.listener(move |this, _, _, cx| {
+                let host = this.ms_host(cx);
+                let (hash, owner) = (hash.clone(), owner.clone());
+                host.update(cx, |host, cx| {
+                    host.proposals(
+                        ms_proposals::Event::Approve {
+                            chain_id,
+                            safe_tx_hash: hash,
+                            owner,
+                        },
+                        cx,
+                    );
+                });
+            }),
+        )
+    }
+
+    /// "Approve with another wallet": the machine's gate, then an outside
+    /// member's wallet over a live session (`approve_outside`).
+    fn ms_outside_press(
+        &mut self,
+        theme: &Theme,
+        item: &ProposalItem,
+        variant: crate::ui::ButtonVariant,
+        cx: &mut Context<Self>,
+    ) -> gpui::Stateful<Div> {
+        let loc = self.ms_loc();
+        let (chain_id, hash) = (item.chain_id, item.safe_tx_hash.clone());
+        crate::ui::vela_button(
+            "ms-outside",
+            variant,
+            words::t(&loc, "external.signWithWallet").into(),
+            theme,
+            cx.listener(move |this, _, _, cx| {
+                let host = this.ms_host(cx);
+                let hash = hash.clone();
+                host.update(cx, |host, cx| {
+                    host.proposals(
+                        ms_proposals::Event::ApproveOutside {
+                            chain_id,
+                            safe_tx_hash: hash,
+                        },
+                        cx,
+                    );
+                });
+            }),
+        )
+    }
+
     /// What the last press came to, when it did not go (`ActionState`).
     fn ms_action_words(&self, state: &ActionState, chain_id: u64) -> Option<String> {
         let loc = &self.loc;
@@ -1617,12 +1682,15 @@ impl WalletPage {
 
     /// The one review every signer signs from (§3.6): what it says, who it
     /// reaches, what moves, the state-diff guard, a member change's rule,
-    /// and the hashes — drawn, never decoded again here.
+    /// and the hashes — drawn, never decoded again here. Each thing said
+    /// once (r8-13): the review's blocks, then only a concern no block
+    /// says. `past` (executed): nothing about what running it WOULD do.
     fn ms_review_body(
         &mut self,
         theme: &Theme,
         review: &ReviewDraw,
         chain_id: u64,
+        past: bool,
         account: Option<&MultisigAccount>,
         cx: &mut Context<Self>,
     ) -> Div {
@@ -1630,7 +1698,7 @@ impl WalletPage {
         let net = network(chain_id);
         let mut col = div().flex().flex_col().gap(px(12.));
 
-        if let Some(refusal) = review.refusal() {
+        if let Some(refusal) = review.refusal().filter(|_| !past) {
             col = col.child(ms_note(
                 theme,
                 &words::tv(&loc, "proposal.refused", &[("reason", &refusal)]),
@@ -1645,7 +1713,9 @@ impl WalletPage {
             let lines = crate::multisig::member_words::change_lines(&loc, changes, &net, &|a: &str| {
                 self.ms_member_name(a, account, cx)
             });
-            col = col.child(ms_note(theme, &lines.caution, Tone::Caution));
+            if !past {
+                col = col.child(ms_note(theme, &lines.caution, Tone::Caution));
+            }
             for (c, line) in changes.changes.iter().zip(&lines.changes) {
                 let whole: Vec<String> = [c.removed.as_deref(), c.added.as_deref()]
                     .into_iter()
@@ -1673,13 +1743,47 @@ impl WalletPage {
                         })),
                 );
             }
-            col = col.child(ms_note(theme, &lines.rule, Tone::Caution));
-            if let Some(misfit) = &lines.does_not_fit {
+            col = col.child(ms_note(theme, &lines.rule, if past { Tone::Neutral } else { Tone::Caution }));
+            if let Some(misfit) = lines.does_not_fit.as_ref().filter(|_| !past) {
                 col = col.child(ms_note(theme, misfit, Tone::Danger));
             }
         }
 
-        // Who it reaches.
+        // The state-diff guard first (the Bybit lesson) — said once.
+        if let Some(state) = review.state.as_ref().filter(|_| !past) {
+            use vela_core::multisig_review::StateVerdict;
+            let said = match &state.verdict {
+                StateVerdict::Unchanged => Some((words::tv(&loc, "review.stateUnchanged", &[("network", &net)]), Tone::Neutral)),
+                StateVerdict::Declared => Some((words::tv(&loc, "review.stateDeclared", &[("network", &net)]), Tone::Neutral)),
+                StateVerdict::Undeclared { writes } => {
+                    let mut lines: Vec<String> = Vec::new();
+                    for line in writes.iter().map(|w| ms_write_line(&loc, w)) {
+                        if !lines.contains(&line) {
+                            lines.push(line);
+                        }
+                    }
+                    Some((
+                        format!(
+                            "{}\n{}\n{}",
+                            words::t(&loc, "review.stateTitle"),
+                            words::tv(&loc, "review.stateBody", &[("network", &net)]),
+                            lines.join("\n")
+                        ),
+                        Tone::Danger,
+                    ))
+                }
+                // The verdict's place says it fails; nothing would change.
+                StateVerdict::Reverts => None,
+                StateVerdict::Unavailable { .. } => {
+                    Some((words::tv(&loc, "review.stateUnread", &[("network", &net)]), Tone::Caution))
+                }
+            };
+            if let Some((text, tone)) = said {
+                col = col.child(ms_note(theme, &text, tone));
+            }
+        }
+
+        // Who it reaches, each with what the review knows of it (its cue).
         let mut parties = div().flex().flex_col().gap(px(6.));
         for (i, r) in review.recipients.iter().enumerate() {
             let role = match r.role {
@@ -1696,6 +1800,29 @@ impl WalletPage {
                 .as_ref()
                 .map(|k| k.label.clone())
                 .unwrap_or_else(|| self.ms_member_name(&r.address, account, cx));
+            // The row's badge (`recipientBadge`): the cues, else whose it is.
+            let badge = if past {
+                None
+            } else {
+                let tags: Vec<String> = [
+                    r.first_time_cue.then(|| self.loc.t("componentsUi.signing.firstTimeTag").to_string()),
+                    r.contract_cue.then(|| self.loc.t("componentsUi.signing.contractTag").to_string()),
+                ]
+                .into_iter()
+                .flatten()
+                .collect();
+                if tags.is_empty() {
+                    match r.known.as_ref().map(|k| k.kind) {
+                        Some(vela_core::multisig_review::KnownKind::Own) => Some((words::t(&loc, "review.knownOwn"), Tone::Neutral)),
+                        Some(vela_core::multisig_review::KnownKind::Member) if r.role != RecipientRole::Member => {
+                            Some((words::t(&loc, "review.knownMember"), Tone::Neutral))
+                        }
+                        _ => None,
+                    }
+                } else {
+                    Some((tags.join(" · "), if r.lookalike.is_some() { Tone::Danger } else { Tone::Caution }))
+                }
+            };
             parties = parties.child(
                 div()
                     .id(ElementId::from(("ms-party", i)))
@@ -1705,9 +1832,17 @@ impl WalletPage {
                     .child(ms_label(theme, &role))
                     .child(
                         div()
-                            .text_size(theme::text_row_title())
-                            .text_color(theme.fg_base)
-                            .child(name),
+                            .flex()
+                            .flex_wrap()
+                            .items_center()
+                            .gap(px(8.))
+                            .child(
+                                div()
+                                    .text_size(theme::text_row_title())
+                                    .text_color(theme.fg_base)
+                                    .child(name),
+                            )
+                            .children(badge.map(|(text, tone)| ms_badge(theme, &text, tone))),
                     )
                     .child(
                         div()
@@ -1717,80 +1852,67 @@ impl WalletPage {
                             .child(vela_core::multisig_link::eip55(&r.address)),
                     ),
             );
+            if !past {
+                if let Some(like) = &r.lookalike {
+                    parties = parties.child(ms_note(
+                        theme,
+                        &words::tv(
+                            &loc,
+                            "review.lookalike",
+                            &[("address", &r.address), ("label", &like.label), ("known", &like.address)],
+                        ),
+                        Tone::Danger,
+                    ));
+                }
+                if r.contract_cue {
+                    parties = parties.child(ms_note(
+                        theme,
+                        &words::tv(&loc, "review.toContract", &[("address", &r.address)]),
+                        Tone::Caution,
+                    ));
+                }
+            }
         }
         col = col.child(parties);
 
-        // What it says of itself, in its tone.
-        for concern in &review.concerns {
-            let (text, tone) = match concern {
-                Concern::NotSigned { why } => (words::tv(&loc, "proposal.refused", &[("reason", why)]), Tone::Danger),
-                Concern::StateChange => (words::tv(&loc, "review.stateBody", &[("network", &net)]), Tone::Danger),
-                Concern::StateUnread { .. } => (words::tv(&loc, "review.stateUnread", &[("network", &net)]), Tone::Caution),
-                Concern::Reverts => (words::t(&loc, "proposal.whyRevertsPlain"), Tone::Danger),
-                Concern::Unsimulated => (words::t(&loc, "proposal.uncheckedReason"), Tone::Caution),
-                Concern::Lookalike { address, of, label } => (
-                    words::tv(&loc, "review.lookalike", &[("address", address), ("label", label), ("known", of)]),
-                    Tone::Danger,
-                ),
-                Concern::FirstTime { address } => (
-                    format!("{} · {}", self.loc.t("componentsUi.signing.firstTimeTag"), address),
-                    Tone::Caution,
-                ),
-                Concern::ToContract { address } => {
-                    (words::tv(&loc, "review.toContract", &[("address", address)]), Tone::Caution)
+        if !past {
+            // What moves (the simulation, or the probe's balances).
+            if let Some(sim) = &review.simulation {
+                if let Some(key) = sim.notice_key.as_ref().or(sim.no_change_key.as_ref()) {
+                    let text = self
+                        .loc
+                        .t_texts(key, &[("reason", sim.revert_reason.as_deref().unwrap_or_default())])
+                        .to_string();
+                    let tone = if sim.kind == "reverts" { Tone::Danger } else if sim.notice_key.is_some() { Tone::Caution } else { Tone::Neutral };
+                    col = col.child(ms_note(theme, &text, tone));
                 }
-                Concern::Blind => (self.loc.t("clearSigning.modalNoDescriptor").to_string(), Tone::Caution),
-            };
-            col = col.child(ms_note(theme, &text, tone));
-        }
-
-        // What moves (the simulation, or the probe's balances).
-        if let Some(sim) = &review.simulation {
-            if let Some(key) = sim.notice_key.as_ref().or(sim.no_change_key.as_ref()) {
-                let text = self
-                    .loc
-                    .t_texts(key, &[("reason", sim.revert_reason.as_deref().unwrap_or_default())])
-                    .to_string();
-                col = col.child(ms_note(theme, &text, Tone::Neutral));
+                for (i, delta) in sim.deltas.iter().enumerate() {
+                    let info = words::token_info(chain_id, delta.token.as_deref());
+                    let (sign, raw) = match delta.delta.strip_prefix('-') {
+                        Some(raw) => ("−", raw),
+                        None => ("+", delta.delta.as_str()),
+                    };
+                    col = col.child(
+                        div()
+                            .id(ElementId::from(("ms-delta", i)))
+                            .text_size(theme::text_row_title())
+                            .text_color(theme.fg_base)
+                            .child(format!("{sign}{} {}", words::units(raw, info.decimals), info.symbol)),
+                    );
+                }
+                if review.simulation_source == "probe" && sim.kind == "deltas" {
+                    col = col.child(ms_note(theme, &words::t(&loc, "review.movesProbe"), Tone::Neutral));
+                }
             }
-            for (i, delta) in sim.deltas.iter().enumerate() {
-                let info = words::token_info(chain_id, delta.token.as_deref());
-                let (sign, raw) = match delta.delta.strip_prefix('-') {
-                    Some(raw) => ("−", raw),
-                    None => ("+", delta.delta.as_str()),
+
+            // What it says of itself that no block above says (r8-13).
+            for concern in crate::multisig::sheet::concerns_left(&review.concerns) {
+                let (text, tone) = match concern {
+                    Concern::Blind => (self.loc.t("clearSigning.modalNoDescriptor").to_string(), Tone::Caution),
+                    _ => continue,
                 };
-                col = col.child(
-                    div()
-                        .id(ElementId::from(("ms-delta", i)))
-                        .text_size(theme::text_row_title())
-                        .text_color(theme.fg_base)
-                        .child(format!("{sign}{} {}", words::units(raw, info.decimals), info.symbol)),
-                );
+                col = col.child(ms_note(theme, &text, tone));
             }
-            if review.simulation_source == "probe" {
-                col = col.child(ms_note(theme, &words::t(&loc, "review.movesProbe"), Tone::Neutral));
-            }
-        }
-
-        // The state-diff guard (the Bybit lesson).
-        if let Some(state) = &review.state {
-            use vela_core::multisig_review::StateVerdict;
-            let (text, tone) = match &state.verdict {
-                StateVerdict::Unchanged => (words::tv(&loc, "review.stateUnchanged", &[("network", &net)]), Tone::Neutral),
-                StateVerdict::Declared => (words::tv(&loc, "review.stateDeclared", &[("network", &net)]), Tone::Neutral),
-                StateVerdict::Undeclared { writes } => {
-                    let lines: Vec<String> = writes.iter().map(|w| ms_write_line(&loc, w)).collect();
-                    (
-                        format!("{}\n{}", words::t(&loc, "review.stateTitle"), lines.join("\n")),
-                        Tone::Danger,
-                    )
-                }
-                StateVerdict::Reverts => (words::t(&loc, "proposal.whyRevertsPlain"), Tone::Caution),
-                StateVerdict::Unavailable { .. } => {
-                    (words::tv(&loc, "review.stateUnread", &[("network", &net)]), Tone::Caution)
-                }
-            };
-            col = col.child(ms_note(theme, &text, tone));
         }
 
         // The technical details: the SafeTx as signed and its hashes.
@@ -1825,13 +1947,19 @@ impl WalletPage {
         col
     }
 
+    /// The approvals in, then each member still to approve and how it signs
+    /// (r7-8, the machine's `signers`): a member on this device waits for
+    /// its own press here — never "another wallet"; an outside wallet's row
+    /// offers "Approve with another wallet"; one nothing says yet, both.
     fn ms_approvals(
         &mut self,
         theme: &Theme,
         item: &ProposalItem,
+        signers: Option<&ms_proposals::ItemSigners>,
         account: Option<&MultisigAccount>,
         cx: &mut Context<Self>,
     ) -> Div {
+        use crate::multisig::sheet::{MemberWay, member_way};
         let loc = self.ms_loc();
         let mut col = div().flex().flex_col().gap(px(4.)).child(ms_label(
             theme,
@@ -1848,24 +1976,229 @@ impl WalletPage {
                 )
             ),
         ));
+        let local: Vec<String> = session::view(cx)
+            .accounts
+            .iter()
+            .map(|row| row.account.address.clone())
+            .collect();
+        let here = |a: &str| local.iter().any(|l| same(l, a));
+        let row = |id: (&'static str, usize), name: String, state: gpui::AnyElement| {
+            div()
+                .id(ElementId::from(id))
+                .flex()
+                .justify_between()
+                .items_center()
+                .gap(px(8.))
+                .text_size(theme::text_row_sub())
+                .child(div().min_w(px(0.)).text_color(theme.fg_base).child(name))
+                .child(div().flex_none().child(state))
+        };
+        let quiet = |text: String| div().text_color(theme.fg_subtle).child(text).into_any_element();
+        let mark = |name: String, address: &str| {
+            if here(address) {
+                format!("{name} · {}", words::t(&loc, "panel.thisDevice"))
+            } else {
+                name
+            }
+        };
         for (i, approval) in item.approvals.iter().enumerate() {
-            let name = self.ms_member_name(&approval.owner, account, cx);
+            let name = mark(self.ms_member_name(&approval.owner, account, cx), &approval.owner);
             let note = if approval.counts {
                 words::t(&loc, "timeline.counted")
             } else {
                 words::t(&loc, "timeline.notCounted")
             };
-            col = col.child(
-                div()
-                    .id(ElementId::from(("ms-approval", i)))
-                    .flex()
-                    .justify_between()
-                    .text_size(theme::text_row_sub())
-                    .child(div().text_color(theme.fg_base).child(name))
-                    .child(div().text_color(theme.fg_subtle).child(note)),
-            );
+            col = col.child(row(("ms-approval", i), name, quiet(note)));
+        }
+        if item.status == ms_proposals::ProposalStatus::Done {
+            return col;
+        }
+        for (i, signer) in signers.map(|s| s.rows.clone()).unwrap_or_default().iter().enumerate() {
+            let name = mark(self.ms_member_name(&signer.owner, account, cx), &signer.owner);
+            let way = member_way(signers, &signer.owner, here(&signer.owner));
+            let enough = signers.is_some_and(|s| s.enough);
+            let state = match way {
+                _ if enough => quiet(words::t(&loc, "proposal.notNeeded")),
+                MemberWay::Outside | MemberWay::Either => {
+                    let (chain_id, hash) = (item.chain_id, item.safe_tx_hash.clone());
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(6.))
+                        .child(quiet(words::t(&loc, "proposal.waiting")))
+                        .child(
+                            text_action(
+                                ElementId::from(("ms-outside-row", i)),
+                                theme,
+                                &mut self.icons,
+                                None,
+                                words::t(&loc, "external.signWithWallet").into(),
+                            )
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                let host = this.ms_host(cx);
+                                let hash = hash.clone();
+                                host.update(cx, |host, cx| {
+                                    host.proposals(
+                                        ms_proposals::Event::ApproveOutside {
+                                            chain_id,
+                                            safe_tx_hash: hash,
+                                        },
+                                        cx,
+                                    );
+                                });
+                            })),
+                        )
+                        .into_any_element()
+                }
+                MemberWay::Contract => quiet(format!(
+                    "{} · {}",
+                    words::t(&loc, "proposal.waiting"),
+                    words::t(&loc, "members.kindContract")
+                )),
+                MemberWay::InVela | MemberWay::Waiting => quiet(words::t(&loc, "proposal.waiting")),
+            };
+            col = col.child(row(("ms-signer", i), name, state));
         }
         col
+    }
+
+    /// The links the members still to approve open it with (r7-8, r4C-13):
+    /// the Vela link for Vela members and those nothing says yet (never
+    /// this device's), the outside-wallet link for an outside wallet — each
+    /// only while approvals are missing; a smart contract account is said.
+    fn ms_invite_links(
+        &mut self,
+        theme: &Theme,
+        item: &ProposalItem,
+        signers: Option<&ms_proposals::ItemSigners>,
+        account: &MultisigAccount,
+        cx: &mut Context<Self>,
+    ) -> Vec<Div> {
+        let mut out = Vec::new();
+        if item.status == ms_proposals::ProposalStatus::Done || item.approved >= item.threshold || item.executing {
+            return out;
+        }
+        let loc = self.ms_loc();
+        let local: Vec<String> = session::view(cx)
+            .accounts
+            .iter()
+            .map(|row| row.account.address.clone())
+            .collect();
+        let here = |a: &str| local.iter().any(|l| same(l, a));
+        let of = |list: Option<&Vec<String>>| -> Vec<String> {
+            list.map(|l| l.iter().filter(|a| !here(a)).cloned().collect()).unwrap_or_default()
+        };
+        let in_vela = of(signers.map(|s| &s.in_vela));
+        let either = of(signers.map(|s| &s.either));
+        let contract = of(signers.map(|s| &s.contract));
+        let outside = crate::multisig::sheet::outside_members(signers, &here);
+        let names = |this: &Self, list: &[String], cx: &App| {
+            list.iter()
+                .map(|a| this.ms_member_name(a, Some(account), cx))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        let tx = vela_core::multisig_link::ProposalLink {
+            chain_id: item.chain_id,
+            multisig: account.address.clone(),
+            safe_tx_hash: item.safe_tx_hash.clone(),
+        };
+        // The Vela link: Vela members elsewhere, nothing-says-yet ones, and
+        // those still being read.
+        if !in_vela.is_empty() || !either.is_empty() || (outside.is_empty() && contract.is_empty()) {
+            let link = vela_core::multisig_link::proposal_link(
+                vela_core::multisig_link::SITE_ORIGIN,
+                self.loc.language(),
+                &tx,
+            );
+            let copied = self.multisig.copied;
+            let mut section = div()
+                .flex()
+                .flex_col()
+                .gap(px(6.))
+                .child(ms_label(theme, &words::t(&loc, "proposal.invite")))
+                .child(
+                    div()
+                        .text_size(theme::text_label())
+                        .text_color(theme.fg_subtle)
+                        .child(crate::ui::prose(words::t(&loc, "proposal.inviteHint"))),
+                );
+            if !in_vela.is_empty() {
+                section = section.child(ms_note(
+                    theme,
+                    &words::tv(&loc, "proposal.approvesInVela", &[("names", &names(self, &in_vela, cx))]),
+                    Tone::Neutral,
+                ));
+            }
+            if !either.is_empty() {
+                section = section.child(ms_note(
+                    theme,
+                    &words::tv(&loc, "proposal.eitherWay", &[("names", &names(self, &either, cx))]),
+                    Tone::Neutral,
+                ));
+            }
+            section = section.child(
+                outline_button(
+                    "ms-copy-link",
+                    theme,
+                    &mut self.icons,
+                    Some(Icon::Copy),
+                    words::t(&loc, if copied { "proposal.copied" } else { "proposal.copyLink" }).into(),
+                )
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    cx.write_to_clipboard(gpui::ClipboardItem::new_string(link.clone()));
+                    this.multisig.copied = true;
+                    cx.notify();
+                })),
+            );
+            out.push(section);
+        }
+        if !contract.is_empty() {
+            out.push(ms_note(
+                theme,
+                &words::tv(&loc, "proposal.contractMembers", &[("names", &names(self, &contract, cx))]),
+                Tone::Caution,
+            ));
+        }
+        // The outside-wallet link: it reads, reviews and signs from the
+        // connect page alone — never the Vela link a wallet can't use.
+        if !outside.is_empty() {
+            let page = format!(
+                "{}/{}/connect",
+                vela_core::multisig_link::share_origin(vela_core::multisig_link::SITE_ORIGIN),
+                self.loc.language()
+            );
+            let link = vela_core::multisig_link::connect_link(&page, None, &outside, Some(&tx));
+            let copied = self.multisig.outside_copied;
+            out.push(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(6.))
+                    .child(ms_label(theme, &words::t(&loc, "external.outsideLinkTitle")))
+                    .child(
+                        div()
+                            .text_size(theme::text_label())
+                            .text_color(theme.fg_subtle)
+                            .child(crate::ui::prose(words::t(&loc, "external.outsideLinkHint"))),
+                    )
+                    .child(
+                        outline_button(
+                            "ms-copy-outside-link",
+                            theme,
+                            &mut self.icons,
+                            Some(Icon::Copy),
+                            words::t(&loc, if copied { "proposal.copied" } else { "proposal.copyLink" }).into(),
+                        )
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            cx.write_to_clipboard(gpui::ClipboardItem::new_string(link.clone()));
+                            this.multisig.outside_copied = true;
+                            cx.notify();
+                        })),
+                    ),
+            );
+        }
+        out
     }
 
     fn ms_timeline(
@@ -2201,7 +2534,7 @@ impl WalletPage {
                 &words::tv(&loc, "action.numberValue", &[("nonce", &item.nonce.to_string())]),
             ));
         match &review {
-            Some(review) => body = body.child(self.ms_review_body(theme, review, item.chain_id, account.as_ref(), cx)),
+            Some(review) => body = body.child(self.ms_review_body(theme, review, item.chain_id, false, account.as_ref(), cx)),
             None => body = body.child(ms_note(theme, &words::t(&loc, "proposal.feeChecking"), Tone::Neutral)),
         }
         let as_member = self
@@ -2212,7 +2545,7 @@ impl WalletPage {
             .or(draft.default_member.clone());
         if draft.members_here.len() > 1 {
             let picked = as_member.clone().unwrap_or_default();
-            body = body.child(self.ms_member_picker(theme, "ms-draft-as", &draft.members_here, &picked, account.as_ref(), false, cx));
+            body = body.child(self.ms_member_picker(theme, "ms-draft-as", &draft.members_here, &picked, account.as_ref(), cx));
         }
         body = body.child(ms_note(theme, &words::t(&loc, "proposal.feeNote"), Tone::Neutral));
         // A site's proposal stays on its review when it did not go: why.
@@ -2475,6 +2808,25 @@ pub(crate) fn ms_note(theme: &Theme, text: &str, tone: Tone) -> Div {
         .line_height(gpui::relative(1.4))
         .text_color(fg)
         .child(crate::ui::prose(text.to_owned()))
+}
+
+/// A recipient row's badge ("First time sending here", "Your account").
+fn ms_badge(theme: &Theme, text: &str, tone: Tone) -> Div {
+    let (bg, fg) = match tone {
+        Tone::Neutral => (theme.bg_sunken, theme.fg_muted),
+        Tone::Caution => (theme.warning_soft, theme.fg_base),
+        Tone::Danger => (theme.error_soft, theme.error_base),
+    };
+    div()
+        .flex_none()
+        .px(px(8.))
+        .py(px(2.))
+        .rounded_full()
+        .bg(bg)
+        .text_size(theme::text_label())
+        .font_weight(gpui::FontWeight::SEMIBOLD)
+        .text_color(fg)
+        .child(text.to_owned())
 }
 
 pub(crate) fn ms_label(theme: &Theme, text: &str) -> Div {

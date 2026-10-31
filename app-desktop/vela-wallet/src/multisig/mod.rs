@@ -23,6 +23,7 @@ pub mod propose;
 #[cfg(all(test, feature = "dev-fixtures"))]
 mod scenarios;
 pub mod session_words;
+pub mod sheet;
 pub mod shell;
 pub mod shown;
 pub mod words;
