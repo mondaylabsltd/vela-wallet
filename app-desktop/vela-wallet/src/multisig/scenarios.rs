@@ -726,3 +726,54 @@ fn moved_facts_are_told_once() {
     let again = sim.machines.facts(facts);
     assert!(again.is_empty(), "nothing moved, nothing said");
 }
+
+/// M6: the notifications read the machines' real views. A transaction
+/// proposed, approved and executed by members on this device is the
+/// person's own doing — only its execution landing is news.
+#[test]
+fn notifications_follow_the_views_and_skip_the_persons_own_moves() {
+    use super::notify::{Kind, Notifier, Snapshot};
+    let look = |sim: &Sim, n: &mut Notifier| {
+        n.observe(Snapshot::of(
+            &sim.machines.accounts_view,
+            &sim.machines.proposals_view,
+            true,
+        ))
+    };
+    let mut n = Notifier::default();
+    let mut sim = booted(&[0, 1]);
+    let address = created(&mut sim);
+    assert!(look(&sim, &mut n).is_empty(), "the baseline");
+    let hash = propose(&mut sim, transfer("1"));
+    assert!(look(&sim, &mut n).is_empty(), "proposed here");
+    sim.proposals(ProposalsEvent::Approve {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        owner: fixture(1).address,
+    });
+    assert!(look(&sim, &mut n).is_empty(), "approved here, ready by it");
+    let owners: Vec<String> = (0..3).map(|i| fixture(i).address).collect();
+    let mut after = DeployedSafe::clean(&owners.iter().map(String::as_str).collect::<Vec<_>>(), 2);
+    after.nonce = 1;
+    sim.world().on_send = Some(Landing {
+        chain: 100,
+        safe: address.clone(),
+        after,
+        safe_tx_hash: hash.clone(),
+        tx_hash: format!("0x{}", "cd".repeat(32)),
+        user_op_hash: format!("0x{}", "ab".repeat(32)),
+    });
+    sim.proposals(ProposalsEvent::Execute {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor: fixture(0).address,
+    });
+    sim.proposals(ProposalsEvent::Refresh { fresh: true });
+    let got = look(&sim, &mut n);
+    assert_eq!(got.len(), 1, "{got:?}");
+    assert_eq!(got[0].kind, Kind::Executed);
+    assert!(got[0].safe_tx_hash.eq_ignore_ascii_case(&hash));
+    assert!(got[0].multisig.eq_ignore_ascii_case(&address));
+    assert_eq!(got[0].name.as_deref(), Some("Quiet Harbor"));
+    assert!(look(&sim, &mut n).is_empty(), "once");
+}

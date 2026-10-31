@@ -13,6 +13,7 @@ pub mod findings;
 pub mod host;
 pub mod live;
 pub mod machines;
+pub mod notify;
 pub mod peer;
 #[cfg(all(test, feature = "dev-fixtures"))]
 mod scenarios;

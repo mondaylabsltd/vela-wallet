@@ -586,6 +586,23 @@ fn main() {
         // release key and updates itself — the first look at the feed, well
         // after the first frame.
         updater::prompt::boot(cx);
+        // M6: multisig notifications. The app's identity to the platform's
+        // notification center (Windows' AppUserModelID — before any window,
+        // and the installer's shortcuts carry the same; the name a Linux
+        // notification is from), a click's way to its transaction, and the
+        // permission asked if the person has them on.
+        cx.set_app_identity(
+            multisig::notify::deliver::APP_ID,
+            multisig::notify::deliver::APP_NAME,
+        );
+        cx.on_system_notification_response(|response, cx| {
+            multisig::notify::deliver::clicked(&response.tag, cx);
+        });
+        if multisig::notify::deliver::wanted() {
+            multisig::notify::deliver::prepare();
+        }
+        #[cfg(any(debug_assertions, feature = "dev-fixtures"))]
+        multisig::notify::deliver::sample_at_launch(cx);
         perf::mark("window_open_requested");
         open_main_window(cx);
         perf::mark("window_opened");
