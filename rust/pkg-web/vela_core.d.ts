@@ -1564,9 +1564,11 @@ export function minGasPriceWei(chain_id: number): string;
  * Where a multisig member's approval goes — `signingRoute` for
  * `vela_multisigApprove` (`trusted_signer::approval::approval_route`): `{type: 'in_vela'}`,
  * `{type: 'page', url}` or `{type: 'blocked', block}` — `null` for a record
- * this build cannot read. `account_json` is the member's record as stored.
+ * this build cannot read. `account_json` is the member's record as stored;
+ * `surface` as `signingRoute`'s (R8: on the Safari Web Extension an
+ * approval is never answered `in_vela`).
  */
-export function multisigApprovalRoute(account_json: string): string | undefined;
+export function multisigApprovalRoute(account_json: string, surface?: string | null): string | undefined;
 
 /**
  * **Multisig accounts** (`vela_core::multisig`): one door, `method` plus its
@@ -1974,8 +1976,14 @@ export function signingPlan(account_json: string): string | undefined;
  * `vela_multisigExecute` for a multisig executor's operation,
  * `vela_multisigApprove` for a member's approval). `null` for a record this
  * build cannot read or a method no venue signs (`eth_sign`) — refuse it.
+ *
+ * `surface` (R8) is where this build runs: `"safari_extension"` for the
+ * Safari Web Extension, whose pages cannot use a `getvela.app` passkey — there
+ * nothing is answered `in_vela`, every kind goes to a page (the account's, or
+ * the official one). Absent or anything else: the web wallet and the Chrome
+ * extension, exactly as before.
  */
-export function signingRoute(account_json: string, method: string): string | undefined;
+export function signingRoute(account_json: string, method: string, surface?: string | null): string | undefined;
 
 /**
  * R1: why `venue_json` cannot reach the keys of an account on `domain`, as a
@@ -2089,12 +2097,37 @@ export function trustedSignerApprovalRequest(args_json: string): string;
 export function trustedSignerCeremonyKeyLabel(operation_json: string): string | undefined;
 
 /**
+ * The page request for a key ceremony a machine sent to a page (spec 102 R3,
+ * R8) — `RegisterPasskey`, `AuthenticatePasskey`, `SignProof` or
+ * `SignMemberProof` as its wire JSON, handed over verbatim
+ * (`trusted_signer::ceremony::request`): `{id, intent, context}`, the key's
+ * place and hints riding along (R5). `deployment_json` is
+ * `{chainId, contract}` for a member proof (the page computes the challenge
+ * from it and reaches no network itself, 076), `null` otherwise. `null`
+ * for an operation that is not a ceremony.
+ */
+export function trustedSignerCeremonyRequest(operation_json: string, id: string, wallet_name: string, registry: string, deployment_json?: string | null): string | undefined;
+
+/**
  * The corpus key of the title a key ceremony on a self-hosted page is drawn
  * under while it waits (spec 102) — `componentsUi.signing.ceremonyCreate`,
  * `.ceremonySignIn` or `.ceremonyConfirm` — or `null` for an operation that is
  * not a ceremony. The web runs none; its gallery draws the apps' card.
  */
 export function trustedSignerCeremonyTitleKey(operation_json: string): string | undefined;
+
+/**
+ * The page's answer to a ceremony, judged as the apps judge it
+ * (`trusted_signer::ceremony::verify`): the ceremony asked for, from
+ * `signer_origin` (the page the wallet opened — the origin the authenticator
+ * signed), over a challenge the page was allowed to sign, and for a member
+ * proof over `expected_member_challenge_hex` (the one the wallet fetched).
+ * `{type: 'registered', registration}` or `{type: 'asserted', assertion}` —
+ * the machines' own `Registration` / `Assertion` wire JSON — or an error
+ * whose message is the refusal's code (`declined`, `refused`,
+ * `wrong_challenge`, `foreign_key`, `not_verified`, `malformed`).
+ */
+export function trustedSignerCeremonyVerify(operation_json: string, answer_json: string, signer_origin: string, expected_member_challenge_hex?: string | null): string;
 
 /**
  * R6's ruling for the web on the bytes `trustedSignerPageTarget`'s URL
@@ -2569,7 +2602,7 @@ export interface InitOutput {
     readonly maskedAmount: (a: number, b: number) => [number, number];
     readonly matchSelector: (a: number, b: number, c: number, d: number) => [number, number, number];
     readonly minGasPriceWei: (a: number) => [number, number];
-    readonly multisigApprovalRoute: (a: number, b: number) => [number, number];
+    readonly multisigApprovalRoute: (a: number, b: number, c: number, d: number) => [number, number];
     readonly multisigCall: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly multisigLinkCall: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly multisigaccountscore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
@@ -2678,7 +2711,7 @@ export interface InitOutput {
     readonly signerPageCheckHeaders: () => [number, number];
     readonly signingPageDomain: (a: number, b: number) => [number, number];
     readonly signingPlan: (a: number, b: number) => [number, number];
-    readonly signingRoute: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly signingRoute: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly signingVenueBlock: (a: number, b: number, c: number, d: number) => [number, number];
     readonly signingVenueChoices: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly signingpagescore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
@@ -2713,7 +2746,9 @@ export interface InitOutput {
     readonly trustedSignerApprovalAccept: (a: number, b: number) => [number, number, number, number];
     readonly trustedSignerApprovalRequest: (a: number, b: number) => [number, number, number, number];
     readonly trustedSignerCeremonyKeyLabel: (a: number, b: number) => [number, number];
+    readonly trustedSignerCeremonyRequest: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number];
     readonly trustedSignerCeremonyTitleKey: (a: number, b: number) => [number, number];
+    readonly trustedSignerCeremonyVerify: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number, number];
     readonly trustedSignerPageAdmit: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number];
     readonly trustedSignerPageTarget: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly trustedSignerRegistryRpId: (a: number, b: number) => [number, number];
