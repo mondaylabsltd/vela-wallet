@@ -27,6 +27,11 @@ import uniffi.vela_core_uniffi.ReceiveWatchCore
 import uniffi.vela_core_uniffi.RpcPoolCore
 import uniffi.vela_core_uniffi.SessionCore
 import uniffi.vela_core_uniffi.TokenTrustCore
+import uniffi.vela_core_uniffi.MultisigAccountsCore
+import uniffi.vela_core_uniffi.MultisigMembersCore
+import uniffi.vela_core_uniffi.MultisigOutsidePageCore
+import uniffi.vela_core_uniffi.MultisigOutsideSessionCore
+import uniffi.vela_core_uniffi.MultisigProposalsCore
 
 /**
  * The three bridge methods, without caring which machine is behind them.
@@ -164,4 +169,21 @@ fun FeeSpeedCore.asBridge(): CoreBridge =
 
 // Spec 102: Settings → Signing pages.
 fun SigningPagesCore.asBridge(): CoreBridge =
+    bridgeOf(this::dispatch, this::resolveEffect, this::view, this::skipUnchangedViews)
+
+// Native multisig (M1–M6): the five machines of `multisig_bridge.rs`, the
+// same JSON surface the web drives — one line each, as every machine above.
+fun MultisigAccountsCore.asBridge(): CoreBridge =
+    bridgeOf(this::dispatch, this::resolveEffect, this::view, this::skipUnchangedViews)
+
+fun MultisigProposalsCore.asBridge(): CoreBridge =
+    bridgeOf(this::dispatch, this::resolveEffect, this::view, this::skipUnchangedViews)
+
+fun MultisigMembersCore.asBridge(): CoreBridge =
+    bridgeOf(this::dispatch, this::resolveEffect, this::view, this::skipUnchangedViews)
+
+fun MultisigOutsidePageCore.asBridge(): CoreBridge =
+    bridgeOf(this::dispatch, this::resolveEffect, this::view, this::skipUnchangedViews)
+
+fun MultisigOutsideSessionCore.asBridge(): CoreBridge =
     bridgeOf(this::dispatch, this::resolveEffect, this::view, this::skipUnchangedViews)
