@@ -968,7 +968,7 @@ struct FeeRowView: View {
                 // action, no coin to pick (note 1); a fee that would fail
                 // opens the coins ("Pay with another coin"); with no coin
                 // left the row is no control at all.
-                switch fee.tap {
+                switch fee.plain ? .nothing : fee.tap {
                 case .nothing:
                     rowFace
                         .accessibilityElement(children: .combine)
@@ -981,14 +981,14 @@ struct FeeRowView: View {
                         .buttonStyle(.plain)
                         .accessibilityLabel(fee.openLabel)
                 }
-                if let refreshLabel = fee.refreshLabel {
+                if !fee.plain, let refreshLabel = fee.refreshLabel {
                     FeeRefreshButton(label: refreshLabel, refreshing: fee.refreshing, onRefresh: onRefresh)
                 }
             }
             .padding(.leading, Tokens.Space.s12)
             .padding(.trailing, fee.refreshLabel == nil ? Tokens.Space.s12 : Tokens.Space.s4)
             .background(RoundedRectangle(cornerRadius: Tokens.Radius.r12).fill(theme.bgRaised))
-            if fee.refreshLabel != nil {
+            if fee.refreshLabel != nil || (fee.plain && fee.staleNote != nil) {
                 // Calm and muted: an old figure is not a fault. Always the
                 // line's full height, so nothing jumps when it appears.
                 Text(verbatim: fee.failNote ?? fee.staleNote ?? " ")
@@ -1031,12 +1031,13 @@ struct FeeRowView: View {
                 .foregroundStyle(theme.fgMuted)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(alignment: .center, spacing: Tokens.Space.s8) {
-                InlineTokenMark(mark: fee.mark)
+                // A multisig's row is who must approve, not a coin (r9-20).
+                if !fee.plain { InlineTokenMark(mark: fee.mark) }
                 Text(verbatim: fee.value)
                     .typeRole(Typography.body.scaled(textScale))
                     .foregroundStyle(theme.fgBase)
                     .fixedSize(horizontal: false, vertical: true)
-                if fee.tap == .open || fee.tap == .chooseCoin {
+                if !fee.plain, fee.tap == .open || fee.tap == .chooseCoin {
                     LucideIcon(.chevronRight, size: LucideIconSize.smallChevron)
                         .foregroundStyle(theme.fgMuted)
                 }

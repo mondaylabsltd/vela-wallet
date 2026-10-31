@@ -593,6 +593,11 @@ struct FeeRowModel {
     /// fee again at once — the refresh's own action, no chevron — or, when
     /// it would fail and no coin is left, nothing at all (PR 2 polish).
     var tap: FeeRowTap = .open
+    /// r9-20: a fact, not a fee — a multisig's send, whose fee the executing
+    /// member pays: no coin mark, no refresh, no chevron, no tap, and its
+    /// line (`staleNote`, who pays) without the clock of an old figure (the
+    /// web's `FeeRowModel.plain`).
+    var plain = false
 
     /// A tap on the row asks the fee again (PR 2 note 1).
     var tapRetries: Bool { tap == .retry }

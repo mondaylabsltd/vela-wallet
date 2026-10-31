@@ -2775,12 +2775,19 @@ struct RootView: View {
                 )
             }
             if case .sendForm(let form) = model.base {
+                let formChain = (view.multiSelectMode ? view.multiChainId : nil) ?? view.selectedToken?.chainId
                 model.base = .sendForm(SendLive.form(
                     view, fee: fees.view, display: display, on: form, loc: loc,
                     speed: fees.speed.map { speed in
                         SendLive.SpeedInputs(view: speed, feeView: { [fees] tier in fees.view(of: tier) })
                     },
-                    networks: walletNetworks
+                    networks: walletNetworks,
+                    // r9-20: a multisig's form says who must approve, as its confirm does.
+                    multisig: view.multisig.map { ref in
+                        MultisigConfirmWords.of(
+                            ref: ref, members: formChain.flatMap { multisig.proposalsView.chain($0)?.members }, loc: loc
+                        )
+                    }
                 ))
             }
             if case .sendReceipt(let receipt) = model.base {
