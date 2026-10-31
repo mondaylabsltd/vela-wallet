@@ -20,6 +20,7 @@ pub mod notify;
 pub mod member_words;
 pub mod peer;
 pub mod propose;
+pub mod reading;
 #[cfg(all(test, feature = "dev-fixtures"))]
 mod scenarios;
 pub mod session_words;

@@ -105,6 +105,10 @@ pub struct Theme {
     pub warning_soft: Hsla,
     pub error_base: Hsla,
     pub error_soft: Hsla,
+    /// A danger button.s fill under a white label (the web.s
+    /// `--color-error-fill`): light is `error_base` itself; dark.s
+    /// `error_base` is a text red, so dark fills a step deeper.
+    pub error_fill: Hsla,
     pub info_base: Hsla,
     pub info_soft: Hsla,
     /// The flow patterns' "well" surface: input field, address strip, tech-
@@ -175,6 +179,7 @@ impl Theme {
             warning_soft: c(0xfff8f0),
             error_base: c(0xc62828),
             error_soft: c(0xfef2f2),
+            error_fill: c(0xc62828),
             info_base: c(0x4267f4),
             info_soft: c(0xedf0ff),
             bg_well: c(0xf5f3ef),
@@ -224,6 +229,7 @@ impl Theme {
             warning_soft: c(0x2a2010),
             error_base: c(0xf87171),
             error_soft: c(0x2d1515),
+            error_fill: c(0xd42a2a),
             info_base: c(0x5a7cf6),
             info_soft: c(0x131b33),
             // The web has no separate well: its fields and code blocks sit on
@@ -1008,6 +1014,8 @@ mod tests {
                 // the detail-footer 删除联系人 is body text on bg_base.
                 ("fg_subtle/bg_base", t.fg_subtle, t.bg_base, 3.0),
                 ("error_base/bg_base", t.error_base, t.bg_base, 4.5),
+                // r9-19: a danger button.s white label on its fill.
+                ("white/error_fill", gpui::Hsla::from(gpui::rgb(0xffffff)), t.error_fill, 4.5),
                 // the 家人 membership chip is fg_muted on the sunken pill.
                 ("fg_muted/bg_sunken", t.fg_muted, t.bg_sunken, 4.5),
             ];

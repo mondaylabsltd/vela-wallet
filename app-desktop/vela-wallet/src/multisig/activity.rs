@@ -71,9 +71,12 @@ pub fn worded(
                 let token_address = row.get("token").and_then(Value::as_str);
                 let info = token(chain_id, token_address);
                 let amount = row.get("amount").and_then(Value::as_str).unwrap_or("0");
-                base["value"] = json!(plain(amount, info.decimals));
+                // r8-2: a token that never said its decimals keeps its raw
+                // integer (0 places), never a friendly amount in 18.
+                let decimals = info.decimals.unwrap_or(0);
+                base["value"] = json!(plain(amount, decimals));
                 base["symbol"] = json!(info.symbol);
-                base["decimals"] = json!(info.decimals);
+                base["decimals"] = json!(decimals);
                 base["type"] = json!("send");
                 if let Some(address) = token_address {
                     base["token"] = json!(address);
@@ -85,18 +88,15 @@ pub fn worded(
                 let info = if moves {
                     token(chain_id, None)
                 } else {
-                    TokenInfo {
-                        symbol: String::new(),
-                        decimals: 18,
-                    }
+                    TokenInfo::coin(String::new())
                 };
                 base["value"] = json!(if moves {
-                    plain(sends, info.decimals)
+                    plain(sends, info.decimals.unwrap_or(18))
                 } else {
                     "0".to_owned()
                 });
                 base["symbol"] = json!(info.symbol);
-                base["decimals"] = json!(info.decimals);
+                base["decimals"] = json!(info.decimals.unwrap_or(18));
                 base["type"] = json!("dapp_tx");
                 base["intent"] = json!(title());
                 base["dappSummary"] = json!({
@@ -118,13 +118,10 @@ mod tests {
 
     fn coin(_: u64, token: Option<&str>) -> TokenInfo {
         match token {
-            None => TokenInfo {
-                symbol: "xDAI".to_owned(),
-                decimals: 18,
-            },
+            None => TokenInfo::coin("xDAI".to_owned()),
             Some(_) => TokenInfo {
                 symbol: "USDC".to_owned(),
-                decimals: 6,
+                decimals: Some(6),
             },
         }
     }

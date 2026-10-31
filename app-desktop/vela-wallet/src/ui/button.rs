@@ -36,8 +36,12 @@ impl ButtonState {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ButtonVariant {
-    /// Accent-filled, inverse label. Reserved for the screen's one primary action.
+    /// Accent-filled, inverse label. Reserved for the screen's one primary
+    /// action that moves value or signs (the web's `value`).
     Primary,
+    /// The error fill under a white label: a signature the review asks for
+    /// "anyway" (r9-19), a destructive confirm (the web's `danger`).
+    Danger,
     /// Outlined on the raised surface, base label (dark label per DV-001).
     Secondary,
     /// The flow outcome stack's solid row (spec 014): filled with the `well`
@@ -94,7 +98,7 @@ pub fn vela_button_state(
     on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
 ) -> Stateful<Div> {
     let height = match variant {
-        ButtonVariant::Primary => BTN_H_PRIMARY,
+        ButtonVariant::Primary | ButtonVariant::Danger => BTN_H_PRIMARY,
         ButtonVariant::Secondary | ButtonVariant::Row => BTN_H_SECONDARY,
     };
     // The height is a MINIMUM: long-locale labels wrap inside a
@@ -194,6 +198,7 @@ fn finish(
     if state == ButtonState::Disabled {
         let styled = match variant {
             ButtonVariant::Primary => base.bg(theme.accent).text_color(theme.fg_inverse),
+            ButtonVariant::Danger => base.bg(theme.error_fill).text_color(white()),
             ButtonVariant::Secondary => base
                 .text_color(theme.fg_base)
                 .border_1()
@@ -211,6 +216,7 @@ fn finish(
                 base.bg(theme.accent).text_color(theme.fg_inverse),
                 theme.fg_inverse,
             ),
+            ButtonVariant::Danger => (base.bg(theme.error_fill).text_color(white()), white()),
             ButtonVariant::Secondary => (
                 base.text_color(theme.fg_base)
                     .border_1()
@@ -230,6 +236,13 @@ fn finish(
             let (hover, active) = (theme.accent_hover, theme.accent_active);
             base.bg(theme.accent)
                 .text_color(theme.fg_inverse)
+                .hover(move |s| s.bg(hover))
+                .active(move |s| s.bg(active))
+        }
+        ButtonVariant::Danger => {
+            let (hover, active) = (theme.error_fill.opacity(0.9), theme.error_fill.opacity(0.8));
+            base.bg(theme.error_fill)
+                .text_color(white())
                 .hover(move |s| s.bg(hover))
                 .active(move |s| s.bg(active))
         }
@@ -273,4 +286,10 @@ fn busy_arc(color: gpui::Hsla) -> AnyElement {
             px(theme::SPINNER_STROKE),
         ))
         .into_any_element()
+}
+
+/// A label on a fill that is not the theme's (the danger fill): white in
+/// both modes, as the web's `--color-onAccent`.
+fn white() -> gpui::Hsla {
+    gpui::Hsla::from(gpui::rgb(0xffffff))
 }

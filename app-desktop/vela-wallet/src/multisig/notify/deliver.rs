@@ -418,10 +418,7 @@ pub fn sample_at_launch(cx: &mut App) {
         };
         let loc = Loc::from_env();
         let worded = word(&loc, &notice, &|a: &str| words::short(a), &|_, _| {
-            words::TokenInfo {
-                symbol: "xDAI".to_owned(),
-                decimals: 18,
-            }
+            words::TokenInfo::coin("xDAI".to_owned())
         });
         crate::diag::vlog!(
             "multisig-notify",
@@ -453,10 +450,7 @@ mod tests {
     }
 
     fn coin(_: u64, _: Option<&str>) -> words::TokenInfo {
-        words::TokenInfo {
-            symbol: "xDAI".to_owned(),
-            decimals: 18,
-        }
+        words::TokenInfo::coin("xDAI".to_owned())
     }
 
     #[test]
