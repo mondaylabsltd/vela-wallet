@@ -233,7 +233,10 @@ final class MultisigLive: MultisigPorts {
             member: owner,
             memberName: name,
             credentialIdsHex: keys.map(\.credentialId),
-            keyRouteJson: plan?.key?.json
+            keyRouteJson: plan?.key?.json,
+            // r9-10: the review asks for "… anyway" — the page says
+            // "Approve anyway" in the danger style, as the app does.
+            anyway: purpose["anyway"] as? Bool ?? false
         )
         guard let request = try? trustedSignerApprovalRequest(input: input) else {
             return Self.passkeyFailed(.pageSignFailed(page: "not_opened", message: nil))

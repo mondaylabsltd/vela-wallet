@@ -89,6 +89,16 @@ enum MsRules {
         ])
     }
 
+    /// r9-12: the invite as the core builds it (`addLink`): its networks and
+    /// the row's `invite_members` — founding members, then members now, a
+    /// name only where one is known, and the kind.
+    static func addLink(origin: String, locale: String, multisig: String, chainIds: [Int], members: Any) -> String? {
+        string("addLink", [
+            "origin": origin, "locale": locale, "multisig": multisig,
+            "extra": ["chainIds": chainIds, "members": members],
+        ])
+    }
+
     /// The connect link an outside owner opens in a browser with its wallet.
     static func connectLink(page: String, invite: String?, members: [String], tx: (chainId: Int, multisig: String, safeTxHash: String)?) -> String? {
         var args: [String: Any] = ["page": page, "invite": invite ?? NSNull(), "members": members]

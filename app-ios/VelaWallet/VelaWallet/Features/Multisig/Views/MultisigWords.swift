@@ -21,6 +21,8 @@ struct MsWords {
     var hub: MultisigHub?
     /// This device's accounts (address → name).
     var localNames: [String: String] = [:]
+    /// r9-12: the core's names (`member_labels`) when given; else the hub's.
+    var labels: [String: String]? = nil
 
     func t(_ key: String, _ vars: [String: String] = [:]) -> String {
         loc.t("home.multisig.\(key)", vars: vars)
@@ -47,18 +49,27 @@ struct MsWords {
         hub?.accountsView.knownMembers[address.lowercased()]?.name.flatMap { $0.isEmpty ? nil : $0 }
     }
 
+    /// r9-12: the core's ONE name for a member (`member_labels`: kept, then
+    /// the passkey index, then this device's own name, then the short
+    /// address) — the same on every device.
+    func coreLabel(_ address: String) -> String? {
+        (labels ?? hub?.accountsView.memberLabels)?[address.lowercased()].flatMap { $0.isEmpty ? nil : $0 }
+    }
+
     /// A member as a line names it: its name and short address, never the
     /// name alone — a name is a claim, the address is who gets the say.
     func who(_ address: String) -> String {
         let short = Self.short(address)
-        let name = localName(address) ?? keptName(address)
+        let name = coreLabel(address) ?? localName(address) ?? keptName(address)
         guard let name, name != short else { return short }
         return "\(name) (\(short))"
     }
 
-    /// A member's label: this device's name, else the kept one, else short.
+    /// A member's label: the core's (r9-12); before the core has named it
+    /// (no hub, a member it does not know yet), this device's name, else
+    /// the kept one, else short.
     func label(_ address: String) -> String {
-        localName(address) ?? keptName(address) ?? Self.short(address)
+        coreLabel(address) ?? localName(address) ?? keptName(address) ?? Self.short(address)
     }
 
     /// A multisig's name: its record's (when displayable), else this
@@ -170,7 +181,9 @@ struct MsWords {
                 "old": who(action["oldOwner"]?.string ?? ""), "new": who(action["newOwner"]?.string ?? ""),
             ])
         case "changeThreshold":
-            return t("action.changeThreshold", ["threshold": action["threshold"]?.string ?? ""])
+            // "Require 1 approval" — the corpus's plural family (r9).
+            let threshold = action["threshold"]?.string ?? ""
+            return t("action.changeThreshold", count: Int(threshold) ?? 0, ["threshold": threshold, "count": threshold])
         case "rename":
             return t("action.rename", ["name": action["name"]?.string ?? ""])
         case "call":
@@ -238,6 +251,21 @@ struct MsWords {
         default:
             return t("proposal.uncheckedReason")
         }
+    }
+
+    // MARK: - Why nothing is signed (r9-9)
+
+    /// The ONE refusal line: the core's own reason, by its corpus key
+    /// (`MultisigReview.refused.key` — `home.multisig.review.refusedWhy.*`,
+    /// or `review.blocked` for the state guard's), never a shell's guess
+    /// nor the core's English `refusal`. `review.blocked` only while a
+    /// review without the field is drawn.
+    func refusalLine(_ review: MsJSON?) -> String {
+        if let key = review?["refused"]?["key"]?.string, !key.isEmpty {
+            let text = loc.t(key)
+            if text != key { return text }
+        }
+        return t("review.blocked")
     }
 
     // MARK: - Why an action did not go (`MultisigActionState`)

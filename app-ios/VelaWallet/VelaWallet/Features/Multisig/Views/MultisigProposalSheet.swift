@@ -210,8 +210,10 @@ struct MsProposalModel {
     /// The lines that say where it stands, in order.
     var notes: [(text: String, tone: MsNote.Tone, id: String)] {
         var out: [(String, MsNote.Tone, String)] = []
-        if let refusal = item.refusal, !refusal.isEmpty {
-            out.append((words.t("proposal.refused", ["reason": refusal]), .danger, "refused"))
+        // r9-9: a refusal is said once, by the review's body in the core's
+        // words; with no review to draw, the plain line.
+        if let refusal = item.refusal, !refusal.isEmpty, review == nil, !reviewHolding {
+            out.append((words.refusalLine(nil), .danger, "refused"))
         }
         if item.cancelledBy != nil, item.action?.kind != "cancel" {
             out.append((words.t("proposal.cancelPending"), .warning, "cancelPending"))
@@ -239,7 +241,10 @@ struct MsProposalModel {
         if let failure = words.actionFailure(executeState, chainId: chainId) {
             out.append((failure, .danger, "executeFailed"))
         }
-        if canApprove.isEmpty, !approvedByHere, !isDone, account != nil, (account?.owners.count ?? 0) > 0, canExecute.isEmpty {
+        // r9-9: "none is signed in on this device" only when the core says
+        // no member of it is here (`members_here`), whatever this one asks.
+        if !isDone, item.membersHere?.isEmpty ?? (canApprove.isEmpty && !approvedByHere && account != nil
+            && (account?.owners.count ?? 0) > 0 && canExecute.isEmpty) {
             out.append((words.t("proposal.notMember"), .neutral, "notMember"))
         }
         return out.map { (text: $0.0, tone: $0.1, id: $0.2) }
@@ -953,7 +958,9 @@ struct MultisigProposalSheet: View {
                             Button(words.t("proposal.reject"), role: .destructive) { reject(model) }
                             Button(words.t("proposal.rejectCancel"), role: .cancel) {}
                         } message: {
-                            Text(verbatim: words.t("proposal.rejectHint", ["threshold": String(model.item.threshold)]))
+                            Text(verbatim: words.t("proposal.rejectHint", count: model.item.threshold, [
+                                "threshold": String(model.item.threshold), "count": String(model.item.threshold),
+                            ]))
                         }
                 }
             }

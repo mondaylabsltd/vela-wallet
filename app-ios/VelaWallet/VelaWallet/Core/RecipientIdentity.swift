@@ -257,6 +257,12 @@ final class RecipientIdentity {
         await registryNames.name(for: address)
     }
 
+    /// The index's verdict on `address` — the multisig's member names
+    /// (r9-12, `index_names`); `nil` when nobody answered.
+    func passkeyIndex(_ address: String) async -> RegistryNameLookup.Verdict? {
+        await registryNames.lookup(for: address)
+    }
+
     private lazy var registryNames = RegistryNameLookup(
         store: store,
         ethCall: { [weak self] chainId, to, data in

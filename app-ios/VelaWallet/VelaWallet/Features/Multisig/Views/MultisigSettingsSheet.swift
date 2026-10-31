@@ -527,6 +527,14 @@ struct MultisigInviteSheet: View {
 
     private var link: String? {
         guard let row = hub.accountsView.row(address) else { return nil }
+        // r9-12: the core's invite members, as every platform's invite carries them.
+        if !row.inviteMembers.array.isEmpty {
+            return MsRules.addLink(
+                origin: MsRules.string("shareOrigin", ["origin": "app://ios"]) ?? "https://getvela.app",
+                locale: MultisigServiceURL.locale, multisig: row.account.address,
+                chainIds: row.account.chainIds, members: row.inviteMembers.any
+            )
+        }
         let known = row.account.members.reduce(into: [String: Any]()) { out, pair in
             out[pair.key] = ["name": pair.value.name.map { $0 as Any } ?? NSNull(), "kind": pair.value.kind.map { $0 as Any } ?? NSNull()]
         }

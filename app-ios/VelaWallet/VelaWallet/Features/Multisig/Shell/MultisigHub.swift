@@ -60,6 +60,13 @@ final class MultisigHub {
     @ObservationIgnored var onActive: ((String?) -> Void)?
     /// Words for a row's title (the proposal's own): the screens' Loc.
     @ObservationIgnored let loc: Loc
+    /// r9-12: the passkey index's verdict on an address (the app's
+    /// `RecipientIdentity`); `nil` answer: nobody answered.
+    @ObservationIgnored var indexLookup: (@MainActor (String) async -> RegistryNameLookup.Verdict?)?
+    /// Addresses asked of the index, and when (an unanswered one is asked
+    /// again after `indexRetry`).
+    @ObservationIgnored private var indexAsked: [String: Date] = [:]
+    static let indexRetry: TimeInterval = 300
 
     // MARK: - Facts
 
@@ -163,6 +170,7 @@ final class MultisigHub {
     private func accountsMoved() {
         let had = accountsView.accounts.count
         accountsView = accounts.accountsView
+        askIndex(accountsView.indexWanted)
         // r9-8: the first multisig created, added, opened from an invite or
         // found as a member here — there is now something to say: the
         // notifications are asked for once (never at launch: a count read
@@ -215,6 +223,36 @@ final class MultisigHub {
         guard told != lastWaitingJson else { return }
         lastWaitingJson = told
         members.dispatch(["type": "waiting", "proposals": waiting])
+    }
+
+    /// r9-12: the names the core wants from the passkey index (every member
+    /// it names and this device's own accounts) — looked up, each answer
+    /// sent as `index_names`. What a name IS stays the core's.
+    private func askIndex(_ wanted: [String]) {
+        guard let lookup = indexLookup else { return }
+        let now = Date()
+        let due = Self.indexDue(wanted, asked: indexAsked, now: now, retry: Self.indexRetry)
+        guard !due.isEmpty else { return }
+        for address in due { indexAsked[address] = now }
+        Task { @MainActor [weak self] in
+            var answers: [String: Any] = [:]
+            for address in due {
+                guard let verdict = await lookup(address) else { continue }
+                answers[address] = ["vela": verdict.vela, "name": verdict.name.map { $0 as Any } ?? NSNull()]
+            }
+            guard let self, !answers.isEmpty else { return }
+            self.accounts.dispatch(["type": "index_names", "answers": answers])
+        }
+    }
+
+    /// The wanted addresses not asked within `retry` (lowercased, each once).
+    static func indexDue(_ wanted: [String], asked: [String: Date], now: Date, retry: TimeInterval) -> [String] {
+        var out: [String] = []
+        for address in wanted.map({ $0.lowercased() }) where !out.contains(address) {
+            if let at = asked[address], now.timeIntervalSince(at) < retry { continue }
+            out.append(address)
+        }
+        return out
     }
 
     /// The stored record of the multisig shown, whole (as the core keeps it).

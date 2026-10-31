@@ -16,6 +16,11 @@
 //    fee and no speed.
 //  - S4: the fee before "Approve and execute", History's times, a danger
 //    call's intent as a danger tag.
+//  - The core's round-9 fields, drawn: the refusal's own reason (r9-9),
+//    nothing in the state guard's place beside it, "none signed in here"
+//    only when no member is (members_here), one name per member and the
+//    passkey index asked for them (r9-12), the invite from the core's
+//    members, plural approval counts, "anyway" to the trusted page (r9-10).
 //
 
 import Foundation
@@ -245,5 +250,123 @@ struct MultisigR9FixTests {
         for tone in [SigningTone.neutral, .accent, .success, .caution] {
             #expect(!MsReadingView.isTag(tone))
         }
+    }
+
+    // MARK: - r9-9: the refusal's own reason, said once
+
+    @Test func theRefusalIsTheCoresOwnReasonByItsKey() throws {
+        let delegate = try #require(decode(MsJSON.self,
+            #"{"sign":{"allowed":false,"anyway":false},"refused":{"why":"delegatecall","key":"home.multisig.review.refusedWhy.delegatecall"}}"#))
+        let line = words.refusalLine(delegate)
+        #expect(line == loc.t("home.multisig.review.refusedWhy.delegatecall"))
+        #expect(line != words.t("review.blocked"), "never 'would change who controls the multisig' for a delegatecall")
+        let state = try #require(decode(MsJSON.self,
+            #"{"sign":{"allowed":false},"refused":{"why":"stateChange","key":"home.multisig.review.blocked"}}"#))
+        #expect(words.refusalLine(state) == words.t("review.blocked"))
+        for why in ["tooDeep", "refund", "other"] {
+            let review = try #require(decode(MsJSON.self,
+                #"{"refused":{"why":"\#(why)","key":"home.multisig.review.refusedWhy.\#(why)"}}"#))
+            #expect(words.refusalLine(review) != "home.multisig.review.refusedWhy.\(why)", "a raw key for \(why)")
+        }
+        #expect(words.refusalLine(nil) == words.t("review.blocked"))
+        // The "… anyway" step names the same reason.
+        let concern = try #require(decode(MsJSON.self, #"{"kind":"notSigned","why":"delegatecall to a contract"}"#))
+        #expect(MsReviewBody.concernText(concern, review: delegate, words: words) == line)
+    }
+
+    @Test func aRefusalIsNotSaidTwiceOnTheSheet() throws {
+        let item = MultisigViewsTests.item(approved: 1, status: "pending")
+            .replacingOccurrences(of: #""refusal":null"#, with: #""refusal":"delegatecall to a contract Vela does not sign for""#)
+        let review = #"{"100:\#(Self.hash)":{"sign":{"allowed":false,"anyway":false},"refused":{"why":"delegatecall","key":"home.multisig.review.refusedWhy.delegatecall"},"concerns":[],"state":{"source":"probe","verdict":{"kind":"withheld"}},"simulation":{"kind":"deltas","deltas":[]},"recipients":[],"fields":[]}}"#
+        let model = try model(view(item: item, replacing: ["reviews": review]))
+        #expect(!model.notes.contains { $0.id == "refused" }, "the review's body says it")
+        #expect(!model.notes.contains { $0.text.contains("Vela does not sign for") }, "never the core's English")
+        #expect(model.review?["state"]?["verdict"]?.kind == "withheld")
+    }
+
+    @Test func noneSignedInHereOnlyWhenNoMemberIsHere() throws {
+        let account = try #require(decode(MsAccountsView.self, MultisigViewsTests.accountsJson)).activeRow?.account
+        func notes(_ membersHere: String) throws -> [String] {
+            let item = MultisigViewsTests.item(approved: 1, status: "pending")
+                .replacingOccurrences(of: #""unsent":false"#, with: #""unsent":false,"membersHere":\#(membersHere)"#)
+            let view = try view(item: item)
+            return MsProposalModel(item: try #require(view.items.first), view: view, words: words, account: account)
+                .notes.map(\.id)
+        }
+        // Parallel One here already approved: it can approve nothing more,
+        // yet it IS a member here — never "none is signed in".
+        #expect(!(try notes(#"["\#(Self.one)"]"#)).contains("notMember"))
+        #expect(try notes("[]").contains("notMember"))
+    }
+
+    // MARK: - r9-12: one name per member, the core's
+
+    @Test func aMemberIsNamedByTheCoreNotByThisDevice() {
+        // This device calls its account "Parallel One"; the passkey index
+        // (the core's rule) says "Interleave" — the core's name is drawn.
+        let named = MsWords(loc: loc, hub: nil, localNames: [Self.one.lowercased(): "Parallel One"],
+                            labels: [Self.one.lowercased(): "Interleave", Self.two.lowercased(): "Bob"])
+        #expect(named.label(Self.one) == "Interleave")
+        #expect(named.label(Self.two) == "Bob")
+        #expect(named.who(Self.one).hasPrefix("Interleave ("))
+        // Still this device's account, for what only this device can do.
+        #expect(named.localName(Self.one) == "Parallel One")
+        // A member the core has not named yet: as before.
+        #expect(named.label(Self.three) == MsWords.short(Self.three))
+    }
+
+    @Test func theAccountsViewCarriesTheNamesTheIndexWantsAndTheInvite() throws {
+        let json = MultisigViewsTests.accountsJson
+            .replacingOccurrences(of: #""invite_shared":false}"#, with: #""invite_shared":false,"invite_members":[{"address":"\#(Self.one)","name":"Interleave","kind":"passkey"},{"address":"\#(Self.three)"}]}"#)
+            .replacingOccurrences(of: #""member_kinds":{}"#, with: #""member_kinds":{},"member_labels":{"\#(Self.one.lowercased())":"Interleave"},"index_wanted":["\#(Self.two.lowercased())"]"#)
+        let view = try #require(decode(MsAccountsView.self, json))
+        #expect(view.memberLabels[Self.one.lowercased()] == "Interleave")
+        #expect(view.indexWanted == [Self.two.lowercased()])
+        let row = try #require(view.activeRow)
+        #expect(row.inviteMembers.array.count == 2)
+        let link = try #require(MsRules.addLink(origin: "https://getvela.app", locale: "en", multisig: Self.safe,
+                                                chainIds: row.account.chainIds, members: row.inviteMembers.any))
+        #expect(link.contains("#msa="))
+        // The link carries the core's name for each member.
+        let parsed = MsRules.call("parseAddLink", ["hash": String(link[link.firstIndex(of: "#")!...])]) as? [String: Any]
+        let members = parsed?["members"] as? [[String: Any]] ?? []
+        #expect(members.contains { ($0["name"] as? String) == "Interleave" })
+    }
+
+    @Test func theIndexIsAskedOnceAndAgainOnlyAfterAWhile() {
+        let now = Date()
+        let wanted = [Self.one, Self.two.uppercased(), Self.one]
+        #expect(MultisigHub.indexDue(wanted, asked: [:], now: now, retry: 300)
+            == [Self.one.lowercased(), Self.two.lowercased()])
+        let asked = [Self.one.lowercased(): now.addingTimeInterval(-10), Self.two.lowercased(): now.addingTimeInterval(-400)]
+        #expect(MultisigHub.indexDue(wanted, asked: asked, now: now, retry: 300) == [Self.two.lowercased()])
+    }
+
+    @Test func theIndexsVerdictIsANameAMissOrNothingSaid() async {
+        let defaults = UserDefaults(suiteName: "ms.r9.index.\(UUID().uuidString)")!
+        let store = VelaStore(defaults: defaults)
+        func lookup(_ done: String) -> RegistryNameLookup {
+            RegistryNameLookup(store: store, ethCall: { _, _, _ in nil }, indexGet: { _ in .failed }, step: { _, _ in done })
+        }
+        let hit = await lookup(#"{"type":"done","found":{"name":"Interleave","public_key":"04ab"},"remember":"forever"}"#)
+            .lookup(for: Self.one)
+        #expect(hit == RegistryNameLookup.Verdict(vela: true, name: "Interleave"))
+        let silent = await lookup(#"{"type":"done","found":null,"remember":"no"}"#).lookup(for: Self.two)
+        #expect(silent == nil, "nobody answered: nothing is said, asked again later")
+        let miss = await lookup(#"{"type":"done","found":null,"remember":"briefly"}"#).lookup(for: Self.three)
+        #expect(miss == RegistryNameLookup.Verdict(vela: false, name: nil))
+        // Kept: asked again, the store answers.
+        let kept = await lookup(#"{"type":"done","found":null,"remember":"no"}"#).lookup(for: Self.one)
+        #expect(kept?.name == "Interleave")
+    }
+
+    // MARK: - Plurals: "Require 1 approval"
+
+    @Test func approvalCountsArePlural() throws {
+        let one = try #require(decode(MsJSON.self, #"{"kind":"changeThreshold","threshold":"1"}"#))
+        let two = try #require(decode(MsJSON.self, #"{"kind":"changeThreshold","threshold":"2"}"#))
+        #expect(words.actionTitleNow(chainId: 100, action: one, nonce: "0") == "Require 1 approval")
+        #expect(words.actionTitleNow(chainId: 100, action: two, nonce: "0") == "Require 2 approvals")
+        #expect(words.t("proposal.rejectHint", count: 1, ["count": "1", "threshold": "1"]).contains("1 approval too"))
     }
 }
