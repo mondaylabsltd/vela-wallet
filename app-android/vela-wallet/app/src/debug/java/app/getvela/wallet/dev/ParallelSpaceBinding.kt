@@ -98,13 +98,15 @@ private class DebugParallelSpace(private val app: Application) : ParallelSpacePr
                 JSONObject()
                     .put("credential_id", key.credentialIdHex)
                     .put("public_key_hex", key.publicKeyHex)
-                    .put("name", if (index == 0) "Parallel space" else key.name)
+                    // r9-12: the core's fixture names (`dev_fixtures`), as the other
+                    // platforms' parallel spaces say them — never a name of Kotlin's.
+                    .put("name", key.name)
                     .put("transports", "internal"),
             )
         }
         val account = JSONObject()
             .put("id", pinned.credentialIdHex)
-            .put("name", "Parallel space")
+            .put("name", pinned.name)
             .put("address", address)
             .put("public_key_hex", pinned.publicKeyHex)
             .put("created_at_iso", Instant.now().toString())
