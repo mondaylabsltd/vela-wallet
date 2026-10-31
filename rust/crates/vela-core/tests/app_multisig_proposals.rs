@@ -1652,3 +1652,22 @@ fn the_members_anywhere_are_the_machine_s() {
     assert!(has(&after, B), "{after:?}");
     assert_eq!(after.len(), 4);
 }
+
+/// W9 (onchain run 2): a look that said the executor cannot pay is never what
+/// Execute stops on — funded since, it is looked at again and executes.
+#[test]
+fn an_executor_funded_after_its_look_executes() {
+    let (mut world, mut sut, account) = setup(&[0, 1]);
+    let hash = approved_twice(&mut world, &mut sut);
+    let a = fixture(0).address;
+    world.balances.insert((100, a.to_ascii_lowercase()), 0);
+    let look = preview_of(&mut sut, &mut world, &hash, &a);
+    assert_eq!(look["canPay"], false, "{look}");
+    // The world answers the look's cap after the look; no time passes for it.
+    world.now -= vela_core::app::multisig_proposals::PREVIEW_CAP_MS as f64;
+    world
+        .balances
+        .insert((100, a.to_ascii_lowercase()), 10_000_000_000_000_000_000);
+    execute_landed(&mut world, &mut sut, &account, &hash, &a);
+    assert_eq!(world.sent.len(), 1, "{:?}", sut.view().actions);
+}

@@ -3302,7 +3302,11 @@ async fn execute(
     let shown = lock(st)
         .preview_plans
         .get(&key)
-        .filter(|(at, p)| matches!(p, Preview::Priced { .. }) && looked - at < PREVIEW_FRESH_MS)
+        // Only a look that lets it run is signed from: one that says the executor
+        // cannot pay is asked again first — the funds may have arrived since.
+        .filter(|(at, p)| {
+            matches!(p, Preview::Priced { can_pay: true, .. }) && looked - at < PREVIEW_FRESH_MS
+        })
         .map(|(_, p)| p.clone());
     let preview = match shown {
         Some(p) => p,
