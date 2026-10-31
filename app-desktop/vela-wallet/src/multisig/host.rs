@@ -285,11 +285,6 @@ impl MultisigHost {
         }
     }
 
-    /// Hand the session machines a transport (the PeerConnect rooms).
-    pub fn set_rooms(&mut self, rooms: Arc<dyn Rooms>) {
-        self.rooms = rooms;
-    }
-
     fn boot(&mut self, cx: &mut Context<Self>) {
         let jobs = self.machines.start(facts_now(&[]));
         self.run(jobs, cx);

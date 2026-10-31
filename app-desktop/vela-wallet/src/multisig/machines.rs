@@ -519,6 +519,7 @@ impl Machines {
     }
 
     /// The multisig shown, if any (the accounts machine's active one).
+    #[cfg(all(test, feature = "dev-fixtures"))]
     #[must_use]
     pub fn active(&self) -> Option<&MultisigAccount> {
         let address = self.accounts_view.active.as_deref()?;

@@ -300,6 +300,8 @@ struct Sim {
 
 impl Sim {
     fn new(world: World) -> Self {
+        // One thread (see `Shared`): an `Arc` only because `Deps` asks one.
+        #[allow(clippy::arc_with_non_send_sync)]
         let world = Arc::new(Mutex::new(world));
         let shared = Arc::new(Shared(Arc::clone(&world)));
         Self {

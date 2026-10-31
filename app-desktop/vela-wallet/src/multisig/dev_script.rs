@@ -63,10 +63,12 @@ fn substitute(value: &Value, captured: &BTreeMap<String, Value>) -> Value {
     match value {
         Value::String(text) => {
             // A whole-string capture keeps its type (a number stays a number).
-            if let Some(name) = text.strip_prefix("${").and_then(|t| t.strip_suffix('}')) {
-                if let Some(v) = captured.get(name) {
-                    return v.clone();
-                }
+            if let Some(v) = text
+                .strip_prefix("${")
+                .and_then(|t| t.strip_suffix('}'))
+                .and_then(|name| captured.get(name))
+            {
+                return v.clone();
             }
             let mut out = text.clone();
             for (name, v) in captured {
@@ -269,7 +271,7 @@ async fn run_step(
     if step.get("page").is_some() {
         log_line(&format!("step {i} page {step}"));
         let ask = step.clone();
-        let _ = cx.update(|cx| {
+        cx.update(|cx| {
             cx.set_global(PageAsk(Some(ask)));
             cx.refresh_windows();
         });
@@ -331,11 +333,11 @@ async fn run_step(
     }
     if let Some(signs) = step.get("answer_risk").and_then(Value::as_bool) {
         log_line(&format!("step {i} answer_risk {signs}"));
-        let _ = cx.update(|cx| host.update(cx, |host, cx| host.answer_risk(signs, cx)));
+        cx.update(|cx| host.update(cx, |host, cx| host.answer_risk(signs, cx)));
         return true;
     }
     if let Some(name) = step.get("shot").and_then(Value::as_str) {
-        let _ = cx.update(|cx| cx.refresh_windows());
+        cx.update(|cx| cx.refresh_windows());
         cx.background_executor().timer(Duration::from_millis(700)).await;
         log_line(&format!("SHOT {name}"));
         cx.background_executor().timer(Duration::from_millis(1500)).await;
