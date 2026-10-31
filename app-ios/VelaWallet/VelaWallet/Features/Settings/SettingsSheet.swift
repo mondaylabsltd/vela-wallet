@@ -35,6 +35,9 @@ struct SettingsSheet: View {
     /// Taking ONE wallet off this device (2026-09-23), by its position in the
     /// session's own list.
     var onRemoveAccount: ((Int) -> Void)?
+    /// The switcher's multisig section (native multisig M1): every multisig
+    /// here, Create and Add. Absent: a fixture board.
+    var multisigSection: AnyView?
     /// SR2's field and its commit (058). Absent in the gallery, where the
     /// endpoint is a picture of one already typed.
     var rpcDraft: Binding<String>?
@@ -111,7 +114,8 @@ struct SettingsSheet: View {
                         onSelect: { address in onSelectAccount?(address) },
                         onCreate: onAccountCreate,
                         onSignIn: onAccountSignIn,
-                        onRemove: onRemoveAccount
+                        onRemove: onRemoveAccount,
+                        multisigSection: multisigSection
                     )
                 case .signOut:
                     ConfirmSheetBody(sheet: model.signOutSheet,
@@ -409,6 +413,8 @@ private struct AccountsSheetBody: View {
     /// The index is the position in the ORIGINAL list, which is what the core
     /// removes by — never the address, which two records can share.
     var onRemove: ((Int) -> Void)?
+    /// The multisigs here, under the Vela accounts.
+    var multisigSection: AnyView?
 
     /// The row a confirmation is open for.
     @State private var removing: Int?
@@ -464,6 +470,7 @@ private struct AccountsSheetBody: View {
             .buttonStyle(.plain)
             .disabled(onSelect == nil)
         }
+        if let multisigSection { multisigSection }
         // Both closures were EMPTY: 创建新账户 and 登录已有账户 drew, took the
         // tap, and did nothing (founder, 2026-09-16). They are the only two
         // ways on from this sheet, so an empty closure is the sheet's dead end.

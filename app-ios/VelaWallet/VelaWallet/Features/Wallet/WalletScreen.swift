@@ -71,6 +71,9 @@ struct WalletScreen: View {
     /// pull, without the gesture. Absent in the gallery, where the control is
     /// drawn and takes no tap.
     var onRefreshNow: (() -> Void)?
+    /// The multisig shown's own lines (native multisig): its rule, what
+    /// waits on it, its first steps. Absent for a Vela account.
+    var multisigCard: AnyView?
     @State private var sheetShown = false
     @State private var viewingIdenticon = false
 
@@ -89,6 +92,10 @@ struct WalletScreen: View {
                         onScan: onFlow.map { flow in { flow(.scan) } }
                     )
                     .padding(.top, Tokens.Space.s24)
+                    if let multisigCard {
+                        multisigCard
+                            .padding(.top, Tokens.Space.s16)
+                    }
                     section(model.activitySection, isActivity: true)
                         .padding(.top, Tokens.Space.s32)
                     section(model.assetsSection, isActivity: false)
@@ -311,8 +318,14 @@ private extension View {
 ///
 /// See `WalletScreen.onRefresh` for why this is a class and not the closure
 /// itself.
-@MainActor
-final class RefreshAction {
+///
+/// `nonisolated`: the box only holds a main-actor closure. A main-actor class
+/// has an ISOLATED deinit, and below iOS 18 that runs through the back-deploy
+/// shim (`swift_task_deinitOnExecutorMainActorBackDeploy`), which freed a
+/// task-local scope it never allocated when SwiftUI released the box during a
+/// render inside an awaiting test — the test host died with "pointer being
+/// freed was not allocated". A plain deinit has nothing to hop.
+nonisolated final class RefreshAction: @unchecked Sendable {
     let run: @MainActor () async -> Void
 
     init(_ run: @escaping @MainActor () async -> Void) {

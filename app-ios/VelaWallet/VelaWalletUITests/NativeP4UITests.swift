@@ -43,19 +43,20 @@ final class NativeP4UITests: XCTestCase {
         return app
     }
 
-    /// The proposal's sheet says, over its buttons, that multisig links open
-    /// in the web wallet for now — in the corpus's words.
-    func testTheLinkSheetSaysWhereMultisigOpens() throws {
+    /// A proposal's link opens the native flow (native multisig M2): the
+    /// accounts machine's link stand — this device has none of the
+    /// multisig's members, so the transaction is read only, or not found —
+    /// never "opens in the web wallet".
+    func testAProposalLinkOpensTheNativeFlow() throws {
         let app = launch(link: "https://wallet.getvela.app/en/wallet#ms=100.\(safe).\(txHash)")
-        let title = app.staticTexts["applink.title"]
-        XCTAssertTrue(title.waitForExistence(timeout: 90), "the link's sheet never opened")
-        let onWeb = app.staticTexts["applink.onWeb"]
-        XCTAssertTrue(onWeb.waitForExistence(timeout: 10), "the sheet does not say where multisig opens")
-        XCTAssertEqual(onWeb.label, w("Multisig links open in the web wallet for now.", "多签链接目前会在网页版钱包中打开。"))
-        XCTAssertTrue(app.buttons["applink.open"].exists)
-        // The line stands above the button that acts on it.
-        XCTAssertLessThan(onWeb.frame.maxY, app.buttons["applink.open"].frame.minY)
-        attach(app.screenshot(), named: "p4-link-onweb-\(lang)")
+        let native = app.descendants(matching: .any).matching(NSPredicate(
+            format: "identifier IN %@",
+            ["multisig.link.opening", "multisig.link.failed", "multisig.link.broken", "multisig.link.missingNetwork",
+             "multisig.proposal.opening", "multisig.proposal.notFound", "multisig.proposal.notInMailbox", "multisig.proposal.title"]
+        )).firstMatch
+        XCTAssertTrue(native.waitForExistence(timeout: 90), "the link's native sheet never opened")
+        XCTAssertFalse(app.staticTexts["applink.onWeb"].exists, "the sheet still sends multisig to the web wallet")
+        attach(app.screenshot(), named: "p4-link-native-\(lang)")
         app.terminate()
     }
 

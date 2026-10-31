@@ -52,6 +52,12 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 export const GEN = join(ROOT, 'app-web/vela-wallet/src/lib/core/generated');
+/**
+ * The multisig machines' wire (native multisig): `MultisigOperation` /
+ * `MultisigShellResult` live in their own generated folder
+ * (`node rust/scripts/gen-core-types.mjs multisig`), read beside the core's.
+ */
+export const MULTISIG_GEN = join(ROOT, 'app-web/vela-wallet/src/lib/multisig/generated');
 // `VELA_IOS_SRC`: measure another copy of the sources (a past commit's, for a
 // before/after report) against today's generated types.
 export const IOS = process.env.VELA_IOS_SRC || join(ROOT, 'app-ios/VelaWallet/VelaWallet');
@@ -103,6 +109,13 @@ export const MACHINES = {
 		passthrough: ['receipt_with_logs.logs']
 	},
 	Trust: ['Features/Wallet/TokenTrustExecutor.swift', 'Core/CustomTokens.swift'],
+	// The five multisig machines share ONE shell (docs/multisig-machines.md):
+	// the executor answers every operation, the live pipelines write the
+	// passkey's, the send's and the quote's results.
+	Multisig: [
+		'Features/Multisig/Shell/MultisigExecutor.swift',
+		'Features/Multisig/Shell/MultisigLive.swift'
+	],
 	// Not iOS machines: the extension's permission store, its dApp sessions
 	// (WalletPair / remote inject) and its attestation cache. iOS's dApps run
 	// in the in-app browser (`Dbr`).
@@ -446,10 +459,13 @@ export function strictFailures(rows) {
 
 function diskIO() {
 	return {
-		listGen: () => readdirSync(GEN),
+		listGen: () => [...readdirSync(GEN), ...(existsSync(MULTISIG_GEN) ? readdirSync(MULTISIG_GEN) : [])],
 		readGen: (name) => {
-			const p = join(GEN, name);
-			return existsSync(p) ? readFileSync(p, 'utf8') : null;
+			for (const dir of [GEN, MULTISIG_GEN]) {
+				const p = join(dir, name);
+				if (existsSync(p)) return readFileSync(p, 'utf8');
+			}
+			return null;
 		},
 		readSwift: (rel) => {
 			const p = join(IOS, rel);

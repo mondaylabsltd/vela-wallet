@@ -128,6 +128,7 @@ private let CALLS: [String: Place] = [
     "browser.revokeAll": .step("clear_storage_item"),
     "browser.setDebugMode": .none("a developer's switch (spec 091), hidden in a release build"),
     "browser.signingAnswered": .none(DAPP),
+    "browser.multisigAnswered": .none(DAPP),
     "browser.snapshot": .view("a tab's picture for the tab strip"),
     "browser.start": .machine(BOOT),
     "browser.startConnections": .machine(BOOT),

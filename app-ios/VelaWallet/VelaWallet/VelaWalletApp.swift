@@ -68,5 +68,10 @@ struct VelaWalletApp: App {
         .backgroundTask(.appRefresh(Self.trackerTask)) {
             await TrackerBackgroundBridge.run()
         }
+        // The multisig's poll (native multisig M6): every multisig here read
+        // as the screen reads it, and what changed for this device said.
+        .backgroundTask(.appRefresh(MultisigNotifier.task)) {
+            await MultisigBackgroundBridge.run()
+        }
     }
 }

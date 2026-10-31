@@ -105,6 +105,11 @@ final class SendExecutor {
         /// the nonce it signed — to the tracker, after the hand-off that
         /// named its records (`submit_facts`).
         var submitFacts: (_ userOpHash: String, _ nonce: String) -> Void = { _, _ in }
+        /// A multisig's confirm (native multisig M2): the reviewed transfers
+        /// proposed through the proposals machine — its review first, then
+        /// one passkey — answered `proposed` / `propose_failed`. Unwired, the
+        /// honest `propose_failed` (nothing signed, nothing sent).
+        var proposeSafeTx: @MainActor (_ operation: [String: Any]) async -> [String: Any]? = { _ in nil }
     }
 
     /// How long `fetch_tokens` waits for the asset list's first round before
@@ -351,12 +356,16 @@ final class SendExecutor {
             return await resolveRisk(operation)
 
         // A multisig's confirm (docs/multisig-vault-design.md): propose the
-        // reviewed transfers to the members. Multisig accounts are the web's
-        // alone until the orchestration is in the core (native parity F0.4),
-        // and no iOS account is one — so this is said as it is: not proposed,
-        // nothing signed, nothing sent. Never a pretend `proposed`.
+        // reviewed transfers to the members — the proposals machine's draft,
+        // its review, then one passkey (native multisig M2). A shell with no
+        // proposals machine says it as it is: not proposed, nothing signed.
         case "propose_safe_tx":
-            VelaLog.failure(.sign, kind: "propose_unsupported", "multisig proposals are not on iOS yet")
+            if let answer = await ports.proposeSafeTx(operation) {
+                // The web's two answers: `proposed { safe_tx_hash }`, or
+                // `propose_failed { cancelled, reason }`.
+                return CoreJSON.string(answer)
+            }
+            VelaLog.failure(.sign, kind: "propose_unsupported", "no multisig proposals machine")
             return Self.proposeFailed
 
         // No simulation engine on this base (055).

@@ -1128,7 +1128,9 @@ enum SendLive {
                 // A failure is no figure at all: its own (the dash, or "Tap to
                 // retry" only when a tap is the one way), kept through the
                 // core's re-ask — never "Estimating…" and back.
-                value: failure?.figure(loc)
+                // A multisig pays no fee of its own: the member who executes
+                // it does (the web's `multisig.feeNote`).
+                value: view.multisig != nil ? loc.t("home.multisig.proposal.feeNote") : failure?.figure(loc)
                     ?? (frozen ? view.fee ?? fee?.fee : view.fee ?? fee?.fee).map {
                         "~\(feeLine($0, view: view, fee: fee, display: display, networks: networks))"
                     }
@@ -1274,7 +1276,8 @@ enum SendLive {
             recipientCheck: recipientCheck(view, loc: loc),
             maxNote: maxMovedNote(view, loc: loc),
             passkeyNote: passkeyNote(view, loc: loc),
-            cta: live.cta,
+            // A multisig's confirm proposes (and approves, as a member here).
+            cta: view.multisig != nil ? loc.t("home.multisig.send.propose") : live.cta,
             heldNote: heldNote(view, fee: fee, loc: loc)
         )
     }

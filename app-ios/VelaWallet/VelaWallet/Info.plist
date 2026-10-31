@@ -185,6 +185,7 @@
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
 		<string>app.getvela.VelaWallet.tracker</string>
+		<string>app.getvela.VelaWallet.multisig</string>
 	</array>
 </dict>
 </plist>

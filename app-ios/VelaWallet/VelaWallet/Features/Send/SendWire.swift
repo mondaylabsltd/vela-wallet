@@ -576,8 +576,8 @@ struct SendViewWire: Decodable, Equatable {
     /// send-11: why the last passkey prompt signed nothing
     /// (`cancelled` / `timed_out`).
     var passkeyNote: String?
-    /// A multisig's rule, and what its confirm proposed. Always absent on
-    /// iOS today (multisig is the web's), decoded so it never breaks a view.
+    /// A multisig's rule, and what its confirm proposed (native multisig
+    /// M2): the transaction's own sheet takes over from `proposed`.
     var multisig: SendMultisigRefWire?
     var proposed: SendProposedWire?
     /// Which field the token picker is choosing for.
