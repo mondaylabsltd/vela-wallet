@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-+HMh1YmrQzOlPe50T4UqL3+ho0/PWeSucPs4Dn34t2Q='; style-src 'sha256-+NrH9/fqK08U9EhxZCSgXYzB0WgRnfRlljXqLondTgs='; img-src data:; font-src data:; base-uri 'none'; form-action 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-s9KaKfCaEh0mx7ONKX4Uo6EasyNJ6bbevk62aFIVqrI='; style-src 'sha256-+NrH9/fqK08U9EhxZCSgXYzB0WgRnfRlljXqLondTgs='; img-src data:; font-src data:; base-uri 'none'; form-action 'none'" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Vela</title>
     <style>
@@ -9981,6 +9981,11 @@ window.VelaCS = window.VelaCS || {};
     if (ctx.channel === 'ws' || ctx.channel === 'relay' || ctx.channel === 'ble') return true;
     if (ctx.channel === 'url') return ns.resolve.answersToWallet(ctx);
     if (ctx.originVerified !== true || typeof ctx.requester !== 'string') return false;
+    // The Safari extension, by the same evidence a signature needs
+    // (`isSafariExtension`). On Safari an extension page can run no passkey
+    // ceremony of its own (WebKit refuses WebAuthn there), so this page is
+    // where the Safari wallet creates, signs in and proves.
+    if (isSafariExtension(ctx.requester, ctx.attestedExtensions)) return true;
     var host = hostOf(ctx.requester);
     if (LOOPBACK_HOST.test(host)) return true;
     return schemeOf(ctx.requester) === 'https:' && (host === 'getvela.app' || /\.getvela\.app$/.test(host));
@@ -10019,13 +10024,62 @@ window.VelaCS = window.VelaCS || {};
     if (!ctx) return false;
     if (ctx.channel === 'url') return ctx.callback === WALLET_CALLBACK;
     return ctx.channel === 'post' && ctx.originVerified === true &&
-      SIGNED_THERE.indexOf(ctx.method) >= 0 && walletOpener(ctx.requester);
+      SIGNED_THERE.indexOf(ctx.method) >= 0 &&
+      walletOpener(ctx.requester, ctx.attestedExtensions);
   }
 
-  /** The opener the browser reports is one of Vela's own wallets. */
-  function walletOpener(origin) {
-    return isWebWallet(origin) || isExtension(origin);
+  /**
+   * The opener the browser reports is one of Vela's own wallets. `attested`
+   * is what `lib/intake.js` heard in THIS window (`isSafariExtension`) — a
+   * channel fact, never the requester's context.
+   */
+  function walletOpener(origin, attested) {
+    return isWebWallet(origin) || isExtension(origin) || isSafariExtension(origin, attested);
   }
+
+  /**
+   * Vela's Safari extension (native AUDIT §6.5), by the origin the BROWSER
+   * reports for the opener AND the extension's own word, said inside this
+   * page.
+   *
+   * The opener is either the window that opened this page (`event.origin`),
+   * or — iOS Safari gives a page an extension opened NO opener (measured) —
+   * the extension speaking through its content script in this window
+   * (lib/intake.js `relayPeer`), whose origin is the one it attested.
+   *
+   * Safari names an extension's pages `safari-web-extension://<UUID>` with a
+   * UUID it makes up per install and again at every Safari launch (WebKit's
+   * fingerprinting defence; measured on iOS, extension/README.md § Safari) —
+   * so there is no fixed origin to list the way the Chrome id is listed.
+   * What can be checked is this: Vela's extension runs a content script on
+   * this page (`safari-attest.js`, on the official page only), which posts
+   * the extension's own current origin into THIS window
+   * (`{vela:'extension', origin}`). Only code running in this window can post
+   * a message whose source is this window: this page's own hashed scripts, or
+   * a content script of an extension the person let run on this page. The
+   * opener is answered when the browser's `event.origin` for it is exactly
+   * one of the origins so attested.
+   *
+   * What it admits, and why that is no wider than before: a site cannot
+   * attest (it is not in this window), nor can an extension that has no
+   * access to this page. An extension that HAS access to this page could
+   * attest itself — and it could equally rewrite this card or press its
+   * button; no rule a page makes holds against code the browser runs inside
+   * it. Several attestations are several candidates; the opener must still be
+   * exactly one of them. Chrome's and the web wallet's origins stay exact and
+   * unattested (`isExtension`, `isWebWallet`).
+   */
+  function isSafariExtension(origin, attested) {
+    // Compared in lower case: Safari reports the origin with a lower-case
+    // UUID and `runtime.getURL` spells it in upper case (measured).
+    return typeof origin === 'string' && SAFARI_EXTENSION.test(origin) &&
+      Array.isArray(attested) && attested.some(function (a) {
+        return typeof a === 'string' && a.toLowerCase() === origin.toLowerCase();
+      });
+  }
+
+  /** A Safari extension page's origin: the scheme and a UUID, nothing after. */
+  var SAFARI_EXTENSION = /^safari-web-extension:\/\/[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/;
 
   /**
    * The web wallet, by the origin the BROWSER reports for the window that
@@ -10082,7 +10136,7 @@ window.VelaCS = window.VelaCS || {};
    * word is drawn as a claim (`warn.claimedOrigin`).
    */
   function relayedSite(requested, ctx) {
-    if (ctx.channel !== 'post' || ctx.originVerified !== true || !walletOpener(ctx.requester)) return false;
+    if (ctx.channel !== 'post' || ctx.originVerified !== true || !walletOpener(ctx.requester, ctx.attestedExtensions)) return false;
     var origin = requested && typeof requested.origin === 'string' ? requested.origin : '';
     if (!origin) return false;
     var parsed = null;
@@ -11025,6 +11079,7 @@ window.VelaCS = window.VelaCS || {};
   ns.resolve.keyRoute = keyRoute;
   ns.resolve.answersToWallet = answersToWallet;
   ns.resolve.EXTENSIONS = EXTENSIONS.slice();
+  ns.resolve.isSafariExtension = isSafariExtension;
   // The waiting card draws the same mark as the request card.
   ns.resolve.toneFor = toneFor;
   ns.format = { units: formatUnits, date: formatDate, short: shortAddress, group: group, amountPhrase: amountPhrase };
@@ -13894,22 +13949,101 @@ window.VelaCS = window.VelaCS || {};
 
   // --- 1. same browser: opened by the wallet or a dApp, answered to the opener -
 
+  /**
+   * What extensions running in THIS window say about themselves: Vela's Safari
+   * extension posts its own current origin here (`{vela:'extension', origin}`,
+   * its `safari-attest.js`), because Safari makes that origin up anew and no
+   * list can name it (`resolve.isSafariExtension`). Heard only from this very
+   * window — `event.source === window`, this page's origin — which no site and
+   * no other window can be. A channel fact: the requester's context cannot
+   * write it (sign.js `show`). The page asks once (`extension?`) in case the
+   * content script spoke before this listener existed, and the opener is told
+   * `ready` only after that question has gone round — so an attestation is in
+   * before the first intent can be.
+   */
+  var SAFARI_ORIGIN = /^safari-web-extension:\/\/[0-9A-Fa-f-]{36}$/;
+  function hearAttestations(attested, done) {
+    var marker = 'vela-attest-' + Math.random().toString(36).slice(2);
+    var finished = false;
+    function finish() { if (!finished) { finished = true; done(); } }
+    window.addEventListener('message', function (event) {
+      if (event.source !== window || event.origin !== location.origin) return;
+      var data = event.data;
+      if (!data || typeof data !== 'object') return;
+      if (data.vela === 'extension' && typeof data.origin === 'string' &&
+          SAFARI_ORIGIN.test(data.origin) && attested.indexOf(data.origin.toLowerCase()) < 0) {
+        attested.push(data.origin.toLowerCase());
+      } else if (data.vela === 'extension?') {
+        // Every extension's listener came before this page's: their answers
+        // are queued ahead of the marker posted now.
+        window.postMessage({ vela: marker }, location.origin);
+      } else if (data.vela === marker) {
+        finish();
+      }
+    });
+    window.postMessage({ vela: 'extension?' }, location.origin);
+    setTimeout(finish, 500);
+  }
+
+  /**
+   * The relay (native AUDIT §6.5, measured on iOS Safari 26): a page Safari
+   * opens for an extension page has NO `window.opener`, so there is no window
+   * to answer. Vela's Safari extension then speaks to this page through its
+   * content script in this very window (`safari-attest.js`): the extension's
+   * messages arrive as `{relay:'to-page', from:<its origin>, …}` posted into
+   * this window, and this page answers into this window
+   * (`{relay:'to-extension', …}`), where only that content script listens.
+   * Heard only with `event.source === window` — no site, no other window.
+   * The requester is the extension origin the message names, and it must be
+   * one this window ATTESTED (`hearAttestations`): the answer rule is the
+   * opener rule's (`resolve.isSafariExtension`). Only for `?ch=post` (the
+   * wallet's hand-off URL, vela-core `CheckedPage::post_launch`) — a page
+   * opened any other way keeps its old ways.
+   */
+  function relayPeer(attested) {
+    return {
+      relay: true,
+      source: window,
+      origin: null, // the extension's, from its first message
+      accepts: function (event) {
+        var data = event.data;
+        return event.source === window && event.origin === location.origin && !!data &&
+          data.relay === 'to-page' && typeof data.from === 'string' &&
+          attested.indexOf(data.from.toLowerCase()) >= 0 &&
+          (this.origin === null || this.origin === data.from.toLowerCase());
+      },
+      send: function (message) {
+        window.postMessage(Object.assign({}, message, { relay: 'to-extension' }), location.origin);
+      },
+    };
+  }
+
   function fromPostMessage(options) {
-    if (!window.opener) return null;
+    var relayed = !window.opener && params().get('ch') === 'post';
+    if (!window.opener && !relayed) return null;
     var session = new Session('post', true, options);
     var opener = window.opener;
     var peer = null; // { source, origin }, pinned by the first intent
+    var attested = [];
+    var relay = relayed ? relayPeer(attested) : null;
 
     function post(message) {
+      if (relay) { relay.send(message); return; }
       try { peer.source.postMessage(message, peer.origin); } catch (e) { /* the opener is gone */ }
     }
 
     function onMessage(event) {
       var data = event.data;
       if (!data || typeof data !== 'object' || session.ended) return;
-      // Whoever sent the first intent is the only one heard from then on —
-      // and the first must come from the window that opened this page.
-      if (peer ? event.source !== peer.source || event.origin !== peer.origin : event.source !== opener) return;
+      if (relay) {
+        if (!relay.accepts(event)) return;
+        event = { source: window, origin: data.from.toLowerCase(), data: data };
+        relay.origin = event.origin;
+      } else if (peer ? event.source !== peer.source || event.origin !== peer.origin : event.source !== opener) {
+        // Whoever sent the first intent is the only one heard from then on —
+        // and the first must come from the window that opened this page.
+        return;
+      }
       if (data.vela === 'bye') {
         // 'withdrawn': the wallet gave up on the request on screen (it ran
         // out of time, was cancelled, or would not take the answer) — the
@@ -13932,6 +14066,7 @@ window.VelaCS = window.VelaCS || {};
         // pair where "who is asking" is a fact rather than a claim.
         originVerified: true,
         requester: event.origin,
+        attestedExtensions: attested.slice(),
       }, function (kind, body) {
         // The same rule as the card's, where the bytes leave (spec 102 R7):
         // an answer goes to the opener only when the answer rule says the
@@ -13943,6 +14078,7 @@ window.VelaCS = window.VelaCS || {};
         var ceremony = !!(ns.ceremony && ns.ceremony.kindOf(method));
         var toWallet = ceremony || (ns.resolve && ns.resolve.answersToWallet({
           channel: 'post', originVerified: true, requester: peer.origin, method: method,
+          attestedExtensions: attested.slice(),
         }));
         if (kind === 'result' && !toWallet) {
           post({ vela: 'error', id: id, code: 'refused' });
@@ -13958,7 +14094,7 @@ window.VelaCS = window.VelaCS || {};
     }, 30000);
     // A closed opener is a finished session: nobody is left to answer.
     var watch = setInterval(function () {
-      var target = peer ? peer.source : opener;
+      var target = relay ? window : peer ? peer.source : opener;
       var gone = true;
       try { gone = !target || target.closed; } catch (e) { gone = true; }
       if (gone || session.ended) {
@@ -13969,8 +14105,17 @@ window.VelaCS = window.VelaCS || {};
     session.close = function (reason) {
       if (peer) post({ vela: 'bye', v: 1, reason: reason || 'done' });
     };
-    // Tell the opener we are ready. It cannot know when our scripts finished.
-    opener.postMessage({ vela: 'ready', v: 1 }, '*');
+    // Tell the opener we are ready. It cannot know when our scripts finished —
+    // and not before an extension in this window has had its say.
+    hearAttestations(attested, function () {
+      if (relay) {
+        // No opener and no extension in this window: nobody can ask.
+        if (!attested.length) { session.finish('error', 'ui.openerSilent'); return; }
+        relay.send({ vela: 'ready', v: 1 });
+        return;
+      }
+      try { opener.postMessage({ vela: 'ready', v: 1 }, '*'); } catch (e) { /* the opener is gone */ }
+    });
     return Promise.resolve(session);
   }
 
@@ -14622,6 +14767,9 @@ window.VelaCS = window.VelaCS || {};
       originVerified: request.originVerified,
       channel: request.channel,
       requester: request.requester,
+      // Extensions that vouched for themselves inside this window
+      // (lib/intake.js `hearAttestations`) — the channel's, never the context's.
+      attestedExtensions: Array.isArray(request.attestedExtensions) ? request.attestedExtensions : [],
       // The requester's own name for itself, where the channel carried one
       // (the handshake's hello). A CLAIM, and drawn as one: this page is a
       // signer anything can connect to, so painting Vela's mark on whatever

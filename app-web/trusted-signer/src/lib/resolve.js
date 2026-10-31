@@ -1481,6 +1481,11 @@ window.VelaCS = window.VelaCS || {};
     if (ctx.channel === 'ws' || ctx.channel === 'relay' || ctx.channel === 'ble') return true;
     if (ctx.channel === 'url') return ns.resolve.answersToWallet(ctx);
     if (ctx.originVerified !== true || typeof ctx.requester !== 'string') return false;
+    // The Safari extension, by the same evidence a signature needs
+    // (`isSafariExtension`). On Safari an extension page can run no passkey
+    // ceremony of its own (WebKit refuses WebAuthn there), so this page is
+    // where the Safari wallet creates, signs in and proves.
+    if (isSafariExtension(ctx.requester, ctx.attestedExtensions)) return true;
     var host = hostOf(ctx.requester);
     if (LOOPBACK_HOST.test(host)) return true;
     return schemeOf(ctx.requester) === 'https:' && (host === 'getvela.app' || /\.getvela\.app$/.test(host));
@@ -1519,13 +1524,62 @@ window.VelaCS = window.VelaCS || {};
     if (!ctx) return false;
     if (ctx.channel === 'url') return ctx.callback === WALLET_CALLBACK;
     return ctx.channel === 'post' && ctx.originVerified === true &&
-      SIGNED_THERE.indexOf(ctx.method) >= 0 && walletOpener(ctx.requester);
+      SIGNED_THERE.indexOf(ctx.method) >= 0 &&
+      walletOpener(ctx.requester, ctx.attestedExtensions);
   }
 
-  /** The opener the browser reports is one of Vela's own wallets. */
-  function walletOpener(origin) {
-    return isWebWallet(origin) || isExtension(origin);
+  /**
+   * The opener the browser reports is one of Vela's own wallets. `attested`
+   * is what `lib/intake.js` heard in THIS window (`isSafariExtension`) — a
+   * channel fact, never the requester's context.
+   */
+  function walletOpener(origin, attested) {
+    return isWebWallet(origin) || isExtension(origin) || isSafariExtension(origin, attested);
   }
+
+  /**
+   * Vela's Safari extension (native AUDIT §6.5), by the origin the BROWSER
+   * reports for the opener AND the extension's own word, said inside this
+   * page.
+   *
+   * The opener is either the window that opened this page (`event.origin`),
+   * or — iOS Safari gives a page an extension opened NO opener (measured) —
+   * the extension speaking through its content script in this window
+   * (lib/intake.js `relayPeer`), whose origin is the one it attested.
+   *
+   * Safari names an extension's pages `safari-web-extension://<UUID>` with a
+   * UUID it makes up per install and again at every Safari launch (WebKit's
+   * fingerprinting defence; measured on iOS, extension/README.md § Safari) —
+   * so there is no fixed origin to list the way the Chrome id is listed.
+   * What can be checked is this: Vela's extension runs a content script on
+   * this page (`safari-attest.js`, on the official page only), which posts
+   * the extension's own current origin into THIS window
+   * (`{vela:'extension', origin}`). Only code running in this window can post
+   * a message whose source is this window: this page's own hashed scripts, or
+   * a content script of an extension the person let run on this page. The
+   * opener is answered when the browser's `event.origin` for it is exactly
+   * one of the origins so attested.
+   *
+   * What it admits, and why that is no wider than before: a site cannot
+   * attest (it is not in this window), nor can an extension that has no
+   * access to this page. An extension that HAS access to this page could
+   * attest itself — and it could equally rewrite this card or press its
+   * button; no rule a page makes holds against code the browser runs inside
+   * it. Several attestations are several candidates; the opener must still be
+   * exactly one of them. Chrome's and the web wallet's origins stay exact and
+   * unattested (`isExtension`, `isWebWallet`).
+   */
+  function isSafariExtension(origin, attested) {
+    // Compared in lower case: Safari reports the origin with a lower-case
+    // UUID and `runtime.getURL` spells it in upper case (measured).
+    return typeof origin === 'string' && SAFARI_EXTENSION.test(origin) &&
+      Array.isArray(attested) && attested.some(function (a) {
+        return typeof a === 'string' && a.toLowerCase() === origin.toLowerCase();
+      });
+  }
+
+  /** A Safari extension page's origin: the scheme and a UUID, nothing after. */
+  var SAFARI_EXTENSION = /^safari-web-extension:\/\/[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/;
 
   /**
    * The web wallet, by the origin the BROWSER reports for the window that
@@ -1582,7 +1636,7 @@ window.VelaCS = window.VelaCS || {};
    * word is drawn as a claim (`warn.claimedOrigin`).
    */
   function relayedSite(requested, ctx) {
-    if (ctx.channel !== 'post' || ctx.originVerified !== true || !walletOpener(ctx.requester)) return false;
+    if (ctx.channel !== 'post' || ctx.originVerified !== true || !walletOpener(ctx.requester, ctx.attestedExtensions)) return false;
     var origin = requested && typeof requested.origin === 'string' ? requested.origin : '';
     if (!origin) return false;
     var parsed = null;
@@ -2525,6 +2579,7 @@ window.VelaCS = window.VelaCS || {};
   ns.resolve.keyRoute = keyRoute;
   ns.resolve.answersToWallet = answersToWallet;
   ns.resolve.EXTENSIONS = EXTENSIONS.slice();
+  ns.resolve.isSafariExtension = isSafariExtension;
   // The waiting card draws the same mark as the request card.
   ns.resolve.toneFor = toneFor;
   ns.format = { units: formatUnits, date: formatDate, short: shortAddress, group: group, amountPhrase: amountPhrase };
