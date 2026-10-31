@@ -223,16 +223,6 @@ class MsProposalModel(
     }
 }
 
-/** The home's waiting line ("1 needs your approval · 1 ready"), or `null` when nothing waits. */
-fun waitingLine(words: MultisigWords, waiting: MsWaiting?): String? {
-    waiting ?: return null
-    val parts = mutableListOf<String>()
-    if (waiting.needsYou > 0) parts += words.plural("presence.needsYou", waiting.needsYou)
-    if (waiting.ready > 0) parts += words.plural("presence.ready", waiting.ready)
-    if (waiting.waitingPayer > 0) parts += words.plural("presence.waitingPayer", waiting.waitingPayer)
-    return parts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
-}
-
 /**
  * The group's one note (`waiting_note`), and whether Retry goes with it —
  * the core says which; this only words it. [time] words a moment (ms).

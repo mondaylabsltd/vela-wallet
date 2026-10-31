@@ -120,6 +120,9 @@ object MsRules {
     fun lastUsedNetworks(accounts: List<Map<String, Any?>>): JsonElement? =
         call("networks.lastUsed", mapOf("accounts" to accounts))
 
+    /** core-ms-2: the core's catalog name for [chainId] (`null`: the catalog does not know it). */
+    fun networkName(chainId: Int): String? = call("networks.name", mapOf("chainId" to chainId)).str
+
     // -- the kernel -----------------------------------------------------------
 
     fun validName(name: String): Boolean = kernel("validName", mapOf("name" to name)).bool ?: false

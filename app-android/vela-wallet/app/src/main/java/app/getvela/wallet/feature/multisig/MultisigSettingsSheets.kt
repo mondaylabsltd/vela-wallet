@@ -120,7 +120,8 @@ fun MultisigSettingsSheet(
                     }
                 }
                 "undeployed" -> MsNote(words.t("settings.undeployedOn", "network" to words.network(chainId)), tag = "multisig.settings.undeployed")
-                "unreadable" -> MsNote(words.t("proposal.cantCheck", "network" to words.network(chainId)), tone = MsTone.Warning)
+                // core-ms-2: a chain that did not answer — nothing claimed of its members.
+                "unreadable" -> MsNote(words.t("settings.unreadableOn", "network" to words.network(chainId)), tone = MsTone.Warning, tag = "multisig.settings.unreadable")
                 else -> Unit
             }
         }

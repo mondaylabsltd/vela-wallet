@@ -86,6 +86,28 @@ class MultisigWords(
 
     fun symbol(chainId: Int): String = nativeSymbol(chainId) ?: "ETH"
 
+    /**
+     * A network this device lacks, titled: the name given, else the core's
+     * catalog's (`networks.name`), else the device's own index — else its id alone.
+     */
+    fun missingTitle(chainId: Int, name: String? = null): String {
+        val named = name ?: MsRules.networkName(chainId) ?: networkName(chainId)
+        return if (named != null) t("proposal.missingNetworkNamed", "name" to named, "chainId" to "$chainId")
+        else t("proposal.missingNetwork", "chainId" to "$chainId")
+    }
+
+    /** The header's rule chip as the machine says it (`MultisigRuleChip`). */
+    fun ruleChip(chip: kotlinx.serialization.json.JsonElement?): String? = when (chip.kind) {
+        "needs" -> chip["rule"].let { r -> if (r["solo"].bool == true) t("panel.chipSolo") else t("panel.chip", "m" to (r["m"].str ?: ""), "n" to (r["n"].str ?: "")) }
+        "differs" -> t("presence.ruleDiffers")
+        else -> null
+    }
+
+    /** The waiting line as the machine parts it (`MultisigWaitingPart[]`): "1 needs your approval · 1 ready to execute". */
+    fun waitingParts(parts: List<kotlinx.serialization.json.JsonElement>): String? =
+        parts.mapNotNull { p -> p["kind"].str?.let { plural("presence.$it", p["count"].int ?: 0) } }
+            .takeIf { it.isNotEmpty() }?.joinToString(" · ")
+
     // -- a transaction's one line ------------------------------------------------
 
     /**

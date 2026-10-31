@@ -21,6 +21,12 @@ import app.getvela.wallet.feature.multisig.core.jo
 import app.getvela.wallet.feature.multisig.core.MultisigLive
 import app.getvela.wallet.feature.multisig.core.str
 import app.getvela.wallet.feature.multisig.core.get
+import app.getvela.wallet.feature.multisig.core.MultisigSheet
+import app.getvela.wallet.feature.multisig.core.bool
+import app.getvela.wallet.feature.multisig.core.int
+import app.getvela.wallet.feature.multisig.core.jsonOf
+import app.getvela.wallet.feature.multisig.core.kind
+import app.getvela.wallet.feature.multisig.core.long
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -304,6 +310,72 @@ class MultisigShellTest {
         hub.openLink("#ms=not-a-link")
         val stand = withTimeout(10_000) { hub.accounts.until { v -> v["link"]?.let { it["kind"].str } } }
         assertEquals("broken", stand)
+    }
+
+    @Test
+    fun the_create_sheets_threshold_is_the_machines_and_steps_on_its_word() = runBlocking {
+        val ports = FakePorts()
+        val hub = hub(ports)
+        withTimeout(20_000) { hub.boot() }
+        val owners = listOf(
+            "0xD400866e00B055B20752a826CD5C89b811de130b",
+            "0x031d7D57c99CAF891e1C250554691Fd12D84772b",
+            "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
+        )
+        hub.send(ev("new_draft"))
+        // core-ms-2: the sensible start for three members is all but one.
+        val start = withTimeout(10_000) {
+            hub.accounts.request(ev("draft", "owners" to owners, "threshold" to 1, "name" to "Team")) { v -> v["create"]["threshold"]?.takeIf { it["members"].int == 3 } }
+        }
+        assertEquals(2, start["value"].int)
+        assertEquals("spare", start["note"].kind)
+        assertEquals(true, start["can_raise"].bool)
+        val raised = withTimeout(10_000) {
+            hub.accounts.request(ev("step_threshold", "up" to true)) { v -> v["create"]["threshold"]?.takeIf { it["value"].int == 3 } }
+        }
+        assertEquals("all", raised["note"].kind)
+        assertEquals(true, raised["risky"].bool)
+        assertEquals(false, raised["can_raise"].bool)
+        // The typed view reads it as the sheet does.
+        withTimeout(10_000) { while (hub.accountsView.value.create.threshold["value"].int != 3) delay(20) }
+        assertEquals(emptyList<Int>(), hub.accountsView.value.recentNetworks)
+    }
+
+    @Test
+    fun a_sites_message_to_a_multisig_is_refused_by_the_machine_and_answered_once() = runBlocking {
+        val ports = FakePorts()
+        val safe = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
+        ports.store["vela.multisigAccounts"] = """[{"address":"$safe","owners":["0xD400866e00B055B20752a826CD5C89b811de130b","0x031d7D57c99CAF891e1C250554691Fd12D84772b"],"threshold":2,"chainIds":[100],"recorded":true,"addedMs":1,"genesis":{"factory":"0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67","singleton":"0x41675C099F32341bf84BFc5382aF534df5C7461a","saltNonce":"0x1","initializer":"0x","name":"Treasury"}}]"""
+        val hub = hub(ports)
+        withTimeout(20_000) { hub.boot() }
+        assertTrue(hub.isMultisig(safe.lowercase()))
+        val answers = java.util.concurrent.CopyOnWriteArrayList<JsonElement>()
+        hub.dappRequest("tab-1:7", safe, "personal_sign", jsonOf(listOf("0x68656c6c6f", safe)), "https://app.example", 100) { answers += it }
+        assertEquals(MultisigSheet.Dapp("tab-1:7"), hub.sheet.value)
+        // dapp-7: a multisig signs no message — the machine's refusal, held for the person to read.
+        withTimeout(10_000) { while (hub.proposalsView.value.dapp["tab-1:7"]["stage"].str != "refused") delay(20) }
+        hub.dappLeave("tab-1:7")
+        withTimeout(10_000) { while (answers.isEmpty()) delay(20) }
+        delay(200)
+        assertEquals(1, answers.size)
+        val error = answers.single()["error"]
+        assertTrue("an error the site reads: $error", (error["code"].long ?: 0) != 0L && error["message"].str != null)
+        // A request for an account that is not a multisig here is never held.
+        val other = java.util.concurrent.CopyOnWriteArrayList<JsonElement>()
+        hub.dappRequest("tab-1:8", "0x0000000000000000000000000000000000000001", "eth_sendTransaction", jsonOf(emptyList<Any>()), "https://app.example", 100) { other += it }
+        assertEquals(4100L, other.single()["error"]["code"].long)
+    }
+
+    @Test
+    fun a_batch_status_is_the_machines_body_and_is_then_let_go() = runBlocking {
+        val ports = FakePorts()
+        val hub = hub(ports)
+        withTimeout(20_000) { hub.boot() }
+        // A batch nobody here proposed: the machine says so as a JSON-RPC body.
+        val body = withTimeout(20_000) { hub.callsStatus(100, "0x" + "cd".repeat(32)) }
+        assertTrue("a JSON-RPC body: $body", body?.get("result") != null || body?.get("error") != null)
+        // Taken: not kept in the view.
+        withTimeout(10_000) { while (hub.proposalsView.value.callsStatus.isNotEmpty()) delay(20) }
     }
 
     @Test

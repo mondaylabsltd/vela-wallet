@@ -30,10 +30,12 @@ import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.feature.multisig.core.MsAccountRow
 import app.getvela.wallet.feature.multisig.core.MultisigHub
 import app.getvela.wallet.feature.multisig.core.MultisigSheet
+import app.getvela.wallet.feature.multisig.core.arr
 import app.getvela.wallet.feature.multisig.core.ev
 import app.getvela.wallet.feature.multisig.core.get
 import app.getvela.wallet.feature.multisig.core.int
 import app.getvela.wallet.feature.multisig.core.kind
+import app.getvela.wallet.feature.multisig.core.str
 import app.getvela.wallet.feature.wallet.components.IdenticonAvatar
 
 /**
@@ -67,10 +69,8 @@ fun MultisigHomeCard(
     Column(modifier.fillMaxWidth().padding(vertical = VelaSpacing.lg).testTag("multisig.home"), verticalArrangement = Arrangement.spacedBy(VelaSpacing.lg)) {
         // Header: the rule in force (each network's, read from the chain).
         Row(horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
-            val rules = if (following && view.chains.isNotEmpty()) {
-                view.chains.map { c -> c.members?.takeIf { it.deployed }?.let { it.threshold to it.owners.size } ?: (account.threshold to account.owners.size) }.distinct()
-            } else listOf(account.threshold to account.owners.size)
-            val chip = if (rules.size > 1) words.t("presence.ruleDiffers") else rules.first().let { words.ruleChip(it.first, it.second) }
+            // The machine's `rule_chip` for the one it follows; the record's rule before.
+            val chip = (if (following) words.ruleChip(view.ruleChip) else null) ?: words.ruleChip(account.threshold, account.owners.size)
             MsChip(chip, Modifier.testTag("multisig.home.rule"))
             if (!row.shared) MsChip(words.t("switcher.notShared"), tone = MsTone.Warning)
             if (row.highRiskOn.isNotEmpty()) MsChip(words.t("authority.riskFlag"), tone = MsTone.Danger)
@@ -88,13 +88,13 @@ fun MultisigHomeCard(
             tag = "multisig.home.settings",
         ) { onOpen(MultisigSheet.Settings(account.address)) }
 
-        // What waits for this device.
-        val waiting = view.presence[account.address.lowercase()]
-        waitingLine(words, waiting)?.let { line ->
+        // What waits for this device: the machine's `banner` (its parts and the one it opens).
+        val banner = if (following) view.banner else null
+        banner?.let { words.waitingParts(it["parts"].arr) }?.let { line ->
             Row(
                 Modifier.fillMaxWidth().clickable(role = Role.Button) {
-                    val chain = waiting?.firstChainId
-                    val hash = waiting?.firstHash
+                    val chain = banner["first"]["chain_id"].int
+                    val hash = banner["first"]["safe_tx_hash"].str
                     if (chain != null && hash != null) onOpen(MultisigSheet.Proposal(chain, hash))
                 }.padding(vertical = VelaSpacing.sm).testTag("multisig.home.waiting"),
                 verticalAlignment = Alignment.CenterVertically,
@@ -141,14 +141,14 @@ fun MultisigHomeCard(
         for (missing in view.missing) {
             val chainId = missing["chainId"].int ?: 0
             MsNote(
-                "${words.t("proposal.missingNetwork", "chainId" to chainId.toString())} · ${words.t("proposal.missingCount", "n" to (missing["count"].int ?: 0).toString())}",
+                "${words.missingTitle(chainId)} · ${words.t("proposal.missingCount", "n" to (missing["count"].int ?: 0).toString())}",
                 tone = MsTone.Warning,
                 tag = "multisig.home.missingNetwork",
             )
         }
 
         // First steps, until dismissed or set up.
-        val setUp = following && view.chains.any { it.members?.deployed == true }
+        val setUp = following && view.setUp
         if (account.firstRun == true && !setUp) {
             Column(
                 Modifier.fillMaxWidth().background(colors.bgSunken, RoundedCornerShape(VelaRadius.xl)).padding(VelaSpacing.xl),
@@ -209,8 +209,10 @@ fun MultisigSwitcherSection(
         MsText(words.t("switcher.section"), MsType.Label, Modifier.padding(top = VelaSpacing.xl).semantics { heading() }, color = colors.fgSubtle)
         for (row in accounts.accounts) {
             val selected = accounts.active.equals(row.account.address, ignoreCase = true)
-            val waiting = proposals.presence[row.account.address.lowercase()]
-            val count = (waiting?.needsYou ?: 0) + (waiting?.ready ?: 0)
+            // The machine's `waiting_parts`: what waits here, in its words.
+            val parts = proposals.waitingPartsOf(row.account.address)
+            val count = parts.filter { it["kind"].str != "waitingPayer" }.sumOf { it["count"].int ?: 0 }
+            val waitingWords = words.waitingParts(parts)
             val tags = buildList {
                 add(words.ruleChip(row.account.threshold, row.account.owners.size))
                 if (row.localMembers.isEmpty()) add(words.t("switcher.readOnly"))
@@ -231,7 +233,7 @@ fun MultisigSwitcherSection(
                 if (count > 0) {
                     Box(
                         Modifier.background(colors.fgBase, RoundedCornerShape(VelaRadius.full)).padding(horizontal = VelaSpacing.md, vertical = VelaSpacing.xs)
-                            .semantics { contentDescription = words.plural("presence.needsYou", count) },
+                            .semantics { contentDescription = waitingWords.orEmpty() },
                     ) { MsText(count.toString(), MsType.Label, color = colors.fgInverse) }
                 }
                 if (selected) Icon(VelaIcons.Check, null, tint = colors.fgBase, modifier = Modifier.size(VelaIconSize.lg))

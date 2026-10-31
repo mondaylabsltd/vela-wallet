@@ -41,6 +41,7 @@ import app.getvela.wallet.feature.multisig.core.kind
 import app.getvela.wallet.feature.wallet.components.IdenticonAvatar
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 
 /**
@@ -99,8 +100,11 @@ fun MultisigProposalSheet(
     // asks every few seconds (docs/multisig-machines.md §1.4).
     LaunchedEffect(chainId, safeTxHash, item?.status) {
         while (true) {
+            // Each executor's look, before any tap — a ready one's, and one a
+            // member's approval would complete (the machine's `approve_execute`
+            // reads that look).
             val current = hub.proposalsView.value.item(chainId, safeTxHash)
-            if (current?.status == "ready") {
+            if (current != null && current.status != "done" && current.canExecute.isNotEmpty()) {
                 for (e in current.canExecute) {
                     hub.sendProposal(ev("preview", "chain_id" to chainId, "safe_tx_hash" to current.safeTxHash, "executor" to e))
                 }
@@ -188,16 +192,40 @@ fun MultisigProposalSheet(
                 if (model.canApprove.size > 1) {
                     MemberPicker(words, words.t("proposal.as"), model.canApprove, chosen, "multisig.proposal.as") { member = it }
                 }
+                // core-ms-2: the machine offers this member "Approve and execute"
+                // in one press (`approve_execute`): theirs reaches the threshold
+                // and their look says they can pay.
+                val oneTap = chosen != null && view.approveExecuteBy(item).any { it.equals(chosen, ignoreCase = true) }
                 VelaValueButton(
-                    text = words.t(if (model.signAllowed) "proposal.approve" else "review.approveAnyway"),
+                    text = when {
+                        oneTap -> words.t(if (model.signAllowed) "proposal.approveAndExecute" else "review.approveExecuteAnyway")
+                        else -> words.t(if (model.signAllowed) "proposal.approve" else "review.approveAnyway")
+                    },
                     onClick = {
                         val owner = chosen ?: return@VelaValueButton
                         haptic(VelaHaptic.Press)
                         scope.launch {
-                            val settled = hub.proposals.request(ev("approve", "chain_id" to chainId, "safe_tx_hash" to item.safeTxHash, "owner" to owner)) { v ->
-                                val s = (v["actions"] as? JsonObject)?.entries?.firstOrNull { it.key.equals("approve:${item.safeTxHash}", ignoreCase = true) }?.value
-                                if (s == null || s.kind == "working") null else s
+                            fun settledOf(v: JsonObject, what: String): JsonElement? {
+                                val s = (v["actions"] as? JsonObject)?.entries?.firstOrNull { it.key.equals("$what:${item.safeTxHash}", ignoreCase = true) }?.value
+                                return if (s == null || s.kind == "working") null else s
                             }
+                            if (oneTap) {
+                                // Should only the execute part be unable to run (before its
+                                // passkey), the machine still gives and keeps the approval (r4-11).
+                                val ran = hub.proposals.request(ev("approve_execute", "chain_id" to chainId, "safe_tx_hash" to item.safeTxHash, "executor" to owner)) { v -> settledOf(v, "execute") }
+                                if (ran.kind == "done") {
+                                    haptic(VelaHaptic.Success)
+                                    return@launch
+                                }
+                                val approved = hub.proposals.until(600_000) { v -> settledOf(v, "approve") }
+                                when (approved.kind) {
+                                    "done" -> haptic(VelaHaptic.Counted)
+                                    null, "cancelled" -> Unit
+                                    else -> haptic(VelaHaptic.Reject)
+                                }
+                                return@launch
+                            }
+                            val settled = hub.proposals.request(ev("approve", "chain_id" to chainId, "safe_tx_hash" to item.safeTxHash, "owner" to owner)) { v -> settledOf(v, "approve") }
                             when (settled.kind) {
                                 "done" -> haptic(VelaHaptic.Counted)
                                 null, "cancelled" -> Unit

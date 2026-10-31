@@ -488,14 +488,16 @@ class MultisigHub(
     // -- a dApp's request to a multisig (M5) ------------------------------------
 
     /** The requests held by the machine, by id: who answers the site. */
-    private val dappAnswers = java.util.concurrent.ConcurrentHashMap<String, (JsonObject) -> Unit>()
+    private val dappAnswers = java.util.concurrent.ConcurrentHashMap<String, (JsonElement) -> Unit>()
 
     /**
      * A site's request to a multisig (`eth_sendTransaction`, `wallet_sendCalls`,
      * …): the machine decides everything — refused (a message), drafted with
      * its review, proposed on the person's word, held until executed, told
      * "proposed" before the request's limit — and its answer goes to the site
-     * exactly once ([answer], the page's payload).
+     * exactly once ([answer]: the machine's `MultisigDappAnswer`, `{result}`
+     * or `{error: {code, message, data?}}`, delivered as it is — the browser
+     * machine's `multisig_answered`).
      */
     fun dappRequest(
         id: String,
@@ -504,11 +506,11 @@ class MultisigHub(
         params: JsonElement,
         origin: String,
         chainId: Int,
-        answer: (JsonObject) -> Unit,
+        answer: (JsonElement) -> Unit,
     ) {
         val rec = record(address)
         if (rec == null) {
-            answer(jo("type" to "err", "code" to 4100, "kind" to "unauthorized_account", "message" to "not a multisig on this device"))
+            answer(jo("error" to jo("code" to 4100, "message" to "not a multisig on this device")))
             return
         }
         dappAnswers[id] = answer
@@ -524,34 +526,37 @@ class MultisigHub(
     /** The person left the request (declined, closed, read the refusal): the machine answers the site as it stands. */
     fun dappLeave(id: String) = proposals.dispatch(ev("dapp_leave", "id" to id))
 
-    /** `wallet_getCallsStatus` for a batch a multisig proposed: the machine's word (its `calls_status`). */
-    suspend fun callsStatus(id: String): JsonElement? {
-        return proposals.request(ev("calls_status", "id" to id), 15_000) { view -> view["calls_status"][id] }
+    /** The page behind a held request is gone (already answered): its sheet goes, the machine lets it go. */
+    fun dappGone(id: String) {
+        dappAnswers.remove(id)
+        if (sheet.value == MultisigSheet.Dapp(id)) sheet.value = null
+        proposals.dispatch(ev("dapp_leave", "id" to id))
     }
 
-    /** Each held request the machine answered: to its site, once. */
+    /**
+     * `wallet_getCallsStatus` of a batch a multisig answered a site with
+     * (`calls_id`: the proposal's safeTxHash, on [chainId]): the machine's
+     * JSON-RPC body (`{result}` or `{error}`, delivered as it is), then
+     * forgotten there (`calls_status_taken`). `null`: no word in time.
+     */
+    suspend fun callsStatus(chainId: Int, callsId: String): JsonElement? {
+        val id = "calls-${java.util.UUID.randomUUID()}"
+        val body = proposals.request(ev("calls_status", "id" to id, "chain_id" to chainId, "calls_id" to callsId), 15_000) { view ->
+            view["calls_status"][id]
+        }
+        proposals.dispatch(ev("calls_status_taken", "id" to id))
+        return body
+    }
+
+    /** Each held request the machine answered: to its site, once; its proposal's sheet opened once it exists. */
     private fun settleDapps(view: MsProposalsView) {
         for ((id, answer) in dappAnswers.entries.toList()) {
             val held = view.dapp[id] ?: continue
             val result = held["answer"] ?: continue
             if (dappAnswers.remove(id) == null) continue
-            val error = result["error"]
-            val payload = if (error != null) {
-                val code = error["code"].long ?: 4001
-                val kind = when (code) {
-                    4001L -> "user_rejected"
-                    4100L -> "unauthorized_account"
-                    -32602L -> "invalid_params"
-                    4200L -> "unsupported_capability"
-                    else -> "submit_failed"
-                }
-                // An error the site was not told of takes the sheet with it.
-                if (held["told"].bool != true && sheet.value == MultisigSheet.Dapp(id)) sheet.value = null
-                jo("type" to "err", "code" to code, "kind" to kind, "message" to error["message"].str)
-            } else {
-                jo("type" to "ok", "result" to (result["result"] ?: JsonNull))
-            }
-            answer(payload)
+            // An error the site was not told of takes the sheet with it.
+            if (result["error"] != null && held["told"].bool != true && sheet.value == MultisigSheet.Dapp(id)) sheet.value = null
+            answer(result)
             proposals.dispatch(ev("dapp_settled", "id" to id))
         }
     }

@@ -12,12 +12,14 @@ import app.getvela.wallet.feature.multisig.deltaText
 import app.getvela.wallet.feature.multisig.memberRefusal
 import app.getvela.wallet.feature.multisig.reviewConcern
 import app.getvela.wallet.feature.multisig.stateWriteLines
-import app.getvela.wallet.feature.multisig.waitingLine
 import app.getvela.wallet.feature.multisig.waitingNote
 import app.getvela.wallet.feature.multisig.core.MsAccountsView
 import app.getvela.wallet.feature.multisig.core.MsPhase
 import app.getvela.wallet.feature.multisig.core.MsProposalsView
 import app.getvela.wallet.feature.multisig.core.MultisigShellFailure
+import app.getvela.wallet.feature.multisig.core.arr
+import app.getvela.wallet.feature.multisig.core.get
+import app.getvela.wallet.feature.multisig.core.str
 import java.io.File
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonElement
@@ -87,6 +89,11 @@ class MultisigViewsTest {
          "presence":{"${safe.lowercase()}":{"needs_you":1,"ready":2,"waiting_payer":0,"first":{"chain_id":100,"safe_tx_hash":"$hash"}}},
          "standings":{"100:$hash":{"kind":"blocked","block":{"kind":"fails","why":{"kind":"short","token":{"symbol":"XDAI","decimals":18},"have":"280000000000000000","need":"500000000000000000"}}}},
          "signers":{"100:$hash":{"rows":[{"owner":"$bob","kind":"vela"},{"owner":"$carol","kind":"wallet"}],"in_vela":["$bob"],"outside":["$carol"],"either":[],"contract":[],"enough":true}},
+         "waiting_parts":{"${safe.lowercase()}":[{"kind":"needsYou","count":1},{"kind":"ready","count":2}]},
+         "banner":{"parts":[{"kind":"needsYou","count":1},{"kind":"ready","count":2}],"first":{"chain_id":100,"safe_tx_hash":"$hash"}},
+         "rule_chip":{"kind":"needs","rule":{"m":2,"n":3,"solo":false}},
+         "approve_execute":{"100:${hash.lowercase()}":["$alice"]},
+         "set_up":true,
          "waiting_note":{"kind":"chainUnreachable","chain_ids":[100]}
          $extra}
     """.trimIndent()
@@ -185,11 +192,19 @@ class MultisigViewsTest {
     fun the_home_waiting_line_and_group_note_are_the_machines_words() {
         val w = words()
         val view = MsProposalsView.of(json(proposalsJson()))
-        assertEquals("1 needs your approval · 2 ready to execute", waitingLine(w, view.presence[safe.lowercase()]))
+        // core-ms-2: the parts, the banner, the chip and the one press are the machine's.
+        assertEquals("1 needs your approval · 2 ready to execute", w.waitingParts(view.waitingPartsOf(safe.uppercase().replace("0X", "0x"))))
+        assertEquals("1 needs your approval · 2 ready to execute", w.waitingParts(view.banner["parts"].arr))
+        assertEquals(hash, view.banner["first"]["safe_tx_hash"].str)
+        assertEquals("Needs 2 of 3", w.ruleChip(view.ruleChip))
+        assertEquals(w.t("panel.chipSolo"), w.ruleChip(json("""{"kind":"needs","rule":{"m":1,"n":1,"solo":true}}""")))
+        assertEquals(w.t("presence.ruleDiffers"), w.ruleChip(json("""{"kind":"differs","rules":[]}""")))
+        assertEquals(listOf(alice), view.approveExecuteBy(view.items.single()))
+        assertTrue(view.setUp)
         val (note, retry) = waitingNote(w, view.waitingNote) { "12:00" }!!
         assertTrue(note.contains("Gnosis"))
         assertTrue("chainUnreachable goes with Retry", retry)
-        assertNull(waitingLine(w, null))
+        assertNull(w.waitingParts(emptyList()))
     }
 
     // -- the transaction sheet's model ------------------------------------------------

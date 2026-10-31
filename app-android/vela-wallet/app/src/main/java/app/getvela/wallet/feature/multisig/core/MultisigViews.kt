@@ -16,7 +16,7 @@ import kotlinx.serialization.json.JsonObject
  */
 
 private fun JsonElement?.strings(): List<String> = arr.mapNotNull { it.str }
-private fun JsonElement?.ints(): List<Int> = arr.mapNotNull { it.int }
+internal fun JsonElement?.ints(): List<Int> = arr.mapNotNull { it.int }
 
 // -- Accounts ------------------------------------------------------------------
 
@@ -134,6 +134,13 @@ data class MsCreateView(
     val networks: Map<String, JsonElement> = emptyMap(),
     val otherSpace: List<Int> = emptyList(),
     val kept: MsCreateDraft? = null,
+    /**
+     * core-ms-2: the threshold step for the draft's members
+     * (`MultisigThresholdView` `{value, members, note, risky, can_lower,
+     * can_raise}`); `null` before a draft names members. Its `value` is the
+     * threshold sent with `draft` / `keep_draft`.
+     */
+    val threshold: JsonElement? = null,
 ) {
     /** The Safe contracts on [chainId]: `present`, `missing`, `unknown`, or `null` (not asked). */
     fun contracts(chainId: Int): String? = networks[chainId.toString()].let { it.str ?: it.kind }
@@ -149,6 +156,7 @@ data class MsCreateView(
             networks = e["networks"].obj,
             otherSpace = e["other_space"].ints(),
             kept = e["kept"]?.let(MsCreateDraft::of),
+            threshold = e["threshold"],
         )
     }
 }
@@ -256,7 +264,20 @@ data class MsAccountsView(
     val link: MsLinkStand? = null,
     val memberKinds: Map<String, MsKindChoice> = emptyMap(),
     val knownMembers: Map<String, MsMemberInfo> = emptyMap(),
+    /** core-ms-2: the invite the add sheet shows (`{link, on_device, missing, missing_name}`). */
+    val invite: JsonElement? = null,
+    /** core-ms-2: where this device's own transactions were (`hints.recent`). */
+    val recentNetworks: List<Int> = emptyList(),
+    /** core-ms-2: where the multisigs here are used (`hints.used`). */
+    val usedNetworks: List<Int> = emptyList(),
 ) {
+    /** The core's hints for `networks.likely` / `networks.firstDefault`, with the wallet's own. */
+    fun networkHints(here: Int? = null): Map<String, Any?> = mapOf(
+        "here" to listOfNotNull(here),
+        "used" to usedNetworks,
+        "recent" to recentNetworks,
+    )
+
     fun row(address: String?): MsAccountRow? =
         address?.let { a -> accounts.firstOrNull { it.account.address.equals(a, ignoreCase = true) } }
 
@@ -283,6 +304,9 @@ data class MsAccountsView(
             link = e["link"]?.let(MsLinkStand::of),
             memberKinds = e["member_kinds"].obj.mapValues { MsKindChoice.of(it.value) },
             knownMembers = e["known_members"].obj.mapValues { MsMemberInfo.of(it.value) },
+            invite = e["invite"],
+            recentNetworks = e["recent_networks"].ints(),
+            usedNetworks = e["used_networks"].ints(),
         )
     }
 }
@@ -364,13 +388,21 @@ data class MsChainState(val chainId: Int, val members: MsChainMembers?, val item
     }
 }
 
-data class MsDraft(val item: MsProposalItem, val review: JsonElement?, val membersHere: List<String>, val defaultMember: String?) {
+data class MsDraft(
+    val item: MsProposalItem,
+    val review: JsonElement?,
+    val membersHere: List<String>,
+    val defaultMember: String?,
+    /** core-ms-2: the proposer's own approval makes it ready (a site's transaction): proposed and executed in one press (`propose_execute`). */
+    val executeNow: Boolean = false,
+) {
     companion object {
         fun of(e: JsonElement?) = MsDraft(
             item = MsProposalItem.of(e["item"]),
             review = e["review"],
             membersHere = e["membersHere"].strings(),
             defaultMember = e["defaultMember"].str,
+            executeNow = e["executeNow"].bool ?: false,
         )
     }
 }
@@ -465,7 +497,24 @@ data class MsProposalsView(
     val linked: MsLinkedView? = null,
     val signers: Map<String, MsSigners> = emptyMap(),
     val frozen: Map<String, JsonElement> = emptyMap(),
+    /** core-ms-2: per `<chainId>:<hash lowercase>`, the members here whose one press approves and executes it. */
+    val approveExecute: Map<String, List<String>> = emptyMap(),
+    /** core-ms-2: the header's rule chip for the multisig followed (`MultisigRuleChip`). */
+    val ruleChip: JsonElement? = null,
+    /** core-ms-2: per multisig here (lowercase), the waiting line's parts, in order, nonzero only. */
+    val waitingParts: Map<String, List<JsonElement>> = emptyMap(),
+    /** core-ms-2: the line at the top of the followed multisig's home (`{parts, first}`), when something waits. */
+    val banner: JsonElement? = null,
+    /** core-ms-2: the followed multisig is deployed on a network read. */
+    val setUp: Boolean = false,
 ) {
+    /** The members here whose one press approves and executes [item] (the machine's `approve_execute`). */
+    fun approveExecuteBy(item: MsProposalItem): List<String> = lookup(approveExecute, item.chainId, item.safeTxHash) ?: emptyList()
+
+    /** The waiting line's parts for [address] (the machine's `waiting_parts`). */
+    fun waitingPartsOf(address: String): List<JsonElement> =
+        waitingParts[address.lowercase()] ?: waitingParts.entries.firstOrNull { it.key.equals(address, ignoreCase = true) }?.value ?: emptyList()
+
     fun item(chainId: Int, hash: String): MsProposalItem? =
         items.firstOrNull { it.chainId == chainId && it.safeTxHash.equals(hash, ignoreCase = true) }
             ?: chains.flatMap { it.items }.firstOrNull { it.chainId == chainId && it.safeTxHash.equals(hash, ignoreCase = true) }
@@ -522,6 +571,11 @@ data class MsProposalsView(
             linked = e["linked"]?.let(MsLinkedView::of),
             signers = e["signers"].obj.mapValues { MsSigners.of(it.value) },
             frozen = e["frozen"].obj,
+            approveExecute = e["approve_execute"].obj.mapValues { it.value.strings() },
+            ruleChip = e["rule_chip"],
+            waitingParts = e["waiting_parts"].obj.mapValues { it.value.arr },
+            banner = e["banner"],
+            setUp = e["set_up"].bool ?: false,
         )
     }
 }

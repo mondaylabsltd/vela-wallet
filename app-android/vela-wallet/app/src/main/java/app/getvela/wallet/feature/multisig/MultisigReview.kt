@@ -30,6 +30,7 @@ import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.feature.multisig.core.MsDraft
 import app.getvela.wallet.feature.multisig.core.MsRules
 import app.getvela.wallet.feature.multisig.core.MultisigHub
+import app.getvela.wallet.feature.multisig.core.ev
 import app.getvela.wallet.feature.multisig.core.MultisigRiskAsk
 import app.getvela.wallet.feature.multisig.core.arr
 import app.getvela.wallet.feature.multisig.core.bool
@@ -283,6 +284,8 @@ fun MultisigDraftReviewSheet(
     tokenInfo: suspend (Int, String) -> Pair<String, Int>,
     siteNote: String? = null,
     onWithdraw: (() -> Unit)? = null,
+    /** A site's transaction (M5): one its proposer's approval makes ready is proposed and executed in one press. */
+    fromSite: Boolean = false,
 ) {
     val view by hub.proposalsView.collectAsStateWithLifecycle()
     val draft: MsDraft? = view.draft
@@ -307,14 +310,26 @@ fun MultisigDraftReviewSheet(
         if (draft.membersHere.size > 1) {
             MemberPicker(words, words.t("proposal.as"), draft.membersHere, member ?: draft.defaultMember ?: draft.membersHere.first(), tag = "multisig.draft.as") { member = it }
         }
+        // A site's transaction ready on its proposer's approval: the machine's
+        // one press (`draft.executeNow`, `propose_execute`) — the site gets its
+        // transaction, not a wait for approvals nobody else has to give.
+        val executeNow = fromSite && draft.executeNow && draft.membersHere.isNotEmpty()
         // Proposing signs (the member's approval travels with it): the accent.
         VelaValueButton(
-            text = words.t(if (draft.membersHere.isEmpty()) "send.proposeOnly" else if (allowed) "send.propose" else "review.proposeAnyway"),
-            onClick = { hub.confirmDraft(member ?: draft.defaultMember) },
+            text = when {
+                executeNow -> words.t(if (allowed) "proposal.approveAndExecute" else "review.approveExecuteAnyway")
+                draft.membersHere.isEmpty() -> words.t("send.proposeOnly")
+                else -> words.t(if (allowed) "send.propose" else "review.proposeAnyway")
+            },
+            onClick = {
+                val by = member ?: draft.defaultMember
+                if (executeNow) hub.sendProposal(ev("propose_execute", "as_member" to by)) else hub.confirmDraft(by)
+            },
             modifier = Modifier.fillMaxWidth().testTag("multisig.draft.propose"),
             enabled = (allowed || anyway) && !working,
             loading = working,
         )
+        if (executeNow) MsNote(words.t("proposal.feeNote"))
         VelaSecondaryButton(
             text = words.t("proposal.dontPropose"),
             onClick = { withdraw() },

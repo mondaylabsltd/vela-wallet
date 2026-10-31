@@ -56,6 +56,7 @@ import app.getvela.wallet.feature.multisig.core.bool
 import app.getvela.wallet.feature.multisig.core.ev
 import app.getvela.wallet.feature.multisig.core.get
 import app.getvela.wallet.feature.multisig.core.int
+import app.getvela.wallet.feature.multisig.core.ints
 import app.getvela.wallet.feature.multisig.core.kind
 import app.getvela.wallet.feature.multisig.core.long
 import app.getvela.wallet.feature.multisig.core.str
@@ -108,8 +109,11 @@ fun MultisigCreateSheet(
     var typed by remember { mutableStateOf("") }
     var typedName by remember { mutableStateOf("") }
     var typedError by remember { mutableStateOf<String?>(null) }
-    var threshold by remember { mutableIntStateOf(1) }
-    var thresholdFor by remember { mutableIntStateOf(0) }
+    // How many must approve — the accounts machine's (`create.threshold`):
+    // the sensible start for these members, or the person's pick for them
+    // (`step_threshold`).
+    val thresholdView = sheet.threshold
+    val threshold = thresholdView["value"].int ?: 1
     var chainId by remember { mutableStateOf<Int?>(null) }
     var chose by remember { mutableStateOf(false) }
     var creator by remember { mutableStateOf<String?>(null) }
@@ -120,9 +124,8 @@ fun MultisigCreateSheet(
 
     // The networks offered: the space's, minus those found without the Safe
     // contracts, the likely ones first (the core's order).
-    val hints = remember(view.accounts) {
-        mapOf("used" to (MsRules.lastUsedNetworks(view.accounts.map { mapOf("chainIds" to it.account.chainIds, "addedMs" to (it.account.raw["addedMs"].long ?: 0)) }) ?: JsonNull))
-    }
+    // r5reg-19: the machine's `used_networks` / `recent_networks`.
+    val hints = remember(view.usedNetworks, view.recentNetworks) { view.networkHints() }
     val networks = run {
         val offered = spaceNetworks.filter { sheet.contracts(it) != "missing" }
         MsRules.likelyNetworks(offered, hints).ifEmpty { offered }
@@ -138,8 +141,6 @@ fun MultisigCreateSheet(
             owners.addAll(kept.owners)
             kept.members.forEach { (k, v) -> v.name?.let { names[k.lowercase()] = it } }
             name = kept.name
-            threshold = kept.threshold
-            thresholdFor = kept.owners.size
             kept.chainId?.let { chainId = it; chose = true }
             resumed = true
         } else {
@@ -181,7 +182,9 @@ fun MultisigCreateSheet(
             ens["address"].str?.let { typed = it; if (typedName.isEmpty()) typedName = ensAsked.orEmpty() }
         }
     }
-    fun askAddress() {
+    // The draft's address, as the members, the rule and the name change (its
+    // members are also what the machine's threshold step is for).
+    LaunchedEffect(owners.toList(), threshold, cleanName, nameOk) {
         if (owners.isNotEmpty() && nameOk) hub.send(ev("draft", "owners" to owners.toList(), "threshold" to threshold, "name" to cleanName))
     }
     fun addMember(address: String, memberName: String?): Boolean {
@@ -216,7 +219,7 @@ fun MultisigCreateSheet(
                         MsTextButton(words.t("create.discardDraft"), tag = "multisig.create.discard") {
                             hub.send(ev("discard_draft"))
                             owners.clear(); accounts.firstOrNull()?.let { owners.add(it.address) }
-                            names.clear(); name = ""; threshold = 1; thresholdFor = 0; nameAsked = false; chose = false
+                            names.clear(); name = ""; nameAsked = false; chose = false
                             chainId = MsRules.firstDefaultNetwork(networks, hints); resumed = false
                         }
                     }
@@ -304,10 +307,7 @@ fun MultisigCreateSheet(
                         if (!nameOk) {
                             nameAsked = true
                         } else {
-                            if (thresholdFor != owners.size) {
-                                threshold = if (owners.size <= 2) owners.size else owners.size - 1
-                                thresholdFor = owners.size
-                            }
+                            // Where it starts is the machine's (`create.threshold`).
                             step = CreateStep.Threshold
                         }
                     },
@@ -320,20 +320,21 @@ fun MultisigCreateSheet(
                 MsSection(words.t("create.threshold")) {
                     Stepper(
                         text = words.ruleText(threshold, owners.size),
-                        canFewer = threshold > 1, canMore = threshold < owners.size,
+                        canFewer = thresholdView["can_lower"].bool ?: false, canMore = thresholdView["can_raise"].bool ?: false,
                         fewer = words.t("create.fewer"), more = words.t("create.more"),
                         tag = "multisig.create.threshold",
-                        onStep = { by -> threshold = (threshold + by).coerceIn(1, maxOf(1, owners.size)) },
+                        onStep = { by -> hub.send(ev("step_threshold", "up" to (by > 0))) },
                     )
-                    val spare = owners.size - threshold
-                    val note = when {
-                        owners.size == 1 -> words.t("create.solo")
-                        threshold == owners.size -> words.t("create.thresholdAll")
-                        threshold == 1 -> words.t("create.thresholdOne")
-                        else -> words.plural("create.thresholdSpare", spare)
+                    val noteView = thresholdView["note"]
+                    val note = when (noteView.kind) {
+                        "solo" -> words.t("create.solo")
+                        "all" -> words.t("create.thresholdAll")
+                        "one" -> words.t("create.thresholdOne")
+                        "spare" -> words.plural("create.thresholdSpare", noteView["count"].int ?: 0)
+                        else -> null
                     }
-                    val risky = owners.size > 1 && (threshold == owners.size || threshold == 1)
-                    MsNote(note, tone = if (risky) MsTone.Warning else MsTone.Neutral, tag = "multisig.create.thresholdNote")
+                    val risky = thresholdView["risky"].bool ?: false
+                    note?.let { MsNote(it, tone = if (risky) MsTone.Warning else MsTone.Neutral, tag = "multisig.create.thresholdNote") }
                 }
                 MsSection(words.t("create.network")) {
                     if (networks.isEmpty()) MsNote(words.t("create.noSafeNetworks"), tone = MsTone.Warning)
@@ -347,12 +348,11 @@ fun MultisigCreateSheet(
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg)) {
                     VelaSecondaryButton(words.t("create.back"), { step = CreateStep.Members }, Modifier.weight(1f))
-                    VelaPrimaryButton(words.t("create.next"), { askAddress(); step = CreateStep.Review }, Modifier.weight(1f).testTag("multisig.create.toReview"), enabled = chainId != null)
+                    VelaPrimaryButton(words.t("create.next"), { step = CreateStep.Review }, Modifier.weight(1f).testTag("multisig.create.toReview"), enabled = chainId != null)
                 }
             }
 
             CreateStep.Review -> {
-                LaunchedEffect(Unit) { askAddress() }
                 val chosenCreator = creator?.let { c -> local.firstOrNull { it.equals(c, ignoreCase = true) } } ?: local.firstOrNull()
                 MsRow(words.t("create.name"), cleanName)
                 MsRow(words.t("create.threshold"), words.ruleText(threshold, owners.size))
@@ -521,6 +521,7 @@ fun MultisigAddSheet(
     spaceNetworks: List<Int>,
     onClose: () -> Unit,
     onAdded: (String) -> Unit,
+    onAddNetwork: ((Int) -> Unit)? = null,
 ) {
     val view by hub.accountsView.collectAsStateWithLifecycle()
     val haptic = rememberVelaHaptic()
@@ -536,7 +537,12 @@ fun MultisigAddSheet(
     var risky by remember { mutableStateOf<List<JsonElement>?>(null) }
     var busy by remember { mutableStateOf(false) }
     val picked = remember { mutableStateListOf<String>() }
-    val linkChains = invite?.chainIds ?: emptyList()
+    // The invite as the accounts machine keeps it (`invite`): the networks
+    // this device has, the first it lacks and its name. Adding its multisig
+    // uses its networks and keeps its members' labels — the machine's, on Add.
+    val kept = view.invite?.takeIf { k -> invite != null && k["link"]["multisig"].str.equals(invite.multisig, ignoreCase = true) }
+    val linkChains = kept?.get("on_device").ints()
+    val linkLacks = kept?.get("missing").int
     val fromLink = invite?.multisig?.equals(address.trim(), ignoreCase = true) == true
     val colors = VelaTheme.colors
 
@@ -552,15 +558,8 @@ fun MultisigAddSheet(
     fun said(outcome: JsonElement?) {
         when (outcome.kind) {
             "added" -> {
+                // The invite's networks and members' labels landed with the add (the machine's).
                 val added = outcome["address"].str ?: address
-                if (fromLink && invite != null) {
-                    hub.send(
-                        ev(
-                            "keep_invited", "address" to added, "chain_ids" to linkChains,
-                            "members" to invite.link["members"].arr.map { mapOf("address" to it["address"], "name" to it["name"], "kind" to it["kind"]) },
-                        ),
-                    )
-                }
                 haptic(VelaHaptic.Success)
                 onAdded(added)
             }
@@ -581,7 +580,8 @@ fun MultisigAddSheet(
         }
         busy = true; failure = null; refused = null
         if (!acceptRisks) risky = null
-        val named = if (choosing) chosen else if (fromLink) linkChains.firstOrNull() else null
+        // The person's pick when asked; an invite's own network is the machine's.
+        val named = if (choosing) chosen else null
         scope.launch {
             val outcome = hub.accounts.request(ev("add", "address" to typed, "network" to named, "accept_risks" to acceptRisks), 120_000) { v ->
                 val add = MsAccountsView.of(v).add
@@ -596,7 +596,13 @@ fun MultisigAddSheet(
         MsText(words.t("add.intro"), MsType.Body, color = colors.fgMuted)
         if (invite != null) {
             Column(Modifier.testTag("multisig.add.invite"), verticalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
-                if (linkChains.isNotEmpty()) MsNote(words.t("add.usedOn", "networks" to linkChains.joinToString(", ", transform = words::network)))
+                if (linkChains.isNotEmpty()) {
+                    MsNote(words.t("add.usedOn", "networks" to linkChains.joinToString(", ", transform = words::network)))
+                } else if (linkLacks != null) {
+                    val title = words.missingTitle(linkLacks, kept?.get("missing_name").str)
+                    MsNote(words.t("add.networkMissing", "network" to title), tone = MsTone.Warning, tag = "multisig.add.networkMissing")
+                    onAddNetwork?.let { addNetwork -> VelaSecondaryButton(words.t("proposal.addNetwork"), { addNetwork(linkLacks) }, Modifier.fillMaxWidth()) }
+                }
                 val members = invite.link["members"].arr
                 if (members.isNotEmpty()) {
                     MsText(words.t("add.invitedMembers"), MsType.Label, color = colors.fgSubtle)
@@ -617,7 +623,7 @@ fun MultisigAddSheet(
         MsField(words.t("add.title"), address, { address = it; failure = null }, words.t("add.placeholder"), error = failure, tag = "multisig.add.address")
         if (choosing) {
             MsNote(words.t("add.chooseNetwork"), tone = MsTone.Warning)
-            val offered = MsRules.likelyNetworks(spaceNetworks, mapOf("named" to if (fromLink) linkChains else emptyList<Int>())).ifEmpty { spaceNetworks }
+            val offered = MsRules.likelyNetworks(spaceNetworks, view.networkHints() + ("named" to if (fromLink) linkChains else emptyList<Int>())).ifEmpty { spaceNetworks }
             for (id in offered) ChoiceRow(words.network(id), id == chosen, "multisig.add.network.$id") { chosen = id }
         }
         refused?.let { list ->
@@ -708,7 +714,7 @@ fun MultisigLinkStandSheet(hub: MultisigHub, words: MultisigWords, onClose: () -
             "broken" -> MsNote(stand.text ?: words.t("proposal.badLink"), tone = MsTone.Warning, tag = "multisig.link.broken")
             "missingNetwork" -> {
                 val chainId = stand.chainId ?: 0
-                MsNote(words.t("proposal.missingNetwork", "chainId" to chainId.toString()), tone = MsTone.Warning, tag = "multisig.link.missingNetwork")
+                MsNote(words.missingTitle(chainId), tone = MsTone.Warning, tag = "multisig.link.missingNetwork")
                 MsNote(words.t("proposal.missingNetworkBody"))
                 onAddNetwork?.let { add -> VelaPrimaryButton(words.t("proposal.addNetwork"), { add(chainId) }, Modifier.fillMaxWidth().testTag("multisig.link.addNetwork")) }
             }

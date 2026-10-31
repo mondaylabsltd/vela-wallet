@@ -81,8 +81,10 @@ fun MultisigHost(hub: MultisigHub, context: MultisigHostContext) {
         MultisigSheet.Link -> if (accounts.link?.kind == "invite") {
             MultisigAddSheet(
                 hub, words, invite = accounts.link, prefill = null, spaceNetworks = context.spaceNetworks,
-                onClose = { hub.send(app.getvela.wallet.feature.multisig.core.ev("close_link")); close() },
+                // An invite's sheet closed: the invite (waiting for its network, or not) is let go — the machine's record.
+                onClose = { hub.send(app.getvela.wallet.feature.multisig.core.ev("drop_link")); close() },
                 onAdded = { hub.send(app.getvela.wallet.feature.multisig.core.ev("close_link")); close(); context.askNotifications() },
+                onAddNetwork = context.onAddNetwork,
             )
         } else {
             MultisigLinkStandSheet(hub, words, onClose = close, onAddNetwork = context.onAddNetwork)
@@ -137,7 +139,7 @@ fun MultisigDappSheet(hub: MultisigHub, id: String, context: MultisigHostContext
             MsNote(words.t("proposal.siteAsks", "host" to host))
             MsNote(held["refusal"]["message"].str ?: words.t("action.unsupported"), tone = MsTone.Warning, tag = "multisig.dapp.refused")
         }
-        view.draft != null -> MultisigDraftReviewSheet(hub, words, context.tokenInfo, siteNote = words.t("proposal.siteAsks", "host" to host), onWithdraw = leave)
+        view.draft != null -> MultisigDraftReviewSheet(hub, words, context.tokenInfo, siteNote = words.t("proposal.siteAsks", "host" to host), onWithdraw = leave, fromSite = true)
         else -> MsSheet(words.t("proposal.title"), words.raw("common.done"), onClose = leave, tag = "multisig.dapp") {
             MsNote(words.t("proposal.siteAsks", "host" to host))
             Row(Modifier.testTag("multisig.dapp.opening"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
