@@ -517,6 +517,10 @@ window.VelaCS = window.VelaCS || {};
     if (view.refuse) {
       button.disabled = true;
       button.classList.add('confirm-off');
+    } else if (view.risk === 'danger' || view.risk === 'hard-danger') {
+      // r8-5: never the plain accent Approve over a danger (a batch inside a
+      // batch, a grant of everything): the danger's own outlined button.
+      button.classList.add('confirm-danger');
     }
     bar.appendChild(button);
     if (!view.refuse) bar.appendChild(el('p', 'confirm-hint', t('ui.closeRefuses')));

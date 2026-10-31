@@ -243,9 +243,13 @@ export function promptCopy(kind: PromptKind, t: Translate): PromptCopy {
 			if (kind.key_kept)
 				return {
 					title: t('onboarding.create.keyKeptTitle'),
-					message: kind.local
-						? t('onboarding.create.keyKeptBodyNetwork')
-						: t('onboarding.create.keyKeptBodyIndex')
+					// S4 (r8): "offline" only when the device says it is — a fetch
+					// the browser refused (CORS, a 404 page) is the index not
+					// answering, never "This device is offline".
+					message:
+						kind.local && deviceOffline()
+							? t('onboarding.create.keyKeptBodyNetwork')
+							: t('onboarding.create.keyKeptBodyIndex')
 				};
 			// The platform's own words. Opaque by nature — it goes straight into
 			// the bug report, and inventing friendlier text here would lose the
@@ -315,4 +319,9 @@ export function promptCopy(kind: PromptKind, t: Translate): PromptCopy {
 		default:
 			return unreachable(kind);
 	}
+}
+
+/** The device says it is offline (`navigator.onLine === false`); unknown is not offline. */
+function deviceOffline(): boolean {
+	return typeof navigator !== 'undefined' && navigator.onLine === false;
 }

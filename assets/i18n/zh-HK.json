@@ -815,7 +815,8 @@
      "title": "可用穩定幣支付 gas",
      "description": "大多數網絡支援以穩定幣支付手續費，毋須預先準備原生幣。"
     }
-   }
+   },
+   "linkWaiting": "有一條多簽連結在等你。建立錢包或登入後就會開啟。"
   },
   "settings": {
    "title": "設定",
@@ -1614,7 +1615,7 @@
     "chipGrantAll": "全部允許",
     "chooseGrant": "請先選擇「全部允許」或「撤銷」",
     "labelSource": "解讀來源",
-    "byVela": "Vela，從交易本身"
+    "byVela": "Vela（讀自交易本身）"
    },
    "hiddenChars": "此請求含有隱藏或會改變文字方向的字元 — 已顯示為 ⟨U+…⟩。",
    "blankLines": "⋯ 空白行：{{lines}} ⋯",

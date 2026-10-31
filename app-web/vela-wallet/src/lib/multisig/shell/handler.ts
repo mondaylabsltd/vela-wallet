@@ -35,7 +35,7 @@ type Op<T extends MultisigOperation['type']> = Extract<MultisigOperation, { type
 /** A JSON-RPC reply through the wallet's own pool: its `result`, or the node's `error`. */
 export interface RpcReply {
 	result?: unknown;
-	error?: { code?: number | null; message?: string } | null;
+	error?: { code?: number | null; message?: string; data?: unknown } | null;
 }
 
 /** The transport a PeerConnect room runs on (`peer.ts` binds the vendored client). */
@@ -249,10 +249,14 @@ export function multisigShell(deps: MultisigShellDeps) {
 					return { type: 'rpc_unanswered', detail: `no answer in ${op.bound_ms} ms` };
 				if (reply.error) {
 					const code = reply.error.code;
+					// r8-4: the node's `data` is kept — a revert's payload is where the
+					// state-diff probe answers (simulateAndRevert always reverts).
+					const data = reply.error.data;
 					return {
 						type: 'rpc_error',
 						code: typeof code === 'number' && Number.isFinite(code) ? BigInt(code) : null,
-						message: reply.error.message ?? ''
+						message: reply.error.message ?? '',
+						...(data === undefined || data === null ? {} : { data })
 					};
 				}
 				return { type: 'rpc_result', result: reply.result ?? null };

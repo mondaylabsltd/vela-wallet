@@ -815,7 +815,8 @@
      "title": "Trả gas bằng stablecoin",
      "description": "Phần lớn mạng cho phép trả phí bằng stablecoin — không cần chuẩn bị sẵn coin gốc."
     }
-   }
+   },
+   "linkWaiting": "Có một liên kết multisig đang chờ. Tạo ví hoặc đăng nhập để mở nó."
   },
   "settings": {
    "title": "Cài đặt",

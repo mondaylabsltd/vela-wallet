@@ -1385,6 +1385,14 @@ impl App for MultisigMembers {
                 render()
             }
             Event::Entry { text } => {
+                // S4 (r8): a whole address typed or pasted is read at once —
+                // Propose is ready on the input, not only once the field blurs.
+                let whole = {
+                    let t = text.trim();
+                    t.len() == 42
+                        && (t.starts_with("0x") || t.starts_with("0X"))
+                        && t[2..].bytes().all(|b| b.is_ascii_hexdigit())
+                };
                 let mut s = lock(&model.state);
                 let e = &mut s.entry;
                 e.typed = text;
@@ -1393,6 +1401,10 @@ impl App for MultisigMembers {
                 e.kind_pick = None;
                 e.resolving = false;
                 e.ask += 1;
+                if whole {
+                    drop(s);
+                    return read_entry(model);
+                }
                 render()
             }
             Event::ReadEntry => read_entry(model),

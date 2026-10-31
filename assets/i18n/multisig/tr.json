@@ -192,7 +192,8 @@
     "copy": "Kopyala",
     "executedBy": "{{name}} yürüttü",
     "countedThen": "Yürütüldüğünde {{threshold}} onaydan {{approved}} tanesi sayıldı",
-    "approvalsSigned": "Bu üyeler onayladı. Yürütüldüğünde hangi onayların sayıldığı bu cihazda kayıtlı değil."
+    "approvalsSigned": "Bu üyeler onayladı. Yürütüldüğünde hangi onayların sayıldığı bu cihazda kayıtlı değil.",
+    "outboxSending": "Onayın diğer üyelere gönderiliyor…"
    },
    "send": {
     "propose": "Öner ve onayla",
@@ -487,7 +488,9 @@
     "rowReject": "{{number}} reddet",
     "outcomeNotSent": "İmzalandı, henüz gönderilmedi",
     "nameFromRecord": "Kaydıyla saklanan adı — imzaladığınız şey adres içindir",
-    "linkDamaged": "Bu bağlantı bozuk — yenisini isteyin."
+    "linkDamaged": "Bu bağlantı bozuk — yenisini isteyin.",
+    "executeConfirms": "Cüzdanın {{total}} işlemi art arda onaylamanı isteyecek.",
+    "executeFeeMax": "Ağ ücreti ≈ {{fee}}, en fazla {{max}}; cüzdanın ({{account}}) öder."
    },
    "import": {
     "or": "Ya da Safe{Wallet}'tan içe aktarın",
@@ -645,7 +648,46 @@
     "approveExecuteAnyway": "Yine de onayla ve çalıştır",
     "executeAnyway": "Yine de çalıştır",
     "proposeAnyway": "Yine de öner ve onayla",
-    "blocked": "Vela bu işlemi imzalamaz: çalıştırmak multisig'i kimin kontrol ettiğini değiştirir."
+    "blocked": "Vela bu işlemi imzalamaz: çalıştırmak multisig'i kimin kontrol ettiğini değiştirir.",
+    "reading": {
+     "send": "Gönder",
+     "sendFrom": "Başka bir hesaptan token taşı",
+     "approve": "Onayla",
+     "increase": "İzni artır",
+     "decrease": "İzni azalt",
+     "permit": "Permit",
+     "daiPermit": "DAI Permit",
+     "permit2": "Permit2 izni",
+     "approveAll": "Bir koleksiyonun tüm tokenlerini onayla",
+     "revokeAll": "Bir koleksiyona erişimi kaldır",
+     "batchOne": "1 çağrılık paket",
+     "batchMany": "{{total}} çağrılık paket",
+     "unreadable": "Okunamıyor",
+     "call": "Sözleşme çağrısı",
+     "members": "Üyeleri değiştirir",
+     "rename": "Adı {{name}} yap",
+     "amount": "Tutar",
+     "allowance": "İzin",
+     "to": "Alıcı",
+     "from": "Gönderen",
+     "spender": "Yetkili",
+     "operator": "Operatör",
+     "collection": "Koleksiyon",
+     "token": "Token",
+     "function": "Fonksiyon",
+     "alsoSends": "Ayrıca gönderir",
+     "runner": "Çalıştıran",
+     "runnerNote": "Çağrıları multisig'den değil, bu sözleşmeden çalışır.",
+     "unlimited": "Sınırsız",
+     "allOfIt": "Tamamı",
+     "decimalsUnknown": "{{raw}} temel birim · ondalık sayısı bilinmiyor",
+     "unlimitedLine": "Sınırsız izin: {{spender}}, multisig'in bundan tuttuğu her şeyi şimdi ve sonra alabilir.",
+     "nestedLine": "Paket içinde paket. Tüm çağrılar aşağıda; içtekiler paket sözleşmesinden çalışır.",
+     "unreadableLine": "Bu paketin bir kısmı okunamıyor (çok derin iç içe ya da kesik). Vela imzalamaz.",
+     "decimalsLine": "{{token}} kaç ondalığı olduğunu söylemedi; tutarları temel birimle gösteriliyor.",
+     "ownTokenLine": "Bu, tokenleri tokenin kendi sözleşmesine ({{token}}) gönderir. Kaybolurlar.",
+     "blindLine": "Vela bu çağrının ne yaptığını okuyamıyor. Yalnızca ne olduğunu tam olarak biliyorsan onayla."
+    }
    }
   }
  }

@@ -294,7 +294,7 @@
         "chipGrantAll": "全部允許",
         "chooseGrant": "請先選擇「全部允許」或「撤銷」",
         "labelSource": "解讀來源",
-        "byVela": "Vela，從交易本身"
+        "byVela": "Vela（讀自交易本身）"
       },
       "hiddenChars": "此請求含有隱藏或會改變文字方向的字元 — 已顯示為 ⟨U+…⟩。",
       "blankLines": "⋯ 空白行：{{lines}} ⋯",

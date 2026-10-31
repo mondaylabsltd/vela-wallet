@@ -24,6 +24,8 @@ export interface WelcomeMessages {
 	heroSubtitle: string;
 	createWallet: string;
 	alreadyHaveWallet: string;
+	/** r5reg: a multisig link opened here waits for a wallet: said, never silent. */
+	linkWaiting: string;
 }
 
 /**
@@ -47,7 +49,8 @@ export const WELCOME_KEYS = [
 	'onboarding.welcome.heroTitleFit',
 	'onboarding.welcome.heroSubtitle',
 	'onboarding.welcome.createWallet',
-	'onboarding.welcome.alreadyHaveWallet'
+	'onboarding.welcome.alreadyHaveWallet',
+	'onboarding.welcomeWeb.linkWaiting'
 ] as const;
 
 /* ------------------------------------------------------------------------ */

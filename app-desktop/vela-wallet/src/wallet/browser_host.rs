@@ -702,6 +702,9 @@ pub fn wallet_news(
 pub struct Multisigs {
     pub addresses: Vec<String>,
     pub shown: Option<String>,
+    /// r8-21: the shown multisig's own networks, in its record's order —
+    /// a site starts on the first of them the space offers.
+    pub networks: Vec<u32>,
 }
 
 /// The multisigs here now; `None` while their list is still being read — a
@@ -720,6 +723,20 @@ fn multisigs_here(cx: &gpui::App) -> Option<Multisigs> {
             .iter()
             .map(|row| row.account.address.clone())
             .collect(),
+        networks: crate::multisig::shown::current(cx)
+            .and_then(|shown| {
+                view.accounts
+                    .iter()
+                    .find(|row| row.account.address.eq_ignore_ascii_case(&shown.address))
+            })
+            .map(|row| {
+                row.account
+                    .chain_ids
+                    .iter()
+                    .filter_map(|c| u32::try_from(*c).ok())
+                    .collect()
+            })
+            .unwrap_or_default(),
         shown: crate::multisig::shown::current(cx).map(|shown| shown.address),
     })
 }
@@ -793,6 +810,13 @@ pub fn wallet_news_with(
             now_ms: now_ms(),
             space,
         });
+        // r8-21: a multisig lives on its own networks: a new site starts
+        // there, never on Ethereum it is not on (the core's rule).
+        if multisig_in_front && !multisigs.networks.is_empty() {
+            events.push(Event::AccountNetworks {
+                networks: multisigs.networks.clone(),
+            });
+        }
     }
     Some((now, events))
 }
@@ -3856,6 +3880,7 @@ mod tests {
             let shown = Multisigs {
                 addresses: vec![MULTISIG.to_owned()],
                 shown: Some(MULTISIG.to_owned()),
+                ..Multisigs::default()
             };
             let Some((told, events)) = wallet_news_with(&wallets.view(), &shown, None) else {
                 unreachable!("news");
@@ -3865,6 +3890,21 @@ mod tests {
                 events.iter().any(|e| matches!(
                     e,
                     Event::AccountSwitched { address, space: true, .. } if address == MULTISIG
+                )),
+                "{events:?}"
+            );
+            // r8-21: its own networks follow the switch — a site starts there.
+            let with_networks = Multisigs {
+                networks: vec![5_042_002, 100],
+                ..shown.clone()
+            };
+            let Some((_, events)) = wallet_news_with(&wallets.view(), &with_networks, None) else {
+                unreachable!("news");
+            };
+            assert!(
+                events.iter().any(|e| matches!(
+                    e,
+                    Event::AccountNetworks { networks } if networks == &[5_042_002, 100]
                 )),
                 "{events:?}"
             );
@@ -3932,6 +3972,7 @@ mod tests {
             let shown = Multisigs {
                 addresses: vec![MULTISIG.to_owned()],
                 shown: Some(MULTISIG.to_owned()),
+                ..Multisigs::default()
             };
             let Some((told, events)) = wallet_news_with(&wallets.view(), &shown, None) else {
                 unreachable!("news");

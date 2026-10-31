@@ -47,7 +47,8 @@ import { readShellFailure } from './failure';
 /** A token's word for an amount (`tokenInfo`), when it is known. */
 export interface TokenWords {
 	symbol: string;
-	decimals: number;
+	/** `null`: unknown (r8-2) — its amounts are said raw. */
+	decimals: number | null;
 }
 
 const big = (v: unknown): bigint => {
@@ -65,7 +66,7 @@ export function blockOf(why: unknown, token: TokenWords | null = null): Executio
 		return {
 			kind: 'short',
 			symbol: token?.symbol ?? '',
-			decimals: token?.decimals ?? 18,
+			decimals: token?.decimals ?? null,
 			have: big(w.have),
 			need: big(w.need)
 		};

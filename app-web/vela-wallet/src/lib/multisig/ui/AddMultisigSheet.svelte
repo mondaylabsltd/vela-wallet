@@ -533,15 +533,19 @@
 							>{m.proposal.addNetwork}</Button
 						>
 					{/if}
-					{#if link.members?.some((member) => member.name || mine(member))}
+					{#if link.members && link.members.length > 0}
+						<!-- r8-12: every member the invite names, with its kind — one with no
+						     label by its address, never left out. -->
 						<p class="line">{m.add.invitedMembers}</p>
 						<ul class="named">
 							{#each link.members as member, i (i)}
 								<!-- r5reg-24: the one of them that is this device's own account, said. -->
 								{@const you = mine(member)}
-								{#if member.name || you}
-									<li data-testid={you ? 'invite-you' : undefined}>
-										<span class="who">{member.name ?? you}</span>
+								{@const shown =
+									member.name ?? you ?? (member.address ? shortenAddress(member.address) : null)}
+								{#if shown}
+									<li data-testid={you ? 'invite-you' : 'invite-member'}>
+										<span class="who">{shown}</span>
 										{#if you}<span class="you">{m.add.thatsYou}</span>{/if}
 										{#if member.kind}<span class="kind"
 												>{member.kind === 'passkey'

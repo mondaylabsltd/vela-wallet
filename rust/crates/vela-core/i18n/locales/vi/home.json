@@ -266,7 +266,8 @@
         "copy": "Sao chép",
         "executedBy": "Do {{name}} thực thi",
         "countedThen": "{{approved}} trong {{threshold}} lượt duyệt được tính khi thực thi",
-        "approvalsSigned": "Các thành viên này đã duyệt. Lượt duyệt nào được tính khi thực thi không được lưu trên thiết bị này."
+        "approvalsSigned": "Các thành viên này đã duyệt. Lượt duyệt nào được tính khi thực thi không được lưu trên thiết bị này.",
+        "outboxSending": "Đang gửi phê duyệt của bạn tới các thành viên khác…"
       },
       "send": {
         "propose": "Đề xuất và duyệt",
@@ -561,7 +562,9 @@
         "rowReject": "Từ chối {{number}}",
         "outcomeNotSent": "Đã ký, chưa gửi",
         "nameFromRecord": "Tên được lưu cùng bản ghi của nó — bạn ký cho địa chỉ",
-        "linkDamaged": "Liên kết này bị hỏng — hãy xin một liên kết mới."
+        "linkDamaged": "Liên kết này bị hỏng — hãy xin một liên kết mới.",
+        "executeConfirms": "Ví sẽ yêu cầu bạn xác nhận {{total}} giao dịch, lần lượt từng cái.",
+        "executeFeeMax": "Phí mạng ≈ {{fee}}, tối đa {{max}}, do ví của bạn ({{account}}) trả."
       },
       "import": {
         "or": "Hoặc nhập từ Safe{Wallet}",
@@ -719,7 +722,46 @@
         "approveExecuteAnyway": "Vẫn phê duyệt và thực thi",
         "executeAnyway": "Vẫn thực thi",
         "proposeAnyway": "Vẫn đề xuất và phê duyệt",
-        "blocked": "Vela không ký giao dịch này: chạy nó sẽ thay đổi ai kiểm soát multisig."
+        "blocked": "Vela không ký giao dịch này: chạy nó sẽ thay đổi ai kiểm soát multisig.",
+        "reading": {
+          "send": "Gửi",
+          "sendFrom": "Chuyển token từ tài khoản khác",
+          "approve": "Phê duyệt",
+          "increase": "Tăng hạn mức",
+          "decrease": "Giảm hạn mức",
+          "permit": "Permit",
+          "daiPermit": "Permit DAI",
+          "permit2": "Hạn mức Permit2",
+          "approveAll": "Phê duyệt mọi token của một bộ sưu tập",
+          "revokeAll": "Thu hồi quyền với một bộ sưu tập",
+          "batchOne": "Gói 1 lệnh gọi",
+          "batchMany": "Gói {{total}} lệnh gọi",
+          "unreadable": "Không đọc được",
+          "call": "Gọi hợp đồng",
+          "members": "Thay đổi thành viên",
+          "rename": "Đổi tên thành {{name}}",
+          "amount": "Số tiền",
+          "allowance": "Hạn mức",
+          "to": "Đến",
+          "from": "Từ",
+          "spender": "Bên được phép",
+          "operator": "Bên điều hành",
+          "collection": "Bộ sưu tập",
+          "token": "Token",
+          "function": "Hàm",
+          "alsoSends": "Gửi kèm",
+          "runner": "Chạy bởi",
+          "runnerNote": "Các lệnh gọi chạy từ hợp đồng này, không phải từ multisig.",
+          "unlimited": "Không giới hạn",
+          "allOfIt": "Toàn bộ",
+          "decimalsUnknown": "{{raw}} đơn vị cơ sở · không rõ số thập phân",
+          "unlimitedLine": "Hạn mức không giới hạn: {{spender}} có thể lấy hết số này mà multisig đang giữ, bây giờ và về sau.",
+          "nestedLine": "Một gói nằm trong gói khác. Mọi lệnh gọi đều liệt kê bên dưới; lệnh bên trong chạy từ hợp đồng gói.",
+          "unreadableLine": "Một phần của gói này không đọc được (lồng quá sâu hoặc bị cắt). Vela sẽ không ký.",
+          "decimalsLine": "{{token}} không cho biết số chữ số thập phân, nên số tiền hiển thị theo đơn vị cơ sở.",
+          "ownTokenLine": "Lệnh này gửi token vào chính hợp đồng của token ({{token}}). Số token đó sẽ mất.",
+          "blindLine": "Vela không đọc được lệnh gọi này làm gì. Chỉ phê duyệt nếu bạn biết chính xác nó là gì."
+        }
       }
     },
     "balanceDetailStatusOwnNode": "Node của bạn không phản hồi",

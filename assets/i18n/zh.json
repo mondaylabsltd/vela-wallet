@@ -815,7 +815,8 @@
      "title": "用稳定币付 gas",
      "description": "多数网络支持用稳定币支付手续费，不用先备一份原生币。"
     }
-   }
+   },
+   "linkWaiting": "有一个多签链接在等你。创建钱包或登录后就会打开。"
   },
   "settings": {
    "title": "设置",
@@ -1614,7 +1615,7 @@
     "chipGrantAll": "全部允许",
     "chooseGrant": "请先选择“全部允许”或“撤销”",
     "labelSource": "解读来源",
-    "byVela": "Vela，从交易本身"
+    "byVela": "Vela（读自交易本身）"
    },
    "hiddenChars": "此请求含有隐藏或会改变文字方向的字符 — 已显示为 ⟨U+…⟩。",
    "blankLines": "⋯ 空行：{{lines}} ⋯",

@@ -70,6 +70,9 @@ pub const CREATE_DRAFT_KEY: &str = "vela.multisigCreateDraft";
 /// r4D-8: the multisigs whose invite was handed on from this device (its
 /// link copied or shared, its code shown) — lowercase addresses, a JSON array.
 pub const INVITE_SHARED_KEY: &str = "vela.multisigInviteShared";
+/// r8-7: each multisig's members as the chains last said (lowercase address
+/// → members), so a member added by a member change is "on this device".
+pub const MEMBERS_NOW_KEY: &str = "vela.multisigMembersNow";
 /// core-ms-2: this device's transaction history (the wallet's, read only
 /// here): where it was used is the `recent` hint ([`MultisigAccountsView::recent_networks`]).
 pub const TRANSACTIONS_KEY: &str = "vela.transactionHistory";
@@ -678,7 +681,9 @@ pub struct AccountRow {
     pub shared: bool,
     /// A creator's proof is kept here: its record is on its way (r4a-12).
     pub record_waiting: bool,
-    /// The founding members that are Vela accounts on this device.
+    /// Its members that are Vela accounts on this device — its members as
+    /// the chains last said (a member added by a member change counts, one
+    /// removed does not), its founding ones until a chain was read (r8-7).
     pub local_members: Vec<String>,
     /// Networks where something besides its members can act for it.
     #[cfg_attr(feature = "bindings", ts(type = "number[]"))]
@@ -775,6 +780,8 @@ pub struct State {
     kept_draft: Option<CreateDraft>,
     /// r4D-8: the multisigs whose invite was handed on from here (lowercase).
     invite_shared: BTreeSet<String>,
+    /// r8-7: members as the chains last said, per multisig (lowercase).
+    members_now: BTreeMap<String, Vec<String>>,
     salt: Option<String>,
     draft: Option<(Vec<String>, u64, String)>,
     /// core-ms-2: the threshold the person picked, and for how many members.
@@ -1712,6 +1719,23 @@ impl App for MultisigAccounts {
                 lock(&model.state).set_first_run(&address, on);
                 flow(model, |io, st| async move { save(&io, &st).await })
             }
+            Event::Apply {
+                address,
+                update: AccountUpdate::MembersNow { members },
+            } => {
+                let json = {
+                    let mut s = lock(&model.state);
+                    let key = address.to_ascii_lowercase();
+                    if s.find(&address).is_none() || s.members_now.get(&key) == Some(&members) {
+                        return render();
+                    }
+                    s.members_now.insert(key, members);
+                    serde_json::to_string(&s.members_now).unwrap_or_default()
+                };
+                flow(model, move |io, _| async move {
+                    io.store(MEMBERS_NOW_KEY, Some(json)).await;
+                })
+            }
             Event::Apply { address, update } => {
                 let changed = {
                     let mut s = lock(&model.state);
@@ -1729,6 +1753,8 @@ impl App for MultisigAccounts {
                         AccountUpdate::NameMembers { members, typed } => {
                             s.name_members(&address, members, *typed)
                         }
+                        // Taken above.
+                        AccountUpdate::MembersNow { .. } => false,
                     }
                 };
                 if !changed {
@@ -1779,10 +1805,15 @@ impl App for MultisigAccounts {
                             .or_else(|| a.label.clone()),
                         shared: a.is_shared(),
                         record_waiting: s.proofs.contains_key(&a.address.to_ascii_lowercase()),
-                        local_members: local_owners(&s.local, &a.owners)
-                            .into_iter()
-                            .map(|o| o.address)
-                            .collect(),
+                        local_members: local_owners(
+                            &s.local,
+                            s.members_now
+                                .get(&a.address.to_ascii_lowercase())
+                                .unwrap_or(&a.owners),
+                        )
+                        .into_iter()
+                        .map(|o| o.address)
+                        .collect(),
                         high_risk_on: on("chain"),
                         refused_on: on("genesis"),
                         account: a.clone(),
@@ -1880,6 +1911,7 @@ async fn start(io: &Io<Event>, st: &Shared<State>) {
             CREATE_DRAFT_KEY,
             INVITE_SHARED_KEY,
             TRANSACTIONS_KEY,
+            MEMBERS_NOW_KEY,
         ])
         .await;
     let get = |k: &str| loaded.get(k).cloned().flatten();
@@ -1899,6 +1931,9 @@ async fn start(io: &Io<Event>, st: &Shared<State>) {
         s.kept_draft = get(CREATE_DRAFT_KEY)
             .and_then(|r| serde_json::from_str::<CreateDraft>(&r).ok())
             .filter(|d| !d.is_blank());
+        s.members_now = get(MEMBERS_NOW_KEY)
+            .and_then(|r| serde_json::from_str(&r).ok())
+            .unwrap_or_default();
         s.invite_shared = get(INVITE_SHARED_KEY)
             .and_then(|r| serde_json::from_str::<BTreeSet<String>>(&r).ok())
             .unwrap_or_default()

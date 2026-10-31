@@ -273,6 +273,63 @@ fn signing_words_live_in_the_core() {
 // ---------------------------------------------------------------------------
 
 #[test]
+fn a_new_site_starts_on_the_spaces_first_network_when_ethereum_is_not_in_it() {
+    // r8-21: a testnet space (no Ethereum) never offers network 1.
+    let mut sut = fresh();
+    sut.dispatch(Event::NetworksChanged {
+        chain_ids: vec![5_042_002, 11_155_111],
+    });
+    hello(&mut sut, "t1", "d1", DAPP);
+    let chain = only_answer(&ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "1",
+        "eth_chainId",
+        json!([]),
+    ));
+    assert_eq!(chain["result"], json!(format!("0x{:x}", 5_042_002)));
+}
+
+#[test]
+fn a_new_site_starts_on_the_multisigs_own_network() {
+    // r8-21: a multisig on Gnosis (and Arc, not in this space) — never Ethereum.
+    let mut sut = fresh();
+    sut.dispatch(Event::AccountNetworks {
+        networks: vec![5_042_002, 100],
+    });
+    hello(&mut sut, "t1", "d1", DAPP);
+    let chain = only_answer(&ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "1",
+        "eth_chainId",
+        json!([]),
+    ));
+    assert_eq!(chain["result"], json!("0x64"));
+    // Another account (lives everywhere): Ethereum again.
+    sut.dispatch(Event::AccountSwitched {
+        address: A2.to_owned(),
+        now_ms: T0,
+        space: false,
+    });
+    hello(&mut sut, "t2", "d2", "https://other.example");
+    let chain = only_answer(&ask(
+        &mut sut,
+        "t2",
+        "d2",
+        "https://other.example",
+        "1",
+        "eth_chainId",
+        json!([]),
+    ));
+    assert_eq!(chain["result"], json!("0x1"));
+}
+
+#[test]
 fn a_new_site_starts_on_ethereum_and_sees_no_accounts() {
     let mut sut = fresh();
     hello(&mut sut, "t1", "d1", DAPP);

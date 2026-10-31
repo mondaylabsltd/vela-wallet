@@ -694,7 +694,7 @@ window.VelaCS = window.VelaCS || {};
       provenance(view, 'described', { contract: (known && known.name) || label(meta) });
     }
 
-    if (descriptor.nested) return applyNested(descriptor, values, call, ctx, view, meta);
+    if (descriptor.nested) return applyNested(descriptor, values, call, ctx, view, meta, isLeg);
 
     var hero = null;
     var rows = [];
@@ -799,7 +799,7 @@ window.VelaCS = window.VelaCS || {};
     provenance(view, 'shape', { whatKey: descriptor.shape });
     // A batch's legs are still read from its bytes — they are what the call
     // hands on — under the same "contract call" and the same line.
-    if (descriptor.nested) return applyNested(descriptor, values, call, ctx, view, meta);
+    if (descriptor.nested) return applyNested(descriptor, values, call, ctx, view, meta, isLeg);
     view.hero = { kind: 'code', title: parsed.name + '(…)', sub: label(meta) };
     view.sentence = text('sentence.shapeOnly');
     view.fields = values.map(function (v, i) {
@@ -1031,16 +1031,19 @@ window.VelaCS = window.VelaCS || {};
 
   // --- nested calldata -------------------------------------------------------
 
-  function applyNested(descriptor, values, call, ctx, view, meta) {
+  function applyNested(descriptor, values, call, ctx, view, meta, isLeg) {
     var inner = descriptor.nested === 'multiSend'
       ? decodeMultiSend(values[0])
       : [{ to: values[0], value: values[1], data: values[2] }];
     view.hero = null;
-    view.legs = inner.map(function (leg, i) {
+    var legs = inner.map(function (leg, i) {
       var legView = baseView(null, ctx);
       resolveCall({ to: leg.to, value: '0x' + BigInt(leg.value || 0n).toString(16), data: leg.data }, ctx, legView, true);
       return { index: i + 1, view: legView };
     });
+    // r8-5: the outermost card lists every level (a leg keeps its own legs
+    // for it to list); deeper than MAX_NESTING is refused there.
+    view.legs = isLeg ? legs : flattenLegs(legs, view);
     view.risk = view.legs.reduce(function (worst, leg) {
       return rank(leg.view.risk) > rank(worst) ? leg.view.risk : worst;
     }, rank(view.risk) > rank('caution') ? view.risk : 'caution');
@@ -1048,14 +1051,44 @@ window.VelaCS = window.VelaCS || {};
     // operation does not hold what was asked) must survive them.
     view.refuse = view.refuse || view.legs.some(function (leg) { return leg.view.refuse; });
     view.sentence = descriptor.nested === 'multiSend'
-      ? text('sentence.multiSend', { count: inner.length })
+      ? (inner.length === 1 ? text('sentence.multiSendOne') : text('sentence.multiSend', { count: inner.length }))
       : text('sentence.safeExec');
-    view.warnings.push({ tone: 'caution', key: 'warn.nested' });
+    // r8-5 (vela-core `reading`: a batch inside a batch asks for "… anyway"):
+    // every leg is listed below; the confirm is never the plain one.
+    view.warnings.push({ tone: isLeg ? 'danger' : 'caution', key: 'warn.nested' });
+    if (isLeg && rank(view.risk) < rank('danger')) view.risk = 'danger';
     liftLegWarnings(view);
     view.tech = techFor(descriptor.signature, values, call.data, {
       addresses: [{ roleKey: 'ui.outerContract', name: label(meta), address: call.to }],
     });
     return view;
+  }
+
+  /** The deepest batch inside a batch this page lists (vela-core `reading::MAX_NESTING`). */
+  var MAX_NESTING = 3;
+
+  /**
+   * r8-5: every leg of every level, in order — a leg that is itself a batch
+   * is followed by its own legs ("1.1", "1.2"), never a card with nothing
+   * under it. Deeper than MAX_NESTING, nothing is read: refused, as the
+   * wallet's core refuses it.
+   */
+  function flattenLegs(legs, view, prefix, depth) {
+    depth = depth || 1;
+    var out = [];
+    legs.forEach(function (leg) {
+      var index = prefix ? prefix + '.' + leg.index : String(leg.index);
+      out.push({ index: index, view: leg.view });
+      var inner = leg.view.legs || [];
+      if (!inner.length) return;
+      if (depth >= MAX_NESTING) {
+        refuseWith(view, 'refuse.msBatchUnreadable');
+        return;
+      }
+      out.push.apply(out, flattenLegs(inner, view, index, depth + 1));
+      leg.view.legs = [];
+    });
+    return out;
   }
 
   /**
@@ -2251,11 +2284,11 @@ window.VelaCS = window.VelaCS || {};
       view.sentence = text('sentence.msReject', { nonce: tx.nonce.toString() });
     } else if (reading.action.kind === 'batch') {
       view.intentKey = 'intent.batch';
-      view.legs = reading.action.calls.map(function (leg, i) {
+      view.legs = flattenLegs(reading.action.calls.map(function (leg, i) {
         var legView = baseView(intent, ctx);
         multisigAction(leg.action, { to: leg.to, value: hexValue(leg.value), data: leg.data }, ctx, legView, true);
         return { index: i + 1, view: legView };
-      });
+      }), view);
       view.sentence = text('sentence.msBatch', { count: reading.action.calls.length });
       view.risk = view.legs.reduce(function (worst, leg) {
         return rank(leg.view.risk) > rank(worst) ? leg.view.risk : worst;

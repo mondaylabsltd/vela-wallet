@@ -86,6 +86,7 @@ window.VelaCS.i18n.register('fr', {
   'sentence.deploy': 'Vous déployez le code d’un nouveau contrat. Un code ne peut pas être lu comme une intention.',
   'sentence.batch': '{count} transactions, une seule signature.',
   'sentence.multiSend': '{count} appels regroupés dans une seule signature.',
+  'sentence.multiSendOne': "Un appel regroupé dans une seule signature.",
   'sentence.safeExec': 'Un appel transmis via Safe — c’est la couche interne qui s’exécute réellement.',
   'sentence.burn': 'Le destinataire est le contrat du token lui-même. Les fonds envoyés là n’arrivent à personne — ils sont bloqués pour toujours.',
   'sentence.abiOnly': 'Le code source de ce contrat est vérifié et chaque paramètre se décode, mais personne n’a écrit ce qu’ils signifient. Ci-dessous : des faits, pas des explications.',

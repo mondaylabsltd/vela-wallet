@@ -818,7 +818,8 @@
      "title": "Paga el gas con stablecoins",
      "description": "La mayoría de las redes acepta stablecoins para las comisiones — no necesitas tener antes la moneda nativa."
     }
-   }
+   },
+   "linkWaiting": "Hay un enlace de multisig esperando. Crea una wallet o inicia sesión y se abrirá."
   },
   "settings": {
    "title": "Ajustes",

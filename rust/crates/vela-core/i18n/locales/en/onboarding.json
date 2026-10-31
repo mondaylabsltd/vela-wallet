@@ -64,7 +64,8 @@
           "title": "Pay gas in stablecoins",
           "description": "Most networks accept stablecoins for fees — no need to stock up on a native coin first."
         }
-      }
+      },
+      "linkWaiting": "A multisig link is waiting. Create a wallet or sign in, and it opens."
     },
     "settings": {
       "title": "Settings",

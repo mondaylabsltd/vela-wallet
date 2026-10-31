@@ -192,7 +192,8 @@
     "copy": "Salin",
     "executedBy": "Dieksekusi oleh {{name}}",
     "countedThen": "{{approved}} dari {{threshold}} persetujuan dihitung saat dieksekusi",
-    "approvalsSigned": "Anggota ini menyetujuinya. Persetujuan mana yang dihitung saat dieksekusi tidak tercatat di perangkat ini."
+    "approvalsSigned": "Anggota ini menyetujuinya. Persetujuan mana yang dihitung saat dieksekusi tidak tercatat di perangkat ini.",
+    "outboxSending": "Mengirim persetujuanmu ke anggota lain…"
    },
    "send": {
     "propose": "Usulkan dan setujui",
@@ -487,7 +488,9 @@
     "rowReject": "Tolak {{number}}",
     "outcomeNotSent": "Ditandatangani, belum terkirim",
     "nameFromRecord": "Namanya seperti tersimpan dengan catatannya — yang Anda tandatangani adalah untuk alamatnya",
-    "linkDamaged": "Tautan ini rusak — mintalah tautan yang baru."
+    "linkDamaged": "Tautan ini rusak — mintalah tautan yang baru.",
+    "executeConfirms": "Wallet-mu akan meminta konfirmasi {{total}} transaksi, satu per satu.",
+    "executeFeeMax": "Biaya jaringan ≈ {{fee}}, paling banyak {{max}}, dibayar wallet-mu ({{account}})."
    },
    "import": {
     "or": "Atau impor dari Safe{Wallet}",
@@ -645,7 +648,46 @@
     "approveExecuteAnyway": "Tetap setujui dan jalankan",
     "executeAnyway": "Tetap jalankan",
     "proposeAnyway": "Tetap usulkan dan setujui",
-    "blocked": "Vela tidak menandatangani transaksi ini: menjalankannya akan mengubah siapa yang mengendalikan multisig."
+    "blocked": "Vela tidak menandatangani transaksi ini: menjalankannya akan mengubah siapa yang mengendalikan multisig.",
+    "reading": {
+     "send": "Kirim",
+     "sendFrom": "Pindahkan token dari akun lain",
+     "approve": "Setujui",
+     "increase": "Tambah izin",
+     "decrease": "Kurangi izin",
+     "permit": "Permit",
+     "daiPermit": "Permit DAI",
+     "permit2": "Izin Permit2",
+     "approveAll": "Setujui semua token sebuah koleksi",
+     "revokeAll": "Cabut akses ke sebuah koleksi",
+     "batchOne": "Bundel 1 panggilan",
+     "batchMany": "Bundel {{total}} panggilan",
+     "unreadable": "Tidak bisa dibaca",
+     "call": "Panggilan kontrak",
+     "members": "Mengubah anggota",
+     "rename": "Ganti nama menjadi {{name}}",
+     "amount": "Jumlah",
+     "allowance": "Izin",
+     "to": "Ke",
+     "from": "Dari",
+     "spender": "Penerima izin",
+     "operator": "Operator",
+     "collection": "Koleksi",
+     "token": "Token",
+     "function": "Fungsi",
+     "alsoSends": "Juga mengirim",
+     "runner": "Dijalankan oleh",
+     "runnerNote": "Panggilannya berjalan dari kontrak ini, bukan dari multisig.",
+     "unlimited": "Tanpa batas",
+     "allOfIt": "Semuanya",
+     "decimalsUnknown": "{{raw}} unit dasar · desimal tidak diketahui",
+     "unlimitedLine": "Izin tanpa batas: {{spender}} bisa mengambil semua yang dipegang multisig, sekarang dan nanti.",
+     "nestedLine": "Bundel di dalam bundel. Semua panggilan tercantum di bawah; yang di dalam berjalan dari kontrak bundel.",
+     "unreadableLine": "Sebagian bundel ini tidak bisa dibaca (bersarang terlalu dalam atau terpotong). Vela tidak akan menandatanganinya.",
+     "decimalsLine": "{{token}} tidak menyebut jumlah desimalnya, jadi jumlahnya ditampilkan dalam unit dasar.",
+     "ownTokenLine": "Ini mengirim token ke kontrak token itu sendiri ({{token}}). Token itu akan hilang.",
+     "blindLine": "Vela tidak bisa membaca apa yang dilakukan panggilan ini. Setujui hanya jika kamu tahu persis apa itu."
+    }
    }
   }
  }

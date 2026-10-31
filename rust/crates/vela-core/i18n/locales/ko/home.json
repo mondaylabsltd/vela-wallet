@@ -266,7 +266,8 @@
         "copy": "복사",
         "executedBy": "{{name}}이(가) 실행함",
         "countedThen": "실행 당시 인정된 승인: {{threshold}}개 중 {{approved}}개",
-        "approvalsSigned": "이 멤버들이 승인했습니다. 실행 당시 어떤 승인이 인정됐는지는 이 기기에 기록되어 있지 않습니다."
+        "approvalsSigned": "이 멤버들이 승인했습니다. 실행 당시 어떤 승인이 인정됐는지는 이 기기에 기록되어 있지 않습니다.",
+        "outboxSending": "승인을 다른 멤버에게 보내는 중…"
       },
       "send": {
         "propose": "제안하고 승인",
@@ -561,7 +562,9 @@
         "rowReject": "#{{number}} 거부",
         "outcomeNotSent": "서명됨, 아직 전송 안 됨",
         "nameFromRecord": "기록과 함께 저장된 이름입니다 — 서명 대상은 주소입니다",
-        "linkDamaged": "이 링크가 손상되었습니다 — 새 링크를 요청하세요."
+        "linkDamaged": "이 링크가 손상되었습니다 — 새 링크를 요청하세요.",
+        "executeConfirms": "지갑이 거래 {{total}}건을 차례로 확인하도록 요청합니다.",
+        "executeFeeMax": "네트워크 수수료 ≈ {{fee}}, 최대 {{max}}, 지갑({{account}})이 냅니다."
       },
       "import": {
         "or": "또는 Safe{Wallet}에서 가져오기",
@@ -719,7 +722,46 @@
         "approveExecuteAnyway": "그래도 승인하고 실행",
         "executeAnyway": "그래도 실행",
         "proposeAnyway": "그래도 제안하고 승인",
-        "blocked": "Vela는 이 거래에 서명하지 않습니다: 실행하면 멀티시그를 누가 관리하는지가 바뀝니다."
+        "blocked": "Vela는 이 거래에 서명하지 않습니다: 실행하면 멀티시그를 누가 관리하는지가 바뀝니다.",
+        "reading": {
+          "send": "보내기",
+          "sendFrom": "다른 계정에서 토큰 옮기기",
+          "approve": "승인",
+          "increase": "허용량 늘리기",
+          "decrease": "허용량 줄이기",
+          "permit": "Permit",
+          "daiPermit": "DAI Permit",
+          "permit2": "Permit2 허용",
+          "approveAll": "컬렉션의 모든 토큰 승인",
+          "revokeAll": "컬렉션 접근 취소",
+          "batchOne": "호출 1개 묶음",
+          "batchMany": "호출 {{total}}개 묶음",
+          "unreadable": "읽을 수 없음",
+          "call": "컨트랙트 호출",
+          "members": "멤버 변경",
+          "rename": "{{name}}(으)로 이름 변경",
+          "amount": "금액",
+          "allowance": "허용량",
+          "to": "받는 곳",
+          "from": "보내는 곳",
+          "spender": "사용 권한자",
+          "operator": "운영자",
+          "collection": "컬렉션",
+          "token": "토큰",
+          "function": "함수",
+          "alsoSends": "함께 보냄",
+          "runner": "실행 주체",
+          "runnerNote": "이 호출은 멀티시그가 아니라 이 컨트랙트에서 실행됩니다.",
+          "unlimited": "무제한",
+          "allOfIt": "전부",
+          "decimalsUnknown": "{{raw}} 기본 단위 · 소수 자릿수 모름",
+          "unlimitedLine": "무제한 허용: {{spender}}이(가) 멀티시그가 가진 이 토큰을 지금과 앞으로 모두 가져갈 수 있습니다.",
+          "nestedLine": "묶음 안에 묶음이 있습니다. 모든 호출을 아래에 표시합니다. 안쪽 호출은 묶음 컨트랙트에서 실행됩니다.",
+          "unreadableLine": "이 묶음의 일부를 읽을 수 없습니다(너무 깊게 중첩되었거나 잘렸습니다). Vela는 서명하지 않습니다.",
+          "decimalsLine": "{{token}}이(가) 소수 자릿수를 알려주지 않아 금액을 기본 단위로 표시합니다.",
+          "ownTokenLine": "토큰 자신의 컨트랙트({{token}})로 토큰을 보냅니다. 잃게 됩니다.",
+          "blindLine": "Vela가 이 호출이 무엇을 하는지 읽을 수 없습니다. 정확히 알고 있을 때만 승인하세요."
+        }
       }
     },
     "balanceDetailStatusOwnNode": "내 노드가 응답하지 않습니다",

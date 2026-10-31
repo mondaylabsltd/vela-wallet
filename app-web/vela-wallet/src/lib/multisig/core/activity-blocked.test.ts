@@ -75,7 +75,7 @@ describe('a ready transaction on the home (r4-5)', () => {
 				mailbox: true
 			}
 		] as never;
-		waitingRows.follow(m, null, SAFE);
+		waitingRows.follow(m, SAFE);
 
 		said.standing = { kind: 'ready' };
 		expect(subtitle()).toContain('Ready to execute');

@@ -1,90 +1,85 @@
 /**
- * cs-12 in a browser: the review a member sees on a multisig proposal (and
- * on the outside-wallet sheet) is drawn by the signing sheet's renderer from
- * the real cores' reading — "Approve" and the unlimited warning for an
- * approve(spender, MAX), the red blind warning for a call nobody can read.
+ * r8-1 in a browser: the review a member sees on a multisig proposal (and
+ * on the outside-wallet sheet) draws the core's own reading of every call —
+ * the shared vectors every platform replays — with the signing sheet's
+ * renderer: "Approve" and "Unlimited" in red for an approve(spender, MAX),
+ * every leg of a nested batch, the raw amount of a token whose decimals are
+ * unknown.
  *
  * The words are their keys (a stand-in catalog), so what is asserted is
  * WHICH sentence is drawn, not its English.
  */
-import { beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
-import { loadCore } from '$lib/core/client';
-import type { SigningMessages } from '$lib/signing/messages';
 import type { PartyBadge } from '$lib/signing/model';
-import { CallReading } from '../core/call-review.svelte';
-import { APPROVE_MAX, BLIND, CHAIN, MULTISIG, SPENDER, read } from '../core/call-review.testing';
+import type { MultisigMessages } from '../messages';
+import type { MultisigReviewOut } from '../core/kernel';
 import CallReview from './CallReview.svelte';
+import VECTORS from '../../../../../../rust/crates/vela-core/tests/vectors/multisig/reading.json';
 
-/** Every message is its own name: `m.warnUnlimited` reads "warnUnlimited". */
-const names = { get: (_: object, key: string | symbol) => String(key) };
-const m = new Proxy({} as SigningMessages, {
-	get: (_, key) => (key === 'certain' ? new Proxy({}, names) : String(key))
-});
+/** Every message is its own name: `m.review.reading.unlimited` reads "unlimited". */
+const words = (): object => new Proxy({}, { get: (_, key) => String(key) });
+const m = {
+	review: { callNumber: 'call {{n}}', reading: words() }
+} as unknown as MultisigMessages;
 
-function shown(
-	call: typeof APPROVE_MAX,
-	badges?: Record<string, PartyBadge>,
-	names?: Record<string, string>
-) {
-	const reading = new CallReading(CHAIN, MULTISIG, call);
-	const views = read(call);
-	reading.clear = views.clear;
-	reading.guard = views.guard;
+type Case = (typeof VECTORS.cases)[number];
+const named = (start: string): Case => VECTORS.cases.find((c) => c.name.startsWith(start))!;
+const reviewOf = (c: Case) => c.expect as unknown as MultisigReviewOut;
+
+function shown(c: Case, badges?: Record<string, PartyBadge>, names?: Record<string, string>) {
 	return render(CallReview, {
-		reading,
+		review: reviewOf(c),
 		m,
+		nativeSymbol: 'USDC',
 		...(badges ? { badges } : {}),
 		...(names ? { names } : {})
 	});
 }
 
-describe('a member reads a multisig’s contract call (cs-12)', () => {
-	beforeAll(async () => {
-		await loadCore();
-	});
-
-	it('approve(spender, MAX): the decoded approval and the unlimited warning', async () => {
-		const screen = shown(APPROVE_MAX);
+describe('a member reads a multisig’s calls, as the core read them (r8-1)', () => {
+	it('approve(spender, MAX): Approve, Unlimited, and the unlimited line', async () => {
+		const screen = shown(named("approve(spender, 2^256-1) of Arc's USDC"));
 		const text = screen.container.textContent ?? '';
-		expect(text.toLowerCase()).toContain('approve');
-		expect(text).toContain('warnUnlimited');
-		expect(text).toContain('valueUnlimited');
-		expect(text).not.toContain('warnBlindDecode');
+		expect(text).toContain('approve');
+		expect(text).toContain('unlimited');
+		expect(text).toContain('unlimitedLine');
 		// What it grants is said, not offered: no cap chips to press.
 		expect(screen.container.querySelectorAll('button').length).toBe(0);
 	});
 
-	it('a call nobody can read: the blind title and warning, and the coin it moves', async () => {
-		const screen = shown(BLIND);
+	it('a nested batch: every leg of every level, and the nested line (r8-5)', async () => {
+		const screen = shown(named('a batch whose leg calls multiSend'));
 		const text = screen.container.textContent ?? '';
-		expect(text).toContain('intentBlind');
-		expect(text).toContain('warnBlindDecode');
-		expect(text).toContain('1.5');
+		expect(text).toContain('call 1');
+		expect(text).toContain('call 1.1');
+		expect(text).toContain('call 1.2');
+		expect(text).toContain('nestedLine');
 	});
 
-	it('r5reg-15: its recipient row wears what the review knows of it — said once, here', async () => {
-		const send = { to: SPENDER, value: '50000000000000000', data: '0x' };
-		const plain = shown(send);
-		expect(plain.container.textContent).not.toContain('tagFirstTime');
-		await plain.unmount();
-		const screen = shown(send, {
-			[SPENDER.toLowerCase()]: { text: 'tagFirstTime', tone: 'caution' }
-		});
-		expect(screen.container.textContent).toContain('tagFirstTime');
+	it('a token nobody read: its raw amount and decimals unknown (r8-2)', async () => {
+		const screen = shown(named('a token nobody read'));
+		const text = screen.container.textContent ?? '';
+		expect(text).toContain('decimalsUnknown');
+		expect(text).toContain('decimalsLine');
 	});
 
-	it('r4a-18: its recipient row reads by the name the review knows, the address beneath', async () => {
-		const send = { to: SPENDER, value: '50000000000000000', data: '0x' };
+	it('r5reg-15 / r4a-18: its recipient row wears what the review knows of it, by name', async () => {
+		const send = named("Arc's USDC ERC-20 transfer");
+		const to = '0x4444444444444444444444444444444444444444';
 		const screen = shown(
 			send,
-			{ [SPENDER.toLowerCase()]: { text: 'knownOwn', tone: 'neutral' } },
-			{ [SPENDER.toLowerCase()]: 'R6 Bob' }
+			{ [to]: { text: 'tagFirstTime', tone: 'caution' } },
+			{ [to]: 'R8 Bob' }
 		);
 		const text = screen.container.textContent ?? '';
-		expect(text).toContain('R6 Bob');
-		expect(text).toContain('knownOwn');
-		expect(text).toContain(SPENDER);
+		expect(text).toContain('tagFirstTime');
+		expect(text).toContain('R8 Bob');
+	});
+
+	it('a member change has no calls: nothing drawn', async () => {
+		const screen = shown(named('a member change'));
+		expect(screen.container.querySelector('[data-testid="multisig-call-review"]')).toBeNull();
 	});
 });

@@ -266,7 +266,8 @@
         "copy": "コピー",
         "executedBy": "{{name}} が実行",
         "countedThen": "実行時に数えられた承認：{{threshold}} 件中 {{approved}} 件",
-        "approvalsSigned": "これらのメンバーが承認しました。実行時にどの承認が数えられたかは、このデバイスに記録されていません。"
+        "approvalsSigned": "これらのメンバーが承認しました。実行時にどの承認が数えられたかは、このデバイスに記録されていません。",
+        "outboxSending": "承認を他のメンバーに送信しています…"
       },
       "send": {
         "propose": "提案して承認",
@@ -561,7 +562,9 @@
         "rowReject": "#{{number}} を拒否",
         "outcomeNotSent": "署名済み・未送信",
         "nameFromRecord": "記録とともに保存された名前です — 署名の対象はアドレスです",
-        "linkDamaged": "このリンクは壊れています — 新しいリンクを頼んでください。"
+        "linkDamaged": "このリンクは壊れています — 新しいリンクを頼んでください。",
+        "executeConfirms": "ウォレットが {{total}} 件のトランザクションを順に確認するよう求めます。",
+        "executeFeeMax": "ネットワーク手数料 ≈ {{fee}}（最大 {{max}}）、ウォレット（{{account}}）が支払います。"
       },
       "import": {
         "or": "または Safe{Wallet} から読み込む",
@@ -719,7 +722,46 @@
         "approveExecuteAnyway": "それでも承認して実行",
         "executeAnyway": "それでも実行",
         "proposeAnyway": "それでも提案して承認",
-        "blocked": "Vela はこの取引に署名しません：実行するとマルチシグを誰が管理するかが変わります。"
+        "blocked": "Vela はこの取引に署名しません：実行するとマルチシグを誰が管理するかが変わります。",
+        "reading": {
+          "send": "送金",
+          "sendFrom": "別のアカウントからトークンを移動",
+          "approve": "承認",
+          "increase": "許可額を増やす",
+          "decrease": "許可額を減らす",
+          "permit": "Permit",
+          "daiPermit": "DAI Permit",
+          "permit2": "Permit2 の許可",
+          "approveAll": "コレクションの全トークンを承認",
+          "revokeAll": "コレクションへのアクセスを取り消す",
+          "batchOne": "1 件の呼び出しのバッチ",
+          "batchMany": "{{total}} 件の呼び出しのバッチ",
+          "unreadable": "読み取れません",
+          "call": "コントラクト呼び出し",
+          "members": "メンバーを変更",
+          "rename": "名前を {{name}} に変更",
+          "amount": "金額",
+          "allowance": "許可額",
+          "to": "宛先",
+          "from": "送金元",
+          "spender": "許可先",
+          "operator": "オペレーター",
+          "collection": "コレクション",
+          "token": "トークン",
+          "function": "関数",
+          "alsoSends": "同時に送金",
+          "runner": "実行元",
+          "runnerNote": "この呼び出しはマルチシグではなく、このコントラクトから実行されます。",
+          "unlimited": "無制限",
+          "allOfIt": "全額",
+          "decimalsUnknown": "{{raw}} 基本単位 · 小数点以下の桁数不明",
+          "unlimitedLine": "無制限の許可：{{spender}} はマルチシグが持つこのトークンを今後も含めてすべて持ち出せます。",
+          "nestedLine": "バッチの中にバッチがあります。すべての呼び出しを下に表示します。内側の呼び出しはバッチコントラクトから実行されます。",
+          "unreadableLine": "このバッチの一部を読み取れません（入れ子が深すぎるか途中で切れています）。Vela は署名しません。",
+          "decimalsLine": "{{token}} が小数点以下の桁数を返さなかったため、金額を基本単位で表示しています。",
+          "ownTokenLine": "トークン自身のコントラクト（{{token}}）にトークンを送ります。失われます。",
+          "blindLine": "Vela はこの呼び出しの内容を読み取れません。内容を正確に把握している場合のみ承認してください。"
+        }
       }
     },
     "balanceDetailStatusOwnNode": "あなたのノードが応答していません",

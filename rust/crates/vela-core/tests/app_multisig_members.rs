@@ -535,9 +535,19 @@ fn replaces_a_member_the_new_account_shown_in_full_and_its_name_kept_here() {
         refusal_of(&on(&plan_of(&sut), ARC)),
         MemberRefusal::TheMultisig
     );
+    run(
+        &mut sut,
+        &mut world,
+        Event::Entry {
+            text: "0xd".to_owned(),
+        },
+    );
+    assert!(
+        sut.view().plan.is_none(),
+        "a part of an address is no entry yet"
+    );
+    // S4 (r8): a whole address is read as it is typed — no blur needed.
     run(&mut sut, &mut world, Event::Entry { text: D.to_owned() });
-    assert!(sut.view().plan.is_none(), "a new text is no entry yet");
-    run(&mut sut, &mut world, Event::ReadEntry);
     assert_eq!(sut.view().entry.entry.unwrap().address, D);
     run(
         &mut sut,

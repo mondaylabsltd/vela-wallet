@@ -147,7 +147,8 @@ export function resolveWelcomeMessages(locale: Locale): WelcomeMessages {
 		heroTitleFit: t(locale, 'onboarding.welcome.heroTitleFit'),
 		heroSubtitle: t(locale, 'onboarding.welcome.heroSubtitle'),
 		createWallet: t(locale, 'onboarding.welcome.createWallet'),
-		alreadyHaveWallet: t(locale, 'onboarding.welcome.alreadyHaveWallet')
+		alreadyHaveWallet: t(locale, 'onboarding.welcome.alreadyHaveWallet'),
+		linkWaiting: t(locale, 'onboarding.welcomeWeb.linkWaiting')
 	};
 }
 

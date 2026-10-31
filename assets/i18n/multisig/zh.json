@@ -192,7 +192,8 @@
     "copy": "复制",
     "executedBy": "由 {{name}} 执行",
     "countedThen": "执行时计入的批准：{{threshold}} 位中的 {{approved}} 位",
-    "approvalsSigned": "这些成员批准了它。执行时计入了哪些批准，这台设备上没有记录。"
+    "approvalsSigned": "这些成员批准了它。执行时计入了哪些批准，这台设备上没有记录。",
+    "outboxSending": "正在把你的批准发给其他成员…"
    },
    "send": {
     "propose": "发起并批准",
@@ -487,7 +488,9 @@
     "rowReject": "拒绝第 {{number}} 号",
     "outcomeNotSent": "已签名，尚未发出",
     "nameFromRecord": "随记录保存的名称——你签的是这个地址",
-    "linkDamaged": "此链接已损坏——请索取新的链接。"
+    "linkDamaged": "此链接已损坏——请索取新的链接。",
+    "executeConfirms": "钱包会依次请你确认 {{total}} 笔交易。",
+    "executeFeeMax": "网络费 ≈ {{fee}}，最多 {{max}}，由你的钱包（{{account}}）支付。"
    },
    "import": {
     "or": "或者从 Safe{Wallet} 导入",
@@ -645,7 +648,46 @@
     "approveExecuteAnyway": "仍然批准并执行",
     "executeAnyway": "仍然执行",
     "proposeAnyway": "仍然发起并批准",
-    "blocked": "Vela 不签这笔交易：执行它会改变谁控制这个多签账户。"
+    "blocked": "Vela 不签这笔交易：执行它会改变谁控制这个多签账户。",
+    "reading": {
+     "send": "发送",
+     "sendFrom": "从另一个账户转出代币",
+     "approve": "授权",
+     "increase": "增加授权额度",
+     "decrease": "降低授权额度",
+     "permit": "Permit 授权",
+     "daiPermit": "DAI Permit",
+     "permit2": "Permit2 授权",
+     "approveAll": "授权一个系列的全部代币",
+     "revokeAll": "撤销对一个系列的授权",
+     "batchOne": "包含 1 笔调用的批量",
+     "batchMany": "包含 {{total}} 笔调用的批量",
+     "unreadable": "无法读取",
+     "call": "合约调用",
+     "members": "更改成员",
+     "rename": "改名为 {{name}}",
+     "amount": "金额",
+     "allowance": "授权额度",
+     "to": "收款方",
+     "from": "付款方",
+     "spender": "被授权方",
+     "operator": "操作方",
+     "collection": "系列",
+     "token": "代币",
+     "function": "函数",
+     "alsoSends": "同时发送",
+     "runner": "执行方",
+     "runnerNote": "这些调用从此合约发出，而不是从多签发出。",
+     "unlimited": "无限",
+     "allOfIt": "全部",
+     "decimalsUnknown": "{{raw}} 个最小单位 · 小数位未知",
+     "unlimitedLine": "无限授权：{{spender}} 现在和以后都能拿走多签持有的全部这种代币。",
+     "nestedLine": "批量里还套着批量。下面列出了每一笔调用；里层的调用从批量合约发出。",
+     "unreadableLine": "这笔批量有一部分无法读取（嵌套太深或被截断）。Vela 不会签名。",
+     "decimalsLine": "{{token}} 没有给出小数位数，金额按最小单位显示。",
+     "ownTokenLine": "这会把代币发送到代币自己的合约（{{token}}），代币将会丢失。",
+     "blindLine": "Vela 读不出这笔调用做什么。只有在你确切知道它是什么时才批准。"
+    }
    }
   }
  }

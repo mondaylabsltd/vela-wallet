@@ -5,20 +5,15 @@
  * review), show the same block kinds, the multisig's beside them (the
  * state-diff guard). The core is the real one; the chain answers are the
  * fork's own (`rust/crates/vela-core/tests/vectors/multisig-review/`), and
- * the clear-signing machines run to rest (`call-review.testing.ts`).
+ * the core reads every call itself (r8-1, `reading-blocks.ts`).
  */
 import '$lib/i18n/wasm-init.server';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import type { CurrencyView } from '$lib/core/generated/CurrencyView';
-import type { FeeView } from '$lib/core/generated/FeeView';
-import type { SignView } from '$lib/core/generated/SignView';
 import { resolveMultisigMessages, resolveSigningMessages } from '$lib/i18n/engine.server';
-import { buildSigningModel } from '$lib/signing/live';
 import type { Block } from '$lib/signing/model';
 import type { SimEnded } from '$lib/signing/verdict';
-import { callReviewBlocks } from './call-review.svelte';
-import { APPROVE_MAX, BLIND, CHAIN, MULTISIG, TOKEN, read } from './call-review.testing';
+import { concernBlocks, readingBlocks, readingTitle, type ReadingContext } from './reading-blocks';
 import {
 	multisigReview,
 	type CriticalWrite,
@@ -41,7 +36,6 @@ import {
 
 const m = resolveMultisigMessages('en');
 const signing = resolveSigningMessages('en');
-const CURRENCY: CurrencyView = { code: 'USD', rate: 1, committed: true, pending: null };
 const ctx: ReviewContext = {
 	m,
 	signing,
@@ -72,7 +66,6 @@ const simOf = (review: MultisigReviewOut): SimEnded => ({
 	verdict: review.simulation,
 	judged: null
 });
-const kinds = (blocks: Block[]) => new Set(blocks.map((b) => b.kind));
 
 describe('the state-diff guard, said (§3.6)', () => {
 	it('Bybit on the fork: a red "changes who controls it", the slot-0 write, its source — no signing', () => {
@@ -281,122 +274,108 @@ describe('what moves, who it reaches, the bytes (§3.6)', () => {
 	});
 });
 
-// -- parity: a Vela account's sheet and a multisig member's review, same intent ----------
+// -- r8-1: the core's own reading of every call, drawn ---------------------------------
 
-const NO_FEE: FeeView = {
-	busy: false,
-	failed: null,
-	fee: null,
-	stale: false,
-	fee_token: null,
-	options: [],
-	confirm_fee_ready: false,
-	no_coin_pays: false,
-	nothing_to_pay_from: false,
-	provisional: false,
-	failure: null
+/** The shared vectors every platform replays (`tests/vectors/multisig/reading.json`). */
+const READING = JSON.parse(
+	readFileSync('../../rust/crates/vela-core/tests/vectors/multisig/reading.json', 'utf8')
+) as {
+	cases: {
+		name: string;
+		args: { chainId: number; safe: string; tx: SafeTx; tokenFacts?: unknown[] };
+		expect: { reading: unknown; anyway: boolean; refused: boolean };
+	}[];
 };
+const readingCtx: ReadingContext = {
+	r: m.review.reading,
+	callNumber: m.review.callNumber,
+	nativeSymbol: 'USDC'
+};
+const reviewOf = (c: (typeof READING.cases)[number]) =>
+	multisigReview({
+		chainId: c.args.chainId,
+		safe: c.args.safe,
+		tx: c.args.tx,
+		owners: ['0x1111111111111111111111111111111111111111'],
+		threshold: 1,
+		deployed: true,
+		simReply: '{"unreachable":true}',
+		tokenFacts: c.args.tokenFacts ?? []
+	} as never);
+const text = (blocks: Block[]) => JSON.stringify(blocks);
 
-function siteRequest(paramsJson: string, from: string): SignView {
-	return {
-		surface: 'sheet',
-		request: {
-			id: 'parity',
-			method: 'eth_sendTransaction',
-			kind: 'transaction',
-			params_json: paramsJson,
-			origin: 'https://app.example',
-			dapp: null,
-			chain_id: CHAIN,
-			signer_address: from,
-			first_party: false
-		},
-		is_signing: false,
-		is_submitting: false,
-		phase: 'idle',
-		pending_op_hash: null,
-		pending_op_maybe_sent: false,
-		error: null,
-		funding: null,
-		confirm_gate_open: true,
-		confirm_block: null,
-		reconcile_pending: false,
-		swipe_action: 'none',
-		tracker_handoff: null,
-		landing_closed: false,
-		tracker_withdraw: null,
-		failure_refused: false,
-		failure_retryable: false,
-		failure_refusal_key: null,
-		failure_not_sent: false,
-		passkey_note: null,
-		sim_checking: false,
-		sim_waited_out_key: null,
-		notice: null,
-		blocked: null,
-		global_chain_id: CHAIN
-	};
-}
+describe('the core reads every call itself, the same on every platform (r8-1)', () => {
+	for (const c of READING.cases) {
+		it(c.name, () => {
+			const review = reviewOf(c);
+			// The review carries the very reading the shared vectors pin.
+			expect(review.reading).toEqual(c.expect.reading);
+			if (!c.expect.refused) expect(review.sign.anyway).toBe(c.expect.anyway);
+			else expect(review.sign.allowed).toBe(false);
+			// Every call is drawn; none as an empty review.
+			const blocks = readingBlocks(review, readingCtx);
+			expect(blocks.length > 0).toBe(review.reading.calls.length > 0);
+			// Nothing is left as a template.
+			expect(text([...blocks, ...concernBlocks(review, readingCtx)])).not.toContain('{{');
+		});
+	}
 
+	const named = (name: string) => READING.cases.find((c) => c.name.startsWith(name))!;
+
+	it("approve(MAX) of Arc's USDC: Approve, Unlimited in red, its spender, and the danger line", () => {
+		const review = reviewOf(named("approve(spender, 2^256-1) of Arc's USDC"));
+		const blocks = readingBlocks(review, readingCtx);
+		expect(blocks[0]).toEqual({ kind: 'intent', text: m.review.reading.approve, tone: 'danger' });
+		const rows = blocks.flatMap((b) => (b.kind === 'rows' ? b.rows : []));
+		expect(rows).toContainEqual({
+			label: m.review.reading.allowance,
+			value: m.review.reading.unlimited,
+			valueTone: 'danger'
+		});
+		expect(rows).toContainEqual({ label: m.review.reading.token, value: 'USDC' });
+		const lines = concernBlocks(review, readingCtx);
+		expect(lines.some((b) => b.kind === 'warning' && b.tone === 'danger')).toBe(true);
+		expect(anywayLabel('approve', 'Approve', review, m)).toBe(m.review.approveAnyway);
+	});
+
+	it('a token nobody read: its amount raw with "decimals unknown", never 18 assumed (r8-2)', () => {
+		const review = reviewOf(named('a token nobody read'));
+		const said = text(readingBlocks(review, readingCtx));
+		expect(said).toContain('10000');
+		expect(said).toContain('decimals');
+		expect(said).not.toContain('0.00000000000001');
+	});
+
+	it("Arc's USDC transfer of 10000: 0.01 USDC (r8-2, r8-20)", () => {
+		const review = reviewOf(named("Arc's USDC ERC-20 transfer"));
+		expect(readingTitle(review, readingCtx)).toBe(`${m.review.reading.send} 0.01 USDC`);
+	});
+
+	it('a nested batch: every leg of every level, and "… anyway" (r8-5)', () => {
+		const review = reviewOf(named('a batch whose leg calls multiSend'));
+		const cards = readingBlocks(review, readingCtx).filter((b) => b.kind === 'card');
+		const titles = cards.map((b) => (b.kind === 'card' ? b.title : ''));
+		expect(titles).toHaveLength(3);
+		expect(titles[0]).toContain('1');
+		expect(titles[1]).toContain('1.1');
+		expect(titles[2]).toContain('1.2');
+		expect(review.sign.anyway).toBe(true);
+	});
+
+	it('a batch nested too deep: refused, nothing signed (r8-5)', () => {
+		const review = reviewOf(named('multiSend called four deep'));
+		expect(review.sign.allowed).toBe(false);
+		expect(text(concernBlocks(review, readingCtx))).toContain(m.review.reading.unreadableLine);
+	});
+});
+
+const TOKEN = '0x3600000000000000000000000000000000000000';
 const TO = '0x4444444444444444444444444444444444444444';
 const TRANSFER = {
 	to: TOKEN,
 	value: '0',
 	data: `0xa9059cbb${TO.slice(2).padStart(64, '0')}${5n.toString(16).padStart(64, '0')}`
 };
-
-describe('parity: the same intent for a Vela account and a multisig (§3.6)', () => {
-	for (const [name, call] of [
-		['an ERC-20 transfer', TRANSFER],
-		['an unlimited approve', APPROVE_MAX],
-		['a call nobody can read', BLIND]
-	] as const) {
-		it(`${name}: every block kind the account's sheet draws, the multisig's review draws`, () => {
-			const reading = read(call);
-			const sim = { verdict: null, judged: null } as unknown as SimEnded;
-			// The Vela account: the signing sheet's own model for a site's request.
-			const account = buildSigningModel({
-				sign: siteRequest(reading.paramsJson, '0x9999999999999999999999999999999999999999'),
-				clear: reading.clear,
-				guard: reading.guard,
-				fee: NO_FEE,
-				currency: CURRENCY,
-				sim,
-				m: signing,
-				identity: {
-					name: '',
-					address: '0x9999999999999999999999999999999999999999',
-					identiconSvg: ''
-				},
-				identicon: () => ''
-			})!;
-			// The multisig member: the call's reading, then the one review.
-			const review = multisigReview({
-				chainId: CHAIN,
-				safe: MULTISIG,
-				tx: txOf(call.to, `0x${BigInt(call.value).toString(16)}`, call.data),
-				owners: ['0x1111111111111111111111111111111111111111'],
-				threshold: 1,
-				deployed: true,
-				simReply: '{"unreachable":true}',
-				blind: reading.clear.sign_anyway
-			});
-			const member = [
-				...callReviewBlocks(reading, signing, CURRENCY),
-				...reviewBlocks(review, { verdict: review.simulation, judged: null }, ctx)
-			];
-			// The one deliberate difference: the account picks its cap (`allowance`);
-			// a member has none to pick and reads what it grants as rows (cs-12).
-			const shown = (k: string) => (k === 'allowance' ? 'rows' : k);
-			for (const kind of kinds(account.blocks)) expect(kinds(member)).toContain(shown(kind));
-			// The same friction: "Sign anyway" on the account's sheet is "… anyway" here.
-			expect(review.sign.anyway).toBe(reading.clear.sign_anyway);
-			// Technical details on both, with the bytes signed.
-			expect(account.tech.raw).toBeDefined();
-			expect(reviewTech(review, ctx).raw?.hex).toContain('SafeTx');
-		});
-	}
-});
 
 /**
  * r5reg-15: a transfer's review named its recipient twice — the call's
@@ -405,28 +384,28 @@ describe('parity: the same intent for a Vela account and a multisig (§3.6)', ()
  */
 describe('who it reaches, said once (r5reg-15)', () => {
 	it('an ERC-20 transfer: the call names the recipient; the review adds its badge, not a second row', () => {
-		const reading = read(TRANSFER);
-		const call = callReviewBlocks(reading, signing, CURRENCY);
-		const drawn = partyAddresses(call);
-		expect(drawn).toContain(TO.toLowerCase());
 		const review = multisigReview({
-			chainId: CHAIN,
-			safe: MULTISIG,
+			chainId: 5042002,
+			safe: '0x0e96ddc491878645dB7E3a47d2a6Ccbc94f17f32',
 			tx: txOf(TRANSFER.to, '0x0', TRANSFER.data),
 			owners: ['0x1111111111111111111111111111111111111111'],
 			threshold: 1,
 			deployed: true,
 			simReply: '{"unreachable":true}',
-			blind: reading.clear.sign_anyway,
 			recipientFacts: [{ address: TO, isContract: false, firstTime: true }]
 		});
-		const named = (blocks: Block[]) =>
+		const call = readingBlocks(review, readingCtx);
+		const drawn = partyAddresses(call);
+		expect(drawn).toContain(TO.toLowerCase());
+		const namedRows = (blocks: Block[]) =>
 			blocks.filter((b) => b.kind === 'party' && b.address?.toLowerCase() === TO.toLowerCase());
 		// Without the call's reading the review names it; with it, it does not.
-		expect(named(reviewBlocks(review, simOf(review), ctx))).toHaveLength(1);
-		expect(named(reviewBlocks(review, simOf(review), ctx, drawn))).toHaveLength(0);
+		expect(namedRows(reviewBlocks(review, simOf(review), ctx))).toHaveLength(1);
+		expect(namedRows(reviewBlocks(review, simOf(review), ctx, drawn))).toHaveLength(0);
 		// One row in all — and it still says it is the first time.
-		expect(named([...call, ...reviewBlocks(review, simOf(review), ctx, drawn)])).toHaveLength(1);
+		expect(namedRows([...call, ...reviewBlocks(review, simOf(review), ctx, drawn)])).toHaveLength(
+			1
+		);
 		expect(recipientBadges(review, ctx)[TO.toLowerCase()]?.text).toBe(signing.tagFirstTime);
 	});
 });

@@ -5,7 +5,7 @@
  * real core, method by method, in both choosers.
  */
 import '$lib/i18n/wasm-init.server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { keyMethodWords, venueWords } from '../../../../../../rust/pkg-web/vela_core.js';
 import type { KeyMethod } from '$lib/onboarding/generated/KeyMethod';
 import { methodCopy, type KeyChooser } from './copy';
@@ -122,6 +122,7 @@ describe('a new key whose confirmation could not reach the index', () => {
 	it('is said as kept, with the way to finish it', async () => {
 		const { promptCopy } = await import('./copy');
 		const t = (key: string) => key;
+		vi.stubGlobal('navigator', { onLine: false });
 		const offline = promptCopy(
 			{
 				type: 'create_failed',
@@ -134,6 +135,21 @@ describe('a new key whose confirmation could not reach the index', () => {
 		);
 		expect(offline.title).toBe('onboarding.create.keyKeptTitle');
 		expect(offline.message).toBe('onboarding.create.keyKeptBodyNetwork');
+		// S4 (r8): a fetch refused while the device is online (CORS, a 404) is
+		// the index not answering — never "This device is offline".
+		vi.stubGlobal('navigator', { onLine: true });
+		const refused = promptCopy(
+			{
+				type: 'create_failed',
+				detail: 'Challenge failed: Failed to fetch',
+				phone_link: false,
+				key_kept: true,
+				local: true
+			},
+			t
+		);
+		expect(refused.message).toBe('onboarding.create.keyKeptBodyIndex');
+		vi.unstubAllGlobals();
 		const index = promptCopy(
 			{ type: 'create_failed', detail: 'HTTP 503', phone_link: false, key_kept: true },
 			t
