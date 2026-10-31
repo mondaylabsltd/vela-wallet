@@ -129,7 +129,9 @@
     "appearance": {
       "menuBar": "Mostrar na barra de menus",
       "trayIcon": "Mostrar na bandeja do sistema",
-      "statusItemHint": "Seu total e Enviar e Receber rápidos, com os últimos valores carregados — nada extra é buscado."
+      "statusItemHint": "Seu total e Enviar e Receber rápidos, com os últimos valores carregados — nada extra é buscado.",
+      "multisigNotifications": "Notificações de multisig",
+      "multisigNotificationsHint": "Avisa quando uma transação multisig precisa da sua aprovação, recebe uma aprovação, está pronta para executar ou foi executada. A Vela verifica a cada minuto enquanto está aberta; as notificações vêm deste dispositivo, não de um serviço de push."
     }
   }
 }

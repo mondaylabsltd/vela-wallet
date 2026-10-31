@@ -597,6 +597,7 @@
         "originalMembers": "Original members",
         "originalNote": "The members it was created with. A network it isn’t deployed on starts with these.",
         "currentOn": "Current members on {{network}}",
+        "unreadableOn": "Couldn't read its members on {{network}}.",
         "sameAsOriginal": "The same as the original members.",
         "added": "Added",
         "removed": "Removed",

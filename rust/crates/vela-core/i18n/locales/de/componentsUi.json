@@ -565,7 +565,28 @@
     "appUpdate": {
       "title": "Update verfügbar",
       "install": "Installieren",
-      "later": "Später"
+      "later": "Später",
+      "refused": {
+        "noKey": "Dieser Build kann die Signatur eines Updates nicht prüfen und installiert daher keines. Lade die neueste Version von der Vela-Website.",
+        "unreadable": "Die Angaben zum Update ließen sich nicht lesen, daher wurde nichts installiert. Deine App ist unverändert.",
+        "badSignature": "Das Update ist nicht von Vela signiert und wurde daher nicht installiert. Deine App ist unverändert.",
+        "replayed": "Dieses Update ist älter als eines, das dieses Gerät schon gesehen hat, und wurde daher nicht installiert. Deine App ist unverändert.",
+        "notNewer": "Dieses Update ist nicht neuer als deine Version – es gibt nichts zu installieren.",
+        "noArtifact": "Für diesen Computer gibt es zu diesem Update keinen Download, daher wurde nichts installiert.",
+        "insecureUrl": "Der Download-Link des Updates ist nicht sicher und wurde daher nicht verwendet. Deine App ist unverändert.",
+        "artifactMismatch": "Der Download stimmte nicht mit der signierten Version überein und wurde daher nicht installiert. Versuch es erneut.",
+        "unreachable": "Der Download wurde nicht abgeschlossen. Prüfe deine Verbindung und versuch es erneut.",
+        "notInstalled": "Diese Kopie ist keine installierte App und kann sich daher nicht selbst aktualisieren.",
+        "signatureMismatch": "Die Codesignatur der neuen App passt nicht zu dieser, daher wurde sie nicht installiert. Deine App ist unverändert.",
+        "versionMismatch": "Die heruntergeladene App ist nicht die signierte Version und wurde daher nicht installiert. Deine App ist unverändert.",
+        "installFailed": "Dein System konnte das Update nicht installieren. Diese App ist unverändert. Versuch es erneut."
+      }
+    },
+    "multisigNotify": {
+      "approvalNeeded": "Braucht deine Genehmigung",
+      "approvalCounted": "Genehmigung gezählt: {{approved}} von {{threshold}}",
+      "readyToExecute": "Bereit zur Ausführung",
+      "executed": "Ausgeführt"
     },
     "dropOverlay": {
       "title": "Adresse, Zahlungslink oder QR-Bild hier ablegen"

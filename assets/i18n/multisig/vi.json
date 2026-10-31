@@ -523,6 +523,7 @@
     "originalMembers": "Thành viên ban đầu",
     "originalNote": "Các thành viên lúc tạo. Mạng nào multisig chưa được triển khai sẽ bắt đầu với các thành viên này.",
     "currentOn": "Thành viên hiện tại trên {{network}}",
+    "unreadableOn": "Không đọc được thành viên trên {{network}}.",
     "sameAsOriginal": "Giống với thành viên ban đầu.",
     "added": "Đã thêm",
     "removed": "Đã xóa",

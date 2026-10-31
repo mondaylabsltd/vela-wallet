@@ -40,7 +40,6 @@
 	import { loadAccounts } from '$lib/onboarding/core/storage';
 	import { networkSpace } from '$lib/network-space/network-space.svelte';
 	import { isHiddenNetwork, spaceNetworksSync } from '$lib/services/networks';
-	import { loadTransactions } from '$lib/services/records';
 	import { chainFilter } from '$lib/wallet/chain-filter.svelte';
 	import { balance } from '$lib/wallet/core/balance.svelte';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
@@ -53,13 +52,7 @@
 	import { inviteLink } from '../core/invite';
 	import { sameAddress, validName } from '../core/kernel';
 	import { MEMBER_NAME_MAX, shareOrigin } from '../core/link';
-	import {
-		firstNetworkDefault,
-		heldChains,
-		lastUsedChains,
-		likelyNetworks,
-		recentChains
-	} from '../core/likely-networks';
+	import { firstNetworkDefault, heldChains, likelyNetworks } from '../core/likely-networks';
 	import { localOwners } from '../core/owners';
 	import { memberProblem } from '../core/members';
 	import { names } from '../core/names.svelte';
@@ -100,20 +93,15 @@
 			.filter(([, verdict]) => (verdict as { kind?: string } | null)?.kind === 'missing')
 			.map(([id]) => Number(id))
 	);
-	/** r5reg-19: this device's own transactions (the core reads where they were, newest first). */
-	let records = $state<{ chainId: number; timestamp: number }[]>([]);
-	void loadTransactions().then(
-		(read) => (records = read),
-		() => {}
-	);
-	const recent = $derived(recentChains(records));
-	// r5reg-19: read as they come — the wallet's network now, then where this
-	// device was last used and holds funds (balances and records land after
-	// the sheet opens; Arc read under "More networks" when they had not yet).
+	// r5reg-19: read as they come — the wallet's network now, then where the
+	// multisigs here and this device's own transactions were (the accounts
+	// machine's: `used_networks`, `recent_networks`), then where it holds
+	// funds (balances land after the sheet opens; Arc read under "More
+	// networks" when they had not yet).
 	const hints = $derived({
 		here: chainFilter.chainId === null ? [] : [chainFilter.chainId],
-		used: lastUsedChains(),
-		recent,
+		used: multisig.view?.used_networks ?? [],
+		recent: multisig.view?.recent_networks ?? [],
 		held: heldChains(balance.view.tokens)
 	});
 	// A network that did not answer stays offered: nothing is deployed until
@@ -140,7 +128,13 @@
 	let ens = $state<EnsAnswer | null>(null);
 	let ensBusy = $state(false);
 	let picking = $state(false);
-	let threshold = $state(1);
+	/**
+	 * How many must approve — the accounts machine's (`create.threshold`):
+	 * the sensible start for these members, or the person's pick for them
+	 * (`step_threshold`).
+	 */
+	const thresholdView = $derived(sheet?.threshold ?? null);
+	const threshold = $derived(thresholdView?.value ?? 1);
 	let name = $state('');
 	/** Next was pressed with no name: the field says so (r4a-14). */
 	let nameAsked = $state(false);
@@ -198,8 +192,7 @@
 						.map(([a, i]) => [a.toLowerCase(), { name: i.name ?? undefined }])
 				);
 				name = kept.name;
-				threshold = kept.threshold;
-				thresholdFor = kept.owners.length;
+				// Its threshold is the machine's pick again (`create.threshold`).
 				if (kept.chainId !== null) {
 					chainId = kept.chainId;
 					chose = true;
@@ -230,8 +223,6 @@
 		owners = current ? [current] : accounts.slice(0, 1).map((a) => a.address);
 		info = {};
 		name = '';
-		threshold = 1;
-		thresholdFor = 0;
 		nameAsked = false;
 		chose = false;
 		chainId = firstNetworkDefault(networks, hints);
@@ -359,35 +350,33 @@
 		)
 	);
 
-	/** The member count the threshold was last set for: back and Next keep the person's pick. */
-	let thresholdFor = $state(0);
-
 	function toThreshold() {
 		if (!membersOk) {
 			nameAsked = true;
 			return;
 		}
-		// A sensible start: all of two, else all but one — one lost passkey is
-		// survivable. Only when the members changed; else it stays the person's.
-		if (thresholdFor !== owners.length) {
-			threshold = owners.length <= 2 ? owners.length : owners.length - 1;
-			thresholdFor = owners.length;
-		}
+		// Where it starts is the machine's (`create.threshold`): sensible for
+		// these members, unless the person picked for them already.
 		step = 'threshold';
 	}
 
-	const thresholdNote = $derived(
-		owners.length === 1
-			? m.create.solo
-			: threshold === owners.length
-				? m.create.thresholdAll
-				: threshold === 1
-					? m.create.thresholdOne
-					: fillTemplate(pluralForm(m.create.thresholdSpare, owners.length - threshold), {
-							count: owners.length - threshold
-						})
-	);
-	const risky = $derived(owners.length > 1 && (threshold === owners.length || threshold === 1));
+	/** What the threshold means — the machine's note, in the corpus' words. */
+	const thresholdNote = $derived.by(() => {
+		const note = thresholdView?.note;
+		switch (note?.kind) {
+			case 'all':
+				return m.create.thresholdAll;
+			case 'one':
+				return m.create.thresholdOne;
+			case 'spare':
+				return fillTemplate(pluralForm(m.create.thresholdSpare, note.count), {
+					count: note.count
+				});
+			default:
+				return m.create.solo;
+		}
+	});
+	const risky = $derived(thresholdView?.risky ?? false);
 
 	/** What the person knows of the members, for the multisig here and its invite (r4D-5). */
 	function membersInfo(): Record<string, MemberInfo> {
@@ -682,15 +671,15 @@
 			<button
 				type="button"
 				aria-label={m.create.fewer}
-				disabled={threshold <= 1}
-				onclick={() => (threshold -= 1)}>−</button
+				disabled={!thresholdView?.can_lower}
+				onclick={() => multisig.send({ type: 'step_threshold', up: false })}>−</button
 			>
 			<output>{fillTemplate(m.create.thresholdValue, { m: threshold, n: owners.length })}</output>
 			<button
 				type="button"
 				aria-label={m.create.more}
-				disabled={threshold >= owners.length}
-				onclick={() => (threshold += 1)}>+</button
+				disabled={!thresholdView?.can_raise}
+				onclick={() => multisig.send({ type: 'step_threshold', up: true })}>+</button
 			>
 		</div>
 		<p class="note" class:risky>{thresholdNote}</p>

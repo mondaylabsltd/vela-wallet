@@ -560,6 +560,36 @@ pub enum Event {
         safe_tx_hash: String,
         executor: String,
     },
+    /// core-ms-2: "Approve and execute", one press, offered where
+    /// [`ProposalsView::approve_execute`] names `executor`: its execution —
+    /// the same look, the same gate and review as Execute — counts its own
+    /// approval as the executor's (`msg.sender`). Should only the execution
+    /// be unable to run, stopped before any signature (a fee it cannot pay,
+    /// a transaction that would fail, a look that could not price or check
+    /// it), the approval is still given and kept (r4-11): then
+    /// `actions["execute:<hash>"]` is `stopped` (why) and
+    /// `actions["approve:<hash>"]` the approval's own outcome.
+    ApproveExecute {
+        #[cfg_attr(feature = "bindings", ts(type = "number"))]
+        chain_id: u64,
+        safe_tx_hash: String,
+        executor: String,
+    },
+    /// core-ms-2: [`Event::ConfirmDraft`], then — when the proposer's own
+    /// approval makes it ready ([`DraftView::execute_now`]: a site's
+    /// transaction a one-approval multisig runs at once) — its execution by
+    /// that member, as [`Event::ApproveExecute`]: the site gets its
+    /// transaction, not a wait for approvals nobody else has to give.
+    ProposeExecute {
+        #[serde(default)]
+        as_member: Option<String>,
+    },
+    /// core-ms-2: the shell answered the site's `wallet_getCallsStatus` read
+    /// with `calls_status[id]`: forgotten (answers not taken are kept at most
+    /// [`flows::CALLS_STATUS_KEPT`], the oldest going first).
+    CallsStatusTaken {
+        id: String,
+    },
     /// Send again what is kept (one transaction's, or all).
     SendAgain {
         #[cfg_attr(feature = "bindings", ts(type = "number | null"))]
@@ -785,6 +815,9 @@ pub struct DraftView {
     pub members_here: Vec<String>,
     /// The one offered first (picked last time, else the first).
     pub default_member: Option<String>,
+    /// core-ms-2: a site's transaction the proposer's own approval makes
+    /// ready: "Approve and execute" ([`Event::ProposeExecute`]), its fee said.
+    pub execute_now: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
@@ -865,6 +898,28 @@ pub struct ProposalsView {
     /// r7: per `<chainId>:<safeTxHash>` asked ([`Event::ReadSigners`]), how
     /// its remaining approvals can come.
     pub signers: BTreeMap<String, ItemSigners>,
+    /// core-ms-2: per `<chainId>:<safeTxHash lowercase>`, the members here
+    /// whose one press approves and executes it ([`Event::ApproveExecute`]):
+    /// short of one approval, theirs reaches the threshold, and their last
+    /// look (at these approvals) does not say they cannot pay (priced and
+    /// payable, or not priced or checked in time: it looks again first). Any
+    /// other member here approves only; an executor of a ready one executes.
+    pub approve_execute: BTreeMap<String, Vec<String>>,
+    /// core-ms-2: the header's rule chip for the multisig followed — the
+    /// rule in force on each network it is used on (its members now where it
+    /// is deployed, its original ones where not; the original alone before
+    /// any is read): "Needs 2 of 3", or that it differs by network.
+    pub rule_chip: Option<super::multisig_members::RuleChip>,
+    /// core-ms-2: per multisig here (lowercase address), the waiting line's
+    /// parts in order, only the counts that are not zero ("1 needs your
+    /// approval · 1 ready to execute") — the switcher's rows.
+    pub waiting_parts: BTreeMap<String, Vec<super::multisig_presence::WaitingPart>>,
+    /// core-ms-2: the line at the top of the followed multisig's home, when
+    /// something waits there — its parts and the transaction it opens.
+    pub banner: Option<super::multisig_presence::WaitingBanner>,
+    /// core-ms-2: the followed multisig is deployed on a network read (its
+    /// first steps are behind it).
+    pub set_up: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -1352,25 +1407,22 @@ impl App for MultisigProposals {
                     draft(&io, &st, chain_id, proposal).await
                 })
             }
-            Event::ConfirmDraft { as_member } => {
-                let round = {
+            Event::ConfirmDraft { as_member } => propose_draft(model, as_member, false),
+            Event::ProposeExecute { as_member } => propose_draft(model, as_member, true),
+            Event::ApproveExecute {
+                chain_id,
+                safe_tx_hash,
+                executor,
+            } => {
+                {
                     let mut s = lock(&model.state);
-                    s.actions.insert("propose".to_owned(), ActionState::Working);
-                    s.draft_round
-                };
+                    let hash = safe_tx_hash.to_ascii_lowercase();
+                    s.actions
+                        .insert(format!("execute:{hash}"), ActionState::Working);
+                    s.actions.remove(&format!("approve:{hash}"));
+                }
                 flow(model, move |io, st| async move {
-                    let claimed = flows::claim(&io, &st, round).await;
-                    let outcome = confirm_draft(&io, &st, as_member, round).await;
-                    {
-                        let mut s = lock(&st);
-                        if s.draft_round == round {
-                            if matches!(outcome, ActionState::Done { .. }) {
-                                s.draft = None;
-                            }
-                            s.actions.insert("propose".to_owned(), outcome.clone());
-                        }
-                    }
-                    flows::on_proposed(&io, &st, round, &outcome, claimed).await;
+                    approve_execute(&io, &st, chain_id, &safe_tx_hash, &executor).await;
                 })
             }
             Event::Withdraw => {
@@ -1437,6 +1489,7 @@ impl App for MultisigProposals {
             | Event::DappLeave { .. }
             | Event::DappSettled { .. }
             | Event::CallsStatus { .. }
+            | Event::CallsStatusTaken { .. }
             | Event::OpenLinked { .. }
             | Event::CloseLinked
             | Event::ApproveOutside { .. }
@@ -1470,6 +1523,22 @@ impl App for MultisigProposals {
             .filter(|i| i.status != ProposalStatus::Done)
             .collect();
         let down = lock(&s.service.outage).down;
+        // core-ms-2: the waiting line's parts per multisig, and the followed
+        // one's banner.
+        let presence_parts: BTreeMap<String, Vec<super::multisig_presence::WaitingPart>> = more
+            .presence
+            .iter()
+            .filter_map(|(k, w)| {
+                let parts = w.as_ref()?.parts();
+                (!parts.is_empty()).then(|| (k.clone(), parts))
+            })
+            .collect();
+        let banner = s
+            .account
+            .as_ref()
+            .and_then(|a| more.presence.get(&a.address.to_ascii_lowercase()))
+            .and_then(Option::as_ref)
+            .and_then(super::multisig_presence::banner_of);
         ProposalsView {
             followed: s.account.as_ref().map(|a| a.address.clone()),
             chains: s.chains.clone(),
@@ -1503,6 +1572,7 @@ impl App for MultisigProposals {
                     })
                     .or_else(|| here.first().map(|o| o.address.clone()));
                 DraftView {
+                    execute_now: !d.item.can_execute.is_empty() && flows::reviewing_request(&s),
                     item: d.item.clone(),
                     review: d.review.clone(),
                     members_here: here.into_iter().map(|o| o.address).collect(),
@@ -1542,6 +1612,29 @@ impl App for MultisigProposals {
                     Some((format!("{chain_id}:{hash}"), signers))
                 })
                 .collect(),
+            approve_execute: items
+                .iter()
+                .filter_map(|i| {
+                    let who = approve_executors(&s, i);
+                    (!who.is_empty()).then(|| {
+                        (
+                            format!("{}:{}", i.chain_id, i.safe_tx_hash.to_ascii_lowercase()),
+                            who,
+                        )
+                    })
+                })
+                .collect(),
+            rule_chip: s.account.as_ref().and_then(|a| {
+                use super::multisig_members::{current_rules, rule_chip, MemberRule};
+                let chains: Vec<&ChainMembers> = s.chains.iter().map(|c| &c.members).collect();
+                rule_chip(&current_rules(
+                    MemberRule::of(a.threshold, a.owners.len()),
+                    &chains,
+                ))
+            }),
+            waiting_parts: presence_parts,
+            banner,
+            set_up: s.account.is_some() && s.chains.iter().any(|c| c.members.deployed),
         }
     }
 }
@@ -3269,6 +3362,155 @@ async fn gas_of(io: &Io<Event>, chain_id: u64, from: &str, call: &Call) -> Optio
         return None;
     }
     shell::quantity(raw)
+}
+
+/// Propose the draft (`ConfirmDraft`) — and, `then_execute`, execute it
+/// once the proposer's own approval made it ready (`ProposeExecute`).
+fn propose_draft(model: &Model, as_member: Option<String>, then_execute: bool) -> Cmd {
+    let (round, chain_id) = {
+        let mut s = lock(&model.state);
+        s.actions.insert("propose".to_owned(), ActionState::Working);
+        (s.draft_round, s.draft.as_ref().map(|d| d.chain.chain_id))
+    };
+    flow(model, move |io, st| async move {
+        let claimed = flows::claim(&io, &st, round).await;
+        let outcome = confirm_draft(&io, &st, as_member, round).await;
+        // `execute:<hash>` is working from the moment it is proposed (a
+        // sheet waits on it); it goes again when the execution is not for now.
+        let executing = match (&outcome, then_execute, chain_id) {
+            (ActionState::Done { safe_tx_hash, .. }, true, Some(chain_id)) => {
+                Some((chain_id, safe_tx_hash.clone()))
+            }
+            _ => None,
+        };
+        {
+            let mut s = lock(&st);
+            if s.draft_round == round {
+                if matches!(outcome, ActionState::Done { .. }) {
+                    s.draft = None;
+                }
+                s.actions.insert("propose".to_owned(), outcome.clone());
+            }
+            if let Some((_, hash)) = &executing {
+                s.actions.insert(
+                    format!("execute:{}", hash.to_ascii_lowercase()),
+                    ActionState::Working,
+                );
+            }
+        }
+        flows::on_proposed(&io, &st, round, &outcome, claimed).await;
+        let Some((chain_id, hash)) = executing else {
+            return;
+        };
+        // The proposal as the mailbox has it now: executed, by the member
+        // who proposed it, if their approval made it ready.
+        refresh(&io, &st, false, true).await;
+        let proposer = lock(&st).item(chain_id, &hash).and_then(|(i, _)| {
+            (i.status == ProposalStatus::Ready
+                && i.can_execute.iter().any(|e| same_address(e, &i.proposer)))
+            .then(|| i.proposer.clone())
+        });
+        match proposer {
+            Some(proposer) => approve_execute(&io, &st, chain_id, &hash, &proposer).await,
+            None => {
+                lock(&st)
+                    .actions
+                    .remove(&format!("execute:{}", hash.to_ascii_lowercase()));
+            }
+        }
+    })
+}
+
+/// A stop before any signature (r4-11): the look could not price or check
+/// it, it would fail, or the executor cannot pay — not a number used
+/// meanwhile, nor who controls it refused.
+fn stopped_before_signing(outcome: &ActionState) -> bool {
+    match outcome {
+        ActionState::Stopped { preview } => matches!(
+            preview.get("kind").and_then(Value::as_str),
+            Some("fails" | "unpriced" | "unchecked" | "priced")
+        ),
+        _ => false,
+    }
+}
+
+/// "Approve and execute" in one press (`ApproveExecute`): the execution,
+/// counting the executor's approval; stopped before its signature, the
+/// approval alone, kept.
+async fn approve_execute(
+    io: &Io<Event>,
+    st: &Shared<State>,
+    chain_id: u64,
+    hash: &str,
+    executor: &str,
+) {
+    let lower = hash.to_ascii_lowercase();
+    let input = execution_input(st, chain_id, hash, executor);
+    let approving = input.as_ref().is_some_and(|i| {
+        i.item.approved < i.item.threshold
+            && i.item.can_approve.iter().any(|o| same_address(o, executor))
+    });
+    let outcome = execute(io, st, chain_id, hash, executor).await;
+    flows::remember_execution(io, st, input.as_ref(), &outcome).await;
+    if matches!(outcome, ActionState::Done { .. }) {
+        note_actor(io, st, chain_id, executor).await;
+    }
+    let approve_too = approving && stopped_before_signing(&outcome);
+    {
+        let mut s = lock(st);
+        s.actions.insert(format!("execute:{lower}"), outcome);
+        if approve_too {
+            s.actions
+                .insert(format!("approve:{lower}"), ActionState::Working);
+        }
+    }
+    if approve_too {
+        io.emit(Event::Changed);
+        let approved = approve(io, st, chain_id, hash, executor).await;
+        if matches!(approved, ActionState::Done { .. }) {
+            note_actor(io, st, chain_id, executor).await;
+        }
+        lock(st)
+            .actions
+            .insert(format!("approve:{lower}"), approved);
+    }
+    refresh(io, st, false, true).await;
+}
+
+/// core-ms-2: the members here whose one press approves and executes `item`
+/// — short of one approval, theirs reaches the threshold, and their look at
+/// these approvals says they can pay. Round 5 (S2): a look that could not
+/// price or check it in time (`unpriced`, `unchecked`) does not say they
+/// cannot — the press is offered, and the execution looks again before any
+/// signature (stopped then, the approval is still given). A look still out,
+/// or one that says it would fail, cannot be paid, is refused or its number
+/// is used, offers nothing.
+fn approve_executors(s: &State, item: &ProposalItem) -> Vec<String> {
+    if item.status != ProposalStatus::Pending {
+        return Vec::new();
+    }
+    item.can_execute
+        .iter()
+        .filter(|e| item.can_approve.iter().any(|o| same_address(o, e)))
+        .filter(|e| {
+            let key = preview_key(item.chain_id, &item.safe_tx_hash, e);
+            let fresh = s
+                .more
+                .looks
+                .get(&key)
+                .is_some_and(|(approved, _)| *approved == item.approved);
+            fresh
+                && s.preview_plans.get(&key).is_some_and(|(_, p)| {
+                    matches!(
+                        p,
+                        Preview::Priced { can_pay: true, .. }
+                            | Preview::Unpriced
+                            | Preview::Unchecked
+                    )
+                })
+        })
+        .cloned()
+        .collect()
 }
 
 async fn execute(

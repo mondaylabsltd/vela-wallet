@@ -1888,7 +1888,28 @@
   "appUpdate": {
    "title": "Actualización disponible",
    "install": "Instalar",
-   "later": "Más tarde"
+   "later": "Más tarde",
+   "refused": {
+    "noKey": "Esta compilación no puede verificar la firma de una actualización, así que no la instalará. Descarga la versión más reciente desde el sitio web de Vela.",
+    "unreadable": "No se pudieron leer los datos de la actualización, así que no se instaló nada. Tu app sigue igual.",
+    "badSignature": "La actualización no está firmada por Vela, así que no se instaló. Tu app sigue igual.",
+    "replayed": "Esta actualización es más antigua que una que este dispositivo ya vio, así que no se instaló. Tu app sigue igual.",
+    "notNewer": "Esta actualización no es más nueva que tu versión, así que no hay nada que instalar.",
+    "noArtifact": "Esta actualización no tiene descarga para esta computadora, así que no se instaló nada.",
+    "insecureUrl": "El enlace de descarga de la actualización no es seguro, así que no se usó. Tu app sigue igual.",
+    "artifactMismatch": "La descarga no coincidió con la versión firmada, así que no se instaló. Intenta de nuevo.",
+    "unreachable": "La descarga no terminó. Revisa tu conexión e intenta de nuevo.",
+    "notInstalled": "Esta copia no es una app instalada, así que no puede actualizarse sola.",
+    "signatureMismatch": "La firma de código de la nueva app no coincide con la de esta, así que no se instaló. Tu app sigue igual.",
+    "versionMismatch": "La app descargada no es la versión firmada, así que no se instaló. Tu app sigue igual.",
+    "installFailed": "Tu sistema no pudo instalar la actualización. Esta app sigue igual. Intenta de nuevo."
+   }
+  },
+  "multisigNotify": {
+   "approvalNeeded": "Necesita tu aprobación",
+   "approvalCounted": "Aprobación contada: {{approved}} de {{threshold}}",
+   "readyToExecute": "Lista para ejecutar",
+   "executed": "Ejecutada"
   },
   "dropOverlay": {
    "title": "Suelta una dirección, un enlace de pago o una imagen QR"
@@ -2086,7 +2107,9 @@
   "appearance": {
    "menuBar": "Mostrar en la barra de menús",
    "trayIcon": "Mostrar en la bandeja del sistema",
-   "statusItemHint": "Tu total y Enviar y Recibir rápidos, con las últimas cifras cargadas; no se consulta nada más."
+   "statusItemHint": "Tu total y Enviar y Recibir rápidos, con las últimas cifras cargadas; no se consulta nada más.",
+   "multisigNotifications": "Notificaciones de multifirma",
+   "multisigNotificationsHint": "Te avisa cuando una transacción multifirma necesita tu aprobación, recibe una aprobación, está lista para ejecutarse o se ejecutó. Vela revisa cada minuto mientras está abierta; las notificaciones salen de este dispositivo, no de un servicio de push."
   }
  },
  "contacts": {

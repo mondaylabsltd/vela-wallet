@@ -41,7 +41,6 @@ use vela_core::app::token_trust::{TrustSimDirection, TrustSimJudgment};
 
 use crate::executor::{identity, storage};
 use crate::resident::{self, Answer, Machine};
-use crate::session;
 
 /// `vela.transactionHistory` — the shared local store.
 pub(crate) const TX_KEY: &str = "vela.transactionHistory";
@@ -551,7 +550,8 @@ impl Machine for ActivityFeed {
 
     fn boot_event(cx: &App) -> Event {
         Event::AccountSwitched {
-            address: session::view(cx).address,
+            // Whose activity: the multisig shown, else the session's.
+            address: crate::multisig::shown::address(cx),
         }
     }
 

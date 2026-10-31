@@ -18,15 +18,21 @@ export class MultisigMachine<View, Event> {
 	constructor(core: JsonWasmCore, deps: MultisigShellDeps, name: string) {
 		const shell = multisigShell(deps);
 		this.view = JSON.parse(core.view()) as View;
-		this.#loop = createJsonWasmShell<View, Event, MultisigEffect, MultisigShellResult>(core, {
-			onView: (view) => {
-				this.view = view;
-				for (const listener of [...this.#listeners]) listener(view);
+		this.#loop = createJsonWasmShell<View, Event, MultisigEffect, MultisigShellResult>(
+			core,
+			{
+				onView: (view) => {
+					this.view = view;
+					for (const listener of [...this.#listeners]) listener(view);
+				},
+				execute: shell.execute,
+				toFailure: shell.toFailure,
+				onError: (error) => console.error(`[multisig ${name}] core fault:`, error)
 			},
-			execute: shell.execute,
-			toFailure: shell.toFailure,
-			onError: (error) => console.error(`[multisig ${name}] core fault:`, error)
-		});
+			// core-ms-2: an answer that moved nothing redraws nothing (the
+			// multisig machines name no volatile fields).
+			{ skipUnchangedViews: { includeVolatile: false } }
+		);
 	}
 
 	dispatch(event: Event): void {

@@ -66,6 +66,34 @@ vi.mock('../core/store.svelte', async () => {
 	 */
 	const { SvelteMap } = await import('svelte/reactivity');
 	const kinds = new SvelteMap<string, unknown>();
+	/**
+	 * core-ms-2: the machine's threshold step (`create.threshold`), as it
+	 * decides it — the sensible start for the draft's members, or the pick
+	 * made for them (`step_threshold`); its rule is Rust's
+	 * (`the_threshold_starts_sensible_and_keeps_the_persons_pick`).
+	 */
+	const step = new SvelteMap<string, number>();
+	const thresholdView = () => {
+		const n = step.get('members') ?? 0;
+		if (n === 0) return null;
+		const value = step.get('pickFor') === n ? (step.get('pick') ?? 1) : n <= 2 ? n : n - 1;
+		const note =
+			n === 1
+				? { kind: 'solo' }
+				: value === n
+					? { kind: 'all' }
+					: value === 1
+						? { kind: 'one' }
+						: { kind: 'spare', count: n - value };
+		return {
+			value,
+			members: n,
+			note,
+			risky: n > 1 && (value === n || value === 1),
+			can_lower: value > 1,
+			can_raise: value < n
+		};
+	};
 	const answer = (address: string, picked: string | null = null) => {
 		const said = seams.evidence[address];
 		if (said === 'vela') return { kind: 'vela', suggested: null, locked: true, note: 'known' };
@@ -96,6 +124,7 @@ vi.mock('../core/store.svelte', async () => {
 						refused: null,
 						error: null,
 						kept: seams.kept,
+						threshold: thresholdView(),
 						other_space: seams.otherSpace,
 						networks: Object.fromEntries(
 							seams.networks.map((n) => {
@@ -125,6 +154,18 @@ vi.mock('../core/store.svelte', async () => {
 						(event as unknown as { draft: (typeof seams.keptDrafts)[0] }).draft
 					);
 				if (event.type === 'discard_draft') seams.discarded += 1;
+				if (event.type === 'draft') {
+					step.set('members', (event as unknown as { owners: string[] }).owners.length);
+				}
+				if (event.type === 'step_threshold') {
+					const now = thresholdView();
+					if (now) {
+						const up = (event as unknown as { up: boolean }).up;
+						step.set('pick', Math.min(Math.max(now.value + (up ? 1 : -1), 1), now.members));
+						step.set('pickFor', now.members);
+					}
+				}
+				if (event.type === 'new_draft') step.clear();
 				if (event.type === 'pick_kind' && event.address) {
 					seams.picked.push([event.address, event.kind ?? null]);
 					kinds.set(event.address.toLowerCase(), answer(event.address, event.kind ?? null));

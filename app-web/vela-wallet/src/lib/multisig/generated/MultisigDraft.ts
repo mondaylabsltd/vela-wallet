@@ -16,4 +16,9 @@ membersHere: Array<string>,
 /**
  * The one offered first (picked last time, else the first).
  */
-defaultMember: string | null, };
+defaultMember: string | null, 
+/**
+ * core-ms-2: a site's transaction the proposer's own approval makes
+ * ready: "Approve and execute" ([`Event::ProposeExecute`]), its fee said.
+ */
+executeNow: boolean, };

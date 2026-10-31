@@ -236,6 +236,14 @@ futures = { version = "0.3", default-features = false, features = ["std"] }
 # of its own (`agent::runtime`), dialling through the app's proxy route the
 # way the cable tunnel does (`agent::dial`).
 clientmcp-client = { path = "../../rust/vendor/clientmcp-client" }
+# A multisig outside owner's room (AUDIT M5): PeerConnect's protocol crate,
+# vendored beside the core (`rust/vendor/peerconnect`; its manifest says from
+# where and how to refresh it) — the same Rust the web's connect page runs as
+# wasm, so both ends of a room speak one protocol. Its sans-I/O `Peer` only:
+# no `client` feature, so no second async WebSocket stack; the room's socket
+# is the blocking tungstenite above, dialled like the cable tunnel
+# (`multisig::peer`).
+peerconnect = { path = "../../rust/vendor/peerconnect" }
 # The agent's shared core (spec 104 phase 7): the runner, transfers, the tools
 # and the connection, one copy with the phones.
 vela-agent = { path = "../../rust/crates/vela-agent" }
@@ -427,6 +435,14 @@ windows-sys = { version = "0.59", features = [
     "Win32_Security_WinTrust",
     "Win32_Security_Cryptography",
 ] }
+
+# The multisig scenarios (`src/multisig/scenarios.rs`) drive the desktop's
+# own host through the core's simulated world
+# (`rust/crates/vela-core/tests/multisig_world`), whose outside owners sign
+# with secp256k1 keys. The version vela-core already resolves, so the lock
+# gains no second copy.
+[dev-dependencies]
+k256 = { version = "0.14.0", default-features = false, features = ["ecdsa", "alloc"] }
 
 # Embeds the application icon into vela-wallet.exe as resource id 1, which is
 # where gpui's LoadImageW looks for it. Declared unconditionally rather than

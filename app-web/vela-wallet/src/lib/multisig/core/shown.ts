@@ -13,6 +13,8 @@ import { sameAddress } from './kernel';
 import { presence } from './presence.svelte';
 import { proposals } from './proposals.svelte';
 import { multisig, type MultisigAccount } from './store.svelte';
+import { proposalsHost } from '../shell/proposals-host.svelte';
+import type { MultisigRuleChip } from '../generated/MultisigRuleChip';
 
 interface SessionLike {
 	address: string;
@@ -21,36 +23,27 @@ interface SessionLike {
 }
 
 /**
- * The rule in force on each network the multisig is used on (r4D-7): its
- * members there now where it is deployed (read for the multisig shown), its
- * original ones where it is not — or for one not read yet. Distinct rules,
- * in the networks' order.
+ * The rule chip's words: "Needs 2 of 3", or that it differs by network —
+ * the proposals machine's `rule_chip` for the multisig it follows (the rule
+ * in force on each network it is used on, r4D-7); one not followed shows
+ * the rule it was made with.
  */
-export function currentRules(
-	account: Pick<MultisigAccount, 'address' | 'owners' | 'threshold'>
-): { m: number; n: number }[] {
-	const original = { m: account.threshold, n: account.owners.length };
-	if (!sameAddress(proposals.followed, account.address) || proposals.chains.length === 0) {
-		return [original];
-	}
-	const rules = proposals.chains.map((c) =>
-		c.members.deployed ? { m: c.members.threshold, n: c.members.owners.length } : original
-	);
-	return rules.filter((r, i) => rules.findIndex((o) => o.m === r.m && o.n === r.n) === i);
-}
-
-/** The rule chip's words: "Needs 2 of 3", or that it differs by network. */
 export function ruleChip(
 	account: Pick<MultisigAccount, 'address' | 'owners' | 'threshold'>,
 	m: MultisigMessages
 ): { label: string; title: string } {
-	const rules = currentRules(account);
-	if (rules.length === 1) {
-		return { label: ruleChipText(m, rules[0]), title: ruleTitle(m, rules[0]) };
+	const chip: MultisigRuleChip = (sameAddress(proposals.followed, account.address)
+		? proposalsHost.view?.rule_chip
+		: null) ?? {
+		kind: 'needs',
+		rule: { m: account.threshold, n: account.owners.length, solo: account.owners.length === 1 }
+	};
+	if (chip.kind === 'needs') {
+		return { label: ruleChipText(m, chip.rule), title: ruleTitle(m, chip.rule) };
 	}
 	return {
 		label: m.presence.ruleDiffers,
-		title: rules.map((r) => ruleTitle(m, r)).join(' · ')
+		title: chip.rules.map((r) => ruleTitle(m, r)).join(' · ')
 	};
 }
 

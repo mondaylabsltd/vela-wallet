@@ -36,14 +36,17 @@
 	onMount(() => presence.follow());
 
 	const active = $derived(multisig.active);
-	const waiting = $derived(active ? presence.of(active.address) : null);
-	const words = $derived(waiting ? waitingWords(waiting, m) : '');
+	/** The proposals machine's line for the multisig it follows (the one shown): what waits, what it opens. */
+	const banner = $derived(
+		active && proposals.followed?.toLowerCase() === active.address.toLowerCase()
+			? presence.banner
+			: null
+	);
+	const words = $derived(banner ? waitingWords(banner.parts, m) : '');
 	const network = $derived(active?.chainIds[0] ?? null);
-	/** Set up on its first network already (read from the chain): the first steps are behind it. */
+	/** Set up on a network already (read from the chain): the first steps are behind it — the machine's `set_up`. */
 	const setUp = $derived(
-		!!active &&
-			proposals.followed?.toLowerCase() === active.address.toLowerCase() &&
-			proposals.chains.some((c) => c.members.deployed)
+		!!active && proposals.followed?.toLowerCase() === active.address.toLowerCase() && presence.setUp
 	);
 	const firstRun = $derived(!!active?.firstRun && !setUp);
 	/**
@@ -69,13 +72,18 @@
 	});
 </script>
 
-{#if active && words && waiting?.first}
-	{@const first = waiting.first}
+{#if active && words && banner}
+	{@const first = banner.first}
 	<button
 		type="button"
 		class="strip"
 		data-testid="multisig-waiting"
-		onclick={() => multisigUi.open({ kind: 'proposal', ...first })}
+		onclick={() =>
+			multisigUi.open({
+				kind: 'proposal',
+				chainId: first.chain_id,
+				safeTxHash: first.safe_tx_hash
+			})}
 	>
 		<span>{words}</span>
 		<Icon icon={UTILITY_ICONS['chevron-right']} size="sm" />

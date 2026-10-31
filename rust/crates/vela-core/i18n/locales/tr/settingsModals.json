@@ -129,7 +129,9 @@
     "appearance": {
       "menuBar": "Menü çubuğunda göster",
       "trayIcon": "Sistem tepsisinde göster",
-      "statusItemHint": "Toplamınız ve hızlı Gönder ile Al, son yüklenen rakamlardan — ek bir şey çekilmez."
+      "statusItemHint": "Toplamınız ve hızlı Gönder ile Al, son yüklenen rakamlardan — ek bir şey çekilmez.",
+      "multisigNotifications": "Çoklu imza bildirimleri",
+      "multisigNotificationsHint": "Bir çoklu imza işlemi onayını beklediğinde, bir onay aldığında, yürütülmeye hazır olduğunda veya yürütüldüğünde haber ver. Vela açıkken her dakika kontrol eder; bildirimler bir anlık bildirim servisinden değil, bu cihazdan gelir."
     }
   }
 }
