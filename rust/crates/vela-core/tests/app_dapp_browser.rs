@@ -2773,6 +2773,10 @@ fn a_multisigs_answer_and_its_batch_are_the_proposals_machines() {
     assert_eq!(error_code(&answer), -32000);
     assert_eq!(answer["error"]["data"]["safeTxHash"], json!(hash));
     assert_eq!(answer["error"]["data"]["status"], "proposed");
+    // Proposed is not a failure of Vela's: the tab shows no trouble for it.
+    let tab = &sut.view().tabs[0];
+    assert_eq!(tab.failed_recent, 0, "proposed is not a failure: {tab:?}");
+    assert!(tab.last_failure.is_none());
 
     let ops = ask(
         &mut sut,

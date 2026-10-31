@@ -2385,6 +2385,12 @@ fn dapp_answer_why(answer: &super::multisig_dapp::DappAnswer) -> (Option<i64>, O
     use super::sign_request::SignErrorKind;
     match &answer.error {
         None => (None, None),
+        // "Proposed, waiting for the members" is an error only by the
+        // protocol's shape: nothing failed, so the tab has no trouble to say
+        // (it is not the relay refusing it).
+        Some(error) if error.code == super::multisig_dapp::PROPOSED_CODE => {
+            (Some(error.code), None)
+        }
         Some(error) => {
             let kind = if error.code == super::multisig_dapp::DECLINED_CODE {
                 SignErrorKind::UserRejected
