@@ -132,4 +132,34 @@ RUST
 ( cd "$TRAY_LIFT" && cargo clippy --target "$TARGET" -- -D warnings )
 echo "windows: the tray icon and the Reduce Motion read type-check too"
 
+# N-D3: the update installer's hand-off (`src/updater/install_windows.rs`,
+# std and windows-sys only by design), lifted whole.
+UPDATE_WIN="$APP/src/updater/install_windows.rs"
+UPDATE_LIFT=$(mktemp -d)
+trap 'rm -rf "$LIFTED" "$TRAY_LIFT" "$UPDATE_LIFT"' EXIT
+mkdir -p "$UPDATE_LIFT/src"
+cat > "$UPDATE_LIFT/Cargo.toml" <<'TOML'
+[package]
+name = "vela-windows-update-lift"
+version = "0.0.0"
+edition = "2024"
+
+[workspace]
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_WinTrust", "Win32_Security_Cryptography"] }
+TOML
+if ! grep -q "WinVerifyTrust" "$UPDATE_WIN"; then
+  echo "windows: could not find the Authenticode check in src/updater/install_windows.rs" >&2
+  exit 1
+fi
+cat > "$UPDATE_LIFT/src/lib.rs" <<RUST
+#![cfg(windows)]
+#![allow(dead_code)]
+#[path = "$UPDATE_WIN"]
+mod install_windows;
+RUST
+( cd "$UPDATE_LIFT" && cargo clippy --target "$TARGET" -- -D warnings )
+echo "windows: the update installer's hand-off type-checks too"
+
 echo "windows: type-checked (not run — see the crate docs)"

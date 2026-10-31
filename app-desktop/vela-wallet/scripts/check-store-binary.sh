@@ -5,7 +5,7 @@
 #   ./scripts/check-store-binary.sh <path to the vela-wallet executable>
 #
 # Run on a RELEASE build (the bundle's Contents/MacOS/vela-wallet, any of the
-# three architectures). Three assertions, each the reason a past audit or the
+# three architectures). Four assertions, each the reason a past audit or the
 # App Store would refuse the build:
 #
 #   1. No private WindowServer import. Upstream gpui_macos links
@@ -18,6 +18,8 @@
 #      the app reads through `dev_env::var!`/`var_os!`/`flag!` is compiled out
 #      of a release build, name and all. The names are taken from the source,
 #      so a new switch is covered the moment it is written.
+#   4. Not the updater's local test flavor (`--features update-test`): a
+#      release key made on a developer's machine and a loopback feed.
 #
 # Pure inspection: nm and grep, no network, no signing identity — CI runs it
 # on the universal bundle (desktop-macos-packages.yml), and
@@ -66,7 +68,16 @@ while IFS= read -r name; do
   fi
 done <<<"$switches"
 
+# 4. Not the updater's local test flavor (`--features update-test`, README
+#    "Updates"): a key made on a developer's machine and a loopback feed. The
+#    marker is the constant `updater::TEST_FLAVOR_MARKER`, read from the source.
+marker="$(sed -n 's/.*TEST_FLAVOR_MARKER: &str = "\([^"]*\)".*/\1/p' "$project_root/src/updater.rs")"
+[[ -n "$marker" ]] || die "found no TEST_FLAVOR_MARKER in src/updater.rs — has it moved?"
+if [[ "$(LC_ALL=C grep -a -c -- "$marker" "$binary" || true)" != 0 ]]; then
+  fail "the updater's local test flavor is compiled in (build without --features update-test)"
+fi
+
 if (( failed )); then
   exit 1
 fi
-echo "ok: no private WindowServer import, no private selector, none of $count developer switches"
+echo "ok: no private WindowServer import, no private selector, none of $count developer switches, not the update test flavor"
