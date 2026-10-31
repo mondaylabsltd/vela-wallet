@@ -323,27 +323,7 @@ class MultisigStore {
 	}
 
 	/**
-	 * The multisig at `address`, read and checked as adding one is — and kept
-	 * nowhere (ms-21, the machine's `find`): what it is, or why not.
-	 */
-	async lookUp(
-		address: string,
-		{
-			network = null,
-			chainIds = null,
-			waitMs = null
-		}: { network?: number | null; chainIds?: number[] | null; waitMs?: number | null } = {}
-	): Promise<FoundOutcome> {
-		const add = await this.request(
-			{ type: 'find', address, network, chain_ids: chainIds, wait_ms: waitMs },
-			(view) =>
-				view.add.phase === 'done' && sameAddress(view.add.address, address) ? view.add : undefined
-		);
-		return foundOutcome(add.outcome, add.found as MultisigAccount | null);
-	}
-
-	/**
-	 * Keep what the last {@link lookUp} read (the person's tap): in the list,
+	 * Keep what the last `find` read (the person's tap): in the list,
 	 * not shown. Resolves with it as kept — `undefined` if nothing was kept.
 	 */
 	keepFound(address: string, acceptRisks = false): Promise<MultisigAccount | undefined> {
@@ -358,25 +338,6 @@ class MultisigStore {
 
 	find(address: string): MultisigAccount | undefined {
 		return this.accounts.find((a) => sameAddress(a.address, address));
-	}
-
-	/** This device's own name for it (shown when its genesis has none). */
-	setLabel(address: string, label: string | null): void {
-		this.send({ type: 'set_label', address, label });
-	}
-
-	/**
-	 * Keep what is known of its members (r4D-5): what this device already
-	 * holds stays, unless `typed` — the person typed these just now (Settings
-	 * → Add member, r5reg-16), and their word replaces what was kept. The
-	 * machine's rule (`name_members`).
-	 */
-	nameMembers(
-		address: string,
-		known: Record<string, MemberInfo>,
-		{ typed = false }: { typed?: boolean } = {}
-	): void {
-		this.send({ type: 'name_members', address, members: known, typed });
 	}
 
 	/**

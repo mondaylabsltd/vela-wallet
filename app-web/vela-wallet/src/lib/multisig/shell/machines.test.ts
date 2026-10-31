@@ -79,7 +79,7 @@ describe('the store’s facade over the accounts machine', () => {
 	});
 
 	it('a change asked for before the machine is up waits for it, and is never lost', async () => {
-		multisig.setLabel(SAFE, 'Ops');
+		multisig.send({ type: 'set_label', address: SAFE, label: 'Ops' });
 		multisig.activate(SAFE);
 		expect(multisig.active).toBeNull();
 		const started = await startAccounts({
