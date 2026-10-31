@@ -1304,7 +1304,9 @@ fun FeeRow(
                 Spacer(modifier = Modifier.width(VelaSpacing.sm))
             }
         }
-        if (fee.refreshLabel != null || fee.reason != null) {
+        // r9-15: a multisig's row has no refresh, and its note (who pays the
+        // fee) is said all the same, as the web's is.
+        if (fee.refreshLabel != null || fee.reason != null || (!fee.opens && fee.staleNote != null)) {
             // Calm and muted: an old figure is not a fault. Always the line's
             // full height, so nothing jumps when it appears. A failed fee's
             // reason (PR 2 note 1) takes the same line, in the error tone the

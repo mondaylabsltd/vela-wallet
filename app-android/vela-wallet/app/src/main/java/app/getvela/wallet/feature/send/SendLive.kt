@@ -121,6 +121,18 @@ object SendLive {
         val relaySentAtMs: Double? = null,
         /** The screen's clock, ms since the epoch: the core's landing pace is read at it. */
         val nowMs: () -> Double = { System.currentTimeMillis().toDouble() },
+        /**
+         * r9-15: chain id → the network's own coin symbol, from the settings
+         * machine's rows (`native_symbol`) — Arc's fee coin is USDC, never a
+         * symbol guessed from the network's display name.
+         */
+        val nativeSymbols: Map<Int, String> = emptyMap(),
+        /**
+         * r9-15 (the web's `membersOn`): the multisig's rule on a network as
+         * the proposals machine last read its members there — `threshold` of
+         * `owners` — or `null` when it did not; then the multisig's own rule.
+         */
+        val multisigMembersOn: (Int) -> Pair<Int, Int>? = { null },
     )
 
     /** Which drawn state the live view is in — the flow host renders by this. */
@@ -935,9 +947,13 @@ object SendLive {
         if (view.multisig != null) {
             // r8-18: and nothing that offers a choice it does not have — no
             // coin chip, no chevron into the coins (nothing to pay in here).
+            // r9-15: the web's row — "Approvals · Needs 2 of 4 members", and
+            // who pays the fee said calmly under it (`home.multisig`'s words).
             return fallback.copy(
-                value = ctx.strings.t("home.multisig.proposal.feeNote"),
-                refreshLabel = null, refreshing = false, staleNote = null, reason = null,
+                label = ctx.strings.t("home.multisig.proposal.approvals"),
+                value = multisigRule(view, ctx),
+                refreshLabel = null, refreshing = false,
+                staleNote = ctx.strings.t("home.multisig.proposal.feeNote"), reason = null,
                 opens = false, showMark = false,
             )
         }
@@ -1270,16 +1286,40 @@ object SendLive {
     // -- SD3 ---------------------------------------------------------------------
 
     internal fun confirm(fallback: SendConfirmModel, view: SendView, ctx: Context, fee: FeeView? = null, speed: FeeSpeedView? = null): SendConfirmModel {
-        val model = confirmBase(fallback, view, ctx, fee, speed)
-        if (view.multisig == null) return model
+        if (view.multisig == null) return confirmBase(fallback, view, ctx, fee, speed)
         // Native multisig M2: a multisig pays no fee of its own (the member who
         // executes it does), and its confirm proposes and approves.
+        // r9-15 (the web's `liveSendConfirm`): no fee figure and no speed at
+        // all — who must approve stands where the fee would, the fee note
+        // under it. Built without the fee session: nothing it priced is a
+        // multisig proposal's (an "Est. Fee ~0.08 ETH" on a proposal was the
+        // proposer's own account's quote).
         val s = ctx.strings
+        val model = confirmBase(fallback, view, ctx, fee = null, speed = null)
         val feeLabel = s.t(I18nKeys.Flows.EST_FEE)
+        val approvals = FactRowModel(
+            label = s.t("home.multisig.proposal.approvals"),
+            value = multisigRule(view, ctx),
+            note = s.t("home.multisig.proposal.feeNote"),
+        )
         return model.copy(
             cta = s.t("home.multisig.send.propose"),
-            facts = model.facts.map { if (it.label == feeLabel) it.copy(value = s.t("home.multisig.proposal.feeNote"), note = null, tap = false) else it },
+            facts = model.facts.map { if (it.label == feeLabel) approvals else it },
         )
+    }
+
+    /**
+     * r9-15 (the web's `multisigRule`): "Needs 2 of 4 members" on the send's
+     * network — its members there now when the proposals machine read them,
+     * else the multisig's own rule; "Needs its only member's approval" for one.
+     */
+    internal fun multisigRule(view: SendView, ctx: Context): String {
+        val own = view.multisig ?: return ""
+        val there = formChain(view)?.let(ctx.multisigMembersOn)
+        val m = there?.first ?: own.threshold
+        val n = there?.second ?: own.owners
+        return if (n == 1) ctx.strings.t("home.multisig.panel.titleSolo")
+        else ctx.strings.t("home.multisig.panel.title", mapOf("m" to m.toString(), "n" to n.toString()))
     }
 
     private fun confirmBase(fallback: SendConfirmModel, view: SendView, ctx: Context, fee: FeeView?, speed: FeeSpeedView?): SendConfirmModel {
@@ -1927,7 +1967,8 @@ object SendLive {
     // -- helpers ----------------------------------------------------------------------
 
     private fun nativeSymbol(chainId: Int, ctx: Context): String =
-        ctx.chainNames[chainId]?.let { NATIVE_BY_NAME[it] } ?: "ETH"
+        ctx.nativeSymbols[chainId]?.takeIf { it.isNotBlank() }
+            ?: ctx.chainNames[chainId]?.let { NATIVE_BY_NAME[it] } ?: "ETH"
 
     /** One of the core's whole-coin figures, with the preset's decimal mark and every digit it gave. */
     internal fun coinText(figure: String): String = Formats.current.plain(figure)

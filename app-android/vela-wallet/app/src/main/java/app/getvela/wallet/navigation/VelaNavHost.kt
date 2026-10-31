@@ -283,6 +283,37 @@ fun VelaNavHost(
     // rotation for the same reason the flow stack does.
     var section by rememberSaveable { mutableStateOf(VelaTab.Wallet) }
 
+    // r9-4: a scanned (or shared) text read by the core's link reading
+    // before it is anyone's recipient (`ScannedLink`): a multisig link to
+    // the accounts machine's one link flow, a payment request to `/pay`, the
+    // connect page to the browser. `true` when it went there ([closeScanner]
+    // first); `false`: Send reads it.
+    fun routeScanned(text: String, closeScanner: () -> Unit): Boolean =
+        when (val route = app.getvela.wallet.feature.wallet.core.ScannedLink.route(text)) {
+            is app.getvela.wallet.feature.wallet.core.ScannedLink.Route.Multisig -> {
+                VelaLog.event("scan", "multisig link")
+                closeScanner()
+                section = VelaTab.Wallet
+                application.container.pendingMultisigLink.value = route.hash
+                true
+            }
+            is app.getvela.wallet.feature.wallet.core.ScannedLink.Route.Pay -> {
+                VelaLog.event("paylink", "scanned")
+                closeScanner()
+                section = VelaTab.Wallet
+                application.container.pendingPayLink.value = android.net.Uri.parse(route.link)
+                true
+            }
+            is app.getvela.wallet.feature.wallet.core.ScannedLink.Route.Connect -> {
+                VelaLog.event("scan", "connect page")
+                closeScanner()
+                val tab = application.container.trustedSignerTab
+                if (tab?.open(route.url) != true) application.container.browser.askToOpen(route.url)
+                true
+            }
+            is app.getvela.wallet.feature.wallet.core.ScannedLink.Route.Send -> false
+        }
+
     // Spec 099 navigation: what brought 探索 up — the core's `explore_landing`
     // question — counted per visit, so a re-tap or a page opened from outside
     // starts the screen again from the core's landing, and kept stable for the
@@ -642,6 +673,7 @@ fun VelaNavHost(
                 // underneath (the web's `shownIdentity`).
                 val multisigHub = application.container.multisig
                 val msAccounts by multisigHub.accountsView.collectAsStateWithLifecycle()
+                val multisigProposals by multisigHub.proposalsView.collectAsStateWithLifecycle()
                 val shownMultisig = msAccounts.activeRow
                 val msWords = remember(strings, msAccounts, session.accounts) {
                     app.getvela.wallet.feature.multisig.MultisigWiring.words(application.container, multisigHub)
@@ -711,6 +743,10 @@ fun VelaNavHost(
                 val noValue = space.testnet
                 val chainNames = remember(networks.networks) {
                     networks.networks.associate { it.chain_id.toInt() to it.display_name }
+                }
+                // r9-15: each network's own coin (Arc's is USDC), from the settings rows.
+                val nativeSymbols = remember(networks.networks) {
+                    networks.networks.associate { it.chain_id.toInt() to it.native_symbol }
                 }
                 LaunchedEffect(shownAddress) {
                     if (shownAddress.isEmpty()) return@LaunchedEffect
@@ -792,6 +828,12 @@ fun VelaNavHost(
             LaunchedEffect(sharedPayment) {
                 val text = sharedPayment ?: return@LaunchedEffect
                 VelaLog.event("share", "payment", "top" to flows.top?.name)
+                // r9-4: a multisig link, a `/pay` link or the connect page shared
+                // in goes where it is for — read by the core first, as a scan is.
+                if (routeScanned(text, closeScanner = { if (flows.top in SEND_STATES) flows.close() })) {
+                    application.container.pendingShare.value = null
+                    return@LaunchedEffect
+                }
                 application.container.paymentHandOff.scan(
                     text = text,
                     sendOpen = flows.top in SEND_STATES,
@@ -843,6 +885,11 @@ fun VelaNavHost(
                 // logos a bad minute lost (RE10), and loads again the page the
                 // network failed (the core's `browserLoadRetryWhenNetworkReturns`).
                 val online by NetHealth.online.collectAsStateWithLifecycle()
+                // S4 (r9): when the figure was last read while there was a network.
+                var readOnline by remember { mutableStateOf<Double?>(null) }
+                LaunchedEffect(online, balances.last_refreshed_at_ms) {
+                    if (online) balances.last_refreshed_at_ms?.let { readOnline = it }
+                }
                 var wasOffline by remember { mutableStateOf(false) }
                 LaunchedEffect(online) {
                     if (!online) {
@@ -1472,7 +1519,18 @@ fun VelaNavHost(
                     val sendRelaySentAt = sendView.user_op_hash?.let { op ->
                         trackView.entries.firstOrNull { it.user_op_hash.equals(op, ignoreCase = true) }?.relay_sent_at_ms
                     }
-                    val flowModel = remember(liveState, sendView, feeView, speedView, batchView, importReplaces, contactsBook, strings, currency, chainNames, explorers, shownAddress, sweepPicking, chainFilter, classFilter, Formats.current, sendRelaySentAt) {
+                    // r9-15: a multisig's send draws `home.multisig` words (its approvals,
+                    // its fee note): that on-demand catalog is in before the form is
+                    // built, and the form is built again once it is (its namespaces are
+                    // a key) — never a raw key on screen.
+                    val i18nNamespaces = application.container.i18nRuntime.state.collectAsStateWithLifecycle().value.namespaces
+                    val sendIsMultisig = sendView.multisig != null
+                    LaunchedEffect(sendIsMultisig) {
+                        if (sendIsMultisig) kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            application.container.i18nRuntime.include(app.getvela.wallet.core.i18n.I18nCatalogs.MULTISIG)
+                        }
+                    }
+                    val flowModel = remember(liveState, sendView, feeView, speedView, batchView, importReplaces, contactsBook, strings, currency, chainNames, explorers, shownAddress, sweepPicking, chainFilter, classFilter, Formats.current, sendRelaySentAt, nativeSymbols, multisigProposals, i18nNamespaces) {
                         val drawn = FlowFixtures.build(liveState, strings)
                         val ctx = SendLive.Context(
                             strings = strings,
@@ -1482,6 +1540,13 @@ fun VelaNavHost(
                             fromName = shownName,
                             fromAddress = shownAddress,
                             relaySentAtMs = sendRelaySentAt,
+                            nativeSymbols = nativeSymbols,
+                            // r9-15: the multisig's members on the send's network as the
+                            // proposals machine read them (the one it follows is the one shown).
+                            multisigMembersOn = { chainId ->
+                                multisigProposals.takeIf { it.followed.equals(shownAddress, ignoreCase = true) }
+                                    ?.chain(chainId)?.members?.let { it.threshold to it.owners.size }
+                            },
                         )
                         VelaLog.event("send.base", drawn.base::class.simpleName ?: "?", "state" to liveState.name, "top" to flowState.name)
                         val base = when (val base = drawn.base) {
@@ -1620,15 +1685,18 @@ fun VelaNavHost(
                             onRecipientScan = { index -> sendView.recipients.getOrNull(index)?.id?.let { send.openRowScanner(it) } },
                             scan = ScanCallbacks(
                                 onDecoded = { text ->
-                                    // A `/pay` link is the core's `payment_request` to rule on
-                                    // (as an App Link or a share is) — never a recipient's text.
-                                    if (PayLink.parse(text) is PayLink.Pay) {
-                                        VelaLog.event("paylink", "scanned")
+                                    // r9-4: what it is FOR is read by the core's link reading
+                                    // first — a multisig invite or transaction opens its own
+                                    // sheet, a `/pay` link is the core's `payment_request` to
+                                    // rule on (as an App Link or a share is), the connect page
+                                    // the browser; only the rest is a recipient's text.
+                                    // Closed as the scanner's own close is: entered from home's or
+                                    // the tile's Scan with nothing chosen, the whole flow goes with it.
+                                    val closeScanner = {
                                         send.closeScanner()
-                                        application.container.pendingPayLink.value = android.net.Uri.parse(text.trim())
-                                    } else {
-                                        send.scanned(text)
+                                        if (sendView.stage == SendStage.SelectToken && flowState == FlowState.S1) flows.close()
                                     }
+                                    if (!routeScanned(text, closeScanner)) send.scanned(text)
                                 },
                                 onClose = {
                                     send.closeScanner()
@@ -2116,33 +2184,11 @@ fun VelaNavHost(
                                     model = remember(strings) { FlowFixtures.scan(strings) },
                                     callbacks = ScanCallbacks(
                                         onDecoded = { text ->
-                                            when (val scanned = app.getvela.wallet.feature.browser.ExploreLive.scanned(text)) {
-                                                is app.getvela.wallet.feature.browser.ExploreLive.Scanned.Url -> {
-                                                    // Phase 3: a web-wallet multisig or connect link is the
-                                                    // browser's (read by the core's codec), never the dApp browser's.
-                                                    val route = app.getvela.wallet.feature.wallet.core.AppLinks.classify(scanned.url)
-                                                    if (route is app.getvela.wallet.feature.wallet.core.AppLinks.Route.Web &&
-                                                        route.kind != app.getvela.wallet.feature.wallet.core.AppLinks.WebKind.Connect
-                                                    ) {
-                                                        // Native multisig: a proposal or an invite opens here, in
-                                                        // the accounts machine's one link flow.
-                                                        onClose()
-                                                        section = VelaTab.Wallet
-                                                        application.container.pendingMultisigLink.value = "#" + scanned.url.substringAfter('#', "")
-                                                    } else if (route is app.getvela.wallet.feature.wallet.core.AppLinks.Route.Web) {
-                                                        onClose()
-                                                        val tab = application.container.trustedSignerTab
-                                                        if (tab?.open(scanned.url) != true) application.container.browser.askToOpen(scanned.url)
-                                                    } else if (route is app.getvela.wallet.feature.wallet.core.AppLinks.Route.Pay) {
-                                                        // A `/pay` link: the wallet's, ruled on by the core
-                                                        // as an App Link is — a request, or why not.
-                                                        onClose()
-                                                        section = VelaTab.Wallet
-                                                        application.container.pendingPayLink.value = android.net.Uri.parse(scanned.url)
-                                                    } else {
-                                                        onUrl(scanned.url)
-                                                    }
-                                                }
+                                            // r9-4: the core's link reading first, as every scanner does —
+                                            // a multisig link (on any page's address, or bare), a `/pay`
+                                            // link, the connect page; then what Explore reads itself.
+                                            if (!routeScanned(text, closeScanner = onClose)) when (val scanned = app.getvela.wallet.feature.browser.ExploreLive.scanned(text)) {
+                                                is app.getvela.wallet.feature.browser.ExploreLive.Scanned.Url -> onUrl(scanned.url)
                                                 is app.getvela.wallet.feature.browser.ExploreLive.Scanned.Payment -> {
                                                     onClose()
                                                     section = VelaTab.Wallet
@@ -2215,7 +2261,15 @@ fun VelaNavHost(
                                 noValue = strings.t(I18nKeys.NetworkSpace.NO_VALUE).takeIf { noValue },
                             ).let { home ->
                                 // Spec 047 D9: no network at all is said on the hero, not guessed from a slow pool.
-                                if (online) home else home.copy(balance = home.balance.copy(status = BalanceStatusModel(BalanceStatusKind.Warning, strings.t(I18nKeys.SettingsUi.NETWORK_OFFLINE))))
+                                // S4 (r9): and its "Updated" is the last read made while
+                                // online — a round that settled offline read nothing, and
+                                // "Updated now" over it said the figure was fresh.
+                                if (online) home else home.copy(
+                                    balance = home.balance.copy(
+                                        status = BalanceStatusModel(BalanceStatusKind.Warning, strings.t(I18nKeys.SettingsUi.NETWORK_OFFLINE)),
+                                        refresh = WalletLive.refresh(balances.copy(last_refreshed_at_ms = readOnline), strings, homeNow),
+                                    ),
+                                )
                             }.let { home ->
                                 // Spec 105: the space in front, beside the account name.
                                 home.copy(
