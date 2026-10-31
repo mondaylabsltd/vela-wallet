@@ -35,7 +35,7 @@ use serde_json::{Value, json};
 
 use vela_core::app::contacts::ContactIdentity;
 use vela_core::app::name_verify::{self, ForwardState, VerifyStep};
-use vela_core::primitives::keccak256;
+use vela_core::ens::ens_reverse_node;
 use vela_core::registry_lookup::{LookupAnswer, LookupOutcome, LookupRequest};
 
 use crate::executor::{pool, registry, storage};
@@ -108,35 +108,6 @@ const SEL_NAME: &str = "691f3431";
 const SEL_NODE: &str = "bffbe61c";
 
 // ---------------------------------------------------------------------------
-// namehash
-// ---------------------------------------------------------------------------
-
-/// EIP-137 namehash. `namehash("") = 0x00…00`, then fold the labels right to
-/// left.
-fn namehash(name: &str) -> String {
-    let mut node = vec![0u8; 32];
-    if name.is_empty() {
-        return hex(&node);
-    }
-    for label in name.split('.').rev() {
-        let label_hash = keccak256(label.as_bytes());
-        let mut combined = node.clone();
-        combined.extend_from_slice(&label_hash);
-        node = keccak256(&combined);
-    }
-    hex(&node)
-}
-
-fn hex(bytes: &[u8]) -> String {
-    let mut out = String::with_capacity(2 + bytes.len() * 2);
-    out.push_str("0x");
-    for byte in bytes {
-        out.push_str(&format!("{byte:02x}"));
-    }
-    out
-}
-
-// ---------------------------------------------------------------------------
 // Reverse resolution
 // ---------------------------------------------------------------------------
 
@@ -177,7 +148,9 @@ fn reverse_resolve(address: &str, service: &NameService, call: Transport<'_>) ->
             // A node is one word. Anything shorter is not one.
             (answer.trim_start_matches("0x").len() >= 64).then_some(answer)?
         }
-        None => namehash(&format!("{stripped}.addr.reverse")),
+        // EIP-137 / ENSIP-3: the core's one rule (core-perf-1), the node
+        // every shell asks about.
+        None => ens_reverse_node(address).ok()?,
     };
     let node = reverse_node.trim_start_matches("0x");
 
@@ -444,21 +417,27 @@ fn name_service_identity(
 mod tests {
     use super::*;
 
-    /// EIP-137's own worked examples.
+    /// The reverse node asked of an ENS-shaped registry is the core's
+    /// (`vela_core::ens`), for any spelling of the address.
     #[test]
-    fn namehash_matches_the_specification() {
-        assert_eq!(
-            namehash(""),
-            "0x0000000000000000000000000000000000000000000000000000000000000000"
-        );
-        assert_eq!(
-            namehash("eth"),
-            "0x93cdeb708b7545dc668eb9280176169d1c33cfd8ed6f04690a0bcc88a93fc4ae"
-        );
-        assert_eq!(
-            namehash("foo.eth"),
-            "0xde9b09fd7c5f901e23a3f19fecc54828e9c848539801e86591bd9801b019f84f"
-        );
+    fn the_reverse_node_is_the_cores() {
+        let asked = std::cell::RefCell::new(Vec::new());
+        let ens = &NAME_SERVICES[0];
+        assert!(ens.reverse_registrar.is_none(), "ENS derives its node");
+        let call = |_: u32, _: &str, data: &str| {
+            asked.borrow_mut().push(data.to_owned());
+            None
+        };
+        for spelling in [
+            "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+            "0x88cca0eedbf2c4426110bbfc998f048689266894",
+        ] {
+            assert_eq!(reverse_resolve(spelling, ens, &call), None);
+        }
+        let node =
+            vela_core::ens::ens_namehash("88cca0eedbf2c4426110bbfc998f048689266894.addr.reverse");
+        let expected = format!("0x{SEL_RESOLVER}{}", node.trim_start_matches("0x"));
+        assert_eq!(*asked.borrow(), vec![expected.clone(), expected]);
     }
 
     /// The addresses that must not reach the network at all.
