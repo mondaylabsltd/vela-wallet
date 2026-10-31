@@ -114,7 +114,7 @@ struct MultisigHomeCard: View {
             }
             MsNavRow(
                 title: words.t("panel.members"),
-                subtitle: words.ruleTitle(m: account.threshold, n: account.owners.count),
+                subtitle: ruleTitle,
                 icon: .usersRound, identifier: "multisig.home.settings"
             ) { onOpen(.settings(address: account.address)) }
         }
@@ -129,6 +129,17 @@ struct MultisigHomeCard: View {
         if chip.kind == "differs" { return words.t("presence.ruleDiffers") }
         let rule = chip["rule"]
         return words.ruleChip(m: rule?["m"]?.int ?? account.threshold, n: rule?["n"]?.int ?? account.owners.count)
+    }
+
+    /// The members row's line: the same rule in force as the chip (the
+    /// record's members are the original ones, not who approves now).
+    private var ruleTitle: String {
+        guard following, let chip = view.ruleChip, !chip.isNull else {
+            return words.ruleTitle(m: account.threshold, n: account.owners.count)
+        }
+        if chip.kind == "differs" { return words.t("presence.ruleDiffers") }
+        let rule = chip["rule"]
+        return words.ruleTitle(m: rule?["m"]?.int ?? account.threshold, n: rule?["n"]?.int ?? account.owners.count)
     }
 
     /// The waiting line's parts as the core ordered them, in words.

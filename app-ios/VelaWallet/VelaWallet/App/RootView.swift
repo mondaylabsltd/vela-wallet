@@ -4599,8 +4599,12 @@ struct RootView: View {
 
     private func followAccountInFront(_ address: String) {
         guard !address.isEmpty else { return }
-        wallet.open(address: address)
-        activity.open(address: address, hidden: wallet.balance?.hidden ?? false)
+        // The home wears what is shown: a multisig shown before the account
+        // signed in at launch keeps its own balance and activity (the
+        // account's would otherwise land under the multisig's header).
+        let shown = shownMultisig?.account.address ?? address
+        wallet.open(address: shown)
+        activity.open(address: shown, hidden: wallet.balance?.hidden ?? false)
         contacts.open(myAddress: address)
         Task { await readDeviceKeys(of: address) }
     }
