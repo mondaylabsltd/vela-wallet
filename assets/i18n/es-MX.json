@@ -841,6 +841,8 @@
    "waitedSeconds": "{{seconds}} segundos de espera",
    "networkTitle": "La conexión de red es inestable",
    "networkBody": "La solicitud nunca llegó — revisa tu red e inténtalo de nuevo.",
+   "proxyPacBody": "Esta computadora está configurada para usar una configuración automática de proxy ({{proxy}}) a la que no se puede acceder, así que ninguna solicitud sale. Corrígela o desactiva la configuración automática de proxy en la sección Proxies de la configuración de red del sistema, y vuelve a intentarlo.",
+   "proxyServerBody": "El proxy que esta computadora tiene configurado ({{proxy}}) no responde, así que ninguna solicitud sale. Inícialo o desactívalo en la sección Proxies de la configuración de red del sistema, y vuelve a intentarlo.",
    "offline": "No tienes conexión. Vela se actualiza de nuevo cuando vuelvas a estar en línea.",
    "serverTitle": "Servicio no disponible por el momento",
    "serverBody": "No se puede contactar al servicio de índice de Passkey — tanto crear como iniciar sesión lo necesitan.",
