@@ -454,7 +454,11 @@ export async function sendBatchCalls(
 	quotedFee?: QuotedInBandFee,
 	// A send: the review the person confirmed. The operation is signed only
 	// if it is exactly this (`attestedSafeOpHash`).
-	review: SignedReview | null = null
+	review: SignedReview | null = null,
+	// The gas the confirmed fee was priced on, fresh and for exactly these
+	// calls (the core's `SubmitUserOp.prepared`): signed without simulating
+	// and measuring again. In-band only; Tempo measures as before.
+	prepared: PreparedInBandGas | null = null
 ): Promise<SubmitResult> {
 	const byteCalls: MultiSendCall[] = calls.map((c) => ({
 		to: c.to,
@@ -484,7 +488,8 @@ export async function sendBatchCalls(
 		publicKeyHex,
 		signFn,
 		quotedFee,
-		review
+		review,
+		prepared
 	);
 }
 
@@ -634,6 +639,21 @@ export function sameAssetFeeLimit(
 		feeAmount,
 		maxTransferAmount: balance > feeAmount ? balance - feeAmount : 0n
 	};
+}
+
+/**
+ * The gas a fee quote measured (`fee_policy::PreparedGas`): the limits the fee
+ * on screen was priced on. The submit signs them instead of asking the relay
+ * to simulate again and measuring the inner calls again, the two slowest
+ * reads before the passkey. The nonce is never part of it: it is read fresh.
+ */
+export interface PreparedInBandGas {
+	/** Whether the account was deployed when the quote measured it. */
+	deployed: boolean;
+	verificationGasLimit: bigint;
+	callGasLimit: bigint;
+	preVerificationGas: bigint;
+	settlementGas: bigint | null;
 }
 
 /** In-band quoted fee as displayed by the confirm UI — the submit path signs exactly
@@ -2120,7 +2140,9 @@ async function sendUserOpInBand(
 	 *  recipient). Signed VERBATIM — what the user saw is what executes. */
 	quotedFee?: QuotedInBandFee,
 	/** A send: the review the person confirmed; signed only if it is exactly this. */
-	review: SignedReview | null = null
+	review: SignedReview | null = null,
+	/** The gas the confirmed fee was priced on (`PreparedInBandGas`). */
+	prepared: PreparedInBandGas | null = null
 ): Promise<SubmitResult> {
 	await verifyChainReady(chainId);
 
@@ -2174,16 +2196,21 @@ async function sendUserOpInBand(
 	// that OOGs on-chain. Pure-transfer batches keep the defaults — they cover them.
 	// Classify by call SHAPE (isPlainTransferCall), same as the Tempo path.
 	const hasContractCall = innerCalls.some((c) => !isPlainTransferCall(c));
+	// The quote's measurement, when it measured THIS account as it stands now
+	// (deployed is read fresh above): its limits already carry the inner
+	// calls' floor, and the core's rule below leaves them as they are.
+	const measured = prepared && prepared.deployed === deployed ? prepared : null;
 	try {
-		const est = await estimateGas(userOp, chainId);
+		const est = measured ?? (await estimateGas(userOp, chainId));
 		// The limits signed are the core's one rule (`userOpGasLimits`): the
 		// relay's limits as returned — no second ×1.5 on top of the relay's own,
 		// no 300k verification floor — raised to the inner calls' own measured
 		// floor, and held to an undeployed Safe's floors. The fee the person saw
 		// was priced on exactly these (or on the relay's settlement gas).
-		const floor = hasContractCall
-			? await innerCallsGasFloor(chainId, safeAddress, innerCalls)
-			: null;
+		const floor =
+			hasContractCall && !measured
+				? await innerCallsGasFloor(chainId, safeAddress, innerCalls)
+				: null;
 		Object.assign(userOp, userOpGasLimits(chainId, deployed, innerCalls.length + 1, est, floor));
 		console.log('[InBand] signed limits', {
 			verification: userOp.verificationGasLimit.toString(),

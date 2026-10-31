@@ -474,6 +474,39 @@ describe('the wallet’s own Send writes ahead (spec 082 RJ1)', () => {
 		});
 	}
 
+	it('hands the quote’s measured gas down to the signing, and none when there is none', async () => {
+		relayPosts(() => {});
+		const executor = createSendExecutor(ports({ credentialId: () => 'cred-1' }), {
+			dispatch: () => {}
+		});
+		const measured = {
+			...submit,
+			operation: {
+				...submit.operation,
+				prepared: {
+					calls: [],
+					deployed: true,
+					verification_gas_limit: '100000',
+					call_gas_limit: '310000',
+					pre_verification_gas: '40000',
+					settlement_gas: null
+				}
+			}
+		};
+		void executor.execute(measured);
+		await vi.waitFor(() => expect(vi.mocked(sendBatchCalls)).toHaveBeenCalledTimes(1));
+		expect(vi.mocked(sendBatchCalls).mock.calls.at(-1)?.[9]).toEqual({
+			deployed: true,
+			verificationGasLimit: 100_000n,
+			callGasLimit: 310_000n,
+			preVerificationGas: 40_000n,
+			settlementGas: null
+		});
+		void executor.execute({ ...submit, id: 3 });
+		await vi.waitFor(() => expect(vi.mocked(sendBatchCalls)).toHaveBeenCalledTimes(2));
+		expect(vi.mocked(sendBatchCalls).mock.calls.at(-1)?.[9]).toBeNull();
+	});
+
 	it('nothing is POSTed before the records are on disk; ClearToPost lets it go', async () => {
 		const dispatched: SendEvent[] = [];
 		const posted = vi.fn();
