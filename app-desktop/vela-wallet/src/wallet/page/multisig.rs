@@ -249,6 +249,14 @@ impl WalletPage {
                 self.multisig.scroll = crate::ui::SmoothScroll::new();
             }
             Some("close_invite") => self.multisig.invite = None,
+            // The add sheet with a link or address pasted, as the person does.
+            Some("add") => {
+                let text = ask.get("text").and_then(Value::as_str).map(str::to_owned);
+                self.open_multisig_add(text, cx);
+                if ask.get("press").and_then(Value::as_bool) == Some(true) {
+                    self.ms_add_press(false, cx);
+                }
+            }
             Some("session") => self.multisig.session = true,
             Some("switcher") => self.account_switcher = true,
             Some("close_switcher") => self.account_switcher = false,

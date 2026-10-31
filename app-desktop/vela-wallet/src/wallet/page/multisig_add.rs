@@ -186,7 +186,7 @@ impl WalletPage {
     /// Add, as the field reads: a link to the machine's link flow, a name
     /// looked up, an address added (on the network the invite names, or the
     /// one picked when asked).
-    fn ms_add_press(&mut self, accept_risks: bool, cx: &mut Context<Self>) {
+    pub(crate) fn ms_add_press(&mut self, accept_risks: bool, cx: &mut Context<Self>) {
         let loc = self.ms_loc();
         let text = self.multisig.add.clone().unwrap_or_default();
         let networks = self.ms_device_networks(cx);
