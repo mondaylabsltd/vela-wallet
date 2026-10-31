@@ -24,9 +24,7 @@ enum MultisigFacts {
         var known: [[String: Any]] = []
         for contact in shelf.readList(VelaStore.Key.contacts) {
             guard let address = contact["address"] as? String else { continue }
-            let label = (contact["name"] as? String).flatMap { $0.isEmpty ? nil : $0 }
-                ?? (contact["resolved_name"] as? String) ?? address
-            known.append(["address": address, "label": label])
+            known.append(["address": address, "label": contactName(contact) ?? address])
         }
         for record in records {
             guard let address = record["address"] as? String else { continue }
@@ -39,6 +37,16 @@ enum MultisigFacts {
             space: NetworkSpace.chainIds(store: shelf),
             known: known
         )
+    }
+
+    /// A stored contact's name as every screen says it (the core's
+    /// `contact_display_name`, the web's `c.name ?? c.resolved_name`): what
+    /// the person called them, else the name resolved for the address (a
+    /// Vela name, ENS, …), an empty one counting as none. The store keeps
+    /// contacts camelCased (`resolvedName`, ContactsWire.swift).
+    static func contactName(_ contact: [String: Any]) -> String? {
+        let named = (contact["name"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        return named ?? (contact["resolvedName"] as? String).flatMap { $0.isEmpty ? nil : $0 }
     }
 
     /// This device's Vela accounts, as the machines need them.

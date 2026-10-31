@@ -320,7 +320,8 @@ final class MultisigHub {
                   address.range(of: "^0x[0-9a-fA-F]{40}$", options: .regularExpression) != nil else { return nil }
             return [
                 "address": address, "name": contact["name"] ?? NSNull(),
-                "resolved_name": contact["resolved_name"] ?? NSNull(), "kind": contact["kind"] ?? NSNull(),
+                "resolved_name": (contact["resolvedName"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? NSNull(),
+                "kind": contact["kind"] ?? NSNull(),
             ]
         }
         members.dispatch(["type": "contacts", "contacts": contacts])
