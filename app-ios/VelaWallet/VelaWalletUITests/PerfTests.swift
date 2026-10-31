@@ -62,8 +62,9 @@ final class PerfTests: XCTestCase {
     private func makeApp(animation: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
-        // The lockup plays on every cold start by design (spec 012) and a tap
-        // ends it; the cached home is composed behind it either way (FR-013a).
+        // The lockup plays once a week (the core's rule, `vela.launch.played`),
+        // and a tap ends it; the cached home is composed behind it either way
+        // (FR-013a).
         if !animation { app.launchEnvironment["VELA_SKIP_LAUNCH_ANIMATION"] = "1" }
         return app
     }
@@ -88,7 +89,8 @@ final class PerfTests: XCTestCase {
     // MARK: - Launch
 
     /// Process start to the first frame (and to responsive), with the launch
-    /// lockup as it ships.
+    /// lockup as it ships: the core's weekly rule decides, so after the first
+    /// of these launches the rest are the everyday cold start.
     func testColdLaunch() throws {
         try requireSeed(makeApp(animation: true))
         measure(metrics: [XCTApplicationLaunchMetric(waitUntilResponsive: true)], options: options(5)) {

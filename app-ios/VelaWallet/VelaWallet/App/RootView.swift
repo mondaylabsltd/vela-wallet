@@ -308,7 +308,8 @@ struct RootView: View {
     /// redraw when the door opens during `.task`.
     @Environment(\.scenePhase) private var scenePhase
     @State private var parallelSpace = false
-    /// Seeded in `init`: only a cold start plays the lockup.
+    /// Seeded in `init`: only a cold start plays the lockup, and only when
+    /// the core's rule says it is due (once a week).
     @State private var launching: Bool
     /// Welcome content fades IN as the launch lockup fades OUT (FR-012).
     @State private var pageOpacity: Double
@@ -322,8 +323,9 @@ struct RootView: View {
         self.graph = graph
         self.loc = graph.loc
         self.onErased = onErased
-        _launching = State(initialValue: graph.firstLaunch && !LaunchAnimation.isDisabled)
-        _pageOpacity = State(initialValue: graph.firstLaunch && !LaunchAnimation.isDisabled ? 0 : 1)
+        // The core's replay rule, decided once by the graph (a week between).
+        _launching = State(initialValue: graph.playsLaunchAnimation)
+        _pageOpacity = State(initialValue: graph.playsLaunchAnimation ? 0 : 1)
     }
 
     private var scheme: ColorScheme {
