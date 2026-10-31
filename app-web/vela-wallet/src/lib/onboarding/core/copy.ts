@@ -12,7 +12,7 @@
  */
 
 import type { KeyMethod } from '../generated/KeyMethod';
-import { SELECTOR_UNRESPONSIVE, SITE_ACCESS_WITHHELD } from './passkey';
+import { SAFARI_PASSKEY_REFUSED, SELECTOR_UNRESPONSIVE, SITE_ACCESS_WITHHELD } from './passkey';
 import type { PromptKind } from '../generated/PromptKind';
 import type { StatusKey } from '../generated/StatusKey';
 import type { SubmitLabel } from '../generated/SubmitLabel';
@@ -256,10 +256,13 @@ export function promptCopy(kind: PromptKind, t: Translate): PromptCopy {
 				message:
 					kind.detail === SITE_ACCESS_WITHHELD
 						? t('onboarding.common.siteAccessBody')
-						: // Issue #446: the link to the other device failed — the core says which.
-							kind.phone_link
-							? t('onboarding.common.phoneLinkFailed')
-							: kind.detail
+						: // Safari refuses an extension page any passkey (R8) — said as that.
+							kind.detail === SAFARI_PASSKEY_REFUSED
+							? t('onboarding.common.safariPasskeyBody')
+							: // Issue #446: the link to the other device failed — the core says which.
+								kind.phone_link
+								? t('onboarding.common.phoneLinkFailed')
+								: kind.detail
 			};
 		case 'recover_offer':
 			return {
@@ -302,10 +305,12 @@ export function promptCopy(kind: PromptKind, t: Translate): PromptCopy {
 						? t('onboarding.login.alertSelectorUnresponsive')
 						: kind.detail === SITE_ACCESS_WITHHELD
 							? t('onboarding.common.siteAccessBody')
-							: // Issue #446: not "set up Face ID" when it was the phone link.
-								kind.phone_link
-								? t('onboarding.common.phoneLinkFailed')
-								: t('onboarding.login.alertSignInFailedBody', { message: kind.detail })
+							: kind.detail === SAFARI_PASSKEY_REFUSED
+								? t('onboarding.common.safariPasskeyBody')
+								: // Issue #446: not "set up Face ID" when it was the phone link.
+									kind.phone_link
+									? t('onboarding.common.phoneLinkFailed')
+									: t('onboarding.login.alertSignInFailedBody', { message: kind.detail })
 			};
 		default:
 			return unreachable(kind);

@@ -285,6 +285,17 @@ export const SELECTOR_UNRESPONSIVE = 'vela:selector-unresponsive';
  */
 export const SITE_ACCESS_WITHHELD = 'vela:site-access-withheld';
 
+/**
+ * The ceremony Safari refused in the packaged extension (spec 102 R8): WebKit
+ * gives an extension page (`safari-web-extension://<UUID>`) no `getvela.app`
+ * passkey at all — `SecurityError: The requested RPID did not match the
+ * origin` — whatever the person allowed. Nothing to grant: the core sends
+ * every ceremony and signature in the Safari package to the signing page, so
+ * this is reached only by a path that did not go there; the prompt copy says
+ * so in plain words (`onboarding.common.safariPasskeyBody`).
+ */
+export const SAFARI_PASSKEY_REFUSED = 'vela:safari-passkey-refused';
+
 /** How long the page may keep focus with a get pending before the sheet is declared dead. */
 const SELECTOR_WATCHDOG_MS = 10_000;
 const SELECTOR_POLL_MS = 250;
@@ -596,7 +607,18 @@ function classify(error: unknown): PasskeyError {
 		return new PasskeyError('not_supported', e.message || 'Authenticator not supported');
 	}
 	if (e?.name === 'SecurityError' && isPackagedApp()) {
-		return new PasskeyError('other', SITE_ACCESS_WITHHELD);
+		// Two packages, two different facts behind the same error. Chrome
+		// refuses only while the person withholds Vela's site access (one
+		// click gives it back); Safari refuses every extension page a
+		// `getvela.app` passkey, whatever the person allowed — which is why
+		// the core sends every ceremony and signature there to the signing
+		// page (R8), and why this is said as that, never as site access.
+		return new PasskeyError(
+			'other',
+			__VELA_EXTENSION_PROTOCOL__ === 'safari-web-extension:'
+				? SAFARI_PASSKEY_REFUSED
+				: SITE_ACCESS_WITHHELD
+		);
 	}
 	if (e?.name === 'InvalidStateError') {
 		// With excludeCredentials set this means the chosen authenticator

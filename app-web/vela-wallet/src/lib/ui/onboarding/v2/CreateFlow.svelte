@@ -33,6 +33,8 @@
 	import type { PromptKind } from '$lib/onboarding/generated/PromptKind';
 	import { track, type AnalyticsEventProps } from '$lib/analytics';
 	import { analyticsMethod } from '$lib/analytics/methods';
+	import { SIGNING_SURFACE } from '$lib/signing/surface';
+	import { harnessSigningPage } from '$lib/dev/harness-page';
 
 	interface Props {
 		strings: (key: string, params?: Record<string, string | number>) => string;
@@ -138,11 +140,16 @@
 						failed('error');
 					}
 				});
-				// Spec 102: no `signing_page_chosen`. Settings no longer names a page
-				// a create would follow, and the web offers no "Use my own signing
-				// page" (it opens no page, owner 2026-09-23) — so every wallet made
-				// here is a `getvela.app` wallet whose ceremonies run in the app.
+				// Spec 102: no `signing_page_chosen` — the web offers no "Use my own
+				// signing page", so every wallet made here is a `getvela.app`
+				// wallet. Its ceremonies run in the app, except where this build's
+				// pages cannot use a passkey (the Safari package, R8): there the
+				// core sends each one to the official signing page.
 				session.start({ type: 'start' });
+				send({ type: 'surface_known', surface: SIGNING_SURFACE });
+				// The device harness's loopback page (development package only).
+				const harnessPage = harnessSigningPage();
+				if (harnessPage) send({ type: 'signing_page_chosen', url: harnessPage });
 				// ob-9: a reload (or a return) mid-create finds the name and the
 				// agreements where they were — one step back from the key list,
 				// whose passkeys lived only in the page that minted them.

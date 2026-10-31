@@ -218,6 +218,7 @@ const FLOW_PROMPT_KEYS = [
 	'onboarding.login.alertSignInFailedBody',
 	'onboarding.login.alertSelectorUnresponsive',
 	'onboarding.common.siteAccessBody',
+	'onboarding.common.safariPasskeyBody',
 	'onboarding.login.recoverOfferTitle',
 	'onboarding.login.recoverOfferBody',
 	'onboarding.login.recoverConfirm',

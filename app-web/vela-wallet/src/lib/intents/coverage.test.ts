@@ -137,6 +137,9 @@ const DISPATCHED: Record<string, Place> = {
 	'signRequest.sim_settled': { machine: 'the simulation' },
 	'signRequest.transport_dropped': { machine: 'the dApp’s connection' },
 	'login.sign_in': { later: 'signing in or creating a wallet: the passkey’s own ceremony' },
+	// Spec 102 R8: the shell says where it runs (the Safari package sends every
+	// ceremony to the signing page) — the build's fact, not the person's act.
+	'login.surface_known': { machine: 'where this build runs (R8)' },
 	// W8: an outside owner's wallet, asked through Vela's live session (the
 	// core's multisig session machine, ExternalSignSheet).
 	'host.mailbox_tick': { machine: 'the mailbox read while an outside wallet is asked' },

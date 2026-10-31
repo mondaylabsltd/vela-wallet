@@ -20,6 +20,11 @@ import type { IntegrityLine } from '$lib/core/generated/IntegrityLine';
 import type { SigningPage } from '$lib/core/generated/SigningPage';
 import type { SigningPlan } from '$lib/core/generated/SigningPlan';
 import type { SigningRoute } from '$lib/core/generated/SigningRoute';
+import type { SigningSurface } from '$lib/core/generated/SigningSurface';
+import type { KeyLabel } from '$lib/core/generated/KeyLabel';
+import type { Registration } from '$lib/onboarding/generated/Registration';
+import type { Assertion as CeremonyAssertion } from '$lib/onboarding/generated/Assertion';
+import { SIGNING_SURFACE } from '$lib/signing/surface';
 import type { SigningVenue } from '$lib/core/generated/SigningVenue';
 import type { VenueBlock } from '$lib/core/generated/VenueBlock';
 import type { VenueChoice } from '$lib/core/generated/VenueChoice';
@@ -703,7 +708,7 @@ export function attestSafeMessageHash(
 export type ApprovalRoute = SigningRoute;
 
 export function multisigApprovalRoute(account: unknown): ApprovalRoute | null {
-	const route = wasm.multisigApprovalRoute(JSON.stringify(account));
+	const route = wasm.multisigApprovalRoute(JSON.stringify(account), SIGNING_SURFACE);
 	return route === undefined ? null : (JSON.parse(route) as ApprovalRoute);
 }
 
@@ -717,9 +722,18 @@ export function multisigApprovalRoute(account: unknown): ApprovalRoute | null {
  * `vela_multisigApprove` for a member's approval. `null` for a record this
  * build cannot read, or a method no venue signs (`eth_sign`, anything
  * unknown).
+ *
+ * On THIS build's surface (R8, `$lib/signing/surface.ts`): in the Safari
+ * package, whose pages cannot use a `getvela.app` passkey, nothing is answered
+ * `in_vela` — a Vela-sheet account signs on the official page. `surface`
+ * stands in for the build in tests and the shared vectors.
  */
-export function signingRoute(account: unknown, method: string): SigningRoute | null {
-	const route = wasm.signingRoute(JSON.stringify(account), method);
+export function signingRoute(
+	account: unknown,
+	method: string,
+	surface: SigningSurface = SIGNING_SURFACE
+): SigningRoute | null {
+	const route = wasm.signingRoute(JSON.stringify(account), method, surface);
 	return route === undefined ? null : (JSON.parse(route) as SigningRoute);
 }
 
@@ -974,6 +988,77 @@ export interface TrustedSignerKey {
  */
 export function trustedSignerRegistryRpId(page: string | null): string | null {
 	return wasm.trustedSignerRegistryRpId(page ?? undefined) ?? null;
+}
+
+/**
+ * The page's request for a key ceremony a machine sent to a page (spec 102
+ * R3, R8 — `register_passkey`, `authenticate_passkey`, `sign_proof`,
+ * `sign_member_proof` with `page` set), built by the core from the operation
+ * itself (`trusted_signer::ceremony::request`): `{id, intent, context}`.
+ * `deployment` is the registry's `{chainId, contract}` for a member proof.
+ * `null` for an operation that is not a ceremony.
+ */
+export function trustedSignerCeremonyRequest(args: {
+	operation: unknown;
+	id: string;
+	walletName: string;
+	registry: string;
+	deployment?: { chainId: number; contract: string } | null;
+}): { id: string; intent: unknown; context: unknown } | null {
+	const request = wasm.trustedSignerCeremonyRequest(
+		JSON.stringify(args.operation),
+		args.id,
+		args.walletName,
+		args.registry,
+		args.deployment ? JSON.stringify(args.deployment) : undefined
+	);
+	return request === undefined
+		? null
+		: (JSON.parse(request) as { id: string; intent: unknown; context: unknown });
+}
+
+/** A ceremony's answer, as the core verified it: the machines' own wire types. */
+export type CeremonyAnswer =
+	| { type: 'registered'; registration: Registration }
+	| { type: 'asserted'; assertion: CeremonyAssertion };
+
+/**
+ * The page's answer to a ceremony, judged as the apps judge it
+ * (`trusted_signer::ceremony::verify`) — or a throw whose message is the
+ * refusal's code (`declined`, `refused`, `wrong_challenge`, `foreign_key`,
+ * `not_verified`, `malformed`). `signerOrigin` is the page this shell opened:
+ * the origin the authenticator must have signed. `expectedMemberChallengeHex`
+ * the registry's challenge this shell fetched, for a member proof.
+ */
+export function trustedSignerCeremonyVerify(args: {
+	operation: unknown;
+	answer: unknown;
+	signerOrigin: string;
+	expectedMemberChallengeHex?: string | null;
+}): CeremonyAnswer {
+	return JSON.parse(
+		wasm.trustedSignerCeremonyVerify(
+			JSON.stringify(args.operation),
+			JSON.stringify(args.answer),
+			args.signerOrigin,
+			args.expectedMemberChallengeHex ?? undefined
+		)
+	) as CeremonyAnswer;
+}
+
+/**
+ * The corpus key of the hand-off card's title while a ceremony waits on its
+ * page (`componentsUi.signing.ceremonyCreate` | `.ceremonySignIn` |
+ * `.ceremonyConfirm`), and the card's key row (`KeyLabel`) — the apps' card.
+ */
+export function trustedSignerCeremonyCard(
+	operation: unknown
+): { titleKey: string; keyLabel: KeyLabel } | null {
+	const json = JSON.stringify(operation);
+	const titleKey = wasm.trustedSignerCeremonyTitleKey(json);
+	const keyLabel = wasm.trustedSignerCeremonyKeyLabel(json);
+	if (titleKey === undefined || keyLabel === undefined) return null;
+	return { titleKey, keyLabel: JSON.parse(keyLabel) as KeyLabel };
 }
 
 // ---------------------------------------------------------------------------
