@@ -13,6 +13,8 @@ import {
 	REPLAY_AFTER_MS,
 	STORAGE_KEY,
 	isDue,
+	launchAnimationDue,
+	storedLastPlayedMs,
 	SKIP_PARAM,
 	assetUrl,
 	boxSize,
@@ -190,6 +192,85 @@ describe('replay gate', () => {
 			html,
 			`the inline cooldown must be ${REPLAY_AFTER_MS} ms — update BOTH copies together`
 		).toContain(String(REPLAY_AFTER_MS));
+	});
+
+	/**
+	 * The core's own cases (`vela_core::launch`, run there by `cargo test`).
+	 * Both web copies (this module and the pre-paint block in `app.html`) must
+	 * land on every one: the core is the rule, the web only cannot call it
+	 * before paint.
+	 */
+	const vectors = JSON.parse(
+		readFileSync(
+			new URL(
+				'../../../../../rust/crates/vela-core/tests/vectors/launch/launch-animation.json',
+				import.meta.url
+			),
+			'utf8'
+		)
+	) as {
+		storage_key: string;
+		replay_after_ms: number;
+		cases: {
+			name: string;
+			last_played_ms: number | null;
+			now_ms: number;
+			disabled: boolean;
+			due: boolean;
+		}[];
+	};
+
+	it('shares the core’s key and week', () => {
+		expect(STORAGE_KEY).toBe(vectors.storage_key);
+		expect(REPLAY_AFTER_MS).toBe(vectors.replay_after_ms);
+		expect(vectors.cases.length).toBeGreaterThanOrEqual(8);
+	});
+
+	it('answers every one of the core’s cases', () => {
+		for (const c of vectors.cases) {
+			expect(launchAnimationDue(c.last_played_ms, c.now_ms, c.disabled), c.name).toBe(c.due);
+			if (!c.disabled) {
+				const stored = c.last_played_ms === null ? null : String(c.last_played_ms);
+				expect(isDue(stored, c.now_ms), c.name).toBe(c.due);
+			}
+		}
+	});
+
+	it('reads what was stored the way the core is handed it', () => {
+		expect(storedLastPlayedMs(null)).toBeNull();
+		expect(storedLastPlayedMs('not-a-number')).toBeNull();
+		expect(storedLastPlayedMs('Infinity')).toBeNull();
+		expect(storedLastPlayedMs('1700000000000')).toBe(1_700_000_000_000);
+	});
+
+	it('runs the pre-paint copy against the core’s cases', () => {
+		const html = readFileSync(new URL('../../app.html', import.meta.url), 'utf8');
+		const begin = html.indexOf('/* launch-gate:begin */');
+		const end = html.indexOf('/* launch-gate:end */');
+		expect(begin, 'the inline gate is marked').toBeGreaterThan(0);
+		expect(end).toBeGreaterThan(begin);
+		const block = html.slice(begin, end);
+		const prePaint = (stored: string | null, now: number, search: string, pathname: string) => {
+			const dataset: Record<string, string> = {};
+			const store: Record<string, string> = stored === null ? {} : { [STORAGE_KEY]: stored };
+			new Function('location', 'document', 'localStorage', 'Date', block)(
+				{ search, pathname },
+				{ documentElement: { dataset } },
+				{ getItem: (key: string) => store[key] ?? null },
+				{ now: () => now }
+			);
+			return dataset.launch === 'playing';
+		};
+		for (const c of vectors.cases) {
+			const stored = c.last_played_ms === null ? null : String(c.last_played_ms);
+			// The page's "disabled" is the deterministic skip.
+			const search = c.disabled ? `?${SKIP_PARAM}` : '';
+			expect(prePaint(stored, c.now_ms, search, '/en'), c.name).toBe(c.due);
+		}
+		// And a value that is not a number reads as never played, as the core says.
+		expect(prePaint('garbage', 1_700_000_000_000, '', '/en')).toBe(true);
+		// The connect page is never a front door.
+		expect(prePaint(null, 1_700_000_000_000, '', '/en/connect')).toBe(false);
 	});
 
 	it('plays rather than breaking when storage throws', () => {

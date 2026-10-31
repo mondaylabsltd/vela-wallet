@@ -108,6 +108,9 @@ pub mod token_provenance;
 pub mod token_registry;
 pub mod token_trust;
 pub mod tx_tracker;
+/// What a machine's answers carry of its view: built only when it can have
+/// changed, sent only when it did (the generic host every bridge shares).
+pub mod view_host;
 
 /// Implemented by every per-domain effect enum (spec 016) so product-agnostic
 /// plumbing — the wasm bridge, the test driver — can split shell requests
@@ -115,7 +118,22 @@ pub mod tx_tracker;
 /// bridge and driver are written once.
 pub trait SplitEffect {
     type Op: crux_core::capability::Operation;
+    /// The shell request, or `None` for a render.
     fn into_shell(self) -> Option<crux_core::Request<Self::Op>>;
+
+    /// Opt-in ([`view_host`]): this machine asks for a render whenever its
+    /// view may have changed, so the generic host builds the view only after
+    /// an answer that rendered and keeps the last one otherwise. A machine
+    /// that sets it and then changes its view without a render leaves the
+    /// shell drawing the older view until its next render: set it only with
+    /// a test that every change renders.
+    const RENDERS_EVERY_CHANGE: bool = false;
+
+    /// Opt-in ([`view_host`]): top-level view fields that move at nearly
+    /// every step and that most shells never read. For a shell that opted in
+    /// to unchanged-view skipping they leave the view, and come apart (in
+    /// `volatile`) only to a shell that asked for them.
+    const VOLATILE_VIEW_KEYS: &'static [&'static str] = &[];
 }
 
 #[cfg(feature = "bindings")]

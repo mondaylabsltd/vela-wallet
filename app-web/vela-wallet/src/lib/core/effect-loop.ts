@@ -17,7 +17,8 @@
 export type EffectWithId = { id: number };
 
 export type CoreResult<View, Effect> = {
-	view: View;
+	/** Absent: nothing the shell draws changed (an opted-in core, `json-shell.ts`). */
+	view?: View;
 	effects: Effect[];
 	cancelled_effect_ids?: number[];
 };
@@ -86,7 +87,7 @@ export function createEffectLoop<View, Event, Effect extends EffectWithId, Resul
 	}
 
 	function apply(result: CoreResult<View, Effect>) {
-		commit(result.view);
+		if (result.view !== undefined) commit(result.view);
 
 		for (const effectId of result.cancelled_effect_ids ?? []) {
 			controllers.get(effectId)?.abort();

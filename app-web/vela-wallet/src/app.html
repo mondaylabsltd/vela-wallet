@@ -139,9 +139,11 @@
 			 * user sees Welcome → animation → Welcome. The founder asked for the order
 			 * to be right; this is the only place it can be guaranteed.
 			 *
-			 * The replay rule is duplicated from `$lib/launch/constants.ts` — it cannot
-			 * be imported here, since the whole point is running before any module
-			 * loads. `constants.test.ts` reads this file and asserts the two agree: a
+			 * The replay rule is the core's (`vela_core::launch::launch_animation_due`,
+			 * every shell asks it). It cannot be called here: this runs before any
+			 * module loads, and the Welcome page never loads the core. So this is a
+			 * copy, and `$lib/launch/constants.test.ts` runs it against the core's own
+			 * vectors (`rust/crates/vela-core/tests/vectors/launch/launch-animation.json`): a
 			 * divergence would hide the page for an animation the component then
 			 * declines to play, i.e. a blank screen.
 			 *
@@ -149,6 +151,7 @@
 			 */
 			// The connect page (an outside owner's wallet, `/<locale>/connect`) is a
 			// utility page for someone who may never have used Vela: no splash.
+			/* launch-gate:begin */
 			var quiet =
 				location.search.indexOf('skipLaunch') !== -1 || /\/connect\/?$/.test(location.pathname);
 			try {
@@ -168,6 +171,7 @@
 					document.documentElement.dataset.launch = 'playing';
 				}
 			}
+			/* launch-gate:end */
 
 			/*
 			 * Spec 038: decide BEFORE first paint whether the first-run intro is up,

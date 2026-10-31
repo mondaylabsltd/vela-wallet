@@ -1101,6 +1101,7 @@ fn erc20_fee_estimate() -> FeeEstimate {
             symbol: None,
         },
         fee_recipient: None,
+        prepared: None,
     }
 }
 
@@ -2427,9 +2428,14 @@ fn gas_unread() -> Res {
 #[test]
 fn a_quote_is_priced_again_every_block_in_the_background() {
     let mut sut = quoted_native(vec![]);
-    let before = sut.view();
+    let mut before = sut.view();
     assert_eq!(sut.resolve(Res::TtlElapsed), gathering_reads());
     let during = sut.view();
+    // The one thing that goes at once is the gas the last run measured: it is
+    // no longer handed to a submit (core-perf-1); nothing a person sees moves.
+    if let Some(fee) = &mut before.fee {
+        fee.prepared = None;
+    }
     assert!(!during.busy, "a background pricing is not busy");
     assert!(
         during.confirm_fee_ready,
@@ -7039,4 +7045,73 @@ fn an_entered_amount_is_read_exactly_or_refused() {
         parse_amount_units("340282366920938463463.374607431768211455", 18),
         Ok(u128::MAX)
     );
+}
+
+// ===========================================================================
+// The gas the quote measured, for the submit (core-perf-1)
+// ===========================================================================
+
+fn a_transfer() -> FeeCall {
+    FeeCall {
+        to: "0x000000000000000000000000000000000000beef".to_owned(),
+        value: "1000".to_owned(),
+        data: "0x".to_owned(),
+    }
+}
+
+/// A run that simulated the operation hands the submit the very limits the
+/// fee was priced on, for the very calls it simulated.
+#[test]
+fn a_simulated_quote_carries_the_gas_it_was_priced_on() {
+    let sut = quoted_native(vec![a_transfer()]);
+    let fee = sut.view().fee.expect("a quote");
+    let prepared = fee.prepared.expect("the measured gas");
+    assert_eq!(prepared.calls, vec![a_transfer()]);
+    assert!(prepared.deployed);
+    let total: u128 = [
+        &prepared.verification_gas_limit,
+        &prepared.call_gas_limit,
+        &prepared.pre_verification_gas,
+    ]
+    .iter()
+    .map(|gas| gas.parse::<u128>().expect("decimal"))
+    .sum();
+    assert_eq!(
+        total.to_string(),
+        fee.total_gas,
+        "the gas the fee was priced on"
+    );
+    assert_eq!(prepared.settlement_gas, None);
+}
+
+/// Freshness: the moment the quote is priced again (once a block), what the
+/// last run measured is no longer handed to a submit, though the figure on
+/// screen stays confirmable until the new one lands, which brings its own.
+#[test]
+fn the_measured_gas_is_dropped_when_the_quote_is_priced_again() {
+    let mut sut = quoted_native(vec![a_transfer()]);
+    sut.resolve(Res::TtlElapsed);
+    let during = sut.view().fee.expect("the figure stays");
+    assert!(during.prepared.is_none(), "one block on: measured again");
+    sut.resolve(gas_ok());
+    sut.resolve(bundler_ok());
+    sut.resolve(quotes_ok());
+    sut.resolve(estimated());
+    assert!(sut.view().fee.expect("re-priced").prepared.is_some());
+}
+
+/// A quote nothing simulated (the static fallback) has nothing to hand on:
+/// the submit measures, as it always did.
+#[test]
+fn a_quote_on_the_static_fallback_carries_no_measured_gas() {
+    let mut sut = Sut::new();
+    sut.dispatch(request(CHAIN, vec![a_transfer()]));
+    sut.resolve(gas_ok());
+    sut.resolve(bundler_ok());
+    sut.resolve(quotes_ok());
+    sut.resolve(Res::UserOpGas {
+        outcome: FeeGasOutcome::SimulationFailed,
+    });
+    let fee = sut.view().fee.expect("static quote");
+    assert!(fee.prepared.is_none());
 }

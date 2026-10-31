@@ -117,25 +117,50 @@ export const STORAGE_KEY = 'vela.launch.played';
  * through it twice; short enough that someone returning after a while still
  * gets the brand moment.
  *
- * **This rule is implemented TWICE** — here, and inline in `app.html` where the
- * decision has to be made before first paint. `constants.test.ts` pins the value
- * and asserts the inline copy still agrees, because a divergence would mean the
- * pre-paint script hides the page for an animation the component then declines
- * to play: a blank screen.
+ * The rule is the core's (`vela_core::launch`, `LAUNCH_ANIMATION_REPLAY_AFTER_MS`);
+ * the native apps ask it. The web keeps two copies because it decides before
+ * the core can load: here, and inline in `app.html` before first paint.
+ * `constants.test.ts` runs both against the core's vectors, because a
+ * divergence would mean the pre-paint script hides the page for an animation
+ * the component then declines to play: a blank screen.
  */
 export const REPLAY_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** The deterministic disable for tests (FR-029). */
 export const SKIP_PARAM = 'skipLaunch';
 
-/** The one rule, expressed once. The inline script mirrors this exactly. */
-export function isDue(storedValue: string | null, now: number): boolean {
-	if (storedValue === null) return true;
+/**
+ * The stored text as the core reads it (`stored_last_played_ms`): the epoch
+ * milliseconds, or `null` when nothing was stored or what was stored is not a
+ * finite number. A corrupt value is "never played" rather than a reason to
+ * suppress the animation forever on a bad write.
+ */
+export function storedLastPlayedMs(storedValue: string | null): number | null {
+	if (storedValue === null) return null;
 	const last = Number(storedValue);
-	// A corrupt or non-numeric value means we cannot tell — treat it as due
-	// rather than suppressing the animation forever on a bad write.
-	if (!Number.isFinite(last)) return true;
-	return now - last >= REPLAY_AFTER_MS;
+	return Number.isFinite(last) ? last : null;
+}
+
+/**
+ * `vela_core::launch::launch_animation_due`, the rule every shell asks the
+ * core. The web cannot ask it here: the decision is made before first paint
+ * (`app.html`) and on Welcome, which never loads the core (`$lib/core/client`).
+ * So this, like the inline copy, is held to the core's own vectors by
+ * `constants.test.ts`, case for case.
+ */
+export function launchAnimationDue(
+	lastPlayedMs: number | null,
+	nowMs: number,
+	disabled: boolean
+): boolean {
+	if (disabled) return false;
+	if (lastPlayedMs === null || !Number.isFinite(lastPlayedMs)) return true;
+	return nowMs - lastPlayedMs >= REPLAY_AFTER_MS;
+}
+
+/** The stored text against the core's rule. The inline script mirrors this exactly. */
+export function isDue(storedValue: string | null, now: number): boolean {
+	return launchAnimationDue(storedLastPlayedMs(storedValue), now, false);
 }
 
 export function shouldPlay(win: Window = window, now: number = Date.now()): boolean {

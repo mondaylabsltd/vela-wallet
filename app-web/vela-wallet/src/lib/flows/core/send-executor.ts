@@ -644,7 +644,20 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 							: undefined,
 						// The review the person confirmed: the operation is signed
 						// only if it is exactly this.
-						op.review
+						op.review,
+						// The gas the confirmed fee was priced on, when the core
+						// still holds it fresh for exactly these calls: signed
+						// without simulating again. The nonce is read as always.
+						op.prepared
+							? {
+									deployed: op.prepared.deployed,
+									verificationGasLimit: BigInt(op.prepared.verification_gas_limit),
+									callGasLimit: BigInt(op.prepared.call_gas_limit),
+									preVerificationGas: BigInt(op.prepared.pre_verification_gas),
+									settlementGas:
+										op.prepared.settlement_gas === null ? null : BigInt(op.prepared.settlement_gas)
+								}
+							: null
 					);
 					submitted.set(result.userOpHash, result);
 					// What the tracker learned while the reply was out (RJ1, RJ4).

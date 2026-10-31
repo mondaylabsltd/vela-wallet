@@ -236,6 +236,14 @@ export class ActivityFeedCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -248,6 +256,14 @@ export class ApprovalGuardCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -260,6 +276,14 @@ export class BalanceDashboardCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -272,6 +296,14 @@ export class BatchImportCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -284,6 +316,14 @@ export class BrowserHistoryCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -296,6 +336,14 @@ export class ClearSigningCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -308,6 +356,14 @@ export class ContactsCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -320,6 +376,14 @@ export class CreateWalletCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -332,6 +396,14 @@ export class DappPermissionsCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -345,6 +417,14 @@ export class DappSessionCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -358,6 +438,14 @@ export class DisplayCurrencyCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -370,6 +458,14 @@ export class ExtCacheCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -383,6 +479,14 @@ export class FeePolicyCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -396,6 +500,14 @@ export class FeeSpeedCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -409,6 +521,14 @@ export class FeeTierPrefCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -463,6 +583,14 @@ export class LoginCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -475,6 +603,14 @@ export class ManageTokensCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -487,6 +623,14 @@ export class MultisigAccountsCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -500,6 +644,14 @@ export class MultisigMembersCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -514,6 +666,14 @@ export class MultisigOutsidePageCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -526,6 +686,14 @@ export class MultisigOutsideSessionCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -539,6 +707,14 @@ export class MultisigProposalsCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -552,6 +728,14 @@ export class NetworkAdminCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -565,6 +749,14 @@ export class PaymentRequestCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -578,6 +770,14 @@ export class ReceiveWatchCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -590,6 +790,14 @@ export class RpcPoolCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -604,6 +812,14 @@ export class SendCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -616,6 +832,14 @@ export class SessionCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -628,6 +852,14 @@ export class SignRequestCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -642,6 +874,14 @@ export class SigningPagesCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -655,6 +895,14 @@ export class TokenTrustCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -667,6 +915,14 @@ export class TxTrackerCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -1008,6 +1264,17 @@ export function encodeSplitterDeployCall(treasury_hex: string): Uint8Array;
 
 export function encodeType(typed_data_json: string): string;
 
+/**
+ * EIP-137 namehash, `0x`-prefixed lower-case hex.
+ */
+export function ensNamehash(name: string): string;
+
+/**
+ * The reverse node of `address`; rejects with `{ code, message }` when it
+ * is not one.
+ */
+export function ensReverseNode(address: string): string;
+
 export function extractAttestationPublicKey(attestation_object: Uint8Array): P256PublicKey;
 
 /**
@@ -1254,6 +1521,13 @@ export function keyMethodWords(method: string, chooser: string, unlock: string):
  * answers it.
  */
 export function landingPace(sent_at_ms: number | null | undefined, typical_s: number, now_ms: number): string;
+
+/**
+ * `stored_last_played_ms`: `undefined` when nothing (readable) is stored.
+ */
+export function launchAnimationDue(stored_last_played_ms: number | null | undefined, now_ms: number, disabled: boolean): boolean;
+
+export function launchAnimationStorageKey(): string;
 
 /**
  * How long a logo that did not load stays failed, ms — `undefined` for the
@@ -2090,6 +2364,7 @@ export interface InitOutput {
     readonly activityfeedcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly activityfeedcore_new: () => number;
     readonly activityfeedcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly activityfeedcore_skip_unchanged_views: (a: number, b: number) => void;
     readonly activityfeedcore_view: (a: number) => [number, number, number, number];
     readonly addressEntry: (a: number, b: number) => [number, number];
     readonly amountTextCaret: (a: number, b: number, c: number, d: number, e: number) => number;
@@ -2097,6 +2372,7 @@ export interface InitOutput {
     readonly approvalguardcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly approvalguardcore_new: () => number;
     readonly approvalguardcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly approvalguardcore_skip_unchanged_views: (a: number, b: number) => void;
     readonly approvalguardcore_view: (a: number) => [number, number, number, number];
     readonly attestReviewedSafeOpHash: (a: number, b: number, c: number, d: number, e: bigint) => [number, number, number, number];
     readonly attestSafeMessageHash: (a: number, b: number, c: bigint, d: number, e: number) => [number, number, number, number];
@@ -2106,16 +2382,19 @@ export interface InitOutput {
     readonly balancedashboardcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly balancedashboardcore_new: () => number;
     readonly balancedashboardcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly balancedashboardcore_skip_unchanged_views: (a: number, b: number) => void;
     readonly balancedashboardcore_view: (a: number) => [number, number, number, number];
     readonly batchimportcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly batchimportcore_new: () => number;
     readonly batchimportcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly batchimportcore_skip_unchanged_views: (a: number, b: number) => void;
     readonly batchimportcore_view: (a: number) => [number, number, number, number];
     readonly bestNativeDexPrice: (a: any) => [number, number];
     readonly browserSiteLabel: (a: number, b: number, c: number, d: number) => [number, number];
     readonly browserhistorycore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly browserhistorycore_new: () => number;
     readonly browserhistorycore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly browserhistorycore_skip_unchanged_views: (a: number, b: number) => void;
     readonly browserhistorycore_view: (a: number) => [number, number, number, number];
     readonly buildGroupProof: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
     readonly buildMemberProof: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
@@ -2131,6 +2410,7 @@ export interface InitOutput {
     readonly clearsigningcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly clearsigningcore_new: () => number;
     readonly clearsigningcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly clearsigningcore_skip_unchanged_views: (a: number, b: number) => void;
     readonly clearsigningcore_view: (a: number) => [number, number, number, number];
     readonly clientmcpInstallationId: (a: number, b: number) => [number, number];
     readonly clientmcpLinkAccept: (a: number, b: number, c: number) => [number, number];
@@ -2145,11 +2425,13 @@ export interface InitOutput {
     readonly contactscore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly contactscore_new: () => number;
     readonly contactscore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly contactscore_skip_unchanged_views: (a: number, b: number) => void;
     readonly contactscore_view: (a: number) => [number, number, number, number];
     readonly create2Address: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly createwalletcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly createwalletcore_new: () => number;
     readonly createwalletcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly createwalletcore_skip_unchanged_views: (a: number, b: number) => void;
     readonly createwalletcore_view: (a: number) => [number, number, number, number];
     readonly currencyFractionDigits: (a: number, b: number) => number;
     readonly cutTokenAmount: (a: number, b: number) => [number, number];
@@ -2171,24 +2453,30 @@ export interface InitOutput {
     readonly dapppermissionscore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly dapppermissionscore_new: () => number;
     readonly dapppermissionscore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly dapppermissionscore_skip_unchanged_views: (a: number, b: number) => void;
     readonly dapppermissionscore_view: (a: number) => [number, number, number, number];
     readonly dappsessioncore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly dappsessioncore_new: () => number;
     readonly dappsessioncore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly dappsessioncore_skip_unchanged_views: (a: number, b: number) => void;
     readonly dappsessioncore_view: (a: number) => [number, number, number, number];
     readonly decodeCalldata: (a: number, b: number, c: number, d: number) => [number, number, number];
     readonly derSignatureToRawLowS: (a: number, b: number) => [number, number, number, number];
     readonly displaycurrencycore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly displaycurrencycore_new: () => number;
     readonly displaycurrencycore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly displaycurrencycore_skip_unchanged_views: (a: number, b: number) => void;
     readonly displaycurrencycore_view: (a: number) => [number, number, number, number];
     readonly dpermSettleOnClose: () => [number, number];
     readonly encodeRegistryMetadata: (a: any) => [number, number, number, number];
     readonly encodeSplitterDeployCall: (a: number, b: number) => [number, number, number, number];
     readonly encodeType: (a: number, b: number) => [number, number, number, number];
+    readonly ensNamehash: (a: number, b: number) => [number, number];
+    readonly ensReverseNode: (a: number, b: number) => [number, number, number, number];
     readonly extcachecore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly extcachecore_new: () => number;
     readonly extcachecore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly extcachecore_skip_unchanged_views: (a: number, b: number) => void;
     readonly extcachecore_view: (a: number) => [number, number, number, number];
     readonly extractAttestationPublicKey: (a: number, b: number) => [number, number, number];
     readonly feeFailureReasonKey: (a: number, b: number) => [number, number];
@@ -2199,14 +2487,17 @@ export interface InitOutput {
     readonly feepolicycore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly feepolicycore_new: () => number;
     readonly feepolicycore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly feepolicycore_skip_unchanged_views: (a: number, b: number) => void;
     readonly feepolicycore_view: (a: number) => [number, number, number, number];
     readonly feespeedcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly feespeedcore_new: () => number;
     readonly feespeedcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly feespeedcore_skip_unchanged_views: (a: number, b: number) => void;
     readonly feespeedcore_view: (a: number) => [number, number, number, number];
     readonly feetierprefcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly feetierprefcore_new: () => number;
     readonly feetierprefcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly feetierprefcore_skip_unchanged_views: (a: number, b: number) => void;
     readonly feetierprefcore_view: (a: number) => [number, number, number, number];
     readonly fiatSymbol: (a: number, b: number, c: number, d: number) => [number, number];
     readonly formatRelativeTime: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number) => [number, number, number, number];
@@ -2262,13 +2553,17 @@ export interface InitOutput {
     readonly keccak256: (a: number, b: number) => [number, number];
     readonly keyMethodWords: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly landingPace: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly launchAnimationDue: (a: number, b: number, c: number, d: number) => number;
+    readonly launchAnimationStorageKey: () => [number, number];
     readonly logincore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly logincore_new: () => number;
     readonly logincore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly logincore_skip_unchanged_views: (a: number, b: number) => void;
     readonly logincore_view: (a: number) => [number, number, number, number];
     readonly managetokenscore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly managetokenscore_new: () => number;
     readonly managetokenscore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly managetokenscore_skip_unchanged_views: (a: number, b: number) => void;
     readonly managetokenscore_view: (a: number) => [number, number, number, number];
     readonly markMissTtlMs: (a: number, b: number, c: number) => number;
     readonly maskedAmount: (a: number, b: number) => [number, number];
@@ -2280,22 +2575,27 @@ export interface InitOutput {
     readonly multisigaccountscore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly multisigaccountscore_new: () => number;
     readonly multisigaccountscore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly multisigaccountscore_skip_unchanged_views: (a: number, b: number) => void;
     readonly multisigaccountscore_view: (a: number) => [number, number, number, number];
     readonly multisigmemberscore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly multisigmemberscore_new: () => number;
     readonly multisigmemberscore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly multisigmemberscore_skip_unchanged_views: (a: number, b: number) => void;
     readonly multisigmemberscore_view: (a: number) => [number, number, number, number];
     readonly multisigoutsidepagecore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly multisigoutsidepagecore_new: () => number;
     readonly multisigoutsidepagecore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly multisigoutsidepagecore_skip_unchanged_views: (a: number, b: number) => void;
     readonly multisigoutsidepagecore_view: (a: number) => [number, number, number, number];
     readonly multisigoutsidesessioncore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly multisigoutsidesessioncore_new: () => number;
     readonly multisigoutsidesessioncore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly multisigoutsidesessioncore_skip_unchanged_views: (a: number, b: number) => void;
     readonly multisigoutsidesessioncore_view: (a: number) => [number, number, number, number];
     readonly multisigproposalscore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly multisigproposalscore_new: () => number;
     readonly multisigproposalscore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly multisigproposalscore_skip_unchanged_views: (a: number, b: number) => void;
     readonly multisigproposalscore_view: (a: number) => [number, number, number, number];
     readonly networkChainIsTestnet: (a: number, b: number, c: number) => number;
     readonly networkSpaceChainIds: (a: number, b: number, c: number, d: number) => [number, number];
@@ -2303,6 +2603,7 @@ export interface InitOutput {
     readonly networkadmincore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly networkadmincore_new: () => number;
     readonly networkadmincore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly networkadmincore_skip_unchanged_views: (a: number, b: number) => void;
     readonly networkadmincore_view: (a: number) => [number, number, number, number];
     readonly parsePublicKey: (a: number, b: number) => [number, number, number];
     readonly parseUserOpStatus: (a: number, b: number) => [number, number];
@@ -2316,6 +2617,7 @@ export interface InitOutput {
     readonly paymentrequestcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly paymentrequestcore_new: () => number;
     readonly paymentrequestcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly paymentrequestcore_skip_unchanged_views: (a: number, b: number) => void;
     readonly paymentrequestcore_view: (a: number) => [number, number, number, number];
     readonly peggedNativeUsd: (a: number, b: number) => [number, number];
     readonly prefsMigrations: (a: number, b: number) => [number, number];
@@ -2324,6 +2626,7 @@ export interface InitOutput {
     readonly receivewatchcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly receivewatchcore_new: () => number;
     readonly receivewatchcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly receivewatchcore_skip_unchanged_views: (a: number, b: number) => void;
     readonly receivewatchcore_view: (a: number) => [number, number, number, number];
     readonly recoverPublicKeyFromAssertions: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number, number];
     readonly registryBackupStep: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
@@ -2345,16 +2648,19 @@ export interface InitOutput {
     readonly rpcpoolcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly rpcpoolcore_new: () => number;
     readonly rpcpoolcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly rpcpoolcore_skip_unchanged_views: (a: number, b: number) => void;
     readonly rpcpoolcore_view: (a: number) => [number, number, number, number];
     readonly safeProxyRuntimeCode: () => [number, number, number, number];
     readonly sendEstimateFailureBodyKey: (a: number, b: number) => [number, number];
     readonly sendcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly sendcore_new: () => number;
     readonly sendcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly sendcore_skip_unchanged_views: (a: number, b: number) => void;
     readonly sendcore_view: (a: number) => [number, number, number, number];
     readonly sessioncore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly sessioncore_new: () => number;
     readonly sessioncore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly sessioncore_skip_unchanged_views: (a: number, b: number) => void;
     readonly sessioncore_view: (a: number) => [number, number, number, number];
     readonly sha256: (a: number, b: number) => [number, number];
     readonly shownNetworksSettle: (a: number, b: number, c: number, d: number) => [number, number];
@@ -2378,10 +2684,12 @@ export interface InitOutput {
     readonly signingpagescore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly signingpagescore_new: () => number;
     readonly signingpagescore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly signingpagescore_skip_unchanged_views: (a: number, b: number) => void;
     readonly signingpagescore_view: (a: number) => [number, number, number, number];
     readonly signrequestcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly signrequestcore_new: () => number;
     readonly signrequestcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly signrequestcore_skip_unchanged_views: (a: number, b: number) => void;
     readonly signrequestcore_view: (a: number) => [number, number, number, number];
     readonly simOutcome: (a: number, b: number, c: number, d: number) => [number, number];
     readonly siteStartChain: (a: number, b: number, c: number) => number;
@@ -2400,6 +2708,7 @@ export interface InitOutput {
     readonly tokentrustcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly tokentrustcore_new: () => number;
     readonly tokentrustcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly tokentrustcore_skip_unchanged_views: (a: number, b: number) => void;
     readonly tokentrustcore_view: (a: number) => [number, number, number, number];
     readonly trustedSignerApprovalAccept: (a: number, b: number) => [number, number, number, number];
     readonly trustedSignerApprovalRequest: (a: number, b: number) => [number, number, number, number];
@@ -2414,6 +2723,7 @@ export interface InitOutput {
     readonly txtrackercore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly txtrackercore_new: () => number;
     readonly txtrackercore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly txtrackercore_skip_unchanged_views: (a: number, b: number) => void;
     readonly txtrackercore_view: (a: number) => [number, number, number, number];
     readonly typedDataDocument: (a: number, b: number, c: number, d: number) => [number, number];
     readonly typicalInclusionSeconds: (a: number) => number;

@@ -32,6 +32,8 @@ export function createActivityFeedSession(options: FeedSessionOptions): Activity
 			execute: (effect, signal) => executor.execute(effect, signal),
 			toFailure: (effect, error) => executor.toFailure(effect, error),
 			onError: options.onError
-		}
+		},
+		// 200 rows were re-sent, parsed and redrawn for every name answer.
+		{ skipUnchangedViews: { includeVolatile: false } }
 	);
 }

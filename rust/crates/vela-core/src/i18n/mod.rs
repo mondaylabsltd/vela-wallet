@@ -491,6 +491,37 @@ impl I18n {
         self.translate(last, opts, 0)
     }
 
+    /// Resolve many keys with the same options in one call: what a shell
+    /// asks once for a whole screen instead of once per label. Answers in
+    /// the order asked; each exactly what [`Self::t`] answers for it.
+    pub fn t_many(&self, keys: &[&str], opts: &Options<'_>) -> Result<Vec<String>, CoreError> {
+        keys.iter().map(|key| self.t(key, opts)).collect()
+    }
+
+    /// Every plain string of the active language whose path starts with
+    /// `prefix` (`""`: all of them), resolved as [`Self::t`] resolves the key
+    /// with no options: the language's own words, or English's where it has
+    /// none. A shell takes this once per language and draws plain labels from
+    /// it without crossing into the core per label; a key it asks with a
+    /// count, a context or variables still goes through [`Self::t`].
+    ///
+    /// Branches and keys nothing resolves are left out.
+    #[must_use]
+    pub fn plain_strings(&self, prefix: &str) -> Vec<(String, String)> {
+        let opts = Options::default();
+        paths::PATHS
+            .iter()
+            .enumerate()
+            .filter(|(id, path)| !paths::is_branch(*id) && path.starts_with(prefix))
+            .filter(|(_, path)| matches!(self.lookup(path, &opts), Resolved::Value(_)))
+            .filter_map(|(_, path)| {
+                self.t(path, &opts)
+                    .ok()
+                    .map(|value| ((*path).to_owned(), value))
+            })
+            .collect()
+    }
+
     /// `getFixedT` — pins a language, namespace and/or key prefix.
     ///
     /// `get_fixed_t` sets the per-call `lng` (`i18next.js:2038`) and therefore

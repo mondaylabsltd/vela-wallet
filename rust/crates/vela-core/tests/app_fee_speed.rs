@@ -405,6 +405,7 @@ fn base() -> FeeEstimateView {
         quoted: true,
         fee_asset: usdc("10000"),
         fee_recipient: Some("0xfee".to_owned()),
+        prepared: None,
     }
 }
 

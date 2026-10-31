@@ -807,6 +807,9 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
             // In-band operations sign zero native-fee fields; the override
             // the core carries for the legacy path has no reader here.
             max_fee_per_gas: _,
+            // The quote's measured gas (core-perf-1): this submit still
+            // measures its own; adopting it is the desktop lane's.
+            prepared: _,
         } => {
             let review = review.clone();
             let chain_id = *chain_id;

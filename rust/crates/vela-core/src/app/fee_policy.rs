@@ -2019,6 +2019,50 @@ pub struct FeeEstimate {
     pub fee_asset: FeeAsset,
     /// The quote's transfer recipient — the submit path signs THIS verbatim.
     pub fee_recipient: Option<String>,
+    /// The gas this fee was priced on, for the submit to sign without
+    /// measuring again ([`PreparedGas`]). Only from a run that simulated the
+    /// operation, and only until the next run starts.
+    pub prepared: Option<PreparedGas>,
+}
+
+/// What a quote measured, handed to the submit so it signs the gas the fee
+/// on screen was priced on instead of measuring it again before the passkey
+/// (core-perf-1): the relay's simulation and the inner calls' floor are the
+/// two slowest reads between "Confirm" and the prompt.
+///
+/// The honesty rule: what was shown is what gets signed. The person is shown
+/// the transfers and the fee, and the passkey signs only an operation that is
+/// exactly those (`signed_review`). These limits are the ones that fee was
+/// priced on (`user_op::in_band_gas_limits`, the inner floor applied), so
+/// signing them is signing what was priced; measuring again at submit signed
+/// gas the fee was NOT priced on.
+///
+/// The freshness rule: a quote is re-priced once a block
+/// ([`requote_interval_ms`]), and every run clears this before it reads, so
+/// it is never older than one re-pricing interval. A run that did not
+/// simulate (the static fallback, Tempo, a coin switch priced on the same
+/// gas) carries none. The send takes it only for exactly these calls, and
+/// drops it the moment the fee card re-quotes or fails.
+///
+/// What it never carries is the nonce: the submit reads it fresh before the
+/// prompt, as before. A nonce another operation spent in between is the
+/// relay's `nonce_used` refusal: nothing is sent and the person reviews again.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct PreparedGas {
+    /// The calls the quote simulated, before the fee leg: the submit uses
+    /// this only for these calls.
+    pub calls: Vec<FeeCall>,
+    /// Whether the account was deployed, as this run read it.
+    pub deployed: bool,
+    /// The limits the submit signs, decimal: apply them as the relay's
+    /// estimate (`user_op_apply_estimate`) and skip the inner calls'
+    /// measurement: the floor is in `call_gas_limit` already.
+    pub verification_gas_limit: String,
+    pub call_gas_limit: String,
+    pub pre_verification_gas: String,
+    /// The relay's `settlementGas`, when it gave one.
+    pub settlement_gas: Option<String>,
 }
 
 /// How a generic in-band fee is charged for the gas it is priced on.
@@ -2214,6 +2258,9 @@ struct Pending {
     /// This run already simulated again for a coin it re-picked on the real
     /// gas ([`price_generic`]): it settles now, whatever it picks.
     relegged: bool,
+    /// The gas this run simulated, for the estimate it prices
+    /// ([`FeeEstimate::prepared`]).
+    prepared: Option<PreparedGas>,
 }
 
 /// What the pricing step needs once the simulation answers.
@@ -2364,6 +2411,12 @@ pub struct FeeEstimateView {
     pub quoted: bool,
     pub fee_asset: FeeAssetView,
     pub fee_recipient: Option<String>,
+    /// [`FeeEstimate::prepared`]. Off the wire when absent, so a shell that
+    /// re-encodes an estimate it decoded without it sends none: the submit
+    /// then measures as it always did.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "bindings", ts(optional))]
+    pub prepared: Option<PreparedGas>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -2964,6 +3017,12 @@ fn is_busy(phase: &Phase) -> bool {
 // ---------------------------------------------------------------------------
 
 fn begin_pipeline(model: &mut Model) -> Command<FeeEffect, Event> {
+    // A run reads again: what the last one measured is not handed to a
+    // submit past this point (the freshness rule of [`PreparedGas`]).
+    if let Some(estimate) = &mut model.estimate {
+        estimate.prepared = None;
+    }
+    model.pending.prepared = None;
     let Some(ctx) = model.ctx.clone() else {
         return Command::done();
     };
@@ -4255,6 +4314,14 @@ fn accept_gas_outcome(
                         },
                     ),
                 };
+                model.pending.prepared = Some(PreparedGas {
+                    calls: ctx.calls.clone(),
+                    deployed: ctx.deployed,
+                    verification_gas_limit: limits.verification_gas_limit.to_string(),
+                    call_gas_limit: limits.call_gas_limit.to_string(),
+                    pre_verification_gas: limits.pre_verification_gas.to_string(),
+                    settlement_gas: settlement.map(|gas| gas.to_string()),
+                });
                 price_generic(model, &ctx, plan, total_gas, charge)
             }
             FeeGasOutcome::ContextUnavailable => fail(model, FeeFailure::EstimateFailed),
@@ -4425,6 +4492,9 @@ fn price_generic(
         FeeAsset::Native => fee_amount,
         FeeAsset::Erc20 { .. } => 0,
     };
+    let leg_measured =
+        model.pending.measured_leg.as_ref() == Some(&FeeLeg::of(model.fee_token.as_deref()));
+    let prepared = model.pending.prepared.take();
     model.estimate = Some(FeeEstimate {
         chain_id: ctx.chain_id,
         total_wei,
@@ -4441,6 +4511,10 @@ fn price_generic(
         quoted: *quoted,
         fee_asset,
         fee_recipient: Some(selected.recipient),
+        // Only the gas this very run simulated WITH THIS COIN'S LEG (another
+        // coin's leg is another call): taken once, so a coin re-picked on it
+        // later is priced without it.
+        prepared: prepared.filter(|_| leg_measured),
     });
     model.measured_leg = model.pending.measured_leg.clone();
     model.charge = Some(charge);
@@ -4530,6 +4604,8 @@ fn price_tempo(
         // Only a well-formed address may become part of the signed fee
         // instruction (`safe-transaction.ts:545`).
         fee_recipient: recipient.clone().filter(|r| is_hex_address(r)),
+        // Tempo prices on its own model and the submit reads its collector.
+        prepared: None,
     });
     model.charge = None;
     // Tempo's fee is no leg of the batch; nothing to measure again.
@@ -5194,6 +5270,7 @@ fn estimate_view(estimate: &FeeEstimate) -> FeeEstimateView {
             },
         },
         fee_recipient: estimate.fee_recipient.clone(),
+        prepared: estimate.prepared.clone(),
     }
 }
 

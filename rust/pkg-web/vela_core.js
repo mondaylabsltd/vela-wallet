@@ -70,6 +70,17 @@ export class ActivityFeedCore {
         }
     }
     /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.activityfeedcore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
      * @returns {string}
      */
     view() {
@@ -161,6 +172,17 @@ export class ApprovalGuardCore {
         } finally {
             wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
         }
+    }
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.approvalguardcore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
     }
     /**
      * @returns {string}
@@ -256,6 +278,17 @@ export class BalanceDashboardCore {
         }
     }
     /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.balancedashboardcore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
      * @returns {string}
      */
     view() {
@@ -347,6 +380,17 @@ export class BatchImportCore {
         } finally {
             wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
         }
+    }
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.batchimportcore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
     }
     /**
      * @returns {string}
@@ -442,6 +486,17 @@ export class BrowserHistoryCore {
         }
     }
     /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.browserhistorycore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
      * @returns {string}
      */
     view() {
@@ -533,6 +588,17 @@ export class ClearSigningCore {
         } finally {
             wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
         }
+    }
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.clearsigningcore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
     }
     /**
      * @returns {string}
@@ -628,6 +694,17 @@ export class ContactsCore {
         }
     }
     /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.contactscore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
      * @returns {string}
      */
     view() {
@@ -721,6 +798,17 @@ export class CreateWalletCore {
         }
     }
     /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.createwalletcore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
      * @returns {string}
      */
     view() {
@@ -812,6 +900,17 @@ export class DappPermissionsCore {
         } finally {
             wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
         }
+    }
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.dapppermissionscore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
     }
     /**
      * @returns {string}
@@ -908,6 +1007,17 @@ export class DappSessionCore {
         }
     }
     /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.dappsessioncore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
      * @returns {string}
      */
     view() {
@@ -1002,6 +1112,17 @@ export class DisplayCurrencyCore {
         }
     }
     /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.displaycurrencycore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
      * @returns {string}
      */
     view() {
@@ -1093,6 +1214,17 @@ export class ExtCacheCore {
         } finally {
             wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
         }
+    }
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.extcachecore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
     }
     /**
      * @returns {string}
@@ -1189,6 +1321,17 @@ export class FeePolicyCore {
         }
     }
     /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.feepolicycore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
      * @returns {string}
      */
     view() {
@@ -1283,6 +1426,17 @@ export class FeeSpeedCore {
         }
     }
     /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.feespeedcore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
      * @returns {string}
      */
     view() {
@@ -1375,6 +1529,17 @@ export class FeeTierPrefCore {
         } finally {
             wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
         }
+    }
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.feetierprefcore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
     }
     /**
      * @returns {string}
@@ -1674,6 +1839,17 @@ export class LoginCore {
         }
     }
     /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.logincore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
      * @returns {string}
      */
     view() {
@@ -1765,6 +1941,17 @@ export class ManageTokensCore {
         } finally {
             wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
         }
+    }
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.managetokenscore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
     }
     /**
      * @returns {string}
@@ -1860,6 +2047,17 @@ export class MultisigAccountsCore {
         }
     }
     /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.multisigaccountscore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
      * @returns {string}
      */
     view() {
@@ -1952,6 +2150,17 @@ export class MultisigMembersCore {
         } finally {
             wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
         }
+    }
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.multisigmemberscore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
     }
     /**
      * @returns {string}
@@ -2049,6 +2258,17 @@ export class MultisigOutsidePageCore {
         }
     }
     /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.multisigoutsidepagecore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
      * @returns {string}
      */
     view() {
@@ -2140,6 +2360,17 @@ export class MultisigOutsideSessionCore {
         } finally {
             wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
         }
+    }
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.multisigoutsidesessioncore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
     }
     /**
      * @returns {string}
@@ -2236,6 +2467,17 @@ export class MultisigProposalsCore {
         }
     }
     /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.multisigproposalscore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
      * @returns {string}
      */
     view() {
@@ -2328,6 +2570,17 @@ export class NetworkAdminCore {
         } finally {
             wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
         }
+    }
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.networkadmincore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
     }
     /**
      * @returns {string}
@@ -2424,6 +2677,17 @@ export class PaymentRequestCore {
         }
     }
     /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.paymentrequestcore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
      * @returns {string}
      */
     view() {
@@ -2518,6 +2782,17 @@ export class ReceiveWatchCore {
         }
     }
     /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.receivewatchcore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
      * @returns {string}
      */
     view() {
@@ -2609,6 +2884,17 @@ export class RpcPoolCore {
         } finally {
             wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
         }
+    }
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.rpcpoolcore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
     }
     /**
      * @returns {string}
@@ -2706,6 +2992,17 @@ export class SendCore {
         }
     }
     /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.sendcore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
      * @returns {string}
      */
     view() {
@@ -2799,6 +3096,17 @@ export class SessionCore {
         }
     }
     /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.sessioncore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
      * @returns {string}
      */
     view() {
@@ -2890,6 +3198,17 @@ export class SignRequestCore {
         } finally {
             wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
         }
+    }
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.signrequestcore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
     }
     /**
      * @returns {string}
@@ -2987,6 +3306,17 @@ export class SigningPagesCore {
         }
     }
     /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.signingpagescore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
      * @returns {string}
      */
     view() {
@@ -3081,6 +3411,17 @@ export class TokenTrustCore {
         }
     }
     /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.tokentrustcore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
      * @returns {string}
      */
     view() {
@@ -3172,6 +3513,17 @@ export class TxTrackerCore {
         } finally {
             wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
         }
+    }
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.txtrackercore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
     }
     /**
      * @returns {string}
@@ -4447,6 +4799,53 @@ export function encodeType(typed_data_json) {
 }
 
 /**
+ * EIP-137 namehash, `0x`-prefixed lower-case hex.
+ * @param {string} name
+ * @returns {string}
+ */
+export function ensNamehash(name) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(name, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.ensNamehash(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * The reverse node of `address`; rejects with `{ code, message }` when it
+ * is not one.
+ * @param {string} address
+ * @returns {string}
+ */
+export function ensReverseNode(address) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(address, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.ensReverseNode(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
  * @param {Uint8Array} attestation_object
  * @returns {P256PublicKey}
  */
@@ -5433,6 +5832,34 @@ export function landingPace(sent_at_ms, typical_s, now_ms) {
     let deferred1_1;
     try {
         const ret = wasm.landingPace(!isLikeNone(sent_at_ms), isLikeNone(sent_at_ms) ? 0 : sent_at_ms, typical_s, now_ms);
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
+}
+
+/**
+ * `stored_last_played_ms`: `undefined` when nothing (readable) is stored.
+ * @param {number | null | undefined} stored_last_played_ms
+ * @param {number} now_ms
+ * @param {boolean} disabled
+ * @returns {boolean}
+ */
+export function launchAnimationDue(stored_last_played_ms, now_ms, disabled) {
+    const ret = wasm.launchAnimationDue(!isLikeNone(stored_last_played_ms), isLikeNone(stored_last_played_ms) ? 0 : stored_last_played_ms, now_ms, disabled);
+    return ret !== 0;
+}
+
+/**
+ * @returns {string}
+ */
+export function launchAnimationStorageKey() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.launchAnimationStorageKey();
         deferred1_0 = ret[0];
         deferred1_1 = ret[1];
         return getStringFromWasm0(ret[0], ret[1]);

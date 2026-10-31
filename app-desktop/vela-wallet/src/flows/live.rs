@@ -5535,6 +5535,7 @@ mod tests {
             quoted: true,
             fee_asset: FeeAssetView::Native,
             fee_recipient: None,
+            prepared: None,
         };
         let mut fee = CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
         // Nothing can price the coin: the line is the coin alone, never a
@@ -8953,6 +8954,7 @@ mod speed_tests {
             quoted: true,
             fee_asset: FeeAssetView::Native,
             fee_recipient: Some("0xfee".to_owned()),
+            prepared: None,
         }
     }
 

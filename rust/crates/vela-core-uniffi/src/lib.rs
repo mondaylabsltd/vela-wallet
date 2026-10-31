@@ -28,9 +28,14 @@ mod onboarding_bridge;
 /// dApp RPC answers, provenance, names, currencies.
 mod rules_bridge;
 mod settings_bridge;
+/// The launch animation's replay rule and the ENS nodes (perf lanes).
+mod shell_rules_bridge;
 /// Where a signature goes and how a page's answer is taken (F0.2).
 mod signing_bridge;
 mod trusted_signer_bridge;
+/// What a view costs per answer (a bench, ignored by default).
+#[cfg(test)]
+mod view_bench;
 
 pub use onboarding_bridge::{CreateWalletCore, LoginCore, SessionCore};
 
@@ -1253,6 +1258,38 @@ impl I18n {
         let mut scratch = vela_core::i18n::Scratch::default();
         let borrowed = owned.as_options(&mut scratch);
         Ok(self.inner.read().map_err(lock_err)?.t(&key, &borrowed)?)
+    }
+
+    /// Resolve many keys with the same options in ONE crossing: what a screen
+    /// asks once instead of once per label. Answers in the order asked, each
+    /// exactly what `t` answers for it.
+    pub fn t_many(&self, keys: Vec<String>, opts: TOptions) -> Result<Vec<String>, CoreError> {
+        let owned = opts.to_owned_options();
+        let mut scratch = vela_core::i18n::Scratch::default();
+        let borrowed = owned.as_options(&mut scratch);
+        let refs: Vec<&str> = keys.iter().map(String::as_str).collect();
+        Ok(self
+            .inner
+            .read()
+            .map_err(lock_err)?
+            .t_many(&refs, &borrowed)?)
+    }
+
+    /// Every plain string of the active language under `prefix` (`""`: all),
+    /// as `t(key)` with no options answers it: take it once per language
+    /// change and draw plain labels from it without crossing per label. A
+    /// key asked with a count, a context or variables still goes to `t`.
+    pub fn plain_strings(
+        &self,
+        prefix: String,
+    ) -> Result<std::collections::HashMap<String, String>, CoreError> {
+        Ok(self
+            .inner
+            .read()
+            .map_err(lock_err)?
+            .plain_strings(&prefix)
+            .into_iter()
+            .collect())
     }
 
     /// Whether `key` resolves to anything. A branch node counts as present.

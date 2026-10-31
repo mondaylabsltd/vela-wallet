@@ -64,6 +64,7 @@ fn estimate(tier: FeeTier) -> FeeEstimateView {
         quoted: true,
         fee_asset: FeeAssetView::Native,
         fee_recipient: None,
+        prepared: None,
     }
 }
 

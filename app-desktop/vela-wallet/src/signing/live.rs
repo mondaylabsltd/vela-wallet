@@ -4944,6 +4944,7 @@ mod tests {
             quoted: true,
             fee_asset: FeeAssetView::Native,
             fee_recipient: Some("0xfee".to_owned()),
+            prepared: None,
         });
         let s = SigningStrings::resolve(&crate::loc::Loc::from_env());
         let clear =
@@ -5335,6 +5336,7 @@ mod fee_tests {
             quoted: true,
             fee_asset: FeeAssetView::Native,
             fee_recipient: Some("0xee2c".to_owned()),
+            prepared: None,
         });
         fee.options = options;
         fee.confirm_fee_ready = ready;
