@@ -15,6 +15,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -35,13 +36,17 @@ import app.getvela.wallet.core.designsystem.tokens.VelaIconSize
 import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.core.platform.VelaHaptic
 import app.getvela.wallet.core.platform.rememberVelaHaptic
+import app.getvela.wallet.feature.flows.components.QrCard
 import app.getvela.wallet.feature.multisig.core.MultisigHub
+import app.getvela.wallet.feature.multisig.core.get
+import app.getvela.wallet.feature.multisig.core.str
 import app.getvela.wallet.feature.multisig.core.ev
 import app.getvela.wallet.feature.multisig.core.kind
 import app.getvela.wallet.feature.wallet.components.IdenticonAvatar
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 
 /**
@@ -85,8 +90,6 @@ fun MultisigProposalSheet(
     // its review, signers and history asked once.
     DisposableEffect(chainId, safeTxHash) {
         val release = hub.watch()
-        hub.sendProposal(ev("review", "chain_id" to chainId, "safe_tx_hash" to safeTxHash, "blind" to false))
-        hub.sendProposal(ev("read_signers", "chain_id" to chainId, "safe_tx_hash" to safeTxHash))
         hub.sendProposal(ev("timeline", "chain_id" to chainId, "safe_tx_hash" to safeTxHash))
         hub.sendProposal(ev("refresh", "fresh" to false))
         // §3.5: who can act for it on this network, read once a session (the
@@ -95,6 +98,42 @@ fun MultisigProposalSheet(
             hub.send(ev("check_on", "address" to address, "chain_id" to chainId))
         }
         onDispose { release() }
+    }
+    // The one review (§3.6), asked once the machine HAS the transaction —
+    // the machine answers nothing for one it has not read yet, and a sheet
+    // that asked only as it opened (a link, a notification, a dApp's
+    // request, right after proposing) waited on "Checking again…" for ever
+    // (r8-19). Asked again whenever what it is of changes, every
+    // REVIEW_FRESH_MS while it waits, and every REVIEW_RETRY_MS while the
+    // last could not reach the chain (the web's rule); a finished one's once.
+    val reviewKey = item?.let { "${it.safeTxHash}:${it.status == "done"}:${view.chain(chainId)?.members?.owners?.joinToString(",")}:${view.chain(chainId)?.members?.threshold}" }
+    var reviewAskedAt by remember(chainId, safeTxHash) { mutableStateOf(0L) }
+    LaunchedEffect(reviewKey) {
+        val current = item ?: return@LaunchedEffect
+        var lastFresh = 0L
+        while (true) {
+            val now = System.currentTimeMillis()
+            val shown = hub.proposalsView.value.item(chainId, current.safeTxHash)?.let { hub.proposalsView.value.review(it) }
+            if (lastFresh == 0L || now - lastFresh >= REVIEW_FRESH_MS || reviewUnread(shown)) {
+                hub.sendProposal(ev("review", "chain_id" to chainId, "safe_tx_hash" to current.safeTxHash, "blind" to false))
+                lastFresh = now
+                reviewAskedAt = now
+            }
+            if (current.status == "done") break
+            delay(REVIEW_RETRY_MS)
+        }
+    }
+    // How each member still to approve signs (r7-8's split, r8-8): asked
+    // once the transaction is the machine's, and again as the members
+    // still to approve change — never only at the sheet's opening, when a
+    // proposal just made (or a link) is not in the machine's list yet and
+    // the question was dropped: no outside-wallet link, no "Approve with
+    // another wallet".
+    val signersKey = item?.takeIf { it.status != "done" }?.let { "${it.safeTxHash}:${it.approvers.joinToString(",")}" }
+    LaunchedEffect(signersKey) {
+        val current = item ?: return@LaunchedEffect
+        if (signersKey == null) return@LaunchedEffect
+        hub.sendProposal(ev("read_signers", "chain_id" to chainId, "safe_tx_hash" to current.safeTxHash))
     }
     // The machine decides whether the last look is stale; the sheet only
     // asks every few seconds (docs/multisig-machines.md §1.4).
@@ -155,12 +194,30 @@ fun MultisigProposalSheet(
             }
         }
         val review = model.review
-        if (review != null) {
-            MultisigReviewBody(review, chainId, words, tokenInfo)
-        } else {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
+        // r8-19: "Checking again…" is bounded — a review not back within
+        // REVIEW_CAP_MS (or one the machine could not gather) is said as
+        // unread, with Retry, never a spinner for ever.
+        val now by produceState(System.currentTimeMillis(), model.reviewReady) {
+            while (!model.reviewReady) {
+                value = System.currentTimeMillis()
+                delay(1_000)
+            }
+        }
+        when (reviewStand(review, reviewAskedAt, now)) {
+            ReviewStand.Shown -> MultisigReviewBody(review!!, chainId, words, tokenInfo)
+            ReviewStand.Checking -> Row(Modifier.testTag("multisig.proposal.reviewChecking"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
                 CircularProgressIndicator(Modifier.padding(VelaSpacing.xs), color = colors.fgMuted, strokeWidth = VelaSpacing.xs)
                 MsText(words.raw("componentsUi.signing.simRechecking"), MsType.Sub, color = colors.fgMuted)
+            }
+            ReviewStand.Unread -> Row(verticalAlignment = Alignment.Top) {
+                MsNote(
+                    words.t(if (model.isDone) "proposal.cantCheckUsed" else "proposal.cantCheck", "network" to words.network(chainId)),
+                    Modifier.weight(1f), tone = MsTone.Warning, tag = "multisig.proposal.reviewUnread",
+                )
+                MsTextButton(words.t("service.retry"), tag = "multisig.proposal.reviewRetry") {
+                    reviewAskedAt = System.currentTimeMillis()
+                    hub.sendProposal(ev("review", "chain_id" to chainId, "safe_tx_hash" to item.safeTxHash, "blind" to false))
+                }
             }
         }
 
@@ -178,7 +235,7 @@ fun MultisigProposalSheet(
                     IdenticonAvatar(seed = m, size = VelaIconSize.xl, tappable = false)
                     Column(Modifier.weight(1f)) {
                         MsText(words.label(m), MsType.Field)
-                        MsText(MultisigWords.short(m), MsType.Mono, color = colors.fgSubtle)
+                        if (words.label(m) != MultisigWords.short(m)) MsText(MultisigWords.short(m), MsType.Mono, color = colors.fgSubtle)
                     }
                     MsText(state, MsType.Sub, color = if (done) colors.successBase else colors.fgSubtle)
                 }
@@ -187,7 +244,7 @@ fun MultisigProposalSheet(
 
         // Actions.
         if (!model.isDone) {
-            if (model.canApprove.isNotEmpty()) {
+            if (model.showApprove) {
                 val chosen = member ?: model.defaultMember
                 if (model.canApprove.size > 1) {
                     MemberPicker(words, words.t("proposal.as"), model.canApprove, chosen, "multisig.proposal.as") { member = it }
@@ -196,13 +253,18 @@ fun MultisigProposalSheet(
                 // in one press (`approve_execute`): theirs reaches the threshold
                 // and their look says they can pay.
                 val oneTap = chosen != null && view.approveExecuteBy(item).any { it.equals(chosen, ignoreCase = true) }
-                VelaValueButton(
+                // r8-1: the core's sign rule decides the friction — `anyway` is
+                // danger-styled and confirmed a second time (MsSignButton).
+                MsSignButton(
                     text = when {
-                        oneTap -> words.t(if (model.signAllowed) "proposal.approveAndExecute" else "review.approveExecuteAnyway")
-                        else -> words.t(if (model.signAllowed) "proposal.approve" else "review.approveAnyway")
+                        oneTap -> words.t(if (model.signAnyway) "review.approveExecuteAnyway" else "proposal.approveAndExecute")
+                        else -> words.t(if (model.signAnyway) "review.approveAnyway" else "proposal.approve")
                     },
-                    onClick = {
-                        val owner = chosen ?: return@VelaValueButton
+                    anyway = model.signAnyway,
+                    dangerLines = model.dangerLines,
+                    words = words,
+                    onConfirm = {
+                        val owner = chosen ?: return@MsSignButton
                         haptic(VelaHaptic.Press)
                         scope.launch {
                             fun settledOf(v: JsonObject, what: String): JsonElement? {
@@ -234,7 +296,7 @@ fun MultisigProposalSheet(
                         }
                     },
                     modifier = Modifier.fillMaxWidth().testTag("multisig.proposal.approve"),
-                    enabled = (model.signAllowed || model.signAnyway) && !approving,
+                    enabled = model.canSign && !approving,
                     loading = approving,
                 )
             }
@@ -245,14 +307,17 @@ fun MultisigProposalSheet(
                 }
                 model.feeLine(chosen)?.let { (text, tone) -> MsNote(text, tone = tone, tag = "multisig.proposal.fee") }
                 for (line in model.setupLines(chosen)) MsNote(line)
-                VelaValueButton(
-                    text = words.t(if (model.signAllowed) "proposal.execute" else "review.executeAnyway"),
-                    onClick = {
+                MsSignButton(
+                    text = words.t(if (model.signAnyway) "review.executeAnyway" else "proposal.execute"),
+                    anyway = model.signAnyway,
+                    dangerLines = model.dangerLines,
+                    words = words,
+                    onConfirm = {
                         haptic(VelaHaptic.Press)
                         hub.sendProposal(ev("execute", "chain_id" to chainId, "safe_tx_hash" to item.safeTxHash, "executor" to chosen))
                     },
                     modifier = Modifier.fillMaxWidth().testTag("multisig.proposal.execute"),
-                    enabled = !model.executeHeld(chosen) && (model.signAllowed || model.signAnyway) && !executingNow,
+                    enabled = !model.executeHeld(chosen) && model.canSign && !executingNow,
                     loading = executingNow,
                 )
                 val look = model.preview(chosen).kind
@@ -297,17 +362,30 @@ fun MultisigProposalSheet(
         }
 
         // Asking the others.
+        // r8-8: each member still to approve is offered the way the core's
+        // split says (`signers`): the Vela link for Vela members (and the
+        // ones nothing says yet), the outside-wallet link and code for an
+        // outside one, and "Approve with another wallet" (a live session with
+        // that wallet) for an outside or either one — as the web and desktop.
         if (!model.isDone && model.stillNeeded.isNotEmpty() && item.approved < item.threshold) {
             MsSection(words.t("proposal.invite")) {
                 MsNote(words.t("proposal.stillNeeded", "missing" to model.stillNeeded.joinToString(", ", transform = words::label)))
                 for (line in model.signerLines) MsNote(line.text, tag = "multisig.proposal.signers.${line.id}")
-                model.link?.let { link -> ShareRow(words, link, "multisig.proposal") }
+                if (model.showVelaLink) model.link?.let { link -> ShareRow(words, link, "multisig.proposal") }
                 if (model.outsideCanSign) {
                     VelaSecondaryButton(
                         text = words.t("external.signWithWallet"),
                         onClick = { hub.sendProposal(ev("approve_outside", "chain_id" to chainId, "safe_tx_hash" to item.safeTxHash)) },
                         modifier = Modifier.fillMaxWidth().testTag("multisig.proposal.outside"),
                     )
+                }
+            }
+            model.outsideLink?.let { link ->
+                MsSection(words.t("external.outsideLinkTitle"), Modifier.testTag("multisig.proposal.outsideInvite")) {
+                    MsNote(words.t("external.outsideLinkHint"))
+                    QrCard(label = words.t("external.outsideLinkTitle"), payload = link, modifier = Modifier.testTag("multisig.proposal.outsideQr"))
+                    MsText(link, MsType.Mono, Modifier.testTag("multisig.proposal.outsideLink"), color = colors.fgMuted, maxLines = 4)
+                    ShareRow(words, link, "multisig.proposal.outsideLink")
                 }
             }
         }
@@ -357,4 +435,33 @@ fun ShareRow(words: MultisigWords, link: String, tagPrefix: String) {
             haptic(VelaHaptic.Select)
         }
     }
+}
+
+/** How often an open sheet reads its review again (the web's and the core's `REVIEW_FRESH_MS`). */
+internal const val REVIEW_FRESH_MS = 30_000L
+
+/** How soon a review that could not read the chain is asked again (the web's `REVIEW_RETRY_MS`). */
+internal const val REVIEW_RETRY_MS = 5_000L
+
+/** r8-19: how long "Checking again…" may stand before the review is said as unread, with Retry (the core's `PREVIEW_CAP_MS`). */
+internal const val REVIEW_CAP_MS = 15_000L
+
+/** The last review could not read the chain (its state or its simulation), or could not be gathered at all: asked again soon. */
+internal fun reviewUnread(review: JsonElement?): Boolean =
+    review is JsonNull || (review != null && (review["state"]["verdict"]["kind"].str == "unavailable" || review["simulation"]["kind"].str == "unreachable"))
+
+/** Where a sheet's review stands (r8-19). */
+enum class ReviewStand { Shown, Checking, Unread }
+
+/**
+ * Shown once the machine has it; "Checking again…" while it is gathered —
+ * for at most [REVIEW_CAP_MS] after it was last asked; then, or when the
+ * machine could not gather it (`null` in `reviews`), unread with Retry.
+ * Never a spinner for ever.
+ */
+internal fun reviewStand(review: JsonElement?, askedAtMs: Long, nowMs: Long): ReviewStand = when {
+    review != null && review !is JsonNull -> ReviewStand.Shown
+    askedAtMs > 0 && nowMs - askedAtMs < (if (review is JsonNull) 1_500L else REVIEW_CAP_MS) -> ReviewStand.Checking
+    askedAtMs == 0L && review == null -> ReviewStand.Checking
+    else -> ReviewStand.Unread
 }

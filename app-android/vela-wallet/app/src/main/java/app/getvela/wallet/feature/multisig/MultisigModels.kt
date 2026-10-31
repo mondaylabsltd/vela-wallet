@@ -14,6 +14,7 @@ import app.getvela.wallet.feature.multisig.core.kind
 import app.getvela.wallet.feature.multisig.core.long
 import app.getvela.wallet.feature.multisig.core.str
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 
 /** One line a sheet says, with how it reads and a stable tag. */
 data class MsLine(val text: String, val tone: MsTone, val id: String)
@@ -62,9 +63,39 @@ class MsProposalModel(
     val defaultMember: String?
         get() = view.lastActor?.let { last -> canApprove.firstOrNull { it.equals(last, ignoreCase = true) } } ?: canApprove.firstOrNull()
 
-    /** The core's sign rule: may this be signed at all — `anyway` only with the "… anyway" friction. */
+    /**
+     * The core's sign rule (`SignRule`): `allowed` false — nothing is signed,
+     * no override; `anyway` — allowed, but only through the signing sheet's
+     * own friction: a danger-styled "… anyway" and a second, explicit
+     * confirmation (r8-1).
+     */
     val signAllowed: Boolean get() = review["sign"]["allowed"].bool ?: true
     val signAnyway: Boolean get() = review["sign"]["anyway"].bool ?: false
+
+    /**
+     * r8-1: the one review every signer signs from is on screen. Before it
+     * is, no action may sign — a tap on a sheet still filling in (its review
+     * landing pushes the buttons down under the finger) approved a request
+     * nobody had read.
+     */
+    val reviewReady: Boolean get() = review.let { it != null && it !is JsonNull }
+
+    /** A press may sign: the review is read and its rule allows it. */
+    val canSign: Boolean get() = reviewReady && signAllowed
+
+    /**
+     * r8-18 (the web's `approveFirst`): Approve is offered only while
+     * approvals are missing. A transaction already at its threshold (2/2)
+     * is executed, never approved again — its main button is Execute.
+     */
+    val showApprove: Boolean get() = canApprove.isNotEmpty() && item.approved < item.threshold
+
+    /** The danger lines a "… anyway" press is confirmed over: the review's own, said again in the confirmation. */
+    val dangerLines: List<String>
+        get() {
+            val r = review ?: return emptyList()
+            return shownConcerns(r).mapNotNull { reviewConcern(words, it) }.filter { it.second == MsTone.Danger }.map { it.first }
+        }
 
     /** One of this device's members approved it already. */
     val approvedByHere: Boolean
@@ -199,7 +230,47 @@ class MsProposalModel(
         }
 
     /** An outside wallet may sign for one still to approve (the core's split: `outside`, `either`). */
-    val outsideCanSign: Boolean get() = signers?.let { (it.outside + it.either).isNotEmpty() } ?: false
+    val outsideCanSign: Boolean get() = signers?.let { s -> (s.outside + s.either).any(::stillToApprove) } ?: false
+
+    private fun stillToApprove(address: String): Boolean = stillNeeded.any { it.equals(address, ignoreCase = true) }
+
+    /** r8-8: the members still to approve whom the core's split says sign with an outside wallet (`outside`). */
+    val outsideMembers: List<String> get() = signers?.outside?.filter(::stillToApprove) ?: emptyList()
+
+    /**
+     * r8-8 (the web's `velaMissing`): members still to approve the Vela link
+     * is for — in Vela elsewhere, either way, or not read yet; never this
+     * device's own, a contract, or a surely outside wallet.
+     */
+    val velaMissing: List<String>
+        get() {
+            val s = signers
+            return stillNeeded.filter { owner ->
+                words.localName(owner) == null && when {
+                    s == null -> true
+                    s.inVela.any { it.equals(owner, ignoreCase = true) } || s.either.any { it.equals(owner, ignoreCase = true) } -> true
+                    else -> s.rows.any { (o, kind) -> o.equals(owner, ignoreCase = true) && kind == null }
+                }
+            }
+        }
+
+    /** The Vela link is shown (the web's rule): someone needs it, or nothing else is offered at all. */
+    val showVelaLink: Boolean
+        get() = velaMissing.isNotEmpty() || (outsideMembers.isEmpty() && (signers?.contract ?: emptyList()).none(::stillToApprove))
+
+    /**
+     * r8-8 (r4C-13): the one link an outside member opens where its wallet
+     * is — Vela's connect page naming the transaction, which reads, reviews
+     * and signs it alone. The core writes it (`connectLink`); `null` when the
+     * core's split names no outside member still to approve.
+     */
+    val outsideLink: String?
+        get() {
+            val outside = outsideMembers
+            if (outside.isEmpty()) return null
+            val multisig = account?.address ?: view.followed ?: return null
+            return MsRules.connectLink("${origin.trimEnd('/')}/$locale/connect", null, outside, Triple(chainId, multisig, hash))
+        }
 
     /** The proposal's link, for another member's Vela. */
     val link: String?
