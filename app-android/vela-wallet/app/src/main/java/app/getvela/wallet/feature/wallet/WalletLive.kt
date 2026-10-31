@@ -699,7 +699,7 @@ object WalletLive {
                 // A holding's worth is a figure in the display currency: it
                 // waits with the total while that is not the person's yet
                 // (the helper answers `null`), its line's room kept.
-                else -> token.price_usd?.let { price ->
+                else -> token.price_usd?.takeIf { it.isFinite() }?.let { price ->
                     money.fiat(amountAsDouble(token.balance) * price)?.let { AssetFiatModel.Value(it) } ?: AssetFiatModel.Loading
                 } ?: AssetFiatModel.NoPrice("—")
             },
@@ -865,7 +865,15 @@ object WalletLive {
          * (spec 047 D2) — or `null`: WITHHELD, the currency is not the
          * person's yet. A caller draws the figure's room and nothing in it.
          */
-        fun fiat(usd: Double): String? = if (settled) symbol + Formats.current.fixed2(convert(usd)) else null
+        fun fiat(usd: Double): String? {
+            if (!settled) return null
+            // r8-3: a worth that is not a number (a NaN or infinite price or
+            // amount upstream) is unknown — said as such, with no currency
+            // sign dressing it up as a figure, and never a crash.
+            val value = convert(usd)
+            if (!value.isFinite()) return Formats.UNKNOWN
+            return symbol + Formats.current.fixed2(value)
+        }
 
         /** The hero's figure in its parts; see [parts]. */
         class Parts(
@@ -884,7 +892,11 @@ object WalletLive {
          */
         fun parts(usd: Double): Parts? {
             if (!settled) return null
-            val rounded = BigDecimal(convert(usd)).setScale(2, RoundingMode.HALF_UP)
+            // r8-3: not a number is no figure — the hero's "not a number yet"
+            // state (its own notice says why), never `BigDecimal(NaN)`'s throw.
+            val value = convert(usd)
+            if (!value.isFinite()) return null
+            val rounded = BigDecimal(value).setScale(2, RoundingMode.HALF_UP)
             val whole = rounded.toBigInteger()
             val cents = rounded.subtract(BigDecimal(whole)).movePointRight(2).abs().toBigInteger()
             return Parts(

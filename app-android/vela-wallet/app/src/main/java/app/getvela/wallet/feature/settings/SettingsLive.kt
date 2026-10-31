@@ -1021,6 +1021,8 @@ object SettingsLive {
     internal fun bytesText(bytes: Long): Pair<String, String> {
         val display = uniffi.vela_core_uniffi.storageBytesDisplay(bytes.coerceAtLeast(0).toULong())
         val digits = when (display.unit) { "B" -> 0; "KB" -> 0; else -> 1 }
+        // r8-3: every formatter total — `BigDecimal(NaN)` throws.
+        if (!display.value.isFinite()) return Formats.UNKNOWN to display.unit
         return Formats.current.number(java.math.BigDecimal(display.value), digits, digits) to display.unit
     }
 

@@ -25,7 +25,6 @@ import app.getvela.wallet.core.designsystem.components.VelaPrimaryButton
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
 import app.getvela.wallet.core.designsystem.tokens.VelaFontWeight
-import app.getvela.wallet.core.designsystem.tokens.VelaMonoFontFamily
 import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.core.designsystem.tokens.VelaTextSize
 import app.getvela.wallet.core.i18n.I18nKeys
@@ -55,15 +54,14 @@ fun CrashSheet(strings: VelaStrings, version: String) {
                 color = colors.fgBase, fontFamily = VelaFontFamily, fontWeight = VelaFontWeight.bold, fontSize = VelaTextSize.xl,
             )
             Spacer(modifier = Modifier.height(VelaSpacing.md))
-            Text(text = record.message, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.base)
-            Spacer(modifier = Modifier.height(VelaSpacing.sm))
-            Text(
-                text = record.stack.lines().take(4).joinToString("\n"),
-                color = colors.fgSubtle, fontFamily = VelaMonoFontFamily, fontSize = VelaTextSize.xs, maxLines = 4,
-            )
+            // r8-3: calm words, never a raw Java stack trace. The exception and
+            // its first lines go into the report the person chooses to send
+            // (Report, below) — the screen itself says what happened in plain
+            // language and that the way back is one tap.
+            Text(text = crashBody(strings), color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.base)
             Spacer(modifier = Modifier.height(VelaSpacing.xl))
             VelaPrimaryButton(
-                strings.t(I18nKeys.SettingsUi.BUG_SEND),
+                strings.t(I18nKeys.Flow.REPORT_ERROR),
                 onClick = {
                     VelaLog.event("crash.sheet", "report tapped")
                     // Spec 081 FR-016: by FIELD ID, never `body`. With
@@ -91,3 +89,10 @@ fun CrashSheet(strings: VelaStrings, version: String) {
         }
     }
 }
+
+/**
+ * What the crash sheet says (r8-3): the plain "something went wrong inside
+ * Vela" line — no exception class, no message, no stack. Pure, so a JVM test
+ * holds the screen to it.
+ */
+internal fun crashBody(strings: VelaStrings): String = strings.t(I18nKeys.Flows.FEE_REASON_INTERNAL)
