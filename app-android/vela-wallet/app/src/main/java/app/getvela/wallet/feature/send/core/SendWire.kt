@@ -1074,6 +1074,12 @@ sealed class SendOperation {
         val quoted_fee: SendQuotedFee? = null,
         /** The review the person confirmed; the passkey's hash is computed against it. */
         val review: JsonElement? = null,
+        /**
+         * core-perf-1: the gas the confirmed fee was priced on, fresh, for
+         * exactly these calls — signed without simulating and measuring
+         * again (`UserOpSpine.submit`). Absent: measured as always.
+         */
+        val prepared: PreparedGas? = null,
     ) : SendOperation()
 
     @Serializable

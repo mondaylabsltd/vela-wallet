@@ -45,6 +45,14 @@ class JourneyBenchmarks {
             seedReturningPerson()
             startActivityAndWait()
             awaitHome()
+            // The launch's own tail (the home's reads, the names, the first
+            // GC and heap trim) is the startup benchmark's, not the journey's.
+            // The 2.7 s launch animation used to hide part of it; since it
+            // plays once a week (core-perf-1) the home is up in ~0.4 s, and a
+            // journey started there measured the tail as its own frames and
+            // memory (history scroll: heap 30 -> 57 MB, jank 17 -> 44 % on
+            // the same build). Waited out, the comparison is the journey's.
+            Thread.sleep(LAUNCH_TAIL_MS)
         },
         measureBlock = block,
     )
@@ -72,5 +80,12 @@ class JourneyBenchmarks {
 
     private companion object {
         const val ITERATIONS = 5
+
+        /**
+         * Long enough for the launch's reads to land and the heap to be
+         * trimmed on an emulator (2.7 s, the old animation's length, was not:
+         * nat-android-6 measured both), so runs before and after core-perf-1 compare.
+         */
+        const val LAUNCH_TAIL_MS = 10_000L
     }
 }

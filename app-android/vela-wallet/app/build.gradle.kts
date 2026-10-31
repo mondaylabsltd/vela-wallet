@@ -54,6 +54,8 @@ val velaUploadKeyProblems: List<String> = buildList {
     if (velaUploadStoreFile != null && !velaUploadStoreFile.isFile) add("no keystore at $velaUploadStoreFile")
 }
 val velaUnsignedRelease: Boolean = providers.gradleProperty("velaUnsignedRelease").isPresent
+/** See the debug build type: R8 on a debug build, for a device pass of release's shrinking. */
+val velaMinifyDebug: Boolean = providers.gradleProperty("velaMinifyDebug").isPresent
 
 // Spec 088 FR-012: every upload needs a higher versionCode than any before it.
 // `-PvelaVersionCode=N`, else `VELA_VERSION_CODE`, else the number of commits
@@ -172,11 +174,28 @@ android {
 
     buildTypes {
         release {
+            // R8: shrunk, optimized, renamed (Phase 4 follow-up, nat-android-6).
+            // The keep rules are src/main/keepRules (every rule says why);
+            // `scripts/check-release-apk.sh` and a device pass on the release
+            // build are the check that nothing reflective was renamed away.
+            // The mapping file (build/outputs/mapping/release/mapping.txt) is
+            // what retraces a crash report from this build: keep it with it.
             optimization {
-                enable = false
+                enable = true
             }
             // The upload key, or nothing at all — never the debug key.
             signingConfig = signingConfigs.findByName("release")
+        }
+        // A DEBUG build with release's R8 (`-PvelaMinifyDebug`): the doors only
+        // debug has — the parallel space's fixed keys, the harness's launch
+        // inputs — on code shrunk and renamed by the same rules, so a device
+        // pass can walk create, send and sign on what R8 makes of them.
+        if (velaMinifyDebug) {
+            debug {
+                optimization {
+                    enable = true
+                }
+            }
         }
     }
     compileOptions {
@@ -257,6 +276,10 @@ android {
             test.inputs.file(velaRepoRoot.resolve("rust/crates/vela-core/tests/vectors/marks.json"))
                 .withPathSensitivity(PathSensitivity.NONE)
                 .withPropertyName("velaMarkVectors")
+            // The launch animation's replay vectors LaunchGateTest replays.
+            test.inputs.file(velaRepoRoot.resolve("rust/crates/vela-core/tests/vectors/launch/launch-animation.json"))
+                .withPathSensitivity(PathSensitivity.NONE)
+                .withPropertyName("velaLaunchVectors")
             // The ts-rs mirrors CoreWireDriftTest checks the Kotlin wire types
             // against (spec 040 FR-008). Same stale-green hazard as the tokens
             // above, and worse: without this, a Rust rename lands, the mirrors
@@ -285,6 +308,11 @@ baselineProfile {
     automaticGenerationDuringBuild = false
     saveInSrc = true
     mergeIntoMain = true
+    // The startup profile (src/main/generated/baselineProfiles/startup-prof.txt,
+    // the launch journey's classes) lays out the primary dex so a cold start
+    // reads the classes it needs from as few pages as possible. AGP applies it
+    // only to an R8-optimized build — which release now is.
+    dexLayoutOptimization = true
 }
 
 // The benchmark build types are signed with the debug key so a device will
@@ -292,6 +320,16 @@ baselineProfile {
 // `preReleaseBuild` alone).
 android.buildTypes.matching { it.name == "benchmarkRelease" || it.name == "nonMinifiedRelease" }.configureEach {
     signingConfig = android.signingConfigs.getByName("debug")
+}
+// The plugin turns minification off for `nonMinifiedRelease` through the old
+// DSL; release's `optimization { enable = true }` (AGP 9) still reached it, so
+// the generator collected rules against renamed classes (and BenchSeedActivity
+// crashed under R8). The profile is collected on the original names; R8
+// rewrites them for the optimized builds.
+// Set in finalizeDsl, which runs after the plugin's own (it copies release
+// into the build types it creates there).
+androidComponents.finalizeDsl { extension ->
+    extension.buildTypes.findByName("nonMinifiedRelease")?.optimization?.enable = false
 }
 androidComponents {
     onVariants(selector().all()) { variant ->

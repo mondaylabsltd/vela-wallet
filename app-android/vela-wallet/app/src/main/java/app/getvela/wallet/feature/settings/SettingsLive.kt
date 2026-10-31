@@ -1607,7 +1607,7 @@ object SettingsLive {
             // glyph arrives with two of them: the row keeps the room of the
             // tallest line and of the glyph from its first frame, so the
             // answer changes its words and nothing under it.
-            subtitleRoom = BACKUP_LINES.map { strings.t(it) },
+            subtitleRoom = strings.tMany(BACKUP_LINES),
             trailingRoom = true,
         )
     }

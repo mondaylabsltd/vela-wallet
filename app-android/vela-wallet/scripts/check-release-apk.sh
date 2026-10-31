@@ -45,6 +45,27 @@ do
   fi
 done
 
+# 2b. R8 renames what it keeps (release is optimized since nat-android-6), so a
+#     debug-only class could ride in under a short name the grep above cannot
+#     see. The mapping R8 wrote beside the APK names every class it kept by its
+#     ORIGINAL name: the same markers must be absent there too. A release APK
+#     with no mapping beside it was not optimized, and the dex grep above is
+#     the whole check.
+MAPPING="${VELA_RELEASE_MAPPING:-$HERE/app/build/outputs/mapping/release/mapping.txt}"
+if [ -f "$MAPPING" ]; then
+  for marker in \
+    'app.getvela.wallet.dev.ServiceLaunchInputs' \
+    'uniffi.vela_dev_fixtures.' \
+    'app.getvela.wallet.bench.' \
+    'fixtureAssert'
+  do
+    if LC_ALL=C grep -qF "$marker" "$MAPPING"; then
+      problems+=("R8's mapping keeps $marker (renamed in the dex, still in the package)")
+    fi
+  done
+  echo "check-release-apk: R8 mapping read ($(LC_ALL=C grep -c '^[^ ]' "$MAPPING") classes kept)"
+fi
+
 # 3. The core ships stripped and inside its budget (native parity Phase 4:
 #    libvela_core_uniffi.so arm64 ≤ 19.5 MB). An AGP that cannot find its NDK
 #    says "Unable to strip …, packaging them as they are" and moves on — the

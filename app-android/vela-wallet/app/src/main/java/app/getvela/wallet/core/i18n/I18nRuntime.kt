@@ -57,6 +57,7 @@ class I18nRuntime(
         applyLocale(localeTag)
         onLanguage(engine.language())
         publish()
+        snapshot()
     }
 
     /** Switches the active language (no-op when already active). */
@@ -67,6 +68,7 @@ class I18nRuntime(
         applyLocale(tag)
         onLanguage(engine.language())
         publish()
+        snapshot()
     }
 
     /**
@@ -85,8 +87,9 @@ class I18nRuntime(
         engine.loadCatalog(FALLBACK, catalog(FALLBACK))
         if (active != FALLBACK) engine.loadCatalog(active, catalog(active))
         engine.changeLanguage(active)
-        plain = java.util.concurrent.ConcurrentHashMap()
+        plain = emptyMap()
         publish()
+        snapshot()
     }
 
     private fun publish() {
@@ -107,27 +110,55 @@ class I18nRuntime(
             engine.loadCatalog(tag, catalog(tag))
         }
         engine.changeLanguage(tag)
-        plain = java.util.concurrent.ConcurrentHashMap()
+        // The old language's words go at once; until the new snapshot is in,
+        // every word is the core's, asked per label as before.
+        plain = emptyMap()
     }
 
     /**
-     * Phase 4: a plain key's words, per catalog state. `t(key)` is a pure
-     * function of (key, the resident catalogs, the active language), and it is
-     * the commonest call a screen makes — every label of every row, again on
-     * every recomposition — each one an FFI crossing with two string copies.
-     * The core still says every word once; this only stops asking it the same
-     * question twice. A NEW map replaces the old one after every catalog or
-     * language change ([applyLocale], [include]); a lookup racing a change
-     * writes into the map it read, which is then dropped, so a word from the
-     * old language can never be served from the new map.
+     * The language's plain words, taken whole (`I18n.plain_strings("")`): one
+     * crossing per language (or namespace) change instead of one per label.
+     * Taken AFTER [publish]: the splash waits for `ready`, not for this, and
+     * a word asked in between is answered by the core directly. Under the
+     * same lock as the change it follows, so it is always the language now
+     * active.
+     */
+    private fun snapshot() {
+        plain = runCatching { engine.plainStrings("") }.getOrDefault(emptyMap())
+    }
+
+    /**
+     * Every plain string of the active language as `t(key)` says it, taken
+     * from the core whole after every catalog or language change
+     * ([applyLocale], [include]; core-perf-1 `plain_strings`). `t(key)` is the
+     * commonest call a screen makes — every label of every row, again on
+     * every recomposition — and used to be an FFI crossing each (then a
+     * per-label memo). Replaced, never edited: a reader holds the map of one
+     * language, and a word from the old language can never be served from
+     * the new one. A key it does not hold (a branch, a key nothing resolves)
+     * goes to the core, which answers it as before.
      */
     @Volatile
-    private var plain = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private var plain: Map<String, String> = emptyMap()
 
-    override fun t(key: String): String {
-        val memo = plain
-        memo[key]?.let { return it }
-        return engine.t(key, options(emptyList())).also { memo[key] = it }
+    override fun t(key: String): String =
+        plain[key] ?: engine.t(key, options(emptyList()))
+
+    /**
+     * Many keys, in the order asked: plain ones from [plain], the rest — and
+     * every key with [vars] — in ONE crossing (`I18n.t_many`).
+     */
+    override fun tMany(keys: List<String>, vars: Map<String, String>): List<String> {
+        if (keys.isEmpty()) return emptyList()
+        if (vars.isEmpty()) {
+            val memo = plain
+            val missing = keys.filter { it !in memo }
+            if (missing.isEmpty()) return keys.map { memo.getValue(it) }
+            val asked = missing.distinct()
+            val answered = asked.zip(engine.tMany(asked, options(emptyList()))).toMap()
+            return keys.map { memo[it] ?: answered.getValue(it) }
+        }
+        return engine.tMany(keys, options(vars.map { (name, value) -> TVar(name, value) }))
     }
 
     override fun t(key: String, vars: Map<String, String>): String =

@@ -1,17 +1,88 @@
-# Add project specific R8 rules here.
-# AGP will combine all keep rule files in src/main/keepRules to pass to R8
+# R8 keep rules for the release build (and `-PvelaMinifyDebug`).
+# AGP combines every file in src/main/keepRules and passes them to R8; the
+# libraries' own consumer rules (androidx, kotlinx.serialization, OkHttp,
+# WorkManager, Lottie, CameraX, Glance) arrive with their AARs/JARs.
 #
-# For more details, see
-#   https://d.android.com/r/tools/r8/keep-rules
+# Every rule here names WHY it is needed: a rule nobody can explain is either
+# dead weight or hiding a reflective call that should not be there.
+# https://d.android.com/r/tools/r8/keep-rules
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
-# vela-core uniffi bindings go through JNA (Native.register + reflection) —
-# latent while release optimization is disabled, load-bearing once R8 is enabled.
+# --- vela-core over uniffi + JNA ---------------------------------------------
+# JNA binds the generated bindings' `external fun`s by NAME (direct mapping:
+# Native.register walks the class's methods), builds Structures by field
+# reflection (`@Structure.FieldOrder`), and calls callbacks through the
+# interfaces' single `callback` method. uniffi's RustBuffer/ForeignBytes/
+# RustCallStatus are Structures; its callback-interface vtables are Callbacks.
+# Renaming or shrinking any of it fails at the first core call, not at build.
 -keep class com.sun.jna.** { *; }
+-keep class * implements com.sun.jna.Callback { *; }
+-keep class * implements com.sun.jna.Library { *; }
+-keepclassmembers class * extends com.sun.jna.Structure { *; }
 -keep class uniffi.vela_core_uniffi.** { *; }
+# The parallel space's fixed keyset (debug source set only; a release build
+# has no such class, and the rule matches nothing there).
+-keep class uniffi.vela_dev_fixtures.** { *; }
 -dontwarn java.awt.**
+-dontwarn com.sun.jna.**
+
+# --- kotlinx.serialization ----------------------------------------------------
+# The library ships R8 rules for the generated serializers; these are the
+# documented belt-and-braces for what it cannot see: a `@Serializable` class's
+# Companion and its `serializer()` reached through a sealed parent's
+# polymorphic lookup (every wire hierarchy in *Wire.kt is one), and the
+# annotations the plugin's descriptors read.
+-keepattributes *Annotation*, InnerClasses, Signature, EnclosingMethod
+-dontnote kotlinx.serialization.AnnotationsKt
+-keepclassmembers @kotlinx.serialization.Serializable class ** {
+    *** Companion;
+}
+-keepclasseswithmembers class ** {
+    kotlinx.serialization.KSerializer serializer(...);
+}
+-if @kotlinx.serialization.Serializable class **
+-keepclassmembers class <1>$Companion {
+    kotlinx.serialization.KSerializer serializer(...);
+}
+-if @kotlinx.serialization.Serializable class ** {
+    static **$* *;
+}
+-keepclassmembers class <2>$<3> {
+    kotlinx.serialization.KSerializer serializer(...);
+}
+
+# --- Room (WorkManager's database) ----------------------------------------------
+# Room builds a database by reflecting on the generated `<Name>_Impl`'s no-arg
+# constructor (RoomDatabase.Builder.build → getDeclaredConstructor()).
+# WorkManager's own rules did not keep it under this R8: the release crashed
+# at start in androidx.startup's WorkManagerInitializer with
+# `NoSuchMethodException: WorkDatabase_Impl.<init> []` (found on the device
+# pass of this change, emulator API 34).
+-keep class * extends androidx.room.RoomDatabase {
+    <init>();
+}
+
+# --- class names in what a person (or a bug report) reads ----------------------
+# A failure with no message is described by its class's simple name
+# (PasskeyExecutor.describe, OnboardingExecutor, SessionExecutor's
+# RegistryLandingUnconfirmed, VelaLog's fault lines and the crash report).
+# Obfuscated, those read "a" — so every Throwable keeps its name.
+-keepnames class * extends java.lang.Throwable
+
+# --- the passkey errors ---------------------------------------------------------
+# The ceremony's refusals are classified by exception TYPE and by the DOM
+# error's `type` string (PasskeyExecutor.classifyCreate/classifyGet). Both are
+# compiled references today; the names are kept so the log lines that print
+# `error.type` / `domError.type` and the classes the classifier names stay
+# readable, and so a future lookup by name cannot silently fall through to
+# "other".
+-keepnames class androidx.credentials.exceptions.** { *; }
+-keep class androidx.credentials.exceptions.domerrors.** {
+    public java.lang.String getType();
+}
+
+# --- line numbers for the crash report -------------------------------------------
+# CrashReport files the stack trace a person sends; with the mapping file
+# (build/outputs/mapping/release/mapping.txt, kept with the release) it can
+# be retraced. Source file names are hidden, line numbers kept.
+-keepattributes LineNumberTable
+-renamesourcefileattribute SourceFile

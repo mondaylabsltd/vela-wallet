@@ -52,13 +52,16 @@ rooted device below that; emulators are fine), on ONE device:
 
 ```sh
 ANDROID_SERIAL=emulator-5554 scripts/generate-baseline-profile.sh
-git add app/src/main/generated/baselineProfiles/baseline-prof.txt
+git add app/src/main/generated/baselineProfiles/baseline-prof.txt \
+        app/src/main/generated/baselineProfiles/startup-prof.txt
 ```
 
-The script also writes startup-prof.txt (the launch journey's classes, for
-DEX layout). It is not checked in: AGP applies a startup profile only to an
-R8-optimized build, and this app's release keeps optimization disabled (see
-the Phase 4 results for what turning R8 on would take).
+The script also writes startup-prof.txt (the launch journey's classes), and
+since release is R8-optimized (nat-android-6) it is checked in: AGP lays out
+the primary dex by it (`baselineProfile { dexLayoutOptimization = true }`),
+which it does only for an optimized build. The generator runs against
+`nonMinifiedRelease`, so the rules name the original classes; R8 rewrites
+both profiles for the names it gives them.
 The plugin's own generateBaselineProfile task does the same, but on every
 attached device.
 

@@ -24,8 +24,10 @@ import app.getvela.wallet.core.i18n.VelaStrings
  */
 object LauncherShortcuts {
     fun publish(context: Context, strings: VelaStrings) {
+        // The three labels in one ask (`tMany`).
+        val labels = strings.tMany(LaunchEntry.Flow.entries.map(::labelKey))
         val shortcuts = LaunchEntry.Flow.entries.mapIndexed { rank, flow ->
-            val label = strings.t(labelKey(flow))
+            val label = labels[rank]
             ShortcutInfoCompat.Builder(context, flow.shortcutId)
                 .setShortLabel(label)
                 .setLongLabel(label)

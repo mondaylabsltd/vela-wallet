@@ -975,6 +975,10 @@ class CoreWireDriftTest {
         assertFieldsExist<FeeOptionView>("FeeOptionView")
         assertFieldsExhaustive<app.getvela.wallet.feature.send.core.FeeShortfall>("FeeShortfall")
         assertFieldsExist<FeeEstimateView>("FeeEstimateView")
+        // core-perf-1: every field — an estimate handed back without `prepared`
+        // would cost the submit its two slowest reads.
+        assertFieldsExhaustive<FeeEstimateView>("FeeEstimateView")
+        assertFieldsExhaustive<app.getvela.wallet.feature.send.core.PreparedGas>("PreparedGas")
         assertFieldsExist<FeeBundlerQuote>("FeeBundlerQuote")
         assertFieldsExist<FeeAssetQuote>("FeeAssetQuote")
         assertFieldsExist<FeeCall>("FeeCall")
