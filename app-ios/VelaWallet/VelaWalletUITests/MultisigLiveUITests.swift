@@ -98,7 +98,9 @@ final class MultisigLiveUITests: XCTestCase {
         type(app, "multisig.create.name", "iOS Team")
         type(app, "multisig.create.address", Self.parallelTwo)
         tap(app, "multisig.create.addMember")
-        type(app, "multisig.create.address", Self.parallelThree)
+        // `VELA_MS_THIRD_MEMBER`: an outside wallet as the third member, so
+        // test5 runs on a fresh device without the member change first.
+        type(app, "multisig.create.address", env["VELA_MS_THIRD_MEMBER"] ?? Self.parallelThree)
         tap(app, "multisig.create.addMember")
         shot(app, "create-members")
         tap(app, "multisig.create.next")
@@ -122,7 +124,10 @@ final class MultisigLiveUITests: XCTestCase {
         XCTAssertEqual(rule.label, start)
         shot(app, "create-threshold")
         tap(app, "multisig.create.toReview")
-        XCTAssertTrue(app.descendants(matching: .any)["multisig.create.draftAddress"].waitForExistence(timeout: 20), "no address")
+        let draft = app.descendants(matching: .any)["multisig.create.draftAddress"].firstMatch
+        XCTAssertTrue(draft.waitForExistence(timeout: 20), "no address")
+        // For the driver that funds it (`VELA_MS_ADDRESS_FILE`).
+        if let file = env["VELA_MS_ADDRESS_FILE"] { try draft.label.write(toFile: file, atomically: true, encoding: .utf8) }
         shot(app, "create-review")
         tap(app, "multisig.create.create")
         XCTAssertTrue(app.descendants(matching: .any)["multisig.create.created"].waitForExistence(timeout: 60), "not created")
