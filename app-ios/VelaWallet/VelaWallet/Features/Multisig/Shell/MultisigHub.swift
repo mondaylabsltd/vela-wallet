@@ -52,6 +52,8 @@ final class MultisigHub {
     /// A link's transaction a device with none of its members reads (ms-21).
     private(set) var openedLink: (chainId: Int, multisig: String, safeTxHash: String)?
 
+    /// The notifications (M6): what changed while the app was away.
+    @ObservationIgnored var notifier: MultisigNotifier?
     /// Executed rows were written to the activity: whoever shows it refreshes.
     @ObservationIgnored var onRecorded: (() -> Void)?
     /// The multisig shown changed (the home follows it).
@@ -183,6 +185,9 @@ final class MultisigHub {
     private func proposalsMoved() {
         let before = proposalsView.paceMs
         proposalsView = proposals.proposalsView
+        if !dappAnswers.isEmpty { settleDapps() }
+        // On screen, the views say it: the notifier only keeps up (M6).
+        if appActive, loaded { notifier?.evaluate(accounts: accountsView, proposals: proposalsView, words: MsWords(loc: loc, hub: self), post: false) }
         if proposalsView.paceMs != before { restartProposalTimer() }
         // The member changes waiting, as the members machine reads them.
         let waiting = proposalsView.items.map { item -> [String: Any] in
@@ -219,6 +224,8 @@ final class MultisigHub {
     func appActive(_ active: Bool) {
         appActive = active
         guard loaded else { return }
+        // Away with a multisig to follow: a background refresh is asked for (M6).
+        if !active, !accountsView.accounts.isEmpty { MultisigNotifier.schedule() }
         if active {
             accounts.dispatch(["type": "tick"])
             proposals.dispatch(["type": "refresh", "fresh": false])
@@ -377,6 +384,8 @@ final class MultisigHub {
             guard let tagged = state(view), tagged.kind != "working", tagged.kind != "outsideAsked" else { return nil }
             return tagged
         }
+        // The first proposal made here: there is now something to say (M6).
+        if done?.kind == "done" { MultisigNotifier.askOnce() }
         if done?.kind != "done", proposals.view["draft"] is [String: Any] {
             proposals.dispatch(["type": "withdraw"])
         }
@@ -413,12 +422,85 @@ final class MultisigHub {
         }
     }
 
+    /// One background round (M6): every multisig here read again, the one
+    /// followed refreshed, then what changed is said — bounded, as iOS bounds
+    /// a refresh.
+    func backgroundRound() async {
+        proposals.dispatch(["type": "others_tick"])
+        proposals.dispatch(["type": "refresh", "fresh": true])
+        try? await Task.sleep(nanoseconds: 2_000_000_000)
+        _ = await proposals.until(timeout: 20) { $0["loading"] as? Bool == false ? true : nil }
+        notifier?.evaluate(accounts: accountsView, proposals: proposalsView, words: MsWords(loc: loc, hub: self), post: true)
+    }
+
     func confirmDraft(as member: String?) {
         proposals.dispatch(["type": "confirm_draft", "as_member": member ?? NSNull()])
     }
 
     func withdrawDraft() {
         proposals.dispatch(["type": "withdraw"])
+    }
+
+    // MARK: - A dApp's request to a multisig (M5)
+
+    /// The requests held by the machine, by id: who answers the site.
+    @ObservationIgnored private var dappAnswers: [String: ([String: Any]) -> Void] = [:]
+
+    /// Whether `address` is a multisig on this device (a site granted it).
+    func isMultisig(_ address: String) -> Bool { accountsView.row(address) != nil }
+
+    /// A site's request to a multisig (`eth_sendTransaction`,
+    /// `wallet_sendCalls`, …): the machine decides everything — refused (a
+    /// message), drafted with its review, proposed on the person's word, held
+    /// until executed, told "proposed" before the request's limit — and its
+    /// answer goes to the site exactly once (`answer`, the page's payload).
+    func dappRequest(
+        id: String, address: String, method: String, paramsJson: String, origin: String, chainId: Int,
+        answer: @escaping ([String: Any]) -> Void
+    ) {
+        guard let record = record(address) else {
+            answer(["type": "err", "code": 4100, "kind": "unauthorized_account", "message": "not a multisig on this device"])
+            return
+        }
+        let params = (try? JSONSerialization.jsonObject(with: Data(paramsJson.utf8), options: [.fragmentsAllowed])) ?? []
+        dappAnswers[id] = answer
+        proposals.dispatch([
+            "type": "dapp_request", "id": id, "account": record, "method": method, "params": params,
+            "origin": origin, "chain_id": max(0, chainId), "limit_ms": NSNull(),
+        ])
+        sheet = .dapp(id: id)
+    }
+
+    /// The person left the request (declined, closed, read the refusal):
+    /// the machine answers the site as it stands.
+    func dappLeave(_ id: String) {
+        proposals.dispatch(["type": "dapp_leave", "id": id])
+    }
+
+    /// Each held request the machine answered: to its site, once.
+    private func settleDapps() {
+        for (id, answer) in dappAnswers {
+            guard let held = proposalsView.dapp[id], let result = held["answer"], !result.isNull else { continue }
+            dappAnswers.removeValue(forKey: id)
+            let payload: [String: Any]
+            if let error = result["error"], !error.isNull {
+                let code = error["code"]?.int ?? 4001
+                let kind = switch code {
+                case 4001: "user_rejected"
+                case 4100: "unauthorized_account"
+                case -32602: "invalid_params"
+                case 4200: "unsupported_capability"
+                default: "submit_failed"
+                }
+                payload = ["type": "err", "code": code, "kind": kind, "message": error["message"]?.string ?? NSNull()]
+                // An error the site was not told of takes the sheet with it.
+                if held["told"]?.bool != true, sheet == .dapp(id: id) { sheet = nil }
+            } else {
+                payload = ["type": "ok", "result": result["result"]?.any ?? NSNull()]
+            }
+            answer(payload)
+            Task { @MainActor [weak self] in self?.proposals.dispatch(["type": "dapp_settled", "id": id]) }
+        }
     }
 
     // MARK: - Risk (§3.5)
@@ -542,6 +624,15 @@ final class MultisigHub {
         guard !out.isEmpty else { return }
         TxRecords.writeRecords(out, store: shelf)
         onRecorded?()
+        // Executed while away: said (M6).
+        for e in executed {
+            let chainId = MultisigExecutor.int(e["chainId"]) ?? 0
+            let hash = e["safeTxHash"] as? String ?? ""
+            let title = await MsWords(loc: loc, hub: self).actionTitle(
+                chainId: chainId, action: MsJSON(any: e["action"]), nonce: e["nonce"] as? String ?? "0"
+            )
+            notifier?.executed(title: title, body: loc.t("home.multisig.proposal.executed"), chainId: chainId, safeTxHash: hash)
+        }
     }
 
     /// A token's symbol and decimals: the chain's coin from the catalogue,
@@ -578,6 +669,8 @@ enum MultisigSheet: Identifiable, Equatable {
     case review(chainId: Int)
     case members(address: String)
     case link
+    /// A site's request to a multisig, held by the proposals machine (M5).
+    case dapp(id: String)
 
     var id: String {
         switch self {
@@ -589,6 +682,7 @@ enum MultisigSheet: Identifiable, Equatable {
         case .review(let c): "review:\(c)"
         case .members(let a): "members:\(a)"
         case .link: "link"
+        case .dapp(let id): "dapp:\(id)"
         }
     }
 }

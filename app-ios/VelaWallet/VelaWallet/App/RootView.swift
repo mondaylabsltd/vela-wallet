@@ -1011,6 +1011,7 @@ struct RootView: View {
             // A multisig shown (or the account again): the home wears it.
             .onChange(of: multisig.accountsView.active) { _, _ in
                 followShown()
+                tellBrowserAboutAccounts()
             }
             .onChange(of: onboarding.finished) { _, finished in
                 if finished {
@@ -1700,6 +1701,18 @@ struct RootView: View {
     /// backup request — is a genuinely busy wallet, and the page is told so
     /// (-32002) rather than left waiting.
     private func openBrowserSigning(_ forward: DbrForward) {
+        // A request to a multisig (M5): the proposals machine holds it — its
+        // review, a proposal, the site answered once it is executed.
+        if multisig.isMultisig(forward.grantedAddress) {
+            multisig.dappRequest(
+                id: forward.id, address: forward.grantedAddress, method: forward.method,
+                paramsJson: forward.paramsJson, origin: forward.origin, chainId: forward.chainId,
+                answer: { [browser] payload in
+                    browser.signingAnswered(tab: forward.tab, id: forward.id, payload: payload, userOpHash: nil)
+                }
+            )
+            return
+        }
         // A sheet that finished while its screen was not mounted is over,
         // whether or not anything was watching it close.
         if signing?.closed == true { signing = nil }
@@ -1897,9 +1910,12 @@ struct RootView: View {
     /// Every account, then the active one — so every grant follows it and the
     /// pages of re-pinned sites hear `accountsChanged` (spec 070).
     private func tellBrowserAboutAccounts() {
+        // The multisigs here are accounts a site may be shown (M5): the one
+        // shown is the account in front.
         browser.accountsChanged(
-            addresses: accounts.loadAccounts().compactMap { $0["address"] as? String },
-            active: session.view.address
+            addresses: accounts.loadAccounts().compactMap { $0["address"] as? String }
+                + multisig.accountsView.accounts.map(\.account.address),
+            active: shownAddress
         )
     }
 

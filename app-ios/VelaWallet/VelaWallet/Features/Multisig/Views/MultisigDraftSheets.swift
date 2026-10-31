@@ -21,6 +21,10 @@ struct MultisigDraftReviewSheet: View {
     let hub: MultisigHub
     let chainId: Int
     let words: MsWords
+    /// A site's request (M5): who asks, said first.
+    var siteNote: String?
+    /// The person's way out, when it is a request's to answer (M5).
+    var onWithdraw: (() -> Void)?
 
     @State private var member: String?
 
@@ -29,6 +33,7 @@ struct MultisigDraftReviewSheet: View {
 
     var body: some View {
         MsSheet(title: words.t("proposal.title"), closeLabel: words.loc.t("common.done"), tall: true, onClose: withdraw) {
+            if let siteNote { MsNote(text: siteNote, identifier: "multisig.draft.site") }
             if let draft {
                 let item = draft.item
                 Text(verbatim: words.actionTitleNow(chainId: item.chainId, action: item.action, nonce: item.nonce))
@@ -94,7 +99,7 @@ struct MultisigDraftReviewSheet: View {
     }
 
     private func withdraw() {
-        hub.withdrawDraft()
+        if let onWithdraw { onWithdraw() } else { hub.withdrawDraft() }
     }
 }
 

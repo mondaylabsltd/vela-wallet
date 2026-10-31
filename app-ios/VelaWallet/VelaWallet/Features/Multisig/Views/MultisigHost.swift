@@ -40,14 +40,20 @@ struct MultisigHostModifier: ViewModifier {
             MultisigCreateSheet(
                 hub: hub, words: words, accounts: accounts, contacts: contacts, spaceNetworks: spaceNetworks,
                 onClose: { hub.sheet = nil },
-                onCreated: { _ in hub.sheet = nil },
+                onCreated: { _ in
+                    hub.sheet = nil
+                    MultisigNotifier.askOnce()
+                },
                 onInvite: { address in hub.sheet = .invite(address: address) }
             )
         case .add(let prefill):
             MultisigAddSheet(
                 hub: hub, words: words, invite: nil, prefill: prefill,
                 onClose: { hub.sheet = nil },
-                onAdded: { _ in hub.sheet = nil },
+                onAdded: { _ in
+                    hub.sheet = nil
+                    MultisigNotifier.askOnce()
+                },
                 onAddNetwork: onAddNetwork
             )
         case .link:
@@ -85,6 +91,8 @@ struct MultisigHostModifier: ViewModifier {
             )
         case .review(let chainId):
             MultisigDraftReviewSheet(hub: hub, chainId: chainId, words: words)
+        case .dapp(let id):
+            MultisigDappSheet(hub: hub, id: id, words: words)
         }
     }
 }

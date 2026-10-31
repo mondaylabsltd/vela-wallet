@@ -488,6 +488,9 @@ final class AppGraph {
             flowNav?.close()
             multisig?.sheet = .proposal(chainId: chainId, safeTxHash: hash)
         }
+        // M6: what changed while the app was away, said; the background poll's seam.
+        multisig.notifier = MultisigNotifier(loc: loc)
+        MultisigBackgroundBridge.hub = multisig
         multisig.onRecorded = { [weak activityStore, weak wallet] in
             activityStore?.reconciled()
             wallet?.refresh(pull: false)

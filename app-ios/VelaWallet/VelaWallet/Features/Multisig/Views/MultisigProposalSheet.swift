@@ -269,7 +269,9 @@ struct MultisigProposalSheet: View {
     let words: MsWords
     var onClose: () -> Void
     /// Add the network a proposal is on (a network this device lacks).
-    var onAddNetwork: ((Int) -> Void)?
+    var onAddNetwork: ((Int) -> Void)? = nil
+    /// A site's request (M5): what the site is told, and when.
+    var siteNote: String? = nil
 
     @State private var member: String?
     @State private var executor: String?
@@ -333,6 +335,7 @@ struct MultisigProposalSheet: View {
     // MARK: - The transaction
 
     @ViewBuilder private func content(_ model: MsProposalModel) -> some View {
+        if let siteNote { MsNote(text: siteNote, identifier: "multisig.proposal.site") }
         VStack(alignment: .leading, spacing: Tokens.Space.s8) {
             Text(verbatim: model.title)
                 .typeRole(Typography.title.scaled(textScale))

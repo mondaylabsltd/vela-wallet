@@ -42,7 +42,7 @@ final class MultisigLiveUITests: XCTestCase {
         return (rpc, relay, genesis, env["VELA_HARNESS_PEERCONNECT"] ?? "")
     }
 
-    private func launch(lang: String = "en", link: String? = nil) throws -> XCUIApplication {
+    private func launch(lang: String = "en", link: String? = nil, url: String? = nil) throws -> XCUIApplication {
         let h = try harness()
         let app = XCUIApplication()
         app.launchEnvironment["VELA_PARALLEL_SPACE"] = "1"
@@ -55,8 +55,11 @@ final class MultisigLiveUITests: XCTestCase {
             #"{"bundlerServiceURL":"\#(h.relay)","genesisServiceURL":"\#(h.genesis)"}"#
         if !h.peer.isEmpty { app.launchEnvironment["VELA_PEERCONNECT_RELAY"] = h.peer }
         if let link { app.launchEnvironment["VELA_OPEN_LINK"] = link }
+        if let url { app.launchEnvironment["VELA_URL"] = url }
         app.launch()
-        XCTAssertTrue(app.buttons["wallet.header.name"].waitForExistence(timeout: 60), "the wallet never opened")
+        if url == nil {
+            XCTAssertTrue(app.buttons["wallet.header.name"].waitForExistence(timeout: 60), "the wallet never opened")
+        }
         return app
     }
 
@@ -153,6 +156,52 @@ final class MultisigLiveUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["multisig.proposal.executed"].waitForExistence(timeout: 180), "never executed")
         sleep(2)
         shot(app, "outside-executed")
+    }
+
+    // MARK: - M5: a dApp asks the multisig for a transaction
+
+    func test6DappRequestBecomesAProposal() throws {
+        let server = try LocalDappServer(html: try LocalDappServer.page(), port: 8139)
+        server.start()
+        defer { server.stop() }
+        let app = try launch(url: server.pageUrl)
+        if !app.buttons["explore.bar.back"].waitForExistence(timeout: 20) {
+            let row = app.buttons.matching(identifier: "explore.resume.row").firstMatch
+            if row.waitForExistence(timeout: 10) { row.tap() }
+        }
+        app.webViews.buttons["Connect"].firstMatch.tap()
+        let approve = app.buttons.matching(NSPredicate(format: "label == %@ OR label == %@", "Connect", "Approve")).element(boundBy: 0)
+        if approve.waitForExistence(timeout: 12), approve.isHittable { approve.tap() }
+        XCTAssertTrue(waitForVerdict(app, "#verdict eth_requestAccounts ok", timeout: 30), "never connected")
+        app.webViews.buttons["Switch to Gnosis"].firstMatch.tap()
+        XCTAssertTrue(waitForVerdict(app, "#verdict wallet_switchEthereumChain ok", timeout: 30))
+        app.webViews.buttons["Send dust"].firstMatch.tap()
+        // Held by the proposals machine: its review first.
+        XCTAssertTrue(app.descendants(matching: .any)["multisig.draft.site"].waitForExistence(timeout: 60), "no held request")
+        XCTAssertTrue(app.descendants(matching: .any)["multisig.draft.propose"].waitForExistence(timeout: 60))
+        sleep(3)
+        shot(app, "dapp-review")
+        tap(app, "multisig.draft.propose")
+        XCTAssertTrue(app.descendants(matching: .any)["multisig.proposal.site"].waitForExistence(timeout: 90), "not proposed")
+        sleep(3)
+        shot(app, "dapp-proposed")
+        // Closed before it is executed: the site is told it was proposed.
+        tap(app, "multisig.sheet.close")
+        XCTAssertTrue(waitForVerdict(app, "#verdict eth_sendTransaction", timeout: 60), "the site was never answered")
+        shot(app, "dapp-answered")
+    }
+
+    private func waitForVerdict(_ app: XCUIApplication, _ fragment: String, timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            let lines = app.webViews.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "#verdict")).allElementsBoundByIndex
+            if let hit = lines.first(where: { $0.label.contains(fragment) }) {
+                print("VERDICT: \(hit.label)")
+                return true
+            }
+            sleep(1)
+        }
+        return false
     }
 
     /// From the home: Send → xDAI → a recipient and an amount → Propose and
