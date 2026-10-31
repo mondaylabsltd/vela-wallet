@@ -72,6 +72,7 @@ fun MultisigReviewBody(
         for (concern in shownConcerns(review)) {
             reviewConcern(words, concern)?.let { (text, tone) -> MsNote(text, tone = tone, tag = "multisig.review.concern.${concern.kind}") }
         }
+        Reading(review, chainId, words)
         Moves(review, chainId, words, tokens)
         Recipients(review, words)
         MemberChanges(review, words, network)
@@ -117,7 +118,140 @@ internal fun reviewConcern(words: MultisigWords, concern: JsonElement): Pair<Str
     "reverts" -> words.raw("componentsUi.signing.simWillFail") to MsTone.Danger
     "unsimulated" -> words.raw("componentsUi.signing.simUnavailableWarning") to MsTone.Warning
     "blind" -> words.t("action.unsupported") to MsTone.Danger
+    // r8-1 / r8-2 / r8-5: the core's reading of every call raises these
+    // (the core's words, `review.reading.*`, as the web says them).
+    "unlimitedApproval" -> words.t("review.reading.unlimitedLine", "spender" to MultisigWords.short(concern["spender"].str.orEmpty())) to MsTone.Danger
+    "nestedBatch" -> words.t("review.reading.nestedLine") to MsTone.Danger
+    "unreadableBatch" -> words.t("review.reading.unreadableLine") to MsTone.Danger
+    "decimalsUnknown" -> words.t("review.reading.decimalsLine", "token" to MultisigWords.short(concern["token"].str.orEmpty())) to MsTone.Warning
+    "toOwnToken" -> words.t("review.reading.ownTokenLine", "token" to MultisigWords.short(concern["token"].str.orEmpty())) to MsTone.Danger
     else -> null
+}
+
+// -- the core's reading of every call (r8-1, r8-2, r8-5) ----------------------------
+
+/** One call of the reading: how deep it sits, its leg label, its title, its rows, how it reads. */
+data class ReadingLine(val depth: Int, val label: String, val text: String, val tone: MsTone, val details: List<Pair<String, String>> = emptyList())
+
+/** A token named by its facts: its symbol, else its short address; the network's coin when none. */
+internal fun tokenName(facts: JsonElement?, words: MultisigWords, chainId: Int): String =
+    facts?.get("symbol").str?.takeIf { it.isNotBlank() }
+        ?: facts?.get("token").str?.takeIf { it.isNotBlank() }?.let(MultisigWords::short)
+        ?: words.symbol(chainId)
+
+/**
+ * An amount as the core says it can honestly be said: unlimited, the exact
+ * whole-token figure (`plain`, in the person's decimal mark), or — decimals
+ * unknown — the base units and that the decimals are unknown (never a guess
+ * at 18, r8-2).
+ */
+internal fun amountText(amount: JsonElement?, symbol: String, words: MultisigWords): String {
+    if (amount["unlimited"].bool == true) return words.t("review.reading.unlimited")
+    amount["plain"].str?.let { return "${app.getvela.wallet.core.format.Formats.current.plain(it)} $symbol".trim() }
+    return words.t("review.reading.decimalsUnknown", "raw" to (amount["raw"].str ?: "0"))
+}
+
+/**
+ * The review's `reading`: every call, every leg of every batch at every
+ * level, each as the core read it — drawn, never decoded here (the Bybit
+ * rule; the web's `reading-blocks.ts`). Empty when the review reads the
+ * transaction as the multisig's own (its member change, rename or
+ * cancellation say it).
+ */
+internal fun readingLines(review: JsonElement, chainId: Int, words: MultisigWords): List<ReadingLine> {
+    val out = mutableListOf<ReadingLine>()
+    val r = { key: String -> words.t("review.reading.$key") }
+    fun walk(calls: List<JsonElement>, depth: Int) {
+        for (call in calls) {
+            val path = call["path"].arr.mapNotNull { it.int }
+            val label = if (path.isEmpty()) "" else words.t("review.callNumber", "n" to path.joinToString("."))
+            val to = MsRules.eip55(call["to"].str.orEmpty())
+            val intent = call["intent"]
+            val rows = mutableListOf<Pair<String, String>>()
+            val (title, tone) = when (intent.kind) {
+                "send" -> {
+                    val sym = tokenName(intent["token"], words, chainId)
+                    rows += r("amount") to amountText(intent["amount"], sym, words)
+                    intent["token"]["token"].str?.let { rows += r("token") to MsRules.eip55(it) }
+                    rows += r("to") to MsRules.eip55(intent["to"].str.orEmpty())
+                    r("send") to MsTone.Neutral
+                }
+                "sendFrom" -> {
+                    val sym = tokenName(intent["token"], words, chainId)
+                    rows += r("amount") to amountText(intent["amount"], sym, words)
+                    intent["token"]["token"].str?.let { rows += r("token") to MsRules.eip55(it) }
+                    rows += r("from") to MsRules.eip55(intent["from"].str.orEmpty())
+                    rows += r("to") to MsRules.eip55(intent["to"].str.orEmpty())
+                    r("sendFrom") to MsTone.Warning
+                }
+                "approve" -> {
+                    val sym = tokenName(intent["token"], words, chainId)
+                    val unlimited = intent["amount"]["unlimited"].bool == true
+                    intent["token"]["token"].str?.let { rows += r("token") to "$sym · ${MsRules.eip55(it)}" }
+                    rows += r("spender") to MsRules.eip55(intent["spender"].str.orEmpty())
+                    rows += r("allowance") to if (intent["grant"].str == "daiPermit") r("allOfIt") else amountText(intent["amount"], sym, words)
+                    val grant = intent["grant"].str ?: "approve"
+                    r(grant) to if (unlimited || grant == "daiPermit") MsTone.Danger else MsTone.Warning
+                }
+                "approveAll" -> {
+                    rows += r("collection") to MsRules.eip55(intent["collection"].str.orEmpty())
+                    rows += r("operator") to MsRules.eip55(intent["operator"].str.orEmpty())
+                    if (intent["granted"].bool == false) r("revokeAll") to MsTone.Neutral else r("approveAll") to MsTone.Danger
+                }
+                "batch" -> {
+                    val legs = intent["calls"].arr
+                    rows += r("runner") to MsRules.eip55(intent["runner"].str.orEmpty())
+                    (if (legs.size == 1) r("batchOne") else words.t("review.reading.batchMany", "total" to legs.size.toString())) to MsTone.Danger
+                }
+                "unreadable" -> {
+                    rows += r("to") to to
+                    r("unreadable") to MsTone.Danger
+                }
+                "members" -> r("members") to MsTone.Warning
+                "rename" -> words.t("review.reading.rename", "name" to intent["name"].str.orEmpty()) to MsTone.Neutral
+                else -> {
+                    rows += r("to") to to
+                    intent["selector"].str?.let { rows += r("function") to it }
+                    r("call") to MsTone.Warning
+                }
+            }
+            val coin = call["value"]
+            if (intent.kind != "send" && (coin["raw"].str ?: "0") != "0") rows += r("alsoSends") to amountText(coin, words.symbol(chainId), words)
+            out += ReadingLine(depth, label, title, tone, rows)
+            if (intent.kind == "batch") {
+                out += ReadingLine(depth + 1, "", r("runnerNote"), MsTone.Warning)
+                walk(intent["calls"].arr, depth + 1)
+            }
+        }
+    }
+    walk(review["reading"]["calls"].arr, 0)
+    return out
+}
+
+@Composable
+private fun Reading(review: JsonElement, chainId: Int, words: MultisigWords) {
+    val lines = readingLines(review, chainId, words)
+    if (lines.isEmpty()) return
+    val colors = VelaTheme.colors
+    Column(Modifier.fillMaxWidth().testTag("multisig.review.reading"), verticalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
+        for (line in lines) {
+            Column(
+                Modifier.fillMaxWidth().padding(start = VelaSpacing.lg * line.depth).testTag("multisig.review.reading.call"),
+                verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs),
+            ) {
+                if (line.details.isEmpty()) {
+                    MsNote(line.text, tone = line.tone)
+                } else {
+                    MsText(
+                        if (line.label.isEmpty()) line.text else "${line.label} · ${line.text}",
+                        MsType.RowTitle,
+                        color = if (line.tone == MsTone.Danger) colors.errorBase else colors.fgBase,
+                    )
+                    for ((k, v) in line.details) MsRow(k, v, mono = v.startsWith("0x"))
+                }
+            }
+        }
+    }
 }
 
 @Composable
