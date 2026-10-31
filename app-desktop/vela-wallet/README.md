@@ -979,6 +979,32 @@ Linux has none yet: a StatusNotifierItem needs a `com.canonical.dbusmenu`
 menu over D-Bus, and GNOME shows none without an extension. Closing the
 window still quits (see the reopen quirk below), and the extra goes with it.
 
+## Multisig accounts
+
+AUDIT M1–M6. The desktop drives the SAME core machines the web does
+(`vela_core::app::multisig_*`, `docs/multisig-machines.md`), in-process:
+`src/multisig/` holds the one executor (`shell.rs`), the gpui-free host and
+notice router (`machines.rs`), the app's pipelines (`live.rs`: the service
+over the proxy routes, the RPC pool, the store, the passkey in Vela or on the
+member's trusted page, the executor's one user operation, a `fee_policy`
+quote), the gpui entity and its timers (`host.rs`) and the PeerConnect rooms
+an outside owner's session opens (`peer.rs`, over the vendored
+`rust/vendor/peerconnect`). The page draws the views (`src/wallet/page/
+multisig*.rs`): the switcher's multisigs, the home's waiting group, a
+transaction's sheet in the third column (its one review and state-diff guard
+before any signature), create / add / import / invite, a multisig's own
+Settings (members per network, member changes, its shared name), an outside
+owner's session, a site's request held until it executes.
+
+The multisig shown is whose wallet the page is (`multisig/shown.rs`): the
+window rebuilds the wallet page for its address, as an account switch does.
+
+The live proof runs the real app against `scripts/onchain/multisig-fork/`
+with no UI driver: `VELA_MULTISIG_SCRIPT=<steps.json>` (dev-fixtures builds
+only) dispatches machine events, waits on views, captures values and presses
+page controls, logging each step to `VELA_MULTISIG_SCRIPT_LOG`
+(`src/multisig/dev_script.rs` documents the steps).
+
 ## Multisig notifications
 
 `src/multisig/notify.rs` (the rule) and `src/multisig/notify/` (words and
