@@ -9,6 +9,7 @@
 //!   router, what one machine's view tells another (no gpui).
 
 pub mod activity;
+pub mod dapp;
 pub mod findings;
 pub mod host;
 pub mod live;
