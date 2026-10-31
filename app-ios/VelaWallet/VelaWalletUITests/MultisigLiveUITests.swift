@@ -158,6 +158,46 @@ final class MultisigLiveUITests: XCTestCase {
         shot(app, "outside-executed")
     }
 
+    // MARK: - Screens beside the web's (VELA_MS_LANG / VELA_MS_THEME)
+
+    func test7Screens() throws {
+        let lang = env["VELA_MS_LANG"] ?? "en"
+        let theme = env["VELA_MS_THEME"] ?? "light"
+        let tag = "ios-\(lang)-\(theme)"
+        let app = try launch(lang: lang)
+        XCTAssertTrue(app.descendants(matching: .any)["multisig.home"].waitForExistence(timeout: 60))
+        sleep(5)
+        shot(app, "\(tag)-home")
+        tap(app, "wallet.header.name")
+        sleep(2)
+        app.swipeUp()
+        shot(app, "\(tag)-switcher")
+        app.swipeDown(velocity: .fast)
+        app.swipeDown(velocity: .fast)
+        sleep(1)
+        let row = app.descendants(matching: .any)["multisig.home.proposal"].firstMatch
+        if row.waitForExistence(timeout: 30) {
+            row.tap()
+            XCTAssertTrue(app.descendants(matching: .any)["multisig.proposal.title"].waitForExistence(timeout: 30))
+            sleep(4)
+            shot(app, "\(tag)-proposal")
+            app.swipeUp()
+            sleep(1)
+            shot(app, "\(tag)-proposal-2")
+            tap(app, "multisig.sheet.close")
+            sleep(1)
+        }
+        tap(app, "multisig.home.settings")
+        sleep(4)
+        shot(app, "\(tag)-settings")
+        tap(app, "multisig.sheet.close")
+        sleep(1)
+        tap(app, "wallet.header.name")
+        tap(app, "multisig.switcher.create")
+        sleep(2)
+        shot(app, "\(tag)-create")
+    }
+
     // MARK: - M5: a dApp asks the multisig for a transaction
 
     func test6DappRequestBecomesAProposal() throws {

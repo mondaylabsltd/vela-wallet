@@ -95,7 +95,8 @@ final class MultisigNotifier {
     /// (the app is on screen: the views said it).
     @discardableResult
     func evaluate(accounts: MsAccountsView, proposals: MsProposalsView, words: MsWords, post: Bool) -> [Note] {
-        var state = seen
+        let before = seen
+        var state = before
         var notes: [Note] = []
         for row in accounts.accounts {
             let key = row.account.address.lowercased()
@@ -136,7 +137,7 @@ final class MultisigNotifier {
             }
             state.approved[item.id] = item.approved
         }
-        seen = state
+        if state != before { seen = state }
         guard post else { return [] }
         notes.forEach(self.post)
         return notes

@@ -117,7 +117,7 @@ struct MultisigOverlays: ViewModifier {
                 get: { active && hub.riskAsk == nil ? hub.outsideSession : nil },
                 set: { if $0 == nil { hub.outsideSession?.close(); hub.outsideSession = nil } }
             )) { session in
-                MultisigOutsideSheet(session: session, words: words, onClose: { hub.outsideSession = nil }).themed(scheme)
+                MultisigOutsideSheet(outside: session, words: words, onClose: { hub.outsideSession = nil }).themed(scheme)
             }
     }
 }

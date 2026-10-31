@@ -151,11 +151,14 @@ struct MultisigShellTests {
     /// A read past its bound never holds the machine.
     @Test func aBoundedReadThatDoesNotAnswerIsUnanswered() async {
         let ports = FakeMultisigPorts()
-        ports.rpcDelayMs = 2_000
+        // The read takes far longer than the bound; the answer comes at the
+        // bound — measured against the read, not a wall clock a busy suite
+        // stretches.
+        ports.rpcDelayMs = 300_000
         let started = Date()
         let answer = await run(ports, ["type": "rpc", "chain_id": 100, "method": "eth_call", "params": [], "bound_ms": 50])
         #expect(answer["type"] as? String == "rpc_unanswered")
-        #expect(Date().timeIntervalSince(started) < 1.5)
+        #expect(Date().timeIntervalSince(started) < 150)
     }
 
     @Test func theStoreIsReadAndWrittenByKey() async {

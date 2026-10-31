@@ -432,11 +432,27 @@ struct MultisigProposalSheet: View {
                             set: { member = $0 }
                         ))
                     }
+                    // This approval completes it: approve and execute in one
+                    // step (executing pays the fee; approving alone does not).
+                    let completes = model.item.approved + 1 >= model.item.threshold && model.item.status != "queued"
+                    if completes {
+                        VelaButton(
+                            title: words.t(model.signAllowed ? "proposal.approveAndExecute" : "review.approveExecuteAnyway"),
+                            kind: .primary,
+                            enabled: model.signAllowed || model.signAnyway,
+                            loading: approving || executing,
+                            haptic: .confirm
+                        ) {
+                            approve(model, thenExecute: true)
+                        }
+                        .accessibilityIdentifier("multisig.proposal.approveExecute")
+                        MsNote(text: words.t("proposal.feeNote"))
+                    }
                     VelaButton(
                         title: words.t(model.signAllowed ? "proposal.approve" : "review.approveAnyway"),
-                        kind: .primary,
+                        kind: completes ? .secondary : .primary,
                         enabled: model.signAllowed || model.signAnyway,
-                        loading: approving,
+                        loading: approving && !completes,
                         haptic: .confirm
                     ) {
                         approve(model)
@@ -579,16 +595,30 @@ struct MultisigProposalSheet: View {
         _ = force
     }
 
-    private func approve(_ model: MsProposalModel) {
+    private func approve(_ model: MsProposalModel, thenExecute: Bool = false) {
         guard let owner = member ?? model.defaultMember else { return }
         hub.sendProposal(["type": "approve", "chain_id": chainId, "safe_tx_hash": model.hash, "owner": owner])
+        let key = "approve:\(model.hash)"
         Task { @MainActor in
-            let settled = await hub.proposals.until(timeout: 600) { view in
-                let state = MultisigMachine.decode(MsProposalsView.self, from: view)?.action("approve:\(model.hash)")
-                return state?.kind == "working" ? nil : state
+            let settled = await hub.proposals.until(timeout: 600) { view -> MsTagged? in
+                let actions = view["actions"] as? [String: Any] ?? [:]
+                guard let raw = actions[key] ?? actions.first(where: { $0.key.lowercased() == key.lowercased() })?.value,
+                      let state = MultisigMachine.decode(MsTagged.self, from: raw)
+                else { return nil }
+                return state.kind == "working" ? nil : state
             }
-            if settled?.kind == "done" { VelaHaptic.approvalCounted.play() }
-            else if settled != nil, settled?.kind != "cancelled" { VelaHaptic.reject.play() }
+            if settled?.kind == "done" {
+                VelaHaptic.approvalCounted.play()
+                // The approval counted: the same member executes (the
+                // machine looks again before any passkey).
+                if thenExecute {
+                    let executor = hub.proposalsView.item(chainId: chainId, hash: model.hash)?.canExecute
+                        .first { $0.caseInsensitiveCompare(owner) == .orderedSame } ?? owner
+                    execute(model, executor: executor)
+                }
+            } else if settled != nil, settled?.kind != "cancelled" {
+                VelaHaptic.reject.play()
+            }
         }
     }
 

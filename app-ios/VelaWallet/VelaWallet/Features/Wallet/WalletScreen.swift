@@ -318,8 +318,14 @@ private extension View {
 ///
 /// See `WalletScreen.onRefresh` for why this is a class and not the closure
 /// itself.
-@MainActor
-final class RefreshAction {
+///
+/// `nonisolated`: the box only holds a main-actor closure. A main-actor class
+/// has an ISOLATED deinit, and below iOS 18 that runs through the back-deploy
+/// shim (`swift_task_deinitOnExecutorMainActorBackDeploy`), which freed a
+/// task-local scope it never allocated when SwiftUI released the box during a
+/// render inside an awaiting test — the test host died with "pointer being
+/// freed was not allocated". A plain deinit has nothing to hop.
+nonisolated final class RefreshAction: @unchecked Sendable {
     let run: @MainActor () async -> Void
 
     init(_ run: @escaping @MainActor () async -> Void) {

@@ -18,7 +18,7 @@ import UIKit
 struct MultisigOutsideSheet: View {
     @Environment(\.theme) private var theme
     @Environment(\.walletTextScale) private var textScale
-    let session: MultisigOutsideSessionModel
+    let outside: MultisigOutsideSessionModel
     let words: MsWords
     var onClose: () -> Void
 
@@ -26,11 +26,11 @@ struct MultisigOutsideSheet: View {
 
     var body: some View {
         MsSheet(title: words.t("external.sheetTitle"), closeLabel: words.loc.t("common.done"), tall: true, onClose: close) {
-            let resumed = session.view["resumed"]?.bool == true
+            let resumed = outside.view["resumed"]?.bool == true
             MsNote(text: resumed
-                ? words.t("external.resumeBody", ["wallet": session.view["wallet"]?.string ?? words.t("external.ownerWallet")])
+                ? words.t("external.resumeBody", ["wallet": outside.view["wallet"]?.string ?? words.t("external.ownerWallet")])
                 : words.t("external.scanBody"))
-            if let link = session.link {
+            if let link = outside.link {
                 if !resumed, let modules = QrCode.modules(link) {
                     MsQrView(modules: modules)
                         .frame(maxWidth: .infinity)
@@ -59,8 +59,8 @@ struct MultisigOutsideSheet: View {
             phaseLine
             relayLine
             failureLine
-            if session.view["outcome"]?.kind == "approved" {
-                MsNote(text: words.t("external.signedBy", ["owner": words.label(session.view["pairedAccount"]?.string ?? "")]), tone: .positive, identifier: "multisig.outside.approved")
+            if outside.view["outcome"]?.kind == "approved" {
+                MsNote(text: words.t("external.signedBy", ["owner": words.label(outside.view["pairedAccount"]?.string ?? "")]), tone: .positive, identifier: "multisig.outside.approved")
             }
             actions
         }
@@ -69,19 +69,19 @@ struct MultisigOutsideSheet: View {
     // MARK: - Where it stands
 
     @ViewBuilder private var phaseLine: some View {
-        let wallet = session.view["wallet"]?.string ?? words.t("external.ownerWallet")
-        let text: String? = switch session.phase {
-        case "waiting": session.view["away"]?.bool == true ? words.t("external.pageAway") : words.t("external.waiting")
+        let wallet = outside.view["wallet"]?.string ?? words.t("external.ownerWallet")
+        let text: String? = switch outside.phase {
+        case "waiting": outside.view["away"]?.bool == true ? words.t("external.pageAway") : words.t("external.waiting")
         case "connecting": words.t("external.connecting")
         case "wrongAccount":
-            words.t("external.wrongAccount", ["account": MsWords.short(session.view["accounts"]?.array.first?.string ?? "")])
-        case "switching": words.t("external.switching", ["chain": session.view["chain"]?.string ?? ""])
+            words.t("external.wrongAccount", ["account": MsWords.short(outside.view["accounts"]?.array.first?.string ?? "")])
+        case "switching": words.t("external.switching", ["chain": outside.view["chain"]?.string ?? ""])
         case "confirming": words.t("external.inWallet", ["wallet": wallet, "elapsed": elapsed])
         default: nil
         }
         if let text {
             HStack(spacing: Tokens.Space.s8) {
-                if session.phase != "done" { ProgressView() }
+                if outside.phase != "done" { ProgressView() }
                 Text(verbatim: text)
                     .typeRole(Typography.body.scaled(textScale))
                     .foregroundStyle(theme.fgBase)
@@ -93,13 +93,13 @@ struct MultisigOutsideSheet: View {
     }
 
     private var elapsed: String {
-        guard let since = session.view["since"]?.int, since > 0 else { return "" }
+        guard let since = outside.view["since"]?.int, since > 0 else { return "" }
         let seconds = max(0, Int(Date().timeIntervalSince1970) - since / 1000)
         return "\(seconds) s"
     }
 
     @ViewBuilder private var relayLine: some View {
-        if let relay = session.relay, relay.kind == "retrying" || relay.kind == "failed" {
+        if let relay = outside.relay, relay.kind == "retrying" || relay.kind == "failed" {
             let reason: String = switch relay["why"]?.string {
             case "refused": words.t("external.relayRefused")
             default: relay["detail"]?.string ?? ""
@@ -108,7 +108,7 @@ struct MultisigOutsideSheet: View {
                 MsNote(text: relay.kind == "failed"
                     ? words.t("external.relayFailed", ["reason": reason])
                     : words.t("external.relayUnreachable", ["reason": reason]), tone: .warning, identifier: "multisig.outside.relay")
-                Button(words.t("external.retry")) { session.retryRelay() }
+                Button(words.t("external.retry")) { outside.retryRelay() }
                     .font(Typography.actionLabel.scaled(textScale).font)
                     .foregroundStyle(theme.fgBase)
             }
@@ -116,15 +116,15 @@ struct MultisigOutsideSheet: View {
     }
 
     @ViewBuilder private var failureLine: some View {
-        if let failure = session.failure {
+        if let failure = outside.failure {
             let text: String = switch failure.kind {
             case "connectDeclined": words.t("external.connectDeclined")
             case "walletDeclined": words.t("external.declined")
-            case "otherChain": words.t("external.otherChain", ["chain": session.view["chain"]?.string ?? ""])
+            case "otherChain": words.t("external.otherChain", ["chain": outside.view["chain"]?.string ?? ""])
             case "badSignature": words.t("external.badSignature")
             case "stoppedWaiting": words.t("external.stoppedWaiting")
             case "noRoom": words.t("external.relayFailed", ["reason": failure["reason"]?.string ?? ""])
-            default: words.t("external.stillWaiting", ["wallet": session.view["wallet"]?.string ?? words.t("external.ownerWallet")])
+            default: words.t("external.stillWaiting", ["wallet": outside.view["wallet"]?.string ?? words.t("external.ownerWallet")])
             }
             MsNote(text: text, tone: .warning, identifier: "multisig.outside.failure")
         }
@@ -132,15 +132,15 @@ struct MultisigOutsideSheet: View {
 
     @ViewBuilder private var actions: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s12) {
-            if session.failure != nil {
-                VelaButton(title: words.t("external.askAgain"), kind: .ink) { session.askAgain() }
+            if outside.failure != nil {
+                VelaButton(title: words.t("external.askAgain"), kind: .ink) { outside.askAgain() }
                     .accessibilityIdentifier("multisig.outside.askAgain")
             }
-            if session.phase == "confirming" {
-                VelaButton(title: words.t("external.stopWaiting"), kind: .secondary) { session.stopWaiting() }
+            if outside.phase == "confirming" {
+                VelaButton(title: words.t("external.stopWaiting"), kind: .secondary) { outside.stopWaiting() }
             }
-            if session.view["pairedAccount"]?.string != nil, session.phase != "done" {
-                Button(words.t("external.unpair")) { session.anotherWallet(unpair: true) }
+            if outside.view["pairedAccount"]?.string != nil, outside.phase != "done" {
+                Button(words.t("external.unpair")) { outside.anotherWallet(unpair: true) }
                     .font(Typography.actionLabel.scaled(textScale).font)
                     .foregroundStyle(theme.fgMuted)
             }
@@ -148,7 +148,7 @@ struct MultisigOutsideSheet: View {
     }
 
     private func close() {
-        session.close()
+        outside.close()
         onClose()
     }
 }
