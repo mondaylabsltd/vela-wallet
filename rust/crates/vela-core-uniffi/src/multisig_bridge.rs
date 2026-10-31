@@ -83,6 +83,20 @@ macro_rules! multisig_object {
             pub fn view(&self) -> Result<String, crate::CoreError> {
                 crate::onboarding_bridge::locked(&self.0)?.view()
             }
+
+            /// Opt in to lighter answers, as every other machine's object
+            /// can (`onboarding_bridge.rs`): from the next answer on, each
+            /// carries `view_version`, and `view` only when it differs from
+            /// the last view this object sent (no `view`: keep the one you
+            /// hold). `include_volatile`: also send the machine's volatile
+            /// fields apart, in `volatile`, when they move.
+            pub fn skip_unchanged_views(
+                &self,
+                include_volatile: bool,
+            ) -> Result<(), crate::CoreError> {
+                crate::onboarding_bridge::locked(&self.0)?.skip_unchanged_views(include_volatile);
+                Ok(())
+            }
         }
 
         impl Default for $class {
@@ -182,6 +196,39 @@ mod tests {
         let none = multisig_link_call("calls.readable".to_owned(), "{}".to_owned()).unwrap();
         assert_eq!(none, "null");
         assert!(multisig_link_call("nobody.knows".to_owned(), "{}".to_owned()).is_err());
+    }
+
+    /// A shell that opted in hears `view_version` on every answer and the
+    /// view only when it moved; one that did not keeps the whole view.
+    #[test]
+    fn a_shell_may_skip_unchanged_views() {
+        let online = r#"{"type":"online","online":true}"#;
+        let classic = MultisigProposalsCore::new();
+        for _ in 0..2 {
+            let out: serde_json::Value =
+                serde_json::from_str(&classic.dispatch(online.to_owned()).unwrap()).unwrap();
+            assert!(out["view"].is_object());
+            assert!(out.get("view_version").is_none());
+        }
+
+        let light = MultisigProposalsCore::new();
+        light.skip_unchanged_views(false).unwrap();
+        let first: serde_json::Value =
+            serde_json::from_str(&light.dispatch(online.to_owned()).unwrap()).unwrap();
+        assert!(first["view_version"].is_u64());
+        assert!(
+            first["view"].is_object(),
+            "the first answer carries the view"
+        );
+        let again: serde_json::Value =
+            serde_json::from_str(&light.dispatch(online.to_owned()).unwrap()).unwrap();
+        assert_eq!(again["view_version"], first["view_version"]);
+        assert!(
+            again.get("view").is_none(),
+            "an unchanged view is not sent again"
+        );
+        // The view is still there to ask for.
+        assert!(light.view().unwrap().starts_with('{'));
     }
 
     /// The kernel door answers as the wasm's `multisigCall` does.
