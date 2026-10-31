@@ -59,12 +59,19 @@ class MultisigWords(
     /** A member as a line names it: its name and short address — a name is a claim, the address is who gets the say. */
     fun who(address: String): String {
         val short = short(address)
-        val name = localName(address) ?: keptName(address)
-        return if (name == null || name == short) short else "$name ($short)"
+        val name = label(address)
+        return if (name == short) short else "$name ($short)"
     }
 
-    /** A member's label: this device's name, else the kept one, else short. */
-    fun label(address: String): String = localName(address) ?: keptName(address) ?: short(address)
+    /**
+     * A member's label — the core's rule (`names.label`, r8-25: the name the
+     * multisigs keep, else the passkey index's, else this device's own
+     * account name, else the short address), so a member reads the same on
+     * every device. This shell only hands it what it knows.
+     */
+    fun label(address: String): String =
+        MsRules.string("names.label", mapOf("address" to address, "own" to localName(address), "kept" to keptName(address), "registered" to null))
+            ?: localName(address) ?: keptName(address) ?: short(address)
 
     /** A multisig's name: its row's, its record's (when valid), its label, else its rule ("Multisig 2/3"). */
     fun name(account: MsAccount, rowName: String? = null): String {
