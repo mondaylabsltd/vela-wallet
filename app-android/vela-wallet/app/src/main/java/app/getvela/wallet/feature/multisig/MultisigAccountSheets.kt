@@ -575,8 +575,19 @@ fun MultisigAddSheet(
             else -> failure = words.t("add.unavailable")
         }
     }
+    // r9-16: an invite (or a transaction) link pasted here is read by the
+    // core's link reading (`ScannedLink`, `carriedLinkHash`) and opens in the
+    // accounts machine's one link flow — the invite's own add sheet, with its
+    // members and networks — never refused as "not an address".
+    fun openedAsLink(text: String): Boolean {
+        val hash = app.getvela.wallet.feature.wallet.core.ScannedLink.multisigHash(text) ?: return false
+        hub.openLink(hash)
+        hub.sheet.value = app.getvela.wallet.feature.multisig.core.MultisigSheet.Link
+        return true
+    }
     fun add(acceptRisks: Boolean) {
         val typed = address.trim()
+        if (openedAsLink(typed)) return
         when (MsRules.addressEntryOf(typed)) {
             "valid" -> Unit
             "checksum" -> { failure = words.t("send.invalidChecksum"); return }
@@ -624,7 +635,14 @@ fun MultisigAddSheet(
                 }
             }
         }
-        MsField(words.t("add.title"), address, { address = it; failure = null }, words.t("add.placeholder"), error = failure, tag = "multisig.add.address")
+        MsField(words.t("add.title"), address, { typed ->
+            val pasted = typed.length - address.length > 1
+            address = typed
+            failure = null
+            // A link pasted whole opens at once; one typed key by key is read
+            // on Add (a half-typed `#ms=` is not a link yet).
+            if (pasted) openedAsLink(typed)
+        }, words.t("add.placeholder"), error = failure, tag = "multisig.add.address")
         if (choosing) {
             MsNote(words.t("add.chooseNetwork"), tone = MsTone.Warning)
             val offered = MsRules.likelyNetworks(spaceNetworks, view.networkHints() + ("named" to if (fromLink) linkChains else emptyList<Int>())).ifEmpty { spaceNetworks }
@@ -715,7 +733,12 @@ fun MultisigLinkStandSheet(hub: MultisigHub, words: MultisigWords, onClose: () -
     }
     MsSheet(if (stand?.kind == "invite") words.t("add.title") else words.t("proposal.title"), words.raw("common.done"), onClose = close, tag = "multisig.link") {
         when (stand?.kind) {
-            "broken" -> MsNote(stand.text ?: words.t("proposal.badLink"), tone = MsTone.Warning, tag = "multisig.link.broken")
+            // A damaged link is said in words, never an empty note: the corpus's
+            // sentence, and what the link held (the core's `text`) when it held anything.
+            "broken" -> {
+                MsNote(words.t("proposal.badLink"), tone = MsTone.Warning, tag = "multisig.link.broken")
+                stand.text?.takeIf { it.isNotBlank() }?.let { MsText(it, MsType.Mono, color = VelaTheme.colors.fgMuted, maxLines = 3) }
+            }
             "missingNetwork" -> {
                 val chainId = stand.chainId ?: 0
                 MsNote(words.missingTitle(chainId), tone = MsTone.Warning, tag = "multisig.link.missingNetwork")
@@ -753,7 +776,7 @@ fun MultisigInviteSheet(hub: MultisigHub, words: MultisigWords, address: String,
     val link = row?.let { r ->
         MsRules.inviteLink(
             origin, locale, r.account.address, r.account.owners, r.account.chainIds, proposals.membersAnywhere,
-            r.account.members.mapValues { (_, v) -> mapOf("name" to v.name, "kind" to v.kind) },
+            inviteKnown(words, r.account, proposals.membersAnywhere),
         )
     }
     LaunchedEffect(address) { hub.send(ev("invite_shared", "address" to address)) }
@@ -766,4 +789,27 @@ fun MultisigInviteSheet(hub: MultisigHub, words: MultisigWords, address: String,
         }
         MsNote(words.t("invite.outsideHint"))
     }
+}
+
+/**
+ * r9-12: what the invite says of each member (the core's `inviteLink`
+ * `known`): the label the core's own rule gives it here (`names.label` —
+ * what the multisigs keep, else this device's own account name), never one
+ * picked in Kotlin, and the kind the record keeps. Every member of it, the
+ * founding ones and those its chains name now — this device's own accounts
+ * included, so the device that opens it shows them by name, as the web's
+ * invite does (`invitedMembers`). A label that is only the short address is
+ * not sent (the core writes no name for it).
+ */
+internal fun inviteKnown(words: MultisigWords, account: app.getvela.wallet.feature.multisig.core.MsAccount, now: List<String>): Map<String, Any?> {
+    val out = linkedMapOf<String, Any?>()
+    for ((key, info) in account.members) out[key.lowercase()] = mapOf("name" to info.name, "kind" to info.kind)
+    for (member in (account.owners + now).distinctBy { it.lowercase() }) {
+        val label = words.label(member).takeIf { it.isNotBlank() && it != MultisigWords.short(member) && it != MsRules.eip55(member) }
+            ?: continue
+        @Suppress("UNCHECKED_CAST")
+        val kept = out[member.lowercase()] as? Map<String, Any?>
+        out[member.lowercase()] = mapOf("name" to label, "kind" to kept?.get("kind"))
+    }
+    return out
 }
