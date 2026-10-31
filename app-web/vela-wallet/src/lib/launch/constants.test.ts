@@ -203,7 +203,7 @@ describe('replay gate', () => {
 	const vectors = JSON.parse(
 		readFileSync(
 			new URL(
-				'../../../../../rust/crates/vela-core/tests/vectors/launch-animation.json',
+				'../../../../../rust/crates/vela-core/tests/vectors/launch/launch-animation.json',
 				import.meta.url
 			),
 			'utf8'

@@ -13,7 +13,7 @@
 //! played on every cold start: 2.5 s of somebody's morning, every morning.
 //!
 //! The web's pre-paint block in `app.html` must decide before any module (or
-//! any wasm) loads, so it keeps an inline copy; `tests/vectors/
+//! any wasm) loads, so it keeps an inline copy; `tests/vectors/launch/
 //! launch-animation.json` is what both that copy and this function are held
 //! to.
 //!
@@ -78,7 +78,7 @@ mod tests {
         cases: Vec<Case>,
     }
 
-    const VECTORS: &str = include_str!("../tests/vectors/launch-animation.json");
+    const VECTORS: &str = include_str!("../tests/vectors/launch/launch-animation.json");
 
     #[test]
     fn the_shared_vectors_hold() {
