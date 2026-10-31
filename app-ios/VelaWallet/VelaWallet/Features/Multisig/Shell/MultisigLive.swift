@@ -73,13 +73,13 @@ final class MultisigLive: MultisigPorts {
     private let deps: Deps
     let peer: MultisigPeerTransport
     /// Where a notice goes (the hub's router), set once the hub exists.
-    var onNotice: ((_ notice: [String: Any]) async -> Void)?
+    var onNotice: (@MainActor (_ notice: [String: Any]) async -> Void)?
     /// The high-risk question (§3.5): the hub's sheet. `nil`: nobody can be
     /// asked, so the answer is "do not sign".
-    var onAskRisk: ((_ op: [String: Any]) async -> Bool)?
+    var onAskRisk: (@MainActor (_ op: [String: Any]) async -> Bool)?
     /// A first-party transaction through the signing sheet (a multisig's
     /// record saved to Ethereum): the root view's. `nil`: answered failed.
-    var onFirstParty: ((_ op: [String: Any]) async -> [String: Any])?
+    var onFirstParty: (@MainActor (_ op: [String: Any]) async -> [String: Any])?
     /// The approvals pages answered, by member, chain and hash: the same
     /// bytes approved twice are one approval (the web's `answered`).
     private var pageAnswers: [String: String] = [:]

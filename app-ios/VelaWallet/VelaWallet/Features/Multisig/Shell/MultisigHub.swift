@@ -71,7 +71,7 @@ final class MultisigHub {
         var known: [[String: Any]]
     }
 
-    @ObservationIgnored private let facts: () async -> Facts
+    @ObservationIgnored private let facts: @MainActor () async -> Facts
     @ObservationIgnored private let shelf: VelaStore
     @ObservationIgnored private let tokens: TokenMetadata?
     @ObservationIgnored private var booted = false
@@ -92,7 +92,7 @@ final class MultisigHub {
         shelf: VelaStore,
         tokens: TokenMetadata?,
         cores: (accounts: MultisigCore, members: MultisigCore, proposals: MultisigCore)? = nil,
-        facts: @escaping () async -> Facts
+        facts: @escaping @MainActor () async -> Facts
     ) {
         self.live = live
         self.loc = loc
