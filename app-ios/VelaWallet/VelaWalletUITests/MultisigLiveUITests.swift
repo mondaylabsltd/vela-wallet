@@ -158,6 +158,37 @@ final class MultisigLiveUITests: XCTestCase {
         shot(app, "outside-executed")
     }
 
+    // MARK: - M1: the invite link adds it (removed first, added back by its link)
+
+    func test8InviteLinkAddsIt() throws {
+        var app = try launch()
+        tap(app, "multisig.home.settings", timeout: 60)
+        tap(app, "multisig.settings.invite")
+        let linkText = app.staticTexts["multisig.invite.link"].firstMatch
+        XCTAssertTrue(linkText.waitForExistence(timeout: 15))
+        let link = linkText.label
+        XCTAssertTrue(link.contains("#msa="), "not an invite link: \(link)")
+        shot(app, "invite")
+        tap(app, "multisig.sheet.close")
+        tap(app, "multisig.home.settings", timeout: 30)
+        tap(app, "multisig.settings.remove")
+        let confirm = app.alerts.buttons.element(boundBy: 0)
+        XCTAssertTrue(confirm.waitForExistence(timeout: 10))
+        confirm.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["multisig.home"].waitForNonExistence(timeout: 20), "still shown after remove")
+        app.terminate()
+        // The invite opens the app: the native flow, not the web wallet.
+        app = try launch(link: link)
+        XCTAssertTrue(app.descendants(matching: .any)["multisig.add.invite"].waitForExistence(timeout: 60), "the invite did not open the add sheet")
+        sleep(2)
+        shot(app, "invite-add")
+        tap(app, "multisig.add.add")
+        XCTAssertTrue(app.descendants(matching: .any)["multisig.add.invite"].waitForNonExistence(timeout: 90), "not added")
+        tap(app, "wallet.header.name", timeout: 30)
+        XCTAssertTrue(app.descendants(matching: .any)["multisig.switcher.row"].waitForExistence(timeout: 20), "not in the switcher")
+        shot(app, "invite-added")
+    }
+
     // MARK: - Screens beside the web's (VELA_MS_LANG / VELA_MS_THEME)
 
     func test7Screens() throws {
@@ -298,7 +329,7 @@ final class MultisigLiveUITests: XCTestCase {
         let entry = app.textFields["multisig.members.entry"].firstMatch
         XCTAssertTrue(entry.waitForExistence(timeout: 15))
         entry.tap()
-        entry.typeText(Self.outsideOwner + "\n")
+        entry.typeText((env["VELA_MS_NEW_MEMBER"] ?? Self.outsideOwner) + "\n")
         let rule = app.descendants(matching: .any)["multisig.members.plan.100"].firstMatch
         XCTAssertTrue(rule.waitForExistence(timeout: 30), "no plan for Gnosis")
         sleep(1)

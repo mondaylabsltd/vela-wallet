@@ -5,9 +5,10 @@
 //  A multisig link the app was opened with (native parity N-I3): a proposal
 //  to approve, an invite, the connect page, or one of them damaged.
 //
-//  **Honest about where it can be acted on.** Multisig runs in the web wallet
-//  until the native machines land (Phase 2 M1–M6); until then this app does
-//  not pretend to approve anything. It shows what the CORE read in the link
+//  **Since native multisig (M1–M6) only the connect page comes here**: a
+//  proposal or an invite goes to the accounts machine's link flow
+//  (`MultisigLinkStandSheet`, the add sheet). The connect page is an outside
+//  owner's, opened in the browser that holds their wallet. It shows what the CORE read in the link
 //  — the network, the multisig, the transaction's hash, the members the
 //  invite names — and offers the web wallet in the system browser, where
 //  the same link opens the same transaction, plus the link itself to copy.
@@ -49,7 +50,7 @@ struct MultisigLinkModel: Equatable {
     /// Where the link is acted on, said plainly over the buttons:
     /// "Multisig links open in the web wallet for now." — this app does not
     /// pretend to approve anything until its multisig lands.
-    let onWeb: String
+    var onWeb: String
     let openLabel: String
     let copyLabel: String
     let closeLabel: String
@@ -107,7 +108,10 @@ struct MultisigLinkModel: Equatable {
             }
             return model
         case .connect(let connect, let url):
+            // The connect page is the OUTSIDE owner's: it opens in the browser
+            // that holds their wallet — said by its own body, nothing more.
             var model = base(loc.t(k.connectTitle), url: url)
+            model.onWeb = ""
             model.body = loc.t(k.connectBody)
             if let tx = connect.tx { model.rows = txRows(tx) }
             return model
@@ -206,12 +210,14 @@ struct MultisigLinkSheet: View {
                 }
                 .accessibilityElement(children: .combine)
             }
-            Text(verbatim: model.onWeb)
-                .typeRole(Typography.rowSub.scaled(textScale))
-                .foregroundStyle(theme.fgMuted)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, Tokens.Space.s8)
-                .accessibilityIdentifier("applink.onWeb")
+            if !model.onWeb.isEmpty {
+                Text(verbatim: model.onWeb)
+                    .typeRole(Typography.rowSub.scaled(textScale))
+                    .foregroundStyle(theme.fgMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, Tokens.Space.s8)
+                    .accessibilityIdentifier("applink.onWeb")
+            }
             VStack(spacing: Tokens.Space.s12) {
                 // Opening a page moves nothing: the neutral ink, not the accent.
                 VelaButton(title: model.openLabel, kind: .ink, action: onOpen)
