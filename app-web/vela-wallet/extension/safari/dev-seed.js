@@ -10,6 +10,14 @@
  *
  *   dev-seed.html?genesis=<url>&relay=<url>&peerconnect=<ws url>
  *                &rpc=<chainId>=<url>[&rpc=…]&locale=<en|zh|…>
+ *                [&index=<url>&page=<url>&next=create]
+ *
+ * The Safari route's e2e (spec 102 R8) creates a REAL wallet with the
+ * simulator's own passkey instead of entering the parallel space: `index` is
+ * the local passkey index (`app-web/trusted-signer/samples/mock-index.mjs`,
+ * so no run writes to the real one), `page` the signing page on this
+ * machine's loopback, which onboarding then creates and signs in on
+ * (`src/lib/dev/harness-page.ts`), and `next=create` opens the create flow.
  */
 const LOOPBACK = /^(?:https?|wss?):\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?(?:\/|$)/;
 const out = document.getElementById('out');
@@ -40,6 +48,9 @@ async function seed() {
 	const genesis = loopback(params.get('genesis'));
 	const relay = loopback(params.get('relay'));
 	const peerconnect = loopback(params.get('peerconnect'));
+	const index = loopback(params.get('index'));
+	const page = loopback(params.get('page'));
+	const create = params.get('next') === 'create';
 	const networks = params
 		.getAll('rpc')
 		.map((entry) => {
@@ -54,20 +65,26 @@ async function seed() {
 		: 'en';
 
 	localStorage.setItem('vela.intro.seen', String(Date.now()));
+	// The wallet's language everywhere (its request tabs included), not just
+	// the page this opens next.
+	localStorage.setItem('vela.language', locale);
 	if (genesis) localStorage.setItem('vela.genesisServiceURL', genesis);
-	if (relay || genesis) {
+	if (page) localStorage.setItem('vela.dev.signingPage', page);
+	else localStorage.removeItem('vela.dev.signingPage');
+	if (relay || genesis || index) {
 		localStorage.setItem(
 			'vela.serviceEndpoints',
 			JSON.stringify({
 				...(relay ? { bundlerServiceURL: relay } : {}),
-				...(genesis ? { genesisServiceURL: genesis } : {})
+				...(genesis ? { genesisServiceURL: genesis } : {}),
+				...(index ? { passkeyIndexURL: index } : {})
 			})
 		);
 	}
 	if (peerconnect) localStorage.setItem('vela.peerconnectRelay', peerconnect);
 	if (networks.length) await seedNetworks(networks);
-	say(`seeded: ${JSON.stringify({ genesis, relay, peerconnect, networks })}`);
-	location.replace(`${locale}/parallel.html`);
+	say(`seeded: ${JSON.stringify({ genesis, relay, peerconnect, index, page, networks })}`);
+	location.replace(create ? `${locale}/create.html` : `${locale}/parallel.html`);
 }
 
 seed().catch((error) => say(`seed failed: ${error?.message ?? error}`));

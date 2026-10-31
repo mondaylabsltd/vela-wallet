@@ -17,6 +17,7 @@
 	import AppPrompt from '$lib/app-prompt/AppPrompt.svelte';
 	import PromptSheet from '$lib/ui/onboarding/v2/PromptSheet.svelte';
 	import IdenticonViewerHost from '$lib/wallet/ui/IdenticonViewerHost.svelte';
+	import PageHandoffSheet from '$lib/signing/ui/PageHandoffSheet.svelte';
 	import { fillTemplate } from '$lib/i18n/fill';
 	import { pluralTemplate } from '$lib/i18n/plural';
 	import { promptCopy, type PromptCopy } from '$lib/onboarding/core/copy';
@@ -92,9 +93,17 @@
 	</CreateFlow>
 </main>
 
-<!-- Spec 075: a founding key can be minted on the Trusted Signer's page. The
-     wait, the pairing code and the sentence a refusal ends with are drawn
-     over this flow, which stays exactly as it was underneath. -->
+<!-- Spec 102 R3/R8: a founding key minted, or confirmed, on the signing page
+     (every one in the Safari package, whose pages cannot use a getvela.app
+     passkey) — the hand-off card over this flow, which stays exactly as it
+     was underneath. -->
+<PageHandoffSheet
+	m={data.handoff}
+	locale={data.locale}
+	wide={false}
+	closeLabel={strings('common.cancel')}
+	kind="ceremony"
+/>
 
 <!-- The done screen's artwork opens the viewer, as every artwork does. -->
 <IdenticonViewerHost copy={data.identiconViewer} />

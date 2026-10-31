@@ -91,6 +91,12 @@
    "pageProtects": "Una página de firma lee la solicitud por sí misma y firma exactamente lo que te muestra, así que una pantalla de Vela alterada no puede engañarte para firmar otra cosa.",
    "pageLimit": "No te protege si la propia billetera está comprometida: tus llaves de acceso firman para {{domain}}, y el código que se ejecute ahí aún podría pedirles una firma."
   },
+  "safariExtension": {
+   "title": "Activa la extensión de Safari",
+   "subtitle": "Usa Vela en sitios web en Safari",
+   "body": "En Configuración, abre Safari → Extensiones → Vela Wallet (en iOS 18 y posteriores: Apps → Safari → Extensiones → Vela Wallet). Activa Permitir extensión y después permítela en los sitios web que uses.",
+   "open": "Abrir Configuración"
+  },
   "advanced": {
    "networksTitle": "Redes",
    "networksSubtitle": "URLs de RPC, Explorador y Bundler",
@@ -878,6 +884,7 @@
    "copied": "Copiado",
    "close": "Cerrar",
    "siteAccessBody": "El acceso de Vela a los sitios está limitado. Elige Permitir acceso arriba y vuelve a intentarlo.",
+   "safariPasskeyBody": "Safari no permite que las páginas propias de una extensión usen una llave de acceso, así que Vela lo hace en su página de firma. Inténtalo de nuevo.",
    "phoneLinkFailed": "Tu otro dispositivo no se conectó, o la conexión se cortó antes de terminar. Mantén ambos dispositivos en línea y cerca, y vuelve a escanear el código.",
    "keyUnavailableTitle": "Llave de seguridad no disponible",
    "keyUnavailableBody": "Este dispositivo no pudo usar la llave de seguridad. Prueba con otra llave de seguridad FIDO2 o elige otra forma de continuar."

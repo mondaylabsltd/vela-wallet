@@ -5954,20 +5954,25 @@ export function minGasPriceWei(chain_id) {
  * Where a multisig member's approval goes — `signingRoute` for
  * `vela_multisigApprove` (`trusted_signer::approval::approval_route`): `{type: 'in_vela'}`,
  * `{type: 'page', url}` or `{type: 'blocked', block}` — `null` for a record
- * this build cannot read. `account_json` is the member's record as stored.
+ * this build cannot read. `account_json` is the member's record as stored;
+ * `surface` as `signingRoute`'s (R8: on the Safari Web Extension an
+ * approval is never answered `in_vela`).
  * @param {string} account_json
+ * @param {string | null} [surface]
  * @returns {string | undefined}
  */
-export function multisigApprovalRoute(account_json) {
+export function multisigApprovalRoute(account_json, surface) {
     const ptr0 = passStringToWasm0(account_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.multisigApprovalRoute(ptr0, len0);
-    let v2;
+    var ptr1 = isLikeNone(surface) ? 0 : passStringToWasm0(surface, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len1 = WASM_VECTOR_LEN;
+    const ret = wasm.multisigApprovalRoute(ptr0, len0, ptr1, len1);
+    let v3;
     if (ret[0] !== 0) {
-        v2 = getStringFromWasm0(ret[0], ret[1]).slice();
+        v3 = getStringFromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     }
-    return v2;
+    return v3;
 }
 
 /**
@@ -7165,22 +7170,31 @@ export function signingPlan(account_json) {
  * `vela_multisigExecute` for a multisig executor's operation,
  * `vela_multisigApprove` for a member's approval). `null` for a record this
  * build cannot read or a method no venue signs (`eth_sign`) — refuse it.
+ *
+ * `surface` (R8) is where this build runs: `"safari_extension"` for the
+ * Safari Web Extension, whose pages cannot use a `getvela.app` passkey — there
+ * nothing is answered `in_vela`, every kind goes to a page (the account's, or
+ * the official one). Absent or anything else: the web wallet and the Chrome
+ * extension, exactly as before.
  * @param {string} account_json
  * @param {string} method
+ * @param {string | null} [surface]
  * @returns {string | undefined}
  */
-export function signingRoute(account_json, method) {
+export function signingRoute(account_json, method, surface) {
     const ptr0 = passStringToWasm0(account_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
     const ptr1 = passStringToWasm0(method, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len1 = WASM_VECTOR_LEN;
-    const ret = wasm.signingRoute(ptr0, len0, ptr1, len1);
-    let v3;
+    var ptr2 = isLikeNone(surface) ? 0 : passStringToWasm0(surface, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len2 = WASM_VECTOR_LEN;
+    const ret = wasm.signingRoute(ptr0, len0, ptr1, len1, ptr2, len2);
+    let v4;
     if (ret[0] !== 0) {
-        v3 = getStringFromWasm0(ret[0], ret[1]).slice();
+        v4 = getStringFromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     }
-    return v3;
+    return v4;
 }
 
 /**
@@ -7574,6 +7588,42 @@ export function trustedSignerCeremonyKeyLabel(operation_json) {
 }
 
 /**
+ * The page request for a key ceremony a machine sent to a page (spec 102 R3,
+ * R8) — `RegisterPasskey`, `AuthenticatePasskey`, `SignProof` or
+ * `SignMemberProof` as its wire JSON, handed over verbatim
+ * (`trusted_signer::ceremony::request`): `{id, intent, context}`, the key's
+ * place and hints riding along (R5). `deployment_json` is
+ * `{chainId, contract}` for a member proof (the page computes the challenge
+ * from it and reaches no network itself, 076), `null` otherwise. `null`
+ * for an operation that is not a ceremony.
+ * @param {string} operation_json
+ * @param {string} id
+ * @param {string} wallet_name
+ * @param {string} registry
+ * @param {string | null} [deployment_json]
+ * @returns {string | undefined}
+ */
+export function trustedSignerCeremonyRequest(operation_json, id, wallet_name, registry, deployment_json) {
+    const ptr0 = passStringToWasm0(operation_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passStringToWasm0(wallet_name, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ptr3 = passStringToWasm0(registry, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len3 = WASM_VECTOR_LEN;
+    var ptr4 = isLikeNone(deployment_json) ? 0 : passStringToWasm0(deployment_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len4 = WASM_VECTOR_LEN;
+    const ret = wasm.trustedSignerCeremonyRequest(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4);
+    let v6;
+    if (ret[0] !== 0) {
+        v6 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v6;
+}
+
+/**
  * The corpus key of the title a key ceremony on a self-hosted page is drawn
  * under while it waits (spec 102) — `componentsUi.signing.ceremonyCreate`,
  * `.ceremonySignIn` or `.ceremonyConfirm` — or `null` for an operation that is
@@ -7591,6 +7641,49 @@ export function trustedSignerCeremonyTitleKey(operation_json) {
         wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     }
     return v2;
+}
+
+/**
+ * The page's answer to a ceremony, judged as the apps judge it
+ * (`trusted_signer::ceremony::verify`): the ceremony asked for, from
+ * `signer_origin` (the page the wallet opened — the origin the authenticator
+ * signed), over a challenge the page was allowed to sign, and for a member
+ * proof over `expected_member_challenge_hex` (the one the wallet fetched).
+ * `{type: 'registered', registration}` or `{type: 'asserted', assertion}` —
+ * the machines' own `Registration` / `Assertion` wire JSON — or an error
+ * whose message is the refusal's code (`declined`, `refused`,
+ * `wrong_challenge`, `foreign_key`, `not_verified`, `malformed`).
+ * @param {string} operation_json
+ * @param {string} answer_json
+ * @param {string} signer_origin
+ * @param {string | null} [expected_member_challenge_hex]
+ * @returns {string}
+ */
+export function trustedSignerCeremonyVerify(operation_json, answer_json, signer_origin, expected_member_challenge_hex) {
+    let deferred6_0;
+    let deferred6_1;
+    try {
+        const ptr0 = passStringToWasm0(operation_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(answer_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(signer_origin, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        var ptr3 = isLikeNone(expected_member_challenge_hex) ? 0 : passStringToWasm0(expected_member_challenge_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len3 = WASM_VECTOR_LEN;
+        const ret = wasm.trustedSignerCeremonyVerify(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3);
+        var ptr5 = ret[0];
+        var len5 = ret[1];
+        if (ret[3]) {
+            ptr5 = 0; len5 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred6_0 = ptr5;
+        deferred6_1 = len5;
+        return getStringFromWasm0(ptr5, len5);
+    } finally {
+        wasm.__wbindgen_free(deferred6_0, deferred6_1, 1);
+    }
 }
 
 /**

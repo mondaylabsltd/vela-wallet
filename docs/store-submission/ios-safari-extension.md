@@ -62,29 +62,38 @@ the owner except the production steps at the end.
    (`safari-package.test.ts`).
 5. **Guideline 4.4.2 (Safari extensions):** it works on the current Safari and
    asks only for what it uses (`storage`, `tabs`, website access for the
-   provider). Optional polish for review: a Settings row in the app telling
-   people how to turn the extension on (iOS has no API to read whether it is
-   on; this needs new corpus keys in 15 locales — not in this round).
+   provider). The app's Settings has a "Turn on the Safari extension" row
+   (`SafariExtensionRow.swift`, `settings.safariExtension.*` in 15 locales):
+   where Safari keeps the switch, and Open Settings — iOS has no API to read
+   whether it is on, nor a link into Safari's own settings.
 
 ## Go-live checklist (production only)
 
-- [ ] **Core:** add signing page build `0d66b844…` to vela-core
-      `trusted_signer::integrity::BUILD_ALLOWED` (front), regenerate, and deploy
-      `app-web/trusted-signer/dist/` to `sign.getvela.app` — until then the
-      deployed page refuses the Safari extension (it has no relay and no
-      attestation rule), and the Safari wallet can sign only with what it can
-      reach in the extension (nothing, for a real passkey: see below).
-- [ ] **Core:** route a Safari extension's signatures AND key ceremonies to the
-      page. WebKit refuses WebAuthn in an extension page (`SecurityError`,
-      RPID), so the in-Vela venue cannot work in Safari for a real passkey:
-      `signing_route` must answer `page` for every kind (create, sign in,
-      proof, sign) when the surface is the Safari extension — today it answers
-      `in_vela` for a `getvela.app` account by default and for every key
-      ceremony (R3). The page already answers the attested extension for
-      ceremonies (`walletRequester`).
-- [ ] **Web:** the onboarding / sign-in flows in the Safari package must send
-      their ceremonies to the page (follows from the core route; today they
-      call WebAuthn and Safari refuses with `SecurityError`, which the wallet
-      words as "site access withheld" — wrong for Safari).
+- [ ] **Deploy** `app-web/trusted-signer/dist/` to `sign.getvela.app`: the
+      Safari page build `879e715f…` is the front of vela-core
+      `trusted_signer::integrity::BUILD_ALLOWED` (the merge's rebuild of
+      `0d66b844…`), but the deployed `index.json` does not list it yet — until
+      it does, the deployed page refuses the Safari extension (no relay, no
+      attestation rule), and since every Safari signature and ceremony goes to
+      the page (below), the Safari wallet can neither create nor sign.
+      Check: `curl -I https://sign.getvela.app/b/879e715f…/sign` is 200 +
+      immutable + `access-control-allow-origin: *`.
+- [x] **Core:** a Safari extension's signatures AND key ceremonies go to the
+      page (spec 102 R8, `signing_venue::SigningSurface::SafariExtension`):
+      `signing_route_on` answers `page` for every kind — the account's page,
+      or the official page for a `getvela.app` account that signs in Vela —
+      and the create / sign-in machines, told `surface_known`, name a page on
+      every ceremony (`ceremony_page_on`). Every other surface is unchanged.
+      Shared vectors: `rust/crates/vela-core/tests/vectors/signing-route/`.
+- [x] **Web:** the Safari package's onboarding (create, add a key, confirm,
+      sign in, a recovery's live proof) runs each ceremony on the page through
+      the existing relay (`src/lib/onboarding/core/page-ceremony.ts`), and a
+      passkey Safari refuses is said as that (`onboarding.common.
+      safariPasskeyBody`), never as "site access withheld". Proven on an iOS
+      26 simulator with a real simulator passkey against a loopback page
+      (`SafariRouteDeviceTests`); not yet against the deployed official page.
+- Not yet carried to the page: a multisig's owner proof
+  (`vela_multisigCreate`) — the page has no card for it, so the Safari wallet
+  refuses it, said as that.
 - [ ] Archive, sign and submit as usual; the store-binary gate runs on the
       archive.

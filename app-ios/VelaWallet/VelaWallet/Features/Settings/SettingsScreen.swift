@@ -524,6 +524,9 @@ struct SettingsScreen: View {
             }
         }
 
+        // Native AUDIT §6.5: where Safari keeps the Vela extension's switch.
+        SafariExtensionRow(loc: loc)
+
         // Issue #322: Sign Out is a settings ROW — the glyph, the title and
         // the chevron its neighbours carry — not centred grey text, which read
         // as a caption under About rather than something to tap.

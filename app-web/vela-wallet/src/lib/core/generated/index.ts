@@ -455,6 +455,7 @@ export * from './SigningPagesShellResult';
 export * from './SigningPagesView';
 export * from './SigningPlan';
 export * from './SigningRoute';
+export * from './SigningSurface';
 export * from './SigningVenue';
 export * from './SimVerdict';
 export * from './StableRef';

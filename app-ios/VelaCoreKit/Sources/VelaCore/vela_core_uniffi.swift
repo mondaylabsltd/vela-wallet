@@ -20809,6 +20809,12 @@ public func multicall3EncodeAggregate3(calls: [Multicall3Call])throws  -> Data  
 /**
  * The multisig links (`vela_core::multisig_link`): `method` plus its
  * arguments as JSON, the answer as JSON — the wasm `multisigLinkCall`.
+ *
+ * The same door answers the multisig's pure rules a screen asks one at a
+ * time (`vela_core::multisig_rules`), by `<area>.<method>`: `relay.*`
+ * (the PeerConnect token schedule), `names.*` (a member's label and kind),
+ * `networks.*` (the order networks are offered in), `calls.*` (which calls a
+ * review reads). docs/multisig-machines.md lists them.
  */
 public func multisigLinkCall(method: String, argsJson: String)throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
@@ -22530,7 +22536,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_multicall3_encode_aggregate3() != 41166) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_func_multisig_link_call() != 29990) {
+    if (uniffi_vela_core_uniffi_checksum_func_multisig_link_call() != 2238) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_builtin_network_display_name() != 32122) {

@@ -47,6 +47,9 @@
 		welcomeBelongsInWallet
 	} from '$lib/intro/gate';
 	import PromptSheet from '$lib/ui/onboarding/v2/PromptSheet.svelte';
+	import PageHandoffSheet from '$lib/signing/ui/PageHandoffSheet.svelte';
+	import { SIGNING_SURFACE } from '$lib/signing/surface';
+	import { harnessSigningPage } from '$lib/dev/harness-page';
 	import { fillTemplate } from '$lib/i18n/fill';
 	import { SUPPORTED_LOCALES, FALLBACK_LOCALE } from '$lib/i18n/locales';
 	import { SITE_ORIGIN } from '$lib/site';
@@ -224,13 +227,18 @@
 					}
 				});
 				login.start({ type: 'start' });
+				// R8: where this build runs — in the Safari package the sign-in
+				// and its proofs run on the signing page.
+				login.dispatch({ type: 'surface_known', surface: SIGNING_SURFACE });
 			}
 			signInMethod = method;
 			signInOpen = true;
 			track('sign_in_started', { method: analyticsMethod(method) });
-			// `page: null` — in the app. The web offers no "Sign in on my own
-			// signing page" (spec 102): it opens no page (owner, 2026-09-23).
-			login.dispatch({ type: 'sign_in', method, page: null });
+			// `page: null` — no page chosen: in the app, or, where this build's
+			// pages cannot use a passkey (the Safari package, R8), on the
+			// official signing page, which the core names itself.
+			// (The device harness's loopback page, development package only.)
+			login.dispatch({ type: 'sign_in', method, page: harnessSigningPage() });
 		} finally {
 			// Handed over to `loginView.busy` — or released, if the core never
 			// came up, so the button can be pressed again.
@@ -411,8 +419,16 @@
 	</BottomSheet>
 {/if}
 
-<!-- Spec 075: signing in can run on the Trusted Signer's page — here is where
-     the person is asked where it is, and where they compare the code. -->
+<!-- Spec 102 R3/R8: a sign-in the core sends to the signing page (every one in
+     the Safari package, whose pages cannot use a getvela.app passkey) — the
+     hand-off card, under the ceremony's own title. -->
+<PageHandoffSheet
+	m={data.handoff}
+	{locale}
+	wide={false}
+	closeLabel={strings('common.cancel')}
+	kind="ceremony"
+/>
 
 {#if pending}
 	<PromptSheet

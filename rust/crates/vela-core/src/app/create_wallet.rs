@@ -153,6 +153,19 @@ pub enum Event {
         #[serde(default)]
         url: Option<String>,
     },
+    /// Spec 102 R8: where this shell runs, said once before the first key.
+    /// On a surface whose own pages cannot use a `getvela.app` passkey (the
+    /// Safari Web Extension) every ceremony of this wallet — each key made,
+    /// each key's membership confirmed — runs on a page: the one chosen
+    /// with [`Event::SigningPageChosen`], else the official page
+    /// ([`crate::signing_venue::ceremony_page_on`]). A shell that never says
+    /// it is [`SigningSurface::Standard`](crate::signing_venue::SigningSurface),
+    /// exactly as before. Ignored once a key exists: the set's keys are all
+    /// made in one place.
+    SurfaceKnown {
+        #[serde(default)]
+        surface: crate::signing_venue::SigningSurface,
+    },
     /// Drop a not-yet-published draft key. Index 0 (the wallet's pinned first
     /// key) is only removable via `StartOver`.
     RemoveKey {
@@ -386,6 +399,8 @@ pub struct Model {
     /// Spec 102: the signing page the person chose to create this wallet on
     /// ("Use my own signing page"), normalised. `None`: the app.
     signing_page: Option<String>,
+    /// Spec 102 R8: where this shell runs ([`Event::SurfaceKnown`]).
+    surface: crate::signing_venue::SigningSurface,
     /// Founding-order draft keys; `drafts[0]` is the pinned first key.
     drafts: Vec<Draft>,
     /// The label of the registration currently in flight, claimed by the
@@ -596,6 +611,12 @@ impl App for CreateWallet {
             Event::Submit => submit(model),
             Event::AddKey { name, method } => add_key(model, name, method),
             Event::SigningPageChosen { url } => choose_page(model, url),
+            Event::SurfaceKnown { surface } => {
+                if !model.stage.is_busy() && model.drafts.is_empty() {
+                    model.surface = surface;
+                }
+                Command::done()
+            }
             Event::RemoveKey { index } => remove_key(model, index),
             Event::KeyNameChanged { index, name } => key_name_changed(model, index, name),
             Event::ConfirmKey { index } => confirm_key(model, index),
@@ -850,7 +871,7 @@ fn add_key(model: &mut Model, label: String, method: KeyMethod) -> Command<Effec
         .iter()
         .map(|draft| draft.credential_id.clone())
         .collect();
-    let page = crate::signing_venue::ceremony_page(model.signing_page.as_deref());
+    let page = ceremony_page(model);
     request(
         model,
         ShellOperation::RegisterPasskey {
@@ -956,9 +977,16 @@ fn begin_sign_member(model: &mut Model, index: usize) -> Command<Effect, Event> 
             // return to the same authenticator.
             method: draft.method,
             group_public_key_hex,
-            page: crate::signing_venue::ceremony_page(model.signing_page.as_deref()),
+            page: ceremony_page(model),
         },
     )
+}
+
+/// R3 on this shell's surface (R8): where this wallet's ceremonies run — the
+/// app, the chosen page on a custom domain, or, on a surface whose pages
+/// cannot use a `getvela.app` passkey, always a page.
+fn ceremony_page(model: &Model) -> Option<String> {
+    crate::signing_venue::ceremony_page_on(model.signing_page.as_deref(), model.surface)
 }
 
 /// Retry a drafted key's membership confirmation (its row's own recovery).
@@ -1100,10 +1128,10 @@ fn pending_publish(model: &Model, prepared: &Prepared) -> Result<PendingPublish,
         group_seed_hex: model.group_seed_hex.clone().unwrap_or_default(),
         group_public_key_hex: model.group_public_key_hex.clone().unwrap_or_default(),
         // The unit is filed under the domain its keys were minted for.
-        page: prepared
-            .signing_venue
-            .page_url()
-            .and_then(|url| crate::signing_venue::ceremony_page(Some(url))),
+        page: crate::signing_venue::ceremony_page_on(
+            prepared.signing_venue.page_url(),
+            model.surface,
+        ),
     })
 }
 

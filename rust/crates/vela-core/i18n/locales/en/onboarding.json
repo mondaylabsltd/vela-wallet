@@ -130,6 +130,7 @@
       "copied": "Copied",
       "close": "Close",
       "siteAccessBody": "Vela's site access is limited. Choose Allow access at the top, then try again.",
+      "safariPasskeyBody": "Safari doesn't let an extension's own pages use a passkey, so Vela does this on its signing page. Try again.",
       "phoneLinkFailed": "Your other device didn't connect, or the link dropped. Keep both devices online and nearby, then scan again.",
       "keyUnavailableTitle": "Security key unavailable",
       "keyUnavailableBody": "This device couldn't use the security key. Try another FIDO2 key, or another way to continue."

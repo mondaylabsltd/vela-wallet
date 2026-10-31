@@ -60,6 +60,13 @@ export interface HandoffMessages {
 	/** "Review and sign on a trusted signing page". */
 	title: string;
 	/**
+	 * A key ceremony's card title, by the corpus key the core names
+	 * (`trusted_signer::ceremony::Ceremony::title_key`): "Create a key on the
+	 * signing page", "Sign in on the signing page", "Confirm with the key on
+	 * the signing page". Absent where no ceremony is drawn.
+	 */
+	ceremonies?: Record<string, string>;
+	/**
 	 * The key row's label, by the corpus key a `KeyLabel` names (`label_key`):
 	 * 「确认方式」 / "Confirm with" — and 「新钥匙存在」 / "New key on" while a
 	 * ceremony makes the key. The signing page's own row labels.

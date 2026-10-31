@@ -91,6 +91,12 @@
    "pageProtects": "Trang ký tự đọc yêu cầu và ký đúng những gì nó hiển thị cho bạn, nên một giao diện Vela bị sửa đổi không thể lừa bạn ký thứ khác.",
    "pageLimit": "Trang này không bảo vệ được bạn nếu chính ví đã bị xâm nhập: passkey của bạn ký cho {{domain}}, và mã chạy ở đó vẫn có thể trực tiếp yêu cầu chúng ký."
   },
+  "safariExtension": {
+   "title": "Bật tiện ích Safari",
+   "subtitle": "Dùng Vela trên các trang web trong Safari",
+   "body": "Trong Cài đặt, mở Safari → Tiện ích → Vela Wallet (iOS 18 trở lên: Ứng dụng → Safari → Tiện ích → Vela Wallet). Bật Cho phép tiện ích, rồi cho phép nó trên các trang web bạn dùng.",
+   "open": "Mở Cài đặt"
+  },
   "advanced": {
    "networksTitle": "Mạng lưới",
    "networksSubtitle": "URL của RPC, Explorer và Bundler",
@@ -875,6 +881,7 @@
    "copied": "Đã sao chép",
    "close": "Đóng",
    "siteAccessBody": "Quyền truy cập trang web bị giới hạn. Chọn Cho phép truy cập ở đầu trang rồi thử lại.",
+   "safariPasskeyBody": "Safari không cho trang riêng của tiện ích dùng khóa truy cập, nên Vela thực hiện bước này trên trang ký. Hãy thử lại.",
    "phoneLinkFailed": "Thiết bị kia không kết nối được, hoặc kết nối bị ngắt trước khi hoàn tất. Hãy giữ cả hai thiết bị trực tuyến và ở gần nhau, rồi quét lại mã.",
    "keyUnavailableTitle": "Không dùng được khóa bảo mật",
    "keyUnavailableBody": "Thiết bị này không dùng được khóa bảo mật. Hãy thử một khóa bảo mật FIDO2 khác, hoặc chọn cách khác để tiếp tục."

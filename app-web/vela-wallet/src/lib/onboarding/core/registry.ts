@@ -432,6 +432,32 @@ export async function probeHealth(): Promise<boolean> {
 	}
 }
 
+/**
+ * The registry deployment a member proof is bound to — `/api/health`'s
+ * `chainId` and `domainRegistry` — for a member proof signed on a page (spec
+ * 075, 102 R3/R8). The page computes the challenge from these and reaches no
+ * network itself (076), and the core refuses an answer over any challenge but
+ * the one this shell fetched, so a lie about either is a refusal, never a
+ * signature. `null` when the registry does not say.
+ */
+export async function deployment(): Promise<{ chainId: number; contract: string } | null> {
+	try {
+		const health = await request<{ chainId?: unknown; domainRegistry?: unknown }>(
+			`/api/health?_t=${Date.now()}`,
+			{},
+			READ_TIMEOUT_MS,
+			'Health'
+		);
+		const chainId = Number(health.chainId);
+		const contract = typeof health.domainRegistry === 'string' ? health.domainRegistry : '';
+		if (!Number.isSafeInteger(chainId) || chainId <= 0) return null;
+		if (!/^0x[0-9a-fA-F]{40}$/.test(contract)) return null;
+		return { chainId, contract };
+	} catch {
+		return null;
+	}
+}
+
 /** The v1 index's display name for a credential — the only place a v1-era
  *  wallet's name survives. Best-effort and read-only; a lost name degrades the
  *  label, never the flow. */

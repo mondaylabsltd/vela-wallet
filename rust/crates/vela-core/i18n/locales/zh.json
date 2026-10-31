@@ -91,6 +91,12 @@
       "pageProtects": "签名页自己读取请求，显示什么就签什么——即使 Vela 的界面被篡改，也骗不了你签别的东西。",
       "pageLimit": "如果钱包本身被完全攻破，它就保护不了你：你的通行密钥为 {{domain}} 签名，在那里运行的代码仍然可以直接向它们要签名。"
     },
+    "safariExtension": {
+      "title": "打开 Safari 扩展",
+      "subtitle": "在 Safari 的网站上使用 Vela",
+      "body": "在「设置」中打开 Safari → 扩展 → Vela Wallet（iOS 18 及更高版本：App → Safari → 扩展 → Vela Wallet）。打开「允许扩展」，再允许它在你使用的网站上运行。",
+      "open": "打开设置"
+    },
     "advanced": {
       "networksTitle": "网络",
       "networksSubtitle": "RPC、区块浏览器与打包器地址",

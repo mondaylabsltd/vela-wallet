@@ -130,6 +130,7 @@
       "copied": "Kopyalandı",
       "close": "Kapat",
       "siteAccessBody": "Vela'nın site erişimi sınırlı. Üstteki Erişime izin ver'i seçip tekrar deneyin.",
+      "safariPasskeyBody": "Safari, bir uzantının kendi sayfalarının geçiş anahtarı kullanmasına izin vermiyor; bu yüzden Vela bunu imzalama sayfasında yapıyor. Tekrar deneyin.",
       "phoneLinkFailed": "Diğer cihazınız bağlanamadı ya da bağlantı tamamlanmadan koptu. İki cihazı da çevrimiçi ve birbirine yakın tutun, ardından kodu yeniden tarayın.",
       "keyUnavailableTitle": "Güvenlik anahtarı kullanılamıyor",
       "keyUnavailableBody": "Bu cihaz güvenlik anahtarını kullanamadı. Başka bir FIDO2 güvenlik anahtarı deneyin ya da devam etmek için başka bir yol seçin."

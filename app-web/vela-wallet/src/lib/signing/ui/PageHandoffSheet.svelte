@@ -2,10 +2,12 @@
 	/**
 	 * A signature handed to the account's trusted signing page: the hand-off
 	 * card the apps draw (spec 102 D4, `HandoffCard`), over the sheet that
-	 * asked. Two hosts draw it, each its own `kind`: the signing host for a
+	 * asked. Three hosts draw it, each its own `kind`: the signing host for a
 	 * transaction, a batch, the wallet's own send or a message (the page,
 	 * everywhere — owner, 2026-10-30), the multisig host for a member's
-	 * approval (2026-10-29).
+	 * approval (2026-10-29), and onboarding for a key ceremony — creating a
+	 * key, signing in, a proof — under the ceremony's own title (spec 102 R8:
+	 * every one of them in the Safari package).
 	 *
 	 * Deliberately not a preview: the page reads the request itself and is the
 	 * authority. The card says that it is reviewed there, which key confirms
@@ -67,6 +69,11 @@
 		);
 	}
 
+	/** A ceremony's own title (nothing to review there), else the signature card's. */
+	const title = $derived(
+		handoff?.titleKey ? (m.ceremonies?.[handoff.titleKey] ?? m.title) : m.title
+	);
+
 	const model = $derived.by((): HandoffModel | null => {
 		const h = handoff;
 		if (h === null) return null;
@@ -78,7 +85,7 @@
 		) ?? { text: '', tone: 'checking' as const };
 		const key = h.keyLabel;
 		return {
-			title: m.title,
+			title,
 			key: {
 				label: key ? (m.keyLabels[key.label_key] ?? '') : '',
 				value: key ? (key.name ?? m.places[key.place_key] ?? '') : h.member
@@ -101,7 +108,7 @@
 {/snippet}
 
 {#if handoff !== null && model !== null}
-	{#if handoff.kind === 'signature'}
+	{#if handoff.kind === 'signature' || handoff.kind === 'ceremony'}
 		<!--
 			Over the signing sheet, which is fixed above the page (the `signing`
 			layer): the `prompt` layer, after it, is above it on every width. Only
@@ -109,7 +116,7 @@
 			scrim must not.
 		-->
 		<BottomSheet
-			title={m.title}
+			{title}
 			{closeLabel}
 			variant="prompt"
 			dismissible="explicit"
@@ -118,7 +125,7 @@
 			{@render card(handoff, model)}
 		</BottomSheet>
 	{:else}
-		<Sheet title={m.title} {closeLabel} {wide} onclose={() => handoff.cancel()}>
+		<Sheet {title} {closeLabel} {wide} onclose={() => handoff.cancel()}>
 			{@render card(handoff, model)}
 		</Sheet>
 	{/if}

@@ -91,6 +91,12 @@
       "pageProtects": "Uma página de assinatura lê a solicitação por conta própria e assina exatamente o que mostra, então uma tela da Vela adulterada não consegue enganar você para assinar outra coisa.",
       "pageLimit": "Ela não protege você se a própria carteira estiver comprometida: suas chaves de acesso assinam para {{domain}}, e um código rodando lá ainda poderia pedir uma assinatura a elas."
     },
+    "safariExtension": {
+      "title": "Ative a extensão do Safari",
+      "subtitle": "Use a Vela em sites no Safari",
+      "body": "Em Ajustes, abra Safari → Extensões → Vela Wallet (no iOS 18 e posteriores: Apps → Safari → Extensões → Vela Wallet). Ative Permitir Extensão e depois permita-a nos sites que você usa.",
+      "open": "Abrir Ajustes"
+    },
     "advanced": {
       "networksTitle": "Redes",
       "networksSubtitle": "URLs de RPC, Explorer e Bundler",

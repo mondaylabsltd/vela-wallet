@@ -91,13 +91,27 @@ export class PageHandoffError extends Error {
 	}
 }
 
-/** What is handed to the page: a member's approval, or any other signature. */
-export type HandoffKind = 'approval' | 'signature';
+/**
+ * What is handed to the page: a member's approval, any other signature, or a
+ * key ceremony — creating a key, signing in, a proof (spec 102 R3, R8: a
+ * custom-domain wallet's, and every one in the Safari package, whose pages
+ * cannot use a `getvela.app` passkey).
+ */
+export type HandoffKind = 'approval' | 'signature' | 'ceremony';
 
 /** The hand-off card, as the hosts draw it. */
 export interface PageHandoff {
-	/** Which host draws it: the multisig's (`approval`), or the signing sheet's (`signature`). */
+	/**
+	 * Which host draws it: the multisig's (`approval`), the signing sheet's
+	 * (`signature`), or onboarding's (`ceremony`).
+	 */
 	kind: HandoffKind;
+	/**
+	 * A ceremony's own title, by its corpus key (`trustedSignerCeremonyCard`):
+	 * "Create a key on the signing page" — there is nothing to review.
+	 * `null`: the signature card's "Review and sign on a trusted signing page".
+	 */
+	titleKey: string | null;
 	/** `checking` while the page is checked; `ready` to open; `waiting` once open; `refused` when it may not open. */
 	phase: 'checking' | 'ready' | 'waiting' | 'refused';
 	/** The page's host, and whether it is Vela's official page. */
@@ -122,7 +136,7 @@ class Handoffs {
 	 * host (the contacts page) still draws a multisig executor's signature —
 	 * its multisig host stands in.
 	 */
-	drawers = $state<Record<HandoffKind, number>>({ approval: 0, signature: 0 });
+	drawers = $state<Record<HandoffKind, number>>({ approval: 0, signature: 0, ceremony: 0 });
 }
 
 /** The hand-off on screen, if any. */
@@ -227,6 +241,8 @@ export interface HandoffInput<T> {
 	signer: string;
 	/** Which key confirms it, for the card's key row (`SigningPlan.key_label`). */
 	keyLabel?: KeyLabel | null;
+	/** A ceremony's own card title, by its corpus key. */
+	titleKey?: string | null;
 	/** The core's `{intent, context}`. */
 	request: { intent: unknown; context: unknown };
 	/** The answer as the core accepts it — throws (its code as the message) when it is not. */
@@ -258,7 +274,8 @@ export async function handOff<T>(
 		host: hostOf(input.page),
 		official,
 		member: input.signer,
-		keyLabel: input.keyLabel ?? null
+		keyLabel: input.keyLabel ?? null,
+		titleKey: input.titleKey ?? null
 	};
 	let settle: { resolve: (a: T) => void; reject: (e: unknown) => void } | null = null;
 	const done = new Promise<T>((resolve, reject) => {
@@ -374,7 +391,10 @@ export async function handOff<T>(
 		if (data.vela === 'result') {
 			let accepted: T;
 			try {
-				accepted = input.accept(data.result);
+				// A signature answers `{result: assertion}`; a key ceremony its
+				// own fields (`{registration | assertion, origin}`, PROTOCOL.md
+				// §10.3), which the core reads whole.
+				accepted = input.accept(input.kind === 'ceremony' ? data : data.result);
 			} catch (error) {
 				withdraw(
 					new PageHandoffError(

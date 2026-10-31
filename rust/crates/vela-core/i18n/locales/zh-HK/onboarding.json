@@ -130,6 +130,7 @@
       "copied": "已複製",
       "close": "關閉",
       "siteAccessBody": "網站存取權已受限制。請按頂部的「允許存取」，然後再試一次。",
+      "safariPasskeyBody": "Safari 不容許擴充功能自己的頁面使用通行密鑰，所以 Vela 改在簽署頁上完成這一步。請再試一次。",
       "phoneLinkFailed": "另一部裝置沒有連上，或連接在完成前中斷了。請讓兩部裝置保持連網並彼此靠近，然後重新掃描代碼。",
       "keyUnavailableTitle": "無法使用安全密鑰",
       "keyUnavailableBody": "此裝置無法使用這個安全密鑰。請改用另一個 FIDO2 安全密鑰，或選擇其他方法繼續。"

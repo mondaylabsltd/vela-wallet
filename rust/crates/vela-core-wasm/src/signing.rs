@@ -25,10 +25,20 @@ pub fn signing_plan(account_json: &str) -> Option<String> {
 /// `vela_multisigExecute` for a multisig executor's operation,
 /// `vela_multisigApprove` for a member's approval). `null` for a record this
 /// build cannot read or a method no venue signs (`eth_sign`) — refuse it.
+///
+/// `surface` (R8) is where this build runs: `"safari_extension"` for the
+/// Safari Web Extension, whose pages cannot use a `getvela.app` passkey — there
+/// nothing is answered `in_vela`, every kind goes to a page (the account's, or
+/// the official one). Absent or anything else: the web wallet and the Chrome
+/// extension, exactly as before.
 #[wasm_bindgen(js_name = signingRoute)]
 #[must_use]
-pub fn signing_route(account_json: &str, method: &str) -> Option<String> {
-    vela_core::app::signing_route_json(account_json, method)
+pub fn signing_route(account_json: &str, method: &str, surface: Option<String>) -> Option<String> {
+    vela_core::app::signing_route_json_on(
+        account_json,
+        method,
+        vela_core::signing_venue::SigningSurface::of_name(surface.as_deref()),
+    )
 }
 
 /// Every venue an account on `domain` could pick, as a JSON `VenueChoice[]` —

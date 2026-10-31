@@ -91,6 +91,12 @@
    "pageProtects": "Une page de signature lit elle-même la demande et signe exactement ce qu'elle vous montre : une interface Vela trafiquée ne peut donc pas vous faire signer autre chose.",
    "pageLimit": "Elle ne vous protège pas si ce portefeuille lui-même est compromis : vos clés d'accès signent pour {{domain}}, et du code qui s'y exécute pourrait encore leur demander une signature."
   },
+  "safariExtension": {
+   "title": "Activer l'extension Safari",
+   "subtitle": "Utiliser Vela sur les sites web dans Safari",
+   "body": "Dans Réglages, ouvrez Safari → Extensions → Vela Wallet (sous iOS 18 et versions ultérieures : Apps → Safari → Extensions → Vela Wallet). Activez Autoriser l'extension, puis autorisez-la sur les sites que vous utilisez.",
+   "open": "Ouvrir Réglages"
+  },
   "advanced": {
    "networksTitle": "Réseaux",
    "networksSubtitle": "URL RPC, explorateur et Bundler",
@@ -878,6 +884,7 @@
    "copied": "Copié",
    "close": "Fermer",
    "siteAccessBody": "L'accès de Vela aux sites est limité. Choisissez Autoriser l'accès en haut, puis réessayez.",
+   "safariPasskeyBody": "Safari n'autorise pas les pages d'une extension à utiliser une clé d'accès : Vela le fait donc sur sa page de signature. Réessayez.",
    "phoneLinkFailed": "Votre autre appareil ne s'est pas connecté, ou la connexion a été coupée avant la fin. Gardez les deux appareils en ligne et proches, puis scannez à nouveau le code.",
    "keyUnavailableTitle": "Clé de sécurité indisponible",
    "keyUnavailableBody": "Cet appareil n'a pas pu utiliser la clé de sécurité. Essayez une autre clé de sécurité FIDO2 ou choisissez un autre moyen de continuer."

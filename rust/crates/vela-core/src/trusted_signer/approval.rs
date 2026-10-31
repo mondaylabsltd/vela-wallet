@@ -215,8 +215,25 @@ pub fn approval_route(plan: &SigningPlan) -> ApprovalRoute {
 #[cfg(feature = "crux")]
 #[must_use]
 pub fn approval_route_json(account_json: &str) -> Option<String> {
+    approval_route_json_on(account_json, crate::signing_venue::SigningSurface::Standard)
+}
+
+/// [`approval_route_json`] on `surface` (R8): on the Safari Web Extension a
+/// member whose account signs in Vela approves on the official page — its
+/// keys are `getvela.app` keys, which no Safari extension page may use.
+#[cfg(feature = "crux")]
+#[must_use]
+pub fn approval_route_json_on(
+    account_json: &str,
+    surface: crate::signing_venue::SigningSurface,
+) -> Option<String> {
     let account: crate::app::Account = serde_json::from_str(account_json).ok()?;
-    serde_json::to_string(&approval_route(&account.signing_plan())).ok()
+    serde_json::to_string(&crate::signing_venue::signing_route_on(
+        &account.signing_plan(),
+        SignatureKind::MultisigApproval,
+        surface,
+    ))
+    .ok()
 }
 
 #[cfg(test)]

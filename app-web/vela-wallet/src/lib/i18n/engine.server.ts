@@ -469,6 +469,12 @@ export function resolveHandoffMessages(locale: Locale): HandoffMessages {
 	const table = (keys: string[]) => Object.fromEntries(keys.map((key) => [key, k(key)]));
 	return {
 		title: k('componentsUi.signing.handoffTitle'),
+		// A key ceremony's own titles (`Ceremony::title_key`, spec 102 R8).
+		ceremonies: table([
+			'componentsUi.signing.ceremonyCreate',
+			'componentsUi.signing.ceremonySignIn',
+			'componentsUi.signing.ceremonyConfirm'
+		]),
 		// The labels a `KeyLabel.label_key` can name (the core's
 		// `CONFIRM_WITH_LABEL` / `NEW_KEY_ON_LABEL`).
 		keyLabels: table([

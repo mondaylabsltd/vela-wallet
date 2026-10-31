@@ -15,6 +15,8 @@
 import { buildGroupProof, buildMemberProof, groupPublicKeyFromSeed, toHex } from './wasm-client';
 import * as Registry from './registry';
 import * as Passkey from './passkey';
+import { ceremonyOnPage } from './page-ceremony';
+import type { KeyMethod } from '../generated/KeyMethod';
 import type { RegistryProof } from '../generated/RegistryProof';
 import type { RegistryPublishMember } from '../generated/RegistryPublishMember';
 
@@ -41,11 +43,13 @@ type RegistryApiMember = {
 export type PublishArgs = {
 	rpId: string;
 	/**
-	 * Spec 102 R3: the page a member with no replayable proof would sign its
-	 * live proof on — a custom-domain wallet's. The web opens no page, so such
-	 * a member is refused here, named. `null`: the app.
+	 * Spec 102 R3/R8: the page a member with no replayable proof signs its
+	 * live proof on — a custom-domain wallet's, or every one in the Safari
+	 * package. `null`: here, on the platform's sheet.
 	 */
 	page?: string | null;
+	/** Where the key that proves live lives (the operation's `method`), for the page's hints. */
+	method?: KeyMethod;
 	/** The group's opaque metadata blob, already hex-encoded by the core. */
 	metadataHex: string;
 	/** The founding passkeys, in canonical founding order. */
@@ -128,20 +132,39 @@ export async function publish(args: PublishArgs): Promise<string | null> {
 			if (!derived) {
 				throw new Error(`registry challenge is missing member ${member.public_key_hex}`);
 			}
-			// Spec 102 R3: a custom-domain wallet's member proves itself on its
-			// page, and the web opens none (owner, 2026-09-23). No platform sheet
-			// can see that key — asking the OS would find nothing, and signing
-			// with the wallet's own rpId would produce an assertion the registry
-			// can never verify. So it stops here, named.
+			// Spec 102 R3/R8: a member whose key lives behind a page proves
+			// itself there — no platform sheet can see that key, and signing
+			// with the wallet's own rpId would make an assertion the registry
+			// can never verify. The page computes this member's challenge
+			// itself; the core takes its answer only over the one fetched here.
 			if (args.page) {
-				throw new Error(`this key proves itself on ${args.page}, which only the Vela app can open`);
+				const answer = await ceremonyOnPage(
+					{
+						type: 'sign_member_proof',
+						credential_id: member.credential_id,
+						public_key_hex: member.public_key_hex,
+						attestation_hex: member.attestation_hex,
+						transports: member.transports,
+						method: args.method ?? 'platform',
+						group_public_key_hex: groupPublicKey,
+						page: args.page
+					},
+					{ walletName: '', memberChallengeHex: stripHex(derived.challenge) }
+				);
+				if (answer.type !== 'asserted') throw new Error('the page did not sign');
+				proof = buildMemberProof(
+					answer.assertion.authenticator_data_hex,
+					answer.assertion.client_data_json_hex,
+					answer.assertion.signature_der_hex
+				) as RegistryProof;
+			} else {
+				const assertion = await Passkey.sign(stripHex(derived.challenge), member.credential_id);
+				proof = buildMemberProof(
+					assertion.authenticatorDataHex,
+					assertion.clientDataJSONHex,
+					assertion.signatureHex
+				) as RegistryProof;
 			}
-			const assertion = await Passkey.sign(stripHex(derived.challenge), member.credential_id);
-			proof = buildMemberProof(
-				assertion.authenticatorDataHex,
-				assertion.clientDataJSONHex,
-				assertion.signatureHex
-			) as RegistryProof;
 		}
 		proven.push({
 			publicKey: member.public_key_hex,

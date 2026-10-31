@@ -156,6 +156,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     // R7 (2026-10-30): where each signature goes (`signingRoute`).
     vela_core::signing_venue::SigningRoute::export_all(&config)?;
     vela_core::signing_venue::SignatureKind::export_all(&config)?;
+    // R8: where this build runs (`signingRoute`'s `surface`).
+    vela_core::signing_venue::SigningSurface::export_all(&config)?;
     vela_core::trusted_signer::launch::IntegrityLine::export_all(&config)?;
     GuardEvent::export_all(&config)?;
     GuardOperation::export_all(&config)?;

@@ -23,6 +23,7 @@ export * from './RegistryUnitMember';
 export * from './ShellOperation';
 export * from './ShellResult';
 export * from './SignInKey';
+export * from './SigningSurface';
 export * from './SigningVenue';
 export * from './StatusKey';
 export * from './SubmitLabel';

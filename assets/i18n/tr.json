@@ -91,6 +91,12 @@
    "pageProtects": "İmza sayfası isteği kendisi okur ve size tam olarak gösterdiğini imzalar; bu yüzden kurcalanmış bir Vela ekranı sizi başka bir şeyi imzalamaya kandıramaz.",
    "pageLimit": "Cüzdanın kendisi ele geçirildiyse sizi koruyamaz: geçiş anahtarlarınız {{domain}} için imza atar ve orada çalışan kod yine de doğrudan onlardan imza isteyebilir."
   },
+  "safariExtension": {
+   "title": "Safari uzantısını aç",
+   "subtitle": "Vela'yı Safari'deki web sitelerinde kullan",
+   "body": "Ayarlar'da Safari → Uzantılar → Vela Wallet'ı açın (iOS 18 ve sonrası: Uygulamalar → Safari → Uzantılar → Vela Wallet). Uzantıya İzin Ver'i açın, ardından kullandığınız web sitelerinde izin verin.",
+   "open": "Ayarlar'ı Aç"
+  },
   "advanced": {
    "networksTitle": "Ağlar",
    "networksSubtitle": "RPC, Gezgin ve Bundler URL'leri",
@@ -875,6 +881,7 @@
    "copied": "Kopyalandı",
    "close": "Kapat",
    "siteAccessBody": "Vela'nın site erişimi sınırlı. Üstteki Erişime izin ver'i seçip tekrar deneyin.",
+   "safariPasskeyBody": "Safari, bir uzantının kendi sayfalarının geçiş anahtarı kullanmasına izin vermiyor; bu yüzden Vela bunu imzalama sayfasında yapıyor. Tekrar deneyin.",
    "phoneLinkFailed": "Diğer cihazınız bağlanamadı ya da bağlantı tamamlanmadan koptu. İki cihazı da çevrimiçi ve birbirine yakın tutun, ardından kodu yeniden tarayın.",
    "keyUnavailableTitle": "Güvenlik anahtarı kullanılamıyor",
    "keyUnavailableBody": "Bu cihaz güvenlik anahtarını kullanamadı. Başka bir FIDO2 güvenlik anahtarı deneyin ya da devam etmek için başka bir yol seçin."

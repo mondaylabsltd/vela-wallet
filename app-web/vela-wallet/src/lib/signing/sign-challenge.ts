@@ -245,6 +245,11 @@ async function signOnPage(
 	// An approval is the multisig's to hand over (it carries the SafeTx); an
 	// operation the page cannot see is not signed behind it.
 	if (method === 'vela_multisigApprove') throw new PageSignFailedError('unsupported', method);
+	// A multisig's owner proof is a key ceremony (R3) the page has no card
+	// for yet: on a surface that sends every ceremony to the page (the Safari
+	// package, R8) it is refused, said as that — never signed in Vela behind
+	// the rule, which is where WebKit would refuse it anyway.
+	if (method === 'vela_multisigCreate') throw new PageSignFailedError('unsupported', method);
 	if (OPERATION_METHODS.has(method) && operation === undefined) {
 		throw new PageSignFailedError('unsupported', 'no operation');
 	}

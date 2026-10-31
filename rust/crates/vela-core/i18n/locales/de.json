@@ -91,6 +91,12 @@
       "pageProtects": "Eine Signaturseite liest die Anfrage selbst und signiert genau das, was sie Ihnen zeigt – eine manipulierte Vela-Oberfläche kann Sie also nicht dazu bringen, etwas anderes zu signieren.",
       "pageLimit": "Sie schützt Sie nicht, wenn diese Wallet selbst kompromittiert ist: Ihre Passkeys signieren für {{domain}}, und Code, der dort läuft, könnte sie trotzdem direkt um eine Signatur bitten."
     },
+    "safariExtension": {
+      "title": "Safari-Erweiterung aktivieren",
+      "subtitle": "Vela auf Websites in Safari nutzen",
+      "body": "Öffne in den Einstellungen Safari → Erweiterungen → Vela Wallet (ab iOS 18: Apps → Safari → Erweiterungen → Vela Wallet). Aktiviere „Erweiterung erlauben“ und erlaube sie auf den Websites, die du nutzt.",
+      "open": "Einstellungen öffnen"
+    },
     "advanced": {
       "networksTitle": "Netzwerke",
       "networksSubtitle": "RPC-, Explorer- & Bundler-URLs",

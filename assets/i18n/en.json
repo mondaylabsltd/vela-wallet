@@ -91,6 +91,12 @@
    "pageProtects": "A signing page reads the request itself and signs exactly what it shows you, so a tampered Vela screen can't trick you into signing something else.",
    "pageLimit": "It can't protect you if this wallet itself is compromised: your passkeys sign for {{domain}}, and code running there could still ask them for a signature."
   },
+  "safariExtension": {
+   "title": "Turn on the Safari extension",
+   "subtitle": "Use Vela on websites in Safari",
+   "body": "In Settings, open Safari → Extensions → Vela Wallet (on iOS 18 and later: Apps → Safari → Extensions → Vela Wallet). Turn on Allow Extension, then allow it on the websites you use.",
+   "open": "Open Settings"
+  },
   "advanced": {
    "networksTitle": "Networks",
    "networksSubtitle": "RPC, Explorer & Bundler URLs",
@@ -875,6 +881,7 @@
    "copied": "Copied",
    "close": "Close",
    "siteAccessBody": "Vela's site access is limited. Choose Allow access at the top, then try again.",
+   "safariPasskeyBody": "Safari doesn't let an extension's own pages use a passkey, so Vela does this on its signing page. Try again.",
    "phoneLinkFailed": "Your other device didn't connect, or the link dropped. Keep both devices online and nearby, then scan again.",
    "keyUnavailableTitle": "Security key unavailable",
    "keyUnavailableBody": "This device couldn't use the security key. Try another FIDO2 key, or another way to continue."
