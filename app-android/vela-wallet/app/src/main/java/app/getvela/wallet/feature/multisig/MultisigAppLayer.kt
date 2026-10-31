@@ -14,6 +14,12 @@ import app.getvela.wallet.feature.multisig.core.MultisigSheet
 import app.getvela.wallet.feature.multisig.core.ev
 import app.getvela.wallet.feature.onboarding.core.SessionRoute
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.platform.testTag
+import androidx.compose.runtime.setValue
+import app.getvela.wallet.feature.multisig.core.get
+import app.getvela.wallet.feature.multisig.core.int
+import app.getvela.wallet.feature.multisig.core.str
 
 /**
  * The multisig, as one layer over the signed-in app (native multisig M1–M6):
@@ -55,6 +61,11 @@ fun MultisigAppLayer(
         hub.appActive(true)
         onPauseOrDispose { hub.appActive(false) }
     }
+    // r8-8: a transaction link opened on a device with no Vela account — most
+    // often an outside member's phone. Kept for an account made later, AND
+    // said at once with the way an outside member signs (the connect page,
+    // where its wallet is) — never a silent Welcome.
+    var waitingConnect by remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
     // A link that reached the app: the accounts machine's one link flow.
     LaunchedEffect(pendingLink, route) {
         val hash = pendingLink ?: return@LaunchedEffect
@@ -65,6 +76,8 @@ fun MultisigAppLayer(
                 hub.boot()
                 hub.send(ev("keep_link", "hash" to hash))
                 VelaLog.event("multisig.link", "kept until there is an account")
+                // The core's reading of the link: a transaction's is the outside way in.
+                waitingConnect = waitingConnectLink(hash, MultisigWiring.connectPage(container))
             }
             SessionRoute.Wallet -> {
                 hub.boot()
@@ -119,6 +132,18 @@ fun MultisigAppLayer(
     }
     // The link flow's own outcomes: a member's transaction opens as its sheet
     // (the router's `open_proposal`); an invite is the add sheet (Link).
+    if (route == SessionRoute.Onboarding) {
+        waitingConnect?.let { link ->
+            MultisigWaitingLinkSheet(
+                words = MultisigWiring.words(container, hub),
+                link = link,
+                onOpen = { container.trustedSignerTab?.open(link) ?: false },
+                onClose = { waitingConnect = null },
+            )
+        }
+    } else if (waitingConnect != null && route == SessionRoute.Wallet) {
+        waitingConnect = null
+    }
     if (route != SessionRoute.Wallet) return
 
     val words = MultisigWiring.words(container, hub)
@@ -145,3 +170,46 @@ fun MultisigAppLayer(
 }
 
 private val ADDRESS = Regex("^0x[0-9a-fA-F]{40}$")
+
+/**
+ * r8-8: the connect page for a transaction link opened where there is no
+ * Vela account — the core reads the link (`parseProposalLink`) and writes
+ * the page's address (`connectLink`, the transaction in its fragment, which
+ * the page reads, reviews and signs from alone). `null`: not a transaction
+ * link (an invite needs an account to add it: Welcome, the link kept).
+ */
+internal fun waitingConnectLink(hash: String, connectPage: String): String? {
+    val tx = app.getvela.wallet.feature.multisig.core.MsRules.call("parseProposalLink", mapOf("hash" to hash)) ?: return null
+    val chainId = tx["chainId"].int ?: return null
+    val multisig = tx["multisig"].str ?: return null
+    val safeTxHash = tx["safeTxHash"].str ?: return null
+    return app.getvela.wallet.feature.multisig.core.MsRules.connectLink(connectPage, null, emptyList(), Triple(chainId, multisig, safeTxHash))
+}
+
+/**
+ * r8-8: a multisig transaction's link reached a device with no Vela account.
+ * An outside member approves where its wallet is: the connect page, opened
+ * in that browser or scanned with the wallet app — said here, with the link
+ * and its code, over Welcome (where the link also waits for an account).
+ */
+@Composable
+fun MultisigWaitingLinkSheet(words: MultisigWords, link: String, onOpen: () -> Boolean, onClose: () -> Unit) {
+    val colors = app.getvela.wallet.core.designsystem.theme.VelaTheme.colors
+    MsSheet(words.t("external.sheetTitle"), words.raw("common.done"), onClose = onClose, tag = "multisig.waitingLink") {
+        MsNote(words.t("external.outsideLinkHint"))
+        MsNote(words.t("external.scanBody"))
+        app.getvela.wallet.feature.flows.components.QrCard(
+            label = words.t("external.sheetTitle"),
+            payload = link,
+            modifier = androidx.compose.ui.Modifier.testTag("multisig.waitingLink.qr"),
+        )
+        MsText(link, MsType.Mono, androidx.compose.ui.Modifier.testTag("multisig.waitingLink.link"), color = colors.fgMuted, maxLines = 4)
+        ShareRow(words, link, "multisig.waitingLink")
+        app.getvela.wallet.core.designsystem.components.VelaSecondaryButton(
+            text = words.t("external.signWithWallet"),
+            onClick = { onOpen() },
+            modifier = androidx.compose.ui.Modifier.fillMaxWidth().testTag("multisig.waitingLink.open"),
+        )
+        MsNote(words.t("external.linkLater"))
+    }
+}
