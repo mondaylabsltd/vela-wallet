@@ -726,3 +726,134 @@ fn moved_facts_are_told_once() {
     let again = sim.machines.facts(facts);
     assert!(again.is_empty(), "nothing moved, nothing said");
 }
+
+/// M3: a member change is composed in the members machine (Settings → Add
+/// member) against the network's members as its chain holds them, and the
+/// plan's proposal for that network goes through the one propose path the
+/// host serves every screen with (`propose::start` / `propose::follow`, the
+/// send flow's too): its draft's review first — which says the rule it
+/// meets and the one it leaves, "Approvals: 2 of 3 → 2 of 4" — then the
+/// person's word, one passkey, the mailbox.
+#[test]
+fn a_member_change_composed_in_settings_is_proposed_through_its_review() {
+    use super::member_words;
+    use super::propose::{self, Proposed, Step};
+    use vela_core::app::multisig_members::{Compose, Event as MembersEvent, NetworkState};
+    use vela_core::multisig_reading::MemberChanges;
+
+    let mut sim = booted(&[0, 1]);
+    let address = created(&mut sim);
+    let owners: Vec<String> = (0..3).map(|i| fixture(i).address).collect();
+    sim.world().deploy(
+        100,
+        &address,
+        DeployedSafe::clean(&owners.iter().map(String::as_str).collect::<Vec<_>>(), 2),
+    );
+    let account = sim.machines.active().cloned().unwrap();
+    let jobs = sim.machines.show_members(&account, vec![100]);
+    sim.run(jobs);
+    assert!(
+        matches!(
+            sim.machines.members_view.networks[0].state,
+            NetworkState::Deployed { .. }
+        ),
+        "{:?}",
+        sim.machines.members_view.networks
+    );
+
+    // Add member: an outside wallet's address, typed and read.
+    let (_, dana) = multisig_world::eoa(7);
+    for event in [
+        MembersEvent::Compose {
+            compose: Some(Compose::Add),
+        },
+        MembersEvent::Entry { text: dana.clone() },
+        MembersEvent::ReadEntry,
+        MembersEvent::EntryName {
+            name: "Dana".to_owned(),
+        },
+    ] {
+        let jobs = sim.machines.members(event);
+        sim.run(jobs);
+    }
+    let view = sim.machines.members_view.clone();
+    assert!(view.can_propose, "{:?}", view.plan);
+    let plan = view.plan.clone().unwrap();
+    let loc = crate::loc::Loc::for_tag("en");
+    let (line, refused) = member_words::plan_line(&loc, &plan.networks[0], "Gnosis");
+    assert_eq!((line.as_str(), refused), ("Gnosis: 2 of 3 → 2 of 4", false));
+
+    // Propose: the members machine keeps the new member's name; each
+    // network's proposal goes to the proposals machine as it is.
+    let jobs = sim.machines.members(MembersEvent::Proposing);
+    sim.run(jobs);
+    let ready: Vec<_> = plan
+        .networks
+        .iter()
+        .filter_map(|n| n.proposal.clone().map(|p| (n.chain_id, p)))
+        .collect();
+    assert_eq!(ready.len(), 1);
+    for (chain_id, proposal) in ready {
+        let mut step = Step::Drafting;
+        let jobs = propose::start(&mut sim.machines, chain_id, &address, proposal);
+        sim.run(jobs);
+        assert_eq!(propose::follow(&mut step, &sim.machines.proposals_view), None);
+        assert_eq!(step, Step::Reviewing, "its review comes first");
+        let draft = sim.machines.proposals_view.draft.clone().unwrap();
+        let review = draft.review.clone().expect("the one review");
+        let changes: MemberChanges =
+            serde_json::from_value(review["memberChanges"].clone()).expect("member changes");
+        let lines = member_words::change_lines(&loc, &changes, "Gnosis", &|a: &str| a.to_owned());
+        assert_eq!(lines.rule, "Approvals: 2 of 3 → 2 of 4");
+        assert!(changes.fits);
+        sim.proposals(ProposalsEvent::ConfirmDraft { as_member: None });
+        let end = propose::follow(&mut step, &sim.machines.proposals_view);
+        assert!(matches!(end, Some(Proposed::Done { .. })), "{end:?}");
+    }
+    assert_eq!(sim.world().mailbox.len(), 1, "in the mailbox");
+    // The name typed for the new member is kept with the multisig here.
+    let row = sim.machines.accounts_view.accounts[0].clone();
+    let kept = row
+        .account
+        .members
+        .unwrap_or_default()
+        .into_iter()
+        .find(|(a, _)| a.eq_ignore_ascii_case(&dana))
+        .and_then(|(_, info)| info.name);
+    assert_eq!(kept.as_deref(), Some("Dana"));
+}
+
+/// M1: the shared name is renamed by a transaction of the multisig itself,
+/// through the same review-first path: withdrawn on its review, nothing is
+/// signed or sent.
+#[test]
+fn a_rename_withdrawn_on_its_review_signs_nothing() {
+    use super::propose::{self, Step};
+
+    let mut sim = booted(&[0, 1]);
+    let address = created(&mut sim);
+    let owners: Vec<String> = (0..3).map(|i| fixture(i).address).collect();
+    sim.world().deploy(
+        100,
+        &address,
+        DeployedSafe::clean(&owners.iter().map(String::as_str).collect::<Vec<_>>(), 2),
+    );
+    let mut step = Step::Drafting;
+    let jobs = propose::start(
+        &mut sim.machines,
+        100,
+        &address,
+        ProposalKind::Rename {
+            name: "Still Water".to_owned(),
+        },
+    );
+    sim.run(jobs);
+    assert_eq!(propose::follow(&mut step, &sim.machines.proposals_view), None);
+    assert_eq!(step, Step::Reviewing, "{:?}", sim.machines.proposals_view.actions);
+    let passkeys = sim.world().passkeys.len();
+    sim.proposals(ProposalsEvent::Withdraw);
+    let end = propose::follow(&mut step, &sim.machines.proposals_view);
+    assert!(end.is_some_and(|e| e.declined()));
+    assert_eq!(sim.world().passkeys.len(), passkeys, "nothing signed");
+    assert!(sim.world().mailbox.is_empty(), "nothing sent");
+}
