@@ -73,8 +73,9 @@ pub struct MultisigHost {
     checked: bool,
     /// Bumped by every change the screens draw: a cheap "did it move".
     pub generation: u64,
-    /// The send flow's confirm, proposing through the proposals machine.
-    send_propose: Option<SendPropose>,
+    /// A proposal on its way through the proposals machine, review first
+    /// (the send flow's confirm, Settings' rename and member changes).
+    send_propose: Option<Proposing>,
     /// The PeerConnect transport (its Retry; leaving every room).
     peer: Option<Arc<super::peer::PeerRooms>>,
     /// M6: what the views said at the last look, for the notifications.
@@ -84,30 +85,15 @@ pub struct MultisigHost {
     others_since: Option<f64>,
 }
 
-/// How a send flow's proposal ended (its `Proposed` / `ProposeFailed`).
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ProposeEnd {
-    Proposed { safe_tx_hash: String },
-    Failed {
-        cancelled: bool,
-        reason: Option<vela_core::app::send::SendProposeFailure>,
-    },
-}
+/// How a send flow's proposal ended (its `Proposed` / `ProposeFailed`),
+/// and how any proposal did.
+pub use super::propose::{ProposeEnd, Proposed};
 
-/// Where the send flow's proposal stands (the web's `proposalsHost.propose`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum ProposeStep {
-    /// Asked for its draft: its review comes first.
-    Drafting,
-    /// Its review is on screen: the person's word next.
-    Reviewing,
-    /// Confirmed: the passkey (or an outside wallet), then the mailbox.
-    Confirmed,
-}
-
-struct SendPropose {
-    step: ProposeStep,
-    reply: futures::channel::oneshot::Sender<ProposeEnd>,
+/// The one proposal being made (the web's `proposalsHost.propose`): where it
+/// stands, and who hears how it ended.
+struct Proposing {
+    step: super::propose::Step,
+    reply: Box<dyn FnOnce(Proposed)>,
 }
 
 #[derive(Default)]
@@ -626,7 +612,7 @@ impl MultisigHost {
         super::shown::set(shown, cx);
     }
 
-    // -- the send flow's confirm (`ProposeSafeTx`) ----------------------------
+    // -- proposing, review first (`ProposeSafeTx`, Settings) -----------------
 
     /// Propose `transfers` on `chain_id` for the multisig shown, as the send
     /// flow's confirm (§3.6): its review first — drawn by the screen while
@@ -640,48 +626,69 @@ impl MultisigHost {
         cx: &mut Context<Self>,
     ) -> futures::channel::oneshot::Receiver<ProposeEnd> {
         let (reply, answer) = futures::channel::oneshot::channel();
-        // One at a time: an earlier one nobody finished is withdrawn.
-        if let Some(earlier) = self.send_propose.take() {
-            let _ = earlier.reply.send(ProposeEnd::Failed {
-                cancelled: true,
-                reason: None,
-            });
-        }
-        let followed = self
-            .machines
-            .proposals_view
-            .followed
-            .as_deref()
-            .is_some_and(|f| f.eq_ignore_ascii_case(multisig));
-        let mut jobs = Vec::new();
-        if !followed {
-            let account = self
-                .machines
-                .accounts_view
-                .accounts
-                .iter()
-                .find(|row| row.account.address.eq_ignore_ascii_case(multisig))
-                .map(|row| row.account.clone());
-            jobs.extend(self.machines.proposals(proposals::Event::Follow { account }));
-        }
-        self.send_propose = Some(SendPropose {
-            step: ProposeStep::Drafting,
-            reply,
-        });
-        jobs.extend(self.machines.proposals(proposals::Event::Draft {
+        self.begin_propose(
             chain_id,
-            proposal: proposals::ProposalKind::Transfers { transfers },
-        }));
-        self.run(jobs, cx);
+            multisig,
+            proposals::ProposalKind::Transfers { transfers },
+            Box::new(move |end| {
+                let _ = reply.send(super::propose::send_end(&end));
+            }),
+            cx,
+        );
         answer
     }
 
-    /// The send flow's proposal is on its review: the screen draws the draft.
+    /// Propose `proposal` on `chain_id` for `multisig` the same way (the
+    /// web's `proposalsHost.propose(.., { review: true })`): Settings'
+    /// rename, each network's member change. Its review is drawn by the same
+    /// dialog the send flow's is; answered once, with how it ended.
+    pub fn propose(
+        &mut self,
+        chain_id: u64,
+        multisig: &str,
+        proposal: proposals::ProposalKind,
+        cx: &mut Context<Self>,
+    ) -> futures::channel::oneshot::Receiver<Proposed> {
+        let (reply, answer) = futures::channel::oneshot::channel();
+        self.begin_propose(
+            chain_id,
+            multisig,
+            proposal,
+            Box::new(move |end| {
+                let _ = reply.send(end);
+            }),
+            cx,
+        );
+        answer
+    }
+
+    fn begin_propose(
+        &mut self,
+        chain_id: u64,
+        multisig: &str,
+        proposal: proposals::ProposalKind,
+        reply: Box<dyn FnOnce(Proposed)>,
+        cx: &mut Context<Self>,
+    ) {
+        // One at a time: an earlier one nobody finished is withdrawn.
+        if let Some(earlier) = self.send_propose.take() {
+            (earlier.reply)(Proposed::withdrawn());
+        }
+        self.send_propose = Some(Proposing {
+            step: super::propose::Step::Drafting,
+            reply,
+        });
+        let jobs = super::propose::start(&mut self.machines, chain_id, multisig, proposal);
+        self.run(jobs, cx);
+    }
+
+    /// A proposal (the send flow's, Settings') is on its review: the screen
+    /// draws the draft.
     #[must_use]
     pub fn send_reviewing(&self) -> bool {
         self.send_propose
             .as_ref()
-            .is_some_and(|p| p.step == ProposeStep::Reviewing)
+            .is_some_and(|p| p.step == super::propose::Step::Reviewing)
             && self.machines.proposals_view.draft.is_some()
     }
 
@@ -701,90 +708,28 @@ impl MultisigHost {
             self.proposals(proposals::Event::Withdraw, cx);
         }
         if let Some(p) = self.send_propose.take() {
-            let _ = p.reply.send(ProposeEnd::Failed {
-                cancelled: true,
-                reason: None,
-            });
+            (p.reply)(Proposed::withdrawn());
         }
         self.touch(cx);
     }
 
-    /// Where the send flow's proposal stands now, from the machine's view.
+    /// Where the proposal on its way stands now, from the machine's view.
     fn follow_send_propose(&mut self, cx: &mut Context<Self>) {
-        let Some(step) = self.send_propose.as_ref().map(|p| p.step) else {
+        let Some(p) = self.send_propose.as_mut() else {
             return;
         };
-        let view = &self.machines.proposals_view;
-        let state = view.actions.get("propose").cloned();
-        let settled = |s: &Option<proposals::ActionState>| {
-            s.as_ref().is_some_and(|s| {
-                !matches!(
-                    s,
-                    proposals::ActionState::Working | proposals::ActionState::OutsideAsked { .. }
-                )
-            })
-        };
-        let end = match step {
-            ProposeStep::Drafting => {
-                if view.draft.is_some() {
-                    if let Some(p) = self.send_propose.as_mut() {
-                        p.step = ProposeStep::Reviewing;
-                    }
-                    None
-                } else if settled(&state) {
-                    Some(state)
-                } else {
-                    None
-                }
-            }
-            ProposeStep::Reviewing => {
-                if matches!(state, Some(proposals::ActionState::Working)) {
-                    if let Some(p) = self.send_propose.as_mut() {
-                        p.step = ProposeStep::Confirmed;
-                    }
-                    None
-                } else if view.draft.is_none() {
-                    Some(Some(proposals::ActionState::Cancelled))
-                } else {
-                    None
-                }
-            }
-            ProposeStep::Confirmed => settled(&state).then_some(state),
-        };
-        let Some(state) = end else {
+        let Some(end) = super::propose::follow(&mut p.step, &self.machines.proposals_view) else {
             return;
         };
-        let offline = view.offline;
         let Some(p) = self.send_propose.take() else {
             return;
         };
-        let answer = match state {
-            Some(proposals::ActionState::Done { safe_tx_hash, .. }) => {
-                ProposeEnd::Proposed { safe_tx_hash }
-            }
-            Some(proposals::ActionState::Cancelled | proposals::ActionState::RiskDeclined) => {
-                ProposeEnd::Failed {
-                    cancelled: true,
-                    reason: None,
-                }
-            }
-            Some(proposals::ActionState::MailboxUnreadable) => ProposeEnd::Failed {
-                cancelled: false,
-                reason: Some(vela_core::app::send::SendProposeFailure::MailboxDown),
-            },
-            _ => ProposeEnd::Failed {
-                cancelled: false,
-                reason: offline.then_some(vela_core::app::send::SendProposeFailure::Offline),
-            },
-        };
         // Not proposed: its draft goes too (nothing more is asked or sent).
-        if !matches!(answer, ProposeEnd::Proposed { .. })
-            && self.machines.proposals_view.draft.is_some()
-        {
+        if !matches!(end, Proposed::Done { .. }) && self.machines.proposals_view.draft.is_some() {
             let jobs = self.machines.proposals(proposals::Event::Withdraw);
             self.run(jobs, cx);
         }
-        let _ = p.reply.send(answer);
+        (p.reply)(end);
     }
 
     /// Blocking work on a thread of its own; its answer back on this one.

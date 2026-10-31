@@ -16,7 +16,9 @@ pub mod host;
 pub mod live;
 pub mod machines;
 pub mod notify;
+pub mod member_words;
 pub mod peer;
+pub mod propose;
 #[cfg(all(test, feature = "dev-fixtures"))]
 mod scenarios;
 pub mod session_words;

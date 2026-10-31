@@ -488,7 +488,46 @@ const EVENTS: &[(&str, Place)] = &[
         Machine("the dApp's connection"),
     ),
     ("tx_tracker::Event::Submitted", Machine("the chain tracker")),
+    // AUDIT M1/M3: a multisig's own Settings (`multisig_settings.rs`) — its
+    // members, the change composed, its record. Proposing goes through the
+    // proposals machine's review and a member's passkey; no catalogued
+    // action asks it yet.
+    (
+        "ms_accounts::Event::CheckBackup",
+        View("whether the multisig's record is on Ethereum"),
+    ),
+    (
+        "ms_accounts::Event::CheckOn",
+        Machine("who can act for the multisig on a network, read from the chain"),
+    ),
+    (
+        "ms_accounts::Event::PlanRename",
+        View("where the multisig's shared name can be renamed"),
+    ),
+    ("ms_accounts::Event::SaveToEthereum", Later(MULTISIG_SETTINGS)),
+    ("ms_accounts::Event::ShareAgain", Later(MULTISIG_SETTINGS)),
+    ("ms_members::Event::Compose", Later(MULTISIG_SETTINGS)),
+    (
+        "ms_members::Event::Contacts",
+        Machine("the contacts book, for the member entry's suggestions"),
+    ),
+    ("ms_members::Event::Entry", Later(MULTISIG_SETTINGS)),
+    ("ms_members::Event::EntryKind", Later(MULTISIG_SETTINGS)),
+    ("ms_members::Event::EntryName", Later(MULTISIG_SETTINGS)),
+    ("ms_members::Event::Pick", Later(MULTISIG_SETTINGS)),
+    ("ms_members::Event::Proposing", Later(MULTISIG_SETTINGS)),
+    ("ms_members::Event::ReadEntry", Later(MULTISIG_SETTINGS)),
+    (
+        "ms_members::Event::Refresh",
+        Machine("each network's members, read again"),
+    ),
+    ("ms_members::Event::Step", Later(MULTISIG_SETTINGS)),
 ];
+
+/// A multisig's own settings: changing its members or rule, renaming it,
+/// sharing or backing up its record.
+const MULTISIG_SETTINGS: &str =
+    "changing a multisig's members, its rule or its shared name: proposals its members approve";
 
 /// Direct calls into the session, the preferences, the storage and the
 /// residents' own functions.
