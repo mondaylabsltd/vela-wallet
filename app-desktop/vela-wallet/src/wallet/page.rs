@@ -3997,6 +3997,9 @@ impl WalletPage {
             self.close_settings_dialog(cx);
         } else if self.unreachable_open {
             self.close_unreachable(cx);
+        } else if self.multisig_settings_escape(cx) {
+            // AUDIT M1/M3: what Settings' multisig block has open — on the
+            // page itself, so under every dialog.
         } else {
             return false;
         }

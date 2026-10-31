@@ -299,7 +299,7 @@ impl WalletPage {
             self.close_multisig_sheet(cx);
             return true;
         }
-        self.multisig_settings_escape(cx)
+        false
     }
 
     // -- the switcher -------------------------------------------------------------

@@ -195,14 +195,21 @@ impl WalletPage {
         let host = self.ms_host(cx);
         let address = row.account.address.clone();
         let key = address.to_ascii_lowercase();
-        if self.multisig.settings.shown.as_ref() != Some(&row.account) {
+        // Its record as the members are read from it: its networks, its
+        // members' kept names. A verdict found since (`findings`) is not a
+        // reason to read every network again.
+        let record = MultisigAccount {
+            findings: None,
+            ..row.account.clone()
+        };
+        if self.multisig.settings.shown.as_ref() != Some(&record) {
             let first = self
                 .multisig
                 .settings
                 .shown
                 .as_ref()
                 .is_none_or(|a| !same(&a.address, &address));
-            self.multisig.settings.shown = Some(row.account.clone());
+            self.multisig.settings.shown = Some(record);
             let contacts = member_contacts(cx);
             host.update(cx, |host, cx| {
                 host.show_members(&address, cx);
@@ -282,11 +289,12 @@ impl WalletPage {
         self.ms_settings_ask(&row, cx);
         let loc = self.ms_loc();
         let host = self.ms_host(cx);
-        let (members, accounts) = {
+        let (members, accounts, service) = {
             let machines = host.read(cx).machines();
             (
                 machines.members_view.clone(),
                 machines.accounts_view.clone(),
+                machines.current_facts().service_url.clone(),
             )
         };
         let members = members
@@ -304,6 +312,8 @@ impl WalletPage {
 
         let mut col = div().flex().flex_col().gap(px(14.));
         col = col.child(self.ms_set_identity(theme, &loc, &row, members.as_ref(), cx));
+        // Nobody is on a developer's service without knowing.
+        col = col.children(mw::custom_service(&loc, &service).map(|note| muted(theme, note)));
         col = col.children(self.ms_set_authority(theme, &loc, &row, cx));
         if let Some(view) = &members {
             col = col.child(self.ms_set_members(theme, &loc, view, cx));

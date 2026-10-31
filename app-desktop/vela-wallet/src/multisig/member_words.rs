@@ -290,6 +290,23 @@ pub fn rename_stand(
     }
 }
 
+/// "Using a custom multisig service (127.0.0.1:8788)" while the service is
+/// not the default one (`CustomServiceNote`): a fact, never a warning.
+#[must_use]
+pub fn custom_service(loc: &Loc, url: &str) -> Option<String> {
+    let url = url.trim();
+    if url.is_empty() || url == vela_core::app::multisig_shell::DEFAULT_GENESIS_SERVICE_URL {
+        return None;
+    }
+    // The URL's host (`new URL(url).host`), else the URL as it is.
+    let host = url
+        .split_once("://")
+        .map(|(_, rest)| rest.split(['/', '?', '#']).next().unwrap_or(rest))
+        .filter(|h| !h.is_empty())
+        .unwrap_or(url);
+    Some(tv(loc, "service.customNote", &[("host", host)]))
+}
+
 /// The backup line (`backupLine`); `None` while it is being checked.
 #[must_use]
 pub fn backup_line(loc: &Loc, state: Option<&BackupState>) -> Option<String> {
@@ -486,6 +503,22 @@ mod tests {
         let (label, title) = chip(&loc, &two);
         assert_eq!(label, "Rule differs by network");
         assert_eq!(title, "Needs 2 of 3 members · Needs 2 of 4 members");
+    }
+
+    #[test]
+    fn a_custom_service_is_named_by_its_host() {
+        let loc = en();
+        assert_eq!(
+            custom_service(
+                &loc,
+                vela_core::app::multisig_shell::DEFAULT_GENESIS_SERVICE_URL
+            ),
+            None
+        );
+        assert_eq!(
+            custom_service(&loc, "http://127.0.0.1:8788/api").as_deref(),
+            Some("Using a custom multisig service (127.0.0.1:8788)")
+        );
     }
 
     #[test]
