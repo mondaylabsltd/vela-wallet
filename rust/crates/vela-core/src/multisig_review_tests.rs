@@ -619,6 +619,48 @@ fn probe_reads_what_moves_where_no_simulation_is_offered() {
     assert_eq!(r.state.verdict, StateVerdict::Unchanged);
 }
 
+/// r9-2: Arc's USDC is ONE balance — the coin (18 decimals) and its ERC-20
+/// interface at `0x3600…0000` (6). A 0.01 transfer through the interface
+/// moves both readings; the review says it once, as the coin.
+#[test]
+fn arc_usdc_moved_through_its_erc20_interface_is_said_once() {
+    let usdc = "0x3600000000000000000000000000000000000000";
+    let mut d = keccak256(b"transfer(address,uint256)")[..4].to_vec();
+    d.extend_from_slice(&word_addr(a(C)));
+    d.extend_from_slice(&word(U256::from(10_000)));
+    let t = tx(usdc, "0x0", &hex(&d), 0);
+    let mut input = reads(t.clone());
+    input.chain_id = 5_042_002;
+    let k = watched(&t, &[a(A), a(B)], &[]).len();
+    let mut before = snap(&[A, B]);
+    before.watched = zero_watch(k);
+    before.balance = 50_000_000_000_000_000;
+    before.tokens = vec![Some(50_000)];
+    let mut after = snap(&[A, B]);
+    after.watched = zero_watch(k);
+    after.balance = 40_000_000_000_000_000;
+    after.tokens = vec![Some(40_000)];
+    let review = |reads: ReadsInput| {
+        multisig_review(&ReviewInput {
+            reads,
+            trace: Some(not_offered_answer()),
+            probe: Some(probe_envelope(&before, &after, true)),
+            sim_reply: Some(r#"{"error":{"code":-32601,"message":"method not supported"}}"#.into()),
+            ..ReviewInput::default()
+        })
+        .unwrap()
+    };
+    let r = review(input.clone());
+    assert_eq!(r.simulation_source, "probe");
+    assert_eq!(r.simulation.deltas.len(), 1, "{:?}", r.simulation.deltas);
+    assert_eq!(r.simulation.deltas[0].token, None);
+    assert_eq!(r.simulation.deltas[0].delta, "-10000000000000000");
+
+    // The same address on another chain is an ordinary token: both said.
+    input.chain_id = 100;
+    assert_eq!(review(input).simulation.deltas.len(), 2);
+}
+
 /// r5reg-1: what moves in a batch of native sends, as a node that traces
 /// transfers AND logs native moves itself (Arc) answers — to an account and
 /// to a smart account (a Vela account's `SafeReceived` beside it), alone and

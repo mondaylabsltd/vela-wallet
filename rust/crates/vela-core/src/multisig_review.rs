@@ -1639,6 +1639,8 @@ pub fn multisig_review(input: &ReviewInput) -> Result<MultisigReview, CoreError>
         (Some(v), None) => (v, "none"),
         (None, None) => (sim_unavailable(), "none"),
     };
+    // r9-2: a native coin with an ERC-20 interface is one balance, said once.
+    let simulation = sim_outcome::one_line_per_balance(r.chain_id, simulation);
 
     // Recipients.
     let recipients: Vec<Recipient> = recipients_of(tx, &review)
