@@ -331,6 +331,29 @@ struct MultisigR8FixTests {
         #expect(RootView.multisigTransaction(ofRow: nil, feed: nil) == nil)
     }
 
+    // MARK: - Notifications: a second new proposal is said too
+
+    @Test func eachNewProposalNeedingYouIsItsOwnNotification() throws {
+        let notifier = MultisigNotifier(loc: loc, defaults: UserDefaults(suiteName: "ms.r8.\(UUID().uuidString)")!)
+        var posted: [MultisigNotifier.Note] = []
+        notifier.post = { posted.append($0) }
+        let accounts = try #require(decode(MsAccountsView.self, MultisigViewsTests.accountsJson))
+        func proposals(needsYou: Int) throws -> MsProposalsView {
+            let json = MultisigViewsTests.proposalsJson(
+                item: MultisigViewsTests.item(approved: 1, status: "pending", canApprove: [Self.one]),
+                standing: #"{"kind":"yourTurn"}"#, ready: 0
+            ).replacingOccurrences(of: #""needs_you":0"#, with: #""needs_you":\#(needsYou)"#)
+            return try #require(decode(MsProposalsView.self, json))
+        }
+        notifier.evaluate(accounts: accounts, proposals: try proposals(needsYou: 1), words: words, post: true)
+        notifier.evaluate(accounts: accounts, proposals: try proposals(needsYou: 2), words: words, post: true)
+        let needs = posted.filter { $0.id.hasPrefix("ms-needs-") }
+        #expect(needs.count == 2)
+        // Same first transaction, another count: never the same request id,
+        // which iOS would replace without a banner.
+        #expect(Set(needs.map(\.id)).count == 2)
+    }
+
     // MARK: - r8-9: the multisig is the source, its rule where the fee was
 
     @Test func theConfirmSaysWhoMustApproveOnTheSendsNetwork() throws {

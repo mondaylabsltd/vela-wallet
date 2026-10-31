@@ -107,14 +107,17 @@ final class MultisigNotifier {
             let hash = first?["safe_tx_hash"]?.string ?? first?["safeTxHash"]?.string
             if waiting.needsYou > (state.needsYou[key] ?? 0) {
                 notes.append(Note(
-                    id: "ms-needs-\(key)-\(hash ?? "")", title: name,
+                    // The count in the id: a request with the id of one
+                    // still in Notification Center replaces it without a
+                    // banner, and a second new proposal went unsaid.
+                    id: "ms-needs-\(key)-\(hash ?? "")-\(waiting.needsYou)", title: name,
                     body: words.t("presence.needsYou", count: waiting.needsYou, ["count": String(waiting.needsYou)]),
                     chainId: chain, safeTxHash: hash, address: row.account.address
                 ))
             }
             if waiting.ready > (state.ready[key] ?? 0) {
                 notes.append(Note(
-                    id: "ms-ready-\(key)-\(hash ?? "")", title: name,
+                    id: "ms-ready-\(key)-\(hash ?? "")-\(waiting.ready)", title: name,
                     body: words.t("presence.ready", count: waiting.ready, ["count": String(waiting.ready)]),
                     chainId: chain, safeTxHash: hash, address: row.account.address
                 ))
