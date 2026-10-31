@@ -335,6 +335,10 @@ fun MultisigCreateSheet(
                     }
                     val risky = thresholdView["risky"].bool ?: false
                     note?.let { MsNote(it, tone = if (risky) MsTone.Warning else MsTone.Neutral, tag = "multisig.create.thresholdNote") }
+                    // Passkey-native recovery: a lost passkey's member is replaced by the others.
+                    if (threshold < owners.size) {
+                        MsText(words.t("members.recovery", "m" to "$threshold", "n" to "${owners.size}"), MsType.Sub, Modifier.testTag("multisig.create.recovery"), color = colors.fgSubtle)
+                    }
                 }
                 MsSection(words.t("create.network")) {
                     if (networks.isEmpty()) MsNote(words.t("create.noSafeNetworks"), tone = MsTone.Warning)
