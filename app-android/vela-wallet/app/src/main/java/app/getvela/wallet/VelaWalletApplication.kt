@@ -839,6 +839,8 @@ class AppContainer(private val app: Application) {
                         controller.accountsChanged(
                             view.accounts.map { it.address } + ms.accounts.map { it.account.address },
                             shown ?: view.address.takeIf { it.isNotBlank() },
+                            // r8-21: a multisig's own networks (its record's), so a site starts on one.
+                            networks = ms.activeRow?.account?.chainIds.orEmpty(),
                         )
                     }
                 }

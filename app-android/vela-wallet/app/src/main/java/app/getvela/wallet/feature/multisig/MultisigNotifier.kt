@@ -24,6 +24,7 @@ import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.feature.multisig.core.MsAccountsView
 import app.getvela.wallet.feature.multisig.core.MsProposalsView
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 
@@ -208,7 +209,15 @@ class MultisigPollWorker(context: Context, params: WorkerParameters) : Coroutine
         val container = (applicationContext as VelaWalletApplication).container
         val hub = container.multisig
         val done = withTimeoutOrNull(60_000) {
+            // r8-26: a cold process (the app swiped away, the worker woke it)
+            // has not read its accounts yet: the machines booted on an empty
+            // list judge this device a member of nothing — nothing "needs
+            // you", nothing said. The session first, then the machines, told
+            // this device's accounts again (a boot from before counts too).
+            withTimeoutOrNull(15_000) { container.session.view.first { !it.loading } }
+            container.i18nRuntime.include(app.getvela.wallet.core.i18n.I18nCatalogs.MULTISIG)
             hub.boot()
+            hub.refreshLocal()
             if (hub.accountsView.value.accounts.isEmpty()) {
                 MultisigNotifier.schedule(applicationContext, on = false)
                 return@withTimeoutOrNull true

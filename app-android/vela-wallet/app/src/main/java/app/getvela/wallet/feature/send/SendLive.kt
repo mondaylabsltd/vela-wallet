@@ -99,6 +99,9 @@ import java.math.RoundingMode
  * filter chips (which 043 does not wire), the pill.
  */
 object SendLive {
+    /** r8-18: how often an open token picker asks for the holdings again. */
+    const val PICKER_REFRESH_MS: Long = 30_000L
+
 
     /** The pieces every builder needs beyond the view. */
     internal class Context(
@@ -579,7 +582,7 @@ object SendLive {
                 recipientModel(view, ctx).copy(note = s.t(I18nKeys.Flows.MULTI_SEND_SAME_RECIPIENT))
             },
             fee = feeRow(fallback.fee, view.fee ?: fee.fee, view.estimating_gas || view.fee_busy || fee.busy || fee.provisional, view, fee, ctx, speed),
-            speed = speed?.let { speedModel(it, view, ctx) },
+            speed = speed?.takeIf { view.multisig == null }?.let { speedModel(it, view, ctx) },
             cta = formCta(view, ctx, s.t(I18nKeys.Flows.CONTINUE)),
             // The core's gate, the whole of it (issue #424): while a relay
             // stop is up the button is its retry, and the core arms it.
@@ -601,7 +604,7 @@ object SendLive {
             badgeLogoUrl = mark.badgeLogoUrl,
             badgeHidden = mark.badgeHidden,
             balance = "${trim(token.balance)} ${token.symbol}",
-            fiat = token.price_usd?.let { price ->
+            fiat = token.price_usd?.takeIf { it.isFinite() }?.let { price ->
                 // As the home's holdings: no worth in a currency that is not
                 // the person's yet — the one helper withholds it.
                 ctx.money.fiat(amount(token.balance) * price)?.let { AssetFiatModel.Value(it) } ?: AssetFiatModel.Loading
@@ -621,7 +624,7 @@ object SendLive {
         // The "≈" line under the amount is a fiat figure: `null` from the one
         // helper is WITHHELD (the display currency is not the person's yet),
         // and the line keeps its room. No price at all is no line, as before.
-        val typedWorth = token?.price_usd?.let { price ->
+        val typedWorth = token?.price_usd?.takeIf { it.isFinite() }?.let { price ->
             (view.token_amount.toBigDecimalOrNull() ?: BigDecimal.ZERO).toDouble() * price
         }
         val fiatLine = typedWorth?.let { ctx.money.fiat(it) }?.let { "≈ $it" }.orEmpty()
@@ -662,7 +665,9 @@ object SendLive {
             },
             summary = if (view.split_mode) splitSummary(view, symbol, ctx) else null,
             fee = feeRow(fallback.fee, view.fee ?: fee.fee, view.estimating_gas || view.fee_busy || fee.busy || fee.provisional, view, fee, ctx, speed),
-            speed = speed?.let { speedModel(it, view, ctx) },
+            // r8-18: a multisig's proposal has no speed of its own — the
+            // executing member's transaction is priced when it runs.
+            speed = speed?.takeIf { view.multisig == null }?.let { speedModel(it, view, ctx) },
             cta = formCta(view, ctx, fallback.cta),
             // The core's gate, the whole of it (issue #424): while a relay
             // stop is up the button is its retry, and the core arms it.
@@ -826,7 +831,7 @@ object SendLive {
         val total = view.confirm_amount.toBigDecimalOrNull() ?: BigDecimal.ZERO
         // The total's worth rides on the same one line; withheld (`null`),
         // the line is the token total alone until the currency commits.
-        val fiat = view.selected_token?.price_usd?.let { price -> ctx.money.fiat(total.toDouble() * price) }?.let { " · ≈ $it" }.orEmpty()
+        val fiat = view.selected_token?.price_usd?.takeIf { it.isFinite() }?.let { price -> ctx.money.fiat(total.toDouble() * price) }?.let { " · ≈ $it" }.orEmpty()
         return SummaryLineModel(
             label = "${s.t(I18nKeys.Flows.SPLIT_TOTAL)} · ${s.t(I18nKeys.Flows.RECIPIENT_COUNT, mapOf("count" to view.recipients.size.toString()))}",
             value = "${Formats.current.plain(view.confirm_amount)} $symbol".trim() + fiat,
@@ -928,7 +933,13 @@ object SendLive {
         // Native multisig M2: a multisig pays no fee of its own — the member
         // who executes it does — so its row says that, with no control.
         if (view.multisig != null) {
-            return fallback.copy(value = ctx.strings.t("home.multisig.proposal.feeNote"), refreshLabel = null, refreshing = false, staleNote = null)
+            // r8-18: and nothing that offers a choice it does not have — no
+            // coin chip, no chevron into the coins (nothing to pay in here).
+            return fallback.copy(
+                value = ctx.strings.t("home.multisig.proposal.feeNote"),
+                refreshLabel = null, refreshing = false, staleNote = null, reason = null,
+                opens = false, showMark = false,
+            )
         }
         // NEVER ANOTHER TIER'S FIGURE WEARING THIS TIER'S NAME (issue 681):
         // on the path where a pick re-measures, the estimate in hand still
@@ -1279,7 +1290,7 @@ object SendLive {
         // The line under the figure is a fiat figure: withheld (`null` from
         // the one helper) until the display currency is the person's, its
         // line kept.
-        val worth = token?.price_usd?.let { price -> (view.confirm_amount.toBigDecimalOrNull() ?: BigDecimal.ZERO).toDouble() * price }
+        val worth = token?.price_usd?.takeIf { it.isFinite() }?.let { price -> (view.confirm_amount.toBigDecimalOrNull() ?: BigDecimal.ZERO).toDouble() * price }
         val fiat = worth?.let { ctx.money.fiat(it) }?.let { "≈ $it" }.orEmpty()
         val (feeLine, _) = feeText(view.fee, view, fee, ctx)
         // The fee card's failure, only when it is for this send's chain (PR 2
@@ -1483,7 +1494,7 @@ object SendLive {
         var totalUsd = 0.0
         val rows = pickedTokens(view).map { token ->
             val figure = sweepAmount(view, token)
-            val usd = token.price_usd?.let { price -> amount(figure) * price }
+            val usd = token.price_usd?.takeIf { it.isFinite() }?.let { price -> amount(figure) * price }
             if (usd != null) totalUsd += usd
             val value = "${trim(figure)} ${token.symbol}"
             BreakdownRowModel(

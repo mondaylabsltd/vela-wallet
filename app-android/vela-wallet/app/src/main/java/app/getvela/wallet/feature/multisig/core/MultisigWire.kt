@@ -167,7 +167,12 @@ sealed class MultisigShellResult {
 
     @Serializable
     @SerialName("rpc_error")
-    data class RpcError(val code: Long? = null, val message: String) : MultisigShellResult()
+    data class RpcError(
+        val code: Long? = null,
+        val message: String,
+        /** r8-4: the node's JSON-RPC `error.data` as it came (the state-diff probe reads its revert data). */
+        val data: kotlinx.serialization.json.JsonElement? = null,
+    ) : MultisigShellResult()
 
     @Serializable
     @SerialName("rpc_unanswered")

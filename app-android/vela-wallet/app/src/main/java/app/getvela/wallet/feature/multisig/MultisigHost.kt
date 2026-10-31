@@ -130,7 +130,9 @@ fun MultisigDappSheet(hub: MultisigHub, id: String, context: MultisigHostContext
     // machine lets the request go, and the sheet stays on what was done.
     var proposed by remember(id) { mutableStateOf<Pair<Int, String>?>(null) }
     if (!hash.isNullOrEmpty()) proposed = (held["chain_id"].int ?: 0) to hash
-    val answered = held == null
+    // r8-10: answered is the site told — never "not in the view yet" (the
+    // machine applies the request after this sheet first draws).
+    val answered = held == null && !hub.dappWaiting(id)
     if (answered && proposed == null) proposed = hub.dappProposal(id)
     LaunchedEffect(answered, proposed) {
         if (answered && proposed == null && hub.sheet.value == MultisigSheet.Dapp(id)) hub.sheet.value = null
@@ -155,7 +157,7 @@ fun MultisigDappSheet(hub: MultisigHub, id: String, context: MultisigHostContext
             MsNote(words.t("proposal.siteAsks", "host" to host))
             MsNote(held["refusal"]["message"].str ?: words.t("action.unsupported"), tone = MsTone.Warning, tag = "multisig.dapp.refused")
         }
-        view.draft != null -> MultisigDraftReviewSheet(hub, words, context.tokenInfo, siteNote = words.t("proposal.siteAsks", "host" to host), onWithdraw = leave, fromSite = true)
+        held != null && view.draft != null -> MultisigDraftReviewSheet(hub, words, context.tokenInfo, siteNote = words.t("proposal.siteAsks", "host" to host), onWithdraw = leave, fromSite = true)
         else -> MsSheet(words.t("proposal.title"), words.raw("common.done"), onClose = leave, tag = "multisig.dapp") {
             MsNote(words.t("proposal.siteAsks", "host" to host))
             Row(Modifier.testTag("multisig.dapp.opening"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {

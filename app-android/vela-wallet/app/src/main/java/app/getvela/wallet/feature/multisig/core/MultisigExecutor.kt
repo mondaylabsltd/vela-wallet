@@ -73,7 +73,7 @@ class MultisigExecutor(private val ports: MultisigPorts) {
             }
             when (reply) {
                 is MultisigRpcReply.Result -> MultisigShellResult.RpcResult(reply.value)
-                is MultisigRpcReply.Error -> MultisigShellResult.RpcError(reply.code, reply.message)
+                is MultisigRpcReply.Error -> MultisigShellResult.RpcError(reply.code, reply.message, reply.data)
                 is MultisigRpcReply.Unanswered -> MultisigShellResult.RpcUnanswered(reply.detail)
             }
         }
@@ -197,7 +197,7 @@ class MultisigExecutor(private val ports: MultisigPorts) {
 /** A JSON-RPC reply through the wallet's own pool: its `result`, the node's `error`, or nobody answered. */
 sealed interface MultisigRpcReply {
     data class Result(val value: JsonElement) : MultisigRpcReply
-    data class Error(val code: Long?, val message: String) : MultisigRpcReply
+    data class Error(val code: Long?, val message: String, val data: JsonElement? = null) : MultisigRpcReply
     data class Unanswered(val detail: String) : MultisigRpcReply
 }
 

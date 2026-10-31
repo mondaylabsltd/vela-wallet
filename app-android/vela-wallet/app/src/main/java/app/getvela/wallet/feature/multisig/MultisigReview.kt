@@ -7,7 +7,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -66,14 +69,40 @@ fun MultisigReviewBody(
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(VelaSpacing.lg)) {
         // Concerns, the core's, in order.
         if (review["sign"]["allowed"].bool == false) MsNote(words.t("review.blocked"), tone = MsTone.Danger, tag = "multisig.review.blocked")
-        for (concern in review["concerns"].arr) {
+        for (concern in shownConcerns(review)) {
             reviewConcern(words, concern)?.let { (text, tone) -> MsNote(text, tone = tone, tag = "multisig.review.concern.${concern.kind}") }
         }
+        Reading(review, chainId, words)
         Moves(review, chainId, words, tokens)
         Recipients(review, words)
         MemberChanges(review, words, network)
         StateGuard(review, words, network)
         Technical(review, words)
+    }
+}
+
+/**
+ * r8-14: the review's concerns this sheet draws as their own lines — each
+ * said ONCE. A concern the review's other blocks already say is not said
+ * again: a first-time recipient wears its "First time" chip on its own row
+ * (`firstTimeCue`), and a simulation that could not run or would revert is
+ * the moves block's notice (`notice_key`) — the phones drew both, so every
+ * sheet said "Vela couldn't check what this transaction does" and "First
+ * time sending here" twice. Nothing is dropped that is not drawn elsewhere.
+ */
+internal fun shownConcerns(review: JsonElement): List<JsonElement> {
+    val recipients = review["recipients"].arr
+    val sim = review["simulation"]
+    val simNotice = sim["kind"].str != "deltas" && !sim["notice_key"].str.isNullOrEmpty()
+    val said = mutableSetOf<String>()
+    return review["concerns"].arr.filter { concern ->
+        val address = concern["address"].str
+        val drawnElsewhere = when (concern.kind) {
+            "firstTime" -> recipients.any { it["address"].str.equals(address, ignoreCase = true) && it["firstTimeCue"].bool == true }
+            "unsimulated", "reverts" -> simNotice
+            else -> false
+        }
+        !drawnElsewhere && said.add(concern.toString())
     }
 }
 
@@ -89,7 +118,144 @@ internal fun reviewConcern(words: MultisigWords, concern: JsonElement): Pair<Str
     "reverts" -> words.raw("componentsUi.signing.simWillFail") to MsTone.Danger
     "unsimulated" -> words.raw("componentsUi.signing.simUnavailableWarning") to MsTone.Warning
     "blind" -> words.t("action.unsupported") to MsTone.Danger
+    // r8-1 / r8-2 / r8-5: the core's reading of every call raises these
+    // (the core's words, `review.reading.*`, as the web says them).
+    "unlimitedApproval" -> words.t("review.reading.unlimitedLine", "spender" to MultisigWords.short(concern["spender"].str.orEmpty())) to MsTone.Danger
+    "nestedBatch" -> words.t("review.reading.nestedLine") to MsTone.Danger
+    "unreadableBatch" -> words.t("review.reading.unreadableLine") to MsTone.Danger
+    "decimalsUnknown" -> words.t("review.reading.decimalsLine", "token" to MultisigWords.short(concern["token"].str.orEmpty())) to MsTone.Warning
+    "toOwnToken" -> words.t("review.reading.ownTokenLine", "token" to MultisigWords.short(concern["token"].str.orEmpty())) to MsTone.Danger
     else -> null
+}
+
+// -- the core's reading of every call (r8-1, r8-2, r8-5) ----------------------------
+
+/** One call of the reading: how deep it sits, its leg label, its title, its rows, how it reads. */
+data class ReadingLine(val depth: Int, val label: String, val text: String, val tone: MsTone, val details: List<Pair<String, String>> = emptyList())
+
+/** A token named by its facts: its symbol, else its short address; the network's coin when none. */
+internal fun tokenName(facts: JsonElement?, words: MultisigWords, chainId: Int): String =
+    facts?.get("symbol").str?.takeIf { it.isNotBlank() }
+        ?: facts?.get("token").str?.takeIf { it.isNotBlank() }?.let(MultisigWords::short)
+        ?: words.symbol(chainId)
+
+/**
+ * An amount as the core says it can honestly be said: unlimited, the exact
+ * whole-token figure (`plain`, in the person's decimal mark), or — decimals
+ * unknown — the base units and that the decimals are unknown (never a guess
+ * at 18, r8-2).
+ */
+internal fun amountText(amount: JsonElement?, symbol: String, words: MultisigWords): String {
+    if (amount["unlimited"].bool == true) return words.t("review.reading.unlimited")
+    amount["plain"].str?.let { return "${app.getvela.wallet.core.format.Formats.current.plain(it)} $symbol".trim() }
+    val raw = amount["raw"].str ?: "0"
+    val said = words.t("review.reading.decimalsUnknown", "raw" to raw)
+    // The raw base units are said whatever the catalog holds (a catalog
+    // older than the key still never hides the figure, nor guesses it).
+    return if (said.contains(raw)) said else "$raw · ${words.raw("componentsUi.signingApprove.decimalsUnverified")}"
+}
+
+/**
+ * The review's `reading`: every call, every leg of every batch at every
+ * level, each as the core read it — drawn, never decoded here (the Bybit
+ * rule; the web's `reading-blocks.ts`). Empty when the review reads the
+ * transaction as the multisig's own (its member change, rename or
+ * cancellation say it).
+ */
+internal fun readingLines(review: JsonElement, chainId: Int, words: MultisigWords): List<ReadingLine> {
+    val out = mutableListOf<ReadingLine>()
+    val r = { key: String -> words.t("review.reading.$key") }
+    fun walk(calls: List<JsonElement>, depth: Int) {
+        for (call in calls) {
+            val path = call["path"].arr.mapNotNull { it.int }
+            val label = if (path.isEmpty()) "" else words.t("review.callNumber", "n" to path.joinToString("."))
+            val to = MsRules.eip55(call["to"].str.orEmpty())
+            val intent = call["intent"]
+            val rows = mutableListOf<Pair<String, String>>()
+            val (title, tone) = when (intent.kind) {
+                "send" -> {
+                    val sym = tokenName(intent["token"], words, chainId)
+                    rows += r("amount") to amountText(intent["amount"], sym, words)
+                    intent["token"]["token"].str?.let { rows += r("token") to MsRules.eip55(it) }
+                    rows += r("to") to MsRules.eip55(intent["to"].str.orEmpty())
+                    r("send") to MsTone.Neutral
+                }
+                "sendFrom" -> {
+                    val sym = tokenName(intent["token"], words, chainId)
+                    rows += r("amount") to amountText(intent["amount"], sym, words)
+                    intent["token"]["token"].str?.let { rows += r("token") to MsRules.eip55(it) }
+                    rows += r("from") to MsRules.eip55(intent["from"].str.orEmpty())
+                    rows += r("to") to MsRules.eip55(intent["to"].str.orEmpty())
+                    r("sendFrom") to MsTone.Warning
+                }
+                "approve" -> {
+                    val sym = tokenName(intent["token"], words, chainId)
+                    val unlimited = intent["amount"]["unlimited"].bool == true
+                    intent["token"]["token"].str?.let { rows += r("token") to "$sym · ${MsRules.eip55(it)}" }
+                    rows += r("spender") to MsRules.eip55(intent["spender"].str.orEmpty())
+                    rows += r("allowance") to if (intent["grant"].str == "daiPermit") r("allOfIt") else amountText(intent["amount"], sym, words)
+                    val grant = intent["grant"].str ?: "approve"
+                    r(grant) to if (unlimited || grant == "daiPermit") MsTone.Danger else MsTone.Warning
+                }
+                "approveAll" -> {
+                    rows += r("collection") to MsRules.eip55(intent["collection"].str.orEmpty())
+                    rows += r("operator") to MsRules.eip55(intent["operator"].str.orEmpty())
+                    if (intent["granted"].bool == false) r("revokeAll") to MsTone.Neutral else r("approveAll") to MsTone.Danger
+                }
+                "batch" -> {
+                    val legs = intent["calls"].arr
+                    rows += r("runner") to MsRules.eip55(intent["runner"].str.orEmpty())
+                    (if (legs.size == 1) r("batchOne") else words.t("review.reading.batchMany", "total" to legs.size.toString())) to MsTone.Danger
+                }
+                "unreadable" -> {
+                    rows += r("to") to to
+                    r("unreadable") to MsTone.Danger
+                }
+                "members" -> r("members") to MsTone.Warning
+                "rename" -> words.t("review.reading.rename", "name" to intent["name"].str.orEmpty()) to MsTone.Neutral
+                else -> {
+                    rows += r("to") to to
+                    intent["selector"].str?.let { rows += r("function") to it }
+                    r("call") to MsTone.Warning
+                }
+            }
+            val coin = call["value"]
+            if (intent.kind != "send" && (coin["raw"].str ?: "0") != "0") rows += r("alsoSends") to amountText(coin, words.symbol(chainId), words)
+            out += ReadingLine(depth, label, title, tone, rows)
+            if (intent.kind == "batch") {
+                out += ReadingLine(depth + 1, "", r("runnerNote"), MsTone.Warning)
+                walk(intent["calls"].arr, depth + 1)
+            }
+        }
+    }
+    walk(review["reading"]["calls"].arr, 0)
+    return out
+}
+
+@Composable
+private fun Reading(review: JsonElement, chainId: Int, words: MultisigWords) {
+    val lines = readingLines(review, chainId, words)
+    if (lines.isEmpty()) return
+    val colors = VelaTheme.colors
+    Column(Modifier.fillMaxWidth().testTag("multisig.review.reading"), verticalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
+        for (line in lines) {
+            Column(
+                Modifier.fillMaxWidth().padding(start = VelaSpacing.lg * line.depth).testTag("multisig.review.reading.call"),
+                verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs),
+            ) {
+                if (line.details.isEmpty()) {
+                    MsNote(line.text, tone = line.tone)
+                } else {
+                    MsText(
+                        if (line.label.isEmpty()) line.text else "${line.label} · ${line.text}",
+                        MsType.RowTitle,
+                        color = if (line.tone == MsTone.Danger) colors.errorBase else colors.fgBase,
+                    )
+                    for ((k, v) in line.details) MsRow(k, v, mono = v.startsWith("0x"))
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -305,7 +471,10 @@ fun MultisigDraftReviewSheet(
         item.refusal?.takeIf { it.isNotEmpty() }?.let { MsNote(words.t("proposal.refused", "reason" to it), tone = MsTone.Danger) }
         draft.review?.takeUnless { it.isNullish }?.let { MultisigReviewBody(it, item.chainId, words, tokenInfo) }
         words.actionFailure(state, item.chainId)?.let { MsNote(it, tone = MsTone.Danger, tag = "multisig.draft.failed") }
-        val allowed = draft.review["sign"]["allowed"].bool ?: true
+        // The core's sign rule (r8-1): `allowed` false signs nothing; `anyway`
+        // signs only through the "… anyway" friction — never a plain accent press.
+        val reviewed = draft.review != null && !draft.review.isNullish
+        val allowed = reviewed && (draft.review["sign"]["allowed"].bool ?: true)
         val anyway = draft.review["sign"]["anyway"].bool ?: false
         if (draft.membersHere.size > 1) {
             MemberPicker(words, words.t("proposal.as"), draft.membersHere, member ?: draft.defaultMember ?: draft.membersHere.first(), tag = "multisig.draft.as") { member = it }
@@ -315,18 +484,23 @@ fun MultisigDraftReviewSheet(
         // transaction, not a wait for approvals nobody else has to give.
         val executeNow = fromSite && draft.executeNow && draft.membersHere.isNotEmpty()
         // Proposing signs (the member's approval travels with it): the accent.
-        VelaValueButton(
+        // Proposing with no member here signs nothing: no friction to ask for.
+        val signs = draft.membersHere.isNotEmpty()
+        MsSignButton(
             text = when {
-                executeNow -> words.t(if (allowed) "proposal.approveAndExecute" else "review.approveExecuteAnyway")
-                draft.membersHere.isEmpty() -> words.t("send.proposeOnly")
-                else -> words.t(if (allowed) "send.propose" else "review.proposeAnyway")
+                executeNow -> words.t(if (anyway) "review.approveExecuteAnyway" else "proposal.approveAndExecute")
+                !signs -> words.t("send.proposeOnly")
+                else -> words.t(if (anyway) "review.proposeAnyway" else "send.propose")
             },
-            onClick = {
+            anyway = anyway && signs,
+            dangerLines = draft.review?.let { r -> shownConcerns(r).mapNotNull { reviewConcern(words, it) }.filter { it.second == MsTone.Danger }.map { it.first } } ?: emptyList(),
+            words = words,
+            onConfirm = {
                 val by = member ?: draft.defaultMember
                 if (executeNow) hub.sendProposal(ev("propose_execute", "as_member" to by)) else hub.confirmDraft(by)
             },
             modifier = Modifier.fillMaxWidth().testTag("multisig.draft.propose"),
-            enabled = (allowed || anyway) && !working,
+            enabled = allowed && !working,
             loading = working,
         )
         if (executeNow) MsNote(words.t("proposal.feeNote"))
@@ -372,10 +546,69 @@ fun MemberPicker(words: MultisigWords, label: String, members: List<String>, sel
             ) {
                 Column(Modifier.weight(1f)) {
                     MsText(words.label(address), MsType.Field)
-                    MsText(MultisigWords.short(address), MsType.Mono, color = colors.fgSubtle)
+                    if (words.label(address) != MultisigWords.short(address)) MsText(MultisigWords.short(address), MsType.Mono, color = colors.fgSubtle)
                 }
                 if (on) Icon(VelaIcons.Check, null, tint = colors.fgBase, modifier = Modifier.size(VelaIconSize.lg))
             }
         }
     }
 }
+
+/**
+ * The one button a signature is given with (r8-1). The core's sign rule
+ * decides its friction: a plain request is the accent press; one the rule
+ * says `anyway` (an unlimited allowance, a nested batch, a call Vela cannot
+ * read) is danger-styled, worded "… anyway", and signs only after a SECOND,
+ * explicit confirmation that says the review's danger lines again — so one
+ * tap, on a sheet that scrolled or filled in under the finger, never signs
+ * a danger request.
+ */
+@Composable
+fun MsSignButton(
+    text: String,
+    anyway: Boolean,
+    dangerLines: List<String>,
+    words: MultisigWords,
+    onConfirm: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    loading: Boolean = false,
+) {
+    var confirming by remember { mutableStateOf(false) }
+    if (!anyway) {
+        VelaValueButton(text = text, onClick = onConfirm, modifier = modifier, enabled = enabled, loading = loading)
+        return
+    }
+    VelaDangerButton(text = text, onClick = { confirming = true }, modifier = modifier, enabled = enabled, loading = loading)
+    if (confirming) {
+        val colors = VelaTheme.colors
+        AlertDialog(
+            onDismissRequest = { confirming = false },
+            title = { Text(text) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(VelaSpacing.sm)) {
+                    for (line in anywayLines(dangerLines, words)) Text(line, color = colors.errorBase)
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirming = false
+                        onConfirm()
+                    },
+                    modifier = Modifier.testTag("multisig.sign.anywayConfirm"),
+                ) { Text(text, color = colors.errorBase) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirming = false }, modifier = Modifier.testTag("multisig.sign.anywayCancel")) {
+                    Text(words.t("proposal.rejectCancel"))
+                }
+            },
+            modifier = Modifier.testTag("multisig.sign.anyway"),
+        )
+    }
+}
+
+/** What the "… anyway" confirmation says: the review's danger lines, else the core's general warning. */
+internal fun anywayLines(dangerLines: List<String>, words: MultisigWords): List<String> =
+    dangerLines.ifEmpty { listOf(words.raw("componentsUi.signing.simUnavailableWarning")) }

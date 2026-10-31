@@ -1270,8 +1270,10 @@ fun FeeRow(
                     },
                     value = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            TokenIcon(mark = fee.mark, inline = true)
-                            Spacer(modifier = Modifier.width(VelaSpacing.sm))
+                            if (fee.showMark) {
+                                TokenIcon(mark = fee.mark, inline = true)
+                                Spacer(modifier = Modifier.width(VelaSpacing.sm))
+                            }
                             // The amount is the one thing on the row never cut:
                             // squeezed past one line, it wraps.
                             Text(

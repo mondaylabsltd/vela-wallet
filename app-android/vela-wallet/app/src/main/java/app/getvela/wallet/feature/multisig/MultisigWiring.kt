@@ -183,6 +183,7 @@ object MultisigWiring {
             localNames = container.session.view.value.accounts.associate { it.address.lowercase() to it.name },
             networkName = { id -> networks.firstOrNull { it.chain_id.toInt() == id }?.display_name },
             nativeSymbol = { id -> networks.firstOrNull { it.chain_id.toInt() == id }?.native_symbol },
+            tokenFacts = { id, token -> hub?.proposalsView?.value?.tokens?.get("$id:${token.lowercase()}") },
         )
     }
 

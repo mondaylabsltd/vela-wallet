@@ -128,8 +128,15 @@ class Formats(
      * cut, 12.34 — really 12.3399… — printed 12.33; the rows under a total
      * of CN¥63.23 added up to 63.21 (spec 078 round 2).
      */
-    fun fixed2(value: Double): String =
-        number(BigDecimal(value).setScale(2, RoundingMode.HALF_UP), minFraction = 2, maxFraction = 2)
+    fun fixed2(value: Double): String {
+        // r8-3: total. `BigDecimal(NaN)` / `BigDecimal(Infinity)` THROW
+        // (`NumberFormatException: Infinite or NaN`) — and a figure drawn in
+        // composition took the whole app down with it (a multisig's Send form,
+        // twice). A figure that is not a number is said as unknown, never
+        // formatted and never guessed.
+        if (!value.isFinite()) return UNKNOWN
+        return number(BigDecimal(value).setScale(2, RoundingMode.HALF_UP), minFraction = 2, maxFraction = 2)
+    }
 
     fun date(epochMs: Long): String {
         val c = Calendar.getInstance(locale).apply { timeInMillis = epochMs }
@@ -205,6 +212,9 @@ class Formats(
     }
 
     companion object {
+        /** What a figure that is not a number is drawn as: an honest unknown, never `NaN`, `∞` or a crash. */
+        const val UNKNOWN: String = "—"
+
         /**
          * The process-wide formats the live builders read (spec 047 D2). Set
          * by the preferences once loaded and on every change; tests set it
