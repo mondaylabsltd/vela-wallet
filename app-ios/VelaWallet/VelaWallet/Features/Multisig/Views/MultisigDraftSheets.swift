@@ -154,7 +154,7 @@ struct MsSignRule: Equatable {
     /// The review's concerns, each in its words.
     @MainActor
     func reasons(_ review: MsJSON?, words: MsWords) -> [String] {
-        (review?["concerns"]?.array ?? []).compactMap { MsReviewBody.concernText($0, words: words) }
+        (review?["concerns"]?.array ?? []).compactMap { MsReviewBody.concernText($0, review: review, words: words) }
     }
 }
 

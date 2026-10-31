@@ -137,7 +137,7 @@ struct MsProposalModel {
     /// concerns, in its words — said again where the person confirms.
     var anywayReasons: [String] {
         guard let review else { return [] }
-        return (review["concerns"]?.array ?? []).compactMap { MsReviewBody.concernText($0, words: words) }
+        return (review["concerns"]?.array ?? []).compactMap { MsReviewBody.concernText($0, review: review, words: words) }
     }
 
     // MARK: - An executed one (r8-17): as it was when it ran

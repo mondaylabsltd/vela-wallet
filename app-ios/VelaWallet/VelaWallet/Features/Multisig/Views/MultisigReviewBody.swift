@@ -30,6 +30,9 @@ struct MsReviewBody: View {
         VStack(alignment: .leading, spacing: Tokens.Space.s12) {
             if !past {
                 concerns
+                // What its calls do, every leg — the core's reading.
+                let reading = MsReading.blocks(review, chainId: chainId, words: words)
+                if !reading.isEmpty { MsReadingView(blocks: reading) }
                 stateGuard
                 recipients
                 memberChanges
@@ -53,7 +56,7 @@ struct MsReviewBody: View {
             MsNote(text: words.t("review.blocked"), tone: .danger, identifier: "multisig.review.blocked")
         }
         ForEach(Array(Self.ownLines(review).enumerated()), id: \.offset) { _, concern in
-            if let text = Self.concernText(concern, words: words) {
+            if let text = Self.concernText(concern, review: review, words: words) {
                 MsNote(text: text, tone: Self.tone(concern), identifier: "multisig.review.concern.\(concern.kind ?? "")")
             }
         }
@@ -66,7 +69,7 @@ struct MsReviewBody: View {
 
     /// A concern in words — every kind, for the "… anyway" step, which
     /// names what the person is signing past.
-    static func concernText(_ concern: MsJSON, words: MsWords) -> String? {
+    static func concernText(_ concern: MsJSON, review: MsJSON? = nil, words: MsWords) -> String? {
         switch concern.kind {
         case "notSigned":
             return words.t("proposal.refused", ["reason": concern["why"]?.string ?? ""])
@@ -89,10 +92,18 @@ struct MsReviewBody: View {
         case "unsimulated":
             return words.loc.t("componentsUi.signing.simUnavailableWarning")
         case "blind":
-            return words.t("action.unsupported")
+            // Not read — signed only "anyway"; never "doesn't sign".
+            return words.loc.t("componentsUi.signing.blindDecodeWarning", vars: ["bytes": String(dataBytes(review))])
         default:
-            return nil
+            // The reading's own (r8-1, r8-2, r8-5).
+            return MsReading.concernText(concern, words: words)
         }
+    }
+
+    /// The bytes of call data the transaction carries (its `data` field).
+    static func dataBytes(_ review: MsJSON?) -> Int {
+        let data = (review?["fields"]?.array ?? []).first { $0["name"]?.string == "data" }?["value"]?.string ?? ""
+        return max(0, (data.hasPrefix("0x") ? data.count - 2 : data.count) / 2)
     }
 
     /// The core's tone for each (`Concern::tone`): refused and danger kinds
