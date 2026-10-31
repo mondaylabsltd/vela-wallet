@@ -120,6 +120,13 @@ describe('the multisig shell', () => {
 		expect(
 			await run(deps({ rpc: async () => ({ error: { code: 3, message: 'reverted' } }) }), op(null))
 		).toEqual({ type: 'rpc_error', code: 3n, message: 'reverted' });
+		// r8-4: a revert's payload reaches the core (the state probe reads it).
+		expect(
+			await run(
+				deps({ rpc: async () => ({ error: { code: 3, message: 'reverted', data: '0x0001' } }) }),
+				op(null)
+			)
+		).toEqual({ type: 'rpc_error', code: 3n, message: 'reverted', data: '0x0001' });
 		const thrown = await run(
 			deps({
 				rpc: async () => {

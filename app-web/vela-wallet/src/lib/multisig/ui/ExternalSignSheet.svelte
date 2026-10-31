@@ -38,7 +38,8 @@
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import type { SigningMessages } from '$lib/signing/messages';
 	import type { MultisigMessages } from '../messages';
-	import { CallReading, readableCalls } from '../core/call-review.svelte';
+	import { asReview, readTx } from '../core/reading';
+	import { nativeSymbol } from '$lib/services/networks';
 	import { memberChanges } from '../core/display';
 	import { reviewTx, type MultisigReviewOut } from '../core/kernel';
 	import ReviewBody from '../external/ReviewBody.svelte';
@@ -197,8 +198,8 @@
 	}
 	const failure = $derived(wallet?.failure ? failureText(wallet.failure) : null);
 
-	/** The call this SafeTx makes, when it is one to another contract (the core's reading). */
-	let reading = $state<CallReading | null>(null);
+	/** r8-1: the core's reading of its calls, before (or without) the review. */
+	let reading = $state<MultisigReviewOut | null>(null);
 	/** A batch's calls that change the multisig's own members, said first. */
 	let changes = $state<string[]>([]);
 
@@ -210,11 +211,10 @@
 			// Nothing the core can read: the wallet's own prompt is all there is.
 		}
 		changes = memberChanges(m, action);
-		const calls = readableCalls(action);
-		// The fallback only: with the review, the call is read once, by `ReviewBody`.
-		if (calls && !untrack(() => review)) {
-			reading = new CallReading(request.chainId, request.safe, calls);
-			void reading.start();
+		// The fallback only: with the review, its reading is drawn by `ReviewBody`.
+		if (!untrack(() => review)) {
+			const read = asReview(readTx(request.chainId, request.safe, request.tx));
+			if (read && read.reading.calls.length > 0) reading = read;
 		}
 		// The connect page opens where the owner's wallet is: the wallet's web
 		// address, never this extension's own.
@@ -237,7 +237,6 @@
 			clearInterval(clock);
 			clearInterval(mailbox);
 			host.dispose();
-			reading?.dispose();
 		};
 	});
 
@@ -288,16 +287,14 @@
 
 <Sheet title={w.sheetTitle} {closeLabel} {wide} onclose={close}>
 	{#if review}
-		<ReviewBody
-			{m}
-			{signing}
-			chainId={request.chainId}
-			safe={request.safe}
-			tx={request.tx}
-			{review}
-		/>
+		<ReviewBody {m} {signing} chainId={request.chainId} safe={request.safe} {review} />
 	{:else if reading}
-		<CallReview {reading} m={signing} alerts={changes} />
+		<CallReview
+			review={reading}
+			{m}
+			nativeSymbol={nativeSymbol(request.chainId)}
+			alerts={changes}
+		/>
 	{/if}
 	{#if wallet}
 		{#if wallet.resumed}

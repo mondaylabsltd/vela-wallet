@@ -86,6 +86,7 @@ window.VelaCS.i18n.register('de', {
   'sentence.deploy': 'Du stellst neuen Vertragscode bereit. Code lässt sich nicht als Absicht lesen.',
   'sentence.batch': '{count} Transaktionen, eine Signatur.',
   'sentence.multiSend': '{count} Aufrufe, gebündelt in einer einzigen Signatur.',
+  'sentence.multiSendOne': "Ein Aufruf, verpackt in eine einzige Signatur.",
   'sentence.safeExec': 'Ein über Safe weitergeleiteter Aufruf — ausgeführt wird tatsächlich die innere Ebene.',
   'sentence.burn': 'Der Empfänger ist der Contract des Tokens selbst. Dorthin gesendete Coins erreichen niemanden — sie stecken für immer fest.',
   'sentence.abiOnly': 'Der Quellcode dieses Contracts ist verifiziert und jeder Parameter lässt sich dekodieren, aber niemand hat aufgeschrieben, was sie bedeuten. Unten stehen Fakten, keine Erklärungen.',

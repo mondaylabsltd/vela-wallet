@@ -1977,8 +1977,7 @@
 	// drawn as its pending rows; a tap opens the transaction.
 	$effect(() => {
 		// A contract call is read as its sheet reads it (the signing words).
-		if (multisig.active)
-			waitingRows.follow(data.multisigMessages, data.signingMessages, multisig.active.address);
+		if (multisig.active) waitingRows.follow(data.multisigMessages, multisig.active.address);
 	});
 	const waiting = $derived(
 		multisig.active

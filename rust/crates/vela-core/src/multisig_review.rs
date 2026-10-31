@@ -51,6 +51,7 @@ use alloy_primitives::{keccak256, Address, B256, U256};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
+use crate::app::multisig_outside::reading::TokenFacts;
 use crate::app::sim_outcome::{self, SimOutcome, SimReply, SimVerdict};
 use crate::app::token_trust::{TrustAssetDelta, TrustDeltaKind};
 use crate::error::CoreError;
@@ -59,6 +60,9 @@ use crate::multisig::{
     GUARD_STORAGE_SLOT, MODULE_GUARD_STORAGE_SLOT,
 };
 use crate::multisig_reading::{self, MemberChanges};
+
+#[path = "multisig_review_reading.rs"]
+pub mod reading;
 
 fn err(message: impl Into<String>) -> CoreError {
     CoreError::Multisig(message.into())
@@ -86,6 +90,11 @@ fn quantity(s: &str) -> Option<U256> {
         Some(h) => U256::from_str_radix(h, 16).ok(),
         None => U256::from_str_radix(s, 10).ok(),
     }
+}
+
+/// A quantity (hex or decimal) as a decimal string; unreadable stays as is.
+pub(crate) fn quantity_dec(s: &str) -> String {
+    quantity(s).map_or_else(|| s.to_owned(), |v| v.to_string())
 }
 
 fn hex_quantity(v: U256) -> String {
@@ -1339,17 +1348,44 @@ pub enum Concern {
     },
     /// A call Vela cannot read.
     Blind,
+    /// A call grants an unlimited allowance, or all of a collection
+    /// (r8-1): `token` the token or collection, `spender` who may spend.
+    UnlimitedApproval {
+        token: String,
+        spender: String,
+    },
+    /// A batch inside a batch (r8-5): every leg is listed, and the inner
+    /// legs run from the batch contract.
+    NestedBatch,
+    /// A batch nested too deep, or whose legs do not read (r8-5): nothing
+    /// is signed.
+    UnreadableBatch,
+    /// A token whose decimals are not known (r8-2): its amount is said raw.
+    DecimalsUnknown {
+        token: String,
+    },
+    /// Tokens sent to the token's own contract: they are lost.
+    ToOwnToken {
+        token: String,
+    },
 }
 
 impl Concern {
     fn tone(&self) -> Tone {
         match self {
-            Concern::NotSigned { .. } | Concern::StateChange => Tone::Refused,
-            Concern::Reverts | Concern::Lookalike { .. } => Tone::Danger,
+            Concern::NotSigned { .. } | Concern::StateChange | Concern::UnreadableBatch => {
+                Tone::Refused
+            }
+            Concern::Reverts
+            | Concern::Lookalike { .. }
+            | Concern::UnlimitedApproval { .. }
+            | Concern::NestedBatch
+            | Concern::ToOwnToken { .. } => Tone::Danger,
             Concern::StateUnread { .. }
             | Concern::Unsimulated
             | Concern::FirstTime { .. }
             | Concern::ToContract { .. }
+            | Concern::DecimalsUnknown { .. }
             | Concern::Blind => Tone::Caution,
         }
     }
@@ -1388,7 +1424,13 @@ pub struct ReviewInput {
     pub recipient_facts: Vec<RecipientFacts>,
     pub known: Vec<Known>,
     /// The clear reading could not read the call (`ClearSigningView.sign_anyway`).
+    /// Only ever stricter: the core's own [`reading::Reading`] says a call
+    /// it cannot read on every platform.
     pub blind: bool,
+    /// The tokens the core read for the reading (r8-2): each one's symbol
+    /// and decimals as its contract answered. The registry's are not needed
+    /// here; a token missing reads as "decimals unknown".
+    pub token_facts: Vec<TokenFacts>,
     /// The site that asked, for a dApp's calls.
     pub origin: Option<String>,
 }
@@ -1398,6 +1440,9 @@ pub struct ReviewInput {
 #[serde(rename_all = "camelCase")]
 pub struct MultisigReview {
     pub review: Review,
+    /// What each call does, every leg of every batch (r8-1, r8-5): draw it,
+    /// never decode again.
+    pub reading: reading::Reading,
     pub member_changes: Option<MemberChanges>,
     pub hashes: SafeTxHashes,
     pub fields: Vec<Field>,
@@ -1461,6 +1506,16 @@ pub fn multisig_review(input: &ReviewInput) -> Result<MultisigReview, CoreError>
     let tx = r.tx.as_ref().ok_or_else(|| err("tx"))?;
     let safe = addr(&r.safe)?;
     let review = multisig::review(r.chain_id, &r.safe, tx)?;
+    let read = reading::read(
+        r.chain_id,
+        tx,
+        &review,
+        &input
+            .token_facts
+            .iter()
+            .filter_map(|t| Some((t.token.clone()?.to_ascii_lowercase(), t.clone())))
+            .collect(),
+    );
     let hashes = multisig::safe_tx_hashes(r.chain_id, &r.safe, tx)?;
     let typed_data = multisig::safe_tx_typed_data(r.chain_id, &r.safe, tx)?;
     let member_changes = match &review.action {
@@ -1663,13 +1718,27 @@ pub fn multisig_review(input: &ReviewInput) -> Result<MultisigReview, CoreError>
             });
         }
     }
+    // What each call does (r8-1): unlimited grants, nested batches, a call
+    // nobody reads, decimals unknown — the same on every platform.
+    concerns.extend(reading::concerns(&read));
+    let blind = input.blind || read.blind;
     if input.blind {
         concerns.push(Concern::Blind);
     }
+    // r8-14: each thing said once.
+    let mut said = Vec::new();
+    concerns.retain(|c| {
+        if said.contains(c) {
+            false
+        } else {
+            said.push(c.clone());
+            true
+        }
+    });
     let tone = concerns.iter().map(Concern::tone).max().unwrap_or(Tone::Ok);
     let sign = SignRule {
         allowed: tone != Tone::Refused,
-        anyway: tone == Tone::Danger || input.blind,
+        anyway: tone == Tone::Danger || blind,
     };
 
     let advice_request = json!({
@@ -1693,6 +1762,7 @@ pub fn multisig_review(input: &ReviewInput) -> Result<MultisigReview, CoreError>
 
     Ok(MultisigReview {
         review,
+        reading: read,
         member_changes,
         hashes,
         fields,

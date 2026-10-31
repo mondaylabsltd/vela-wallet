@@ -86,6 +86,7 @@ window.VelaCS.i18n.register('es-MX', {
   'sentence.deploy': 'Estás desplegando el código de un contrato nuevo. El código no se puede leer como una intención.',
   'sentence.batch': '{count} transacciones, una sola firma.',
   'sentence.multiSend': '{count} llamadas agrupadas en una sola firma.',
+  'sentence.multiSendOne': "Una llamada agrupada en una sola firma.",
   'sentence.safeExec': 'Una llamada que pasa a través de Safe — lo que de verdad se ejecuta es la capa interna.',
   'sentence.burn': 'El destinatario es el propio contrato del token. Las monedas que se envían ahí no le llegan a nadie — se quedan atrapadas para siempre.',
   'sentence.abiOnly': 'El código fuente de este contrato está verificado y todos sus parámetros se decodifican, pero nadie dejó escrito qué significan. Abajo hay hechos, no explicaciones.',

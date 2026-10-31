@@ -86,6 +86,7 @@ window.VelaCS.i18n.register('zh-TW', {
   'sentence.deploy': '你正在部署一份新的合約程式碼。從程式碼無法解讀出它的意圖。',
   'sentence.batch': '{count} 筆交易，一併簽署。',
   'sentence.multiSend': '{count} 筆呼叫打包成一次簽署。',
+  'sentence.multiSendOne': "1 筆呼叫打包成一次簽署。",
   'sentence.safeExec': '這是一筆透過 Safe 轉發的呼叫——真正執行的是裡面那一層。',
   'sentence.burn': '接收方填的是這個代幣自己的合約地址。轉進去的幣不會到任何人手上——會永遠卡在那裡。',
   'sentence.abiOnly': '這個合約的原始碼已驗證，所有參數都能解碼，但沒有人寫下它們的含義。下面列的是事實，不是解釋。',

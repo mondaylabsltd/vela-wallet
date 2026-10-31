@@ -374,6 +374,28 @@ const warned = (v, key) => v.warnings.some((w) => w.key === key);
   check('a batch: each leg read (a threshold change, a native transfer in units)', !batch.refuse && batch.legs.length === 2 &&
     batch.legs[0].view.intentKey === 'intent.msThreshold' && batch.legs[1].view.hero.amount.text === '2',
     JSON.stringify(batch.legs.map((l) => [l.view.intentKey, l.view.hero && l.view.hero.amount && l.view.hero.amount.text])));
+
+  // r8-5: a batch whose leg CALLs multiSend of two transfers (round 8's #9):
+  // every leg of every level is listed, and the confirm is never the plain one.
+  const transferTo = (to, amount) => '0x' + sel('transfer(address,uint256)') + word(to) + num(amount);
+  const nested = view(request(tx({
+    to: MSCO, operation: 1, data: multiSend([
+      { to: MSCO, data: multiSend([{ to: USDC, data: transferTo(THIRD, 1000) }, { to: USDC, data: transferTo(OTHER, 1000) }]) },
+    ]),
+  })));
+  check('r8-5: a nested batch lists every leg of every level ("1", "1.1", "1.2")',
+    !nested.refuse && nested.legs.map((l) => l.index).join(',') === '1,1.1,1.2' &&
+    nested.legs[1].view.hero && nested.legs[1].view.hero.amount.text === '0.001',
+    JSON.stringify(nested.legs.map((l) => [l.index, l.view.intentKey])));
+  check('r8-5: a nested batch is a danger, said (never the plain accent Approve)',
+    nested.risk === 'danger' && warned(nested, 'warn.nested'), nested.risk);
+  check('r8-5: one call packed reads as one', nested.legs[0].view.sentence &&
+    !/\b1 calls\b/.test(String(nested.legs[0].view.sentence.text || nested.legs[0].view.sentence)));
+  let deep = transferTo(THIRD, 1);
+  for (let i = 0; i < 4; i++) deep = multiSend([{ to: MSCO, data: deep }]);
+  const tooDeep = view(request(tx({ to: MSCO, operation: 1, data: multiSend([{ to: MSCO, data: deep }]) })));
+  check('r8-5: nested deeper than three: refused, nothing signed', tooDeep.refuse &&
+    warned(tooDeep, 'refuse.msBatchUnreadable'));
 }
 
 {

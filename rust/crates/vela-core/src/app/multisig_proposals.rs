@@ -52,6 +52,7 @@ use serde_json::{json, Value};
 use ts_rs::TS;
 
 use super::multisig_gather;
+use super::multisig_outside::reading::TokenFacts;
 use super::multisig_shell::{
     self as shell, keys, local_owners, lock, same_address, AccountUpdate, ApprovalRoute, Chain,
     ChainMembers, Io, LocalAccount, MultisigAccount, MultisigEffect, MultisigOperation,
@@ -796,10 +797,16 @@ pub enum ActionState {
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "MultisigOutboxEntry"))]
 pub struct OutboxEntry {
-    /// `busy`: the service said wait; `away`: nothing answered.
+    /// `busy`: the service said wait; `away`: nothing answered; `sending`
+    /// (r8-16): on its way now — nothing was refused, nothing to send again.
     pub why: String,
-    /// When it is sent again; `None`: on the person's word (Send again).
+    /// When it is sent again; `None`: on the person's word (Send again) —
+    /// or, while `sending`, not needed.
     pub retry_at: Option<f64>,
+    /// r8-16: it is being handed to the mailbox right now. A shell says
+    /// "Sending…", never "Not sent yet" and never offers Send again.
+    #[serde(default)]
+    pub sending: bool,
 }
 
 /// The draft the person reviews before the passkey.
@@ -920,6 +927,11 @@ pub struct ProposalsView {
     /// core-ms-2: the followed multisig is deployed on a network read (its
     /// first steps are behind it).
     pub set_up: bool,
+    /// r8-2: every token the proposals shown move, per `<chainId>:<token
+    /// lowercase>` — the wallet's registry, else its contract's own answer;
+    /// `decimals` `None` (not read yet, or it did not say): an amount in it is
+    /// said raw, never in 18 decimals. A shell words a title from this alone.
+    pub tokens: BTreeMap<String, TokenFacts>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1020,6 +1032,12 @@ pub struct State {
     signers_asked: BTreeSet<(u64, String)>,
     /// What the chains said of each member read (lowercase address).
     signer_reads: BTreeMap<String, SignerRead>,
+    /// r8-2: each token a proposal moves, as its contract answered
+    /// (`(chain, lowercase address)`): kept for the session, never unsaid by
+    /// a read that fails later.
+    tokens: BTreeMap<(u64, String), TokenFacts>,
+    /// r8-7: the members last told to the accounts machine, per multisig.
+    members_told: BTreeMap<String, Vec<String>>,
 }
 
 impl State {
@@ -1635,6 +1653,18 @@ impl App for MultisigProposals {
             waiting_parts: presence_parts,
             banner,
             set_up: s.account.is_some() && s.chains.iter().any(|c| c.members.deployed),
+            tokens: tokens_moved(&items)
+                .into_iter()
+                .map(|(c, t)| {
+                    let read: BTreeMap<String, TokenFacts> = s
+                        .tokens
+                        .get(&(c, t.clone()))
+                        .map(|f| (t.clone(), f.clone()))
+                        .into_iter()
+                        .collect();
+                    (format!("{c}:{t}"), TokenFacts::of(c, Some(&t), &read))
+                })
+                .collect(),
         }
     }
 }
@@ -2187,7 +2217,94 @@ async fn refresh_once(io: &Io<Event>, st: &Shared<State>, tick: bool) {
         save_json(io, keys::WAITING, &waiting, false).await;
     }
     save_json(io, EXECUTING_KEY, &executing, true).await;
+    tell_members(io, st, &account).await;
+    read_tokens(io, st).await;
     record_remote_executions(io, st, &account).await;
+}
+
+/// r8-7: tell the accounts machine who the members are now — once every
+/// network it is used on was read (an unread one could hide its founding
+/// members), and only when that changed.
+async fn tell_members(io: &Io<Event>, st: &Shared<State>, account: &MultisigAccount) {
+    let members = {
+        let mut s = lock(st);
+        if !s.followed(&account.address)
+            || !s.unreadable.is_empty()
+            || s.chains.is_empty()
+            || s.chains.iter().all(|c| !c.members.deployed)
+        {
+            return;
+        }
+        let chains: Vec<&ChainMembers> = s.chains.iter().map(|c| &c.members).collect();
+        let members = super::multisig_members::members_anywhere(&account.owners, &chains);
+        let key = account.address.to_ascii_lowercase();
+        if s.members_told.get(&key) == Some(&members) {
+            return;
+        }
+        s.members_told.insert(key, members.clone());
+        members
+    };
+    io.notice(Notice::Account {
+        address: account.address.clone(),
+        update: AccountUpdate::MembersNow { members },
+    })
+    .await;
+}
+
+/// The tokens a proposal on the list moves (ERC-20 transfers, alone or in a
+/// batch), per chain, lowercase.
+fn tokens_moved(items: &[ProposalItem]) -> BTreeSet<(u64, String)> {
+    let mut out = BTreeSet::new();
+    for i in items {
+        let legs: Vec<&Action> = match &i.review.action {
+            Some(Action::Batch { calls }) => calls.iter().map(|c| &c.action).collect(),
+            Some(a) => vec![a],
+            None => Vec::new(),
+        };
+        for leg in legs {
+            if let Action::Transfer { token: Some(t), .. } = leg {
+                out.insert((i.chain_id, t.to_ascii_lowercase()));
+            }
+        }
+    }
+    out
+}
+
+/// r8-2: read each token the list moves that neither the registry names nor
+/// this session read yet; one that does not answer is asked again on the
+/// next read, and one read stays read.
+async fn read_tokens(io: &Io<Event>, st: &Shared<State>) {
+    let wanted: Vec<(u64, String)> = {
+        let s = lock(st);
+        tokens_moved(&s.items())
+            .into_iter()
+            .filter(|(c, t)| {
+                !s.tokens.contains_key(&(*c, t.clone()))
+                    && !TokenFacts::of(*c, Some(t), &BTreeMap::new()).known
+            })
+            .collect()
+    };
+    let mut by_chain: BTreeMap<u64, Vec<String>> = BTreeMap::new();
+    for (c, t) in wanted {
+        by_chain.entry(c).or_default().push(t);
+    }
+    for (chain_id, tokens) in by_chain {
+        let read = super::multisig_outside::reading::read_these(
+            io,
+            chain_id,
+            tokens,
+            Some(multisig_gather::REVIEW_READ_MS),
+        )
+        .await;
+        let mut s = lock(st);
+        for (t, facts) in read {
+            // A decimals answer is what an amount needs; a symbol alone is
+            // asked again later for its decimals.
+            if facts.decimals.is_some() {
+                s.tokens.insert((chain_id, t), facts);
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2229,13 +2346,25 @@ async fn gather_review(
     members: &ChainMembers,
     origin: Option<String>,
 ) -> ReviewInput {
+    // One lock, read before: a guard held in the literal would be held to
+    // its end, and a second `lock` there would wait for ever.
+    let (known, tokens) = {
+        let s = lock(st);
+        let tokens: BTreeMap<String, TokenFacts> = s
+            .tokens
+            .iter()
+            .filter(|((c, _), _)| *c == chain_id)
+            .map(|((_, t), f)| (t.clone(), f.clone()))
+            .collect();
+        (s.known.clone(), tokens)
+    };
     let subject = multisig_gather::ReviewSubject {
         chain_id,
         safe: account.address.clone(),
         tx: tx.clone(),
         members: members.clone(),
         genesis: Some(account.genesis.clone()),
-        known: lock(st).known.clone(),
+        known,
         member_names: account
             .members
             .as_ref()
@@ -2246,6 +2375,7 @@ async fn gather_review(
             })
             .unwrap_or_default(),
         origin: origin.clone(),
+        tokens,
     };
     let input = multisig_gather::gather_review(io, &subject).await;
     let key = subject_key(chain_id, &account.address, tx, members, origin.as_deref());
@@ -2432,6 +2562,15 @@ async fn send_kept(io: &Io<Event>, st: &Shared<State>, req: Submission) -> Sent 
     let outbox = {
         let mut s = lock(st);
         s.outbox.insert(key.clone(), req.clone());
+        // r8-16: kept and on its way at once — never "not sent" meanwhile.
+        s.outbox_entries.insert(
+            key.clone(),
+            OutboxEntry {
+                why: "sending".to_owned(),
+                retry_at: None,
+                sending: true,
+            },
+        );
         s.outbox.clone()
     };
     save_json(io, keys::OUTBOX, &outbox, true).await;
@@ -2457,7 +2596,20 @@ async fn drop_kept(io: &Io<Event>, st: &Shared<State>, key: &str) {
 }
 
 async fn attempt(io: &Io<Event>, st: &Shared<State>, key: &str, req: &Submission) -> Sent {
-    let service = lock(st).service.clone();
+    // r8-16: on its way: said as sending until the mailbox answers.
+    let service = {
+        let mut s = lock(st);
+        s.outbox_entries.insert(
+            key.to_owned(),
+            OutboxEntry {
+                why: "sending".to_owned(),
+                retry_at: None,
+                sending: true,
+            },
+        );
+        s.service.clone()
+    };
+    io.emit(Event::Changed);
     match service.submit_approval(io, req).await {
         Ok(SubmitAnswer::Took { .. }) => {
             drop_kept(io, st, key).await;
@@ -2492,6 +2644,7 @@ async fn attempt(io: &Io<Event>, st: &Shared<State>, key: &str, req: &Submission
                 OutboxEntry {
                     why: why.to_owned(),
                     retry_at,
+                    sending: false,
                 },
             );
             Sent::Kept
@@ -3223,7 +3376,7 @@ async fn call_refusal(io: &Io<Event>, input: &ExecutionInput) -> Option<Value> {
         )
         .await
     {
-        Err(shell::RpcFail::Error { code, message }) => {
+        Err(shell::RpcFail::Error { code, message, .. }) => {
             if code != Some(3) && !message.to_ascii_lowercase().contains("revert") {
                 return None;
             }
@@ -4463,13 +4616,31 @@ async fn lookup_execution(
     is_final: bool,
     nonce: Option<u128>,
 ) -> Result<Option<String>, HistoryUnreadable> {
+    lookup_execution_at(io, st, multisig, chain_id, hash, since_ms, is_final, nonce)
+        .await
+        .map(|found| found.map(|(tx, _)| tx))
+}
+
+/// [`lookup_execution`], with the block it ran in when the search found it
+/// now (`None` for one this device already knew).
+#[allow(clippy::too_many_arguments)]
+async fn lookup_execution_at(
+    io: &Io<Event>,
+    st: &Shared<State>,
+    multisig: &str,
+    chain_id: u64,
+    hash: &str,
+    since_ms: f64,
+    is_final: bool,
+    nonce: Option<u128>,
+) -> Result<Option<(String, Option<u64>)>, HistoryUnreadable> {
     let kept = lock(st)
         .lookups
         .get(&lookup_key(chain_id, multisig, hash))
         .cloned();
     match kept.as_deref() {
         Some("none") => return Ok(None),
-        Some(tx) => return Ok(Some(tx.to_owned())),
+        Some(tx) => return Ok(Some((tx.to_owned(), None))),
         None => {}
     }
     let (from, head) = if since_ms > 0.0 {
@@ -4507,7 +4678,7 @@ async fn lookup_execution(
         )
         .await;
     }
-    Ok(found.map(|(t, _)| t))
+    Ok(found.map(|(t, b)| (t, (b > 0).then_some(b))))
 }
 
 /// Executions on another member's device: found by their `ExecutionSuccess`
@@ -4535,7 +4706,7 @@ async fn record_remote_executions(io: &Io<Event>, st: &Shared<State>, account: &
         if known {
             continue;
         }
-        match lookup_execution(
+        match lookup_execution_at(
             io,
             st,
             &account.address,
@@ -4547,9 +4718,20 @@ async fn record_remote_executions(io: &Io<Event>, st: &Shared<State>, account: &
         )
         .await
         {
-            Ok(Some(tx)) => {
-                let now = io.now().await;
-                rows.push(execution_row(&account.address, &item, &tx, "", now));
+            Ok(Some((tx, block))) => {
+                // r8-17: dated when it ran (its block's time), not when this
+                // device found it; now only when the block's time can't be read.
+                let ran = match block {
+                    Some(b) => {
+                        flows::block_time(io, item.chain_id, Some(&json!(format!("0x{b:x}")))).await
+                    }
+                    None => None,
+                };
+                let at = match ran {
+                    Some(at) => at,
+                    None => io.now().await,
+                };
+                rows.push(execution_row(&account.address, &item, &tx, "", at));
             }
             Ok(None) => {}
             Err(_) => unreadable.push(item.chain_id),

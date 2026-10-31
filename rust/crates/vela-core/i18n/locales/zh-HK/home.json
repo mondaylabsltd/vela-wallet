@@ -266,7 +266,8 @@
         "copy": "複製",
         "executedBy": "由 {{name}} 執行",
         "countedThen": "執行時計入的批准：{{threshold}} 位中的 {{approved}} 位",
-        "approvalsSigned": "這些成員批准了它。執行時計入了哪些批准，這部裝置上沒有記錄。"
+        "approvalsSigned": "這些成員批准了它。執行時計入了哪些批准，這部裝置上沒有記錄。",
+        "outboxSending": "正在把你的批准傳給其他成員…"
       },
       "send": {
         "propose": "發起並批准",
@@ -561,7 +562,9 @@
         "rowReject": "拒絕第 {{number}} 號",
         "outcomeNotSent": "已簽署，尚未發出",
         "nameFromRecord": "隨記錄儲存的名稱——你簽的是這個地址",
-        "linkDamaged": "此連結已損壞——請索取新的連結。"
+        "linkDamaged": "此連結已損壞——請索取新的連結。",
+        "executeConfirms": "錢包會依次請你確認 {{total}} 筆交易。",
+        "executeFeeMax": "網絡費 ≈ {{fee}}，最多 {{max}}，由你的錢包（{{account}}）支付。"
       },
       "import": {
         "or": "或從 Safe{Wallet} 匯入",
@@ -719,7 +722,46 @@
         "approveExecuteAnyway": "仍然批准並執行",
         "executeAnyway": "仍然執行",
         "proposeAnyway": "仍然發起並批准",
-        "blocked": "Vela 唔會簽呢筆交易：執行佢會改變誰控制這個多簽帳戶。"
+        "blocked": "Vela 唔會簽呢筆交易：執行佢會改變誰控制這個多簽帳戶。",
+        "reading": {
+          "send": "傳送",
+          "sendFrom": "從另一個帳戶轉出代幣",
+          "approve": "授權",
+          "increase": "增加授權額度",
+          "decrease": "降低授權額度",
+          "permit": "Permit 授權",
+          "daiPermit": "DAI Permit",
+          "permit2": "Permit2 授權",
+          "approveAll": "授權一個系列的全部代幣",
+          "revokeAll": "撤銷對一個系列的授權",
+          "batchOne": "包含 1 筆呼叫的批次",
+          "batchMany": "包含 {{total}} 筆呼叫的批次",
+          "unreadable": "無法讀取",
+          "call": "合約呼叫",
+          "members": "更改成員",
+          "rename": "改名為 {{name}}",
+          "amount": "金額",
+          "allowance": "授權額度",
+          "to": "收款方",
+          "from": "付款方",
+          "spender": "被授權方",
+          "operator": "操作方",
+          "collection": "系列",
+          "token": "代幣",
+          "function": "函數",
+          "alsoSends": "同時傳送",
+          "runner": "執行方",
+          "runnerNote": "這些呼叫從此合約發出，而不是從多簽發出。",
+          "unlimited": "無限",
+          "allOfIt": "全部",
+          "decimalsUnknown": "{{raw}} 個最小單位 · 小數位未知",
+          "unlimitedLine": "無限授權：{{spender}} 現在和以後都能拿走多簽持有的全部這種代幣。",
+          "nestedLine": "批次裡還包著批次。下面列出了每一筆呼叫；裡層的呼叫從批次合約發出。",
+          "unreadableLine": "這筆批次有一部分無法讀取（嵌套太深或被截斷）。Vela 不會簽署。",
+          "decimalsLine": "{{token}} 沒有提供小數位數，金額以最小單位顯示。",
+          "ownTokenLine": "這會把代幣傳送到代幣自己的合約（{{token}}），代幣將會遺失。",
+          "blindLine": "Vela 讀不出這筆呼叫做甚麼。只有在你確切知道它是甚麼時才批准。"
+        }
       }
     },
     "balanceDetailStatusOwnNode": "你的節點沒有回應",

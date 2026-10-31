@@ -87,6 +87,7 @@ window.VelaCS.i18n.register('en', {
   'sentence.deploy': 'You are deploying new contract code. Code cannot be read as intent.',
   'sentence.batch': '{count} transactions, one signature.',
   'sentence.multiSend': '{count} calls packed into a single signature.',
+  'sentence.multiSendOne': "One call packed into a single signature.",
   'sentence.safeExec': 'A call forwarded through Safe — the inner layer is what actually runs.',
   'sentence.burn': 'The recipient is the token contract itself. Coins sent there reach nobody — they are stuck for good.',
   'sentence.abiOnly': 'This contract is source-verified and every parameter decodes, but nobody wrote down what they mean. Below are facts, not explanations.',

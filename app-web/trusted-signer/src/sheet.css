@@ -1065,6 +1065,13 @@ details.fee-wrap[open] summary.fee .chevron { transform: rotate(90deg); }
   color: var(--color-fg-muted);
 }
 
+/* r8-5: a danger is confirmed on the danger's own outlined button, never the accent. */
+.confirm-danger {
+  border: var(--border-emphasis) solid var(--color-error-base);
+  background: transparent;
+  color: var(--color-error-base);
+}
+
 .confirm-done {
   border: var(--border-hairline) solid var(--color-border-strong);
   background: transparent;

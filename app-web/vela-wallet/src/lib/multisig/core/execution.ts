@@ -11,7 +11,7 @@ import type { Call } from './kernel';
 /** Why an execution would fail if it were sent now. */
 export type ExecutionBlock =
 	/** The multisig holds less of a coin than the transaction spends. */
-	| { kind: 'short'; symbol: string; decimals: number; have: bigint; need: bigint }
+	| { kind: 'short'; symbol: string; decimals: number | null; have: bigint; need: bigint }
 	/** It reverts when it runs; the reason the chain or relay gave, if any. */
 	| { kind: 'reverts'; reason: string | null };
 

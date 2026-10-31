@@ -91,6 +91,7 @@ window.VelaCS.i18n.register('zh', {
   'sentence.deploy': '你要把一份新合约部署到链上。它的代码无法被解读为意图。',
   'sentence.batch': '{count} 笔交易，一并签名。',
   'sentence.multiSend': '{count} 笔调用被打包进一次签名。',
+  'sentence.multiSendOne': "1 笔调用被打包进一次签名。",
   'sentence.safeExec': '这是一笔通过 Safe 转发的调用 —— 真正执行的是里面那一层。',
   'sentence.burn': '接收方填的是这枚代币自己的合约地址。转进去的币不会到任何人手上 —— 它们会永久卡在那里。',
   'sentence.abiOnly': '这个合约的源码已验证，参数可以全部解开，但没有人为它写过含义说明。下面是事实，不是解释。',

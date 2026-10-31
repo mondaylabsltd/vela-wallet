@@ -42,6 +42,29 @@ export function carriedLinkHash(hash: string): string {
 	return isMultisigLink(body) ? `#${body}` : '';
 }
 
+/** A kept link is opened within a day of being kept (the accounts machine's rule). */
+const KEPT_FOR_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * r5reg: whether a multisig link opened here waits for a wallet (kept, not
+ * yet a day old) — Welcome says so.
+ */
+export function linkWaiting(now = Date.now()): boolean {
+	try {
+		const raw = localStorage.getItem(KEPT_LINK_KEY);
+		if (!raw) return false;
+		const kept = JSON.parse(raw) as { hash?: unknown; at?: unknown };
+		return (
+			typeof kept.hash === 'string' &&
+			isMultisigLink(kept.hash) &&
+			typeof kept.at === 'number' &&
+			now - kept.at < KEPT_FOR_MS
+		);
+	} catch {
+		return false;
+	}
+}
+
 /** Keep `hash` if it is a multisig link. Whether it was kept. */
 export function keepLink(hash: string, now = Date.now()): boolean {
 	if (!isMultisigLink(hash)) return false;

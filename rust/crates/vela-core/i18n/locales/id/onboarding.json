@@ -64,7 +64,8 @@
           "title": "Bayar gas dengan stablecoin",
           "description": "Sebagian besar jaringan menerima stablecoin untuk biaya — tidak perlu menyiapkan koin native dulu."
         }
-      }
+      },
+      "linkWaiting": "Ada tautan multisig yang menunggu. Buat wallet atau masuk, lalu tautan itu terbuka."
     },
     "settings": {
       "title": "Pengaturan",
@@ -87,6 +88,8 @@
       "waitedSeconds": "Sudah menunggu {{seconds}} detik",
       "networkTitle": "Koneksi jaringan tidak stabil",
       "networkBody": "Permintaan tidak sampai — periksa jaringan Anda lalu coba lagi.",
+      "proxyPacBody": "Komputer ini diatur memakai konfigurasi proxy otomatis ({{proxy}}) yang tidak bisa dijangkau, jadi tidak ada permintaan yang keluar. Perbaiki, atau matikan konfigurasi proxy otomatis di pengaturan jaringan sistem pada bagian Proxy, lalu coba lagi.",
+      "proxyServerBody": "Proxy yang diatur untuk komputer ini ({{proxy}}) tidak merespons, jadi tidak ada permintaan yang keluar. Jalankan proxy itu, atau matikan di pengaturan jaringan sistem pada bagian Proxy, lalu coba lagi.",
       "offline": "Anda sedang offline. Vela diperbarui lagi setelah Anda kembali online.",
       "serverTitle": "Layanan sementara tidak tersedia",
       "serverBody": "Layanan Indeks Passkey tidak dapat dijangkau — pembuatan dompet dan proses masuk sama-sama memerlukannya.",

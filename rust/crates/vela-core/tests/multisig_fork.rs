@@ -107,18 +107,31 @@ struct Shell {
 
 impl Shell {
     fn rpc(&self, chain: u64, method: &str, params: Value) -> Result<Value, (Option<i64>, String)> {
+        self.rpc_full(chain, method, params)
+            .map_err(|(code, message, _)| (code, message))
+    }
+
+    /// The node's answer, its error's `data` kept (r8-4: the probe's payload).
+    #[allow(clippy::type_complexity)]
+    fn rpc_full(
+        &self,
+        chain: u64,
+        method: &str,
+        params: Value,
+    ) -> Result<Value, (Option<i64>, String, Option<Value>)> {
         let url = self
             .rpcs
             .get(&chain)
-            .ok_or((None, format!("no network {chain}")))?;
+            .ok_or((None, format!("no network {chain}"), None))?;
         let body =
             json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).to_string();
-        let (_, _, text) = http("POST", url, Some(&body)).map_err(|e| (None, e))?;
-        let v: Value = serde_json::from_str(&text).map_err(|e| (None, e.to_string()))?;
+        let (_, _, text) = http("POST", url, Some(&body)).map_err(|e| (None, e, None))?;
+        let v: Value = serde_json::from_str(&text).map_err(|e| (None, e.to_string(), None))?;
         if let Some(e) = v.get("error") {
             return Err((
                 e["code"].as_i64(),
                 e["message"].as_str().unwrap_or("").to_owned(),
+                e.get("data").filter(|d| !d.is_null()).cloned(),
             ));
         }
         Ok(v["result"].clone())
@@ -187,13 +200,14 @@ impl Shell {
                 method,
                 params,
                 ..
-            } => match self.rpc(*chain_id, method, params.clone()) {
+            } => match self.rpc_full(*chain_id, method, params.clone()) {
                 Ok(result) => Res::RpcResult { result },
-                Err((Some(code), message)) => Res::RpcError {
+                Err((Some(code), message, data)) => Res::RpcError {
                     code: Some(code),
                     message,
+                    data,
                 },
-                Err((None, detail)) => Res::RpcUnanswered { detail },
+                Err((None, detail, _)) => Res::RpcUnanswered { detail },
             },
             Op::LoadStore { keys } => Res::StoreLoaded {
                 entries: keys

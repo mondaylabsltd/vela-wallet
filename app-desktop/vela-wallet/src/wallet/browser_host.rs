@@ -702,6 +702,9 @@ pub fn wallet_news(
 pub struct Multisigs {
     pub addresses: Vec<String>,
     pub shown: Option<String>,
+    /// r8-21: the shown multisig's own networks, in its record's order —
+    /// a site starts on the first of them the space offers.
+    pub networks: Vec<u32>,
 }
 
 /// The multisigs here now; `None` while their list is still being read — a
@@ -720,6 +723,20 @@ fn multisigs_here(cx: &gpui::App) -> Option<Multisigs> {
             .iter()
             .map(|row| row.account.address.clone())
             .collect(),
+        networks: crate::multisig::shown::current(cx)
+            .and_then(|shown| {
+                view.accounts
+                    .iter()
+                    .find(|row| row.account.address.eq_ignore_ascii_case(&shown.address))
+            })
+            .map(|row| {
+                row.account
+                    .chain_ids
+                    .iter()
+                    .filter_map(|c| u32::try_from(*c).ok())
+                    .collect()
+            })
+            .unwrap_or_default(),
         shown: crate::multisig::shown::current(cx).map(|shown| shown.address),
     })
 }
@@ -727,9 +744,13 @@ fn multisigs_here(cx: &gpui::App) -> Option<Multisigs> {
 /// [`wallet_news`], with the multisigs here: each one's address is one of
 /// the wallet's accounts, and the one shown is the account in front — the
 /// address sites are offered and every grant follows (the web's
-/// `activeAddress: multisig.active ?? session.address`). Inside a dev space
-/// the space's test wallet stays in front. With no multisig here it says
-/// exactly what [`wallet_news`] always said.
+/// `activeAddress: multisig.active ?? session.address`) — inside a dev space
+/// too, where the multisig shown is a space account: told as `space`, so the
+/// person's own sites are set aside, never re-pinned to it. (The space's
+/// test wallet used to stay in front there: the header said "R8 Desk" and a
+/// site was offered "Parallel One" — no dApp could reach a multisig in the
+/// space.) With no multisig here it says exactly what [`wallet_news`]
+/// always said.
 #[must_use]
 pub fn wallet_news_with(
     session: &vela_core::app::session::SessionView,
@@ -755,9 +776,13 @@ pub fn wallet_news_with(
         .find(|row| row.account.address == session.address)
         .is_some_and(|row| crate::parallel_space::is_test_wallet(&row.account));
     let active = match &multisigs.shown {
-        Some(shown) if !in_space && !session.address.is_empty() => shown.clone(),
+        Some(shown) if !session.address.is_empty() => shown.clone(),
         _ => session.address.clone(),
     };
+    let multisig_in_front = multisigs
+        .shown
+        .as_deref()
+        .is_some_and(|shown| shown.eq_ignore_ascii_case(&active));
     let now = (addresses.clone(), active.clone());
     if told == Some(&now) {
         return None;
@@ -767,11 +792,17 @@ pub fn wallet_news_with(
         addresses: (!addresses.is_empty()).then_some(addresses),
     }];
     if switched && !active.is_empty() {
-        let space = session
-            .accounts
-            .iter()
-            .find(|row| row.account.address == active)
-            .is_some_and(|row| crate::parallel_space::is_test_wallet(&row.account));
+        // A multisig shown from inside the space is the space's: the
+        // person's sites stay as they were through it.
+        let space = if multisig_in_front {
+            in_space
+        } else {
+            session
+                .accounts
+                .iter()
+                .find(|row| row.account.address == active)
+                .is_some_and(|row| crate::parallel_space::is_test_wallet(&row.account))
+        };
         // Every grant follows it (`followActiveAccount`), and each open
         // page of those sites hears `accountsChanged` — the core's rule.
         events.push(Event::AccountSwitched {
@@ -779,6 +810,13 @@ pub fn wallet_news_with(
             now_ms: now_ms(),
             space,
         });
+        // r8-21: a multisig lives on its own networks: a new site starts
+        // there, never on Ethereum it is not on (the core's rule).
+        if multisig_in_front && !multisigs.networks.is_empty() {
+            events.push(Event::AccountNetworks {
+                networks: multisigs.networks.clone(),
+            });
+        }
     }
     Some((now, events))
 }
@@ -3817,6 +3855,62 @@ mod tests {
         });
     }
 
+    /// Desktop dApps from a multisig (R8, untested until now): a multisig
+    /// shown from inside the parallel space is the account sites are
+    /// offered — told as a space, so the person's own sites are set aside
+    /// through it — not the space's test wallet behind it.
+    #[cfg(feature = "dev-fixtures")]
+    #[test]
+    fn a_multisig_shown_inside_the_space_is_offered_as_a_space_account() {
+        use vela_core::dev_fixtures as fixtures;
+        storage::tests::with_temp_state("dbr-host-space-multisig", || {
+            let Ok(fixture) = fixtures::account(0) else {
+                unreachable!("the keyset has a first key");
+            };
+            let mut test_wallet = real_account(&fixture.credential_id_hex, &fixture.address);
+            test_wallet.keys[0]
+                .public_key_hex
+                .clone_from(&fixture.public_key_hex);
+            test_wallet
+                .public_key_hex
+                .clone_from(&fixture.public_key_hex);
+            assert!(storage::save_account(&test_wallet).is_ok());
+            assert!(storage::save_active_index(0).is_ok());
+            let wallets = Wallets::boot();
+            let shown = Multisigs {
+                addresses: vec![MULTISIG.to_owned()],
+                shown: Some(MULTISIG.to_owned()),
+                ..Multisigs::default()
+            };
+            let Some((told, events)) = wallet_news_with(&wallets.view(), &shown, None) else {
+                unreachable!("news");
+            };
+            assert_eq!(told.1, MULTISIG, "the multisig shown is in front");
+            assert!(
+                events.iter().any(|e| matches!(
+                    e,
+                    Event::AccountSwitched { address, space: true, .. } if address == MULTISIG
+                )),
+                "{events:?}"
+            );
+            // r8-21: its own networks follow the switch — a site starts there.
+            let with_networks = Multisigs {
+                networks: vec![5_042_002, 100],
+                ..shown.clone()
+            };
+            let Some((_, events)) = wallet_news_with(&wallets.view(), &with_networks, None) else {
+                unreachable!("news");
+            };
+            assert!(
+                events.iter().any(|e| matches!(
+                    e,
+                    Event::AccountNetworks { networks } if networks == &[5_042_002, 100]
+                )),
+                "{events:?}"
+            );
+        });
+    }
+
     /// A launch with the test wallet already in front — the parallel space
     /// started on a store that holds it: the stored sites are the person's,
     /// set aside as they are read, and they are there again once the person's
@@ -3878,6 +3972,7 @@ mod tests {
             let shown = Multisigs {
                 addresses: vec![MULTISIG.to_owned()],
                 shown: Some(MULTISIG.to_owned()),
+                ..Multisigs::default()
             };
             let Some((told, events)) = wallet_news_with(&wallets.view(), &shown, None) else {
                 unreachable!("news");

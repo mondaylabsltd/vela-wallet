@@ -679,7 +679,78 @@ export type ReviewConcern =
 	| { kind: 'lookalike'; address: string; of: string; label: string }
 	| { kind: 'firstTime'; address: string }
 	| { kind: 'toContract'; address: string }
-	| { kind: 'blind' };
+	| { kind: 'blind' }
+	/** r8-1: an unlimited allowance (or all of a collection) to `spender`. */
+	| { kind: 'unlimitedApproval'; token: string; spender: string }
+	/** r8-5: a batch inside a batch. */
+	| { kind: 'nestedBatch' }
+	/** r8-5: a batch too deep or cut short: nothing is signed. */
+	| { kind: 'unreadableBatch' }
+	/** r8-2: a token whose decimals are not known: its amounts are raw. */
+	| { kind: 'decimalsUnknown'; token: string }
+	/** Tokens sent to the token's own contract: lost. */
+	| { kind: 'toOwnToken'; token: string };
+
+/** A token as the core names it (the core's `OutsideTokenFacts`). */
+export interface ReadingToken {
+	/** Lowercase; `null`: the network's own coin. */
+	token: string | null;
+	symbol: string | null;
+	/** `null`: unknown — an amount in it is said raw, never in 18 decimals. */
+	decimals: number | null;
+	/** The wallet's registry names it. */
+	known: boolean;
+}
+
+/** An amount as the core reads it (r8-2). */
+export interface ReadingAmount {
+	/** Base units, decimal. */
+	raw: string;
+	decimals: number | null;
+	/** The exact whole-token amount, when the decimals are known and it is not unlimited. */
+	plain: string | null;
+	unlimited: boolean;
+}
+
+export type ReadingGrant = 'approve' | 'increase' | 'decrease' | 'permit' | 'daiPermit' | 'permit2';
+
+/** What one call does (the core's `reading::Intent`). */
+export type ReadingIntent =
+	| { kind: 'send'; token: ReadingToken; to: string; amount: ReadingAmount }
+	| { kind: 'sendFrom'; token: ReadingToken; from: string; to: string; amount: ReadingAmount }
+	| {
+			kind: 'approve';
+			token: ReadingToken;
+			spender: string;
+			grant: ReadingGrant;
+			amount: ReadingAmount;
+			expires: string | null;
+	  }
+	| { kind: 'approveAll'; collection: string; operator: string; granted: boolean }
+	| { kind: 'batch'; runner: string; calls: ReadingCall[] }
+	| { kind: 'unreadable' }
+	| { kind: 'members'; action: Action }
+	| { kind: 'rename'; name: string }
+	| { kind: 'call'; selector: string | null };
+
+/** One call, read (the core's `reading::Call`). */
+export interface ReadingCall {
+	/** Leg numbers from the top: `[]` the lone call, `[2, 1]` the first leg of leg 2's batch. */
+	path: number[];
+	to: string;
+	value: ReadingAmount;
+	intent: ReadingIntent;
+}
+
+/** The transaction's calls, read by the core (`MultisigReview.reading`, r8-1). */
+export interface ReviewReading {
+	calls: ReadingCall[];
+	nested: boolean;
+	unreadable: boolean;
+	unlimited: boolean;
+	blind: boolean;
+	decimalsUnknown: string[];
+}
 
 export type ReviewTone = 'ok' | 'caution' | 'danger' | 'refused';
 
@@ -703,6 +774,8 @@ export interface ReviewInput extends ReviewReadsInput {
 /** The one review (the core's `MultisigReview`). */
 export interface MultisigReviewOut {
 	review: Review;
+	/** What each call does, every leg of every batch (r8-1): drawn, never decoded again. */
+	reading: ReviewReading;
 	memberChanges: MemberChanges | null;
 	hashes: SafeTxHashes;
 	fields: { name: string; value: string }[];

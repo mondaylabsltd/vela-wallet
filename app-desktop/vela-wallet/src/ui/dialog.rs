@@ -88,6 +88,29 @@ pub fn dialog(
     scroll: &crate::ui::SmoothScroll,
     close: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
 ) -> Stateful<Div> {
+    dialog_with_foot(id, theme, window, title, subtitle, close_icon, body, None, scroll, close)
+}
+
+/// The room a pinned foot takes from the scrolling body: one row of
+/// answers (`BTN_H_PRIMARY`) and the gap above it.
+const FOOT_ROOM: f32 = theme::BTN_H_PRIMARY + 16.;
+
+/// [`dialog`] with `foot` pinned under the scrolling body (r4D-19): the
+/// answers of a long review stay in view, never scrolled out of it.
+#[allow(clippy::too_many_arguments, reason = "one dialog, named parts")]
+pub fn dialog_with_foot(
+    id: &'static str,
+    theme: &Theme,
+    window: &Window,
+    title: SharedString,
+    subtitle: Option<SharedString>,
+    close_icon: impl gpui::IntoElement,
+    body: impl gpui::IntoElement,
+    foot: Option<gpui::AnyElement>,
+    scroll: &crate::ui::SmoothScroll,
+    close: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+) -> Stateful<Div> {
+    let foot_room = if foot.is_some() { FOOT_ROOM } else { 0. };
     // N-D1: the dialog is read by its title.
     let name = title.clone();
     let has_subtitle = subtitle.is_some();
@@ -146,7 +169,8 @@ pub fn dialog(
         - PAD * 2.
         - CLOSE
         - subtitle_h
-        - HEADER_GAP)
+        - HEADER_GAP
+        - foot_room)
         .max(160.));
     let content = div()
         .relative()
@@ -173,7 +197,8 @@ pub fn dialog(
             card((id, 0u64), theme, DIALOG_W)
                 .a11y_dialog(name)
                 .child(header)
-                .child(content),
+                .child(content)
+                .children(foot),
             (id, 4u64),
             reduce,
         ))

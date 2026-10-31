@@ -736,6 +736,7 @@ impl World {
                 None => Res::RpcError {
                     code: Some(-32000),
                     message: "gas required exceeds allowance".to_owned(),
+                    data: None,
                 },
             },
             "eth_getBlockByNumber" => ok(json!({
@@ -775,6 +776,7 @@ impl World {
             _ => Res::RpcError {
                 code: Some(-32601),
                 message: format!("{method} not here"),
+                data: None,
             },
         }
     }
@@ -787,6 +789,7 @@ impl World {
             return Res::RpcError {
                 code: Some(3),
                 message: "execution reverted".to_owned(),
+                data: None,
             };
         }
         // `getConfiguration(address)` on Vela's shared passkey signer: a key

@@ -15,4 +15,11 @@ count: number,
 /**
  * Some could not be priced before the ones ahead of them land.
  */
-partial: boolean, };
+partial: boolean, 
+/**
+ * r8-15: the most it can cost (wei, decimal): every transaction at
+ * twice the gas price now (a wallet's own ceiling while the price
+ * moves), and one not priced yet at [`UNPRICED_GAS`] — said beside
+ * the estimate, so what the wallet takes is never more than said.
+ */
+maxWei: string, };

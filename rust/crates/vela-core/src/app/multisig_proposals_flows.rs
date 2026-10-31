@@ -765,7 +765,12 @@ pub async fn remember_execution(
     .await;
 }
 
-async fn block_time(io: &Io<Event>, chain_id: u64, block: Option<&Value>) -> Option<f64> {
+/// When `block` was made (ms), or `None` when the chain does not say.
+pub(super) async fn block_time(
+    io: &Io<Event>,
+    chain_id: u64,
+    block: Option<&Value>,
+) -> Option<f64> {
     let block = block?.as_str()?;
     let answer = io
         .rpc(chain_id, "eth_getBlockByNumber", json!([block, false]))

@@ -594,6 +594,7 @@ impl Deps for Live {
                     .and_then(Value::as_str)
                     .unwrap_or_default()
                     .to_owned(),
+                data: error.get("data").cloned(),
             });
         }
         Ok(RpcReply::Result(

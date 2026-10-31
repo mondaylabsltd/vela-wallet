@@ -815,7 +815,8 @@
      "title": "可用穩定幣支付 gas",
      "description": "大多數網絡支援以穩定幣支付手續費，毋須預先準備原生幣。"
     }
-   }
+   },
+   "linkWaiting": "有一條多簽連結在等你。建立錢包或登入後就會開啟。"
   },
   "settings": {
    "title": "設定",
@@ -838,6 +839,8 @@
    "waitedSeconds": "已等待 {{seconds}} 秒",
    "networkTitle": "網絡連接不穩定",
    "networkBody": "請求沒有送達，請檢查網絡後再試一次。",
+   "proxyPacBody": "這部電腦設定了自動代理伺服器設定（{{proxy}}），但無法連線，所以所有請求都送不出去。請修正它，或在系統網絡設定的「代理伺服器」中關閉自動代理伺服器設定，然後再試一次。",
+   "proxyServerBody": "這部電腦設定的代理伺服器（{{proxy}}）沒有回應，所以所有請求都送不出去。請啟動它，或在系統網絡設定的「代理伺服器」中將其關閉，然後再試一次。",
    "offline": "你已離線。恢復連線後，Vela 會重新更新。",
    "serverTitle": "服務暫時無法使用",
    "serverBody": "無法連接通行密鑰索引服務，建立及登入均需要它。",
@@ -1612,7 +1615,7 @@
     "chipGrantAll": "全部允許",
     "chooseGrant": "請先選擇「全部允許」或「撤銷」",
     "labelSource": "解讀來源",
-    "byVela": "Vela，從交易本身"
+    "byVela": "Vela（讀自交易本身）"
    },
    "hiddenChars": "此請求含有隱藏或會改變文字方向的字元 — 已顯示為 ⟨U+…⟩。",
    "blankLines": "⋯ 空白行：{{lines}} ⋯",

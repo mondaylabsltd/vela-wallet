@@ -21,6 +21,7 @@ use std::collections::BTreeMap;
 use futures::future;
 use serde_json::{json, Value};
 
+use super::multisig_outside::reading::TokenFacts;
 use super::multisig_shell::{ChainMembers, Io, MultisigOperation, MultisigShellResult, RpcFail};
 use crate::multisig::{self, Genesis, SafeTx};
 use crate::multisig_review::{
@@ -52,6 +53,9 @@ pub struct ReviewSubject {
     pub member_names: BTreeMap<String, String>,
     /// The site that asked, for a dApp's calls.
     pub origin: Option<String>,
+    /// Tokens this device already read (lowercase address → facts): never
+    /// read again, so a read that fails now cannot unsay one (r8-2).
+    pub tokens: BTreeMap<String, TokenFacts>,
 }
 
 /// A JSON-RPC answer as the review takes it: `{result}`, `{error}`,
@@ -59,7 +63,17 @@ pub struct ReviewSubject {
 pub fn envelope(answer: Result<Value, RpcFail>) -> Value {
     match answer {
         Ok(result) => json!({ "result": result }),
-        Err(RpcFail::Error { code, message }) => {
+        // r8-4: the error's `data` is the probe's answer (simulateAndRevert
+        // always reverts) — kept, so the state-diff guard reads on a network
+        // without a debug trace.
+        Err(RpcFail::Error {
+            code,
+            message,
+            data: Some(data),
+        }) => {
+            json!({ "error": { "code": code, "message": message, "data": data } })
+        }
+        Err(RpcFail::Error { code, message, .. }) => {
             json!({ "error": { "code": code, "message": message } })
         }
         Err(RpcFail::Unanswered(_)) => json!({ "unreachable": true }),
@@ -181,7 +195,27 @@ pub async fn gather_review<Ev: Send + 'static>(
             },
         }
     }));
-    let ((trace, probe), sim_reply, recipient_facts) = futures::join!(state, simulate, facts);
+    // The tokens the reading names that the registry does not (r8-2): each
+    // contract's own symbol and decimals; one that does not answer stays
+    // unknown — its amount is said raw, never as 18 decimals.
+    let tokens = async {
+        let review = multisig::review(chain_id, &subject.safe, &subject.tx).ok();
+        let names: Vec<String> = review
+            .map(|r| mr::reading::tokens_to_read(chain_id, &subject.tx, &r))
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|t| !subject.tokens.contains_key(t))
+            .collect();
+        let mut read =
+            super::multisig_outside::reading::read_these(io, chain_id, names, Some(REVIEW_READ_MS))
+                .await;
+        for (k, v) in &subject.tokens {
+            read.entry(k.clone()).or_insert_with(|| v.clone());
+        }
+        read
+    };
+    let ((trace, probe), sim_reply, recipient_facts, tokens) =
+        futures::join!(state, simulate, facts, tokens);
     let mut known = subject.known.clone();
     known.extend(members_known(
         &subject.members.owners,
@@ -195,6 +229,7 @@ pub async fn gather_review<Ev: Send + 'static>(
         recipient_facts,
         known,
         blind: false,
+        token_facts: tokens.into_values().collect(),
         origin: subject.origin.clone(),
     }
 }
@@ -269,9 +304,19 @@ mod tests {
         assert_eq!(
             envelope(Err(RpcFail::Error {
                 code: Some(3),
-                message: "execution reverted".into()
+                message: "execution reverted".into(),
+                data: None,
             })),
             json!({"error": {"code": 3, "message": "execution reverted"}})
+        );
+        // r8-4: the revert's payload reaches the probe's reader.
+        assert_eq!(
+            envelope(Err(RpcFail::Error {
+                code: Some(3),
+                message: "execution reverted".into(),
+                data: Some(json!("0x0001")),
+            })),
+            json!({"error": {"code": 3, "message": "execution reverted", "data": "0x0001"}})
         );
     }
 

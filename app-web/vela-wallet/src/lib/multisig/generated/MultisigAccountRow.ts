@@ -13,7 +13,9 @@ name: string | null, shared: boolean,
  */
 record_waiting: boolean, 
 /**
- * The founding members that are Vela accounts on this device.
+ * Its members that are Vela accounts on this device — its members as
+ * the chains last said (a member added by a member change counts, one
+ * removed does not), its founding ones until a chain was read (r8-7).
  */
 local_members: Array<string>, 
 /**

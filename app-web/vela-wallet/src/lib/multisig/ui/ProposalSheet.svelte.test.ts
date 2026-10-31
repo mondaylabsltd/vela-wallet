@@ -433,6 +433,29 @@ vi.mock('../core/gate.svelte', () => {
  */
 const REVIEW = vi.hoisted(() => ({
 	sign: { allowed: true, anyway: false },
+	// r8-1: the core's reading of the call (an approve of 1 base unit).
+	reading: {
+		calls: [
+			{
+				path: [],
+				to: '0x000000000000000000000000000000000000dEaD',
+				value: { raw: '0', decimals: 18, plain: '0', unlimited: false },
+				intent: {
+					kind: 'approve',
+					grant: 'approve',
+					spender: '0x000000000000000000000000000000000000bEEF',
+					token: { token: null, symbol: 'TKN', decimals: 6, known: false },
+					amount: { raw: '1', decimals: 6, plain: '0.000001', unlimited: false },
+					expires: null
+				}
+			}
+		],
+		nested: false,
+		unreadable: false,
+		unlimited: false,
+		blind: false,
+		decimalsUnknown: []
+	},
 	state: { source: 'trace', verdict: { kind: 'unchanged' } },
 	recipients: [],
 	hashes: {
@@ -510,7 +533,8 @@ vi.mock('../core/display', () => ({
 	}),
 	shortenAddress: (a: string) => a.slice(0, 8),
 	tokenInfo: async (_chain: number, token: string) =>
-		token === USDC ? { symbol: 'USDC', decimals: 0 } : { symbol: 'xDAI', decimals: 18 }
+		token === USDC ? { symbol: 'USDC', decimals: 0 } : { symbol: 'xDAI', decimals: 18 },
+	UNREAD_TOKEN: { symbol: '', decimals: null }
 }));
 vi.mock('../core/kernel', () => {
 	const same = (a?: string | null, b?: string | null) =>
@@ -957,12 +981,14 @@ describe('the proposer (ms-6)', () => {
 		];
 		const screen = show();
 		await settle();
-		expect(buttons()).toContain('proposal.reject');
-		press('proposal.reject');
+		// r4D-13: its own proposal is withdrawn, not rejected.
+		expect(buttons()).toContain('proposal.withdraw');
+		expect(buttons()).not.toContain('proposal.reject');
+		press('proposal.withdraw');
 		await settle();
 		// The confirmation, then the cancellation it proposes.
 		[...document.body.querySelectorAll('button')]
-			.filter((b) => b.textContent?.trim() === 'proposal.reject')
+			.filter((b) => b.textContent?.trim() === 'proposal.withdraw')
 			.at(-1)
 			?.click();
 		await settle();
@@ -2179,7 +2205,8 @@ describe('how each missing member approves (r4-9, r4D-6)', () => {
 
 describe('Reject (r4D-14)', () => {
 	it('has a way back', async () => {
-		fake.chain.items = [item()];
+		// Another member's proposal: rejected (one's own is withdrawn, r4D-13).
+		fake.chain.items = [item({ proposer: OTHER })];
 		const screen = show();
 		await settle();
 		press('proposal.reject');
@@ -2236,14 +2263,16 @@ describe('round 6: the review’s words and where its actions stand', () => {
 		expect(document.querySelector('[data-testid="multisig-call-review"]')).not.toBeNull();
 		expect(document.querySelector('header.what .title')).toBeNull();
 		await screen.unmount();
-		// A cancellation is the multisig's own reading: its line stays.
+		// A cancellation is the multisig's own reading (no calls read): its line stays.
 		fake.chain.items = [
 			item({ review: { action: { kind: 'cancel', nonce: '0' }, refusal: null } })
 		];
+		reviewSeam.review = { ...REVIEW, reading: { ...REVIEW.reading, calls: [] } };
 		const again = show();
 		await settle();
 		expect(document.querySelector('header.what .title')).not.toBeNull();
 		await again.unmount();
+		reviewSeam.review = null;
 	});
 
 	it('r4D-19: in the desktop dialog the actions ride its bottom edge; the phone sheet is unchanged', async () => {
