@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -125,7 +126,22 @@ fun MultisigDappSheet(hub: MultisigHub, id: String, context: MultisigHostContext
         if (hub.sheet.value == MultisigSheet.Dapp(id)) hub.sheet.value = null
     }
     val hash = held["safe_tx_hash"].str
+    // The transaction the request became, kept: once the site is answered the
+    // machine lets the request go, and the sheet stays on what was done.
+    var proposed by remember(id) { mutableStateOf<Pair<Int, String>?>(null) }
+    if (!hash.isNullOrEmpty()) proposed = (held["chain_id"].int ?: 0) to hash
+    val answered = held == null
+    if (answered && proposed == null) proposed = hub.dappProposal(id)
+    LaunchedEffect(answered, proposed) {
+        if (answered && proposed == null && hub.sheet.value == MultisigSheet.Dapp(id)) hub.sheet.value = null
+    }
+    val done = proposed
     when {
+        answered && done != null -> MultisigProposalSheet(
+            hub, done.first, done.second, words, context.origin, context.locale, context.tokenInfo, context.explorerTx,
+            onClose = { if (hub.sheet.value == MultisigSheet.Dapp(id)) hub.sheet.value = null },
+        )
+        answered -> Unit
         !hash.isNullOrEmpty() -> MultisigProposalSheet(
             hub, held["chain_id"].int ?: 0, hash, words, context.origin, context.locale, context.tokenInfo, context.explorerTx,
             onClose = leave,

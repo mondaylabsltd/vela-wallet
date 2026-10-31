@@ -156,13 +156,6 @@ class MultisigHub(
     @Volatile private var appActive = true
     @Volatile private var lastPace = 12_000L
 
-    init {
-        live.onNotice = { notice -> route(notice) }
-        live.onAskRisk = { op -> askRisk(op) }
-        scope.launch { accounts.view.collect { accountsMoved(it) } }
-        scope.launch { proposals.view.collect { proposalsMoved(it) } }
-    }
-
     // -- boot -------------------------------------------------------------------
 
     /** Idempotent: the machines start from the app's facts; the accounts machine reads its store and says `loaded`. */
@@ -490,6 +483,12 @@ class MultisigHub(
     /** The requests held by the machine, by id: who answers the site. */
     private val dappAnswers = java.util.concurrent.ConcurrentHashMap<String, (JsonElement) -> Unit>()
 
+    /** The transaction each answered request became (chain, safeTxHash): its sheet stays on it once the machine lets the request go. */
+    private val dappProposed = java.util.concurrent.ConcurrentHashMap<String, Pair<Int, String>>()
+
+    /** What the request [id] became, once proposed (`null`: nothing yet, or never). */
+    fun dappProposal(id: String): Pair<Int, String>? = dappProposed[id]
+
     /**
      * A site's request to a multisig (`eth_sendTransaction`, `wallet_sendCalls`,
      * …): the machine decides everything — refused (a message), drafted with
@@ -554,6 +553,7 @@ class MultisigHub(
             val held = view.dapp[id] ?: continue
             val result = held["answer"] ?: continue
             if (dappAnswers.remove(id) == null) continue
+            held["safe_tx_hash"].str?.takeIf { it.isNotEmpty() }?.let { dappProposed[id] = (held["chain_id"].int ?: 0) to it }
             // An error the site was not told of takes the sheet with it.
             if (result["error"] != null && held["told"].bool != true && sheet.value == MultisigSheet.Dapp(id)) sheet.value = null
             answer(result)
@@ -683,6 +683,15 @@ class MultisigHub(
         accounts.dispose()
         members.dispose()
         proposals.dispose()
+    }
+
+    // Last in the class: the views are followed only once every field above
+    // exists (a view can land on another thread before construction ends).
+    init {
+        live.onNotice = { notice -> route(notice) }
+        live.onAskRisk = { op -> askRisk(op) }
+        scope.launch { accounts.view.collect { accountsMoved(it) } }
+        scope.launch { proposals.view.collect { proposalsMoved(it) } }
     }
 
     private companion object {

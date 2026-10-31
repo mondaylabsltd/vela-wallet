@@ -1918,9 +1918,16 @@ fun VelaNavHost(
                         val networks by application.container.spaceNetworks.collectAsStateWithLifecycle()
                         val tabView = dapp.tabs.firstOrNull { it.tab == exploreView.selected_tab }
                         val siteChain = tabView?.chain_id ?: app.getvela.wallet.feature.browser.core.DbrTabView("").chain_id
+                        // M5: a multisig shown is the account sites see — named as the wallet names it.
+                        val exploreMsHub = application.container.multisig
+                        val exploreMs by exploreMsHub.accountsView.collectAsStateWithLifecycle()
+                        val exploreShown = exploreMs.activeRow
+                        val exploreShownName = remember(exploreShown, strings) {
+                            exploreShown?.let { app.getvela.wallet.feature.multisig.MultisigWiring.words(application.container, exploreMsHub).name(it.account, it.name) }
+                        }
                         val identity = app.getvela.wallet.feature.browser.ExploreLive.Identity(
-                            accountName = session.activeName,
-                            accountAddress = session.address,
+                            accountName = exploreShownName ?: session.activeName,
+                            accountAddress = exploreShown?.account?.address ?: session.address,
                             chainName = chainNames[siteChain] ?: siteChain.toString(),
                             chainDot = WalletLive.badge(siteChain.toLong()),
                             chainId = siteChain,
