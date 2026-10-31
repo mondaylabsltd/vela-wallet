@@ -1628,9 +1628,16 @@ pub mod reading {
                 io.rpc_within(chain_id, "eth_call", call(DECIMALS), bound_ms)
             );
             let symbol = symbol.ok().and_then(|v| v.as_str().and_then(abi_string));
+            // r9 (r8-2's class): `decimals()` answers one 32-byte word. An
+            // address with no code answers "0x" — no answer, never 0
+            // decimals (which read 1,000,000 base units as "1,000,000").
             let decimals = decimals
                 .ok()
-                .and_then(|v| v.as_str().and_then(shell::quantity))
+                .and_then(|v| {
+                    v.as_str()
+                        .filter(|s| s.strip_prefix("0x").is_some_and(|h| h.len() == 64))
+                        .and_then(shell::quantity)
+                })
                 .and_then(|d| u32::try_from(d).ok())
                 .filter(|d| *d <= 36);
             (token, symbol, decimals)

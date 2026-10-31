@@ -1500,6 +1500,36 @@ fn a_look_at_a_number_used_by_another_says_it_was_executed_by_another() {
     assert!(world.sent.is_empty());
 }
 
+/// r9 (r8-2's class, found by the desktop lane): an address with no code
+/// answers `eth_call` with "0x" — that is no answer, never 0 decimals.
+#[test]
+fn an_address_with_no_code_has_no_decimals() {
+    const TOKEN: &str = "0x00000000000000000000000000000000000b0b0b";
+    let (mut world, mut sut, _account) = setup(&[0, 1]);
+    world.rpc_hooks.push(Box::new(move |_, method, params| {
+        let call = &params[0];
+        if method != "eth_call" || !call["to"].as_str()?.eq_ignore_ascii_case(TOKEN) {
+            return None;
+        }
+        Some(
+            vela_core::app::multisig_shell::MultisigShellResult::RpcResult {
+                result: json!("0x"),
+            },
+        )
+    }));
+    let kind = ProposalKind::Transfers {
+        transfers: vec![Transfer {
+            token: Some(TOKEN.to_owned()),
+            to: B.to_owned(),
+            amount: "1000000".to_owned(),
+        }],
+    };
+    let _ = propose(&mut sut, &mut world, kind, None);
+    run(&mut sut, &mut world, Event::Refresh { fresh: true });
+    let facts = sut.view().tokens[&format!("100:{TOKEN}")].clone();
+    assert_eq!(facts.decimals, None, "\"0x\" is no answer: decimals unknown");
+}
+
 /// r8-2: a token a proposal moves is named by its contract's own decimals,
 /// never 18 assumed; a read that fails later never unsays it.
 #[test]
