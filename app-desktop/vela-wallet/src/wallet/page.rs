@@ -5178,6 +5178,8 @@ impl WalletPage {
             || self.palette.is_some()
             || self.feedback.viewer_open()
             || session::view(cx).sign_out.is_some()
+            // AUDIT M1–M6: a multisig's question, draft, session or sheet.
+            || self.multisig_layer_up(cx)
             || self.signing_host.as_ref().is_some_and(|host| {
                 let channel = host.read(cx).trusted_signer();
                 channel.waiting() || channel.ended().is_some()
@@ -23506,9 +23508,11 @@ mod tests {
         let agent = include_str!("page/agent.rs");
         // And the command palette from its own (N-D2).
         let palette = include_str!("page/palette.rs");
+        // And the multisig layer from its own (AUDIT M1–M6).
+        let multisig = include_str!("page/multisig.rs");
         let body_of = |name: &str| -> &str {
             let signature = ["fn ", name, "("].concat();
-            let (file, start) = [source, agent, palette]
+            let (file, start) = [source, agent, palette, multisig]
                 .into_iter()
                 .find_map(|file| file.find(&signature).map(|start| (file, start)))
                 .unwrap_or_else(|| unreachable!("fn {name}"));
@@ -23537,6 +23541,7 @@ mod tests {
             ("trusted_signer_prompt", "trusted_signer()"),
             ("agent_approval_dialog", "self.agent_pending(cx)"),
             ("palette_dialog", "self.palette"),
+            ("multisig_layer", "self.multisig_layer_up(cx)"),
         ];
         for (dialog, state) in raised_by {
             assert!(

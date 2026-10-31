@@ -1900,6 +1900,9 @@ impl WalletPage {
         window: &Window,
         cx: &mut Context<Self>,
     ) -> Option<gpui::AnyElement> {
+        if !self.multisig_layer_up(cx) {
+            return None;
+        }
         let host = ms_host::booted(cx)?;
         if let Some(prompt) = self.ms_ceremony_layer(theme, window, &host, cx) {
             return Some(prompt);
@@ -2025,6 +2028,27 @@ impl WalletPage {
             return Some(scrim("ms-touch-scrim").child(card).into_any_element());
         }
         None
+    }
+
+    /// A multisig dialog is over the page (`dialog_up`: the in-app
+    /// browser's page goes off the screen under it).
+    pub(crate) fn multisig_layer_up(&self, cx: &App) -> bool {
+        let Some(host) = ms_host::booted(cx) else {
+            return false;
+        };
+        let host = host.read(cx);
+        let channel = &host.ceremony;
+        channel.pending_pin().is_some()
+            || channel.pending_choice().is_some()
+            || channel.qr_showing().is_some()
+            || channel.touch_waiting().is_some()
+            || host.risk.is_some()
+            || host.send_reviewing()
+            || (self.multisig.session && host.machines().session_view().is_some())
+            || host.machines().accounts_view.link.is_some()
+            || self.multisig.create
+            || self.multisig.add.is_some()
+            || self.multisig.invite.is_some()
     }
 
     fn ms_risk_dialog(

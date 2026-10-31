@@ -522,7 +522,38 @@ const EVENTS: &[(&str, Place)] = &[
         Machine("each network's members, read again"),
     ),
     ("ms_members::Event::Step", Later(MULTISIG_SETTINGS)),
+    // AUDIT M1/M2/M4: the switcher's multisigs, the transaction's sheet,
+    // an outside owner's session. Signing ones (Approve, Execute, a Draft
+    // confirmed) go through the proposals machine's review and a member's
+    // passkey — never an intent's.
+    ("ms_accounts::Event::Activate", Later(MULTISIG_SHOWN)),
+    ("ms_accounts::Event::Remove", Later(MULTISIG_SHOWN)),
+    ("ms_accounts::Event::NewDraft", Later(MULTISIG_SHOWN)),
+    ("ms_accounts::Event::InviteShared", View("the invite was handed on")),
+    ("multisig_accounts::Event::OpenLink", Later(MULTISIG_SHOWN)),
+    ("ms_proposals::Event::Approve", Later(MULTISIG_SIGNS)),
+    ("ms_proposals::Event::ApproveOutside", Later(MULTISIG_SIGNS)),
+    ("ms_proposals::Event::Execute", Later(MULTISIG_SIGNS)),
+    ("ms_proposals::Event::Draft", Later(MULTISIG_SIGNS)),
+    ("ms_proposals::Event::SendAgain", Later(MULTISIG_SIGNS)),
+    ("ms_proposals::Event::CloseLinked", View("a link's transaction let go")),
+    ("ms_proposals::Event::Preview", Machine("the executor's look: fee and whether it runs")),
+    ("ms_proposals::Event::ReadSigners", Machine("how the remaining approvals can come")),
+    ("ms_proposals::Event::Retry", Machine("the multisig service asked again")),
+    ("ms_proposals::Event::Review", Machine("the one review, gathered")),
+    ("ms_proposals::Event::Timeline", Machine("a transaction's history")),
+    ("ms_proposals::Event::Watch", View("a transaction's sheet opened")),
+    ("ms_proposals::Event::Unwatch", View("a transaction's sheet closed")),
+    ("session::Event::AskAgain", Later(MULTISIG_SIGNS)),
 ];
+
+/// Which account the wallet shows, among a person's multisigs.
+const MULTISIG_SHOWN: &str =
+    "showing, adding or removing a multisig, or opening its link: the person's own presses";
+
+/// A multisig transaction proposed, approved or executed.
+const MULTISIG_SIGNS: &str =
+    "proposing, approving or executing a multisig transaction: a member's passkey after its review";
 
 /// A multisig's own settings: changing its members or rule, renaming it,
 /// sharing or backing up its record.
