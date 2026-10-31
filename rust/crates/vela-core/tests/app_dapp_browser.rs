@@ -2741,3 +2741,89 @@ fn loaded_lower_case_sites_are_normalised() {
         other => panic!("forwarded to signing: {other:?}"),
     }
 }
+
+/// core-ms-2: a multisig's answer reaches the page as the proposals machine
+/// formed it — a "proposed, waiting" error keeps its `data` (the proposal) —
+/// and a batch it answered is a multisig batch: its `wallet_getCallsStatus`
+/// is the proposals machine's, delivered as it is.
+#[test]
+fn a_multisigs_answer_and_its_batch_are_the_proposals_machines() {
+    use vela_core::app::multisig_dapp::{left_proposed, DappAnswer};
+    let hash = format!("0x{}", "Ab".repeat(32));
+    let mut sut = connected(DAPP);
+    hello(&mut sut, "t1", "d1", DAPP);
+    let ops = ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "1",
+        "eth_sendTransaction",
+        json!([{"to": A2, "value": "0x1"}]),
+    );
+    assert!(forwarded(&ops).is_some());
+    let ops = sut.dispatch(Event::MultisigAnswered {
+        tab: "t1".to_owned(),
+        id: "1".to_owned(),
+        answer: DappAnswer::err(left_proposed(&hash)),
+        now_ms: 0.0,
+    });
+    let answer = only_answer(&ops);
+    assert_eq!(error_code(&answer), -32000);
+    assert_eq!(answer["error"]["data"]["safeTxHash"], json!(hash));
+    assert_eq!(answer["error"]["data"]["status"], "proposed");
+
+    let ops = ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "2",
+        "wallet_sendCalls",
+        json!([{"version": "2.0.0", "calls": [{"to": A2}]}]),
+    );
+    assert!(forwarded(&ops).is_some());
+    let ops = sut.dispatch(Event::MultisigAnswered {
+        tab: "t1".to_owned(),
+        id: "2".to_owned(),
+        answer: DappAnswer::ok(json!({ "id": hash })),
+        now_ms: 0.0,
+    });
+    assert_eq!(only_answer(&ops)["result"], json!({ "id": hash }));
+
+    let ops = ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "3",
+        "wallet_getCallsStatus",
+        json!([hash]),
+    );
+    assert!(
+        !ops.iter().any(|op| matches!(op, Op::Read { .. })),
+        "no bundler read: {ops:?}"
+    );
+    assert!(ops.contains(&Op::MultisigCallsStatus {
+        tab: "t1".to_owned(),
+        id: "3".to_owned(),
+        chain_id: 100,
+        batch: hash.to_ascii_lowercase(),
+    }));
+    let status = json!({ "version": "2.0.0", "id": hash, "chainId": "0x64", "status": 100 });
+    let ops = sut.dispatch(Event::MultisigCallsStatusAnswered {
+        tab: "t1".to_owned(),
+        id: "3".to_owned(),
+        answer: DappAnswer::ok(status.clone()),
+        now_ms: 0.0,
+    });
+    assert_eq!(only_answer(&ops)["result"], status);
+    // Answered once: a late second answer is dropped.
+    let ops = sut.dispatch(Event::MultisigCallsStatusAnswered {
+        tab: "t1".to_owned(),
+        id: "3".to_owned(),
+        answer: DappAnswer::ok(status),
+        now_ms: 0.0,
+    });
+    assert!(delivered(&ops).is_empty());
+}
