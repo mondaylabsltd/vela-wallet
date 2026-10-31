@@ -85,6 +85,7 @@ class I18nRuntime(
         engine.loadCatalog(FALLBACK, catalog(FALLBACK))
         if (active != FALLBACK) engine.loadCatalog(active, catalog(active))
         engine.changeLanguage(active)
+        plain = java.util.concurrent.ConcurrentHashMap()
         publish()
     }
 
@@ -106,9 +107,28 @@ class I18nRuntime(
             engine.loadCatalog(tag, catalog(tag))
         }
         engine.changeLanguage(tag)
+        plain = java.util.concurrent.ConcurrentHashMap()
     }
 
-    override fun t(key: String): String = engine.t(key, options(emptyList()))
+    /**
+     * Phase 4: a plain key's words, per catalog state. `t(key)` is a pure
+     * function of (key, the resident catalogs, the active language), and it is
+     * the commonest call a screen makes — every label of every row, again on
+     * every recomposition — each one an FFI crossing with two string copies.
+     * The core still says every word once; this only stops asking it the same
+     * question twice. A NEW map replaces the old one after every catalog or
+     * language change ([applyLocale], [include]); a lookup racing a change
+     * writes into the map it read, which is then dropped, so a word from the
+     * old language can never be served from the new map.
+     */
+    @Volatile
+    private var plain = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    override fun t(key: String): String {
+        val memo = plain
+        memo[key]?.let { return it }
+        return engine.t(key, options(emptyList())).also { memo[key] = it }
+    }
 
     override fun t(key: String, vars: Map<String, String>): String =
         engine.t(key, options(vars.map { (name, value) -> TVar(name, value) }))

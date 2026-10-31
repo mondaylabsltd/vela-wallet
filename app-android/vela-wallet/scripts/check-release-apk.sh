@@ -29,11 +29,13 @@ problems=()
 if find "$WORK/lib" -name 'libvela_dev_fixtures.so' 2>/dev/null | grep -q .; then
   problems+=("libvela_dev_fixtures.so is packaged (the parallel space's keys)")
 fi
-# 2. Classes that exist in the debug source set only. A class name is in the
+# 2. Classes that exist in the debug source set only, and the benchmark build
+#    types' fixture doors (Phase 4, src/benchmark). A class name is in the
 #    dex as a type descriptor, compressed or not.
 for marker in \
   'Lapp/getvela/wallet/dev/ServiceLaunchInputs;' \
   'Luniffi/vela_dev_fixtures/' \
+  'Lapp/getvela/wallet/bench/' \
   'fixtureAssert'
 do
   # grep the files themselves: `cat | grep -q` under pipefail reads as "absent"

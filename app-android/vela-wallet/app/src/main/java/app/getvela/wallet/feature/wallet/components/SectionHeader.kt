@@ -12,6 +12,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import app.getvela.wallet.core.designsystem.components.VelaIcons
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
@@ -40,6 +41,8 @@ fun SectionHeader(
      * section's 标签页 ›, which opens the switcher) and takes a full 44 target.
      */
     actionHitTarget: Boolean = false,
+    /** A test tag for the action (Phase 4's journeys open the history by it). */
+    actionTag: String? = null,
 ) {
     val colors = VelaTheme.colors
     Row(
@@ -57,6 +60,7 @@ fun SectionHeader(
         Row(
             modifier = Modifier
                 .let { if (actionHitTarget) it.defaultMinSize(minHeight = VelaSizing.hitTarget) else it }
+                .let { m -> actionTag?.let { m.testTag(it) } ?: m }
                 .clickable(onClick = onAction),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(VelaSpacing.xs),

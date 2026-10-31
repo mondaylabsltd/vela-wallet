@@ -29,6 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
@@ -208,6 +209,7 @@ private fun SigningClose(onClose: () -> Unit, label: String) {
     Box(
         modifier = Modifier
             .size(VelaSizing.hitTarget)
+            .testTag("signing-close")
             .clickable(onClick = onClose),
         contentAlignment = Alignment.Center,
     ) { Icon(VelaIcons.Close, label, tint = VelaTheme.colors.fgMuted) }

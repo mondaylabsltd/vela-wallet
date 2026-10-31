@@ -24,12 +24,15 @@ import app.getvela.wallet.core.designsystem.tokens.VelaIconSize
 import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.core.designsystem.tokens.VelaTextSize
 import app.getvela.wallet.feature.wallet.ActionsModel
+import androidx.compose.ui.platform.testTag
 
 /** One equal-width action card: glyph above label. */
 data class ActionButtonItem(
     val icon: ImageVector,
     val label: String,
     val onClick: () -> Unit = {},
+    /** A test tag for the card (Phase 4's journeys tap the home's Send by it). */
+    val tag: String? = null,
 )
 
 /**
@@ -46,9 +49,9 @@ fun ActionButtonRow(
 ) {
     ActionButtonRow(
         items = listOf(
-            ActionButtonItem(VelaIcons.ArrowDownLeft, actions.receive, onReceive),
-            ActionButtonItem(VelaIcons.ArrowUpRight, actions.send, onSend),
-            ActionButtonItem(VelaIcons.ScanLine, actions.scan, onScan),
+            ActionButtonItem(VelaIcons.ArrowDownLeft, actions.receive, onReceive, tag = "home-receive"),
+            ActionButtonItem(VelaIcons.ArrowUpRight, actions.send, onSend, tag = "home-send"),
+            ActionButtonItem(VelaIcons.ScanLine, actions.scan, onScan, tag = "home-scan"),
         ),
         modifier = modifier,
     )
@@ -73,7 +76,7 @@ fun ActionButtonRow(
                 icon = item.icon,
                 label = item.label,
                 onClick = item.onClick,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).let { m -> item.tag?.let { m.testTag(it) } ?: m },
             )
         }
     }

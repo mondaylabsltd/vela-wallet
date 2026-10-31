@@ -151,6 +151,7 @@ import app.getvela.wallet.feature.onboarding.flow.UsbTouchIndicator
 import app.getvela.wallet.feature.onboarding.flow.UsbWalletPicker
 import app.getvela.wallet.feature.onboarding.placeholder.ImportPlaceholderScreen
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.ReportDrawnWhen
 import app.getvela.wallet.feature.flows.FlowFixtures
 import app.getvela.wallet.feature.flows.FlowHost
 import app.getvela.wallet.core.designsystem.motion.flowMotion
@@ -2134,8 +2135,7 @@ fun VelaNavHost(
                                 app.getvela.wallet.core.widget.VelaBalanceWidget.refresh(widgetContext)
                             }
                         }
-                        WalletScreen(
-                            model = WalletLive.home(
+                        val homeModel = WalletLive.home(
                                 model, balances, feed, currency, strings, chainNames, now = homeNow, chainFilter = chainFilter,
                                 noValue = strings.t(I18nKeys.NetworkSpace.NO_VALUE).takeIf { noValue },
                             ).let { home ->
@@ -2151,7 +2151,17 @@ fun VelaNavHost(
                                         sync = WalletLive.syncLine(session.unsynced, session.address, strings, syncRounds),
                                     ),
                                 )
-                            },
+                            }
+                        // Phase 4: the app is fully drawn (TTFD, `reportFullyDrawn`) once the
+                        // home stands on something — the last-known rows or a chain's
+                        // answer — rather than skeletons. Under the launch animation
+                        // that is already true: a tap there cuts straight to it (FR-016).
+                        ReportDrawnWhen {
+                            homeModel.activitySection.mode != app.getvela.wallet.feature.wallet.SectionMode.Loading &&
+                                homeModel.assetsSection.mode != app.getvela.wallet.feature.wallet.SectionMode.Loading
+                        }
+                        WalletScreen(
+                            model = homeModel,
                             onSyncRetry = { application.container.session.syncPending() },
                             onSpace = { application.container.networkSpace.switcherOpen.value = true },
                             onSelectTab = select,
