@@ -243,7 +243,7 @@ export function followSharedTracker(deps: ShareDeps = browserShareDeps()): void 
 
 /** Whether this document is one of the extension's (its own origin). */
 function extensionDocument(): boolean {
-	return typeof location !== 'undefined' && location.protocol === 'chrome-extension:';
+	return typeof location !== 'undefined' && location.protocol === __VELA_EXTENSION_PROTOCOL__;
 }
 
 /** A voice's seams: the extension's documents only, unless a test sets them. */

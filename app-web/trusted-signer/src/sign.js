@@ -403,6 +403,9 @@
       originVerified: request.originVerified,
       channel: request.channel,
       requester: request.requester,
+      // Extensions that vouched for themselves inside this window
+      // (lib/intake.js `hearAttestations`) — the channel's, never the context's.
+      attestedExtensions: Array.isArray(request.attestedExtensions) ? request.attestedExtensions : [],
       // The requester's own name for itself, where the channel carried one
       // (the handshake's hello). A CLAIM, and drawn as one: this page is a
       // signer anything can connect to, so painting Vela's mark on whatever

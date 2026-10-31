@@ -36,6 +36,8 @@ on:
     paths:
       - 'app-ios/VelaWallet/VelaWallet.xcodeproj/project.pbxproj'
       - 'rust/scripts/build-ios-xcframework.sh'
+      - 'app-ios/scripts/bundle-safari-extension.sh'
+      - 'app-web/vela-wallet/extension/**'
       - '.github/workflows/ios-package.yml'
 
 # Every build says which commit it is (spec 064 §3). Set here, from the commit
@@ -114,6 +116,22 @@ jobs:
       - name: Build the xcframework
         if: steps.xcframework.outputs.cache-hit != 'true'
         run: ./rust/scripts/build-ios-xcframework.sh
+      # Native AUDIT §6.5: the Safari Web Extension embeds the web extension's
+      # Safari RELEASE package; a Release build without it fails
+      # (app-ios/scripts/bundle-safari-extension.sh), by design.
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: app-web/vela-wallet/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: app-web/vela-wallet/pnpm-lock.yaml
+      - name: Build the Safari extension package
+        working-directory: app-web/vela-wallet
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run build:extension:safari
       - name: Archive (device, code signing disabled)
         working-directory: app-ios/VelaWallet
         run: |

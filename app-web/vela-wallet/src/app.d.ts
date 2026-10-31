@@ -6,6 +6,12 @@ declare global {
 	const __VELA_COMMIT__: string;
 	/** `true` in the browser extension's build (`VELA_TARGET=extension`). */
 	const __VELA_EXTENSION__: boolean;
+	/**
+	 * The scheme the extension's own pages load from: `'chrome-extension:'`,
+	 * or `'safari-web-extension:'` in the Safari package. Every other build
+	 * (the hosted site, the tests) reads `'chrome-extension:'`.
+	 */
+	const __VELA_EXTENSION_PROTOCOL__: 'chrome-extension:' | 'safari-web-extension:';
 
 	namespace App {
 		interface Platform {

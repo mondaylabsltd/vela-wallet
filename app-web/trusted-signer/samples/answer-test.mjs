@@ -54,9 +54,12 @@ import { extname, join, normalize } from 'node:path';
 import { Page, b64url, loadPageLibs, makeChecks, root, sleep } from './test-kit.mjs';
 import { build } from './build-single.mjs';
 
-const CDP = 9406;
-const TLS_PORT = 8453;
-const LOOPBACK_PORT = 8478;
+// Overridable, so two runs on one machine (two agents, two worktrees) do not
+// fight over a port: ANSWER_PORT_BASE=9900 → CDP 9900, TLS 9901, loopback 9902.
+const PORT_BASE = Number(process.env.ANSWER_PORT_BASE) || 0;
+const CDP = PORT_BASE ? PORT_BASE : 9406;
+const TLS_PORT = PORT_BASE ? PORT_BASE + 1 : 8453;
+const LOOPBACK_PORT = PORT_BASE ? PORT_BASE + 2 : 8478;
 const WALLET_CALLBACK = 'velawallet://sign-result';
 const check = makeChecks();
 
@@ -426,6 +429,53 @@ async function describeStolen(entries) {
   const away = signIn({ channel: 'url', callback: 'https://evil.example/steal' });
   check('R. a sign-in on the url channel: offered when it answers the wallet, refused when it does not',
     !home.refuse && away.refuse === true && away.warnings.some((w) => w.key === 'refuse.ceremonyNotForWallet'));
+
+  // Safari (native AUDIT §6.5): the extension's origin is made up per launch,
+  // so the opener is answered when the browser's origin for it is EXACTLY one
+  // the extension attested inside this window (lib/intake.js
+  // `hearAttestations`) — a channel fact, never the requester's context.
+  const SAFARI = 'safari-web-extension://3F2504E0-4F89-11D3-9A0C-0305E82C3301';
+  const OTHER_SAFARI = 'safari-web-extension://9C1B6B2A-0000-4000-8000-000000000001';
+  const safari = (requester, attestedExtensions) =>
+    r7({ channel: 'post', originVerified: true, requester, attestedExtensions });
+  check('R. Safari: the attested extension that opened the page is answered',
+    !safari(SAFARI, [SAFARI]).refused);
+  check('R. Safari: one of several attested origins is answered (the opener must still be one)',
+    !safari(SAFARI, [OTHER_SAFARI, SAFARI]).refused);
+  for (const [what, requester, attested] of [
+    ['an extension that did not attest', SAFARI, []],
+    ['an extension other than the one that attested', OTHER_SAFARI, [SAFARI]],
+    ['no attestation at all', SAFARI, undefined],
+    ['an attestation that is not a list', SAFARI, SAFARI],
+    ['a Safari origin with a path', `${SAFARI}/x`, [`${SAFARI}/x`]],
+    ['a Safari origin that is not a UUID', 'safari-web-extension://vela', ['safari-web-extension://vela']],
+    ['a website "attested" as an extension', 'https://evil.example', ['https://evil.example']],
+  ]) {
+    const got = safari(requester, attested);
+    check(`R. Safari: ${what} — refused`, got.refused && got.key === 'refuse.answerElsewhere', JSON.stringify(got));
+  }
+  // sign.js `show` writes the channel's list over any `attestedExtensions` a
+  // requester put in its context — asserted on the published bytes below (S).
+  check('R. Safari: unverified postMessage stays refused even when attested',
+    r7({ channel: 'post', originVerified: false, requester: SAFARI, attestedExtensions: [SAFARI] }).refused);
+  const safariEthSign = lib.resolve({ method: 'eth_sign', params: [SAFE, '0x' + 'ab'.repeat(32)], origin: 'https://app.example' },
+    { account: SAFE, chainId: 1, channel: 'post', originVerified: true, requester: SAFARI, attestedExtensions: [SAFARI] });
+  check('R. Safari: eth_sign from the attested extension — refused', safariEthSign.refuse === true);
+  const safariRelayed = lib.resolve(signature, { account: SAFE, chainId: 1, channel: 'post', originVerified: true,
+    requester: SAFARI, attestedExtensions: [SAFARI] });
+  check('R. Safari: the site the extension relays is the wallet\'s word',
+    safariRelayed.dapp.originVerified === false && safariRelayed.warnings.some((w) => w.key === 'warn.relayedOrigin'));
+  const safariSignIn = signIn({ channel: 'post', originVerified: true, requester: SAFARI, attestedExtensions: [SAFARI] });
+  const strangerSignIn = signIn({ channel: 'post', originVerified: true, requester: OTHER_SAFARI, attestedExtensions: [SAFARI] });
+  check('R. Safari: the attested extension is a wallet for a key ceremony; another extension is not',
+    lib.resolve.walletRequester({ channel: 'post', originVerified: true, requester: SAFARI, attestedExtensions: [SAFARI] }) &&
+    !lib.resolve.walletRequester({ channel: 'post', originVerified: true, requester: OTHER_SAFARI, attestedExtensions: [SAFARI] }) &&
+    !safariSignIn.refuse && !strangerSignIn.warnings.some((w) => w.key === 'refuse.answerElsewhere'),
+    JSON.stringify(strangerSignIn.warnings.map((w) => w.key)));
+  // Chrome and the web wallet stay exact: an attestation never widens them.
+  check('R. Chrome: an attestation does not admit another Chrome extension id',
+    r7({ channel: 'post', originVerified: true, requester: 'chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      attestedExtensions: ['chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'] }).refused);
 }
 
 try {
@@ -805,6 +855,78 @@ try {
       JSON.stringify(other.answers).slice(0, 160));
     check('H. and the card names the extension the answer would have gone to',
       other.text.includes(`chrome-extension://${EXTENSIONS.other.id}`), other.text.slice(0, 200));
+
+    // === S. Safari: no opener, the extension's content script relays =========
+    //
+    // Measured on iOS Safari 26: a page an extension page opens has no
+    // `window.opener`. Vela's content script on the page
+    // (`app-web/vela-wallet/extension/safari/attest.js`) attests the
+    // extension's origin inside the page and carries the hand-off. Played
+    // here by a script in an ISOLATED world on the page's own tab (CDP
+    // `worldName`) — which is what a content script is: code in this window,
+    // not in the page's world. What it heard is left on the DOM for the test.
+    const SAFARI = 'safari-web-extension://3f2504e0-4f89-11d3-9a0c-0305e82c3301';
+    const OTHER_SAFARI = 'safari-web-extension://9c1b6b2a-0000-4000-8000-000000000001';
+    async function viaSafariRelay({ attest, from, request }) {
+      const relay = `(() => {
+        const heard = [];
+        const keep = () => document.documentElement && document.documentElement.setAttribute('data-relayed', JSON.stringify(heard));
+        const say = () => ${attest ? `window.postMessage({ vela: 'extension', origin: ${JSON.stringify(attest)} }, location.origin)` : 'undefined'};
+        window.addEventListener('message', (event) => {
+          if (event.source !== window) return;
+          const data = event.data || {};
+          if (data.vela === 'extension?') { say(); return; }
+          if (data.relay !== 'to-extension') return;
+          heard.push(data); keep();
+          if (data.vela === 'ready') {
+            window.postMessage(Object.assign({ vela: 'intent', v: 1, id: 'safari-1', relay: 'to-page', from: ${JSON.stringify(from)} },
+              ${JSON.stringify(request)}), location.origin);
+          }
+        });
+        say();
+      })();`;
+      const page = await Page.open(CDP, 'about:blank');
+      await page.send('Page.enable');
+      await page.send('Page.addScriptToEvaluateOnNewDocument', { source: COUNT_WEBAUTHN });
+      await page.send('Page.addScriptToEvaluateOnNewDocument', { source: relay, worldName: 'vela-safari-extension' });
+      const uses = await addKey(page);
+      await page.navigate(`${PAGE}?ch=post&lang=en`);
+      await page.waitFor("window.__velaState && ['card', 'refused', 'answered', 'waiting', 'error'].includes(window.__velaState.phase)", 8000).catch(() => {});
+      await sleep(1500);
+      const phase = await page.ev('window.__velaState && window.__velaState.phase');
+      const text = await page.ev('document.body.innerText');
+      const slid = await slideIfOffered(page);
+      if (slid) await sleep(3000);
+      const relayed = JSON.parse((await page.ev("document.documentElement.getAttribute('data-relayed')")) || '[]');
+      const used = await uses();
+      await page.close();
+      const result = relayed.find((m) => m.vela === 'result');
+      const sig = result ? await usable(Buffer.from(JSON.stringify(result.result)).toString('base64url')) : { valid: false };
+      return { phase, text, slid, relayed, used, sig };
+    }
+    const safariSign = cases[0][1];
+    const ok = await viaSafariRelay({ attest: SAFARI, from: SAFARI, request: safariSign });
+    check('S. Safari relay: the page says ready to the extension in its window, not to an opener',
+      ok.relayed.length > 0 && ok.relayed[0].vela === 'ready', JSON.stringify(ok.relayed).slice(0, 160));
+    check('S. Safari relay: the attested extension is answered — signed by the account\'s key, back through the relay',
+      ok.slid && ok.used === 1 && ok.sig.valid && ok.sig.overDigest,
+      `${ok.phase} ${JSON.stringify(ok.relayed).slice(0, 160)}`);
+    check('S. Safari relay: the relayed site is drawn as the wallet\'s word',
+      ok.text.includes("the wallet's word"), ok.text.slice(0, 160));
+    const stranger = await viaSafariRelay({ attest: SAFARI, from: OTHER_SAFARI, request: safariSign });
+    check('S. Safari relay: an intent naming an extension that did not attest is not heard — no card, nothing signed',
+      !stranger.slid && stranger.used === 0 && !stranger.relayed.some((m) => m.vela === 'result') && stranger.phase !== 'card',
+      `${stranger.phase} ${JSON.stringify(stranger.relayed).slice(0, 120)}`);
+    const unattested = await viaSafariRelay({ attest: null, from: SAFARI, request: safariSign });
+    check('S. Safari relay: no attestation in the window — the page says nobody asked, offers nothing',
+      !unattested.slid && unattested.used === 0 && unattested.relayed.length === 0 && unattested.phase !== 'card',
+      `${unattested.phase} ${unattested.text.slice(0, 120)}`);
+    const ethSignRelay = await viaSafariRelay({ attest: SAFARI, from: SAFARI,
+      request: { intent: { method: 'eth_sign', params: [SAFE, '0x' + 'ab'.repeat(32)], origin: site }, context: safariSign.context } });
+    check('S. Safari relay: eth_sign from the attested extension — refused, and the refusal travels back',
+      !ethSignRelay.slid && ethSignRelay.used === 0 &&
+        ethSignRelay.relayed.some((m) => m.vela === 'error' && m.code === 'refused'),
+      JSON.stringify(ethSignRelay.relayed).slice(0, 160));
   }
 } catch (error) {
   console.log('FAILED: ' + (error.stack || error.message));

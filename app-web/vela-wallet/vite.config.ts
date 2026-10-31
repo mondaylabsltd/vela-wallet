@@ -69,6 +69,19 @@ const EXTENSION_TARGET = process.env.VELA_TARGET === 'extension';
 const EXTENSION_OUT = process.env.VELA_EXTENSION_DIST || 'extension/dist';
 
 /**
+ * The scheme the extension's own pages are served from: `chrome-extension:`,
+ * or `safari-web-extension:` when `extension/build.mjs --safari` builds the
+ * Safari package (`VELA_EXTENSION_BROWSER=safari`). Every other build — the
+ * hosted site, the tests, the Chrome package — gets `chrome-extension:`, so
+ * their output is the bytes it was before the Safari target existed: the
+ * constant replaces the literal it stands for.
+ */
+const EXTENSION_PROTOCOL =
+	EXTENSION_TARGET && process.env.VELA_EXTENSION_BROWSER === 'safari'
+		? 'safari-web-extension:'
+		: 'chrome-extension:';
+
+/**
  * The version and commit every page of this build reports (spec 064 §3).
  *
  * VERSION is `extension/manifest.json`'s — the one declared version this app
@@ -107,7 +120,10 @@ export default defineConfig({
 		// Which build this is: usage analytics report from the hosted wallet's
 		// own origin in one, and only from `chrome-extension:` pages in the
 		// other (`$lib/analytics/gate.ts`).
-		__VELA_EXTENSION__: JSON.stringify(EXTENSION_TARGET)
+		__VELA_EXTENSION__: JSON.stringify(EXTENSION_TARGET),
+		// Which browser's package this is, by the scheme its pages load from
+		// (`$lib/extension/page-url.ts`, `$lib/dapp/transport.ts`).
+		__VELA_EXTENSION_PROTOCOL__: JSON.stringify(EXTENSION_PROTOCOL)
 	},
 	resolve: {
 		alias: { $animations: LAUNCH_ANIMATIONS }

@@ -31,6 +31,7 @@ App 用的只有**一条**通道，一种意图格式，**没有服务器**。�
 | --- | --- | --- |
 | 桌面 App（macOS / Windows / Linux）、iPhone、Android | 请求放在 URL 片段里（`sign.html?ch=url#i=…`），回答走 `velawallet://sign-result` 自定义 scheme 交回 App | ✅ Android、Windows 11 有端到端记录；macOS / iOS / Linux 接线相同、尚无完整跑通记录 |
 | 网页钱包、Chrome 扩展（同浏览器） | `postMessage`（`?ch=post`），答复只交给浏览器报告的打开者 origin **恰好是** `https://wallet.getvela.app`、`https://getvela.app`、`chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl` | ✅ 2026-10-30 起：交易、批量、钱包自己的发送、`personal_sign`、typed data、多签批准（PROTOCOL.md 第 13 节）；其他打开者一律拒签（规格 102 R7） |
+| Safari 扩展（iOS，2026-10-31） | 没有 `window.opener`（实测），走同窗中继：Vela 的内容脚本在本页窗口里证明扩展此刻的 origin（`safari-web-extension://<UUID>`，Safari 每次启动都换）并转交消息；只答**证明过的**那一个（PROTOCOL.md 第 13.5 节） | ✅ 本机回环 + iOS 模拟器跑通；官方页上线后生效 |
 | 同机 App | 回环 WebSocket（`?ch=ws`，代码还在，没有 App 使用） | 仅测试用：发布页的 CSP 连不出去 |
 
 已砍掉：跨设备的 BLE 与 WebSocket 隧道（075，「只留回环这个，这样更加安全」）；

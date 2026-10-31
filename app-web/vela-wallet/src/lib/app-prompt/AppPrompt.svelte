@@ -62,6 +62,9 @@
 	}
 
 	onMount(() => {
+		// The Safari package is delivered BY the iOS app: whoever sees it has
+		// the app already.
+		if (__VELA_EXTENSION_PROTOCOL__ === 'safari-web-extension:') return;
 		const on =
 			platform ?? detectPlatform(navigator.userAgent, navigator.maxTouchPoints, __VELA_EXTENSION__);
 		const next = promptPlan(on, links ?? storeLinks(placement));

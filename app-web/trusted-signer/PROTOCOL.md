@@ -39,6 +39,7 @@ USB 安全密钥」平级的一条 passkey 通道（创始人，2026-09-22）。
 | 请求方 | 签名方 | 通道 | 来源可验证 | 一个会话几个请求 |
 | --- | --- | --- | --- | --- |
 | 同浏览器的网页钱包、Chrome 扩展（**2026-10-30 起现行**） | 本页 | `window.postMessage`（7.1）—— 只答 Vela 自己的钱包：浏览器报告的打开者 origin **恰好是** `https://wallet.getvela.app`、`https://getvela.app` 或 `chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl`（第 12.3 节）；其他打开者的签名一律拒签（规格 102 R7） | ✅ 浏览器背书 | 多个 |
+| Safari 扩展（iOS，2026-10-31） | 本页 | 同窗中继（13.5）：没有 opener，Vela 的内容脚本在本页窗口里证明扩展此刻的 origin 并转交；只答证明过的那一个 | 🟡 内容脚本作证（见 13.5 的论证） | 多个 |
 | Android / iOS / 桌面 App（**现行**） | 本页 | URL 片段 + `velawallet://sign-result`（7.2 + 下文） | ❌ 自述；一次性 token 证明「是打开本页的那个 App」 | 一个 |
 | ~~同机 App~~ | ~~本页~~ | ~~回环 WebSocket（7.4）~~ | **2026-09-24 让给自定义 scheme**；代码留给测试 | |
 | ~~任何一端，跨设备~~ | ~~另一台设备上的本页~~ | ~~隧道（7.5）~~ | **已撤回 2026-09-23** | |
@@ -950,3 +951,40 @@ content.js 收到 `claimed` 就把页面那边的期限往后推。认领被拒�
   （扩展 + 本机 TLS 上的 `dist/`：签名方式在设置里选签名页，dApp 的 `personal_sign` 与 typed data 在页上签、关页 → 4001）。
 - 核心：`signing_venue` 的 R7 测试、`tests/trusted_signer.rs`（`digest_of`、`accept_signature`）、
   `tests/app_sign_request.rs`（`PageDeclined` → 4001）、`tests/signing_venue_102b.rs` 第 7 节。
+
+### 13.5 Safari 扩展（iOS，原生审计 §6.5，2026-10-31）
+
+同一份扩展代码打成 Safari 包（`app-web/vela-wallet/extension`，`pnpm build:extension:safari`），由 iOS App 的
+Safari Web Extension 目标装进 Safari。iOS 26.2 模拟器上实测的三件事决定了这一节：
+
+1. **扩展页不能做 passkey。** `safari-web-extension://` 页面里 `navigator.credentials.get({rpId:'getvela.app'})`
+   直接 `SecurityError: The requested RPID did not match the origin or related origins`（Chrome 的「持 host 权限即可
+   认领 RP」在 Safari 不存在）。所以 Safari 上的签名只能在本页（或 App）里完成。
+2. **扩展的 origin 是 Safari 编的。** `safari-web-extension://<UUID>`：每次安装、每次 Safari 重启都换（同一台模拟器上
+   实测三个不同的 UUID：`db8b4296…`、`8ae147fd…`、`4f68376d…`；`localStorage` 与 `storage.local` 跨这三次都还在，
+   按扩展而不是按 origin 存）。`runtime.getURL` 给大写 UUID，浏览器报的 origin 是小写。**没有固定的 origin 可以列进白名单。**
+3. **扩展页 `window.open` 出来的页面没有 `window.opener`。** 7.1 的 postMessage 无窗可答。
+
+于是 Safari 走**同窗中继**（`lib/intake.js` `relayPeer`，只在 `?ch=post` 且没有 opener 时）：
+
+- Vela 的内容脚本（`extension/safari/attest.js`，Safari 只在 `https://sign.getvela.app/*` 上注入它；开发包另加本机回环）
+  在本页**自己的窗口**里说出扩展**此刻**的 origin：`{vela:'extension', origin}`。本页只听 `event.source === window`、
+  本页 origin 的消息 —— 网站、别的窗口都发不出这种消息；只有本页自己的脚本和**被允许在本页运行的扩展**的内容脚本能。
+  本页先问一句 `extension?`，等它在窗口里转一圈再说 `ready`，所以证明总在第一条意图之前到。
+- 钱包（Safari 包的扩展页，`src/lib/extension/safari-signer.ts`）用 `tabs.create` 开本页，`tabs.sendMessage` 把消息交给
+  内容脚本，内容脚本以 `{relay:'to-page', from:<扩展 origin>, …}` 投进本页；本页以 `{relay:'to-extension', …}` 投回窗口，
+  内容脚本 `runtime.sendMessage` 交回钱包 —— 钱包只认那个标签页、按浏览器给的 `sender.url` 核对本页 origin。
+- **答复规则**（`resolve.isSafariExtension`）：Safari 打开者被答复，当且仅当它的 origin（中继时是意图里写的 `from`）
+  **逐字（不分大小写）等于本窗口里证明过的某一个**。证明过的才是钱包，签名与钥匙仪式都一样（`walletRequester`）；
+  没有证明 → 本页不出卡（`ui.openerSilent`）；别的扩展 origin 的意图 → 听不见；`eth_sign` 照旧谁来都拒。
+  Chrome 与网页钱包的 origin 仍是逐字白名单，证明不会放宽它们。
+
+**为什么这不比原来宽**：能在本页窗口里发消息的扩展，本来就能改写本页的卡片、替人按按钮 —— 页面对浏览器在它里面
+运行的代码没有任何规则可言。网站和没被允许在本页运行的扩展，既证明不了、也发不来中继消息。证明的 origin 只在本页
+（官方页）说，不在别的网站说：它是一个按次启动的标识，不该交给陌生人。
+
+**测试**：`bun samples/answer-test.mjs` 的 R 段（规则：证明过的 Safari origin 被答、没证明 / 别的 UUID / 带路径 / 非 UUID /
+网站冒充都拒、`eth_sign` 拒、转来的站点是钱包的说法、仪式只认证明过的）与 S 段（发布出去的字节上，用 CDP 隔离世界
+扮演内容脚本：没有 opener 时 `ready` 交给窗口里的扩展；证明过的扩展签了、答复经中继回来且是账户钥匙对本页摘要的签名；
+没证明 → 不出卡；别的扩展的意图 → 听不见；`eth_sign` 的拒签经中继回来）；钱包一侧 `src/lib/extension/safari-signer.test.ts`；
+iOS 模拟器上真机 Safari：`app-ios/VelaWallet/VelaWalletUITests/SafariExtensionDeviceTests.swift` 第 9、10 步。

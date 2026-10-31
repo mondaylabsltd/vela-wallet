@@ -40,5 +40,9 @@ static/vela_core_bg.*.wasm
 extension/dist
 extension/dist-release
 extension/dist-store
+# native AUDIT §6.5: the Safari package and its release twin (`--safari`),
+# which the iOS app's Safari Web Extension target embeds
+extension/dist-safari
+extension/dist-safari-release
 /vela-wallet-extension-*.zip
 .pw-out*

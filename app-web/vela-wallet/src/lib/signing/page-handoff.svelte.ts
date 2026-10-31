@@ -33,6 +33,7 @@
 import type { IntegrityLine } from '$lib/core/generated/IntegrityLine';
 import type { KeyLabel } from '$lib/core/generated/KeyLabel';
 import { trustedSignerPageAdmit, trustedSignerPageTarget } from '$lib/core/kernels';
+import { safariSignerDeps } from '$lib/extension/safari-signer';
 
 /** What a browser sends when it navigates to a page (`launch::CHECK_HEADERS`). */
 const CHECK_ACCEPT = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8';
@@ -148,7 +149,7 @@ async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
 	return Array.from(digest, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-export const browserDeps: PageHandoffDeps = {
+const windowDeps: PageHandoffDeps = {
 	fetch: (input, init) => fetch(input, init),
 	// The page must know which window opened it (`window.opener`): no `noopener`.
 	open: (url) => window.open(url, 'vela-signing-page'),
@@ -160,6 +161,16 @@ export const browserDeps: PageHandoffDeps = {
 	},
 	sha256: sha256Hex
 };
+
+/**
+ * The Safari package carries the hand-off through a tab and Vela's content
+ * script on the page (`$lib/extension/safari-signer.ts`): iOS Safari gives a
+ * page an extension opens no `window.opener`. Every other build: windows.
+ */
+export const browserDeps: PageHandoffDeps =
+	__VELA_EXTENSION_PROTOCOL__ === 'safari-web-extension:'
+		? safariSignerDeps(windowDeps)
+		: windowDeps;
 
 function originOf(url: string): string {
 	try {

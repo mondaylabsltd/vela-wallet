@@ -10,6 +10,7 @@
 		2352DB8B3023327400130124 /* Lottie in Frameworks */ = {isa = PBXBuildFile; productRef = AAC0DE00000000000000C002 /* Lottie */; };
 		AAC0DE00000000000000A003 /* VelaCore in Frameworks */ = {isa = PBXBuildFile; productRef = AAC0DE00000000000000A002 /* VelaCore */; };
 		AAC0DE00000000000000D016 /* VelaWidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AAC0DE00000000000000D002 /* VelaWidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		AAC0DE00000000000000E016 /* VelaSafariExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AAC0DE00000000000000E002 /* VelaSafariExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -34,6 +35,13 @@
 			remoteGlobalIDString = AAC0DE00000000000000D001;
 			remoteInfo = VelaWidgetsExtension;
 		};
+		AAC0DE00000000000000E013 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 23ED5E2E3019A42200EA9C55 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AAC0DE00000000000000E001;
+			remoteInfo = VelaSafariExtension;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -44,6 +52,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				AAC0DE00000000000000D016 /* VelaWidgetsExtension.appex in Embed Foundation Extensions */,
+				AAC0DE00000000000000E016 /* VelaSafariExtension.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -55,9 +64,17 @@
 		23ED5E473019A42500EA9C55 /* VelaWalletTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VelaWalletTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		23ED5E513019A42500EA9C55 /* VelaWalletUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VelaWalletUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		AAC0DE00000000000000D002 /* VelaWidgetsExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = VelaWidgetsExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		AAC0DE00000000000000E002 /* VelaSafariExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = VelaSafariExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		AAC0DE00000000000000E010 /* Exceptions for "VelaSafariExtension" folder in "VelaSafariExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = AAC0DE00000000000000E001 /* VelaSafariExtension */;
+		};
 		23ED5E593019A42500EA9C55 /* Exceptions for "VelaWallet" folder in "VelaWallet" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -86,6 +103,14 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		AAC0DE00000000000000E009 /* VelaSafariExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				AAC0DE00000000000000E010 /* Exceptions for "VelaSafariExtension" folder in "VelaSafariExtension" target */,
+			);
+			path = VelaSafariExtension;
+			sourceTree = "<group>";
+		};
 		23ED5E383019A42200EA9C55 /* VelaWallet */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -121,6 +146,13 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		AAC0DE00000000000000E004 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		23ED5E333019A42200EA9C55 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -162,6 +194,7 @@
 				23ED5E543019A42500EA9C55 /* VelaWalletUITests */,
 				AAC0DE00000000000000D011 /* Shared */,
 				AAC0DE00000000000000D009 /* VelaWidgets */,
+				AAC0DE00000000000000E009 /* VelaSafariExtension */,
 				23ED5E373019A42200EA9C55 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -173,6 +206,7 @@
 				23ED5E473019A42500EA9C55 /* VelaWalletTests.xctest */,
 				23ED5E513019A42500EA9C55 /* VelaWalletUITests.xctest */,
 				AAC0DE00000000000000D002 /* VelaWidgetsExtension.appex */,
+				AAC0DE00000000000000E002 /* VelaSafariExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -180,6 +214,29 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		AAC0DE00000000000000E001 /* VelaSafariExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AAC0DE00000000000000E006 /* Build configuration list for PBXNativeTarget "VelaSafariExtension" */;
+			buildPhases = (
+				AAC0DE00000000000000E003 /* Sources */,
+				AAC0DE00000000000000E004 /* Frameworks */,
+				AAC0DE00000000000000E005 /* Resources */,
+				AAC0DE00000000000000E011 /* Bundle the Safari extension package */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				AAC0DE00000000000000E009 /* VelaSafariExtension */,
+			);
+			name = VelaSafariExtension;
+			packageProductDependencies = (
+			);
+			productName = VelaSafariExtension;
+			productReference = AAC0DE00000000000000E002 /* VelaSafariExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		23ED5E353019A42200EA9C55 /* VelaWallet */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 23ED5E5A3019A42500EA9C55 /* Build configuration list for PBXNativeTarget "VelaWallet" */;
@@ -195,6 +252,7 @@
 			);
 			dependencies = (
 				AAC0DE00000000000000D014 /* PBXTargetDependency */,
+				AAC0DE00000000000000E014 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				23ED5E383019A42200EA9C55 /* VelaWallet */,
@@ -302,6 +360,9 @@
 					AAC0DE00000000000000D001 = {
 						CreatedOnToolsVersion = 26.3;
 					};
+					AAC0DE00000000000000E001 = {
+						CreatedOnToolsVersion = 26.3;
+					};
 				};
 			};
 			buildConfigurationList = 23ED5E313019A42200EA9C55 /* Build configuration list for PBXProject "VelaWallet" */;
@@ -326,11 +387,19 @@
 				23ED5E463019A42500EA9C55 /* VelaWalletTests */,
 				23ED5E503019A42500EA9C55 /* VelaWalletUITests */,
 				AAC0DE00000000000000D001 /* VelaWidgetsExtension */,
+				AAC0DE00000000000000E001 /* VelaSafariExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		AAC0DE00000000000000E005 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		23ED5E343019A42200EA9C55 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -362,6 +431,25 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		AAC0DE00000000000000E011 /* Bundle the Safari extension package */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Bundle the Safari extension package";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "\"$SRCROOT/../scripts/bundle-safari-extension.sh\"\n";
+		};
 		AAC0DE00000000000000B001 /* Bundle locale catalogs */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -407,6 +495,13 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		AAC0DE00000000000000E003 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		23ED5E323019A42200EA9C55 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -438,6 +533,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		AAC0DE00000000000000E014 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AAC0DE00000000000000E001 /* VelaSafariExtension */;
+			targetProxy = AAC0DE00000000000000E013 /* PBXContainerItemProxy */;
+		};
 		23ED5E493019A42500EA9C55 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 23ED5E353019A42200EA9C55 /* VelaWallet */;
@@ -456,6 +556,66 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		AAC0DE00000000000000E007 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = F9W689P9NE;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = VelaSafariExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Vela Wallet";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.9.8;
+				PRODUCT_BUNDLE_IDENTIFIER = app.getvela.VelaWallet.SafariExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		AAC0DE00000000000000E008 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = F9W689P9NE;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = VelaSafariExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Vela Wallet";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.9.8;
+				PRODUCT_BUNDLE_IDENTIFIER = app.getvela.VelaWallet.SafariExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
 		23ED5E5B3019A42500EA9C55 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -815,6 +975,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		AAC0DE00000000000000E006 /* Build configuration list for PBXNativeTarget "VelaSafariExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AAC0DE00000000000000E007 /* Debug */,
+				AAC0DE00000000000000E008 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		23ED5E313019A42200EA9C55 /* Build configuration list for PBXProject "VelaWallet" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

@@ -61,6 +61,13 @@
 /// Every entry is a page published at `sign.getvela.app/b/<hash>/sign.html`.
 /// An empty set would open nothing were it enforced — see [`ENFORCE`].
 pub const BUILD_ALLOWED: &[&str] = &[
+    // 126a267a's page plus the Safari Web Extension's hand-off: with no
+    // `window.opener` (a page opened from an extension page), the answer
+    // goes back through Vela's content script on the page; and an opener
+    // whose origin is a per-install `safari-web-extension://<UUID>` is
+    // answered only when that exact origin was announced inside the page's
+    // own window (web and Chrome origins stay an exact list).
+    "879e715f2b47c5dbfa75b081499c4ec39f40149d7ddc6370a44c0ab541319dd6",
     // 416a65c1's page, finished calmly (round 7, S4): done said once (the
     // card's title, the note without a second "Done"), an ended session
     // said once and in the calm style of any card, and a finished page
