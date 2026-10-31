@@ -23,6 +23,14 @@ dev-fixtures = ["vela-core/dev-fixtures", "wry/mac-proxy"]
 # build's own optimisation can be measured with no developer switch compiled
 # in. Off by default; a store build never carries it.
 perf = []
+# The updater's local proof (README "Updates"): the release key and the feed
+# are taken from the BUILD's environment (`VELA_UPDATE_TEST_KEY`, a P-256
+# public point made on this machine; `VELA_UPDATE_TEST_FEED`), loopback
+# http:// is accepted for the feed and the artifact, an ad-hoc signed bundle
+# may replace an ad-hoc signed one, and `VELA_UPDATE_TEST_VERSION` may stand
+# in for this build's version. Never a store or release build:
+# `scripts/check-store-binary.sh` refuses a binary that carries it.
+update-test = []
 
 [dependencies]
 gpui = { git = "https://github.com/zed-industries/zed" }
@@ -165,6 +173,9 @@ calamine = "0.36"
 # shared secret as an input precisely so it can stay a pure function.
 getrandom = "0.3"
 p256 = { version = "0.13", features = ["ecdh"] }
+# The update download's SHA-256, taken as the bytes arrive rather than over
+# the whole file in memory afterwards. The version p256 already pulls.
+sha2 = "0.10"
 
 # Where the account file lives: the platform config dir, so the three desktops
 # each land in their own convention rather than in a hand-rolled `~/.vela`.
@@ -412,6 +423,9 @@ windows-sys = { version = "0.59", features = [
     # Shell_NotifyIconW, and the module handle its icon is loaded from.
     "Win32_UI_Shell",
     "Win32_System_LibraryLoader",
+    # N-D3: the update installer's Authenticode check (`updater/install_windows.rs`).
+    "Win32_Security_WinTrust",
+    "Win32_Security_Cryptography",
 ] }
 
 # Embeds the application icon into vela-wallet.exe as resource id 1, which is

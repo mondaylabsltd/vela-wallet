@@ -1,10 +1,10 @@
-//! Updates (N-D3): how this app learns of a new version, and how it proves a
-//! download is the owner's before anything runs it.
+//! Updates (N-D3): how this app learns of a new version, proves a download
+//! is the owner's, and hands it to the OS.
 //!
 //! **Off until the owner provides a signing key.** [`UPDATE_KEY`] is `None`
 //! in this source, and while it is `None` the updater asks no server and
 //! shows nothing: an update path that cannot prove where a file came from is
-//! not shipped (README "Updates" lists what turns it on).
+//! not shipped (README "Updates" says which three values turn it on).
 //!
 //! ## Why not Sparkle / Velopack / WinSparkle
 //!
@@ -37,34 +37,94 @@
 //!    than this build's is no update (no downgrade), and a manifest issued
 //!    before the last one this device accepted is refused (no replay of an
 //!    old, vulnerable "latest").
-//! 3. The **artifact** is downloaded and accepted only when its size and
-//!    SHA-256 are the signed manifest's ([`verify_artifact`]). Then — in the
-//!    install hand-off, NOT built yet — the OS's own checks run on top:
-//!    on macOS the downloaded app must carry this app's Developer ID team
-//!    (`codesign`), on Windows the installer's Authenticode signature
-//!    (`WinVerifyTrust`) — the owner's signing identities, neither of which
-//!    this source holds.
-//! 4. Nothing installs silently. macOS opens the verified disk image for
-//!    the person to drag (as a first install did); Windows starts the
-//!    verified installer, which upgrades in place. **Store builds never run
-//!    this**: the Mac App Store, Flathub and distribution packages update
-//!    through their store ([`Channel::Store`]).
+//! 3. The **artifact** is downloaded ([`download`]) and kept only when its
+//!    size and SHA-256 are the signed manifest's — never more bytes than were
+//!    signed are read. Then the OS's own checks run on top:
+//!    - **macOS** ([`install_macos`]): the artifact is the `.app` as a
+//!      `ditto` zip. The unpacked bundle must verify (`codesign --verify
+//!      --deep --strict`), carry this app's bundle id and this app's
+//!      Developer ID **team** — the running app's own, read from its
+//!      signature, so no team id lives in this source — pass Gatekeeper, and
+//!      say the version the manifest signed. Then it replaces the running
+//!      bundle in ONE step (`renamex_np(RENAME_SWAP)`, both on the same
+//!      volume) and the app relaunches.
+//!    - **Windows** ([`install_windows`]): the artifact is the Inno Setup
+//!      installer. When this app is Authenticode-signed the installer must
+//!      verify too (`WinVerifyTrust`); the installer opens as a person
+//!      starts it (never `/SILENT`), and the app quits so it can upgrade in
+//!      place.
+//! 4. Nothing installs unasked: the prompt ([`prompt`]) offers, Install
+//!    starts it, Later puts it away until the next launch, and an install
+//!    waits while a submit is out (`relay::may_close`). **Store builds never
+//!    run this**: the Mac App Store, Flathub and distribution packages update
+//!    through their store ([`Channel::Store`]); a Linux tarball has no
+//!    hand-off and is not offered.
+//!
+//! ## The local test flavor
+//!
+//! `--features update-test` (with `dev-fixtures` for a throwaway state
+//! directory) compiles a key and a feed from the BUILD's environment and
+//! accepts loopback `http://` — the whole path proved on one machine against
+//! a key made on it (`scripts/update-e2e.sh`). [`TEST_FLAVOR_MARKER`] is in
+//! such a binary, and `check-store-binary.sh` refuses any binary that holds
+//! it.
+
+pub mod download;
+#[cfg(target_os = "macos")]
+pub mod install_macos;
+#[cfg(windows)]
+pub mod install_windows;
+pub mod prompt;
 
 use serde::Deserialize;
 
 /// The owner's release-signing public key: a P-256 SEC1 point, hex
 /// (`04…`, 65 bytes). **`None` keeps the updater off.** See
 /// README "Updates" for how to make the key and where it lives.
+#[cfg(not(feature = "update-test"))]
 pub const UPDATE_KEY: Option<&str> = None;
+/// The test flavor's key: the public half of a pair made on this machine,
+/// from the build's environment.
+#[cfg(feature = "update-test")]
+pub const UPDATE_KEY: Option<&str> = option_env!("VELA_UPDATE_TEST_KEY");
 
 /// Where the signed manifest is served (owner hosting).
-pub const FEED_URL: &str = "https://getvela.app/desktop/releases/stable.json";
+pub const RELEASE_FEED_URL: &str = "https://getvela.app/desktop/releases/stable.json";
+
+/// The feed this build asks.
+#[cfg(not(feature = "update-test"))]
+pub const FEED_URL: &str = RELEASE_FEED_URL;
+#[cfg(feature = "update-test")]
+pub const FEED_URL: &str = match option_env!("VELA_UPDATE_TEST_FEED") {
+    Some(url) => url,
+    None => RELEASE_FEED_URL,
+};
+
+/// Whether this is the local test flavor (`--features update-test`).
+pub const TEST_FLAVOR: bool = cfg!(feature = "update-test");
+
+/// Present in a test-flavor binary and in no other: what
+/// `scripts/check-store-binary.sh` looks for.
+#[cfg(feature = "update-test")]
+pub const TEST_FLAVOR_MARKER: &str = "vela-update-test-flavor:local-key:loopback-feed";
 
 /// The store record: the last manifest's issue time this device accepted.
 pub const STATE_KEY: &str = "vela.desktop.update";
 
 /// The largest manifest read. A manifest is a few kilobytes.
 const MAX_MANIFEST: usize = 256 * 1024;
+
+/// This build's version, as the manifest is compared with it. The test
+/// flavor may stand in a later one (`VELA_UPDATE_TEST_VERSION`, at build
+/// time) to make the "newer" build of the local proof.
+#[must_use]
+pub fn current_version() -> &'static str {
+    #[cfg(feature = "update-test")]
+    if let Some(version) = option_env!("VELA_UPDATE_TEST_VERSION") {
+        return version;
+    }
+    env!("CARGO_PKG_VERSION")
+}
 
 /// How this copy of the app is updated.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -95,10 +155,15 @@ pub fn channel() -> Channel {
     Channel::Direct
 }
 
+/// Whether this platform has an install hand-off: macOS replaces the
+/// bundle, Windows runs the installer. A Linux tarball has none, so it is
+/// offered nothing it could not install.
+pub const HAS_HAND_OFF: bool = cfg!(any(target_os = "macos", windows));
+
 /// Whether this build may look for updates at all.
 #[must_use]
 pub fn enabled() -> bool {
-    UPDATE_KEY.is_some() && channel() == Channel::Direct
+    UPDATE_KEY.is_some() && HAS_HAND_OFF && channel() == Channel::Direct
 }
 
 /// This build's platform key in a manifest.
@@ -112,6 +177,19 @@ pub fn platform() -> &'static str {
         ("linux", "aarch64") => "linux-aarch64",
         _ => "linux-x86_64",
     }
+}
+
+/// Whether a feed or artifact URL may be fetched: `https://` only — and,
+/// in the test flavor alone, `http://` to this machine.
+#[must_use]
+pub fn url_allowed(url: &str) -> bool {
+    url.starts_with("https://") || (TEST_FLAVOR && is_loopback_http(url))
+}
+
+fn is_loopback_http(url: &str) -> bool {
+    ["http://127.0.0.1:", "http://127.0.0.1/", "http://localhost:", "http://localhost/"]
+        .iter()
+        .any(|prefix| url.starts_with(prefix))
 }
 
 #[derive(Debug, Deserialize)]
@@ -149,14 +227,14 @@ pub struct Release {
 }
 
 /// The update prompt's words (`componentsUi.appUpdate.*`): "Update
-/// available", Install, Later — in the person's language. The prompt that
-/// draws them waits for the install hand-off (README "Updates"), which is
-/// what Install would press; until then nothing offers an update.
+/// available", Install, Later — and "Try again" after a download or an
+/// install that was refused — in the person's language.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PromptWords {
     pub title: gpui::SharedString,
     pub install: gpui::SharedString,
     pub later: gpui::SharedString,
+    pub retry: gpui::SharedString,
 }
 
 impl PromptWords {
@@ -166,12 +244,14 @@ impl PromptWords {
             title: loc.t("componentsUi.appUpdate.title"),
             install: loc.t("componentsUi.appUpdate.install"),
             later: loc.t("componentsUi.appUpdate.later"),
+            retry: loc.t("componentsUi.relayUnreachable.retryBtn"),
         }
     }
 }
 
-/// Why a manifest or a download was not taken. None of these is shown as an
-/// update; each is logged.
+/// Why a manifest, a download or an install was not taken. None of these is
+/// shown as an update; each is logged, and the prompt shows a refused
+/// download or install as one that can be tried again.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Refusal {
     /// The updater has no key (this build).
@@ -190,6 +270,20 @@ pub enum Refusal {
     InsecureUrl,
     /// The download is not the signed size or hash.
     ArtifactMismatch,
+    /// The feed or the download did not answer, or stopped.
+    Unreachable,
+    /// This copy is not an installed bundle (a `cargo run` binary), so
+    /// there is nothing to replace.
+    NotInstalled,
+    /// The update's code signature is not this app's: another bundle id,
+    /// another team, an ad-hoc signature where this app has a team, or one
+    /// that does not verify at all.
+    SignatureMismatch,
+    /// The bundle says another version than the manifest signed.
+    VersionMismatch,
+    /// The OS refused a step of the install (a folder it may not write, a
+    /// swap that failed); the running app is untouched.
+    InstallFailed(String),
 }
 
 /// `"1.10.2"` → `(1, 10, 2)`. A pre-release or build suffix is no release.
@@ -259,7 +353,7 @@ pub fn verify_manifest(
         .get(platform)
         .cloned()
         .ok_or(Refusal::NoArtifact)?;
-    if !artifact.url.starts_with("https://") {
+    if !url_allowed(&artifact.url) {
         return Err(Refusal::InsecureUrl);
     }
     Ok(Release {
@@ -268,16 +362,6 @@ pub fn verify_manifest(
         notes_url: payload.notes_url,
         artifact,
     })
-}
-
-/// Whether downloaded bytes are the signed artifact: its size and SHA-256.
-pub fn verify_artifact(bytes: &[u8], artifact: &Artifact) -> Result<(), Refusal> {
-    let digest = vela_core::primitives::sha256(bytes);
-    let expected = hex_bytes(&artifact.sha256).ok_or(Refusal::ArtifactMismatch)?;
-    if bytes.len() as u64 != artifact.size || digest != expected {
-        return Err(Refusal::ArtifactMismatch);
-    }
-    Ok(())
 }
 
 /// The issue time of the last manifest this device accepted.
@@ -290,34 +374,45 @@ pub fn last_issued() -> u64 {
         .unwrap_or(0)
 }
 
-/// Ask the feed once (blocking; call off the UI thread). `None` when the
-/// updater is off, the feed is unreachable or nothing newer is signed.
-#[must_use]
-pub fn check() -> Option<Release> {
-    let key = UPDATE_KEY?;
-    if channel() != Channel::Direct {
-        return None;
+/// Ask the feed once (blocking; call off the UI thread). The release on
+/// offer, or why there is none (the updater off, the feed unreachable,
+/// nothing newer signed). A manifest that verified is remembered by its issue
+/// time, so an older one is never taken again.
+pub fn check() -> Result<Release, Refusal> {
+    let key = UPDATE_KEY.ok_or(Refusal::NoKey)?;
+    if !enabled() {
+        return Err(Refusal::NoKey);
     }
-    let body = fetch(FEED_URL, MAX_MANIFEST)?;
-    match verify_manifest(
+    #[cfg(feature = "update-test")]
+    crate::diag::vlog!("update", "{TEST_FLAVOR_MARKER} feed={FEED_URL}");
+    if !url_allowed(FEED_URL) {
+        return Err(Refusal::InsecureUrl);
+    }
+    let body = fetch(FEED_URL, MAX_MANIFEST).ok_or(Refusal::Unreachable)?;
+    let verdict = verify_manifest(
         &body,
         key,
-        env!("CARGO_PKG_VERSION"),
+        current_version(),
         platform(),
         last_issued(),
-    ) {
+    );
+    match &verdict {
         Ok(release) => {
             let _ = crate::executor::storage::write_value(
                 STATE_KEY,
                 serde_json::json!({ "issued_at": release.issued_at }),
             );
-            Some(release)
+            crate::diag::vlog!(
+                "update",
+                "offered {} (running {}) issued_at={}",
+                release.version,
+                current_version(),
+                release.issued_at
+            );
         }
-        Err(refusal) => {
-            crate::diag::vlog!("update", "manifest not taken: {refusal:?}");
-            None
-        }
+        Err(refusal) => crate::diag::vlog!("update", "manifest not taken: {refusal:?}"),
     }
+    verdict
 }
 
 /// One GET on the person's proxy routes (spec 082 RD2), at most `limit`
@@ -356,7 +451,7 @@ mod tests {
     fn the_prompts_words_resolve_in_every_language() {
         for (tag, loc) in crate::loc::Loc::every_language() {
             let words = PromptWords::of(&loc);
-            for word in [&words.title, &words.install, &words.later] {
+            for word in [&words.title, &words.install, &words.later, &words.retry] {
                 assert!(
                     !word.is_empty() && !word.contains("componentsUi."),
                     "{tag}: {word}"
@@ -365,8 +460,13 @@ mod tests {
         }
         let en = PromptWords::of(&crate::loc::Loc::for_tag("en"));
         assert_eq!(
-            (en.title.as_ref(), en.install.as_ref(), en.later.as_ref()),
-            ("Update available", "Install", "Later")
+            (
+                en.title.as_ref(),
+                en.install.as_ref(),
+                en.later.as_ref(),
+                en.retry.as_ref()
+            ),
+            ("Update available", "Install", "Later", "Try again")
         );
     }
 
@@ -410,6 +510,24 @@ mod tests {
         );
     }
 
+    /// openssl's `dgst -sha256 -sign` writes DER, which is what the README's
+    /// recipe produces: it verifies as well as the raw r‖s.
+    #[test]
+    fn a_der_signature_is_read_too() {
+        let text = payload("0.10.0", 100, URL);
+        let signature: Signature = signer().sign(text.as_bytes());
+        let der: String = signature
+            .to_der()
+            .as_bytes()
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
+        let manifest =
+            serde_json::to_vec(&serde_json::json!({ "payload": text, "signature": der }))
+                .unwrap_or_default();
+        assert!(verify_manifest(&manifest, &key_hex(), "0.9.8", "macos-aarch64", 0).is_ok());
+    }
+
     #[test]
     fn anybody_elses_signature_or_an_edited_payload_is_refused() {
         let stranger = SigningKey::from_slice(&[9u8; 32]).unwrap_or_else(|e| unreachable!("{e}"));
@@ -442,6 +560,11 @@ mod tests {
             verify_manifest(&same, &key_hex(), "0.9.8", "macos-aarch64", 0),
             Err(Refusal::NotNewer)
         );
+        let older = sign(&payload("0.9.7", 100, URL), &signer());
+        assert_eq!(
+            verify_manifest(&older, &key_hex(), "0.9.8", "macos-aarch64", 0),
+            Err(Refusal::NotNewer)
+        );
         let pre = sign(&payload("0.10.0-beta.1", 100, URL), &signer());
         assert_eq!(
             verify_manifest(&pre, &key_hex(), "0.9.8", "macos-aarch64", 0),
@@ -463,37 +586,34 @@ mod tests {
         );
     }
 
+    /// Loopback http:// is the test flavor's alone; a release build takes
+    /// https:// and nothing else, for the feed and for the artifact.
     #[test]
-    fn a_download_is_the_signed_bytes_or_nothing() {
-        let bytes = b"abc";
-        let digest: String = vela_core::primitives::sha256(bytes)
-            .iter()
-            .map(|b| format!("{b:02x}"))
-            .collect();
-        let artifact = Artifact {
-            url: URL.to_owned(),
-            sha256: digest,
-            size: 3,
-        };
-        assert_eq!(verify_artifact(bytes, &artifact), Ok(()));
-        assert_eq!(
-            verify_artifact(b"abd", &artifact),
-            Err(Refusal::ArtifactMismatch)
+    fn loopback_http_is_the_test_flavors_alone() {
+        let local = sign(
+            &payload("0.10.0", 100, "http://127.0.0.1:8765/Vela.zip"),
+            &signer(),
         );
-        assert_eq!(
-            verify_artifact(b"abcd", &artifact),
-            Err(Refusal::ArtifactMismatch)
-        );
+        let verdict = verify_manifest(&local, &key_hex(), "0.9.8", "macos-aarch64", 0);
+        assert_eq!(verdict.is_ok(), TEST_FLAVOR);
+        assert_eq!(url_allowed("http://localhost:1/x"), TEST_FLAVOR);
+        assert!(!url_allowed("http://127.0.0.1.evil.example/x"));
+        assert!(!url_allowed("http://getvela.app/x"));
+        assert!(!url_allowed("file:///tmp/x"));
+        assert!(url_allowed("https://getvela.app/x"));
     }
 
     #[test]
+    #[cfg(not(feature = "update-test"))]
     fn this_build_ships_with_the_updater_off() {
         // The owner's key is not in this source: no feed is asked, and no
         // update can be offered, until README "Updates" is followed.
         assert!(UPDATE_KEY.is_none());
         assert!(!enabled());
-        assert!(check().is_none());
+        assert_eq!(check(), Err(Refusal::NoKey));
+        assert_eq!(FEED_URL, RELEASE_FEED_URL);
         assert!(FEED_URL.starts_with("https://"));
+        assert_eq!(current_version(), env!("CARGO_PKG_VERSION"));
         assert_eq!(parse_version("1.10.2"), Some((1, 10, 2)));
         assert!(parse_version("1.10").is_none());
     }

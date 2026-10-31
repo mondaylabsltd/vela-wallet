@@ -807,11 +807,14 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
             // In-band operations sign zero native-fee fields; the override
             // the core carries for the legacy path has no reader here.
             max_fee_per_gas: _,
-            // The quote's measured gas (core-perf-1): this submit still
-            // measures its own; adopting it is the desktop lane's.
-            prepared: _,
+            prepared,
         } => {
             let review = review.clone();
+            // The gas the confirmed fee was priced on (core-perf-1), when the
+            // core still holds it fresh for exactly these calls: signed
+            // without simulating and measuring again. The nonce and the
+            // deployment are read before the prompt as always.
+            let prepared = prepared.as_deref().cloned();
             let chain_id = *chain_id;
             let account = account.clone();
             let calls: Vec<FeeCall> = calls.clone();
@@ -894,6 +897,7 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
                     // The review the person confirmed: the operation is
                     // signed only if it is exactly this.
                     Some(&review),
+                    prepared.as_ref(),
                     // The send column reads its own flags for the prompt
                     // (`signing_started`, the Trusted Signer's channel).
                     &user_op::quiet,

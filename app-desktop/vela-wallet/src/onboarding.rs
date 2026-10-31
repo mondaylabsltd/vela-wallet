@@ -254,11 +254,10 @@ impl OnboardingPage {
         let mut page = Self {
             // Spec 038: the 7-day replay window the web has had since spec 012.
             // Before this the desktop played it on EVERY start.
-            launch: if theme::launch_disabled()
-                || !theme::launch_due(
-                    storage::read_epoch_ms(theme::LAUNCH_PLAYED_KEY),
-                    crate::executor::now_ms(),
-                ) {
+            launch: if !theme::launch_due(
+                storage::read_epoch_ms(theme::LAUNCH_PLAYED_KEY),
+                crate::executor::now_ms(),
+            ) {
                 None
             } else {
                 Some(LaunchAnimation::new(mode, cx))
