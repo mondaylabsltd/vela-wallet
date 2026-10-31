@@ -65,8 +65,15 @@ const EXTENSION_TARGET = process.env.VELA_TARGET === 'extension';
  * (`playwright.isolated.config.ts`), so a test run never rewrites the package
  * under a running browser (spec 082 RJ21, G66: the pre-opened side panel
  * failed its next navigation). `extension/build.mjs` reads the same variable.
+ *
+ * The Safari package's default is `extension/dist-safari`, where
+ * `build.mjs --safari` looks for it — without this, `pnpm
+ * build:extension:safari` wrote Safari's pages over the Chrome package and
+ * then failed for want of its own ("no build output at extension/dist-safari").
  */
-const EXTENSION_OUT = process.env.VELA_EXTENSION_DIST || 'extension/dist';
+const EXTENSION_OUT =
+	process.env.VELA_EXTENSION_DIST ||
+	(process.env.VELA_EXTENSION_BROWSER === 'safari' ? 'extension/dist-safari' : 'extension/dist');
 
 /**
  * The scheme the extension's own pages are served from: `chrome-extension:`,
