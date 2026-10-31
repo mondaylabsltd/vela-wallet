@@ -1367,6 +1367,18 @@ fun VelaNavHost(
                         }
                     }
                 }
+                // r8-18: the picker shows the asset list's holdings — read
+                // again while it is open, so a balance that moved since the
+                // last round (a multisig's spend, a payment) is the chain's
+                // now, not the one the home read minutes ago. Each new round
+                // reaches the picker as `HoldingsUpdated` (SendController).
+                val picking = sendView.stage == SendStage.SelectToken && flows.top in SEND_STATES
+                LaunchedEffect(picking) {
+                    while (picking) {
+                        application.container.wallet.refresh(force = true)
+                        kotlinx.coroutines.delay(SendLive.PICKER_REFRESH_MS)
+                    }
+                }
                 // A tapped notification opens the wallet on that row.
                 val pendingReceipt by application.container.pendingReceipt.collectAsStateWithLifecycle()
                 LaunchedEffect(pendingReceipt) {
@@ -1943,7 +1955,7 @@ fun VelaNavHost(
                         }
                         val consentCard = dapp.consent?.let { c ->
                             // Secure is the core's word (a loopback test page is), not a prefix check.
-                            app.getvela.wallet.feature.browser.ExploreLive.consent(exploreModel.connection, c, strings, identity.copy(chainName = chainNames[c.chain_id] ?: c.chain_id.toString(), chainDot = WalletLive.badge(c.chain_id.toLong())))
+                            app.getvela.wallet.feature.browser.ExploreLive.consent(exploreModel.connection, c, strings, identity.copy(chainName = chainNames[c.chain_id] ?: app.getvela.wallet.feature.multisig.core.MsRules.networkName(c.chain_id) ?: c.chain_id.toString(), chainDot = WalletLive.badge(c.chain_id.toLong())))
                         }
                         // One-line notices the browser raises (a WalletConnect link, say).
                         LaunchedEffect(browser) {

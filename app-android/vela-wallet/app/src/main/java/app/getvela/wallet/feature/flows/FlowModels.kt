@@ -631,6 +631,12 @@ data class FeeRowModel(
      * line needs from now, so nothing under it moves when it lands.
      */
     val worthRoom: Boolean = false,
+    /**
+     * r8-18: the coin chip beside the value. `false` for a fee this account
+     * does not pay (a multisig's proposal: the executing member pays) — no
+     * coin is named, so none is drawn ("ETH" on Arc was a placeholder).
+     */
+    val showMark: Boolean = true,
 )
 
 /** One option of the speed control (spec 068). */
