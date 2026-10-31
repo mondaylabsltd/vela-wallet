@@ -54,12 +54,14 @@ final class Loc {
     /// Whether an explicit tag was supplied at construction.
     private var pinned = false
 
-    /// Every plain key already resolved in the active language (native parity
-    /// Phase 4). The screens' models are rebuilt on every change they watch,
-    /// and each one asks for dozens of words — each a call into the engine.
-    /// A key with no variables always resolves to the same words until the
-    /// language changes, and `adopt` empties this when it does.
-    @ObservationIgnored private var resolved: [String: String] = [:]
+    /// Every plain string of the active language, as `t(key)` with no options
+    /// answers it — the core's snapshot (`I18n.plain_strings`, core-perf-1),
+    /// taken once per language change by `adopt`. The screens' models are
+    /// rebuilt on every change they watch and each asks for dozens of words;
+    /// a plain label is read from here instead of crossing into the engine.
+    /// A key it does not hold (a branch, a missing key) still asks the engine,
+    /// which echoes a missing one (FR-005).
+    @ObservationIgnored private var plain: [String: String] = [:]
 
     /// The device's own order, kept so `auto` can be re-resolved later without
     /// asking `Locale` again mid-session (it does not change while we run, and
@@ -90,22 +92,26 @@ final class Loc {
     /// FR-005 forbids more strongly than it forbids the wrong language.
     private func adopt(_ candidate: String) {
         guard let engine else { return }
-        resolved.removeAll(keepingCapacity: true)
+        let active = Self.activate(candidate, on: engine)
+        // The snapshot BEFORE the language is published: an observer woken by
+        // `resolvedLanguage` reads the new words, never the old ones.
+        plain = (try? engine.plainStrings(prefix: "")) ?? [:]
+        resolvedLanguage = active
+    }
+
+    /// The engine on `candidate`, its catalog loaded — or on English, cleanly.
+    private static func activate(_ candidate: String, on engine: I18n) -> String {
         if candidate != "en" {
             let state = try? engine.changeLanguage(lng: candidate)
             let active = state?.resolvedLanguage ?? "en"
-            if active != "en", let data = Loc.catalogData(active) {
-                if (try? engine.loadCatalog(lang: active, json: data)) != nil {
-                    resolvedLanguage = active
-                    return
-                }
+            if active != "en", let data = Loc.catalogData(active),
+               (try? engine.loadCatalog(lang: active, json: data)) != nil {
+                return active
             }
             // Catalog unavailable → fall back to English cleanly.
-            _ = try? engine.changeLanguage(lng: "en")
-        } else {
-            _ = try? engine.changeLanguage(lng: "en")
         }
-        resolvedLanguage = "en"
+        _ = try? engine.changeLanguage(lng: "en")
+        return "en"
     }
 
     /// Resolve a translation. Missing keys echo the key (FR-005).
@@ -119,8 +125,35 @@ final class Loc {
     func t(_ key: String, vars: [String: String] = [:]) -> String {
         _ = resolvedLanguage
         guard let engine else { return key }
-        if vars.isEmpty, let words = resolved[key] { return words }
-        let opts = TOptions(
+        if vars.isEmpty, let words = plain[key] { return words }
+        return (try? engine.t(key: key, opts: Self.options(vars))) ?? key
+    }
+
+    /// Many keys with the same variables, in ONE crossing (`I18n.t_many`):
+    /// for a screen whose labels share their variables, instead of a crossing
+    /// per label. Answers in the order asked, each exactly what `t(_:vars:)`
+    /// answers for it; plain ones come from the snapshot.
+    func tMany(_ keys: [String], vars: [String: String] = [:]) -> [String] {
+        _ = resolvedLanguage
+        guard let engine else { return keys }
+        if vars.isEmpty, let words = Self.all(keys, in: plain) { return words }
+        guard let words = try? engine.tMany(keys: keys, opts: Self.options(vars)), words.count == keys.count
+        else { return keys }
+        return words
+    }
+
+    private static func all(_ keys: [String], in plain: [String: String]) -> [String]? {
+        var words: [String] = []
+        words.reserveCapacity(keys.count)
+        for key in keys {
+            guard let word = plain[key] else { return nil }
+            words.append(word)
+        }
+        return words
+    }
+
+    private static func options(_ vars: [String: String]) -> TOptions {
+        TOptions(
             count: nil,
             context: nil,
             defaultValue: nil,
@@ -128,9 +161,6 @@ final class Loc {
             ordinal: false,
             vars: vars.map { TVar(name: $0.key, value: $0.value) }
         )
-        let words = (try? engine.t(key: key, opts: opts)) ?? key
-        if vars.isEmpty { resolved[key] = words }
-        return words
     }
 
     /// Resolve a PLURAL key: `count` chooses the form — `_one`, `_few`,

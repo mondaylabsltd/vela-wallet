@@ -2053,20 +2053,26 @@ enum SendLive {
             } else {
                 nil
             }
+        // The sheet's labels that name the coin or the currency, in one
+        // crossing (`Loc.tMany`): each key reads only the variables it names.
+        let named = loc.tMany(
+            ["send.batchUnitFiat", "send.batchUnitToken", "send.batchRateLabel", "send.batchRateHint"],
+            vars: ["code": code, "sym": symbol]
+        )
         return BatchImportModel(
             title: model.title,
             closeLabel: model.closeLabel,
-            unitFiat: loc.t("send.batchUnitFiat", vars: ["code": code]),
-            unitToken: loc.t("send.batchUnitToken", vars: ["sym": symbol]),
+            unitFiat: named[0],
+            unitToken: named[1],
             unit: batch.unit,
             pasteValue: batch.rawText,
             pastePlaceholder: model.pastePlaceholder,
             importFile: model.importFile,
             template: model.template,
             rateSection: model.rateSection,
-            rateLabel: loc.t("send.batchRateLabel", vars: ["sym": symbol]),
+            rateLabel: named[2],
             rateValue: rateValue,
-            rateHint: loc.t("send.batchRateHint", vars: ["code": code, "sym": symbol]),
+            rateHint: named[3],
             rateReset: loc.t("send.batchRateReset"),
             rateEdited: batch.rateEdited,
             // The core's own flag. In 按 xDAI 数量 the figures in the file ARE

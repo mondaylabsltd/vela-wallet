@@ -9,7 +9,8 @@
 //    skips hears every CHANGED view and no repeat, one that does not hears
 //    every answer, and volatile fields are folded back for a driver that
 //    asked for them;
-//  - `Loc`'s memo answers the engine's words, and a language change is heard;
+//  - `Loc`'s plain-strings snapshot is the engine's words, a language change
+//    is heard, and `tMany` answers what each key answers alone;
 //  - `PerfSeed` writes the shapes the stores read.
 //
 
@@ -190,14 +191,47 @@ struct PerfPathTests {
 
     // MARK: - Loc
 
-    @Test func theMemoAnswersTheEnginesWordsAndHearsALanguageChange() {
+    @Test func theSnapshotAnswersTheEnginesWordsAndHearsALanguageChange() {
         let loc = Loc(overrideTag: nil, preferredLanguages: ["en"])
         let first = loc.t("common.done")
         #expect(first == loc.t("common.done"))
         #expect(first != "common.done")
         loc.apply("zh")
-        #expect(loc.t("common.done") != first, "the memo outlived its language")
+        #expect(loc.t("common.done") != first, "the snapshot outlived its language")
         #expect(loc.t("common.done") == Loc(overrideTag: "zh", preferredLanguages: []).t("common.done"))
+        // A key nobody wrote still echoes (FR-005), past the snapshot.
+        #expect(loc.t("no.such.key") == "no.such.key")
+    }
+
+    /// The plain-strings snapshot is exactly what the engine answers key by
+    /// key, in every language — read against a Loc that asks per key.
+    @Test func theSnapshotIsWhatTheEngineSaysForEveryKey() throws {
+        for lang in ["en", "zh", "ru", "ja"] {
+            let engine = try I18n(fallbackJson: try #require(Loc.catalogData("en")))
+            if lang != "en" {
+                _ = try engine.changeLanguage(lng: lang)
+                try engine.loadCatalog(lang: lang, json: try #require(Loc.catalogData(lang)))
+            }
+            let loc = Loc(overrideTag: lang, preferredLanguages: [])
+            let plain = try engine.plainStrings(prefix: "")
+            #expect(plain.count > 1000, "\(lang): the snapshot is nearly empty")
+            let none = TOptions(count: nil, context: nil, defaultValue: nil, lng: nil, ordinal: false, vars: [])
+            for (key, words) in plain.prefix(400) {
+                #expect(try engine.t(key: key, opts: none) == words, "\(lang) \(key): the snapshot is not t()")
+                #expect(loc.t(key) == words, "\(lang) \(key)")
+            }
+        }
+    }
+
+    /// Many keys in one crossing answer what each answers alone — with
+    /// variables, and plain.
+    @Test func manyKeysAnswerWhatEachAnswersAlone() {
+        let loc = Loc(overrideTag: "en", preferredLanguages: [])
+        let keys = ["send.batchUnitFiat", "send.batchUnitToken", "send.batchRateLabel", "send.batchRateHint"]
+        let vars = ["code": "USD", "sym": "xDAI"]
+        #expect(loc.tMany(keys, vars: vars) == keys.map { loc.t($0, vars: vars) })
+        #expect(loc.tMany(["common.done", "no.such.key"]) == [loc.t("common.done"), "no.such.key"])
+        #expect(loc.tMany(keys, vars: vars)[1].contains("xDAI"))
     }
 
     // MARK: - PerfSeed

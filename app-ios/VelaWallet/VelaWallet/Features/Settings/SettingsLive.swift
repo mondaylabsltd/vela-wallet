@@ -497,7 +497,7 @@ enum SettingsLive {
                 [loc.t(k.keysUserVerified), loc.t(k.keysSynced)],
                 [loc.t(k.keysUserVerified), loc.t(k.keysNotSynced)],
             ],
-            holderRoom: [k.keysProviderPlatform, k.keysProviderSecurityKey, k.keysProviderGeneric].map { loc.t($0) }
+            holderRoom: loc.tMany([k.keysProviderPlatform, k.keysProviderSecurityKey, k.keysProviderGeneric])
         )
         return next
     }
