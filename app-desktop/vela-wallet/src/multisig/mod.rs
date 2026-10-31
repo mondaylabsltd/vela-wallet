@@ -9,6 +9,8 @@
 //!   router, what one machine's view tells another (no gpui).
 
 pub mod activity;
+#[cfg(feature = "dev-fixtures")]
+pub mod dev_script;
 pub mod findings;
 pub mod host;
 pub mod live;

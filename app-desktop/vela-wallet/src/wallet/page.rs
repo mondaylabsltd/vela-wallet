@@ -1532,6 +1532,9 @@ impl WalletPage {
         page.identity = Some(identity);
         // The multisig machines' screen asks reach this page (AUDIT M1–M6).
         page.multisig_observe(cx);
+        // `VELA_MULTISIG_SCRIPT` (developer builds): the live proof's driver.
+        #[cfg(feature = "dev-fixtures")]
+        crate::multisig::dev_script::start(cx);
         // `VELA_DROP_FILE=<path>` (developer builds): that file dropped on
         // the window once it is up — the `VELA_SCAN_FILE` seam, for the same
         // reason: a drag from the Finder is a gesture no headless pass makes.
@@ -22601,6 +22604,8 @@ impl Render for WalletPage {
         }
         self.watch_money(cx);
         self.watch_send_display(cx);
+        #[cfg(feature = "dev-fixtures")]
+        self.ms_script_asks(cx);
         // An identicon somewhere was pressed (078 H-02): open the viewer on
         // its address. The artwork raised the request; the viewer lives here.
         if let Some(address) = cx

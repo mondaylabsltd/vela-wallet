@@ -157,6 +157,44 @@ impl WalletPage {
         }));
     }
 
+    /// `VELA_MULTISIG_SCRIPT`'s page steps (developer builds): the presses
+    /// a script makes on this page — a transaction's sheet, opened or closed.
+    #[cfg(feature = "dev-fixtures")]
+    pub(crate) fn ms_script_asks(&mut self, cx: &mut Context<Self>) {
+        let Some(ask) = cx
+            .try_global::<crate::multisig::dev_script::PageAsk>()
+            .and_then(|a| a.0.clone())
+        else {
+            return;
+        };
+        cx.set_global(crate::multisig::dev_script::PageAsk(None));
+        match ask.get("page").and_then(Value::as_str) {
+            Some("open_sheet") => {
+                let chain_id = ask.get("chain_id").and_then(Value::as_u64).unwrap_or(100);
+                let hash = ask.get("safe_tx_hash").and_then(Value::as_str).unwrap_or_default().to_owned();
+                self.open_multisig_sheet(chain_id, hash, cx);
+            }
+            Some("close_sheet") => self.close_multisig_sheet(cx),
+            Some("approve_as") => {
+                self.multisig.approve_as = ask.get("member").and_then(Value::as_str).map(str::to_owned);
+            }
+            Some("executor") => {
+                self.multisig.executor = ask.get("member").and_then(Value::as_str).map(str::to_owned);
+            }
+            Some("invite") => {
+                self.multisig.invite = ask.get("address").and_then(Value::as_str).map(str::to_owned);
+                self.multisig.scroll = crate::ui::SmoothScroll::new();
+            }
+            Some("close_invite") => self.multisig.invite = None,
+            Some("session") => self.multisig.session = true,
+            Some("switcher") => self.account_switcher = true,
+            Some("close_switcher") => self.account_switcher = false,
+            Some("tech") => self.multisig.tech = true,
+            _ => {}
+        }
+        cx.notify();
+    }
+
     /// The multisig shown, as its row (`None`: the Vela account is shown).
     pub(crate) fn shown_multisig(&self, cx: &App) -> Option<ms_accounts::AccountRow> {
         let host = ms_host::booted(cx)?;
@@ -1338,7 +1376,7 @@ impl WalletPage {
             .signers
             .get(&key)
             .is_some_and(|s| !s.enough && (!s.outside.is_empty() || !s.either.is_empty()));
-        if outside && item.can_approve.is_empty() {
+        if outside {
             let (chain_id, hash) = (item.chain_id, item.safe_tx_hash.clone());
             foot = foot.child(
                 crate::ui::vela_button(
@@ -1476,11 +1514,24 @@ impl WalletPage {
                 words::tv(loc, "proposal.refused", &[("reason", why)])
             }
             ActionState::MailboxRefused { .. } => reason("serviceRefused"),
-            ActionState::Stopped { preview } => words::tv(
-                loc,
-                "proposal.wouldFail",
-                &[("reason", &self.ms_why_words(preview.get("why").unwrap_or(preview), chain_id))],
-            ),
+            // The look stopped it before the passkey: why, as the look says.
+            ActionState::Stopped { preview } => match preview.get("kind").and_then(Value::as_str) {
+                Some("unpriced") => words::tv(
+                    loc,
+                    "proposal.failed",
+                    &[("reason", &words::t(loc, "proposal.unpricedReason"))],
+                ),
+                Some("unchecked") => words::tv(
+                    loc,
+                    "proposal.failed",
+                    &[("reason", &words::t(loc, "proposal.uncheckedReason"))],
+                ),
+                _ => words::tv(
+                    loc,
+                    "proposal.wouldFail",
+                    &[("reason", &self.ms_why_words(preview.get("why").unwrap_or(preview), chain_id))],
+                ),
+            },
             ActionState::Failed { detail } => self.ms_failure_words(detail, chain_id),
             ActionState::NoOutsideSigner => words::tv(
                 loc,

@@ -446,6 +446,9 @@ pub fn quote(chain_id: u64, from: &str, calls: &[SentCall]) -> Value {
         read_deployment: Some(true),
     });
     let started = Instant::now();
+    // A timer (the quote's deadline, a block's requote) is answered only
+    // once every read is in and its time has come — a shell's clock.
+    let mut timers: Vec<(Instant, u64, vela_core::app::fee_policy::FeeShellResult)> = Vec::new();
     loop {
         let view = host.view();
         if !view.busy {
@@ -468,9 +471,11 @@ pub fn quote(chain_id: u64, from: &str, calls: &[SentCall]) -> Value {
                     }
                     return out;
                 }
+                crate::diag::vlog!("multisig", "quote: no fee recipient or a zero fee");
                 return json!({ "kind": "failed" });
             }
             if let Some(failure) = view.failed {
+                crate::diag::vlog!("multisig", "quote: {failure:?}");
                 return if failure == FeeFailure::WouldFail {
                     json!({ "kind": "reverts", "reason": Value::Null })
                 } else {
@@ -478,17 +483,27 @@ pub fn quote(chain_id: u64, from: &str, calls: &[SentCall]) -> Value {
                 };
             }
         }
-        let Some(next) = pending.pop() else {
-            return json!({ "kind": "failed" });
-        };
         if started.elapsed() > QUOTE_BUDGET {
+            crate::diag::vlog!("multisig", "quote: out of time");
             return json!({ "kind": "failed" });
         }
+        let Some(next) = pending.pop() else {
+            // Only timers left: the earliest, when its time comes.
+            timers.sort_by_key(|(due, _, _)| *due);
+            if timers.is_empty() {
+                crate::diag::vlog!("multisig", "quote: nothing left to answer");
+                return json!({ "kind": "failed" });
+            }
+            let (due, id, result) = timers.remove(0);
+            std::thread::sleep(due.saturating_duration_since(Instant::now()));
+            pending.extend(host.resolve(id, result));
+            continue;
+        };
         let result = match FeePolicy::perform(&next.operation) {
             Answer::Now(result) => result,
             Answer::After(delay, result) => {
-                std::thread::sleep(delay.min(Duration::from_secs(2)));
-                result
+                timers.push((Instant::now() + delay, next.id, result));
+                continue;
             }
             Answer::Blocking(work) => work(),
             Answer::Streaming(work) => {
