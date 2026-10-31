@@ -24,7 +24,32 @@ let cancelTitle = 'Cancel transaction #{{nonce}}';
 /** The page's words for the rows' titles. */
 export function useRecordWords(m: MultisigMessages): void {
 	words = m;
-	if (m.action.cancel) cancelTitle = m.action.cancel;
+	if (m.action.cancel) {
+		cancelTitle = m.action.cancel;
+		void rewordCancelRows(m.action.cancel).catch(() => {});
+	}
+}
+
+/** The fallback a cancellation row was titled with before the page's words were in. */
+const FALLBACK_CANCEL = /^Cancel transaction #(\d+)$/;
+
+/**
+ * r8-22: a cancellation's row written in English (before the page's words
+ * were in, or in another language since) reads in the page's words: the
+ * multisig's own rows (`multisig:` ids) whose title is the English fallback
+ * are titled again with `template`. Nothing else of a row changes.
+ */
+export async function rewordCancelRows(template: string): Promise<number> {
+	if (template === 'Cancel transaction #{{nonce}}') return 0;
+	const { loadTransactions, updateTransaction } = await import('$lib/services/records');
+	const rows = (await loadTransactions()).filter(
+		(t) => t.id.startsWith('multisig:') && FALLBACK_CANCEL.test(t.intent ?? '')
+	);
+	for (const row of rows) {
+		const nonce = (row.intent ?? '').match(FALLBACK_CANCEL)?.[1] ?? '';
+		await updateTransaction(row.id, { intent: fillTemplate(template, { nonce }) });
+	}
+	return rows.length;
 }
 
 /** One row the core planned (`execution_rows`). */

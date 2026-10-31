@@ -981,12 +981,14 @@ describe('the proposer (ms-6)', () => {
 		];
 		const screen = show();
 		await settle();
-		expect(buttons()).toContain('proposal.reject');
-		press('proposal.reject');
+		// r4D-13: its own proposal is withdrawn, not rejected.
+		expect(buttons()).toContain('proposal.withdraw');
+		expect(buttons()).not.toContain('proposal.reject');
+		press('proposal.withdraw');
 		await settle();
 		// The confirmation, then the cancellation it proposes.
 		[...document.body.querySelectorAll('button')]
-			.filter((b) => b.textContent?.trim() === 'proposal.reject')
+			.filter((b) => b.textContent?.trim() === 'proposal.withdraw')
 			.at(-1)
 			?.click();
 		await settle();
@@ -2203,7 +2205,8 @@ describe('how each missing member approves (r4-9, r4D-6)', () => {
 
 describe('Reject (r4D-14)', () => {
 	it('has a way back', async () => {
-		fake.chain.items = [item()];
+		// Another member's proposal: rejected (one's own is withdrawn, r4D-13).
+		fake.chain.items = [item({ proposer: OTHER })];
 		const screen = show();
 		await settle();
 		press('proposal.reject');

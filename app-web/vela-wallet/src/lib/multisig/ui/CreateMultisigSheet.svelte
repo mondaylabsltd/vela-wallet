@@ -451,6 +451,8 @@
 		try {
 			// What the button says: the invite link — its networks and members ride along.
 			await navigator.clipboard.writeText(inviteLink(shareOrigin(location.origin), locale, kept));
+			// S4 (r8): the invite was handed on from here: the home's first step ticks.
+			multisig.inviteShared(kept.address);
 			copied = true;
 			setTimeout(() => (copied = false), 1600);
 		} catch {
@@ -716,17 +718,16 @@
 		<h3>{m.create.members}</h3>
 		<ol class="owners compact">
 			{#each owners as o, i (o)}
-				{@const mine = !!localName(o)}
+				{@const named = label(o) !== shortenAddress(o)}
 				<li>
+					<!-- r4a-14 / r8: every member reads the same way here, where it is
+					     checked before the passkey signs — its name when it has one, and
+					     its address in full (EIP-55), never a short form beside a long one. -->
 					<span class="ordinal">{i + 1}</span><span class="text"
-						><span class="name">{label(o)}</span>
-						<!-- r4a-14: a member from outside this device reads in full here,
-						     where it is checked before the passkey signs. -->
-						{#if mine}{#if label(o) !== shortenAddress(o)}<span class="address"
-									>{shortenAddress(o)}</span
-								>{/if}{:else}<span class="address full" data-testid="review-full"
-								>{checksumAddress(o)}</span
-							>{/if}</span
+						>{#if named}<span class="name">{label(o)}</span>{/if}<span
+							class="address full"
+							data-testid="review-full">{checksumAddress(o)}</span
+						></span
 					>
 				</li>
 			{/each}

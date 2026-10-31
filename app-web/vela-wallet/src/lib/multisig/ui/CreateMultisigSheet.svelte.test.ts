@@ -558,10 +558,12 @@ describe('r4a-14: what a creation can be, and how its members come', () => {
 		const full = [...document.body.querySelectorAll('[data-testid="review-full"]')].map(
 			(e) => e.textContent
 		);
-		expect(full).toEqual([
+		// r8: every member in full, the same way — this device's own one too.
+		expect(full.slice(-2)).toEqual([
 			'0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC',
 			'0x90F79bf6EB2c4f870365E785982E1f101E93b906'
 		]);
+		expect(full.every((a) => /^0x[0-9a-fA-F]{40}$/.test(a ?? ''))).toBe(true);
 		document.body.querySelector<HTMLButtonElement>('[role="radio"]')?.click();
 		await settle();
 		press('create.create');

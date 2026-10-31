@@ -7,11 +7,37 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('./display', () => ({
 	actionTitle: async () => 'Change approvals to 1',
+	shortenAddress: (a: string) => a.slice(0, 8),
+	UNREAD_TOKEN: { symbol: '', decimals: null },
 	tokenInfo: async (_chain: number, token: string | null) =>
 		token ? { symbol: 'USDC', decimals: 6 } : { symbol: 'xDAI', decimals: 18 }
 }));
+const stored = vi.hoisted(() => ({ rows: [] as { id: string; intent?: string }[] }));
+vi.mock('$lib/services/records', () => ({
+	loadTransactions: async () => stored.rows,
+	updateTransaction: async (id: string, patch: { intent?: string }) => {
+		const row = stored.rows.find((r) => r.id === id);
+		if (row) Object.assign(row, patch);
+	}
+}));
 
-const { executionRows, useRecordWords } = await import('./records');
+const { executionRows, rewordCancelRows, useRecordWords } = await import('./records');
+
+describe('r8-22: a cancellation row titled in English before the words came', () => {
+	it("reads in the page's words, and nothing else is touched", async () => {
+		stored.rows = [
+			{ id: 'multisig:100:0xab:0', intent: 'Cancel transaction #4' },
+			{ id: 'multisig:100:0xcd:0', intent: 'Send 1 USDC' },
+			{ id: '0xother', intent: 'Cancel transaction #9' }
+		];
+		expect(await rewordCancelRows('作废第 {{nonce}} 号交易')).toBe(1);
+		expect(stored.rows.map((r) => r.intent)).toEqual([
+			'作废第 4 号交易',
+			'Send 1 USDC',
+			'Cancel transaction #9'
+		]);
+	});
+});
 
 const SAFE = '0x' + 'cd'.repeat(20);
 const BOB = '0x' + 'b0'.repeat(20);

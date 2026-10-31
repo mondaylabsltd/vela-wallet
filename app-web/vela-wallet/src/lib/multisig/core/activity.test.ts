@@ -111,7 +111,10 @@ vi.mock('./reading', () => ({
 	asReview: (a: unknown) => a
 }));
 vi.mock('$lib/flows/marks', () => ({ chainLogoURL: () => null }));
-vi.mock('$lib/services/networks', () => ({ chainName: () => 'Gnosis', nativeSymbol: () => 'xDAI' }));
+vi.mock('$lib/services/networks', () => ({
+	chainName: () => 'Gnosis',
+	nativeSymbol: () => 'xDAI'
+}));
 vi.mock('$lib/wallet/fixtures', () => ({ chainColor: () => 'var(--color-fg-muted)' }));
 // The chain index: it knows chain 77777 by name, and not 99999.
 vi.mock('$lib/services/chain-doc', () => ({

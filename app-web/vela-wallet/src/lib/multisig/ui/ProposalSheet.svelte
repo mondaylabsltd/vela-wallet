@@ -591,6 +591,9 @@
 	 * its number, which that member approves at once.
 	 */
 	const rejecters = $derived(localOwners(members?.owners ?? []));
+	/** r4D-13: the person's own proposal (proposed from a member here) is withdrawn, not rejected. */
+	const ownProposal = $derived(!!item?.proposer && localOwners([item.proposer]).length > 0);
+	const rejectWord = $derived(ownProposal ? m.proposal.withdraw : m.proposal.reject);
 	const rejecter = $derived<LocalOwner | null>(
 		rejecters.find((o) => sameAddress(o.address, actor?.address)) ?? rejecters[0] ?? null
 	);
@@ -2205,12 +2208,12 @@
 							shape="rounded"
 							loading={busy && phase.kind === 'busy' && phase.what === 'reject'}
 							disabled={busy}
-							onclick={onReject}>{m.proposal.reject}</Button
+							onclick={onReject}>{rejectWord}</Button
 						>
 					</div>
 				{:else}
 					<button type="button" class="text-button" data-tap onclick={() => (rejecting = true)}
-						>{m.proposal.reject}</button
+						>{rejectWord}</button
 					>
 				{/if}
 			</div>
