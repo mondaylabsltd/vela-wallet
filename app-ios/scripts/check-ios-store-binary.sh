@@ -19,6 +19,11 @@
 #   3. The widget extension (native parity N-I2) links no core and no network,
 #      keychain, passkey or camera framework, calls no URL session, keychain
 #      item or biometry, and — when signed — is entitled to its App Group only.
+#   4. The Safari Web Extension (native AUDIT §6.5) carries the web
+#      extension's RELEASE package (no developer page, no harness doorway, no
+#      `key`, no `nativeMessaging`, the app's version), links no core, calls
+#      no keychain / biometry / passkey or required-reason API, and — when
+#      signed — is entitled to nothing.
 #
 # Pure inspection: strings, nm and grep — no signing identity, no network.
 set -euo pipefail
@@ -117,8 +122,63 @@ else
   fi
 fi
 
+# 4. The Safari Web Extension (native AUDIT §6.5): the RELEASE package of the
+#    web extension, and a native half that does nothing. Read from the built
+#    bundle, so what the App Store receives is what is checked:
+#    - the package is the release one: no developer page (dev-*.html, the
+#      harness doorway's scripts, the parallel space), no Chrome `key`, no
+#      `nativeMessaging`, and the app's own version;
+#    - its binary links no core and calls no keychain, biometry or passkey
+#      API, and imports no required-reason API its privacy manifest (which
+#      declares none) would have to name;
+#    - signed, it is entitled to nothing — no App Group, no keychain group,
+#      no associated domain: no state is shared with the app, and no key
+#      reaches Safari.
+safari_dir="$(dirname "$target")/PlugIns/VelaSafariExtension.appex"
+safari_bin="$safari_dir/VelaSafariExtension"
+if [[ ! -f "$safari_bin" ]]; then
+  fail "the Safari Web Extension is not embedded (PlugIns/VelaSafariExtension.appex)"
+else
+  manifest="$safari_dir/manifest.json"
+  if [[ ! -f "$manifest" ]]; then
+    fail "the Safari extension carries no manifest.json — the package was not bundled"
+  else
+    for developer in dev-seed.html dev-probe.html dev-handoff.html dev-bridge.js dev-seed.js dev-probe.js dev-handoff.js; do
+      [[ ! -e "$safari_dir/$developer" ]] || fail "the Safari extension carries a developer file: $developer"
+    done
+    if compgen -G "$safari_dir/*/parallel.html" >/dev/null || compgen -G "$safari_dir/*/gallery.html" >/dev/null; then
+      fail "the Safari extension carries the parallel space or a gallery"
+    fi
+    for word in '"key"' nativeMessaging dev-bridge sidePanel; do
+      if grep -q -- "$word" "$manifest"; then fail "the Safari manifest names $word"; fi
+    done
+    pkg_version="$(/usr/bin/plutil -extract version raw -o - "$manifest" 2>/dev/null || true)"
+    app_version="$(/usr/bin/plutil -extract CFBundleShortVersionString raw -o - "$(dirname "$target")/Info.plist" 2>/dev/null || true)"
+    [[ -n "$pkg_version" && "$pkg_version" == "$app_version" ]] \
+      || fail "the Safari package is version '$pkg_version', the app '$app_version'"
+  fi
+  [[ -f "$safari_dir/PrivacyInfo.xcprivacy" ]] || fail "the Safari extension has no PrivacyInfo.xcprivacy"
+  sx=("$safari_bin")
+  [[ -f "$safari_dir/VelaSafariExtension.debug.dylib" ]] && sx+=("$safari_dir/VelaSafariExtension.debug.dylib")
+  score="$(for b in "${sx[@]}"; do nm -arch all "$b" 2>/dev/null; done | grep -cE 'uniffi_vela_core|ffi_vela_core' || true)"
+  [[ "$score" == 0 ]] || fail "the Safari extension links the core ($score symbol(s))"
+  sundef="$(for b in "${sx[@]}"; do nm -u -arch all "$b" 2>/dev/null; done)"
+  for symbol in SecItemCopyMatching SecItemAdd SecKeyCreate LAContext ASAuthorization NSUserDefaults \
+                _stat _fstat _lstat statfs mach_absolute_time UITextInputMode; do
+    if grep -qE -- "(^|[^A-Za-z])_?$symbol" <<<"$sundef"; then
+      fail "the Safari extension calls $symbol"
+    fi
+  done
+  if sent="$(codesign -d --entitlements - --xml "$safari_dir" 2>/dev/null)" && [[ -n "$sent" ]]; then
+    for key in com.apple.security.application-groups keychain-access-groups com.apple.developer.associated-domains; do
+      if grep -q "$key" <<<"$sent"; then fail "the Safari extension is entitled to $key"; fi
+    done
+  fi
+fi
+
 if (( failed )); then
   exit 1
 fi
 echo "ok: none of $count developer inputs, no fixture symbol, no parallel-space binding;" \
-  "the widget extension links no core, no network stack, no keychain"
+  "the widget extension links no core, no network stack, no keychain;" \
+  "the Safari extension is the release package, links no core and is entitled to nothing"
