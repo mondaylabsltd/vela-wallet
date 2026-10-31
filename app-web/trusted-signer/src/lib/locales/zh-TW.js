@@ -243,7 +243,7 @@ window.VelaCS.i18n.register('zh-TW', {
   'ui.proofFailed': '未簽署：操作已取消、逾時，或這台裝置上沒有這把金鑰。',
   'ui.waitingForWallet': '正在等待錢包',
   'ui.waitingNote': '這一頁會保持開啟，等待錢包的下一個請求。你可以回到錢包了。',
-  'ui.sessionDone': '完成——錢包需要的都已交回。你可以關閉這一頁了。',
+  'ui.sessionDone': '錢包需要的都已交回。你可以關閉這一頁了。',
   'ui.sessionIdle': '5 分鐘內沒有收到任何請求，這一頁已停止等待。請從錢包重新開始。',
   'ui.openerSilent': '開啟這一頁的頁面始終沒有送出請求。',
   'ui.sessionEnded': '工作階段已結束',

@@ -9,13 +9,11 @@
  * `a_risk_is_asked_every_signature`, `an_unchecked_network_signs_nothing_yet`).
  */
 import { readFileSync } from 'node:fs';
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { initSync } from '../../../../../../rust/pkg-web/vela_core.js';
 import { WASM_URL } from '../../../../../../rust/pkg-web/vela_core_wasm_url.js';
 
 const MODULE = '0x9813461E88aDD60D0eC0943B74A83368CA2E36D1';
-
-vi.mock('./recheck', () => ({ checkNow: async () => [], findingsOn: () => [] }));
 
 const { gateOf } = await import('./gate.svelte');
 

@@ -679,6 +679,23 @@
 		);
 	});
 
+	/**
+	 * Round 7 (S4): the request whose signature went to the signing page. The
+	 * hand-off ends the moment the page answers, a beat before the core leaves
+	 * `awaiting_signature`: kept for that request, so the sheet never says
+	 * "Waiting for biometric…" while the page (not this window) signs.
+	 */
+	let signedOnPage = $state<string | null>(null);
+	$effect(() => {
+		if (pageHandoff.current?.kind !== 'signature') return;
+		const id = untrack(() => signView.request?.id ?? null);
+		if (id !== null) signedOnPage = id;
+	});
+	const onPage = $derived(
+		pageHandoff.current?.kind === 'signature' ||
+			(signedOnPage !== null && signedOnPage === (signView.request?.id ?? null))
+	);
+
 	const built = $derived.by(() => {
 		if (!identity) return null;
 		return buildSigningModel({
@@ -687,7 +704,7 @@
 			guard: signingSheet.guard,
 			fee: feeShown,
 			// Round 7 (S4): the page has it — "Waiting for the signing page…".
-			progress: { ...signRequest.progress, onPage: pageHandoff.current?.kind === 'signature' },
+			progress: { ...signRequest.progress, onPage },
 			// This request's own simulation, and no other's.
 			sim: checked !== null && checked.requestId === signView.request?.id ? checked.sim : null,
 			simRechecking: recheckingFor !== null && recheckingFor === signView.request?.id,

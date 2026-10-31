@@ -32,11 +32,17 @@ const seams = vi.hoisted(() => ({
 	historyUnreadable: [] as number[],
 	cached: null as { at: number } | null,
 	loading: false,
-	readAt: null as number | null
+	readAt: null as number | null,
+	/** The machine's note on its list, and each row's standing (`view`). */
+	note: null as unknown,
+	standings: {} as Record<string, unknown>
 }));
 
 vi.mock('./proposals.svelte', () => ({
 	proposals: {
+		get view() {
+			return { waiting_note: seams.note, standings: seams.standings };
+		},
 		chain: () => undefined,
 		get open() {
 			return seams.open;
@@ -155,8 +161,7 @@ describe('a waiting contract call in Activity', () => {
 describe('the waiting group while the multisig service is away', () => {
 	it('says so once, over the last list, with a Retry', () => {
 		seams.open = [call('0xdeadbeef')];
-		seams.stale = true;
-		seams.unreachable = true;
+		seams.note = { kind: 'unreachable' };
 		const group = waitingRows.group(m)!;
 		expect(group.note).toBe('service away');
 		expect(group.action).toEqual({ id: MULTISIG_RETRY, label: 'Retry' });
@@ -168,12 +173,11 @@ describe('the waiting group while the multisig service is away', () => {
 
 	it('a list that is only stale says that, with no Retry of its own', () => {
 		seams.open = [call('0xdeadbeef')];
-		seams.stale = true;
-		seams.unreachable = false;
+		seams.note = { kind: 'stale' };
 		const group = waitingRows.group(m)!;
 		expect(group.note).toBe('stale');
 		expect(group.action).toBeUndefined();
-		seams.stale = false;
+		seams.note = null;
 		expect(waitingRows.group(m)?.note).toBeUndefined();
 	});
 });
@@ -212,35 +216,30 @@ describe('proposals on a network this device does not have', () => {
 	});
 });
 
+/**
+ * What the group says of its list is the machine's note (its order:
+ * app_multisig_presence.rs `the_waiting_group_says_where_its_list_stands`),
+ * worded here, with a Retry where one helps.
+ */
 describe('what the waiting group says of where it stands (r4b-3, r4b-11, r4b-15, r4b-2)', () => {
 	const reset = () => {
 		seams.open = [call('0xdeadbeef')];
 		seams.missing = [];
-		seams.stale = false;
-		seams.unreachable = false;
-		seams.offline = false;
-		seams.unreadable = [];
-		seams.historyUnreadable = [];
-		seams.cached = null;
-		seams.loading = false;
-		seams.readAt = null;
+		seams.note = null;
 	};
 
-	it('offline is said as offline, with when the list was read — before anything else', () => {
+	it('offline is said as offline, with when the list was read', () => {
 		reset();
-		seams.offline = true;
-		seams.stale = true;
-		seams.unreachable = true;
+		seams.note = { kind: 'offline', since: null };
 		expect(waitingRows.group(m)?.note).toBe('offline');
-		seams.readAt = Date.UTC(2026, 9, 29, 16, 36);
+		seams.note = { kind: 'offline', since: Date.UTC(2026, 9, 29, 16, 36) };
 		expect(waitingRows.group(m)?.note).toMatch(/^offline since \S/);
 		expect(waitingRows.group(m)?.action).toBeUndefined();
 	});
 
 	it('a network that did not answer is named, with Retry — never "nothing waits"', () => {
 		reset();
-		seams.stale = true;
-		seams.unreadable = [100];
+		seams.note = { kind: 'chainUnreachable', chain_ids: [100] };
 		const group = waitingRows.group(m)!;
 		expect(group.note).toBe("can't reach Gnosis");
 		expect(group.action).toEqual({ id: MULTISIG_RETRY, label: 'Retry' });
@@ -250,8 +249,7 @@ describe('what the waiting group says of where it stands (r4b-3, r4b-11, r4b-15,
 
 	it('the list kept from an earlier page is shown at once, said as the last known', () => {
 		reset();
-		seams.stale = true;
-		seams.cached = { at: Date.UTC(2026, 9, 29, 16, 36) };
+		seams.note = { kind: 'lastKnown', at: Date.UTC(2026, 9, 29, 16, 36) };
 		const group = waitingRows.group(m)!;
 		expect(group.rows).toHaveLength(1);
 		expect(group.note).toMatch(/^last known \S/);
@@ -260,15 +258,15 @@ describe('what the waiting group says of where it stands (r4b-3, r4b-11, r4b-15,
 	it('still reading with nothing to show: a cue from the first frame', () => {
 		reset();
 		seams.open = [];
-		seams.loading = true;
+		seams.note = { kind: 'checking' };
 		expect(waitingRows.group(m)).toMatchObject({ note: 'checking', rows: [] });
-		seams.loading = false;
+		seams.note = null;
 		expect(waitingRows.group(m)).toBeNull();
 	});
 
 	it('a history that could not be read is said, with Retry', () => {
 		reset();
-		seams.historyUnreadable = [100];
+		seams.note = { kind: 'historyUnreadable', chain_ids: [100] };
 		expect(waitingRows.group(m)).toMatchObject({
 			note: 'history unread on Gnosis',
 			action: { id: MULTISIG_RETRY }
@@ -292,6 +290,11 @@ describe('a waiting row (r4b-6, r4b-7, r4b-17, r4a-4)', () => {
 		};
 		const b = { ...call('0x22222222'), sameNonce: ['0xa'], executing: true };
 		seams.open = [a, b];
+		seams.note = null;
+		seams.standings = {
+			[`100:${a.safeTxHash}`]: { kind: 'ready' },
+			[`100:${b.safeTxHash}`]: { kind: 'executing' }
+		};
 		waitingRows.follow(m, signing, MULTISIG);
 		await settle();
 		const [first, second] = waitingRows.group(m)!.rows;

@@ -130,6 +130,8 @@ export interface MultisigMessages {
 		reject: string;
 		/** r4D-13: the person's own proposal, on its review before its passkey: withdrawn, not declined. */
 		withdraw: string;
+		/** S4 (r7): the person's own proposal, not proposed yet: "Don't propose". */
+		dontPropose: string;
 		rejectHint: string;
 		cancelPending: string;
 		executing: string;
@@ -268,6 +270,8 @@ export interface MultisigMessages {
 		sendLink: string;
 		/** r4-9: Vela members elsewhere approve from the link (`{{names}}`). */
 		approvesInVela: string;
+		/** r7-8: members nothing says how they sign yet (`{{names}}`): either way, said once. */
+		eitherWay: string;
 		/** r7: smart contract members still to approve (`{{names}}`): from their own app, not collected yet. */
 		contractMembers: string;
 		/** r4D-14: the way back from Reject. */
@@ -364,6 +368,12 @@ export interface MultisigMessages {
 		/** The first transfer out sets it up there (`{{network}}`). */
 		firstRunCost: string;
 		firstRunDismiss: string;
+		/** r7-9: this device's networks of the other space (`{{networks}}`, `{{space}}`). */
+		otherSpace: string;
+		/** r7-9: the sheet opened on what was entered before. */
+		draftKept: string;
+		/** r7-9: drop the kept draft and start a fresh one. */
+		discardDraft: string;
 	};
 	/** r4D-16: the invite sheet. */
 	invite: {
@@ -583,6 +593,8 @@ export interface MultisigMessages {
 		renameNotDeployed: string;
 		/** r4a-12: its record is not saved yet — nothing to rename. */
 		renameNotRecorded: string;
+		/** r7-10: its record is on its way to `{{network}}` (not landed yet). */
+		renamePending: string;
 		originalMembers: string;
 		originalNote: string;
 		/** `{{network}}` */
@@ -949,6 +961,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		share: '',
 		reject: '',
 		withdraw: '',
+		dontPropose: '',
 		rejectHint: '',
 		cancelPending: '',
 		executing: '',
@@ -1042,6 +1055,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		notNeeded: '',
 		sendLink: '',
 		approvesInVela: '',
+		eitherWay: '',
 		contractMembers: '',
 		rejectCancel: '',
 		noOutsideSigner: ''
@@ -1113,7 +1127,10 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		firstRunFund: '',
 		firstRunFundNote: '',
 		firstRunCost: '',
-		firstRunDismiss: ''
+		firstRunDismiss: '',
+		otherSpace: '',
+		draftKept: '',
+		discardDraft: ''
 	},
 	invite: {
 		body: '',
@@ -1308,6 +1325,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		renameUnavailable: '',
 		renameNotDeployed: '',
 		renameNotRecorded: '',
+		renamePending: '',
 		originalMembers: '',
 		originalNote: '',
 		currentOn: '',

@@ -3,13 +3,7 @@
  * confirmation clears itself, so nothing stays on screen after "Don't sign"
  * or "sign" — and the next signature asks a new one.
  */
-import { describe, expect, it, vi } from 'vitest';
-
-vi.mock('./recheck', () => ({
-	checkOn: async () => [],
-	checkNow: async () => [],
-	findingsOn: () => []
-}));
+import { describe, expect, it } from 'vitest';
 
 const { riskConfirmation } = await import('./gate.svelte');
 

@@ -61,6 +61,12 @@
 /// Every entry is a page published at `sign.getvela.app/b/<hash>/sign.html`.
 /// An empty set would open nothing were it enforced — see [`ENFORCE`].
 pub const BUILD_ALLOWED: &[&str] = &[
+    // 416a65c1's page, finished calmly (round 7, S4): done said once (the
+    // card's title, the note without a second "Done"), an ended session
+    // said once and in the calm style of any card, and a finished page
+    // closes itself however the session ends — the wallet's goodbye, or
+    // its asking window gone before it could say one.
+    "126a267a46b0800ab1033a0eb121fd306b6e347d66fe1e8a8ea2438b08d53c2a",
     // 031dd666's page, reading a multisig EXECUTION (round 7, r7-1): the
     // executor's own operation — `execTransaction` with the SafeTx decoded and
     // read by the approval's rules (refusals included), its safeTxHash

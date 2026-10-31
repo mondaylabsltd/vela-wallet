@@ -170,6 +170,7 @@
         "share": "Condividi",
         "reject": "Rifiuta",
         "withdraw": "Ritira",
+        "dontPropose": "Non proporre",
         "rejectHint": "Rifiutare propone un annullamento con lo stesso numero; anche questo richiede {{threshold}} approvazioni, e vale quella eseguita per prima.",
         "cancelPending": "Un annullamento di questa transazione è in attesa di approvazione.",
         "executing": "Esecuzione…",
@@ -238,6 +239,7 @@
         "notNeeded": "Non serve",
         "sendLink": "Invia link",
         "approvesInVela": "Approva in Vela dal proprio dispositivo: {{names}}. Invia loro questo link.",
+        "eitherWay": "Non si sa ancora come approvano: {{names}}. Possono approvare in Vela con questo link, oppure con il proprio wallet usando il link per wallet esterni.",
         "contractMembers": "{{names}}: un account smart contract approva dalla sua app (ad es. un altro Safe). Vela non può ancora raccogliere queste approvazioni.",
         "rejectCancel": "Annulla",
         "noOutsideSigner": "nessun membro è su questo dispositivo, e ogni membro approva in Vela dal proprio dispositivo — chiedi a uno di loro di proporla",
@@ -336,7 +338,10 @@
         "firstRunFund": "Aggiungi fondi",
         "firstRunFundNote": "Invia al suo indirizzo su {{network}}.",
         "firstRunCost": "Il suo primo trasferimento in uscita lo configura anche su {{network}}: una commissione di rete una tantum, pagata con quel trasferimento e mostrata prima dell’esecuzione.",
-        "firstRunDismiss": "Ho capito"
+        "firstRunDismiss": "Ho capito",
+        "otherSpace": "Anche su questo dispositivo, in {{space}}: {{networks}}. Per creare il multisig su una di queste, passa prima a {{space}}.",
+        "draftKept": "Riprendi da dove avevi lasciato.",
+        "discardDraft": "Ricomincia"
       },
       "invite": {
         "body": "I membri scansionano il codice o aprono il link: aggiunge il multisig in Vela con la sua rete e i nomi dei membri.",
@@ -602,7 +607,8 @@
         "removed": "Rimossi",
         "thresholdChanged": "Approvazioni necessarie: {{was}} in origine, {{is}} ora.",
         "undeployedOn": "Non ancora distribuito su {{network}}: lì partirà con i membri originali.",
-        "renameNotRecorded": "Potrà essere rinominato quando il suo record sarà salvato presso il servizio multisig."
+        "renameNotRecorded": "Potrà essere rinominato quando il suo record sarà salvato presso il servizio multisig.",
+        "renamePending": "Potrà essere rinominato quando il suo record arriverà su {{network}}. Può volerci un po’: nel frattempo non si perde nulla."
       },
       "service": {
         "customNote": "In uso un servizio multisig personalizzato ({{host}})",

@@ -146,4 +146,44 @@ describe('the machines’ host', () => {
 		machines.followRecords()();
 		expect(seen.filter((t) => t === 'check_records')).toHaveLength(1);
 	});
+
+	/**
+	 * ms-22 (a regression): a proposal link waiting for a network this device
+	 * lacks is the accounts machine's record — a new document (a reload, the
+	 * Add network wizard) still waits for it, and opens it once the network
+	 * is here (Rust: `a_link_waiting_for_its_network_survives_a_reload`).
+	 */
+	it('keeps a link waiting for its network through a reload, and opens it once the network is here', async () => {
+		const storage = memoryStorage({});
+		const start = (networks: number[]) =>
+			machines.boot({
+				load: async () => {},
+				deps: offlineDeps(storage),
+				facts: () => ({
+					serviceUrl: 'http://service.test',
+					accounts: [],
+					networks,
+					space: networks
+				})
+			});
+		await start([100]);
+		multisig.send({
+			type: 'open_link',
+			hash: `#ms=8453.${SAFE}.0x${'ab'.repeat(32)}`,
+			take_kept: false
+		});
+		await settled();
+		expect(machines.accounts!.view.link?.kind).toBe('missingNetwork');
+		expect(storage.map.has('vela.multisigPendingLink')).toBe(true);
+		// A new document over the same store: still waiting, nothing said.
+		machines.resetForTests();
+		await start([100]);
+		await settled();
+		expect(machines.accounts!.view.link).toBeNull();
+		expect(storage.map.has('vela.multisigPendingLink')).toBe(true);
+		// The network is added: the link opens, and is waited for no more.
+		multisig.send({ type: 'networks', networks: [100, 8453] });
+		await vi.waitFor(() => expect(storage.map.has('vela.multisigPendingLink')).toBe(false));
+		expect(machines.accounts!.view.link?.kind).not.toBe('missingNetwork');
+	});
 });

@@ -29,7 +29,16 @@ import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
 import { loadCore } from '$lib/core/client';
 import { MULTISIG_SHAPE, type MultisigMessages } from '$lib/multisig/messages';
-import { cancelTx, safeTxHashes, type SafeTx } from '$lib/multisig/core/kernel';
+import {
+	cancelTx,
+	multisigReview,
+	safeTxHashes,
+	type MultisigReviewOut,
+	type SafeTx
+} from '$lib/multisig/core/kernel';
+import type { OutsideActivityRow } from '$lib/multisig/generated/OutsideActivityRow';
+import type { OutsideTxShown } from '$lib/multisig/generated/OutsideTxShown';
+import type { OutsideTxTitle } from '$lib/multisig/generated/OutsideTxTitle';
 import type { OutsideActivityEntry } from '$lib/multisig/generated/OutsideActivityEntry';
 import type { OutsideActions } from '$lib/multisig/generated/OutsideActions';
 import type { OutsideGate } from '$lib/multisig/generated/OutsideGate';
@@ -196,6 +205,9 @@ function words(): MultisigMessages {
 	out.external.rowExecute = 'Execute {{number}}';
 	out.external.rowReject = 'Reject {{number}}';
 	out.external.executeNeedsGas = 'needs {{fee}}, holds {{balance}}';
+	out.change.rule = 'Approvals: {{before}} → {{after}}';
+	out.create.thresholdValue = '{{m}} of {{n}}';
+	out.change.add = 'Add {{member}}';
 	out.external.relayRetrying = "Can't connect ({{reason}}) — in {{seconds}} s";
 	return out;
 }
@@ -308,6 +320,41 @@ function asked(over: Partial<OutsideActivityEntry> = {}): OutsideActivityEntry {
 	};
 }
 
+/** TX, as the core titles it: a send of the network coin. */
+const SEND: OutsideTxTitle = {
+	kind: 'send',
+	to: TX.to,
+	amount: '10000000000000000',
+	token: { token: null, symbol: null, decimals: 18, known: true }
+};
+
+/** A SafeTx as the core page machine shows it for review (`TxShown`). */
+function shownOf(tx: SafeTx, over: Partial<OutsideTxShown> = {}): OutsideTxShown {
+	return {
+		chainId: 5042002,
+		safe: SAFE,
+		nonce: BigInt(tx.nonce).toString(),
+		hashes: safeTxHashes(5042002, SAFE, tx),
+		name: null,
+		title: SEND,
+		review: null,
+		chainNonce: '3',
+		...over
+	};
+}
+
+/** A row of the list, as the core says it. */
+function row(over: Partial<OutsideActivityRow> = {}): OutsideActivityRow {
+	return {
+		id: `row-${Math.random()}`,
+		at: Date.now(),
+		label: { kind: 'approveTo', chainId: 5042002, nonce: '3', title: SEND, to: TX.to },
+		outcome: { kind: 'waiting' },
+		bad: false,
+		...over
+	};
+}
+
 describe('the connect page says where it stands (r4)', () => {
 	it('r4D-16: a spinner and "Connecting to Vela…" before anything is found', async () => {
 		let release!: () => void;
@@ -337,7 +384,7 @@ describe('the connect page says where it stands (r4)', () => {
 		const screen = await open([MEMBER], `#${encodeURIComponent(INVITE)}&for=${MEMBER}`);
 		pair();
 		const entry = asked({ id: 'r1' });
-		host().set({ activity: [entry], request: entry });
+		host().set({ activity: [entry], request: entry, requestReview: shownOf(TX) });
 		await vi.waitFor(() => expect(testid('connect-review')).not.toBeNull());
 		const hashes = safeTxHashes(5042002, SAFE, TX);
 		expect(testid('review-safe')?.textContent).toBe(SAFE);
@@ -381,6 +428,13 @@ describe('the connect page says where it stands (r4)', () => {
 					outcome: 'rejected',
 					problem: { kind: 'declined' }
 				}
+			]
+		});
+		host().set({
+			rows: [
+				row({ outcome: { kind: 'done' } }),
+				row({ outcome: { kind: 'withdrawn' } }),
+				row({ outcome: { kind: 'walletDeclined' } })
 			]
 		});
 		await vi.waitFor(() => expect(testid('connect-signed')).not.toBeNull());
@@ -470,6 +524,8 @@ function readyView(
 		findings,
 		gate: gateOf(findings),
 		review: null,
+		title: SEND,
+		name: null,
 		members: { deployed: true, owners, threshold: 2, nonce: '3' },
 		item: {
 			chainId: 5042002,
@@ -665,7 +721,11 @@ describe('round 6: one card, one message (r5reg-7)', () => {
 		// Vela asks for another transaction: its review is the one card.
 		const next = { ...TX, nonce: '0x4' };
 		const other = asked({ safeTx: { chainId: 5042002, safe: SAFE, tx: next } });
-		host().set({ activity: [other], request: other });
+		host().set({
+			activity: [other],
+			request: other,
+			requestReview: shownOf(next, { chainNonce: '3' })
+		});
 		await vi.waitFor(() => expect(testid('connect-request')).not.toBeNull());
 		expect(testid('connect-outside')).toBeNull();
 		expect(document.querySelectorAll('[data-testid="connect-review"]')).toHaveLength(1);
@@ -799,6 +859,14 @@ describe('round 6: the link transaction from here', () => {
 					safeTx: { chainId: 5042002, safe: SAFE, tx: cancelTx(SAFE, '0x8') }
 				}),
 				asked({ id: 'approve', stage: 'answered', outcome: 'done', form: 'typedData' })
+			],
+			rows: [
+				row({
+					id: 'reject',
+					label: { kind: 'reject', nonce: '8' },
+					outcome: { kind: 'walletDeclined' }
+				}),
+				row({ id: 'approve', outcome: { kind: 'done' } })
 			]
 		});
 		await vi.waitFor(() =>
@@ -813,7 +881,13 @@ describe('round 6: the link transaction from here', () => {
 		expect(list).not.toContain('external.signTx');
 		// What was done from here is a row too.
 		readyView(0);
-		host().set({ step: { kind: 'executed', txHash: `0x${'77'.repeat(32)}` } });
+		host().set({
+			step: { kind: 'executed', txHash: `0x${'77'.repeat(32)}` },
+			rows: [
+				row({ id: 'here-1', label: { kind: 'execute', nonce: '3' }, outcome: { kind: 'sent' } }),
+				...host().view.rows
+			]
+		});
 		await vi.waitFor(() => expect(testid('connect-activity')?.textContent).toContain('Execute #3'));
 		await screen.unmount();
 	});
@@ -854,10 +928,50 @@ describe('round 6: the relay and Vela, said plainly', () => {
 		pair();
 		const entry = asked();
 		// The registry names the multisig (the core read it for the request).
-		host().set({ activity: [entry], request: entry, requestGenesis: { name: 'R5 Team' } });
+		host().set({
+			activity: [entry],
+			request: entry,
+			requestReview: shownOf(TX, { name: 'R5 Team' })
+		});
 		await vi.waitFor(() => expect(testid('review-name')?.textContent).toBe('R5 Team'));
 		expect(testid('review-name-source')?.textContent).toBe('external.nameFromRecord');
 		expect(testid('review-nonce')?.textContent?.trim()).toBe('#3');
+		await screen.unmount();
+	});
+});
+
+describe('r7-11: the outside owner reads the member change and its rule', () => {
+	it('an addOwner request shows Approvals: 2 of 3 → 2 of 4, from the core review', async () => {
+		const screen = await open([MEMBER], `#${encodeURIComponent(INVITE)}&for=${MEMBER}`);
+		pair();
+		const NEWCOMER = '0x15d34aaf54267db7d7c367839aaf71a00a2c6a65';
+		const add: SafeTx = {
+			...TX,
+			to: SAFE,
+			value: '0x0',
+			data: `0x0d582f13${NEWCOMER.slice(2).padStart(64, '0')}${(2).toString(16).padStart(64, '0')}`
+		};
+		// The core own review, as the page machine gathers it.
+		const review: MultisigReviewOut = multisigReview({
+			chainId: 5042002,
+			safe: SAFE,
+			tx: add,
+			owners: [MEMBER, STRANGER, ALSO],
+			threshold: 2,
+			deployed: true
+		});
+		const entry = asked({ safeTx: { chainId: 5042002, safe: SAFE, tx: add } });
+		host().set({
+			activity: [entry],
+			request: entry,
+			requestReview: shownOf(add, { title: { kind: 'addOwner', owner: NEWCOMER }, review })
+		});
+		await vi.waitFor(() =>
+			expect(testid('member-change-rule')?.textContent).toBe('Approvals: 2 of 3 → 2 of 4')
+		);
+		expect(testid('member-change')?.textContent).toContain('Add');
+		// One reading: the hashes are the review own.
+		expect(testid('review-hashes')?.textContent).toContain(review.hashes.safeTxHash);
 		await screen.unmount();
 	});
 });

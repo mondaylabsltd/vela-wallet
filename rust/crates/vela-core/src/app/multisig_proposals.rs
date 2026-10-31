@@ -84,6 +84,16 @@ pub const REVIEW_FRESH_MS: f64 = 30_000.0;
 /// A priced look this recent is what Execute signs (`PREVIEW_FRESH_MS`);
 /// an older one, or one that did not price it, is taken again first.
 pub const PREVIEW_FRESH_MS: f64 = 15_000.0;
+/// A look that could not price the fee (or was not checked) is taken again sooner.
+pub const UNPRICED_FRESH_MS: f64 = 5_000.0;
+/// Round 5: the longest one look is waited for. "Approve and execute" once
+/// stayed disabled four minutes on a look that never answered; past this
+/// the look says `unchecked` — approving goes ahead, and Execute looks
+/// again before its passkey.
+pub const PREVIEW_CAP_MS: u64 = 15_000;
+/// How long the home lets a ready transaction's look stand (its "Can't run
+/// now"): looked at again on the poll after this.
+pub const HOME_FRESH_MS: f64 = 60_000.0;
 const RECENT_CAP: usize = 16;
 /// An on-chain "no" is asked again after this.
 pub const ONCHAIN_RECHECK_MS: f64 = 30_000.0;
@@ -671,10 +681,23 @@ pub struct ItemSigners {
     /// The members on its network that have not approved yet, in the
     /// chain's order, each with how it signs.
     pub rows: Vec<SignerRow>,
-    /// Of them, those an outside wallet may be asked to sign for
-    /// (`plainAccounts`): never this device's, a Vela account, or a smart
-    /// contract account.
+    /// Of them, those an outside wallet may be asked to sign for — the
+    /// outside-wallet link names them: a plain account, or one nothing
+    /// says (beside the Vela way). Never this device's, a Vela account, a
+    /// smart contract account, or one still being read.
     pub outside: Vec<String>,
+    /// r7-8: those that approve in Vela on their own device (the Vela link)
+    /// — only a member something shows is a Vela account; never an outside
+    /// member nothing has said yet.
+    pub in_vela: Vec<String>,
+    /// r7-8: those nothing says how they sign yet: either way is offered,
+    /// and said once — never listed as Vela's and the outside wallet's both.
+    pub either: Vec<String>,
+    /// Smart contract members: they approve from their own app, which Vela
+    /// can't collect yet (said; no link offered).
+    pub contract: Vec<String>,
+    /// Enough approvals are in: nobody else is asked (every list empty).
+    pub enough: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -822,6 +845,11 @@ pub struct ProposalsView {
     /// A multisig other than the followed one has something waiting (the
     /// dot on the switcher's button).
     pub others_waiting: bool,
+    /// Everyone who is a member of the followed multisig on some network
+    /// (`membersAnywhere`): its members now where it is deployed, its
+    /// original members wherever it is not. Who may sign on one network is
+    /// that network's alone; this only says whether any member is here.
+    pub members_anywhere: Vec<String>,
     /// Each open proposal's one word, per `<chainId>:<safeTxHash>`.
     pub standings: BTreeMap<String, super::multisig_presence::Standing>,
     /// What the waiting group says of the list.
@@ -926,6 +954,8 @@ pub struct State {
     previews: BTreeMap<String, Value>,
     /// Each executor's last look ([`preview_key`]): when it was taken, what it said.
     preview_plans: BTreeMap<String, (f64, Preview)>,
+    /// The looks under way ([`preview_key`]): never two at once.
+    looking: BTreeSet<String>,
     verdicts: BTreeMap<String, Value>,
     /// The executions being watched ([`exec_key`]): each flight followed once.
     watching: BTreeSet<String>,
@@ -990,15 +1020,33 @@ impl State {
             })
             .cloned()
             .collect();
+        let rows: Vec<SignerRow> = missing
+            .iter()
+            .map(|o| SignerRow {
+                owner: o.clone(),
+                kind: signers::signer_kind(&facts(o)),
+            })
+            .collect();
+        // Nobody else is asked once enough approved, nor for one done or one
+        // Vela cannot read (r4D-6).
+        let enough = item.approved >= item.threshold;
+        let asks = !enough && item.status != ProposalStatus::Done && item.review.action.is_some();
+        let of = |kinds: &[SignerKind]| -> Vec<String> {
+            if !asks {
+                return Vec::new();
+            }
+            rows.iter()
+                .filter(|r| r.kind.is_some_and(|k| kinds.contains(&k)))
+                .map(|r| r.owner.clone())
+                .collect()
+        };
         Some(ItemSigners {
-            rows: missing
-                .iter()
-                .map(|o| SignerRow {
-                    owner: o.clone(),
-                    kind: signers::signer_kind(&facts(o)),
-                })
-                .collect(),
-            outside: signers::plain_accounts(&missing, |o| facts(o)),
+            outside: of(&[SignerKind::Wallet, SignerKind::Unsure]),
+            in_vela: of(&[SignerKind::Vela]),
+            either: of(&[SignerKind::Unsure]),
+            contract: of(&[SignerKind::Contract]),
+            enough,
+            rows,
         })
     }
 
@@ -1184,7 +1232,8 @@ impl App for MultisigProposals {
                 render()
             }
             Event::Tick => flow(model, |io, st| async move {
-                refresh(&io, &st, true, false).await
+                refresh(&io, &st, true, false).await;
+                look_at_ready(&io, &st).await;
             }),
             Event::Refresh { fresh } => flow(model, move |io, st| async move {
                 refresh(&io, &st, false, fresh).await
@@ -1359,9 +1408,7 @@ impl App for MultisigProposals {
                 let Some(input) = execution_input(&st, chain_id, &safe_tx_hash, &executor) else {
                     return;
                 };
-                if look_now(&io, &st, &input).await == Preview::Spent {
-                    settle_spent(&io, &st, &input).await;
-                }
+                look_if_stale(&io, &st, &input, PREVIEW_FRESH_MS).await;
             }),
             Event::Execute {
                 chain_id,
@@ -1473,6 +1520,14 @@ impl App for MultisigProposals {
                 .and_then(|a| s.last_actor.get(&a.address.to_ascii_lowercase()).cloned()),
             presence: more.presence,
             others_waiting: more.others_waiting,
+            members_anywhere: s
+                .account
+                .as_ref()
+                .map(|a| {
+                    let chains: Vec<&ChainMembers> = s.chains.iter().map(|c| &c.members).collect();
+                    super::multisig_members::members_anywhere(&a.owners, &chains)
+                })
+                .unwrap_or_default(),
             standings: more.standings,
             waiting_note: more.waiting_note,
             timelines: more.timelines,
@@ -3247,7 +3302,11 @@ async fn execute(
     let shown = lock(st)
         .preview_plans
         .get(&key)
-        .filter(|(at, p)| matches!(p, Preview::Priced { .. }) && looked - at < PREVIEW_FRESH_MS)
+        // Only a look that lets it run is signed from: one that says the executor
+        // cannot pay is asked again first — the funds may have arrived since.
+        .filter(|(at, p)| {
+            matches!(p, Preview::Priced { can_pay: true, .. }) && looked - at < PREVIEW_FRESH_MS
+        })
         .map(|(_, p)| p.clone());
     let preview = match shown {
         Some(p) => p,
@@ -3368,6 +3427,106 @@ async fn look_now(io: &Io<Event>, st: &Shared<State>, input: &ExecutionInput) ->
     preview
 }
 
+/// Look at `input` unless its executor's last look is fresh (`fresh_ms`;
+/// an unpriced or unchecked one [`UNPRICED_FRESH_MS`] at most) or one is
+/// under way (`preflight.check`): one look per execution and executor, never
+/// a second answer to the same question. A look that does not answer within
+/// [`PREVIEW_CAP_MS`] says `unchecked` (never a guess); a number found used
+/// is settled as another member's execution (`settleSpent`).
+pub(crate) async fn look_if_stale(
+    io: &Io<Event>,
+    st: &Shared<State>,
+    input: &ExecutionInput,
+    fresh_ms: f64,
+) {
+    let key = preview_key(
+        input.chain_id,
+        &input.item.safe_tx_hash,
+        &input.executor.address,
+    );
+    let now = io.now().await;
+    {
+        let mut s = lock(st);
+        if s.looking.contains(&key) {
+            return;
+        }
+        let fresh = s.preview_plans.get(&key).is_some_and(|(at, p)| {
+            // r7: a look that stops it (nobody can pay, it would fail) is
+            // asked again at the sheet's pace even on the home — an
+            // executor funded is noticed on the next poll, not a minute on.
+            let fresh = match p {
+                Preview::Unpriced | Preview::Unchecked => fresh_ms.min(UNPRICED_FRESH_MS),
+                Preview::Fails(_) | Preview::Priced { can_pay: false, .. } => {
+                    fresh_ms.min(PREVIEW_FRESH_MS)
+                }
+                _ => fresh_ms,
+            };
+            // A look taken at other approvals is not this execution's.
+            let same = s
+                .more
+                .looks
+                .get(&key)
+                .is_some_and(|(approved, _)| *approved == input.item.approved);
+            same && now - at < fresh
+        });
+        if fresh {
+            return;
+        }
+        s.looking.insert(key.clone());
+    }
+    let read = Box::pin(preview_execution(io, st, input));
+    let cap = Box::pin(io.wait(PREVIEW_CAP_MS));
+    let preview = match future::select(read, cap).await {
+        future::Either::Left((preview, _)) => preview,
+        future::Either::Right(_) => Preview::Unchecked,
+    };
+    let at = io.now().await;
+    {
+        let mut s = lock(st);
+        s.looking.remove(&key);
+        flows::keep_look(&mut s, input, &preview);
+        s.previews.insert(key.clone(), preview.to_value());
+        s.preview_plans.insert(key, (at, preview.clone()));
+    }
+    if preview == Preview::Spent {
+        settle_spent(io, st, input).await;
+    }
+}
+
+/// The home's "Can't run now" (r4-5): each ready transaction of the followed
+/// multisig is looked at by each executor here — again once its look is
+/// older than [`HOME_FRESH_MS`] — so `standings` says why one cannot run,
+/// with the look's own detail.
+async fn look_at_ready(io: &Io<Event>, st: &Shared<State>) {
+    let inputs: Vec<ExecutionInput> = {
+        let s = lock(st);
+        let ready: Vec<(u64, String, Vec<String>)> = s
+            .items()
+            .iter()
+            .filter(|i| {
+                i.status == ProposalStatus::Ready && !i.executing && i.cancelled_by.is_none()
+            })
+            .map(|i| (i.chain_id, i.safe_tx_hash.clone(), i.can_execute.clone()))
+            .collect();
+        drop(s);
+        ready
+            .into_iter()
+            .flat_map(|(chain_id, hash, executors)| {
+                executors
+                    .into_iter()
+                    .filter_map(|e| execution_input(st, chain_id, &hash, &e))
+                    .collect::<Vec<_>>()
+            })
+            .collect()
+    };
+    future::join_all(
+        inputs
+            .iter()
+            .map(|input| look_if_stale(io, st, input, HOME_FRESH_MS)),
+    )
+    .await;
+}
+
 /// r5reg-21 (`settleSpent`): a look found its number used — another member
 /// executed it, or another transaction at its number ran — so what ran is
 /// read (its execution, final at its number) and said the way a lost race
@@ -3472,7 +3631,71 @@ fn execution_row(
         "safeTxHash": item.safe_tx_hash,
         "nonce": item.nonce.to_string(),
         "action": item.review.action,
+        "rows": execution_rows(multisig, item),
     })
+}
+
+/// The Activity rows executing `item` writes (`executionRows`, W9): one per
+/// transfer — a transfer, or a batch of transfers alone, is said by its
+/// transfers — and otherwise one more row titled as its proposal (a call,
+/// calls in a batch, a member change, a rename, a cancellation), moving only
+/// the coin a call sends, to what it calls (a batch's own target, else the
+/// multisig). Amounts are base units in decimal; the shell only words them
+/// (a token's symbol and decimals, the proposal's title).
+pub fn execution_rows(multisig: &str, item: &ProposalItem) -> Vec<Value> {
+    let action = item.review.action.as_ref();
+    let mut rows: Vec<Value> = Vec::new();
+    let send = |token: &Option<String>, to: &str, value: &str, rows: &mut Vec<Value>| {
+        rows.push(json!({
+            "index": rows.len(),
+            "kind": "send",
+            "to": to,
+            "token": token,
+            "amount": shell::quantity(value).map(|a| a.to_string()).unwrap_or_default(),
+        }));
+    };
+    match action {
+        Some(Action::Transfer { token, to, amount }) => {
+            send(token, to, amount, &mut rows);
+            return rows;
+        }
+        Some(Action::Batch { calls }) => {
+            for c in calls {
+                if let Action::Transfer { token, to, amount } = &c.action {
+                    send(token, to, amount, &mut rows);
+                }
+            }
+            let only_transfers = calls
+                .iter()
+                .all(|c| matches!(c.action, Action::Transfer { .. }));
+            if only_transfers && !rows.is_empty() {
+                return rows;
+            }
+        }
+        _ => {}
+    }
+    let to = match action {
+        Some(Action::Call { to, .. }) => to.clone(),
+        Some(Action::Batch { .. }) => item.tx.to.clone(),
+        _ => multisig.to_owned(),
+    };
+    let sends = match action {
+        Some(Action::Call { value, .. }) => shell::quantity(value).unwrap_or(0),
+        _ => 0,
+    };
+    let calls = match action {
+        Some(Action::Batch { calls }) => calls.len(),
+        _ => 1,
+    };
+    rows.push(json!({
+        "index": rows.len(),
+        "kind": "call",
+        "to": to,
+        "sends": sends.to_string(),
+        "calls": calls,
+        "contract": to.to_ascii_lowercase(),
+    }));
+    rows
 }
 
 // ---------------------------------------------------------------------------

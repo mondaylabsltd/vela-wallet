@@ -77,6 +77,15 @@ describe('a waiting multisig transaction in Activity', () => {
 				]
 			}
 		] as never;
+		// Where each stands is the machine's word (`standings`), worded here.
+		vi.spyOn(proposals, 'view', 'get').mockReturnValue({
+			waiting_note: null,
+			standings: {
+				'100:0xd': { kind: 'ready' },
+				'100:0xe': { kind: 'yourTurn' },
+				'100:0xf': { kind: 'queued' }
+			}
+		} as never);
 		waitingRows.follow(m);
 		await vi.waitFor(() =>
 			expect(waitingRows.group(m, 'To {{name}}')?.rows[0].amount).not.toBe('')
@@ -108,6 +117,15 @@ describe('a waiting multisig transaction in Activity', () => {
 				]
 			}
 		] as never;
+		// Where each stands is the machine's word (`standings`), worded here.
+		vi.spyOn(proposals, 'view', 'get').mockReturnValue({
+			waiting_note: null,
+			standings: {
+				'100:0xd': { kind: 'ready' },
+				'100:0xe': { kind: 'yourTurn' },
+				'100:0xf': { kind: 'queued' }
+			}
+		} as never);
 		waitingRows.follow(m);
 		await vi.waitFor(() =>
 			expect(waitingRows.group(m, 'To {{name}}')?.rows[0].amount).not.toBe('')

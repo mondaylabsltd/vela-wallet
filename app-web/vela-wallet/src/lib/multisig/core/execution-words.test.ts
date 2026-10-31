@@ -1,17 +1,14 @@
 /**
- * An execution's preview in words, and the looks the sheet and the home
- * share: why it would fail, what the fee is and pays for (r4-5, r4-7), and
- * when the home says "Can't run now".
+ * An execution's preview in words: why it would fail, what the fee is and
+ * pays for (r4-5, r4-7). When it cannot run and each look's pace are the
+ * machine's (app_multisig_presence.rs, app_multisig_proposals.rs).
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { MULTISIG_SHAPE, type MultisigMessages } from '../messages';
 
-vi.mock('./execute', () => ({ previewExecution: async () => ({ kind: 'unpriced' }) }));
-
 const { feeCoin, feeWords, whyText } = await import('./execution-words');
-const { blockOf, preflight, previewKey } = await import('./preflight.svelte');
 
-type Priced = Extract<import('./execute').ExecutionPreview, { kind: 'priced' }>;
+type Priced = Extract<import('./execution').ExecutionPreview, { kind: 'priced' }>;
 
 const USDC = 10n ** 18n;
 const ALICE = '0x00000000000000000000000000000000000000a1';
@@ -123,85 +120,5 @@ describe('the fee line (r4-7)', () => {
 		const shown = feeWords(words(), priced({ executor: true }), opts);
 		expect(shown.setup).toBe('Includes one-time setup on Arc Testnet:');
 		expect(shown.items).toEqual(['activating Alice’s account, which pays the fee']);
-	});
-});
-
-describe('when the home says it cannot run (r4-5)', () => {
-	it('any look that fails: the transaction’s own fault', () => {
-		const why = { kind: 'reverts', reason: null } as const;
-		expect(blockOf([priced(), { kind: 'fails', why }])).toEqual({ kind: 'fails', why });
-	});
-
-	it('nobody here can pay, once every executor was priced', () => {
-		expect(blockOf([priced({}, false), priced({}, false)])).toEqual({ kind: 'nobodyPays' });
-		expect(blockOf([priced({}, false), priced({}, true)])).toBeNull();
-		expect(blockOf([priced({}, false), null]), 'a look still out says nothing').toBeNull();
-		expect(blockOf([{ kind: 'unpriced' }])).toBeNull();
-		expect(blockOf([])).toBeNull();
-	});
-});
-
-describe('the looks the sheet and the home share', () => {
-	const input = (nonce = 0n) =>
-		({
-			chainId: 5042002,
-			multisig: '0xcc',
-			executor: { address: ALICE },
-			members: { owners: [ALICE], threshold: 1, deployed: true, nonce },
-			tx: { nonce: '0x0' },
-			approvals: []
-		}) as never;
-
-	beforeEach(() => preflight._reset());
-
-	it('takes one look per execution while it is fresh, and a new one at a new state', async () => {
-		const look = vi.fn(async () => priced());
-		preflight._reset(look);
-		await preflight.check(input());
-		await preflight.check(input());
-		expect(look).toHaveBeenCalledTimes(1);
-		expect(preflight.get(input())).toEqual(priced());
-		await preflight.check(input(1n));
-		expect(look).toHaveBeenCalledTimes(2);
-		expect(previewKey(input())).not.toBe(previewKey(input(1n)));
-		await preflight.check(input(), 0);
-		expect(look, 'asked again on the person’s tap').toHaveBeenCalledTimes(3);
-	});
-
-	it('a look that throws is unpriced, never a hang', async () => {
-		preflight._reset(async () => {
-			throw new Error('down');
-		});
-		expect(await preflight.check(input())).toEqual({ kind: 'unpriced' });
-	});
-
-	/**
-	 * Round 5 (S2): "Approve and execute" stayed disabled four minutes on a
-	 * look that never answered. Every look is capped: past it, "couldn't
-	 * check" — approving goes ahead, Execute looks again — and a late answer
-	 * still lands.
-	 */
-	it('a look that never answers is said as unchecked at its cap — never endless', async () => {
-		vi.useFakeTimers();
-		try {
-			const answers: ((p: Priced) => void)[] = [];
-			preflight._reset(() => new Promise<Priced>((done) => answers.push(done)), 15_000);
-			const looking = preflight.check(input());
-			expect(preflight.get(input())).toBeNull();
-			await vi.advanceTimersByTimeAsync(15_000);
-			expect(await looking).toEqual({ kind: 'unchecked' });
-			expect(preflight.get(input())).toEqual({ kind: 'unchecked' });
-			// Not reused: Execute's own look (freshness 0) asks again, capped too.
-			const again = preflight.check(input(), 0);
-			expect(answers).toHaveLength(2);
-			await vi.advanceTimersByTimeAsync(15_000);
-			expect(await again).toEqual({ kind: 'unchecked' });
-			// The first look answers at last: it lands.
-			answers[0](priced());
-			await vi.advanceTimersByTimeAsync(0);
-			expect(preflight.get(input())).toEqual(priced());
-		} finally {
-			vi.useRealTimers();
-		}
 	});
 });

@@ -6,13 +6,7 @@
  */
 import { checksumAddress } from '$lib/core/kernels';
 import { poolRpcCall } from '$lib/services/rpc-pool';
-import {
-	genesisMembers,
-	multisigContracts,
-	safeContracts,
-	type Genesis,
-	type SafeContracts
-} from './kernel';
+import { genesisMembers, type Genesis } from './kernel';
 
 const GET_OWNERS = '0xa0e67e2b';
 const GET_THRESHOLD = '0xe75235b8';
@@ -35,48 +29,9 @@ async function rpc<T>(chainId: number, method: string, params: unknown[]): Promi
 	return answer.result as T;
 }
 
-export async function hasCode(chainId: number, address: string): Promise<boolean> {
+async function hasCode(chainId: number, address: string): Promise<boolean> {
 	const code = await rpc<string>(chainId, 'eth_getCode', [address, 'latest']);
 	return typeof code === 'string' && code !== '0x' && code !== '0x0';
-}
-
-/**
- * Whether `address` is a smart account on `chainId` — code there that is not
- * an EIP-7702 delegation (`0xef0100 ++ implAddr`, 23 bytes: a person's own
- * wallet with smart-account features, which still signs with its key, as
- * `recipient-risk.ts` reads it). Who signs how is decided on this, not on
- * `hasCode`: a delegated EOA's wallet signs for it.
- */
-export async function hasContractCode(chainId: number, address: string): Promise<boolean> {
-	const code = await rpc<string>(chainId, 'eth_getCode', [address, 'latest']);
-	if (typeof code !== 'string' || code === '0x' || code === '0x0') return false;
-	return !/^0xef0100[0-9a-fA-F]{40}$/i.test(code);
-}
-
-/** Verdicts read this session: a contract's code does not come and go. */
-const contractVerdicts = new Map<number, SafeContracts>();
-
-/**
- * Whether `chainId` holds the Safe v1.4.1 contracts a new multisig needs —
- * read here (`eth_getCode` of each), judged by the core (`safeContracts`).
- * A chain that does not answer is `unknown`, and asked again next time.
- */
-export async function safeContractsOn(chainId: number): Promise<SafeContracts> {
-	const known = contractVerdicts.get(chainId);
-	if (known) return known;
-	const codes = await Promise.all(
-		multisigContracts().map(async ({ address }) => {
-			try {
-				const code = await rpc<string>(chainId, 'eth_getCode', [address, 'latest']);
-				return typeof code === 'string' ? code : null;
-			} catch {
-				return null;
-			}
-		})
-	);
-	const verdict = safeContracts(codes);
-	if (verdict.kind !== 'unknown') contractVerdicts.set(chainId, verdict);
-	return verdict;
 }
 
 function ethCall(chainId: number, to: string, data: string): Promise<string> {
@@ -160,12 +115,6 @@ const membersAt = new Map<
 	{ nonce: bigint; owners: string[]; threshold: number; at: number }
 >();
 export const MEMBERS_FRESH_MS = 60_000;
-
-/** The multisig's nonce on `chainId` now (0 where it is not deployed). */
-export async function readNonce(chainId: number, safe: string): Promise<bigint> {
-	if (!(await deployed(chainId, safe))) return 0n;
-	return BigInt(await ethCall(chainId, safe, NONCE));
-}
 
 /** The multisig's owners, threshold and nonce on `chainId`, from the chain (or, undeployed, its genesis). */
 export async function readMembers(

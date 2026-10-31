@@ -170,6 +170,7 @@
         "share": "Partager",
         "reject": "Rejeter",
         "withdraw": "Retirer",
+        "dontPropose": "Ne pas proposer",
         "rejectHint": "Rejeter propose une annulation au même numéro ; elle exige aussi {{threshold}} approbations, et la première exécutée l’emporte.",
         "cancelPending": "Une annulation de cette transaction attend une approbation.",
         "executing": "Exécution…",
@@ -238,6 +239,7 @@
         "notNeeded": "Pas nécessaire",
         "sendLink": "Envoyer le lien",
         "approvesInVela": "Approuve dans Vela sur son propre appareil : {{names}}. Envoyez-leur ce lien.",
+        "eitherWay": "On ne sait pas encore comment ils approuvent : {{names}}. Ils peuvent approuver dans Vela avec ce lien, ou avec leur propre portefeuille via le lien pour portefeuille externe.",
         "contractMembers": "{{names}} : un compte de contrat intelligent approuve depuis sa propre app (par ex. un autre Safe). Vela ne peut pas encore recueillir ces approbations.",
         "rejectCancel": "Annuler",
         "noOutsideSigner": "aucun membre n’est sur cet appareil, et chaque membre approuve dans Vela sur son propre appareil — demandez à l’un d’eux de la proposer",
@@ -336,7 +338,10 @@
         "firstRunFund": "Ajouter des fonds",
         "firstRunFundNote": "Envoyez à son adresse sur {{network}}.",
         "firstRunCost": "Son premier transfert sortant le met aussi en place sur {{network}} : des frais de réseau uniques, payés avec ce transfert et affichés avant son exécution.",
-        "firstRunDismiss": "Compris"
+        "firstRunDismiss": "Compris",
+        "otherSpace": "Aussi sur cet appareil, dans {{space}} : {{networks}}. Pour y créer le multisig, passez d’abord à {{space}}.",
+        "draftKept": "Vous reprenez là où vous vous étiez arrêté.",
+        "discardDraft": "Recommencer"
       },
       "invite": {
         "body": "Les membres scannent le code ou ouvrent le lien : il ajoute le multisig dans Vela avec son réseau et les noms des membres.",
@@ -602,7 +607,8 @@
         "removed": "Retirés",
         "thresholdChanged": "Approbations requises : {{was}} à l’origine, {{is}} maintenant.",
         "undeployedOn": "Pas encore déployé sur {{network}} : il y démarrera avec les membres d’origine.",
-        "renameNotRecorded": "Il pourra être renommé une fois son enregistrement sauvegardé auprès du service multisig."
+        "renameNotRecorded": "Il pourra être renommé une fois son enregistrement sauvegardé auprès du service multisig.",
+        "renamePending": "Il pourra être renommé une fois son enregistrement arrivé sur {{network}}. Cela peut prendre un moment — rien n’est perdu entre-temps."
       },
       "service": {
         "customNote": "Service multisig personnalisé utilisé ({{host}})",

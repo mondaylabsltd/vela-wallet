@@ -40,7 +40,8 @@
 	import type { MultisigMessages } from '../messages';
 	import { CallReading, readableCalls } from '../core/call-review.svelte';
 	import { memberChanges } from '../core/display';
-	import { reviewTx } from '../core/kernel';
+	import { reviewTx, type MultisigReviewOut } from '../core/kernel';
+	import ReviewBody from '../external/ReviewBody.svelte';
 	import type { ExternalRequest } from '../external/signing.svelte';
 	import { problemText } from '../external/errors';
 	import { eip55 } from '../external/eip55';
@@ -62,9 +63,16 @@
 		request: ExternalRequest;
 		wide: boolean;
 		closeLabel: string;
+		/**
+		 * The one review of this SafeTx (§3.6), as the proposals machine gives
+		 * it (`view.reviews['<chainId>:<safeTxHash>']`): drawn as the connect
+		 * page draws it, the one reading every signer sees. Absent (not
+		 * gathered yet): the call is read by the signing sheet machines alone.
+		 */
+		review?: MultisigReviewOut | null;
 	}
 
-	let { m, signing, locale, request: asked, wide, closeLabel }: Props = $props();
+	let { m, signing, locale, request: asked, wide, closeLabel, review = null }: Props = $props();
 	const w = $derived(m.external);
 	/**
 	 * r5reg-11: the request this sheet was opened for, kept. The host opens
@@ -203,7 +211,8 @@
 		}
 		changes = memberChanges(m, action);
 		const calls = readableCalls(action);
-		if (calls) {
+		// The fallback only: with the review, the call is read once, by `ReviewBody`.
+		if (calls && !untrack(() => review)) {
 			reading = new CallReading(request.chainId, request.safe, calls);
 			void reading.start();
 		}
@@ -278,7 +287,16 @@
 </script>
 
 <Sheet title={w.sheetTitle} {closeLabel} {wide} onclose={close}>
-	{#if reading}
+	{#if review}
+		<ReviewBody
+			{m}
+			{signing}
+			chainId={request.chainId}
+			safe={request.safe}
+			tx={request.tx}
+			{review}
+		/>
+	{:else if reading}
 		<CallReview {reading} m={signing} alerts={changes} />
 	{/if}
 	{#if wallet}

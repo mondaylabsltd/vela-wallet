@@ -23,6 +23,7 @@
 	import { proposals } from '../core/proposals.svelte';
 	import { multisig } from '../core/store.svelte';
 	import { multisigUi } from '../core/ui.svelte';
+	import { balance } from '$lib/wallet/core/balance.svelte';
 
 	interface Props {
 		m: MultisigMessages;
@@ -45,6 +46,19 @@
 			proposals.chains.some((c) => c.members.deployed)
 	);
 	const firstRun = $derived(!!active?.firstRun && !setUp);
+	/**
+	 * S4 (r7): a step done is ticked — funds are in once the multisig holds
+	 * something (not spam) on its first network, as the wallet's balance read
+	 * it for the address shown.
+	 */
+	/** Its invite was handed on (shown, copied or shared): the accounts machine's word. */
+	const invited = $derived(!!active && (multisig.row(active.address)?.invite_shared ?? false));
+	const funded = $derived(
+		!!active &&
+			network !== null &&
+			balance.view.address?.toLowerCase() === active.address.toLowerCase() &&
+			balance.view.tokens.some((t) => t.chain_id === network && !t.spam && /[1-9]/.test(t.balance))
+	);
 	/** r5reg-18: a multisig of one has no members to invite. */
 	const solo = $derived(!!active && active.owners.length === 1);
 	// r5reg-17: once it is set up (deployed — funded and used), its first
@@ -74,8 +88,19 @@
 		<ol>
 			{#if !solo}
 				<li>
-					<button type="button" class="step" onclick={() => multisigUi.open({ kind: 'invite' })}>
-						<span class="icon"><Icon icon={UTILITY_ICONS['qr-code']} size="md" /></span>
+					<button
+						type="button"
+						class="step"
+						class:done={invited}
+						data-testid="first-run-invite"
+						onclick={() => multisigUi.open({ kind: 'invite' })}
+					>
+						<span class="icon"
+							><Icon
+								icon={invited ? UTILITY_ICONS.check : UTILITY_ICONS['qr-code']}
+								size="md"
+							/></span
+						>
 						<span class="text">
 							<span class="title">{m.create.firstRunInvite}</span>
 							<span class="note">{m.create.firstRunInviteNote}</span>
@@ -85,8 +110,20 @@
 				</li>
 			{/if}
 			<li>
-				<button type="button" class="step" onclick={() => onfund?.()} disabled={!onfund}>
-					<span class="icon"><Icon icon={UTILITY_ICONS['arrow-down-left']} size="md" /></span>
+				<button
+					type="button"
+					class="step"
+					class:done={funded}
+					data-testid="first-run-fund"
+					onclick={() => onfund?.()}
+					disabled={!onfund}
+				>
+					<span class="icon"
+						><Icon
+							icon={funded ? UTILITY_ICONS.check : UTILITY_ICONS['arrow-down-left']}
+							size="md"
+						/></span
+					>
 					<span class="text">
 						<span class="title">{m.create.firstRunFund}</span>
 						{#if network !== null}<span class="note"
@@ -183,6 +220,11 @@
 	.step:disabled {
 		cursor: default;
 		opacity: var(--opacity-disabled);
+	}
+
+	/* A step done: ticked, its title quieter — neutral ink, never the accent. */
+	.step.done .title {
+		color: var(--color-fg-muted);
 	}
 
 	.icon {

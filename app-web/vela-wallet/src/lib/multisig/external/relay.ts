@@ -17,11 +17,24 @@
  * way (2 s … 30 s) and then stops, said as that; a relay that does not
  * answer is said too.
  *
+ * Every one of those decisions is the core's (`multisig_rules::relay`, asked
+ * through `multisigLinkCall("relay.<rule>")`): which relay asks for a token,
+ * whether the kept one is still good, what an endpoint answered, which token
+ * a refusal forgets, how long to wait and when to stop, where the
+ * connection's way onto the relay stands. This file keeps only the I/O — the
+ * socket, the timers, the fetches and the device's storage.
+ *
  * A token only lets its holder use the relay: rooms are end-to-end
  * encrypted, and the relay reads nothing. Any other relay (a profile's
  * `vela.peerconnectRelay`, a self-hosted one) is given no token.
  */
+import * as wasm from '../../../../../../rust/pkg-web/vela_core.js';
 import { connect, type Room } from '$lib/vendor/peerconnect/index.js';
+
+/** Ask one of the core's relay rules. */
+function rule<T>(name: string, args: Record<string, unknown> = {}): T {
+	return JSON.parse(wasm.multisigLinkCall(`relay.${name}`, JSON.stringify(args))) as T;
+}
 
 export const DEFAULT_RELAY = 'wss://relay.peerconnect.dev';
 export const TOKEN_ENDPOINT = 'https://getvela.app/api/peerconnect-token';
@@ -31,8 +44,6 @@ const RELAY_KEY = 'vela.peerconnectRelay';
 const ENDPOINT_KEY = 'vela.peerconnectTokenEndpoint';
 const DEVICE_KEY = 'vela.peerconnectDevice';
 const TOKEN_KEY = 'vela.peerconnectToken.v1';
-/** A token this close to expiring is replaced before it is used. */
-const MARGIN_S = 10 * 60;
 
 /** The relay new rooms go through; a profile may point at another. */
 export function relayUrl(): string {
@@ -54,7 +65,20 @@ export function tokenEndpoint(): string {
 
 /** Whether `relay` is the public relay, the one that asks for tokens. */
 export function needsToken(relay: string): boolean {
-	return relay.replace(/\/+$/, '') === DEFAULT_RELAY;
+	return rule<boolean>('needsToken', { relay });
+}
+
+/** The core's schedule: the waits between tokens, and when offline is said as unreachable. */
+export interface RelaySchedule {
+	backoffMs: number[];
+	refusals: number;
+	unreachableAfterMs: number;
+}
+
+let schedule: RelaySchedule | null = null;
+export function relaySchedule(): RelaySchedule {
+	schedule ??= rule<RelaySchedule>('constants');
+	return schedule;
 }
 
 interface Kept {
@@ -114,12 +138,8 @@ export type RelayStatus =
 	/** Stopped trying: said, until the person taps Retry ({@link RelayWatch.retry}). */
 	| { kind: 'failed'; why: RelayTrouble; detail: string };
 
-/** Waits between tokens, refused or not given: each longer, at most 30 s. */
-export const BACKOFF_MS = [2_000, 4_000, 8_000, 16_000, 30_000] as const;
-/** Tokens refused in a row before it stops: the kept one, a fresh one, the trial's. */
-export const REFUSALS = 3;
-/** With a token and still offline this long: the relay is said not to answer. */
-export const UNREACHABLE_AFTER_MS = 10_000;
+/** What a connection does before it asks for its next token (the core's `Before`). */
+type Before = { kind: 'go'; trial: boolean } | { kind: 'wait'; ms: number } | { kind: 'stop' };
 
 /** A token, with who issued it. */
 export interface Issued {
@@ -135,49 +155,40 @@ export class NoTokenError extends Error {
 	}
 }
 
+/** One endpoint asked; what it answered is read by the core: a token, or what to say. */
 async function ask(url: string, body?: unknown): Promise<Kept | string> {
+	let status: number | null = null;
+	let text = '';
 	try {
 		const res = await fetch(url, {
 			method: 'POST',
 			headers: body === undefined ? undefined : { 'content-type': 'application/json' },
 			body: body === undefined ? undefined : JSON.stringify(body)
 		});
-		if (!res.ok) return `HTTP ${res.status}`;
-		const answer = (await res.json()) as { token?: unknown; expires_at?: unknown };
-		return typeof answer.token === 'string' && typeof answer.expires_at === 'number'
-			? { token: answer.token, expiresAt: answer.expires_at }
-			: 'no token in the answer';
+		status = res.status;
+		text = await res.text();
 	} catch {
-		return 'no answer';
+		// No answer: said as that, by the core.
 	}
-}
-
-function hostOf(url: string): string {
-	try {
-		return new URL(url).host;
-	} catch {
-		return url;
-	}
+	const answer = rule<{ ok: Kept } | { err: string }>('tokenAnswer', { status, body: text });
+	return 'ok' in answer ? answer.ok : answer.err;
 }
 
 let asking: Promise<Issued> | null = null;
 
 /**
- * A token for the public relay: the one kept, if it has time left, else a new
- * one from Vela's site, else a trial one (`trial`: the trial's, unless the one
- * kept is the trial's already). Throws {@link NoTokenError} when neither
- * answers with one.
+ * A token for the public relay: the one kept, if the core finds it still
+ * good, else a new one from Vela's site, else a trial one (`trial`: the
+ * trial's, unless the one kept is the trial's already). Throws
+ * {@link NoTokenError} when neither answers with one.
  */
 export function relayToken(trial = false): Promise<Issued> {
-	const kept = read<Kept>(TOKEN_KEY);
-	if (
-		kept &&
-		typeof kept.token === 'string' &&
-		kept.expiresAt - MARGIN_S > Date.now() / 1000 &&
-		(!trial || kept.source === 'trial')
-	) {
-		return Promise.resolve({ token: kept.token, source: kept.source ?? 'site' });
-	}
+	const usable = rule<Issued | null>('usable', {
+		kept: read<Kept>(TOKEN_KEY),
+		nowS: Date.now() / 1000,
+		trial
+	});
+	if (usable) return Promise.resolve(usable);
 	// Two rooms opening at once share one request.
 	asking ??= (async (): Promise<Issued> => {
 		const site = trial ? null : await ask(tokenEndpoint(), { device: deviceId() });
@@ -187,11 +198,9 @@ export function relayToken(trial = false): Promise<Issued> {
 		} else {
 			const fallback = await ask(TRIAL_ENDPOINT);
 			if (typeof fallback === 'string') {
-				const said = [
-					...(site === null ? [] : [`${hostOf(tokenEndpoint())}: ${site}`]),
-					`${hostOf(TRIAL_ENDPOINT)}: ${fallback}`
-				];
-				throw new NoTokenError(said.join(' · '));
+				throw new NoTokenError(
+					rule<string>('noTokenDetail', { endpoint: tokenEndpoint(), site, trial: fallback })
+				);
 			}
 			fresh = { ...fallback, source: 'trial' };
 		}
@@ -205,8 +214,9 @@ export function relayToken(trial = false): Promise<Issued> {
 
 /** The relay refused the kept token (revoked, expired): the next ask gets a new one. */
 export function forgetRelayToken(refused?: string): void {
-	const kept = read<Kept>(TOKEN_KEY);
-	if (!refused || kept?.token === refused) write(TOKEN_KEY, null);
+	if (rule<boolean>('forgets', { kept: read<Kept>(TOKEN_KEY), refused: refused ?? null })) {
+		write(TOKEN_KEY, null);
+	}
 }
 
 /**
@@ -271,38 +281,44 @@ export function connectRoom(room: Room): RelayConnection {
 		return plain;
 	}
 	let last: string | undefined;
-	let source: Issued['source'] | undefined;
-	/** Tokens refused in a row, and whether the trial's was one of them. */
-	let refused = 0;
-	let trialTried = false;
-	/** The relay refused the last one: the next ask waits first. */
-	let pending = false;
+	/** The core's count of this connection's refusals, kept here between questions. */
+	let refusals: unknown = null;
+	const refused = (on: string, source: Issued['source'] | null = null): Before | null => {
+		const answer = rule<{ state: unknown; before: Before | null }>('refusals', {
+			state: refusals,
+			on,
+			source
+		});
+		refusals = answer.state;
+		return answer.before;
+	};
 	const connection = connect(room, {
 		token: async () => {
-			if (pending) {
-				pending = false;
-				refused += 1;
-				if (source === 'trial') trialTried = true;
-				if (refused >= REFUSALS || (refused >= REFUSALS - 1 && trialTried)) {
-					await watch.stop('refused', 'HTTP 4403');
-					refused = 0;
-					trialTried = false;
+			// Refused before: waited out, or stopped until Retry, as the core says.
+			let before = refused('beforeToken');
+			while (before && before.kind !== 'go') {
+				if (before.kind === 'wait') {
+					await watch.wait('refused', 'HTTP 4403', before.ms);
 				} else {
-					await watch.wait('refused', 'HTTP 4403', BACKOFF_MS[refused - 1]);
+					await watch.stop('refused', 'HTTP 4403');
+					refused('retried');
 				}
+				before = refused('beforeToken');
 			}
+			// The last chance before stopping is the trial's, once.
+			const trial = before?.kind === 'go' && before.trial;
 			for (let tries = 0; ; tries += 1) {
 				watch.set({ kind: 'connecting' });
 				try {
-					// The last chance before stopping is the trial's, once.
-					const issued = await relayToken(refused === REFUSALS - 1 && !trialTried);
+					const issued = await relayToken(trial);
 					last = issued.token;
-					source = issued.source;
+					refused('issued', issued.source);
 					return issued.token;
 				} catch (error) {
 					const detail = error instanceof NoTokenError ? error.detail : String(error);
-					if (tries < BACKOFF_MS.length) {
-						await watch.wait('noToken', detail, BACKOFF_MS[tries]);
+					const step = rule<Before>('noTokenStep', { tries });
+					if (step.kind === 'wait') {
+						await watch.wait('noToken', detail, step.ms);
 					} else {
 						await watch.stop('noToken', detail);
 						tries = -1;
@@ -314,43 +330,38 @@ export function connectRoom(room: Room): RelayConnection {
 	// Dispatched before the connection asks again: that ask must not get the same one.
 	connection.addEventListener('unauthorized', () => {
 		forgetRelayToken(last);
-		pending = true;
+		refused('unauthorized');
 	});
 	const watched = Object.assign(connection, { relay: watch });
-	followState(watched, watch, () => {
-		refused = 0;
-		trialTried = false;
-	});
+	followState(watched, watch, () => refused('accepted'));
 	return watched;
 }
 
 /**
- * On the relay: said as up (`accepted` is told, to forget the refusals). A
- * token in hand and still offline after {@link UNREACHABLE_AFTER_MS}: the
- * relay does not answer, said — the connection keeps trying on its own.
+ * Where the connection's way onto the relay stands, as the core reads its
+ * state: up once on the relay (`accepted` is told, to forget the refusals);
+ * offline with a token for the core's while, said as the relay not answering
+ * — the connection keeps trying on its own.
  */
 function followState(connection: RelayConnection, watch: RelayWatch, accepted?: () => void) {
 	let timer: ReturnType<typeof setTimeout> | undefined;
+	const said = (offlineMs: number) => {
+		const next = rule<{ status: RelayStatus; accepted: boolean }>('onState', {
+			status: watch.status,
+			state: connection.state,
+			offlineMs,
+			relay: connection.room.relay
+		});
+		if (next.accepted) accepted?.();
+		if (JSON.stringify(next.status) !== JSON.stringify(watch.status)) watch.set(next.status);
+		return next;
+	};
 	const check = () => {
 		clearTimeout(timer);
-		const state = connection.state;
-		if (state === 'waiting' || state === 'connected') {
-			accepted?.();
-			if (watch.status.kind !== 'up') watch.set({ kind: 'up' });
-			return;
-		}
-		if (state === 'closed') return;
-		if (watch.status.kind === 'up') watch.set({ kind: 'connecting' });
-		timer = setTimeout(() => {
-			if (connection.state === 'offline' && watch.status.kind === 'connecting') {
-				watch.set({
-					kind: 'retrying',
-					why: 'unreachable',
-					detail: hostOf(connection.room.relay),
-					at: null
-				});
-			}
-		}, UNREACHABLE_AFTER_MS);
+		const next = said(0);
+		if (next.accepted || connection.state === 'closed') return;
+		const after = relaySchedule().unreachableAfterMs;
+		timer = setTimeout(() => said(after), after);
 	};
 	connection.addEventListener('state', check);
 	queueMicrotask(check);

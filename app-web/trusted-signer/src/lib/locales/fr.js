@@ -243,7 +243,7 @@ window.VelaCS.i18n.register('fr', {
   'ui.proofFailed': 'Non signé : l’opération a été annulée, a expiré, ou cet appareil ne détient pas cette clé.',
   'ui.waitingForWallet': 'En attente du portefeuille',
   'ui.waitingNote': 'Cette page reste ouverte pour la prochaine demande du portefeuille. Vous pouvez retourner au portefeuille.',
-  'ui.sessionDone': 'Terminé — le portefeuille a ce qu’il a demandé. Vous pouvez fermer cette page.',
+  'ui.sessionDone': 'Le portefeuille a ce qu’il a demandé. Vous pouvez fermer cette page.',
   'ui.sessionIdle': 'Rien n’est arrivé pendant 5 minutes, cette page a donc cessé d’attendre. Recommencez depuis le portefeuille.',
   'ui.openerSilent': 'La page qui a ouvert celle-ci n’a jamais envoyé de demande.',
   'ui.sessionEnded': 'Session terminée',

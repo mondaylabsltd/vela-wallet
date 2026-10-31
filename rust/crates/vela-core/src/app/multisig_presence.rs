@@ -63,20 +63,27 @@ impl Waiting {
 }
 
 /// Why a ready transaction cannot run here now (`blockOf`'s word).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
 #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "MultisigReadyBlock"))]
 pub enum ReadyBlock {
-    /// A look says it would fail (the transaction's own fault).
-    Fails,
+    /// A look says it would fail (the transaction's own fault). `why` is that
+    /// look's own detail, as the preview says it — `{kind: "short", symbol,
+    /// decimals, have, need}` or `{kind: "reverts", reason}` — the words
+    /// after "Can't run now".
+    Fails {
+        #[cfg_attr(feature = "bindings", ts(type = "unknown"))]
+        why: serde_json::Value,
+    },
     /// Every executor here was priced and none holds the fee.
     NobodyPays,
 }
 
 /// One executor's look at an execution, as `blockOf` reads it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Look {
-    Fails,
+    /// It would fail: the preview's detail (`ReadyBlock::Fails::why`).
+    Fails(serde_json::Value),
     Priced {
         can_pay: bool,
     },
@@ -88,8 +95,11 @@ pub enum Look {
 /// (`blockOf`): any look says it fails, or every one was priced and none can
 /// pay. `None` while any look is missing or unpriced, or someone can run it.
 pub fn block_of(looks: &[Option<Look>]) -> Option<ReadyBlock> {
-    if looks.contains(&Some(Look::Fails)) {
-        return Some(ReadyBlock::Fails);
+    if let Some(why) = looks.iter().find_map(|l| match l {
+        Some(Look::Fails(why)) => Some(why.clone()),
+        _ => None,
+    }) {
+        return Some(ReadyBlock::Fails { why });
     }
     if looks.is_empty() {
         return None;
@@ -153,7 +163,7 @@ pub fn waiting_of(
 // ---------------------------------------------------------------------------
 
 /// The one word a waiting row says about where it stands (`standing`).
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "MultisigStanding"))]
 pub enum Standing {
@@ -262,6 +272,9 @@ pub struct ListFacts {
     pub stale: bool,
     pub history_unreadable: Vec<u64>,
     pub loading: bool,
+    /// The group shows no row (no open transaction, no network missing):
+    /// only then is "checking" said — over rows, the rows speak.
+    pub nothing_shown: bool,
 }
 
 /// The waiting group's note; `None`: nothing to say of the list.
@@ -288,7 +301,7 @@ pub fn waiting_note(f: &ListFacts) -> Option<WaitingNote> {
             chain_ids: f.history_unreadable.clone(),
         });
     }
-    f.loading.then_some(WaitingNote::Checking)
+    (f.loading && f.nothing_shown).then_some(WaitingNote::Checking)
 }
 
 // ---------------------------------------------------------------------------

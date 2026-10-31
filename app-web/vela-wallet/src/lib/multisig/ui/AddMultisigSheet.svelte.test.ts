@@ -8,9 +8,10 @@
  * high-risk one is shown and added only on the person's explicit tap.
  */
 import { tick } from 'svelte';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
+import { loadCore } from '$lib/core/client';
 import type { MultisigMessages } from '../messages';
 
 const REFUSED = '0x2f53cc750594bb97c21bf3c18a4837bb5ad911f6';
@@ -237,6 +238,11 @@ const radios = () =>
 	[...root().querySelectorAll<HTMLButtonElement>('[role="radio"]')].map((r) =>
 		r.textContent?.trim()
 	);
+
+// The network order is the core’s rule (`networks.likely`, `multisigLinkCall`).
+beforeAll(async () => {
+	await loadCore();
+});
 
 beforeEach(() => {
 	calls.length = 0;

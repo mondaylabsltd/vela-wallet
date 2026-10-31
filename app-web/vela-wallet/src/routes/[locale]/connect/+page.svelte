@@ -63,17 +63,12 @@
 	import AuthorityNotice from '$lib/multisig/ui/AuthorityNotice.svelte';
 	import { findingLines } from '$lib/multisig/ui/findings';
 	import type { Finding } from '$lib/multisig/core/refusal';
+	import { explorerTxUrl, formatUnits } from '$lib/multisig/core/display';
+	import { rowLabelText, rowOutcomeText } from '$lib/multisig/external/words';
+	import type { OutsideTxShown } from '$lib/multisig/generated/OutsideTxShown';
 	import {
-		actionRecipient,
-		actionTitle,
-		explorerTxUrl,
-		formatUnits
-	} from '$lib/multisig/core/display';
-	import {
-		reviewTx,
 		safeTxHashes,
 		verifyEcdsaApproval,
-		type Genesis,
 		type SafeTx,
 		type SafeTxHashes
 	} from '$lib/multisig/core/kernel';
@@ -300,36 +295,6 @@
 		return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 	}
 
-	function describe(method: string): string {
-		if (method === 'eth_signTypedData_v4') return m.signTx;
-		if (method === 'eth_sendTransaction') return m.sendTx;
-		if (method === 'wallet_switchEthereumChain') return m.switchChain;
-		return method;
-	}
-
-	function outcomeOf(a: ActivityEntry): string {
-		switch (a.outcome) {
-			case 'done':
-				return a.method === 'eth_sendTransaction'
-					? m.outcomeSent
-					: a.method === 'wallet_switchEthereumChain'
-						? m.outcomeSwitched
-						: a.form === 'ethSign'
-							? m.outcomeSignedHash
-							: m.outcomeDone;
-			case 'withdrawn':
-				return m.outcomeWithdrawn;
-			case 'rejected':
-				return a.problem?.kind === 'declined' ? m.walletDeclined : m.outcomeDeclined;
-			case 'failed':
-				return a.problem
-					? problemText(a.problem, m, fillTemplate, walletName, '')
-					: m.outcomeFailed;
-			default:
-				return a.stage === 'wallet' ? m.outcomeInWallet : m.outcomeWaiting;
-		}
-	}
-
 	function relayText(status: RelayStatus): string {
 		if (status.kind !== 'retrying' && status.kind !== 'failed') return '';
 		const reason =
@@ -510,161 +475,41 @@
 	 */
 	const requestEnough = $derived(view?.requestEnough ?? false);
 	/**
-	 * r5reg-23: Vela's request names its multisig as the link's review does —
-	 * the registry's genesis, only if the core derives the address from it.
+	 * r5reg-23 / r7-11: Vela's request, reviewed as the link's is — the core
+	 * read it (its title in facts, its hashes, its name, the one review): its
+	 * title and hashes at once, the review once gathered.
 	 */
-	const requestGenesis = $derived((view?.requestGenesis ?? null) as Genesis | null);
-
-	/**
-	 * r4C-12: what each request was, by its number — "Approve #7 · Send 0.02
-	 * USDC to 0x…", "Reject #8", "Execute #7" — read by the core from what was
-	 * asked. Worked out once per request (a token's symbol is read once).
-	 */
-	let labels = $state<Record<string, string>>({});
-	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping (which rows are asked for), never drawn
-	const labelling = new Set<string>();
-	$effect(() => {
-		if (!coreReady) return;
-		for (const a of activity) {
-			if (labelling.has(a.id)) continue;
-			labelling.add(a.id);
-			void labelOf(a).then((label) => {
-				if (label) labels = { ...labels, [a.id]: label };
-			});
-		}
-	});
-
-	const numbered = (nonce: bigint) =>
-		fillTemplate(all.action.numberValue, { nonce: nonce.toString() });
-
-	async function labelOf(a: ActivityEntry): Promise<string | null> {
-		try {
-			if (a.method === 'eth_signTypedData_v4' && a.safeTx) {
-				return await txLabel(a.safeTx.chainId, a.safeTx.safe, a.safeTx.tx as SafeTx);
-			}
-			if (a.method === 'eth_sendTransaction' && a.send) {
-				const sent = executed(a.send);
-				if (sent) return fillTemplate(m.rowExecute, { number: numbered(BigInt(sent.nonce)) });
-			}
-		} catch {
-			// the generic words stand
-		}
-		return null;
-	}
-
-	/** "Approve #7 · Send 0.02 USDC to 0x…", or "Reject #8" for a cancellation. */
-	async function txLabel(chainId: number, safe: string, safeTx: SafeTx): Promise<string> {
-		const action = reviewTx(chainId, safe, safeTx).action;
-		const nonce = BigInt(safeTx.nonce);
-		if (action?.kind === 'cancel') return fillTemplate(m.rowReject, { number: numbered(nonce) });
-		const what = await actionTitle(all, chainId, action, nonce);
-		const to = actionRecipient(action);
-		return to
-			? fillTemplate(m.rowApproveTo, {
-					number: numbered(nonce),
-					what,
-					to: shortenAddress(eip55(to))
-				})
-			: fillTemplate(m.rowApprove, { number: numbered(nonce), what });
-	}
-
-	/**
-	 * The SafeTx an `execTransaction` sent to a multisig runs, when it is one
-	 * this page has seen (asked to approve, or the link's): its call is matched
-	 * field by field — `execTransaction` carries no number.
-	 */
-	function executed(send: { to: string; data: string }): SafeTx | null {
-		const data = send.data.toLowerCase();
-		if (!data.startsWith('0x6a761202')) return null;
-		const word = (i: number) => BigInt(`0x${data.slice(10 + i * 64, 10 + (i + 1) * 64) || '0'}`);
-		const known: { safe: string; tx: SafeTx }[] = [
-			...activity.flatMap((x) =>
-				x.safeTx ? [{ safe: x.safeTx.safe, tx: x.safeTx.tx as SafeTx }] : []
-			),
-			...(tx ? [{ safe: tx.safe, tx: tx.tx as SafeTx }] : [])
-		];
-		return (
-			known.find(
-				({ safe, tx: t }) =>
-					safe.toLowerCase() === send.to.toLowerCase() &&
-					BigInt(t.to) === word(0) &&
-					BigInt(t.value) === word(1) &&
-					BigInt(t.operation) === word(3) &&
-					BigInt(t.safeTxGas) === word(4) &&
-					BigInt(t.baseGas) === word(5) &&
-					BigInt(t.gasPrice) === word(6) &&
-					BigInt(t.gasToken) === word(7) &&
-					BigInt(t.refundReceiver) === word(8)
-			)?.tx ?? null
-		);
-	}
-
-	/**
-	 * r4C-12: what was done from here on the link's transaction, a row beside
-	 * Vela's requests, with how it ended.
-	 */
-	let mine = $state<Row[]>([]);
-	let mineLabel = $state('');
-	const labelKey = $derived(
-		tx && coreReady ? `${tx.chainId}|${tx.safe}|${tx.item.safeTxHash}` : ''
+	const requestReview = $derived(view?.requestReview ?? null);
+	/** The link's transaction as the review draws it: the core reading of it. */
+	const linkShown = $derived<OutsideTxShown | null>(
+		tx
+			? {
+					chainId: tx.chainId,
+					safe: tx.safe,
+					nonce: tx.item.nonce,
+					hashes: tx.hashes,
+					name: tx.name,
+					title: tx.title,
+					review: tx.review,
+					chainNonce: tx.members.nonce
+				}
+			: null
 	);
-	$effect(() => {
-		const v = labelKey ? untrack(() => tx) : null;
-		if (!v) return;
-		let alive = true;
-		void txLabel(v.chainId, v.safe, v.tx as SafeTx)
-			.then((label) => {
-				if (alive) mineLabel = label;
-			})
-			.catch(() => {});
-		return () => {
-			alive = false;
-		};
-	});
-	const stepKey = $derived(JSON.stringify(step));
-	let logged = JSON.stringify({ kind: 'idle' });
-	$effect(() => {
-		const key = stepKey;
-		const s = untrack(() => step);
-		const v = untrack(() => tx);
-		if (key === logged || !v) return;
-		logged = key;
-		const number = numbered(BigInt(v.item.nonce));
-		const row = (label: string, outcome: string, bad = false) => {
-			const at = Date.now();
-			const before = untrack(() => mine);
-			mine = [{ id: `here-${at}-${before.length}`, at, label, outcome, bad }, ...before];
-		};
-		const label =
-			s.kind === 'executed' || (s.kind === 'failed' && s.what === 'execute')
-				? fillTemplate(m.rowExecute, { number })
-				: s.kind === 'rejected' || (s.kind === 'failed' && s.what === 'reject')
-					? fillTemplate(m.rowReject, { number })
-					: untrack(() => mineLabel) || number;
-		if (s.kind === 'approved' || s.kind === 'rejected') row(label, m.outcomeDone);
-		else if (s.kind === 'executed') row(label, m.outcomeSent);
-		else if (s.kind === 'failed') row(label, s.unsent ? m.outcomeNotSent : m.outcomeFailed, true);
-	});
 
-	interface Row {
-		id: string;
-		at: number;
-		label: string;
-		outcome: string;
-		bad: boolean;
-	}
-	/** Every row, newest first: Vela's requests and what was done from here. */
-	const rows = $derived<Row[]>(
-		[
-			...activity.map((a) => ({
-				id: a.id,
-				at: a.at,
-				label: labels[a.id] ?? describe(a.method),
-				outcome: outcomeOf(a),
-				bad: a.outcome === 'failed'
-			})),
-			...mine
-		].sort((x, y) => y.at - x.at)
+	/**
+	 * r4C-12: every row, newest first — Vela's requests and what was done
+	 * here — each said by what it was ("Approve #7 · Send 0.02 USDC to 0x…",
+	 * "Reject #8", "Execute #7") and how it ended, as the core read it: the
+	 * page only words it.
+	 */
+	const rows = $derived(
+		(view?.rows ?? []).map((r) => ({
+			id: r.id,
+			at: r.at,
+			label: rowLabelText(all, r.label),
+			outcome: rowOutcomeText(all, r.outcome, walletName),
+			bad: r.bad
+		}))
 	);
 
 	let rejecting = $state(false);
@@ -836,16 +681,18 @@
 			{@const hashes = hashesOf(entry)}
 			<!-- r4C-7: Vela's request, read before the wallet is asked. -->
 			<section class="card" aria-live="polite" data-testid="connect-request">
-				{#if entry.safeTx && hashes}
+				{#if entry.safeTx && hashes && requestReview}
 					<TxReview
 						m={all}
 						signing={data.signingMessages}
-						chainId={entry.safeTx.chainId}
-						safe={entry.safeTx.safe}
+						shown={requestReview}
 						tx={entry.safeTx.tx as SafeTx}
-						{hashes}
-						genesis={requestGenesis}
 					/>
+				{:else if entry.safeTx && hashes}
+					<!-- The core reads it in a moment: never a reading of the page's own meanwhile. -->
+					<p class="waiting" aria-busy="true" data-testid="connect-request-reading">
+						<span class="spinner" aria-hidden="true"></span>{m.loadingTx}
+					</p>
 				{:else if entry.method === 'eth_signTypedData_v4'}
 					<p class="error" role="alert">{m.notSafeTx}</p>
 				{:else if entry.send}
@@ -1047,16 +894,9 @@
 			>
 		{:else if tx && txHashes}
 			{@const gate = tx.gate}
-			<TxReview
-				m={all}
-				signing={data.signingMessages}
-				chainId={tx.chainId}
-				safe={tx.safe}
-				tx={tx.tx as SafeTx}
-				hashes={txHashes}
-				genesis={tx.genesis as Genesis | null}
-				chainNonce={BigInt(tx.members.nonce)}
-			/>
+			{#if linkShown}
+				<TxReview m={all} signing={data.signingMessages} shown={linkShown} tx={tx.tx as SafeTx} />
+			{/if}
 			<!-- §3.5: who can act for it on this network, as Vela judges it. -->
 			{#if gate.kind === 'refused'}
 				<AuthorityNotice

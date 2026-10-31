@@ -25,6 +25,7 @@
 	import Button from '$lib/ui/Button.svelte';
 	import { indexName, missingTitle } from '../core/activity.svelte';
 	import { proposals } from '../core/proposals.svelte';
+	import type { MultisigReviewOut } from '../core/kernel';
 	import { proposalsHost } from '../shell/proposals-host.svelte';
 	import { useRecordWords } from '../core/records';
 	import { multisig, type MultisigAccount } from '../core/store.svelte';
@@ -139,6 +140,19 @@
 	 * deployed one can gain a module since. What is found is kept on it and
 	 * shown (Settings, the switcher, its transactions); nothing is silent.
 	 */
+	/**
+	 * The one review of the SafeTx an outside wallet is asked to sign — the
+	 * proposals machine's (`reviews[<chainId>:<safeTxHash>]`): the sheet draws
+	 * it as the connect page does, one reading for every signer (§3.6).
+	 */
+	const externalReview = $derived.by(() => {
+		const r = externalSigning.request;
+		if (!r) return null;
+		const key = `${r.chainId}:${r.safeTxHash}`.toLowerCase();
+		const reviews = proposals.view?.reviews ?? {};
+		const hit = Object.entries(reviews).find(([k]) => k.toLowerCase() === key);
+		return (hit?.[1] ?? null) as MultisigReviewOut | null;
+	});
 	const recheckKey = $derived(
 		multisig.accounts.map((a) => `${a.address}:${a.chainIds.join(',')}`).join(';')
 	);
@@ -317,7 +331,8 @@
 
 	/**
 	 * Settings → Add network, the chain filled in (the wizard reads it in the
-	 * chain index). A link's transaction opens once the network is here.
+	 * chain index). A link's transaction opens once the network is here — the
+	 * accounts machine keeps it waiting, through a reload (ms-22).
 	 */
 	function addNetwork(chainId: number) {
 		multisigUi.close();
@@ -445,7 +460,17 @@
 		/>
 	{/key}
 {:else if sheet?.kind === 'missing'}
-	<Sheet title={m.proposal.title} {closeLabel} {wide} onclose={() => multisigUi.close()}>
+	<!-- Closed: the link waiting for its network is let go (the machine's
+	     record — Add network keeps it, through a reload, until the network is here). -->
+	<Sheet
+		title={m.proposal.title}
+		{closeLabel}
+		{wide}
+		onclose={() => {
+			multisig.send({ type: 'drop_link' });
+			multisigUi.close();
+		}}
+	>
 		<p class="missing-title" data-testid="missing-network">
 			{missingTitle(m, sheet.chainId, missingName)}
 		</p>
@@ -548,6 +573,7 @@
 			{signing}
 			{locale}
 			request={externalSigning.request}
+			review={externalReview}
 			{wide}
 			{closeLabel}
 		/>

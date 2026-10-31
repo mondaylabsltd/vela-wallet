@@ -95,6 +95,7 @@
     "share": "Teilen",
     "reject": "Ablehnen",
     "withdraw": "Zurückziehen",
+    "dontPropose": "Nicht vorschlagen",
     "rejectHint": "Ablehnen schlägt eine Stornierung mit derselben Nummer vor; auch sie braucht {{threshold}} Genehmigungen, und die zuerst ausgeführte gilt.",
     "cancelPending": "Eine Stornierung dieser Transaktion wartet auf Genehmigung.",
     "executing": "Wird ausgeführt…",
@@ -163,6 +164,7 @@
     "notNeeded": "Nicht nötig",
     "sendLink": "Link senden",
     "approvesInVela": "Genehmigt in Vela auf dem eigenen Gerät: {{names}}. Schick ihnen diesen Link.",
+    "eitherWay": "Noch nicht bekannt, wie sie genehmigen: {{names}}. Sie können in Vela mit diesem Link genehmigen oder mit ihrer eigenen Wallet über den Link für externe Wallets.",
     "contractMembers": "{{names}}: Ein Smart-Contract-Konto genehmigt in seiner eigenen App (z. B. ein anderer Safe). Vela kann diese Genehmigungen noch nicht einholen.",
     "rejectCancel": "Abbrechen",
     "noOutsideSigner": "kein Mitglied ist auf diesem Gerät, und alle Mitglieder genehmigen in Vela auf ihrem eigenen Gerät — bitte eines von ihnen, es vorzuschlagen",
@@ -260,7 +262,10 @@
     "firstRunFund": "Guthaben hinzufügen",
     "firstRunFundNote": "An seine Adresse auf {{network}} senden.",
     "firstRunCost": "Seine erste ausgehende Überweisung richtet es auch auf {{network}} ein: eine einmalige Netzwerkgebühr, mit dieser Überweisung bezahlt und vor dem Ausführen angezeigt.",
-    "firstRunDismiss": "Verstanden"
+    "firstRunDismiss": "Verstanden",
+    "otherSpace": "Ebenfalls auf diesem Gerät, unter {{space}}: {{networks}}. Um das Multisig in einem davon zu erstellen, wechseln Sie zuerst zu {{space}}.",
+    "draftKept": "Sie machen dort weiter, wo Sie aufgehört haben.",
+    "discardDraft": "Neu beginnen"
    },
    "invite": {
     "body": "Mitglieder scannen den Code oder öffnen den Link: Er fügt das Multisig in Vela mit seinem Netzwerk und den Namen der Mitglieder hinzu.",
@@ -523,7 +528,8 @@
     "removed": "Entfernt",
     "thresholdChanged": "Nötige Genehmigungen: ursprünglich {{was}}, jetzt {{is}}.",
     "undeployedOn": "Auf {{network}} noch nicht bereitgestellt: Dort beginnt es mit den ursprünglichen Mitgliedern.",
-    "renameNotRecorded": "Es kann umbenannt werden, sobald sein Eintrag beim Multisig-Dienst gespeichert ist."
+    "renameNotRecorded": "Es kann umbenannt werden, sobald sein Eintrag beim Multisig-Dienst gespeichert ist.",
+    "renamePending": "Es kann umbenannt werden, sobald sein Eintrag auf {{network}} angekommen ist. Das kann eine Weile dauern – bis dahin geht nichts verloren."
    },
    "service": {
     "customNote": "Eigener Multisig-Dienst in Verwendung ({{host}})",

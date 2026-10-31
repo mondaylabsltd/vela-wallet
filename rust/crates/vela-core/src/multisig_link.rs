@@ -672,6 +672,18 @@ pub fn invite_link(
 pub const KEPT_LINK_KEY: &str = "vela.multisigKeptLink";
 /// How long a kept link waits for the wallet to be there: a day.
 pub const KEPT_LINK_MS: f64 = 86_400_000.0;
+/// Where the accounts machine keeps a proposal link waiting for a network
+/// this device lacks (ms-22) — the same `{"hash":…,"at":…}` record, the
+/// same day: a reload (the Add network wizard, another tab) loses nothing.
+pub const PENDING_LINK_KEY: &str = "vela.multisigPendingLink";
+
+/// The hash a proposal link is opened from (`#ms=<chainId>.<multisig>.<safeTxHash>`).
+pub fn proposal_hash(link: &ProposalLink) -> String {
+    format!(
+        "#{PREFIX}{}.{}.{}",
+        link.chain_id, link.multisig, link.safe_tx_hash
+    )
+}
 
 /// The record to store under [`KEPT_LINK_KEY`] for `hash` at `now_ms`
 /// (`keepLink`): `{"hash":…,"at":…}`, or `None` when `hash` is no multisig
@@ -1371,6 +1383,12 @@ pub fn call_json(method: &str, args_json: &str) -> Result<String, CoreError> {
             arg(&args, "approved")?,
             arg(&args, "threshold")?,
         )),
+        #[cfg(feature = "crux")]
+        other => match crate::multisig_rules::call_json(other, &args) {
+            Some(answer) => answer,
+            None => Err(err(format!("unknown multisig link method: {other}"))),
+        },
+        #[cfg(not(feature = "crux"))]
         other => Err(err(format!("unknown multisig link method: {other}"))),
     }
 }

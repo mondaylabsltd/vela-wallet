@@ -61,9 +61,7 @@ export function shownIdentity(
 ): WalletIdentity {
 	const shown = multisig.active;
 	// r4D-7: a dot on the switcher's button while another account has something waiting.
-	const waiting = presence.othersWaiting(shown?.address ?? null)
-		? { waiting: m.presence.othersWaiting }
-		: {};
+	const waiting = presence.othersWaiting ? { waiting: m.presence.othersWaiting } : {};
 	if (shown) {
 		return {
 			name: multisigName(shown, m),

@@ -70,6 +70,7 @@
 	} from '$lib/agent/advice.svelte';
 	import { adviceCard } from '$lib/agent/advisor';
 	import ReviewTech from './ReviewTech.svelte';
+	import MemberChangeRule from './MemberChangeRule.svelte';
 	import { names } from '../core/names.svelte';
 	import {
 		actionRecipient,
@@ -96,7 +97,7 @@
 		ExecutorCannotPayError,
 		stoppedBeforeSigning,
 		type ExecutionPreview
-	} from '../core/execute';
+	} from '../core/execution';
 	import { feeCoin, feeWords, whyText } from '../core/execution-words';
 	import {
 		declinedRisk,
@@ -106,12 +107,10 @@
 		SigningRefusedError,
 		SigningUncheckedError
 	} from '../core/gate.svelte';
-	import { checkOn } from '../core/recheck';
 	import { refusalText } from './findings';
 	import AuthorityNotice from './AuthorityNotice.svelte';
 	import { ChainUnavailableError } from '../core/chain';
 	import { progressLine } from '../core/progress';
-	import { PREVIEW_CAP_MS, PREVIEW_FRESH_MS, UNPRICED_FRESH_MS } from '../core/preflight.svelte';
 	import { proposalsHost, ProposeFailedError } from '../shell/proposals-host.svelte';
 	import {
 		actionError,
@@ -126,12 +125,10 @@
 	import { PageApprovalError } from '../core/page-approval.svelte';
 	import { PageDeclinedError, PageSignFailedError } from '$lib/signing/sign-challenge';
 	import { integrityLineModel } from '$lib/settings/venue';
-	import { ServiceUnavailableError } from '../core/service';
 	import { PasskeyError } from '$lib/onboarding/core/passkey';
 	import type { ExecutionVerdict } from '../core/kernel';
 	import { memberDrift, readMemberChanges, sameAddress, transfersOf } from '../core/kernel';
 	import { connectLink, proposalLink, shareOrigin } from '../core/link';
-	import { eip55 } from '../external/eip55';
 	import { localOwners, type LocalOwner } from '../core/owners';
 	import { itemOf, linkedSource, proposals, type ProposalItem } from '../core/proposals.svelte';
 	import { multisig, type MultisigAccount } from '../core/store.svelte';
@@ -205,16 +202,17 @@
 	/** A dApp's transaction not proposed yet, or the person's own (§3.6): the review, before any passkey. */
 	const drafting = $derived((!!dapp && !dapp.held.safe_tx_hash) || !!prebuilt);
 
-	/** This session's check of this network, once it has answered. */
-	let checked = $state<Finding[] | null>(null);
-
-	onMount(() => {
-		// §3.5: who can act for it on this network, read now (once a session)
-		// — so a refusal or a risk is said before anyone taps.
-		void checkOn(account, chainId).then((found) => {
-			if (found) checked = found;
-		});
-	});
+	/**
+	 * §3.5: who can act for it on this network — the accounts machine's
+	 * verdict (`check_on`: read once a session, also a network it is not used
+	 * on yet), so a refusal or a risk is said before anyone taps. Never a
+	 * chain read of the sheet's own.
+	 */
+	onMount(() => multisig.checkOn(account.address, chainId));
+	const networkVerdict = $derived(multisig.verdictOn(account.address, chainId));
+	const checked = $derived<Finding[] | null>(
+		networkVerdict.checked ? networkVerdict.findings : null
+	);
 
 	/**
 	 * Whether this device signs here: not at all where its genesis is
@@ -529,14 +527,12 @@
 		Object.entries(machine?.previews ?? {}).find(
 			([k]) => k.toLowerCase() === lookKey(executor)
 		)?.[1];
-	/** When each look was asked, and what stood then (a look past its cap is said as unchecked). */
-	let asked = $state<Record<string, { at: number; was: unknown }>>({});
-	let clockLook = $state(Date.now());
+	/** How often an open sheet asks the machine to look (it decides whether a look is stale). */
+	const ASK_LOOK_EVERY_MS = 5_000;
 	function look(executor: string): void {
 		// Asked from an effect: what it reads here is not what it depends on.
 		untrack(() => {
 			if (!item) return;
-			asked = { ...asked, [executor.toLowerCase()]: { at: Date.now(), was: lookOf(executor) } };
 			proposalsHost.send({
 				type: 'preview',
 				chain_id: chainId,
@@ -550,18 +546,13 @@
 		if (!lookKeys) return;
 		const executors = untrack(() => looked);
 		for (const e of executors) look(e);
-		// r5reg-14: asked every 5 s — a priced look still stands its 15 s; one
-		// that could not price or check it (an RPC outage) is taken again
-		// within 5 s of the network's return.
+		// r5reg-14: asked every few seconds while the sheet is open — the
+		// machine decides whether a look is stale (a priced one stands its
+		// 15 s, an unpriced one 5 s), never runs two at once, and says a look
+		// past its cap as unchecked.
 		const timer = setInterval(() => {
-			clockLook = Date.now();
-			for (const e of executors) {
-				const at = untrack(() => asked[e.toLowerCase()]?.at ?? 0);
-				const now = untrack(() => previewOf(localOwners([e])[0] ?? null));
-				const soon = !now || now.kind === 'unpriced' || now.kind === 'unchecked';
-				if (Date.now() - at >= (soon ? UNPRICED_FRESH_MS : PREVIEW_FRESH_MS)) look(e);
-			}
-		}, UNPRICED_FRESH_MS);
+			for (const e of executors) look(e);
+		}, ASK_LOOK_EVERY_MS);
 		return () => clearInterval(timer);
 	});
 	/** The token a `short` look is about, worded (`tokenInfo`; the chain's coin by its symbol). */
@@ -581,13 +572,6 @@
 	function previewOf(owner: LocalOwner | null): ExecutionPreview | null {
 		if (!owner || !looked.some((e) => sameAddress(e, owner.address))) return null;
 		const value = lookOf(owner.address);
-		const sent = asked[owner.address.toLowerCase()];
-		// Round 5: a look that has not answered within its cap is said as not checked.
-		if (sent && value === sent.was && clockLook - sent.at >= PREVIEW_CAP_MS) {
-			return value === undefined
-				? { kind: 'unchecked' }
-				: previewFrom(value, chainId, wordsFor(value));
-		}
 		return value === undefined ? null : previewFrom(value, chainId, wordsFor(value));
 	}
 	/** Someone here who can pay the fee — the one picked unless the person picks. */
@@ -787,9 +771,6 @@
 		if (cancelled(error)) return m.proposal.reason.passkeyClosed;
 		if (error instanceof PasskeyCheckError) return m.proposal.reason.passkeyFailed;
 		if (error instanceof MailboxRefusedError) return m.proposal.reason.serviceRefused;
-		if (error instanceof ServiceUnavailableError) {
-			return offline() ? m.proposal.reason.offline : m.proposal.reason.serviceKept;
-		}
 		// The relay provably never took it (refused, or out of reach): nothing was sent.
 		if (error instanceof Error && error.name === 'UserOpNotSentError') return m.proposal.notSent;
 		if (error instanceof ChainUnavailableError || offline()) {
@@ -1086,28 +1067,21 @@
 		)
 	);
 	/**
-	 * Owners still to approve whose wallets are elsewhere: an outside wallet
-	 * can sign for a plain account — a queued transaction too (its approval
-	 * waits like any other). Never for a Vela account (ms-11, r4-9): one the
-	 * index knows, one that approved with its passkey or this device keeps as
-	 * one (r4a-9) — its key is a passkey, and it approves in Vela, from the
-	 * link. Never for a smart contract account either (r7: code at its
-	 * address, no index record) — it approves from its own app, which Vela
-	 * can't collect yet, and that is said (`contractMissing`). One nothing says
-	 * (`unsure`) is offered the Vela way first and the outside wallet's beside
-	 * it — never alone: its row's "Send link", then "Approve with another
-	 * wallet" (r7, restored beside it). Nothing is offered once enough have
-	 * approved.
+	 * r7-8: the machine's one partition of the members still to approve —
+	 * each said once: `in_vela` (something shows a Vela account: it approves
+	 * in Vela, from the link — never an outside wallet, ms-11/r4-9), `outside`
+	 * (the outside-wallet link: a plain account, or one nothing says, beside
+	 * the Vela way), `either` (nothing says yet: both ways, its own line),
+	 * `contract` (it approves from its own app, which Vela can't collect yet:
+	 * said, nothing offered). Nothing once enough approved (r4D-6).
 	 */
-	const outside = $derived(
-		enough
-			? []
-			: missingOwners.filter((o) => kinds.get(o) === 'wallet' || kinds.get(o) === 'unsure')
-	);
+	const partOf = (list: readonly string[] | undefined): string[] =>
+		(list ?? []).filter((o) => missingOwners.some((x) => sameAddress(x, o)));
+	const outside = $derived(partOf(machineSigners?.outside));
 	/** Vela members elsewhere still to approve: they approve in Vela, from the link. */
-	const elsewhere = $derived(
-		enough ? [] : missingOwners.filter((o) => kinds.get(o) === 'vela' || kinds.get(o) === 'unsure')
-	);
+	const elsewhere = $derived(partOf(machineSigners?.in_vela));
+	/** Members nothing says how they sign yet: either way, said once (r7-8). */
+	const either = $derived(partOf(machineSigners?.either));
 
 	/**
 	 * r4C-13: the one link to send a member whose wallet is elsewhere — the
@@ -1123,16 +1097,20 @@
 					safeTxHash
 				})
 	);
-	/** Members still to approve who approve in Vela (not this device's, not surely outside wallets). */
+	/**
+	 * Members still to approve the Vela link is for: Vela's, nothing-says-yet
+	 * ones, and those still being read (never this device's, never a
+	 * contract or a surely outside wallet).
+	 */
 	const velaMissing = $derived(
-		!item
+		enough
 			? []
-			: (members?.owners ?? []).filter(
+			: missingOwners.filter(
 					(o) =>
 						localOwners([o]).length === 0 &&
-						kinds.get(o) !== 'contract' &&
-						(!outside.some((x) => sameAddress(x, o)) || elsewhere.some((x) => sameAddress(x, o))) &&
-						!item.approvals.some((a) => a.counts && sameAddress(a.owner, o))
+						(elsewhere.some((x) => sameAddress(x, o)) ||
+							either.some((x) => sameAddress(x, o)) ||
+							kinds.get(o) === null)
 				)
 	);
 	/**
@@ -1140,9 +1118,7 @@
 	 * own app (EIP-1271), which Vela can't collect yet: said, and neither the
 	 * Vela link nor an outside wallet offered for them.
 	 */
-	const contractMissing = $derived(
-		enough ? [] : missingOwners.filter((o) => kinds.get(o) === 'contract')
-	);
+	const contractMissing = $derived(partOf(machineSigners?.contract));
 	let outsideCopied = $state(false);
 	async function copyOutsideLink() {
 		try {
@@ -1474,9 +1450,10 @@
 			<p class="site">{fillTemplate(m.proposal.siteAsks, { host: site })}</p>
 		{/if}
 		<header class="what">
-			{#if !reading}
+			{#if !reading && !(change && memberReading?.changes.length === 1)}
 				<!-- r5reg-15: a call read by the signing sheet's machines heads itself
-				     ("Send −0.05 USDC"): its verb is not said twice above it. -->
+				     ("Send −0.05 USDC"): its verb is not said twice above it. S4 (r7): nor
+				     is a lone member change, which its own list names ("Add Carol (…)"). -->
 				<p class="title">{shownTitle || '…'}</p>
 			{/if}
 			{#if recipient && !(reading && item.review.action?.kind === 'transfer')}
@@ -1500,39 +1477,16 @@
 				/>
 			{/if}
 			{#if change && memberReading}
-				<!-- r4a-1: who it adds, removes or replaces, the rule before and
-				     after, on which network — said before anything else. -->
-				<section class="change" data-testid="member-change">
-					{#if item.status !== 'done'}
-						<p class="change-caution" role="alert">
-							<Icon icon={UTILITY_ICONS['triangle-alert']} size="sm" />
-							<span>{change.caution}</span>
-						</p>
-					{/if}
-					<ul class="change-list">
-						{#each memberReading.changes as c, i (i)}
-							<li>
-								<span class="change-what">{change.changes[i]}</span>
-								{#each [c.removed, c.added].filter((a) => a !== null) as address, j (j)}
-									<span class="change-who">
-										<Identicon
-											svg={identiconSvgForClient(address ?? '')}
-											size="compact"
-											address={address ?? ''}
-										/>
-										<code class="change-address">{eip55(address ?? '')}</code>
-									</span>
-								{/each}
-							</li>
-						{/each}
-					</ul>
-					{#if item.status !== 'done'}
-						<p class="change-rule" data-testid="member-change-rule">{change.rule}</p>
-						{#if change.doesNotFit}
-							<p class="warn" role="alert">{change.doesNotFit}</p>
-						{/if}
-					{/if}
-				</section>
+				<!-- r4a-1 / r7-11: who it adds, removes or replaces, the rule before and
+				     after, on which network — said before anything else, drawn as every
+				     signer reads it (the connect page too). -->
+				<MemberChangeRule
+					{m}
+					changes={memberReading}
+					network={chainName(chainId)}
+					{who}
+					done={item.status === 'done'}
+				/>
 			{/if}
 			{#if reading}
 				<CallReview {reading} m={signing} badges={partyBadges} names={partyNames} />
@@ -1619,7 +1573,13 @@
 		</header>
 
 		{#if fullReview && tech}
-			<ReviewTech {m} review={fullReview} {tech} advice={adviceModel} />
+			<ReviewTech
+				{m}
+				review={fullReview}
+				{tech}
+				advice={adviceModel}
+				executed={item.status === 'done'}
+			/>
 		{/if}
 
 		{#if gate.kind === 'refused'}
@@ -1691,15 +1651,20 @@
 								<button type="button" class="external" onclick={onExternal}
 									>{m.external.signWithWallet}</button
 								>
-							{:else if !drafting && elsewhere.some((o) => sameAddress(o, owner))}
+							{:else if !drafting && (elsewhere.some( (o) => sameAddress(o, owner) ) || either.some( (o) => sameAddress(o, owner) ))}
 								<!-- A Vela member elsewhere approves in Vela, from the link (r4-9);
-								     one that may be either is offered the Vela way first (r4a-9)
-								     and its own wallet's beside it (r7). -->
+								     one nothing says yet is offered the Vela way first (r4a-9)
+								     and its own wallet's beside it (r7), worded as either (r7-8). -->
 								{m.proposal.waiting} ·
 								<button
 									type="button"
 									class="external"
-									title={fillTemplate(m.proposal.approvesInVela, { names: names.label(owner) })}
+									title={fillTemplate(
+										either.some((o) => sameAddress(o, owner))
+											? m.proposal.eitherWay
+											: m.proposal.approvesInVela,
+										{ names: names.label(owner) }
+									)}
 									onclick={canShare ? shareLink : copyLink}>{m.proposal.sendLink}</button
 								>{#if kinds.get(owner) === 'unsure' && !busy}
 									·
@@ -1933,9 +1898,10 @@
 			{/if}
 			<!-- r4D-19: in the desktop's capped dialog the actions stay in view. -->
 			<div class="two" class:actions={wide} data-testid="proposal-actions">
-				<!-- r4D-13: a site's request is declined; the person's own proposal is withdrawn. -->
+				<!-- r4D-13: a site's request is declined; S4 (r7): the person's own, not
+				     proposed yet, is simply not proposed — nothing to withdraw. -->
 				<Button variant="secondary" shape="rounded" disabled={busy} onclick={decline}
-					>{prebuilt ? m.proposal.withdraw : m.external.decline}</Button
+					>{prebuilt ? m.proposal.dontPropose : m.external.decline}</Button
 				>
 				{#if item.review.action !== null && !readOnly && !signBlocked}
 					<Button
@@ -2168,6 +2134,14 @@
 					<p class="fine" data-testid="approves-in-vela">
 						{fillTemplate(m.proposal.approvesInVela, {
 							names: elsewhere.map((o) => names.label(o)).join(', ')
+						})}
+					</p>
+				{/if}
+				{#if either.length > 0}
+					<!-- r7-8: nothing says how they sign yet — said once, both ways offered. -->
+					<p class="fine" data-testid="either-way">
+						{fillTemplate(m.proposal.eitherWay, {
+							names: either.map((o) => names.label(o)).join(', ')
 						})}
 					</p>
 				{/if}
@@ -2460,66 +2434,6 @@
 		margin: var(--space-lg) 0 0;
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-fg-muted);
-	}
-
-	/* r4a-1: a member change, read before anything else. */
-	.change {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-sm);
-		margin: var(--space-md) 0 var(--space-lg);
-		padding: var(--space-md);
-		border-radius: var(--radius-lg);
-		background: var(--color-error-soft);
-	}
-
-	.change-caution {
-		display: flex;
-		gap: var(--space-sm);
-		align-items: flex-start;
-		margin: 0;
-		font-weight: var(--weight-semibold);
-		color: var(--color-error-base);
-	}
-
-	.change-list {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-sm);
-		margin: 0;
-		padding: 0;
-		list-style: none;
-	}
-
-	.change-list li {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-xs);
-	}
-
-	.change-what {
-		font-weight: var(--weight-semibold);
-		color: var(--color-fg-base);
-	}
-
-	.change-who {
-		display: flex;
-		align-items: center;
-		gap: var(--space-sm);
-		min-width: 0;
-	}
-
-	.change-address {
-		font-family: var(--font-mono);
-		font-size: calc(var(--text-sm) * var(--text-scale, 1));
-		color: var(--color-fg-muted);
-		overflow-wrap: anywhere;
-	}
-
-	.change-rule {
-		margin: 0;
-		font-variant-numeric: tabular-nums;
-		color: var(--color-fg-base);
 	}
 
 	.line-note {

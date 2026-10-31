@@ -11,7 +11,6 @@ import '$lib/tokens/tokens.css';
 import GroupNote from '$lib/wallet/ui/GroupNote.svelte';
 import type { MultisigMessages } from '../messages';
 import { saveServiceEndpoints } from '$lib/onboarding/core/storage';
-import { serviceOutage } from '../core/service-state.svelte';
 import CustomServiceNote from './CustomServiceNote.svelte';
 
 const m = {
@@ -28,13 +27,10 @@ describe('the custom-service note', () => {
 		expect(screen.container.textContent?.trim()).toBe(
 			'Using a custom multisig service (127.0.0.1:8788)'
 		);
-		// Settings → Service Endpoints writes the record: the note follows,
-		// and what was known of the last service's outage goes with it.
-		serviceOutage.failed();
+		// Settings → Service Endpoints writes the record: the note follows.
 		saveServiceEndpoints({ genesisServiceURL: 'https://safe-genesis.getvela.app' });
 		await tick();
 		expect(screen.container.querySelector('[data-testid="custom-genesis-service"]')).toBeNull();
-		expect(serviceOutage.down).toBe(false);
 	});
 });
 

@@ -285,12 +285,21 @@ where
     A::Model: Default,
     A::Effect: SplitEffect<Op = Op>,
 {
+    // A shell runs its operations at once: a bound (a look's cap, a wait)
+    // runs out after the reads it bounds have answered — so every other
+    // operation is answered first, a wait only when nothing else is out.
     for _ in 0..5_000 {
-        let Some(op) = sut.outstanding().first().cloned() else {
+        let outstanding = sut.outstanding();
+        let Some(op) = outstanding
+            .iter()
+            .find(|op| !matches!(op, Op::Wait { .. }))
+            .or_else(|| outstanding.first())
+            .cloned()
+        else {
             return;
         };
         let res = shell.answer(&op);
-        sut.resolve(res);
+        sut.resolve_matching(|o| *o == op, res);
     }
     panic!("never settled");
 }

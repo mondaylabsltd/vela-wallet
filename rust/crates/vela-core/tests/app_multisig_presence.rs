@@ -134,15 +134,32 @@ fn a_ready_one_nobody_here_can_pay_for_is_not_ready() {
 /// otherwise nothing is said.
 #[test]
 fn why_a_ready_one_cannot_run() {
-    let fails = Some(Look::Fails);
+    let short = serde_json::json!({"kind": "short", "token": null, "have": "1", "need": "5"});
+    let fails = Some(Look::Fails(short.clone()));
     let broke = Some(Look::Priced { can_pay: false });
     let pays = Some(Look::Priced { can_pay: true });
-    assert_eq!(block_of(&[pays, fails]), Some(ReadyBlock::Fails));
-    assert_eq!(block_of(&[broke, broke]), Some(ReadyBlock::NobodyPays));
-    assert_eq!(block_of(&[broke, pays]), None);
+    // W9: the row's "Can't run now" says the look's own detail.
+    assert_eq!(
+        block_of(&[pays.clone(), fails]),
+        Some(ReadyBlock::Fails { why: short.clone() })
+    );
+    assert_eq!(
+        block_of(&[broke.clone(), broke.clone()]),
+        Some(ReadyBlock::NobodyPays)
+    );
+    assert_eq!(block_of(&[broke.clone(), pays]), None);
     assert_eq!(block_of(&[broke, None]), None, "a look still out");
     assert_eq!(block_of(&[Some(Look::Other)]), None);
     assert_eq!(block_of(&[]), None);
+    // The detail crosses the wire whole, under its kind.
+    assert_eq!(
+        serde_json::to_value(ReadyBlock::Fails { why: short.clone() }).unwrap(),
+        serde_json::json!({"kind": "fails", "why": short})
+    );
+    assert_eq!(
+        serde_json::to_value(ReadyBlock::NobodyPays).unwrap(),
+        serde_json::json!({"kind": "nobodyPays"})
+    );
 }
 
 // -- a waiting row's one word, and the group's note (activity*.test.ts) -------------------
@@ -237,9 +254,16 @@ fn the_waiting_group_says_where_its_list_stands() {
     assert!(waiting_note(&history).unwrap().retry());
     let loading = ListFacts {
         loading: true,
-        ..base
+        nothing_shown: true,
+        ..base.clone()
     };
     assert_eq!(waiting_note(&loading), Some(WaitingNote::Checking));
+    // Over rows, the rows speak: "checking" only with nothing shown (W9).
+    let over_rows = ListFacts {
+        loading: true,
+        ..base
+    };
+    assert_eq!(waiting_note(&over_rows), None);
 }
 
 // -- what an execution from this device counts (executed.test.ts) ------------------------
@@ -685,4 +709,49 @@ fn the_followed_ones_presence_standing_and_timeline() {
                 ..
             }
         )));
+}
+
+// -- what an executed proposal writes in Activity (records.ts executionRows, W9) ----------
+
+/// One row per transfer; a transfer or a batch of transfers alone is said by
+/// its transfers; anything else adds one row titled as its proposal, moving
+/// only the coin a call sends, to what it calls.
+#[test]
+fn an_execution_writes_one_row_per_transfer_else_one_for_its_proposal() {
+    use vela_core::app::multisig_proposals::execution_rows;
+    let with = |action: Value| {
+        let mut i = item(0, ProposalStatus::Done);
+        i.review.action = Some(serde_json::from_value(action).unwrap());
+        i.tx.to = CAROL.to_owned();
+        i
+    };
+    let send = with(json!({"kind": "transfer", "token": null, "to": BOB, "amount": "0x10"}));
+    let rows = execution_rows(SAFE, &send);
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["kind"], "send");
+    assert_eq!(rows[0]["amount"], "16", "base units, decimal");
+    let transfer = json!({"kind": "transfer", "token": CAROL, "to": BOB, "amount": "5"});
+    let leg = |action: Value| json!({"to": CAROL, "value": "0", "data": "0x", "action": action});
+    let only =
+        with(json!({"kind": "batch", "calls": [leg(transfer.clone()), leg(transfer.clone())]}));
+    let rows = execution_rows(SAFE, &only);
+    assert_eq!(rows.len(), 2, "{rows:?}");
+    assert!(rows.iter().all(|r| r["kind"] == "send"));
+    let call = json!({"kind": "call", "to": ALICE, "value": "0x0", "data": "0x095ea7b3"});
+    let mixed = with(json!({"kind": "batch", "calls": [leg(transfer), leg(call)]}));
+    let rows = execution_rows(SAFE, &mixed);
+    assert_eq!(rows.len(), 2, "{rows:?}");
+    assert_eq!(rows[1]["kind"], "call");
+    assert_eq!(rows[1]["calls"], 2);
+    assert_eq!(rows[1]["to"], CAROL, "a batch: its own target");
+    let paying = with(json!({"kind": "call", "to": ALICE, "value": "0x5", "data": "0x"}));
+    let rows = execution_rows(SAFE, &paying);
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["sends"], "5");
+    assert_eq!(rows[0]["contract"], ALICE.to_ascii_lowercase());
+    let change = with(json!({"kind": "changeThreshold", "threshold": "1"}));
+    let rows = execution_rows(SAFE, &change);
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["to"], SAFE, "a member change: the multisig itself");
+    assert_eq!(rows[0]["sends"], "0");
 }

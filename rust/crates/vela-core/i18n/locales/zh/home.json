@@ -169,6 +169,7 @@
         "share": "分享",
         "reject": "拒绝",
         "withdraw": "撤回",
+        "dontPropose": "不发起",
         "rejectHint": "拒绝会在同一序号上发起一笔作废交易，同样需要 {{threshold}} 位批准，先执行的那笔生效。",
         "cancelPending": "这笔交易的作废交易正在等待批准。",
         "executing": "正在执行…",
@@ -237,6 +238,7 @@
         "notNeeded": "不需要",
         "sendLink": "发送链接",
         "approvesInVela": "在自己设备上的 Vela 中批准：{{names}}。把这个链接发给他们。",
+        "eitherWay": "尚不知道他们如何批准：{{names}}。他们可以用这个链接在 Vela 中批准，或通过外部钱包链接用自己的钱包批准。",
         "contractMembers": "{{names}}：智能合约账户在自己的应用中批准（例如另一个 Safe）。Vela 暂时还无法收取这些批准。",
         "rejectCancel": "取消",
         "noOutsideSigner": "此设备上没有成员，而每位成员都在自己设备上的 Vela 中批准 — 请其中一位来提议",
@@ -334,7 +336,10 @@
         "firstRunFund": "充值",
         "firstRunFundNote": "转入它在 {{network}} 上的地址。",
         "firstRunCost": "它的第一笔转出还会在 {{network}} 上完成部署：一次性网络费，随这笔转账支付，执行前会显示。",
-        "firstRunDismiss": "知道了"
+        "firstRunDismiss": "知道了",
+        "otherSpace": "此设备在{{space}}中还有：{{networks}}。要在其中之一创建多签，请先切换到{{space}}。",
+        "draftKept": "已恢复你上次填写的内容。",
+        "discardDraft": "重新开始"
       },
       "invite": {
         "body": "成员扫码或打开链接即可：在 Vela 中添加这个多签，并带上网络和成员名称。",
@@ -597,7 +602,8 @@
         "removed": "已移除",
         "thresholdChanged": "所需批准数：最初 {{was}}，现在 {{is}}。",
         "undeployedOn": "尚未部署在 {{network}} 上：在那里将以初始成员开始。",
-        "renameNotRecorded": "它的记录保存到多签服务后即可重命名。"
+        "renameNotRecorded": "它的记录保存到多签服务后即可重命名。",
+        "renamePending": "记录写入 {{network}} 后即可重命名。这可能需要一些时间，期间不会丢失任何内容。"
       },
       "service": {
         "customNote": "正在使用自定义多签服务（{{host}}）",

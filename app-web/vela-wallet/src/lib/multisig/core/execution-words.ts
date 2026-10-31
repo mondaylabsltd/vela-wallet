@@ -6,7 +6,7 @@
 import { feeAmountText } from '$lib/flows/fee-line';
 import { fillTemplate } from '$lib/i18n/fill';
 import type { MultisigMessages } from '../messages';
-import type { ExecutionBlock, ExecutionPreview } from './execute';
+import type { ExecutionBlock, ExecutionPreview } from './execution';
 import { formatUnits } from './units';
 
 /**

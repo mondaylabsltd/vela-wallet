@@ -23,4 +23,17 @@ high_risk_on: number[],
 /**
  * Networks where its genesis is refused: read-only there.
  */
-refused_on: number[], };
+refused_on: number[], 
+/**
+ * §3.5: networks whose verdict is this session's ([`Event::CheckOn`],
+ * the re-check, another machine's): its findings there are current.
+ */
+checked_on: number[], 
+/**
+ * Networks being read now.
+ */
+checking_on: number[], 
+/**
+ * r4D-8: its invite was handed on from this device ([`Event::InviteShared`]).
+ */
+invite_shared: boolean, };

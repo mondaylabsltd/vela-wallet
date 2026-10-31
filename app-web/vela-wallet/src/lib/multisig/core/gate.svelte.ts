@@ -21,7 +21,6 @@
  * (`SigningUncheckedError`).
  */
 import type { Finding } from './refusal';
-import { findingsOn } from './recheck';
 import { signingGateRule, type MultisigReviewOut, type SignRule } from './kernel';
 import type { MultisigAccount } from './store.svelte';
 
@@ -55,7 +54,10 @@ export function signingGate(
 	chainId: number,
 	sign?: SignRule | null
 ): SigningGate {
-	return gateOf(findingsOn(account, chainId), chainId, sign);
+	// The accounts machine's findings for it (its stored row's, or this
+	// session's verdict there, `check_on`), on this network.
+	const findings = (account.findings ?? []).filter((f) => f.chainId === chainId);
+	return gateOf(findings, chainId, sign);
 }
 
 /** Its genesis is refused on `chainId`: Vela signs nothing for it there. */

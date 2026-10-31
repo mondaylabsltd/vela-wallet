@@ -13,8 +13,8 @@ const seams = vi.hoisted(() => ({
 	/** The proposals machine's word on the multisigs not shown, by lowercase address. */
 	machine: {} as Record<string, unknown>,
 	accounts: [] as { address: string }[],
-	/** r5reg-6: each ready one's executor look, by its hash. */
-	looks: {} as Record<string, { kind: string; canPay?: boolean }>,
+	/** The machine's word on whether a multisig not shown has something waiting. */
+	othersWaiting: false,
 	followed: { address: null as string | null, items: [] as ProposalItem[] }
 }));
 vi.mock('./proposals.svelte', () => ({
@@ -32,7 +32,7 @@ vi.mock('./proposals.svelte', () => ({
 vi.mock('../shell/proposals-host.svelte', () => ({
 	proposalsHost: {
 		get view() {
-			return { presence: seams.machine };
+			return { presence: seams.machine, others_waiting: seams.othersWaiting };
 		},
 		othersTick: async () => {},
 		followOthers: () => () => {}
@@ -42,26 +42,6 @@ vi.mock('../shell/proposals-host.svelte', () => ({
 vi.mock('$lib/core/client', () => ({
 	i18nPluralSuffix: (_l: string, n: number) => (n === 1 ? '_one' : '_other')
 }));
-vi.mock('./preflight.svelte', () => ({
-	preflight: { get: (hash: string) => seams.looks[hash] ?? null },
-	blockOf: (looks: ({ kind: string; canPay?: boolean } | null)[]) =>
-		looks.length > 0 && looks.every((l) => l?.kind === 'priced' && !l.canPay)
-			? { kind: 'nobodyPays' }
-			: null
-}));
-vi.mock('./store.svelte', () => ({
-	multisig: {
-		get accounts() {
-			return seams.accounts;
-		},
-		find: (a: string) => seams.accounts.find((x) => x.address.toLowerCase() === a.toLowerCase())
-	}
-}));
-vi.mock('./kernel', () => ({
-	sameAddress: (a: string | null, b: string | null) =>
-		!!a && !!b && a.toLowerCase() === b.toLowerCase()
-}));
-
 const { presence, waitingWords } = await import('./presence.svelte');
 
 describe('what waits here, said (r4D-7)', () => {
@@ -118,7 +98,10 @@ describe('a multisig not shown', () => {
 			first: { chainId: 100, safeTxHash: '0x01' }
 		});
 		expect(presence.of('0xCC')).toBeNull();
-		expect(presence.othersWaiting(null)).toBe(true);
-		expect(presence.othersWaiting('0xbb')).toBe(false);
+		// Whether another has something waiting is the machine's word.
+		seams.othersWaiting = true;
+		expect(presence.othersWaiting).toBe(true);
+		seams.othersWaiting = false;
+		expect(presence.othersWaiting).toBe(false);
 	});
 });

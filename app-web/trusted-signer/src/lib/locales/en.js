@@ -265,7 +265,7 @@ window.VelaCS.i18n.register('en', {
   'ui.proofFailed': 'Not signed: the ceremony was cancelled, timed out, or this device holds no such key.',
   'ui.waitingForWallet': 'Waiting for the wallet',
   'ui.waitingNote': 'This page stays open for the wallet’s next request. You can go back to the wallet.',
-  'ui.sessionDone': 'Done — the wallet has what it asked for. You can close this page.',
+  'ui.sessionDone': 'The wallet has what it asked for. You can close this page.',
   'ui.sessionIdle': 'Nothing arrived for 5 minutes, so this page stopped waiting. Start again from the wallet.',
   'ui.openerSilent': 'The page that opened this one never sent a request.',
   'ui.sessionEnded': 'Session ended',

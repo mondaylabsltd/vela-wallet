@@ -161,4 +161,19 @@ describe('the first-run card (r5reg-17, r5reg-18)', () => {
 		expect(card()?.textContent).toContain('create.firstRunInvite');
 		await two.unmount();
 	});
+
+	it('S4 (r7): a step done is ticked — the invite handed on, funds in', async () => {
+		await shown(account([A, B]));
+		const screen = render(MultisigHomeCard, { props: { m: words(), onfund: () => {} } });
+		await settle();
+		const done = (id: string) =>
+			document.body.querySelector(`[data-testid="${id}"]`)?.classList.contains('done');
+		expect(done('first-run-invite')).toBe(false);
+		expect(done('first-run-fund')).toBe(false);
+		// The invite handed on: the accounts machine keeps it.
+		multisig.inviteShared(SAFE);
+		await settle();
+		expect(done('first-run-invite')).toBe(true);
+		await screen.unmount();
+	});
 });

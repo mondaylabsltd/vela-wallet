@@ -10,10 +10,17 @@ import { identiconViewer } from '$lib/wallet/identicon-viewer.svelte';
 import { MULTISIG_SHAPE, type MultisigMessages } from '../messages';
 
 const SAFE = '0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83';
+/** r4D-8: the multisigs whose invite was handed on (`multisig.inviteShared`). */
+const invited = vi.hoisted(() => [] as string[]);
 
 vi.mock('../core/store.svelte', () => ({
-	isShared: () => true,
-	multisig: { find: () => null, row: () => null, accounts: [] }
+	multisig: {
+		find: () => null,
+		row: () => null,
+		shared: () => true,
+		inviteShared: (address: string) => invited.push(address),
+		accounts: []
+	}
 }));
 vi.mock('$lib/services/public-key-index', () => ({
 	queryWalletName: async () => null,
@@ -91,6 +98,8 @@ describe('the invite sheet', () => {
 			?.click();
 		await vi.waitFor(() => expect(copied).not.toBe(''));
 		expect(new URL(copied).hash.startsWith(`#msa=5042002:${SAFE}`)).toBe(true);
+		// r4D-8: handed on — its first steps tick off.
+		expect(invited).toContain(SAFE);
 		clip.mockRestore();
 	});
 });

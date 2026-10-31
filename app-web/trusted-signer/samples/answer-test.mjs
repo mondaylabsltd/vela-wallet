@@ -709,13 +709,39 @@ try {
       await opener.ev("window.__bye('done')", true);
       await popup.waitFor("window.__velaState.phase === 'ended'").catch(() => {});
       const text = await popup.ev('document.body.innerText').catch(() => '');
-      const said = text.split('Done — the wallet has what it asked for').length - 1;
+      const said = text.split('The wallet has what it asked for').length - 1;
       await opener.waitFor('window.__childClosed()', 6000).catch(() => {});
       const closed = await opener.ev('window.__childClosed()');
       check('G. answered, the wallet says goodbye: "Done" said once, then the page closes itself (S4)',
-        slid && said === 1 && closed === true, JSON.stringify({ slid, said, closed, text: text.slice(0, 160) }));
+        slid && said === 1 && !text.includes('Done — ') && closed === true, JSON.stringify({ slid, said, closed, text: text.slice(0, 160) }));
       await popup.close().catch(() => {});
       await opener.close();
+    }
+
+    // S4: answered, and the window that asked went away before its goodbye
+    // (the extension request window closes as the page opens): the finished
+    // page closes itself all the same.
+    {
+      const req = Buffer.from(JSON.stringify(messageRequest)).toString('base64url');
+      const opener = await Page.open(CDP,
+        `https://wallet.getvela.app/open-request?signer=${encodeURIComponent(`${PAGE}?ch=post&lang=en`)}&req=${req}`);
+      await opener.waitFor('!!window.__go');
+      await opener.ev('window.__go()', true);
+      const popup = await Page.find(CDP, (u) => u.includes('/sign?ch=post'));
+      await addKey(popup);
+      await popup.waitFor('window.__velaState && window.__velaState.phase === "card"');
+      const slid = await slideIfOffered(popup);
+      await opener.waitFor('window.__answers.length > 0', 10000).catch(() => {});
+      await opener.close();
+      let gone = false;
+      for (let i = 0; i < 40 && !gone; i += 1) {
+        const targets = await (await fetch(`http://127.0.0.1:${CDP}/json/list`)).json();
+        gone = !targets.some((t) => t.id === popup.targetId);
+        if (!gone) await sleep(200);
+      }
+      check('G. answered, the asking window gone before its goodbye: the finished page still closes itself (S4)',
+        slid && gone, JSON.stringify({ slid, gone }));
+      await popup.close().catch(() => {});
     }
   }
 

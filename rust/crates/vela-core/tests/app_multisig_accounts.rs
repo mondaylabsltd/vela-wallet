@@ -15,8 +15,9 @@ use std::collections::BTreeMap;
 use serde_json::{json, Value};
 use support::DomainDriver;
 use vela_core::app::multisig_accounts::{
-    AddOutcome, BackupState, CreateChoice, EnsAnswer, Event, ImportOutcome, InvitedMember, KindAsk,
-    MultisigAccounts, Phase, RenameBlocked,
+    AddOutcome, BackupState, CreateChoice, CreateDraft, EnsAnswer, Event, ImportOutcome,
+    InvitedMember, KindAsk, MultisigAccounts, Phase, RenameBlocked, CREATE_DRAFT_KEY,
+    INVITE_SHARED_KEY,
 };
 use vela_core::app::multisig_shell::{keys, AccountUpdate, MemberInfo, Notice};
 use vela_core::app::multisig_signers::{KindNote, MemberKind};
@@ -1260,9 +1261,11 @@ fn a_rename_says_why_it_cannot_run() {
     run(&mut sut, &mut world, rename());
     assert_eq!(
         plan(&sut).blocked,
-        Some(RenameBlocked::Unrecorded),
-        "a record on its way names no chain"
+        Some(RenameBlocked::Pending),
+        "r7-10: a record on its way is not one never saved"
     );
+    assert_eq!(plan(&sut).chain_id, None, "and names no chain yet");
+    assert_eq!(plan(&sut).lands_on, Some(100), "it lands on the home chain");
 
     world.record(&g.address, &g.genesis, false);
     run(&mut sut, &mut world, rename());
@@ -1748,4 +1751,270 @@ fn a_network_it_comes_to_be_used_on_is_checked_then() {
     assert_eq!(world.reads_on(100), on_100);
     assert!(sut.view().accounts[0].high_risk_on.is_empty());
     assert!(sut.view().accounts[0].refused_on.is_empty());
+}
+
+// -- r7-10: a record on its way is said as such ------------------------------------
+
+/// Created while the service was away: its proof is kept here and asked
+/// again — renamed once it lands, never "not saved".
+#[test]
+fn a_record_asked_for_here_is_on_its_way_not_unrecorded() {
+    let mut world = World::default();
+    world.locals.push(fixture(0));
+    let mut sut = started(&mut world, vec![100]);
+    run(&mut sut, &mut world, Event::NewDraft);
+    world.service_down = true;
+    let c = choice(&world);
+    run(&mut sut, &mut world, Event::Create { choice: c });
+    let address = sut.view().create.address.clone().unwrap();
+    world.service_down = false;
+    run(
+        &mut sut,
+        &mut world,
+        Event::PlanRename {
+            address: address.clone(),
+        },
+    );
+    let plan = sut.view().rename[&address.to_ascii_lowercase()].clone();
+    assert_eq!(plan.blocked, Some(RenameBlocked::Pending));
+    assert_eq!(plan.lands_on, Some(100));
+}
+
+// -- §3.5: one network checked on demand --------------------------------------------
+
+/// `CheckOn`: one network read once a session — also one it is not used on
+/// yet; a network that does not answer is no verdict and is asked again.
+#[test]
+fn a_network_is_checked_on_demand_once_a_session() {
+    let g = genesis(&[A], 1, "0x61");
+    let mut world = World::default();
+    world.store.insert(
+        keys::ACCOUNTS.to_owned(),
+        json!([stored_row(&g, &[100], true)]).to_string(),
+    );
+    world.silent.insert(8453);
+    world
+        .canonical_missing
+        .insert((8453, HANDLER_LOWER.to_owned()));
+    let mut sut = started(&mut world, vec![100, 8453]);
+    let check = || Event::CheckOn {
+        address: g.address.clone(),
+        chain_id: 8453,
+    };
+    run(&mut sut, &mut world, check());
+    let row = &sut.view().accounts[0];
+    assert!(world.reads_on(8453) > 0, "read, though not used there yet");
+    assert!(row.checked_on.is_empty(), "no answer is no verdict");
+    assert!(row.checking_on.is_empty());
+    world.silent.clear();
+    run(&mut sut, &mut world, check());
+    let row = sut.view().accounts[0].clone();
+    assert_eq!(row.checked_on, vec![8453], "asked again, and answered");
+    assert_eq!(row.refused_on, vec![8453], "the same verdict rule");
+    assert_eq!(
+        world.stored_accounts()[0]["chainIds"],
+        json!([100]),
+        "not added there"
+    );
+    let reads = world.reads_on(8453);
+    run(&mut sut, &mut world, check());
+    assert_eq!(world.reads_on(8453), reads, "checked once a session");
+    // The re-check counts it as checked too.
+    run(&mut sut, &mut world, Event::Recheck);
+    assert_eq!(world.reads_on(8453), reads);
+    assert!(sut.view().accounts[0].checked_on.contains(&100));
+    // A network this device lacks is not read at all.
+    let before = world.reads_on(42161);
+    run(
+        &mut sut,
+        &mut world,
+        Event::CheckOn {
+            address: g.address.clone(),
+            chain_id: 42161,
+        },
+    );
+    assert_eq!(world.reads_on(42161), before);
+}
+
+// -- r7-9: the create sheet --------------------------------------------------------
+
+fn draft(world: &World) -> CreateDraft {
+    let me = world.locals[0].address.clone();
+    CreateDraft {
+        owners: vec![me, B.to_owned()],
+        members: BTreeMap::from([(
+            B.to_owned(),
+            MemberInfo {
+                name: Some("Bo".to_owned()),
+                kind: None,
+                typed: None,
+            },
+        )]),
+        name: "Quiet Harbor".to_owned(),
+        threshold: 2,
+        chain_id: Some(8453),
+    }
+}
+
+/// Leaving the create sheet loses nothing: its draft (members, their names
+/// and picked kinds, name, rule, network) is the machine’s record until it
+/// is created or discarded; a new sheet does not wipe it.
+#[test]
+fn the_create_draft_is_kept_until_created_or_discarded() {
+    let mut world = World::default();
+    world.locals.push(fixture(0));
+    let mut sut = started(&mut world, vec![100, 8453]);
+    let d = draft(&world);
+    run(&mut sut, &mut world, Event::KeepDraft { draft: d });
+    run(
+        &mut sut,
+        &mut world,
+        Event::PickKind {
+            address: B.to_owned(),
+            kind: Some(MemberKind::Wallet),
+        },
+    );
+    assert!(world.store.contains_key(CREATE_DRAFT_KEY));
+    // The page reloads: the sheet opens on it, the pick the person made too.
+    let mut sut = started(&mut world, vec![100, 8453]);
+    let kept = sut.view().create.kept.clone().unwrap();
+    assert_eq!(kept.name, "Quiet Harbor");
+    assert_eq!(kept.chain_id, Some(8453));
+    assert_eq!(kept.members[B].name.as_deref(), Some("Bo"));
+    assert_eq!(kept.members[B].kind.as_deref(), Some("wallet"));
+    assert_eq!(sut.view().member_kinds[B].kind, Some(MemberKind::Wallet));
+    run(&mut sut, &mut world, Event::NewDraft);
+    assert!(sut.view().create.kept.is_some(), "a new sheet keeps it");
+    // Discarded: gone.
+    run(&mut sut, &mut world, Event::DiscardDraft);
+    assert!(sut.view().create.kept.is_none());
+    assert!(!world.store.contains_key(CREATE_DRAFT_KEY));
+    // A blank sheet keeps nothing.
+    let me = world.locals[0].address.clone();
+    let blank = CreateDraft {
+        owners: vec![me],
+        threshold: 1,
+        ..CreateDraft::default()
+    };
+    run(&mut sut, &mut world, Event::KeepDraft { draft: blank });
+    assert!(!world.store.contains_key(CREATE_DRAFT_KEY));
+    // Kept again, then created: done with.
+    let d = draft(&world);
+    run(&mut sut, &mut world, Event::KeepDraft { draft: d });
+    assert!(world.store.contains_key(CREATE_DRAFT_KEY));
+    let c = choice(&world);
+    run(&mut sut, &mut world, Event::Create { choice: c });
+    assert_eq!(sut.view().create.phase, Phase::Done);
+    assert!(sut.view().create.kept.is_none());
+    assert!(!world.store.contains_key(CREATE_DRAFT_KEY));
+}
+
+/// r7-9: the create sheet offers the space in front; this device’s networks
+/// of the other space are said, not hidden.
+#[test]
+fn the_other_spaces_networks_are_said() {
+    let mut world = World::default();
+    let mut sut = started(&mut world, vec![1, 100, 5_042_002, 11_155_111]);
+    assert!(
+        sut.view().create.other_space.is_empty(),
+        "no space said yet"
+    );
+    run(
+        &mut sut,
+        &mut world,
+        Event::Space {
+            chain_ids: vec![1, 100],
+        },
+    );
+    assert_eq!(sut.view().create.other_space, vec![5_042_002, 11_155_111]);
+}
+
+/// r7-8: what the person picked for each member lands in the stored row —
+/// a pick alone, before any chain answered.
+#[test]
+fn a_created_multisig_keeps_the_kinds_picked() {
+    const EVE: &str = "0x00000000000000000000000000000000000000ee";
+    let mut world = World::default();
+    world.locals.push(fixture(0));
+    let mut sut = started(&mut world, vec![100]);
+    let me = world.locals[0].address.clone();
+    run(&mut sut, &mut world, Event::NewDraft);
+    for (who, kind) in [(B, MemberKind::Vela), (EVE, MemberKind::Wallet)] {
+        run(
+            &mut sut,
+            &mut world,
+            Event::PickKind {
+                address: who.to_owned(),
+                kind: Some(kind),
+            },
+        );
+    }
+    let c = CreateChoice {
+        owners: vec![me.clone(), B.to_owned(), EVE.to_owned()],
+        threshold: 2,
+        name: "Quiet Harbor".to_owned(),
+        chain_id: 100,
+        creator: me.clone(),
+        members: BTreeMap::from([(
+            B.to_owned(),
+            MemberInfo {
+                name: Some("Bob".to_owned()),
+                kind: None,
+                typed: None,
+            },
+        )]),
+    };
+    run(&mut sut, &mut world, Event::Create { choice: c });
+    let members = &world.stored_accounts()[0]["members"];
+    assert_eq!(members[me.to_ascii_lowercase()]["kind"], "passkey");
+    assert_eq!(members[B]["kind"], "passkey");
+    assert_eq!(members[B]["name"], "Bob");
+    assert_eq!(members[EVE]["kind"], "wallet");
+    let known = &sut.view().known_members;
+    assert_eq!(known[EVE].kind.as_deref(), Some("wallet"));
+    assert_eq!(known[B].name.as_deref(), Some("Bob"));
+}
+
+/// r4D-8: its invite handed on from here is kept (through a reload), said on
+/// its row, and forgotten with it.
+#[test]
+fn an_invite_handed_on_is_kept_with_the_multisig() {
+    let g = genesis(&[A], 1, "0x62");
+    let mut world = World::default();
+    world.store.insert(
+        keys::ACCOUNTS.to_owned(),
+        json!([stored_row(&g, &[100], true)]).to_string(),
+    );
+    let mut sut = started(&mut world, vec![100]);
+    assert!(!sut.view().accounts[0].invite_shared);
+    let shared = || Event::InviteShared {
+        address: g.address.to_ascii_uppercase().replace("0X", "0x"),
+    };
+    run(&mut sut, &mut world, shared());
+    assert!(sut.view().accounts[0].invite_shared);
+    let sut2 = started(&mut world, vec![100]);
+    assert!(
+        sut2.view().accounts[0].invite_shared,
+        "kept through a reload"
+    );
+    run(
+        &mut sut,
+        &mut world,
+        Event::InviteShared {
+            address: B.to_owned(),
+        },
+    );
+    assert_eq!(
+        world.store[INVITE_SHARED_KEY],
+        json!([g.address.to_ascii_lowercase()]).to_string(),
+        "only a multisig here"
+    );
+    run(
+        &mut sut,
+        &mut world,
+        Event::Remove {
+            address: g.address.clone(),
+        },
+    );
+    assert_eq!(world.store[INVITE_SHARED_KEY], "[]");
 }

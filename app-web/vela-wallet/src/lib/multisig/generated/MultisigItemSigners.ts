@@ -11,8 +11,29 @@ export type MultisigItemSigners = {
  */
 rows: Array<MultisigSignerRow>, 
 /**
- * Of them, those an outside wallet may be asked to sign for
- * (`plainAccounts`): never this device's, a Vela account, or a smart
- * contract account.
+ * Of them, those an outside wallet may be asked to sign for — the
+ * outside-wallet link names them: a plain account, or one nothing
+ * says (beside the Vela way). Never this device's, a Vela account, a
+ * smart contract account, or one still being read.
  */
-outside: Array<string>, };
+outside: Array<string>, 
+/**
+ * r7-8: those that approve in Vela on their own device (the Vela link)
+ * — only a member something shows is a Vela account; never an outside
+ * member nothing has said yet.
+ */
+in_vela: Array<string>, 
+/**
+ * r7-8: those nothing says how they sign yet: either way is offered,
+ * and said once — never listed as Vela's and the outside wallet's both.
+ */
+either: Array<string>, 
+/**
+ * Smart contract members: they approve from their own app, which Vela
+ * can't collect yet (said; no link offered).
+ */
+contract: Array<string>, 
+/**
+ * Enough approvals are in: nobody else is asked (every list empty).
+ */
+enough: boolean, };

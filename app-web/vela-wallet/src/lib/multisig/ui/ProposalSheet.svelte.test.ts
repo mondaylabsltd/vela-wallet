@@ -96,6 +96,10 @@ const fake = vi.hoisted(() => ({
 const view = vi.hoisted(() => ({
 	key: (hash: string) => `100:${hash.toLowerCase()}`
 }));
+/** The members of `rows` of these kinds, as the machine lists them. */
+function of(rows: { owner: string; kind: string | null }[], kinds: string[]): string[] {
+	return rows.filter((r) => r.kind !== null && kinds.includes(r.kind)).map((r) => r.owner);
+}
 vi.mock('../core/proposals.svelte', async () => {
 	const { machineSeam, machineLook, machineTimeline } =
 		await import('./proposal-sheet.testing.svelte');
@@ -151,7 +155,18 @@ vi.mock('../core/proposals.svelte', async () => {
 			outbox,
 			reviews: { [key]: reviewSeam.review ?? REVIEW },
 			previews,
-			signers: { [key]: { rows, outside: [] } },
+			// The machine's partition of them (app_multisig_proposals.rs
+			// `each_remaining_member_signs_as_the_one_rule_says`).
+			signers: {
+				[key]: {
+					rows,
+					outside: of(rows, ['wallet', 'unsure']),
+					in_vela: of(rows, ['vela']),
+					either: of(rows, ['unsure']),
+					contract: of(rows, ['contract']),
+					enough: false
+				}
+			},
 			timelines,
 			frozen: fake.frozen ? { [key]: fake.frozen } : {},
 			history_unreadable: fake.executed === undefined ? [100] : [],
@@ -307,11 +322,14 @@ vi.mock('../shell/proposals-host.svelte', async () => {
 	};
 	return { proposalsHost: host, ProposeFailedError };
 });
-// §3.5: the network's check, as the chain would answer it (`recheck.test.ts` reads it).
-vi.mock('../core/recheck', () => ({
-	checkOn: async () => fake.checked,
-	findingsOn: () => []
-}));
+// §3.5: the network's check — the accounts machine's verdict (`check_on`;
+// app_multisig_accounts.rs reads it), as the chain would answer it.
+vi.mock('../core/store.svelte', async (importOriginal) => {
+	const real = await importOriginal<typeof import('../core/store.svelte')>();
+	real.multisig.checkOn = () => {};
+	real.multisig.verdictOn = () => ({ checked: true, checking: false, findings: fake.checked });
+	return real;
+});
 // §3.5, §3.6: the gate, its rule as the core's (`gate.test.ts` drives the real one).
 vi.mock('../core/gate.svelte', () => {
 	class SigningRefusedError extends Error {
@@ -404,37 +422,7 @@ vi.mock('$lib/agent/advice.svelte', () => ({
 	openReview: () => null,
 	adviceStanding: () => ({ standing: 'current' })
 }));
-vi.mock('../core/execute', () => {
-	class ExecutorCannotPayError extends Error {}
-	class ExecutionWouldFailError extends Error {
-		constructor(readonly why: unknown) {
-			super('would fail');
-		}
-	}
-	class ExecutionUnpricedError extends Error {}
-	class ExecutionUncheckedError extends Error {}
-	class ExecutionSpentError extends Error {}
-	return {
-		ExecutionSpentError,
-		ExecutorCannotPayError,
-		ExecutionWouldFailError,
-		ExecutionUnpricedError,
-		ExecutionUncheckedError,
-		stoppedBeforeSigning: (e: unknown) =>
-			e instanceof ExecutorCannotPayError ||
-			e instanceof ExecutionWouldFailError ||
-			e instanceof ExecutionUnpricedError ||
-			e instanceof ExecutionUncheckedError,
-		relayRefused: async () => fake.refused
-	};
-});
-vi.mock('../core/preflight.svelte', () => ({
-	PREVIEW_FRESH_MS: 15_000,
-	UNPRICED_FRESH_MS: 5_000,
-	PREVIEW_CAP_MS: 15_000
-}));
 vi.mock('../core/chain', () => ({ ChainUnavailableError: class extends Error {} }));
-vi.mock('../core/service', () => ({ ServiceUnavailableError: class extends Error {} }));
 vi.mock('../core/owners', () => ({
 	PasskeyCheckError: class extends Error {},
 	localOwners: (owners: string[]) =>
@@ -2023,7 +2011,7 @@ describe('who proposes, on the review before the passkey (r5reg-5)', () => {
 describe('"Approve and execute" whose execute part cannot run (r4-11)', () => {
 	it('keeps the approval, and says only executing could not run', async () => {
 		fake.chain.items = [item({ approved: 1, canExecute: [local], canApprove: [local] })];
-		const { ExecutorCannotPayError } = await import('../core/execute');
+		const { ExecutorCannotPayError } = await import('../core/execution');
 		fake.executeThrows = new ExecutorCannotPayError(1n, 0n);
 		const screen = show();
 		await settle();
@@ -2062,12 +2050,16 @@ describe('how each missing member approves (r4-9, r4D-6)', () => {
 		if (!row) throw new Error('no row offers the Vela link');
 		const controls = [...row.querySelectorAll('.state button')].map((b) => b.textContent?.trim());
 		expect(controls).toEqual(['proposal.sendLink', 'external.signWithWallet']);
-		const vela = document.querySelector('[data-testid="approves-in-vela"]');
+		// r7-8: never listed as approving in Vela — said once, either way.
+		expect(document.querySelector('[data-testid="approves-in-vela"]')).toBeNull();
+		const either = document.querySelector('[data-testid="either-way"]');
 		const outside = document.querySelector('[data-testid="outside-invite"]');
-		expect(vela).not.toBeNull();
+		expect(either).not.toBeNull();
 		// The outside wallet's link is still there, after the Vela one.
 		expect(outside).not.toBeNull();
-		expect(vela!.compareDocumentPosition(outside!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(
+			either!.compareDocumentPosition(outside!) & Node.DOCUMENT_POSITION_FOLLOWING
+		).toBeTruthy();
 		// The row's live pairing is the outside wallet's own way (r7).
 		[...row.querySelectorAll('button')]
 			.find((b) => b.textContent?.trim() === 'external.signWithWallet')
@@ -2167,9 +2159,9 @@ describe('round 6: the review’s words and where its actions stand', () => {
 	it('r4D-13: the person’s own proposal is withdrawn, not declined (a site’s request still is)', async () => {
 		const screen = show({ prebuilt: own(), safeTxHash: '' });
 		await settle();
-		expect(buttons()).toContain('proposal.withdraw');
+		expect(buttons()).toContain('proposal.dontPropose');
 		expect(buttons()).not.toContain('external.decline');
-		press('proposal.withdraw');
+		press('proposal.dontPropose');
 		expect(fake.calls).toEqual(['withdraw']);
 		await screen.unmount();
 	});

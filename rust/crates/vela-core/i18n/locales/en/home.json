@@ -169,6 +169,7 @@
         "share": "Share",
         "reject": "Reject",
         "withdraw": "Withdraw",
+        "dontPropose": "Don’t propose",
         "rejectHint": "Rejecting proposes a cancellation at the same number; it needs {{threshold}} approvals too, and whichever is executed first wins.",
         "cancelPending": "A cancellation of this transaction is waiting for approval.",
         "executing": "Executing…",
@@ -237,6 +238,7 @@
         "notNeeded": "Not needed",
         "sendLink": "Send link",
         "approvesInVela": "Approves in Vela on their own device: {{names}}. Send them this link.",
+        "eitherWay": "Not known yet how they approve: {{names}}. They can approve in Vela with this link, or with their own wallet using the outside-wallet link.",
         "contractMembers": "{{names}}: a smart contract account approves from its own app (e.g. another Safe). Vela can't collect those approvals yet.",
         "rejectCancel": "Cancel",
         "noOutsideSigner": "no member is on this device, and every member approves in Vela on their own device — ask one of them to propose it",
@@ -334,7 +336,10 @@
         "firstRunFund": "Add funds",
         "firstRunFundNote": "Send to its address on {{network}}.",
         "firstRunCost": "Its first transfer out also sets it up on {{network}}: a one-time network fee, paid with that transfer and shown before it's executed.",
-        "firstRunDismiss": "Got it"
+        "firstRunDismiss": "Got it",
+        "otherSpace": "Also on this device, in {{space}}: {{networks}}. To create the multisig on one of them, switch to {{space}} first.",
+        "draftKept": "Picked up where you left off.",
+        "discardDraft": "Start over"
       },
       "invite": {
         "body": "Members scan the code or open the link: it adds the multisig in Vela with its network and the members' names.",
@@ -597,7 +602,8 @@
         "removed": "Removed",
         "thresholdChanged": "Approvals needed: {{was}} originally, {{is}} now.",
         "undeployedOn": "Not deployed on {{network}} yet: it will start there with the original members.",
-        "renameNotRecorded": "It can be renamed once its record is saved with the multisig service."
+        "renameNotRecorded": "It can be renamed once its record is saved with the multisig service.",
+        "renamePending": "It can be renamed once its record lands on {{network}}. That can take a while — nothing is lost meanwhile."
       },
       "service": {
         "customNote": "Using a custom multisig service ({{host}})",

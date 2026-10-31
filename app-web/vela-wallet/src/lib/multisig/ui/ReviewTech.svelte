@@ -23,8 +23,13 @@
 		review: MultisigReviewOut;
 		tech: TechModel;
 		advice: AgentAdviceCardModel | null;
+		/**
+		 * S4 (r7): it already ran — the hashes are a record, not something to
+		 * compare before signing: no "if any of them differs, don't sign".
+		 */
+		executed?: boolean;
 	}
-	let { m, review, tech, advice }: Props = $props();
+	let { m, review, tech, advice, executed = false }: Props = $props();
 
 	let open = $state(false);
 	let copied = $state<string | null>(null);
@@ -49,7 +54,7 @@
 
 <section class="hashes" aria-label={m.review.hashesTitle} data-testid="review-hashes">
 	<h3>{m.review.hashesTitle}</h3>
-	<p class="note">{m.external.hashesNote}</p>
+	{#if !executed}<p class="note">{m.external.hashesNote}</p>{/if}
 	<dl>
 		{#each rows as row (row.label)}
 			<div class="row">

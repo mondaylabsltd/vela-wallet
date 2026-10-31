@@ -79,6 +79,13 @@ presence: { [key in string]: MultisigWaiting | null },
  */
 others_waiting: boolean, 
 /**
+ * Everyone who is a member of the followed multisig on some network
+ * (`membersAnywhere`): its members now where it is deployed, its
+ * original members wherever it is not. Who may sign on one network is
+ * that network's alone; this only says whether any member is here.
+ */
+members_anywhere: Array<string>, 
+/**
  * Each open proposal's one word, per `<chainId>:<safeTxHash>`.
  */
 standings: { [key in string]: MultisigStanding }, 

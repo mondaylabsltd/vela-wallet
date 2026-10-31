@@ -79,7 +79,7 @@ pub struct More {
     others_reading: bool,
     /// One executor's look, by `<chainId>:<hash>:<executor>`: the count of
     /// approvals it was taken at, and what it said.
-    looks: BTreeMap<String, (u64, Look)>,
+    pub(crate) looks: BTreeMap<String, (u64, Look)>,
     frozen: BTreeMap<String, FrozenFacts>,
     dapp: BTreeMap<String, Held>,
     calls_status: BTreeMap<String, DappAnswer>,
@@ -171,7 +171,7 @@ fn ready_block(s: &State, item: &ProposalItem) -> Option<ReadyBlock> {
                 .looks
                 .get(&look_key(item.chain_id, &item.safe_tx_hash, e))
                 .filter(|(approved, _)| *approved == item.approved)
-                .map(|(_, l)| *l)
+                .map(|(_, l)| l.clone())
         })
         .collect();
     block_of(&looks)
@@ -330,6 +330,8 @@ pub fn view_more(s: &mut State) -> MoreView {
         stale: s.stale,
         history_unreadable: s.history_unreadable.clone(),
         loading: s.loading,
+        nothing_shown: !items.iter().any(|i| i.status != ProposalStatus::Done)
+            && s.missing.is_empty(),
     });
     let mut timelines = BTreeMap::new();
     if let Some(f) = &followed {
@@ -635,7 +637,7 @@ async fn read_other(
 /// Keep one executor's look (the home's "Can't run now" reads the same one).
 pub fn keep_look(s: &mut State, input: &ExecutionInput, preview: &Preview) {
     let look = match preview {
-        Preview::Fails(_) => Look::Fails,
+        Preview::Fails(why) => Look::Fails(why.clone()),
         Preview::Priced { can_pay, .. } => Look::Priced { can_pay: *can_pay },
         _ => Look::Other,
     };

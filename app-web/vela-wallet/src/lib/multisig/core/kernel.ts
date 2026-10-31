@@ -76,10 +76,6 @@ export interface OnChainApproval {
 /** One owner's approval, any kind (told apart by their fields). */
 export type Approval = PasskeyApproval | EcdsaApproval | OnChainApproval;
 
-export const isEcdsaApproval = (a: Approval): a is EcdsaApproval => 'signature' in a;
-export const isPasskeyApproval = (a: Approval): a is PasskeyApproval => 'ownerGenesis' in a;
-export const isOnChainApproval = (a: Approval): a is OnChainApproval => 'onChain' in a;
-
 export interface Call {
 	to: string;
 	value: string;
@@ -108,9 +104,6 @@ export type Action =
 	| { kind: 'rename'; name: string }
 	/** A dApp's call to another contract; `value` in base units, decimal. */
 	| { kind: 'call'; to: string; value: string; data: string };
-
-/** The kinds of action that change a multisig's own members or threshold. */
-export const MEMBER_CHANGES = ['addOwner', 'removeOwner', 'swapOwner', 'changeThreshold'] as const;
 
 /**
  * One call of a batch: as packed (`value` base units, decimal; `data` hex)
@@ -194,15 +187,11 @@ export const validName = (name: string) => call<boolean>('validName', { name });
 /** Whether `address` can be a member (not the zero address, not Safe's `0x…01` sentinel). */
 export const validOwner = (address: string) => call<boolean>('validOwner', { address });
 
-export const genesisAddress = (genesis: Genesis) => call<string>('genesisAddress', { genesis });
-
 export const genesisMembers = (genesis: Genesis) =>
 	call<{ owners: string[]; threshold: number }>('genesisMembers', { genesis });
 
 export const velaAccountGenesis = (keys: FoundingKey[]) =>
 	call<{ address: string; genesis: Genesis }>('velaAccountGenesis', { keys });
-
-export const deployCall = (genesis: Genesis) => call<Call>('deployCall', { genesis });
 
 export const safeTxHash = (chainId: number, safe: string, tx: SafeTx) =>
 	call<string>('safeTxHash', { chainId, safe, tx });
@@ -210,29 +199,11 @@ export const safeTxHash = (chainId: number, safe: string, tx: SafeTx) =>
 export const approvalChallenge = (chainId: number, owner: string, safeTxHash: string) =>
 	call<string>('approvalChallenge', { chainId, owner, safeTxHash });
 
-export const sponsorChallenge = (multisig: string) =>
-	call<string>('sponsorChallenge', { multisig });
-
-export const approvalFromAssertion = (
-	keys: FoundingKey[],
-	assertion: {
-		credentialId: string;
-		authenticatorData: string;
-		clientDataJSON: string;
-		signature: string;
-	}
-) => call<PasskeyApproval>('approvalFromAssertion', { keys, ...assertion });
-
 export const verifyApproval = (chainId: number, safeTxHash: string, approval: PasskeyApproval) =>
 	call<boolean>('verifyApproval', { chainId, safeTxHash, approval });
 
-export const executionCalls = (plan: ExecutionPlan) => call<Call[]>('executionCalls', { plan });
-
 export const reviewTx = (chainId: number, multisig: string, tx: SafeTx) =>
 	call<Review>('review', { chainId, multisig, tx });
-
-export const transfersTx = (transfers: Transfer[], nonce: string) =>
-	call<SafeTx>('transfersTx', { transfers, nonce });
 
 /** A site's call, as `eth_sendTransaction` or one of `wallet_sendCalls`' calls carries it. */
 export interface CallArg {
@@ -261,14 +232,6 @@ export const verifyEcdsaApproval = (safeTxHash: string, approval: EcdsaApproval)
 	call<EcdsaApproval>('verifyEcdsaApproval', { safeTxHash, approval });
 
 /**
- * How a plain account signed: EIP-712 typed data (`v` 27/28), or Safe's
- * `eth_sign` form (`v` 31/32: `personal_sign` over the safeTxHash, for a
- * wallet that cannot sign typed data). Throws for anything else.
- */
-export const ecdsaForm = (signature: string) =>
-	call<'typedData' | 'ethSign'>('ecdsaForm', { signature });
-
-/**
  * The hashes a hardware wallet shows for the SafeTx's typed data — domain
  * hash, message hash, and the safeTxHash they make — and what `personal_sign`
  * signs in the `eth_sign` form, for the owner to match on the device.
@@ -283,23 +246,9 @@ export interface SafeTxHashes {
 export const safeTxHashes = (chainId: number, safe: string, tx: SafeTx) =>
 	call<SafeTxHashes>('safeTxHashes', { chainId, safe, tx });
 
-/** The SafeTx as `eth_signTypedData_v4` takes it (its EIP-712 hash is the safeTxHash). */
-export const safeTxTypedData = (chainId: number, safe: string, tx: SafeTx) =>
-	call<Record<string, unknown>>('safeTxTypedData', { chainId, safe, tx });
-
 /** The signatures `execTransaction` takes, sorted by owner; no executor when a wallet sends it. */
 export const signatures = (approvals: Approval[], executor: string | null) =>
 	call<string>('signatures', { approvals, executor });
-
-export const execTransactionData = (tx: SafeTx, signatures: string) =>
-	call<string>('execTransactionData', { tx, signatures });
-
-/** An undeployed Safe{Wallet} Safe's genesis from its props; throws unless it derives `address`. */
-export const safeWalletPropsGenesis = (props: unknown, address: string) =>
-	call<Genesis>('safeWalletPropsGenesis', { props, address });
-
-/** A Safe{Wallet} export, merged by address. Throws on a file that is not one. */
-export const parseSafeExport = (json: string) => call<ExportedSafe[]>('parseSafeExport', { json });
 
 /**
  * The Safe Genesis Registry (v4, `keccak256("safe-genesis-registry/v4")`
@@ -307,16 +256,6 @@ export const parseSafeExport = (json: string) => call<ExportedSafe[]>('parseSafe
  * on. The core's `GENESIS_REGISTRY`, which a test pins against it.
  */
 export const GENESIS_REGISTRY = '0xF412388bF908E510066d3Be5c704bd9A327f945d';
-
-/**
- * The registry call that records `genesis` on any chain, with its name — its
- * own, else the one the service would give it ({@link defaultName}); anyone
- * may send it.
- */
-export const recordCall = (genesis: Genesis) => call<Call>('recordCall', { genesis });
-
-/** Whether the registry takes `name` (1 to 64 bytes); {@link validName} is the wallet's narrower rule. */
-export const recordableName = (name: string) => call<boolean>('recordableName', { name });
 
 /** The service's name for a Safe recorded without one ("Quiet Harbor"), from its address. */
 export const defaultName = (safe: string) => call<string>('defaultName', { safe });
@@ -370,26 +309,6 @@ export type MemberVerdict =
 	| { kind: 'ready'; tx: SafeTx; before: MemberSet; after: MemberSet }
 	| { kind: 'refused'; refusal: MemberRefusal };
 
-/**
- * `change` as the multisig's own transaction at `nonce` on a network whose
- * members are `state` — `addOwnerWithThreshold`, `removeOwner` /
- * `swapOwner` with the previous owner from that network's list, or
- * `changeThreshold` — with the members before and after; or the core's
- * reason it cannot be made there.
- */
-export const memberChangeTx = (
-	multisig: string,
-	state: MemberState,
-	change: MemberChangeRequest,
-	nonce: string
-) => call<MemberVerdict>('memberChangeTx', { multisig, state, change, nonce });
-
-/** The multisig's transaction that renames its record in the registry, at `nonce`. */
-export const renameTx = (name: string, nonce: string) => call<SafeTx>('renameTx', { name, nonce });
-
-/** `genesisOf(safe)` calldata, for an `eth_call` to {@link GENESIS_REGISTRY}. */
-export const genesisOfCall = (safe: string) => call<string>('genesisOfCall', { safe });
-
 /** What one chain's registry holds for a Safe, as the core reads `genesisOf`. */
 export interface RegistryRecord {
 	/** The genesis, with the record's name on that chain. */
@@ -404,26 +323,7 @@ export interface RegistryRecord {
 	nameBySafe: boolean;
 }
 
-/**
- * A `genesisOf(safe)` answer read by the core: `null` when the registry holds
- * nothing for `safe`. Throws on an answer that is not one, or whose genesis
- * does not make `safe` (the core re-derives it).
- */
-export const readGenesisOf = (safe: string, ret: string) =>
-	call<RegistryRecord | null>('readGenesisOf', { safe, ret });
-
-/** The genesis inside a creating transaction's calldata that derives `safe`, if any. */
-export const genesisFromCalldata = (input: string, safe: string) =>
-	call<Genesis | null>('genesisFromCalldata', { input, safe });
-
 // -- where a multisig can live, and where it does ---------------------------------
-
-/**
- * The Safe v1.4.1 contracts a new multisig's genesis names (factory,
- * singleton, fallback handler): a chain with code at all three can deploy it.
- */
-export const multisigContracts = () =>
-	call<{ name: string; address: string }[]>('multisigContracts', {});
 
 /** Whether a chain holds those contracts, as the core reads it. */
 export type SafeContracts =
@@ -431,13 +331,6 @@ export type SafeContracts =
 	| { kind: 'missing'; names: string[] }
 	/** The chain did not answer for some: nothing can be said either way. */
 	| { kind: 'unknown' };
-
-/**
- * The core's verdict on one chain from `eth_getCode` of each of
- * {@link multisigContracts}, in that order (`null`: the chain did not answer).
- */
-export const safeContracts = (codes: (string | null)[]) =>
-	call<SafeContracts>('safeContracts', { codes });
 
 /** What says which networks a multisig is used on (the core's `NetworkEvidence`). */
 export interface NetworkEvidence {
@@ -455,14 +348,6 @@ export interface NetworkEvidence {
 	 */
 	have?: number[] | null;
 }
-
-/**
- * The networks a multisig is used on, by the core's rule: deployed, then
- * proposals, then named, then kept — never the chain its record is on (the
- * registry is an index). Empty: nothing says; ask the person.
- */
-export const multisigNetworks = (evidence: NetworkEvidence) =>
-	call<number[]>('multisigNetworks', { evidence });
 
 /**
  * The networks the mailbox's proposals (or a link) put the multisig on that
@@ -553,18 +438,6 @@ export interface ExecutionFacts {
 	executorApproved: boolean;
 }
 
-/**
- * The frozen facts of `safeTxHash`'s execution, read from the receipt logs of
- * the transaction that executed it; `null` when they do not say (a Safe that
- * is not an L2 one emits no `SafeMultiSigTransaction`).
- */
-export const executionFacts = (
-	chainId: number,
-	safe: string,
-	safeTxHash: string,
-	logs: ReceiptLog[]
-) => call<ExecutionFacts | null>('executionFacts', { chainId, safe, safeTxHash, logs });
-
 // -- the multisig service's health answer (`app::genesis_service`) ---------------
 
 /** A chain the service says it serves (its own name for it, if any). */
@@ -588,10 +461,6 @@ export type ServiceAnswer =
 	  }
 	| { kind: 'other' }
 	| { kind: 'unreachable' };
-
-/** Whether a health answer (its status and body text) is a multisig service's. */
-export const serviceAnswer = (status: number, body: string) =>
-	call<ServiceAnswer>('serviceAnswer', { status, body });
 
 // -- who can act for a Safe: its chain, or the counterfactual rule (§3.5) ----------
 
@@ -628,10 +497,6 @@ export type Authority =
 export const counterfactualReads = (genesis: Genesis, safe: string) =>
 	call<string[]>('counterfactualReads', { genesis, safe });
 
-/** The core's counterfactual verdict for `safe` from `genesis`, with the target chain's code. */
-export const counterfactualAuthority = (genesis: Genesis, safe: string, facts: ChainFacts) =>
-	call<Authority>('counterfactualAuthority', { genesis, safe, facts });
-
 /** What can act for a deployed Safe besides its members, as its chain shows (the core's). */
 export type Risk =
 	| { kind: 'module'; address: string }
@@ -665,11 +530,6 @@ export interface DeployedCheck {
 	/** The chain did not answer for something: nothing can be said yet. */
 	unread: boolean;
 }
-
-export const deployedReads = () => call<DeployedReads>('deployedReads', {});
-
-export const deployedCheck = (facts: DeployedFacts) =>
-	call<DeployedCheck>('deployedCheck', { facts });
 
 // -- an execution in flight (`multisig_watch`) -----------------------------------
 
@@ -858,8 +718,6 @@ export interface MultisigReviewOut {
 	/** What the agent reads as the request on screen: bound to this proposal. */
 	adviceRequest: Record<string, unknown>;
 }
-
-export const reviewReads = (input: ReviewReadsInput) => call<ReviewReads>('reviewReads', { input });
 
 export const multisigReview = (input: ReviewInput) =>
 	call<MultisigReviewOut>('multisigReview', { input });

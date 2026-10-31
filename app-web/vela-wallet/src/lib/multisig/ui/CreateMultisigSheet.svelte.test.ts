@@ -6,10 +6,12 @@
  * content and steal the row's tap, so it stays a picture.
  */
 import { tick } from 'svelte';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
 import { page } from 'vitest/browser';
+import { loadCore } from '$lib/core/client';
+import { networkSpace } from '$lib/network-space/network-space.svelte';
 import { chainFilter } from '$lib/wallet/chain-filter.svelte';
 import { identiconViewer } from '$lib/wallet/identicon-viewer.svelte';
 import { MULTISIG_SHAPE, type MultisigMessages } from '../messages';
@@ -36,7 +38,13 @@ const seams = vi.hoisted(() => ({
 	evidence: {} as Record<string, 'vela' | 'contract' | 'wallet' | null>,
 	evidenceOn: [] as number[][],
 	/** r7: the kinds the person picked (`pick_kind`). */
-	picked: [] as [string, string | null][]
+	picked: [] as [string, string | null][],
+	/** r7-9: the draft the machine kept from before, and the other space's networks. */
+	kept: null as unknown,
+	otherSpace: [] as number[],
+	/** r7-9: what the sheet asked the machine to keep (`keep_draft`), and discards. */
+	keptDrafts: [] as { owners: string[]; name: string; chainId: number | null }[],
+	discarded: 0
 }));
 vi.mock('$lib/services/networks', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/services/networks')>()),
@@ -87,6 +95,8 @@ vi.mock('../core/store.svelte', async () => {
 						address: null,
 						refused: null,
 						error: null,
+						kept: seams.kept,
+						other_space: seams.otherSpace,
 						networks: Object.fromEntries(
 							seams.networks.map((n) => {
 								const kind = seams.contracts[n.chainId] ?? 'present';
@@ -110,6 +120,11 @@ vi.mock('../core/store.svelte', async () => {
 						kinds.set(m.address.toLowerCase(), answer(m.address));
 					}
 				}
+				if (event.type === 'keep_draft')
+					seams.keptDrafts.push(
+						(event as unknown as { draft: (typeof seams.keptDrafts)[0] }).draft
+					);
+				if (event.type === 'discard_draft') seams.discarded += 1;
 				if (event.type === 'pick_kind' && event.address) {
 					seams.picked.push([event.address, event.kind ?? null]);
 					kinds.set(event.address.toLowerCase(), answer(event.address, event.kind ?? null));
@@ -209,8 +224,17 @@ const press = (label: string) =>
 		.find((b) => b.textContent?.trim() === label)
 		?.click();
 
+// The network order and the labels are the core's rules (`multisigLinkCall`).
+beforeAll(async () => {
+	await loadCore();
+});
+
 afterEach(() => {
 	identiconViewer.close();
+	seams.kept = null;
+	seams.otherSpace = [];
+	seams.keptDrafts = [];
+	seams.discarded = 0;
 	seams.networks = [{ chainId: 100, displayName: 'Gnosis' }];
 	seams.contracts = {};
 	seams.created = [];
@@ -445,9 +469,12 @@ describe('r4a-14: what a creation can be, and how its members come', () => {
 	it('counts the name in bytes and says what is wrong with it, on the name', async () => {
 		const screen = open();
 		await settle();
-		expect(document.body.querySelector('[data-testid="name-bytes"]')?.textContent).toContain(
-			'create.nameBytes'
-		);
+		// S4: the byte count only near (or over) the limit.
+		expect(document.body.querySelector('[data-testid="name-bytes"]')).toBeNull();
+		type('.name-field', 'Team');
+		await settle();
+		expect(document.body.querySelector('[data-testid="name-bytes"]')).toBeNull();
+		type('.name-field', '');
 		// Next with no name: the field says so.
 		press('create.next');
 		await settle();
@@ -458,6 +485,9 @@ describe('r4a-14: what a creation can be, and how its members come', () => {
 		await settle();
 		expect(document.body.querySelector('[data-testid="name-error"]')?.textContent).toBe(
 			'create.nameTooLong'
+		);
+		expect(document.body.querySelector('[data-testid="name-bytes"]')?.textContent).toContain(
+			'create.nameBytes'
 		);
 		await screen.unmount();
 	});
@@ -712,6 +742,72 @@ describe('round 6: the create sheet at a phone’s width, and a multisig of one'
 		expect(document.body.querySelector('[data-testid="created-body"]')?.textContent?.trim()).toBe(
 			'create.createdBodySolo'
 		);
+		await screen.unmount();
+	});
+});
+
+/**
+ * r7-9: leaving the sheet loses nothing — what was entered is the accounts
+ * machine's draft (`keep_draft`, kept until created or discarded), and the
+ * sheet opens on it; the other space's networks are said, with the way there.
+ */
+describe('r7-9: the create sheet keeps its draft and says where else it could be', () => {
+	it('opens on the draft kept from before, and starts over on the person’s tap', async () => {
+		seams.kept = {
+			owners: [ME, DAN],
+			members: { [DAN]: { name: 'Dan' } },
+			name: 'Team fund',
+			threshold: 2,
+			chainId: 100
+		};
+		const screen = open();
+		await settle();
+		expect(document.body.querySelector<HTMLInputElement>('input.name-field')?.value).toBe(
+			'Team fund'
+		);
+		await expect.element(screen.getByTestId('draft-kept')).toBeVisible();
+		await expect.element(screen.getByText('Dan', { exact: true })).toBeVisible();
+		press('create.discardDraft');
+		await settle();
+		expect(seams.discarded).toBe(1);
+		expect(document.body.querySelector<HTMLInputElement>('input.name-field')?.value).toBe('');
+		expect(document.body.querySelector('[data-testid="draft-kept"]')).toBeNull();
+		await screen.unmount();
+	});
+
+	it('hands every change to the machine to keep', async () => {
+		const screen = open();
+		await settle();
+		type('.name-field', 'Team');
+		await settle();
+		const last = seams.keptDrafts.at(-1);
+		expect(last?.name).toBe('Team');
+		expect(last?.owners).toEqual([ME]);
+		expect(last?.chainId, 'a network nobody picked is not kept').toBeNull();
+		await screen.unmount();
+	});
+
+	it('says the other space’s networks on review, with the way there', async () => {
+		seams.otherSpace = [11155111];
+		networkSpace.words = {
+			mainnet: 'Mainnet',
+			testnet: 'Testnet',
+			toTestnet: 'Switch to the testnet space',
+			toMainnet: 'Switch to the mainnet space'
+		} as never;
+		const screen = open();
+		await settle();
+		type('.name-field', 'Team');
+		await settle();
+		press('create.next');
+		await settle();
+		press('create.next');
+		await settle();
+		await expect.element(screen.getByTestId('other-space')).toHaveTextContent('create.otherSpace');
+		await screen.getByRole('button', { name: 'Switch to the testnet space' }).click();
+		expect(networkSpace.switcherOpen).toBe(true);
+		networkSpace.switcherOpen = false;
+		networkSpace.words = null;
 		await screen.unmount();
 	});
 });

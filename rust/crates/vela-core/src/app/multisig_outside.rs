@@ -921,7 +921,8 @@ pub mod relay {
     }
 
     /// What a connection does before it asks for its next token.
-    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+    #[serde(tag = "kind", rename_all = "camelCase")]
     pub enum Before {
         /// Ask now (`trial`: the trial's, the last chance before stopping).
         Go { trial: bool },
@@ -934,7 +935,8 @@ pub mod relay {
     /// One connection's refusals by the relay: never another token at once
     /// (2 s, then 4 s), a fresh one from the site, then the trial's once,
     /// then stopped.
-    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase", default)]
     pub struct Refusals {
         refused: u32,
         trial_tried: bool,
@@ -1295,6 +1297,519 @@ pub async fn verified_genesis<Ev: Send + 'static>(
         .map(|_| g)
 }
 
+// ---------------------------------------------------------------------------
+// What a transaction does, in facts a page words (r4C-7, r4C-12)
+// ---------------------------------------------------------------------------
+
+/// What a page names a transaction by — its title, its rows — in facts it
+/// only words: the token's symbol and decimals read once here, the number
+/// decimal, the recipient. Nothing about a transaction is decided by a
+/// shell re-reading it.
+pub mod reading {
+    use std::collections::BTreeMap;
+
+    use alloy_primitives::U256;
+    use serde::{Deserialize, Serialize};
+    use serde_json::json;
+
+    #[cfg(feature = "bindings")]
+    use ts_rs::TS;
+
+    use super::shell::{self, Io};
+    use crate::app::token_registry::registry_token;
+    use crate::multisig::{self, Action, SafeTx};
+
+    const SYMBOL: &str = "0x95d89b41";
+    const DECIMALS: &str = "0x313ce567";
+    const EXEC_TRANSACTION: &str = "0x6a761202";
+
+    /// A token as an amount is said in it.
+    #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "OutsideTokenFacts"))]
+    pub struct TokenFacts {
+        /// The token contract, lowercase; `None`: the network's own coin.
+        pub token: Option<String>,
+        /// The registry's symbol, or the contract's own answer; `None` for
+        /// the network's coin (the shell's chain table names it) or when
+        /// the contract did not answer.
+        pub symbol: Option<String>,
+        /// `None`: the contract did not say (the amount is said raw).
+        pub decimals: Option<u32>,
+        /// The wallet's registry names it; else it is the contract's own word.
+        pub known: bool,
+    }
+
+    impl TokenFacts {
+        fn native() -> Self {
+            Self {
+                token: None,
+                symbol: None,
+                decimals: Some(18),
+                known: true,
+            }
+        }
+
+        /// `token` on `chain_id`: the registry's, else what was read of it.
+        pub fn of(chain_id: u64, token: Option<&str>, read: &BTreeMap<String, Self>) -> Self {
+            let Some(token) = token else {
+                return Self::native();
+            };
+            let key = token.to_ascii_lowercase();
+            if let Some(r) = u32::try_from(chain_id)
+                .ok()
+                .and_then(|c| registry_token(c, &key))
+            {
+                return Self {
+                    token: Some(key),
+                    symbol: Some(r.symbol.to_owned()),
+                    decimals: Some(r.decimals),
+                    known: true,
+                };
+            }
+            read.get(&key).cloned().unwrap_or(Self {
+                token: Some(key),
+                symbol: None,
+                decimals: None,
+                known: false,
+            })
+        }
+    }
+
+    /// One transfer a transaction makes.
+    #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "OutsideTransferFacts"))]
+    pub struct TransferFacts {
+        pub to: String,
+        /// Base units, decimal.
+        pub amount: String,
+        pub token: TokenFacts,
+    }
+
+    /// What a transaction does, as its one line says it ("Send 500 USDC",
+    /// "Add 0x12…34", "Cancel #7"): the core's reading, in facts.
+    #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+    #[serde(
+        tag = "kind",
+        rename_all = "camelCase",
+        rename_all_fields = "camelCase"
+    )]
+    #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "OutsideTxTitle"))]
+    pub enum TxTitle {
+        Send {
+            to: String,
+            /// Base units, decimal.
+            amount: String,
+            token: TokenFacts,
+        },
+        /// Several calls; `transfers`: each leg that sends money, when every
+        /// leg does (a batch with calls is read call by call).
+        Batch {
+            total: u32,
+            transfers_only: bool,
+            transfers: Vec<TransferFacts>,
+        },
+        Cancel,
+        AddOwner {
+            owner: String,
+        },
+        RemoveOwner {
+            owner: String,
+        },
+        SwapOwner {
+            old_owner: String,
+            new_owner: String,
+        },
+        ChangeThreshold {
+            threshold: String,
+        },
+        Rename {
+            name: String,
+        },
+        /// A call to another contract; `value`: the coin it sends, base units.
+        Call {
+            to: String,
+            value: String,
+        },
+        /// Not one Vela signs (`refusal`: the core's reason).
+        Unsupported {
+            refusal: Option<String>,
+        },
+    }
+
+    impl TxTitle {
+        /// Who it pays or calls, when that is one address.
+        pub fn recipient(&self) -> Option<&str> {
+            match self {
+                Self::Send { to, .. } | Self::Call { to, .. } => Some(to),
+                _ => None,
+            }
+        }
+    }
+
+    /// `review`'s action as its title, its tokens' facts from `read`.
+    pub fn title_of(
+        chain_id: u64,
+        review: &multisig::Review,
+        read: &BTreeMap<String, TokenFacts>,
+    ) -> TxTitle {
+        let Some(action) = &review.action else {
+            return TxTitle::Unsupported {
+                refusal: review.refusal.clone(),
+            };
+        };
+        let transfer = |token: &Option<String>, to: &str, amount: &str| TransferFacts {
+            to: to.to_owned(),
+            amount: amount.to_owned(),
+            token: TokenFacts::of(chain_id, token.as_deref(), read),
+        };
+        match action {
+            Action::Transfer { token, to, amount } => {
+                let t = transfer(token, to, amount);
+                TxTitle::Send {
+                    to: t.to,
+                    amount: t.amount,
+                    token: t.token,
+                }
+            }
+            Action::Batch { calls } => {
+                let transfers: Vec<TransferFacts> = calls
+                    .iter()
+                    .filter_map(|c| match &c.action {
+                        Action::Transfer { token, to, amount } => Some(transfer(token, to, amount)),
+                        _ => None,
+                    })
+                    .collect();
+                let transfers_only = transfers.len() == calls.len();
+                TxTitle::Batch {
+                    total: u32::try_from(calls.len()).unwrap_or(u32::MAX),
+                    transfers_only,
+                    transfers: if transfers_only {
+                        transfers
+                    } else {
+                        Vec::new()
+                    },
+                }
+            }
+            Action::Cancel => TxTitle::Cancel,
+            Action::AddOwner { owner, .. } => TxTitle::AddOwner {
+                owner: owner.clone(),
+            },
+            Action::RemoveOwner { owner, .. } => TxTitle::RemoveOwner {
+                owner: owner.clone(),
+            },
+            Action::SwapOwner {
+                old_owner,
+                new_owner,
+            } => TxTitle::SwapOwner {
+                old_owner: old_owner.clone(),
+                new_owner: new_owner.clone(),
+            },
+            Action::ChangeThreshold { threshold } => TxTitle::ChangeThreshold {
+                threshold: threshold.clone(),
+            },
+            Action::Rename { name } => TxTitle::Rename { name: name.clone() },
+            Action::Call { to, value, .. } => TxTitle::Call {
+                to: to.clone(),
+                value: value.clone(),
+            },
+        }
+    }
+
+    /// The name a multisig's record carries, when the core displays it.
+    pub fn shown_name(genesis: Option<&multisig::Genesis>) -> Option<String> {
+        genesis
+            .and_then(|g| g.name.clone())
+            .filter(|n| multisig::valid_name(n))
+    }
+
+    /// A number as written in a SafeTx (hex or decimal), decimal.
+    pub fn decimal(nonce: &str) -> String {
+        shell::quantity(nonce).map_or_else(|| nonce.to_owned(), |n| n.to_string())
+    }
+
+    /// The ERC-20 tokens `action` moves that the registry does not name.
+    fn unknown_tokens(chain_id: u64, action: Option<&Action>) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        let mut add = |a: &Action| {
+            if let Action::Transfer {
+                token: Some(token), ..
+            } = a
+            {
+                let key = token.to_ascii_lowercase();
+                let known = u32::try_from(chain_id)
+                    .ok()
+                    .and_then(|c| registry_token(c, &key))
+                    .is_some();
+                if !known && !out.contains(&key) {
+                    out.push(key);
+                }
+            }
+        };
+        match action {
+            Some(Action::Batch { calls }) => calls.iter().for_each(|c| add(&c.action)),
+            Some(a) => add(a),
+            None => {}
+        }
+        out
+    }
+
+    /// Hex bytes as UTF-8, up to the first NUL; nothing when empty or not UTF-8.
+    fn utf8(hex: &str) -> Option<String> {
+        let mut out = Vec::new();
+        for i in 0..hex.len() / 2 {
+            let b = u8::from_str_radix(hex.get(i * 2..i * 2 + 2)?, 16).ok()?;
+            if b == 0 {
+                break;
+            }
+            out.push(b);
+        }
+        let text = String::from_utf8(out).ok()?;
+        let text = text.trim();
+        (!text.is_empty()).then(|| text.to_owned())
+    }
+
+    /// An ABI `string` answer (or a legacy `bytes32` one), UTF-8 or nothing.
+    pub fn abi_string(hex: &str) -> Option<String> {
+        let data = hex.strip_prefix("0x").unwrap_or(hex);
+        if data.len() < 64 {
+            return None;
+        }
+        if data.len() < 128 {
+            return utf8(data.get(..64)?);
+        }
+        let length = usize::from_str_radix(data.get(64..128)?.trim_start_matches('0'), 16).ok();
+        let end = length.and_then(|l| l.checked_mul(2)?.checked_add(128).map(|e| (l, e)));
+        match end {
+            Some((l, end)) if l > 0 && l <= 4096 && end <= data.len() => utf8(data.get(128..end)?),
+            _ => utf8(data.get(..64)?),
+        }
+    }
+
+    /// The symbol and decimals of the tokens `action` moves that the
+    /// registry does not name, asked of their contracts on `chain_id`.
+    pub async fn read_tokens<Ev: Send + 'static>(
+        io: &Io<Ev>,
+        chain_id: u64,
+        action: Option<&Action>,
+    ) -> BTreeMap<String, TokenFacts> {
+        let mut out = BTreeMap::new();
+        for token in unknown_tokens(chain_id, action) {
+            let call = |data: &str| json!([{ "to": token, "data": data }, "latest"]);
+            let symbol = io
+                .rpc(chain_id, "eth_call", call(SYMBOL))
+                .await
+                .ok()
+                .and_then(|v| v.as_str().and_then(abi_string));
+            let decimals = io
+                .rpc(chain_id, "eth_call", call(DECIMALS))
+                .await
+                .ok()
+                .and_then(|v| v.as_str().and_then(shell::quantity))
+                .and_then(|d| u32::try_from(d).ok())
+                .filter(|d| *d <= 36);
+            out.insert(
+                token.clone(),
+                TokenFacts {
+                    token: Some(token),
+                    symbol,
+                    decimals,
+                    known: false,
+                },
+            );
+        }
+        out
+    }
+
+    // -- the rows of what was asked and done (r4C-12) -----------------------------
+
+    /// What a row was: "Approve #7 · Send 0.02 USDC to 0x…", "Reject #8",
+    /// "Execute #7" — or, when it is not a transaction the core read, what
+    /// was asked.
+    #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+    #[serde(
+        tag = "kind",
+        rename_all = "camelCase",
+        rename_all_fields = "camelCase"
+    )]
+    #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "OutsideRowLabel"))]
+    pub enum RowLabel {
+        /// Approve its number (decimal), doing `title`.
+        Approve {
+            #[cfg_attr(feature = "bindings", ts(type = "number"))]
+            chain_id: u64,
+            nonce: String,
+            title: TxTitle,
+        },
+        /// The same, said with whom it pays or calls.
+        ApproveTo {
+            #[cfg_attr(feature = "bindings", ts(type = "number"))]
+            chain_id: u64,
+            nonce: String,
+            title: TxTitle,
+            to: String,
+        },
+        /// The same-number cancellation.
+        Reject {
+            nonce: String,
+        },
+        /// `execTransaction` of a SafeTx this page has seen.
+        Execute {
+            nonce: String,
+        },
+        /// Typed data that is not a SafeTx the core reads.
+        SignTx,
+        /// A transaction the page has not matched to a SafeTx.
+        SendTx,
+        SwitchChain,
+        Other {
+            method: String,
+        },
+    }
+
+    /// Approving `review`'s transaction, said as its row is.
+    pub fn approve_label(
+        chain_id: u64,
+        review: &multisig::Review,
+        read: &BTreeMap<String, TokenFacts>,
+    ) -> RowLabel {
+        let nonce = decimal(&review.nonce);
+        if matches!(review.action, Some(Action::Cancel)) {
+            return RowLabel::Reject { nonce };
+        }
+        let title = title_of(chain_id, review, read);
+        match title.recipient().map(str::to_owned) {
+            Some(to) => RowLabel::ApproveTo {
+                chain_id,
+                nonce,
+                title,
+                to,
+            },
+            None => RowLabel::Approve {
+                chain_id,
+                nonce,
+                title,
+            },
+        }
+    }
+
+    fn quantity(s: &str) -> Option<U256> {
+        let h = s.strip_prefix("0x").unwrap_or(s);
+        if h.is_empty() {
+            return Some(U256::ZERO);
+        }
+        U256::from_str_radix(h, 16).ok()
+    }
+
+    /// The `execTransaction` call `data` sent to `to`, matched to a SafeTx
+    /// of `known` (multisig, SafeTx) field by field, its bytes too —
+    /// `execTransaction` carries no number: its number, decimal.
+    pub fn executed_nonce(to: &str, data: &str, known: &[(String, SafeTx)]) -> Option<String> {
+        let data = data.to_ascii_lowercase();
+        let body = data.strip_prefix(EXEC_TRANSACTION)?;
+        let word = |i: usize| -> Option<U256> {
+            U256::from_str_radix(body.get(i * 64..(i + 1) * 64)?, 16).ok()
+        };
+        // The call's own bytes, at the offset word 2 names.
+        let calldata = word(2).and_then(|o| usize::try_from(o).ok()).and_then(|o| {
+            let at = o.checked_mul(2)?;
+            let len =
+                usize::try_from(U256::from_str_radix(body.get(at..at + 64)?, 16).ok()?).ok()?;
+            body.get(at + 64..at + 64 + len.checked_mul(2)?)
+                .map(str::to_owned)
+        });
+        known.iter().find_map(|(safe, t)| {
+            let bytes = t.data.trim_start_matches("0x").to_ascii_lowercase();
+            let same = shell::same_address(safe, to)
+                && quantity(&t.to) == word(0)
+                && quantity(&t.value) == word(1)
+                && calldata.as_deref() == Some(bytes.as_str())
+                && Some(U256::from(t.operation)) == word(3)
+                && quantity(&t.safe_tx_gas) == word(4)
+                && quantity(&t.base_gas) == word(5)
+                && quantity(&t.gas_price) == word(6)
+                && quantity(&t.gas_token) == word(7)
+                && quantity(&t.refund_receiver) == word(8);
+            same.then(|| decimal(&t.nonce))
+        })
+    }
+
+    /// How a row ended, as its outcome column says it.
+    #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+    #[serde(
+        tag = "kind",
+        rename_all = "camelCase",
+        rename_all_fields = "camelCase"
+    )]
+    #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "OutsideRowOutcome"))]
+    pub enum RowOutcome {
+        /// Shown here, not handed to the wallet yet.
+        Waiting,
+        InWallet,
+        /// Signed (typed data).
+        Done,
+        /// Signed in the `eth_sign` form of Safe.
+        SignedHash,
+        Sent,
+        Switched,
+        Withdrawn,
+        /// Declined here.
+        Declined,
+        /// Declined in the wallet.
+        WalletDeclined,
+        /// Failed: the problem the wallet said, when it said one.
+        Failed {
+            problem: Option<super::WalletProblem>,
+        },
+        /// Signed here and kept: the mailbox has not taken it.
+        NotSent,
+    }
+
+    impl RowOutcome {
+        /// Said as trouble.
+        pub fn bad(&self) -> bool {
+            matches!(self, Self::Failed { .. } | Self::NotSent)
+        }
+    }
+
+    /// One row of the list on the page: a request from Vela, or what was done here.
+    #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "OutsideActivityRow"))]
+    pub struct ActivityRow {
+        pub id: String,
+        pub at: f64,
+        pub label: RowLabel,
+        pub outcome: RowOutcome,
+        pub bad: bool,
+    }
+
+    /// The review a page draws for a transaction (the one its link names, or
+    /// the one Vela asks for) in the one reading of the core.
+    #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "OutsideTxShown"))]
+    pub struct TxShown {
+        #[cfg_attr(feature = "bindings", ts(type = "number"))]
+        pub chain_id: u64,
+        pub safe: String,
+        /// Decimal.
+        pub nonce: String,
+        #[cfg_attr(feature = "bindings", ts(type = "unknown"))]
+        pub hashes: multisig::SafeTxHashes,
+        /// The name its record carries, when the core derives the address
+        /// from that record and displays the name.
+        pub name: Option<String>,
+        pub title: TxTitle,
+        /// The one review (§3.6); `None`: it could not be gathered now.
+        #[cfg_attr(feature = "bindings", ts(type = "unknown"))]
+        pub review: Option<serde_json::Value>,
+        /// The next number of the chain, decimal, when read.
+        pub chain_nonce: Option<String>,
+    }
+}
+
 // ===========================================================================
 // The connect page
 // ===========================================================================
@@ -1602,6 +2117,10 @@ pub mod page {
         /// The one review (§3.6), as `multisig_review` gives it.
         #[cfg_attr(feature = "bindings", ts(type = "unknown"))]
         pub review: Option<Value>,
+        /// What it does, in the facts its title is said with.
+        pub title: reading::TxTitle,
+        /// The name its record carries, when the core displays it.
+        pub name: Option<String>,
     }
 
     impl OutsideTxView {
@@ -1854,6 +2373,14 @@ pub mod page {
         /// its account has not approved: nothing to sign.
         #[serde(default)]
         pub request_enough: bool,
+        /// r7-11: the request's review, as the link's own is drawn (its
+        /// title and hashes at once, the review once gathered).
+        #[serde(default)]
+        pub request_review: Option<reading::TxShown>,
+        /// r4C-12: every row of the list, newest first: each request from
+        /// Vela (its id) and what was done here on the link's transaction.
+        #[serde(default)]
+        pub rows: Vec<reading::ActivityRow>,
     }
 
     // -- state -------------------------------------------------------------------
@@ -1989,6 +2516,10 @@ pub mod page {
         /// Vela's requests read (by safeTxHash, lowercase).
         request_reads: BTreeMap<String, RequestRead>,
         started: bool,
+        /// What was done here on the link's transaction, newest first.
+        own: Vec<reading::ActivityRow>,
+        /// The step its last row was logged for.
+        logged: OutsideStep,
     }
 
     /// Vela's request as this page read it ([`read_request`]).
@@ -1996,6 +2527,10 @@ pub mod page {
     struct RequestRead {
         genesis: Option<Genesis>,
         tx: Option<OutsideTxView>,
+        /// Its review, as the page draws it (r7-11).
+        shown: Option<reading::TxShown>,
+        /// The facts of the tokens it moves the registry does not name.
+        tokens: BTreeMap<String, reading::TokenFacts>,
     }
 
     impl PageState {
@@ -2038,6 +2573,160 @@ pub mod page {
         }
     }
 
+    /// r4C-12: how each row is said (what it was and how it ended): the
+    /// core reading what was asked, never the shell.
+    impl PageState {
+        /// Where a request from Vela ended, as its row says it.
+        fn entry_outcome(a: &ActivityEntry) -> reading::RowOutcome {
+            use reading::RowOutcome as O;
+            match a.outcome {
+                Some(Outcome::Done) => match a.method.as_str() {
+                    "eth_sendTransaction" => O::Sent,
+                    "wallet_switchEthereumChain" => O::Switched,
+                    _ if a.form == Some(EcdsaForm::EthSign) => O::SignedHash,
+                    _ => O::Done,
+                },
+                Some(Outcome::Withdrawn) => O::Withdrawn,
+                Some(Outcome::Rejected) => {
+                    if matches!(a.problem, Some(WalletProblem::Declined)) {
+                        O::WalletDeclined
+                    } else {
+                        O::Declined
+                    }
+                }
+                Some(Outcome::Failed) => O::Failed {
+                    problem: a.problem.clone(),
+                },
+                None if a.stage == Stage::Wallet => O::InWallet,
+                None => O::Waiting,
+            }
+        }
+
+        /// What a request from Vela was: the SafeTx it asks to approve, read
+        /// by the core (its tokens as read for it), or the SafeTx an
+        /// `execTransaction` runs, matched to one this page has seen.
+        fn entry_label(&self, a: &ActivityEntry) -> reading::RowLabel {
+            use reading::RowLabel as L;
+            match a.method.as_str() {
+                "eth_signTypedData_v4" => a
+                    .safe_tx
+                    .as_ref()
+                    .and_then(|t| {
+                        let review = multisig::review(t.chain_id, &t.safe, &t.tx).ok()?;
+                        let tokens = multisig::safe_tx_hash(t.chain_id, &t.safe, &t.tx)
+                            .ok()
+                            .and_then(|h| self.request_reads.get(&h.to_ascii_lowercase()))
+                            .map(|r| r.tokens.clone())
+                            .unwrap_or_default();
+                        Some(reading::approve_label(t.chain_id, &review, &tokens))
+                    })
+                    .unwrap_or(L::SignTx),
+                "eth_sendTransaction" => a
+                    .send
+                    .as_ref()
+                    .and_then(|send| {
+                        let mut known: Vec<(String, SafeTx)> = self
+                            .activity
+                            .iter()
+                            .filter_map(|x| x.safe_tx.as_ref())
+                            .map(|t| (t.safe.clone(), t.tx.clone()))
+                            .collect();
+                        if let Some(v) = self.view_tx() {
+                            known.push((v.safe.clone(), v.tx.clone()));
+                        }
+                        reading::executed_nonce(&send.to, &send.data, &known)
+                    })
+                    .map_or(L::SendTx, |nonce| L::Execute { nonce }),
+                "wallet_switchEthereumChain" => L::SwitchChain,
+                other => L::Other {
+                    method: other.to_owned(),
+                },
+            }
+        }
+
+        /// What was done here on the transaction of the link, logged once each
+        /// time its step ends somewhere new: approved, rejected, executed, failed.
+        fn log_step(&mut self, at: f64) {
+            use reading::{RowLabel as L, RowOutcome as O};
+            if self.step == self.logged {
+                return;
+            }
+            self.logged = self.step.clone();
+            let Some(v) = self.view_tx() else { return };
+            let nonce = v.item.nonce.clone();
+            let what = match &self.step {
+                OutsideStep::Approved { .. } => OutsideAction::Approve,
+                OutsideStep::Rejected => OutsideAction::Reject,
+                OutsideStep::Executed { .. } => OutsideAction::Execute,
+                OutsideStep::Failed { what, .. } => *what,
+                _ => return,
+            };
+            let label = match what {
+                OutsideAction::Execute => L::Execute { nonce },
+                OutsideAction::Reject => L::Reject { nonce },
+                OutsideAction::Approve | OutsideAction::ApproveOnChain => {
+                    if matches!(v.item.review.action, Some(multisig::Action::Cancel)) {
+                        L::Reject { nonce }
+                    } else {
+                        match v.title.recipient().map(str::to_owned) {
+                            Some(to) => L::ApproveTo {
+                                chain_id: v.chain_id,
+                                nonce,
+                                title: v.title.clone(),
+                                to,
+                            },
+                            None => L::Approve {
+                                chain_id: v.chain_id,
+                                nonce,
+                                title: v.title.clone(),
+                            },
+                        }
+                    }
+                }
+            };
+            let outcome = match &self.step {
+                OutsideStep::Executed { .. } => O::Sent,
+                OutsideStep::Failed { unsent: true, .. } => O::NotSent,
+                OutsideStep::Failed { problem, .. } => O::Failed {
+                    problem: problem.clone(),
+                },
+                _ => O::Done,
+            };
+            let id = format!("here-{at}-{}", self.own.len());
+            self.own.insert(
+                0,
+                reading::ActivityRow {
+                    id,
+                    at,
+                    bad: outcome.bad(),
+                    label,
+                    outcome,
+                },
+            );
+        }
+
+        /// Every row, newest first: the requests from Vela and what was done here.
+        fn rows(&self) -> Vec<reading::ActivityRow> {
+            let mut rows: Vec<reading::ActivityRow> = self
+                .activity
+                .iter()
+                .map(|a| {
+                    let outcome = Self::entry_outcome(a);
+                    reading::ActivityRow {
+                        id: a.id.clone(),
+                        at: a.at,
+                        label: self.entry_label(a),
+                        bad: outcome.bad(),
+                        outcome,
+                    }
+                })
+                .chain(self.own.iter().cloned())
+                .collect();
+            rows.sort_by(|x, y| y.at.total_cmp(&x.at));
+            rows
+        }
+    }
+
     #[derive(Default)]
     pub struct Model {
         state: Shared<PageState>,
@@ -2060,7 +2749,9 @@ pub mod page {
                 let io = Io::new(ctx);
                 let now = io.now().await;
                 lock(&state).clock = now;
-                f(io.clone(), state).await;
+                f(io.clone(), state.clone()).await;
+                let now = io.now().await;
+                lock(&state).log_step(now);
                 io.emit(Event::Changed);
             }),
         ])
@@ -2151,6 +2842,7 @@ pub mod page {
                         s.resumed = false;
                         s.fee = None;
                         s.balance = None;
+                        s.logged = OutsideStep::Idle;
                     }
                     flow(model, |io, st| async move { refresh(&io, &st).await })
                 }
@@ -2389,6 +3081,8 @@ pub mod page {
                 wallet_failure: s.wallet_failure.clone(),
                 request_genesis: request_read.and_then(|r| r.genesis.clone()),
                 request_enough,
+                request_review: request_read.and_then(|r| r.shown.clone()),
+                rows: s.rows(),
                 relay: relay::worst(
                     s.live
                         .keys()
@@ -2469,30 +3163,22 @@ pub mod page {
         resume(io, st, &link, used).await;
     }
 
-    /// A transaction a link names, read as this page reads it: the mailbox's
-    /// copy (believed only re-hashed to the link's hash), the chain's
-    /// members, what the chain approved, who can act for it (§3.5) and the
-    /// one review (§3.6) — or why it cannot be read now.
-    async fn read_link(
+    /// Who the members of `safe` are on `chain_id` now: read with its
+    /// genesis, or from its code once deployed; an undeployed one with no
+    /// genesis to say who they are cannot be read.
+    async fn read_members(
         io: &Io<Event>,
-        service: &Service,
-        seen: &Shared<OnChainSeen>,
-        link: &TxLink,
-    ) -> Result<OutsideTxView, OutsideLoad> {
-        let answer = service
-            .fetch_proposals(io, link.chain_id, &link.safe, false)
-            .await
-            .map_err(|e| OutsideLoad::Unavailable {
-                what: "mailbox".to_owned(),
-                detail: service_detail(&e),
-            })?;
-        let list = answer.map(|a| a.proposals).unwrap_or_default();
-        let p = match match_proposal(link, &list) {
-            Matched::Found(p) => *p,
-            Matched::Missing => return Err(OutsideLoad::Missing),
-            Matched::Mismatch => return Err(OutsideLoad::Mismatch),
+        chain_id: u64,
+        safe: &str,
+        genesis: Option<&Genesis>,
+    ) -> Result<ChainMembers, OutsideLoad> {
+        let link = TxLink {
+            chain_id,
+            safe: safe.to_owned(),
+            safe_tx_hash: String::new(),
+            for_members: Vec::new(),
         };
-        let genesis = verified_genesis(io, service, &link.safe).await;
+        let genesis = genesis.cloned();
         let chain = shell::Chain::default();
         let members = match &genesis {
             Some(g) => chain.read_members(io, link.chain_id, &link.safe, g).await,
@@ -2524,6 +3210,34 @@ pub mod page {
             what: "chain".to_owned(),
             detail: e.detail,
         })?;
+        Ok(members)
+    }
+
+    /// A transaction a link names, read as this page reads it: the mailbox's
+    /// copy (believed only re-hashed to the link's hash), the chain's
+    /// members, what the chain approved, who can act for it (§3.5) and the
+    /// one review (§3.6) — or why it cannot be read now.
+    async fn read_link(
+        io: &Io<Event>,
+        service: &Service,
+        seen: &Shared<OnChainSeen>,
+        link: &TxLink,
+    ) -> Result<OutsideTxView, OutsideLoad> {
+        let answer = service
+            .fetch_proposals(io, link.chain_id, &link.safe, false)
+            .await
+            .map_err(|e| OutsideLoad::Unavailable {
+                what: "mailbox".to_owned(),
+                detail: service_detail(&e),
+            })?;
+        let list = answer.map(|a| a.proposals).unwrap_or_default();
+        let p = match match_proposal(link, &list) {
+            Matched::Found(p) => *p,
+            Matched::Missing => return Err(OutsideLoad::Missing),
+            Matched::Mismatch => return Err(OutsideLoad::Mismatch),
+        };
+        let genesis = verified_genesis(io, service, &link.safe).await;
+        let members = read_members(io, link.chain_id, &link.safe, genesis.as_ref()).await?;
         let on_chain = if members.deployed {
             let open: Vec<String> = members
                 .owners
@@ -2576,10 +3290,15 @@ pub mod page {
             findings.clone(),
             review.as_ref(),
         );
+        let tokens = reading::read_tokens(io, link.chain_id, item.review.action.as_ref()).await;
+        let title = reading::title_of(link.chain_id, &item.review, &tokens);
+        let name = reading::shown_name(genesis.as_ref());
         Ok(OutsideTxView {
             chain_id: link.chain_id,
             safe: link.safe.clone(),
             tx: p.safe_tx.clone(),
+            title,
+            name,
             item,
             members,
             hashes,
@@ -2614,28 +3333,69 @@ pub mod page {
             .request_reads
             .insert(hash.clone(), RequestRead::default());
         let genesis = verified_genesis(io, &service, &request.safe).await;
+        let (chain_id, safe, tx) = (request.chain_id, request.safe.clone(), request.tx.clone());
+        let read = multisig::review(chain_id, &safe, &tx).ok();
+        let tokens = match &read {
+            Some(r) => reading::read_tokens(io, chain_id, r.action.as_ref()).await,
+            None => BTreeMap::new(),
+        };
+        let shown = |review: Option<Value>, chain_nonce: Option<String>| {
+            let r = read.as_ref()?;
+            Some(reading::TxShown {
+                chain_id,
+                safe: safe.clone(),
+                nonce: reading::decimal(&r.nonce),
+                hashes: multisig::safe_tx_hashes(chain_id, &safe, &tx).ok()?,
+                name: reading::shown_name(genesis.as_ref()),
+                title: reading::title_of(chain_id, r, &tokens),
+                review,
+                chain_nonce,
+            })
+        };
+        // Its title and hashes at once; the review once it is gathered.
         lock(st).request_reads.insert(
             hash.clone(),
             RequestRead {
                 genesis: genesis.clone(),
                 tx: None,
+                shown: shown(None, None),
+                tokens: tokens.clone(),
             },
         );
         let link = TxLink {
-            chain_id: request.chain_id,
-            safe: request.safe.to_ascii_lowercase(),
+            chain_id,
+            safe: safe.to_ascii_lowercase(),
             safe_tx_hash: hash.clone(),
             for_members: Vec::new(),
         };
-        if let Ok(view) = read_link(io, &service, &seen, &link).await {
-            lock(st).request_reads.insert(
-                hash,
-                RequestRead {
-                    genesis,
-                    tx: Some(view),
-                },
-            );
-        }
+        let (view, review, chain_nonce) = match read_link(io, &service, &seen, &link).await {
+            Ok(view) => {
+                let review = view.review.clone();
+                let nonce = view.members.nonce.to_string();
+                (Some(view), review, Some(nonce))
+            }
+            // Not in the mailbox yet (Vela asks before it proposes), or not
+            // readable there: what Vela asks is reviewed from the chain alone.
+            Err(_) => match read_members(io, chain_id, &safe, genesis.as_ref()).await {
+                Ok(members) => {
+                    let review = review_now(io, chain_id, &safe, &tx, &members, genesis.as_ref())
+                        .await
+                        .and_then(|r| serde_json::to_value(r).ok());
+                    (None, review, Some(members.nonce.to_string()))
+                }
+                Err(_) => (None, None, None),
+            },
+        };
+        let shown = shown(review, chain_nonce);
+        lock(st).request_reads.insert(
+            hash,
+            RequestRead {
+                genesis,
+                tx: view,
+                shown,
+                tokens,
+            },
+        );
     }
 
     fn service_detail(e: &ServiceFail) -> String {

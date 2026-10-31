@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-+HMh1YmrQzOlPe50T4UqL3+ho0/PWeSucPs4Dn34t2Q='; style-src 'sha256-+NrH9/fqK08U9EhxZCSgXYzB0WgRnfRlljXqLondTgs='; img-src data:; font-src data:; base-uri 'none'; form-action 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-6YdMH4eYVYiOVQBf0CstqsaCsLlkGOOIsrXrmsPxryo='; style-src 'sha256-quufbRp70X1ExcmuXCfRs4b8t+LxIlSp4KE2iwzX0OE='; img-src data:; font-src data:; base-uri 'none'; form-action 'none'" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Vela</title>
     <style>
@@ -1149,7 +1149,7 @@ details.fee-wrap[open] summary.fee .chevron { transform: rotate(90deg); }
 }
 
 .sheet-waiting .waiting-note { margin-top: var(--space-md); color: var(--color-fg-muted); }
-.sheet-waiting.sheet-ended .waiting-title { color: var(--color-fg-muted); }
+/* An ended session is said calmly, as any other card: never drawn as a failure (S4). */
 
 .pairing-code {
   display: flex;
@@ -1584,7 +1584,7 @@ window.VelaCS.i18n.register('en', {
   'ui.proofFailed': 'Not signed: the ceremony was cancelled, timed out, or this device holds no such key.',
   'ui.waitingForWallet': 'Waiting for the wallet',
   'ui.waitingNote': 'This page stays open for the wallet’s next request. You can go back to the wallet.',
-  'ui.sessionDone': 'Done — the wallet has what it asked for. You can close this page.',
+  'ui.sessionDone': 'The wallet has what it asked for. You can close this page.',
   'ui.sessionIdle': 'Nothing arrived for 5 minutes, so this page stopped waiting. Start again from the wallet.',
   'ui.openerSilent': 'The page that opened this one never sent a request.',
   'ui.sessionEnded': 'Session ended',
@@ -1988,7 +1988,7 @@ window.VelaCS.i18n.register('zh', {
   'ui.proofFailed': '没有签成：仪式被取消、超时，或这台设备上没有这把钥匙。',
   'ui.waitingForWallet': '等待钱包',
   'ui.waitingNote': '这一页会一直开着，等钱包的下一个请求。你可以回到钱包了。',
-  'ui.sessionDone': '完成 —— 钱包要的都已交回。可以关掉这一页了。',
+  'ui.sessionDone': '钱包要的都已交回。可以关掉这一页了。',
   'ui.sessionIdle': '5 分钟内没有新的请求，这一页已停止等待。请回到钱包重新发起。',
   'ui.openerSilent': '打开这一页的页面始终没有发来请求。',
   'ui.sessionEnded': '会话已结束',
@@ -2374,7 +2374,7 @@ window.VelaCS.i18n.register('zh-TW', {
   'ui.proofFailed': '未簽署：操作已取消、逾時，或這台裝置上沒有這把金鑰。',
   'ui.waitingForWallet': '正在等待錢包',
   'ui.waitingNote': '這一頁會保持開啟，等待錢包的下一個請求。你可以回到錢包了。',
-  'ui.sessionDone': '完成——錢包需要的都已交回。你可以關閉這一頁了。',
+  'ui.sessionDone': '錢包需要的都已交回。你可以關閉這一頁了。',
   'ui.sessionIdle': '5 分鐘內沒有收到任何請求，這一頁已停止等待。請從錢包重新開始。',
   'ui.openerSilent': '開啟這一頁的頁面始終沒有送出請求。',
   'ui.sessionEnded': '工作階段已結束',
@@ -2757,7 +2757,7 @@ window.VelaCS.i18n.register('zh-HK', {
   'ui.proofFailed': '未有簽署：操作已取消、逾時，或這部裝置上沒有這把鎖匙。',
   'ui.waitingForWallet': '正在等待錢包',
   'ui.waitingNote': '這一頁會保持開啟，等待錢包的下一個請求。你可以返回錢包了。',
-  'ui.sessionDone': '完成——錢包需要的都已交回。你可以關閉這一頁了。',
+  'ui.sessionDone': '錢包需要的都已交回。你可以關閉這一頁了。',
   'ui.sessionIdle': '5 分鐘內沒有收到任何請求，這一頁已停止等待。請從錢包重新開始。',
   'ui.openerSilent': '開啟這一頁的頁面始終沒有發出請求。',
   'ui.sessionEnded': '工作階段已結束',
@@ -3139,7 +3139,7 @@ window.VelaCS.i18n.register('ja', {
   'ui.proofFailed': '署名されませんでした：手続きがキャンセルされたか、タイムアウトしたか、この端末にそのキーがありません。',
   'ui.waitingForWallet': 'ウォレットを待っています',
   'ui.waitingNote': 'このページは、ウォレットからの次のリクエストのために開いたままになります。ウォレットに戻ってかまいません。',
-  'ui.sessionDone': '完了 — ウォレットは必要なものを受け取りました。このページは閉じてかまいません。',
+  'ui.sessionDone': 'ウォレットは必要なものを受け取りました。このページは閉じてかまいません。',
   'ui.sessionIdle': '5 分間何も届かなかったため、このページは待機を終了しました。ウォレットからもう一度始めてください。',
   'ui.openerSilent': 'このページを開いたページから、リクエストが届きませんでした。',
   'ui.sessionEnded': 'セッション終了',
@@ -3520,7 +3520,7 @@ window.VelaCS.i18n.register('ko', {
   'ui.proofFailed': '서명되지 않았습니다: 절차가 취소되었거나, 시간이 초과되었거나, 이 기기에 그런 키가 없습니다.',
   'ui.waitingForWallet': '지갑을 기다리는 중',
   'ui.waitingNote': '이 페이지는 지갑의 다음 요청을 위해 열린 채로 있습니다. 지갑으로 돌아가도 됩니다.',
-  'ui.sessionDone': '완료 — 지갑이 요청한 것을 모두 받았습니다. 이 페이지를 닫아도 됩니다.',
+  'ui.sessionDone': '지갑이 요청한 것을 모두 받았습니다. 이 페이지를 닫아도 됩니다.',
   'ui.sessionIdle': '5분 동안 아무것도 오지 않아 이 페이지가 기다리기를 멈췄습니다. 지갑에서 다시 시작하세요.',
   'ui.openerSilent': '이 페이지를 연 페이지가 요청을 보내지 않았습니다.',
   'ui.sessionEnded': '세션 종료',
@@ -3901,7 +3901,7 @@ window.VelaCS.i18n.register('vi', {
   'ui.proofFailed': 'Chưa ký: quá trình đã bị hủy, hết thời gian, hoặc thiết bị này không có khóa đó.',
   'ui.waitingForWallet': 'Đang chờ ví',
   'ui.waitingNote': 'Trang này vẫn mở để chờ yêu cầu tiếp theo của ví. Bạn có thể quay lại ví.',
-  'ui.sessionDone': 'Xong — ví đã nhận đủ những gì cần. Bạn có thể đóng trang này.',
+  'ui.sessionDone': 'Ví đã nhận đủ những gì cần. Bạn có thể đóng trang này.',
   'ui.sessionIdle': 'Không có yêu cầu nào trong 5 phút, nên trang này đã ngừng chờ. Hãy bắt đầu lại từ ví.',
   'ui.openerSilent': 'Trang đã mở trang này không hề gửi yêu cầu nào.',
   'ui.sessionEnded': 'Phiên đã kết thúc',
@@ -4282,7 +4282,7 @@ window.VelaCS.i18n.register('id', {
   'ui.proofFailed': 'Tidak ditandatangani: prosesnya dibatalkan, waktunya habis, atau perangkat ini tidak menyimpan kunci tersebut.',
   'ui.waitingForWallet': 'Menunggu dompet',
   'ui.waitingNote': 'Halaman ini tetap terbuka untuk permintaan dompet berikutnya. Anda bisa kembali ke dompet.',
-  'ui.sessionDone': 'Selesai — dompet sudah menerima yang dimintanya. Anda bisa menutup halaman ini.',
+  'ui.sessionDone': 'Dompet sudah menerima yang dimintanya. Anda bisa menutup halaman ini.',
   'ui.sessionIdle': 'Tidak ada yang masuk selama 5 menit, jadi halaman ini berhenti menunggu. Mulai lagi dari dompet.',
   'ui.openerSilent': 'Halaman yang membuka halaman ini tidak pernah mengirim permintaan.',
   'ui.sessionEnded': 'Sesi berakhir',
@@ -4663,7 +4663,7 @@ window.VelaCS.i18n.register('tr', {
   'ui.proofFailed': 'İmzalanmadı: süreç iptal edildi, zaman aşımına uğradı ya da bu cihazda böyle bir anahtar yok.',
   'ui.waitingForWallet': 'Cüzdan bekleniyor',
   'ui.waitingNote': 'Bu sayfa cüzdanın bir sonraki isteği için açık kalır. Cüzdana dönebilirsiniz.',
-  'ui.sessionDone': 'Tamam — cüzdan istediğini aldı. Bu sayfayı kapatabilirsiniz.',
+  'ui.sessionDone': 'Cüzdan istediğini aldı. Bu sayfayı kapatabilirsiniz.',
   'ui.sessionIdle': '5 dakika boyunca hiçbir şey gelmedi, bu yüzden bu sayfa beklemeyi bıraktı. Cüzdandan yeniden başlayın.',
   'ui.openerSilent': 'Bu sayfayı açan sayfa hiç istek göndermedi.',
   'ui.sessionEnded': 'Oturum sona erdi',
@@ -5044,7 +5044,7 @@ window.VelaCS.i18n.register('es-MX', {
   'ui.proofFailed': 'No se firmó: el proceso se canceló, se agotó el tiempo o este dispositivo no tiene esa llave.',
   'ui.waitingForWallet': 'Esperando a la billetera',
   'ui.waitingNote': 'Esta página sigue abierta para la próxima solicitud de la billetera. Ya puedes volver a la billetera.',
-  'ui.sessionDone': 'Listo — la billetera ya tiene lo que pidió. Puedes cerrar esta página.',
+  'ui.sessionDone': 'La billetera ya tiene lo que pidió. Puedes cerrar esta página.',
   'ui.sessionIdle': 'No llegó nada en 5 minutos, así que esta página dejó de esperar. Empieza de nuevo desde la billetera.',
   'ui.openerSilent': 'La página que abrió esta nunca envió una solicitud.',
   'ui.sessionEnded': 'Sesión terminada',
@@ -5425,7 +5425,7 @@ window.VelaCS.i18n.register('pt-BR', {
   'ui.proofFailed': 'Não assinado: o processo foi cancelado, o tempo acabou ou este aparelho não tem essa chave.',
   'ui.waitingForWallet': 'Aguardando a carteira',
   'ui.waitingNote': 'Esta página fica aberta para o próximo pedido da carteira. Você já pode voltar para a carteira.',
-  'ui.sessionDone': 'Concluído — a carteira já tem o que pediu. Você pode fechar esta página.',
+  'ui.sessionDone': 'A carteira já tem o que pediu. Você pode fechar esta página.',
   'ui.sessionIdle': 'Nada chegou em 5 minutos, então esta página parou de esperar. Comece de novo pela carteira.',
   'ui.openerSilent': 'A página que abriu esta nunca enviou uma solicitação.',
   'ui.sessionEnded': 'Sessão encerrada',
@@ -5807,7 +5807,7 @@ window.VelaCS.i18n.register('fr', {
   'ui.proofFailed': 'Non signé : l’opération a été annulée, a expiré, ou cet appareil ne détient pas cette clé.',
   'ui.waitingForWallet': 'En attente du portefeuille',
   'ui.waitingNote': 'Cette page reste ouverte pour la prochaine demande du portefeuille. Vous pouvez retourner au portefeuille.',
-  'ui.sessionDone': 'Terminé — le portefeuille a ce qu’il a demandé. Vous pouvez fermer cette page.',
+  'ui.sessionDone': 'Le portefeuille a ce qu’il a demandé. Vous pouvez fermer cette page.',
   'ui.sessionIdle': 'Rien n’est arrivé pendant 5 minutes, cette page a donc cessé d’attendre. Recommencez depuis le portefeuille.',
   'ui.openerSilent': 'La page qui a ouvert celle-ci n’a jamais envoyé de demande.',
   'ui.sessionEnded': 'Session terminée',
@@ -6190,7 +6190,7 @@ window.VelaCS.i18n.register('de', {
   'ui.proofFailed': 'Nicht signiert: Der Vorgang wurde abgebrochen oder hat zu lange gedauert, oder dieses Gerät hat keinen solchen Schlüssel.',
   'ui.waitingForWallet': 'Warte auf die Wallet',
   'ui.waitingNote': 'Diese Seite bleibt für die nächste Anfrage der Wallet geöffnet. Du kannst zur Wallet zurückkehren.',
-  'ui.sessionDone': 'Fertig — die Wallet hat, was sie angefordert hat. Du kannst diese Seite schließen.',
+  'ui.sessionDone': 'Die Wallet hat, was sie angefordert hat. Du kannst diese Seite schließen.',
   'ui.sessionIdle': '5 Minuten lang kam nichts an, daher wartet diese Seite nicht mehr. Starte erneut über die Wallet.',
   'ui.openerSilent': 'Die Seite, die diese geöffnet hat, hat nie eine Anfrage gesendet.',
   'ui.sessionEnded': 'Sitzung beendet',
@@ -6573,7 +6573,7 @@ window.VelaCS.i18n.register('ru', {
   'ui.proofFailed': 'Не подписано: операция отменена, время ожидания истекло или на этом устройстве нет такого ключа.',
   'ui.waitingForWallet': 'Ожидание кошелька',
   'ui.waitingNote': 'Эта страница остаётся открытой для следующего запроса кошелька. Можно вернуться в кошелёк.',
-  'ui.sessionDone': 'Готово — кошелёк получил то, что запрашивал. Эту страницу можно закрыть.',
+  'ui.sessionDone': 'Кошелёк получил то, что запрашивал. Эту страницу можно закрыть.',
   'ui.sessionIdle': 'За 5 минут ничего не пришло, поэтому страница перестала ждать. Начните заново из кошелька.',
   'ui.openerSilent': 'Страница, открывшая эту, так и не отправила запрос.',
   'ui.sessionEnded': 'Сеанс завершён',
@@ -6955,7 +6955,7 @@ window.VelaCS.i18n.register('it', {
   'ui.proofFailed': 'Non firmato: la procedura è stata annullata, il tempo è scaduto, oppure questo dispositivo non ha quella chiave.',
   'ui.waitingForWallet': 'In attesa del wallet',
   'ui.waitingNote': 'Questa pagina resta aperta per la prossima richiesta del wallet. Puoi già tornare al wallet.',
-  'ui.sessionDone': 'Fatto — il wallet ha ciò che ha chiesto. Puoi chiudere questa pagina.',
+  'ui.sessionDone': 'Il wallet ha ciò che ha chiesto. Puoi chiudere questa pagina.',
   'ui.sessionIdle': 'Non è arrivato nulla per 5 minuti, quindi questa pagina ha smesso di attendere. Ricomincia dal wallet.',
   'ui.openerSilent': 'La pagina che ha aperto questa non ha mai inviato una richiesta.',
   'ui.sessionEnded': 'Sessione terminata',
@@ -14679,16 +14679,35 @@ window.VelaCS = window.VelaCS || {};
   }
 
   function closing(reason) {
+    // Answered, taken, nothing refused or withdrawn: the page has finished.
+    var finished = session.answered && !lastGone && !window.__refused && session.why !== 'withdrawn';
+    if (finished && reason !== 'error') {
+      // Done, said once (round 7, S4): the card says it, the status line is
+      // quiet, and nothing about it is drawn as a failure.
+      say('');
+      waiting({ titleKey: 'ui.doneTitle', noteKey: 'ui.sessionDone' });
+      // The wallet has the answer: a page it opened closes itself, in every
+      // way the session ends — its goodbye, or its window gone before it
+      // could say one — rather than leaving a finished tab behind (the
+      // extension opened one per signature). A browser lets a script close
+      // only a window a script opened; anywhere else the card stays, and
+      // says the page may be closed.
+      setTimeout(function () { try { window.close(); } catch (e) { /* stays */ } }, closeAfterMs());
+      return;
+    }
     if (reason === 'error') {
-      say(session.endDetail || 'ui.walletGone');
       if (session.persistent) {
+        // Said once, on the card, in the calm style of an ended session.
+        say('');
         waiting({ titleKey: 'ui.sessionEnded', noteKey: session.endDetail || 'ui.walletGone' });
         slot.firstChild.classList.add('sheet-ended');
+      } else {
+        say(session.endDetail || 'ui.walletGone');
       }
       return;
     }
     if (reason === 'idle') {
-      say('ui.sessionIdle');
+      say('');
       waiting({ titleKey: 'ui.sessionEnded', noteKey: 'ui.sessionIdle' });
       slot.firstChild.classList.add('sheet-ended');
       return;
@@ -14710,18 +14729,6 @@ window.VelaCS = window.VelaCS || {};
       say('');
       waiting({ titleKey: 'ui.withdrawnTitle', noteKey: 'ui.answerNotTaken' });
       slot.firstChild.classList.add('sheet-ended');
-      return;
-    }
-    if (session.answered) {
-      // Done, said once (round 7): the card says it, the status line is
-      // quiet, and nothing about it is drawn as a failure.
-      say('');
-      waiting({ titleKey: 'ui.doneTitle', noteKey: 'ui.sessionDone' });
-      // The wallet has the answer and said goodbye: a page it opened closes
-      // itself, rather than leaving a finished tab behind (the extension
-      // opened one per signature). A browser lets a script close only a
-      // window a script opened; anywhere else the card stays, and says so.
-      if (reason === 'bye') setTimeout(function () { try { window.close(); } catch (e) { /* stays */ } }, closeAfterMs());
       return;
     }
     // Nothing was answered: the wallet stopped waiting (or never came).

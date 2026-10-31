@@ -24,10 +24,12 @@ import { checksumAddress } from '$lib/core/kernels';
 import { readMemberChanges } from './kernel';
 import { names } from './names.svelte';
 import { provenanceNote, type ProvenanceNote } from '$lib/services/token-provenance';
-import { executionInput, proposals, type ProposalItem } from './proposals.svelte';
-import { blockOf, preflight } from './preflight.svelte';
-import { multisig } from './store.svelte';
+import { proposals, type ProposalItem } from './proposals.svelte';
 import { whyText } from './execution-words';
+import { blockOf as wordedBlock, type TokenWords } from '../shell/proposal-failure';
+import { nativeSymbol } from '$lib/services/networks';
+import type { MultisigStanding } from '../generated/MultisigStanding';
+import type { MultisigWaitingNote } from '../generated/MultisigWaitingNote';
 import { readCall } from './call-review.svelte';
 import { readChainDoc } from '$lib/services/chain-doc';
 import type { SigningMessages } from '$lib/signing/messages';
@@ -108,8 +110,8 @@ interface Drawn {
 const who = (address: string) => memberWho(address, names.label(address));
 
 class WaitingRows {
-	/** The multisig `follow` was last told of: whose executions the rows were looked at for. */
-	#multisig = $state<string | null>(null);
+	/** A `short` look's token, worded once read (symbol, decimals). */
+	#tokens = $state<Record<string, TokenWords>>({});
 	/** Titles and amounts are read from the chain (a token's symbol): kept once read. */
 	#drawn = $state<Record<string, Drawn>>({});
 	/** The chain index's names of the networks this device lacks, once read. */
@@ -192,13 +194,18 @@ class WaitingRows {
 		multisigAddress: string | null = null
 	): void {
 		for (const item of proposals.open) this.#draw(m, item, multisigAddress, signing);
-		// r4-5: what is ready is looked at as it would run, so the row never
-		// says "Ready to execute" for one that cannot (the sheet's same looks).
-		this.#multisig = multisigAddress;
+		// r4-5: what is ready the machine looks at as it would run (each poll),
+		// so the row never says "Ready to execute" for one that cannot; a
+		// `short` look's token is worded here (its symbol and decimals).
 		for (const item of proposals.open) {
-			for (const input of readyInputs(multisigAddress, item)) {
-				void preflight.check(input, HOME_FRESH_MS);
-			}
+			const block = standingOf(item);
+			if (block?.kind !== 'blocked' || block.block.kind !== 'fails') continue;
+			const why = block.block.why as { kind?: string; token?: string | null } | null;
+			const token = why?.kind === 'short' ? (why.token ?? null) : undefined;
+			if (!token || this.#tokens[token.toLowerCase()]) continue;
+			void tokenInfo(item.chainId, token)
+				.catch(() => ({ symbol: '', decimals: 18 }))
+				.then((info) => (this.#tokens = { ...this.#tokens, [token.toLowerCase()]: info }));
 		}
 		for (const missing of proposals.missing) {
 			if (this.#asked.has(missing.chainId)) continue;
@@ -218,12 +225,7 @@ class WaitingRows {
 	group(m: MultisigMessages, toName?: string): ActivityGroupModel | null {
 		const open = proposals.open;
 		const missing = proposals.missing;
-		const said =
-			proposals.stale ||
-			proposals.offline ||
-			proposals.unreadable.length > 0 ||
-			proposals.historyUnreadable.length > 0 ||
-			proposals.loading;
+		const said = !!proposals.view?.waiting_note;
 		if (open.length === 0 && missing.length === 0 && !said) return null;
 		const rows: ActivityRowModel[] = open.map((item) => {
 			const drawn = this.#drawn[proposalRowId(item)];
@@ -240,7 +242,7 @@ class WaitingRows {
 				// ("1/2 approved"), which says "waiting for others" by itself.
 				subtitle: [
 					drawn?.source,
-					standing(m, item, this.#multisig),
+					standing(m, item, this.#tokens),
 					// r4b-6: proposals at one number — only one of them can run.
 					item.sameNonce.length > 0 ? m.status.conflict : null,
 					// r4a-1: the rule it meets and the one it leaves.
@@ -295,60 +297,16 @@ class WaitingRows {
 			});
 		}
 		const retry = () => ({ id: MULTISIG_RETRY, label: m.service.retry });
-		// r4b-15: offline is said as offline — with when the list shown was read.
-		if (proposals.offline) {
-			const at = proposals.readAt;
-			return {
-				label: m.panel.pending,
-				note: at
-					? fillTemplate(m.service.offlineSince, { time: clockTime(at) })
-					: m.service.offline,
-				rows
-			};
-		}
-		// The service away is said as itself, once for every network, with a
-		// Retry: its own schedule retries too, but nobody should have to wait.
-		if (proposals.unreachable) {
-			return { label: m.panel.pending, note: m.service.unreachableNote, action: retry(), rows };
-		}
-		// r4b-3: a network that did not answer is named, never "nothing waits".
-		const unread = proposals.unreadable;
-		if (unread.length > 0) {
-			return {
-				label: m.panel.pending,
-				note: fillTemplate(m.service.chainUnreachable, {
-					network: unread.map((id) => chainName(id)).join(', ')
-				}),
-				action: retry(),
-				rows
-			};
-		}
-		// r4b-11: the list kept from an earlier page, shown at once — said as
-		// the last known while it is checked (or while the mailbox is slow).
-		if (proposals.cached) {
-			return {
-				label: m.panel.pending,
-				note: fillTemplate(m.panel.lastKnown, { time: clockTime(proposals.cached.at) }),
-				rows
-			};
-		}
-		if (proposals.stale) return { label: m.panel.pending, note: m.panel.stale, rows };
-		// r4b-2: a history that could not be read is said, with Retry.
-		const history = proposals.historyUnreadable;
-		if (history.length > 0) {
-			return {
-				label: m.panel.pending,
-				note: fillTemplate(m.panel.historyUnreadable, {
-					network: history.map((id) => chainName(id)).join(', ')
-				}),
-				action: retry(),
-				rows
-			};
-		}
-		// r4b-11, r4D-9: still reading, nothing to show yet — said from the
-		// first frame, never an empty space the list then jumps into.
-		if (rows.length === 0 && proposals.loading) {
-			return { label: m.panel.pending, note: m.panel.checking, rows };
+		// What the group says of its list is the machine's one note (offline,
+		// the service away, a network unanswered, the list kept, stale, the
+		// history unread, still reading) — worded here, with a Retry where
+		// one helps.
+		const note = proposals.view?.waiting_note ?? null;
+		if (note) {
+			const said = noteText(m, note);
+			return noteRetries(note)
+				? { label: m.panel.pending, note: said, action: retry(), rows }
+				: { label: m.panel.pending, note: said, rows };
 		}
 		return { label: m.panel.pending, rows };
 	}
@@ -388,45 +346,94 @@ function memberChangeOf(m: MultisigMessages, item: ProposalItem): { rule: string
 	}
 }
 
-/** How long the home lets an execution's look stand: it is re-read on every poll. */
-const HOME_FRESH_MS = 60_000;
-
-/** A ready transaction's execution by each of this device's executors. */
-function readyInputs(multisigAddress: string | null, item: ProposalItem) {
-	if (item.status !== 'ready' || item.canExecute.length === 0) return [];
-	const account = multisigAddress ? multisig.find(multisigAddress) : undefined;
-	const members = account ? proposals.chain(item.chainId)?.members : undefined;
-	if (!account || !members) return [];
-	return item.canExecute.map((o) => executionInput(account, item, o, members));
-}
-
-/** "Can't run now — …" for a ready one that cannot, else `null`. */
-function blockedLine(
-	m: MultisigMessages,
-	item: ProposalItem,
-	multisigAddress: string | null
-): string | null {
-	const block = blockOf(readyInputs(multisigAddress, item).map((input) => preflight.get(input)));
-	if (!block) return null;
-	return fillTemplate(m.status.cannotRun, {
-		reason: block.kind === 'fails' ? whyText(m, block.why) : m.status.nobodyPays
-	});
+/** The machine's one word on where `item` stands (`standings`), if it said one. */
+function standingOf(item: ProposalItem): MultisigStanding | null {
+	const key = `${item.chainId}:${item.safeTxHash}`.toLowerCase();
+	const standings = proposals.view?.standings ?? {};
+	for (const [k, v] of Object.entries(standings)) if (k.toLowerCase() === key) return v;
+	return null;
 }
 
 /**
- * An Activity row's one word on where it stands (see `group`): a plain wait
- * is said by its count, which already says "waiting for others".
+ * An Activity row's one word on where it stands — the machine's (`standing`):
+ * a plain wait is said by its count, which already says "waiting for
+ * others"; a ready one that cannot run here says why ("Can't run now — the
+ * multisig holds 0.28 USDC, and this needs 0.5 USDC").
  */
-function standing(m: MultisigMessages, item: ProposalItem, multisigAddress: string | null): string {
-	// Signed here, not in the mailbox yet: the one thing to know about it.
-	if (item.unsent) return m.status.unsent;
-	// r4b-7: sent from here and may still land — not offered again.
-	if (item.executing) return m.status.executing;
-	if (item.status === 'queued') return m.status.queued;
-	if (item.status === 'ready') return blockedLine(m, item, multisigAddress) ?? m.status.ready;
-	if (item.canApprove.length > 0) return m.status.yourTurn;
-	// r4b-17: never "3/2".
-	return progressLine(m, item.approved, item.threshold);
+function standing(
+	m: MultisigMessages,
+	item: ProposalItem,
+	tokens: Record<string, TokenWords>
+): string {
+	const said = standingOf(item);
+	switch (said?.kind) {
+		case 'unsent':
+			return m.status.unsent;
+		case 'executing':
+			return m.status.executing;
+		case 'queued':
+			return m.status.queued;
+		case 'ready':
+			return m.status.ready;
+		case 'yourTurn':
+			return m.status.yourTurn;
+		case 'progress':
+			// r4b-17: never "3/2" — the machine caps it.
+			return progressLine(m, said.approved, said.threshold);
+		case 'blocked': {
+			if (said.block.kind === 'nobodyPays') {
+				return fillTemplate(m.status.cannotRun, { reason: m.status.nobodyPays });
+			}
+			const why = said.block.why as { kind?: string; token?: string | null } | null;
+			const token =
+				why?.kind === 'short'
+					? why.token
+						? (tokens[why.token.toLowerCase()] ?? null)
+						: { symbol: nativeSymbol(item.chainId), decimals: 18 }
+					: null;
+			return fillTemplate(m.status.cannotRun, {
+				reason: whyText(m, wordedBlock(said.block.why, token))
+			});
+		}
+		default:
+			// Not said yet (the first frame): its count.
+			return progressLine(m, Math.min(item.approved, item.threshold), item.threshold);
+	}
+}
+
+/** The waiting group's note, worded. */
+function noteText(m: MultisigMessages, note: MultisigWaitingNote): string {
+	switch (note.kind) {
+		case 'offline':
+			return note.since
+				? fillTemplate(m.service.offlineSince, { time: clockTime(note.since) })
+				: m.service.offline;
+		case 'unreachable':
+			return m.service.unreachableNote;
+		case 'chainUnreachable':
+			return fillTemplate(m.service.chainUnreachable, {
+				network: note.chain_ids.map((id) => chainName(id)).join(', ')
+			});
+		case 'lastKnown':
+			return fillTemplate(m.panel.lastKnown, { time: clockTime(note.at) });
+		case 'stale':
+			return m.panel.stale;
+		case 'historyUnreadable':
+			return fillTemplate(m.panel.historyUnreadable, {
+				network: note.chain_ids.map((id) => chainName(id)).join(', ')
+			});
+		case 'checking':
+			return m.panel.checking;
+	}
+}
+
+/** The note comes with a Retry (`WaitingNote::retry`). */
+function noteRetries(note: MultisigWaitingNote): boolean {
+	return (
+		note.kind === 'unreachable' ||
+		note.kind === 'chainUnreachable' ||
+		note.kind === 'historyUnreadable'
+	);
 }
 
 export const waitingRows = new WaitingRows();

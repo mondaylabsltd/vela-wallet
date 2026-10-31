@@ -242,7 +242,7 @@ window.VelaCS.i18n.register('it', {
   'ui.proofFailed': 'Non firmato: la procedura è stata annullata, il tempo è scaduto, oppure questo dispositivo non ha quella chiave.',
   'ui.waitingForWallet': 'In attesa del wallet',
   'ui.waitingNote': 'Questa pagina resta aperta per la prossima richiesta del wallet. Puoi già tornare al wallet.',
-  'ui.sessionDone': 'Fatto — il wallet ha ciò che ha chiesto. Puoi chiudere questa pagina.',
+  'ui.sessionDone': 'Il wallet ha ciò che ha chiesto. Puoi chiudere questa pagina.',
   'ui.sessionIdle': 'Non è arrivato nulla per 5 minuti, quindi questa pagina ha smesso di attendere. Ricomincia dal wallet.',
   'ui.openerSilent': 'La pagina che ha aperto questa non ha mai inviato una richiesta.',
   'ui.sessionEnded': 'Sessione terminata',

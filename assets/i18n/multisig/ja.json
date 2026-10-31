@@ -95,6 +95,7 @@
     "share": "共有",
     "reject": "拒否",
     "withdraw": "取り下げる",
+    "dontPropose": "提案しない",
     "rejectHint": "拒否すると、同じ番号で取り消し取引を提案します。これにも {{threshold}} 人の承認が必要で、先に実行された方が有効になります。",
     "cancelPending": "この取引の取り消しが承認待ちです。",
     "executing": "実行中…",
@@ -163,6 +164,7 @@
     "notNeeded": "不要",
     "sendLink": "リンクを送る",
     "approvesInVela": "自分のデバイスの Vela で承認します：{{names}}。このリンクを送ってください。",
+    "eitherWay": "承認方法はまだわかりません：{{names}}。このリンクで Vela から承認するか、外部ウォレット用リンクで自分のウォレットから承認できます。",
     "contractMembers": "{{names}}：スマートコントラクトアカウントは自身のアプリ（別の Safe など）から承認します。Vela はまだこれらの承認を受け取れません。",
     "rejectCancel": "キャンセル",
     "noOutsideSigner": "このデバイスにメンバーはおらず、全員が自分のデバイスの Vela で承認します — メンバーの誰かに提案を頼んでください",
@@ -260,7 +262,10 @@
     "firstRunFund": "資金を追加",
     "firstRunFundNote": "{{network}} のアドレス宛に送金します。",
     "firstRunCost": "最初の送金で {{network}} 上のセットアップも行われます。一度だけのネットワーク手数料で、その送金と一緒に支払い、実行前に表示されます。",
-    "firstRunDismiss": "OK"
+    "firstRunDismiss": "OK",
+    "otherSpace": "このデバイスには {{space}} のネットワークもあります：{{networks}}。そこで作成するには、先に {{space}} に切り替えてください。",
+    "draftKept": "前回の入力から再開しています。",
+    "discardDraft": "最初からやり直す"
    },
    "invite": {
     "body": "メンバーはコードを読み取るかリンクを開くだけ。ネットワークとメンバー名つきで Vela にマルチシグが追加されます。",
@@ -523,7 +528,8 @@
     "removed": "削除",
     "thresholdChanged": "必要な承認数：当初 {{was}}、現在 {{is}}。",
     "undeployedOn": "{{network}} にはまだデプロイされていません。そこでは作成時のメンバーで始まります。",
-    "renameNotRecorded": "マルチシグサービスに記録が保存されると名前を変更できます。"
+    "renameNotRecorded": "マルチシグサービスに記録が保存されると名前を変更できます。",
+    "renamePending": "記録が {{network}} に届くと名前を変更できます。時間がかかることがありますが、その間も何も失われません。"
    },
    "service": {
     "customNote": "カスタムのマルチシグサービスを使用中（{{host}}）",

@@ -89,16 +89,6 @@ export interface MemberInfo {
 }
 
 /**
- * Whether another device can find it by its address: the service hands its
- * genesis out (`shared`), or the registry holds it (a row written before
- * `shared` existed says only `recorded`). The machine's rows say it
- * (`row.shared`); this reads a record handed around on its own.
- */
-export function isShared(account: Pick<MultisigAccount, 'shared' | 'recorded'>): boolean {
-	return account.shared === true || account.recorded;
-}
-
-/**
  * The accounts machine as the facade drives it: its view, its events, and a
  * word each time the view moves (`shell/machine.svelte.ts`; a test's stand-in).
  */
@@ -212,6 +202,47 @@ class MultisigStore {
 				sameAddress((r.account as MultisigAccount).address, address)
 			) ?? null
 		);
+	}
+
+	/**
+	 * Whether another device can find it by its address (the machine's
+	 * `row.shared`); `null` until the machine has read the store — nothing is
+	 * said of it then.
+	 */
+	shared(address: string): boolean | null {
+		return this.row(address)?.shared ?? null;
+	}
+
+	/**
+	 * §3.5: who can act for `address` on `chainId`, read now unless this
+	 * session already has (or is reading) its verdict — also a network it is
+	 * not used on yet. A network that does not answer is no verdict: asked
+	 * again on the next call. The machine's `check_on`; read the answer with
+	 * {@link verdictOn}.
+	 */
+	checkOn(address: string, chainId: number): void {
+		this.send({ type: 'check_on', address, chain_id: chainId });
+	}
+
+	/**
+	 * This session's verdict for `address` on `chainId` (the machine's row):
+	 * `checked` — the findings are current (`[]`: only its members act for
+	 * it); `checking` — being read now; neither — not read, or the network did
+	 * not answer (no verdict). Reactive.
+	 */
+	verdictOn(
+		address: string,
+		chainId: number
+	): { checked: boolean; checking: boolean; findings: Finding[] } {
+		const row = this.row(address);
+		const findings = ((row?.account as MultisigAccount | undefined)?.findings ?? []).filter(
+			(f) => f.chainId === chainId
+		);
+		return {
+			checked: row?.checked_on.includes(chainId) ?? false,
+			checking: row?.checking_on.includes(chainId) ?? false,
+			findings
+		};
 	}
 
 	/** The active multisig, or `null` when the wallet shows a Vela account. */
@@ -346,6 +377,14 @@ class MultisigStore {
 		{ typed = false }: { typed?: boolean } = {}
 	): void {
 		this.send({ type: 'name_members', address, members: known, typed });
+	}
+
+	/**
+	 * r4D-8: its invite was handed on from this device (the link copied or
+	 * shared, the code shown) — its first steps say so (`row.invite_shared`).
+	 */
+	inviteShared(address: string): void {
+		this.send({ type: 'invite_shared', address });
 	}
 
 	/** r4D-8: show (or, `false`, stop showing) its first steps on the home. */

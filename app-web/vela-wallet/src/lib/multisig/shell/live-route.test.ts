@@ -6,7 +6,7 @@
  */
 import '$lib/i18n/wasm-init.server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { SafeTx } from './kernel';
+import type { SafeTx } from '../core/kernel';
 
 const storage = new Map<string, string>();
 vi.stubGlobal('localStorage', {
@@ -16,8 +16,9 @@ vi.stubGlobal('localStorage', {
 });
 
 const onPage = vi.fn(async () => ({ owner: 'page' }));
-vi.mock('./page-approval.svelte', () => ({
-	approveOnPage: (...args: unknown[]) => onPage(...(args as []))
+vi.mock('../core/page-approval.svelte', () => ({
+	approveOnPage: (...args: unknown[]) => onPage(...(args as [])),
+	PageApprovalError: class extends Error {}
 }));
 const inVela = vi.fn(async () => {
 	throw new Error('signed in Vela');
@@ -27,8 +28,8 @@ vi.mock('$lib/signing/sign-challenge', async (original) => ({
 	signChallenge: (...args: unknown[]) => inVela(...(args as []))
 }));
 
-const { signApproval } = await import('./owners');
-const { VenueBlockedError } = await import('$lib/signing/sign-challenge');
+const { liveDeps } = await import('./live');
+const deps = liveDeps({ peer: {} as never, notice: () => {} });
 
 const KEY = '04' + '11'.repeat(64);
 const TX: SafeTx = {
@@ -61,7 +62,32 @@ function account(domain: string, venue: unknown) {
 
 function keep(record: unknown) {
 	storage.set('vela.accounts', JSON.stringify([record]));
-	return record as Parameters<typeof signApproval>[0];
+	return record as { address: string };
+}
+
+/** The machine's passkey operation for an approval, as the shell runs it. */
+function signApproval(
+	owner: { address: string },
+	chainId: number,
+	hash: string,
+	subject: { multisig: string; name?: string; tx: SafeTx }
+) {
+	return deps.passkey(
+		{
+			type: 'passkey',
+			owner: owner.address,
+			chain_id: chainId,
+			challenge: '0x' + '33'.repeat(32),
+			purpose: {
+				kind: 'approve',
+				multisig: subject.multisig,
+				safe_tx_hash: hash,
+				name: subject.name ?? null,
+				tx: subject.tx
+			}
+		} as never,
+		new AbortController().signal
+	);
 }
 
 beforeEach(() => {
@@ -100,20 +126,23 @@ describe('a member approves where it reviews and signs', () => {
 
 	it("in Vela: the member's own passkey prompt, as before", async () => {
 		const owner = keep(account('getvela.app', { type: 'in_vela' }));
-		await expect(
-			signApproval(owner, 5042002, HASH, { multisig: '0x' + '44'.repeat(20), tx: TX })
-		).rejects.toThrow('signed in Vela');
+		const answer = await signApproval(owner, 5042002, HASH, {
+			multisig: '0x' + '44'.repeat(20),
+			tx: TX
+		});
+		expect(answer.type).toBe('passkey_failed');
 		expect(inVela).toHaveBeenCalledTimes(1);
 		expect(onPage).not.toHaveBeenCalled();
 	});
 
 	it("nowhere, with the core's reason, when nothing here can reach the member's keys", async () => {
 		const owner = keep(account('sign.example.com', { type: 'in_vela' }));
-		const error = await signApproval(owner, 5042002, HASH, {
+		const answer = await signApproval(owner, 5042002, HASH, {
 			multisig: '0x' + '44'.repeat(20),
 			tx: TX
-		}).catch((e: unknown) => e);
-		expect(error).toBeInstanceOf(VenueBlockedError);
+		});
+		expect(answer.type).not.toBe('asserted');
+		expect(answer.type).not.toBe('page_approved');
 		expect(onPage).not.toHaveBeenCalled();
 		expect(inVela).not.toHaveBeenCalled();
 	});

@@ -29,7 +29,9 @@ export function emptyView(): OutsidePageView {
 		relay: { kind: 'up' },
 		walletFailure: null,
 		requestGenesis: null,
-		requestEnough: false
+		requestEnough: false,
+		requestReview: null,
+		rows: []
 	};
 }
 

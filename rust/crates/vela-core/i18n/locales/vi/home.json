@@ -169,6 +169,7 @@
         "share": "Chia sẻ",
         "reject": "Từ chối",
         "withdraw": "Rút lại",
+        "dontPropose": "Không đề xuất",
         "rejectHint": "Từ chối là đề xuất hủy với cùng số thứ tự; việc hủy cũng cần {{threshold}} lượt duyệt, và giao dịch nào được thực thi trước sẽ có hiệu lực.",
         "cancelPending": "Một yêu cầu hủy giao dịch này đang chờ duyệt.",
         "executing": "Đang thực thi…",
@@ -237,6 +238,7 @@
         "notNeeded": "Không cần",
         "sendLink": "Gửi liên kết",
         "approvesInVela": "Phê duyệt trong Vela trên thiết bị của họ: {{names}}. Hãy gửi họ liên kết này.",
+        "eitherWay": "Chưa rõ họ phê duyệt bằng cách nào: {{names}}. Họ có thể phê duyệt trong Vela bằng liên kết này, hoặc bằng ví riêng qua liên kết ví bên ngoài.",
         "contractMembers": "{{names}}: tài khoản hợp đồng thông minh phê duyệt từ ứng dụng riêng (ví dụ một Safe khác). Vela chưa thể thu thập những phê duyệt đó.",
         "rejectCancel": "Hủy",
         "noOutsideSigner": "không có thành viên nào trên thiết bị này, và mọi thành viên đều phê duyệt trong Vela trên thiết bị của họ — hãy nhờ một người đề xuất",
@@ -334,7 +336,10 @@
         "firstRunFund": "Nạp tiền",
         "firstRunFundNote": "Gửi đến địa chỉ của nó trên {{network}}.",
         "firstRunCost": "Lần chuyển ra đầu tiên cũng thiết lập nó trên {{network}}: phí mạng một lần, trả cùng lần chuyển đó và hiển thị trước khi thực hiện.",
-        "firstRunDismiss": "Đã hiểu"
+        "firstRunDismiss": "Đã hiểu",
+        "otherSpace": "Thiết bị này còn có trong {{space}}: {{networks}}. Để tạo multisig trên một trong số đó, hãy chuyển sang {{space}} trước.",
+        "draftKept": "Tiếp tục từ chỗ bạn đã dừng.",
+        "discardDraft": "Bắt đầu lại"
       },
       "invite": {
         "body": "Thành viên quét mã hoặc mở liên kết: multisig được thêm vào Vela cùng mạng và tên các thành viên.",
@@ -597,7 +602,8 @@
         "removed": "Đã xóa",
         "thresholdChanged": "Số lượt duyệt cần: ban đầu {{was}}, hiện tại {{is}}.",
         "undeployedOn": "Chưa được triển khai trên {{network}}: ở đó nó sẽ bắt đầu với các thành viên ban đầu.",
-        "renameNotRecorded": "Có thể đổi tên khi bản ghi của nó đã được lưu ở dịch vụ multisig."
+        "renameNotRecorded": "Có thể đổi tên khi bản ghi của nó đã được lưu ở dịch vụ multisig.",
+        "renamePending": "Có thể đổi tên khi bản ghi của nó đến {{network}}. Việc này có thể mất một lúc — trong lúc đó không mất gì cả."
       },
       "service": {
         "customNote": "Đang dùng dịch vụ đa chữ ký tùy chỉnh ({{host}})",

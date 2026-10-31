@@ -1,12 +1,13 @@
 /**
  * r4-5: the home never says "Ready to execute" for a transaction that cannot
- * run — it says "Can't run now — <why>", from the looks the sheet shares.
+ * run — it says "Can't run now — <why>", the machine's standing worded (the
+ * rule: app_multisig_proposals.rs `a_ready_one_that_would_fail_says_why_on_the_home`).
  */
 import { describe, expect, it, vi } from 'vitest';
 
 const SAFE = '0x00000000000000000000000000000000000000cc';
 const ME = '0x00000000000000000000000000000000000000aa';
-const look = vi.hoisted(() => ({ preview: null as unknown }));
+const said = vi.hoisted(() => ({ standing: null as unknown }));
 
 vi.mock('./display', () => ({
 	actionTitle: async () => 'Send 0.5 USDC',
@@ -17,18 +18,16 @@ vi.mock('./display', () => ({
 }));
 vi.mock('$lib/core/kernels', () => ({ checksumAddress: (address: string) => address }));
 vi.mock('$lib/flows/marks', () => ({ chainLogoURL: () => '' }));
-vi.mock('$lib/services/networks', () => ({ chainName: () => 'Arc Testnet' }));
+vi.mock('$lib/services/networks', () => ({
+	chainName: () => 'Arc Testnet',
+	nativeSymbol: () => 'USDC'
+}));
 vi.mock('$lib/wallet/fixtures', () => ({ chainColor: () => 'var(--color-chain-arc)' }));
-vi.mock('./store.svelte', () => ({
-	multisig: { find: (a: string) => (a === SAFE ? { address: SAFE, genesis: {} } : undefined) }
-}));
-vi.mock('./preflight.svelte', async (importOriginal) => ({
-	...(await importOriginal<typeof import('./preflight.svelte')>()),
-	preflight: { get: () => look.preview, check: async () => look.preview }
-}));
-
 const { proposals } = await import('./proposals.svelte');
 const { waitingRows } = await import('./activity.svelte');
+vi.spyOn(proposals, 'view', 'get').mockImplementation(
+	() => ({ standings: { '5042002:0xa': said.standing }, waiting_note: null }) as never
+);
 
 const m = {
 	status: {
@@ -78,17 +77,14 @@ describe('a ready transaction on the home (r4-5)', () => {
 		] as never;
 		waitingRows.follow(m, null, SAFE);
 
-		look.preview = null;
-		expect(subtitle(), 'not looked at yet: as it was').toContain('Ready to execute');
+		said.standing = { kind: 'ready' };
+		expect(subtitle()).toContain('Ready to execute');
 
-		look.preview = {
-			kind: 'fails',
-			why: {
-				kind: 'short',
-				symbol: 'USDC',
-				decimals: 18,
-				have: 28n * 10n ** 16n,
-				need: 5n * 10n ** 17n
+		said.standing = {
+			kind: 'blocked',
+			block: {
+				kind: 'fails',
+				why: { kind: 'short', token: null, have: '280000000000000000', need: '500000000000000000' }
 			}
 		};
 		expect(subtitle()).toContain(
@@ -96,14 +92,7 @@ describe('a ready transaction on the home (r4-5)', () => {
 		);
 		expect(subtitle()).not.toContain('Ready to execute');
 
-		look.preview = {
-			kind: 'priced',
-			calls: [],
-			fee: { amount: 1n, recipient: '0xfe' },
-			balance: 0n,
-			canPay: false,
-			setup: { multisig: false, members: [], executor: false, amount: null }
-		};
+		said.standing = { kind: 'blocked', block: { kind: 'nobodyPays' } };
 		expect(subtitle()).toContain(
 			'Can’t run now — no account on this device can pay the network fee'
 		);

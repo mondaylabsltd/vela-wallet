@@ -1114,7 +1114,7 @@ details.fee-wrap[open] summary.fee .chevron { transform: rotate(90deg); }
 }
 
 .sheet-waiting .waiting-note { margin-top: var(--space-md); color: var(--color-fg-muted); }
-.sheet-waiting.sheet-ended .waiting-title { color: var(--color-fg-muted); }
+/* An ended session is said calmly, as any other card: never drawn as a failure (S4). */
 
 .pairing-code {
   display: flex;

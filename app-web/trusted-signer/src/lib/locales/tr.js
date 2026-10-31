@@ -242,7 +242,7 @@ window.VelaCS.i18n.register('tr', {
   'ui.proofFailed': 'İmzalanmadı: süreç iptal edildi, zaman aşımına uğradı ya da bu cihazda böyle bir anahtar yok.',
   'ui.waitingForWallet': 'Cüzdan bekleniyor',
   'ui.waitingNote': 'Bu sayfa cüzdanın bir sonraki isteği için açık kalır. Cüzdana dönebilirsiniz.',
-  'ui.sessionDone': 'Tamam — cüzdan istediğini aldı. Bu sayfayı kapatabilirsiniz.',
+  'ui.sessionDone': 'Cüzdan istediğini aldı. Bu sayfayı kapatabilirsiniz.',
   'ui.sessionIdle': '5 dakika boyunca hiçbir şey gelmedi, bu yüzden bu sayfa beklemeyi bıraktı. Cüzdandan yeniden başlayın.',
   'ui.openerSilent': 'Bu sayfayı açan sayfa hiç istek göndermedi.',
   'ui.sessionEnded': 'Oturum sona erdi',
