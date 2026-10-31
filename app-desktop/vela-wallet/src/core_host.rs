@@ -56,6 +56,11 @@ where
     core: Core<A>,
     pending: HashMap<u64, Request<<A::Effect as SplitEffect>::Op>>,
     next_id: u64,
+    /// The machine asked for a render since [`Self::take_rendered`] last
+    /// looked (core-perf-1, `vela_core::app::view_host`): for a machine that
+    /// promises a render on every change
+    /// ([`SplitEffect::RENDERS_EVERY_CHANGE`]), no render means no new view.
+    rendered: bool,
 }
 
 impl<A> CoreHost<A>
@@ -70,6 +75,7 @@ where
             core: Core::new(),
             pending: HashMap::new(),
             next_id: 0,
+            rendered: false,
         }
     }
 
@@ -104,6 +110,20 @@ where
         }
     }
 
+    /// Whether the machine rendered since the last call, and forget it.
+    pub fn take_rendered(&mut self) -> bool {
+        std::mem::take(&mut self.rendered)
+    }
+
+    /// Whether the view must be built again after the answers since the
+    /// last [`Self::take_rendered`]: always for a machine that makes no
+    /// promise, and only after a render for one that renders every change —
+    /// the generic host's rule (`ViewHost::needs_view`), in-process.
+    pub fn view_may_have_changed(&mut self) -> bool {
+        let rendered = self.take_rendered();
+        rendered || !<A::Effect as SplitEffect>::RENDERS_EVERY_CHANGE
+    }
+
     /// Whether anything is still outstanding. Used by the flow screens to
     /// decide whether a pump has drained, not to decide anything the core owns.
     pub fn is_idle(&self) -> bool {
@@ -113,19 +133,22 @@ where
     fn collect(&mut self, effects: Vec<A::Effect>) -> Vec<Pending<<A::Effect as SplitEffect>::Op>> {
         let mut out = Vec::new();
         for effect in effects {
-            // `Effect::Render` falls out here as `None`. The caller re-renders
-            // unconditionally after a pump, so a render needs no separate
-            // handling — but it must still be SPLIT OFF, or it would be queued
-            // as an operation no executor can perform.
-            if let Some(request) = effect.into_shell() {
-                self.next_id += 1;
-                let id = self.next_id;
-                out.push(Pending {
-                    id,
-                    operation: request.operation.clone(),
-                });
-                self.pending.insert(id, request);
-            }
+            // `Effect::Render` falls out here as `None`: it is not an
+            // operation and must be SPLIT OFF, or it would be queued as one
+            // no executor can perform. It is remembered, so a resident can
+            // skip building the view of a machine that did not render
+            // (`ResidentCore::pump`).
+            let Some(request) = effect.into_shell() else {
+                self.rendered = true;
+                continue;
+            };
+            self.next_id += 1;
+            let id = self.next_id;
+            out.push(Pending {
+                id,
+                operation: request.operation.clone(),
+            });
+            self.pending.insert(id, request);
         }
         out
     }
@@ -159,3 +182,35 @@ where
 // waiting for a finger on a security key. That is bounded by the CTAPHID
 // timeout in `ctap::usb`, which answers with a failure result rather than
 // leaving the core waiting — the same shape every other failure takes.
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use vela_core::app::activity_feed::{ActivityFeed, Event as FeedEvent};
+    use vela_core::app::fee_tier_pref::{Event as PrefEvent, FeeTierPref};
+
+    /// The feed promises a render on every change, so its view is rebuilt
+    /// only after an answer that rendered — and the promise is the core's,
+    /// not a guess here.
+    #[test]
+    fn a_machine_that_renders_every_change_is_rebuilt_only_after_a_render() {
+        let mut feed = CoreHost::<ActivityFeed>::new();
+        assert!(!feed.view_may_have_changed(), "nothing answered yet");
+        let _ = feed.dispatch(FeedEvent::AccountSwitched {
+            address: "0x88cca0eedbf2c4426110bbfc998f048689266894".to_owned(),
+        });
+        assert!(feed.view_may_have_changed(), "the switch rendered");
+        assert!(!feed.view_may_have_changed(), "and nothing since");
+    }
+
+    /// A machine without the promise is rebuilt after every answer, as it
+    /// always was; whether its redraw is skipped is the equality check's.
+    #[test]
+    fn a_machine_without_the_promise_is_always_rebuilt() {
+        let mut pref = CoreHost::<FeeTierPref>::new();
+        assert!(pref.view_may_have_changed());
+        let _ = pref.dispatch(PrefEvent::Refresh);
+        assert!(pref.view_may_have_changed());
+        assert!(pref.view_may_have_changed());
+    }
+}

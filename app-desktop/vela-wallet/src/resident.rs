@@ -187,7 +187,7 @@ where
     A::Effect: SplitEffect,
     Op<A>: Clone + 'static,
     Out<A>: 'static,
-    A::ViewModel: Clone,
+    A::ViewModel: Clone + PartialEq,
 {
     fn new() -> Self {
         let host = CoreHost::<A>::new();
@@ -293,7 +293,31 @@ where
                 }
             }
         }
-        self.view = std::rc::Rc::new(self.host.view());
+        self.refresh_view(cx);
+    }
+
+    /// The view after a pump, and a redraw only when it moved
+    /// (core-perf-1's "unchanged views are not sent", in-process):
+    ///
+    /// - a machine that renders every change
+    ///   ([`SplitEffect::RENDERS_EVERY_CHANGE`], the activity feed) has its
+    ///   view built only after an answer that rendered — the feed's name
+    ///   answers render in batches, so 200 names are a dozen builds of its
+    ///   rows, not 200;
+    /// - a view equal to the one already shared is not swapped in and wakes
+    ///   no observer: the pages reading it redraw only when it moved.
+    fn refresh_view(&mut self, cx: &mut Context<Self>) {
+        let name = crate::perf::short_type_name::<A>();
+        if !self.host.view_may_have_changed() {
+            crate::perf::record("view_unbuilt", name, Duration::ZERO);
+            return;
+        }
+        let next = self.host.view();
+        if *self.view == next {
+            crate::perf::record("view_unchanged", name, Duration::ZERO);
+            return;
+        }
+        self.view = std::rc::Rc::new(next);
         cx.notify();
     }
 }
@@ -318,7 +342,7 @@ where
     A::Effect: SplitEffect,
     Op<A>: Clone + 'static,
     Out<A>: 'static,
-    A::ViewModel: Clone,
+    A::ViewModel: Clone + PartialEq,
 {
     if let Some(existing) = cx
         .try_global::<Residents>()
