@@ -119,6 +119,45 @@ final class MultisigLiveUITests: XCTestCase {
 
     func test2ProposeASend() throws {
         let app = try launch()
+        proposeSend(app, amount: "1")
+    }
+
+    // MARK: - M4: an outside owner approves with its own wallet (PeerConnect)
+
+    func test5OutsideWalletApproves() throws {
+        let linkFile = env["VELA_MS_LINK_FILE"] ?? "/private/tmp/ios-ms-outside-link.txt"
+        try? FileManager.default.removeItem(atPath: linkFile)
+        let app = try launch()
+        proposeSend(app, amount: "0.5")
+        tap(app, "multisig.proposal.outside", timeout: 30)
+        let link = app.staticTexts["multisig.outside.link"].firstMatch
+        XCTAssertTrue(link.waitForExistence(timeout: 60), "no connect link")
+        sleep(2)
+        shot(app, "outside-sheet")
+        try link.label.write(toFile: linkFile, atomically: true, encoding: .utf8)
+        // The scripted wallet joins the room, connects and signs; the core
+        // verifies its signature before the proposals machine counts it.
+        let approved = app.descendants(matching: .any)["multisig.outside.approved"].firstMatch
+        XCTAssertTrue(approved.waitForExistence(timeout: 240), "the outside wallet never approved")
+        sleep(2)
+        shot(app, "outside-approved")
+        // The session sheet goes with its outcome; the proposal's is under it.
+        if app.descendants(matching: .any)["multisig.outside.link"].exists { tap(app, "multisig.sheet.close") }
+        let execute = app.buttons["multisig.proposal.execute"].firstMatch
+        XCTAssertTrue(execute.waitForExistence(timeout: 90), "not ready after the outside approval")
+        expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: execute)
+        waitForExpectations(timeout: 60)
+        if !execute.isHittable { app.swipeUp() }
+        shot(app, "outside-ready")
+        execute.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["multisig.proposal.executed"].waitForExistence(timeout: 180), "never executed")
+        sleep(2)
+        shot(app, "outside-executed")
+    }
+
+    /// From the home: Send → xDAI → a recipient and an amount → Propose and
+    /// approve → the review → one passkey → the transaction's sheet.
+    private func proposeSend(_ app: XCUIApplication, amount value: String) {
         XCTAssertTrue(app.descendants(matching: .any)["multisig.home"].waitForExistence(timeout: 30), "the multisig is not shown")
         sleep(4)
         app.buttons["Send"].firstMatch.tap()
@@ -130,7 +169,7 @@ final class MultisigLiveUITests: XCTestCase {
         recipient.typeText(Self.parallelThree)
         let amount = app.textFields["send.amount"].firstMatch
         amount.tap()
-        amount.typeText("1")
+        amount.typeText(value)
         if app.buttons["keyboard.done"].exists { app.buttons["keyboard.done"].tap() }
         shot(app, "send-form")
         let next = app.buttons["Continue"].firstMatch

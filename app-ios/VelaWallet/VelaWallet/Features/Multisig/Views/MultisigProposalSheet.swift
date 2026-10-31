@@ -509,7 +509,7 @@ struct MultisigProposalSheet: View {
     // MARK: - Asking the others
 
     @ViewBuilder private func asking(_ model: MsProposalModel) -> some View {
-        if !model.isDone, !model.stillNeeded.isEmpty {
+        if !model.isDone, !model.stillNeeded.isEmpty, model.item.approved < model.item.threshold {
             MsSection(title: words.t("proposal.invite")) {
                 MsNote(text: words.t("proposal.stillNeeded", ["missing": model.stillNeeded.map(words.label).joined(separator: ", ")]))
                 ForEach(model.signerLines, id: \.id) { line in
