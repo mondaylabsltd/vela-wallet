@@ -4,11 +4,11 @@
 //
 //  Native parity Phase 4's shortcuts, pinned to what they must never change:
 //
-//  - `ViewBytes` finds a core answer's view by its bytes — including strings
-//    holding braces, commas, quotes and backslashes — and cuts an ignored
-//    top-level field out wherever it stands;
-//  - a store that skips unchanged views still hears every CHANGED one, from
-//    the real core, and a byte-identical one is not decoded again;
+//  - every store opts its machine in to the core's unchanged views
+//    (core-perf-1): an answer without a view is the one held, a store that
+//    skips hears every CHANGED view and no repeat, one that does not hears
+//    every answer, and volatile fields are folded back for a driver that
+//    asked for them;
 //  - `Loc`'s memo answers the engine's words, and a language change is heard;
 //  - `PerfSeed` writes the shapes the stores read.
 //
@@ -22,71 +22,43 @@ import VelaCore
 @Suite(.hangLimit)
 struct PerfPathTests {
 
-    // MARK: - ViewBytes
+    // MARK: - CoreStore, the core's unchanged views (core-perf-1)
 
-    @Test func theViewIsFoundByItsBytes() throws {
-        let text = #"{"view":{"a":"x,}]\"{","b":[1,{"c":null}]},"effects":[{"id":1}],"cancelled_effect_ids":[]}"#
-        let split = try #require(ViewBytes.split(text))
-        #expect(String(decoding: split.comparable, as: UTF8.self) == #"{"a":"x,}]\"{","b":[1,{"c":null}]}"#)
-        #expect(split.rest == #"{"effects":[{"id":1}],"cancelled_effect_ids":[]}"#)
-        // What is left parses, and is what the whole answer said.
-        let rest = try CoreJSON.object(split.rest)
-        let whole = try CoreJSON.object(text)
-        #expect(NSDictionary(dictionary: rest).isEqual(to: whole.filter { $0.key != "view" }))
-    }
-
-    @Test func aBackslashBeforeTheClosingQuoteIsItsOwn() throws {
-        let text = #"{"view":{"path":"C:\\","n":1},"effects":[]}"#
-        let split = try #require(ViewBytes.split(text))
-        #expect(String(decoding: split.comparable, as: UTF8.self) == #"{"path":"C:\\","n":1}"#)
-    }
-
-    @Test func anIgnoredFieldIsCutWhereverItStands() throws {
-        let a = #"{"view":{"banned":[],"pending_urls":{"1":["https://a,b"]},"z":[2]},"effects":[]}"#
-        let b = #"{"view":{"banned":[],"pending_urls":{},"z":[2]},"effects":[]}"#
-        let c = #"{"view":{"banned":[],"pending_urls":{},"z":[3]},"effects":[]}"#
-        let last = #"{"view":{"banned":[],"pending_urls":{"9":[]}},"effects":[]}"#
-        let keys = ["pending_urls"]
-        let sa = try #require(ViewBytes.split(a, ignoring: keys))
-        let sb = try #require(ViewBytes.split(b, ignoring: keys))
-        let sc = try #require(ViewBytes.split(c, ignoring: keys))
-        #expect(sa.comparable == sb.comparable, "only the ignored field moved")
-        #expect(sa.comparable != sc.comparable, "a field that is read moved")
-        #expect(ViewBytes.split(last, ignoring: keys) != nil)
-        // A key that merely CONTAINS the name, or the name inside a string, is
-        // not the field.
-        let decoy = #"{"view":{"note":"\"pending_urls\":1","x_pending_urls":1},"effects":[]}"#
-        let sd = try #require(ViewBytes.split(decoy, ignoring: keys))
-        #expect(String(decoding: sd.comparable, as: UTF8.self) == #"{"note":"\"pending_urls\":1","x_pending_urls":1}"#)
-    }
-
-    @Test func anotherShapeIsLeftToTheParser() {
-        #expect(ViewBytes.split(#"{"effects":[],"view":{}}"#) == nil)
-        #expect(ViewBytes.split(#"{"view":{"a":1}"#) == nil, "truncated")
-        #expect(ViewBytes.split("") == nil)
-    }
-
-    // MARK: - CoreStore, skipping unchanged views
-
-    /// A machine that answers the same view twice, then a changed one.
+    /// A machine that answers what it is scripted to — each answer's text
+    /// whole, so a test can hand over the core's own shapes: a view, none
+    /// ("keep the one you hold"), a volatile part alone.
     private final class Echo: CoreBridge {
-        var views: [String]
+        var answers: [String]
         var served = 0
-        init(_ views: [String]) { self.views = views }
+        private(set) var optedIn: Bool?
+        init(_ answers: [String]) { self.answers = answers }
         func dispatch(eventJson: String) throws -> String { next() }
         func resolveEffect(effectId: UInt64, resultJson: String) throws -> String { next() }
         func view() throws -> String { "{}" }
+        func skipUnchangedViews(includeVolatile: Bool) throws { optedIn = includeVolatile }
         private func next() -> String {
             defer { served += 1 }
-            let view = views[min(served, views.count - 1)]
-            return #"{"view":"# + view + #","effects":[],"cancelled_effect_ids":[]}"#
+            return answers[min(served, answers.count - 1)]
         }
+
+        static func view(_ view: String) -> String {
+            #"{"view":"# + view + #","view_version":1,"effects":[],"cancelled_effect_ids":[]}"#
+        }
+        static let same = #"{"view_version":1,"effects":[],"cancelled_effect_ids":[]}"#
     }
 
     private struct Wire: Decodable, Equatable { let n: Int }
 
+    @Test func everyStoreOptsInWithoutVolatileFields() {
+        let bridge = Echo([Echo.view(#"{"n":1}"#)])
+        _ = CoreStore<Wire>(bridge: bridge, perform: { _ in "{}" })
+        #expect(bridge.optedIn == false, "the store never asked the core to leave unchanged views out")
+    }
+
     @Test func aStoreThatSkipsHearsEveryChangeAndNoRepeat() {
-        let bridge = Echo([#"{"n":1}"#, #"{"n":1}"#, #"{"n":2}"#, #"{"n":2}"#, #"{"n":1}"#])
+        let bridge = Echo([
+            Echo.view(#"{"n":1}"#), Echo.same, Echo.view(#"{"n":2}"#), Echo.same, Echo.view(#"{"n":1}"#),
+        ])
         var heard: [Int] = []
         let store = CoreStore<Wire>(
             bridge: bridge, perform: { _ in "{}" }, onView: { heard.append($0.n) },
@@ -99,13 +71,51 @@ struct PerfPathTests {
         #expect(store.json == #"{"n":1}"#)
     }
 
-    @Test func aStoreThatDoesNotSkipHearsEveryView() {
-        let bridge = Echo([#"{"n":1}"#])
-        var heard = 0
-        let store = CoreStore<Wire>(bridge: bridge, perform: { _ in "{}" }, onView: { _ in heard += 1 })
+    /// A store that resumes waiters or counts commits hears every answer —
+    /// the one it holds, again, for an answer that carries none.
+    @Test func aStoreThatDoesNotSkipHearsEveryAnswer() {
+        let bridge = Echo([Echo.view(#"{"n":1}"#), Echo.same, Echo.same, Echo.view(#"{"n":3}"#)])
+        var heard: [Int] = []
+        let store = CoreStore<Wire>(bridge: bridge, perform: { _ in "{}" }, onView: { heard.append($0.n) })
         store.boot(#"{"type":"x"}"#)
         for _ in 0..<3 { store.dispatch(#"{"type":"x"}"#) }
-        #expect(heard == 4)
+        #expect(heard == [1, 1, 1, 3])
+    }
+
+    /// A machine's volatile fields, for a driver that asked for them, come
+    /// apart and are folded back into the view it holds.
+    @Test func volatileFieldsAreFoldedBackIntoTheView() {
+        let bridge = Echo([
+            #"{"view":{"a":1},"view_version":1,"volatile":{"p":{}},"effects":[],"cancelled_effect_ids":[]}"#,
+            #"{"view_version":1,"volatile":{"p":{"1":["u"]}},"effects":[],"cancelled_effect_ids":[]}"#,
+            Echo.same,
+            #"{"view":{"a":2},"view_version":2,"effects":[],"cancelled_effect_ids":[]}"#,
+        ])
+        var views: [[String: Any]] = []
+        let driver = CoreDriver(bridge: bridge, perform: { _ in "{}" }, onView: { views.append($0) },
+                                includeVolatile: true)
+        driver.skipsUnchangedView = true
+        #expect(bridge.optedIn == true)
+        for _ in 0..<4 { driver.dispatch(#"{"type":"x"}"#) }
+        #expect(views.count == 3, "an answer with neither moved nothing")
+        #expect(views.map { $0["a"] as? Int } == [1, 1, 2])
+        #expect((views[1]["p"] as? [String: Any])?["1"] != nil, "the volatile part was not folded in")
+        #expect((views[2]["p"] as? [String: Any])?["1"] != nil, "a new view lost the volatile part it holds")
+    }
+
+    /// The real RPC pool, opted in without its volatile `pending_urls`:
+    /// a call's steps are not a changed view.
+    @Test func theRealPoolSendsNoViewForACallsSteps() throws {
+        let core = RpcPoolCore()
+        try core.skipUnchangedViews(includeVolatile: false)
+        let booted = try CoreJSON.object(core.dispatch(eventJson: #"{"type":"bans_loaded","entries":[]}"#))
+        let view = try #require(booted["view"] as? [String: Any], "the first answer carries the view")
+        #expect(view["pending_urls"] == nil, "a volatile field reached a shell that did not ask for it")
+        #expect(booted["volatile"] == nil)
+        // The same event again changes nothing: no view crosses.
+        let again = try CoreJSON.object(core.dispatch(eventJson: #"{"type":"bans_loaded","entries":[]}"#))
+        #expect(again["view"] == nil)
+        #expect(again["view_version"] as? Int == booted["view_version"] as? Int)
     }
 
     // MARK: - RecipientIdentity, the feed's turn

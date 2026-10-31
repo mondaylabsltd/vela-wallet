@@ -78,7 +78,9 @@ final class ContactsStore {
             // silent success.
             neutralAnswer: { ContactsExecutor.neutralAnswer($0) },
             // The view as the core wrote it, for the AI agent's world (spec 104).
-            keepsJson: true
+            keepsJson: true,
+            // `onView` mirrors: an answer that moved nothing redraws nothing.
+            skipsUnchanged: true
         )
     }
 

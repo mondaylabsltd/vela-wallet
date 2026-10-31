@@ -177,12 +177,12 @@ final class RpcPool {
             onFault: { VelaLog.failure(.rpc, kind: "pool_fault", VelaLog.error($0)) },
             keepsJson: true,
             // Every call settles through this machine, and most leave its
-            // view as it was: those are not decoded, and nobody watching the
-            // pool is woken for them (native parity Phase 4). `pending_urls`
-            // is the hedging shells' (desktop, web): this one never reads it,
-            // and it moves at every step of every call.
-            skipsUnchanged: true,
-            ignoringKeys: ["pending_urls"]
+            // view as it was: the core sends none for those, and nobody
+            // watching the pool is woken (native parity Phase 4). Its
+            // volatile `pending_urls` are the hedging shells' (desktop, web):
+            // not asked for (`CoreStore` opts in without volatile fields), so
+            // a step of a call no longer reads as a changed view.
+            skipsUnchanged: true
         )
     }
 

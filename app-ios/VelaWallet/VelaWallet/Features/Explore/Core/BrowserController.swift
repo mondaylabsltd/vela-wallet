@@ -218,7 +218,9 @@ final class BrowserController {
             perform: { [historyExecutor] in await historyExecutor.perform($0) },
             onView: { [weak self] view in self?.history = view },
             onFault: { VelaLog.failure(.browser, kind: "browser_history_fault", VelaLog.error($0)) },
-            keepsJson: true
+            keepsJson: true,
+            // `onView` mirrors: an answer that moved nothing redraws nothing.
+            skipsUnchanged: true
         )
         dbrCore = CoreStore(
             bridge: DappBrowserCore(),
