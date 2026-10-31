@@ -297,6 +297,38 @@ async fn run_step(
             .detach();
         return true;
     }
+    if let Some(address) = step.get("show_members").and_then(Value::as_str) {
+        // Settings showing the multisig: its members read per network.
+        log_line(&format!("step {i} show_members {address}"));
+        let address = address.to_owned();
+        cx.update(|cx| host.update(cx, |host, cx| host.show_members(&address, cx)));
+        return true;
+    }
+    if let Some(ask) = step.get("propose") {
+        // A Settings proposal (a member change, a rename), as its screen
+        // hands it over: the review first, then the person's word.
+        log_line(&format!("step {i} propose {ask}"));
+        let chain_id = ask.get("chain_id").and_then(Value::as_u64).unwrap_or(100);
+        let multisig = ask.get("multisig").and_then(Value::as_str).unwrap_or_default().to_owned();
+        let Some(proposal) = ask
+            .get("proposal")
+            .cloned()
+            .and_then(|p| serde_json::from_value(p).ok())
+        else {
+            log_line(&format!("step {i} propose: not a proposal"));
+            return false;
+        };
+        let answer = cx.update(|cx| {
+            host.update(cx, |host, cx| host.propose(chain_id, &multisig, proposal, cx))
+        });
+        cx.background_executor()
+            .spawn(async move {
+                let end = answer.await;
+                log_line(&format!("propose answered {end:?}"));
+            })
+            .detach();
+        return true;
+    }
     if let Some(signs) = step.get("answer_risk").and_then(Value::as_bool) {
         log_line(&format!("step {i} answer_risk {signs}"));
         let _ = cx.update(|cx| host.update(cx, |host, cx| host.answer_risk(signs, cx)));
