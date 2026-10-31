@@ -80,6 +80,7 @@ final class MultisigHub {
     @ObservationIgnored private var othersTimer: Task<Void, Never>?
     @ObservationIgnored private var checkedRecords = false
     @ObservationIgnored private var lastAccountsJson = ""
+    @ObservationIgnored private var lastWaitingJson = ""
     @ObservationIgnored private var appActive = true
     @ObservationIgnored private var watching = 0
 
@@ -191,6 +192,11 @@ final class MultisigHub {
                 "threshold": item.threshold, "status": item.status,
             ]
         }
+        // Said once per change (the web's `#tell`): a dispatch per commit
+        // would be a members view per proposals view.
+        let told = CoreJSON.string(["w": waiting])
+        guard told != lastWaitingJson else { return }
+        lastWaitingJson = told
         members.dispatch(["type": "waiting", "proposals": waiting])
     }
 

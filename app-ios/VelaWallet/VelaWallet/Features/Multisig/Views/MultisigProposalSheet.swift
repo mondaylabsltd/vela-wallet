@@ -297,7 +297,6 @@ struct MultisigProposalSheet: View {
             releaseWatch?()
             releaseWatch = nil
         }
-        .onChange(of: hub.proposals.version) { _, _ in askPreviews() }
         .task(id: chainId) {
             // The machine decides whether the last look is stale; a sheet
             // only asks every few seconds (docs/multisig-machines.md §1.4).
@@ -403,7 +402,8 @@ struct MultisigProposalSheet: View {
                                 .foregroundStyle(theme.fgSubtle)
                         }
                         Spacer(minLength: Tokens.Space.s8)
-                        Text(verbatim: words.t(done ? "proposal.approved" : "proposal.waiting"))
+                        Text(verbatim: words.t(done ? "proposal.approved"
+                            : (model.item.approved >= model.item.threshold ? "proposal.notNeeded" : "proposal.waiting")))
                             .typeRole(Typography.rowSub.scaled(textScale))
                             .foregroundStyle(done ? theme.successBase : theme.fgSubtle)
                     }

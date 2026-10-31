@@ -114,4 +114,69 @@ final class MultisigLiveUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["multisig.home"].waitForExistence(timeout: 20), "the home does not show the multisig")
         shot(app, "home-multisig")
     }
+
+    // MARK: - M2: propose a send from the multisig (funded by the driver)
+
+    func test2ProposeASend() throws {
+        let app = try launch()
+        XCTAssertTrue(app.descendants(matching: .any)["multisig.home"].waitForExistence(timeout: 30), "the multisig is not shown")
+        sleep(4)
+        app.buttons["Send"].firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["xDAI"].waitForExistence(timeout: 60), "the picker never listed xDAI")
+        app.staticTexts["xDAI"].firstMatch.tap()
+        let recipient = app.textFields["send.recipient"].firstMatch
+        XCTAssertTrue(recipient.waitForExistence(timeout: 20), "the form never opened")
+        recipient.tap()
+        recipient.typeText(Self.parallelThree)
+        let amount = app.textFields["send.amount"].firstMatch
+        amount.tap()
+        amount.typeText("1")
+        if app.buttons["keyboard.done"].exists { app.buttons["keyboard.done"].tap() }
+        shot(app, "send-form")
+        let next = app.buttons["Continue"].firstMatch
+        XCTAssertTrue(next.waitForExistence(timeout: 20))
+        expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: next)
+        waitForExpectations(timeout: 60)
+        next.tap()
+        let propose = app.buttons["Propose and approve"].firstMatch
+        XCTAssertTrue(propose.waitForExistence(timeout: 60), "no propose on the confirm")
+        shot(app, "send-confirm")
+        propose.tap()
+        // The review first (§3.6), then one passkey.
+        XCTAssertTrue(app.descendants(matching: .any)["multisig.draft.propose"].waitForExistence(timeout: 60), "no review before the passkey")
+        sleep(3)
+        shot(app, "draft-review")
+        tap(app, "multisig.draft.propose")
+        // Proposed: the transaction's own sheet takes over.
+        XCTAssertTrue(app.descendants(matching: .any)["multisig.proposal.title"].waitForExistence(timeout: 90), "the proposal sheet never opened")
+        sleep(4)
+        shot(app, "proposal-proposed")
+        let status = app.descendants(matching: .any)["multisig.proposal.status"].firstMatch
+        XCTAssertTrue(status.waitForExistence(timeout: 30))
+    }
+
+    // MARK: - M2: execute (the second member approved on the web)
+
+    func test3ExecuteWhenApproved() throws {
+        let app = try launch()
+        let row = app.descendants(matching: .any)["multisig.home.proposal"].firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 60), "nothing waiting on the home")
+        shot(app, "home-ready")
+        row.tap()
+        let execute = app.buttons["multisig.proposal.execute"].firstMatch
+        XCTAssertTrue(execute.waitForExistence(timeout: 60), "no Execute — not ready?")
+        // The machine's look: the fee and that it would run.
+        let fee = app.descendants(matching: .any)["multisig.proposal.fee"].firstMatch
+        XCTAssertTrue(fee.waitForExistence(timeout: 30))
+        expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: execute)
+        waitForExpectations(timeout: 60)
+        sleep(2)
+        shot(app, "proposal-ready")
+        if !execute.isHittable { app.swipeUp() }
+        execute.tap()
+        let executed = app.descendants(matching: .any)["multisig.proposal.executed"].firstMatch
+        XCTAssertTrue(executed.waitForExistence(timeout: 180), "never executed")
+        sleep(2)
+        shot(app, "proposal-executed")
+    }
 }
