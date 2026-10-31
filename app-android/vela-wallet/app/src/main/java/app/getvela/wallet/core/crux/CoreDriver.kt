@@ -72,6 +72,19 @@ class CoreDriver(
     private val escapedFailure: (operation: JSONObject, error: Throwable) -> String,
     /** A shell fault: a malformed event, an escaped exception. Never a user error. */
     private val onFault: (Throwable) -> Unit = {},
+    /**
+     * The core's answer to an EVENT left the view as it was (core-perf-1):
+     * nothing is committed, but the view held is now that event's — what
+     * `CoreHost.applied` reads. Answers to effects that moved nothing are
+     * not reported at all: no event was applied, nothing changed.
+     */
+    private val onUnchanged: () -> Unit = {},
+    /**
+     * core-perf-1: ask the core for the machine's volatile view fields (the
+     * RPC pool's `pending_urls`, which only a hedging shell reads). Off: they
+     * are not sent, and the view drawn carries their defaults.
+     */
+    private val includeVolatile: Boolean = false,
 ) {
     /** One thing the core must be told, in the order it happened. */
     private sealed interface Turn {
@@ -110,10 +123,22 @@ class CoreDriver(
     @Volatile
     private var disposed = false
 
+    /**
+     * core-perf-1 (`vela_core::app::view_host`): the view the core last sent
+     * and its volatile fields as last sent. An opted-in answer without a
+     * `view` means "keep the one you hold"; the volatile fields are folded
+     * back into it, so [onView] always gets the whole view. Consumer only.
+     */
+    private var held: JSONObject? = null
+    private var heldVolatile: JSONObject? = null
+
     init {
         // THE consumer. Every bridge call happens here, one at a time, in the
         // order its turn was queued.
         scope.launch {
+            // First, before any answer: every machine skips unchanged views.
+            // A bridge that cannot keeps the classic answers, read as before.
+            runCatching { bridge.skipUnchangedViews(includeVolatile) }.onFailure(onFault)
             for (turn in inbox) {
                 if (disposed) break
                 when (turn) {
@@ -122,7 +147,9 @@ class CoreDriver(
                     is Turn.Event -> {
                         // Single writer (this loop), so the increment is safe.
                         eventsApplied += 1
-                        runCatching { JSONObject(bridge.dispatch(turn.json)) }.onSuccess(::apply).onFailure(onFault)
+                        runCatching { JSONObject(bridge.dispatch(turn.json)) }
+                            .onSuccess { apply(it, event = true) }
+                            .onFailure(onFault)
                     }
                     is Turn.Answer -> resolve(turn.id, turn.resultJson)
                 }
@@ -169,9 +196,12 @@ class CoreDriver(
 
     // -- the loop ------------------------------------------------------------
 
-    /** Consumer only. */
-    private fun apply(result: JSONObject) {
-        commit(result.optJSONObject("view") ?: JSONObject())
+    /** Consumer only. [event]: the answer to an event, not to an effect. */
+    private fun apply(result: JSONObject, event: Boolean = false) {
+        when (val view = viewOf(result)) {
+            null -> if (event && !disposed) onUnchanged()
+            else -> commit(view)
+        }
 
         result.optJSONArray("cancelled_effect_ids")?.let { cancelled ->
             for (i in 0 until cancelled.length()) {
@@ -188,6 +218,26 @@ class CoreDriver(
             operations[id] = operation
             run(id, operation)
         }
+    }
+
+    /**
+     * The whole view this answer stands for, or `null` when it changed
+     * nothing. A classic answer (no `view_version`) is its `view`, as it
+     * always was; an opted-in one carries `view` and `volatile` only when
+     * they moved.
+     */
+    private fun viewOf(result: JSONObject): JSONObject? {
+        if (!result.has("view_version")) return result.optJSONObject("view") ?: JSONObject()
+        var moved = false
+        result.optJSONObject("view")?.let { held = it; moved = true }
+        result.optJSONObject("volatile")?.let { heldVolatile = it; moved = true }
+        if (!moved) return null
+        val view = held ?: return null
+        val volatile = heldVolatile ?: return view
+        // A copy: the held view stays as the core sent it.
+        val whole = JSONObject(view, view.keys().asSequence().toList().toTypedArray())
+        for (key in volatile.keys()) whole.put(key, volatile.get(key))
+        return whole
     }
 
     private fun commit(view: JSONObject) {

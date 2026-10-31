@@ -39,6 +39,16 @@ interface CoreBridge {
     fun dispatch(eventJson: String): String
     fun resolveEffect(effectId: ULong, resultJson: String): String
     fun view(): String
+
+    /**
+     * Opt in to lighter answers (`vela_core::app::view_host`): from the next
+     * answer on, `view_version` always, `view` only when it differs from the
+     * last one sent, and — [includeVolatile] — the machine's volatile fields
+     * apart in `volatile`. [CoreDriver] calls it before anything else and
+     * reads both shapes. A bridge without the knob (a test's fake) keeps the
+     * classic answers, which the driver reads as before.
+     */
+    fun skipUnchangedViews(includeVolatile: Boolean) {}
 }
 
 /**
@@ -54,11 +64,13 @@ private fun bridgeOf(
     dispatch: (String) -> String,
     resolveEffect: (ULong, String) -> String,
     view: () -> String,
+    skipUnchangedViews: (Boolean) -> Unit,
 ): CoreBridge = object : CoreBridge {
     override fun dispatch(eventJson: String) = dispatch.invoke(eventJson)
     override fun resolveEffect(effectId: ULong, resultJson: String) =
         resolveEffect.invoke(effectId, resultJson)
     override fun view() = view.invoke()
+    override fun skipUnchangedViews(includeVolatile: Boolean) = skipUnchangedViews.invoke(includeVolatile)
 }
 
 // -- the machines this client drives ----------------------------------------
@@ -67,89 +79,89 @@ private fun bridgeOf(
 
 /** Onboarding (spec 019). */
 fun CreateWalletCore.asBridge(): CoreBridge =
-    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+    bridgeOf(this::dispatch, this::resolveEffect, this::view, this::skipUnchangedViews)
 
 fun LoginCore.asBridge(): CoreBridge =
-    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+    bridgeOf(this::dispatch, this::resolveEffect, this::view, this::skipUnchangedViews)
 
 fun SessionCore.asBridge(): CoreBridge =
-    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+    bridgeOf(this::dispatch, this::resolveEffect, this::view, this::skipUnchangedViews)
 
 /** Wallet state (spec 040). */
 fun ContactsCore.asBridge(): CoreBridge =
-    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+    bridgeOf(this::dispatch, this::resolveEffect, this::view, this::skipUnchangedViews)
 
 fun NetworkAdminCore.asBridge(): CoreBridge =
-    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+    bridgeOf(this::dispatch, this::resolveEffect, this::view, this::skipUnchangedViews)
 
 fun DisplayCurrencyCore.asBridge(): CoreBridge =
-    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+    bridgeOf(this::dispatch, this::resolveEffect, this::view, this::skipUnchangedViews)
 
 /** The read path (spec 041). `RpcPoolCore` is what every other one reads through. */
 fun RpcPoolCore.asBridge(): CoreBridge =
-    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+    bridgeOf(this::dispatch, this::resolveEffect, this::view, this::skipUnchangedViews)
 
 fun BalanceDashboardCore.asBridge(): CoreBridge =
-    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+    bridgeOf(this::dispatch, this::resolveEffect, this::view, this::skipUnchangedViews)
 
 fun ActivityFeedCore.asBridge(): CoreBridge =
-    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+    bridgeOf(this::dispatch, this::resolveEffect, this::view, this::skipUnchangedViews)
 
 fun ManageTokensCore.asBridge(): CoreBridge =
-    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+    bridgeOf(this::dispatch, this::resolveEffect, this::view, this::skipUnchangedViews)
 
 /** The in-app browser's decision half (spec 070). */
 fun DappBrowserCore.asBridge(): CoreBridge =
-    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+    bridgeOf(this::dispatch, this::resolveEffect, this::view, this::skipUnchangedViews)
 
 fun DappPermissionsCore.asBridge(): CoreBridge =
-    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+    bridgeOf(this::dispatch, this::resolveEffect, this::view, this::skipUnchangedViews)
 
 fun ExploreSitesCore.asBridge(): CoreBridge =
-    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+    bridgeOf(this::dispatch, this::resolveEffect, this::view, this::skipUnchangedViews)
 
 fun BrowserHistoryCore.asBridge(): CoreBridge =
-    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+    bridgeOf(this::dispatch, this::resolveEffect, this::view, this::skipUnchangedViews)
 
 fun SignRequestCore.asBridge(): CoreBridge =
-    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+    bridgeOf(this::dispatch, this::resolveEffect, this::view, this::skipUnchangedViews)
 
 fun ClearSigningCore.asBridge(): CoreBridge =
-    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+    bridgeOf(this::dispatch, this::resolveEffect, this::view, this::skipUnchangedViews)
 
 fun ApprovalGuardCore.asBridge(): CoreBridge =
-    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+    bridgeOf(this::dispatch, this::resolveEffect, this::view, this::skipUnchangedViews)
 
 // Spec 045: the payroll batch the split rows are seeded from.
 fun BatchImportCore.asBridge(): CoreBridge =
-    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+    bridgeOf(this::dispatch, this::resolveEffect, this::view, this::skipUnchangedViews)
 
 // Spec 043: the send path's three machines.
 fun SendCore.asBridge(): CoreBridge =
-    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+    bridgeOf(this::dispatch, this::resolveEffect, this::view, this::skipUnchangedViews)
 
 fun FeePolicyCore.asBridge(): CoreBridge =
-    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+    bridgeOf(this::dispatch, this::resolveEffect, this::view, this::skipUnchangedViews)
 
 fun TxTrackerCore.asBridge(): CoreBridge =
-    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+    bridgeOf(this::dispatch, this::resolveEffect, this::view, this::skipUnchangedViews)
 
 fun TokenTrustCore.asBridge(): CoreBridge =
-    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+    bridgeOf(this::dispatch, this::resolveEffect, this::view, this::skipUnchangedViews)
 
 fun ReceiveWatchCore.asBridge(): CoreBridge =
-    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+    bridgeOf(this::dispatch, this::resolveEffect, this::view, this::skipUnchangedViews)
 
 fun PaymentRequestCore.asBridge(): CoreBridge =
-    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+    bridgeOf(this::dispatch, this::resolveEffect, this::view, this::skipUnchangedViews)
 
 // Spec 069: the default transaction speed, and the send screen's speed control.
 fun FeeTierPrefCore.asBridge(): CoreBridge =
-    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+    bridgeOf(this::dispatch, this::resolveEffect, this::view, this::skipUnchangedViews)
 
 fun FeeSpeedCore.asBridge(): CoreBridge =
-    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+    bridgeOf(this::dispatch, this::resolveEffect, this::view, this::skipUnchangedViews)
 
 // Spec 102: Settings → Signing pages.
 fun SigningPagesCore.asBridge(): CoreBridge =
-    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+    bridgeOf(this::dispatch, this::resolveEffect, this::view, this::skipUnchangedViews)
