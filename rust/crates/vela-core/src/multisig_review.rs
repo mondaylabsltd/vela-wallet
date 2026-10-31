@@ -773,6 +773,11 @@ pub enum StateVerdict {
     /// `singletonCode` (not deployed, and the start state cannot be put in
     /// place).
     Unavailable { reason: String },
+    /// r9-9: the transaction is refused for another reason
+    /// ([`MultisigReview::refused`]) — a reassurance ("changes nothing about
+    /// who controls the multisig") or a could-not-check beside "Vela won't
+    /// sign this" would contradict it. Nothing is said in the guard's place.
+    Withheld,
 }
 
 /// The guard's reading.
@@ -1401,6 +1406,80 @@ pub struct SignRule {
     pub anyway: bool,
 }
 
+/// r9-9: why Vela signs nothing for a transaction — each reason its own
+/// words, never another's ("would change who controls the multisig" is the
+/// state guard's alone).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RefusedWhy {
+    /// A delegatecall (the transaction's, or a batch leg's): it runs another
+    /// contract's code as the multisig.
+    Delegatecall,
+    /// A batch nested past [`reading::MAX_NESTING`], or one whose bytes do
+    /// not read in full.
+    TooDeep,
+    /// It pays gas or a refund out of the multisig.
+    Refund,
+    /// The state guard found a change it does not declare.
+    StateChange,
+    /// Not a kind of transaction Vela signs.
+    Other,
+}
+
+impl RefusedWhy {
+    /// The one line that says it (a corpus key).
+    pub fn key(self) -> &'static str {
+        match self {
+            RefusedWhy::Delegatecall => "home.multisig.review.refusedWhy.delegatecall",
+            RefusedWhy::TooDeep => "home.multisig.review.refusedWhy.tooDeep",
+            RefusedWhy::Refund => "home.multisig.review.refusedWhy.refund",
+            RefusedWhy::StateChange => "home.multisig.review.blocked",
+            RefusedWhy::Other => "home.multisig.review.refusedWhy.other",
+        }
+    }
+
+    /// The reason a [`Review::refusal`] (the core's own English) names.
+    fn of_refusal(why: &str) -> RefusedWhy {
+        if why.contains("delegatecall") {
+            RefusedWhy::Delegatecall
+        } else if why.contains("cannot read in full") {
+            RefusedWhy::TooDeep
+        } else if why.contains("refund") {
+            RefusedWhy::Refund
+        } else {
+            RefusedWhy::Other
+        }
+    }
+}
+
+/// [`MultisigReview::refused`]: the reason, and its line's corpus key.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Refused {
+    pub why: RefusedWhy,
+    pub key: String,
+}
+
+/// The first reason the concerns refuse for: what the transaction is
+/// before what its batch reads as, before what the state guard found.
+fn refused_of(concerns: &[Concern]) -> Option<RefusedWhy> {
+    let not_signed = concerns.iter().find_map(|c| match c {
+        Concern::NotSigned { why } => Some(RefusedWhy::of_refusal(why)),
+        _ => None,
+    });
+    not_signed
+        .or_else(|| {
+            concerns
+                .contains(&Concern::UnreadableBatch)
+                .then_some(RefusedWhy::TooDeep)
+        })
+        .or_else(|| {
+            concerns
+                .contains(&Concern::StateChange)
+                .then_some(RefusedWhy::StateChange)
+        })
+}
+
 /// One SafeTx field, as signed.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Field {
@@ -1456,6 +1535,10 @@ pub struct MultisigReview {
     pub concerns: Vec<Concern>,
     pub tone: Tone,
     pub sign: SignRule,
+    /// r9-9: why nothing is signed (`sign.allowed` false), as ONE line — its
+    /// corpus key. Draw it in place of any other refusal words; `None` when
+    /// the transaction may be signed.
+    pub refused: Option<Refused>,
     /// What `agent_review` reads as the request on screen (a `SignFacts`):
     /// an opinion is bound to this proposal on this chain.
     pub advice_request: Value,
@@ -1737,11 +1820,28 @@ pub fn multisig_review(input: &ReviewInput) -> Result<MultisigReview, CoreError>
             true
         }
     });
+    // r9-9: refused for what it is, the guard's reassurance or its
+    // could-not-check is not said beside it.
+    let refused = refused_of(&concerns);
+    let mut state = state;
+    if refused.is_some_and(|w| w != RefusedWhy::StateChange)
+        && matches!(
+            state.verdict,
+            StateVerdict::Unchanged | StateVerdict::Declared | StateVerdict::Unavailable { .. }
+        )
+    {
+        state.verdict = StateVerdict::Withheld;
+        concerns.retain(|c| !matches!(c, Concern::StateUnread { .. }));
+    }
     let tone = concerns.iter().map(Concern::tone).max().unwrap_or(Tone::Ok);
     let sign = SignRule {
         allowed: tone != Tone::Refused,
         anyway: tone == Tone::Danger || blind,
     };
+    let refused = refused.map(|why| Refused {
+        why,
+        key: why.key().to_owned(),
+    });
 
     let advice_request = json!({
         "id": format!("multisig:{}:{}", r.chain_id, hashes.safe_tx_hash),
@@ -1776,6 +1876,7 @@ pub fn multisig_review(input: &ReviewInput) -> Result<MultisigReview, CoreError>
         concerns,
         tone,
         sign,
+        refused,
         advice_request,
     })
 }

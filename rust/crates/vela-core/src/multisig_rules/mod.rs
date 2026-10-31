@@ -12,7 +12,7 @@
 use crate::CoreError;
 
 mod calls;
-mod names;
+pub mod names;
 pub mod networks;
 mod relay;
 pub mod review;

@@ -333,6 +333,25 @@ pub enum Event {
         address: String,
         kind: Option<MemberKind>,
     },
+    /// r9-12: what the passkey index answered for these addresses (the
+    /// shell's lookup, `registry_lookup::step`), by address — for the ones
+    /// [`MultisigAccountsView::index_wanted`] names. An address it could not
+    /// ask (nobody answered) is left out: asked again later.
+    IndexNames {
+        answers: BTreeMap<String, IndexAnswer>,
+    },
+}
+
+/// r9-12: the passkey index's answer for one address: it holds a Vela
+/// account there (`vela`), and the name that account registered for itself
+/// (`name`, public, the same on every device). A hint, never authority.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "MultisigIndexAnswer"))]
+pub struct IndexAnswer {
+    #[serde(default)]
+    pub vela: bool,
+    #[serde(default)]
+    pub name: Option<String>,
 }
 
 /// r7-9: the create sheet's draft, as the person left it.
@@ -700,6 +719,14 @@ pub struct AccountRow {
     pub checking_on: Vec<u64>,
     /// r4D-8: its invite was handed on from this device ([`Event::InviteShared`]).
     pub invite_shared: bool,
+    /// r9-12: the members its invite carries — the founding ones in the
+    /// genesis's order, then those members now that are not — each with the
+    /// name [`MultisigAccountsView::member_labels`] shows for it (only a
+    /// name, never the short address) and its kind as this device can tell.
+    /// Build the invite from these alone: link door `addLink {origin,
+    /// locale, multisig, extra: {chainIds, members}}`.
+    #[serde(default)]
+    pub invite_members: Vec<crate::multisig_link::InvitedMember>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -731,6 +758,19 @@ pub struct MultisigAccountsView {
     /// address — the first that names it, the first that says its kind
     /// (`keptMember`). Labels only, never authority.
     pub known_members: BTreeMap<String, MemberInfo>,
+    /// r9-12: ONE name per member, by lowercase address — every member of
+    /// every multisig here (founding, members now, named) and this device's
+    /// own accounts — by the core's rule (`multisig_rules::names::label`):
+    /// the name a multisig here keeps, else the one the member registered in
+    /// the passkey index, else this device's own name for its account, else
+    /// the short address. Draw these; never pick a name in a shell.
+    #[serde(default)]
+    pub member_labels: BTreeMap<String, String>,
+    /// r9-12: the addresses of `member_labels` the passkey index has not
+    /// answered for yet (lowercase), this device's own accounts among them:
+    /// look each up and send `index_names`.
+    #[serde(default)]
+    pub index_wanted: Vec<String>,
     /// core-ms-2: the invite the add sheet shows (opened from a link, or
     /// waiting for its network since a reload): adding its multisig uses its
     /// networks and keeps what it says of the members — the shell sends
@@ -782,6 +822,8 @@ pub struct State {
     invite_shared: BTreeSet<String>,
     /// r8-7: members as the chains last said, per multisig (lowercase).
     members_now: BTreeMap<String, Vec<String>>,
+    /// r9-12: the passkey index's answers, by lowercase address.
+    index: BTreeMap<String, IndexAnswer>,
     salt: Option<String>,
     draft: Option<(Vec<String>, u64, String)>,
     /// core-ms-2: the threshold the person picked, and for how many members.
@@ -852,6 +894,106 @@ impl State {
             .keys()
             .chain(self.kind_picks.keys())
             .map(|a| (a.clone(), self.kind_choice(a)))
+            .collect()
+    }
+
+    /// r9-12: a multisig's members as its invite names them: the founding
+    /// ones, then its members now that are not among them.
+    fn members_of(&self, account: &MultisigAccount) -> Vec<String> {
+        let mut all = account.owners.clone();
+        let now = self.members_now.get(&account.address.to_ascii_lowercase());
+        for member in now.into_iter().flatten() {
+            if !all.iter().any(|a| same_address(a, member)) {
+                all.push(member.clone());
+            }
+        }
+        all
+    }
+
+    /// r9-12: the one name for `address` (`names::label`).
+    fn label_of(&self, address: &str) -> String {
+        let key = address.to_ascii_lowercase();
+        let own = self
+            .local
+            .iter()
+            .find(|l| same_address(&l.address, address))
+            .map(|l| l.name.as_str());
+        let kept = kept_member(&self.accounts, address).name;
+        let registered = self.index.get(&key).and_then(|a| a.name.as_deref());
+        crate::multisig_rules::names::label(address, own, kept.as_deref(), registered)
+    }
+
+    /// r9-12: what `address` is as far as this device can tell (`names::kind`).
+    fn invite_kind_of(&self, address: &str) -> Option<crate::multisig_link::MemberKind> {
+        use crate::multisig_link::MemberKind as K;
+        let own = self.local.iter().any(|l| same_address(&l.address, address));
+        let vela = self
+            .index
+            .get(&address.to_ascii_lowercase())
+            .is_some_and(|a| a.vela);
+        let kept = kept_member(&self.accounts, address).kind;
+        match crate::multisig_rules::names::kind(own, vela, kept.as_deref())?.as_str() {
+            "passkey" => Some(K::Passkey),
+            "wallet" => Some(K::Wallet),
+            "contract" => Some(K::Contract),
+            _ => None,
+        }
+    }
+
+    /// r9-12: what `account`'s invite carries of each member.
+    fn invite_members(
+        &self,
+        account: &MultisigAccount,
+    ) -> Vec<crate::multisig_link::InvitedMember> {
+        self.members_of(account)
+            .into_iter()
+            .map(|member| {
+                let label = self.label_of(&member);
+                let named = label != crate::multisig_rules::names::short_address(&member);
+                crate::multisig_link::InvitedMember {
+                    name: named.then_some(label),
+                    kind: self.invite_kind_of(&member),
+                    address: Some(member),
+                }
+            })
+            .collect()
+    }
+
+    /// r9-12: every address a name is shown for, lowercase, each once.
+    fn named_addresses(&self) -> BTreeSet<String> {
+        let mut out = BTreeSet::new();
+        for a in &self.accounts {
+            out.extend(self.members_of(a).iter().map(|m| m.to_ascii_lowercase()));
+            out.extend(
+                a.members
+                    .iter()
+                    .flatten()
+                    .map(|(k, _)| k.to_ascii_lowercase()),
+            );
+        }
+        out.extend(self.local.iter().map(|l| l.address.to_ascii_lowercase()));
+        out.retain(|a| a.parse::<alloy_primitives::Address>().is_ok());
+        out
+    }
+
+    /// r9-12: [`MultisigAccountsView::member_labels`].
+    fn member_labels(&self) -> BTreeMap<String, String> {
+        self.named_addresses()
+            .into_iter()
+            .map(|a| {
+                let label = self.label_of(&a);
+                (a, label)
+            })
+            .collect()
+    }
+
+    /// r9-12: [`MultisigAccountsView::index_wanted`] — an address the index
+    /// has not answered for — this device's own accounts too: the name its
+    /// account registered is the one every other device shows for it.
+    fn index_wanted(&self) -> Vec<String> {
+        self.named_addresses()
+            .into_iter()
+            .filter(|a| !self.index.contains_key(a))
             .collect()
     }
 
@@ -1202,6 +1344,25 @@ impl App for MultisigAccounts {
                     });
                     future::join_all(reads).await;
                 })
+            }
+            Event::IndexNames { answers } => {
+                let changed = {
+                    let mut s = lock(&model.state);
+                    let mut changed = false;
+                    for (address, answer) in answers {
+                        let key = address.to_ascii_lowercase();
+                        if s.index.get(&key) != Some(&answer) {
+                            s.index.insert(key, answer);
+                            changed = true;
+                        }
+                    }
+                    changed
+                };
+                if changed {
+                    render()
+                } else {
+                    Command::done()
+                }
             }
             Event::PickKind { address, kind } => {
                 let drafted = {
@@ -1802,6 +1963,7 @@ impl App for MultisigAccounts {
                         checked_on: session(&mut s.verdicts.keys()),
                         checking_on: session(&mut s.checking.iter()),
                         invite_shared: s.invite_shared.contains(&a.address.to_ascii_lowercase()),
+                        invite_members: s.invite_members(a),
                         name: a
                             .genesis
                             .name
@@ -1863,6 +2025,8 @@ impl App for MultisigAccounts {
             link: s.link.stand.clone(),
             member_kinds: s.member_kinds(),
             known_members: known_members(&s.accounts),
+            member_labels: s.member_labels(),
+            index_wanted: s.index_wanted(),
         }
     }
 }

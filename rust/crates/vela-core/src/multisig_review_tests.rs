@@ -330,6 +330,98 @@ fn bybit_delegatecall_shape_is_refused_twice() {
     .is_empty());
 }
 
+/// r9-9: a refusal says its own reason, once — a delegatecall "runs another
+/// contract's code as the multisig", a batch too deep "can't be read" — and
+/// never the state guard's words, nor its reassurance beside the refusal.
+#[test]
+fn each_refusal_says_its_own_reason_and_no_reassurance() {
+    let mut d = keccak256(b"transfer(address,uint256)")[..4].to_vec();
+    d.extend_from_slice(&word_addr(a(C)));
+    d.extend_from_slice(&word(U256::from(1)));
+    let delegate = tx(
+        "0x5555555555555555555555555555555555555555",
+        "0x0",
+        &hex(&d),
+        1,
+    );
+    // The probe answered "nothing about who controls it changes".
+    let k = watch_of(&delegate, &[]);
+    let mut before = snap(&[A, B]);
+    before.watched = zero_watch(k);
+    let mut after = snap(&[A, B]);
+    after.watched = zero_watch(k);
+    let r = review_with(
+        delegate,
+        Some(not_offered_answer()),
+        Some(probe_envelope(&before, &after, true)),
+    );
+    assert!(!r.sign.allowed);
+    let refused = r.refused.clone().unwrap();
+    assert_eq!(refused.why, RefusedWhy::Delegatecall);
+    assert_eq!(refused.key, "home.multisig.review.refusedWhy.delegatecall");
+    assert_eq!(
+        r.state.verdict,
+        StateVerdict::Withheld,
+        "no \"changes nothing\" beside a refusal"
+    );
+
+    // Four batches deep.
+    let transfer = format!("a9059cbb{:0>64}{:064x}", &C[2..], 1u64);
+    let mut inner = transfer;
+    for _ in 0..4 {
+        let leg = format!(
+            "00{}{:064x}{:064x}{}",
+            &multisig::MULTI_SEND_CALL_ONLY[2..],
+            0,
+            inner.len() / 2,
+            inner
+        );
+        let pad = (64 - (leg.len() % 64)) % 64;
+        inner = format!(
+            "8d80ff0a{:064x}{:064x}{}{}",
+            0x20,
+            leg.len() / 2,
+            leg,
+            "0".repeat(pad)
+        );
+    }
+    let deep = tx(
+        "0x5555555555555555555555555555555555555555",
+        "0x0",
+        &format!("0x{inner}"),
+        0,
+    );
+    let r = review_with(deep, Some(not_offered_answer()), None);
+    assert!(!r.sign.allowed);
+    assert_eq!(r.refused.as_ref().unwrap().why, RefusedWhy::TooDeep);
+    assert_eq!(r.state.verdict, StateVerdict::Withheld);
+    assert!(!r
+        .concerns
+        .iter()
+        .any(|c| matches!(c, Concern::StateUnread { .. })));
+
+    // An undeclared change is the guard's own refusal, said as such.
+    let t = tx(SAFE, "0x0", &add_owner(C, 1), 0);
+    let k = watch_of(&t, &[C]);
+    let mut before = snap(&[A, B]);
+    before.watched = zero_watch(k);
+    let mut swapped = snap(&[C, A, B]);
+    swapped.watched = zero_watch(k);
+    swapped.singleton = a(ATTACKER);
+    let r = review_with(
+        t,
+        Some(not_offered_answer()),
+        Some(probe_envelope(&before, &swapped, true)),
+    );
+    assert_eq!(r.refused.unwrap().key, "home.multisig.review.blocked");
+
+    // A transaction it signs refuses nothing.
+    let ok = tx(C, "0x1", "0x", 0);
+    assert!(review_with(ok, Some(not_offered_answer()), None)
+        .refused
+        .is_none());
+}
+
 #[test]
 fn an_undeclared_add_owner_through_a_nested_call_is_refused() {
     // A call to another contract that, through a module or a re-entry, adds

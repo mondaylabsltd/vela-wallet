@@ -133,6 +133,7 @@ fn run(func: &str, i: &Value) -> Value {
                 account_name: opt_s(i, "account_name"),
                 credential_ids_hex: strings(i, "credential_ids_hex"),
                 key_route_json: opt_s(i, "key_route_json"),
+                anyway: false,
                 calls: Vec::new(),
             };
             json_text(
@@ -511,6 +512,7 @@ fn unreadable_page_answers_are_malformed() {
             member_name: None,
             credential_ids_hex: Vec::new(),
             key_route_json: None,
+            anyway: false,
         })
         .is_err()
     );
