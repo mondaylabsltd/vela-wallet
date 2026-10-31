@@ -318,7 +318,12 @@ impl WalletPage {
         if let Some(view) = &members {
             col = col.child(self.ms_set_members(theme, &loc, view, cx));
         }
-        if row.local_members.is_empty() && members.as_ref().is_none_or(|v| v.read_only) {
+        // None of its members (anywhere) is on this device: the members
+        // machine's word once it read them, its founding members' until then.
+        let read_only = members
+            .as_ref()
+            .map_or(row.local_members.is_empty(), |v| v.read_only);
+        if read_only {
             col = col.child(muted(theme, words::t(&loc, "panel.readOnly")));
         }
         if let Some(view) = &members {
