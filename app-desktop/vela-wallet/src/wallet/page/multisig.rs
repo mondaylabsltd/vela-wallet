@@ -1836,6 +1836,12 @@ impl WalletPage {
         cx: &mut Context<Self>,
     ) -> Option<gpui::AnyElement> {
         let host = ms_host::booted(cx)?;
+        // A link's stand (`multisig_links.rs`) is drawn once, whatever is up.
+        self.ms_take_link(cx);
+        self.ms_network_watch(cx);
+        if !self.multisig_up(cx) {
+            return None;
+        }
         if let Some(risk) = host.read(cx).risk.clone() {
             return Some(self.ms_risk_dialog(theme, window, &risk, cx));
         }
@@ -1845,9 +1851,7 @@ impl WalletPage {
         if self.multisig.session && host.read(cx).machines().session_view().is_some() {
             return Some(self.ms_session_dialog(theme, window, cx));
         }
-        // A link's stand (`multisig_links.rs`): drawn once, its own sheet first.
-        self.ms_take_link(cx);
-        self.ms_network_watch(cx);
+        // A link's own sheet first.
         if self.multisig.link_sheet.is_some() {
             return self.ms_link_dialog(theme, window, cx);
         }

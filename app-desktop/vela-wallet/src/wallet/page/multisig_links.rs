@@ -114,7 +114,90 @@ pub(crate) fn take_stand(stand: &LinkStand) -> (LinkTake, bool) {
     }
 }
 
+/// What a sheet carries across the page being rebuilt. Creating or adding a
+/// multisig makes it the one shown (the machine's `activate`), and the
+/// window builds the page again for it (`main.rs`: a page is its shown
+/// account's) — the sheet's own state goes with the old page. So the
+/// created screen, and an add still awaited (with its invite, whose labels
+/// and networks are kept once it lands), are carried here and opened again
+/// on the new page.
+#[derive(Default)]
+pub(crate) struct Carry {
+    /// Create was pressed (the name typed).
+    create: Option<String>,
+    /// An add is awaited: its address and the invite it came from.
+    add: Option<(String, Option<vela_core::multisig_link::AddLink>)>,
+}
+
+impl gpui::Global for Carry {}
+
+impl Carry {
+    pub(crate) fn set_create(name: String, cx: &mut gpui::App) {
+        cx.default_global::<Self>().create = Some(name);
+    }
+
+    pub(crate) fn take_create(cx: &mut gpui::App) -> Option<String> {
+        cx.default_global::<Self>().create.take()
+    }
+
+    pub(crate) fn set_add(
+        address: String,
+        link: Option<vela_core::multisig_link::AddLink>,
+        cx: &mut gpui::App,
+    ) {
+        cx.default_global::<Self>().add = Some((address, link));
+    }
+
+    pub(crate) fn take_add(
+        cx: &mut gpui::App,
+    ) -> Option<(String, Option<vela_core::multisig_link::AddLink>)> {
+        cx.default_global::<Self>().add.take()
+    }
+}
+
 impl WalletPage {
+    /// A multisig dialog is over the page ([`WalletPage::multisig_layer`]
+    /// draws one): the high-risk question, the send flow's draft, an
+    /// outside owner's session, the create, add or invite sheet, a link's
+    /// own sheet — so the page (the browser's view too) steps aside.
+    pub(crate) fn multisig_up(&self, cx: &gpui::App) -> bool {
+        let Some(host) = crate::multisig::host::booted(cx) else {
+            return false;
+        };
+        let host = host.read(cx);
+        host.risk.is_some()
+            || host.send_reviewing()
+            || (self.multisig.session && host.machines().session_view().is_some())
+            || self.multisig.create
+            || self.multisig.add.is_some()
+            || self.multisig.invite.is_some()
+            || self.multisig.link_sheet.is_some()
+    }
+
+    /// A new page: the sheet carried from the last one opens again — the
+    /// created multisig's screen (no new draft: the machine's `create` view
+    /// is the one just made), or the add still awaited.
+    pub(crate) fn ms_restore_carried(&mut self, cx: &mut Context<Self>) {
+        if let Some(name) = Carry::take_create(cx) {
+            let mut form = super::multisig_create::CreateForm::new(Vec::new(), cx);
+            form.name = name.clone();
+            form.pressed = true;
+            form.draft_read = true;
+            form.step = super::multisig_create::CreateStep::Review;
+            self.multisig.create = true;
+            self.multisig.create_form = Some(form);
+            // Still carried until the person closes the created screen.
+            Carry::set_create(name, cx);
+        }
+        if let Some((address, link)) = Carry::take_add(cx) {
+            self.ms_add_opened(Some(address.clone()), link.clone(), None, cx);
+            if let Some(form) = self.multisig.add_form.as_mut() {
+                form.asked = Some(address.clone());
+            }
+            Carry::set_add(address, link, cx);
+        }
+    }
+
     /// The machine's `link`, drawn once each: what it opens is opened, and
     /// it is let go — "Opening…" only once the machine moves on.
     pub(crate) fn ms_take_link(&mut self, cx: &mut Context<Self>) {

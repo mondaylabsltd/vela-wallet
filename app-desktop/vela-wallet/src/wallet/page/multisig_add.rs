@@ -177,6 +177,7 @@ impl WalletPage {
     }
 
     pub(crate) fn close_multisig_add(&mut self, cx: &mut Context<Self>) {
+        super::multisig_links::Carry::take_add(cx);
         self.multisig.add = None;
         self.multisig.add_form = None;
         cx.notify();
@@ -255,6 +256,9 @@ impl WalletPage {
             form.said = None;
         }
         form.asked = Some(address.clone());
+        // Added, it is the multisig shown: the page is built again for it,
+        // and what is awaited is carried over (`Carry`).
+        super::multisig_links::Carry::set_add(address.clone(), form.link.clone(), cx);
         let host = self.ms_host(cx);
         host.update(cx, |host, cx| {
             host.accounts(
@@ -291,6 +295,7 @@ impl WalletPage {
             return;
         }
         form.asked = None;
+        super::multisig_links::Carry::take_add(cx);
         let Some(outcome) = view.add.outcome.clone() else {
             return;
         };
@@ -1267,7 +1272,7 @@ impl WalletPage {
             .ok()
             .and_then(|t| serde_json::from_str::<String>(&t).ok())
             .unwrap_or_else(|| words::short(&member.address));
-            let short = crate::wallet::live::shorten_address(&member.address);
+            let short = super::multisig_create::names_short(&member.address);
             let mut row = div()
                 .flex()
                 .flex_col()

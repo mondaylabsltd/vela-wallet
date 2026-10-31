@@ -75,7 +75,7 @@ pub(crate) struct CreateForm {
 }
 
 impl CreateForm {
-    fn new(owners: Vec<String>, cx: &mut Context<WalletPage>) -> Self {
+    pub(crate) fn new(owners: Vec<String>, cx: &mut Context<WalletPage>) -> Self {
         Self {
             step: CreateStep::Members,
             owners,
@@ -224,6 +224,12 @@ fn rule<T: serde::de::DeserializeOwned>(method: &str, args: &Value) -> Option<T>
         .and_then(|text| serde_json::from_str(&text).ok())
 }
 
+/// A member's short form, as the core's naming rule writes it
+/// (`names.short`) — what `names.label` falls back to.
+pub(crate) fn names_short(address: &str) -> String {
+    rule("names.short", &json!({ "address": address })).unwrap_or_else(|| words::short(address))
+}
+
 /// `networks`, the likely ones first (`networks.likely`).
 pub(crate) fn likely_networks(networks: &[u64], hints: &Value) -> Vec<u64> {
     rule(
@@ -302,6 +308,28 @@ pub(crate) fn ens_answer<'a>(
 }
 
 impl WalletPage {
+    /// `VELA_MULTISIG_SHEET=create|add` (developer builds only — the
+    /// `dev_env::var!` read compiles to `None` in a release build): the
+    /// signed-in page opens with that multisig sheet up, for a screenshot
+    /// pass that cannot click to it.
+    ///
+    /// First, what a sheet carried across the page being rebuilt for the
+    /// multisig it just made the one shown ([`super::multisig_links::Carry`]).
+    pub(crate) fn pin_multisig_sheet(&mut self, cx: &mut Context<Self>) {
+        self.ms_restore_carried(cx);
+        // Once a run: the page built again for a multisig just made is not
+        // pinned over.
+        static PINNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        if PINNED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+            return;
+        }
+        match crate::dev_env::var!("VELA_MULTISIG_SHEET").as_deref() {
+            Some("create") => self.open_multisig_create(cx),
+            Some("add") => self.open_multisig_add(None, cx),
+            _ => {}
+        }
+    }
+
     /// The sheet opened: a fresh form seeded with the account shown (the
     /// machine's `new_draft` was sent), and which of the space's networks
     /// hold the Safe contracts (`check_networks`).
@@ -331,6 +359,7 @@ impl WalletPage {
     /// The create sheet closed: what it holds is kept (r7-9) by the
     /// machine (`keep_draft` on every edit), so closing loses nothing.
     pub(crate) fn close_multisig_create(&mut self, cx: &mut Context<Self>) {
+        super::multisig_links::Carry::take_create(cx);
         self.multisig.create = false;
         self.multisig.create_form = None;
         cx.notify();
@@ -1042,8 +1071,13 @@ impl WalletPage {
             ));
             for (i, owner) in owners.iter().enumerate() {
                 let label = self.ms_create_label(owner, locals, view);
-                let short = crate::wallet::live::shorten_address(owner);
                 let local = locals.iter().any(|(a, _)| same(a, owner));
+                // This device's accounts read as the list above writes them.
+                let short = if local {
+                    crate::wallet::live::shorten_address(owner)
+                } else {
+                    names_short(owner)
+                };
                 let doomed = owner.clone();
                 let mut row = div()
                     .flex()
@@ -1209,6 +1243,7 @@ impl WalletPage {
                     .when(enabled, |el| {
                         el.cursor_pointer().hover(|el| el.bg(theme.bg_sunken))
                     })
+                    .when(!enabled, |el| el.opacity(0.4))
                     .child(glyph)
             };
         let fewer = stepper_button(
@@ -1519,11 +1554,12 @@ impl WalletPage {
             body = body.child(
                 div()
                     .flex()
-                    .flex_wrap()
-                    .items_center()
-                    .gap(px(8.))
+                    .flex_col()
+                    .items_start()
+                    .gap(px(4.))
                     .child(
                         div()
+                            .w_full()
                             .text_size(theme::text_label())
                             .text_color(theme.fg_subtle)
                             .child(crate::ui::prose(words::tv(
@@ -1577,6 +1613,10 @@ impl WalletPage {
         }
         // What the last press came to.
         if pressed && view.create.address.is_none() {
+            // Nothing was made: nothing to carry to another page.
+            if matches!(view.create.phase, Phase::Failed | Phase::Cancelled) {
+                super::multisig_links::Carry::take_create(cx);
+            }
             match view.create.phase {
                 Phase::Failed => {
                     let detail = view.create.error.clone().unwrap_or_default();
@@ -1661,6 +1701,9 @@ impl WalletPage {
                             if let Some(form) = this.multisig.create_form.as_mut() {
                                 form.pressed = true;
                             }
+                            // Created, it is the multisig shown: the page is
+                            // built again for it, and the sheet carried over.
+                            super::multisig_links::Carry::set_create(choice.name.clone(), cx);
                             let host = this.ms_host(cx);
                             host.update(cx, |host, cx| {
                                 // The creator's passkey is this device's: the
@@ -2055,6 +2098,13 @@ mod tests {
             "a threshold past fewer members comes back within them"
         );
         assert_eq!(step_threshold(1, 0, true), 1);
+    }
+
+    #[test]
+    fn the_spare_members_are_counted_in_the_words() {
+        let loc = Loc::for_tag("en");
+        let line = words::tc(&loc, "create.thresholdSpare", 2);
+        assert!(line.contains('2') && !line.contains("{{"), "{line}");
     }
 
     #[test]

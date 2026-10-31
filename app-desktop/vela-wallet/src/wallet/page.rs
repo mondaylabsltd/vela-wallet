@@ -1559,6 +1559,7 @@ impl WalletPage {
         if let Some(query) = crate::dev_env::var!("VELA_PALETTE") {
             page.palette = Some(palette::Palette { query, selected: 0 });
         }
+        page.pin_multisig_sheet(cx);
         // Money in flight outlives every screen: the tracker runs from the
         // moment somebody is signed in, not from the moment a send opens.
         crate::executor::tracker::start(cx);
@@ -5170,6 +5171,8 @@ impl WalletPage {
             || self.unreachable_open
             // N-D2: the command palette, over the browser too.
             || self.palette.is_some()
+            // A multisig's question, sheet or link (AUDIT M1–M6).
+            || self.multisig_up(cx)
             || self.feedback.viewer_open()
             || session::view(cx).sign_out.is_some()
             || self.signing_host.as_ref().is_some_and(|host| {
@@ -23493,9 +23496,11 @@ mod tests {
         let agent = include_str!("page/agent.rs");
         // And the command palette from its own (N-D2).
         let palette = include_str!("page/palette.rs");
+        // And the multisig layer from its own (AUDIT M1–M6).
+        let multisig = include_str!("page/multisig.rs");
         let body_of = |name: &str| -> &str {
             let signature = ["fn ", name, "("].concat();
-            let (file, start) = [source, agent, palette]
+            let (file, start) = [source, agent, palette, multisig]
                 .into_iter()
                 .find_map(|file| file.find(&signature).map(|start| (file, start)))
                 .unwrap_or_else(|| unreachable!("fn {name}"));
@@ -23524,6 +23529,7 @@ mod tests {
             ("trusted_signer_prompt", "trusted_signer()"),
             ("agent_approval_dialog", "self.agent_pending(cx)"),
             ("palette_dialog", "self.palette"),
+            ("multisig_layer", "self.multisig_up(cx)"),
         ];
         for (dialog, state) in raised_by {
             assert!(
