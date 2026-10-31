@@ -18351,6 +18351,7 @@ impl WalletPage {
             // and the site's network, which can be changed right here.
             .child(row_divider(theme))
             .child(self.account_row(theme, consent.address.as_deref(), cx))
+            .children(self.ms_dapp_connect_note(theme, consent.address.as_deref(), cx))
             .child(row_divider(theme))
             .child(self.site_network_row(theme, consent.chain_id, Some(consent.origin.clone()), cx))
             .child(row_divider(theme))

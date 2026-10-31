@@ -36,6 +36,7 @@ impl WalletPage {
     /// the proposals machine's — `true` — and nothing reaches the Vela
     /// signing column. One at a time: while the send flow proposes, or
     /// another site's request is held, the site hears "busy, ask again".
+    #[cfg_attr(target_os = "linux", allow(dead_code))]
     pub(crate) fn ms_dapp_take(&mut self, forwarded: &Forwarded, cx: &mut Context<Self>) -> bool {
         let Some(host) = ms_host::booted(cx) else {
             return false;
@@ -74,6 +75,31 @@ impl WalletPage {
         host.update(cx, |host, cx| host.proposals(ask, cx));
         self.ms_dapp_follow(cx);
         true
+    }
+
+    /// dapp-7: a connect for a multisig says what a multisig cannot be
+    /// asked (the web's `multisigConnectNote`) — `address` is the account
+    /// the grant would be made for.
+    pub(crate) fn ms_dapp_connect_note(
+        &mut self,
+        theme: &Theme,
+        address: Option<&str>,
+        cx: &mut Context<Self>,
+    ) -> Option<Div> {
+        let address = address.filter(|a| !a.is_empty())?;
+        let host = ms_host::booted(cx)?;
+        let multisig =
+            ms_dapp::multisig_of(address, &host.read(cx).machines().accounts_view.accounts)
+                .is_some();
+        multisig.then(|| {
+            div()
+                .text_size(theme::text_row_sub())
+                .line_height(gpui::relative(1.4))
+                .text_color(theme.fg_muted)
+                .child(crate::ui::prose(
+                    self.loc.t("connect.browser.multisigConnectNote"),
+                ))
+        })
     }
 
     /// The page that asked is gone (its 4900 already sent): a request the
