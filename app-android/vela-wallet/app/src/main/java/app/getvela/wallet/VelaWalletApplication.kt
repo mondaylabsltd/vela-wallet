@@ -1188,6 +1188,11 @@ class VelaWalletApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // core-perf-1: the core's library is loaded — JNA's registration of
+        // every export, uniffi's contract check — by whichever thread touches
+        // it first. Touched here, on a worker, before anything else runs, so
+        // that is not the main thread on its way to the first frame.
+        warmCore()
         // First, so a crash in composition is itself on the record. Debug
         // builds only; see VelaLog.
         VelaLog.install(this)
@@ -1203,6 +1208,18 @@ class VelaWalletApplication : Application() {
         try { container = AppContainer(this) } finally { android.os.Trace.endSection() }
         android.os.Trace.beginSection("vela.AppContainer.start")
         try { container.start() } finally { android.os.Trace.endSection() }
+    }
+
+    private fun warmCore() {
+        Thread({
+            android.os.Trace.beginSection("vela.core.warm")
+            try {
+                // Any export loads the library; this one is a constant.
+                runCatching { uniffi.vela_core_uniffi.launchAnimationStorageKey() }
+            } finally {
+                android.os.Trace.endSection()
+            }
+        }, "vela-core-warm").start()
     }
 
     /**
