@@ -56,25 +56,32 @@ enum DevMultisigPoll {
             },
             darwinName as CFString, nil, .deliverImmediately
         )
-        observers.append(NotificationCenter.default.addObserver(
-            forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main
-        ) { _ in
-            Task { @MainActor in DevMultisigPoll.stayAwake() }
-        })
+        // At once, on the main queue: a Task scheduled here may run only
+        // after iOS has suspended the app.
+        for name in [UIApplication.willResignActiveNotification, UIApplication.didEnterBackgroundNotification,
+                     UIScene.didEnterBackgroundNotification] {
+            observers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { _ in
+                MainActor.assumeIsolated { DevMultisigPoll.stayAwake() }
+            })
+        }
         observers.append(NotificationCenter.default.addObserver(
             forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main
         ) { _ in
-            Task { @MainActor in DevMultisigPoll.release() }
+            MainActor.assumeIsolated { DevMultisigPoll.release() }
         })
-        print("[vela-wallet] dev: multisig poll armed (\(darwinName))")
+        trace("armed (\(darwinName))")
     }
 
     /// Away: keep running for the time iOS gives a finishing task.
     private static func stayAwake() {
         guard task == .invalid else { return }
         task = UIApplication.shared.beginBackgroundTask(withName: "dev.multisigPoll") {
+            DevMultisigPoll.trace("away: the background time ran out")
             DevMultisigPoll.release()
         }
+        // `backgroundTimeRemaining` is `.greatestFiniteMagnitude` while the app
+        // is still active: said as it is, never converted to an Int.
+        trace("away: kept running (\(UIApplication.shared.backgroundTimeRemaining) s)")
     }
 
     private static func release() {
@@ -85,9 +92,30 @@ enum DevMultisigPoll {
 
     /// One round — the background refresh's own.
     static func round() async {
-        print("[vela-wallet] dev: multisig poll — one background round")
+        let notifier = MultisigBackgroundBridge.hub?.notifier
+        trace("round: start (away \(UIApplicationStateProbe.isAway)); said before \(notifier?.seen.needsYou ?? [:])")
         await MultisigBackgroundBridge.run()
-        print("[vela-wallet] dev: multisig poll — round done")
+        trace("round: said now \(notifier?.seen.needsYou ?? [:])")
+        let presence = MultisigBackgroundBridge.hub?.proposalsView.presence ?? [:]
+        let waiting = presence.map { "\($0.key):\($0.value?.needsYou ?? -1)/\($0.value?.ready ?? -1)" }.joined(separator: ",")
+        trace("round: done; needs you/ready \(waiting)")
+    }
+
+    /// A line for the harness — `multisig-poll.log` in the app's Caches,
+    /// which the host reads (`simctl get_app_container … data`) — and the
+    /// console.
+    private static func trace(_ line: String) {
+        print("[vela-wallet] dev: multisig poll — \(line)")
+        guard let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else { return }
+        let path = caches.appendingPathComponent("multisig-poll.log").path
+        let stamped = "\(Date().timeIntervalSince1970) \(line)\n"
+        if let handle = FileHandle(forWritingAtPath: path) {
+            handle.seekToEndOfFile()
+            handle.write(Data(stamped.utf8))
+            try? handle.close()
+        } else {
+            try? stamped.write(toFile: path, atomically: true, encoding: .utf8)
+        }
     }
 }
 

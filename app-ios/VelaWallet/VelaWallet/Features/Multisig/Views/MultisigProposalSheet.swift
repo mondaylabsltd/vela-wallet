@@ -727,12 +727,17 @@ struct MultisigProposalSheet: View {
                     HStack(spacing: Tokens.Space.s12) {
                         IdenticonAvatar(seed: member, size: 28, tappable: false)
                         VStack(alignment: .leading, spacing: Tokens.Space.s2) {
-                            Text(verbatim: words.label(member))
-                                .typeRole(Typography.fieldLabel.scaled(textScale))
+                            let short = MsWords.short(member)
+                            let label = words.label(member)
+                            // An unnamed member is its address, said once.
+                            Text(verbatim: label)
+                                .typeRole((label == short ? Typography.monoSmall : Typography.fieldLabel).scaled(textScale))
                                 .foregroundStyle(theme.fgBase)
-                            Text(verbatim: MsWords.short(member))
-                                .typeRole(Typography.monoSmall.scaled(textScale))
-                                .foregroundStyle(theme.fgSubtle)
+                            if label != short {
+                                Text(verbatim: short)
+                                    .typeRole(Typography.monoSmall.scaled(textScale))
+                                    .foregroundStyle(theme.fgSubtle)
+                            }
                         }
                         Spacer(minLength: Tokens.Space.s8)
                         Text(verbatim: words.t(word.key))
@@ -890,6 +895,8 @@ struct MultisigProposalSheet: View {
                     linkActions(link, copiedFlag: $copied, share: "multisig.proposal.share", copy: "multisig.proposal.copyLink")
                 }
             }
+            // A container of its own: its rows keep their identifiers.
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("multisig.proposal.invite")
         }
         if let link = model.outsideLink {
@@ -918,6 +925,7 @@ struct MultisigProposalSheet: View {
                     .accessibilityIdentifier("multisig.proposal.outsideLink")
                 linkActions(link, copiedFlag: $outsideCopied, share: "multisig.proposal.outsideShare", copy: "multisig.proposal.outsideCopy")
             }
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("multisig.proposal.outsideInvite")
         }
         if model.offersOutsideWallet {
