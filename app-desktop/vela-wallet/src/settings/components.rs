@@ -1536,13 +1536,38 @@ pub fn confirm_sheet(
     on_confirm: impl Fn(&gpui::ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
     on_cancel: impl Fn(&gpui::ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
 ) -> Div {
-    use crate::flows::components::{accent_button, danger_button, secondary_button};
+    use crate::flows::components::{accent_button, danger_button};
 
     let answer = if copy.danger {
-        danger_button(theme, copy.confirm)
+        danger_button(theme, copy.confirm.clone())
     } else {
-        accent_button(theme, copy.confirm)
+        accent_button(theme, copy.confirm.clone())
     };
+    sheet_with(theme, copy, answer, on_confirm, on_cancel)
+}
+
+/// [`confirm_sheet`] whose answer moves no value: the ink fill, never the
+/// accent (r8 S4: "Switch to the testnet space" wore the accent, which
+/// means "this moves the money").
+pub fn neutral_confirm_sheet(
+    theme: &Theme,
+    copy: ConfirmCopy,
+    on_confirm: impl Fn(&gpui::ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
+    on_cancel: impl Fn(&gpui::ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
+) -> Div {
+    let answer = crate::flows::components::ink_button(theme, copy.confirm.clone());
+    sheet_with(theme, copy, answer, on_confirm, on_cancel)
+}
+
+fn sheet_with(
+    theme: &Theme,
+    copy: ConfirmCopy,
+    answer: Div,
+    on_confirm: impl Fn(&gpui::ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
+    on_cancel: impl Fn(&gpui::ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
+) -> Div {
+    use crate::flows::components::secondary_button;
+
     let answer = answer
         .id("confirm-accept")
         .cursor_pointer()

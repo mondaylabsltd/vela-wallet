@@ -841,6 +841,8 @@
    "waitedSeconds": "{{seconds}} secondes d'attente",
    "networkTitle": "Connexion réseau instable",
    "networkBody": "La requête n'est pas arrivée — vérifiez votre réseau, puis réessayez.",
+   "proxyPacBody": "Cet ordinateur est réglé pour utiliser une configuration automatique du proxy ({{proxy}}) inaccessible : aucune requête ne sort. Corrigez-la, ou désactivez la configuration automatique du proxy dans la section Proxys des réglages réseau du système, puis réessayez.",
+   "proxyServerBody": "Le proxy que cet ordinateur est réglé pour utiliser ({{proxy}}) ne répond pas : aucune requête ne sort. Démarrez-le, ou désactivez-le dans la section Proxys des réglages réseau du système, puis réessayez.",
    "offline": "Vous êtes hors ligne. Vela se met à jour dès que vous êtes de nouveau en ligne.",
    "serverTitle": "Service temporairement indisponible",
    "serverBody": "Le service d'index des clés d'accès est injoignable — la création comme la connexion en ont besoin.",

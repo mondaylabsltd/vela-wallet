@@ -1353,8 +1353,14 @@ for (let i = 1; i < PATHS.length; i++) {
 //   readyToExecute, executed}`). 2243 + 19 leaves + 2 branches
 //   (`componentsUi.appUpdate.refused`, `componentsUi.multisigNotify`) =
 //   2264 paths, 2147 leaves, 117 branches.
-if (PATHS.length !== 2264) fail(`expected 2264 paths (2147 leaf + 117 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2147) fail(`expected 2147 leaf paths, got ${leafSet.size}`);
+// 2266 (desktop r8-23, 2026-11-01): + the welcome's word for a proxy that
+//   keeps every request in (`onboarding.common.{proxyPacBody,
+//   proxyServerBody}`: an automatic proxy configuration that can't be
+//   reached, a proxy that doesn't answer — and where to turn it off), in
+//   place of "check your network" when the network was never the problem.
+//   2264 + 2 leaves = 2266 paths, 2149 leaves, 117 branches.
+if (PATHS.length !== 2266) fail(`expected 2266 paths (2149 leaf + 117 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2149) fail(`expected 2149 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 117) fail(`expected 117 branch paths, got ${branchSet.size}`);
 // The on-demand catalogs, pinned the same way (leaves of every locale's union):
 // a key dropped from one namespace and not landed in the other fails here.

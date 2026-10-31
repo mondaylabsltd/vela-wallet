@@ -3502,7 +3502,8 @@ impl WalletPage {
             cancel: Some(self.loc.t("common.cancel")),
             danger: false,
         };
-        let sheet = confirm_sheet(
+        // A switch of space moves no value: the ink answer, not the accent.
+        let sheet = crate::settings::components::neutral_confirm_sheet(
             theme,
             copy,
             cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
@@ -4235,12 +4236,40 @@ impl WalletPage {
                     on_account,
                     space,
                 );
+                // r8-13: a multisig shown says its rule under its name, as
+                // the web's header chip — pressed, its Settings.
+                let rule = if live { self.ms_rule_chip(cx) } else { None };
                 div()
                     .flex()
                     .flex_col()
                     .gap(px(6.))
                     .mb(px(4.))
                     .child(header)
+                    .children(rule.map(|(label, title)| {
+                        div().px(px(12.)).flex().child(
+                            div()
+                                .id("sidebar-rule-chip")
+                                .a11y_button(SharedString::from(title))
+                                .flex()
+                                .items_center()
+                                .gap(px(4.))
+                                .px(px(8.))
+                                .py(px(2.))
+                                .rounded_full()
+                                .border_1()
+                                .border_color(theme.divider)
+                                .bg(theme.bg_raised)
+                                .cursor_pointer()
+                                .text_size(theme::text_label())
+                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .text_color(theme.fg_muted)
+                                .child(icon_img(&mut self.icons, Icon::UsersRound, false, theme.fg_muted, 12.))
+                                .child(label)
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.go_to_section(Section::Settings, cx);
+                                })),
+                        )
+                    }))
                     .children(sync.map(|sync| {
                         div()
                             .id("sidebar-sync")
@@ -4586,6 +4615,11 @@ impl WalletPage {
                         div()
                             .max_w(px(WALLET_ROW_MEASURE))
                             .child(pills)
+                            .children(if self.identity.is_some() {
+                                self.multisig_get_ready(theme, cx)
+                            } else {
+                                None
+                            })
                             .children(if self.identity.is_some() {
                                 self.multisig_waiting_group(theme, cx)
                             } else {
@@ -5537,13 +5571,14 @@ impl WalletPage {
         // Issue #443: when the figure was last read — "Updated 2m" — beside
         // the control that reads it again. A deposit sent from another
         // device gave no sign of when the hero would next look.
-        model.updated = view.last_refreshed_at_ms.map(|at| {
+        let ago = view.last_refreshed_at_ms.map(|at| {
             SharedString::from(crate::wallet::fill(
                 &self.strings.last_updated,
                 "ago",
                 &self.loc.relative_time(at, crate::executor::now_ms()),
             ))
         });
+        model.updated = wallet_live::updated_line(&model, ago);
         // Issue 462: the core's "a read they asked for is out", held for at
         // least the press's minimum turn.
         model.refreshing = wallet_live::refresh_turning(
