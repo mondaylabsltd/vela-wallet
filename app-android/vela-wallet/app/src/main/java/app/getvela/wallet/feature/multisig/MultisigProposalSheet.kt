@@ -190,13 +190,15 @@ fun MultisigProposalSheet(
         Column(verticalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
             MsText(model.title, MsType.Title, Modifier.testTag("multisig.proposal.title"))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
-                MsChip(model.statusLine, Modifier.testTag("multisig.proposal.status"), tone = if (model.standing.kind == "blocked") MsTone.Warning else MsTone.Neutral)
+                model.statusLine.takeIf { it.isNotEmpty() }?.let { line ->
+                    MsChip(line, Modifier.testTag("multisig.proposal.status"), tone = if (model.standing.kind == "blocked") MsTone.Warning else MsTone.Neutral)
+                }
                 MsText("${words.network(chainId)} · ${words.t("action.numberValue", "nonce" to item.nonce)}", MsType.Sub, color = colors.fgSubtle)
             }
         }
         for (note in model.notes) MsNote(note.text, tone = note.tone, tag = "multisig.proposal.note.${note.id}")
         model.executedTx?.let { tx ->
-            MsNote(words.t("proposal.executed"), tone = MsTone.Positive, tag = "multisig.proposal.executed")
+            if (!model.executedSaidInNotes) MsNote(words.t("proposal.executed"), tone = MsTone.Positive, tag = "multisig.proposal.executed")
             explorerTx(chainId, tx)?.let { url ->
                 val context = LocalContext.current
                 MsTextButton(words.t("proposal.explorer"), tag = "multisig.proposal.explorer") {

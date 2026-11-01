@@ -54,7 +54,14 @@ class MsProposalModel(
      * multisig's own line (a member change, a cancellation, a rename).
      */
     val title: String get() = readingTitle(review, chainId, words) ?: words.actionTitle(chainId, item.action, item.nonce)
-    val statusLine: String get() = words.standingLine(standing, item)
+    val statusLine: String
+        // r10-7 (round 11, live): an executed one has no standing — the chip
+        // fell back to today's count and read "1/2 approved" over an
+        // execution that counted 2 of 2. Finished: what the heading says.
+        get() = if (isDone) approvalsCount else words.standingLine(standing, item)
+
+    /** r10-7: the execution's own line is said once — the notes' line, else the chain's word for it. */
+    val executedSaidInNotes: Boolean get() = executionLine?.id == "executed"
 
     /** Who approved, by address (lowercased). */
     val approvedBy: Set<String> get() = item.approvers.map { it.lowercase() }.toSet()

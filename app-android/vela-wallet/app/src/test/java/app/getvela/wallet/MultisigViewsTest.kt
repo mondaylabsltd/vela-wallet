@@ -257,6 +257,47 @@ class MultisigViewsTest {
         assertTrue(model.notes.any { it.id == "executed" && it.tone == MsTone.Positive })
     }
 
+    /**
+     * r10-7 (round 11, live): after its own one-press the sheet read "1/2
+     * approved" over "Executed by Interleave · 2 of 2 approvals counted",
+     * and "Executed" twice. Finished: the chip is the heading's word, the
+     * execution said once.
+     */
+    @Test
+    fun an_executed_one_says_executed_once_never_todays_count() {
+        val done = proposalsJson(""","executions":{"100:$hash":{"kind":"executed","txHash":"0xtx"}},"timelines":{"100:$hash":[{"kind":"executed","tx_hash":"0xtx"}]}""")
+            .replace("\"status\":\"ready\"", "\"status\":\"done\"")
+        val view = MsProposalsView.of(json(done))
+        val model = MsProposalModel(view.items.single(), view, words(), null)
+        assertEquals(words().t("proposal.executed"), model.statusLine)
+        assertTrue("the notes say it", model.executedSaidInNotes)
+        assertEquals(1, model.notes.count { it.text == words().t("proposal.executed") })
+    }
+
+    /**
+     * r11-9: one press whose look could not check it showed two boxes —
+     * "Couldn't check whether it would run" and "This would fail if executed
+     * now: it couldn't be checked". The stopped state is the look's own words,
+     * a warning, and the fee line gives way to it.
+     */
+    @Test
+    fun a_stopped_execution_is_said_in_its_looks_words_once() {
+        val unchecked = ""","previews":{"100:${hash}:${alice.lowercase()}":{"kind":"unchecked"}},"actions":{"execute:$hash":{"kind":"stopped","preview":{"kind":"unchecked"}}}"""
+        val view = MsProposalsView.of(json(proposalsJson(unchecked)))
+        val model = MsProposalModel(view.items.single(), view, words(), null)
+        val failure = model.executeFailure!!
+        assertEquals(words().t("proposal.feeUnchecked"), failure.text)
+        assertEquals(MsTone.Warning, failure.tone)
+        assertFalse(failure.text.contains(words().t("proposal.uncheckedReason")))
+        assertNull("one box: the fee line gives way", model.feeLineBeside(alice, failure))
+        // A look that says it fails is still "would fail", with its why.
+        val fails = ""","previews":{"100:${hash}:${alice.lowercase()}":{"kind":"fails","why":{"kind":"reverts","reason":"GS013"}}},"actions":{"execute:$hash":{"kind":"stopped","preview":{"kind":"fails","why":{"kind":"reverts","reason":"GS013"}}}}"""
+        val v2 = MsProposalsView.of(json(proposalsJson(fails)))
+        val m2 = MsProposalModel(v2.items.single(), v2, words(), null)
+        assertTrue(m2.executeFailure!!.text.contains("GS013"))
+        assertEquals(MsTone.Danger, m2.executeFailure!!.tone)
+    }
+
     @Test
     fun the_history_lines_name_who_did_what() {
         val view = MsProposalsView.of(json(proposalsJson()))
