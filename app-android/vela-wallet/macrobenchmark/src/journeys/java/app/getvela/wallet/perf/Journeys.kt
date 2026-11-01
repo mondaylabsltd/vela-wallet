@@ -26,9 +26,17 @@ import java.io.File
  * beside the results before it fails.
  */
 object Journeys {
-    const val PACKAGE = "app.getvela.wallet"
-    private const val SEED = "$PACKAGE/app.getvela.wallet.bench.BenchSeedActivity"
-    private const val SIGN = "$PACKAGE/app.getvela.wallet.bench.BenchSignActivity"
+    /**
+     * The app under test: `app.getvela.wallet`, unless the run names another
+     * (`-e vela.targetPackage app.getvela.wallet.devicetest`) — a phone that
+     * already holds the store app is measured on the `-PvelaDeviceTest` build
+     * installed beside it, never over it (scripts/run-macrobenchmarks.sh).
+     */
+    val PACKAGE: String =
+        InstrumentationRegistry.getArguments().getString("vela.targetPackage")?.takeIf { it.isNotBlank() }
+            ?: "app.getvela.wallet"
+    private val SEED = "$PACKAGE/app.getvela.wallet.bench.BenchSeedActivity"
+    private val SIGN = "$PACKAGE/app.getvela.wallet.bench.BenchSignActivity"
     const val ROWS = 200
     private const val WAIT_MS = 30_000L
 
