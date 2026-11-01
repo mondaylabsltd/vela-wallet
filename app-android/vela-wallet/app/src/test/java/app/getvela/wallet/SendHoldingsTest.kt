@@ -236,10 +236,12 @@ class SendHoldingsTest {
         val now = System.currentTimeMillis().toDouble()
         feed.settle(BalanceView(address = ME, tokens = emptyList(), failed_chain_ids = listOf(1, 100)), at = now)
         val reachable = java.util.concurrent.atomic.AtomicBoolean(false)
+        // Each round a second later than the last: a round is new by its stamp.
+        val round = java.util.concurrent.atomic.AtomicInteger()
         val send = controller(feed) {
             val tokens = if (reachable.get()) listOf(token("XDAI", 100, "0.7")) else emptyList()
             val failed = if (reachable.get()) emptyList() else listOf(1, 100)
-            feed.settle(BalanceView(address = ME, tokens = tokens, failed_chain_ids = failed), at = System.currentTimeMillis().toDouble())
+            feed.settle(BalanceView(address = ME, tokens = tokens, failed_chain_ids = failed), at = now + 1_000.0 * round.incrementAndGet())
         }
         send.open(account = me, display = usd)
         send.awaitView("the picker's failed state") { it.tokens_failed_key != null }
