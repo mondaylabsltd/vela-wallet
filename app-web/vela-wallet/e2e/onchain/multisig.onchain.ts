@@ -26,6 +26,7 @@ import {
 	recordOnChain,
 	rpc,
 	safeTx,
+	seedNetwork,
 	servedGenesis,
 	setBalance,
 	signSafeTx,
@@ -473,9 +474,19 @@ async function signFromOutsideLink(
 	await withInjectedWallet(ctx, owner);
 	const page = await ctx.newPage();
 	const thrown = errors(page);
+	// The page reads the chain the multisig lives on — the fork here, as an
+	// outside owner's browser reads the real chain (without this it read the
+	// public Gnosis, where the fork's funding is not: "expected to fail").
+	await page.goto(new URL('/robots.txt', link).href);
+	await seedNetwork(page);
 	await page.goto(link);
-	// r4C-7: reviewed on the page first; the wallet is asked on the tap.
-	await page.getByRole('button', { name: /^Sign with / }).click({ timeout: 60_000 });
+	// r4C-7: reviewed on the page first; the wallet is asked on the tap. The
+	// last approval a wallet that can pay gives is offered as one press with
+	// the execution ("Execute with …") beside "Approve only": approve only.
+	await page
+		.getByRole('button', { name: /^Sign with |^Approve only/ })
+		.first()
+		.click({ timeout: 60_000 });
 	await expect(page.getByTestId('outside-approved')).toBeVisible({ timeout: 60_000 });
 	await expect(page.getByText(/expected to fail/i)).toHaveCount(0);
 	if (countedAfter) {
