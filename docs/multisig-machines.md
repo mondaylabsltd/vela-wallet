@@ -575,3 +575,24 @@ domain, code, message) -> {kind, key, failure}` (uniffi
   takes optional `error {platform, domain, code, message}`; the core fills
   `PromptKind::{CreateFailed, SignInFailed}.words_key`. Vectors
   `tests/vectors/rules/passkey-errors.json`.
+
+### 9.8 Shell notes from the native fixers (round 10)
+
+- **Android** (branch of the Android r10 fixer, merged by the coordinator):
+  the sheet title from `review.reading` (r10-8); an executed sheet draws its
+  frozen facts and asks the timeline once more when done (r10-7);
+  `waiting_note` drawn as it is; the "Updated" stamp hidden while
+  `checking_key` is set; lists through `ListFormatter`
+  (`MultisigWords.list`); `recipient_facts.first_time = false` for this
+  device's own accounts and multisigs; the notification ask marked on its
+  answer; WorkManager rounds on an INTERNET (not VALIDATED) network request,
+  plus an expedited round on leaving. r10-6: the shell also drops
+  `reverts` / `unsimulated` beside a withheld simulation and
+  `unreadableBatch` beside `refused.why = tooDeep` (one red box) — the core
+  no longer emits them (§9.5), both are compatible. Its new on-demand keys
+  (`home.multisig.notify.*`, `home.multisig.create.close*`) move the
+  multisig pin; this branch's own +1 (`presence.ruleLastKnown`, 665) is to
+  be added on merge.
+- **Desktop**: the deep-batch refusal said once (`reading::
+concern_blocks_beside`); `SendPick.loading`; network status beside the
+  stamp; `TokensPartial` only with a held balance.
