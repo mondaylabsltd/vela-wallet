@@ -55,6 +55,7 @@
 	import { focusOwnWindow, openInBrowserTab } from '$lib/extension/open-tab';
 	import { oneSurface } from '$lib/extension/one-surface.svelte';
 	import {
+		answerNotShown,
 		answerRequest,
 		readRequest,
 		rejectRequest,
@@ -236,24 +237,32 @@
 
 			// Publish what the worker will need to answer this origin instantly
 			// next time. The core authors it; this only stores it.
-			const [snapshot] = await Promise.all([
-				publishExtSnapshot({
-					isLoading: session.view.loading,
-					hasWallet: session.view.has_wallet,
-					accounts: [
-						...session.view.accounts.map((row) => row.account),
-						...multisigAccountsForExt().accounts
-					],
-					active:
-						multisigAccountsForExt().active ??
-						session.view.accounts[session.view.active_index]?.account ??
-						null,
-					theme: 'dark',
-					locale
-				}),
-				publishExtChains()
-			]);
-			chainId = await getOriginChain(incoming.origin, snapshot?.chain_id ?? 0);
+			// r11-2: a read before the sheet that throws leaves no request owed
+			// with nothing on screen (`notShown`).
+			let snapshot: Awaited<ReturnType<typeof publishExtSnapshot>>;
+			try {
+				[snapshot] = await Promise.all([
+					publishExtSnapshot({
+						isLoading: session.view.loading,
+						hasWallet: session.view.has_wallet,
+						accounts: [
+							...session.view.accounts.map((row) => row.account),
+							...multisigAccountsForExt().accounts
+						],
+						active:
+							multisigAccountsForExt().active ??
+							session.view.accounts[session.view.active_index]?.account ??
+							null,
+						theme: 'dark',
+						locale
+					}),
+					publishExtChains()
+				]);
+				chainId = await getOriginChain(incoming.origin, snapshot?.chain_id ?? 0);
+			} catch (error) {
+				await notShown(incoming, error);
+				return;
+			}
 			// Withdrawn while the snapshot was being published.
 			if (owing !== incoming.rid) return;
 
@@ -284,9 +293,29 @@
 		}
 	}
 
+	/**
+	 * r11-2: `incoming` was taken (owed, reported shown) and its sheet could
+	 * not be built. It is not left owed behind a plain wallet: the site hears
+	 * that nothing was shown or signed, and this surface takes the next one.
+	 */
+	async function notShown(incoming: ExtensionRequest, error: unknown): Promise<void> {
+		console.warn('[dapp] request not shown:', error);
+		if (owing !== incoming.rid) return;
+		owing = null;
+		request = null;
+		stage = { kind: 'loading' };
+		await answerNotShown(incoming.rid);
+		leave();
+	}
+
 	/** Ask the core about `incoming` and carry out what it says. */
 	async function proceed(incoming: ExtensionRequest): Promise<void> {
-		stage = await evaluate(incoming, facts);
+		try {
+			stage = await evaluate(incoming, facts);
+		} catch (error) {
+			await notShown(incoming, error);
+			return;
+		}
 		if (stage.kind === 'done' || stage.kind === 'refused') {
 			owing = null;
 			request = null;

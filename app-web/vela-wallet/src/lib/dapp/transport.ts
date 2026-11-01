@@ -137,6 +137,24 @@ export async function answerRequest(
 }
 
 /** Refuse a request in the standard shape. */
+/**
+ * r11-2: a request this surface TOOK — marked owed, reported shown to the
+ * worker — whose sheet could not be built (a read before the sheet threw).
+ * Left as it was, the request stayed owed with no sheet: the panel drew the
+ * plain wallet, the site's promise never settled, and every later request
+ * of the window waited behind it. Nothing was signed or sent (the throw came
+ * before any sheet), so the site hears an internal error it may retry —
+ * never "the user rejected it", which nobody did.
+ */
+export const NOT_SHOWN_ERROR = {
+	code: -32603,
+	message: 'Vela could not show this request. Nothing was signed — try again.'
+} as const;
+
+export function answerNotShown(rid: string): Promise<boolean> {
+	return answerRequest(rid, { error: { ...NOT_SHOWN_ERROR } }).catch(() => false);
+}
+
 export function rejectRequest(
 	rid: string,
 	message = 'User rejected the request'
