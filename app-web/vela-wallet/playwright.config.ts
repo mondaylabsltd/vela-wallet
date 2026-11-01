@@ -15,7 +15,12 @@ const STORAGE_SUITES = [
 	// A failed lazy import: the tab's memory of the build it recovered from is
 	// session storage — and the cancelled imports of a page being left, which
 	// it must ignore, are reported by Firefox alone.
-	'**/chunk-recovery.e2e.ts'
+	'**/chunk-recovery.e2e.ts',
+	// A multisig's everyday flows against the hermetic multisig world — an
+	// invite added, a rejection at its number, what waits said: what a member
+	// sees and keeps (the store, the passkey, the mailbox's answer) must not
+	// be one engine's.
+	'**/multisig-world.e2e.ts'
 ];
 
 export default defineConfig({

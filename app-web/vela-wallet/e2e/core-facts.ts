@@ -60,6 +60,23 @@ export async function speedDefaults(): Promise<{ factory: Speed; offered: Speed[
 }
 
 /**
+ * One of the core's multisig doors (`multisigCall`: genesis, hashes;
+ * `multisigLinkCall`: the links' codec), asked in Node — a suite that needs
+ * a multisig's address or its invite builds them as the wallet would.
+ */
+export async function multisigCore<T>(
+	door: 'multisigCall' | 'multisigLinkCall',
+	method: string,
+	args: Record<string, unknown>
+): Promise<T> {
+	const core = (await shippedCore()) as unknown as Record<
+		string,
+		(method: string, args: string) => string
+	>;
+	return JSON.parse(core[door](method, JSON.stringify(args))) as T;
+}
+
+/**
  * The Safe contracts the core pins (`multisig::CANONICAL`): each one's
  * address and the keccak256 of the runtime code it must hold — for a suite
  * that recomputes them from a chain.
