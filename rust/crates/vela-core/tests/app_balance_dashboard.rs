@@ -1462,6 +1462,16 @@ fn unreachable_names_only_the_networks_a_multisig_lives_on() {
     // Nothing said of where it lives: every failed network.
     round(&mut sut, vec![11_155_420]);
     assert_eq!(down(&sut), vec![11_155_420]);
+    // A plain account said to live nowhere in particular (`lives_on []`, as
+    // the web says for a Vela account) names no home: a Vela account can be
+    // paid on any network, so every failed one is still said (T152).
+    sut.dispatch(Event::LivesOn {
+        address: ADDR_A.to_owned(),
+        chain_ids: vec![],
+    });
+    round(&mut sut, vec![11_155_420]);
+    assert_eq!(down(&sut), vec![11_155_420]);
+    assert!(sut.view().balance_partial);
     // A multisig on Arc Testnet alone: OP Sepolia is not its network.
     sut.dispatch(Event::LivesOn {
         address: ADDR_A.to_ascii_uppercase().replace("0X", "0x"),

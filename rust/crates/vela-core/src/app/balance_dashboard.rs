@@ -2354,10 +2354,15 @@ fn network_rank(chain_id: u32) -> u64 {
 /// [`home_chains`] when it was said to live somewhere (`lives_on`, a
 /// multisig), else `None`: every network.
 fn said_home(model: &Model) -> Option<BTreeSet<u32>> {
+    // A shell says `lives_on []` for a plain account too: that names no home,
+    // and a Vela account can be paid on any network — every failed network is
+    // still said (never a confident zero, T152). Only a non-empty word (a
+    // multisig's networks) narrows what is said.
     model.address.as_deref().and_then(|address| {
         model
             .lives_on
-            .contains_key(&address.to_ascii_lowercase())
+            .get(&address.to_ascii_lowercase())
+            .is_some_and(|chains| !chains.is_empty())
             .then(|| home_chains(model, address, &[]))
     })
 }
