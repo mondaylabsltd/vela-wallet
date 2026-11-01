@@ -574,7 +574,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 0.9.8;
-				PRODUCT_BUNDLE_IDENTIFIER = app.getvela.VelaWallet.SafariExtension;
+				PRODUCT_BUNDLE_IDENTIFIER = "app.getvela.VelaWallet$(VELA_BUNDLE_ID_SUFFIX).SafariExtension";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -604,7 +604,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 0.9.8;
-				PRODUCT_BUNDLE_IDENTIFIER = app.getvela.VelaWallet.SafariExtension;
+				PRODUCT_BUNDLE_IDENTIFIER = "app.getvela.VelaWallet$(VELA_BUNDLE_ID_SUFFIX).SafariExtension";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -649,7 +649,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.9.8;
-				PRODUCT_BUNDLE_IDENTIFIER = app.getvela.VelaWallet;
+				PRODUCT_BUNDLE_IDENTIFIER = "app.getvela.VelaWallet$(VELA_BUNDLE_ID_SUFFIX)";
 				VELA_GIT_COMMIT = unknown;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -688,7 +688,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.9.8;
-				PRODUCT_BUNDLE_IDENTIFIER = app.getvela.VelaWallet;
+				PRODUCT_BUNDLE_IDENTIFIER = "app.getvela.VelaWallet$(VELA_BUNDLE_ID_SUFFIX)";
 				VELA_GIT_COMMIT = unknown;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -762,6 +762,7 @@
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				VELA_BUNDLE_ID_SUFFIX = "";
 			};
 			name = Debug;
 		};
@@ -819,6 +820,7 @@
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
+				VELA_BUNDLE_ID_SUFFIX = "";
 			};
 			name = Release;
 		};
@@ -834,7 +836,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.4;
 				MARKETING_VERSION = 0.9.8;
-				PRODUCT_BUNDLE_IDENTIFIER = app.getvela.VelaWalletTests;
+				PRODUCT_BUNDLE_IDENTIFIER = "app.getvela.VelaWalletTests$(VELA_BUNDLE_ID_SUFFIX)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -856,7 +858,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.4;
 				MARKETING_VERSION = 0.9.8;
-				PRODUCT_BUNDLE_IDENTIFIER = app.getvela.VelaWalletTests;
+				PRODUCT_BUNDLE_IDENTIFIER = "app.getvela.VelaWalletTests$(VELA_BUNDLE_ID_SUFFIX)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -878,7 +880,7 @@
 				DEVELOPMENT_TEAM = F9W689P9NE;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 0.9.8;
-				PRODUCT_BUNDLE_IDENTIFIER = app.getvela.VelaWalletUITests;
+				PRODUCT_BUNDLE_IDENTIFIER = "app.getvela.VelaWalletUITests$(VELA_BUNDLE_ID_SUFFIX)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -898,7 +900,7 @@
 				DEVELOPMENT_TEAM = F9W689P9NE;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 0.9.8;
-				PRODUCT_BUNDLE_IDENTIFIER = app.getvela.VelaWalletUITests;
+				PRODUCT_BUNDLE_IDENTIFIER = "app.getvela.VelaWalletUITests$(VELA_BUNDLE_ID_SUFFIX)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -928,7 +930,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 0.9.8;
-				PRODUCT_BUNDLE_IDENTIFIER = app.getvela.VelaWallet.Widgets;
+				PRODUCT_BUNDLE_IDENTIFIER = "app.getvela.VelaWallet$(VELA_BUNDLE_ID_SUFFIX).Widgets";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -959,7 +961,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 0.9.8;
-				PRODUCT_BUNDLE_IDENTIFIER = app.getvela.VelaWallet.Widgets;
+				PRODUCT_BUNDLE_IDENTIFIER = "app.getvela.VelaWallet$(VELA_BUNDLE_ID_SUFFIX).Widgets";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;

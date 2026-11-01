@@ -46,7 +46,20 @@ enum PerfSeed {
     static func install() {
         #if targetEnvironment(simulator)
         apply(environment: ProcessInfo.processInfo.environment, store: VelaStore())
+        #else
+        // A phone, but the device-test build (app-ios/devicetest): its storage
+        // is its own, beside the Vela the phone holds — no history of anybody's
+        // to replace. Measuring on the phone is the point of Phase 4.
+        if isDeviceTestBuild(Bundle.main.bundleIdentifier) {
+            apply(environment: ProcessInfo.processInfo.environment, store: VelaStore())
+        }
         #endif
+    }
+
+    /// The `.devicetest` bundle id (`VELA_BUNDLE_ID_SUFFIX=.devicetest`), and
+    /// nothing else — the store app's id never seeds on a phone.
+    static func isDeviceTestBuild(_ bundleId: String?) -> Bool {
+        bundleId?.hasSuffix(".devicetest") == true
     }
 
     /// What a test drives: the environment and the shelf handed in. `false`
