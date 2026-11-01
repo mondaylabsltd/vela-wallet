@@ -12534,7 +12534,11 @@ impl WalletPage {
         // list, by name, after the mainnet hint — "Add one from Add Network".
         let view = resident::resident::<NetworkAdmin>(cx).read(cx).view();
         let more =
-            settings_live::more_networks(&view, &self.loc.t("settingsModals.network.moreNetworks"));
+            settings_live::more_networks(
+                &view,
+                &self.loc.t("settingsModals.network.moreNetworks"),
+                self.loc.language(),
+            );
         let hint = settings_live::space_hint(&self.loc.t(hint), more.as_deref(), testnet);
         Some(
             div()
@@ -14851,7 +14855,7 @@ impl WalletPage {
         // A partial wipe names what stayed, in the dialog itself — the person
         // is still signed in, and the button is still live so they can retry.
         let failed = self.erase_failed.as_ref().map(|left| {
-            gpui::SharedString::from(format!("{} ({})", s.erase_failed, left.join(", ")))
+            gpui::SharedString::from(format!("{} ({})", s.erase_failed, self.loc.list(left)))
         });
         // ob-2: erasing means everything, the pending-upload outbox too — so a
         // wallet not yet synced, which no other device can find, is named
@@ -14868,7 +14872,7 @@ impl WalletPage {
             })
             .collect();
         let warning = (!unsynced.is_empty()).then(|| {
-            gpui::SharedString::from(s.erase_unsynced.replace("{{names}}", &unsynced.join(", ")))
+            gpui::SharedString::from(s.erase_unsynced.replace("{{names}}", &self.loc.list(&unsynced)))
         });
         let ack_text = s.erase_unsynced_ack.clone();
         let acked = self.erase_ack;

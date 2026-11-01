@@ -8,6 +8,7 @@
  * Stage 2  ->  rust/.../src/i18n_catalogs/<lng>.rs    one value blob per locale
  * Stage 4  ->  assets/i18n/<lng>.json                  the on-demand catalog every shell reads
  * Stage 5  ->  rust/.../src/l10n/datetime_data.rs      day periods + weekday names
+ * Stage 5b ->  rust/.../src/l10n/list_data.rs          list separators (and-lists)
  *
  * (Stage 3 was `src/i18n/resources.ts`, the React Native app's import; it went
  * with that app in spec 039. The numbering is kept so older notes still line up.)
@@ -48,6 +49,7 @@ const CATALOG_DIR = join(REPO_ROOT, 'rust/crates/vela-core/src/i18n_catalogs');
 // where to look if it ever has to happen again.
 const ASSET_DIR = join(REPO_ROOT, 'assets/i18n');
 const DATETIME_FILE = join(REPO_ROOT, 'rust/crates/vela-core/src/l10n/datetime_data.rs');
+const LIST_FILE = join(REPO_ROOT, 'rust/crates/vela-core/src/l10n/list_data.rs');
 
 // Locale order and namespace spread order are the ones the original
 // hand-maintained resource file had, so a later namespace overwriting an
@@ -1765,6 +1767,56 @@ pub(crate) fn row(locale: &str) -> &'static (&'static str, &'static str, &'stati
 `);
 
 // ---------------------------------------------------------------------------
+// Stage 5b — list separators (r10 follow-up)
+// ---------------------------------------------------------------------------
+//
+// A list inside a sentence ("used on Base, Arbitrum and Ethereum", "transactions
+// #1, #2 and #3") is joined the way the locale joins one: zh "Base、Arbitrum和
+// Ethereum", ja "Base、Arbitrum、Ethereum". iOS and Android have the system's
+// formatter; the desktop has none, and joined with ", " in every language. The
+// CLDR "and" list (Intl.ListFormat conjunction/long) — what the phones' formatters
+// draw — taken from ICU as four separators: two items, then the first, the middle
+// and the last of a longer list. Same house rule as Stage 5: derived, not typed.
+
+const MARKS = ['\u0001', '\u0002', '\u0003', '\u0004'];
+const listRows = LOCALES.map((lng) => {
+  const fmt = new Intl.ListFormat(lng, { type: 'conjunction', style: 'long' });
+  const cut = (text, n) => {
+    const parts = text.split(/[\u0001-\u0004]/u);
+    if (parts.length !== n + 1 || parts[0] !== '' || parts[n] !== '') {
+      fail(`${lng}: the list pattern has text outside its items: ${JSON.stringify(text)}`);
+    }
+    return parts.slice(1, n);
+  };
+  const [pair] = cut(fmt.format(MARKS.slice(0, 2)), 2);
+  const [start, middle, end] = cut(fmt.format(MARKS), 4);
+  return { lng, pair, start, middle, end };
+});
+
+writeFileSync(LIST_FILE, `//! ${GENERATED_BY}
+//!
+//! The separators of an "and" list for the ${LOCALES.length} shipped locales (CLDR's
+//! standard list pattern, as \`Intl.ListFormat\` conjunction/long draws it), extracted
+//! from ICU ${process.versions.icu}. Regenerate with \`node scripts/gen-i18n.mjs\`.
+
+/// \`(locale, two, start, middle, end)\`: between the two items of a pair; between the
+/// first and second of a longer list; between the middle ones; before the last.
+pub(crate) static LISTS: [(&str, &str, &str, &str, &str); ${listRows.length}] = [
+${listRows.map((r) => `    (${rustStr(r.lng)}, ${rustStr(r.pair)}, ${rustStr(r.start)}, ${rustStr(r.middle)}, ${rustStr(r.end)}),`).join('\n')}
+];
+
+/// Row for \`locale\`, falling back to \`en\` — the same fallback the resolver uses.
+pub(crate) fn row(locale: &str) -> &'static (&'static str, &'static str, &'static str, &'static str, &'static str) {
+    let primary = locale.split(['-', '_']).next().unwrap_or(locale);
+    LISTS
+        .iter()
+        .find(|r| r.0 == locale)
+        .or_else(|| LISTS.iter().find(|r| r.0 == primary))
+        .unwrap_or(&LISTS[0])
+}
+`);
+
+// ---------------------------------------------------------------------------
 // Canonical formatting
 //
 // The generated Rust must come out exactly as `cargo fmt` would leave it, or the
@@ -1777,6 +1829,7 @@ pub(crate) fn row(locale: &str) -> &'static (&'static str, &'static str, &'stati
 const RUST_OUTPUTS = [
   PATHS_FILE,
   DATETIME_FILE,
+  LIST_FILE,
   join(CATALOG_DIR, 'mod.rs'),
   ...LOCALES.map((lng) => join(CATALOG_DIR, `${modOf(lng)}.rs`)),
 ];
@@ -1819,3 +1872,4 @@ for (const name of Object.keys(onDemand)) {
 }
 const dtBytes = dtRows.reduce((n, r) => n + Buffer.byteLength(r.am) + Buffer.byteLength(r.pm) + r.weekdays.reduce((m, w) => m + Buffer.byteLength(w), 0), 0);
 console.log(`datetime   : ${dtRows.length} locales, ${dtBytes} bytes of strings (ICU ${process.versions.icu}) -> ${relative(REPO_ROOT, DATETIME_FILE)}`);
+console.log(`lists      : ${listRows.length} locales (ICU ${process.versions.icu}) -> ${relative(REPO_ROOT, LIST_FILE)}`);

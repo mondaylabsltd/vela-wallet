@@ -702,16 +702,21 @@ mod tests {
         let template = "Also supported, not in your list: {{names}}.";
         let mut view = view_with(Vec::new());
         view.hidden_vela_chain_ids = Vec::new();
-        assert_eq!(more_networks(&view, template), None);
+        assert_eq!(more_networks(&view, template, "en"), None);
         view.hidden_vela_chain_ids = vec![988, 4326];
-        let more = more_networks(&view, template);
+        let more = more_networks(&view, template, "en");
         assert_eq!(
             more.as_deref(),
-            Some("Also supported, not in your list: Stable, MegaETH.")
+            Some("Also supported, not in your list: Stable and MegaETH.")
         );
         assert_eq!(
             space_hint("Real money.", more.as_deref(), false),
-            "Real money. Also supported, not in your list: Stable, MegaETH."
+            "Real money. Also supported, not in your list: Stable and MegaETH."
+        );
+        // r10 follow-up: the list is the language's, not ", " everywhere.
+        assert_eq!(
+            more_networks(&view, "{{names}}", "zh").as_deref(),
+            Some("Stable和MegaETH")
         );
         assert_eq!(space_hint("Test coins.", more.as_deref(), true), "Test coins.");
         assert_eq!(space_hint("Real money.", None, false), "Real money.");
@@ -1202,9 +1207,10 @@ pub fn network_rows(view: &NetView) -> Vec<NetworkRowModel> {
 
 /// "Also supported, not in your list: Stable, MegaETH…" — the Vela networks
 /// the core says are out of the person's lists (`hidden_vela_chain_ids`), by
-/// name; none, no line (the web's `moreNetworks`).
+/// name; none, no line (the web's `moreNetworks`). The names are one list in
+/// `language` (`vela_core::l10n::format_list`, r10 follow-up).
 #[must_use]
-pub fn more_networks(view: &NetView, template: &str) -> Option<String> {
+pub fn more_networks(view: &NetView, template: &str, language: &str) -> Option<String> {
     if view.hidden_vela_chain_ids.is_empty() {
         return None;
     }
@@ -1218,7 +1224,11 @@ pub fn more_networks(view: &NetView, template: &str) -> Option<String> {
                 .map_or_else(|| format!("Chain {id}"), |chain| chain.display_name.to_owned())
         })
         .collect();
-    Some(crate::wallet::fill(template, "names", &names.join(", ")))
+    Some(crate::wallet::fill(
+        template,
+        "names",
+        &vela_core::l10n::format_list(language, &names),
+    ))
 }
 
 /// The network list heading's hint (the web's `liveSpaceHeading`): the
