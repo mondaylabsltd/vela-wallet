@@ -197,9 +197,12 @@ window.VelaCS = window.VelaCS || {};
       value: value,
       token: token,
       tokenAddress: tokenAddress,
-      text: unlimited ? null : formatUnits(value, token.decimals),
+      // r9-10: an unknown token's figure is its base units, said as such —
+      // "1000000 base units · decimals unknown", as the app's review says
+      // it — never "1,000,000 ? ?".
+      text: unlimited ? null : known ? formatUnits(value, token.decimals) : value.toString(),
       textKey: unlimited ? 'value.unlimited' : null,
-      symbol: token.symbol,
+      symbol: known ? token.symbol : ns.i18n.t('value.baseUnitsUnknown'),
       fiat: unlimited ? null : fiat(ctx, token.symbol, value, token.decimals),
       unverifiedDecimals: !known,
       // Decoration only — see lib/logos.js.
@@ -2163,6 +2166,15 @@ window.VelaCS = window.VelaCS || {};
     return identify(address, ctx, {});
   }
 
+  /**
+   * r9-10: "1 approval", never "1 approvals" — the sentence's singular form
+   * for a threshold of one (every catalog has it; where a language has one
+   * form, it is the same words).
+   */
+  function one(threshold) {
+    return String(threshold) === '1' ? 'One' : '';
+  }
+
   /** The rows and words of a member change, the multisig's own call. */
   function memberChange(action, ctx, view) {
     view.intentKey = MEMBER_INTENTS[action.kind];
@@ -2172,7 +2184,8 @@ window.VelaCS = window.VelaCS || {};
       var who = memberIdentity(action.owner, ctx);
       view.fields.push({ label: action.kind === 'addOwner' ? 'field.newMember' : 'field.member', identity: who });
       view.fields.push({ label: 'field.threshold', value: action.threshold, emphasis: true });
-      view.sentence = text(action.kind === 'addOwner' ? 'sentence.msAddOwner' : 'sentence.msRemoveOwner',
+      view.sentence = text(
+        (action.kind === 'addOwner' ? 'sentence.msAddOwner' : 'sentence.msRemoveOwner') + one(action.threshold),
         { owner: who.short, threshold: action.threshold });
     } else if (action.kind === 'swapOwner') {
       var gone = memberIdentity(action.oldOwner, ctx);
@@ -2182,7 +2195,7 @@ window.VelaCS = window.VelaCS || {};
       view.sentence = text('sentence.msSwapOwner', { newOwner: next.short, oldOwner: gone.short });
     } else {
       view.fields.push({ label: 'field.threshold', value: action.threshold, emphasis: true });
-      view.sentence = text('sentence.msThreshold', { threshold: action.threshold });
+      view.sentence = text('sentence.msThreshold' + one(action.threshold), { threshold: action.threshold });
     }
     if (!view.warnings.some(function (w) { return w.key === 'warn.msMembers'; })) {
       view.warnings.push({ tone: 'caution', key: 'warn.msMembers' });
@@ -2312,7 +2325,20 @@ window.VelaCS = window.VelaCS || {};
 
     var finished = finishSigning(view, ctx);
     if (!finished.refuse) {
-      finished.confirmKey = reading.action && reading.action.kind === 'cancel' ? 'button.msReject' : 'button.msApprove';
+      var cancel = reading.action && reading.action.kind === 'cancel';
+      // r9-10: "… anyway" exactly where the app's one review asks for it
+      // (`context.multisig.anyway` — what this page cannot check, a run
+      // that fails, said as the app's word) or this page's own reading
+      // finds a danger; in the danger style, never the plain accent.
+      var appAnyway = !!(ctx.multisig && ctx.multisig.anyway === true);
+      var danger = finished.risk === 'danger' || finished.risk === 'hard-danger';
+      if (appAnyway && !danger) {
+        raise(finished, 'danger');
+        finished.warnings.push({ tone: 'danger', key: 'warn.msAppAnyway' });
+      }
+      finished.anyway = appAnyway || danger;
+      finished.confirmKey = cancel ? 'button.msReject'
+        : finished.anyway ? 'button.msApproveAnyway' : 'button.msApprove';
     }
     return finished;
   }

@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-mKfoafZcifj4zjnQYbTEeTXstr6I1DVu9o4c6izMnXU='; style-src 'sha256-S5bvn9F3yOYSNVDAmXppe3Quxt7Fn5LXbjBTZ260Rzo='; img-src data:; font-src data:; base-uri 'none'; form-action 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-ElnUZsJxXyU1lhCUndK7yV0u9wEGkeWSj3ZSzKarvCw='; style-src 'sha256-IvjEd3Od02b8rk0e1KtXxPCSfUrwsnqsHIkMkYUW80A='; img-src data:; font-src data:; base-uri 'none'; form-action 'none'" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Vela</title>
     <style>
@@ -1107,6 +1107,13 @@ details.fee-wrap[open] summary.fee .chevron { transform: rotate(90deg); }
   color: var(--color-error-base);
 }
 
+/* r9-10: "Approve anyway" — the apps' danger fill, never the accent. */
+.confirm-anyway {
+  border: 0;
+  background: var(--color-error-base);
+  color: var(--color-onAccent);
+}
+
 .confirm-done {
   border: var(--border-hairline) solid var(--color-border-strong);
   background: transparent;
@@ -1731,6 +1738,14 @@ window.VelaCS.i18n.register('en', {
   'ui.withdrawnTitle': "Withdrawn",
   'ui.walletWithdrew': "The wallet stopped waiting for this request, so nothing is signed here. You can close this page.",
   'ui.answerNotTaken': "The wallet didn’t take this page’s answer, so nothing was sent. Go back to the wallet.",
+  // r9-10: "… anyway" where the app's review asks for it; a token whose
+  // decimals are unknown in its base units; one approval said as one.
+  'button.msApproveAnyway': "Approve anyway",
+  'warn.msAppAnyway': "Vela’s check of this transaction found a danger this page can’t verify (for example, that it would fail): approve only if you’re sure.",
+  'value.baseUnitsUnknown': "base units · decimals unknown",
+  'sentence.msAddOwnerOne': "{owner} becomes a member, and {threshold} approval will be needed.",
+  'sentence.msRemoveOwnerOne': "{owner} stops being a member, and {threshold} approval will be needed.",
+  'sentence.msThresholdOne': "From now on {threshold} approval will be needed.",
 });
 
 // 简体中文。每一句签名提示的措辞都在这里，改词不用碰逻辑。
@@ -2136,6 +2151,14 @@ window.VelaCS.i18n.register('zh', {
   'ui.withdrawnTitle': "已撤回",
   'ui.walletWithdrew': "钱包已不再等待这个请求，这里不会签任何东西。可以关掉这一页了。",
   'ui.answerNotTaken': "钱包没有接受这一页的回答，所以什么都没有发出。请回到钱包。",
+  // r9-10: "… anyway" where the app's review asks for it; a token whose
+  // decimals are unknown in its base units; one approval said as one.
+  'button.msApproveAnyway': "仍然批准",
+  'warn.msAppAnyway': "Vela 的检查发现了本页无法核实的风险（例如执行会失败）：只有在确定时才批准。",
+  'value.baseUnitsUnknown': "个最小单位 · 小数位未知",
+  'sentence.msAddOwnerOne': "{owner} 成为成员，之后需要 {threshold} 个批准。",
+  'sentence.msRemoveOwnerOne': "{owner} 不再是成员，之后需要 {threshold} 个批准。",
+  'sentence.msThresholdOne': "从现在起需要 {threshold} 个批准。",
 });
 
 // 繁體中文（台灣）。每一句簽署提示的措辭都在這裡，改字不用動到邏輯。
@@ -2520,6 +2543,14 @@ window.VelaCS.i18n.register('zh-TW', {
   'ui.withdrawnTitle': "已撤回",
   'ui.walletWithdrew': "錢包已不再等待這個請求，這裡不會簽任何東西。你可以關閉這一頁了。",
   'ui.answerNotTaken': "錢包沒有接受這一頁的回答，所以什麼都沒有送出。請回到錢包。",
+  // r9-10: "… anyway" where the app's review asks for it; a token whose
+  // decimals are unknown in its base units; one approval said as one.
+  'button.msApproveAnyway': "仍然核准",
+  'warn.msAppAnyway': "Vela 的檢查發現了本頁無法核實的風險（例如執行會失敗）：只有在確定時才核准。",
+  'value.baseUnitsUnknown': "個最小單位 · 小數位未知",
+  'sentence.msAddOwnerOne': "{owner} 成為成員，之後需要 {threshold} 個核准。",
+  'sentence.msRemoveOwnerOne': "{owner} 不再是成員，之後需要 {threshold} 個核准。",
+  'sentence.msThresholdOne': "從現在起需要 {threshold} 個核准。",
 });
 
 // 繁體中文（香港）。每一句簽署提示的措辭都在這裏，改字不用動到邏輯。
@@ -2904,6 +2935,14 @@ window.VelaCS.i18n.register('zh-HK', {
   'ui.withdrawnTitle': "已撤回",
   'ui.walletWithdrew': "錢包已經唔再等呢個請求，呢度唔會簽任何嘢。你可以關閉呢一頁。",
   'ui.answerNotTaken': "錢包冇接受呢一頁嘅回答，所以乜都冇發出。請返去錢包。",
+  // r9-10: "… anyway" where the app's review asks for it; a token whose
+  // decimals are unknown in its base units; one approval said as one.
+  'button.msApproveAnyway': "仍然批准",
+  'warn.msAppAnyway': "Vela 嘅檢查發現咗本頁無法核實嘅風險（例如執行會失敗）：確定先好批准。",
+  'value.baseUnitsUnknown': "個最小單位 · 小數位未知",
+  'sentence.msAddOwnerOne': "{owner} 成為成員，之後需要 {threshold} 個批准。",
+  'sentence.msRemoveOwnerOne': "{owner} 唔再係成員，之後需要 {threshold} 個批准。",
+  'sentence.msThresholdOne': "由而家起需要 {threshold} 個批准。",
 });
 
 // 日本語。署名ページに表示される文言はすべてここにあります。言い回しを変えるのにロジックに触れる必要はありません。
@@ -3286,6 +3325,14 @@ window.VelaCS.i18n.register('ja', {
   'ui.withdrawnTitle': "取り下げ済み",
   'ui.walletWithdrew': "ウォレットはこのリクエストを待つのをやめました。ここでは何も署名されません。このページは閉じてかまいません。",
   'ui.answerNotTaken': "ウォレットはこのページの応答を受け取らなかったため、何も送信されていません。ウォレットに戻ってください。",
+  // r9-10: "… anyway" where the app's review asks for it; a token whose
+  // decimals are unknown in its base units; one approval said as one.
+  'button.msApproveAnyway': "それでも承認",
+  'warn.msAppAnyway': "Vela の確認で、このページでは検証できない危険が見つかりました（例：実行が失敗する）。確信がある場合のみ承認してください。",
+  'value.baseUnitsUnknown': "基本単位 · 小数点以下の桁数不明",
+  'sentence.msAddOwnerOne': "{owner} がメンバーになり、承認は {threshold} 件必要になります。",
+  'sentence.msRemoveOwnerOne': "{owner} がメンバーでなくなり、承認は {threshold} 件必要になります。",
+  'sentence.msThresholdOne': "今後は承認が {threshold} 件必要になります。",
 });
 
 // 한국어. 서명 페이지에 표시되는 모든 문구가 여기에 있습니다. 표현을 바꿀 때 로직은 건드리지 않아도 됩니다.
@@ -3668,6 +3715,14 @@ window.VelaCS.i18n.register('ko', {
   'ui.withdrawnTitle': "철회됨",
   'ui.walletWithdrew': "지갑이 이 요청을 더 이상 기다리지 않으므로 여기서는 아무것도 서명되지 않습니다. 이 페이지를 닫아도 됩니다.",
   'ui.answerNotTaken': "지갑이 이 페이지의 응답을 받지 않았으므로 아무것도 보내지 않았습니다. 지갑으로 돌아가세요.",
+  // r9-10: "… anyway" where the app's review asks for it; a token whose
+  // decimals are unknown in its base units; one approval said as one.
+  'button.msApproveAnyway': "그래도 승인",
+  'warn.msAppAnyway': "Vela의 확인에서 이 페이지가 검증할 수 없는 위험이 발견되었습니다(예: 실패할 거래). 확실할 때만 승인하세요.",
+  'value.baseUnitsUnknown': "기본 단위 · 소수 자릿수 모름",
+  'sentence.msAddOwnerOne': "{owner} 님이 멤버가 되고, 승인이 {threshold}개 필요해집니다.",
+  'sentence.msRemoveOwnerOne': "{owner} 님이 더 이상 멤버가 아니며, 승인이 {threshold}개 필요해집니다.",
+  'sentence.msThresholdOne': "이제부터 승인이 {threshold}개 필요합니다.",
 });
 
 // Tiếng Việt. Mọi câu chữ của trang ký nằm ở đây; đổi chữ không cần đụng tới logic.
@@ -4050,6 +4105,14 @@ window.VelaCS.i18n.register('vi', {
   'ui.withdrawnTitle': "Đã rút lại",
   'ui.walletWithdrew': "Ví đã ngừng chờ yêu cầu này, nên không có gì được ký ở đây. Bạn có thể đóng trang này.",
   'ui.answerNotTaken': "Ví không nhận câu trả lời của trang này, nên chưa gửi gì. Hãy quay lại ví.",
+  // r9-10: "… anyway" where the app's review asks for it; a token whose
+  // decimals are unknown in its base units; one approval said as one.
+  'button.msApproveAnyway': "Vẫn phê duyệt",
+  'warn.msAppAnyway': "Kiểm tra của Vela phát hiện một nguy cơ mà trang này không thể xác minh (ví dụ: giao dịch sẽ thất bại): chỉ phê duyệt nếu bạn chắc chắn.",
+  'value.baseUnitsUnknown': "đơn vị cơ sở · không rõ số thập phân",
+  'sentence.msAddOwnerOne': "{owner} trở thành thành viên, và sẽ cần {threshold} phê duyệt.",
+  'sentence.msRemoveOwnerOne': "{owner} không còn là thành viên, và sẽ cần {threshold} phê duyệt.",
+  'sentence.msThresholdOne': "Từ nay sẽ cần {threshold} phê duyệt.",
 });
 
 // Bahasa Indonesia. Semua kalimat halaman tanda tangan ada di sini; mengganti kata tidak perlu menyentuh logika.
@@ -4432,6 +4495,14 @@ window.VelaCS.i18n.register('id', {
   'ui.withdrawnTitle': "Ditarik",
   'ui.walletWithdrew': "Dompet tidak lagi menunggu permintaan ini, jadi tidak ada yang ditandatangani di sini. Anda bisa menutup halaman ini.",
   'ui.answerNotTaken': "Dompet tidak menerima jawaban halaman ini, jadi tidak ada yang dikirim. Kembali ke dompet.",
+  // r9-10: "… anyway" where the app's review asks for it; a token whose
+  // decimals are unknown in its base units; one approval said as one.
+  'button.msApproveAnyway': "Tetap setujui",
+  'warn.msAppAnyway': "Pemeriksaan Vela menemukan bahaya yang tidak bisa diverifikasi halaman ini (misalnya, transaksi akan gagal): setujui hanya jika Anda yakin.",
+  'value.baseUnitsUnknown': "unit dasar · desimal tidak diketahui",
+  'sentence.msAddOwnerOne': "{owner} menjadi anggota, dan {threshold} persetujuan akan dibutuhkan.",
+  'sentence.msRemoveOwnerOne': "{owner} tidak lagi menjadi anggota, dan {threshold} persetujuan akan dibutuhkan.",
+  'sentence.msThresholdOne': "Mulai sekarang {threshold} persetujuan dibutuhkan.",
 });
 
 // Türkçe. İmza sayfasının tüm cümleleri burada; bir sözcüğü değiştirmek için mantığa dokunmak gerekmez.
@@ -4814,6 +4885,14 @@ window.VelaCS.i18n.register('tr', {
   'ui.withdrawnTitle': "Geri çekildi",
   'ui.walletWithdrew': "Cüzdan bu isteği beklemeyi bıraktı, bu yüzden burada hiçbir şey imzalanmıyor. Bu sayfayı kapatabilirsiniz.",
   'ui.answerNotTaken': "Cüzdan bu sayfanın yanıtını almadı, bu yüzden hiçbir şey gönderilmedi. Cüzdana dönün.",
+  // r9-10: "… anyway" where the app's review asks for it; a token whose
+  // decimals are unknown in its base units; one approval said as one.
+  'button.msApproveAnyway': "Yine de onayla",
+  'warn.msAppAnyway': "Vela’nın kontrolü bu sayfanın doğrulayamadığı bir tehlike buldu (örneğin başarısız olacağı): yalnızca eminsen onayla.",
+  'value.baseUnitsUnknown': "temel birim · ondalık sayısı bilinmiyor",
+  'sentence.msAddOwnerOne': "{owner} üye olur ve {threshold} onay gerekir.",
+  'sentence.msRemoveOwnerOne': "{owner} artık üye değildir ve {threshold} onay gerekir.",
+  'sentence.msThresholdOne': "Bundan sonra {threshold} onay gerekir.",
 });
 
 // Español (México). Cada frase de la página de firma vive aquí; cambiar una palabra no toca la lógica.
@@ -5196,6 +5275,14 @@ window.VelaCS.i18n.register('es-MX', {
   'ui.withdrawnTitle': "Retirada",
   'ui.walletWithdrew': "La billetera dejó de esperar esta solicitud, así que aquí no se firma nada. Puedes cerrar esta página.",
   'ui.answerNotTaken': "La billetera no aceptó la respuesta de esta página, así que no se envió nada. Vuelve a la billetera.",
+  // r9-10: "… anyway" where the app's review asks for it; a token whose
+  // decimals are unknown in its base units; one approval said as one.
+  'button.msApproveAnyway': "Aprobar de todos modos",
+  'warn.msAppAnyway': "La revisión de Vela encontró un peligro que esta página no puede verificar (por ejemplo, que fallaría): aprueba solo si estás seguro.",
+  'value.baseUnitsUnknown': "unidades base · decimales desconocidos",
+  'sentence.msAddOwnerOne': "{owner} se vuelve miembro y se necesitará {threshold} aprobación.",
+  'sentence.msRemoveOwnerOne': "{owner} deja de ser miembro y se necesitará {threshold} aprobación.",
+  'sentence.msThresholdOne': "A partir de ahora se necesitará {threshold} aprobación.",
 });
 
 // Português (Brasil). Cada frase da página de assinatura mora aqui; trocar uma palavra não mexe na lógica.
@@ -5578,6 +5665,14 @@ window.VelaCS.i18n.register('pt-BR', {
   'ui.withdrawnTitle': "Retirada",
   'ui.walletWithdrew': "A carteira parou de esperar por esta solicitação, então nada é assinado aqui. Você pode fechar esta página.",
   'ui.answerNotTaken': "A carteira não aceitou a resposta desta página, então nada foi enviado. Volte para a carteira.",
+  // r9-10: "… anyway" where the app's review asks for it; a token whose
+  // decimals are unknown in its base units; one approval said as one.
+  'button.msApproveAnyway': "Aprovar mesmo assim",
+  'warn.msAppAnyway': "A verificação da Vela encontrou um perigo que esta página não consegue verificar (por exemplo, que ela falharia): aprove só se tiver certeza.",
+  'value.baseUnitsUnknown': "unidades base · casas decimais desconhecidas",
+  'sentence.msAddOwnerOne': "{owner} passa a ser membro, e será necessária {threshold} aprovação.",
+  'sentence.msRemoveOwnerOne': "{owner} deixa de ser membro, e será necessária {threshold} aprovação.",
+  'sentence.msThresholdOne': "A partir de agora será necessária {threshold} aprovação.",
 });
 
 // Français. Chaque phrase de la page de signature est ici ; changer un mot ne touche pas à la logique.
@@ -5962,6 +6057,14 @@ window.VelaCS.i18n.register('fr', {
   'ui.withdrawnTitle': "Retirée",
   'ui.walletWithdrew': "Le portefeuille a cessé d’attendre cette demande, rien n’est donc signé ici. Vous pouvez fermer cette page.",
   'ui.answerNotTaken': "Le portefeuille n’a pas accepté la réponse de cette page, rien n’a donc été envoyé. Revenez au portefeuille.",
+  // r9-10: "… anyway" where the app's review asks for it; a token whose
+  // decimals are unknown in its base units; one approval said as one.
+  'button.msApproveAnyway': "Approuver quand même",
+  'warn.msAppAnyway': "La vérification de Vela a trouvé un danger que cette page ne peut pas vérifier (par exemple, qu’elle échouerait) : n’approuvez que si vous êtes sûr.",
+  'value.baseUnitsUnknown': "unités de base · décimales inconnues",
+  'sentence.msAddOwnerOne': "{owner} devient membre, et {threshold} approbation sera requise.",
+  'sentence.msRemoveOwnerOne': "{owner} n’est plus membre, et {threshold} approbation sera requise.",
+  'sentence.msThresholdOne': "Désormais, {threshold} approbation sera requise.",
 });
 
 // Deutsch. Jede Formulierung der Signaturseite steht hier; ein Wort zu ändern berührt keine Logik.
@@ -6346,6 +6449,14 @@ window.VelaCS.i18n.register('de', {
   'ui.withdrawnTitle': "Zurückgezogen",
   'ui.walletWithdrew': "Die Wallet wartet nicht mehr auf diese Anfrage, daher wird hier nichts signiert. Du kannst diese Seite schließen.",
   'ui.answerNotTaken': "Die Wallet hat die Antwort dieser Seite nicht angenommen, daher wurde nichts gesendet. Geh zurück zur Wallet.",
+  // r9-10: "… anyway" where the app's review asks for it; a token whose
+  // decimals are unknown in its base units; one approval said as one.
+  'button.msApproveAnyway': "Trotzdem freigeben",
+  'warn.msAppAnyway': "Velas Prüfung dieser Transaktion hat eine Gefahr gefunden, die diese Seite nicht überprüfen kann (zum Beispiel, dass sie fehlschlagen würde): Gib nur frei, wenn du sicher bist.",
+  'value.baseUnitsUnknown': "Basiseinheiten · Dezimalstellen unbekannt",
+  'sentence.msAddOwnerOne': "{owner} wird Mitglied, und es wird {threshold} Freigabe benötigt.",
+  'sentence.msRemoveOwnerOne': "{owner} ist kein Mitglied mehr, und es wird {threshold} Freigabe benötigt.",
+  'sentence.msThresholdOne': "Ab jetzt wird {threshold} Freigabe benötigt.",
 });
 
 // Русский. Все формулировки страницы подписи собраны здесь; правка слов не затрагивает логику.
@@ -6730,6 +6841,14 @@ window.VelaCS.i18n.register('ru', {
   'ui.withdrawnTitle': "Отозван",
   'ui.walletWithdrew': "Кошелёк перестал ждать этот запрос, поэтому здесь ничего не подписывается. Эту страницу можно закрыть.",
   'ui.answerNotTaken': "Кошелёк не принял ответ этой страницы, поэтому ничего не отправлено. Вернитесь в кошелёк.",
+  // r9-10: "… anyway" where the app's review asks for it; a token whose
+  // decimals are unknown in its base units; one approval said as one.
+  'button.msApproveAnyway': "Всё равно одобрить",
+  'warn.msAppAnyway': "Проверка Vela нашла опасность, которую эта страница проверить не может (например, что транзакция не пройдёт): одобряйте, только если уверены.",
+  'value.baseUnitsUnknown': "базовых единиц · число знаков неизвестно",
+  'sentence.msAddOwnerOne': "{owner} становится участником, и понадобится одобрений: {threshold}.",
+  'sentence.msRemoveOwnerOne': "{owner} перестаёт быть участником, и понадобится одобрений: {threshold}.",
+  'sentence.msThresholdOne': "Отныне понадобится одобрений: {threshold}.",
 });
 
 // Italiano. Ogni frase della pagina di firma vive qui; cambiare una parola non tocca la logica.
@@ -7112,6 +7231,14 @@ window.VelaCS.i18n.register('it', {
   'ui.withdrawnTitle': "Ritirata",
   'ui.walletWithdrew': "Il wallet ha smesso di attendere questa richiesta, quindi qui non viene firmato nulla. Puoi chiudere questa pagina.",
   'ui.answerNotTaken': "Il wallet non ha accettato la risposta di questa pagina, quindi non è stato inviato nulla. Torna al wallet.",
+  // r9-10: "… anyway" where the app's review asks for it; a token whose
+  // decimals are unknown in its base units; one approval said as one.
+  'button.msApproveAnyway': "Approva comunque",
+  'warn.msAppAnyway': "Il controllo di Vela ha trovato un pericolo che questa pagina non può verificare (per esempio, che fallirebbe): approva solo se sei sicuro.",
+  'value.baseUnitsUnknown': "unità base · decimali sconosciuti",
+  'sentence.msAddOwnerOne': "{owner} diventa membro e servirà {threshold} approvazione.",
+  'sentence.msRemoveOwnerOne': "{owner} non è più membro e servirà {threshold} approvazione.",
+  'sentence.msThresholdOne': "D’ora in poi servirà {threshold} approvazione.",
 });
 
 // @generated by samples/gen-catalog.mjs from vela-core — do not edit.
@@ -8720,9 +8847,12 @@ window.VelaCS = window.VelaCS || {};
       value: value,
       token: token,
       tokenAddress: tokenAddress,
-      text: unlimited ? null : formatUnits(value, token.decimals),
+      // r9-10: an unknown token's figure is its base units, said as such —
+      // "1000000 base units · decimals unknown", as the app's review says
+      // it — never "1,000,000 ? ?".
+      text: unlimited ? null : known ? formatUnits(value, token.decimals) : value.toString(),
       textKey: unlimited ? 'value.unlimited' : null,
-      symbol: token.symbol,
+      symbol: known ? token.symbol : ns.i18n.t('value.baseUnitsUnknown'),
       fiat: unlimited ? null : fiat(ctx, token.symbol, value, token.decimals),
       unverifiedDecimals: !known,
       // Decoration only — see lib/logos.js.
@@ -10686,6 +10816,15 @@ window.VelaCS = window.VelaCS || {};
     return identify(address, ctx, {});
   }
 
+  /**
+   * r9-10: "1 approval", never "1 approvals" — the sentence's singular form
+   * for a threshold of one (every catalog has it; where a language has one
+   * form, it is the same words).
+   */
+  function one(threshold) {
+    return String(threshold) === '1' ? 'One' : '';
+  }
+
   /** The rows and words of a member change, the multisig's own call. */
   function memberChange(action, ctx, view) {
     view.intentKey = MEMBER_INTENTS[action.kind];
@@ -10695,7 +10834,8 @@ window.VelaCS = window.VelaCS || {};
       var who = memberIdentity(action.owner, ctx);
       view.fields.push({ label: action.kind === 'addOwner' ? 'field.newMember' : 'field.member', identity: who });
       view.fields.push({ label: 'field.threshold', value: action.threshold, emphasis: true });
-      view.sentence = text(action.kind === 'addOwner' ? 'sentence.msAddOwner' : 'sentence.msRemoveOwner',
+      view.sentence = text(
+        (action.kind === 'addOwner' ? 'sentence.msAddOwner' : 'sentence.msRemoveOwner') + one(action.threshold),
         { owner: who.short, threshold: action.threshold });
     } else if (action.kind === 'swapOwner') {
       var gone = memberIdentity(action.oldOwner, ctx);
@@ -10705,7 +10845,7 @@ window.VelaCS = window.VelaCS || {};
       view.sentence = text('sentence.msSwapOwner', { newOwner: next.short, oldOwner: gone.short });
     } else {
       view.fields.push({ label: 'field.threshold', value: action.threshold, emphasis: true });
-      view.sentence = text('sentence.msThreshold', { threshold: action.threshold });
+      view.sentence = text('sentence.msThreshold' + one(action.threshold), { threshold: action.threshold });
     }
     if (!view.warnings.some(function (w) { return w.key === 'warn.msMembers'; })) {
       view.warnings.push({ tone: 'caution', key: 'warn.msMembers' });
@@ -10835,7 +10975,20 @@ window.VelaCS = window.VelaCS || {};
 
     var finished = finishSigning(view, ctx);
     if (!finished.refuse) {
-      finished.confirmKey = reading.action && reading.action.kind === 'cancel' ? 'button.msReject' : 'button.msApprove';
+      var cancel = reading.action && reading.action.kind === 'cancel';
+      // r9-10: "… anyway" exactly where the app's one review asks for it
+      // (`context.multisig.anyway` — what this page cannot check, a run
+      // that fails, said as the app's word) or this page's own reading
+      // finds a danger; in the danger style, never the plain accent.
+      var appAnyway = !!(ctx.multisig && ctx.multisig.anyway === true);
+      var danger = finished.risk === 'danger' || finished.risk === 'hard-danger';
+      if (appAnyway && !danger) {
+        raise(finished, 'danger');
+        finished.warnings.push({ tone: 'danger', key: 'warn.msAppAnyway' });
+      }
+      finished.anyway = appAnyway || danger;
+      finished.confirmKey = cancel ? 'button.msReject'
+        : finished.anyway ? 'button.msApproveAnyway' : 'button.msApprove';
     }
     return finished;
   }
@@ -11388,7 +11541,8 @@ window.VelaCS = window.VelaCS || {};
     var figure = amountText(hero.amount);
     var size = figure.length > 16 ? ' amount-longer' : figure.length > 10 ? ' amount-long' : '';
     line.appendChild(el('span', 'amount' + size + (hero.amount.unlimited ? ' amount-danger' : ''), figure));
-    line.appendChild(tokenChip(hero.amount.token, hero.amount.logos));
+    // r9-10: a token this page cannot name gets no "?" chip beside its figure.
+    if (!hero.amount.unverifiedDecimals) line.appendChild(tokenChip(hero.amount.token, hero.amount.logos));
     line.appendChild(el('span', 'amount-symbol', hero.amount.symbol));
     box.appendChild(line);
     // The coin of a chain this page does not know is the app's word, said
@@ -11660,6 +11814,9 @@ window.VelaCS = window.VelaCS || {};
     if (view.refuse) {
       button.disabled = true;
       button.classList.add('confirm-off');
+    } else if (view.anyway) {
+      // r9-10: the words say "anyway", the fill says danger — as the apps' do.
+      button.classList.add('confirm-anyway');
     } else if (view.risk === 'danger' || view.risk === 'hard-danger') {
       // r8-5: never the plain accent Approve over a danger (a batch inside a
       // batch, a grant of everything): the danger's own outlined button.

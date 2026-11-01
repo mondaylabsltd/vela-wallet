@@ -175,6 +175,11 @@ pub struct ProposalItem {
     pub status: ProposalStatus,
     /// This device's members that have not approved yet.
     pub can_approve: Vec<String>,
+    /// r9-9: every member of it on this device, approved or not, whatever
+    /// the transaction is — "none is signed in on this device" is said only
+    /// when this is empty.
+    #[serde(default)]
+    pub members_here: Vec<String>,
     /// Who on this device can execute it now.
     pub can_execute: Vec<String>,
     /// A cancellation at the same nonce that voids this one.
@@ -309,6 +314,7 @@ pub fn read_proposal(
             can_approve
         },
         can_execute,
+        members_here: local.iter().map(|o| o.address.clone()).collect(),
         cancelled_by: None,
         same_nonce: Vec::new(),
         executing,
@@ -2399,14 +2405,15 @@ enum Stop {
 
 /// Before any signature for `account` on `chain_id` over `tx`: read the
 /// chain now (who can act for it; its members; the state diff), then the
-/// core's gate. `Ok` when signing may go on.
+/// core's gate. `Ok` when signing may go on — `true` when the review asks
+/// for "… anyway" (r9-10: a page that signs it says so).
 async fn authorize_signing(
     io: &Io<Event>,
     st: &Shared<State>,
     account: &MultisigAccount,
     chain_id: u64,
     tx: &SafeTx,
-) -> Result<(), Stop> {
+) -> Result<bool, Stop> {
     let chain = lock(st).chain.clone();
     let found = async { shell::judge(io, chain_id, &account.address, &account.genesis).await };
     let rule = async {
@@ -2439,8 +2446,9 @@ async fn authorize_signing(
         },
     })
     .await;
+    let anyway = review.as_ref().is_some_and(|r| r.sign.anyway);
     match multisig_gather::decide(chain_id, &account.address, tx, Some(found), review.as_ref()) {
-        multisig_review::Gate::Open => Ok(()),
+        multisig_review::Gate::Open => Ok(anyway),
         multisig_review::Gate::Unchecked => Err(Stop::State(ActionState::SigningUnchecked)),
         multisig_review::Gate::Refused { findings } => {
             Err(Stop::State(ActionState::SigningRefused { findings }))
@@ -2454,7 +2462,7 @@ async fn authorize_signing(
             })
             .await
         {
-            MultisigShellResult::RiskAnswered { signs: true } => Ok(()),
+            MultisigShellResult::RiskAnswered { signs: true } => Ok(anyway),
             _ => Err(Stop::State(ActionState::RiskDeclined)),
         },
     }
@@ -2468,6 +2476,7 @@ async fn sign_approval(
     chain_id: u64,
     hash: &str,
     tx: &SafeTx,
+    anyway: bool,
 ) -> Result<Approval, Stop> {
     if owner.route == ApprovalRoute::Blocked {
         return Err(Stop::State(ActionState::Failed {
@@ -2493,6 +2502,7 @@ async fn sign_approval(
                     .clone()
                     .or_else(|| account.label.clone()),
                 tx: Box::new(tx.clone()),
+                anyway,
             },
         })
         .await;
@@ -2958,14 +2968,15 @@ async fn confirm_draft(
         };
         save_json(io, keys::LAST_ACTOR, &map, false).await;
     }
-    if let Err(Stop::State(s)) = authorize_signing(io, st, &account, chain_id, &tx).await {
-        return s;
-    }
+    let anyway = match authorize_signing(io, st, &account, chain_id, &tx).await {
+        Ok(anyway) => anyway,
+        Err(Stop::State(s)) => return s,
+    };
     if lock(st).draft_round != round {
         return ActionState::Cancelled;
     }
     let hash = multisig::safe_tx_hash(chain_id, &account.address, &tx).unwrap_or_default();
-    let approval = match sign_approval(io, &owner, &account, chain_id, &hash, &tx).await {
+    let approval = match sign_approval(io, &owner, &account, chain_id, &hash, &tx, anyway).await {
         Ok(a) => a,
         Err(Stop::State(s)) => return s,
     };
@@ -3001,10 +3012,11 @@ async fn approve(
             detail: "nothing to approve".to_owned(),
         };
     };
-    if let Err(Stop::State(s)) = authorize_signing(io, st, &account, chain_id, &item.tx).await {
-        return s;
-    }
-    approve_authorized(io, st, &account, &item, &owner).await
+    let anyway = match authorize_signing(io, st, &account, chain_id, &item.tx).await {
+        Ok(anyway) => anyway,
+        Err(Stop::State(s)) => return s,
+    };
+    approve_authorized(io, st, &account, &item, &owner, anyway).await
 }
 
 async fn approve_authorized(
@@ -3013,6 +3025,7 @@ async fn approve_authorized(
     account: &MultisigAccount,
     item: &ProposalItem,
     owner: &LocalAccount,
+    anyway: bool,
 ) -> ActionState {
     let approval = match sign_approval(
         io,
@@ -3021,6 +3034,7 @@ async fn approve_authorized(
         item.chain_id,
         &item.safe_tx_hash,
         &item.tx,
+        anyway,
     )
     .await
     {
@@ -3337,12 +3351,21 @@ pub fn plain_reason(reason: Option<&str>) -> Option<String> {
     (!r.is_empty()).then(|| r.to_owned())
 }
 
+/// What a balance read said: the amount; `Ok(None)` — the node answered
+/// with an error (a token whose `balanceOf` reverts: no word on it);
+/// `Err(Unread)` — nobody answered, or the answer is no amount at all (an
+/// empty "0x"). r9 (desktop): a failed read is "couldn't check", never a
+/// balance of 0 ("Can't run now — the multisig holds 0 xDAI" while the RPC
+/// was dead).
+#[derive(Debug)]
+struct Unread;
+
 async fn balance_of(
     io: &Io<Event>,
     chain_id: u64,
     token: Option<&str>,
     holder: &str,
-) -> Option<u128> {
+) -> Result<Option<u128>, Unread> {
     let read = match token {
         None => io
             .rpc_within(chain_id, "eth_getBalance", json!([holder, "latest"]), Some(REVIEW_READ_MS))
@@ -3356,9 +3379,25 @@ async fn balance_of(
             )
             .await,
     };
-    let raw = read.ok()?;
-    let raw = raw.as_str()?;
+    let raw = match read {
+        Ok(raw) => raw,
+        Err(shell::RpcFail::Error { .. }) => return Ok(None),
+        Err(_) => return Err(Unread),
+    };
+    let raw = raw.as_str().ok_or(Unread)?;
+    let digits = raw.strip_prefix("0x").unwrap_or(raw);
+    // `eth_getBalance` is a quantity ("0x0" is zero); `balanceOf` one word.
+    let whole = if token.is_some() {
+        digits.len() >= 64
+    } else {
+        !digits.is_empty()
+    };
+    if !whole {
+        return Err(Unread);
+    }
     shell::quantity(if raw.len() > 66 { &raw[..66] } else { raw })
+        .map(Some)
+        .ok_or(Unread)
 }
 
 async fn call_refusal(io: &Io<Event>, input: &ExecutionInput) -> Option<Value> {
@@ -3411,6 +3450,10 @@ async fn preview_execution(io: &Io<Event>, st: &Shared<State>, input: &Execution
 async fn look(io: &Io<Event>, input: &ExecutionInput) -> Preview {
     for (token, need) in spending_of(input.item.review.action.as_ref()) {
         let have = balance_of(io, input.chain_id, token.as_deref(), &input.account.address).await;
+        let Ok(have) = have else {
+            // Its balance could not be read: not checked, never "holds 0".
+            return Preview::Unchecked;
+        };
         if let Some(have) = have {
             if have < need {
                 return Preview::Fails(
@@ -3437,6 +3480,7 @@ async fn look(io: &Io<Event>, input: &ExecutionInput) -> Preview {
         .await
     };
     let (quote, balance) = futures::join!(quote, balance_of(io, input.chain_id, None, &executor));
+    let balance = balance.ok().flatten();
     let MultisigShellResult::Quoted { quote } = quote else {
         return Preview::Unpriced;
     };
@@ -4451,8 +4495,8 @@ fn range_cap(message: &str) -> Option<u64> {
     Some(digits.into_iter().min().unwrap_or(0))
 }
 
-async fn block_of(
-    io: &Io<Event>,
+async fn block_of<Ev: Send + 'static>(
+    io: &Io<Ev>,
     chain_id: u64,
     tag: &str,
 ) -> Result<(u64, u64), HistoryUnreadable> {
@@ -4477,8 +4521,8 @@ async fn block_of(
     }
 }
 
-async fn block_before(
-    io: &Io<Event>,
+async fn block_before<Ev: Send + 'static>(
+    io: &Io<Ev>,
     chain_id: u64,
     ms: f64,
 ) -> Result<(u64, u64), HistoryUnreadable> {
@@ -4523,12 +4567,56 @@ async fn search_logs(
     from: u64,
     to: u64,
 ) -> Result<Option<(String, u64)>, HistoryUnreadable> {
-    let mut hi = to;
     let mut span = lock(st)
         .spans
         .get(&chain_id)
         .copied()
         .unwrap_or(FIRST_LOG_SPAN);
+    let before = span;
+    let found = search_logs_with(io, chain_id, address, hash, from, to, &mut span).await;
+    if span != before {
+        lock(st).spans.insert(chain_id, span);
+    }
+    found
+}
+
+/// r8-24: the transaction that executed `hash` on `safe` (its
+/// `ExecutionSuccess`), searched from a little before `since_ms` to now —
+/// for a reader that keeps no history of its own (the outside page).
+/// `Ok(None)`: none ran in that range; `Err(())`: the chain did not say.
+pub(crate) async fn find_execution<Ev: Send + 'static>(
+    io: &Io<Ev>,
+    chain_id: u64,
+    safe: &str,
+    hash: &str,
+    since_ms: f64,
+) -> Result<Option<String>, ()> {
+    let (from, head) = if since_ms > 0.0 {
+        block_before(io, chain_id, (since_ms - CREATED_MARGIN_MS).max(0.0))
+            .await
+            .map_err(|_| ())?
+    } else {
+        (0, block_of(io, chain_id, "latest").await.map_err(|_| ())?.0)
+    };
+    let mut span = FIRST_LOG_SPAN;
+    search_logs_with(io, chain_id, safe, hash, from, head, &mut span)
+        .await
+        .map(|found| found.map(|(tx, _)| tx))
+        .map_err(|_| ())
+}
+
+/// [`search_logs`]' walk, newest window first, narrowing `span` to what the
+/// node allows.
+async fn search_logs_with<Ev: Send + 'static>(
+    io: &Io<Ev>,
+    chain_id: u64,
+    address: &str,
+    hash: &str,
+    from: u64,
+    to: u64,
+    span: &mut u64,
+) -> Result<Option<(String, u64)>, HistoryUnreadable> {
+    let mut hi = to;
     let mut windows = 0;
     loop {
         if hi < from {
@@ -4538,8 +4626,8 @@ async fn search_logs(
         if windows > MAX_LOG_WINDOWS {
             return Err(HistoryUnreadable);
         }
-        let lo = if hi + 1 > from + span {
-            hi + 1 - span
+        let lo = if hi + 1 > from + *span {
+            hi + 1 - *span
         } else {
             from
         };
@@ -4555,15 +4643,14 @@ async fn search_logs(
                 let Some(cap) = range_cap(&message) else {
                     return Err(HistoryUnreadable);
                 };
-                if span <= 1 {
+                if *span <= 1 {
                     return Err(HistoryUnreadable);
                 }
-                span = if cap > 0 && cap < span {
+                *span = if cap > 0 && cap < *span {
                     cap
                 } else {
-                    (span / 2).max(1)
+                    (*span / 2).max(1)
                 };
-                lock(st).spans.insert(chain_id, span);
                 windows -= 1;
             }
             Err(shell::RpcFail::Unanswered(_)) => return Err(HistoryUnreadable),

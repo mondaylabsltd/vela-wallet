@@ -380,4 +380,12 @@ window.VelaCS.i18n.register('ru', {
   'ui.withdrawnTitle': "Отозван",
   'ui.walletWithdrew': "Кошелёк перестал ждать этот запрос, поэтому здесь ничего не подписывается. Эту страницу можно закрыть.",
   'ui.answerNotTaken': "Кошелёк не принял ответ этой страницы, поэтому ничего не отправлено. Вернитесь в кошелёк.",
+  // r9-10: "… anyway" where the app's review asks for it; a token whose
+  // decimals are unknown in its base units; one approval said as one.
+  'button.msApproveAnyway': "Всё равно одобрить",
+  'warn.msAppAnyway': "Проверка Vela нашла опасность, которую эта страница проверить не может (например, что транзакция не пройдёт): одобряйте, только если уверены.",
+  'value.baseUnitsUnknown': "базовых единиц · число знаков неизвестно",
+  'sentence.msAddOwnerOne': "{owner} становится участником, и понадобится одобрений: {threshold}.",
+  'sentence.msRemoveOwnerOne': "{owner} перестаёт быть участником, и понадобится одобрений: {threshold}.",
+  'sentence.msThresholdOne': "Отныне понадобится одобрений: {threshold}.",
 });

@@ -2,7 +2,7 @@
 import type { DappChainAsk } from "./DappChainAsk";
 import type { DpermGrant } from "./DpermGrant";
 
-export type DbrOperation = { "type": "list_sites" } | { "type": "write_grant", grant: DpermGrant, } | { "type": "remove_grant", origin: string, } | { "type": "write_site_chain", origin: string, chain_id: number, } | { "type": "deliver", tab: string, doc: string, message_json: string, } | { "type": "read", tab: string, id: string, chain_id: number, method: string, params_json: string, bundler: boolean, 
+export type DbrOperation = { "type": "list_sites" } | { "type": "write_grant", grant: DpermGrant, } | { "type": "remove_grant", origin: string, } | { "type": "write_site_chain", origin: string, chain_id: number, } | { "type": "write_multisig_batches", value_json: string, } | { "type": "deliver", tab: string, doc: string, message_json: string, } | { "type": "read", tab: string, id: string, chain_id: number, method: string, params_json: string, bundler: boolean, 
 /**
  * Answer by then, whatever the endpoints are doing (spec 099
  * FR-008): `ReadAnswered { body_json: None, failure: timed_out }`.

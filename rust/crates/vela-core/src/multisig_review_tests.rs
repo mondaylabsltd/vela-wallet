@@ -330,6 +330,98 @@ fn bybit_delegatecall_shape_is_refused_twice() {
     .is_empty());
 }
 
+/// r9-9: a refusal says its own reason, once — a delegatecall "runs another
+/// contract's code as the multisig", a batch too deep "can't be read" — and
+/// never the state guard's words, nor its reassurance beside the refusal.
+#[test]
+fn each_refusal_says_its_own_reason_and_no_reassurance() {
+    let mut d = keccak256(b"transfer(address,uint256)")[..4].to_vec();
+    d.extend_from_slice(&word_addr(a(C)));
+    d.extend_from_slice(&word(U256::from(1)));
+    let delegate = tx(
+        "0x5555555555555555555555555555555555555555",
+        "0x0",
+        &hex(&d),
+        1,
+    );
+    // The probe answered "nothing about who controls it changes".
+    let k = watch_of(&delegate, &[]);
+    let mut before = snap(&[A, B]);
+    before.watched = zero_watch(k);
+    let mut after = snap(&[A, B]);
+    after.watched = zero_watch(k);
+    let r = review_with(
+        delegate,
+        Some(not_offered_answer()),
+        Some(probe_envelope(&before, &after, true)),
+    );
+    assert!(!r.sign.allowed);
+    let refused = r.refused.clone().unwrap();
+    assert_eq!(refused.why, RefusedWhy::Delegatecall);
+    assert_eq!(refused.key, "home.multisig.review.refusedWhy.delegatecall");
+    assert_eq!(
+        r.state.verdict,
+        StateVerdict::Withheld,
+        "no \"changes nothing\" beside a refusal"
+    );
+
+    // Four batches deep.
+    let transfer = format!("a9059cbb{:0>64}{:064x}", &C[2..], 1u64);
+    let mut inner = transfer;
+    for _ in 0..4 {
+        let leg = format!(
+            "00{}{:064x}{:064x}{}",
+            &multisig::MULTI_SEND_CALL_ONLY[2..],
+            0,
+            inner.len() / 2,
+            inner
+        );
+        let pad = (64 - (leg.len() % 64)) % 64;
+        inner = format!(
+            "8d80ff0a{:064x}{:064x}{}{}",
+            0x20,
+            leg.len() / 2,
+            leg,
+            "0".repeat(pad)
+        );
+    }
+    let deep = tx(
+        "0x5555555555555555555555555555555555555555",
+        "0x0",
+        &format!("0x{inner}"),
+        0,
+    );
+    let r = review_with(deep, Some(not_offered_answer()), None);
+    assert!(!r.sign.allowed);
+    assert_eq!(r.refused.as_ref().unwrap().why, RefusedWhy::TooDeep);
+    assert_eq!(r.state.verdict, StateVerdict::Withheld);
+    assert!(!r
+        .concerns
+        .iter()
+        .any(|c| matches!(c, Concern::StateUnread { .. })));
+
+    // An undeclared change is the guard's own refusal, said as such.
+    let t = tx(SAFE, "0x0", &add_owner(C, 1), 0);
+    let k = watch_of(&t, &[C]);
+    let mut before = snap(&[A, B]);
+    before.watched = zero_watch(k);
+    let mut swapped = snap(&[C, A, B]);
+    swapped.watched = zero_watch(k);
+    swapped.singleton = a(ATTACKER);
+    let r = review_with(
+        t,
+        Some(not_offered_answer()),
+        Some(probe_envelope(&before, &swapped, true)),
+    );
+    assert_eq!(r.refused.unwrap().key, "home.multisig.review.blocked");
+
+    // A transaction it signs refuses nothing.
+    let ok = tx(C, "0x1", "0x", 0);
+    assert!(review_with(ok, Some(not_offered_answer()), None)
+        .refused
+        .is_none());
+}
+
 #[test]
 fn an_undeclared_add_owner_through_a_nested_call_is_refused() {
     // A call to another contract that, through a module or a re-entry, adds
@@ -617,6 +709,48 @@ fn probe_reads_what_moves_where_no_simulation_is_offered() {
     assert_eq!(r.simulation.deltas[0].delta, "-5");
     assert_eq!(r.simulation.deltas[0].token.as_deref(), Some(token));
     assert_eq!(r.state.verdict, StateVerdict::Unchanged);
+}
+
+/// r9-2: Arc's USDC is ONE balance — the coin (18 decimals) and its ERC-20
+/// interface at `0x3600…0000` (6). A 0.01 transfer through the interface
+/// moves both readings; the review says it once, as the coin.
+#[test]
+fn arc_usdc_moved_through_its_erc20_interface_is_said_once() {
+    let usdc = "0x3600000000000000000000000000000000000000";
+    let mut d = keccak256(b"transfer(address,uint256)")[..4].to_vec();
+    d.extend_from_slice(&word_addr(a(C)));
+    d.extend_from_slice(&word(U256::from(10_000)));
+    let t = tx(usdc, "0x0", &hex(&d), 0);
+    let mut input = reads(t.clone());
+    input.chain_id = 5_042_002;
+    let k = watched(&t, &[a(A), a(B)], &[]).len();
+    let mut before = snap(&[A, B]);
+    before.watched = zero_watch(k);
+    before.balance = 50_000_000_000_000_000;
+    before.tokens = vec![Some(50_000)];
+    let mut after = snap(&[A, B]);
+    after.watched = zero_watch(k);
+    after.balance = 40_000_000_000_000_000;
+    after.tokens = vec![Some(40_000)];
+    let review = |reads: ReadsInput| {
+        multisig_review(&ReviewInput {
+            reads,
+            trace: Some(not_offered_answer()),
+            probe: Some(probe_envelope(&before, &after, true)),
+            sim_reply: Some(r#"{"error":{"code":-32601,"message":"method not supported"}}"#.into()),
+            ..ReviewInput::default()
+        })
+        .unwrap()
+    };
+    let r = review(input.clone());
+    assert_eq!(r.simulation_source, "probe");
+    assert_eq!(r.simulation.deltas.len(), 1, "{:?}", r.simulation.deltas);
+    assert_eq!(r.simulation.deltas[0].token, None);
+    assert_eq!(r.simulation.deltas[0].delta, "-10000000000000000");
+
+    // The same address on another chain is an ordinary token: both said.
+    input.chain_id = 100;
+    assert_eq!(review(input).simulation.deltas.len(), 2);
 }
 
 /// r5reg-1: what moves in a batch of native sends, as a node that traces

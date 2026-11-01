@@ -39,6 +39,21 @@ member_kinds: { [key in string]: MultisigKindChoice },
  */
 known_members: { [key in string]: MultisigMemberInfo }, 
 /**
+ * r9-12: ONE name per member, by lowercase address — every member of
+ * every multisig here (founding, members now, named) and this device's
+ * own accounts — by the core's rule (`multisig_rules::names::label`):
+ * the name a multisig here keeps, else the one the member registered in
+ * the passkey index, else this device's own name for its account, else
+ * the short address. Draw these; never pick a name in a shell.
+ */
+member_labels: { [key in string]: string }, 
+/**
+ * r9-12: the addresses of `member_labels` the passkey index has not
+ * answered for yet (lowercase), this device's own accounts among them:
+ * look each up and send `index_names`.
+ */
+index_wanted: Array<string>, 
+/**
  * core-ms-2: the invite the add sheet shows (opened from a link, or
  * waiting for its network since a reload): adding its multisig uses its
  * networks and keeps what it says of the members — the shell sends

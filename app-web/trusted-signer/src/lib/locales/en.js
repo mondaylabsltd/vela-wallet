@@ -405,4 +405,12 @@ window.VelaCS.i18n.register('en', {
   'ui.withdrawnTitle': "Withdrawn",
   'ui.walletWithdrew': "The wallet stopped waiting for this request, so nothing is signed here. You can close this page.",
   'ui.answerNotTaken': "The wallet didn’t take this page’s answer, so nothing was sent. Go back to the wallet.",
+  // r9-10: "… anyway" where the app's review asks for it; a token whose
+  // decimals are unknown in its base units; one approval said as one.
+  'button.msApproveAnyway': "Approve anyway",
+  'warn.msAppAnyway': "Vela’s check of this transaction found a danger this page can’t verify (for example, that it would fail): approve only if you’re sure.",
+  'value.baseUnitsUnknown': "base units · decimals unknown",
+  'sentence.msAddOwnerOne': "{owner} becomes a member, and {threshold} approval will be needed.",
+  'sentence.msRemoveOwnerOne': "{owner} stops being a member, and {threshold} approval will be needed.",
+  'sentence.msThresholdOne': "From now on {threshold} approval will be needed.",
 });

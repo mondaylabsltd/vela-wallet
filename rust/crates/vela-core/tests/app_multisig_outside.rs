@@ -1220,6 +1220,39 @@ fn kept_for_a_number_used_since_it_is_dropped_with_nothing_to_send() {
     assert!(!mailbox_signatures(&w, &hash)
         .iter()
         .any(|(o, _)| *o == addr(SEED_B)));
+    // r8-24: nothing of its own ran: another transaction took its number.
+    assert_eq!(
+        used.view().tx.unwrap().done,
+        Some(page::OutsideDone::Cancelled)
+    );
+}
+
+/// r8-24: a link to a transaction that was executed says so, and by which
+/// transaction — never only "executed or cancelled".
+#[test]
+fn a_link_to_an_executed_transaction_says_it_ran_and_where() {
+    let mut w = deployed_world();
+    let t = tx("0x3");
+    let hash = hash_of(SAFE, &t);
+    let sut = opened(&mut w, link_to(SAFE, &t));
+    assert_eq!(sut.view().tx.unwrap().done, None, "open: nothing to say");
+    w.safe_mut(CHAIN, SAFE).nonce = 4;
+    let ran = "0x00000000000000000000000000000000000000000000000000000000000000e1";
+    w.receipts.insert(
+        ran.to_owned(),
+        json!({ "logs": [{
+            "address": SAFE,
+            "topics": ["0x442e715f626346e8c54381002da614f62bee8d27386535b2521ec8540898556e", hash],
+            "data": "0x"
+        }] }),
+    );
+    let used = opened(&mut w, link_to(SAFE, &t));
+    assert_eq!(
+        used.view().tx.unwrap().done,
+        Some(page::OutsideDone::Executed {
+            tx_hash: ran.to_owned()
+        })
+    );
 }
 
 // ---------------------------------------------------------------------------

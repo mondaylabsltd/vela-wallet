@@ -303,7 +303,8 @@ describe('the multisig shell', () => {
 				multisig: '0xm',
 				safe_tx_hash: '0xh',
 				name: null,
-				tx: {}
+				tx: {},
+				anyway: false
 			})
 		).toEqual({ method: 'vela_multisigApprove', params: { safeTxHash: '0xh' } });
 		expect(passkeyRequest({ kind: 'record', multisig: '0xm' })).toEqual({

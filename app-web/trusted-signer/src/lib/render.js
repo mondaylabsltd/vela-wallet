@@ -245,7 +245,8 @@ window.VelaCS = window.VelaCS || {};
     var figure = amountText(hero.amount);
     var size = figure.length > 16 ? ' amount-longer' : figure.length > 10 ? ' amount-long' : '';
     line.appendChild(el('span', 'amount' + size + (hero.amount.unlimited ? ' amount-danger' : ''), figure));
-    line.appendChild(tokenChip(hero.amount.token, hero.amount.logos));
+    // r9-10: a token this page cannot name gets no "?" chip beside its figure.
+    if (!hero.amount.unverifiedDecimals) line.appendChild(tokenChip(hero.amount.token, hero.amount.logos));
     line.appendChild(el('span', 'amount-symbol', hero.amount.symbol));
     box.appendChild(line);
     // The coin of a chain this page does not know is the app's word, said
@@ -517,6 +518,9 @@ window.VelaCS = window.VelaCS || {};
     if (view.refuse) {
       button.disabled = true;
       button.classList.add('confirm-off');
+    } else if (view.anyway) {
+      // r9-10: the words say "anyway", the fill says danger — as the apps' do.
+      button.classList.add('confirm-anyway');
     } else if (view.risk === 'danger' || view.risk === 'hard-danger') {
       // r8-5: never the plain accent Approve over a danger (a batch inside a
       // batch, a grant of everything): the danger's own outlined button.

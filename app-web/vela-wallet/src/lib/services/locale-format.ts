@@ -48,6 +48,34 @@ const NUMBER_STYLES: Record<Exclude<NumberFormatKey, 'auto'>, NumberStyle> = {
 let autoNumber: Exclude<NumberFormatKey, 'auto'> | null = null;
 let autoDate: Exclude<DateFormatKey, 'auto'> | null = null;
 let autoTime: Exclude<TimeFormatKey, 'auto'> | null = null;
+/** The language the `auto` date and time presets were detected for. */
+let autoFor: string | undefined;
+
+/**
+ * r9: the language the wallet is shown in (the `<html lang>` the layout
+ * sets), so `auto` dates and times follow it — a Chinese page in an English
+ * browser read "11/01/2026, 4:58 AM". `undefined` (the browser's own) where
+ * there is no page.
+ */
+function pageLanguage(): string | undefined {
+	try {
+		const lang = typeof document === 'undefined' ? '' : document.documentElement.lang;
+		return lang && Intl.DateTimeFormat.supportedLocalesOf([lang]).length > 0 ? lang : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+/** The page's language changed since `auto` was read: read it again. */
+function followPageLanguage(): string | undefined {
+	const lang = pageLanguage();
+	if (lang !== autoFor) {
+		autoFor = lang;
+		autoDate = null;
+		autoTime = null;
+	}
+	return lang;
+}
 
 function detectNumber(): Exclude<NumberFormatKey, 'auto'> {
 	if (autoNumber) return autoNumber;
@@ -79,10 +107,11 @@ function detectNumber(): Exclude<NumberFormatKey, 'auto'> {
 }
 
 function detectDate(): Exclude<DateFormatKey, 'auto'> {
+	const lang = followPageLanguage();
 	if (autoDate) return autoDate;
 	let key: Exclude<DateFormatKey, 'auto'> = 'mdy_slash';
 	try {
-		const parts = new Intl.DateTimeFormat(undefined, {
+		const parts = new Intl.DateTimeFormat(lang, {
 			year: 'numeric',
 			month: '2-digit',
 			day: '2-digit'
@@ -103,10 +132,11 @@ function detectDate(): Exclude<DateFormatKey, 'auto'> {
 }
 
 function detectTime(): Exclude<TimeFormatKey, 'auto'> {
+	const lang = followPageLanguage();
 	if (autoTime) return autoTime;
 	let key: Exclude<TimeFormatKey, 'auto'> = 'h24';
 	try {
-		const parts = new Intl.DateTimeFormat(undefined, {
+		const parts = new Intl.DateTimeFormat(lang, {
 			hour: 'numeric',
 			minute: 'numeric'
 		}).formatToParts(new Date(2026, 5, 13, 13, 45));
@@ -152,6 +182,7 @@ export function resetAutoDetectionForTests(): void {
 	autoNumber = null;
 	autoDate = null;
 	autoTime = null;
+	autoFor = undefined;
 }
 
 // ---------------------------------------------------------------------------

@@ -7,6 +7,7 @@
  * with a link or a proposal (docs/multisig-vault-design.md §5.3).
  */
 import { fillTemplate } from '$lib/i18n/fill';
+import { requireApprovals } from './approvals-words';
 import * as wasm from '../../../../../../rust/pkg-web/vela_core.js';
 import { loadAccounts } from '$lib/onboarding/core/storage';
 import { chainMeta } from '$lib/services/chains';
@@ -221,7 +222,7 @@ export async function actionTitle(
 				new: who(action.newOwner)
 			});
 		case 'changeThreshold':
-			return fillTemplate(m.action.changeThreshold, { threshold: action.threshold });
+			return requireApprovals(m, action.threshold);
 		case 'rename':
 			return fillTemplate(m.action.rename, { name: action.name });
 		case 'call': {
@@ -249,16 +250,16 @@ export function memberChanges(m: MultisigMessages, action: Action | null): strin
 		let change: string;
 		switch (a.kind) {
 			case 'addOwner':
-				change = `${m.action.addOwner} ${shortenAddress(a.owner)}, ${fillTemplate(m.action.changeThreshold, { threshold: a.threshold })}`;
+				change = `${m.action.addOwner} ${shortenAddress(a.owner)}, ${requireApprovals(m, a.threshold)}`;
 				break;
 			case 'removeOwner':
-				change = `${m.action.removeOwner} ${shortenAddress(a.owner)}, ${fillTemplate(m.action.changeThreshold, { threshold: a.threshold })}`;
+				change = `${m.action.removeOwner} ${shortenAddress(a.owner)}, ${requireApprovals(m, a.threshold)}`;
 				break;
 			case 'swapOwner':
 				change = `${m.action.swapOwner} ${shortenAddress(a.oldOwner)} → ${shortenAddress(a.newOwner)}`;
 				break;
 			case 'changeThreshold':
-				change = fillTemplate(m.action.changeThreshold, { threshold: a.threshold });
+				change = requireApprovals(m, a.threshold);
 				break;
 			default:
 				return [];

@@ -378,4 +378,12 @@ window.VelaCS.i18n.register('id', {
   'ui.withdrawnTitle': "Ditarik",
   'ui.walletWithdrew': "Dompet tidak lagi menunggu permintaan ini, jadi tidak ada yang ditandatangani di sini. Anda bisa menutup halaman ini.",
   'ui.answerNotTaken': "Dompet tidak menerima jawaban halaman ini, jadi tidak ada yang dikirim. Kembali ke dompet.",
+  // r9-10: "… anyway" where the app's review asks for it; a token whose
+  // decimals are unknown in its base units; one approval said as one.
+  'button.msApproveAnyway': "Tetap setujui",
+  'warn.msAppAnyway': "Pemeriksaan Vela menemukan bahaya yang tidak bisa diverifikasi halaman ini (misalnya, transaksi akan gagal): setujui hanya jika Anda yakin.",
+  'value.baseUnitsUnknown': "unit dasar · desimal tidak diketahui",
+  'sentence.msAddOwnerOne': "{owner} menjadi anggota, dan {threshold} persetujuan akan dibutuhkan.",
+  'sentence.msRemoveOwnerOne': "{owner} tidak lagi menjadi anggota, dan {threshold} persetujuan akan dibutuhkan.",
+  'sentence.msThresholdOne': "Mulai sekarang {threshold} persetujuan dibutuhkan.",
 });

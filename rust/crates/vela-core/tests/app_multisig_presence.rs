@@ -51,6 +51,7 @@ fn item(nonce: u128, status: ProposalStatus) -> ProposalItem {
         threshold: 2,
         status,
         can_approve: Vec::new(),
+        members_here: Vec::new(),
         can_execute: Vec::new(),
         cancelled_by: None,
         same_nonce: Vec::new(),

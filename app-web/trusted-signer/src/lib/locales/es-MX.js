@@ -378,4 +378,12 @@ window.VelaCS.i18n.register('es-MX', {
   'ui.withdrawnTitle': "Retirada",
   'ui.walletWithdrew': "La billetera dejó de esperar esta solicitud, así que aquí no se firma nada. Puedes cerrar esta página.",
   'ui.answerNotTaken': "La billetera no aceptó la respuesta de esta página, así que no se envió nada. Vuelve a la billetera.",
+  // r9-10: "… anyway" where the app's review asks for it; a token whose
+  // decimals are unknown in its base units; one approval said as one.
+  'button.msApproveAnyway': "Aprobar de todos modos",
+  'warn.msAppAnyway': "La revisión de Vela encontró un peligro que esta página no puede verificar (por ejemplo, que fallaría): aprueba solo si estás seguro.",
+  'value.baseUnitsUnknown': "unidades base · decimales desconocidos",
+  'sentence.msAddOwnerOne': "{owner} se vuelve miembro y se necesitará {threshold} aprobación.",
+  'sentence.msRemoveOwnerOne': "{owner} deja de ser miembro y se necesitará {threshold} aprobación.",
+  'sentence.msThresholdOne': "A partir de ahora se necesitará {threshold} aprobación.",
 });

@@ -1430,7 +1430,15 @@ if (branchSet.size !== 117) fail(`expected 117 branch paths, got ${branchSet.siz
   //   is "sending", never "not sent") and `home.multisig.external.
   //   {executeConfirms, executeFeeMax}` (r8-15: how many wallet prompts are
   //   coming, and the most the fee can be). 610 + 40 = 650.
-  const pins = { multisig: 650 };
+  // 664 (round 9 core, 2026-11-01): + `home.multisig.review.refusedWhy.
+  //   {delegatecall, tooDeep, refund, other}` (r9-9: a refusal says its own
+  //   reason, never the state guard's), `home.multisig.action.
+  //   changeThreshold_{one,few,many,other}` and `home.multisig.proposal.
+  //   rejectHint_{one,few,many,other}` ("Require 1 approval", plural by
+  //   `{{count}}`; the plain keys stay for shells not moved yet) and
+  //   `home.multisig.external.{doneExecuted, doneCancelled}` (r8-24: a link to
+  //   a transaction whose number is used says which). 650 + 14 = 664.
+  const pins = { multisig: 664 };
   for (const [name, docs] of Object.entries(onDemand)) {
     const leaves = new Set();
     for (const lng of LOCALES) walk(docs[lng], '', leaves, new Set());

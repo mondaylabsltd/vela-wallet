@@ -2022,6 +2022,14 @@ export function simOutcome(user: string, reply_json: string): string;
 export function siteStartChain(space_chain_ids: Uint32Array, last_used?: number | null): number;
 
 /**
+ * [`site_start_chain`] for an account (r9): `network_space::
+ * site_start_chain_for` — after the network last used, the first of
+ * `account_chains` (where the account holds something, or used) the space
+ * offers. The extension worker's twin is pinned to this.
+ */
+export function siteStartChainFor(space_chain_ids: Uint32Array, last_used: number | null | undefined, account_chains: Uint32Array): number;
+
+/**
  * `{value, unit}` — a byte count in 1024s, for the shell to format in the
  * person's numbers.
  */
@@ -2726,6 +2734,7 @@ export interface InitOutput {
     readonly signrequestcore_view: (a: number) => [number, number, number, number];
     readonly simOutcome: (a: number, b: number, c: number, d: number) => [number, number];
     readonly siteStartChain: (a: number, b: number, c: number) => number;
+    readonly siteStartChainFor: (a: number, b: number, c: number, d: number, e: number) => number;
     readonly storageBytesDisplay: (a: number) => [number, number];
     readonly storageIsCacheKey: (a: number, b: number) => number;
     readonly storageIsErasableKey: (a: number, b: number) => number;

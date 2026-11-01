@@ -689,6 +689,51 @@ const aliceSigned = [passkeyApproval(ALICE.address, ALICE.genesis)];
     v.hero.amount.symbol === 'USDC' && !v.hero.amount.unverifiedDecimals, v.hero && JSON.stringify(v.hero.amount.text));
 }
 
+{
+  // r9-10: "… anyway" exactly where the app's one review asks for it, and in
+  // the danger fill; a plain transfer the review signs as it is stays "Approve".
+  const BASE = 8453;
+  const BASE_USDC = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+  const safeTx = ms('transfersTx', { transfers: [{ token: BASE_USDC, to: THIRD, amount: '250000000' }], nonce: '0x7' });
+  const intent = {
+    method: 'vela_multisigApprove', origin: '',
+    params: [{ chainId: BASE, safe: SAFE, member: MEMBER, safeTx,
+      safeTxHash: ms('safeTxHashes', { chainId: BASE, safe: SAFE, tx: safeTx }).safeTxHash }],
+  };
+  const plain = view(intent, { chainId: BASE, multisig: { name: 'Team fund' } });
+  check('r9-10: no word from the app — a plain "Approve"', plain.confirmKey === 'button.msApprove' && !plain.anyway);
+  const asked = view(intent, { chainId: BASE, multisig: { name: 'Team fund', anyway: true } });
+  check('r9-10: the app\'s review asks "anyway" (a run that fails) — "Approve anyway", said why',
+    !asked.refuse && asked.anyway && asked.confirmKey === 'button.msApproveAnyway' && warned(asked, 'warn.msAppAnyway') &&
+    (asked.risk === 'danger' || asked.risk === 'hard-danger'), JSON.stringify([asked.confirmKey, asked.risk]));
+  ns.i18n.setLocale('en');
+  check('r9-10: …in the danger fill, never the accent', hasClass(ns.render(asked, {}), 'confirm-anyway'));
+
+  // A token this page cannot name: its base units, said as such — never "1,000,000 ? ?".
+  const UNKNOWN = '0x7777777777777777777777777777777777777777';
+  const nodec = ms('transfersTx', { transfers: [{ token: UNKNOWN, to: THIRD, amount: '1000000' }], nonce: '0x8' });
+  const v = view({
+    method: 'vela_multisigApprove', origin: '',
+    params: [{ chainId: BASE, safe: SAFE, member: MEMBER, safeTx: nodec,
+      safeTxHash: ms('safeTxHashes', { chainId: BASE, safe: SAFE, tx: nodec }).safeTxHash }],
+  }, { chainId: BASE });
+  check('r9-10: unknown decimals read "1000000 base units · decimals unknown"',
+    v.hero && v.hero.amount.text === '1000000' && v.hero.amount.symbol === 'base units · decimals unknown',
+    v.hero && JSON.stringify([v.hero.amount.text, v.hero.amount.symbol]));
+
+  // One approval is "1 approval".
+  const one = view(request(memberTx({ kind: 'threshold', threshold: 1 })));
+  check('r9-10: "From now on 1 approval will be needed."',
+    one.sentence && one.sentence.key === 'sentence.msThresholdOne' &&
+    ns.i18n.t(one.sentence) === 'From now on 1 approval will be needed.', JSON.stringify(one.sentence));
+}
+
+function hasClass(node, name) {
+  if (!node) return false;
+  if (String(node.className || '').split(/\s+/).includes(name)) return true;
+  return [...(node.children || [])].some((child) => hasClass(child, name));
+}
+
 // Every word this approval can put on the card, in every language.
 const KEYS = Object.keys(ns.i18n.catalogue ? ns.i18n.catalogue('en') : {});
 const msKeys = (KEYS.length ? KEYS : []).filter((k) => /\.ms[A-Z]|^ui\.copy$|^tag\.(multisig|thisMultisig)$|^field\.(multisig|member|newMember|oldMember|threshold|newName)$/.test(k));

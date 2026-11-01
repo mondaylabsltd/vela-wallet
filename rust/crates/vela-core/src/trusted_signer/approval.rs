@@ -57,6 +57,10 @@ pub struct ApprovalInput<'a> {
     /// The member's credential ids, hex (offered when there is no route).
     pub credential_ids_hex: &'a [String],
     pub key_route: Option<&'a KeyRoute>,
+    /// r9-10: the one review asks for "… anyway" (`sign.anyway`): the page
+    /// says "Approve anyway" in the danger style — the app's word, which only
+    /// adds to what the page reads itself.
+    pub anyway: bool,
 }
 
 /// The page's `{intent, context}` for `input` (PROTOCOL.md §12).
@@ -92,6 +96,9 @@ pub fn request(input: &ApprovalInput<'_>) -> Result<Value, crate::error::CoreErr
         let mut about = serde_json::Map::new();
         if let Some(name) = input.multisig_name.map(str::trim).filter(|n| !n.is_empty()) {
             about.insert("name".into(), json!(name));
+        }
+        if input.anyway {
+            about.insert("anyway".into(), json!(true));
         }
         context.insert("multisig".into(), Value::Object(about));
     }
@@ -332,6 +339,7 @@ mod tests {
             member_name: Some("Alice"),
             credential_ids_hex: &ids,
             key_route: None,
+            anyway: true,
         })
         .unwrap_or_else(|_| unreachable!());
         assert_eq!(request["intent"]["method"], METHOD);
@@ -351,6 +359,8 @@ mod tests {
         assert_eq!(context["chainId"], CHAIN);
         assert_eq!(context["signer"]["name"], "Alice");
         assert_eq!(context["multisig"]["name"], "Team fund");
+        // r9-10: the review asks for "… anyway": the page is told so.
+        assert_eq!(context["multisig"]["anyway"], true);
         assert!(context.get("operation").is_none());
         assert_eq!(
             context["allowCredentials"].as_array().map(Vec::len),

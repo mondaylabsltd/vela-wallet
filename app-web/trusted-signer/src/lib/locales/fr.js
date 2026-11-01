@@ -380,4 +380,12 @@ window.VelaCS.i18n.register('fr', {
   'ui.withdrawnTitle': "Retirée",
   'ui.walletWithdrew': "Le portefeuille a cessé d’attendre cette demande, rien n’est donc signé ici. Vous pouvez fermer cette page.",
   'ui.answerNotTaken': "Le portefeuille n’a pas accepté la réponse de cette page, rien n’a donc été envoyé. Revenez au portefeuille.",
+  // r9-10: "… anyway" where the app's review asks for it; a token whose
+  // decimals are unknown in its base units; one approval said as one.
+  'button.msApproveAnyway': "Approuver quand même",
+  'warn.msAppAnyway': "La vérification de Vela a trouvé un danger que cette page ne peut pas vérifier (par exemple, qu’elle échouerait) : n’approuvez que si vous êtes sûr.",
+  'value.baseUnitsUnknown': "unités de base · décimales inconnues",
+  'sentence.msAddOwnerOne': "{owner} devient membre, et {threshold} approbation sera requise.",
+  'sentence.msRemoveOwnerOne': "{owner} n’est plus membre, et {threshold} approbation sera requise.",
+  'sentence.msThresholdOne': "Désormais, {threshold} approbation sera requise.",
 });

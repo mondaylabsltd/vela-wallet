@@ -378,4 +378,12 @@ window.VelaCS.i18n.register('ko', {
   'ui.withdrawnTitle': "철회됨",
   'ui.walletWithdrew': "지갑이 이 요청을 더 이상 기다리지 않으므로 여기서는 아무것도 서명되지 않습니다. 이 페이지를 닫아도 됩니다.",
   'ui.answerNotTaken': "지갑이 이 페이지의 응답을 받지 않았으므로 아무것도 보내지 않았습니다. 지갑으로 돌아가세요.",
+  // r9-10: "… anyway" where the app's review asks for it; a token whose
+  // decimals are unknown in its base units; one approval said as one.
+  'button.msApproveAnyway': "그래도 승인",
+  'warn.msAppAnyway': "Vela의 확인에서 이 페이지가 검증할 수 없는 위험이 발견되었습니다(예: 실패할 거래). 확실할 때만 승인하세요.",
+  'value.baseUnitsUnknown': "기본 단위 · 소수 자릿수 모름",
+  'sentence.msAddOwnerOne': "{owner} 님이 멤버가 되고, 승인이 {threshold}개 필요해집니다.",
+  'sentence.msRemoveOwnerOne': "{owner} 님이 더 이상 멤버가 아니며, 승인이 {threshold}개 필요해집니다.",
+  'sentence.msThresholdOne': "이제부터 승인이 {threshold}개 필요합니다.",
 });

@@ -147,6 +147,10 @@ pub struct TrustedSignerApprovalInput {
     pub credential_ids_hex: Vec<String>,
     /// The member's key route as JSON (`signing_plan`'s `key`), as it came.
     pub key_route_json: Option<String>,
+    /// r9-10: the review asks for "… anyway" (the passkey purpose's
+    /// `anyway`): the page says "Approve anyway" in the danger style.
+    #[uniffi(default = false)]
+    pub anyway: bool,
 }
 
 /// The page's `{intent, context}` for a member's approval of a SafeTx
@@ -177,6 +181,7 @@ pub fn trusted_signer_approval_request(
         member_name: input.member_name.as_deref(),
         credential_ids_hex: &input.credential_ids_hex,
         key_route: key_route.as_ref(),
+        anyway: input.anyway,
     })?;
     Ok(request.to_string())
 }

@@ -71,7 +71,7 @@
 	import { payPrefill } from '$lib/pay/link';
 	import { takeKeptPay } from '$lib/pay/kept';
 	import { preferences } from '$lib/services/preferences.svelte';
-	import { publishExtChains } from '$lib/dapp/core/ext-chains';
+	import { publishExtChains, setExtAccountChains } from '$lib/dapp/core/ext-chains';
 	import { networkSpace } from '$lib/network-space/network-space.svelte';
 	import { chainName, subscribeNetworks } from '$lib/services/networks';
 	import { ownNodes } from '$lib/services/own-node.svelte';
@@ -1748,6 +1748,22 @@
 		return subscribeNetworks(() => void publishExtChains());
 	});
 
+	// r9: a new site starts where the account lives — a multisig's own
+	// networks, then where it holds something (the holdings in their worth's
+	// order), then where this device's transactions were — before the space's
+	// first (the core's `site_start_chain_for`, read by the worker).
+	$effect(() => {
+		if (!inExtension()) return;
+		const held = balance.view.tokens
+			.filter((t) => !t.spam && Number(t.balance) > 0)
+			.map((t) => t.chain_id);
+		setExtAccountChains([
+			...(multisig.active?.chainIds ?? []),
+			...held,
+			...(multisig.view?.recent_networks ?? [])
+		]);
+	});
+
 	// What an already-connected site may be told (the worker's snapshot), a
 	// connected site following the active account, and old grants getting the
 	// core's spelling — all from the ROOT LAYOUT (082 G58, 086 issue 315), so a
@@ -1807,6 +1823,22 @@
 	// 5-minute token cache has expired by then anyway.
 	onMount(() => {
 		const id = setInterval(() => balance.refresh(false), 600_000);
+		return () => clearInterval(id);
+	});
+
+	/** r9 (S4): how often a shown multisig's home reads its balances. */
+	const MULTISIG_BALANCE_FLOOR_MS = 60_000;
+	// r9 (S4): a multisig's funds move without this device — another member
+	// executes, a site's batch runs — so its home reads itself every minute
+	// while it is shown and the page visible — forced, so the read is a read
+	// and never the 5-minute token cache answering "Updated now" — and the
+	// "Updated" beside its total never ages past that with a healthy network.
+	// An unreachable one says so in the home's own line.
+	$effect(() => {
+		if (!multisig.active) return;
+		const id = setInterval(() => {
+			if (document.visibilityState === 'visible') balance.refresh(true);
+		}, MULTISIG_BALANCE_FLOOR_MS);
 		return () => clearInterval(id);
 	});
 
