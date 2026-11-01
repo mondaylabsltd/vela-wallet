@@ -198,6 +198,7 @@ impl Deps for Shared {
             chain_id,
             from: from.to_owned(),
             calls: calls.to_vec(),
+            state_overrides: None,
         }) {
             Res::Simulated { reply } => reply,
             _ => None,

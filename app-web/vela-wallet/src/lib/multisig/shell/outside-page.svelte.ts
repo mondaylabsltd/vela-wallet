@@ -112,7 +112,12 @@ export function pageDeps(input: {
 		// The signing sheet's own simulation of the review's calls, loaded on the first ask.
 		simulate: async (op) => {
 			const { rpcSimulateReply } = await import('$lib/services/sim/sim-engine-rpc');
-			return rpcSimulateReply(op.from, op.calls as never, op.chain_id).catch(() => null);
+			return rpcSimulateReply(
+				op.from,
+				op.calls as never,
+				op.chain_id,
+				op.state_overrides ?? undefined
+			).catch(() => null);
 		},
 		// A recipient as the chain says it; this browser holds no history of the owner's.
 		recipientFacts: async (op) => {

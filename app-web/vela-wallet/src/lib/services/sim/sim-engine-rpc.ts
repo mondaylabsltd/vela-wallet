@@ -41,10 +41,14 @@ function callSucceeded(call: any): boolean {
 }
 
 /** The `eth_simulateV1` question: `calls` in one simulated block, from `from`. */
-function simulatePayload(from: string, calls: SimCall[]) {
+function simulatePayload(from: string, calls: SimCall[], stateOverrides?: unknown) {
 	return {
 		blockStateCalls: [
 			{
+				// Real-device S2: an undeployed multisig placed as its deployment
+				// leaves it (the core's override), so its first transaction is
+				// simulated as it will run — not from a bare address.
+				...(stateOverrides ? { stateOverrides } : {}),
 				calls: calls.map((c) => ({
 					from,
 					to: c.to,
@@ -74,12 +78,17 @@ const UNREACHABLE_REPLY = '{"unreachable":true}';
 export async function rpcSimulateReply(
 	from: string,
 	calls: SimCall[],
-	chainId: number
+	chainId: number,
+	stateOverrides?: unknown
 ): Promise<string> {
 	// Nothing was asked: an answer nobody can read, never "nothing moves".
 	if (!calls.length || !calls[0]?.to) return '{}';
 	try {
-		const res = await rpcCall('eth_simulateV1', [simulatePayload(from, calls), 'latest'], chainId);
+		const res = await rpcCall(
+			'eth_simulateV1',
+			[simulatePayload(from, calls, stateOverrides), 'latest'],
+			chainId
+		);
 		return JSON.stringify(res ?? {});
 	} catch {
 		return UNREACHABLE_REPLY;

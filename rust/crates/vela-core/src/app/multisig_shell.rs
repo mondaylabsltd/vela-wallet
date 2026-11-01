@@ -240,6 +240,15 @@ pub enum MultisigOperation {
         from: String,
         #[cfg_attr(feature = "bindings", ts(type = "unknown[]"))]
         calls: Vec<crate::multisig_review::SimCall>,
+        /// Real-device S2: the multisig as its deployment leaves it, where it
+        /// is not deployed yet (its code and setup storage) — `eth_simulateV1`'s
+        /// `blockStateCalls[0].stateOverrides`, passed as it is. Without it an
+        /// undeployed multisig's first transaction was simulated from a bare
+        /// address and said "expected to fail", then ran fine. `None` for a
+        /// deployed one.
+        #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(type = "unknown | null"))]
+        state_overrides: Option<Value>,
     },
     /// What the send flow knows of a recipient (`resolveRecipientRisk`):
     /// whether it is a contract, and whether this device sent to it before.

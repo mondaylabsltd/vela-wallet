@@ -214,6 +214,45 @@ fn reads_for_a_safe_not_deployed_put_it_in_place() {
     );
 }
 
+/// Real-device S2: an undeployed multisig's first transaction was simulated
+/// from a bare address and said "expected to fail" — then ran. The
+/// simulation puts the multisig in place as its deployment will (the same
+/// code and storage the probe uses); a deployed one needs none.
+#[test]
+fn the_simulation_of_an_undeployed_safe_includes_its_deployment() {
+    let g = multisig::multisig_genesis(&[A.into(), B.into()], 1, "Team", "0x1").unwrap();
+    let safe = g.address.clone();
+    let mut input = ReadsInput {
+        chain_id: 100,
+        safe: safe.clone(),
+        tx: Some(tx(A, "0x1", "0x", 0)),
+        deployed: false,
+        genesis: Some(g.genesis.clone()),
+        ..ReadsInput::default()
+    };
+    let first = review_reads(&input).unwrap();
+    assert!(first.sim_state_overrides.is_none(), "nothing to place yet");
+    let singleton = first.need_code[0].clone();
+    let dir = format!("{}/tests/vectors/safe-code", env!("CARGO_MANIFEST_DIR"));
+    let code = ["safe-l2-1.4.1", "safe-1.4.1"]
+        .iter()
+        .map(|n| std::fs::read_to_string(format!("{dir}/{n}.hex")).unwrap())
+        .map(|c| c.trim().to_owned())
+        .find(|c| multisig::canonical_singleton_code(singleton.parse().unwrap(), c))
+        .expect("a canonical singleton's code");
+    input.codes.insert(singleton, Some(code));
+    let reads = review_reads(&input).unwrap();
+    let overrides = reads.sim_state_overrides.expect("the multisig placed");
+    let placed = &overrides[&checksum(safe.parse().unwrap())];
+    assert!(placed["code"].as_str().is_some_and(|c| c.len() > 2));
+    assert!(placed["stateDiff"].as_object().is_some_and(|s| !s.is_empty()));
+    // Deployed: the chain already has it.
+    input.deployed = true;
+    input.owners = vec![A.into(), B.into()];
+    input.threshold = 1;
+    assert!(review_reads(&input).unwrap().sim_state_overrides.is_none());
+}
+
 // -- the guard, from a trace ---------------------------------------------------
 
 /// anvil's own answer for `addOwnerWithThreshold(C, 1)` executed by A.

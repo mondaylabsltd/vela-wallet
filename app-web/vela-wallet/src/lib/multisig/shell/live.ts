@@ -382,7 +382,13 @@ export function liveDeps(input: {
 			riskConfirmation.ask({ chainId: op.chain_id, safe: op.safe, findings: op.findings as never }),
 		sendCalls,
 		quoteCalls,
-		simulate: (op) => rpcSimulateReply(op.from, op.calls as never, op.chain_id).catch(() => null),
+		simulate: (op) =>
+			rpcSimulateReply(
+				op.from,
+				op.calls as never,
+				op.chain_id,
+				op.state_overrides ?? undefined
+			).catch(() => null),
 		recipientFacts: async (op) => {
 			const risk = await resolveRecipientRisk(op.chain_id, op.address);
 			return { isContract: risk.isContract, firstTime: risk.firstInteraction };

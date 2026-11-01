@@ -426,7 +426,10 @@ test('an outside owner signs with their own wallet, through the connect page', a
 	// Vela link first, "Approve with another wallet" beside it, and the
 	// outside member's own link (r4C-13). The outside owner signs from that
 	// link, on the connect page alone.
-	const thrownB = await signFromOutsideLink(browser, page, EOA_ONE, 'e3-outside-link');
+	// Real-device S2: the undeployed multisig's first transaction is not said
+	// to fail (the simulation includes its deployment), and the page counts
+	// the outside member's own approval at once (2/2, not 1/2).
+	const thrownB = await signFromOutsideLink(browser, page, EOA_ONE, 'e3-outside-link', '2/2');
 	await expect(page.getByText('2/2 approved').first()).toBeVisible({ timeout: 90_000 });
 	await shot(page, 'e5-approved');
 
@@ -455,7 +458,8 @@ async function signFromOutsideLink(
 	browser: import('@playwright/test').Browser,
 	vela: Page,
 	owner: string,
-	name: string
+	name: string,
+	countedAfter?: string
 ): Promise<string[]> {
 	const outsideLink = vela.getByTestId('outside-link');
 	await expect(outsideLink).toBeVisible({ timeout: 30_000 });
@@ -473,6 +477,12 @@ async function signFromOutsideLink(
 	// r4C-7: reviewed on the page first; the wallet is asked on the tap.
 	await page.getByRole('button', { name: /^Sign with / }).click({ timeout: 60_000 });
 	await expect(page.getByTestId('outside-approved')).toBeVisible({ timeout: 60_000 });
+	await expect(page.getByText(/expected to fail/i)).toHaveCount(0);
+	if (countedAfter) {
+		await expect(page.getByTestId('outside-approvals')).toContainText(countedAfter, {
+			timeout: 30_000
+		});
+	}
 	await shot(page, name);
 	await ctx.close();
 	return thrown;

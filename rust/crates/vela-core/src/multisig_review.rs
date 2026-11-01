@@ -357,6 +357,10 @@ pub struct RpcRequest {
 pub struct Reads {
     pub need_code: Vec<String>,
     pub sim_calls: Vec<SimCall>,
+    /// Real-device S2: the state override that puts an undeployed multisig
+    /// in place (its deployment's code and storage) for `eth_simulateV1` —
+    /// the simulation includes the deploy, as the execution will.
+    pub sim_state_overrides: Option<Value>,
     pub trace: Option<RpcRequest>,
     pub probe: Option<RpcRequest>,
     pub unavailable: Option<String>,
@@ -609,6 +613,14 @@ pub fn review_reads(input: &ReadsInput) -> Result<Reads, CoreError> {
             return Ok(reads);
         }
     };
+    if placed.code.is_some() {
+        let mut overrides = Map::new();
+        overrides.insert(
+            checksum(safe),
+            override_of(placed.code.as_deref(), &placed.storage),
+        );
+        reads.sim_state_overrides = Some(Value::Object(overrides));
+    }
     let (_, _, named, _) = declared(review.action.as_ref(), &placed.owners, placed.threshold);
     let watch = watched(tx, &placed.owners, &named);
     let inner = inner_of(tx)?;
