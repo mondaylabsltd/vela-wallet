@@ -120,7 +120,7 @@ class MsProposalModel(
             if (review["refused"]["key"].str == null) {
                 item.refusal?.takeIf { it.isNotEmpty() }?.let { out += MsLine(words.t("proposal.refused", "reason" to it), MsTone.Danger, "refused") }
             }
-            if (item.status == "queued") out += MsLine(words.t("proposal.queuedNote", "nonce" to previousNonce), MsTone.Neutral, "queued")
+            if (item.status == "queued") out += MsLine(queuedNote(), MsTone.Neutral, "queued")
             if (item.renameUndeployed) out += MsLine(words.t("proposal.renameUndeployed", "network" to words.network(chainId)), MsTone.Warning, "renameUndeployed")
             if (standing.kind == "blocked") out += MsLine(words.t("status.cannotRun", "reason" to words.blockReason(standing["block"])), MsTone.Warning, "blocked")
             if (item.unsent) {
@@ -148,7 +148,17 @@ class MsProposalModel(
      * while it works, once done, or for the person's own cancel.
      */
     val approveFailure: MsLine? get() = words.actionFailure(approveState, chainId)?.let { MsLine(it, MsTone.Danger, "approveFailed") }
-    val executeFailure: MsLine? get() = words.actionFailure(executeState, chainId)?.let { MsLine(it, MsTone.Danger, "executeFailed") }
+    val executeFailure: MsLine? get() = words.actionFailure(executeState, chainId)?.let { MsLine(it, words.actionFailureTone(executeState), "executeFailed") }
+
+    /**
+     * r11-9: the fee line under the button, unless the action's own state
+     * speaks for the look now — one box, never the look's line and the
+     * action's beside it (the action state replaces the fee line).
+     */
+    fun feeLineBeside(executor: String, failure: MsLine?): Pair<String, MsTone>? {
+        val line = feeLine(executor) ?: return null
+        return if (failure != null && (failure.text == line.first || executeState.kind == "stopped")) null else line
+    }
 
     /**
      * r9-13: the core's view of a transaction a cancellation waits on — only
@@ -170,6 +180,17 @@ class MsProposalModel(
             ?.let { it["sending"].bool == true || it["why"].str == "sending" } ?: false
 
     private val previousNonce: String get() = ((item.nonce.toLongOrNull() ?: 1L) - 1).coerceAtLeast(0).toString()
+
+    /**
+     * r11 S4: "It can run once…" — every number it waits behind, the core's
+     * (`waits_for`): one named, several listed as "#n" in the person's list
+     * form. The previous number alone only from a core without the list.
+     */
+    internal fun queuedNote(): String = when (item.waitsFor.size) {
+        0 -> words.t("proposal.queuedNote", "nonce" to previousNonce)
+        1 -> words.t("proposal.queuedNote", "nonce" to item.waitsFor.single())
+        else -> words.t("proposal.queuedNoteMany", "nonces" to words.list(item.waitsFor.map { "#$it" }))
+    }
 
     private fun outboxLine(entry: JsonElement): String {
         val seconds = entry["retryAt"].long?.let { ((it - nowMs()) / 1000).coerceAtLeast(0) } ?: 0

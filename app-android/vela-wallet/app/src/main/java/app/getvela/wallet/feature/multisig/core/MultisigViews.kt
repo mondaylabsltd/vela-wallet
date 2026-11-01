@@ -364,6 +364,8 @@ data class MsProposalItem(
      * transaction (`members_here`); `null` from a core without the field.
      */
     val membersHere: List<String>? = null,
+    /** r11 S4: every number a queued one waits behind (`waits_for`, decimal), the same on every surface. */
+    val waitsFor: List<String> = emptyList(),
 ) {
     val id: String get() = "$chainId:${safeTxHash.lowercase()}"
 
@@ -394,6 +396,7 @@ data class MsProposalItem(
             renameUndeployed = e["renameUndeployed"].bool ?: false,
             raw = e,
             membersHere = (e["membersHere"] ?: e["members_here"])?.takeIf { it is kotlinx.serialization.json.JsonArray }?.strings(),
+            waitsFor = (e["waitsFor"] ?: e["waits_for"]).strings(),
         )
     }
 }

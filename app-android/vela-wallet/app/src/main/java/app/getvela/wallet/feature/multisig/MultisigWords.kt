@@ -71,9 +71,10 @@ class MultisigWords(
 
     /** A member as a line names it: its name and short address — a name is a claim, the address is who gets the say. */
     fun who(address: String): String {
-        val short = short(address)
         val name = label(address)
-        return if (name == short) short else "$name ($short)"
+        // r11-6: the core's one rule for a title naming a member (`names.who`).
+        return MsRules.string("names.who", mapOf("address" to address, "label" to name))
+            ?: short(address).let { short -> if (name == short) short else "$name ($short)" }
     }
 
     /**
@@ -269,12 +270,26 @@ class MultisigWords(
             "signingUnchecked" -> t("authority.signUnchecked", "network" to network(chainId))
             "refused" -> t("proposal.refused", "reason" to (state["reason"].str ?: ""))
             "mailboxRefused" -> t("proposal.reason.serviceRefused")
-            "stopped" -> t("proposal.wouldFail", "reason" to whyFails(state["preview"]["why"] ?: state["preview"]))
+            // r11-9: what stopped it is its look's own kind — "would fail" only
+            // for a look that says it fails, never for one that could not price
+            // or check it ("This would fail…: it couldn't be checked").
+            "stopped" -> stoppedLine(state["preview"])
             "noOutsideSigner" -> t("proposal.failed", "reason" to t("proposal.noOutsideSigner"))
             "failed" -> failureText(state["detail"].str)
             else -> t("proposal.reason.unknown")
         }
     }
+
+    /** r11-9: an execution its look stopped, in the look's own words (`MultisigPreview` kind). */
+    fun stoppedLine(preview: JsonElement?): String = when (preview.kind) {
+        "unpriced" -> t("proposal.feeUnpriced")
+        "unchecked" -> t("proposal.feeUnchecked")
+        else -> t("proposal.wouldFail", "reason" to whyFails(preview["why"] ?: preview?.takeIf { it.kind == "short" || it.kind == "reverts" }))
+    }
+
+    /** r11-9: a look that only could not price or check it is a warning, never a failure. */
+    fun actionFailureTone(state: JsonElement?): MsTone =
+        if (state.kind == "stopped" && state["preview"].kind in setOf("unpriced", "unchecked")) MsTone.Warning else MsTone.Danger
 
     /** The core's sentence for a passkey error's own words; `null` when it names nothing more than "it failed". */
     private fun passkeyWords(message: String?): String? {
@@ -349,10 +364,12 @@ class MultisigWords(
 
     companion object {
         /** "0xd9c79C…a20432": short, in its EIP-55 case. */
-        fun short(address: String): String {
-            val checksummed = MsRules.eip55(address)
-            return if (checksummed.length > 14) "${checksummed.take(8)}…${checksummed.takeLast(6)}" else checksummed
-        }
+        fun short(address: String): String =
+            // r11-6: THE short form is the core's (`names.short`, 6+6 EIP-55).
+            MsRules.string("names.short", mapOf("address" to address)) ?: run {
+                val checksummed = MsRules.eip55(address)
+                if (checksummed.length > 14) "${checksummed.take(8)}…${checksummed.takeLast(6)}" else checksummed
+            }
 
         /** Keep [Wire] reachable for callers that decode a view part here. */
         internal val json get() = Wire.json

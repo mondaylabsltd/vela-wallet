@@ -273,7 +273,7 @@ class MultisigViewsTest {
         val w = words()
         assertEquals(MsTone.Danger, reviewConcern(w, json("""{"kind":"lookalike","address":"$bob","label":"Bob","of":"$alice"}"""))!!.second)
         assertNull(reviewConcern(w, json("""{"kind":"stateChange"}""")))
-        assertEquals("-1.5 XDAI", deltaText(json("""{"delta":"-1500000000000000000"}"""), 100, w, emptyMap()))
+        assertEquals("\u22121.5 XDAI", deltaText(json("""{"delta":"-1500000000000000000"}"""), 100, w, emptyMap()))
         assertEquals("+2 USDC", deltaText(json("""{"delta":"2000000","token":"0xA"}"""), 100, w, mapOf("0xa" to ("USDC" to 6))))
         assertTrue(changeText(w, json("""{"kind":"add","added":"$alice"}""")).contains("Alice"))
         val writes: List<JsonElement> = listOf(json("""{"kind":"module","enabled":true,"address":"0xM"}"""), json("""{"kind":"module","enabled":true,"address":"0xM"}"""))
