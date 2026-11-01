@@ -434,7 +434,12 @@ fn each_refusal_says_its_own_reason_and_no_reassurance() {
     );
     let r = review_with(deep, Some(not_offered_answer()), None);
     assert!(!r.sign.allowed);
+    assert_eq!(r.tone, Tone::Refused);
     assert_eq!(r.refused.as_ref().unwrap().why, RefusedWhy::TooDeep);
+    // r10 follow-up: one refusal box — the "can't be read" concern the
+    // refusal came from is not said beside it, by any shell.
+    assert!(r.reading.unreadable);
+    assert!(!r.concerns.contains(&Concern::UnreadableBatch));
     assert_eq!(r.state.verdict, StateVerdict::Withheld);
     assert!(!r
         .concerns

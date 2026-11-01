@@ -2277,8 +2277,9 @@ impl WalletPage {
             let lines = if past {
                 Vec::new()
             } else {
-                // The refusal above says its own concern; not twice.
-                crate::multisig::reading::concern_blocks_beside(draw, &ctx, review.refused.as_ref())
+                // Beside a refusal the core has left out the concern it
+                // says (one refusal box); every concern here is drawn.
+                crate::multisig::reading::concern_blocks(draw, &ctx)
             };
             let blocks = crate::multisig::reading::blocks(&draw.reading, &ctx);
             drawn_parties = crate::multisig::reading::party_addresses(&blocks);
