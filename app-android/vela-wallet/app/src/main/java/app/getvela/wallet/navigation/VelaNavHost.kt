@@ -282,11 +282,14 @@ fun VelaNavHost(
     // 2026-10-11). Kept with the address it was read for: another account's
     // rows are never shown under this one.
     var deviceKeys by remember { mutableStateOf<Pair<String, app.getvela.wallet.feature.settings.core.WalletKeys.Result>?>(null) }
-    LaunchedEffect(session.address, session.activeName) {
+    // r10 follow-up (core §10.5): the account's name beside the keys is the one
+    // every screen shows for it (`activeLabel`, the published name) — a key row
+    // never repeats what the header says.
+    LaunchedEffect(session.address, activeLabel) {
         val address = session.address
         if (address.isBlank()) return@LaunchedEffect
         val device = application.container.deviceKeysOf(address)
-        deviceKeys = address to application.container.walletKeys.deviceOnly(device, application.container.signInCredentialOf(address), session.activeName)
+        deviceKeys = address to application.container.walletKeys.deviceOnly(device, application.container.signInCredentialOf(address), activeLabel)
     }
 
     // Which body the signed-in shell shows. 钱包 and 探索 are SECTIONS of the
@@ -2890,7 +2893,7 @@ fun VelaNavHost(
                 }
                 // Which passkeys control this wallet — the block the backup sits under.
                 var walletKeys by remember(session.address) { mutableStateOf<app.getvela.wallet.feature.settings.core.WalletKeys.Result?>(null) }
-                LaunchedEffect(session.address) {
+                LaunchedEffect(session.address, activeLabel) {
                     val address = session.address
                     if (address.isBlank()) return@LaunchedEffect
                     // P2.4 (perf-10): Settings draws no balance of its own — the
@@ -2902,8 +2905,8 @@ fun VelaNavHost(
                     // account came to the front is a row before the registry
                     // says so — and then the registry. r10 follow-up: the
                     // account's name goes beside the keys, never as key 0's.
-                    deviceKeys = address to application.container.walletKeys.deviceOnly(device, signIn, session.activeName)
-                    walletKeys = application.container.walletKeys.read(address, device, signIn, session.activeName)
+                    deviceKeys = address to application.container.walletKeys.deviceOnly(device, signIn, activeLabel)
+                    walletKeys = application.container.walletKeys.read(address, device, signIn, activeLabel)
                 }
                 // What this device may say about itself in a report — five named
                 // fields, never an address, a balance or an endpoint URL.
