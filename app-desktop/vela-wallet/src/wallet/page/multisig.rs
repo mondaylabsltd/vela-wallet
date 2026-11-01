@@ -272,6 +272,12 @@ impl WalletPage {
             Some("switcher") => self.account_switcher = true,
             Some("close_switcher") => self.account_switcher = false,
             Some("tech") => self.multisig.tech = true,
+            // Settings → Appearance's multisig-notifications switch, pressed
+            // (`{"page":"notify","on":true}`): the same call its press makes.
+            Some("notify") => {
+                let on = ask.get("on").and_then(Value::as_bool).unwrap_or(true);
+                crate::multisig::notify::deliver::set_wanted(on);
+            }
             // The network space switched, as the person's press does
             // (`{"page":"space","to":"testnet"}`).
             Some("space") => {
@@ -1120,6 +1126,23 @@ impl WalletPage {
         Some(card)
     }
 
+    /// r10-4 / r11: the networks of the other space the multisig shown
+    /// lives on, when none of its networks is in the space in front (its
+    /// record's `chain_ids`; which space a network is in is the core's
+    /// word). Empty for a Vela account, or a multisig used here.
+    pub(crate) fn multisig_elsewhere(&self, cx: &App) -> Vec<u32> {
+        let Some(row) = self.shown_multisig(cx) else {
+            return Vec::new();
+        };
+        let ids: Vec<u32> = row
+            .account
+            .chain_ids
+            .iter()
+            .filter_map(|id| u32::try_from(*id).ok())
+            .collect();
+        crate::network_space::lives_elsewhere(&ids)
+    }
+
     /// r10-4: a multisig shown from the space it does not live in — used
     /// only on networks of the other space — reads as empty here ("$0.00",
     /// "Deposit your first asset"): where it lives is said, with the switch
@@ -1130,14 +1153,7 @@ impl WalletPage {
         theme: &Theme,
         cx: &mut Context<Self>,
     ) -> Option<Div> {
-        let row = self.shown_multisig(cx)?;
-        let ids: Vec<u32> = row
-            .account
-            .chain_ids
-            .iter()
-            .filter_map(|id| u32::try_from(*id).ok())
-            .collect();
-        let elsewhere = crate::network_space::lives_elsewhere(&ids);
+        let elsewhere = self.multisig_elsewhere(cx);
         if elsewhere.is_empty() {
             return None;
         }
