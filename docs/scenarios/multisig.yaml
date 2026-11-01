@@ -177,6 +177,9 @@ scenarios:
         - { file: app-android/vela-wallet/app/src/androidTest/java/app/getvela/wallet/MultisigFlowDeviceTest.kt, test: anotherMembersProposalIsRejectedWithASameNumberCancellation, ci: opt-in, note: 'device/emulator, hermetic (MultisigWorld); no instrumented job in CI' }
       ios-unit:
         - { file: app-ios/VelaWallet/VelaWalletTests/MultisigFlowTests.swift, test: rejectingProposesTheSameNumberCancellationApprovedByThatMember, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigFlowTests.swift, test: rejectingShowsTheCancellationsReviewBeforeItsPasskey, ci: required, note: 'r9-13 through MultisigHub.reject: the cancellation drawn for its review, no passkey or send until proposed there, the rejecting member offered first' }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigFlowTests.swift, test: aRejectionWithdrawnOnItsReviewSignsNothingAndSaysNothing, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigFlowTests.swift, test: aRejectionsPasskeyClosedSaysNothingButOneTimedOutIsSaid, ci: required }
       ios-ui: { gap: 'no reject UI test' }
       desktop:
         - { file: app-desktop/vela-wallet/src/multisig/scenarios.rs, test: anothers_proposal_rejected_is_a_cancellation_reviewed_then_approved_at_its_number, ci: required, note: 'dev-fixtures job; the page''s reject presses (reject_press) drive the machines' }
