@@ -20,6 +20,7 @@
   <button id="takeover" type="button">Add owner (blocked)</button>
   <button id="enablemodule" type="button">Enable module (blocked)</button>
   <button id="safetx" type="button">SafeTx typed data (blocked)</button>
+  <button id="bybit" type="button">Bybit execTransaction (blocked)</button>
   <button id="send" type="button">Send dust</button>
   <button id="approve" type="button">Approve unlimited</button>
   <button id="approve-254" type="button">Approve 2^254</button>
@@ -222,6 +223,28 @@ const keccak256 = (() => {
         types: { EIP712Domain: [{ name: 'chainId', type: 'uint256' }, { name: 'verifyingContract', type: 'address' }], SafeTx: [{ name: 'to', type: 'address' }, { name: 'value', type: 'uint256' }, { name: 'data', type: 'bytes' }] },
         message: { to: selfAddr(), value: '0', data: '0x' }
       })
+    ]);
+    // The Bybit hack (2025-02-21), as its signers were asked for it: an
+    // `execTransaction` on a Safe this account holds a key of, whose inner
+    // call is a DELEGATECALL (operation 1) of `transfer(attacker, 0)` to a
+    // contract that rewrites the Safe's slot 0 — its singleton. A dApp
+    // cannot express operation 1 through {to, value, data}; seeing it means
+    // hand-built calldata, refused whatever it targets.
+    const BYBIT_COLD = '0x1Db92e2EeBC8E0c075a02BeA49a2935BcD2dFCF4';
+    const BYBIT_IMPL = '0x96221423681A6d52E184D440a8eFCEbB105C7242';
+    const BYBIT_ATTACKER = '0xbDd077f651EBe7f7b3cE16fe5F2b025BE2969516';
+    const word = (n) => n.toString(16).padStart(64, '0');
+    const bybitInner = 'a9059cbb' + wordAddr(BYBIT_ATTACKER) + word(0);   // 68 bytes
+    const bybitData = '0x6a761202'
+      + wordAddr(BYBIT_IMPL) + word(0)          // to, value
+      + word(0x140) + word(1)                   // data (offset), operation: DELEGATECALL
+      + word(45746) + word(0) + word(0)         // safeTxGas, baseGas, gasPrice
+      + wordAddr('0x0') + wordAddr('0x0')       // gasToken, refundReceiver
+      + word(0x1c0)                             // signatures (offset)
+      + word(68) + bybitInner.padEnd(192, '0')  // data, padded to a word
+      + word(0);                                // signatures: none
+    document.getElementById('bybit').onclick = () => window.__ask('eth_sendTransaction', [
+      { from: selfAddr(), to: BYBIT_COLD, data: bybitData, value: '0x0' }
     ]);
   </script>
 </body>
