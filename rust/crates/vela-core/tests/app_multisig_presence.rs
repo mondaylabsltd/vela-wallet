@@ -59,6 +59,7 @@ fn item(nonce: u128, status: ProposalStatus) -> ProposalItem {
         created_ms: 1_000.0,
         unsent: false,
         rename_undeployed: false,
+        waits_for: Vec::new(),
     }
 }
 
@@ -822,4 +823,17 @@ fn an_execution_writes_one_row_per_transfer_else_one_for_its_proposal() {
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0]["to"], SAFE, "a member change: the multisig itself");
     assert_eq!(rows[0]["sends"], "0");
+}
+
+/// r11 S4: "It can run once…" lists every number a queued transaction waits
+/// behind — from the multisig's nonce up to its own — the same on every
+/// surface (the natives said only the previous number, the outside page #0).
+#[test]
+fn a_queued_transaction_waits_behind_every_earlier_number() {
+    use vela_core::app::multisig_proposals::{waits_for, WAITS_FOR_MAX};
+    assert_eq!(waits_for(0, 3), vec!["0", "1", "2"]);
+    assert_eq!(waits_for(6, 7), vec!["6"]);
+    assert!(waits_for(7, 7).is_empty());
+    assert!(waits_for(8, 7).is_empty());
+    assert_eq!(waits_for(0, 100).len(), WAITS_FOR_MAX);
 }

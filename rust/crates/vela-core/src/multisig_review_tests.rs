@@ -1400,3 +1400,64 @@ fn a_refusal_withholds_a_revert_too() {
     assert!(!r.concerns.iter().any(|c| matches!(c, Concern::Reverts)));
     assert_eq!(r.simulation.kind, "withheld");
 }
+
+/// r11 S4: what nobody can approve is known from the transaction alone —
+/// the same reason the review gives, before any chain is read — and a
+/// review that withholds what moves draws no "Balance changes" heading.
+#[test]
+fn what_nobody_can_approve_is_read_from_the_transaction_alone() {
+    let mut d = keccak256(b"transfer(address,uint256)")[..4].to_vec();
+    d.extend_from_slice(&word_addr(a(C)));
+    d.extend_from_slice(&word(U256::from(1)));
+    let delegate = tx(
+        "0x5555555555555555555555555555555555555555",
+        "0x0",
+        &hex(&d),
+        1,
+    );
+    let review = multisig::review(100, SAFE, &delegate).unwrap();
+    assert_eq!(
+        refused_for_what_it_is(100, &delegate, &review),
+        Some(RefusedWhy::Delegatecall)
+    );
+    let r = review_with(delegate, Some(not_offered_answer()), None);
+    assert_eq!(r.moves_title_key, None, "withheld: nothing drawn there");
+
+    let transfer = format!("a9059cbb{:0>64}{:064x}", &C[2..], 1u64);
+    let mut inner = transfer;
+    for _ in 0..4 {
+        let leg = format!(
+            "00{}{:064x}{:064x}{}",
+            &multisig::MULTI_SEND_CALL_ONLY[2..],
+            0,
+            inner.len() / 2,
+            inner
+        );
+        let pad = (64 - (leg.len() % 64)) % 64;
+        inner = format!(
+            "8d80ff0a{:064x}{:064x}{}{}",
+            0x20,
+            leg.len() / 2,
+            leg,
+            "0".repeat(pad)
+        );
+    }
+    let deep = tx(
+        "0x5555555555555555555555555555555555555555",
+        "0x0",
+        &format!("0x{inner}"),
+        0,
+    );
+    let review = multisig::review(100, SAFE, &deep).unwrap();
+    assert_eq!(
+        refused_for_what_it_is(100, &deep, &review),
+        Some(RefusedWhy::TooDeep)
+    );
+
+    let ok = tx(C, "0x1", "0x", 0);
+    let review = multisig::review(100, SAFE, &ok).unwrap();
+    assert_eq!(refused_for_what_it_is(100, &ok, &review), None);
+    let r = review_with(ok, Some(not_offered_answer()), None);
+    assert_eq!(r.moves_title_key.as_deref(), Some(MOVES_TITLE_KEY));
+    assert_eq!(MOVES_TITLE_KEY, "componentsUi.signing.balanceChangesTitle");
+}

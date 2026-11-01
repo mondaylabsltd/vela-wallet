@@ -193,6 +193,29 @@ pub struct ProposalItem {
     pub unsent: bool,
     /// A rename where the multisig is not deployed: never executed there.
     pub rename_undeployed: bool,
+    /// r11 S4: a queued transaction's "It can run once…" — every number it
+    /// waits behind, from the multisig's nonce on this network up to its
+    /// own, in order (decimal; at most [`WAITS_FOR_MAX`]). Empty unless
+    /// queued. Say `proposal.queuedNote` with `{{nonce}}` for one, else
+    /// `proposal.queuedNoteMany` with `{{nonces}}` = the platform's list of
+    /// `#n` — the same numbers on every surface, the outside page included.
+    #[serde(default)]
+    pub waits_for: Vec<String>,
+}
+
+/// The most numbers [`ProposalItem::waits_for`] lists.
+pub const WAITS_FOR_MAX: usize = 20;
+
+/// The numbers a transaction at `nonce` waits behind while the multisig's
+/// nonce is `chain_nonce`: every one in between, in order, at most
+/// [`WAITS_FOR_MAX`] (r11 S4 — the web listed them all, the natives only
+/// the previous one, the outside page `#0`).
+#[must_use]
+pub fn waits_for(chain_nonce: u128, nonce: u128) -> Vec<String> {
+    (chain_nonce..nonce)
+        .take(WAITS_FOR_MAX)
+        .map(|n| n.to_string())
+        .collect()
 }
 
 /// Read one stored proposal (`readProposal`); `None` when it does not hash as itself.
@@ -289,7 +312,14 @@ pub fn read_proposal(
     let rename_undeployed =
         matches!(review.action, Some(Action::Rename { .. })) && !members.deployed;
     let executing = status != ProposalStatus::Done && executing;
-    let unreadable = review.action.is_none();
+    // Nobody signs what Vela refuses for what it is — a transaction it cannot
+    // read, a delegatecall, a refund, a batch too deep (r11 S4: "9 need your
+    // approval" counted deep4 and the delegatecall, and the sheets still
+    // offered "Ask members to approve"). Said at the source: no member here
+    // can approve or execute it, so nothing counts it as theirs to do.
+    let unreadable = review.action.is_none()
+        || crate::multisig_review::refused_for_what_it_is(p.chain_id, &p.safe_tx, &review)
+            .is_some();
     let can_execute = if matches!(status, ProposalStatus::Done | ProposalStatus::Queued)
         || unreadable
         || rename_undeployed
@@ -321,6 +351,11 @@ pub fn read_proposal(
         created_ms: p.created_ms,
         unsent: false,
         rename_undeployed,
+        waits_for: if status == ProposalStatus::Queued {
+            waits_for(members.nonce, nonce)
+        } else {
+            Vec::new()
+        },
         review,
         approvals,
     })
@@ -3704,6 +3739,18 @@ fn stopped_before_signing(outcome: &ActionState) -> bool {
     }
 }
 
+/// A stop because the look could not price or check it in time (`unpriced`,
+/// `unchecked`) — not because it would fail or cannot be paid.
+fn unlooked(outcome: &ActionState) -> bool {
+    match outcome {
+        ActionState::Stopped { preview } => matches!(
+            preview.get("kind").and_then(Value::as_str),
+            Some("unpriced" | "unchecked")
+        ),
+        _ => false,
+    }
+}
+
 /// "Approve and execute" in one press (`ApproveExecute`): the execution,
 /// counting the executor's approval; stopped before its signature, the
 /// approval alone, kept.
@@ -3726,9 +3773,20 @@ async fn approve_execute(
         note_actor(io, st, chain_id, executor).await;
     }
     let approve_too = approving && stopped_before_signing(&outcome);
+    // r11-9: the look could not price or check it, so the press approves
+    // alone. That is no failure of the execution — nothing was tried — and
+    // the look already says it ("Couldn't check whether it would run — you
+    // can still approve; Execute checks again"): one verdict, so the
+    // execution records nothing beside the approval (Android drew "This
+    // would fail if executed now: it couldn't be checked…" next to it).
+    let quiet_stop = approve_too && unlooked(&outcome);
     {
         let mut s = lock(st);
-        s.actions.insert(format!("execute:{lower}"), outcome);
+        if quiet_stop {
+            s.actions.remove(&format!("execute:{lower}"));
+        } else {
+            s.actions.insert(format!("execute:{lower}"), outcome);
+        }
         if approve_too {
             s.actions
                 .insert(format!("approve:{lower}"), ActionState::Working);

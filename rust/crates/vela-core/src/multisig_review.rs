@@ -1492,6 +1492,28 @@ fn refused_of(concerns: &[Concern]) -> Option<RefusedWhy> {
         })
 }
 
+/// Why Vela refuses `tx` for WHAT IT IS — a delegatecall, a refund, a batch
+/// it cannot read in full (r9-9's reasons but the state guard's) — read from
+/// the transaction alone, before any chain is asked: `None` when nothing in
+/// the transaction itself refuses it. Nobody can approve such a transaction
+/// on any device, so nothing counts it as waiting for someone's approval
+/// (r11 S4: "9 need your approval" counted deep4 and the delegatecall).
+/// Agrees with [`multisig_review`]'s `refused` for every reason but
+/// [`RefusedWhy::StateChange`], which needs the chain.
+#[must_use]
+pub fn refused_for_what_it_is(
+    chain_id: u64,
+    tx: &SafeTx,
+    review: &multisig::Review,
+) -> Option<RefusedWhy> {
+    if let Some(why) = &review.refusal {
+        return Some(RefusedWhy::of_refusal(why));
+    }
+    reading::read(chain_id, tx, review, &BTreeMap::new())
+        .unreadable
+        .then_some(RefusedWhy::TooDeep)
+}
+
 /// One SafeTx field, as signed.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Field {
@@ -1554,10 +1576,19 @@ pub struct MultisigReview {
     /// corpus key. Draw it in place of any other refusal words; `None` when
     /// the transaction may be signed.
     pub refused: Option<Refused>,
+    /// r11 S4: the heading over what moves, when anything is drawn there
+    /// ([`MOVES_TITLE_KEY`], "Balance changes" — the signing sheet's own),
+    /// `None` when the simulation is withheld. Every surface draws this key
+    /// (Android drew "SIMULATION RESULT").
+    #[serde(default)]
+    pub moves_title_key: Option<String>,
     /// What `agent_review` reads as the request on screen (a `SignFacts`):
     /// an opinion is bound to this proposal on this chain.
     pub advice_request: Value,
 }
+
+/// The heading over a review's balance changes ([`MultisigReview::moves_title_key`]).
+pub const MOVES_TITLE_KEY: &str = "componentsUi.signing.balanceChangesTitle";
 
 fn sim_unavailable() -> SimVerdict {
     sim_outcome::verdict_of(SimOutcome::NotOffered)
@@ -1924,6 +1955,7 @@ pub fn multisig_review(input: &ReviewInput) -> Result<MultisigReview, CoreError>
         "signer_address": checksum(safe),
     });
 
+    let moves_title_key = (simulation.kind != SIM_WITHHELD).then(|| MOVES_TITLE_KEY.to_owned());
     Ok(MultisigReview {
         review,
         reading: read,
@@ -1939,6 +1971,7 @@ pub fn multisig_review(input: &ReviewInput) -> Result<MultisigReview, CoreError>
         tone,
         sign,
         refused,
+        moves_title_key,
         advice_request,
     })
 }
