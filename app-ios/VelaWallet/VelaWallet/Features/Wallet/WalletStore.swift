@@ -254,19 +254,21 @@ final class WalletStore {
         core.dispatch(Self.autoRefreshEvent)
     }
 
-    /// r10-1: a network the balance could not read answered another call (a
-    /// multisig's poll, a fee, a page): the balance reads again now, instead
-    /// of on the core's next recovery step — which can be five minutes off
-    /// after a long outage, the home saying "Updated 5m" over a network that
-    /// has been back for three. The core's view says which networks failed;
-    /// the read and what it stamps are the core's. Once per network per
-    /// outage and minute: a network the balance still cannot read (its token
-    /// list, say) is not asked again on every call that reaches it.
+    /// r10-1: a network came back — a call to it answered after calls to it
+    /// went unanswered, or the balance's own last read could not reach it —
+    /// and the balance reads again now. Nothing else would: the home's poll
+    /// is ten minutes, and the core's recovery ladder is armed only by a
+    /// read of its own that failed, so after an outage the multisig's polls
+    /// noticed the home said "Updated 5m" over a network back for three
+    /// minutes. The read and what it stamps are the core's; this only says
+    /// when. Once per network a minute, never while a round is out.
     @discardableResult
-    func chainAnswered(_ chainId: Int, nowMs: Double = Date().timeIntervalSince1970 * 1000) -> Bool {
-        guard let view = balance,
-              recovery.shouldRead(chainId, unreadable: Self.unreadable(view), refreshing: view.refreshing, nowMs: nowMs)
-        else { return false }
+    func chainOutcome(_ chainId: Int, reached: Bool, nowMs: Double = Date().timeIntervalSince1970 * 1000) -> Bool {
+        let view = balance
+        guard recovery.observe(
+            chainId, reached: reached,
+            unreadable: view.map(Self.unreadable) ?? [], refreshing: view?.refreshing ?? false, nowMs: nowMs
+        ), view != nil else { return false }
         refresh(pull: false)
         return true
     }
@@ -370,18 +372,24 @@ final class WalletStore {
     func appBackgrounded() { core.dispatch(CoreJSON.string(["type": "app_backgrounded"])) }
 }
 
-/// When a network's answer elsewhere reads the balance again (r10-1): only a
-/// network the balance's last read could not reach, not while a round is
-/// out, and once per network a minute — a network the balance still cannot
-/// read is not asked again on every call that reaches it. A network read
-/// again is forgotten, so its next outage nudges at once.
+/// When a network's answer reads the balance again (r10-1): a network that
+/// came back — calls to it went unanswered and one now answered — or one the
+/// balance's last read could not reach, answering. Not while a round is out,
+/// and once per network a minute, so a network the balance still cannot read
+/// (its token list, say) is not asked again on every call that reaches it.
 struct RecoveryNudge {
     static let gapMs: Double = 60_000
+    /// Networks whose last call went unanswered (not rate limited).
+    private(set) var down: Set<Int> = []
     private(set) var nudged: [Int: Double] = [:]
 
-    mutating func shouldRead(_ chainId: Int, unreadable: Set<Int>, refreshing: Bool, nowMs: Double) -> Bool {
-        nudged = nudged.filter { unreadable.contains($0.key) }
-        guard !refreshing, unreadable.contains(chainId),
+    mutating func observe(_ chainId: Int, reached: Bool, unreadable: Set<Int>, refreshing: Bool, nowMs: Double) -> Bool {
+        guard reached else {
+            down.insert(chainId)
+            return false
+        }
+        let cameBack = down.remove(chainId) != nil
+        guard cameBack || unreadable.contains(chainId), !refreshing,
               nowMs - (nudged[chainId] ?? -.infinity) >= Self.gapMs
         else { return false }
         nudged[chainId] = nowMs

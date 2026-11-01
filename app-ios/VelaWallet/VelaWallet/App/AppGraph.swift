@@ -314,11 +314,13 @@ final class AppGraph {
         pool.onOutcome = { [weak netWatch, weak wallet] outcome, chainId in
             netWatch?.observe(outcome, chainId: chainId)
             // r10-1: one network back while the rest never went (no
-            // "came back" edge for that): a network the balance could not
-            // read answered — the balance reads it again now.
+            // "came back" edge for that) — the balance reads again now.
+            // A rate limit is no outage: neither down nor back.
             switch outcome {
-            case .ok, .rpcError: wallet?.chainAnswered(chainId)
-            default: break
+            case .failed(let rateLimited):
+                if !rateLimited { wallet?.chainOutcome(chainId, reached: false) }
+            default:
+                wallet?.chainOutcome(chainId, reached: true)
             }
         }
         netWatch.onCameBack = { [weak browserController, weak wallet] in
