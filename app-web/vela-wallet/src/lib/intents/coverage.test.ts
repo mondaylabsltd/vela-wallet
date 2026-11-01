@@ -133,6 +133,7 @@ const DISPATCHED: Record<string, Place> = {
 	'signRequest.retry_tapped': { view: 'the request’s own retry' },
 	'signRequest.landing_closed': { view: 'the landing closed: never drawn again' },
 	'signRequest.request_arrived': { machine: 'a dApp’s request arriving' },
+	'signRequest.space_noted': { machine: 'a dApp’s request from a site the space switch moved' },
 	'signRequest.sim_started': { machine: 'the simulation' },
 	'signRequest.sim_settled': { machine: 'the simulation' },
 	'signRequest.transport_dropped': { machine: 'the dApp’s connection' },

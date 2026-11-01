@@ -31,7 +31,15 @@ import type { SendTxStatus } from "./SendTxStatus";
 import type { SendUnitIssue } from "./SendUnitIssue";
 import type { VenueBlock } from "./VenueBlock";
 
-export type SendView = { stage: SendStage, loading: boolean, locked: boolean, 
+export type SendView = { stage: SendStage, loading: boolean, 
+/**
+ * r10 follow-up: the token list could not be read — the corpus key of
+ * the picker's line ([`TOKENS_FAILED_KEY`]), drawn in place of the list
+ * with a "Try again" (`common.tryAgain` -> [`Event::RetryTokens`]).
+ * A shell that draws it draws no `ShowAlert {load_tokens_failed}`
+ * (still sent, for a shell not moved yet). `None` otherwise.
+ */
+tokens_failed_key?: string | null, locked: boolean, 
 /**
  * The amount is fixed only when the locked request actually named one.
  */

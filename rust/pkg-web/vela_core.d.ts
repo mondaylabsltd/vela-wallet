@@ -1420,10 +1420,11 @@ export function identiconSvgCircular(seed: string): string;
 export function inFlightOps(track_view_json: string): string;
 
 /**
- * r9-17: the wait before the next incoming scan
- * (`incoming_scan::next_scan_ms`).
+ * r9-17 / r10: the wait before the next incoming scan
+ * (`incoming_scan::next_scan_ms`) — shown or not, and how many scans in a
+ * row found nothing (the back-off's step).
  */
-export function incomingNextScanMs(visible: boolean, since_interaction_ms: number): number;
+export function incomingNextScanMs(visible: boolean, quiet_scans: number): number;
 
 /**
  * r9-17: the networks an account's incoming scan reads, and where its
