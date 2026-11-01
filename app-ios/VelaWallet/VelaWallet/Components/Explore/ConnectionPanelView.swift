@@ -80,6 +80,11 @@ struct ConnectionPanelView: View {
                                 .foregroundStyle(theme.fgMuted)
                         }
                     }
+                    // r10 follow-up: the space switch moved the asking site —
+                    // said once, under it.
+                    if let spaceNote = connection.spaceNote {
+                        SpaceNoteLine(text: spaceNote)
+                    }
                 }
                 Spacer(minLength: Tokens.Space.s12)
                 if let onClose {

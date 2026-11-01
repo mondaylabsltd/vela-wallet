@@ -431,7 +431,10 @@ enum ExploreLive {
                     logoUrl: Marks.chainLogoURL(id), amount: holdings[id]
                 )
             },
-            networkLogoUrl: Marks.chainLogoURL(chainId)
+            networkLogoUrl: Marks.chainLogoURL(chainId),
+            spaceNote: consent?.spaceNote.map { note in
+                loc.t(note.key, vars: ["network": chainName(note.chainId, networks: networks)])
+            }
         )
     }
 

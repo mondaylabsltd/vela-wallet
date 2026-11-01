@@ -101,6 +101,7 @@ struct SigningSheet: View {
             SigningHeaderView(dapp: model.dapp, network: model.network, own: model.dappOwn,
                               headline: model.headline,
                               iconUrls: model.dappIconUrls, networkLogoUrl: model.networkLogoUrl,
+                              spaceNote: model.spaceNote,
                               onClose: onClose, closeLabel: model.closeLabel)
                 .padding(.top, Tokens.Space.s8)
                 .padding(.horizontal, Tokens.Layout.screenPaddingX)

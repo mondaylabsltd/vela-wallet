@@ -1648,9 +1648,10 @@ struct RootView: View {
                     // or a renderer dying settles a page — the core's rule.
                     .onChange(of: session.view.address) { _, _ in tellBrowserAboutAccounts() }
                     // The space in front's chains (spec 105): a switch of space
-                    // is a change of what a site may use.
-                    .onChange(of: walletNetworks.chains.map(\.chainId)) { _, chains in
-                        if !chains.isEmpty { browser.networksChanged(chains) }
+                    // is a change of what a site may use — and, r10 follow-up,
+                    // of which space a refused network belongs to.
+                    .onChange(of: browserNetworks) { _, networks in
+                        if !networks.chains.isEmpty { tellBrowserAboutNetworks() }
                     }
                     .task {
                         // A sheet that finished while 探索 was not on screen
@@ -1688,7 +1689,7 @@ struct RootView: View {
                         // The settings machine may not have read them yet; the
                         // catalogue stands in until it has, and the change
                         // handler above replaces it the moment it does.
-                        browser.networksChanged(walletNetworks.chains.map(\.chainId))
+                        tellBrowserAboutNetworks()
                         tellBrowserAboutAccounts()
                         // The device harness opens its own page. Not a product
                         // affordance: a browser that launched a URL somebody
@@ -1760,7 +1761,8 @@ struct RootView: View {
                 origin: forward.origin,
                 transportId: forward.tab,
                 chainId: forward.chainId,
-                grantedAddress: forward.grantedAddress
+                grantedAddress: forward.grantedAddress,
+                spaceNote: forward.spaceNote
             ),
             respond: { [browser] transportId, id, payload, userOpHash in
                 // The core builds the page's message, and delivers it to the
@@ -2711,6 +2713,21 @@ struct RootView: View {
     /// here, and every receive row's index is an index into its `chains`.
     private var walletNetworks: WalletNetworks {
         WalletNetworks(settings.networkAdmin?.networks, space: space.current)
+    }
+
+    /// What the in-app browser is told of the networks (r10 follow-up): the
+    /// space in front, its chains, and every chain Vela has in both spaces.
+    private var browserNetworks: BrowserNetworks {
+        BrowserNetworks(
+            space: space.current,
+            chains: walletNetworks.chains.map(\.chainId),
+            known: WalletNetworks(settings.networkAdmin?.networks).chains.map(\.chainId)
+        )
+    }
+
+    private func tellBrowserAboutNetworks() {
+        let networks = browserNetworks
+        browser.networksChanged(networks.chains, space: networks.space, known: networks.known)
     }
 
     /// The receive list's row `receiveNetwork`, from the same list it was
@@ -5077,4 +5094,12 @@ private struct SpeedBridge: ViewModifier {
 struct PayRefusalNotice: Equatable {
     let serial: Int
     let body: String
+}
+
+/// The in-app browser's network facts (`space_networks_changed`), compared
+/// whole so a change of any one of them is said once.
+private struct BrowserNetworks: Equatable {
+    let space: NetworkSpaceKind
+    let chains: [Int]
+    let known: [Int]
 }

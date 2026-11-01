@@ -301,10 +301,22 @@ final class BrowserController {
         dbrCore.dispatch(CoreJSON.string(["type": "debug_mode_changed", "on": debugMode]))
     }
 
-    /// The wallet's chains. A site may switch or add only to one of these.
-    func networksChanged(_ chainIds: [Int]) {
+    /// The space in front's chains — a site may switch or add only to one of
+    /// these — with the space it is and every network Vela has, both spaces
+    /// (r10 follow-up, `space_networks_changed`). With them the core refuses
+    /// a page's switch to the other space's network NAMING that space (4902,
+    /// the extension's sentence), never "not in Vela's networks"; refuses an
+    /// add of one the same way; and on a space switch moves every site
+    /// outside the new space to its start network, the next sheet that site
+    /// opens saying so once (`space_note`).
+    func networksChanged(_ chainIds: [Int], space: NetworkSpaceKind, known knownChainIds: [Int]) {
         self.chainIds = chainIds
-        dbrCore.dispatch(CoreJSON.string(["type": "networks_changed", "chain_ids": chainIds]))
+        dbrCore.dispatch(CoreJSON.string([
+            "type": "space_networks_changed",
+            "space": space.rawValue,
+            "chain_ids": chainIds,
+            "known_chain_ids": knownChainIds,
+        ]))
     }
 
     /// The wallet's accounts, then the active one.
@@ -881,7 +893,14 @@ final class BrowserController {
         ["type": "err", "code": -32002, "kind": "submit_failed", "message": "Another request is open"]
     }
 
-    private func forwardToSigning(_ forward: DbrForward) {
+    private func forwardToSigning(_ incoming: DbrForward) {
+        // r10 follow-up: what a space switch said of this site rides on the
+        // request into its sheet. The view naming this request was committed
+        // before the operation ran.
+        var forward = incoming
+        if let signing = dbr.signing, signing.tab == forward.tab, signing.id == forward.id {
+            forward.spaceNote = signing.spaceNote?.chainId
+        }
         // The sheet names the site; the page behind it should be the one that
         // asked, not whichever tab happened to be in front.
         if explore.tabs.contains(where: { $0.id == forward.tab }) { selectTab(forward.tab) }

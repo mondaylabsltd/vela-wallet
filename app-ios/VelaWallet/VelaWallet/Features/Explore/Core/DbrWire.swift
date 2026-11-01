@@ -89,6 +89,9 @@ struct DbrConsentViewWire: Decodable, Equatable {
     /// The mark beside the asking site's name (`OriginLock`'s wire name): a
     /// padlock for `https` only. Absent from a view built before the field.
     var lock: String? = nil
+    /// r10 follow-up: a network-space switch moved this site since its last
+    /// request — one line on the sheet, under the site.
+    var spaceNote: DbrSpaceNoteWire? = nil
 
     /// The mark to draw: the core's, or its own rule for the origin.
     var mark: OriginLock { OriginLock(wire: lock) ?? .of(origin: origin) }
@@ -262,6 +265,18 @@ struct DbrSiteViewWire: Decodable, Equatable, Identifiable {
 struct DbrSigningViewWire: Decodable, Equatable {
     let tab: String
     let id: String
+    /// r10 follow-up: a network-space switch moved this site since its last
+    /// request — handed to the sign machine (`space_noted`), whose view
+    /// carries it to the sheet.
+    var spaceNote: DbrSpaceNoteWire? = nil
+}
+
+/// r10 follow-up (`DbrSpaceNote`): the space switch put the site on
+/// `chainId`. `key` (`connect.browser.spaceMoved`) is drawn once with
+/// `network` = that chain's name.
+struct DbrSpaceNoteWire: Decodable, Equatable {
+    let chainId: Int
+    let key: String
 }
 
 struct DbrViewWire: Decodable, Equatable {
@@ -300,9 +315,13 @@ struct DbrForward: Equatable {
     let chainId: Int
     /// The address the site was shown. The signer is pinned to it.
     let grantedAddress: String
+    /// r10 follow-up: the chain a network-space switch moved this site to
+    /// since its last request (`DbrSigningView.space_note`), for the sign
+    /// machine's `space_noted`. `nil`: nothing moved it.
+    var spaceNote: Int?
 
     init(tab: String, id: String, method: String, paramsJson: String,
-         origin: String, chainId: Int, grantedAddress: String) {
+         origin: String, chainId: Int, grantedAddress: String, spaceNote: Int? = nil) {
         self.tab = tab
         self.id = id
         self.method = method
@@ -310,6 +329,7 @@ struct DbrForward: Equatable {
         self.origin = origin
         self.chainId = chainId
         self.grantedAddress = grantedAddress
+        self.spaceNote = spaceNote
     }
 
     init(operation: [String: Any]) {

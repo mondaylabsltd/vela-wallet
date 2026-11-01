@@ -392,6 +392,13 @@ enum SigningLive {
         // nothing. Its headline and the ✕ take the row (`SigningModel.headline`).
         model.dappOwn = own
         model.dappIconUrls = own ? [] : siteIconUrls(origin: request.origin)
+        // r10 follow-up: the space switch moved this site — said once, under
+        // the requester, with the network it is on now.
+        model.spaceNote = own ? nil : sign.request?.spaceNote.map { note in
+            loc.t(note.key, vars: [
+                "network": context.networks.meta(note.chainId)?.displayName ?? String(note.chainId),
+            ])
+        }
         model.networkLogoUrl = Marks.chainLogoURL(request.chainId)
         if !isOffChain(clear) {
             model.feeSpeed = speed.map {

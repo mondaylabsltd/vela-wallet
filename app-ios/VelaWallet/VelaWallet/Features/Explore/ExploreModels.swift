@@ -172,6 +172,9 @@ struct ConnectionModel {
     var networks: [NetworkChoiceModel] = []
     /// Spec 079: the site's network's logo; the dot shows until it lands.
     var networkLogoUrl: String?
+    /// r10 follow-up: a network-space switch moved the asking site since its
+    /// last request (`DbrConsentView.space_note`) — one line under the site.
+    var spaceNote: String?
 }
 
 /// One network the connection panel's picker offers.

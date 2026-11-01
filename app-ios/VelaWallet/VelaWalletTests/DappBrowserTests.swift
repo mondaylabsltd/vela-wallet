@@ -101,7 +101,7 @@ final class BrowserHarness {
     /// Started, two accounts, `a1` active, chains 1 / 100 / 8453, sites read.
     func boot() async {
         browser.startConnections()
-        browser.networksChanged([1, 100, 8453])
+        browser.networksChanged([1, 100, 8453], space: .mainnet, known: [1, 100, 8453])
         browser.accountsChanged(addresses: [a1, a2], active: a1)
         await until { self.browser.dbr.ready }
     }
@@ -346,7 +346,7 @@ struct DappBrowserTests {
             store.writeString("vela.perm.\(dapp)", BrowserHarness.grant(dapp, a1, chain: 56))
         })
         await h.boot()
-        h.browser.networksChanged([1, 56, 100])
+        h.browser.networksChanged([1, 56, 100], space: .mainnet, known: [1, 56, 100])
         await h.hello("t1", doc: "d1", origin: dapp)
         await h.ask("t1", doc: "d1", origin: dapp, id: "b1", method: "wallet_sendCalls",
                     params: [["from": a1, "calls": [["to": a2, "data": "0x"]]]])
@@ -397,7 +397,7 @@ struct DappBrowserTests {
             store.writeString("vela.perm.\(dapp)", BrowserHarness.grant(dapp, a1, chain: 56))
         })
         await h.boot()
-        h.browser.networksChanged([1, 56, 100])
+        h.browser.networksChanged([1, 56, 100], space: .mainnet, known: [1, 56, 100])
         await h.hello("t1", doc: "d1", origin: dapp)
         await h.ask("t1", doc: "d1", origin: dapp, id: "g1", method: "wallet_sendCalls", params: [batch])
         await h.until { !h.forwards.isEmpty }
