@@ -353,7 +353,11 @@ final class R10FixLiveUITests: XCTestCase {
         // Settings.
         tapTab("Settings", in: app)
         XCTAssertTrue(text(app, containing: "Interleave").waitForExistence(timeout: 15), "Settings names it otherwise")
-        XCTAssertFalse(text(app, containing: "Parallel One").exists, "two names for one account in Settings")
+        // "Parallel One" may stand in Settings — as KEY 1's own name in the
+        // keys block (r10 follow-up: keys are not accounts) — never as the
+        // account's: the account's row is the first named one.
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Parallel One")).firstMatch.exists,
+                       "two names for one account in Settings")
         shot(app, "r10-names-settings")
         tapTab("Wallet", in: app)
         XCTAssertTrue(header.waitForExistence(timeout: 10))
