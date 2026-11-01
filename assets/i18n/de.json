@@ -816,7 +816,8 @@
      "description": "Die meisten Netzwerke akzeptieren Stablecoins für Gebühren — kein Vorrat an nativen Coins nötig."
     }
    },
-   "linkWaiting": "Ein Multisig-Link wartet. Erstelle eine Wallet oder melde dich an, dann öffnet er sich."
+   "linkWaiting": "Ein Multisig-Link wartet. Erstelle eine Wallet oder melde dich an, dann öffnet er sich.",
+   "linkBroken": "Dieser Multisig-Link ist nicht vollständig angekommen. Bitte ihn erneut anfordern."
   },
   "settings": {
    "title": "Einstellungen",

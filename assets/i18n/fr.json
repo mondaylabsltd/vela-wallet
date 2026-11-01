@@ -819,7 +819,8 @@
      "description": "La plupart des réseaux acceptent les stablecoins pour les frais — inutile de prévoir d'abord la monnaie native."
     }
    },
-   "linkWaiting": "Un lien multisig vous attend. Créez un wallet ou connectez-vous, et il s'ouvrira."
+   "linkWaiting": "Un lien multisig vous attend. Créez un wallet ou connectez-vous, et il s'ouvrira.",
+   "linkBroken": "Ce lien multisig n’est pas arrivé en entier. Demandez-le à nouveau."
   },
   "settings": {
    "title": "Réglages",

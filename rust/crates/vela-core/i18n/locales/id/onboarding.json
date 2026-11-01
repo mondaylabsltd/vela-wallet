@@ -65,7 +65,8 @@
           "description": "Sebagian besar jaringan menerima stablecoin untuk biaya — tidak perlu menyiapkan koin native dulu."
         }
       },
-      "linkWaiting": "Ada tautan multisig yang menunggu. Buat wallet atau masuk, lalu tautan itu terbuka."
+      "linkWaiting": "Ada tautan multisig yang menunggu. Buat wallet atau masuk, lalu tautan itu terbuka.",
+      "linkBroken": "Tautan multisig ini tidak sampai utuh. Minta lagi."
     },
     "settings": {
       "title": "Pengaturan",

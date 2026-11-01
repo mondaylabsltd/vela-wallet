@@ -65,7 +65,8 @@
           "description": "Most networks accept stablecoins for fees — no need to stock up on a native coin first."
         }
       },
-      "linkWaiting": "A multisig link is waiting. Create a wallet or sign in, and it opens."
+      "linkWaiting": "A multisig link is waiting. Create a wallet or sign in, and it opens.",
+      "linkBroken": "This multisig link didn't arrive whole. Ask for it again."
     },
     "settings": {
       "title": "Settings",

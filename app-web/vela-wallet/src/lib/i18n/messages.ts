@@ -26,6 +26,8 @@ export interface WelcomeMessages {
 	alreadyHaveWallet: string;
 	/** r5reg: a multisig link opened here waits for a wallet: said, never silent. */
 	linkWaiting: string;
+	/** r10: the link opened here does not read (cut short, damaged): said, never "waiting". */
+	linkBroken: string;
 }
 
 /**
@@ -50,7 +52,8 @@ export const WELCOME_KEYS = [
 	'onboarding.welcome.heroSubtitle',
 	'onboarding.welcome.createWallet',
 	'onboarding.welcome.alreadyHaveWallet',
-	'onboarding.welcomeWeb.linkWaiting'
+	'onboarding.welcomeWeb.linkWaiting',
+	'onboarding.welcomeWeb.linkBroken'
 ] as const;
 
 /* ------------------------------------------------------------------------ */

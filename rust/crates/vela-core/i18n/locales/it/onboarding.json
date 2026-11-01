@@ -65,7 +65,8 @@
           "description": "La maggior parte delle reti accetta stablecoin per le commissioni — senza dover prima procurarti la moneta nativa."
         }
       },
-      "linkWaiting": "C'è un link multisig in attesa. Crea un wallet o accedi e si aprirà."
+      "linkWaiting": "C'è un link multisig in attesa. Crea un wallet o accedi e si aprirà.",
+      "linkBroken": "Questo link multisig non è arrivato intero. Chiedilo di nuovo."
     },
     "settings": {
       "title": "Impostazioni",

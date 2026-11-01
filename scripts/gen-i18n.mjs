@@ -1362,8 +1362,13 @@ for (let i = 1; i < PATHS.length; i++) {
 // 2267 (round 8 core, 2026-11-01): + `onboarding.welcomeWeb.linkWaiting`
 //   (Welcome says a multisig link opened here is waiting for a wallet,
 //   r5reg). 2266 + 1 = 2267 paths, 2150 leaves, 117 branches.
-if (PATHS.length !== 2267) fail(`expected 2267 paths (2150 leaf + 117 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2150) fail(`expected 2150 leaf paths, got ${leafSet.size}`);
+// 2268 (round 10 core, 2026-11-01): + `onboarding.welcomeWeb.linkBroken`
+//   (Welcome on a device with no account said "a multisig link is waiting"
+//   for a damaged invite; the core's codec reads it, and a link that does
+//   not read is said as that). 2267 + 1 = 2268 paths, 2151 leaves, 117
+//   branches.
+if (PATHS.length !== 2268) fail(`expected 2268 paths (2151 leaf + 117 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2151) fail(`expected 2151 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 117) fail(`expected 117 branch paths, got ${branchSet.size}`);
 // The on-demand catalogs, pinned the same way (leaves of every locale's union):
 // a key dropped from one namespace and not landed in the other fails here.

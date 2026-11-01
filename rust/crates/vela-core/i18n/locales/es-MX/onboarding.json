@@ -65,7 +65,8 @@
           "description": "La mayoría de las redes acepta stablecoins para las comisiones — no necesitas tener antes la moneda nativa."
         }
       },
-      "linkWaiting": "Hay un enlace de multisig esperando. Crea una wallet o inicia sesión y se abrirá."
+      "linkWaiting": "Hay un enlace de multisig esperando. Crea una wallet o inicia sesión y se abrirá.",
+      "linkBroken": "Este enlace de multifirma no llegó completo. Pídelo de nuevo."
     },
     "settings": {
       "title": "Ajustes",

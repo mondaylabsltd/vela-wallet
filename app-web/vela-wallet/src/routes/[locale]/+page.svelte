@@ -27,7 +27,13 @@
 	 */
 	import { onMount } from 'svelte';
 	import { afterNavigate, goto, replaceState } from '$app/navigation';
-	import { keepLink, linkWaiting } from '$lib/multisig/core/kept-link';
+	import {
+		forgetKeptLink,
+		isMultisigLink,
+		keepLink,
+		linkWaiting
+	} from '$lib/multisig/core/kept-link';
+	import { loadCore } from '$lib/core/client';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import type { PageProps } from './$types';
@@ -68,6 +74,8 @@
 
 	/** r5reg: a multisig link opened here (or sent here) is kept for the wallet. */
 	let waitingLink = $state(false);
+	/** r10: the multisig link opened here does not read. */
+	let brokenLink = $state(false);
 	const m = $derived(data.messages);
 	const locale = $derived(data.locale);
 
@@ -290,6 +298,25 @@
 				login = null;
 			};
 		}
+		// r10: a link opened here is read by the core's codec before Welcome says
+		// it waits — a damaged invite is said as damaged and not kept. The core
+		// is fetched only for a page opened with a multisig link (Welcome alone
+		// loads no wasm, `budgets.e2e.ts`).
+		const opened = location.hash;
+		if (isMultisigLink(opened)) {
+			void (async () => {
+				try {
+					await loadCore();
+					const { linkBroken } = await import('$lib/multisig/core/link');
+					if (!linkBroken(opened)) return;
+					forgetKeptLink(opened);
+					waitingLink = linkWaiting();
+					brokenLink = true;
+				} catch {
+					// No core here: the wallet's own codec says it once it opens.
+				}
+			})();
+		}
 		if (shouldShowIntro()) intro = true;
 		// Sent here to sign in (`/import`, vis-22): the way-in sheet, past the intro.
 		if (new URLSearchParams(location.search).has(SIGN_IN_PARAM)) {
@@ -359,7 +386,10 @@
 				<div class="hero">
 					<h1 class="headline" class:long={m.heroTitleFit === 'long'}>{m.heroTitle}</h1>
 					<p class="sub">{m.heroSubtitle}</p>
-					{#if waitingLink}
+					{#if brokenLink}
+						<!-- r10: a link that does not read is said as that, never as waiting. -->
+						<p class="sub" role="alert" data-testid="welcome-link-broken">{m.linkBroken}</p>
+					{:else if waitingLink}
 						<!-- r5reg: a multisig link opened here waits for the wallet being made. -->
 						<p class="sub" role="status" data-testid="welcome-link-waiting">{m.linkWaiting}</p>
 					{/if}

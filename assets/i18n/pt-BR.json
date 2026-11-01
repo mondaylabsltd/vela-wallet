@@ -819,7 +819,8 @@
      "description": "A maioria das redes aceita stablecoins para as taxas — sem precisar ter a moeda nativa antes."
     }
    },
-   "linkWaiting": "Um link de multisig está esperando. Crie uma carteira ou entre, e ele abre."
+   "linkWaiting": "Um link de multisig está esperando. Crie uma carteira ou entre, e ele abre.",
+   "linkBroken": "Este link de multisig não chegou inteiro. Peça de novo."
   },
   "settings": {
    "title": "Configurações",
