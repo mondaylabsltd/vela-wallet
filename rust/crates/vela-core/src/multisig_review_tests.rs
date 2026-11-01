@@ -422,6 +422,107 @@ fn each_refusal_says_its_own_reason_and_no_reassurance() {
         .is_none());
 }
 
+/// A refused delegatecall (or a batch too deep) says nothing about what
+/// moves: the probe read the Safe's balances unchanged, yet "No asset
+/// changes" under "Vela won't sign this" is false comfort — the call runs
+/// another contract's code as the multisig. The simulation is `withheld`:
+/// no deltas, no notice, no no-change line, and no could-not-check either.
+#[test]
+fn a_refusal_withholds_what_moves() {
+    let mut d = keccak256(b"transfer(address,uint256)")[..4].to_vec();
+    d.extend_from_slice(&word_addr(a(C)));
+    d.extend_from_slice(&word(U256::from(1)));
+    let delegate = tx(
+        "0x5555555555555555555555555555555555555555",
+        "0x0",
+        &hex(&d),
+        1,
+    );
+    let k = watch_of(&delegate, &[]);
+    let mut before = snap(&[A, B]);
+    before.watched = zero_watch(k);
+    let mut after = snap(&[A, B]);
+    after.watched = zero_watch(k);
+    let r = review_with(
+        delegate,
+        Some(not_offered_answer()),
+        Some(probe_envelope(&before, &after, true)),
+    );
+    assert_eq!(r.refused.as_ref().unwrap().why, RefusedWhy::Delegatecall);
+    assert_eq!(r.simulation, sim_withheld());
+    assert_eq!(r.simulation.kind, "withheld");
+    assert!(r.simulation.deltas.is_empty());
+    assert_eq!(r.simulation.no_change_key, None, "no \"No asset changes\"");
+    assert_eq!(r.simulation.notice_key, None);
+    assert!(!r
+        .concerns
+        .iter()
+        .any(|c| matches!(c, Concern::Unsimulated | Concern::Reverts)));
+    assert_eq!(r.tone, Tone::Refused);
+    assert!(!r.sign.allowed);
+    // On the wire: the kind the shells branch on.
+    let wire = serde_json::to_value(&r).unwrap();
+    assert_eq!(wire["simulation"]["kind"], "withheld");
+    assert!(wire["simulation"]["no_change_key"].is_null());
+
+    // A batch too deep, with no reading at all: withheld too, not "couldn't check".
+    let transfer = format!("a9059cbb{:0>64}{:064x}", &C[2..], 1u64);
+    let mut inner = transfer;
+    for _ in 0..4 {
+        let leg = format!(
+            "00{}{:064x}{:064x}{}",
+            &multisig::MULTI_SEND_CALL_ONLY[2..],
+            0,
+            inner.len() / 2,
+            inner
+        );
+        let pad = (64 - (leg.len() % 64)) % 64;
+        inner = format!(
+            "8d80ff0a{:064x}{:064x}{}{}",
+            0x20,
+            leg.len() / 2,
+            leg,
+            "0".repeat(pad)
+        );
+    }
+    let deep = tx(
+        "0x5555555555555555555555555555555555555555",
+        "0x0",
+        &format!("0x{inner}"),
+        0,
+    );
+    let r = review_with(deep, Some(not_offered_answer()), None);
+    assert_eq!(r.refused.as_ref().unwrap().why, RefusedWhy::TooDeep);
+    assert_eq!(r.simulation.kind, SIM_WITHHELD);
+    assert!(!r.concerns.contains(&Concern::Unsimulated));
+
+    // The state guard's own refusal keeps what moves: there the chain's
+    // answer is the evidence.
+    let t = tx(SAFE, "0x0", &add_owner(C, 1), 0);
+    let k = watch_of(&t, &[C]);
+    let mut before = snap(&[A, B]);
+    before.watched = zero_watch(k);
+    let mut swapped = snap(&[C, A, B]);
+    swapped.watched = zero_watch(k);
+    swapped.singleton = a(ATTACKER);
+    let r = review_with(
+        t,
+        Some(not_offered_answer()),
+        Some(probe_envelope(&before, &swapped, true)),
+    );
+    assert_eq!(r.refused.as_ref().unwrap().why, RefusedWhy::StateChange);
+    assert_eq!(r.simulation.kind, "deltas");
+
+    // A transaction it signs: what moves, as always.
+    let ok = tx(C, "0x1", "0x", 0);
+    assert_ne!(
+        review_with(ok, Some(not_offered_answer()), None)
+            .simulation
+            .kind,
+        SIM_WITHHELD
+    );
+}
+
 #[test]
 fn an_undeclared_add_owner_through_a_nested_call_is_refused() {
     // A call to another contract that, through a module or a re-entry, adds

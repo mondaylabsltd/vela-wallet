@@ -1528,6 +1528,9 @@ pub struct MultisigReview {
     pub typed_data: Value,
     pub recipients: Vec<Recipient>,
     pub state: StateGuard,
+    /// What moves. Its `kind` is the signing sheet's, or `withheld`
+    /// ([`sim_withheld`]): refused for a reason other than the state
+    /// guard's, nothing is drawn in its place.
     pub simulation: SimVerdict,
     /// `simulate` (`eth_simulateV1`), `probe` (the Safe's balances, read by
     /// the state probe: the coin and `tokens` only), or `none`.
@@ -1546,6 +1549,28 @@ pub struct MultisigReview {
 
 fn sim_unavailable() -> SimVerdict {
     sim_outcome::verdict_of(SimOutcome::NotOffered)
+}
+
+/// The kind of [`MultisigReview::simulation`] when the transaction is
+/// refused for anything but the state guard's own finding
+/// ([`MultisigReview::refused`] `why` ≠ `stateChange`).
+pub const SIM_WITHHELD: &str = "withheld";
+
+/// What moves, withheld: no deltas, no notice, no "No asset changes" — a
+/// shell draws nothing in the simulation's place (r9-9, the state guard's
+/// [`StateVerdict::Withheld`] for the balances). Only the multisig review
+/// says it; the signing sheet's [`SimVerdict`] never has this kind.
+#[must_use]
+pub fn sim_withheld() -> SimVerdict {
+    SimVerdict {
+        kind: SIM_WITHHELD.to_owned(),
+        deltas: Vec::new(),
+        revert_reason: None,
+        notice_risk: None,
+        notice_key: None,
+        no_change_key: None,
+        recheck: false,
+    }
 }
 
 /// The Safe's own moves, read from the probe's balances.
@@ -1823,8 +1848,9 @@ pub fn multisig_review(input: &ReviewInput) -> Result<MultisigReview, CoreError>
     // r9-9: refused for what it is, the guard's reassurance or its
     // could-not-check is not said beside it.
     let refused = refused_of(&concerns);
+    let withheld = refused.is_some_and(|w| w != RefusedWhy::StateChange);
     let mut state = state;
-    if refused.is_some_and(|w| w != RefusedWhy::StateChange)
+    if withheld
         && matches!(
             state.verdict,
             StateVerdict::Unchanged | StateVerdict::Declared | StateVerdict::Unavailable { .. }
@@ -1833,6 +1859,21 @@ pub fn multisig_review(input: &ReviewInput) -> Result<MultisigReview, CoreError>
         state.verdict = StateVerdict::Withheld;
         concerns.retain(|c| !matches!(c, Concern::StateUnread { .. }));
     }
+    // The same for what moves: a delegatecall runs another contract's code
+    // as the multisig, a batch too deep is not read in full — "No asset
+    // changes" (or its could-not-check, or a revert only the simulation
+    // said) beside "Vela won't sign this" is a reassurance nobody can give.
+    let simulation = if withheld {
+        let state_reverts = state.verdict == StateVerdict::Reverts;
+        concerns.retain(|c| match c {
+            Concern::Unsimulated => false,
+            Concern::Reverts => state_reverts,
+            _ => true,
+        });
+        sim_withheld()
+    } else {
+        simulation
+    };
     let tone = concerns.iter().map(Concern::tone).max().unwrap_or(Tone::Ok);
     let sign = SignRule {
         allowed: tone != Tone::Refused,

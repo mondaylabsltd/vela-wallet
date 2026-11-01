@@ -24,11 +24,13 @@ import {
 import {
 	anywayLabel,
 	hashRows,
+	movesBlocks,
 	partyAddresses,
 	recipientBadges,
 	recipientNames,
 	reviewBlocks,
 	reviewTech,
+	simWithheld,
 	stateBlocks,
 	writeLine,
 	type ReviewContext
@@ -155,6 +157,29 @@ describe('what moves, who it reaches, the bytes (§3.6)', () => {
 		const blocks = reviewBlocks(review, simOf(review), ctx);
 		expect(blocks.some((b) => b.kind === 'verdict')).toBe(true);
 		expect(blocks).toContainEqual({ kind: 'source', text: m.review.movesProbe, tone: 'neutral' });
+	});
+
+	it('a refused delegatecall: nothing in the place of what moves — never "No asset changes"', () => {
+		const noChange = signing.simSaid['componentsUi.signing.simResultNoChange'];
+		expect(noChange).toBeTruthy();
+		for (const name of ['fork-bybit-probe', 'fork-bybit-trace']) {
+			const review = multisigReview(vector(name));
+			expect(review.refused?.why).toBe('delegatecall');
+			expect(review.simulation.kind).toBe('withheld');
+			expect(review.simulation.no_change_key).toBeNull();
+			expect(simWithheld(review)).toBe(true);
+			// Landed or not, the verdict's place holds nothing: no card, no
+			// "Checking…", no could-not-check, no "read from the probe" line
+			// (the state guard keeps its own source line).
+			for (const sim of [simOf(review), null]) {
+				expect(movesBlocks(review, sim, ctx)).toEqual([]);
+				const blocks = reviewBlocks(review, sim, ctx);
+				expect(blocks.some((b) => b.kind === 'verdict')).toBe(false);
+				expect(JSON.stringify(blocks)).not.toContain(noChange);
+				expect(JSON.stringify(blocks)).not.toContain(m.review.movesProbe);
+			}
+			expect(review.concerns.some((c) => c.kind === 'unsimulated')).toBe(false);
+		}
 	});
 
 	it('a lookalike recipient: a danger line naming who it looks like; first time and contract as badges', () => {

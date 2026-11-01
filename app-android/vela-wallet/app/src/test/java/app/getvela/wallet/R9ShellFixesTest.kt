@@ -8,6 +8,7 @@ import app.getvela.wallet.core.platform.VelaHaptic
 import app.getvela.wallet.feature.flows.FlowBase
 import app.getvela.wallet.feature.flows.FlowFixtures
 import app.getvela.wallet.feature.flows.FlowState
+import app.getvela.wallet.feature.multisig.MovesSaid
 import app.getvela.wallet.feature.multisig.MsProposalModel
 import app.getvela.wallet.feature.multisig.MultisigNotifier
 import app.getvela.wallet.feature.multisig.MultisigNotifyAsk
@@ -16,6 +17,11 @@ import app.getvela.wallet.feature.multisig.core.MsAccount
 import app.getvela.wallet.feature.multisig.core.MsAccountsView
 import app.getvela.wallet.feature.multisig.core.MsProposalsView
 import app.getvela.wallet.feature.multisig.inviteKnown
+import app.getvela.wallet.feature.multisig.movesSaid
+import app.getvela.wallet.feature.multisig.core.get
+import app.getvela.wallet.feature.multisig.core.kind
+import app.getvela.wallet.feature.multisig.core.str
+import uniffi.vela_core_uniffi.multisigCall
 import app.getvela.wallet.feature.multisig.refusalLine
 import app.getvela.wallet.feature.multisig.shownConcerns
 import app.getvela.wallet.feature.multisig.core.MsRules
@@ -333,14 +339,36 @@ class R9ShellFixesTest {
         val delegate = json(
             """{"sign":{"allowed":false,"anyway":false},"refused":{"why":"delegatecall","key":"home.multisig.review.refusedWhy.delegatecall"},
                "concerns":[{"kind":"notSigned","why":"delegatecall to a contract Vela does not sign for"}],"recipients":[],
-               "simulation":{"kind":"deltas","deltas":[]},"state":{"verdict":{"kind":"withheld"}}}""",
+               "simulation":{"kind":"withheld","deltas":[]},"state":{"verdict":{"kind":"withheld"}}}""",
         )
         assertEquals(strings.t("home.multisig.review.refusedWhy.delegatecall"), refusalLine(delegate, w))
         assertNotEquals(strings.t("home.multisig.review.blocked"), refusalLine(delegate, w))
         assertTrue("the English reason is not said again", shownConcerns(delegate).none { it.toString().contains("notSigned") })
+        assertEquals(MovesSaid.Empty, movesSaid(delegate))
         // An older core: the old line, when it may not be signed; nothing when it may.
         assertEquals(strings.t("home.multisig.review.blocked"), refusalLine(json("""{"sign":{"allowed":false}}"""), w))
         assertNull(refusalLine(json("""{"sign":{"allowed":true}}"""), w))
+    }
+
+    /**
+     * The fork's Bybit-shaped delegatecall through the core's own review
+     * (`multisigReview`): refused, and nothing in the place of what moves —
+     * never "No asset changes" (the old fallback when `no_change_key` is null).
+     */
+    @Test
+    fun a_refused_delegatecall_says_no_asset_changes_nowhere() {
+        val vectors = File(repoRoot, "rust/crates/vela-core/tests/vectors/multisig-review")
+        for (name in listOf("fork-bybit-probe", "fork-bybit-trace")) {
+            val vector = json(File(vectors, "$name.json").readText())
+            val review = json(multisigCall("multisigReview", """{"input":${vector["input"]}}"""))
+            assertEquals(name, "delegatecall", review["refused"]["why"].str)
+            assertEquals(name, "withheld", review["simulation"]["kind"].str)
+            assertEquals(name, MovesSaid.Empty, movesSaid(review))
+            assertTrue(name, shownConcerns(review).none { it.kind == "unsimulated" })
+        }
+        // Where the core checked and nothing moves, the quiet line stays.
+        val quiet = json("""{"simulation":{"kind":"deltas","deltas":[],"no_change_key":"componentsUi.signing.simResultNoChange"}}""")
+        assertEquals(MovesSaid.Line("componentsUi.signing.simResultNoChange", null, null), movesSaid(quiet))
     }
 
     @Test

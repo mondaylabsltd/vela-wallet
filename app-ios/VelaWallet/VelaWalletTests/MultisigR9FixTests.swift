@@ -277,11 +277,38 @@ struct MultisigR9FixTests {
     @Test func aRefusalIsNotSaidTwiceOnTheSheet() throws {
         let item = MultisigViewsTests.item(approved: 1, status: "pending")
             .replacingOccurrences(of: #""refusal":null"#, with: #""refusal":"delegatecall to a contract Vela does not sign for""#)
-        let review = #"{"100:\#(Self.hash)":{"sign":{"allowed":false,"anyway":false},"refused":{"why":"delegatecall","key":"home.multisig.review.refusedWhy.delegatecall"},"concerns":[],"state":{"source":"probe","verdict":{"kind":"withheld"}},"simulation":{"kind":"deltas","deltas":[]},"recipients":[],"fields":[]}}"#
+        let review = #"{"100:\#(Self.hash)":{"sign":{"allowed":false,"anyway":false},"refused":{"why":"delegatecall","key":"home.multisig.review.refusedWhy.delegatecall"},"concerns":[],"state":{"source":"probe","verdict":{"kind":"withheld"}},"simulation":{"kind":"withheld","deltas":[]},"recipients":[],"fields":[]}}"#
         let model = try model(view(item: item, replacing: ["reviews": review]))
         #expect(!model.notes.contains { $0.id == "refused" }, "the review's body says it")
         #expect(!model.notes.contains { $0.text.contains("Vela does not sign for") }, "never the core's English")
         #expect(model.review?["state"]?["verdict"]?.kind == "withheld")
+        #expect(MsReviewBody.movesSaid(try #require(model.review)) == .nothing)
+    }
+
+    /// The fork's Bybit-shaped delegatecall, through the core's own review
+    /// (`multisigReview`): refused, and nothing in the place of what moves —
+    /// never "No asset changes" under the refusal, though no `no_change_key`
+    /// is there for the old fallback to miss.
+    @Test func aRefusedDelegatecallSaysNoAssetChangesNowhere() throws {
+        let vectors = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("rust/crates/vela-core/tests/vectors/multisig-review")
+        for name in ["fork-bybit-probe", "fork-bybit-trace"] {
+            let data = try Data(contentsOf: vectors.appendingPathComponent("\(name).json"))
+            let vector = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+            let out = try multisigCall(method: "multisigReview",
+                                       argsJson: CoreJSON.string(["input": vector["input"] ?? NSNull()]))
+            let review = MsJSON(any: try JSONSerialization.jsonObject(with: Data(out.utf8)))
+            #expect(review["refused"]?["why"]?.string == "delegatecall", "\(name)")
+            #expect(review["simulation"]?["kind"]?.string == "withheld", "\(name)")
+            #expect(MsReviewBody.movesSaid(review) == .nothing, "\(name): nothing where what moves would be")
+        }
+        // Where the core checked and nothing moves, the quiet line stays.
+        let quiet = MsJSON(any: ["simulation": ["kind": "deltas", "deltas": [Any](),
+                                                "no_change_key": "componentsUi.signing.simResultNoChange"]])
+        #expect(MsReviewBody.movesSaid(quiet)
+                == .line(key: "componentsUi.signing.simResultNoChange", reason: nil, tone: .neutral))
     }
 
     @Test func noneSignedInHereOnlyWhenNoMemberIsHere() throws {

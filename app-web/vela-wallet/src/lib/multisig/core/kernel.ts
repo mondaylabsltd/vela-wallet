@@ -784,7 +784,11 @@ export interface MultisigReviewOut {
 	typedData: unknown;
 	recipients: ReviewRecipient[];
 	state: StateGuard;
-	/** The core's `SimVerdict` (snake_case, as the signing sheet's). */
+	/**
+	 * The core's `SimVerdict` (snake_case, as the signing sheet's). `kind`
+	 * `withheld`: refused for a reason other than the state guard's — draw
+	 * nothing in its place (`simWithheld`).
+	 */
 	simulation: SimVerdict;
 	simulationSource: 'simulate' | 'probe' | 'none';
 	concerns: ReviewConcern[];
