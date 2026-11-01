@@ -1871,3 +1871,45 @@ fn an_eip_7702_delegation_is_a_persons_wallet_not_a_contract() {
     let choice = entered(&mut world, NEWCOMER);
     assert_eq!(choice.note, Some(KindNote::Likely), "{choice:?}");
 }
+
+/// r10 (web): "Couldn't read its members" stayed after the network came back
+/// — nothing read it again. The machine reads an unread network again on its
+/// own (`MEMBERS_REREAD_MS`); no shell has to send `refresh`.
+#[test]
+fn an_unread_network_is_read_again_on_its_own() {
+    use vela_core::app::multisig_members::MEMBERS_REREAD_MS;
+    use vela_core::app::multisig_shell::MultisigOperation as Op;
+    let (mut world, account) = two_networks();
+    world.silent.insert(BASE);
+    let mut sut = Sut::new();
+    sut.dispatch(show_event(&world, &account, &[ARC, BASE]));
+    // Answer everything until the machine only waits to look again.
+    for _ in 0..5_000 {
+        let outstanding = sut.outstanding();
+        let rereading = outstanding
+            .iter()
+            .any(|op| matches!(op, Op::Wait { ms } if u64::from(*ms) == MEMBERS_REREAD_MS[0]));
+        let Some(op) = outstanding
+            .iter()
+            .find(|op| !matches!(op, Op::Wait { ms } if u64::from(*ms) == MEMBERS_REREAD_MS[0]))
+            .cloned()
+        else {
+            assert!(rereading, "it waits to read the network again");
+            break;
+        };
+        let res = world.answer(&op);
+        sut.resolve_matching(|o| *o == op, res);
+    }
+    assert!(matches!(
+        sut.view().networks[1].state,
+        NetworkState::Unreadable { .. }
+    ));
+    // The network comes back: the wait ends, it is read again, and said.
+    world.silent.clear();
+    settle_reads_first(&mut sut, &mut world, 5_000);
+    assert!(matches!(
+        sut.view().networks[1].state,
+        NetworkState::Deployed { same: true, .. }
+    ));
+    assert!(sut.outstanding().is_empty(), "nothing left waiting once read");
+}

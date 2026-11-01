@@ -67,6 +67,11 @@ use crate::registry_lookup::{LookupAnswer, LookupOutcome, LookupRequest};
 /// How long one network's members are waited for: past it, the network is
 /// said as unreadable (the web's `PREVIEW_READ_MS`).
 pub const MEMBERS_READ_MS: u64 = 8_000;
+/// r10 (web: "Couldn't read its members" stayed after the RPC recovered): a
+/// network whose members did not answer is read again on its own, after
+/// each of these waits, while it is still shown — the machine decides when
+/// to look again, no shell has to. A `refresh` or `show` starts it over.
+pub const MEMBERS_REREAD_MS: [u64; 6] = [10_000, 20_000, 40_000, 60_000, 60_000, 60_000];
 /// At most this many suggestions under the entry.
 pub const MAX_SUGGESTIONS: usize = 5;
 /// A walk is a handful of rounds; this only stops a contract bug from spinning.
@@ -924,6 +929,9 @@ pub struct State {
     reads: BTreeMap<u64, Read>,
     /// Bumped when another multisig is shown: its reads are not this one's.
     round: u64,
+    /// r10: which read's re-reads are live — a later read ends the earlier
+    /// one's.
+    reread_gen: u64,
     waiting: Vec<WaitingProposal>,
     compose: Option<Compose>,
     picked: Option<u64>,
@@ -1509,15 +1517,53 @@ async fn read_all(io: &Io<Event>, st: &Shared<State>) {
             s.seeded = true;
         }
     }
-    let (account, chain_ids, chain, round) = {
-        let s = lock(st);
+    let (account, chain_ids, chain, round, gen) = {
+        let mut s = lock(st);
         let Some(account) = s.account.clone() else {
             return;
         };
-        (account, s.chain_ids.clone(), s.chain.clone(), s.round)
+        s.reread_gen += 1;
+        (
+            account,
+            s.chain_ids.clone(),
+            s.chain.clone(),
+            s.round,
+            s.reread_gen,
+        )
     };
+    read_some(io, st, &account, &chain, &chain_ids, round).await;
+    // r10: an unread network is read again on its own until it answers.
+    let unread = |s: &State| -> Option<Vec<u64>> {
+        let ids: Vec<u64> = s
+            .chain_ids
+            .iter()
+            .copied()
+            .filter(|id| matches!(s.reads.get(id), Some(Read::Unreadable(_))))
+            .collect();
+        (s.reread_gen == gen && s.round == round && !ids.is_empty()).then_some(ids)
+    };
+    for ms in MEMBERS_REREAD_MS {
+        if unread(&lock(st)).is_none() {
+            return;
+        }
+        io.wait(ms).await;
+        let Some(ids) = unread(&lock(st)) else {
+            return;
+        };
+        read_some(io, st, &account, &chain, &ids, round).await;
+    }
+}
+
+/// Read `chain_ids`' members, each answer kept as it lands (this round's).
+async fn read_some(
+    io: &Io<Event>,
+    st: &Shared<State>,
+    account: &MultisigAccount,
+    chain: &Chain,
+    chain_ids: &[u64],
+    round: u64,
+) {
     let reads = chain_ids.iter().map(|id| {
-        let (account, chain) = (&account, &chain);
         async move {
             let read = read_bounded(io, chain, *id, account).await;
             {
