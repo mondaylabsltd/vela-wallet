@@ -4860,6 +4860,29 @@ export function extractAttestationPublicKey(attestation_object) {
 }
 
 /**
+ * What a failed `eth_estimateUserOperationGas` tells the fee machine
+ * (r11-8): `refused` or `simulation_failed`. `errorJson`: the relay's
+ * JSON-RPC `error` member (or the whole body), `undefined` when nothing
+ * answered. See `vela_core::app::fee_policy::estimate_gas_outcome`.
+ * @param {string | null} [error_json]
+ * @returns {string}
+ */
+export function feeEstimateGasOutcome(error_json) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        var ptr0 = isLikeNone(error_json) ? 0 : passStringToWasm0(error_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len0 = WASM_VECTOR_LEN;
+        const ret = wasm.feeEstimateGasOutcome(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
  * The corpus key of the reason line under a failed fee, or `undefined` for
  * none (spec 082 RJ13) — the one choice every shell used to make itself.
  * `explore.chainDown` takes `{{chain}}`. `failure` as for
@@ -7128,6 +7151,29 @@ export function signRequestTtlMs() {
 }
 
 /**
+ * An amount already written in the person's marks, signed the one way
+ * money is signed in Vela (r11 S4): U+2212 when `outgoing`, `+` when not,
+ * nothing when `undefined`. See `vela_core::l10n::signed_amount_text`.
+ * @param {string} amount
+ * @param {boolean | null} [outgoing]
+ * @returns {string}
+ */
+export function signedAmountText(amount, outgoing) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(amount, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.signedAmountText(ptr0, len0, isLikeNone(outgoing) ? 0xFFFFFF : outgoing ? 1 : 0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
  * Does a check made at `checked_at_ms` still vouch for a page at `now_ms`
  * (spec 102: a day)?
  * @param {number} checked_at_ms
@@ -7615,6 +7661,30 @@ export function tokenProvenance(chain_id, token, symbol, native_symbol) {
         return getStringFromWasm0(ret[0], ret[1]);
     } finally {
         wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
+ * How far a failed POST got (r11-9) — `offline`, `dns`,
+ * `connect_refused`, `connect_timeout`, `tls`, `refused`, `write_failed`,
+ * `after_write`, `read_timeout`, `timeout`, `unknown` — to the pool's
+ * transport outcome as JSON. See
+ * `vela_core::app::rpc_pool::transport_outcome_of`.
+ * @param {string} failure
+ * @returns {string}
+ */
+export function transportOutcomeOf(failure) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(failure, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.transportOutcomeOf(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
     }
 }
 

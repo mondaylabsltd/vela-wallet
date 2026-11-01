@@ -1278,6 +1278,14 @@ export function ensReverseNode(address: string): string;
 export function extractAttestationPublicKey(attestation_object: Uint8Array): P256PublicKey;
 
 /**
+ * What a failed `eth_estimateUserOperationGas` tells the fee machine
+ * (r11-8): `refused` or `simulation_failed`. `errorJson`: the relay's
+ * JSON-RPC `error` member (or the whole body), `undefined` when nothing
+ * answered. See `vela_core::app::fee_policy::estimate_gas_outcome`.
+ */
+export function feeEstimateGasOutcome(error_json?: string | null): string;
+
+/**
  * The corpus key of the reason line under a failed fee, or `undefined` for
  * none (spec 082 RJ13) — the one choice every shell used to make itself.
  * `explore.chainDown` takes `{{chain}}`. `failure` as for
@@ -1952,6 +1960,13 @@ export function signNotConfirmedDetail(user_op_hash: string): string;
 export function signRequestTtlMs(): number;
 
 /**
+ * An amount already written in the person's marks, signed the one way
+ * money is signed in Vela (r11 S4): U+2212 when `outgoing`, `+` when not,
+ * nothing when `undefined`. See `vela_core::l10n::signed_amount_text`.
+ */
+export function signedAmountText(amount: string, outgoing?: boolean | null): string;
+
+/**
  * Does a check made at `checked_at_ms` still vouch for a page at `now_ms`
  * (spec 102: a day)?
  */
@@ -2111,6 +2126,15 @@ export function tokenMark(ethereum_data_url: string, chain_id: number, symbol: s
  * it while it builds a row.
  */
 export function tokenProvenance(chain_id: number, token: string, symbol: string, native_symbol: string): string;
+
+/**
+ * How far a failed POST got (r11-9) — `offline`, `dns`,
+ * `connect_refused`, `connect_timeout`, `tls`, `refused`, `write_failed`,
+ * `after_write`, `read_timeout`, `timeout`, `unknown` — to the pool's
+ * transport outcome as JSON. See
+ * `vela_core::app::rpc_pool::transport_outcome_of`.
+ */
+export function transportOutcomeOf(failure: string): string;
 
 /**
  * The page's answer as the member's approval (`PasskeyApproval`, JSON), or
@@ -2551,6 +2575,7 @@ export interface InitOutput {
     readonly extcachecore_skip_unchanged_views: (a: number, b: number) => void;
     readonly extcachecore_view: (a: number) => [number, number, number, number];
     readonly extractAttestationPublicKey: (a: number, b: number) => [number, number, number];
+    readonly feeEstimateGasOutcome: (a: number, b: number) => [number, number];
     readonly feeFailureReasonKey: (a: number, b: number) => [number, number];
     readonly feeQuoteDeadlineMs: () => number;
     readonly feeRequoteDelayMs: (a: number, b: number, c: number) => number;
@@ -2748,6 +2773,7 @@ export interface InitOutput {
     readonly signMessageHash: (a: number, b: number, c: number, d: number) => [number, number];
     readonly signNotConfirmedDetail: (a: number, b: number) => [number, number];
     readonly signRequestTtlMs: () => number;
+    readonly signedAmountText: (a: number, b: number, c: number) => [number, number];
     readonly signerCheckFresh: (a: number, b: number) => number;
     readonly signerCheckRefreshDue: (a: number, b: number, c: number, d: number, e: number) => number;
     readonly signerIntegrityTime: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
@@ -2787,6 +2813,7 @@ export interface InitOutput {
     readonly tokentrustcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly tokentrustcore_skip_unchanged_views: (a: number, b: number) => void;
     readonly tokentrustcore_view: (a: number) => [number, number, number, number];
+    readonly transportOutcomeOf: (a: number, b: number) => [number, number];
     readonly trustedSignerApprovalAccept: (a: number, b: number) => [number, number, number, number];
     readonly trustedSignerApprovalRequest: (a: number, b: number) => [number, number, number, number];
     readonly trustedSignerCeremonyKeyLabel: (a: number, b: number) => [number, number];
