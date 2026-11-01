@@ -340,38 +340,67 @@ fn calldata_of(row: &Value) -> Option<bool> {
 /// run found nothing, which is a true statement, and it is not a reason to
 /// show an error over a feed that is otherwise correct.
 fn sync_received(address: &str) -> u32 {
-    // One scan at a time. Ticks are 10 s apart and a twelve-chain discovery on
-    // a bad network can outlive that; two of them overlapping would read the
-    // same store, both find the same receipt missing, and both write it —
-    // which is two rows and two celebrations for one payment. A scan that
-    // could not run found nothing, which is the answer this function already
-    // gives for every other way it can fail to run.
-    if SCANNING.swap(true, Ordering::SeqCst) {
-        return 0;
-    }
-    let added = scan(address);
-    SCANNING.store(false, Ordering::SeqCst);
-    added
+    // One scan per account at a time is the core's (`scan_in_flight`), and
+    // a receipt is written once under the store's lock (`persist_incoming`).
+    scan(address)
 }
 
-static SCANNING: AtomicBool = AtomicBool::new(false);
+/// r9-17 (§9.4): the account's facts — no choice. Which networks are
+/// scanned, the windows and the backfill are the core's
+/// (`incoming_scan::scan_plan`, `token_trust`'s `ScanRequested`).
+fn scan_facts(address: &str) -> vela_core::app::incoming_scan::TrustScanFacts {
+    use vela_core::app::incoming_scan::{TrustAccountNetwork, TrustScanFacts};
+    TrustScanFacts {
+        held_chain_ids: crate::executor::token_trust::held_of(address),
+        // A multisig's networks (its record's); a Vela account lives on none.
+        account_networks: crate::executor::balance_dashboard::lives_on_of(address)
+            .into_iter()
+            .map(|chain_id| TrustAccountNetwork {
+                chain_id,
+                deploy_block: None,
+            })
+            .collect(),
+        space_chain_ids: crate::network_space::space_chain_ids(),
+        added_chain_ids: crate::executor::network_admin::read_store_custom_chain_ids(),
+    }
+}
+
+/// The coverage kept for `address` (`vela.scanCursors.<address>`).
+fn read_cursors(address: &str) -> Vec<vela_core::app::incoming_scan::TrustScanCursor> {
+    let key = format!(
+        "{}{}",
+        vela_core::app::incoming_scan::CURSOR_KEY_PREFIX,
+        address.to_ascii_lowercase()
+    );
+    storage::read_value(&key)
+        .ok()
+        .flatten()
+        .and_then(|value| serde_json::from_value(value).ok())
+        .unwrap_or_default()
+}
+
+/// Keep the coverage a finished poll handed back (`TrustView::cursors`).
+fn write_cursors(address: &str, cursors: &[vela_core::app::incoming_scan::TrustScanCursor]) {
+    if cursors.is_empty() {
+        return;
+    }
+    let key = format!(
+        "{}{}",
+        vela_core::app::incoming_scan::CURSOR_KEY_PREFIX,
+        address.to_ascii_lowercase()
+    );
+    if let Ok(value) = serde_json::to_value(cursors) {
+        let _ = storage::write_value(&key, value);
+    }
+}
 
 fn scan(address: &str) -> u32 {
     use crate::executor::token_trust;
-    // r9-17, the web's `activity.ts` rule: the chains it holds on; else the
-    // main payment chains where the space in front has them; else that
-    // space's own networks (the ones added first, then its first six) — an
-    // account holding nothing yet in the testnet space gets its first coin
-    // on Arc, which the main payment chains never look at. Each scanned
-    // chain's registry is primed, as the web's `primeRegistry`, so its
-    // canonical stablecoin is a trusted token on the first receipt.
-    let held = token_trust::held_of(address);
-    let chains = scan_chains(
-        &held,
-        &crate::network_space::space_chain_ids(),
-        &crate::executor::network_admin::read_store_custom_chain_ids(),
-        &crate::network_space::in_space,
-    );
+    let facts = scan_facts(address);
+    // Each planned network's registry is primed first, as the web's
+    // `primeRegistry`, so its canonical stablecoin is a trusted token on the
+    // first receipt.
+    let chains = vela_core::app::incoming_scan::scan_plan(&facts).scan_chain_ids;
     for chain_id in &chains {
         let data = crate::executor::chain_tokens::cached(*chain_id).or_else(|| {
             match crate::executor::chain_tokens::fetch_doc(*chain_id) {
@@ -387,40 +416,9 @@ fn scan(address: &str) -> u32 {
             );
         }
     }
-    if held.is_empty() && !chains.is_empty() {
-        token_trust::held_chains(address, chains);
-    }
-    persist_incoming(address, &token_trust::poll(address))
-}
-
-/// How many of the space's own networks an empty account's scan reads
-/// (the web's `NATIVE_WATCH_FALLBACK`).
-const SPACE_SCAN_FIRST: usize = 6;
-
-/// The chains an incoming scan reads (the web's `activity.ts`): `held`, else
-/// the core's main payment chains when the space has any of them (an empty
-/// answer: the core falls back to them itself), else the space's networks —
-/// those the person added first, then its first [`SPACE_SCAN_FIRST`].
-fn scan_chains(
-    held: &[u32],
-    space: &[u32],
-    added: &[u32],
-    in_space: &dyn Fn(u32) -> bool,
-) -> Vec<u32> {
-    if !held.is_empty() {
-        return held.to_vec();
-    }
-    let defaults = vela_core::app::token_trust::DEFAULT_MONITOR_CHAINS;
-    if defaults.iter().any(|c| in_space(*c)) {
-        return defaults.to_vec();
-    }
-    let mut out: Vec<u32> = Vec::new();
-    for id in added.iter().copied().filter(|c| in_space(*c)).chain(space.iter().copied().take(SPACE_SCAN_FIRST)) {
-        if !out.contains(&id) {
-            out.push(id);
-        }
-    }
-    out
+    let (incoming, cursors) = token_trust::scan(address, facts, read_cursors(address));
+    write_cursors(address, &cursors);
+    persist_incoming(address, &incoming)
 }
 
 /// Store the transfers the scan admitted that the store does not hold yet,
@@ -721,20 +719,17 @@ impl Machine for ActivityFeed {
 
 static TICKING: AtomicBool = AtomicBool::new(false);
 
-/// The cadence the core does NOT own.
+/// The scan cadence is the core's (r9-17, §9.4): this only reports the
+/// page's presence ([`Event::PresenceChanged`] — started, shown, hidden,
+/// touched) and runs the one timer the core asks for
+/// ([`FeedView::next_scan`]), answering it with [`Event::ScanDue`]. Shown
+/// means the wallet section — the Activity — showing in a window that is on
+/// screen, asked of the system at each look, since a minimized window is not
+/// re-rendered and could not say so itself. "Touched" is the window being
+/// the person's key window: the desktop's nearest to the web's last tap.
 ///
-/// Its words: "`FocusTick`/`LiveTick` cadence (focus + 30s auto-refresh, 10s
-/// while the Activity tab is visible) stays in the shell: which tab is visible
-/// is render-domain state the core never sees." The web's home runs the 10 s
-/// `LiveTick` while its tab is visible (078 W-09); here that is the wallet
-/// section showing ([`set_visible`]) in a window that is on screen — shown
-/// and not minimized, asked of the system at each beat, since a minimized
-/// window is not re-rendered and could not say so itself. Otherwise every
-/// third beat — the 30 s auto-refresh. A scan that outlives a beat is not
-/// doubled: `sync_received` runs one at a time.
-const TICK: Duration = Duration::from_secs(10);
-/// Beats between two auto-refreshes while the Activity is out of sight (30 s).
-const HIDDEN_EVERY: u32 = 3;
+/// [`FeedView::next_scan`]: vela_core::app::activity_feed::FeedView::next_scan
+const LOOK: Duration = Duration::from_secs(1);
 
 /// The wallet section — the Activity — is what the window is showing.
 static VISIBLE: AtomicBool = AtomicBool::new(false);
@@ -780,27 +775,67 @@ fn window_on_screen(window: isize) -> bool {
 /// Called by the wallet page on sign-in, beside the tracker's own; a second
 /// call is a no-op.
 pub fn start_ticks(cx: &mut App) {
+    use vela_core::app::activity_feed::{FeedPresence, FeedPresenceChange};
     let _ = resident::resident::<ActivityFeed>(cx);
     if TICKING.swap(true, Ordering::SeqCst) {
         return;
     }
     cx.spawn(async move |cx| {
-        let mut beat: u32 = 0;
+        let mut shown: Option<bool> = None;
+        let mut was_front = false;
+        let mut last_front = crate::executor::now_ms();
+        // The core's timer: its `seq`, and when it is due (epoch ms).
+        let mut armed: Option<(u32, f64)> = None;
+        let mut fired: Option<u32> = None;
         loop {
-            cx.background_executor().timer(TICK).await;
-            beat = beat.wrapping_add(1);
-            let event = if activity_on_screen() {
-                Event::LiveTick
-            } else if beat.is_multiple_of(HIDDEN_EVERY) {
-                Event::FocusTick
-            } else {
-                continue;
+            cx.background_executor().timer(LOOK).await;
+            let now = crate::executor::now_ms();
+            let visible = activity_on_screen();
+            let front = cx.update(|cx| cx.active_window().is_some());
+            if front {
+                last_front = now;
+            }
+            let presence = FeedPresence {
+                visible,
+                since_interaction_ms: now - last_front,
+                now_ms: now,
             };
-            // Re-fetched each tick, for the reason the tracker's loop states:
+            let change = match shown {
+                None => Some(FeedPresenceChange::Started),
+                Some(before) if before != visible => Some(if visible {
+                    FeedPresenceChange::Shown
+                } else {
+                    FeedPresenceChange::Hidden
+                }),
+                _ if front && !was_front && visible => Some(FeedPresenceChange::Interacted),
+                _ => None,
+            };
+            shown = Some(visible);
+            was_front = front;
+            // Re-fetched each look, for the reason the tracker's loop states:
             // a sign-out drops every resident, and the next sign-in's feed is
-            // the one that must get the ticks.
+            // the one that must hear the presence.
             let feed = cx.update(resident::resident::<ActivityFeed>);
-            feed.update(cx, |resident, cx| resident.dispatch(event, cx));
+            if let Some(change) = change {
+                feed.update(cx, |resident, cx| {
+                    resident.dispatch(Event::PresenceChanged { presence, change }, cx);
+                });
+            }
+            let next = cx.update(|cx| feed.read(cx).view().next_scan);
+            if let Some(next) = next
+                && armed.map(|(seq, _)| seq) != Some(next.seq)
+            {
+                armed = Some((next.seq, now + f64::from(next.after_ms)));
+            }
+            if let Some((seq, due)) = armed
+                && now >= due
+                && fired != Some(seq)
+            {
+                fired = Some(seq);
+                feed.update(cx, |resident, cx| {
+                    resident.dispatch(Event::ScanDue { seq, presence }, cx);
+                });
+            }
         }
     })
     .detach();
@@ -859,23 +894,43 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    /// r9-17: an account holding nothing yet in the testnet space is scanned
-    /// on that space's networks (Arc), as the web scans it — never only the
-    /// main payment chains, which are not in that space.
+    /// r9-17 (§9.4): the scan's facts are the account's — a multisig's
+    /// networks among them — and which networks are read is the core's plan:
+    /// a multisig holding nothing yet on Arc Testnet is scanned there.
     #[test]
-    fn an_empty_account_in_the_testnet_space_is_scanned_on_its_networks() {
+    fn a_multisig_is_scanned_on_the_networks_it_lives_on() {
         const ARC: u32 = 5_042_002;
-        let testnet = |c: u32| matches!(c, ARC | 11_155_111 | 84_532);
-        assert_eq!(scan_chains(&[ARC], &[11_155_111, ARC], &[], &testnet), vec![ARC]);
-        assert_eq!(
-            scan_chains(&[], &[11_155_111, 84_532, ARC], &[ARC], &testnet),
-            vec![ARC, 11_155_111, 84_532]
-        );
-        let mainnet = |c: u32| !testnet(c);
-        assert_eq!(
-            scan_chains(&[], &[1, 100], &[], &mainnet),
-            vela_core::app::token_trust::DEFAULT_MONITOR_CHAINS.to_vec()
-        );
+        const MS: &str = "0x07804b3012f5d87b1936401358941d99a881235a";
+        storage::tests::with_temp_state("feed-scan-facts", || {
+            crate::executor::balance_dashboard::remember_lives_on(MS, vec![ARC]);
+            let facts = scan_facts(MS);
+            assert_eq!(
+                facts.account_networks.iter().map(|n| n.chain_id).collect::<Vec<_>>(),
+                vec![ARC]
+            );
+            let plan = vela_core::app::incoming_scan::scan_plan(&facts);
+            assert!(plan.scan_chain_ids.contains(&ARC), "{plan:?}");
+            // A Vela account lives on none of its own.
+            assert!(scan_facts("0x88cca0eedbf2c4426110bbfc998f048689266894")
+                .account_networks
+                .is_empty());
+        });
+    }
+
+    /// The coverage a poll hands back is kept per account and read again.
+    #[test]
+    fn the_scan_coverage_is_kept_per_account() {
+        use vela_core::app::incoming_scan::{TrustBlockSpan, TrustScanCursor};
+        storage::tests::with_temp_state("feed-scan-cursors", || {
+            assert!(read_cursors("0xAbC").is_empty());
+            let kept = vec![TrustScanCursor {
+                chain_id: 100,
+                covered: vec![TrustBlockSpan::of(10, 20)],
+            }];
+            write_cursors("0xAbC", &kept);
+            assert_eq!(read_cursors("0xabc"), kept);
+            assert!(storage::read_value("vela.scanCursors.0xabc").ok().flatten().is_some());
+        });
     }
 
     fn seed(rows: Value) {
@@ -1535,24 +1590,6 @@ mod tests {
             );
             assert_eq!(stored_rows(), after);
         });
-    }
-
-    /// A scan that arrives while one is already running answers zero rather
-    /// than joining in.
-    ///
-    /// Both would read the same store, both would find the same receipt
-    /// missing from it, and both would write it back — two rows for one
-    /// payment, and two celebrations. Nothing else in the pipeline would
-    /// notice: the core counts what the shell reports, and the shell would be
-    /// reporting the truth twice.
-    #[test]
-    fn a_second_scan_does_not_run_beside_the_first() {
-        // Standing in for the in-flight one. Never touches the network: the
-        // guard is the first thing `sync_received` does, before the poll.
-        SCANNING.store(true, Ordering::SeqCst);
-        let answered = sync_received("0x88cCA0EeDbF2C4426110bbFc998F048689266894");
-        SCANNING.store(false, Ordering::SeqCst);
-        assert_eq!(answered, 0, "a scan that could not run found nothing");
     }
 
     /// A record another client wrote reads back, camelCase and all.
