@@ -279,28 +279,52 @@ private fun Reading(review: JsonElement, chainId: Int, words: MultisigWords) {
     }
 }
 
+/** What the verdict's place holds, as the core's `simulation` says it. */
+internal sealed interface MovesSaid {
+    /**
+     * Nothing: the core withholds what moves (`kind` `withheld` — refused for
+     * a reason other than the state guard's, a delegatecall or a batch too
+     * deep), or there is no line to say.
+     */
+    data object Empty : MovesSaid
+    /** The balance rows. */
+    data object Deltas : MovesSaid
+    /** One line: the core's no-change key (quiet, `tone` null), or its notice. */
+    data class Line(val key: String, val reason: String?, val tone: MsTone?) : MovesSaid
+}
+
+/** The core's `simulation` in the verdict's place — never "No asset changes" for one the core withheld. */
+internal fun movesSaid(review: JsonElement): MovesSaid {
+    val sim = review["simulation"]
+    return when (sim["kind"].str) {
+        "withheld" -> MovesSaid.Empty
+        "deltas" ->
+            if (sim["deltas"].arr.isNotEmpty()) MovesSaid.Deltas
+            else MovesSaid.Line(sim["no_change_key"].str ?: "componentsUi.signing.simResultNoChange", null, null)
+        else -> {
+            val key = sim["notice_key"].str
+            if (key.isNullOrEmpty()) MovesSaid.Empty
+            else MovesSaid.Line(key, sim["revert_reason"].str, if (sim["notice_risk"].str == "danger") MsTone.Danger else MsTone.Warning)
+        }
+    }
+}
+
 @Composable
 private fun Moves(review: JsonElement, chainId: Int, words: MultisigWords, tokens: Map<String, Pair<String, Int>>) {
-    val sim = review["simulation"]
-    val deltas = sim["deltas"].arr
+    val deltas = review["simulation"]["deltas"].arr
     val colors = VelaTheme.colors
-    when {
-        sim["kind"].str == "deltas" && deltas.isNotEmpty() -> MsSection(words.raw("componentsUi.signing.simResultLabel")) {
+    when (val said = movesSaid(review)) {
+        MovesSaid.Empty -> Unit
+        MovesSaid.Deltas -> MsSection(words.raw("componentsUi.signing.simResultLabel")) {
             for (delta in deltas) {
                 val text = deltaText(delta, chainId, words, tokens)
                 MsText(text, MsType.RowTitle, Modifier.testTag("multisig.review.delta"), color = if (text.startsWith("-")) colors.fgBase else colors.successBase)
             }
             if (review["simulationSource"].str == "probe") MsNote(words.t("review.movesProbe"))
         }
-        sim["kind"].str == "deltas" -> MsNote(words.raw(sim["no_change_key"].str ?: "componentsUi.signing.simResultNoChange"))
-        !sim["notice_key"].str.isNullOrEmpty() -> {
-            val key = sim["notice_key"].str!!
-            val reason = sim["revert_reason"].str
-            MsNote(
-                if (reason != null) words.raw(key, "reason" to reason) else words.raw(key),
-                tone = if (sim["notice_risk"].str == "danger") MsTone.Danger else MsTone.Warning,
-                tag = "multisig.review.sim",
-            )
+        is MovesSaid.Line -> {
+            val text = if (said.reason != null) words.raw(said.key, "reason" to said.reason) else words.raw(said.key)
+            if (said.tone == null) MsNote(text) else MsNote(text, tone = said.tone, tag = "multisig.review.sim")
         }
     }
 }
