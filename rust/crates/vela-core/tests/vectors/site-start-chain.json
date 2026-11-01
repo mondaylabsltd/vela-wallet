@@ -1,0 +1,89 @@
+{
+  "about": "dapp-17, r9, r10: the chain a site with no chain of its own starts on (network_space::site_start_chain_for). space_chain_ids: the space in front's networks in the wallet's list order; last_used: the network the person last put a site on in this space (null: none); account_chains: where the signed-in account holds something or used, most telling first. Read by vela-core (tests/site_start_chain_vectors.rs) and by the extension worker's twin (extension/lib/protocol.js siteStartChain / startChainOf, in src/lib/dapp/protocol.test.ts), so the two cannot drift.",
+  "cases": [
+    {
+      "name": "r9/r10: an account holding only Arc USDC, testnet space",
+      "space_chain_ids": [11155111, 84532, 421614, 11155420, 80002, 97, 43113, 5042002, 42431],
+      "last_used": null,
+      "account_chains": [5042002],
+      "start": 5042002
+    },
+    {
+      "name": "the network last used in this space comes first",
+      "space_chain_ids": [11155111, 84532, 5042002],
+      "last_used": 84532,
+      "account_chains": [5042002],
+      "start": 84532
+    },
+    {
+      "name": "last used in the other space is no network of this one",
+      "space_chain_ids": [11155111, 84532, 5042002],
+      "last_used": 8453,
+      "account_chains": [5042002],
+      "start": 5042002
+    },
+    {
+      "name": "an account chain outside the space is skipped",
+      "space_chain_ids": [11155111, 84532, 5042002],
+      "last_used": null,
+      "account_chains": [8453, 5042002],
+      "start": 5042002
+    },
+    {
+      "name": "the account lives only in the other space: the space's first",
+      "space_chain_ids": [11155111, 84532, 5042002],
+      "last_used": null,
+      "account_chains": [8453],
+      "start": 11155111
+    },
+    {
+      "name": "nothing known: the space's first",
+      "space_chain_ids": [11155111, 84532, 5042002],
+      "last_used": null,
+      "account_chains": [],
+      "start": 11155111
+    },
+    {
+      "name": "mainnet space, never used: the first of its list",
+      "space_chain_ids": [1, 8453, 100],
+      "last_used": null,
+      "account_chains": [],
+      "start": 1
+    },
+    {
+      "name": "mainnet space, an account on Gnosis",
+      "space_chain_ids": [1, 8453, 100],
+      "last_used": null,
+      "account_chains": [100, 8453],
+      "start": 100
+    },
+    {
+      "name": "mainnet space, Base last used beats the account's Gnosis",
+      "space_chain_ids": [1, 8453, 100],
+      "last_used": 8453,
+      "account_chains": [100],
+      "start": 8453
+    },
+    {
+      "name": "last used no longer in the list",
+      "space_chain_ids": [1, 8453],
+      "last_used": 100,
+      "account_chains": [],
+      "start": 1
+    },
+    {
+      "name": "a space with no network at all: Ethereum",
+      "space_chain_ids": [],
+      "last_used": 100,
+      "account_chains": [8453],
+      "start": 1
+    },
+    {
+      "name": "a one-network space",
+      "space_chain_ids": [100],
+      "last_used": null,
+      "account_chains": [999],
+      "start": 100
+    }
+  ]
+}
