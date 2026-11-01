@@ -1208,6 +1208,7 @@ fun VelaNavHost(
                     val signCtx = app.getvela.wallet.feature.signing.SigningLive.Context(
                         strings = strings,
                         chainName = chainNames[signChain] ?: signChain.toString(),
+                        networkName = remember(chainNames) { { id: Int -> chainNames[id] ?: app.getvela.wallet.feature.multisig.core.MsRules.networkName(id) ?: id.toString() } },
                         chainDot = WalletLive.badge(signChain.toLong()),
                         nativeSymbol = networks.networks.firstOrNull { it.chain_id.toInt() == signChain }?.native_symbol ?: "ETH",
                         walletName = activeLabel,
@@ -2051,7 +2052,7 @@ fun VelaNavHost(
                         }
                         val consentCard = dapp.consent?.let { c ->
                             // Secure is the core's word (a loopback test page is), not a prefix check.
-                            app.getvela.wallet.feature.browser.ExploreLive.consent(exploreModel.connection, c, strings, identity.copy(chainName = chainNames[c.chain_id] ?: app.getvela.wallet.feature.multisig.core.MsRules.networkName(c.chain_id) ?: c.chain_id.toString(), chainDot = WalletLive.badge(c.chain_id.toLong())))
+                            app.getvela.wallet.feature.browser.ExploreLive.consent(exploreModel.connection, c, strings, identity.copy(chainName = chainNames[c.chain_id] ?: app.getvela.wallet.feature.multisig.core.MsRules.networkName(c.chain_id) ?: c.chain_id.toString(), chainDot = WalletLive.badge(c.chain_id.toLong())), networkName = { id -> chainNames[id] ?: app.getvela.wallet.feature.multisig.core.MsRules.networkName(id) ?: id.toString() })
                         }
                         // One-line notices the browser raises (a WalletConnect link, say).
                         LaunchedEffect(browser) {

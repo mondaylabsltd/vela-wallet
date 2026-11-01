@@ -49,6 +49,12 @@ data class IncomingRequest(
      * `null` for the wallet's own requests.
      */
     val grantedAddress: String? = null,
+    /**
+     * r10 follow-up (core §10.4): the network a space switch moved the asking
+     * site to since its last request (`DbrSigningView.space_note`) — the
+     * sheet says so once. `null` for every other request.
+     */
+    val spaceNoteChainId: Int? = null,
 )
 
 /**
@@ -583,6 +589,7 @@ class SigningController(
                 first_party = request.transportId == app.getvela.wallet.feature.signing.SigningLive.WALLET_TRANSPORT,
             ),
         )
+        request.spaceNoteChainId?.takeIf { it > 0 }?.let { chain -> dispatchSign(SignEvent.SpaceNoted(id = request.id, chain_id = chain)) }
         // What it does. A transaction decodes from its call; typed data and a
         // plain message are their own rungs of the same ladder. The BROWSER's
         // fact about who is asking, never the page's claim.

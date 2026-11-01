@@ -885,8 +885,18 @@ class AppContainer(private val app: Application) {
             }
             // The chains a page may switch to are the space in front's
             // networks, live (spec 105): a switch of space is a change of them.
+            // r10 follow-up (core §10.3): said with the space and every network
+            // Vela has, so the other space's network is refused by name and a
+            // space switch moves the sites it leaves behind.
             follow.launch {
-                spaceNetworks.collect { view -> controller.networksChanged(view.networks.map { it.chain_id.toInt() }) }
+                combine(settings.networks, networkSpace.space) { all, space -> all to space }
+                    .collect { (all, space) ->
+                        controller.spaceNetworksChanged(
+                            space = space,
+                            chainIds = NetworkSpaces.view(space, all).networks.map { it.chain_id.toInt() },
+                            knownChainIds = all.networks.map { it.chain_id.toInt() },
+                        )
+                    }
             }
             // Spec 091: Settings' debug mode, live — revealed, switched, or
             // hidden again by an erase, it is the preferences' to store and
@@ -921,6 +931,12 @@ class AppContainer(private val app: Application) {
                 transportId = operation.tab,
                 chainId = operation.chain_id,
                 grantedAddress = operation.granted_address,
+                // r10 follow-up (core §10.4): a space switch moved this site
+                // since its last request — the browser's view of the request
+                // it forwards says so, committed before the forward runs.
+                spaceNoteChainId = browser.dapp.value.signing
+                    ?.takeIf { it.tab == operation.tab && it.id == operation.id }
+                    ?.space_note?.chain_id,
             ),
             answer = { payload -> browser.signingAnswered(operation.tab, operation.id, payload, userOpHash) },
             rememberUserOp = { userOpHash = it },

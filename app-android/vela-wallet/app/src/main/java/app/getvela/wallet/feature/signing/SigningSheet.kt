@@ -727,17 +727,30 @@ private fun SigningSheetHeader(model: SigningScreenModel, onClose: (() -> Unit)?
             closeLabel = model.closeLabel,
         )
     } else {
-        SigningHeader(
-            name = model.dappName,
-            host = model.dappHost,
-            letter = model.dappLetter,
-            tint = model.dappTint,
-            networkName = model.networkName,
-            networkDot = model.networkDot,
-            iconUrls = model.dappIconUrls,
-            networkLogoUrl = model.networkLogoUrl,
-            onClose = onClose,
-            closeLabel = model.closeLabel,
-        )
+        Column(verticalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
+            SigningHeader(
+                name = model.dappName,
+                host = model.dappHost,
+                letter = model.dappLetter,
+                tint = model.dappTint,
+                networkName = model.networkName,
+                networkDot = model.networkDot,
+                iconUrls = model.dappIconUrls,
+                networkLogoUrl = model.networkLogoUrl,
+                onClose = onClose,
+                closeLabel = model.closeLabel,
+            )
+            // r10 follow-up (core §10.4): the network-space switch moved this
+            // site since it last asked; said once, under who is asking.
+            model.spaceNote?.let { note ->
+                Text(
+                    text = note,
+                    color = VelaTheme.colors.fgMuted,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.base,
+                    modifier = Modifier.testTag("signing-space-note"),
+                )
+            }
+        }
     }
 }

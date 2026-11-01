@@ -814,8 +814,16 @@ class BrowserController(
         BrowserAccounts.events(addresses, active, now(), networks = networks).forEach(::dispatch)
     }
 
-    /** The chains a site may switch or add to — the wallet's networks. */
-    fun networksChanged(chainIds: List<Int>) = dispatch(DbrEvent.NetworksChanged(chainIds))
+    /**
+     * The chains a site may switch or add to — the space in front's ([chainIds])
+     * — with which space that is and every network Vela has, both spaces
+     * ([knownChainIds]): r10 follow-up (core §10.3). A page asking for the
+     * other space's network is refused naming that space, never "not in
+     * Vela's networks", and a space switch moves each site outside the new
+     * space to its start network (the page hears `chainChanged`).
+     */
+    fun spaceNetworksChanged(space: app.getvela.wallet.feature.settings.core.NetworkSpace, chainIds: List<Int>, knownChainIds: List<Int>) =
+        dispatch(DbrEvent.SpaceNetworksChanged(space = space.wire, chain_ids = chainIds, known_chain_ids = knownChainIds))
 
     /** The signing sheet's answer for a forwarded request — delivered by the core, exactly once. */
     fun signingAnswered(tab: String, id: String, payload: SignResponsePayload, userOpHash: String?) =
