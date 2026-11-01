@@ -253,9 +253,15 @@ object MultisigNotifyAsk {
     /** Shown, not answered yet (the process may die under it): asked again on a later run. */
     const val ASKING = "asking"
 
-    /** One ask per process: a screen recreated under the dialog (a language switch) does not ask twice. */
-    @Volatile
-    private var askedThisRun = false
+    /**
+     * One ask per process: a screen recreated under the dialog (a language
+     * switch) does not ask twice — nor do the add sheet's own ask and the
+     * layer's "there is a multisig now" ask, which come in the same frame.
+     * On the Redmi (MIUI) those two launched the system request twice
+     * 250 ms apart and the second came back "denied" at once, the dialog
+     * still up: set before anything suspends, so only one gets through.
+     */
+    private val askedThisRun = java.util.concurrent.atomic.AtomicBoolean(false)
 
     /**
      * Whether the system's ask may be shown now — once per install, counted
@@ -265,11 +271,9 @@ object MultisigNotifyAsk {
      * the phone had never seen the question).
      */
     suspend fun claim(store: app.getvela.wallet.core.data.KeyValueStore): Boolean {
-        if (askedThisRun) return false
+        if (!askedThisRun.compareAndSet(false, true)) return false
         if (store.read(KEY) == ANSWERED) return false
-        if (!store.write(KEY, ASKING)) return false
-        askedThisRun = true
-        return true
+        return store.write(KEY, ASKING)
     }
 
     /** The system's dialog answered: the mark for good. */
@@ -279,6 +283,6 @@ object MultisigNotifyAsk {
 
     /** A test's fresh process. */
     internal fun forgetRun() {
-        askedThisRun = false
+        askedThisRun.set(false)
     }
 }

@@ -237,9 +237,31 @@ class MultisigNotifier(
 
         internal fun constraints(): Constraints =
             Constraints.Builder()
-                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .anyInternet()
                 .setRequiresBatteryNotLow(true)
                 .build()
+
+        /**
+         * A network with internet — NOT one Android has "validated". The
+         * system validates a network by reaching Google; where Google is out
+         * of reach (much of this wallet's market, a VPN off) the network is
+         * never validated, and a job asking for `CONNECTED` (which JobScheduler
+         * reads as INTERNET + VALIDATED) never runs at all — measured on the
+         * emulator behind such a network: CONNECTIVITY unsatisfied for good.
+         * The round reads the multisig service and the chains, not Google.
+         */
+        private fun Constraints.Builder.anyInternet(): Constraints.Builder =
+            if (Build.VERSION.SDK_INT >= 28) {
+                setRequiredNetworkRequest(
+                    android.net.NetworkRequest.Builder()
+                        .addCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                        .removeCapability(android.net.NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+                        .build(),
+                    NetworkType.CONNECTED,
+                )
+            } else {
+                setRequiredNetworkType(NetworkType.CONNECTED)
+            }
 
         /**
          * The app was put away (its last screen stopped) with a multisig to
@@ -254,7 +276,7 @@ class MultisigNotifier(
         fun checkOnLeaving(context: Context) {
             val request = androidx.work.OneTimeWorkRequestBuilder<MultisigPollWorker>()
                 .setExpedited(androidx.work.OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
-                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .setConstraints(Constraints.Builder().anyInternet().build())
                 .addTag(LEAVING_NAME)
                 .build()
             WorkManager.getInstance(context).enqueueUniqueWork(LEAVING_NAME, androidx.work.ExistingWorkPolicy.REPLACE, request)
@@ -263,18 +285,23 @@ class MultisigNotifier(
 
         /**
          * Whether the system holds this app's background work back — the
-         * honest fact behind "a notification may come late": the person put
-         * it under battery optimisation (not exempt), or restricted it
-         * outright (Android 9+'s background restriction). OEM schedulers
-         * (MIUI's battery saver, autostart) add their own, which no API
-         * reports; [oemHint] names the maker whose settings are known to.
+         * honest fact behind "a notification may come late": the person
+         * restricted it outright (Android 9+'s background restriction,
+         * "Restricted" battery use), or the system put it in a standby
+         * bucket that runs jobs rarely or never (`rare`, `restricted`).
+         * Android's default "Optimized" battery use is NOT that: periodic
+         * work still runs in its maintenance windows, and saying otherwise
+         * would be a warning every phone shows. OEM schedulers (MIUI's
+         * battery saver, autostart) add their own, which no API reports;
+         * [oemHint] names the makers whose settings are known to.
          */
         fun backgroundLimited(context: Context): Boolean {
-            val power = context.getSystemService(android.os.PowerManager::class.java)
-            val optimised = power?.isIgnoringBatteryOptimizations(context.packageName) == false
+            if (Build.VERSION.SDK_INT < 28) return false
             val activity = context.getSystemService(android.app.ActivityManager::class.java)
-            val restricted = Build.VERSION.SDK_INT >= 28 && activity?.isBackgroundRestricted == true
-            return optimised || restricted
+            if (activity?.isBackgroundRestricted == true) return true
+            val usage = context.getSystemService(android.app.usage.UsageStatsManager::class.java)
+            val bucket = runCatching { usage?.appStandbyBucket }.getOrNull() ?: return false
+            return bucket >= android.app.usage.UsageStatsManager.STANDBY_BUCKET_RARE
         }
 
         /** The phone's maker is one whose own battery manager holds background work beyond Android's (MIUI, HyperOS, ColorOS, …). */

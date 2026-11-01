@@ -40,6 +40,7 @@ import app.getvela.wallet.feature.settings.core.CurrencyView
 import app.getvela.wallet.feature.wallet.WalletLive
 import app.getvela.wallet.feature.wallet.core.ScannedLink
 import java.io.File
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonElement
 import org.junit.Assert.assertEquals
@@ -342,6 +343,23 @@ class R9ShellFixesTest {
         MultisigNotifyAsk.forgetRun()
         val refusing = FakeStore().apply { refuseWrites = true }
         assertFalse("a store that cannot keep the mark does not ask on every screen", MultisigNotifyAsk.claim(refusing))
+    }
+
+    /**
+     * Real device (Redmi, MIUI): the add sheet's ask and the layer's "there
+     * is a multisig now" ask came in the same frame; both passed the store
+     * read before either wrote, the system request went out twice 250 ms
+     * apart and the second came back "denied" at once. Only one passes.
+     */
+    @Test
+    fun two_asks_in_the_same_frame_launch_one_request() = runBlocking {
+        MultisigNotifyAsk.forgetRun()
+        val store = FakeStore()
+        val answers = kotlinx.coroutines.coroutineScope {
+            List(4) { async(kotlinx.coroutines.Dispatchers.Default) { MultisigNotifyAsk.claim(store) } }.map { it.await() }
+        }
+        assertEquals(1, answers.count { it })
+        MultisigNotifyAsk.forgetRun()
     }
 
     @Test
