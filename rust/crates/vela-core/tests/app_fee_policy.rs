@@ -3211,8 +3211,10 @@ fn erc20_fee_leg_is_a_token_transfer() {
 
 /// A failed simulation on a small op keeps the static fallback, with the L2
 /// data-fee adders (`safe-transaction.ts:715-730`).
+/// A small operation the relay ANSWERED fails keeps a fee (the sheet warns,
+/// it never blocks): the static model, the L2 adder in `preVerificationGas`.
 #[test]
-fn failed_simulation_uses_static_fallback_with_l2_adders() {
+fn a_refused_small_op_uses_static_fallback_with_l2_adders() {
     // Mainnet: 300k + 200k + 100k = 600k.
     let mut sut = Sut::new();
     sut.dispatch(request(CHAIN, vec![]));
@@ -3220,7 +3222,7 @@ fn failed_simulation_uses_static_fallback_with_l2_adders() {
     sut.resolve(bundler_ok());
     sut.resolve(quotes_ok());
     sut.resolve(Res::UserOpGas {
-        outcome: FeeGasOutcome::SimulationFailed,
+        outcome: FeeGasOutcome::Refused,
     });
     assert_eq!(sut.view().fee.expect("static quote").total_gas, "600000");
 
@@ -3231,7 +3233,7 @@ fn failed_simulation_uses_static_fallback_with_l2_adders() {
     sut.resolve(bundler_ok());
     sut.resolve(quotes_ok());
     sut.resolve(Res::UserOpGas {
-        outcome: FeeGasOutcome::SimulationFailed,
+        outcome: FeeGasOutcome::Refused,
     });
     assert_eq!(sut.view().fee.expect("static quote").total_gas, "1200000");
 
@@ -3242,9 +3244,32 @@ fn failed_simulation_uses_static_fallback_with_l2_adders() {
     sut.resolve(bundler_ok());
     sut.resolve(quotes_ok());
     sut.resolve(Res::UserOpGas {
-        outcome: FeeGasOutcome::SimulationFailed,
+        outcome: FeeGasOutcome::Refused,
     });
     assert_eq!(sut.view().fee.expect("static quote").total_gas, "750000");
+}
+
+/// r11-8: no simulation came back for a SMALL operation (the round-11
+/// Android send, its relay out of reach from the emulator). It used to be
+/// priced on the static 600,000 while the submit measured again and signed
+/// the relay's 1,600,000 — 0.045 USDC against 0.12 on every other shell.
+/// Nothing is priced on a figure nobody measured: the estimate's failure,
+/// asked again on the schedule.
+#[test]
+fn an_unanswered_simulation_of_a_small_op_prices_nothing() {
+    let mut sut = Sut::new();
+    sut.dispatch(request(CHAIN, vec![]));
+    sut.resolve(gas_ok());
+    sut.resolve(bundler_ok());
+    sut.resolve(quotes_ok());
+    let ops = sut.resolve(Res::UserOpGas {
+        outcome: FeeGasOutcome::SimulationFailed,
+    });
+    assert_eq!(ops, vec![Op::StartTtl { ms: 3_000 }], "{ops:?}");
+    let view = sut.view();
+    assert_eq!(view.failed, Some(FeeFailure::EstimateFailed));
+    assert!(view.fee.is_none());
+    assert!(!view.confirm_fee_ready);
 }
 
 /// For a large/complex op the static fallback would mislead and the submit
@@ -4246,7 +4271,7 @@ fn the_static_fallback_is_raised_to_the_measured_floor() {
     let mut sut = Sut::new();
     to_estimating(&mut sut, request_undeployed(vec![contract_call()]));
     sut.resolve(Res::UserOpGas {
-        outcome: FeeGasOutcome::SimulationFailed,
+        outcome: FeeGasOutcome::Refused,
     });
     assert!(sut.view().busy, "the floor still matters to the fallback");
     sut.resolve(measured(&[Some("4308125")]));
@@ -7102,16 +7127,24 @@ fn the_measured_gas_is_dropped_when_the_quote_is_priced_again() {
 
 /// A quote nothing simulated (the static fallback) has nothing to hand on:
 /// the submit measures, as it always did.
+/// r11-8: a fee on the static model carries the limits it was priced on,
+/// so the submit signs exactly them — never a fresh measurement beside a fee
+/// priced on something else.
 #[test]
-fn a_quote_on_the_static_fallback_carries_no_measured_gas() {
+fn a_quote_on_the_static_fallback_carries_the_limits_it_was_priced_on() {
     let mut sut = Sut::new();
     sut.dispatch(request(CHAIN, vec![a_transfer()]));
     sut.resolve(gas_ok());
     sut.resolve(bundler_ok());
     sut.resolve(quotes_ok());
     sut.resolve(Res::UserOpGas {
-        outcome: FeeGasOutcome::SimulationFailed,
+        outcome: FeeGasOutcome::Refused,
     });
     let fee = sut.view().fee.expect("static quote");
-    assert!(fee.prepared.is_none());
+    let prepared = fee.prepared.expect("the static limits");
+    assert_eq!(prepared.verification_gas_limit, "300000");
+    assert_eq!(prepared.call_gas_limit, "200000");
+    assert_eq!(prepared.pre_verification_gas, "100000");
+    assert_eq!(prepared.settlement_gas, None);
+    assert_eq!(fee.total_gas, "600000");
 }

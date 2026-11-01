@@ -337,6 +337,25 @@ pub const MAX_TOKEN_DECIMALS: u32 = 255;
 /// Integer digits an `f64` always holds exactly (2^53 ≈ 9.007 × 10^15).
 const EXACT_FLOAT_DIGITS: usize = 15;
 
+/// An amount already written in the person's marks, with the sign money
+/// carries in this app (r11 S4): U+2212 for what leaves (`−0.01`), `+` for
+/// what arrives, nothing for a direction that is neither. A sign the text
+/// already carries (`-`, U+2212 or `+`) is replaced, never doubled. ONE
+/// minus everywhere: the desktop's Activity and the Android / iOS sheets
+/// wrote a hyphen (`-0.01`) beside the web's U+2212.
+#[must_use]
+pub fn signed_amount_text(amount: &str, outgoing: Option<bool>) -> String {
+    let body = amount
+        .trim()
+        .trim_start_matches(['-', '\u{2212}', '+'])
+        .trim_start();
+    match outgoing {
+        Some(true) => format!("\u{2212}{body}"),
+        Some(false) => format!("+{body}"),
+        None => body.to_owned(),
+    }
+}
+
 /// A signed balance change, from a signed base-unit **string**: `−8,450.00`,
 /// `+2.1`, `−0.000000000000001` (spec 082 RJ15, G49).
 ///
@@ -631,5 +650,24 @@ mod cut_amount_tests {
         for text in ["", ".5", "abc", "1,5", "-1.5", "1e-7", "1.2.3"] {
             assert_eq!(cut_token_amount(text), text);
         }
+    }
+
+    /// r11 S4: one minus, U+2212, whatever sign the text came with.
+    #[test]
+    fn money_is_signed_one_way() {
+        assert_eq!(
+            super::signed_amount_text("0.01", Some(true)),
+            "\u{2212}0.01"
+        );
+        assert_eq!(
+            super::signed_amount_text("-0.01", Some(true)),
+            "\u{2212}0.01"
+        );
+        assert_eq!(
+            super::signed_amount_text("\u{2212}0.01", Some(true)),
+            "\u{2212}0.01"
+        );
+        assert_eq!(super::signed_amount_text("-0.6", Some(false)), "+0.6");
+        assert_eq!(super::signed_amount_text(" +1,000 ", None), "1,000");
     }
 }

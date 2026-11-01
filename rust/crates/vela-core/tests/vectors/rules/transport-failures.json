@@ -1,0 +1,82 @@
+{
+  "about": "r11-9: 'not sent' versus 'may have been sent' is the core's rule, from the error CLASS a shell passes (`rpc_pool::TransportFailure`, uniffi/wasm `transport_outcome_of` / `transportOutcomeOf`). A refused connect, a name that did not resolve, a TLS failure, a request the platform refused to send or one that never left whole reached nobody: a submit that met only those is `not_sent` ('try again'). Only a request that left whole may have been acted on: `maybe_sent` ('don't send it again'). The round-11 Android send was refused by the relay's host in 4–6 ms and said maybe_sent. `outcome` is the pool's `RpcTransportOutcome`; `may_have_delivered` is `rpc_pool::may_have_delivered` of it; `submit` is `user_op::submit_step(NoAnswer, 0, may_have_delivered, …)`'s verdict type. Each shell's test maps its own platform errors to these classes (`platform` lists the usual ones per shell, as guidance — the classes are the contract). Replayed by rust/crates/vela-core/tests/app_fee_parity.rs.",
+  "cases": [
+    {
+      "failure": "offline",
+      "outcome": { "type": "not_connected" },
+      "may_have_delivered": false,
+      "submit": "not_sent",
+      "platform": { "web": "navigator.onLine === false before the fetch", "android": "no active network", "ios": "URLError.notConnectedToInternet", "desktop": "-" }
+    },
+    {
+      "failure": "dns",
+      "outcome": { "type": "not_connected" },
+      "may_have_delivered": false,
+      "submit": "not_sent",
+      "platform": { "android": "UnknownHostException", "ios": "URLError.cannotFindHost / .dnsLookupFailed", "desktop": "a resolve error" }
+    },
+    {
+      "failure": "connect_refused",
+      "outcome": { "type": "not_connected" },
+      "may_have_delivered": false,
+      "submit": "not_sent",
+      "platform": { "android": "ConnectException, NoRouteToHostException; okhttp connectFailed before any request byte", "ios": "URLError.cannotConnectToHost", "desktop": "a connect error (ECONNREFUSED, unreachable)" }
+    },
+    {
+      "failure": "connect_timeout",
+      "outcome": { "type": "not_connected" },
+      "may_have_delivered": false,
+      "submit": "not_sent",
+      "platform": { "android": "SocketTimeoutException during connect (okhttp connectFailed)", "desktop": "a connect timeout" }
+    },
+    {
+      "failure": "tls",
+      "outcome": { "type": "not_connected" },
+      "may_have_delivered": false,
+      "submit": "not_sent",
+      "platform": { "android": "SSLHandshakeException", "ios": "URLError.secureConnectionFailed, server certificate errors", "desktop": "a TLS handshake error" }
+    },
+    {
+      "failure": "refused",
+      "outcome": { "type": "not_connected" },
+      "may_have_delivered": false,
+      "submit": "not_sent",
+      "platform": { "ios": "URLError.badURL / .unsupportedURL / ATS / a proxy refusing CONNECT", "web": "the shell skipped the endpoint" }
+    },
+    {
+      "failure": "write_failed",
+      "outcome": { "type": "not_connected" },
+      "may_have_delivered": false,
+      "submit": "not_sent",
+      "platform": { "android": "an IOException after connectEnd and before requestBodyEnd (okhttp EventListener)" }
+    },
+    {
+      "failure": "after_write",
+      "outcome": { "type": "network" },
+      "may_have_delivered": true,
+      "submit": "maybe_sent",
+      "platform": { "android": "an IOException after requestBodyEnd: reset, 'unexpected end of stream'", "ios": "URLError.networkConnectionLost after the body was sent" }
+    },
+    {
+      "failure": "read_timeout",
+      "outcome": { "type": "timeout" },
+      "may_have_delivered": true,
+      "submit": "maybe_sent",
+      "platform": { "android": "SocketTimeoutException reading the answer; okhttp's call timeout after the request", "ios": "URLError.timedOut" }
+    },
+    {
+      "failure": "timeout",
+      "outcome": { "type": "timeout" },
+      "may_have_delivered": true,
+      "submit": "maybe_sent",
+      "platform": { "web": "the shell's own abort timer" }
+    },
+    {
+      "failure": "unknown",
+      "outcome": { "type": "network" },
+      "may_have_delivered": true,
+      "submit": "maybe_sent",
+      "platform": { "all": "anything the stack cannot place", "web": "a thrown fetch while online — fetch cannot say how far it got" }
+    }
+  ]
+}
