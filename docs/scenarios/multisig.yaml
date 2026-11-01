@@ -118,8 +118,10 @@ scenarios:
       ios-unit:
         - { file: app-ios/VelaWallet/VelaWalletTests/MultisigViewsTests.swift, test: aReadyProposalOffersExecuteWithTheMachinesLook, ci: required }
         - { file: app-ios/VelaWallet/VelaWalletTests/MultisigViewsTests.swift, test: anExecutionsEndingIsSaidAsItWas, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigFlowTests.swift, test: aSendsReviewSwipedAwayIsWithdrawnAtOnceAndCanBeProposedAgain, ci: required, note: 'MultisigHub.sheetDismissed: the review swiped down is withdrawn at once, the send told cancelled, nothing signed or sent' }
       ios-ui:
         - { file: app-ios/VelaWallet/VelaWalletUITests/MultisigHermeticUITests.swift, test: testCreateATwoOfThreeAndProposeASendAgainstALocalWorld, ci: main, note: 'hermetic, up to the proposal in the mailbox and on its sheet; nothing executes in this world' }
+        - { file: app-ios/VelaWallet/VelaWalletUITests/MultisigHermeticUITests.swift, test: testAReviewSwipedDownIsWithdrawnAtOnceAndTheSendCanBeProposedAgain, ci: main, note: 'hermetic; a real swipe down on the review: the confirm back in seconds, the mailbox empty, then proposed' }
         - { file: app-ios/VelaWallet/VelaWalletUITests/MultisigLiveUITests.swift, test: test2ProposeASend, ci: opt-in }
         - { file: app-ios/VelaWallet/VelaWalletUITests/MultisigLiveUITests.swift, test: test3ExecuteWhenApproved, ci: opt-in }
       desktop:
@@ -180,6 +182,7 @@ scenarios:
         - { file: app-ios/VelaWallet/VelaWalletTests/MultisigFlowTests.swift, test: rejectingShowsTheCancellationsReviewBeforeItsPasskey, ci: required, note: 'r9-13 through MultisigHub.reject: the cancellation drawn for its review, no passkey or send until proposed there, the rejecting member offered first' }
         - { file: app-ios/VelaWallet/VelaWalletTests/MultisigFlowTests.swift, test: aRejectionWithdrawnOnItsReviewSignsNothingAndSaysNothing, ci: required }
         - { file: app-ios/VelaWallet/VelaWalletTests/MultisigFlowTests.swift, test: aRejectionsPasskeyClosedSaysNothingButOneTimedOutIsSaid, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigFlowTests.swift, test: aRejectionsReviewSwipedAwayIsWithdrawnAndItsTransactionShownAgain, ci: required }
       ios-ui: { gap: 'no reject UI test' }
       desktop:
         - { file: app-desktop/vela-wallet/src/multisig/scenarios.rs, test: anothers_proposal_rejected_is_a_cancellation_reviewed_then_approved_at_its_number, ci: required, note: 'dev-fixtures job; the page''s reject presses (reject_press) drive the machines' }
@@ -268,6 +271,7 @@ scenarios:
       ios-unit:
         - { file: app-ios/VelaWallet/VelaWalletTests/MultisigR10FixTests.swift, test: theConnectSheetNamesTheMultisigAndNeverSaysItCanBeAskedToSign, ci: required }
         - { file: app-ios/VelaWallet/VelaWalletTests/MultisigR9FixTests.swift, test: theBrowserKeepsTheMultisigBatchesThroughARestart, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigFlowTests.swift, test: aSitesRequestSwipedAwayOnItsReviewIsLeftAndTheSiteAnsweredAtOnce, ci: required, note: 'through MultisigHub.dappRequest: swiped on its review, left (dapp_leave), the site answered 4001 once' }
       ios-ui:
         - { file: app-ios/VelaWallet/VelaWalletUITests/MultisigLiveUITests.swift, test: test6DappRequestBecomesAProposal, ci: opt-in }
         - { file: app-ios/VelaWallet/VelaWalletUITests/R10FixLiveUITests.swift, test: test3TheConnectSheetNamesTheMultisigAndSaysWhatIsTrue, ci: opt-in }
