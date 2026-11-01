@@ -19552,6 +19552,21 @@ public func extractAttestationPublicKey(attestationObject: Data)throws  -> P256P
 })
 }
 /**
+ * What a failed `eth_estimateUserOperationGas` tells the fee machine
+ * (r11-8): `error_json` is the relay's JSON-RPC `error` member (or the
+ * whole body), null when nothing answered. Answers the `FeeGasOutcome`
+ * type to send — `refused` or `simulation_failed`. See
+ * `vela_core::app::fee_policy::estimate_gas_outcome`.
+ */
+public func feeEstimateGasOutcome(errorJson: String?) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_fee_estimate_gas_outcome(
+        FfiConverterOptionString.lower(errorJson),uniffiCallStatus
+    )
+})
+}
+/**
  * The corpus key of the reason line under a failed fee (spec 082 RJ13), or
  * `None` for no reason line. `explore.chainDown` takes `{{chain}}`, the
  * chain's name. `failure` as for [`fee_requote_delay_ms`].
@@ -20643,6 +20658,21 @@ public func signRoute(deviceKeysJson: String, method: String) -> String?  {
 })
 }
 /**
+ * An amount already written in the person's marks, signed the one way
+ * money is signed in Vela (r11 S4): U+2212 when `outgoing` is true, `+`
+ * when false, nothing when null; a sign the text carries is replaced. See
+ * `vela_core::l10n::signed_amount_text`.
+ */
+public func signedAmountText(amount: String, outgoing: Bool?) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_signed_amount_text(
+        FfiConverterString.lower(amount),
+        FfiConverterOptionBool.lower(outgoing),uniffiCallStatus
+    )
+})
+}
+/**
  * The domain whose keys a page at `url` can use (spec 102): its host, or
  * `getvela.app` for every `*.getvela.app` page. Empty for something that is
  * not an address.
@@ -20784,6 +20814,23 @@ public func tokenMark(ethereumDataUrl: String, chainId: UInt32, symbol: String, 
         FfiConverterString.lower(symbol),
         FfiConverterOptionString.lower(tokenAddress),
         FfiConverterSequenceString.lower(named),uniffiCallStatus
+    )
+})
+}
+/**
+ * How far a failed POST got (r11-9), as the shell's HTTP stack can prove
+ * it — `offline`, `dns`, `connect_refused`, `connect_timeout`, `tls`,
+ * `refused`, `write_failed`, `after_write`, `read_timeout`, `timeout`,
+ * `unknown` — to the pool's transport outcome as JSON (`{"type":
+ * "not_connected"}`, `{"type":"timeout"}`, `{"type":"network"}`): the one
+ * rule for "not sent" versus "may have been sent". An unknown class is
+ * `unknown`. See `vela_core::app::rpc_pool::transport_outcome_of`.
+ */
+public func transportOutcomeOf(failure: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_transport_outcome_of(
+        FfiConverterString.lower(failure),uniffiCallStatus
     )
 })
 }
@@ -23155,6 +23202,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_extract_attestation_public_key() != 65487) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_fee_estimate_gas_outcome() != 52495) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_fee_failure_reason_key() != 39551) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -23398,6 +23448,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_sign_route() != 44079) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_signed_amount_text() != 20106) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_signing_page_domain() != 58784) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -23426,6 +23479,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_token_mark() != 53788) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_transport_outcome_of() != 6504) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_typed_data_document() != 37492) {
