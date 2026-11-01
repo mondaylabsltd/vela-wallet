@@ -4342,9 +4342,10 @@ struct RootView: View {
     private func readWalletKeys() async {
         let address = session.view.address
         guard !address.isEmpty else { return }
-        let device = await WalletKeys.deviceKeys(
-            of: address, walletName: session.view.activeName, in: sendAccountPort
-        )
+        // r10 follow-up: each key by its own name, and the account's name
+        // beside them — never as key 0's label.
+        let accountName = session.view.activeName
+        let device = await WalletKeys.deviceKeys(of: address, in: sendAccountPort)
         let signingKey = await WalletKeys.signInCredential(of: address, in: sendAccountPort)
         let reader = WalletKeys(ethCall: { [pool] chainId, to, data in
             let outcome = await pool.call(
@@ -4356,8 +4357,10 @@ struct RootView: View {
             return hex
         })
         // What the device knows, before the first chain is asked.
-        deviceKeys = (address, reader.deviceOnly(device: device, signInCredential: signingKey))
-        walletKeys = (address, await reader.read(address: address, device: device, signInCredential: signingKey))
+        deviceKeys = (address, reader.deviceOnly(accountName: accountName, device: device, signInCredential: signingKey))
+        walletKeys = (address, await reader.read(
+            address: address, accountName: accountName, device: device, signInCredential: signingKey
+        ))
     }
 
     /// The account in front's keys as this device's record has them — no
@@ -4365,14 +4368,14 @@ struct RootView: View {
     /// person can reach Settings, so the keys block opens on its rows.
     private func readDeviceKeys(of address: String) async {
         guard !address.isEmpty else { return }
-        let device = await WalletKeys.deviceKeys(
-            of: address, walletName: session.view.activeName, in: sendAccountPort
-        )
+        let accountName = session.view.activeName
+        let device = await WalletKeys.deviceKeys(of: address, in: sendAccountPort)
         let signingKey = await WalletKeys.signInCredential(of: address, in: sendAccountPort)
         guard address.caseInsensitiveCompare(session.view.address) == .orderedSame else { return }
         deviceKeys = (
             address,
-            WalletKeys(ethCall: { _, _, _ in nil }).deviceOnly(device: device, signInCredential: signingKey)
+            WalletKeys(ethCall: { _, _, _ in nil })
+                .deviceOnly(accountName: accountName, device: device, signInCredential: signingKey)
         )
     }
 

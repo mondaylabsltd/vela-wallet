@@ -361,9 +361,7 @@ struct RegistryBackupTests {
             ],
         ])
 
-        let device = await WalletKeys.deviceKeys(
-            of: address, walletName: "Mine", in: SendAccountPort(accounts: store)
-        )
+        let device = await WalletKeys.deviceKeys(of: address, in: SendAccountPort(accounts: store))
         #expect(device.map(\.credentialId) == ["cred-page", "cred-here"])
 
         let rows = await WalletKeys(ethCall: { _, _, _ in nil })
