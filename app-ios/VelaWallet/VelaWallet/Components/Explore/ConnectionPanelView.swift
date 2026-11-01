@@ -106,9 +106,12 @@ struct ConnectionPanelView: View {
                             Text(verbatim: connection.account.name)
                                 .typeRole(Typography.rowTitle.literal.scaled(textScale))
                                 .foregroundStyle(theme.fgBase)
-                            Text(verbatim: connection.account.address)
-                                .typeRole(Typography.monoSmall.scaled(textScale))
-                                .foregroundStyle(theme.fgMuted)
+                            // r10-9: an unnamed account is its address — once.
+                            if connection.account.address != connection.account.name {
+                                Text(verbatim: connection.account.address)
+                                    .typeRole(Typography.monoSmall.scaled(textScale))
+                                    .foregroundStyle(theme.fgMuted)
+                            }
                         }
                         Spacer(minLength: Tokens.Space.s12)
                         HStack(spacing: Tokens.Space.s4) {

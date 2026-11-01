@@ -1533,6 +1533,12 @@ struct RootView: View {
                             ),
                             snapshot: { [browser] tab in browser.snapshot(of: tab) },
                             networks: walletNetworks,
+                            // r10-9: a multisig the site sees, by its name.
+                            multisigName: { [hub = multisig, words = multisigWords] address in
+                                hub.accountsView.row(address).map {
+                                    words.name(of: $0.account, rowName: $0.name)
+                                }
+                            },
                             loc: loc
                         ),
                         loc: loc,
