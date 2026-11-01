@@ -1385,8 +1385,13 @@ for (let i = 1; i < PATHS.length; i++) {
 //   the one line a site moved by a space switch carries on its next request
 //   (`connect.browser.spaceMoved`). 2277 + 6 leaves + 1 branch = 2284 paths,
 //   2165 leaves, 119 branches.
-if (PATHS.length !== 2284) fail(`expected 2284 paths (2165 leaf + 119 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2165) fail(`expected 2165 leaf paths, got ${leafSet.size}`);
+// 2285 (r10 follow-ups, 2026-11-01): + `send.tokensUnavailable` — the picker's
+//   own line when the token list could not be read, with "Try again"
+//   (`SendView.tokens_failed_key`), where a one-word "Failed to load tokens."
+//   dialog had popped up over whatever the person had gone to since. 2284 + 1
+//   = 2285 paths, 2166 leaves, 119 branches.
+if (PATHS.length !== 2285) fail(`expected 2285 paths (2166 leaf + 119 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2166) fail(`expected 2166 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 119) fail(`expected 119 branch paths, got ${branchSet.size}`);
 // The on-demand catalogs, pinned the same way (leaves of every locale's union):
 // a key dropped from one namespace and not landed in the other fails here.

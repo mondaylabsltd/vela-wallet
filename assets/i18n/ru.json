@@ -384,6 +384,7 @@
   "alertInvalidAmountBody": "Введите корректную сумму больше нуля.",
   "alertInsufficientBalanceTitle": "Недостаточно средств",
   "alertLoadTokensError": "Не удалось загрузить токены.",
+  "tokensUnavailable": "Не удалось загрузить ваши токены. Проверьте подключение и попробуйте ещё раз.",
   "warnNotEnoughToken": "На этом аккаунте недостаточно {{symbol}}",
   "warnInsufficientForGas": "Недостаточно {{sym}} для покрытия суммы и комиссии за газ",
   "warnInsufficientGas": "Недостаточно {{sym}} для оплаты комиссии за газ",

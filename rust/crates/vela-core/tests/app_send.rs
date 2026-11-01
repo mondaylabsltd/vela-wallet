@@ -1005,6 +1005,81 @@ fn token_load_failure_alerts_and_stops_loading() {
     assert!(!sut.view().loading);
 }
 
+/// r10 follow-up: the failed list is an honest, recoverable state — the
+/// picker's own line and its "Try again" — not only a one-off alert.
+#[test]
+fn a_failed_token_list_says_so_in_place_and_can_be_asked_again() {
+    let mut sut = Sut::new();
+    sut.dispatch(open_event(SendOpenParams::default()));
+    assert_eq!(sut.view().tokens_failed_key, None);
+    sut.resolve(Res::TokensLoaded {
+        tokens: None,
+        chains: chains(),
+    });
+    assert_eq!(
+        sut.view().tokens_failed_key.as_deref(),
+        Some(vela_core::app::send::TOKENS_FAILED_KEY)
+    );
+    let ops = sut.dispatch(Event::RetryTokens);
+    assert_eq!(
+        ops,
+        vec![Op::FetchTokens {
+            address: ACCOUNT.to_owned()
+        }]
+    );
+    assert_eq!(sut.view().tokens_failed_key, None);
+    assert!(sut.view().loading);
+    sut.resolve_matching(
+        |op| matches!(op, Op::FetchTokens { .. }),
+        loaded(vec![eth("2")]),
+    );
+    assert_eq!(sut.view().tokens_failed_key, None);
+    assert_eq!(sut.view().tokens.len(), 1);
+    // Nothing to try again once it loaded.
+    assert!(sut.dispatch(Event::RetryTokens).is_empty());
+}
+
+/// The picker's line is in the corpus, with the "Try again" it offers.
+#[cfg(feature = "i18n-en")]
+#[test]
+fn the_failed_lists_words_are_in_the_corpus() {
+    let i18n = vela_core::i18n::I18n::embedded().expect("embedded corpus");
+    let opts = vela_core::i18n::Options::default();
+    for key in [vela_core::app::send::TOKENS_FAILED_KEY, "common.tryAgain"] {
+        assert!(i18n.exists(key, &opts), "{key}");
+    }
+}
+
+/// r10 follow-up (Android, the in-app browser): the person left Send while
+/// the list was still out; it failed a minute later. Nothing pops up over
+/// whatever they went to — the shell's leaving or the flow's own close.
+#[test]
+fn a_late_answer_after_send_was_left_raises_nothing() {
+    for leave in [Event::Left, Event::Back] {
+        let mut sut = Sut::new();
+        sut.dispatch(open_event(SendOpenParams::default()));
+        let ops = sut.dispatch(leave.clone());
+        if matches!(leave, Event::Back) {
+            assert_eq!(ops, vec![Op::Close], "the picker's back closes the flow");
+        }
+        let ops = sut.resolve(Res::TokensLoaded {
+            tokens: None,
+            chains: chains(),
+        });
+        assert!(ops.is_empty(), "{leave:?}: {ops:?}");
+        assert_eq!(sut.view().tokens_failed_key, None);
+        assert!(sut.dispatch(Event::RetryTokens).is_empty());
+        // Opened again: a fresh list is asked for, and answered.
+        let ops = sut.dispatch(open_event(SendOpenParams::default()));
+        assert_eq!(
+            ops,
+            vec![Op::FetchTokens {
+                address: ACCOUNT.to_owned()
+            }]
+        );
+    }
+}
+
 #[test]
 fn progressive_chunks_paint_early_but_never_after_the_load_settled() {
     let mut sut = Sut::new();

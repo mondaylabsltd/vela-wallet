@@ -384,6 +384,7 @@
   "alertInvalidAmountBody": "0 より大きい有効な金額を入力してください。",
   "alertInsufficientBalanceTitle": "残高不足",
   "alertLoadTokensError": "トークンの読み込みに失敗しました。",
+  "tokensUnavailable": "トークンを読み込めませんでした。接続を確認してから、もう一度お試しください。",
   "warnNotEnoughToken": "このアカウントには {{symbol}} の残高が足りません",
   "warnInsufficientForGas": "金額とガス代の合計で {{sym}} が不足しています",
   "warnInsufficientGas": "ガス代の支払いに必要な {{sym}} が不足しています",

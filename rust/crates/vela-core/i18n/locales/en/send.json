@@ -28,6 +28,7 @@
     "alertInvalidAmountBody": "Please enter a valid amount greater than zero.",
     "alertInsufficientBalanceTitle": "Insufficient Balance",
     "alertLoadTokensError": "Failed to load tokens.",
+    "tokensUnavailable": "Couldn’t load your tokens. Check your connection, then try again.",
     "warnNotEnoughToken": "You do not have enough {{symbol}} in this account",
     "warnInsufficientForGas": "Insufficient {{sym}} to cover amount + gas fees",
     "warnInsufficientGas": "Insufficient {{sym}} for gas fees",

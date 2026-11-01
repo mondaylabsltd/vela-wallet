@@ -386,6 +386,7 @@
   "alertInvalidAmountBody": "请输入大于零的有效金额。",
   "alertInsufficientBalanceTitle": "余额不足",
   "alertLoadTokensError": "加载代币失败。",
+  "tokensUnavailable": "无法加载你的代币。请检查网络连接后重试。",
   "warnNotEnoughToken": "账户中 {{symbol}} 余额不足",
   "warnInsufficientForGas": "{{sym}} 余额不足以支付金额及 Gas 费",
   "warnInsufficientGas": "{{sym}} 余额不足以支付 Gas 费",

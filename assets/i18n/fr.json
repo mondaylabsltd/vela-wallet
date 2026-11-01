@@ -384,6 +384,7 @@
   "alertInvalidAmountBody": "Veuillez saisir un montant valide supérieur à zéro.",
   "alertInsufficientBalanceTitle": "Solde insuffisant",
   "alertLoadTokensError": "Échec du chargement des tokens.",
+  "tokensUnavailable": "Impossible de charger vos jetons. Vérifiez votre connexion, puis réessayez.",
   "warnNotEnoughToken": "Vous n'avez pas assez de {{symbol}} sur ce compte",
   "warnInsufficientForGas": "{{sym}} insuffisant pour couvrir le montant + les frais de gas",
   "warnInsufficientGas": "{{sym}} insuffisant pour les frais de gas",

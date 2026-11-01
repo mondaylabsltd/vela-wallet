@@ -384,6 +384,7 @@
   "alertInvalidAmountBody": "Inserisci un importo valido maggiore di zero.",
   "alertInsufficientBalanceTitle": "Saldo insufficiente",
   "alertLoadTokensError": "Impossibile caricare i token.",
+  "tokensUnavailable": "Impossibile caricare i tuoi token. Controlla la connessione e riprova.",
   "warnNotEnoughToken": "Non hai abbastanza {{symbol}} in questo account",
   "warnInsufficientForGas": "{{sym}} insufficiente per coprire l'importo e le commissioni di gas",
   "warnInsufficientGas": "{{sym}} insufficiente per le commissioni di gas",

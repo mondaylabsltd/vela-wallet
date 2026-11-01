@@ -26,6 +26,7 @@
     "alertInvalidAmountBody": "Bitte geben Sie einen gültigen Betrag größer als null ein.",
     "alertInsufficientBalanceTitle": "Unzureichendes Guthaben",
     "alertLoadTokensError": "Token konnten nicht geladen werden.",
+    "tokensUnavailable": "Deine Token konnten nicht geladen werden. Prüfe deine Verbindung und versuche es erneut.",
     "warnNotEnoughToken": "Sie haben nicht genügend {{symbol}} in diesem Konto",
     "warnInsufficientForGas": "{{sym}} reicht nicht für Betrag + Gas-Gebühren",
     "warnInsufficientGas": "{{sym}} reicht nicht für die Gas-Gebühren",

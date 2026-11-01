@@ -384,6 +384,7 @@
   "alertInvalidAmountBody": "Masukkan jumlah valid yang lebih besar dari nol.",
   "alertInsufficientBalanceTitle": "Saldo Tidak Cukup",
   "alertLoadTokensError": "Gagal memuat token.",
+  "tokensUnavailable": "Token Anda tidak dapat dimuat. Periksa koneksi Anda, lalu coba lagi.",
   "warnNotEnoughToken": "Anda tidak memiliki cukup {{symbol}} di akun ini",
   "warnInsufficientForGas": "{{sym}} tidak cukup untuk menutup jumlah + biaya gas",
   "warnInsufficientGas": "{{sym}} tidak cukup untuk biaya gas",

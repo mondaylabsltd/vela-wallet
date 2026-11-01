@@ -26,6 +26,7 @@
     "alertInvalidAmountBody": "Lütfen sıfırdan büyük geçerli bir tutar girin.",
     "alertInsufficientBalanceTitle": "Yetersiz Bakiye",
     "alertLoadTokensError": "Token'lar yüklenemedi.",
+    "tokensUnavailable": "Token’larınız yüklenemedi. Bağlantınızı kontrol edip tekrar deneyin.",
     "warnNotEnoughToken": "Bu hesapta yeterli {{symbol}} yok",
     "warnInsufficientForGas": "Tutar + gas ücretlerini karşılamak için {{sym}} yetersiz",
     "warnInsufficientGas": "Gas ücretleri için {{sym}} yetersiz",

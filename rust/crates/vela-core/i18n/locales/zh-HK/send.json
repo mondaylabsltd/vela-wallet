@@ -26,6 +26,7 @@
     "alertInvalidAmountBody": "請輸入大於零的有效金額。",
     "alertInsufficientBalanceTitle": "餘額不足",
     "alertLoadTokensError": "載入代幣失敗。",
+    "tokensUnavailable": "無法載入你的代幣。請檢查網絡連線後再試。",
     "warnNotEnoughToken": "此帳戶的 {{symbol}} 不足",
     "warnInsufficientForGas": "{{sym}} 不足以支付金額及 Gas 費",
     "warnInsufficientGas": "{{sym}} 不足以支付 Gas 費",
