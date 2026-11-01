@@ -75,7 +75,11 @@ class BrowserExecutor(
     }
 
     suspend fun perform(operation: DbrOperation): DbrShellResult = when (operation) {
-        DbrOperation.ListSites -> DbrShellResult.SitesListed(listSites())
+        DbrOperation.ListSites -> DbrShellResult.SitesListed(listSites(), store.read(MULTISIG_BATCHES_KEY))
+        is DbrOperation.WriteMultisigBatches -> {
+            store.write(MULTISIG_BATCHES_KEY, operation.value_json)
+            DbrShellResult.Ack
+        }
         is DbrOperation.WriteGrant -> {
             store.write(grantKey(operation.grant.origin), Wire.json.encodeToString(DpermGrant.serializer(), operation.grant))
             DbrShellResult.Ack
@@ -206,6 +210,9 @@ class BrowserExecutor(
     companion object {
         const val GRANT_PREFIX = "vela.perm."
         const val CHAIN_PREFIX = "vela.chain."
+
+        /** r9: the core's `MULTISIG_BATCHES_KEY` (the batches a multisig answered pages with). */
+        const val MULTISIG_BATCHES_KEY = "vela.dapp.multisigBatches"
 
         /** `vela.perm.<origin>` — every client's key; one document per origin. */
         fun grantKey(origin: String): String = GRANT_PREFIX + origin

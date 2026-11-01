@@ -808,6 +808,55 @@ fn a_page_executor_signs_one_operation_and_its_page_is_told_what_runs() {
     );
 }
 
+/// r9 (desktop): a balance read nobody answered — or answered with no
+/// amount at all — is "couldn't check", never "the multisig holds 0".
+#[test]
+fn an_unread_balance_is_unchecked_never_zero() {
+    let (mut world, mut sut, account) = setup(&[0, 1]);
+    let hash = hash_of(&propose(&mut sut, &mut world, transfer("1000"), None));
+    run(
+        &mut sut,
+        &mut world,
+        Event::Approve {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+            owner: fixture(1).address,
+        },
+    );
+    let safe = account.address.to_ascii_lowercase();
+    for answer in [
+        vela_core::app::multisig_shell::MultisigShellResult::RpcResult {
+            result: json!("0x"),
+        },
+        vela_core::app::multisig_shell::MultisigShellResult::RpcUnanswered {
+            detail: "not connected".into(),
+        },
+    ] {
+        let safe = safe.clone();
+        world.rpc_hooks.clear();
+        world.rpc_hooks.push(Box::new(move |_, method, params| {
+            (method == "eth_getBalance" && params[0].as_str()?.eq_ignore_ascii_case(&safe))
+                .then(|| answer.clone())
+        }));
+        run(
+            &mut sut,
+            &mut world,
+            Event::Execute {
+                chain_id: 100,
+                safe_tx_hash: hash.clone(),
+                executor: fixture(0).address,
+            },
+        );
+        let state = sut.view().actions[&format!("execute:{hash}")].clone();
+        let said = serde_json::to_value(&state).unwrap();
+        assert!(
+            !said.to_string().contains("\"short\""),
+            "never \"holds 0\": {said}"
+        );
+    }
+    assert!(world.sent.is_empty());
+}
+
 /// r4-5: spending more than the multisig holds fails in its own words,
 /// before any fee or passkey.
 #[test]
@@ -1498,6 +1547,39 @@ fn a_look_at_a_number_used_by_another_says_it_was_executed_by_another() {
     assert_eq!(verdict["txHash"], OTHER_TX);
     assert_eq!(verdict["paid"], false);
     assert!(world.sent.is_empty());
+}
+
+/// r9 (r8-2's class, found by the desktop lane): an address with no code
+/// answers `eth_call` with "0x" — that is no answer, never 0 decimals.
+#[test]
+fn an_address_with_no_code_has_no_decimals() {
+    const TOKEN: &str = "0x00000000000000000000000000000000000b0b0b";
+    let (mut world, mut sut, _account) = setup(&[0, 1]);
+    world.rpc_hooks.push(Box::new(move |_, method, params| {
+        let call = &params[0];
+        if method != "eth_call" || !call["to"].as_str()?.eq_ignore_ascii_case(TOKEN) {
+            return None;
+        }
+        Some(
+            vela_core::app::multisig_shell::MultisigShellResult::RpcResult {
+                result: json!("0x"),
+            },
+        )
+    }));
+    let kind = ProposalKind::Transfers {
+        transfers: vec![Transfer {
+            token: Some(TOKEN.to_owned()),
+            to: B.to_owned(),
+            amount: "1000000".to_owned(),
+        }],
+    };
+    let _ = propose(&mut sut, &mut world, kind, None);
+    run(&mut sut, &mut world, Event::Refresh { fresh: true });
+    let facts = sut.view().tokens[&format!("100:{TOKEN}")].clone();
+    assert_eq!(
+        facts.decimals, None,
+        "\"0x\" is no answer: decimals unknown"
+    );
 }
 
 /// r8-2: a token a proposal moves is named by its contract's own decimals,

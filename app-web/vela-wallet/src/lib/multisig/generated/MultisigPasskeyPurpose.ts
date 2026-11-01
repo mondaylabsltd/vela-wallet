@@ -4,4 +4,10 @@
  * What a signature on a passkey is for, so the shell can say so and route
  * it (the member's own signing page, if it signs on one).
  */
-export type MultisigPasskeyPurpose = { "kind": "approve", multisig: string, safe_tx_hash: string, name: string | null, tx: unknown, } | { "kind": "record", multisig: string, };
+export type MultisigPasskeyPurpose = { "kind": "approve", multisig: string, safe_tx_hash: string, name: string | null, tx: unknown, 
+/**
+ * r9-10: the one review asks for "… anyway" (its `sign.anyway`) —
+ * a page signing it says so, in the danger style, as the app's
+ * word (it may add friction, never take it away).
+ */
+anyway: boolean, } | { "kind": "record", multisig: string, };

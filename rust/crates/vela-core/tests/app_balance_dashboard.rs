@@ -1353,6 +1353,64 @@ fn the_refresh_control_spins_until_its_own_round_ends() {
     assert_eq!(sut.view().last_refreshed_at_ms, Some(NOW + 1.0));
 }
 
+/// r9 (Android; the desktop's r9-3): a round where no network answered is
+/// not "Updated now" — the stamp stays at the last round one did, and the
+/// home says which networks it cannot reach; a round some answered moves it,
+/// its failed networks listed the same way.
+#[test]
+fn a_round_no_network_answered_never_moves_updated() {
+    let mut sut = booted(
+        ADDR_A,
+        None,
+        settled_read(vec![token(1, "ETH", "5", Some(1.0))], vec![], vec![1, 100]),
+    );
+    assert_eq!(sut.view().last_refreshed_at_ms, Some(NOW));
+    let round = |sut: &mut Sut, failed: Vec<u32>, now_ms: f64| {
+        sut.dispatch(Event::RefreshRequested {
+            force: true,
+            pull: false,
+        });
+        sut.resolve(Res::FetchSettled {
+            address: ADDR_A.to_owned(),
+            pull: false,
+            tokens: vec![],
+            failed_chain_ids: failed,
+            rate_limited_chain_ids: vec![],
+            read_chain_ids: vec![1, 100],
+            internal_chain_ids: vec![],
+            registry_chain_ids: vec![],
+            own_node_chain_ids: vec![],
+            fallback_chain_ids: vec![],
+            now_ms,
+        });
+    };
+    // Every network down: nothing was read, nothing is "now".
+    round(&mut sut, vec![1, 100], NOW + 60_000.0);
+    let view = sut.view();
+    assert_eq!(
+        view.last_refreshed_at_ms,
+        Some(NOW),
+        "the last round that answered"
+    );
+    let mut down: Vec<u32> = view
+        .unreachable_networks
+        .iter()
+        .map(|n| n.chain_id)
+        .collect();
+    down.sort_unstable();
+    assert_eq!(down, vec![1, 100], "said as unreachable, each one");
+    // One answers again: updated, and the other still said.
+    round(&mut sut, vec![100], NOW + 120_000.0);
+    let view = sut.view();
+    assert_eq!(view.last_refreshed_at_ms, Some(NOW + 120_000.0));
+    let down: Vec<u32> = view
+        .unreachable_networks
+        .iter()
+        .map(|n| n.chain_id)
+        .collect();
+    assert_eq!(down, vec![100]);
+}
+
 #[test]
 fn polls_never_run_backgrounded_but_focus_reloads() {
     let mut sut = booted(

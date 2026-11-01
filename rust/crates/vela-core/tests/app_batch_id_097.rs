@@ -224,6 +224,7 @@ fn browser_with_forwarded(origin: &str, params: Value) -> Browser {
         space: false,
     });
     browser.resolve(DbrShellResult::SitesListed {
+        multisig_batches_json: None,
         sites: vec![DbrStoredSite {
             origin: origin.to_owned(),
             grant: Some(DpermGrant {

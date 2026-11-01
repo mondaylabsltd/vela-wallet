@@ -16,7 +16,7 @@
  * one piece of wallet state the worker may see, and it is a fact the core
  * authored — never a decision the worker makes.
  */
-import { siteStartChain } from '$lib/core/kernels';
+import { siteStartChainFor } from '$lib/core/kernels';
 import { CHAIN_PREFIX, CHAINS_KEY, LAST_CHAIN_KEY, PERM_PREFIX } from './keys';
 
 /** The stored grant. `grantedAt` is kept even though no rule reads it — a wire
@@ -111,7 +111,11 @@ export async function getOriginChain(origin: string, fallback: number): Promise<
 /** Where a new site starts, from the published catalog; `0` for a catalog that does not say. */
 function startChain(catalog: unknown, lastBySpace: unknown): number {
 	if (!catalog || typeof catalog !== 'object') return 0;
-	const { order, space } = catalog as { order?: unknown; space?: unknown };
+	const { order, space, accountChains } = catalog as {
+		order?: unknown;
+		space?: unknown;
+		accountChains?: unknown;
+	};
 	if (!Array.isArray(order)) return 0;
 	const ids = order.filter((id): id is number => Number.isInteger(id) && id > 0);
 	if (ids.length === 0) return 0;
@@ -119,7 +123,11 @@ function startChain(catalog: unknown, lastBySpace: unknown): number {
 		typeof space === 'string' && lastBySpace && typeof lastBySpace === 'object'
 			? (lastBySpace as Record<string, unknown>)[space]
 			: undefined;
-	return siteStartChain(ids, typeof last === 'number' && last > 0 ? last : null);
+	// r9: where the account holds something or used, before the space's first.
+	const held = Array.isArray(accountChains)
+		? accountChains.filter((id): id is number => Number.isInteger(id) && id > 0)
+		: [];
+	return siteStartChainFor(ids, typeof last === 'number' && last > 0 ? last : null, held);
 }
 
 function isGrant(value: unknown): value is DAppGrant {

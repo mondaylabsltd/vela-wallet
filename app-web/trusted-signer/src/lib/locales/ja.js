@@ -378,4 +378,12 @@ window.VelaCS.i18n.register('ja', {
   'ui.withdrawnTitle': "取り下げ済み",
   'ui.walletWithdrew': "ウォレットはこのリクエストを待つのをやめました。ここでは何も署名されません。このページは閉じてかまいません。",
   'ui.answerNotTaken': "ウォレットはこのページの応答を受け取らなかったため、何も送信されていません。ウォレットに戻ってください。",
+  // r9-10: "… anyway" where the app's review asks for it; a token whose
+  // decimals are unknown in its base units; one approval said as one.
+  'button.msApproveAnyway': "それでも承認",
+  'warn.msAppAnyway': "Vela の確認で、このページでは検証できない危険が見つかりました（例：実行が失敗する）。確信がある場合のみ承認してください。",
+  'value.baseUnitsUnknown': "基本単位 · 小数点以下の桁数不明",
+  'sentence.msAddOwnerOne': "{owner} がメンバーになり、承認は {threshold} 件必要になります。",
+  'sentence.msRemoveOwnerOne': "{owner} がメンバーでなくなり、承認は {threshold} 件必要になります。",
+  'sentence.msThresholdOne': "今後は承認が {threshold} 件必要になります。",
 });

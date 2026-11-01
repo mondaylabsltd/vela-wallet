@@ -221,9 +221,9 @@ impl Live {
         account: &Account,
         page: &str,
         chain_id: u64,
-        purpose: (&str, &str, Option<&str>, &vela_core::multisig::SafeTx),
+        purpose: (&str, &str, Option<&str>, &vela_core::multisig::SafeTx, bool),
     ) -> Res {
-        let (multisig, safe_tx_hash, name, tx) = purpose;
+        let (multisig, safe_tx_hash, name, tx, anyway) = purpose;
         let keys = user_op::key_set_of(account);
         let credential_ids: Vec<String> = keys.iter().map(|k| k.credential_id.clone()).collect();
         let plan = account.signing_plan();
@@ -242,6 +242,8 @@ impl Live {
                 member_name: Some(account.name.as_str()).filter(|n| !n.is_empty()),
                 credential_ids_hex: &credential_ids,
                 key_route: plan.key.as_ref(),
+                // r9-10: the page says "Approve anyway" where the core asks.
+                anyway,
             },
         );
         let request = match request {
@@ -659,6 +661,7 @@ impl Deps for Live {
             safe_tx_hash,
             name,
             tx,
+            anyway,
         } = purpose
         {
             match signing_route(&account.signing_plan(), SignatureKind::MultisigApproval) {
@@ -675,7 +678,7 @@ impl Deps for Live {
                         &account,
                         &url,
                         chain_id,
-                        (multisig, safe_tx_hash, name.as_deref(), tx),
+                        (multisig, safe_tx_hash, name.as_deref(), tx, *anyway),
                     );
                 }
                 SigningRoute::InVela => {}

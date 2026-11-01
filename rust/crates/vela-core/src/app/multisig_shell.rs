@@ -73,6 +73,11 @@ pub enum PasskeyPurpose {
         name: Option<String>,
         #[cfg_attr(feature = "bindings", ts(type = "unknown"))]
         tx: Box<SafeTx>,
+        /// r9-10: the one review asks for "… anyway" (its `sign.anyway`) —
+        /// a page signing it says so, in the danger style, as the app's
+        /// word (it may add friction, never take it away).
+        #[serde(default)]
+        anyway: bool,
     },
     /// The proof asking the genesis service to record a new multisig
     /// (`sponsor_challenge`).

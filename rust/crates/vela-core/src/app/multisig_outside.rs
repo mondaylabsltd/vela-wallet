@@ -1628,9 +1628,16 @@ pub mod reading {
                 io.rpc_within(chain_id, "eth_call", call(DECIMALS), bound_ms)
             );
             let symbol = symbol.ok().and_then(|v| v.as_str().and_then(abi_string));
+            // r9 (r8-2's class): `decimals()` answers one 32-byte word. An
+            // address with no code answers "0x" — no answer, never 0
+            // decimals (which read 1,000,000 base units as "1,000,000").
             let decimals = decimals
                 .ok()
-                .and_then(|v| v.as_str().and_then(shell::quantity))
+                .and_then(|v| {
+                    v.as_str()
+                        .filter(|s| s.strip_prefix("0x").is_some_and(|h| h.len() == 64))
+                        .and_then(shell::quantity)
+                })
                 .and_then(|d| u32::try_from(d).ok())
                 .filter(|d| *d <= 36);
             (token, symbol, decimals)
@@ -2152,6 +2159,27 @@ pub mod page {
         pub title: reading::TxTitle,
         /// The name its record carries, when the core displays it.
         pub name: Option<String>,
+        /// r8-24: its number is used — what happened: executed (by which
+        /// transaction) or cancelled (another transaction at its number
+        /// ran). `None`: still open, or the chain could not say yet ("its
+        /// number is used: it was executed or cancelled").
+        #[serde(default)]
+        pub done: Option<OutsideDone>,
+    }
+
+    /// r8-24: what became of a transaction whose number is used.
+    #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+    #[serde(
+        tag = "kind",
+        rename_all = "camelCase",
+        rename_all_fields = "camelCase"
+    )]
+    #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "OutsideDone"))]
+    pub enum OutsideDone {
+        /// It ran, in `tx_hash` (its `ExecutionSuccess`).
+        Executed { tx_hash: String },
+        /// Another transaction at its number ran: it never will.
+        Cancelled,
     }
 
     impl OutsideTxView {
@@ -2533,6 +2561,9 @@ pub mod page {
     pub struct PageState {
         service: Service,
         clock: f64,
+        /// r8-24: what became of a used number, per `chainId:safeTxHash`
+        /// (final once found: read once).
+        done: Shared<BTreeMap<String, OutsideDone>>,
         link: Option<TxLink>,
         load: OutsideLoad,
         loaded: Option<Loaded>,
@@ -3196,12 +3227,17 @@ pub mod page {
         for request in unreviewed {
             read_request(io, st, request).await;
         }
-        let (link, service, seen) = {
+        let (link, service, seen, done) = {
             let s = lock(st);
-            (s.link.clone(), s.service.clone(), s.seen.clone())
+            (
+                s.link.clone(),
+                s.service.clone(),
+                s.seen.clone(),
+                s.done.clone(),
+            )
         };
         let Some(link) = link else { return };
-        let read = read_link(io, &service, &seen, &link).await;
+        let read = read_link(io, &service, &seen, &done, &link).await;
         let used = {
             let mut s = lock(st);
             if s.link.as_ref() != Some(&link) {
@@ -3281,6 +3317,7 @@ pub mod page {
         io: &Io<Event>,
         service: &Service,
         seen: &Shared<OnChainSeen>,
+        done_seen: &Shared<BTreeMap<String, OutsideDone>>,
         link: &TxLink,
     ) -> Result<OutsideTxView, OutsideLoad> {
         let answer = service
@@ -3353,7 +3390,13 @@ pub mod page {
         let tokens = reading::read_tokens(io, link.chain_id, item.review.action.as_ref()).await;
         let title = reading::title_of(link.chain_id, &item.review, &tokens);
         let name = reading::shown_name(genesis.as_ref());
+        let done = if item.status == ItemStatus::Done {
+            what_ran(io, done_seen, link, &item, p.created_ms).await
+        } else {
+            None
+        };
         Ok(OutsideTxView {
+            done,
             chain_id: link.chain_id,
             safe: link.safe.clone(),
             tx: p.safe_tx.clone(),
@@ -3369,6 +3412,42 @@ pub mod page {
         })
     }
 
+    /// r8-24: what became of the link's transaction once its number is
+    /// used — its own `ExecutionSuccess` since it was proposed says it ran
+    /// (and in which transaction); none says another ran at its number. A
+    /// chain that does not answer says nothing yet (asked again next read).
+    async fn what_ran(
+        io: &Io<Event>,
+        done_seen: &Shared<BTreeMap<String, OutsideDone>>,
+        link: &TxLink,
+        item: &OutsideItem,
+        since_ms: f64,
+    ) -> Option<OutsideDone> {
+        let key = format!(
+            "{}:{}",
+            link.chain_id,
+            item.safe_tx_hash.to_ascii_lowercase()
+        );
+        if let Some(known) = lock(done_seen).get(&key) {
+            return Some(known.clone());
+        }
+        let found = super::super::multisig_proposals::find_execution(
+            io,
+            link.chain_id,
+            &link.safe,
+            &item.safe_tx_hash,
+            since_ms,
+        )
+        .await
+        .ok()?;
+        let done = match found {
+            Some(tx_hash) => OutsideDone::Executed { tx_hash },
+            None => OutsideDone::Cancelled,
+        };
+        lock(done_seen).insert(key, done.clone());
+        Some(done)
+    }
+
     /// r4C-14 / r5reg-23: Vela's request, read as the link's own is — its
     /// multisig named from the registry's genesis (only if the core derives
     /// the address from it), and counted as the mailbox and the chain hold
@@ -3378,11 +3457,12 @@ pub mod page {
             return;
         };
         let hash = hash.to_ascii_lowercase();
-        let (service, seen, known) = {
+        let (service, seen, done, known) = {
             let s = lock(st);
             (
                 s.service.clone(),
                 s.seen.clone(),
+                s.done.clone(),
                 // Read already (with its review), or being read: nothing to do.
                 s.request_reads.get(&hash).is_some_and(|r| {
                     r.reading || r.shown.as_ref().is_some_and(|x| x.review.is_some())
@@ -3436,7 +3516,7 @@ pub mod page {
             safe_tx_hash: hash.clone(),
             for_members: Vec::new(),
         };
-        let (view, review, chain_nonce) = match read_link(io, &service, &seen, &link).await {
+        let (view, review, chain_nonce) = match read_link(io, &service, &seen, &done, &link).await {
             Ok(view) => {
                 let review = view.review.clone();
                 let nonce = view.members.nonce.to_string();

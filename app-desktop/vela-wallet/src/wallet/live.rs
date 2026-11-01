@@ -484,22 +484,6 @@ pub fn updated_line(model: &BalanceModel, ago: Option<SharedString>) -> Option<S
     ago
 }
 
-/// r9-3: whether the hero.s figure stands on a read that failed — every
-/// network it asked failed (`unreachable`), or a network it last saw holding
-/// something did not answer: that part is last known, not updated, and
-/// "Updated now" over it would say a dead network was just read. The
-/// "Can't reach …" line stands in its place.
-#[must_use]
-pub fn figure_stale(view: &BalanceView) -> bool {
-    view.unreachable
-        || view.unreachable_networks.iter().any(|n| {
-            matches!(
-                n.last_known,
-                vela_core::app::balance_dashboard::LastKnown::Held
-            )
-        })
-}
-
 /// The hero's line while the FIRST read of the account is still out (PR 3
 /// final note F19, `BalanceView.checking_key`): "Checking…". `None` from the
 /// first round's end on — a later refresh is not "checking".
@@ -1195,23 +1179,6 @@ mod tests {
         });
         let line = balance(&view, &s, "en", money).status.map(|(_, line)| line);
         assert_eq!(line, Some(s.balance_internal.clone()));
-    }
-
-    /// r9-3: a network last seen holding something that did not answer
-    /// leaves the figure last known — no "Updated now" over it; one that held
-    /// nothing, or every network answering, keeps the time.
-    #[test]
-    fn a_dead_network_that_holds_something_is_never_updated_now() {
-        use vela_core::app::balance_dashboard::LastKnown;
-        let mut held = view(Some(12.0));
-        assert!(!figure_stale(&held));
-        set_unreachable(&mut held, &[5_042_002]);
-        assert!(!figure_stale(&held), "it never held anything");
-        held.unreachable_networks[0].last_known = LastKnown::Held;
-        assert!(figure_stale(&held));
-        let mut nothing = view(None);
-        nothing.unreachable = true;
-        assert!(figure_stale(&nothing));
     }
 
     fn set_unreachable(view: &mut BalanceView, chain_ids: &[u32]) {

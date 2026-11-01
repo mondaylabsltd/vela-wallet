@@ -170,7 +170,10 @@ function words(): MultisigMessages {
 	out.members.failedOn = 'failedOn {{network}}: {{reason}}';
 	out.settings.undeployedOn = 'undeployedOn {{network}}';
 	out.members.recovery = 'recovery {{m}}/{{n}}';
-	out.action.changeThreshold = 'Require {{threshold}}';
+	out.action.changeThreshold = {
+		locale: 'en',
+		forms: { _one: 'Require {{count}}', _other: 'Require {{count}}' }
+	};
 	out.members.changeAdd = 'Add {{name}}';
 	out.members.changeReplace = 'Replace {{old}} with {{new}}';
 	(out.members.refuse as Record<string, string>).belowThreshold =

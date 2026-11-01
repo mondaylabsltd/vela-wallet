@@ -713,13 +713,17 @@ export function chainEndpoints(catalog, chainId, bundler) {
 
 /** Does the wallet's catalog know this chain at all? */
 /**
- * A TWIN of the core's `network_space::site_start_chain` (dapp-17), pinned to
- * it through the wasm by `instant.test.ts`: the chain a site with no chain of
- * its own starts on — `lastUsed` while it is one of the space's networks
- * (`order`, the wallet's list order), else the space's first, else Ethereum.
+ * A TWIN of the core's `network_space::site_start_chain_for` (dapp-17, r9),
+ * pinned to it through the wasm by `protocol.test.ts`: the chain a site with
+ * no chain of its own starts on — `lastUsed` while it is one of the space's
+ * networks (`order`, the wallet's list order), else the first of
+ * `accountChains` (where the account holds something, or used) the space
+ * offers, else the space's first, else Ethereum.
  */
-export function siteStartChain(order, lastUsed) {
+export function siteStartChain(order, lastUsed, accountChains = []) {
 	if (typeof lastUsed === 'number' && order.includes(lastUsed)) return lastUsed;
+	const held = accountChains.find((id) => order.includes(id));
+	if (held !== undefined) return held;
 	return order.length > 0 ? order[0] : 1;
 }
 
@@ -738,7 +742,11 @@ export function startChainOf(catalog, lastBySpace) {
 	const space = typeof catalog.space === 'string' ? catalog.space : '';
 	const last =
 		space && lastBySpace && typeof lastBySpace === 'object' ? parseChainId(lastBySpace[space]) : 0;
-	return siteStartChain(order, last > 0 ? last : null);
+	// r9: the networks the account holds something on or used, as published.
+	const held = Array.isArray(catalog.accountChains)
+		? catalog.accountChains.map((id) => parseChainId(id)).filter((id) => id > 0)
+		: [];
+	return siteStartChain(order, last > 0 ? last : null, held);
 }
 
 /** `LAST_CHAIN_KEY`'s value once `chainId` was used in the catalog's space; `null`: nothing to write. */

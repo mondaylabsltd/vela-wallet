@@ -523,6 +523,7 @@ function readyView(
 		tx: TX,
 		hashes,
 		genesis: null,
+		done: null,
 		findings,
 		gate: gateOf(findings),
 		review: null,

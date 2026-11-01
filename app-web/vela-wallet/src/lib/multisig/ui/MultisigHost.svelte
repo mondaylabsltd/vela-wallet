@@ -30,6 +30,7 @@
 	import { proposalsHost } from '../shell/proposals-host.svelte';
 	import { useRecordWords } from '../core/records';
 	import { multisig, type MultisigAccount } from '../core/store.svelte';
+	import { names } from '../core/names.svelte';
 	import { multisigUi } from '../core/ui.svelte';
 	import { machines } from '../shell/machines.svelte';
 	import { externalSigning } from '../external/signing.svelte';
@@ -100,6 +101,13 @@
 
 	/** ms-21: the linked multisig was added here, on the person's tap. */
 	let watched = $state(false);
+
+	// r9-12: the passkey index is asked about every member the accounts
+	// machine names (its `index_wanted`), so `member_labels` — one name per
+	// member on every platform — has the index's names to choose from.
+	$effect(() => {
+		if ((multisig.view?.index_wanted.length ?? 0) > 0) names.askWanted();
+	});
 
 	onMount(() => {
 		multisig.boot();

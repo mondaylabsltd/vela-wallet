@@ -152,9 +152,12 @@ pub fn action_title(
             "change.replace",
             &[("old", &who(old_owner)), ("new", &who(new_owner))],
         ),
-        Action::ChangeThreshold { threshold } => {
-            tv(loc, "action.changeThreshold", &[("threshold", threshold)])
-        }
+        // r9: "Require 1 approval" — plural by the count.
+        Action::ChangeThreshold { threshold } => tc(
+            loc,
+            "action.changeThreshold",
+            threshold.parse().unwrap_or(0),
+        ),
         Action::Rename { name } => tv(loc, "action.rename", &[("name", name)]),
         Action::Call { value, .. } => {
             let zero = vela_core::app::multisig_shell::quantity(value).is_none_or(|v| v == 0);

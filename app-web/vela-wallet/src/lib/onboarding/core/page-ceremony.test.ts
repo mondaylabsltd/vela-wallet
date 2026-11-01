@@ -23,7 +23,7 @@ import { setCeremonyHandoffDeps } from './page-ceremony';
 import type { ShellOperation } from '../generated/ShellOperation';
 
 /** The front of the core's BUILD_ALLOWED, as published in `dist/`. */
-const VERSION = '1f9092c7278df85fcaf3ff02ece7b757a709c475dc72b9dee6a9ce44151c14c2';
+const VERSION = '344aacd2785aea2738ee6b984156a84ad65e48fb0289bbd46235acd85256352f';
 const PAGE_BYTES = readFileSync(
 	fileURLToPath(
 		new URL(`../../../../../trusted-signer/dist/b/${VERSION}/sign.html`, import.meta.url)

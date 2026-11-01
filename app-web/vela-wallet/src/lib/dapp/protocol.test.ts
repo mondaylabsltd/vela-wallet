@@ -14,7 +14,8 @@ import {
 	rpcCooldownMs,
 	rpcReadTimeoutMs,
 	signNotConfirmedDetail,
-	siteStartChain as coreSiteStartChain
+	siteStartChain as coreSiteStartChain,
+	siteStartChainFor as coreSiteStartChainFor
 } from '$lib/core/kernels';
 import { LAST_CHAIN_KEY as APP_LAST_CHAIN_KEY } from './keys';
 import {
@@ -327,14 +328,30 @@ describe('the worker’s chain reads (spec 082 RF2, G20, G33)', () => {
  */
 describe('where a new site starts (dapp-17)', () => {
 	it('the twin answers what the core answers', () => {
-		const orders = [[1, 8453, 100], [11155111, 84532], [], [100]];
+		const orders = [[1, 8453, 100], [11155111, 84532, 5042002], [], [100]];
 		for (const order of orders) {
 			for (const last of [null, 1, 100, 84532, 999]) {
-				expect(siteStartChain(order, last), `${order} ${last}`).toBe(
-					coreSiteStartChain(order, last)
-				);
+				for (const held of [[], [5042002], [8453, 100], [999]]) {
+					expect(siteStartChain(order, last, held), `${order} ${last} ${held}`).toBe(
+						coreSiteStartChainFor(order, last, held)
+					);
+				}
+				expect(siteStartChain(order, last)).toBe(coreSiteStartChain(order, last));
 			}
 		}
+	});
+
+	it('a new site starts where the account holds something (r9)', () => {
+		const testnet = {
+			version: 1,
+			chains: {},
+			space: 'testnet',
+			order: [11155111, 84532, 5042002],
+			accountChains: [5042002]
+		};
+		expect(startChainOf(testnet, undefined)).toBe(5042002);
+		// The network last used in this space still comes first.
+		expect(startChainOf(testnet, { testnet: 84532 })).toBe(84532);
 	});
 
 	it('reads the catalog the wallet published, by its space', () => {

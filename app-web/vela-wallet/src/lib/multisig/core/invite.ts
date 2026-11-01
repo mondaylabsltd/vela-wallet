@@ -14,7 +14,7 @@ import { sameAddress } from './kernel';
 import { addLink, type InvitedMember } from './link';
 import { names } from './names.svelte';
 import { membersAnywhere } from './proposals.svelte';
-import type { MultisigAccount } from './store.svelte';
+import { multisig, type MultisigAccount } from './store.svelte';
 
 /**
  * What this device knows of each member, by address: the founding members in
@@ -43,8 +43,15 @@ export function inviteLink(
 	locale: string,
 	account: Pick<MultisigAccount, 'address' | 'owners' | 'chainIds'>
 ): string {
+	// r9-12: the members as the accounts machine names them (`invite_members`:
+	// every name known, the same on every platform); a multisig it does not
+	// list (a draft just created) by the same rule here.
+	const row = multisig.view?.accounts.find((r) =>
+		sameAddress((r.account as MultisigAccount).address, account.address)
+	);
+	const members = (row?.invite_members as InvitedMember[] | undefined) ?? invitedMembers(account);
 	return addLink(origin, locale, account.address, {
 		chainIds: account.chainIds,
-		members: invitedMembers(account)
+		members
 	});
 }

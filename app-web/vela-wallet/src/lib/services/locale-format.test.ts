@@ -25,6 +25,7 @@ import {
 	numberFormatOptions,
 	numberSeparators,
 	parseLocaleNumber,
+	resetAutoDetectionForTests,
 	timeFormatOptions
 } from './locale-format';
 
@@ -131,6 +132,28 @@ describe('date and time presets', () => {
 		preferences.setTimeFormat('h12');
 		expect(formatDate(SAMPLE)).toBe('2026-06-13');
 		expect(formatTime(SAMPLE)).toBe('1:45 PM');
+	});
+
+	it('`auto` follows the language the page is shown in, not the browser (r9)', () => {
+		const had = Object.getOwnPropertyDescriptor(globalThis, 'document');
+		const page = (lang: string) =>
+			Object.defineProperty(globalThis, 'document', {
+				configurable: true,
+				value: { documentElement: { lang } }
+			});
+		try {
+			resetAutoDetectionForTests();
+			page('zh');
+			expect(formatDate(SAMPLE)).toBe('2026/06/13');
+			expect(formatTime(SAMPLE)).toBe('13:45');
+			page('en-US');
+			expect(formatDate(SAMPLE)).toBe('06/13/2026');
+			expect(formatTime(SAMPLE)).toBe('1:45 PM');
+		} finally {
+			if (had) Object.defineProperty(globalThis, 'document', had);
+			else Reflect.deleteProperty(globalThis, 'document');
+			resetAutoDetectionForTests();
+		}
 	});
 });
 

@@ -17,21 +17,21 @@
 //!   view of the machine asks of the shell ([`Step`]): open the proposal's
 //!   sheet once it exists, answer the site once the machine answered it
 //!   (then `DappSettled`).
-//! - [`payload`]: the machine's answer, as the browser machine's
-//!   `SigningAnswered` carries it to the page.
-//! - `wallet_getCallsStatus` of a batch a multisig answered with: asked of
-//!   the machine (`CallsStatus`), and its answer handed to the browser
-//!   machine's read ([`read_body`]).
+//! - the machine's answer goes to the browser machine as it is
+//!   (`MultisigAnswered`, core-ms-2): a batch's id is then the browser
+//!   machine's to keep (`vela.dapp.multisigBatches`, across a restart).
+//! - `wallet_getCallsStatus` of such a batch: the browser machine's read of
+//!   `MULTISIG_CALLS_STATUS_METHOD`, asked of the proposals machine
+//!   (`CallsStatus`) and answered with its body ([`read_body`]).
 
 use std::collections::BTreeMap;
 
 use serde_json::{Value, json};
 use vela_core::app::dapp_rpc;
 use vela_core::app::multisig_accounts::AccountRow;
-use vela_core::app::multisig_dapp::{DappAnswer, HeldRequest, HeldStage, declined};
+use vela_core::app::multisig_dapp::{DappAnswer, HeldRequest, HeldStage};
 use vela_core::app::multisig_proposals::{Event, ProposalsView};
 use vela_core::app::multisig_shell::MultisigAccount;
-use vela_core::app::sign_request::{SignErrorKind, SignResponsePayload};
 
 use crate::executor::dapp_browser::Forwarded;
 
@@ -66,28 +66,6 @@ pub fn request_event(
     }
 }
 
-/// The machine's answer as the browser machine carries it to the page
-/// (`SigningAnswered`). A decline is the person's own rejection, worded by
-/// the core; any other error keeps the machine's code and message exactly
-/// (carried as a refusal with its own words, as the busy answer is).
-#[must_use]
-pub fn payload(answer: &DappAnswer) -> SignResponsePayload {
-    match &answer.error {
-        None => SignResponsePayload::Ok {
-            result: Some(answer.result.clone().unwrap_or(Value::Null)),
-        },
-        Some(error) if *error == declined() => SignResponsePayload::Err {
-            code: i32::try_from(error.code).unwrap_or(4001),
-            kind: SignErrorKind::UserRejected,
-            message: None,
-        },
-        Some(error) => SignResponsePayload::Err {
-            code: i32::try_from(error.code).unwrap_or(-32603),
-            kind: SignErrorKind::SubmitFailed,
-            message: Some(error.message.clone()),
-        },
-    }
-}
 
 /// One request handed to the machine.
 #[derive(Clone, Debug)]
@@ -105,15 +83,14 @@ struct Holding {
 pub enum Step {
     /// The request's proposal exists: its sheet opens on it (once).
     Open { chain_id: u64, safe_tx_hash: String },
-    /// The machine answered: the site hears `payload`, then the machine is
+    /// The machine answered: the site hears its answer, then the machine is
     /// told (`DappSettled`).
     Answer {
         rid: String,
         tab: String,
         id: String,
-        payload: SignResponsePayload,
-        /// A batch answered its id: `wallet_getCallsStatus` follows it here.
-        batch: Option<(String, u32)>,
+        /// The machine's answer, delivered as it is (`MultisigAnswered`).
+        answer: DappAnswer,
         /// An error the site was not told of before: its sheet goes.
         close: Option<(u64, String)>,
     },
@@ -131,15 +108,6 @@ pub struct CallsRead {
     pub chain_id: u32,
 }
 
-/// What to do for a [`CallsRead`].
-#[derive(Clone, Debug)]
-pub enum CallsNext {
-    /// Ask the machine (`CallsStatus`).
-    Ask(Box<Event>),
-    /// Answer the read now, from the machine's last word on the batch.
-    Answer { read: u64, body_json: String },
-}
-
 /// The requests handed to the proposals machine, and the batch reads out.
 #[derive(Debug, Default)]
 pub struct Holds {
@@ -151,8 +119,6 @@ pub struct Holds {
     seen: Option<HeldRequest>,
     /// `CallsStatus` asked: the machine's id → the read it answers.
     asks: BTreeMap<String, CallsRead>,
-    /// The machine's last status of a batch, for the browser's second read.
-    last: BTreeMap<String, DappAnswer>,
 }
 
 impl Holds {
@@ -269,16 +235,6 @@ impl Holds {
             let Some(answer) = &held.answer else {
                 continue;
             };
-            let batch = (held.method == "wallet_sendCalls")
-                .then_some(answer.result.as_ref())
-                .flatten()
-                .and_then(dapp_rpc::batch_id_of)
-                .map(|id| {
-                    (
-                        id.to_ascii_lowercase(),
-                        u32::try_from(held.chain_id).unwrap_or_default(),
-                    )
-                });
             let close = (answer.error.is_some() && !held.told)
                 .then(|| held.safe_tx_hash.clone().map(|h| (held.chain_id, h)))
                 .flatten();
@@ -286,8 +242,7 @@ impl Holds {
                 rid: rid.clone(),
                 tab: holding.tab.clone(),
                 id: holding.id.clone(),
-                payload: payload(answer),
-                batch,
+                answer: answer.clone(),
                 close,
             });
             self.held.remove(&rid);
@@ -297,15 +252,7 @@ impl Holds {
 
     /// A batch read the browser asked: from the machine's last word on it
     /// when this is the read that follows one, else asked of the machine.
-    pub fn calls(&mut self, read: CallsRead) -> CallsNext {
-        if read.method == dapp_rpc::USER_OP_STATUS_METHOD
-            && let Some(last) = self.last.remove(&read.batch)
-        {
-            return CallsNext::Answer {
-                read: read.read,
-                body_json: read_body(&read.method, &last),
-            };
-        }
+    pub fn calls(&mut self, read: CallsRead) -> Event {
         self.next += 1;
         let ask = format!("calls-{}", self.next);
         let event = Event::CallsStatus {
@@ -314,7 +261,7 @@ impl Holds {
             calls_id: read.batch.clone(),
         };
         self.asks.insert(ask, read);
-        CallsNext::Ask(Box::new(event))
+        event
     }
 
     /// The batch reads the machine answered: `(read, body)` each, once.
@@ -331,81 +278,18 @@ impl Holds {
             else {
                 continue;
             };
-            if read.method != dapp_rpc::USER_OP_STATUS_METHOD {
-                self.last.insert(read.batch.clone(), answer.clone());
-            }
-            out.push((read.read, read_body(&read.method, answer)));
+            out.push((read.read, read_body(answer)));
         }
         out
     }
 }
 
-/// The machine's `wallet_getCallsStatus` answer (`multisig_calls_status`),
-/// as the bundler read the browser machine asked would have answered it: the
-/// browser machine forms the site's answer from it
-/// (`dapp_rpc::calls_status`), and that answer is the machine's, field for
-/// field (proved in the tests below). The browser machine knows only a user
-/// operation's batch (a core gap: it has no multisig batch), so its read is
-/// answered in its own shape.
-///
-/// - its receipt read (`eth_getUserOperationReceipt`): the execution's
-///   receipt when it ran (200 / 500), else none;
-/// - its status read ([`dapp_rpc::USER_OP_STATUS_METHOD`], asked when there
-///   is no receipt): refused before any block when the number was used by
-///   another transaction (400), else nothing.
-///
-/// An error from the machine (an id it does not know) reads as nothing yet:
-/// the browser machine answers a batch read it cannot read as pending.
+/// The machine's `wallet_getCallsStatus` answer as the body of the browser
+/// machine's read of it (`MULTISIG_CALLS_STATUS_METHOD`): a JSON-RPC body,
+/// `{result}` or `{error}`, delivered as it is — `data` kept (core-ms-2).
 #[must_use]
-pub fn read_body(method: &str, answer: &DappAnswer) -> String {
-    let status = answer.result.as_ref();
-    let code = status.and_then(|s| s.get("status")).and_then(Value::as_u64);
-    if method == dapp_rpc::USER_OP_STATUS_METHOD {
-        let result = if code == Some(u64::from(dapp_rpc::CALLS_STATUS_OFFCHAIN_FAILURE)) {
-            json!({ "status": "rejected" })
-        } else {
-            Value::Null
-        };
-        return json!({ "result": result }).to_string();
-    }
-    let receipt = status
-        .and_then(|s| s.get("receipts"))
-        .and_then(|r| r.get(0))
-        .filter(|_| matches!(code, Some(200 | 500)));
-    let result = receipt.map_or(Value::Null, |r| {
-        let field = |key: &str| r.get(key).cloned().unwrap_or(Value::Null);
-        json!({
-            "success": code == Some(200),
-            "logs": field("logs"),
-            "receipt": {
-                "transactionHash": field("transactionHash"),
-                "blockHash": field("blockHash"),
-                "blockNumber": field("blockNumber"),
-                "gasUsed": field("gasUsed"),
-                "logs": field("logs"),
-            },
-        })
-    });
-    json!({ "result": result }).to_string()
-}
-
-/// The batch a browser read asks about, when it is a `wallet_getCallsStatus`
-/// read of one a multisig answered with: its receipt, or its status.
-#[must_use]
-pub fn batch_read(
-    method: &str,
-    params_json: &str,
-    bundler: bool,
-    batches: &BTreeMap<String, u32>,
-) -> Option<(String, u32)> {
-    if !bundler
-        || !(method == "eth_getUserOperationReceipt" || method == dapp_rpc::USER_OP_STATUS_METHOD)
-    {
-        return None;
-    }
-    let params: Value = serde_json::from_str(params_json).ok()?;
-    let batch = dapp_rpc::calls_status_id(&params)?;
-    batches.get(&batch).map(|chain| (batch, *chain))
+pub fn read_body(answer: &DappAnswer) -> String {
+    serde_json::to_string(answer).unwrap_or_else(|_| json!({ "result": null }).to_string())
 }
 
 #[cfg(test)]
@@ -413,7 +297,7 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
 
     use super::*;
-    use vela_core::app::multisig_dapp::{DappError, left_proposed, multisig_refusal};
+    use vela_core::app::multisig_dapp::DappError;
 
     const HASH: &str = "0x1111111111111111111111111111111111111111111111111111111111111111";
 
@@ -501,44 +385,6 @@ mod tests {
         assert_eq!(params[0]["value"], "0x1");
     }
 
-    #[test]
-    fn every_answer_keeps_the_machines_code_and_words() {
-        assert_eq!(
-            payload(&DappAnswer::ok(json!("0xabc"))),
-            SignResponsePayload::Ok {
-                result: Some(json!("0xabc"))
-            }
-        );
-        assert_eq!(
-            payload(&DappAnswer::err(declined())),
-            SignResponsePayload::Err {
-                code: 4001,
-                kind: SignErrorKind::UserRejected,
-                message: None
-            }
-        );
-        let proposed = left_proposed(HASH);
-        let SignResponsePayload::Err {
-            code,
-            kind,
-            message,
-        } = payload(&DappAnswer::err(proposed.clone()))
-        else {
-            panic!()
-        };
-        assert_eq!((code, kind), (-32000, SignErrorKind::SubmitFailed));
-        // The words the page reads are the machine's, whole.
-        assert_eq!(
-            dapp_rpc::sign_error_words(kind, message.as_deref()),
-            proposed.message
-        );
-        let refusal = multisig_refusal("personal_sign").unwrap();
-        let SignResponsePayload::Err { code, .. } = payload(&DappAnswer::err(refusal)) else {
-            panic!()
-        };
-        assert_eq!(code, 4200);
-    }
-
     fn hold(holds: &mut Holds, method: &str) -> String {
         let account = row("0xabc0000000000000000000000000000000000001").account;
         let Event::DappRequest { id, .. } = holds.hold(&asked(method), &account, None) else {
@@ -605,7 +451,7 @@ mod tests {
         let Step::Answer {
             tab,
             id,
-            batch,
+            answer,
             close,
             ..
         } = &steps[0]
@@ -613,8 +459,8 @@ mod tests {
             panic!("{steps:?}")
         };
         assert_eq!(
-            (tab.as_str(), id.as_str(), batch, close),
-            ("t1", "7", &None, &None)
+            (tab.as_str(), id.as_str(), answer, close),
+            ("t1", "7", &DappAnswer::ok(json!("0xcd")), &None)
         );
         assert!(holds.is_empty());
         assert!(holds.step(&view).is_empty(), "answered once");
@@ -634,10 +480,12 @@ mod tests {
         ));
         view.dapp.insert(rid.clone(), h);
         let steps = holds.step(&view);
-        let Some(Step::Answer { batch, .. }) = steps.last() else {
+        // The batch's id goes to the browser machine as the machine formed
+        // it: from there it is the browser machine's batch to follow.
+        let Some(Step::Answer { answer, .. }) = steps.last() else {
             panic!()
         };
-        assert_eq!(batch, &Some((HASH.to_owned(), 100)));
+        assert_eq!(answer.result.as_ref().and_then(dapp_rpc::batch_id_of).map(str::to_ascii_lowercase), Some(HASH.to_owned()));
 
         let rid = hold(&mut holds, "eth_sendTransaction");
         let mut h = held(&rid, HeldStage::Waiting);
@@ -655,97 +503,44 @@ mod tests {
         assert_eq!(close, &Some((100, HASH.to_owned())));
     }
 
-    /// The browser machine's answer from [`read_body`] is the multisig
-    /// machine's status, field for field: pending, executed, reverted, and
-    /// its number used by another transaction.
+    /// core-ms-2: the browser machine's read of a multisig batch is
+    /// answered with the machine's own body — its status whole, or its
+    /// error with its `data`.
     #[test]
-    fn a_batch_read_answers_the_machines_status_exactly() {
-        let receipt = json!({
-            "transactionHash": format!("0x{}", "cd".repeat(32)),
-            "blockHash": format!("0x{}", "ef".repeat(32)),
-            "blockNumber": "0x64",
-            "gasUsed": "0x5208",
-            "status": "0x1",
-            "logs": [{ "address": "0xabc" }],
-        });
-        let mut reverted = receipt.clone();
-        reverted["status"] = json!("0x0");
-        for (execution, used) in [
-            (None, false),
-            (Some(&receipt), false),
-            (Some(&reverted), false),
-            (None, true),
-        ] {
-            let status = dapp_rpc::multisig_calls_status(HASH, 100, execution, used);
-            let answer = DappAnswer::ok(status.clone());
-            let first: Value =
-                serde_json::from_str(&read_body("eth_getUserOperationReceipt", &answer)).unwrap();
-            let second: Value =
-                serde_json::from_str(&read_body(dapp_rpc::USER_OP_STATUS_METHOD, &answer)).unwrap();
-            let landed = dapp_rpc::calls_status_landed(first.get("result"));
-            let relay = (!landed).then(|| second["result"].clone());
-            let browser = dapp_rpc::calls_status(
-                HASH,
-                100,
-                first.get("result").filter(|r| !r.is_null()),
-                relay.as_ref().filter(|r| !r.is_null()),
-            );
-            assert_eq!(browser, status, "{execution:?} {used}");
-        }
+    fn a_batch_read_is_the_machines_answer_as_it_is() {
+        let status = dapp_rpc::multisig_calls_status(HASH, 100, None, false);
+        let body: Value = serde_json::from_str(&read_body(&DappAnswer::ok(status.clone()))).unwrap();
+        assert_eq!(body, json!({ "result": status }));
+        let refused = DappError {
+            code: 5730,
+            message: "Unknown bundle id".into(),
+            data: Some(json!({ "x": 1 })),
+        };
+        let body: Value = serde_json::from_str(&read_body(&DappAnswer::err(refused))).unwrap();
+        assert_eq!(body["error"]["code"], 5730);
+        assert_eq!(body["error"]["data"], json!({ "x": 1 }));
     }
 
     #[test]
-    fn only_a_multisigs_batch_read_is_the_machines() {
-        let batches = BTreeMap::from([(HASH.to_owned(), 100)]);
-        let params = format!(r#"["{}"]"#, HASH.to_uppercase().replace("0X", "0x"));
-        assert_eq!(
-            batch_read("eth_getUserOperationReceipt", &params, true, &batches),
-            Some((HASH.to_owned(), 100))
-        );
-        assert!(batch_read(dapp_rpc::USER_OP_STATUS_METHOD, &params, true, &batches).is_some());
-        assert!(batch_read("eth_getUserOperationReceipt", &params, false, &batches).is_none());
-        assert!(batch_read("eth_getTransactionReceipt", &params, true, &batches).is_none());
-        assert!(
-            batch_read(
-                "eth_getUserOperationReceipt",
-                &params,
-                true,
-                &BTreeMap::new()
-            )
-            .is_none()
-        );
-    }
-
-    #[test]
-    fn the_status_read_after_a_receipt_read_is_answered_from_it() {
+    fn each_batch_read_is_asked_of_the_machine_once() {
         let mut holds = Holds::default();
-        let read = |n: u64, method: &str| CallsRead {
+        let read = |n: u64| CallsRead {
             read: n,
-            method: method.into(),
+            method: vela_core::app::dapp_browser::MULTISIG_CALLS_STATUS_METHOD.into(),
             batch: HASH.into(),
             chain_id: 100,
         };
-        let CallsNext::Ask(ask) = holds.calls(read(1, "eth_getUserOperationReceipt")) else {
-            panic!()
-        };
-        let Event::CallsStatus { id, calls_id, .. } = *ask else {
+        let Event::CallsStatus { id, calls_id, .. } = holds.calls(read(1)) else {
             panic!()
         };
         assert_eq!(calls_id, HASH);
         let mut view = ProposalsView::default();
-        view.calls_status.insert(
-            id,
-            DappAnswer::ok(dapp_rpc::multisig_calls_status(HASH, 100, None, true)),
-        );
+        let status = dapp_rpc::multisig_calls_status(HASH, 100, None, true);
+        view.calls_status.insert(id, DappAnswer::ok(status.clone()));
         let answered = holds.calls_answered(&view);
         assert_eq!(answered.len(), 1);
+        assert_eq!(answered[0].0, 1);
+        assert!(answered[0].1.contains("\"status\""));
         assert!(holds.calls_answered(&view).is_empty(), "once");
-        let CallsNext::Answer { read, body_json } =
-            holds.calls(read(2, dapp_rpc::USER_OP_STATUS_METHOD))
-        else {
-            panic!()
-        };
-        assert_eq!(read, 2);
-        assert!(body_json.contains("rejected"));
     }
 }

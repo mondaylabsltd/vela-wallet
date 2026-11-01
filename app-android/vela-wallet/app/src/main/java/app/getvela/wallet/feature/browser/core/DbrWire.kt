@@ -362,6 +362,11 @@ sealed class DbrOperation {
     @SerialName("write_site_chain")
     data class WriteSiteChain(val origin: String, val chain_id: Int) : DbrOperation()
 
+    /** r9: keep the multisig batches under the core's `MULTISIG_BATCHES_KEY`. */
+    @Serializable
+    @SerialName("write_multisig_batches")
+    data class WriteMultisigBatches(val value_json: String) : DbrOperation()
+
     @Serializable
     @SerialName("deliver")
     data class Deliver(val tab: String, val doc: String, val message_json: String) : DbrOperation()
@@ -423,7 +428,11 @@ sealed class DbrOperation {
 sealed class DbrShellResult {
     @Serializable
     @SerialName("sites_listed")
-    data class SitesListed(val sites: List<DbrStoredSite>) : DbrShellResult()
+    data class SitesListed(
+        val sites: List<DbrStoredSite>,
+        /** r9: what `vela.dapp.multisigBatches` holds, handed back to the core. */
+        val multisig_batches_json: String? = null,
+    ) : DbrShellResult()
 
     /**
      * The JSON-RPC body, or `null` when nothing answered — and then [failure]

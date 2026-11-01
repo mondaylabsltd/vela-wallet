@@ -63,6 +63,8 @@ export interface PageApprovalInput {
 	multisig: string;
 	/** The multisig's name on this device: the page marks it "named by the app". */
 	multisigName?: string | null;
+	/** r9-10: the one review asks for "… anyway" (`PasskeyPurpose.anyway`). */
+	anyway?: boolean;
 	tx: SafeTx;
 	/** The safeTxHash the core computed: what the approval is FOR. */
 	safeTxHash: string;
@@ -121,7 +123,8 @@ function handOffApproval(
 		member: input.member.address,
 		memberName: input.member.name,
 		credentialIdsHex: input.keys.map((k) => k.credentialId),
-		keyRoute: input.keyRoute
+		keyRoute: input.keyRoute,
+		anyway: input.anyway === true
 	});
 	return handOff<PasskeyApproval>(
 		{

@@ -34,6 +34,7 @@
 	import Button from '$lib/ui/Button.svelte';
 	import { hostLabel } from '$lib/dapp/host';
 	import { fillTemplate } from '$lib/i18n/fill';
+	import { refusedLine, rejectHint } from '../core/approvals-words';
 	import { nativeSymbol } from '$lib/services/networks';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
@@ -1592,7 +1593,9 @@
 		{#if item.review.action === null}
 			<p class="warn" role="alert">
 				<Icon icon={UTILITY_ICONS['triangle-alert']} size="sm" />
-				{fillTemplate(m.proposal.refused, { reason: item.review.refusal ?? '' })}
+				<!-- r9-9: the core's one line for why (never its English reason). -->
+				{refusedLine(m, fullReview?.refused?.key) ??
+					fillTemplate(m.proposal.refused, { reason: item.review.refusal ?? '' })}
 			</p>
 		{/if}
 
@@ -2195,7 +2198,7 @@
 			<!-- Not while it is being executed; and a way back from it (r4D-14). -->
 			<div class="reject">
 				{#if rejecting}
-					<p class="fine">{fillTemplate(m.proposal.rejectHint, { threshold: item.threshold })}</p>
+					<p class="fine">{rejectHint(m, item.threshold)}</p>
 					<div class="two">
 						<Button
 							variant="secondary"

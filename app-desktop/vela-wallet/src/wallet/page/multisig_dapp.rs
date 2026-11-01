@@ -23,7 +23,7 @@ use vela_core::app::multisig_dapp::{HeldRequest, HeldStage};
 use vela_core::app::sign_request::EXTENSION_REQUEST_TTL_MS;
 
 use super::*;
-use crate::multisig::dapp::{self as ms_dapp, CallsNext, CallsRead, Step};
+use crate::multisig::dapp::{self as ms_dapp, CallsRead, Step};
 
 /// The site, as the signing sheet names it.
 fn site_of(origin: &str) -> String {
@@ -147,17 +147,25 @@ impl WalletPage {
                     rid,
                     tab,
                     id,
-                    payload,
-                    batch,
+                    answer,
                     close,
                 } => {
-                    // A batch's id: its status reads are the machine's from
-                    // the answer on.
-                    if let Some((batch, chain_id)) = batch {
-                        let browser = self.browser_host(cx);
-                        browser.update(cx, |browser, _| browser.multisig_batch(&batch, chain_id));
-                    }
-                    self.answer_dapp_signing(&tab, id, payload, None, cx);
+                    // core-ms-2: delivered as the machine formed it (an
+                    // error keeps its `data`); a batch's id is the browser
+                    // machine's to follow from here — kept across a restart
+                    // in its own store (r9-18).
+                    let browser = self.browser_host(cx);
+                    browser.update(cx, |browser, cx| {
+                        browser.dispatch(
+                            DbrEvent::MultisigAnswered {
+                                tab: tab.clone(),
+                                id,
+                                answer,
+                                now_ms: crate::executor::now_ms(),
+                            },
+                            cx,
+                        );
+                    });
                     let shown = close.as_ref().is_some_and(|(chain_id, hash)| {
                         self.multisig
                             .sheet
@@ -188,13 +196,11 @@ impl WalletPage {
                 // No machine to ask: nothing known yet, never left hanging.
                 let unknown =
                     vela_core::app::multisig_dapp::DappAnswer::ok(serde_json::Value::Null);
-                now.push((read.read, ms_dapp::read_body(&read.method, &unknown)));
+                now.push((read.read, ms_dapp::read_body(&unknown)));
                 continue;
             };
-            match self.multisig.dapp.calls(read) {
-                CallsNext::Ask(event) => host.update(cx, |host, cx| host.proposals(*event, cx)),
-                CallsNext::Answer { read, body_json } => now.push((read, body_json)),
-            }
+            let event = self.multisig.dapp.calls(read);
+            host.update(cx, |host, cx| host.proposals(event, cx));
         }
         self.ms_dapp_answer_reads(now, cx);
         self.ms_dapp_follow(cx);

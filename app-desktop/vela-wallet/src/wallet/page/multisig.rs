@@ -22,7 +22,9 @@ use vela_core::app::multisig_shell::MultisigAccount;
 use vela_core::app::sim_outcome::SimVerdict;
 use vela_core::multisig::SafeTxHashes;
 use vela_core::multisig_reading::MemberChanges;
-use vela_core::multisig_review::{Concern, Field, Recipient, RecipientRole, SignRule, StateGuard};
+use vela_core::multisig_review::{
+    Concern, Field, Recipient, RecipientRole, Refused, SignRule, StateGuard,
+};
 
 use gpui::App;
 
@@ -117,6 +119,8 @@ pub(crate) struct ReviewDraw {
     #[serde(deserialize_with = "known_concerns")]
     pub concerns: Vec<Concern>,
     pub sign: SignRule,
+    /// r9-9: why nothing is signed, the core's one line (its corpus key).
+    pub refused: Option<Refused>,
     /// What each call does, as the core read it (r8-1, r9-1).
     #[serde(skip)]
     pub reading: Option<crate::multisig::reading::ReadingDraw>,
@@ -132,15 +136,6 @@ impl ReviewDraw {
         let mut draw: Self = serde_json::from_value(value.clone()).ok()?;
         draw.reading = crate::multisig::reading::ReadingDraw::of(value);
         Some(draw)
-    }
-
-    /// The transaction's own refusal (Vela does not sign it), if any.
-    fn refusal(&self) -> Option<String> {
-        self.review
-            .as_ref()
-            .and_then(|r| r.get("refusal"))
-            .and_then(Value::as_str)
-            .map(str::to_owned)
     }
 }
 
@@ -1720,7 +1715,13 @@ impl WalletPage {
             }
             _ => {}
         }
-        if reviewed && !sign.allowed && !matches!(plan.kind, FootKind::Nothing) {
+        // r9-9: the refusal is said once, by the review's own line above; a
+        // review that names no reason still says nothing is signed.
+        if reviewed
+            && !sign.allowed
+            && review.is_some_and(|r| r.refused.is_none())
+            && !matches!(plan.kind, FootKind::Nothing)
+        {
             foot = foot.child(ms_note(theme, &words::t(&loc, "review.blocked"), Tone::Danger));
         }
 
@@ -1999,12 +2000,10 @@ impl WalletPage {
         let net = network(chain_id);
         let mut col = div().flex().flex_col().gap(px(12.));
 
-        if let Some(refusal) = review.refusal().filter(|_| !past) {
-            col = col.child(ms_note(
-                theme,
-                &words::tv(&loc, "proposal.refused", &[("reason", &refusal)]),
-                Tone::Danger,
-            ));
+        // r9-9: why nothing is signed — the core's one line, said once here
+        // (the foot says nothing more), never an English reason of its own.
+        if let Some(refused) = review.refused.as_ref().filter(|_| !past) {
+            col = col.child(ms_note(theme, &loc.t(&refused.key), Tone::Danger));
         }
 
         // A member change, read before anything else (`MemberChangeRule`):
@@ -2093,7 +2092,8 @@ impl WalletPage {
                     ))
                 }
                 // The verdict's place says it fails; nothing would change.
-                StateVerdict::Reverts => None,
+                // r9-9: refused for another reason — said once, below.
+                StateVerdict::Reverts | StateVerdict::Withheld => None,
                 StateVerdict::Unavailable { .. } => {
                     Some((words::tv(&loc, "review.stateUnread", &[("network", &net)]), Tone::Caution))
                 }

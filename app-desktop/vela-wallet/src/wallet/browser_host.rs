@@ -28,7 +28,7 @@
 //! it puts a delivery into the webview, a read on the background executor,
 //! and an order where the page will pick it up.
 
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::VecDeque;
 
 use gpui::Context;
 
@@ -67,56 +67,6 @@ pub enum Outbound {
 /// The machine and its operations, with no gpui in the way.
 pub struct BrowserDriver {
     core: CoreHost<DappBrowser>,
-    /// AUDIT M5: the batches a multisig answered a site with (its proposal's
-    /// safeTxHash, lower-case) → their chain.
-    multisig_batches: BTreeMap<String, u32>,
-    /// The page requests that are a `wallet_getCallsStatus` (tab, id), the
-    /// newest last: only their reads of a multisig's batch are the
-    /// proposals machine's.
-    calls_requests: VecDeque<(String, String)>,
-}
-
-/// How many `wallet_getCallsStatus` requests are remembered (their reads
-/// follow at once; the oldest is forgotten first).
-const CALLS_REQUESTS_KEPT: usize = 64;
-
-/// r9-18: where the batches a multisig answered sites with are kept —
-/// `[[batch, chainId], …]`, the newest last.
-const MULTISIG_BATCHES_KEY: &str = "vela.desktop.multisigBatches";
-/// How many are kept (a site follows its batch for minutes, not months).
-const MULTISIG_BATCHES_KEPT: usize = 64;
-
-fn stored_multisig_batches() -> Vec<(String, u32)> {
-    let Ok(Some(serde_json::Value::Array(rows))) = crate::executor::storage::read_value(MULTISIG_BATCHES_KEY) else {
-        return Vec::new();
-    };
-    rows.iter()
-        .filter_map(|row| {
-            let batch = row.get(0)?.as_str()?.to_ascii_lowercase();
-            let chain = u32::try_from(row.get(1)?.as_u64()?).ok()?;
-            Some((batch, chain))
-        })
-        .collect()
-}
-
-fn load_multisig_batches() -> BTreeMap<String, u32> {
-    stored_multisig_batches().into_iter().collect()
-}
-
-fn save_multisig_batch(batch: &str, chain_id: u32) {
-    let mut rows = stored_multisig_batches();
-    rows.retain(|(b, _)| b != batch);
-    rows.push((batch.to_owned(), chain_id));
-    let skip = rows.len().saturating_sub(MULTISIG_BATCHES_KEPT);
-    let value = serde_json::Value::Array(
-        rows.into_iter()
-            .skip(skip)
-            .map(|(b, c)| serde_json::json!([b, c]))
-            .collect(),
-    );
-    if let Err(error) = crate::executor::storage::write_value(MULTISIG_BATCHES_KEY, value) {
-        crate::diag::vlog!("browser", "multisig batch not kept: {error}");
-    }
 }
 
 impl Default for BrowserDriver {
@@ -130,21 +80,7 @@ impl BrowserDriver {
     pub fn new() -> Self {
         Self {
             core: CoreHost::new(),
-            // r9-18: the batches answered before a restart are still the
-            // proposals machine's — a site that follows one after the app
-            // came back was told "Unknown bundle id".
-            multisig_batches: load_multisig_batches(),
-            calls_requests: VecDeque::new(),
         }
-    }
-
-    /// AUDIT M5: a site was answered batch `id` by a multisig on `chain_id`:
-    /// its `wallet_getCallsStatus` is the proposals machine's from here —
-    /// across a restart too (kept, the newest [`MULTISIG_BATCHES_KEPT`]).
-    pub fn multisig_batch(&mut self, id: &str, chain_id: u32) {
-        self.multisig_batches
-            .insert(id.to_ascii_lowercase(), chain_id);
-        save_multisig_batch(&id.to_ascii_lowercase(), chain_id);
     }
 
     #[must_use]
@@ -154,42 +90,19 @@ impl BrowserDriver {
 
     /// Send an event; perform what can be performed now.
     pub fn dispatch(&mut self, event: Event) -> Vec<Outbound> {
-        if !self.multisig_batches.is_empty() {
-            self.note_calls_request(&event);
-        }
         let pending = self.core.dispatch(event);
         self.pump(pending)
     }
 
-    /// A page's `wallet_getCallsStatus`, read by the core's own parser and
-    /// remembered by its tab and id.
-    fn note_calls_request(&mut self, event: &Event) {
-        let Event::PageMessage {
-            tab, message_json, ..
-        } = event
-        else {
-            return;
-        };
-        if !message_json.contains("wallet_getCallsStatus") {
-            return;
-        }
-        if let vela_core::app::dapp_rpc::PageMessage::Request(request) =
-            vela_core::app::dapp_rpc::parse_page_message(message_json)
-            && request.method == "wallet_getCallsStatus"
-        {
-            if self.calls_requests.len() >= CALLS_REQUESTS_KEPT {
-                self.calls_requests.pop_front();
-            }
-            self.calls_requests.push_back((tab.clone(), request.id));
-        }
-    }
-
-    /// The read `operation` is a `wallet_getCallsStatus` read of a batch a
-    /// multisig answered with.
-    fn multisig_calls(&self, operation: &DbrOperation) -> Option<(String, String, u32)> {
+    /// core-ms-2, r9-18: the read the browser machine asks for a batch a
+    /// multisig answered a site with — `wallet_getCallsStatus` on the
+    /// bundler (`MULTISIG_CALLS_STATUS_METHOD`, never a bundler's own
+    /// method), whose answer is the proposals machine's. Which batches those
+    /// are is the machine's, kept across a restart in its own store
+    /// (`vela.dapp.multisigBatches`).
+    fn multisig_calls(operation: &DbrOperation) -> Option<(String, String, u32)> {
         let DbrOperation::Read {
-            tab,
-            id,
+            chain_id,
             method,
             params_json,
             bundler,
@@ -198,11 +111,12 @@ impl BrowserDriver {
         else {
             return None;
         };
-        if !self.calls_requests.iter().any(|(t, i)| t == tab && i == id) {
+        if !*bundler || method != vela_core::app::dapp_browser::MULTISIG_CALLS_STATUS_METHOD {
             return None;
         }
-        crate::multisig::dapp::batch_read(method, params_json, *bundler, &self.multisig_batches)
-            .map(|(batch, chain)| (method.clone(), batch, chain))
+        let params: serde_json::Value = serde_json::from_str(params_json).ok()?;
+        let batch = vela_core::app::dapp_rpc::calls_status_id(&params)?;
+        Some((method.clone(), batch, *chain_id))
     }
 
     /// A network call came back.
@@ -219,7 +133,7 @@ impl BrowserDriver {
         let mut out = Vec::new();
         let mut queue: VecDeque<Pending<DbrOperation>> = pending.into();
         while let Some(next) = queue.pop_front() {
-            if let Some((method, batch, chain_id)) = self.multisig_calls(&next.operation) {
+            if let Some((method, batch, chain_id)) = Self::multisig_calls(&next.operation) {
                 out.push(Outbound::MultisigCalls(crate::multisig::dapp::CallsRead {
                     read: next.id,
                     method,
@@ -699,11 +613,6 @@ impl BrowserHost {
             },
             cx,
         );
-    }
-
-    /// AUDIT M5: a site was answered batch `id` by a multisig on `chain_id`.
-    pub fn multisig_batch(&mut self, id: &str, chain_id: u32) {
-        self.driver.multisig_batch(id, chain_id);
     }
 
     /// The view of `id`'s tab, if the machine has heard of it.
@@ -4064,39 +3973,18 @@ mod tests {
         });
     }
 
-    /// r9-18: a batch a multisig answered a site with is still the proposals
-    /// machine's after the app comes back — never "Unknown bundle id".
+    /// AUDIT M5, core-ms-2, r9-18: a batch a multisig answered a site with
+    /// (`MultisigAnswered`) is the browser machine's to follow — kept in its
+    /// own store, so after a restart `wallet_getCallsStatus` of it is still
+    /// asked of the proposals machine (never the bundler's "Unknown bundle
+    /// id"), and only that request's read; the machine's answer is the page's.
     #[test]
-    fn a_multisig_batch_outlives_a_restart() {
-        let batch = format!("0x{}", "CD".repeat(32));
-        storage::tests::with_temp_state("dbr-host-multisig-restart", || {
-            let mut before = BrowserDriver::new();
-            before.multisig_batch(&batch, 100);
-            let after = BrowserDriver::new();
-            assert_eq!(after.multisig_batches.get(&batch.to_ascii_lowercase()), Some(&100));
-            // Kept bounded, the newest last.
-            let mut many = BrowserDriver::new();
-            for i in 0..(MULTISIG_BATCHES_KEPT + 3) {
-                many.multisig_batch(&format!("0x{i:064x}"), 100);
-            }
-            let kept = BrowserDriver::new().multisig_batches;
-            assert_eq!(kept.len(), MULTISIG_BATCHES_KEPT);
-            assert!(!kept.contains_key(&batch.to_ascii_lowercase()), "the oldest went first");
-        });
-    }
-
-    /// AUDIT M5: a `wallet_getCallsStatus` of a batch a multisig answered
-    /// with goes to the proposals machine — and only that request's reads;
-    /// its answer is the page's status.
-    #[test]
-    fn a_multisig_batchs_status_is_read_by_the_proposals_machine() {
+    fn a_multisig_batch_is_followed_across_a_restart() {
         let batch = format!("0x{}", "ab".repeat(32));
         storage::tests::with_temp_state("dbr-host-multisig-calls", || {
             seed_grant(DAPP, A1, 100);
             let mut driver = booted();
             page(&mut driver, DAPP, json!({"t":"hello","doc":"d1"}));
-            driver.multisig_batch(&batch, 100);
-            // `user_ops` knows it as the batch a sendCalls was answered with.
             let out = ask(
                 &mut driver,
                 DAPP,
@@ -4106,70 +3994,53 @@ mod tests {
                 json!([{"version":"2.0.0","chainId":"0x64","calls":[{"to":A2,"value":"0x1"}]}]),
             );
             assert_eq!(forwarded(&out).len(), 1);
-            let out = driver.dispatch(Event::SigningAnswered {
+            let out = driver.dispatch(Event::MultisigAnswered {
                 tab: TAB.to_owned(),
                 id: "1".to_owned(),
-                payload: SignResponsePayload::Ok {
-                    result: Some(json!({ "id": batch })),
-                },
-                user_op_hash: None,
+                answer: vela_core::app::multisig_dapp::DappAnswer::ok(json!({ "id": batch })),
                 now_ms: 0.0,
             });
             assert_eq!(answers(&out)[0]["result"]["id"], json!(batch));
 
-            // A page's own bundler read of it is not a status: the network's.
+            // The app comes back: a new machine over the same store.
+            let mut driver = booted();
+            page(&mut driver, DAPP, json!({"t":"hello","doc":"d2"}));
+            // A page's own bundler read of it is the network's.
             let out = ask(
                 &mut driver,
                 DAPP,
-                "d1",
+                "d2",
                 "2",
                 "eth_getUserOperationReceipt",
                 json!([batch]),
             );
             assert!(
                 !out.iter().any(|o| matches!(o, Outbound::MultisigCalls(_))),
-                "only a status request's reads"
+                "only a status request's read"
             );
-
-            let calls = |out: &[Outbound]| -> crate::multisig::dapp::CallsRead {
-                out.iter()
-                    .find_map(|o| match o {
-                        Outbound::MultisigCalls(read) => Some(read.clone()),
-                        _ => None,
-                    })
-                    .unwrap_or_else(|| unreachable!("asked of the proposals machine"))
-            };
             let out = ask(
                 &mut driver,
                 DAPP,
-                "d1",
+                "d2",
                 "3",
                 "wallet_getCallsStatus",
                 json!([batch]),
             );
-            let first = calls(&out);
-            assert_eq!(
-                (first.batch.as_str(), first.chain_id),
-                (batch.as_str(), 100)
-            );
-            let receipt = json!({
-                "transactionHash": format!("0x{}", "cd".repeat(32)),
-                "blockHash": format!("0x{}", "ef".repeat(32)),
-                "blockNumber": "0x64",
-                "gasUsed": "0x5208",
-                "status": "0x1",
-                "logs": [],
-            });
-            let status =
-                vela_core::app::dapp_rpc::multisig_calls_status(&batch, 100, Some(&receipt), false);
-            let body = crate::multisig::dapp::read_body(
-                &first.method,
-                &vela_core::app::multisig_dapp::DappAnswer::ok(status.clone()),
-            );
+            let read = out
+                .iter()
+                .find_map(|o| match o {
+                    Outbound::MultisigCalls(read) => Some(read.clone()),
+                    _ => None,
+                })
+                .unwrap_or_else(|| unreachable!("asked of the proposals machine after the restart"));
+            assert_eq!((read.batch.as_str(), read.chain_id), (batch.as_str(), 100));
+            let status = vela_core::app::dapp_rpc::multisig_calls_status(&batch, 100, None, false);
             let out = driver.resolve(
-                first.read,
+                read.read,
                 DbrShellResult::ReadAnswered {
-                    body_json: Some(body),
+                    body_json: Some(crate::multisig::dapp::read_body(
+                        &vela_core::app::multisig_dapp::DappAnswer::ok(status.clone()),
+                    )),
                     now_ms: 0.0,
                     failure: None,
                 },
