@@ -728,6 +728,211 @@ const aliceSigned = [passkeyApproval(ALICE.address, ALICE.genesis)];
     ns.i18n.t(one.sentence) === 'From now on 1 approval will be needed.', JSON.stringify(one.sentence));
 }
 
+// --- 4. round 10: whose coins, and a member change before → after ------------
+//
+// r10 (S4): an unlimited approve on a multisig's transaction said "all of
+// YOUR USDC" — it is the multisig's. And a member change said only "1
+// approval will be needed", where the app says "2 of 4 → 1 of 5": the page
+// now draws it against the members the app says the multisig has now
+// (`context.multisig.owners` / `.threshold`, vela-core `approval::request`),
+// the "before" marked as the app's word; the members a setup in this very
+// operation names are facts.
+{
+  ns.i18n.setLocale('en');
+  const BASE = 8453;
+  const BASE_USDC = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+  const SPENDER = '0xcA0b000000000000000000000000000000c070a5';
+  const MAX = (1n << 256n) - 1n;
+  const approveTx = tx({ to: BASE_USDC, data: '0x' + sel('approve(address,uint256)') + word(SPENDER) + num(MAX) });
+  const intent = {
+    method: 'vela_multisigApprove', origin: '',
+    params: [{ chainId: BASE, safe: SAFE, member: MEMBER, safeTx: approveTx,
+      safeTxHash: ms('safeTxHashes', { chainId: BASE, safe: SAFE, tx: approveTx }).safeTxHash }],
+  };
+  const v = view(intent, { chainId: BASE });
+  const said = ns.render(v, {}).textContent;
+  check('r10: an unlimited approve of the multisig\'s USDC says the multisig\'s, not yours',
+    v.sentence && v.sentence.key === 'sentence.approveUnlimitedMs' && warned(v, 'warn.unlimitedMs') &&
+      !warned(v, 'warn.unlimited') && said.includes('all of the multisig’s USDC') &&
+      said.includes('every USDC the multisig has') && !/\byour USDC\b|\bUSDC you have\b/.test(said),
+    JSON.stringify([v.sentence, v.warnings.map((w) => w.key)]));
+  ns.i18n.setLocale('zh');
+  const zh = ns.render(v, {}).textContent;
+  check('r10: …in Chinese too ("多签全部 USDC", never "你全部")', zh.includes('多签全部 USDC') && !zh.includes('你全部'), zh.slice(0, 300));
+  ns.i18n.setLocale('en');
+  const capped = tx({ to: BASE_USDC, data: '0x' + sel('approve(address,uint256)') + word(SPENDER) + num(5_000_000n) });
+  const vc = view({ ...intent, params: [{ ...intent.params[0], safeTx: capped,
+    safeTxHash: ms('safeTxHashes', { chainId: BASE, safe: SAFE, tx: capped }).safeTxHash }] }, { chainId: BASE });
+  check('r10: …a capped approve too ("up to 5 USDC of the multisig’s")', vc.sentence && vc.sentence.key === 'sentence.approveMs',
+    JSON.stringify(vc.sentence));
+  const sent = view(request(ms('transfersTx', { transfers: [{ to: THIRD, amount: '1' }], nonce: '0x7' })));
+  check('r10: …and a transfer is the multisig\'s ("The multisig sends …")', sent.sentence && sent.sentence.key === 'sentence.msSends',
+    JSON.stringify(sent.sentence));
+  // A site's own transaction is the account's: "your", whatever its context says.
+  const own = ns.resolve({ method: 'eth_sendTransaction', origin: 'https://app.example',
+    params: [{ from: MEMBER, to: BASE_USDC, value: '0x0', data: '0x' + sel('approve(address,uint256)') + word(SPENDER) + num(MAX) }] },
+  { chainId: BASE, account: MEMBER, channel: 'url', callback: 'velawallet://sign-result', selfTag: 'tag.thisMultisig' });
+  check('r10: a requester cannot make an account\'s approve read as a multisig\'s', own.sentence &&
+    own.sentence.key === 'sentence.approveUnlimited' && warned(own, 'warn.unlimited'), JSON.stringify(own.sentence));
+}
+
+{
+  ns.i18n.setLocale('en');
+  const FOURTH = '0x9A8b000000000000000000000000000000001a09';
+  const FIFTH = '0x88cCa00000000000000000000000000000266894';
+  const now = { owners: [MEMBER, OTHER, THIRD, FOURTH], threshold: 2 };
+  const changeOn = (state, change) => {
+    const verdict = ms('memberChangeTx', { multisig: SAFE, state, change, nonce: '0x7' });
+    if (!verdict.tx) throw new Error('the core refused ' + JSON.stringify(change) + ': ' + JSON.stringify(verdict));
+    return verdict.tx;
+  };
+  // "Approvals needed" carries the before → after; without a claim it is the
+  // bare threshold the bytes say, as before.
+  const changeRow = (f) => f.label === 'field.threshold' && f.value && f.value.key === 'value.msApprovalsChange';
+  const rowsOf = (v) => ({
+    members: v.fields.find((f) => f.label === 'field.msMembers'),
+    approvals: v.fields.find(changeRow),
+    threshold: v.fields.find((f) => f.label === 'field.threshold' && !changeRow(f)),
+  });
+  const words = (row) => row && ns.i18n.t(row.value);
+
+  // The round-10 case: 2 of 4, add a fifth needing 1.
+  const add = view(request(changeOn(now, { kind: 'add', owner: FIFTH, threshold: 1 })), { multisig: { name: 'R10 Team', ...now } });
+  const r = rowsOf(add);
+  check('r10: add a member — "Members 4 → 5", "Approvals 2 of 4 → 1 of 5", the app\'s word',
+    !add.refuse && words(r.members) === '4 → 5' && words(r.approvals) === '2 of 4 → 1 of 5' &&
+      r.members.tagKey === 'tag.byApp' && r.approvals.tagKey === 'tag.byApp' && !r.threshold,
+    JSON.stringify([words(r.members), words(r.approvals), r.members && r.members.tagKey]));
+  const card = ns.render(add, {}).textContent;
+  check('r10: …drawn on the card, with "per the app"', card.includes('4 → 5') && card.includes('2 of 4 → 1 of 5') &&
+    card.includes('per the app'), card.slice(0, 500));
+  ns.i18n.setLocale('zh');
+  check('r10: …in Chinese ("2 / 4 → 1 / 5")', ns.render(add, {}).textContent.includes('2 / 4 → 1 / 5'));
+  ns.i18n.setLocale('en');
+
+  const remove = view(request(changeOn(now, { kind: 'remove', owner: OTHER, threshold: 2 })), { multisig: now });
+  check('r10: remove a member — "4 → 3", "2 of 4 → 2 of 3"',
+    words(rowsOf(remove).members) === '4 → 3' && words(rowsOf(remove).approvals) === '2 of 4 → 2 of 3',
+    JSON.stringify([words(rowsOf(remove).members), words(rowsOf(remove).approvals)]));
+  const swap = view(request(changeOn(now, { kind: 'replace', oldOwner: OTHER, newOwner: FIFTH })), { multisig: now });
+  check('r10: replace a member — "4 → 4", "2 of 4 → 2 of 4"',
+    words(rowsOf(swap).members) === '4 → 4' && words(rowsOf(swap).approvals) === '2 of 4 → 2 of 4');
+  const rule = view(request(changeOn(now, { kind: 'threshold', threshold: 3 })), { multisig: now });
+  check('r10: change the threshold — "4 → 4", "2 of 4 → 3 of 4"',
+    words(rowsOf(rule).members) === '4 → 4' && words(rowsOf(rule).approvals) === '2 of 4 → 3 of 4' && !rowsOf(rule).threshold);
+
+  // A wallet that names no members (an older one): the change as before.
+  const bare = view(request(changeOn(now, { kind: 'add', owner: FIFTH, threshold: 1 })));
+  check('r10: no members from the app — no before, the threshold row as before, no caution',
+    !rowsOf(bare).members && rowsOf(bare).threshold && !warned(bare, 'warn.msMembersClaimOff'));
+  // Members that do not fit the change: no figures this page cannot stand behind, and said.
+  const off = view(request(changeOn(now, { kind: 'add', owner: FIFTH, threshold: 1 })),
+    { multisig: { owners: [MEMBER, FIFTH], threshold: 1 } });
+  check('r10: members that do not fit the change (adds one it has) — no before → after, a caution, not refused',
+    !off.refuse && !rowsOf(off).members && rowsOf(off).threshold && warned(off, 'warn.msMembersClaimOff'));
+  for (const [name, bad] of [
+    ['a threshold above the members', { owners: [MEMBER, OTHER], threshold: 3 }],
+    ['the same member twice', { owners: [MEMBER, MEMBER.toLowerCase()], threshold: 1 }],
+    ['an address that is not one', { owners: [MEMBER, 'Bob'], threshold: 1 }],
+    ['a threshold in words', { owners: [MEMBER, OTHER], threshold: '2' }],
+  ]) {
+    const v = view(request(changeOn(now, { kind: 'add', owner: FIFTH, threshold: 1 })), { multisig: bad });
+    check(`r10: a malformed claim (${name}) is no claim`, !rowsOf(v).members && rowsOf(v).threshold);
+  }
+
+  // A batch: each change against the one before it.
+  const batch = view(request(tx({
+    to: MSCO, operation: 1, data: multiSend([
+      { to: SAFE, data: '0x' + sel('addOwnerWithThreshold(address,uint256)') + word(FIFTH) + num(2) },
+      { to: SAFE, data: '0x' + sel('changeThreshold(uint256)') + num(3) },
+    ]),
+  })), { multisig: now });
+  const legRows = batch.legs.map((l) => [words(rowsOf(l.view).members), words(rowsOf(l.view).approvals)]);
+  check('r10: a batch — each change against the one before ("4 → 5, 2 of 4 → 2 of 5", then "5 → 5, 2 of 5 → 3 of 5")',
+    JSON.stringify(legRows) === JSON.stringify([['4 → 5', '2 of 4 → 2 of 5'], ['5 → 5', '2 of 5 → 3 of 5']]),
+    JSON.stringify(legRows));
+  check('r10: a batch\'s legs are numbered "1", "2" (never an empty number)', batch.legs.map((l) => l.index).join(',') === '1,2');
+}
+
+{
+  // An executor runs a member change: the members now are the app's
+  // (`execution_context`'s `owners`), or the setup's when this operation
+  // deploys the multisig — facts, no "per the app".
+  ns.i18n.setLocale('en');
+  const NEWCOMER = '0x88cCa00000000000000000000000000000266894';
+  const change = ms('memberChangeTx', { multisig: MS, state: { owners: [ALICE.address, EXECUTOR], threshold: 2 },
+    change: { kind: 'add', owner: NEWCOMER, threshold: 2 }, nonce: '0x7' }).tx;
+  const calls = ms('executionCalls', {
+    plan: { multisig: MS, deployMultisig: null, deployOwners: [], tx: change, approvals: aliceSigned, executor: EXECUTOR },
+  });
+  const run = executionRequest(calls, aboutOf(change, { owners: [ALICE.address, EXECUTOR] }));
+  const v = ns.resolve(run.intent, run.context);
+  const members = v.fields.find((f) => f.label === 'field.msMembers');
+  check('r10: an execution of "add a member" — "2 → 3", the app\'s word', !v.refuse && members &&
+    ns.i18n.t(members.value) === '2 → 3' && members.tagKey === 'tag.byApp', JSON.stringify([v.warnings.map((w) => w.key), members]));
+  const change0 = { ...change, nonce: '0x0' };
+  const first = [deployLeg(team.genesis), deployLeg(ALICE.genesis), execLeg(change0, aliceSigned)];
+  const deployed = executionRequest(first, aboutOf(change0));
+  const vd = ns.resolve(deployed.intent, deployed.context);
+  const factual = vd.fields.find((f) => f.label === 'field.msMembers');
+  check('r10: …deployed in the same operation: "2 → 3" from the setup, a fact (no "per the app")', !vd.refuse && factual &&
+    ns.i18n.t(factual.value) === '2 → 3' && factual.tagKey === undefined, JSON.stringify([vd.warnings.map((w) => w.key), factual]));
+
+  // r10 (r8-5 on the executor's card): a batch inside the executed batch,
+  // and a lone call that is a batch, list every leg with its number — an
+  // execution drew a nested leg with nothing under it, and dropped a lone
+  // call's legs altogether.
+  const transferTo = (to, amount) => '0x' + sel('transfer(address,uint256)') + word(to) + num(amount);
+  const runOf = (safeTx) => {
+    const c = ms('executionCalls', {
+      plan: { multisig: MS, deployMultisig: null, deployOwners: [], tx: safeTx, approvals: aliceSigned, executor: EXECUTOR },
+    });
+    const r = executionRequest(c, aboutOf(safeTx));
+    return ns.resolve(r.intent, r.context);
+  };
+  const nestedRun = runOf(tx({ to: MSCO, operation: 1, data: multiSend([
+    { to: MSCO, data: multiSend([{ to: USDC, data: transferTo(THIRD, 1000) }, { to: USDC, data: transferTo(OTHER, 1000) }]) },
+  ]) }));
+  check('r10: an executed batch inside a batch lists every leg ("1", "1.1", "1.2"), the multisig\'s',
+    !nestedRun.refuse && nestedRun.legs.map((l) => l.index).join(',') === '1,1.1,1.2' &&
+      nestedRun.legs[1].view.hero && nestedRun.legs[1].view.hero.amount.text === '0.001' &&
+      nestedRun.legs[1].view.sentence.key === 'sentence.msSends',
+    JSON.stringify(nestedRun.legs.map((l) => [l.index, l.view.intentKey, l.view.sentence && l.view.sentence.key])));
+  const lone = runOf(tx({ to: MSCO, data: multiSend([{ to: USDC, data: transferTo(THIRD, 1000) }, { to: THIRD, value: 5 }]) }));
+  check('r10: an executed lone call that is a batch lists its legs ("1", "2"), never an empty number',
+    lone.legs.map((l) => l.index).join(',') === '1,2' && lone.legs.every((l) => String(l.index).length > 0),
+    JSON.stringify([lone.refuse, lone.legs.map((l) => l.index), lone.warnings.map((w) => w.key)]));
+  ns.i18n.setLocale('zh');
+  const loneText = ns.render(lone, {}).textContent;
+  check('r10: …in Chinese the leg heads carry their numbers ("1 · …", "2 · …")', /(^|[^.\d])1 · /.test(loneText) &&
+    /(^|[^.\d])2 · /.test(loneText) && !/第\s*笔/.test(loneText), loneText.slice(0, 300));
+  ns.i18n.setLocale('en');
+  let deep = transferTo(THIRD, 1);
+  for (let i = 0; i < 4; i++) deep = multiSend([{ to: MSCO, data: deep }]);
+  const tooDeep = runOf(tx({ to: MSCO, operation: 1, data: multiSend([{ to: MSCO, data: deep }]) }));
+  check('r10: an executed batch nested deeper than the core reads: refused', tooDeep.refuse &&
+    warned(tooDeep, 'refuse.msBatchUnreadable'));
+}
+
+{
+  // The levels the page lists agree with the core's one review, level by
+  // level (vela-core `reading::MAX_NESTING`): what the core reads, the page
+  // lists; what the core refuses, the page refuses.
+  const transferTo = (to, amount) => '0x' + sel('transfer(address,uint256)') + word(to) + num(amount);
+  const agree = [];
+  for (let k = 0; k <= 5; k++) {
+    let deep = transferTo(THIRD, 1);
+    for (let i = 0; i < k; i++) deep = multiSend([{ to: MSCO, data: deep }]);
+    const safeTx = tx({ to: MSCO, operation: 1, data: multiSend([{ to: k ? MSCO : USDC, data: deep }]) });
+    const out = reviewOf({ chainId: CHAIN, safe: SAFE, tx: safeTx, owners: members.owners, threshold: members.threshold, deployed: true });
+    const coreRefuses = !!out.thrown || out.sign?.allowed === false;
+    agree.push([k, coreRefuses, view(request(safeTx)).refuse]);
+  }
+  check('r10: nesting — the page refuses exactly where the core does (0–5 batches deep)',
+    agree.every(([, core, page]) => core === page) && agree.some(([, core]) => core) && agree.some(([, core]) => !core),
+    JSON.stringify(agree));
+}
+
 function hasClass(node, name) {
   if (!node) return false;
   if (String(node.className || '').split(/\s+/).includes(name)) return true;
@@ -743,7 +948,11 @@ const sample = ['intent.msApprove', 'refuse.msHashMismatch', 'refuse.msDelegateC
   // round 7: an execution
   'intent.msExecute', 'sentence.msExecute', 'sentence.msSends', 'sentence.msExecSetsUp', 'sentence.msExecActivates',
   'refuse.msExecShape', 'refuse.msExecExtra', 'refuse.msExecDeploy', 'refuse.msExecMismatch', 'refuse.msExecThreshold',
-  'warn.msExecNoNonce', 'ui.msHashesExecNote', 'field.approvedBy', 'ui.walletWithdrew', 'ui.answerNotTaken'];
+  'warn.msExecNoNonce', 'ui.msHashesExecNote', 'field.approvedBy', 'ui.walletWithdrew', 'ui.answerNotTaken',
+  // round 10: the multisig's coins; a member change before → after
+  // (`value.msCountChange` is "{before} → {after}" in every language)
+  'sentence.approveMs', 'sentence.approveUnlimitedMs', 'warn.unlimitedMs', 'warn.approveAllMs', 'warn.nativeValueMs',
+  'field.msMembers', 'value.msApprovalsChange', 'warn.msMembersClaimOff'];
 for (const key of sample) english[key] = ns.i18n.t(key, { claimed: 'A', computed: 'B', nonce: '7', fn: 'f' });
 for (const locale of LOCALES) {
   ns.i18n.setLocale(locale);

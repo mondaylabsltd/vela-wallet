@@ -386,4 +386,15 @@ window.VelaCS.i18n.register('ko', {
   'sentence.msAddOwnerOne': "{owner} 님이 멤버가 되고, 승인이 {threshold}개 필요해집니다.",
   'sentence.msRemoveOwnerOne': "{owner} 님이 더 이상 멤버가 아니며, 승인이 {threshold}개 필요해집니다.",
   'sentence.msThresholdOne': "이제부터 승인이 {threshold}개 필요합니다.",
+  // r10: a multisig's coins are the multisig's, not the signer's; a member
+  // change reads before → after against the members the app says it has now.
+  'sentence.approveMs': "{spender}이(가) 멀티시그 자산을 최대 {amount}까지 사용하도록 허용합니다.",
+  'sentence.approveUnlimitedMs': "{spender}이(가) 멀티시그의 {symbol} 전부를 사용하도록 허용합니다 — 한도가 없습니다.",
+  'warn.unlimitedMs': "무제한 — 이 컨트랙트가 멀티시그의 {symbol}을(를) 모두 사용할 수 있습니다.",
+  'warn.approveAllMs': "이 컬렉션에서 멀티시그가 지금과 앞으로 보유하는 모든 NFT를 상대가 언제든 가져갈 수 있게 됩니다.",
+  'warn.nativeValueMs': "이 호출은 여기 표시된 내용과 별도로 멀티시그에서 호출 대상 컨트랙트로 {amount}을(를) 보냅니다.",
+  'field.msMembers': "멤버",
+  'value.msCountChange': "{before} → {after}",
+  'value.msApprovalsChange': "{beforeOf}개 중 {before}개 → {afterOf}개 중 {after}개",
+  'warn.msMembersClaimOff': "이 변경은 앱이 말하는 멀티시그의 현재 멤버와 맞지 않습니다 — 실행될 때 실패할 수 있습니다. 승인하기 전에 다른 멤버와 멤버 구성을 확인하세요.",
 });
