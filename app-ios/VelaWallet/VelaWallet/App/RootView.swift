@@ -4797,6 +4797,11 @@ struct RootView: View {
         } else if onboarding.signInConnecting {
             UsbConnectingSheet(loc: loc, method: onboarding.signInMethod)
                 .themed(scheme)
+        } else if onboarding.cableEndHold {
+            // A phone's ceremony just ended by itself: this sheet stays,
+            // and takes the core's reason for it (real-device S3).
+            UsbConnectingSheet(loc: loc, method: .hybrid)
+                .themed(scheme)
         } else if onboarding.systemSheetHold {
             // Under Apple's security-key sheet, after "Use Apple's
             // security-key sheet": this sheet stays, and takes whatever the

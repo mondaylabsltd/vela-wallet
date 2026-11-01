@@ -106,6 +106,17 @@ final class OnboardingModel {
     /// its dismissal.
     private(set) var systemSheetHold = false
 
+    /// Real-device S3: a phone's ceremony (caBLE) ended by itself — the
+    /// other phone could not connect, nothing answered the code, the channel
+    /// broke — not by the person's Cancel. Its code (or "look at your
+    /// phone") leaves, and whatever the core says next — the reason, as a
+    /// prompt — must take its place on the SAME sheet: dropped for a frame,
+    /// the sheet began to dismiss, the prompt was presented into the
+    /// dismissal, and the person was left on the key list with no word of
+    /// what went wrong (iPhone → Android, 2026-11-01). Held as the
+    /// connecting sheet until the prompt is up or the machine is idle.
+    private(set) var cableEndHold = false
+
     /// The pending release of the holds (`releaseHolds`).
     private var holdRelease: Task<Void, Never>?
 
@@ -119,7 +130,8 @@ final class OnboardingModel {
     /// single `.sheet(isPresented:)`; the content is chosen by priority.
     var onboardingSheetPresented: Bool {
         pendingPin != nil || pendingWalletPick != nil || usbTouch != nil || pendingInsertKey != nil
-            || cableQr != nil || pending != nil || signInConnecting || systemSheetHold || showSignInMethods
+            || cableQr != nil || pending != nil || signInConnecting || systemSheetHold || cableEndHold
+            || showSignInMethods
     }
 
     /// A swipe-to-dismiss on the shared sheet. Cancels whatever the active
@@ -156,6 +168,7 @@ final class OnboardingModel {
     /// with it, or the shared sheet would come straight back as that
     /// non-dismissable hold until the core went idle.
     func cancelCable() {
+        cableEndHold = false
         cableQr = nil
         if usbTouch?.remote == true { usbTouch = nil }
         signInConnecting = false
@@ -266,11 +279,39 @@ final class OnboardingModel {
     // Set from the (nonisolated) prompts bridge; the sheet reads them.
     fileprivate func presentPin(_ pin: PendingPin) { pendingPin = pin }
     fileprivate func presentWalletPick(_ pick: PendingWalletPick) { pendingWalletPick = pick }
-    fileprivate func presentTouch(_ touch: UsbTouch?) { usbTouch = touch }
-    fileprivate func presentQr(_ payload: String?, creates: Bool) {
+    func presentTouch(_ touch: UsbTouch?) {
+        // The phone's "look at your phone" leaving by itself (not Cancel,
+        // which clears it first): the sheet is held for what comes next.
+        if touch == nil, usbTouch?.remote == true { holdCableEnd() }
+        usbTouch = touch
+    }
+
+    func presentQr(_ payload: String?, creates: Bool) {
+        // The code leaving by itself (Cancel clears it first): held.
+        if payload == nil, cableQr != nil { holdCableEnd() }
         cableQr = payload
         cableQrCreates = creates
     }
+
+    /// Hold the shared sheet across the turn between a phone ceremony's end
+    /// and the core's word about it (`cableEndHold`). Released by the
+    /// machine's next idle view (`releaseHolds`); a ceremony that goes on
+    /// (recovery's second signature, the key's member proof) puts its own
+    /// code up over the hold.
+    private func holdCableEnd() {
+        cableEndHold = true
+        // Never a sheet nobody can leave: if no machine answers at all, the
+        // hold goes by itself.
+        holdRelease?.cancel()
+        holdRelease = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: Self.cableEndHoldMaxNs)
+            guard let self, !Task.isCancelled else { return }
+            self.cableEndHold = false
+        }
+    }
+
+    /// At most this long with nothing said: then the hold goes.
+    static let cableEndHoldMaxNs: UInt64 = 5_000_000_000
 
     /// Spec 102 R3: the page a wallet on its own domain runs its ceremonies
     /// on. Set by the host; `nil` in previews and the gallery, where an
@@ -352,7 +393,7 @@ final class OnboardingModel {
                 // The core is the authority on the name — a `StartOver` clears
                 // it, and the field has to follow.
                 if decoded.name != self.name { self.name = decoded.name }
-                if !decoded.busy, self.systemSheetHold {
+                if !decoded.busy, self.systemSheetHold || self.cableEndHold {
                     self.releaseHolds(of: self.create) { [weak self] in self?.createView?.busy ?? false }
                 }
                 self.endTrustedSignerFlow(ifIdle: decoded.busy)
@@ -434,7 +475,7 @@ final class OnboardingModel {
                     // up on its own; a success finishes onboarding.
                     if decoded.busy {
                         self.sawBusySinceConnect = true
-                    } else if self.sawBusySinceConnect || self.systemSheetHold {
+                    } else if self.sawBusySinceConnect || self.systemSheetHold || self.cableEndHold {
                         self.releaseHolds(of: self.login) { [weak self] in self?.loginView.busy ?? false }
                     }
                     self.endTrustedSignerFlow(ifIdle: decoded.busy)
@@ -480,6 +521,7 @@ final class OnboardingModel {
             guard let self, !Task.isCancelled, !isBusy() else { return }
             self.signInConnecting = false
             self.systemSheetHold = false
+            self.cableEndHold = false
         }
     }
 
@@ -490,6 +532,8 @@ final class OnboardingModel {
 
     func answerPrompt(_ accepted: Bool) {
         guard let prompt = pending else { return }
+        // The reason was said: the phone's hold has done its work.
+        cableEndHold = false
         pending = nil
         prompt.answer.resume(returning: accepted)
     }
@@ -559,6 +603,7 @@ extension OnboardingModel: OnboardingExecutorDeps {
         // the person had just entered (device-found 2026-08-28).
         signInConnecting = false
         systemSheetHold = false
+        cableEndHold = false
 
         // A FINISHED machine is not a BUSY one.
         //
