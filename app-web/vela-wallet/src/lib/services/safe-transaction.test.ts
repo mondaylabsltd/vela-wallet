@@ -839,7 +839,9 @@ describe('a relay estimate that reverts reaches the sheet (spec 082 RJ19)', () =
 			calls,
 			publicKeyHex: KEY
 		});
-		expect(failed.kind).toBe('simulation_failed');
+		// r11-8: the relay's own word that the operation fails — the fee
+		// machine's `refused` (the core's rule, `estimate_gas_outcome`).
+		expect(failed.kind).toBe('refused');
 		expect(estimateRevertsFor(100, ACCOUNT)).toEqual({ reason: null });
 		expect(userOpEstimateFailure('')).toEqual({ type: 'unavailable' });
 

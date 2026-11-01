@@ -18,6 +18,7 @@ import {
 	changeLines,
 	formatUnits,
 	localName,
+	memberActionTitle,
 	memberWho,
 	shortenAddress,
 	tokenInfo,
@@ -230,7 +231,8 @@ class WaitingRows {
 			return {
 				id: proposalRowId(item),
 				kind: 'sent',
-				title: drawn?.title ?? '…',
+				// r11-6: a member change is named with the names as they stand.
+				title: memberActionTitle(m, item.review.action, who) ?? drawn?.title ?? '…',
 				// r4D-13: ONE word about where it stands, so the line fits two
 				// lines on a 320-wide phone. "Ready to execute" already says every
 				// approval is in, "Needs your approval" is the one thing to do,

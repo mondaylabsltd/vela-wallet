@@ -11,6 +11,8 @@ const said = vi.hoisted(() => ({ standing: null as unknown }));
 
 vi.mock('./display', () => ({
 	actionTitle: async () => 'Send 0.5 USDC',
+	memberActionTitle: () => null,
+	memberWho: (address: string) => address,
 	formatUnits: () => '0.5',
 	tokenInfo: async () => ({ symbol: 'USDC', decimals: 18 }),
 	localName: () => null,

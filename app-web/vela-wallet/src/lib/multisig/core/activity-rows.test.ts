@@ -6,6 +6,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('./display', () => ({
 	actionTitle: async () => 'Send 1.5 xDAI',
+	memberActionTitle: () => null,
+	memberWho: (address: string) => address,
 	formatUnits: () => '1.5',
 	tokenInfo: async () => ({ symbol: 'xDAI', decimals: 18 }),
 	localName: (address: string) =>

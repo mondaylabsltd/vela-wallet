@@ -78,6 +78,8 @@ vi.mock('./proposals.svelte', () => ({
 }));
 vi.mock('./display', () => ({
 	actionTitle: async () => 'Contract call',
+	memberActionTitle: () => null,
+	memberWho: (address: string) => address,
 	formatUnits: (raw: string) => raw,
 	tokenInfo: async () => ({ symbol: 'xDAI', decimals: 0 })
 }));

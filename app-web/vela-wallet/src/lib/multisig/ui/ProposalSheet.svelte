@@ -1323,18 +1323,18 @@
 	}
 
 	/**
-	 * r4a-16: every transaction it waits behind — each number between the
-	 * chain's and its own — and, where one is here, the way to it (r4D-19).
+	 * r4a-16: every transaction it waits behind — the core's numbers
+	 * (`waitsFor`, r11 S4: the same on every surface) — and, where one is
+	 * here, the way to it (r4D-19).
 	 */
 	const blocking = $derived.by(() => {
 		if (!item || item.status !== 'queued') return [];
-		const from = store.chain(chainId)?.members.nonce ?? 0n;
-		const out: { nonce: bigint; hash: string | null }[] = [];
-		for (let n = from; n < item.nonce && out.length < 20; n += 1n) {
-			const open = store.chain(chainId)?.items.find((i) => i.nonce === n && i.status !== 'done');
-			out.push({ nonce: n, hash: open?.safeTxHash ?? null });
-		}
-		return out;
+		return (item.waitsFor ?? []).map((n) => ({
+			nonce: n,
+			hash:
+				store.chain(chainId)?.items.find((i) => i.nonce === n && i.status !== 'done')?.safeTxHash ??
+				null
+		}));
 	});
 
 	/** Approvals the mailbox holds from accounts that are not members on this network now. */

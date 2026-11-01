@@ -494,7 +494,9 @@
 					name: tx.name,
 					title: tx.title,
 					review: tx.review,
-					chainNonce: tx.members.nonce
+					chainNonce: tx.members.nonce,
+					// r11 S4: the core's numbers it waits behind (`OutsideItem.waits_for`).
+					waitsFor: tx.item.waitsFor ?? []
 				}
 			: null
 	);

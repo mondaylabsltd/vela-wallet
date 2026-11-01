@@ -259,13 +259,7 @@ export function createFeeExecutor(options: FeeSessionOptions) {
 						}
 					};
 				}
-				return {
-					type: 'user_op_gas',
-					outcome:
-						outcome.kind === 'context_unavailable'
-							? { type: 'context_unavailable' }
-							: { type: 'simulation_failed' }
-				};
+				return { type: 'user_op_gas', outcome: { type: outcome.kind } };
 			}
 
 			case 'measure_inner_calls': {

@@ -3,6 +3,8 @@
  * zero routing decisions. Fetch is mocked at the boundary; the ban codec is
  * pinned to the cross-client bytes.
  */
+// The outcome of a thrown fetch is the core's rule (r11-9, `transportOutcomeOf`).
+import '$lib/i18n/wasm-init.server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RpcPoolCallRegistry, RpcPoolEffect } from './rpc-pool-types';
 
