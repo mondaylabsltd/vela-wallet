@@ -47,6 +47,7 @@
  *     emitted when a grant or a chain pick CHANGES in storage.
  */
 import {
+	ACCOUNT_CHAINS_KEY,
 	CHAIN_PREFIX,
 	CHAINS_KEY,
 	DOC_PORT,
@@ -66,6 +67,7 @@ import {
 	USER_OP_STATUS_METHOD,
 	SAFE_EXECUTION_SUCCESS,
 	SAFE_NONCE_CALL,
+	accountChainsOf,
 	callsStatusId,
 	callsStatusResult,
 	multisigCallsStatusResult,
@@ -1030,10 +1032,14 @@ function chainOf(origin, all) {
 	const connectedOn = grant && typeof grant === 'object' ? parseChainId(grant.chainId) : 0;
 	if (connectedOn > 0) return connectedOn;
 	// dapp-17: a new site starts on the network last used in this space, not
-	// on mainnet — a testnet-space wallet put every new site on 0x1.
-	const start = startChainOf(all[CHAINS_KEY], all[LAST_CHAIN_KEY]);
-	if (start > 0) return start;
+	// on mainnet — a testnet-space wallet put every new site on 0x1. r10:
+	// then where the SIGNED-IN account lives, as the wallet page stored it for
+	// that account (`ACCOUNT_CHAINS_KEY`) — never from whichever extension
+	// page published the catalog last.
 	const snapshot = all[EXT_CACHE_KEY];
+	const lives = accountChainsOf(all[ACCOUNT_CHAINS_KEY], signedInOf(snapshot));
+	const start = startChainOf(all[CHAINS_KEY], all[LAST_CHAIN_KEY], lives);
+	if (start > 0) return start;
 	return snapshot && typeof snapshot === 'object' ? parseChainId(snapshot.chain_id) : 0;
 }
 
@@ -1070,7 +1076,8 @@ async function answerFromSnapshot(method, origin) {
 		CHAIN_PREFIX + origin,
 		EXT_CACHE_KEY,
 		CHAINS_KEY,
-		LAST_CHAIN_KEY
+		LAST_CHAIN_KEY,
+		ACCOUNT_CHAINS_KEY
 	]);
 	const grant = all[PERM_PREFIX + origin] ?? null;
 	const snapshot = all[EXT_CACHE_KEY] ?? null;
@@ -1128,7 +1135,8 @@ async function switchChain(method, params, origin) {
 		CHAIN_PREFIX + origin,
 		PERM_PREFIX + origin,
 		EXT_CACHE_KEY,
-		LAST_CHAIN_KEY
+		LAST_CHAIN_KEY,
+		ACCOUNT_CHAINS_KEY
 	]);
 	const catalog = all[CHAINS_KEY];
 	if (!catalog) return { error: NOT_OPENED() };
@@ -1277,7 +1285,8 @@ async function forwardRead(method, params, origin) {
 		CHAIN_PREFIX + origin,
 		PERM_PREFIX + origin,
 		EXT_CACHE_KEY,
-		LAST_CHAIN_KEY
+		LAST_CHAIN_KEY,
+		ACCOUNT_CHAINS_KEY
 	]);
 	const catalog = all[CHAINS_KEY];
 	if (!catalog) return { error: NOT_OPENED() };

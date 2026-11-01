@@ -1577,6 +1577,70 @@ describe('where a new site starts (dapp-17)', () => {
 		const second = env.openPage(8, 'doc-b', 'https://other.example');
 		expect(await chainOfPage(env, second)).toBe('0x14a34');
 	});
+
+	it('starts where the SIGNED-IN account lives, whatever page published the catalog (r10)', async () => {
+		const arc = {
+			...catalog,
+			order: [11155111, 84532, 5042002],
+			chains: {
+				...catalog.chains,
+				'5042002': { chainId: 5042002, name: 'Arc Testnet', rpc: [], bundler: '' }
+			}
+		};
+		const env = makeEnv();
+		env.local.data['vela.ext.chains'] = arc;
+		env.local.data['vela.ext.cache'] = {
+			address: '0xD400866e00B055B20752a826CD5C89b811de130b',
+			chain_id: 1
+		};
+		env.local.data['vela.ext.accountChains'] = {
+			'0xd400866e00b055b20752a826cd5c89b811de130b': [5042002],
+			'0x031d7d57c99caf891e1c250554691fd12d84772b': [84532]
+		};
+		await startWorker(env);
+		expect(await chainOfPage(env, env.openPage(7, 'doc-a'))).toBe('0x4cef52');
+		// The other account signed in: where IT lives.
+		env.local.data['vela.ext.cache'] = {
+			address: '0x031D7D57c99CAF891e1C250554691Fd12D84772b',
+			chain_id: 1
+		};
+		expect(await chainOfPage(env, env.openPage(8, 'doc-b', 'https://other.example'))).toBe(
+			'0x14a34'
+		);
+	});
+
+	it('switches to a network of the space NOT in front, and keeps the last one used here (r10)', async () => {
+		const env = makeEnv();
+		// Safari: the wallet in the mainnet space, a site asks for Arc Testnet.
+		env.local.data['vela.ext.chains'] = {
+			version: 1,
+			space: 'mainnet',
+			order: [1],
+			chains: {
+				'1': { chainId: 1, name: 'Ethereum', rpc: [], bundler: '' },
+				'5042002': { chainId: 5042002, name: 'Arc Testnet', rpc: [], bundler: '' }
+			}
+		};
+		await startWorker(env);
+		const page = env.openPage(7, 'doc-a');
+		const switched = await env.sendFromPage(page, {
+			type: 'rpc',
+			id: 's',
+			method: 'wallet_switchEthereumChain',
+			params: [{ chainId: '0x4cef52' }]
+		});
+		expect(switched).toEqual({ result: null });
+		expect(await chainOfPage(env, page)).toBe('0x4cef52');
+		expect(env.local.data['vela.ext.lastChain']).toBeUndefined();
+		// A chain Vela does not have is still 4902.
+		const unknown = await env.sendFromPage(page, {
+			type: 'rpc',
+			id: 'u',
+			method: 'wallet_switchEthereumChain',
+			params: [{ chainId: '0x67932' }]
+		});
+		expect(unknown.error?.code).toBe(4902);
+	});
 });
 
 describe('chain reads (RF2, G20, G33)', () => {

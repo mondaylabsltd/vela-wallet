@@ -9,6 +9,8 @@
 // The core is loaded the way every build-time consumer loads it, so the
 // worker's constants can be pinned to the core's own numbers (spec 082 §13).
 import '$lib/i18n/wasm-init.server';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
 	rpcCooldownMs,
@@ -17,8 +19,13 @@ import {
 	siteStartChain as coreSiteStartChain,
 	siteStartChainFor as coreSiteStartChainFor
 } from '$lib/core/kernels';
-import { LAST_CHAIN_KEY as APP_LAST_CHAIN_KEY } from './keys';
 import {
+	ACCOUNT_CHAINS_KEY as APP_ACCOUNT_CHAINS_KEY,
+	LAST_CHAIN_KEY as APP_LAST_CHAIN_KEY
+} from './keys';
+import {
+	ACCOUNT_CHAINS_KEY,
+	accountChainsOf,
 	ENDPOINTS_KEY,
 	ERR,
 	LAST_CHAIN_KEY,
@@ -224,6 +231,26 @@ describe('what the worker now routes itself (reads, switching)', () => {
 		expect(chainKnown(catalog, 8453)).toBe(false);
 		expect(chainKnown(undefined, 1)).toBe(false);
 	});
+
+	it('knows a network of the space NOT in front — 4902 only for one Vela lacks (r10)', () => {
+		// Safari, the wallet in the mainnet space: a site's switch to Arc
+		// Testnet was "Chain 5042002 is not in Vela's networks".
+		const catalog = {
+			version: 1,
+			space: 'mainnet',
+			order: [1, 8453],
+			chains: {
+				'1': { rpc: ['https://a'] },
+				'8453': { rpc: ['https://b'] },
+				'5042002': { rpc: ['https://arc'] }
+			}
+		};
+		expect(chainKnown(catalog, 5042002)).toBe(true);
+		expect(chainEndpoints(catalog, 5042002, false)).toEqual(['https://arc']);
+		expect(chainKnown(catalog, 424242)).toBe(false);
+		// A new site still starts in the space in front.
+		expect(startChainOf(catalog, undefined, [5042002])).toBe(1);
+	});
 });
 
 describe('the worker’s chain reads (spec 082 RF2, G20, G33)', () => {
@@ -341,17 +368,58 @@ describe('where a new site starts (dapp-17)', () => {
 		}
 	});
 
-	it('a new site starts where the account holds something (r9)', () => {
-		const testnet = {
-			version: 1,
-			chains: {},
-			space: 'testnet',
-			order: [11155111, 84532, 5042002],
-			accountChains: [5042002]
+	it('the twin answers every shared vector as vela-core does (r10)', () => {
+		const { cases } = JSON.parse(
+			readFileSync(
+				fileURLToPath(
+					new URL(
+						'../../../../../rust/crates/vela-core/tests/vectors/site-start-chain.json',
+						import.meta.url
+					)
+				),
+				'utf8'
+			)
+		) as {
+			cases: {
+				name: string;
+				space_chain_ids: number[];
+				last_used: number | null;
+				account_chains: number[];
+				start: number;
+			}[];
 		};
-		expect(startChainOf(testnet, undefined)).toBe(5042002);
+		expect(cases.length).toBeGreaterThanOrEqual(10);
+		for (const c of cases) {
+			expect(siteStartChain(c.space_chain_ids, c.last_used, c.account_chains), c.name).toBe(
+				c.start
+			);
+			// …and through the worker's door, from what is stored.
+			if (c.space_chain_ids.length === 0) continue;
+			const catalog = { version: 1, chains: {}, space: 'testnet', order: c.space_chain_ids };
+			const last = c.last_used === null ? undefined : { testnet: c.last_used };
+			expect(startChainOf(catalog, last, c.account_chains), c.name).toBe(c.start);
+		}
+	});
+
+	it('a new site starts where the SIGNED-IN account lives (r9, r10)', () => {
+		const testnet = { version: 1, chains: {}, space: 'testnet', order: [11155111, 84532, 5042002] };
+		const stored = {
+			'0xd400866e00b055b20752a826cd5c89b811de130b': [5042002],
+			'0x031d7d57c99caf891e1c250554691fd12d84772b': [84532]
+		};
+		const lives = accountChainsOf(stored, '0xD400866e00B055B20752a826CD5C89b811de130b');
+		expect(lives).toEqual([5042002]);
+		expect(startChainOf(testnet, undefined, lives)).toBe(5042002);
 		// The network last used in this space still comes first.
-		expect(startChainOf(testnet, { testnet: 84532 })).toBe(84532);
+		expect(startChainOf(testnet, { testnet: 84532 }, lives)).toBe(84532);
+		// Another account, or nobody signed in, or nothing stored yet.
+		expect(accountChainsOf(stored, '0x031D7D57c99CAF891e1C250554691Fd12D84772b')).toEqual([84532]);
+		expect(accountChainsOf(stored, null)).toEqual([]);
+		expect(accountChainsOf(undefined, '0xD400866e00B055B20752a826CD5C89b811de130b')).toEqual([]);
+		// A catalog's own `accountChains` (r9's, written by whichever page
+		// published last) is no longer read: only the account's stored list.
+		expect(startChainOf({ ...testnet, accountChains: [5042002] }, undefined)).toBe(11155111);
+		expect(ACCOUNT_CHAINS_KEY).toBe(APP_ACCOUNT_CHAINS_KEY);
 	});
 
 	it('reads the catalog the wallet published, by its space', () => {
@@ -374,6 +442,11 @@ describe('where a new site starts (dapp-17)', () => {
 		});
 		// Nothing new to write.
 		expect(withLastChain(catalog, { testnet: 84532 }, 84532)).toBeNull();
+		// r10: the catalog serves both spaces; a switch to the other space's
+		// chain is no network of this one, and keeps the last one used here.
+		const listed = { space: 'testnet', order: [11155111, 84532, 5042002] };
+		expect(withLastChain(listed, { testnet: 5042002 }, 1)).toBeNull();
+		expect(withLastChain(listed, { testnet: 5042002 }, 84532)).toEqual({ testnet: 84532 });
 		expect(withLastChain({}, {}, 84532)).toBeNull();
 		expect(LAST_CHAIN_KEY).toBe(APP_LAST_CHAIN_KEY);
 	});

@@ -1753,13 +1753,23 @@
 	// networks, then where it holds something (the holdings in their worth's
 	// order), then where this device's transactions were — before the space's
 	// first (the core's `site_start_chain_for`, read by the worker).
+	//
+	// r10: stored for the ACCOUNT the holdings are (the balance view's own
+	// address — the one the worker's snapshot names), and only once this page
+	// knows them: a view with no round settled and nothing restored says
+	// nothing about where the account lives, and must not overwrite what an
+	// earlier page learned (the worker reads it long after this page closed).
 	$effect(() => {
 		if (!inExtension()) return;
-		const held = balance.view.tokens
-			.filter((t) => !t.spam && Number(t.balance) > 0)
-			.map((t) => t.chain_id);
-		setExtAccountChains([
-			...(multisig.active?.chainIds ?? []),
+		const view = balance.view;
+		const address = view.address;
+		if (address === null) return;
+		const held = view.tokens.filter((t) => !t.spam && Number(t.balance) > 0).map((t) => t.chain_id);
+		if (view.last_refreshed_at_ms === null && held.length === 0) return;
+		const active = multisig.active;
+		const own = active && active.address.toLowerCase() === address.toLowerCase() ? active : null;
+		void setExtAccountChains(address, [
+			...(own?.chainIds ?? []),
 			...held,
 			...(multisig.view?.recent_networks ?? [])
 		]);
