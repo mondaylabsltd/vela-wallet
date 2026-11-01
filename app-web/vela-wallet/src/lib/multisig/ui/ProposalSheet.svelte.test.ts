@@ -866,7 +866,10 @@ describe('a transaction the core refuses (r11-4)', () => {
 	});
 
 	it('a delegatecall ("A transaction Vela doesn\'t sign"): its own reason, never the core\'s English', async () => {
-		reviewSeam.review = refusedReview('delegatecall', 'home.multisig.review.refusedWhy.delegatecall');
+		reviewSeam.review = refusedReview(
+			'delegatecall',
+			'home.multisig.review.refusedWhy.delegatecall'
+		);
 		fake.vela = [OTHER];
 		fake.chain.items = [
 			item({
