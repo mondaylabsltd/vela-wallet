@@ -2017,6 +2017,22 @@ function keyFingerprint(publicKeyHex: string): string {
 	return body.length >= 8 ? `${body.slice(0, 4)}…${body.slice(-4)}`.toLowerCase() : '';
 }
 
+/**
+ * What a key's row is called: its own name, else the label the core chose
+ * (`WalletKeyRow.label_key` — "Key {{n}}" is the one it gives), never blank.
+ */
+export function keyLabel(
+	key: Pick<WalletKeys['keys'][number], 'name' | 'label_n'>,
+	index: number,
+	m: SettingsMessages
+): string {
+	if (key.name !== '') return key.name;
+	// `label_n` is the place in the founding order — the row's index, which a
+	// row from before the core said it (a cached core) falls back on.
+	const n = key.label_n > 0 ? key.label_n : index + 1;
+	return m.keys.keyN.replace('{{n}}', String(n));
+}
+
 export function walletKeysModel(
 	keys: WalletKeys | null,
 	/** The core's row for where the record stands — `CHECKING_ROW` while asking. */
@@ -2060,10 +2076,10 @@ export function walletKeysModel(
 	const synced = { text: m.keys.synced, tone: 'synced' as const };
 	const local = { text: m.keys.notSynced, tone: 'local' as const };
 	const rows = (keys?.keys ?? []).map((key, index) => ({
-		// A key the device has no name for is "Key n" — once the registry, whose
-		// record may name it, has had its say.
-		name:
-			key.name !== '' ? key.name : asking ? '' : m.keys.keyN.replace('{{n}}', String(index + 1)),
+		// The core's label, said (r10 follow-up, never blank): the key's own
+		// name, else "Key n" by its place in the founding order — the same
+		// while the registry is asked and after, and never the account's name.
+		name: keyLabel(key, index, m),
 		holderFallback: fallbackFor(key.method),
 		fingerprint: keyFingerprint(key.public_key_hex),
 		pills: [

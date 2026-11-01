@@ -8,6 +8,8 @@
  * the device's own rows, marked the same way.
  */
 import '$lib/i18n/wasm-init.server';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('$lib/core/client', async (importOriginal) => ({
@@ -17,10 +19,16 @@ vi.mock('$lib/core/client', async (importOriginal) => ({
 vi.mock('./core-walk', () => ({ runWalk: async () => null }));
 
 import type { Account } from '$lib/core/generated/Account';
+import { walletKeysStep } from '$lib/core/client';
 import { resolveSettingsMessages } from '$lib/i18n/engine.server';
 import { walletKeysModel } from '$lib/settings/live';
 import { CHECKING_ROW } from './registry-backup';
-import { deviceOnlyKeys, keysWorthAskingAgain, readWalletKeys } from './wallet-keys';
+import {
+	deviceOnlyKeys,
+	keysWorthAskingAgain,
+	readWalletKeys,
+	type WalletKeys
+} from './wallet-keys';
 
 const m = resolveSettingsMessages('en');
 
@@ -115,8 +123,9 @@ describe('before any chain is asked', () => {
 		account.keys[2].name = '';
 		const model = walletKeysModel(deviceOnlyKeys(account), CHECKING_ROW, m);
 		expect(model).toMatchObject({ loading: false, asking: true, count: '3' });
-		// The registry's record may name a key the device has no name for.
-		expect(model.rows.map((row) => row.name)).toEqual(['Mac', 'YubiKey', '']);
+		// A key the device has no name for is called by its place (r10 #5b):
+		// never blank, and nothing the registry's answer contradicts.
+		expect(model.rows.map((row) => row.name)).toEqual(['Mac', 'YubiKey', 'Key 3']);
 		expect(model.rows.map((row) => row.fingerprint)).toEqual([
 			'1111…1111',
 			'2222…2222',
@@ -161,7 +170,7 @@ describe('before any chain is asked', () => {
 			[2, 2],
 			[2, 2]
 		]);
-		// A key nobody named is "Key n" once the registry has had its say.
+		// A key nobody named is "Key n", after the registry as before it.
 		const unnamed = wallet();
 		unnamed.keys[0].name = '';
 		const done = walletKeysModel(
@@ -226,4 +235,57 @@ describe('keysWorthAskingAgain', () => {
 		expect(keysWorthAskingAgain({ source: 'not_registered', chainId: 100, keys: [] })).toBe(false);
 		expect(keysWorthAskingAgain(null)).toBe(false);
 	});
+});
+
+/**
+ * r10 follow-up #5b — what a key row is called, held to the core's vectors
+ * (`rust/crates/vela-core/tests/vectors/wallet-keys/labels.json`): through the
+ * wasm door the web calls, then in the web's own words. Never blank, never the
+ * account's name. The registry cases are the core's own test (the recording).
+ */
+describe('a key row is always called something (vectors)', () => {
+	const doc = JSON.parse(
+		readFileSync(
+			fileURLToPath(
+				new URL(
+					'../../../../../rust/crates/vela-core/tests/vectors/wallet-keys/labels.json',
+					import.meta.url
+				)
+			),
+			'utf8'
+		)
+	) as {
+		label_key: string;
+		cases: {
+			name: string;
+			chains: 'none' | 'recorded';
+			device: unknown;
+			rows: [string, string, number][];
+			say_en: string[];
+		}[];
+	};
+	const device = doc.cases.filter((c) => c.chains === 'none');
+
+	it('has the device cases', () => {
+		expect(doc.label_key).toBe('settingsModals.keys.keyN');
+		expect(device.length).toBeGreaterThanOrEqual(4);
+	});
+
+	for (const vector of device) {
+		it(vector.name, () => {
+			const done = JSON.parse(walletKeysStep('', JSON.stringify(vector.device), '[]', '')) as {
+				keys: WalletKeys['keys'];
+			};
+			expect(done.keys.map((k) => [k.name, k.label_key, k.label_n])).toEqual(vector.rows);
+			const model = walletKeysModel(
+				{ source: 'device', chainId: null, keys: done.keys, asking: true },
+				CHECKING_ROW,
+				m
+			);
+			expect(model.rows.map((row) => row.name)).toEqual(vector.say_en);
+			// …and the same once nobody answered: a label does not wait for the registry.
+			const silent = walletKeysModel({ source: 'device', chainId: null, keys: done.keys }, null, m);
+			expect(silent.rows.map((row) => row.name)).toEqual(vector.say_en);
+		});
+	}
 });

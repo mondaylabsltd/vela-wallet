@@ -1222,9 +1222,11 @@ export interface WalletKeyPillModel {
 
 export interface WalletKeyRowModel {
 	/**
-	 * The owner's label, or "Key n" when nobody recorded one. EMPTY while the
-	 * registry is being asked about a key the device has no name for: the
-	 * registry's record may name it, and "Key 2" would then have been wrong.
+	 * The key's own label, or "Key n" by its place in the founding order when
+	 * it has none (the core's `label_key` / `label_n`, r10 follow-up #5b).
+	 * Never empty and never the account's name — also while the registry is
+	 * asked: a key's place is a fact no answer contradicts, and a registry
+	 * that does name the key replaces it in the same line.
 	 */
 	name: string;
 	/** Who holds it when the core's catalog knows; else the method's generic line. */

@@ -34,6 +34,8 @@ const key = (over: Partial<WalletKeyRow>): WalletKeyRow => ({
 	attestation_hex: '',
 	user_verified: null,
 	signs_here: false,
+	label_key: 'settingsModals.keys.keyN',
+	label_n: 0,
 	...over
 });
 
