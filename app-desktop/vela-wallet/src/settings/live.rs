@@ -609,8 +609,16 @@ pub fn key_row(
     answered: bool,
     words: &KeyRowWords,
 ) -> KeyRowModel {
+    // The core's label (r10 follow-up #5b, never blank): the key's own name,
+    // else "Key n" by its place in the founding order (`label_n`; a row from
+    // an older core carries none, and its index says the same).
     let name = if key.name.is_empty() {
-        SharedString::from(words.key_n.replace("{{n}}", &(index + 1).to_string()))
+        let n = if key.label_n == 0 {
+            index + 1
+        } else {
+            key.label_n as usize
+        };
+        SharedString::from(words.key_n.replace("{{n}}", &n.to_string()))
     } else {
         SharedString::from(key.name.clone())
     };
@@ -2709,6 +2717,46 @@ mod keys_tests {
             && row.user_verified.is_none()));
         assert_eq!(device_key_rows("", &device[..1], "").len(), 1);
         assert!(device_key_rows("", &[], "").is_empty());
+    }
+
+    /// r10 follow-up #5b: a key whose only name is the account's is called by
+    /// its place — "Key 1" — from the core's label, never blank and never
+    /// the account's name.
+    #[test]
+    fn a_key_named_as_the_account_is_key_n() {
+        let mut device = KeysPin::Asking(3).device();
+        device[0].name = "Savings".to_owned();
+        device[1].name = String::new();
+        let rows = device_key_rows("Savings", &device, "");
+        let labels: Vec<(String, u32)> = rows
+            .iter()
+            .map(|row| (row.label_key.clone(), row.label_n))
+            .collect();
+        assert_eq!(labels[0], ("settingsModals.keys.keyN".to_owned(), 1));
+        assert_eq!(labels[1], ("settingsModals.keys.keyN".to_owned(), 2));
+        let words = KeyRowWords {
+            key_n: "Key {{n}}".to_owned(),
+            holders: (
+                SharedString::from("Built-in passkey"),
+                SharedString::from("Phone or tablet"),
+                SharedString::from("Security key"),
+            ),
+            user_verified: SharedString::from("Verify to use"),
+            synced: SharedString::from("Cloud-synced"),
+            not_synced: SharedString::from("Device-bound"),
+            signs_here: SharedString::from("Signed in"),
+        };
+        let names: Vec<String> = rows
+            .iter()
+            .enumerate()
+            .map(|(index, row)| key_row(row, index, false, &words).name.to_string())
+            .collect();
+        assert_eq!(names[..2], ["Key 1", "Key 2"]);
+        assert!(
+            names
+                .iter()
+                .all(|name| !name.is_empty() && name != "Savings")
+        );
     }
 
     /// The copy-record row's status is drawn on ONE line, so the row is one

@@ -40,6 +40,14 @@ export interface WalletKeyRow extends Omit<CreateKeyRow, 'synced' | 'kind' | 'sy
 	 * the sign-in key.
 	 */
 	signs_here: boolean;
+	/**
+	 * r10 follow-up (never blank): the corpus key a row with no name of its
+	 * own is called by — `settingsModals.keys.keyN`, "Key {{n}}" — and empty
+	 * when `name` is the key's own. The core decides; a shell only says it.
+	 */
+	label_key: string;
+	/** The key's place in the founding order, from 1: `{{n}}` of `label_key`. */
+	label_n: number;
 }
 
 export interface WalletKeys {

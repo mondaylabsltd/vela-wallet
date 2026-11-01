@@ -539,6 +539,29 @@ describe('the wallet’s own Send writes ahead (spec 082 RJ1)', () => {
 	 * acknowledges a write the store refused (so the machine moves on). A
 	 * refused write-ahead must still let nothing out (DESK_B review (2)).
 	 */
+	/**
+	 * The feed's shell contract: after every write of the send's records the
+	 * Activity feed reads the store again — r10's due scan and `sent` read
+	 * nothing, so a pending send stood absent from Activity (sweep.e2e).
+	 */
+	it('every write of the send’s records has the feed read them again', async () => {
+		const recordsWritten = vi.fn();
+		const executor = createSendExecutor(ports({ recordsWritten }));
+		await executor.execute(persistAhead(OP));
+		expect(recordsWritten).toHaveBeenCalledTimes(1);
+		await executor.execute({
+			id: 91,
+			operation: { type: 'mark_admitted', record_ids: [`${OP}-0`] }
+		});
+		expect(recordsWritten).toHaveBeenCalledTimes(2);
+		await executor.execute({ id: 92, operation: { type: 'delete_tx_records', ids: [`${OP}-0`] } });
+		expect(recordsWritten).toHaveBeenCalledTimes(3);
+		// A write the store refused put nothing on disk: nothing to read.
+		seams.saveTransactions.mockRejectedValueOnce(new Error('QuotaExceededError'));
+		await executor.execute(persistAhead(OP));
+		expect(recordsWritten).toHaveBeenCalledTimes(3);
+	});
+
 	it('records the store refused let nothing out — the send fails as not sent', async () => {
 		const posted = vi.fn();
 		relayPosts(posted);

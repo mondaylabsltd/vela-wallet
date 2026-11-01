@@ -884,6 +884,9 @@
 				// it used to be a console line nobody reading the form could see.
 				alert: (kind) => (sendAlert = kind),
 				close: () => closeSend(),
+				// The send's records are on disk: Activity reads them at once
+				// (the feed's `ReconcileCompleted`), pending until the tracker says.
+				recordsWritten: () => feed.reconciled(1),
 				// vis-24: the person's own name for a recipient — one of their
 				// accounts, else a contact they named — before any lookup.
 				knownName: (address) => {

@@ -66,14 +66,39 @@ pub enum KeysSource {
     NotRegistered,
 }
 
+/// What a key with no name of its own is called: "Key {{n}}", `n` its place
+/// in founding order ([`WalletKeyRow::label_key`]).
+pub const KEY_N_KEY: &str = "settingsModals.keys.keyN";
+
 /// One row of the keys view. The first eight fields are `CreateKeyRow`'s, in
 /// its spelling, so the shells draw it with the component the create flow
 /// already has.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WalletKeyRow {
-    /// The owner's label; EMPTY when nobody recorded one — the shell then says
-    /// "Key n".
+    /// The key's OWN label — what the person or the registry's record called
+    /// THAT key, never the account's name; EMPTY when it has none, and then
+    /// the row is called by [`Self::label_key`].
     pub name: String,
+    /// r10 follow-up (#5b, never blank): the corpus key a row with no name of
+    /// its own is called by — [`KEY_N_KEY`], "Key {{n}}" with `{{n}}` =
+    /// [`Self::label_n`]. Empty when [`Self::name`] is the label. So a row
+    /// always has exactly one label, and the shell only says it.
+    ///
+    /// Why the place and nothing else ([`label_of`]): what the authenticator
+    /// is — "Apple Passwords", "Security key" — is the row's caption already,
+    /// said once and only once the registry vouched for it (item 13.1); on
+    /// the device's own rows it is a guess the registry can contradict. And
+    /// where a key was made is not recorded honestly anywhere: "This device"
+    /// is false for a synced passkey opened here (issue 207), and the page a
+    /// key was made on is not where it lives (spec 102). The place in the
+    /// founding order is the one fact the device's record and the registry
+    /// agree on, so the label is the same before, during and after the walk.
+    #[serde(default)]
+    pub label_key: String,
+    /// The key's place in the founding order, from 1 — `{{n}}` of
+    /// [`Self::label_key`]. Set on every row.
+    #[serde(default)]
+    pub label_n: u32,
     pub authenticator_attachment: String,
     pub transports: String,
     /// Always `true`: a key that is in the founding set confirmed its membership.
@@ -142,11 +167,39 @@ fn normal_key(public_key_hex: &str) -> Option<String> {
     ))
 }
 
+/// Every row its label (r10 follow-up #5b): its own name when it has one,
+/// else "Key n" by its place in the founding order — never blank, never the
+/// account's name (`account` is that name, trimmed; empty when unknown).
+fn label_rows(rows: &mut [WalletKeyRow], account: &str) {
+    for (index, row) in rows.iter_mut().enumerate() {
+        let own = row.name.trim();
+        if own.is_empty() || (!account.is_empty() && own == account) {
+            row.name.clear();
+        } else if own.len() != row.name.len() {
+            row.name = own.to_owned();
+        }
+        (row.label_key, row.label_n) = label_of(&row.name, index);
+    }
+}
+
+/// The label of the `index`-th row whose own name is `name` (already cleared
+/// of the account's): `("", n)` for a named key, `(KEY_N_KEY, n)` otherwise.
+fn label_of(name: &str, index: usize) -> (String, u32) {
+    let n = u32::try_from(index).map_or(u32::MAX, |i| i.saturating_add(1));
+    if name.is_empty() {
+        (KEY_N_KEY.to_owned(), n)
+    } else {
+        (String::new(), n)
+    }
+}
+
 fn device_rows(device: &[DeviceKey]) -> Vec<WalletKeyRow> {
     device
         .iter()
         .map(|key| WalletKeyRow {
             name: key.name.clone(),
+            label_key: String::new(),
+            label_n: 0,
             authenticator_attachment: String::new(),
             transports: key.transports.clone(),
             confirmed: true,
@@ -246,6 +299,8 @@ fn registry_rows(unit_body: &str, device: &[DeviceKey]) -> Option<Vec<WalletKeyR
             .unwrap_or_default();
         rows.push(WalletKeyRow {
             name,
+            label_key: String::new(),
+            label_n: 0,
             authenticator_attachment: attachment.to_owned(),
             transports: transports.to_owned(),
             confirmed: true,
@@ -291,8 +346,10 @@ pub fn step(
 /// own — what the person or the device called THAT key — and never the
 /// account's name: a label that is the account's name (the record's
 /// `keys[0].name` IS the wallet's name, and the registry's `key_names[0]` is
-/// its published name) is no label, and the shell says "Key n". Pass the
-/// record's own key names as they are; `""` for an unknown account name.
+/// its published name) is no label of the key's own. Every row still has one
+/// (#5b, never blank): a key with no name of its own is "Key n" by its place
+/// in the founding order ([`WalletKeyRow::label_key`]). Pass the record's own
+/// key names as they are; `""` for an unknown account name.
 #[must_use]
 pub fn step_for_account(
     address: &str,
@@ -316,9 +373,7 @@ pub fn step_for_account(
     let mut next = walk(address, &device, answers);
     if let KeysStep::Done { keys, .. } = &mut next {
         mark_sign_in_key(keys, &device, sign_in_credential);
-        for row in keys.iter_mut().filter(|row| is_account(&row.name)) {
-            row.name.clear();
-        }
+        label_rows(keys, account);
     }
     next
 }
@@ -990,6 +1045,11 @@ mod tests {
             let rows = walk_named(&device, account);
             let names: Vec<&str> = rows.iter().map(|r| r.name.as_str()).collect();
             assert_eq!(names, ["", "Key 2", "Key 3"], "account {account:?}");
+            // …and the first is still called something: "Key 1" (#5b).
+            assert_eq!(
+                (rows[0].label_key.as_str(), rows[0].label_n),
+                (KEY_N_KEY, 1)
+            );
         }
         // Device only (no chain): the account's name, said, is no key's label.
         let rows = match step_for_account("", "Interleave", &device, &[], "") {
@@ -997,6 +1057,66 @@ mod tests {
             KeysStep::Ask { .. } => unreachable!(),
         };
         assert_eq!(rows[0].name, "");
+        assert_eq!(
+            (rows[0].label_key.as_str(), rows[0].label_n),
+            (KEY_N_KEY, 1)
+        );
+    }
+
+    /// r10 follow-up #5b (owner: honest, never blank). A key with no name of
+    /// its own is "Key n" by its place in the founding order — whoever
+    /// answered, whatever its authenticator, and never the account's name; a
+    /// named key is its name, and carries no label key.
+    #[test]
+    fn every_row_is_called_something_and_never_the_account() {
+        let key = |n: u8, name: &str, transports: &str| DeviceKey {
+            credential_id: format!("c{n}"),
+            public_key_hex: format!("04{}", n.to_string().repeat(128)),
+            name: name.to_owned(),
+            transports: transports.to_owned(),
+        };
+        let record = [
+            key(1, "E2E Wallet", ""),
+            key(2, "  ", "usb,nfc"),
+            key(3, " Pixel 9 ", "hybrid"),
+            key(4, "", "internal"),
+        ];
+        for address in ["", SAFE] {
+            let rows = match step_for_account(address, "E2E Wallet", &record, &[], "c2") {
+                KeysStep::Done { keys, .. } => keys,
+                // A chain to ask: answered as if none did.
+                KeysStep::Ask { .. } => {
+                    match step_for_account("", "E2E Wallet", &record, &[], "c2") {
+                        KeysStep::Done { keys, .. } => keys,
+                        KeysStep::Ask { .. } => unreachable!(),
+                    }
+                }
+            };
+            let labels: Vec<(&str, &str, u32)> = rows
+                .iter()
+                .map(|r| (r.name.as_str(), r.label_key.as_str(), r.label_n))
+                .collect();
+            assert_eq!(
+                labels,
+                [
+                    ("", KEY_N_KEY, 1),
+                    ("", KEY_N_KEY, 2),
+                    ("Pixel 9", "", 3),
+                    ("", KEY_N_KEY, 4),
+                ]
+            );
+            assert!(rows
+                .iter()
+                .all(|r| !r.name.is_empty() || !r.label_key.is_empty()));
+        }
+        // From the registry too: every row is called something.
+        for row in walk_named(&device()[..1], "Parallel Multi") {
+            assert!(
+                !row.name.is_empty() || row.label_key == KEY_N_KEY,
+                "{row:?}"
+            );
+            assert!(row.label_n >= 1);
+        }
     }
 
     /// Each key's own label, as the fixture's record holds them (Parallel One,
