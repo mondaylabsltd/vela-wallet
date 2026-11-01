@@ -2244,6 +2244,12 @@ impl WalletPage {
                         .to_string();
                     col = col.child(ms_note(theme, &text, tone));
                 }
+                // r10 S4: the lines below are headed, as on the web, the
+                // outside page and the phones — a bare "−0.01 USDC" did not
+                // say whose balance it was or that it was a change.
+                if !sim.deltas.is_empty() {
+                    col = col.child(ms_label(theme, &self.loc.t("componentsUi.signing.balanceChangesTitle")));
+                }
                 for (i, delta) in sim.deltas.iter().enumerate() {
                     let info = words::token_facts(&self.multisig.tokens, chain_id, delta.token.as_deref());
                     let (sign, raw) = match delta.delta.strip_prefix('-') {
