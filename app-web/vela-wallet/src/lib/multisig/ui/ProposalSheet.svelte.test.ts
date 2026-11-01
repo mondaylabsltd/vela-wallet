@@ -807,6 +807,88 @@ describe('one review, every signer, every action (§3.6)', () => {
 	});
 });
 
+describe('a transaction the core refuses (r11-4)', () => {
+	/** The core's review of one it refuses for `why` (`multisig_review` `refused`). */
+	const refusedReview = (why: string, key: string) => ({
+		...REVIEW,
+		sign: { allowed: false, anyway: false },
+		tone: 'refused',
+		state: { source: 'probe', verdict: { kind: 'withheld' } },
+		simulation: { kind: 'withheld', deltas: [] },
+		refused: { why, key }
+	});
+	const DEEP4 = {
+		kind: 'batch',
+		calls: [
+			{
+				to: TO,
+				value: '0',
+				data: '0x8d80ff0a',
+				action: { kind: 'call', to: TO, value: '0', data: '0x8d80ff0a' }
+			}
+		]
+	};
+	const said = () =>
+		[...document.querySelectorAll('[data-testid="proposal-refused"]')].map((p) =>
+			p.textContent?.trim()
+		);
+	/** Nobody is asked to approve it: no ask, no link, no other wallet. */
+	const asksNobody = () => {
+		const text = document.body.textContent ?? '';
+		expect(text).not.toContain('proposal.invite');
+		expect(text).not.toContain('proposal.inviteHint');
+		expect(document.querySelector('[data-testid="outside-invite"]')).toBeNull();
+		expect(buttons()).not.toContain('proposal.sendLink');
+		expect(buttons()).not.toContain('proposal.copyLink');
+		expect(buttons()).not.toContain('proposal.share');
+		expect(buttons()).not.toContain('external.signWithWallet');
+		expect(buttons()).not.toContain('proposal.approve');
+		expect(buttons()).not.toContain('proposal.approveAndExecute');
+	};
+
+	it('a batch nested too deep (deep4): its reason, once — though the core reads it as a batch', async () => {
+		reviewSeam.review = refusedReview('tooDeep', 'home.multisig.review.refusedWhy.tooDeep');
+		fake.vela = [OTHER];
+		fake.chain.items = [item({ review: { action: DEEP4, refusal: null } })];
+		show();
+		await settle();
+		expect(said()).toEqual(['review.refusedWhy.tooDeep']);
+		asksNobody();
+	});
+
+	it('the same, to a member with an outside wallet: no outside link either', async () => {
+		reviewSeam.review = refusedReview('tooDeep', 'home.multisig.review.refusedWhy.tooDeep');
+		fake.chain.items = [item({ review: { action: DEEP4, refusal: null } })];
+		show();
+		await settle();
+		expect(said()).toEqual(['review.refusedWhy.tooDeep']);
+		asksNobody();
+	});
+
+	it('a delegatecall ("A transaction Vela doesn\'t sign"): its own reason, never the core\'s English', async () => {
+		reviewSeam.review = refusedReview('delegatecall', 'home.multisig.review.refusedWhy.delegatecall');
+		fake.vela = [OTHER];
+		fake.chain.items = [
+			item({
+				review: { action: null, refusal: 'delegatecall to a contract Vela does not sign for' }
+			})
+		];
+		show();
+		await settle();
+		expect(said()).toEqual(['review.refusedWhy.delegatecall']);
+		expect(document.body.textContent).not.toContain('delegatecall to a contract');
+		asksNobody();
+	});
+
+	it('one Vela signs: no refusal said, and members are asked', async () => {
+		fake.vela = [OTHER];
+		show();
+		await settle();
+		expect(said()).toEqual([]);
+		expect(document.body.textContent).toContain('proposal.invite');
+	});
+});
+
 /** A dApp's request as the machine holds it (`view.dapp[rid]`). */
 function held(over: Record<string, unknown> = {}) {
 	return {
