@@ -284,3 +284,19 @@ final class Loc {
         return out
     }
 }
+
+extension Loc {
+    /// A list inside a translated sentence ("#1, #2 and #3", "Gnosis、Base"),
+    /// in the language the app speaks — the platform's list formatter for the
+    /// resolved language, never ", " (r10, the zh retest's "交易 #1, #2, #3").
+    func list(_ items: [String]) -> String {
+        Self.list(items, language: resolvedLanguage)
+    }
+
+    static func list(_ items: [String], language: String) -> String {
+        guard items.count > 1 else { return items.first ?? "" }
+        let formatter = ListFormatter()
+        formatter.locale = Locale(identifier: language)
+        return formatter.string(from: items) ?? items.joined(separator: ", ")
+    }
+}

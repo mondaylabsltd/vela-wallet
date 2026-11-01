@@ -445,7 +445,7 @@ struct MultisigCreateSheet: View {
     private var otherSpaceLine: String? {
         guard !sheet.otherSpace.isEmpty else { return nil }
         let space = words.loc.t(NetworkSpace.read(VelaStore()) == .testnet ? "networkSpace.mainnet" : "networkSpace.testnet")
-        return words.t("create.otherSpace", ["space": space, "networks": sheet.otherSpace.map(words.network).joined(separator: ", ")])
+        return words.t("create.otherSpace", ["space": space, "networks": words.loc.list(sheet.otherSpace.map(words.network))])
     }
 
     // MARK: - Review

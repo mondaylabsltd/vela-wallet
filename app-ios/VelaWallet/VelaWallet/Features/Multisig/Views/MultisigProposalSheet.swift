@@ -482,10 +482,10 @@ struct MsProposalModel {
     var signerLines: [(text: String, id: String)] {
         var out: [(String, String)] = []
         if !inVela.isEmpty {
-            out.append((words.t("proposal.approvesInVela", ["names": inVela.map(words.label).joined(separator: ", ")]), "inVela"))
+            out.append((words.t("proposal.approvesInVela", ["names": words.loc.list(inVela.map(words.label))]), "inVela"))
         }
         if !either.isEmpty {
-            out.append((words.t("proposal.eitherWay", ["names": either.map(words.label).joined(separator: ", ")]), "either"))
+            out.append((words.t("proposal.eitherWay", ["names": words.loc.list(either.map(words.label))]), "either"))
         }
         return out.map { (text: $0.0, id: $0.1) }
     }
@@ -493,7 +493,7 @@ struct MsProposalModel {
     /// r7: smart-contract members still to approve, said honestly.
     var contractLine: String? {
         contract.isEmpty ? nil
-            : words.t("proposal.contractMembers", ["names": contract.map(words.label).joined(separator: ", ")])
+            : words.t("proposal.contractMembers", ["names": words.loc.list(contract.map(words.label))])
     }
 
     /// The multisig this transaction is of: the one shown, else the link's.
@@ -1047,7 +1047,7 @@ struct MultisigProposalSheet: View {
             // reads, reviews and signs the transaction alone.
             MsSection(title: words.t("external.outsideLinkTitle")) {
                 MsNote(text: words.t("external.outsideLinkHint"))
-                Text(verbatim: words.t("proposal.stillNeeded", ["missing": model.outside.map(words.label).joined(separator: ", ")]))
+                Text(verbatim: words.t("proposal.stillNeeded", ["missing": words.loc.list(model.outside.map(words.label))]))
                     .typeRole(Typography.rowSub.scaled(textScale))
                     .foregroundStyle(theme.fgMuted)
                     .fixedSize(horizontal: false, vertical: true)

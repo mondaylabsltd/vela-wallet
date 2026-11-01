@@ -76,11 +76,12 @@ struct NetworksParityP2Tests {
         #expect(gnosis.badge != nil)
     }
 
-    /// "Also supported, not in your list: Stable, MegaETH." — under the
+    /// "Also supported, not in your list: Stable and MegaETH." — the list in
+    /// the reader's language (r10, `Loc.list`), under the
     /// MAINNET heading only, by name, and nothing when nothing is out.
     @Test func moreNetworksIsSaidUnderTheMainnetHeading() {
         let more = SettingsLive.moreNetworks(view([network()], hidden: [988, 4_326]), loc: en)
-        #expect(more == "Also supported, not in your list: Stable, MegaETH. Add one from Add Network.")
+        #expect(more == "Also supported, not in your list: Stable and MegaETH. Add one from Add Network.")
         #expect(SettingsLive.moreNetworks(view([network()]), loc: en) == nil)
 
         let base = SettingsFixtures.build(.st9, loc: en)

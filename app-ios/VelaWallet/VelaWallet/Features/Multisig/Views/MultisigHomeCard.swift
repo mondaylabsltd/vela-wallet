@@ -191,7 +191,7 @@ struct MultisigHomeCard: View {
     /// The group's one note (`waiting_note`), and whether Retry goes with it.
     private var waitingNote: (text: String, retry: Bool)? {
         guard following, let note = view.waitingNote else { return nil }
-        let networks = { (note["chain_ids"]?.array ?? []).compactMap(\.int).map(words.network).joined(separator: ", ") }
+        let networks = { words.loc.list((note["chain_ids"]?.array ?? []).compactMap(\.int).map(words.network)) }
         switch note.kind {
         case "offline":
             if let since = note["since"]?.int {
