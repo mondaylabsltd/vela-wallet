@@ -668,3 +668,85 @@ Shell work these leave (no shell can drift; each is a draw or a send):
   registry is asked.
 - **Send** (Android lane): send `left` when Send is left; draw
   `tokens_failed_key` in the picker; draw the send alert only on Send.
+
+## 11. Round 11 — one fee, one verdict, one name
+
+All additive (new functions, new view fields with serde defaults, a new
+enum) except one behaviour of the fee machine (r11-8, below) and the Rust
+struct literals of `ProposalItem`, `OutsideItem`, `OutsideTxShown` and
+`MultisigReview` (one more field each).
+
+### 11.1 The fee (r11-8)
+
+The same plain 0.01 USDC send from a deployed account, through the same
+relay, was priced and charged 0.045 on Android, 0.1092 on iOS, 0.1168 on the
+desktop and 0.1224 on the web. Read from the bundles on Arc Testnet (the
+relay answers without `settlementGas`, so the charge is `3 × gas × basis`):
+iOS, the desktop and the web all priced the relay's limits (500,000 +
+1,000,000 + 100,000 = 1,600,000) at Arc's `eth_gasPrice` of the moment
+(22.75 / 25 / 25.5 gwei), so those three are the same rule. Android's relay
+estimate never came back from the emulator. Its shell said `simulation_failed`,
+the core priced the static model (300,000 + 200,000 + 100,000 = 600,000 →
+0.045), and the submit then measured again and signed the relay's 1,600,000.
+That fee was under-provisioned against the limits it carried, and the gas it
+was priced on was not the gas signed.
+
+| Was | Now |
+| --- | --- |
+| `FeeGasOutcome::SimulationFailed` on a small operation → the static model | no simulation, no fee: `FeeFailure::EstimateFailed`, asked again on the schedule (3 s, 6 s, 8 s…) |
+| each shell deciding "refused" vs "failed" (iOS: refused → `simulation_failed`, unreachable → `context_unavailable`; Android: both → `simulation_failed`; the desktop's own `refuses()`) | `fee_policy::estimate_gas_outcome(error_json)` (uniffi `fee_estimate_gas_outcome(error_json?) -> "refused" \| "simulation_failed"`, wasm `feeEstimateGasOutcome`): `refused` only on the relay's own "simulation failed" / "execution reverted" / "reverted during simulation", never for an `AA..` code |
+| `Refused` on a small operation: the static fee, then the submit measured again | the static fee AND `prepared` = the static limits (L2 adder in `preVerificationGas`), so the submit signs exactly what was priced |
+
+Shell work: send the core's outcome for every failed estimate; sign
+`prepared` whenever the fee carries it (every shell already does).
+Vector `tests/vectors/fee/plain-send.json`: wire answers → the shell results
+every shell must produce → the machine's fee. Replayed by
+`tests/app_fee_parity.rs` and the web's `fee-plain-send-parity.test.ts`.
+
+### 11.2 Sent or not sent (r11-9)
+
+| Was | Now |
+| --- | --- |
+| each shell reading its own exceptions into `not_connected` / `network` (a refused connect in 4–6 ms said "It may have been sent… don't send it again" on Android) | `rpc_pool::TransportFailure` — the error CLASS the shell passes — and `transport_outcome_of(class)` (uniffi `transport_outcome_of(failure) -> JSON`, wasm `transportOutcomeOf`): `offline`, `dns`, `connect_refused`, `connect_timeout`, `tls`, `refused`, `write_failed` → `not_connected` (not sent); `after_write`, `unknown` → `network`; `read_timeout`, `timeout` → `timeout` (may have been sent) |
+| one-press approve-and-execute with a look that could not price or check it: an `execute:` state `stopped {unchecked}` beside the approval, drawn as "This would fail if executed now: it couldn't be checked…" next to "Couldn't check whether it would run — you can still approve" | the approval is the one verdict. Nothing is recorded for the execution, and the look's own line (`proposal.feeUnchecked` / `feeUnpriced`) is the one note |
+
+Draw `ActionState::Stopped` by its preview's kind: `fails` →
+`proposal.wouldFail {reason}`, `unpriced` → `proposal.feeUnpriced`,
+`unchecked` → `proposal.feeUnchecked`. Draw it in place of the fee line,
+never beside it, and never `wouldFail` for a look that did not check.
+Vector `tests/vectors/rules/transport-failures.json` (each class, its
+outcome, `may_have_delivered`, and the submit verdict; per-platform guidance
+in `platform`). Android: tell `write_failed` from `after_write` with
+OkHttp's `EventListener` (`connectFailed` / `requestBodyEnd`). The web's
+`fetch` names only `offline` and its own `timeout`; anything else is
+`unknown`.
+
+### 11.3 Names (r11-6)
+
+| Was | Now |
+| --- | --- |
+| short addresses 6+6 on the web and Android, 4+4 on iOS and the desktop | `names.short` (`multisig_rules::names::short_address`) is THE short form: EIP-55, `0x` + 6, `…`, 6 (`0x88cCA0…266894`). Six and six because a 4+4 look-alike is a 2^32 search for an address-poisoning sender and 6+6 is 2^48 |
+| "Add 0x88cCA0…266894" (web Activity, outside page), "Add 0x88cC…6894" (desktop Activity), "Add Interleave (…)" elsewhere | `names.who {address, label}` (`names::who`): "Interleave (0x88cCA0…266894)", or the short form alone when the label is none. Every title that names a member — sheets, Activity rows, the outside page, notifications — uses it with `label` = `member_labels[lowercase]`. The web's Activity draws a member change with the names as they stand, never the first drawing. The outside page asks the passkey index itself (`names.label` with the published name only) |
+
+A name shown to others is only ever the member's published one (the
+passkey index), a kept label, or the short form — never this device's
+local-only name presented as the member's own.
+
+### 11.4 S4 — counts, signs, headings, numbers
+
+| Was | Now |
+| --- | --- |
+| "9 need your approval" counting deep4 and the delegatecall, and "Ask members to approve" on them | a transaction Vela refuses for what it is (`multisig_review::refused_for_what_it_is`: a delegatecall, a refund, a batch too deep) has empty `can_approve` and `can_execute` at the source. Every count, "Your turn" and the ask drop it. Hide the ask when `can_approve` is empty and `review.refused` is set |
+| "−0.01" on the web, "-0.01" on the desktop Activity and the Android / iOS sheets | `l10n::signed_amount_text(amount, outgoing)` (uniffi `signed_amount_text`, wasm `signedAmountText`) for a written amount; `format_signed_token_amount` from base units. U+2212 only |
+| "SIMULATION RESULT" (Android) vs "Balance changes" | `MultisigReview.moves_title_key` (`componentsUi.signing.balanceChangesTitle`; `null` when the simulation is withheld) |
+| "It can run once…": every earlier number (web), the previous one (natives), "#0" (outside page) | `ProposalItem.waits_for`, `OutsideItem.waits_for`, `OutsideTxShown.waits_for`: every number from the multisig's nonce up to its own, at most 20 (`multisig_proposals::waits_for`). One → `proposal.queuedNote {nonce}`, more → `proposal.queuedNoteMany {nonces}` (the platform's list of `#n`). The outside page now says the wallet's sentence |
+
+### 11.5 The web and the extensions (no native change)
+
+- r11-4: the proposal sheet draws `review.refused.key` whenever it is set,
+  whatever `action` is, and asks nobody to approve a transaction nobody can
+  sign.
+- r11-5: the switcher's (and Settings') multisig rows draw `AccountRow.rule`
+  with "Last known".
+- Add member prefills Name with the address's published name (index), never
+  a local or kept one, and never over what the person typed.
