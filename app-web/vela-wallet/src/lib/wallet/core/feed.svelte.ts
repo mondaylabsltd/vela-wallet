@@ -18,6 +18,7 @@ import { balance } from '$lib/wallet/core/balance.svelte';
 import { spaceNetworksSync, subscribeNetworks } from '$lib/services/networks';
 import { balanceReadPlan } from '$lib/core/kernels';
 import { decimalToBase, onNativeBalanceMoved, setShownNative } from '$lib/services/native-watch';
+import type { CadencePort } from './incoming-cadence';
 import {
 	activityFeedView,
 	dispatchActivityFeed,
@@ -133,6 +134,29 @@ class Feed {
 	liveTick(): void {
 		if (!this.#booted) return;
 		dispatchActivityFeed({ type: 'live_tick' });
+	}
+
+	/**
+	 * r9-17: the incoming check's cadence, as `incoming-cadence.ts` talks to
+	 * the core — the page's presence in, the core's `next_scan` out, the due
+	 * timer's answer back. When to scan is the core's.
+	 */
+	cadencePort(): CadencePort {
+		return {
+			report: (change, presence) => {
+				void this.boot().then(() =>
+					dispatchActivityFeed({ type: 'presence_changed', presence, change })
+				);
+			},
+			due: (seq, presence) => {
+				if (!this.#booted) return;
+				dispatchActivityFeed({ type: 'scan_due', seq, presence });
+			},
+			follow: (listener) => {
+				listener(activityFeedView().next_scan ?? null);
+				return subscribeActivityFeed((view) => listener(view.next_scan ?? null));
+			}
+		};
 	}
 
 	/**
