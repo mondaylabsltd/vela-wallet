@@ -996,17 +996,26 @@ class AppContainer(private val app: Application) {
     }
 
     /**
-     * The account record's keys in founding order, as the keys walk wants them.
-     * The record keeps no per-key label, so only key 0 — whose name IS the
-     * wallet's — arrives named; the registry's metadata names the rest.
+     * The account record's keys in founding order, as the keys walk wants them
+     * — each with its OWN name and transports as the record keeps them (r10
+     * follow-up, core §10.5). The account's name is never handed in as a key's:
+     * the walk takes it beside the keys ([WalletKeys.read]'s `accountName`), and
+     * a key labelled with it is "Key n". A legacy record (no `keys` array) is
+     * its one scalar key, unnamed.
      */
-    suspend fun deviceKeysOf(address: String, walletName: String): List<WalletKeys.DeviceKey> {
+    suspend fun deviceKeysOf(address: String): List<WalletKeys.DeviceKey> {
         val port = StoreAccountPort(AccountStore(app))
-        return port.keysOf(address).mapIndexed { index, key ->
+        val record = port.accountJson(address)?.let { runCatching { JSONObject(it) }.getOrNull() }
+        val named = record?.optJSONArray("keys")
+        return port.keysOf(address).map { key ->
+            val stored = named?.let { keys ->
+                (0 until keys.length()).asSequence().mapNotNull { keys.optJSONObject(it) }
+                    .firstOrNull { it.optString("credential_id") == key.credentialId }
+            }
             WalletKeys.DeviceKey(
                 publicKeyHex = key.publicKeyHex,
-                name = if (index == 0) walletName else "",
-                transports = "",
+                name = stored?.optString("name").orEmpty(),
+                transports = stored?.optString("transports").orEmpty(),
                 credentialId = key.credentialId,
             )
         }

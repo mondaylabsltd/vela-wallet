@@ -285,8 +285,8 @@ fun VelaNavHost(
     LaunchedEffect(session.address, session.activeName) {
         val address = session.address
         if (address.isBlank()) return@LaunchedEffect
-        val device = application.container.deviceKeysOf(address, session.activeName)
-        deviceKeys = address to application.container.walletKeys.deviceOnly(device, application.container.signInCredentialOf(address))
+        val device = application.container.deviceKeysOf(address)
+        deviceKeys = address to application.container.walletKeys.deviceOnly(device, application.container.signInCredentialOf(address), session.activeName)
     }
 
     // Which body the signed-in shell shows. 钱包 and 探索 are SECTIONS of the
@@ -2867,13 +2867,14 @@ fun VelaNavHost(
                     // P2.4 (perf-10): Settings draws no balance of its own — the
                     // account is noted, not read (the web's `noteAccount`).
                     application.container.wallet.noteAccount(address)
-                    val device = application.container.deviceKeysOf(address, session.activeName)
+                    val device = application.container.deviceKeysOf(address)
                     val signIn = application.container.signInCredentialOf(address)
                     // The record as it stands NOW — a key added since the
                     // account came to the front is a row before the registry
-                    // says so — and then the registry.
-                    deviceKeys = address to application.container.walletKeys.deviceOnly(device, signIn)
-                    walletKeys = application.container.walletKeys.read(address, device, signIn)
+                    // says so — and then the registry. r10 follow-up: the
+                    // account's name goes beside the keys, never as key 0's.
+                    deviceKeys = address to application.container.walletKeys.deviceOnly(device, signIn, session.activeName)
+                    walletKeys = application.container.walletKeys.read(address, device, signIn, session.activeName)
                 }
                 // What this device may say about itself in a report — five named
                 // fields, never an address, a balance or an endpoint URL.

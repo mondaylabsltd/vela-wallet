@@ -45,7 +45,7 @@ class WalletKeysPendingTest {
     private val keyB = "047cf27b188d034f7e8a52380304b51ac3c08969e277f21b35a60b48fc4766997807775510db8ed040293d9ac69f7430dbba7dade63ce982299e04b79d227873d1"
     private val keyC = "045ecbe4d1a6330a44c8f7ef951d4bf165e6c6b721efada985fb41661bc6e7fd6c8734640c4998ff7e374b06ce1a64a2ecd82ab036384fb83d9a79b127a27d5032"
 
-    /** The record as `VelaWalletApplication.deviceKeysOf` hands it over: only the first key is named, no transports. */
+    /** A record that names only its first key and keeps no transports (an older record, as `deviceKeysOf` reads it). */
     private val record = listOf(
         WalletKeys.DeviceKey(keyA, "F", "", "cred-a"),
         WalletKeys.DeviceKey(keyB, "", "", "cred-b"),
@@ -103,6 +103,38 @@ class WalletKeysPendingTest {
         assertEquals(listOf(false, true, false), own.rows.map { it.signsHere })
         // Nobody has vouched for anything else.
         assertTrue(own.rows.all { it.synced == null && it.userVerified == null && it.key.providerName.isEmpty() })
+    }
+
+    /**
+     * r10 follow-up (core §10.5): the record's keys go with their OWN names
+     * and the account's name beside them — a key row never takes the
+     * account's name ("Interleave" over "Parallel One"), and a key whose own
+     * label IS the account's name (a one-key wallet's `keys[0]`) is unnamed.
+     */
+    @Test
+    fun `a key keeps its own name and never takes the account's`() {
+        val seen = ArrayList<String>()
+        val spied = WalletKeys(
+            ethCall = { _, _, _ -> null },
+            step = { address, device, answers, credential ->
+                seen += device
+                uniffi.vela_core_uniffi.walletKeysStep(address, device, answers, credential)
+            },
+        )
+        val parallel = listOf(
+            WalletKeys.DeviceKey(keyA, "Parallel One", "internal", "cred-a"),
+            WalletKeys.DeviceKey(keyB, "Parallel Two", "internal", "cred-b"),
+            WalletKeys.DeviceKey(keyC, "Parallel Three", "internal", "cred-c"),
+        )
+        val named = spied.deviceOnly(parallel, "cred-a", accountName = "Interleave")
+        assertEquals(listOf("Parallel One", "Parallel Two", "Parallel Three"), named.rows.map { it.key.name })
+        val sent = JSONObject(seen.single())
+        assertEquals("the account's name goes beside the keys", "Interleave", sent.getString("account_name"))
+        assertEquals("Parallel One", sent.getJSONArray("keys").getJSONObject(0).getString("name"))
+
+        // A one-key wallet: the record's key 0 is named after the wallet — no key label.
+        val single = keys.deviceOnly(listOf(WalletKeys.DeviceKey(keyA, "My Wallet", "internal", "cred-a")), "cred-a", accountName = "My Wallet")
+        assertEquals(listOf(""), single.rows.map { it.key.name })
     }
 
     @Test
