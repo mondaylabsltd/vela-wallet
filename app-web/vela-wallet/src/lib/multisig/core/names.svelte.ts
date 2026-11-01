@@ -79,6 +79,17 @@ class Names {
 		return this.#vela[address.toLowerCase()] === true;
 	}
 
+	/**
+	 * The name the account at `address` published for itself in the passkey
+	 * index (public, the same on every device) — never a name only this
+	 * device holds (a kept label, a contact, its own account's). `null`
+	 * until (unless) the index answers one. Starts the lookup the first time.
+	 */
+	published(address: string): string | null {
+		this.#ask(address);
+		return this.#registered[address.toLowerCase()] ?? null;
+	}
+
 	/** What `address` is, as far as this device can tell (the core's rule); `null`: not known. */
 	kindOf(address: string): NonNullable<MemberInfo['kind']> | null {
 		this.#ask(address);

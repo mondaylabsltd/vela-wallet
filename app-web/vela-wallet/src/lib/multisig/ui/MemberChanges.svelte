@@ -87,7 +87,44 @@
 		}
 	});
 
+	/*
+	 * The Name field, prefilled with the name the member's account published
+	 * for itself in the passkey index ("Interleave") once the entry is an
+	 * address — asked the way every member's name is (`names`), and only
+	 * that name: never one only this device holds. The person can still edit
+	 * it; a name they typed (or one the core kept from a pick) is never
+	 * overwritten, and a cleared field is not filled again. A prefill left as
+	 * it was follows the entry to another address (that one's name, or none).
+	 */
+	const entryAddress = $derived(entry?.entry?.address ?? null);
+	const publishedName = $derived(entryAddress ? names.published(entryAddress) : null);
+	/** The name this sheet put in the field, for which address (not the person's). */
+	let prefill: { key: string; name: string } | null = null;
+	/** The address whose name the person typed themselves. */
+	let typedFor: string | null = null;
+	$effect(() => {
+		const key = entryAddress?.toLowerCase() ?? null;
+		const name = entry?.name ?? '';
+		if (!key || prefill?.key === key || typedFor === key) return;
+		const ours = prefill !== null && name === prefill.name;
+		if (name.trim() !== '' && !ours) return;
+		if (publishedName) {
+			prefill = { key, name: publishedName };
+			send({ type: 'entry_name', name: publishedName });
+		} else if (ours && name !== '') {
+			// Another address's name: not this one's.
+			prefill = null;
+			send({ type: 'entry_name', name: '' });
+		}
+	});
+	function typeName(name: string) {
+		typedFor = entryAddress?.toLowerCase() ?? null;
+		send({ type: 'entry_name', name });
+	}
+
 	function open(next: MultisigMemberCompose | null) {
+		prefill = null;
+		typedFor = null;
 		send({ type: 'compose', compose: next });
 		progress = [];
 		failure = null;
@@ -230,7 +267,7 @@
 					placeholder={mm.memberNamePlaceholder}
 					autocomplete="off"
 					value={entry.name}
-					oninput={(e) => send({ type: 'entry_name', name: e.currentTarget.value })}
+					oninput={(e) => typeName(e.currentTarget.value)}
 					data-testid="member-name"
 				/>
 			</label>

@@ -38,7 +38,9 @@ const seams = vi.hoisted(() => ({
 	/** Members' labels kept with the multisig (the accounts machine's `name_members`, r4D-5). */
 	named: [] as [string, Record<string, unknown>][],
 	/** r7: what the chains say of each address added (unlisted: nobody answers). */
-	evidence: {} as Record<string, 'vela' | 'contract' | 'wallet' | null>
+	evidence: {} as Record<string, 'vela' | 'contract' | 'wallet' | null>,
+	/** What the passkey index answers: the name each account published for itself (reactive). */
+	published: null as null | Map<string, string>
 }));
 vi.mock('../core/store.svelte', () => ({
 	MULTISIG_ACCOUNTS_KEY: 'vela.multisigAccounts',
@@ -122,10 +124,20 @@ vi.mock('../core/display', () => ({
 vi.mock('../core/ui.svelte', () => ({
 	multisigUi: { open: (sheet: unknown) => seams.opened.push(sheet) }
 }));
-vi.mock('../core/names.svelte', () => ({
-	names: { label: (a: string) => `name-${a.slice(2, 4)}`, isVela: () => false },
-	keptMember: () => ({})
-}));
+vi.mock('../core/names.svelte', async () => {
+	const { SvelteMap } = await import('svelte/reactivity');
+	const published = new SvelteMap<string, string>();
+	seams.published = published;
+	return {
+		// A name only this device holds (its label) is never the published one.
+		names: {
+			label: (a: string) => `name-${a.slice(2, 4)}`,
+			isVela: () => false,
+			published: (a: string) => published.get(a.toLowerCase()) ?? null
+		},
+		keptMember: () => ({})
+	};
+});
 vi.mock('$lib/onboarding/core/storage', async (original) => ({
 	...(await original<object>()),
 	loadAccounts: () => []
@@ -251,6 +263,7 @@ afterEach(() => {
 	seams.refuseOn = null;
 	seams.contacts = [];
 	seams.evidence = {};
+	seams.published?.clear();
 });
 
 describe('changing the members (Settings)', () => {
@@ -566,5 +579,105 @@ describe('Add member: the kind, declared then verified (r7)', () => {
 		byText(screen.container, 'send.propose')?.click();
 		await vi.waitFor(() => expect(seams.proposed).toHaveLength(2));
 		expect(seams.named.at(-1)?.[1]).toEqual({ [D]: { kind: 'passkey' } });
+	});
+});
+
+/**
+ * Add member, the Name field: an address entered, the field is prefilled
+ * with the name its account published in the passkey index ("Interleave",
+ * as on the other platforms) — asked the way every member's name is. The
+ * person can still edit it; what they typed is never overwritten; a name
+ * only this device holds is never put there as the member's own.
+ */
+describe('Add member: the Name field, from the passkey index', () => {
+	const INTERLEAVE = '0x88cCA0EeDbF2C4426110bbFc998F048689266894';
+	const E = '0x5555555555555555555555555555555555555555';
+
+	async function adding() {
+		twoNetworks();
+		const screen = shown();
+		await tick();
+		byText(screen.container, 'members.add')?.click();
+		await tick();
+		const entry = screen.container.querySelector<HTMLInputElement>('[data-testid="member-entry"]');
+		if (!entry) throw new Error('no entry');
+		const enter = async (address: string) => {
+			entry.value = address;
+			entry.dispatchEvent(new Event('input', { bubbles: true }));
+			entry.dispatchEvent(new Event('blur'));
+			await tick();
+		};
+		const field = () =>
+			screen.container.querySelector<HTMLInputElement>('[data-testid="member-name"]');
+		const typeName = async (name: string) => {
+			const input = field();
+			if (!input) throw new Error('no name field');
+			input.value = name;
+			input.dispatchEvent(new Event('input', { bubbles: true }));
+			await tick();
+		};
+		return { screen, enter, field, typeName };
+	}
+
+	it('prefills the name the account published, and keeps it with the member', async () => {
+		seams.published?.set(INTERLEAVE.toLowerCase(), 'Interleave');
+		const { screen, enter, field } = await adding();
+		await enter(INTERLEAVE);
+		expect(field()?.value).toBe('Interleave');
+		byText(screen.container, 'send.propose')?.click();
+		await vi.waitFor(() => expect(seams.proposed).toHaveLength(2));
+		expect(seams.named.at(-1)?.[1]).toEqual({ [INTERLEAVE]: { name: 'Interleave' } });
+	});
+
+	it('the index answers after the address is in: prefilled then', async () => {
+		const { enter, field } = await adding();
+		await enter(INTERLEAVE);
+		expect(field()?.value).toBe('');
+		seams.published?.set(INTERLEAVE.toLowerCase(), 'Interleave');
+		await tick();
+		expect(field()?.value).toBe('Interleave');
+	});
+
+	it('a name the person typed is never overwritten — nor a field they cleared filled again', async () => {
+		const { enter, field, typeName } = await adding();
+		await enter(INTERLEAVE);
+		await typeName('Dana');
+		seams.published?.set(INTERLEAVE.toLowerCase(), 'Interleave');
+		await tick();
+		expect(field()?.value).toBe('Dana');
+		await typeName('');
+		await tick();
+		expect(field()?.value).toBe('');
+	});
+
+	it('editable: what the person makes of the prefilled name stands', async () => {
+		seams.published?.set(INTERLEAVE.toLowerCase(), 'Interleave');
+		const { enter, field, typeName } = await adding();
+		await enter(INTERLEAVE);
+		expect(field()?.value).toBe('Interleave');
+		await typeName('');
+		await tick();
+		expect(field()?.value).toBe('');
+		await typeName('Treasurer');
+		await tick();
+		expect(field()?.value).toBe('Treasurer');
+	});
+
+	it('nothing published: empty — never a name only this device holds', async () => {
+		const { enter, field } = await adding();
+		await enter(E);
+		await tick();
+		expect(field()?.value).toBe('');
+		expect(field()?.value).not.toBe('name-55');
+	});
+
+	it('another address entered: the prefill follows it, never naming it after the first', async () => {
+		seams.published?.set(INTERLEAVE.toLowerCase(), 'Interleave');
+		const { enter, field } = await adding();
+		await enter(INTERLEAVE);
+		expect(field()?.value).toBe('Interleave');
+		await enter(E);
+		await tick();
+		expect(field()?.value).toBe('');
 	});
 });
