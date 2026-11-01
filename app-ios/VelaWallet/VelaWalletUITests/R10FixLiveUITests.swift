@@ -350,6 +350,12 @@ final class R10FixLiveUITests: XCTestCase {
         let phone = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Phone or tablet")).firstMatch
         XCTAssertTrue(phone.waitForExistence(timeout: 15), "no Phone or tablet")
         phone.tap()
+        // A phone asks for Bluetooth once: allowed, so the scan really runs.
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        for label in ["Allow", "允许"] {
+            let allow = springboard.buttons[label]
+            if allow.waitForExistence(timeout: 4) { allow.tap(); break }
+        }
         XCTAssertTrue(element(app, "cable.cancel").waitForExistence(timeout: 30), "no code")
         sleep(2)
         shot(app, "r10-s3-hybrid-code")
