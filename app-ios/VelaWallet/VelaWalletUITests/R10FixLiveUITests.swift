@@ -303,6 +303,157 @@ final class R10FixLiveUITests: XCTestCase {
         shot(app, "r10-1-2-back")
     }
 
+    // MARK: - §9: one name everywhere, the chain's rule, a receipt on Arc
+
+    private func tapTab(_ label: String, in app: XCUIApplication) {
+        let button = app.buttons[label]
+        if button.exists { button.tap(); return }
+        let matches = app.staticTexts.matching(identifier: label)
+        if matches.count > 0 { matches.element(boundBy: matches.count - 1).tap(); return }
+        XCTFail("no tab called \(label)")
+    }
+
+    /// On a FRESH clone, in the testnet space with Arc Testnet (5042002, 8th
+    /// in its space) on the Arc-like fork (`VELA_R10_ARC_RPC`): the wallet is
+    /// named "Interleave" in the header, the switcher and Settings; a
+    /// multisig made on Arc holds nothing yet; its rule moves on chain to
+    /// 2 of 4 and the switcher says so; a coin from this device's own
+    /// account reaches it and Activity says "Received", from "Interleave".
+    func test10NamesTheChainsRuleAndAReceiptOnArc() throws {
+        let h = try required()
+        guard let arc = env["VELA_R10_ARC_RPC"] else { throw XCTSkip("no Arc-like fork named (VELA_R10_ARC_RPC)") }
+        let app = XCUIApplication()
+        app.launchEnvironment["VELA_PARALLEL_SPACE"] = "1"
+        app.launchEnvironment["VELA_LANG"] = "en"
+        app.launchEnvironment["VELA_THEME"] = "light"
+        app.launchEnvironment["VELA_SKIP_LAUNCH_ANIMATION"] = "1"
+        app.launchEnvironment["VELA_RPC_OVERRIDES"] =
+            #"{"100":{"rpcURL":"\#(h.rpc)","onlyMine":true},"5042002":{"rpcURL":"\#(arc)","onlyMine":true}}"#
+        app.launchEnvironment["VELA_SERVICE_ENDPOINTS"] =
+            #"{"bundlerServiceURL":"\#(h.relay)","genesisServiceURL":"\#(h.genesis)"}"#
+        if let peer = env["VELA_HARNESS_PEERCONNECT"] { app.launchEnvironment["VELA_PEERCONNECT_RELAY"] = peer }
+        app.launchArguments += ["-vela.networkSpace", "testnet"]
+        app.launch()
+        let header = app.buttons["wallet.header.name"]
+        XCTAssertTrue(header.waitForExistence(timeout: 60), "the wallet never opened")
+        // A multisig shown from an earlier run: back to the Vela account.
+        sleep(3)
+        if !header.label.contains("Interleave") {
+            header.tap()
+            let mine = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", "Interleave")).firstMatch
+            if mine.waitForExistence(timeout: 10) { mine.tap() }
+            sleep(2)
+        }
+        // One name: the header.
+        let named = NSPredicate(format: "label CONTAINS %@", "Interleave")
+        expectation(for: named, evaluatedWith: header)
+        waitForExpectations(timeout: 30)
+        XCTAssertFalse(header.label.contains("Parallel One"), header.label)
+        shot(app, "r10-names-header")
+        // Settings.
+        tapTab("Settings", in: app)
+        XCTAssertTrue(text(app, containing: "Interleave").waitForExistence(timeout: 15), "Settings names it otherwise")
+        XCTAssertFalse(text(app, containing: "Parallel One").exists, "two names for one account in Settings")
+        shot(app, "r10-names-settings")
+        tapTab("Wallet", in: app)
+        XCTAssertTrue(header.waitForExistence(timeout: 10))
+        // The switcher.
+        header.tap()
+        XCTAssertTrue(text(app, containing: "Interleave").waitForExistence(timeout: 10), "the switcher names it otherwise")
+        shot(app, "r10-names-switcher")
+        // A multisig made on Arc.
+        tap(app, "multisig.switcher.create")
+        type(app, "multisig.create.name", "R10 Arc")
+        type(app, "multisig.create.address", Self.parallelTwo)
+        tap(app, "multisig.create.addMember")
+        type(app, "multisig.create.address", h.outside)
+        tap(app, "multisig.create.addMember")
+        tap(app, "multisig.create.next")
+        let picker = app.buttons["multisig.create.network"].firstMatch
+        XCTAssertTrue(picker.waitForExistence(timeout: 10))
+        picker.tap()
+        let arcRow = app.buttons["Arc Testnet"].firstMatch
+        XCTAssertTrue(arcRow.waitForExistence(timeout: 5), "no Arc Testnet in the testnet space")
+        arcRow.tap()
+        tap(app, "multisig.create.toReview")
+        let draft = element(app, "multisig.create.draftAddress")
+        XCTAssertTrue(draft.waitForExistence(timeout: 20), "no address")
+        let address = draft.label.range(of: "0x[0-9a-fA-F]{40}", options: .regularExpression).map { String(draft.label[$0]) } ?? ""
+        try address.write(toFile: safeFile, atomically: true, encoding: .utf8)
+        tap(app, "multisig.create.create")
+        let allow = XCUIApplication(bundleIdentifier: "com.apple.springboard").buttons["Allow"]
+        if allow.waitForExistence(timeout: 20) { allow.tap() }
+        XCTAssertTrue(element(app, "multisig.create.created").waitForExistence(timeout: 60), "not created")
+        tap(app, "multisig.create.done")
+        XCTAssertTrue(element(app, "multisig.home").waitForExistence(timeout: 20))
+        // Its members, named once each — this device's own as "Interleave".
+        tap(app, "multisig.home.settings")
+        XCTAssertTrue(text(app, containing: "Interleave").waitForExistence(timeout: 15), "Settings names it otherwise")
+        XCTAssertFalse(text(app, containing: "Parallel One").exists, "two names for one account")
+        shot(app, "r10-names-multisig-settings")
+        tap(app, "multisig.sheet.close")
+        try driver("deployArc", timeout: 180)
+        try driver("addMemberArc")
+    }
+
+    private func launchArc() throws -> XCUIApplication {
+        let h = try required()
+        guard let arc = env["VELA_R10_ARC_RPC"] else { throw XCTSkip("no Arc-like fork named (VELA_R10_ARC_RPC)") }
+        let app = XCUIApplication()
+        app.launchEnvironment["VELA_PARALLEL_SPACE"] = "1"
+        app.launchEnvironment["VELA_LANG"] = "en"
+        app.launchEnvironment["VELA_THEME"] = "light"
+        app.launchEnvironment["VELA_SKIP_LAUNCH_ANIMATION"] = "1"
+        app.launchEnvironment["VELA_RPC_OVERRIDES"] =
+            #"{"100":{"rpcURL":"\#(h.rpc)","onlyMine":true},"5042002":{"rpcURL":"\#(arc)","onlyMine":true}}"#
+        app.launchEnvironment["VELA_SERVICE_ENDPOINTS"] =
+            #"{"bundlerServiceURL":"\#(h.relay)","genesisServiceURL":"\#(h.genesis)"}"#
+        if let peer = env["VELA_HARNESS_PEERCONNECT"] { app.launchEnvironment["VELA_PEERCONNECT_RELAY"] = peer }
+        app.launchArguments += ["-vela.networkSpace", "testnet"]
+        app.launch()
+        XCTAssertTrue(app.buttons["wallet.header.name"].waitForExistence(timeout: 60), "the wallet never opened")
+        return app
+    }
+
+    /// After test10: the multisig made on Arc, deployed there and its rule
+    /// moved on chain to 2 of 4 (the founding record says 2 of 3) — the
+    /// switcher's chip is the chain's; a coin from this device's own account
+    /// reaches it on Arc, 8th in its space, holding nothing before — and
+    /// Activity says "Received", from "Interleave".
+    func test11TheChainsRuleAndAReceiptOnArc() throws {
+        let app = try launchArc()
+        XCTAssertTrue(element(app, "multisig.home").waitForExistence(timeout: 60), "the Arc multisig is not shown")
+        let header = app.buttons["wallet.header.name"]
+        // r9-14: the switcher's chip from the chain.
+        var chip = false
+        let deadline = Date().addingTimeInterval(150)
+        while Date() < deadline, !chip {
+            let hittable = NSPredicate(format: "hittable == true")
+            expectation(for: hittable, evaluatedWith: header)
+            waitForExpectations(timeout: 20)
+            header.tap()
+            chip = text(app, containing: "Needs 2 of 4").waitForExistence(timeout: 5)
+            shot(app, "r10-rule-switcher")
+            app.swipeDown(velocity: .fast)
+            if !chip { sleep(8) }
+        }
+        XCTAssertTrue(chip, "the switcher's chip is the founding rule, not the chain's")
+        sleep(2)
+        // r9-17: a coin from this device's own account, on Arc.
+        try driver("receiveArc")
+        let row = app.buttons.matching(NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", "Received", "0.25")).firstMatch
+        let seen = Date().addingTimeInterval(150)
+        while !row.exists && Date() < seen { sleep(3) }
+        shot(app, row.exists ? "r10-received-arc" : "r10-received-arc-missing")
+        XCTAssertTrue(row.exists, "no Received row for the multisig on Arc")
+        for _ in 0..<3 where !row.isHittable { app.swipeUp(); sleep(1) }
+        row.tap()
+        sleep(2)
+        shot(app, "r10-received-arc-detail")
+        XCTAssertTrue(text(app, containing: "Interleave").waitForExistence(timeout: 10), "Activity names the sender otherwise")
+        XCTAssertFalse(text(app, containing: "Parallel One").exists)
+    }
+
     // MARK: - S3: the receive code decodes off a screenshot (no harness)
 
     /// The parallel space's own account: Receive, a screenshot, a standard
