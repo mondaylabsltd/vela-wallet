@@ -260,12 +260,26 @@ enum CoreHTTP {
     /// transport stricter than the core turned "Only use my node" on a local
     /// node into "can't reach your node", for ever.
     private static func request(_ url: String, timeout: TimeInterval) -> URLRequest? {
-        guard let parsed = URL(string: url),
-              parsed.scheme?.lowercased() == "https" || isLocalhostHttp(url)
-        else { return nil }
+        guard let parsed = URL(string: url), allowsTransport(url) else { return nil }
         var request = URLRequest(url: parsed)
         request.timeoutInterval = timeout
         return request
+    }
+
+    /// The ONE rule for where this app sends a request (real-device S3:
+    /// plain LAN `http` was refused for RPC and accepted for the multisig
+    /// service): `https://`, or plain `http://` to this device alone
+    /// (`isLocalhostHttp`, the core's). The WebSocket schemes follow their
+    /// HTTP twins — `wss://` as `https://`, `ws://` only to localhost. Every
+    /// transport the app owns asks this: the RPC pool, the relay, the
+    /// multisig service and its PeerConnect rooms.
+    nonisolated static func allowsTransport(_ url: String) -> Bool {
+        let lower = url.lowercased()
+        if lower.hasPrefix("https://") || lower.hasPrefix("wss://") {
+            return URL(string: url)?.host?.isEmpty == false
+        }
+        if lower.hasPrefix("ws://") { return isLocalhostHttp("http://" + url.dropFirst("ws://".count)) }
+        return isLocalhostHttp(url)
     }
 
     /// The core's HTTPS exception (`network_admin::is_localhost_http`, over

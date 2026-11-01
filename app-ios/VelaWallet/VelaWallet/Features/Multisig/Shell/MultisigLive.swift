@@ -96,6 +96,10 @@ final class MultisigLive: MultisigPorts {
         guard let target = URL(string: url) else {
             throw MultisigWalletRefusal(code: nil, message: "not a URL: \(url)")
         }
+        // Real-device S3: the RPC's rule, not a looser one — https, or plain
+        // http to this device only. A LAN address over plain http is refused
+        // here as it is for a node (answered `http_unreachable`).
+        if let refusal = Self.transportRefusal(url) { throw refusal }
         var request = URLRequest(url: target, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData)
         request.httpMethod = method
         request.timeoutInterval = max(1, Double(timeoutMs) / 1000)
@@ -110,6 +114,13 @@ final class MultisigLive: MultisigPorts {
             retryAfter: http?.value(forHTTPHeaderField: "retry-after"),
             body: String(decoding: data, as: UTF8.self)
         )
+    }
+
+    /// The app's one transport rule (`CoreHTTP.allowsTransport`), as the
+    /// refusal the multisig service's `http` answers with; `nil` when the
+    /// URL may be sent to.
+    nonisolated static func transportRefusal(_ url: String) -> MultisigWalletRefusal? {
+        CoreHTTP.allowsTransport(url) ? nil : MultisigWalletRefusal(code: nil, message: "not https: \(url)")
     }
 
     // MARK: - RPC
