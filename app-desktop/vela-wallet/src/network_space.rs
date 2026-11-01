@@ -101,6 +101,32 @@ pub fn in_space(chain_id: u32) -> bool {
     })
 }
 
+/// Whether `chain_id` belongs to the space NOT in front — the same core
+/// word (`chain_is_testnet`). A network the person took off their lists is
+/// in neither: it is not somewhere a switch would show.
+#[must_use]
+pub fn in_other_space(chain_id: u32) -> bool {
+    with_snapshot(|snapshot| {
+        chain_is_testnet(chain_id, &snapshot.custom) != (snapshot.space == NetworkSpace::Testnet)
+            && shown_networks::is_shown(chain_id, snapshot.shown.as_ref())
+    })
+}
+
+/// r10-4: where an account used on `chain_ids` lives, when it is not in
+/// the space in front — none of them is in it, and these are in the other
+/// one. Empty when one of them is here, or it names none: nothing to say.
+#[must_use]
+pub fn lives_elsewhere(chain_ids: &[u32]) -> Vec<u32> {
+    if chain_ids.is_empty() || chain_ids.iter().any(|id| in_space(*id)) {
+        return Vec::new();
+    }
+    chain_ids
+        .iter()
+        .copied()
+        .filter(|id| in_other_space(*id))
+        .collect()
+}
+
 /// `ids` without the other space's chains, nor a Vela network out of the
 /// person's lists (`shown_networks`), in their order.
 #[must_use]
@@ -287,6 +313,22 @@ mod tests {
             assert!(testnets.contains(&7777) && !testnets.contains(&1));
             assert_eq!(mainnets.len() + testnets.len(), all_networks().len());
             assert!(in_space(7777) && !in_space(4242));
+        });
+    }
+
+    /// r10-4: a multisig used only on Arc Testnet, shown from the mainnet
+    /// space, lives in the testnet space — said; from the testnet space, or
+    /// used on a network of each, there is nothing to say.
+    #[test]
+    fn an_account_of_the_other_space_says_where_it_lives() {
+        with_temp_state("space-lives-elsewhere", || {
+            assert_eq!(lives_elsewhere(&[5_042_002]), [5_042_002]);
+            assert!(lives_elsewhere(&[5_042_002, 100]).is_empty());
+            assert!(lives_elsewhere(&[100]).is_empty());
+            assert!(lives_elsewhere(&[]).is_empty());
+            assert!(storage::write_value(KEY, json!("testnet")).is_ok());
+            assert!(lives_elsewhere(&[5_042_002]).is_empty());
+            assert_eq!(lives_elsewhere(&[100, 8453]), [100, 8453]);
         });
     }
 

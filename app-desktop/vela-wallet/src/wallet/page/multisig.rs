@@ -857,6 +857,82 @@ impl WalletPage {
         Some(card)
     }
 
+    /// r10-4: a multisig shown from the space it does not live in — used
+    /// only on networks of the other space — reads as empty here ("$0.00",
+    /// "Deposit your first asset"): where it lives is said, with the switch
+    /// there (the create sheet's way, r7-9). Its networks are its record's
+    /// (`chain_ids`); which space a network is in is the core's word.
+    pub(crate) fn multisig_other_space(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Option<Div> {
+        let row = self.shown_multisig(cx)?;
+        let ids: Vec<u32> = row
+            .account
+            .chain_ids
+            .iter()
+            .filter_map(|id| u32::try_from(*id).ok())
+            .collect();
+        let elsewhere = crate::network_space::lives_elsewhere(&ids);
+        if elsewhere.is_empty() {
+            return None;
+        }
+        let loc = self.ms_loc();
+        let testnet = crate::network_space::testnet();
+        let (to, heading, switch) = if testnet {
+            (NetworkSpace::Mainnet, "networkSpace.headingMainnet", "networkSpace.toMainnet")
+        } else {
+            (NetworkSpace::Testnet, "networkSpace.headingTestnet", "networkSpace.toTestnet")
+        };
+        let networks = elsewhere
+            .iter()
+            .map(|id| network(u64::from(*id)))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let line = format!(
+            "{} · {}",
+            words::tv(&loc, "add.usedOn", &[("networks", &networks)]),
+            self.loc.t(heading)
+        );
+        Some(
+            div()
+                .flex()
+                .flex_col()
+                .items_start()
+                .gap(px(8.))
+                .mb(px(16.))
+                .p(px(16.))
+                .rounded(px(12.))
+                .border_1()
+                .border_color(theme.warning_border)
+                .bg(theme.warning_soft)
+                .child(
+                    div()
+                        .flex()
+                        .items_start()
+                        .gap(px(8.))
+                        .child(div().flex_none().child(icon_img(&mut self.icons, Icon::Info, false, theme.fg_base, 18.)))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w(px(0.))
+                                .text_size(theme::text_row_sub())
+                                .text_color(theme.fg_base)
+                                .child(crate::ui::prose(line)),
+                        ),
+                )
+                .child(crate::ui::vela_button(
+                    "ms-other-space-switch",
+                    crate::ui::ButtonVariant::Secondary,
+                    self.loc.t(switch),
+                    theme,
+                    // A switch of space moves no value: the person's press,
+                    // through the same intent the space dialog answers with.
+                    cx.listener(move |_, _, _, cx| {
+                        crate::agent::invoke_person(Action::SetNetworkSpace { space: to }, cx);
+                        cx.notify();
+                    }),
+                )),
+        )
+    }
+
     /// The multisig's transactions waiting, first on its home (the web's
     /// `waitingRows.group`): one row each with its one word, the group's
     /// note and its Retry; a network the mailbox holds proposals on that

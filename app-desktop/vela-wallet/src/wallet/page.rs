@@ -4616,6 +4616,11 @@ impl WalletPage {
                             .max_w(px(WALLET_ROW_MEASURE))
                             .child(pills)
                             .children(if self.identity.is_some() {
+                                self.multisig_other_space(theme, cx)
+                            } else {
+                                None
+                            })
+                            .children(if self.identity.is_some() {
                                 self.multisig_get_ready(theme, cx)
                             } else {
                                 None
