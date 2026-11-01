@@ -646,6 +646,19 @@ impl MultisigHost {
         if !view.loaded {
             return;
         }
+        // §9.1: one name per address for every surface, the core's.
+        super::shown::set_labels(&view.member_labels);
+        // r10-1: the networks each multisig lives on (its record's), so the
+        // hero's "Updated" speaks only for those (§9.3 `lives_on`).
+        for row in &view.accounts {
+            let chain_ids = row
+                .account
+                .chain_ids
+                .iter()
+                .filter_map(|id| u32::try_from(*id).ok())
+                .collect();
+            crate::executor::balance_dashboard::lives_on(&row.account.address, chain_ids, cx);
+        }
         let shown = view.active.as_deref().and_then(|active| {
             view.accounts
                 .iter()

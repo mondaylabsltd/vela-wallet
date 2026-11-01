@@ -382,9 +382,11 @@ impl Machine for BalanceDashboard {
     /// front (home-1, home-3) — the web's `#restoreRows` after
     /// `account_changed`: the core lets them stand until each chain answers.
     fn boot_followups(cx: &App) -> Vec<Event> {
-        restored_holdings(&crate::multisig::shown::address(cx))
-            .into_iter()
-            .collect()
+        // r10-1: the networks each multisig here lives on, so the stamp
+        // speaks only for them (`Event::LivesOn`, kept per address).
+        let mut out = lives_on_known();
+        out.extend(restored_holdings(&crate::multisig::shown::address(cx)));
+        out
     }
 
     fn perform(operation: &BalanceOperation) -> Answer<BalanceShellResult, Self::Event> {
@@ -658,6 +660,67 @@ pub fn dispatch(event: Event, cx: &mut App) {
     });
 }
 
+/// The networks each account here lives on, as last told (r10-1).
+static LIVES_ON: Mutex<Option<std::collections::BTreeMap<String, Vec<u32>>>> = Mutex::new(None);
+
+/// [`Event::LivesOn`] for every account whose networks are known — a
+/// multisig's, from its record (`chain_ids`).
+fn lives_on_known() -> Vec<Event> {
+    LIVES_ON
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .iter()
+        .flatten()
+        .map(|(address, chain_ids)| Event::LivesOn {
+            address: address.clone(),
+            chain_ids: chain_ids.clone(),
+        })
+        .collect()
+}
+
+/// Keep the networks `address` lives on; whether that changed what was kept.
+pub fn remember_lives_on(address: &str, chain_ids: Vec<u32>) -> bool {
+    let mut guard = LIVES_ON
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let map = guard.get_or_insert_with(Default::default);
+    let address = address.to_ascii_lowercase();
+    if map.get(&address) == Some(&chain_ids) {
+        return false;
+    }
+    map.insert(address, chain_ids);
+    true
+}
+
+/// The networks `address` lives on, as last told (a multisig's; none for a
+/// Vela account) — the incoming scan's `account_networks` (§9.4).
+#[must_use]
+pub fn lives_on_of(address: &str) -> Vec<u32> {
+    LIVES_ON
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .as_ref()
+        .and_then(|map| map.get(&address.to_ascii_lowercase()).cloned())
+        .unwrap_or_default()
+}
+
+/// r10-1 (docs/multisig-machines.md §9.3): `address` lives on `chain_ids` —
+/// a multisig's networks — so the hero's "Updated" moves only when they
+/// answered. Kept for the next boot, and told to the running machine when
+/// it changed. Never boots the balances: a machine not booted yet hears it
+/// with its boot.
+pub fn lives_on(address: &str, chain_ids: Vec<u32>, cx: &mut App) {
+    let address = address.to_ascii_lowercase();
+    if !remember_lives_on(&address, chain_ids.clone()) {
+        return;
+    }
+    if let Some(resident) = resident::existing::<BalanceDashboard>(cx) {
+        resident.update(cx, |resident, cx| {
+            resident.dispatch(Event::LivesOn { address, chain_ids }, cx);
+        });
+    }
+}
+
 /// The window opened on a screen that draws no balance of its own: the next
 /// boot only notes the account ([`Event::AccountNoted`], perf-10).
 static NOTED_ONLY: AtomicBool = AtomicBool::new(false);
@@ -734,6 +797,53 @@ mod tests {
         match BalanceDashboard::perform(&operation) {
             Answer::Now(result) => result,
             _ => unreachable!("this operation is local"),
+        }
+    }
+
+    /// r10-1 (§9.3): the shared stamp vectors, replayed through this shell's
+    /// own host of the machine — events dispatched, each answer resolving
+    /// the outstanding operation of its kind, the stamp read off the view as
+    /// the hero draws it.
+    #[test]
+    fn the_balance_stamp_vectors_hold_here() {
+        use crate::core_host::{CoreHost, Pending};
+        const VECTORS: &str =
+            include_str!("../../../../rust/crates/vela-core/tests/vectors/balance-stamp.json");
+        let file: Value = serde_json::from_str(VECTORS).unwrap_or(Value::Null);
+        let cases = file["cases"].as_array().cloned().unwrap_or_default();
+        assert!(cases.len() >= 8, "the vectors are read");
+        for case in cases {
+            let name = case["name"].as_str().unwrap_or_default().to_owned();
+            let address = case["address"].as_str().unwrap_or_default().to_owned();
+            let mut host = CoreHost::<BalanceDashboard>::new();
+            let mut out: Vec<Pending<BalanceOperation>> =
+                host.dispatch(Event::AccountChanged { address });
+            for (i, step) in case["steps"].as_array().cloned().unwrap_or_default().iter().enumerate() {
+                if let Some(event) = step.get("event") {
+                    let event: Event = serde_json::from_value(event.clone())
+                        .unwrap_or_else(|e| unreachable!("{name} step {i}: {e}"));
+                    out.extend(host.dispatch(event));
+                } else {
+                    let answer: BalanceShellResult = serde_json::from_value(step["answer"].clone())
+                        .unwrap_or_else(|e| unreachable!("{name} step {i}: {e}"));
+                    let fetch = matches!(answer, BalanceShellResult::FetchSettled { .. });
+                    let at = out
+                        .iter()
+                        .position(|p| {
+                            if fetch {
+                                matches!(p.operation, BalanceOperation::FetchTokens { .. })
+                            } else {
+                                matches!(p.operation, BalanceOperation::ReadBalanceCache { .. })
+                            }
+                        })
+                        .unwrap_or_else(|| unreachable!("{name} step {i}: nothing to answer"));
+                    let id = out.remove(at).id;
+                    out.extend(host.resolve(id, answer));
+                }
+                if let Some(stamp) = step.get("stamp") {
+                    assert_eq!(host.view().last_refreshed_at_ms, stamp.as_f64(), "{name}, step {i}");
+                }
+            }
         }
     }
 
