@@ -703,7 +703,19 @@ impl SendHost {
                 None => {
                     // The first round is still out: the chains that have
                     // answered, display-only, as the Assets column shows them.
-                    if !view.tokens.is_empty() {
+                    //
+                    // r10 S4: only a partial the picker would list something
+                    // from — the core lists the holdings above zero, and a
+                    // partial ends its "loading". The fast chains answering
+                    // with nothing turned the list into an empty,
+                    // settled-looking column for the 8+ s the multisig's own
+                    // network took. A balance with a non-zero digit is one
+                    // above zero (the get-ready card's own test).
+                    let held = view
+                        .tokens
+                        .iter()
+                        .any(|token| token.balance.chars().any(|c| ('1'..='9').contains(&c)));
+                    if held {
                         let tokens = view
                             .tokens
                             .iter()

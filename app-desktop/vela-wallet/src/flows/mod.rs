@@ -377,6 +377,8 @@ pub struct FlowStrings {
     pub send_search: SharedString,
     /// What a token search that hides every row says (078 X-05).
     pub no_matching_tokens: SharedString,
+    /// r10 S4: the token list while its first read is out.
+    pub loading_tokens: SharedString,
     pub filter_all: SharedString,
     pub filter_stable: SharedString,
     pub filter_gas: SharedString,
@@ -1112,6 +1114,7 @@ impl FlowStrings {
             select_token_title: s("send.selectTokenTitle"),
             send_search: s("send.searchPlaceholder"),
             no_matching_tokens: s("send.noMatchingTokens"),
+            loading_tokens: s("send.loadingTokens"),
             filter_all: s("history.filterAll"),
             filter_stable: s("send.filterStable"),
             filter_gas: s("send.filterGas"),
@@ -1364,6 +1367,7 @@ mod tests {
             (s.bad_amount.as_ref(), "send.badAmount"),
             (s.batch_dup.as_ref(), "send.batchDup"),
             (s.no_matching_tokens.as_ref(), "send.noMatchingTokens"),
+            (s.loading_tokens.as_ref(), "send.loadingTokens"),
             (s.scan_invalid.as_ref(), "home.invalidQrTitle"),
             (s.scan_no_qr.as_ref(), "componentsUi.scanner.noQrFoundMsg"),
             (

@@ -2043,6 +2043,7 @@ pub fn send_pick_with(i: &SendInputs<'_>, sweeping: bool, class: SendClass) -> S
         cta_accent: false,
         search_placeholder: s.send_search.clone(),
         no_match: s.no_matching_tokens.clone(),
+        loading: (i.send.tokens.is_empty() && i.send.loading).then(|| s.loading_tokens.clone()),
         filters: SendClass::CHIPS
             .iter()
             .map(|chip| FilterChip {
@@ -2186,6 +2187,33 @@ mod sweep_tests {
             let pick = send_pick_with(&inputs(&view, &fee, &s, &wallet), false, SendClass::Gas);
             let lit: Vec<bool> = pick.filters.iter().map(|chip| chip.selected).collect();
             assert_eq!(lit, [false, false, true, false]);
+        });
+    }
+
+    /// r10 S4: the list read for seconds with nothing in it said nothing.
+    /// While the core's first read is out (`loading`) and no row is here,
+    /// the picker says it is loading; a row, or a read that ended, says no
+    /// such thing.
+    #[test]
+    fn the_picker_says_it_is_loading_while_it_reads() {
+        crate::executor::storage::tests::with_temp_state("send-pick-loading", || {
+            let s = FlowStrings::resolve(&crate::loc::Loc::from_env());
+            let wallet = crate::wallet::WalletStrings::resolve(&crate::loc::Loc::from_env());
+            let fee = CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
+            let mut view = view_with(Vec::new(), Vec::new(), None);
+            view.loading = true;
+            let pick = send_pick_with(&inputs(&view, &fee, &s, &wallet), false, SendClass::All);
+            assert_eq!(pick.loading.as_ref(), Some(&s.loading_tokens));
+            assert_eq!(s.loading_tokens.as_ref(), "Loading tokens...");
+
+            view.tokens = vec![token(1, "ETH", None)];
+            let pick = send_pick_with(&inputs(&view, &fee, &s, &wallet), false, SendClass::All);
+            assert!(pick.loading.is_none(), "a row is here");
+
+            view.tokens.clear();
+            view.loading = false;
+            let pick = send_pick_with(&inputs(&view, &fee, &s, &wallet), false, SendClass::All);
+            assert!(pick.loading.is_none(), "the read ended");
         });
     }
 
