@@ -339,10 +339,6 @@ struct SigningModel {
     /// The site's own icon, tried in order OVER the letter (founder ruling
     /// 2026-09-19). Https only.
     var dappIconUrls: [String] = []
-    /// r10 follow-up: a network-space switch moved the asking site since its
-    /// last request — the core's line (`SignRequestView.space_note`), drawn
-    /// once under the requester. `nil` otherwise.
-    var spaceNote: String?
     /// The chain's logo; the dot shows until it lands, and when there is none.
     var networkLogoUrl: String?
     /// Spec 079: the fee row's refresh (owner: "似乎没有刷新网络费的按钮呀");

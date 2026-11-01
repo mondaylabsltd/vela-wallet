@@ -163,8 +163,8 @@ struct R10FollowUpTests {
         ))
         let note = try #require(controller.sign.request?.spaceNote)
         #expect(note.chainId == sepolia)
-        let line = loc.t(note.key, vars: ["network": WalletNetworks.builtin.meta(sepolia)?.displayName ?? ""])
-        #expect(line.contains("Sepolia"), "\(line)")
+        let line = try #require(SigningLive.spaceNote(controller.sign, networks: .builtin, loc: loc))
+        #expect(line == loc.t("connect.browser.spaceMoved", vars: ["network": "Sepolia"]), "\(line)")
     }
 
     /// The connection sheet draws the consent's note under the site.
@@ -179,7 +179,7 @@ struct R10FollowUpTests {
         let model = ExploreLive.connectionModel(
             dbr: dbr, tab: nil, engine: nil, identity: (name: "Mine", address: a1), loc: loc
         )
-        #expect(model.spaceNote == loc.t("connect.browser.spaceMoved", vars: ["network": "Sepolia"]))
+        #expect(model.statusLine == loc.t("connect.browser.spaceMoved", vars: ["network": "Sepolia"]))
     }
 
     // MARK: - Keys are not accounts

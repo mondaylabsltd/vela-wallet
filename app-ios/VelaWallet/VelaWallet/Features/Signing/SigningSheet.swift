@@ -46,6 +46,9 @@ struct SigningSheet: View {
     @Environment(\.theme) private var theme
 
     let model: SigningModel
+    /// r10 follow-up: the line that says a space switch moved the asking site
+    /// (`SigningLive.spaceNote`), under the requester. `nil`: nothing moved it.
+    var spaceNote: String?
     var onConfirm: () -> Void = {}
     /// An allowance chip was tapped: `requested`, `balance`, `custom`,
     /// `revoke`. The core decides what each means.
@@ -101,7 +104,7 @@ struct SigningSheet: View {
             SigningHeaderView(dapp: model.dapp, network: model.network, own: model.dappOwn,
                               headline: model.headline,
                               iconUrls: model.dappIconUrls, networkLogoUrl: model.networkLogoUrl,
-                              spaceNote: model.spaceNote,
+                              spaceNote: spaceNote,
                               onClose: onClose, closeLabel: model.closeLabel)
                 .padding(.top, Tokens.Space.s8)
                 .padding(.horizontal, Tokens.Layout.screenPaddingX)

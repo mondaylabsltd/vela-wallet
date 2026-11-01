@@ -4084,6 +4084,9 @@ struct RootView: View {
             if let model = signingSheetModel {
                 SigningSheet(
                     model: model,
+                    spaceNote: signing.flatMap { live in
+                        SigningLive.spaceNote(live.sign, networks: WalletNetworks(settings.networkAdmin?.networks), loc: loc)
+                    },
                     onConfirm: { signing?.approve() },
                     onAllowanceChip: { chip in signing?.guardChip(chip) },
                     onAllowanceAmount: { text in signing?.guardCustomAmount(text) },
