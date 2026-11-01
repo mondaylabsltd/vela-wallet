@@ -2189,6 +2189,36 @@ pub fn user_op_estimate_failure(error_json: &str) -> String {
         .unwrap_or_else(|_| r#"{"type":"unavailable"}"#.to_owned())
 }
 
+/// How far a failed POST got (r11-9) — `offline`, `dns`,
+/// `connect_refused`, `connect_timeout`, `tls`, `refused`, `write_failed`,
+/// `after_write`, `read_timeout`, `timeout`, `unknown` — to the pool's
+/// transport outcome as JSON. See
+/// `vela_core::app::rpc_pool::transport_outcome_of`.
+#[wasm_bindgen(js_name = transportOutcomeOf)]
+#[must_use]
+pub fn transport_outcome_of(failure: &str) -> String {
+    use vela_core::app::rpc_pool::{transport_outcome_of as outcome, TransportFailure};
+    let failure: TransportFailure =
+        serde_json::from_value(serde_json::Value::String(failure.to_owned()))
+            .unwrap_or(TransportFailure::Unknown);
+    serde_json::to_string(&outcome(failure)).unwrap_or_else(|_| r#"{"type":"network"}"#.to_owned())
+}
+
+/// What a failed `eth_estimateUserOperationGas` tells the fee machine
+/// (r11-8): `refused` or `simulation_failed`. `errorJson`: the relay's
+/// JSON-RPC `error` member (or the whole body), `undefined` when nothing
+/// answered. See `vela_core::app::fee_policy::estimate_gas_outcome`.
+#[wasm_bindgen(js_name = feeEstimateGasOutcome)]
+#[must_use]
+pub fn fee_estimate_gas_outcome(error_json: Option<String>) -> String {
+    use vela_core::app::fee_policy::{estimate_gas_outcome, FeeGasOutcome};
+    match estimate_gas_outcome(error_json.as_deref()) {
+        FeeGasOutcome::Refused => "refused",
+        _ => "simulation_failed",
+    }
+    .to_owned()
+}
+
 /// A signed balance change from signed base units, or `undefined` for zero
 /// or unreadable text: the token ladder, dust written exactly (never `−0`),
 /// U+2212 / `+` (spec 082 RJ15). `preset` is the number preset's wire name;
@@ -2204,6 +2234,15 @@ pub fn format_signed_token_amount(
     let preset: NumberPreset =
         serde_json::from_value(serde_json::Value::String(preset.to_owned())).unwrap_or_default();
     format(delta_base_units, decimals, preset)
+}
+
+/// An amount already written in the person's marks, signed the one way
+/// money is signed in Vela (r11 S4): U+2212 when `outgoing`, `+` when not,
+/// nothing when `undefined`. See `vela_core::l10n::signed_amount_text`.
+#[wasm_bindgen(js_name = signedAmountText)]
+#[must_use]
+pub fn signed_amount_text(amount: &str, outgoing: Option<bool>) -> String {
+    vela_core::l10n::signed_amount_text(amount, outgoing)
 }
 
 /// `topics[0]` of the `eth_getLogs` filter a `FindOpEvent` asks for (ruling

@@ -1,0 +1,153 @@
+{
+  "about": "r11-8: ONE fee for the same plain send on every shell. The round-11 send of 0.01 USDC on Arc Testnet (5042002) from a deployed account through the harness relay (no settlementGas, no inBandFeePerGas: Charge::Marked = 3 × gas × basis) was charged 0.045 on Android, 0.1092 on iOS, 0.12 on the desktop and the web. The three last are one rule at three moments of Arc's eth_gasPrice (22.75 / 25 / 25 gwei, read from the bundles on chain); Android's relay estimate never came back from the emulator, the fee machine fell back to the static 600,000 gas (0.045) and the submit then measured again and signed the relay's 1,600,000. The rule now: no simulation, no fee (estimate_failed, asked again); a relay that ANSWERS the operation fails keeps the static model with its own limits as the prepared gas (signed exactly). A shell's parity test replays this: map each `wire` answer through the shell's own reader into the machine's shell result and check it equals `shell_result` (the fee inputs every shell must hand the core identically), then drive the core's fee machine with `request` and the shell results and check `expect`. `estimate_wire` is the relay's JSON-RPC body for eth_estimateUserOperationGas (null: nothing answered); `user_op_gas` the FeeGasOutcome that body means (`fee_policy::estimate_gas_outcome` for an error). Replayed by rust/crates/vela-core/tests/app_fee_parity.rs.",
+  "request": {
+    "type": "quote_requested",
+    "read_deployment": null,
+    "chain_id": 5042002,
+    "account": "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+    "deployed": true,
+    "public_key_available": true,
+    "tier": "fast",
+    "calls": [
+      {
+        "to": "0xd9c79Cc5c3de9858e8767bb702DB5FFe51a20432",
+        "value": "10000000000000000",
+        "data": "0x"
+      }
+    ],
+    "fee_token": null,
+    "auto_fee_token": false,
+    "number": "comma_dot"
+  },
+  "gas_price": {
+    "wire": {
+      "eth_gasPrice": "0x5d21dba00",
+      "latest_block_baseFeePerGas": "0x4a817c800",
+      "eth_maxPriorityFeePerGas": "0x12a05f200"
+    },
+    "shell_result": {
+      "type": "gas_price",
+      "eth_gas_price": "25000000000",
+      "base_fee": "20000000000",
+      "priority_fee": "5000000000"
+    }
+  },
+  "bundler_quote": {
+    "wire": {
+      "slow": { "maxFeePerGas": "0xba43b7400", "maxPriorityFeePerGas": "0xba43b7400" },
+      "standard": { "maxFeePerGas": "0xba43b7400", "maxPriorityFeePerGas": "0xba43b7400" },
+      "fast": { "maxFeePerGas": "0xba43b7400", "maxPriorityFeePerGas": "0xba43b7400" }
+    },
+    "shell_result": {
+      "type": "bundler_quote",
+      "quote": {
+        "max_fee_per_gas": "50000000000",
+        "max_priority_fee_per_gas": "50000000000",
+        "network_fee_per_gas": null,
+        "relayer_fee_per_gas": null,
+        "in_band_fee_per_gas": null
+      }
+    }
+  },
+  "in_band_quotes": {
+    "wire": [
+      {
+        "recipient": "0xd9c79Cc5c3de9858e8767bb702DB5FFe51a20432",
+        "asset": "native",
+        "feeToken": null,
+        "balance": "0x7b915cd31814000",
+        "decimals": 18,
+        "symbol": "USDC",
+        "usdBalance": "0.5565",
+        "usdPrice": "1"
+      }
+    ],
+    "shell_result": {
+      "type": "in_band_quotes",
+      "quotes": [
+        {
+          "recipient": "0xd9c79Cc5c3de9858e8767bb702DB5FFe51a20432",
+          "asset": "native",
+          "fee_token": null,
+          "balance": "556500000000000000",
+          "decimals": 18,
+          "symbol": "USDC",
+          "usd_balance": "0.5565",
+          "usd_price": "1",
+          "native_usd_floor_price": null,
+          "minimum_amount": null
+        }
+      ]
+    }
+  },
+  "cases": [
+    {
+      "name": "the relay simulates it: its limits, 3 × 25 gwei — 0.12 USDC, the limits it was priced on signed",
+      "estimate_wire": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {
+          "preVerificationGas": "0x186a0",
+          "verificationGasLimit": "0x7a120",
+          "callGasLimit": "0xf4240"
+        }
+      },
+      "user_op_gas": {
+        "type": "estimated",
+        "verification_gas_limit": "500000",
+        "call_gas_limit": "1000000",
+        "pre_verification_gas": "100000",
+        "settlement_gas": null
+      },
+      "expect": {
+        "failed": null,
+        "total_gas": "1600000",
+        "in_band_gas_basis": "25000000000",
+        "total_wei": "120000000000000000",
+        "prepared": {
+          "verification_gas_limit": "500000",
+          "call_gas_limit": "1000000",
+          "pre_verification_gas": "100000",
+          "settlement_gas": null
+        }
+      }
+    },
+    {
+      "name": "nothing answered (the round-11 Android send): no fee on a figure nobody measured — estimate_failed, asked again",
+      "estimate_wire": null,
+      "user_op_gas": { "type": "simulation_failed" },
+      "expect": { "failed": "estimate_failed", "fee": null }
+    },
+    {
+      "name": "the relay answers an account check (AA25), which says nothing of the operation: no fee",
+      "estimate_wire": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "error": { "code": -32500, "message": "AA25 invalid account nonce" }
+      },
+      "user_op_gas": { "type": "simulation_failed" },
+      "expect": { "failed": "estimate_failed", "fee": null }
+    },
+    {
+      "name": "the relay answers that the operation fails: the static model (600,000) with its own limits signed — 0.045 USDC",
+      "estimate_wire": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "error": { "code": -32500, "message": "UserOperation simulation failed: execution reverted" }
+      },
+      "user_op_gas": { "type": "refused" },
+      "expect": {
+        "failed": null,
+        "total_gas": "600000",
+        "in_band_gas_basis": "25000000000",
+        "total_wei": "45000000000000000",
+        "prepared": {
+          "verification_gas_limit": "300000",
+          "call_gas_limit": "200000",
+          "pre_verification_gas": "100000",
+          "settlement_gas": null
+        }
+      }
+    }
+  ]
+}
