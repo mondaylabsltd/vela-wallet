@@ -60,6 +60,8 @@ const fake = vi.hoisted(() => ({
 	/** The core's ruling on a token nobody vouches for (r4a-2). */
 	tokenNote: null as any,
 	approveError: null as any,
+	/** Each `propose` asked of the host: the proposal and how (r9-13: its review first). */
+	proposed: [] as { proposal: any; opts: any }[],
 	/** r4b-1: where the core says this device's execution ended. */
 	verdict: null as any,
 	/** r4b-7: an execution sent before a reload, still in flight. */
@@ -348,6 +350,7 @@ vi.mock('../shell/proposals-host.svelte', async () => {
 			return null;
 		},
 		async propose(_a: unknown, _c: number, proposal: { kind: string }, opts: { as?: string }) {
+			fake.proposed.push({ proposal, opts });
 			fake.calls.push(proposal.kind === 'cancel' ? 'reject' : `propose:${opts?.as ?? ''}`);
 			if (fake.approveError) throw new ProposeFailedError(stateOf(fake.approveError), 100);
 			return { safeTxHash: HASH };
@@ -706,6 +709,7 @@ beforeEach(() => {
 	fake.remembered = [];
 	fake.tokenNote = null;
 	fake.approveError = null;
+	fake.proposed = [];
 	fake.verdict = null;
 	fake.inflight = null;
 	fake.unreadable = [];
@@ -2307,6 +2311,43 @@ describe('Reject (r4D-14)', () => {
 		await settle();
 		expect(buttons()).not.toContain('proposal.rejectCancel');
 		expect(fake.calls).toEqual([]);
+		await screen.unmount();
+	});
+
+	/** Press Reject, then the question's own Reject. */
+	const confirmReject = async () => {
+		press('proposal.reject');
+		await settle();
+		[...document.body.querySelectorAll('button')]
+			.filter((b) => b.textContent?.trim() === 'proposal.reject')
+			.at(-1)
+			?.click();
+		await settle();
+	};
+
+	it('r9-13: the cancellation at its number is drawn for its review first, never signed at once', async () => {
+		fake.chain.items = [item({ proposer: OTHER, nonce: 26n })];
+		const screen = show();
+		await settle();
+		await confirmReject();
+		expect(fake.calls).toEqual(['reject']);
+		expect(fake.proposed).toHaveLength(1);
+		expect(fake.proposed[0].proposal).toEqual({ kind: 'cancel', nonce: '0x1a' });
+		// The host's review-first sheet (§3.6), as every proposal: not `review: false`.
+		expect(fake.proposed[0].opts?.review).not.toBe(false);
+		await screen.unmount();
+	});
+
+	it('withdrawn on its review: nothing is said, and Reject is offered again', async () => {
+		fake.chain.items = [item({ proposer: OTHER })];
+		fake.approveError = new DOMException('the passkey prompt was closed', 'AbortError');
+		const screen = show();
+		await settle();
+		await confirmReject();
+		expect(fake.calls).toEqual(['reject']);
+		expect(document.body.querySelector('[role="alert"]')).toBeNull();
+		expect(buttons()).not.toContain('proposal.rejectCancel');
+		expect(buttons()).toContain('proposal.reject');
 		await screen.unmount();
 	});
 });

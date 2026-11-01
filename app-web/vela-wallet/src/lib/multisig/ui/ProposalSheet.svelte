@@ -1166,23 +1166,26 @@
 		if (error && !cancelled(error)) phase = failedPhase(error);
 	}
 
-	/** A voiding transaction at its number, proposed and approved at once by `rejecter`. */
+	/**
+	 * A voiding transaction at its number (r9-13): a proposal like any other —
+	 * drawn with its review first, on top (§3.6), and signed only once the
+	 * person proposes it there. Withdrawn on its review, nothing is signed and
+	 * nothing is said.
+	 */
 	async function onReject() {
 		if (!item || !rejecter) return;
 		phase = { kind: 'busy', what: 'reject' };
 		try {
-			await proposalsHost.propose(
-				account,
-				chainId,
-				{ kind: 'cancel', nonce: `0x${item.nonce.toString(16)}` },
-				{ review: false, as: rejecter.address }
-			);
-			rejecting = false;
+			await proposalsHost.propose(account, chainId, {
+				kind: 'cancel',
+				nonce: `0x${item.nonce.toString(16)}`
+			});
 			phase = { kind: 'idle' };
 		} catch (error) {
-			phase = failedPhase(
-				error instanceof ProposeFailedError ? actionError(error.state, chainId) : error
-			);
+			const why = error instanceof ProposeFailedError ? actionError(error.state, chainId) : error;
+			phase = cancelled(why) ? { kind: 'idle' } : failedPhase(why);
+		} finally {
+			rejecting = false;
 		}
 	}
 
