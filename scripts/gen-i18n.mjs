@@ -1438,7 +1438,10 @@ if (branchSet.size !== 117) fail(`expected 117 branch paths, got ${branchSet.siz
   //   `{{count}}`; the plain keys stay for shells not moved yet) and
   //   `home.multisig.external.{doneExecuted, doneCancelled}` (r8-24: a link to
   //   a transaction whose number is used says which). 650 + 14 = 664.
-  const pins = { multisig: 664 };
+  // 665 (round 10 core, 2026-11-01): + `home.multisig.presence.ruleLastKnown`
+  //   (r9-14: the rule chip of a multisig not read this session is the one a
+  //   chain last said, marked as the last known). 664 + 1 = 665.
+  const pins = { multisig: 665 };
   for (const [name, docs] of Object.entries(onDemand)) {
     const leaves = new Set();
     for (const lng of LOCALES) walk(docs[lng], '', leaves, new Set());

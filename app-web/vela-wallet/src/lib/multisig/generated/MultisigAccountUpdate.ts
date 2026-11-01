@@ -5,4 +5,4 @@ import type { MultisigMemberInfo } from "./MultisigMemberInfo";
  * One change to a stored multisig, made by a machine that does not own
  * the list (the web's `multisig.useChain`, `setFindingsOn`, …).
  */
-export type MultisigAccountUpdate = { "kind": "use_chain", chain_id: number, } | { "kind": "findings_on", chain_id: number, findings: unknown[], } | { "kind": "recorded_name", name: string, } | { "kind": "name_members", members: { [key in string]: MultisigMemberInfo }, typed: boolean, } | { "kind": "members_now", members: Array<string>, };
+export type MultisigAccountUpdate = { "kind": "use_chain", chain_id: number, } | { "kind": "findings_on", chain_id: number, findings: unknown[], } | { "kind": "recorded_name", name: string, } | { "kind": "name_members", members: { [key in string]: MultisigMemberInfo }, typed: boolean, } | { "kind": "members_now", members: Array<string>, } | { "kind": "rule_now", chip: MultisigRuleChip, };

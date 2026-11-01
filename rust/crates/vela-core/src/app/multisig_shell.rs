@@ -335,6 +335,13 @@ pub enum AccountUpdate {
     /// r8-7: its members as the chains say now — its members where it is
     /// deployed, its founding ones where it is not (`members_anywhere`).
     MembersNow { members: Vec<String> },
+    /// r9-14: the rule in force as the chains last said — its rule where it
+    /// is deployed, the founding one where it is not, per network
+    /// (`current_rules`) — kept per multisig and served on its row.
+    RuleNow {
+        #[cfg_attr(feature = "bindings", ts(type = "MultisigRuleChip"))]
+        chip: super::multisig_members::RuleChip,
+    },
 }
 
 /// What the shell answers.

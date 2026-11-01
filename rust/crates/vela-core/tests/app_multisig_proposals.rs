@@ -2047,3 +2047,24 @@ fn a_service_away_on_a_live_chain_is_the_service() {
     assert!(view.unreadable.is_empty());
     assert!(view.unreachable, "the service's own read missed");
 }
+
+/// r9-14: the rule as the chain says (a member added: 2 of 4) is told to the
+/// accounts machine with the members, so its row says it unfollowed too.
+#[test]
+fn the_rule_the_chain_says_is_told() {
+    use vela_core::app::multisig_members::{MemberRule, RuleChip};
+    let (mut world, mut sut, account) = setup(&[0]);
+    let mut owners: Vec<String> = (0..3).map(|i| fixture(i).address).collect();
+    owners.push(B.to_owned());
+    let refs: Vec<&str> = owners.iter().map(String::as_str).collect();
+    world.deploy(100, &account.address, world::DeployedSafe::clean(&refs, 2));
+    run(&mut sut, &mut world, Event::Refresh { fresh: true });
+    assert!(world.notices.contains(&Notice::Account {
+        address: account.address.clone(),
+        update: AccountUpdate::RuleNow {
+            chip: RuleChip::Needs {
+                rule: MemberRule::of(2, 4)
+            }
+        },
+    }));
+}

@@ -73,6 +73,8 @@ pub const INVITE_SHARED_KEY: &str = "vela.multisigInviteShared";
 /// r8-7: each multisig's members as the chains last said (lowercase address
 /// → members), so a member added by a member change is "on this device".
 pub const MEMBERS_NOW_KEY: &str = "vela.multisigMembersNow";
+/// r9-14: the rule as the chains last said, per multisig (lowercase).
+pub const RULES_NOW_KEY: &str = "vela.multisigRulesNow";
 /// core-ms-2: this device's transaction history (the wallet's, read only
 /// here): where it was used is the `recent` hint ([`MultisigAccountsView::recent_networks`]).
 pub const TRANSACTIONS_KEY: &str = "vela.transactionHistory";
@@ -727,6 +729,39 @@ pub struct AccountRow {
     /// locale, multisig, extra: {chainIds, members}}`.
     #[serde(default)]
     pub invite_members: Vec<crate::multisig_link::InvitedMember>,
+    /// r9-14: the rule chip every surface draws for it — the switcher, the
+    /// header, Settings — whether or not it is the one followed. Draw
+    /// `rule.chip`; with `rule.last_known` say it is the last known (the
+    /// chain was not read this session while it was shown).
+    #[serde(default)]
+    pub rule: RowRule,
+}
+
+/// r9-14: a row's rule ([`AccountRow::rule`]).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "MultisigRowRule"))]
+pub struct RowRule {
+    /// The rule as the chains last said ([`AccountUpdate::RuleNow`], kept in
+    /// `vela.multisigRulesNow`), else the founding one.
+    #[cfg_attr(feature = "bindings", ts(type = "MultisigRuleChip"))]
+    pub chip: super::multisig_members::RuleChip,
+    /// It is what a chain said, not the founding record's.
+    pub from_chain: bool,
+    /// Not read from the chain this session: the last known (from an earlier
+    /// session, or the founding rule before any read).
+    pub last_known: bool,
+}
+
+impl Default for RowRule {
+    fn default() -> Self {
+        Self {
+            chip: super::multisig_members::RuleChip::Needs {
+                rule: super::multisig_members::MemberRule::of(1, 1),
+            },
+            from_chain: false,
+            last_known: true,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -822,6 +857,10 @@ pub struct State {
     invite_shared: BTreeSet<String>,
     /// r8-7: members as the chains last said, per multisig (lowercase).
     members_now: BTreeMap<String, Vec<String>>,
+    /// r9-14: the rule as the chains last said, per multisig (lowercase).
+    rules_now: BTreeMap<String, super::multisig_members::RuleChip>,
+    /// r9-14: the multisigs whose rule a chain read told this session.
+    rules_read: BTreeSet<String>,
     /// r9-12: the passkey index's answers, by lowercase address.
     index: BTreeMap<String, IndexAnswer>,
     salt: Option<String>,
@@ -941,6 +980,28 @@ impl State {
     }
 
     /// r9-12: what `account`'s invite carries of each member.
+
+    /// r9-14: the rule `account`'s row shows ([`RowRule`]).
+    fn row_rule(&self, account: &MultisigAccount) -> RowRule {
+        let key = account.address.to_ascii_lowercase();
+        match self.rules_now.get(&key) {
+            Some(chip) => RowRule {
+                chip: chip.clone(),
+                from_chain: true,
+                last_known: !self.rules_read.contains(&key),
+            },
+            None => RowRule {
+                chip: super::multisig_members::RuleChip::Needs {
+                    rule: super::multisig_members::MemberRule::of(
+                        account.threshold,
+                        account.owners.len(),
+                    ),
+                },
+                from_chain: false,
+                last_known: true,
+            },
+        }
+    }
     fn invite_members(
         &self,
         account: &MultisigAccount,
@@ -1902,6 +1963,27 @@ impl App for MultisigAccounts {
                     io.store(MEMBERS_NOW_KEY, Some(json)).await;
                 })
             }
+            Event::Apply {
+                address,
+                update: AccountUpdate::RuleNow { chip },
+            } => {
+                let json = {
+                    let mut s = lock(&model.state);
+                    let key = address.to_ascii_lowercase();
+                    if s.find(&address).is_none() {
+                        return render();
+                    }
+                    s.rules_read.insert(key.clone());
+                    if s.rules_now.get(&key) == Some(&chip) {
+                        return render();
+                    }
+                    s.rules_now.insert(key, chip);
+                    serde_json::to_string(&s.rules_now).unwrap_or_default()
+                };
+                flow(model, move |io, _| async move {
+                    io.store(RULES_NOW_KEY, Some(json)).await;
+                })
+            }
             Event::Apply { address, update } => {
                 let changed = {
                     let mut s = lock(&model.state);
@@ -1920,7 +2002,7 @@ impl App for MultisigAccounts {
                             s.name_members(&address, members, *typed)
                         }
                         // Taken above.
-                        AccountUpdate::MembersNow { .. } => false,
+                        AccountUpdate::MembersNow { .. } | AccountUpdate::RuleNow { .. } => false,
                     }
                 };
                 if !changed {
@@ -1964,6 +2046,7 @@ impl App for MultisigAccounts {
                         checking_on: session(&mut s.checking.iter()),
                         invite_shared: s.invite_shared.contains(&a.address.to_ascii_lowercase()),
                         invite_members: s.invite_members(a),
+                        rule: s.row_rule(a),
                         name: a
                             .genesis
                             .name
@@ -2081,6 +2164,7 @@ async fn start(io: &Io<Event>, st: &Shared<State>) {
             INVITE_SHARED_KEY,
             TRANSACTIONS_KEY,
             MEMBERS_NOW_KEY,
+            RULES_NOW_KEY,
         ])
         .await;
     let get = |k: &str| loaded.get(k).cloned().flatten();
@@ -2107,6 +2191,12 @@ async fn start(io: &Io<Event>, st: &Shared<State>) {
             .into_iter()
             .filter(|(_, members)| !members.is_empty())
             .collect();
+        s.rules_now = get(RULES_NOW_KEY)
+            .and_then(|r| {
+                serde_json::from_str::<BTreeMap<String, super::multisig_members::RuleChip>>(&r)
+                    .ok()
+            })
+            .unwrap_or_default();
         s.invite_shared = get(INVITE_SHARED_KEY)
             .and_then(|r| serde_json::from_str::<BTreeSet<String>>(&r).ok())
             .unwrap_or_default()
