@@ -381,15 +381,12 @@ impl WalletPage {
             });
         // The rule in force on its networks, once they are read (the core's
         // chip); the original rule until then.
-        let (chip, title) = members.and_then(|v| v.rule_chip.as_ref()).map_or_else(
-            || {
-                (
-                    words::rule_chip(loc, account.threshold, n),
-                    words::rule_title(loc, account.threshold, n),
-                )
-            },
-            |c| mw::chip(loc, c),
-        );
+        // §9.2: until the members machine has read them, the rule the
+        // accounts machine keeps for it (from the chain when one said it),
+        // never the founding rule over a chain's.
+        let (chip, title) = members
+            .and_then(|v| v.rule_chip.as_ref())
+            .map_or_else(|| mw::chip(loc, &row.rule.chip), |c| mw::chip(loc, c));
         let refresh_label = words::t(loc, "proposal.feeRetry");
         let mut col = div().flex().flex_col().gap(px(6.)).child(
             div()

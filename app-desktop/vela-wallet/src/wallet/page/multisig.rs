@@ -495,11 +495,13 @@ impl WalletPage {
     ) -> Div {
         let loc = self.ms_loc();
         let host = self.ms_host(cx);
-        let (view, presence) = {
+        let (view, presence, followed, followed_chip) = {
             let machines = host.read(cx).machines();
             (
                 machines.accounts_view.clone(),
                 machines.proposals_view.presence.clone(),
+                machines.proposals_view.followed.clone(),
+                machines.proposals_view.rule_chip.clone(),
             )
         };
         let prefix = if in_dialog { "switcher-ms" } else { "settings-ms" };
@@ -523,7 +525,15 @@ impl WalletPage {
                 .unwrap_or_else(|| {
                     words::tv(&loc, "switcher.rowName", &[("m", &m.to_string()), ("n", &n.to_string())])
                 });
-            let mut flags: Vec<String> = vec![words::rule_chip(&loc, m, n)];
+            // r9-14 (§9.2): the rule in force from the chain — the followed
+            // multisig's from proposals, any other's as the accounts machine
+            // keeps it (`AccountRow.rule`), "last known" when not read now.
+            let is_followed = followed.as_deref().is_some_and(|f| same(f, &address));
+            let mut flags: Vec<String> = vec![crate::multisig::member_words::row_chip(
+                &loc,
+                &row.rule,
+                followed_chip.as_ref().filter(|_| is_followed),
+            )];
             if !row.shared {
                 flags.push(words::t(&loc, "switcher.notShared"));
             }
@@ -743,11 +753,14 @@ impl WalletPage {
         let host = ms_host::booted(cx)?;
         let view = &host.read(cx).machines().proposals_view;
         let followed = view.followed.as_deref().is_some_and(|f| same(f, &row.account.address));
-        let chip = crate::multisig::sheet::home_chip(
-            view.rule_chip.as_ref().filter(|_| followed),
-            row.account.threshold,
-            row.account.owners.len(),
-        );
+        // The followed multisig's chip from proposals; until it is followed,
+        // the rule the accounts machine keeps for it (§9.2), never the
+        // founding rule while a chain has said another.
+        let chip = view
+            .rule_chip
+            .clone()
+            .filter(|_| followed)
+            .unwrap_or_else(|| row.rule.chip.clone());
         Some(crate::multisig::member_words::chip(&loc, &chip))
     }
 
