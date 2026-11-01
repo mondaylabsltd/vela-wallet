@@ -342,6 +342,70 @@ pub fn may_have_delivered(outcome: &RpcTransportOutcome) -> bool {
     }
 }
 
+/// How far a failed POST got, as the platform's error says it (r11-9) — the
+/// error CLASS every shell passes, so the delivery rule is the core's and
+/// not each shell's reading of its own exceptions. A shell names the stage
+/// its HTTP stack can prove; when it cannot tell, [`Self::Unknown`].
+///
+/// The round-11 Android send was refused by the relay's host in 4–6 ms and
+/// said "It may have been sent… don't send it again" though nothing had
+/// left the device: the shell had read the error as a socket failure.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum TransportFailure {
+    /// The device is offline (the platform says so before the request).
+    Offline,
+    /// The host's name did not resolve.
+    Dns,
+    /// The connection was refused, reset or unroutable while connecting
+    /// (`ECONNREFUSED`, no route, network unreachable) — before any byte of
+    /// the request was written.
+    ConnectRefused,
+    /// Connecting timed out (no connection was ever established).
+    ConnectTimeout,
+    /// The TLS handshake or the certificate failed.
+    Tls,
+    /// The platform refused to send it at all: a malformed or refused URL,
+    /// a transport-security rule, a proxy that refused `CONNECT`.
+    Refused,
+    /// The connection broke while the request was being written: the
+    /// request never arrived whole, and no server acts on half a request.
+    WriteFailed,
+    /// The request was written whole and the answer never came complete —
+    /// a reset, a closed connection, an end of stream before the reply.
+    AfterWrite,
+    /// The answer did not come in time after the request was written.
+    ReadTimeout,
+    /// The call's whole time ran out, at a stage the platform does not say.
+    Timeout,
+    /// The platform cannot say how far it got.
+    Unknown,
+}
+
+/// What a failed POST is to the pool and to a submit (r11-9): `NotConnected`
+/// ("not sent") only when nothing of the request can have reached the
+/// endpoint — offline, a name that did not resolve, a refused or timed-out
+/// connect, a failed TLS handshake, a request the platform refused to send,
+/// a request that never left whole; `Timeout` for a time-out once written
+/// (or at an unknown stage); `Network` ("may have been sent") for a break
+/// after the request left whole, and for a failure the platform cannot
+/// place. Vectors: `tests/vectors/rules/transport-failures.json`.
+#[must_use]
+pub fn transport_outcome_of(failure: TransportFailure) -> RpcTransportOutcome {
+    match failure {
+        TransportFailure::Offline
+        | TransportFailure::Dns
+        | TransportFailure::ConnectRefused
+        | TransportFailure::ConnectTimeout
+        | TransportFailure::Tls
+        | TransportFailure::Refused
+        | TransportFailure::WriteFailed => RpcTransportOutcome::NotConnected,
+        TransportFailure::ReadTimeout | TransportFailure::Timeout => RpcTransportOutcome::Timeout,
+        TransportFailure::AfterWrite | TransportFailure::Unknown => RpcTransportOutcome::Network,
+    }
+}
+
 /// How a routed call ends — delivered to the shell so it can settle the
 /// promise it is holding for `call_id`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
