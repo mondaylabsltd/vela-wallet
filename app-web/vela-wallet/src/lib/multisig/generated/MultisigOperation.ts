@@ -24,4 +24,4 @@ pairing: string | null, } | { "type": "peer_send", room: string, message: unknow
  * address and said "expected to fail", then ran fine. `None` for a
  * deployed one.
  */
-state_overrides: unknown | null, } | { "type": "recipient_risk", chain_id: number, address: string, } | { "type": "user_op_status", chain_id: number, user_op_hash: string, } | { "type": "notice", notice: MultisigNotice, };
+state_overrides?: unknown, } | { "type": "recipient_risk", chain_id: number, address: string, } | { "type": "user_op_status", chain_id: number, user_op_hash: string, } | { "type": "notice", notice: MultisigNotice, };

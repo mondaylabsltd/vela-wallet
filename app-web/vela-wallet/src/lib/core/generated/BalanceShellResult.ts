@@ -55,7 +55,7 @@ fallback_chain_ids: Array<number>,
  * stamp is that time, never `now_ms`: a cache hit while offline is
  * not "Updated now". Absent: read now.
  */
-read_at_ms: number | null, now_ms: number, } | { "type": "fetch_errored", address: string, pull: boolean, 
+read_at_ms?: number, now_ms: number, } | { "type": "fetch_errored", address: string, pull: boolean, 
 /**
  * It threw inside the app before anything left it (PR 2 note 11):
  * said as Vela's own fault, never "can't reach".

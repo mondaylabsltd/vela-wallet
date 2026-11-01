@@ -743,7 +743,6 @@ pub struct AccountRow {
 pub struct RowRule {
     /// The rule as the chains last said ([`AccountUpdate::RuleNow`], kept in
     /// `vela.multisigRulesNow`), else the founding one.
-    #[cfg_attr(feature = "bindings", ts(type = "MultisigRuleChip"))]
     pub chip: super::multisig_members::RuleChip,
     /// It is what a chain said, not the founding record's.
     pub from_chain: bool,

@@ -262,7 +262,7 @@ pub enum MultisigOperation {
         /// address and said "expected to fail", then ran fine. `None` for a
         /// deployed one.
         #[serde(default)]
-        #[cfg_attr(feature = "bindings", ts(type = "unknown | null"))]
+        #[cfg_attr(feature = "bindings", ts(optional, type = "unknown"))]
         state_overrides: Option<Value>,
     },
     /// What the send flow knows of a recipient (`resolveRecipientRisk`):
@@ -363,7 +363,6 @@ pub enum AccountUpdate {
     /// is deployed, the founding one where it is not, per network
     /// (`current_rules`) — kept per multisig and served on its row.
     RuleNow {
-        #[cfg_attr(feature = "bindings", ts(type = "MultisigRuleChip"))]
         chip: super::multisig_members::RuleChip,
     },
 }

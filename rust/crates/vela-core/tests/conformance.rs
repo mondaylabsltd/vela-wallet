@@ -40,8 +40,13 @@ struct Case {
 
 /// Vector files beside the corpus that are not suites: each has its own
 /// runner, which every shell replays by name (r9-17's incoming scan,
-/// `app_incoming_scan.rs`).
-const OWN_RUNNER_FILES: [&str; 1] = ["incoming-scan.json"];
+/// `app_incoming_scan.rs`; r10-1's balance stamp, `app_balance_dashboard.rs`;
+/// r9 S4's new site's chain, `site_start_chain_vectors.rs`).
+const OWN_RUNNER_FILES: [&str; 3] = [
+    "incoming-scan.json",
+    "balance-stamp.json",
+    "site-start-chain.json",
+];
 
 /// The corpus is seven suites, discovered by scanning the directory. Every runner
 /// asserts that exact set is present: without it, a vector file lost to a bad merge

@@ -797,6 +797,7 @@ pub enum BalanceShellResult {
         /// stamp is that time, never `now_ms`: a cache hit while offline is
         /// not "Updated now". Absent: read now.
         #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(optional))]
         read_at_ms: Option<f64>,
         now_ms: f64,
     },

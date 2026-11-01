@@ -119,7 +119,7 @@ export function createBalanceExecutor(stream: BalanceStreamSink) {
 				let failed: number[] = [];
 				let internal: number[] = [];
 				let registry: number[] = [];
-				let readAt: number | null = null;
+				let readAt: number | undefined;
 				const tokens = await fetchTokens(operation.address, {
 					forceRefresh: operation.force,
 					onCached: (at) => (readAt = at),
