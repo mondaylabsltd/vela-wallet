@@ -241,6 +241,14 @@ export function recipientBlocks(
 	return out;
 }
 
+/** The core's `simulation.kind` when a refusal withholds what moves (`multisig_review::SIM_WITHHELD`). */
+export const SIM_WITHHELD = 'withheld';
+
+/** The review says nothing about what moves: refused, and not by the state guard. */
+export function simWithheld(review: MultisigReviewOut): boolean {
+	return review.simulation.kind === SIM_WITHHELD;
+}
+
 /**
  * What moves, in the verdict's place — the signing sheet's own card: checking
  * while the review is out, then the core's verdict judged by the token rules.
@@ -251,6 +259,10 @@ export function movesBlocks(
 	ctx: ReviewContext
 ): Block[] {
 	const m = ctx.signing;
+	// Refused for a reason other than the state guard's (a delegatecall, a
+	// batch too deep): the core withholds what moves — nothing in its place,
+	// never "No asset changes" or "Checking…".
+	if (review && simWithheld(review)) return [];
 	if (!review || !sim) {
 		return [{ kind: 'verdict', inner: [checkingCard(m)], rooms: verdictRooms(m), landed: false }];
 	}
