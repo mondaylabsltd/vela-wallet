@@ -2352,11 +2352,25 @@ fn network_rank(chain_id: u32) -> u64 {
 /// merely rate-limited, each with what it held when last read — those last
 /// seen holding something first, by that worth, then the rest in network
 /// order.
+///
+/// r11 (desktop S4): an account said to live on some networks
+/// ([`Event::LivesOn`] — a multisig's) is named unreachable only on the
+/// networks it lives on or held something on ([`home_chains`]): "Can't
+/// reach OP Sepolia" said nothing about a multisig used only on Arc
+/// Testnet. An account nothing was said of (a Vela account, which can be
+/// paid on any network) keeps every failed network.
 fn unreachable_networks(model: &Model) -> Vec<UnreachableNetwork> {
+    let home = model.address.as_deref().and_then(|address| {
+        model
+            .lives_on
+            .contains_key(&address.to_ascii_lowercase())
+            .then(|| home_chains(model, address, &[]))
+    });
     let chains: BTreeSet<u32> = model
         .failed_chain_ids
         .iter()
         .copied()
+        .filter(|id| home.as_ref().is_none_or(|home| home.contains(id)))
         .filter(|id| !model.rate_limited_chain_ids.contains(id))
         // A fault inside the app is not the network's (PR 2 note 11).
         .filter(|id| !model.internal_chain_ids.contains(id))

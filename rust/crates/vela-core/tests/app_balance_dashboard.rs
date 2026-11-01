@@ -1418,6 +1418,67 @@ fn a_round_no_network_answered_never_moves_updated() {
     assert_eq!(down, vec![100]);
 }
 
+/// r11 (desktop S4): a multisig used only on Arc Testnet is never said to be
+/// out of reach because OP Sepolia did not answer — the networks named are
+/// the ones it lives on (`lives_on`) or held something on; an account
+/// nothing was said of keeps every failed network.
+#[test]
+fn unreachable_names_only_the_networks_a_multisig_lives_on() {
+    let mut sut = booted(
+        ADDR_A,
+        None,
+        settled_read(vec![], vec![], vec![5_042_002, 11_155_420]),
+    );
+    let round = |sut: &mut Sut, failed: Vec<u32>| {
+        sut.dispatch(Event::RefreshRequested {
+            force: true,
+            pull: false,
+        });
+        sut.resolve(Res::FetchSettled {
+            address: ADDR_A.to_owned(),
+            pull: false,
+            tokens: vec![],
+            failed_chain_ids: failed,
+            rate_limited_chain_ids: vec![],
+            read_chain_ids: vec![5_042_002, 11_155_420],
+            internal_chain_ids: vec![],
+            registry_chain_ids: vec![],
+            own_node_chain_ids: vec![],
+            fallback_chain_ids: vec![],
+            read_at_ms: None,
+            now_ms: NOW + 60_000.0,
+        });
+    };
+    let down = |sut: &Sut| -> Vec<u32> {
+        let mut ids: Vec<u32> = sut
+            .view()
+            .unreachable_networks
+            .iter()
+            .map(|n| n.chain_id)
+            .collect();
+        ids.sort_unstable();
+        ids
+    };
+    // Nothing said of where it lives: every failed network.
+    round(&mut sut, vec![11_155_420]);
+    assert_eq!(down(&sut), vec![11_155_420]);
+    // A multisig on Arc Testnet alone: OP Sepolia is not its network.
+    sut.dispatch(Event::LivesOn {
+        address: ADDR_A.to_ascii_uppercase().replace("0X", "0x"),
+        chain_ids: vec![5_042_002],
+    });
+    round(&mut sut, vec![11_155_420]);
+    assert!(down(&sut).is_empty(), "{:?}", down(&sut));
+    assert_eq!(sut.view().unreachable_key, None);
+    // Its own network out of reach: said, and only it.
+    round(&mut sut, vec![5_042_002, 11_155_420]);
+    assert_eq!(down(&sut), vec![5_042_002]);
+    assert_eq!(
+        sut.view().unreachable_key.as_deref(),
+        Some("assets.unreachableOne")
+    );
+}
+
 #[test]
 fn polls_never_run_backgrounded_but_focus_reloads() {
     let mut sut = booted(
