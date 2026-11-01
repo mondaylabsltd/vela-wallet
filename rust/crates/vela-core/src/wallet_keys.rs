@@ -222,10 +222,27 @@ fn registry_rows(unit_body: &str, device: &[DeviceKey]) -> Option<Vec<WalletKeyR
         // chose outranks every name somebody else recorded). The registry's
         // metadata is what the key was called on the day it was registered —
         // often a default — and only speaks when the device has nothing.
+        //
+        // r10 follow-up (owner: keys and accounts are different things):
+        // `key_names[0]` is the WALLET's published name (what the index
+        // answers for the address, §9.1), never a key's label — so it labels
+        // no row, and a remembered label that is that name is the account's,
+        // not the key's own.
+        let published = names.first().map(|name| name.trim()).unwrap_or_default();
+        let own = |name: &str| {
+            let name = name.trim();
+            !name.is_empty() && name != published
+        };
         let name = remembered
             .map(|key| key.name.clone())
-            .filter(|name| !name.is_empty())
-            .or_else(|| names.get(index).filter(|name| !name.is_empty()).cloned())
+            .filter(|name| own(name))
+            .or_else(|| {
+                names
+                    .get(index)
+                    .filter(|_| index > 0)
+                    .filter(|name| own(name))
+                    .cloned()
+            })
             .unwrap_or_default();
         rows.push(WalletKeyRow {
             name,
@@ -266,9 +283,42 @@ pub fn step(
     answers: &[LookupAnswer],
     sign_in_credential: &str,
 ) -> KeysStep {
-    let mut next = walk(address, device, answers);
+    step_for_account(address, "", device, answers, sign_in_credential)
+}
+
+/// [`step`] for an account named `account_name` (r10 follow-up, the owner's
+/// rule: keys and accounts are different things). A row's label is the key's
+/// own — what the person or the device called THAT key — and never the
+/// account's name: a label that is the account's name (the record's
+/// `keys[0].name` IS the wallet's name, and the registry's `key_names[0]` is
+/// its published name) is no label, and the shell says "Key n". Pass the
+/// record's own key names as they are; `""` for an unknown account name.
+#[must_use]
+pub fn step_for_account(
+    address: &str,
+    account_name: &str,
+    device: &[DeviceKey],
+    answers: &[LookupAnswer],
+    sign_in_credential: &str,
+) -> KeysStep {
+    let account = account_name.trim();
+    let is_account = |name: &str| !account.is_empty() && name.trim() == account;
+    let device: Vec<DeviceKey> = device
+        .iter()
+        .cloned()
+        .map(|mut key| {
+            if is_account(&key.name) {
+                key.name.clear();
+            }
+            key
+        })
+        .collect();
+    let mut next = walk(address, &device, answers);
     if let KeysStep::Done { keys, .. } = &mut next {
-        mark_sign_in_key(keys, device, sign_in_credential);
+        mark_sign_in_key(keys, &device, sign_in_credential);
+        for row in keys.iter_mut().filter(|row| is_account(&row.name)) {
+            row.name.clear();
+        }
     }
     next
 }
@@ -469,10 +519,23 @@ pub fn sign_route_json(device_keys_json: &str, method: &str) -> Option<String> {
     serde_json::to_string(&sign_route(&device, method)?).ok()
 }
 
+/// [`step_json`]'s `device_keys_json` in its fuller shape (r10 follow-up):
+/// the account's name beside its keys, so a row never takes it as a key's
+/// label ([`step_for_account`]).
+#[derive(Debug, Default, Deserialize)]
+struct NamedDevice {
+    #[serde(default)]
+    account_name: String,
+    #[serde(default)]
+    keys: Vec<DeviceKey>,
+}
+
 /// The JSON door the bindings use. `device_keys_json` is the account record's
-/// `keys` array (or a one-element array built from the legacy scalars);
-/// anything unreadable is an empty list, and the answer is then an empty view.
-/// `sign_in_credential` as [`step`] takes it.
+/// `keys` array (or a one-element array built from the legacy scalars) — or,
+/// r10 follow-up, `{"account_name": "…", "keys": [ … ]}`, the record's keys
+/// with their own names and the account's name ([`step_for_account`]: a row
+/// never takes the account's name). Anything unreadable is an empty list, and
+/// the answer is then an empty view. `sign_in_credential` as [`step`] takes it.
 #[must_use]
 pub fn step_json(
     address: &str,
@@ -480,11 +543,22 @@ pub fn step_json(
     answers_json: &str,
     sign_in_credential: &str,
 ) -> String {
-    let device: Vec<DeviceKey> = serde_json::from_str(device_keys_json).unwrap_or_default();
+    let named: NamedDevice = serde_json::from_str::<Vec<DeviceKey>>(device_keys_json)
+        .map(|keys| NamedDevice {
+            account_name: String::new(),
+            keys,
+        })
+        .or_else(|_| serde_json::from_str(device_keys_json))
+        .unwrap_or_default();
     let answers: Vec<LookupAnswer> = serde_json::from_str(answers_json).unwrap_or_default();
-    serde_json::to_string(&step(address, &device, &answers, sign_in_credential)).unwrap_or_else(
-        |_| r#"{"type":"done","source":"device","chain_id":null,"keys":[]}"#.to_owned(),
-    )
+    serde_json::to_string(&step_for_account(
+        address,
+        &named.account_name,
+        &named.keys,
+        &answers,
+        sign_in_credential,
+    ))
+    .unwrap_or_else(|_| r#"{"type":"done","source":"device","chain_id":null,"keys":[]}"#.to_owned())
 }
 
 #[cfg(test)]
@@ -860,5 +934,91 @@ mod tests {
         assert!(first.contains(r#""type":"ask""#) && first.contains("groups@100"));
         let garbage = step_json(SAFE, "not json", "not json", "");
         assert!(garbage.contains(r#""source":"device""#));
+    }
+
+    /// The golden wallet's walk for `device` and `account_name`, to the end.
+    fn walk_named(device: &[DeviceKey], account_name: &str) -> Vec<WalletKeyRow> {
+        let fixture = recorded();
+        let mut answers = Vec::new();
+        for _ in 0..32 {
+            match step_for_account(SAFE, account_name, device, &answers, "") {
+                KeysStep::Ask { requests } => {
+                    for request in requests {
+                        let LookupRequest::EthCall {
+                            id, chain_id, data, ..
+                        } = request
+                        else {
+                            unreachable!()
+                        };
+                        let body = fixture["answers"][chain_id.to_string()][&data].as_str();
+                        answers.push(LookupAnswer {
+                            id,
+                            outcome: if body.is_some() {
+                                LookupOutcome::Ok
+                            } else {
+                                LookupOutcome::Failed
+                            },
+                            body: body.map(str::to_owned),
+                        });
+                    }
+                }
+                KeysStep::Done { keys, .. } => return keys,
+            }
+        }
+        unreachable!("the walk never finished")
+    }
+
+    fn named(key: &WalletKeyRow, name: &str) -> DeviceKey {
+        DeviceKey {
+            credential_id: String::new(),
+            public_key_hex: key.public_key_hex.clone(),
+            name: name.to_owned(),
+            transports: String::new(),
+        }
+    }
+
+    /// r10 follow-up (owner: keys and accounts are different things). The
+    /// golden wallet was published as "Interleave" (`key_names[0]`); the
+    /// phones fed key 0 the account's name. Settings drew "Interleave" for
+    /// the first KEY. Its row now carries no label (the shell says "Key 1"),
+    /// whether or not the shell says the account's name.
+    #[test]
+    fn a_key_row_never_takes_the_accounts_name() {
+        let mut device = device();
+        device[0].name = "Interleave".to_owned();
+        for account in ["", "Interleave"] {
+            let rows = walk_named(&device, account);
+            let names: Vec<&str> = rows.iter().map(|r| r.name.as_str()).collect();
+            assert_eq!(names, ["", "Key 2", "Key 3"], "account {account:?}");
+        }
+        // Device only (no chain): the account's name, said, is no key's label.
+        let rows = match step_for_account("", "Interleave", &device, &[], "") {
+            KeysStep::Done { keys, .. } => keys,
+            KeysStep::Ask { .. } => unreachable!(),
+        };
+        assert_eq!(rows[0].name, "");
+    }
+
+    /// Each key's own label, as the fixture's record holds them (Parallel One,
+    /// Two, Three), beside the account's name: every row its own.
+    #[test]
+    fn each_key_keeps_its_own_label() {
+        let rows = walk_named(&device(), "");
+        let device: Vec<DeviceKey> = rows
+            .iter()
+            .zip(["Parallel One", "Parallel Two", "Parallel Three"])
+            .map(|(row, name)| named(row, name))
+            .collect();
+        let rows = walk_named(&device, "Interleave");
+        let names: Vec<&str> = rows.iter().map(|r| r.name.as_str()).collect();
+        assert_eq!(names, ["Parallel One", "Parallel Two", "Parallel Three"]);
+        // Through the door, in the named shape.
+        let json = serde_json::json!({ "account_name": "Interleave", "keys": [
+            { "public_key_hex": device[0].public_key_hex, "name": "Interleave" }
+        ]})
+        .to_string();
+        let done = step_json("", &json, "[]", "");
+        assert!(done.contains(r#""name":"""#), "{done}");
+        assert!(!done.contains("Interleave"), "{done}");
     }
 }

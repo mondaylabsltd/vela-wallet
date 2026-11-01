@@ -100,6 +100,15 @@ export function deviceKeys(account: Pick<Account, 'id' | 'name' | 'public_key_he
 	];
 }
 
+/**
+ * What the walk is handed (r10 follow-up): the record's keys, each with its
+ * own name, beside the account's name — the core never lets a key row take
+ * the account's name (`wallet_keys::step_for_account`).
+ */
+export function deviceJsonOf(account: Pick<Account, 'id' | 'name' | 'public_key_hex' | 'keys'>) {
+	return JSON.stringify({ account_name: account.name, keys: deviceKeys(account) });
+}
+
 /** The credential of the account's sign-in route; empty when it has none. */
 const signInCredential = (account: Account) => signingPlan(account)?.key?.credential_id ?? '';
 
@@ -125,7 +134,7 @@ function deviceAnswer(deviceJson: string, signIn: string): WalletKeyRow[] {
  */
 export function deviceOnlyKeys(account: Account): WalletKeys | null {
 	try {
-		const keys = deviceAnswer(JSON.stringify(deviceKeys(account)), signInCredential(account));
+		const keys = deviceAnswer(deviceJsonOf(account), signInCredential(account));
 		return keys.length === 0 ? null : { source: 'device', chainId: null, keys, asking: true };
 	} catch {
 		return null;
@@ -146,11 +155,10 @@ export function keysWorthAskingAgain(keys: WalletKeys | null): boolean {
  * throws; the worst answer is the device's own.
  */
 export async function readWalletKeys(account: Account): Promise<WalletKeys> {
-	const device = deviceKeys(account);
 	const fallback: WalletKeys = { source: 'device', chainId: null, keys: [] };
 	try {
 		await loadCore();
-		const json = JSON.stringify(device);
+		const json = deviceJsonOf(account);
 		const signIn = signInCredential(account);
 		const done = await runWalk<KeysDone>((answers) =>
 			walletKeysStep(account.address, json, answers, signIn)

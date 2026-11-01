@@ -806,7 +806,7 @@ impl KeysPin {
     /// signs with.
     #[must_use]
     pub fn device_rows(self) -> Vec<vela_core::wallet_keys::WalletKeyRow> {
-        super::live::device_key_rows(&self.device(), "pinned-credential-10")
+        super::live::device_key_rows("", &self.device(), "pinned-credential-10")
     }
 
     /// The registry's answer, once it is in: `None` while asking. A registry

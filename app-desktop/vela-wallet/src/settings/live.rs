@@ -462,12 +462,16 @@ pub fn currency_menu(priced: &[(String, f64)], selected: &str, locale: &str) -> 
 /// until the registry answered, then grew to the wallet's keys, and
 /// everything under it dropped (~250 pt on the iPhone, 151 px on the
 /// Xiaomi); on the desktop the same, 177 pt for a wallet of three keys.
+///
+/// `account_name`: the account's own name — never a key row's label (r10
+/// follow-up, `vela_core::wallet_keys::step_for_account`).
 #[must_use]
 pub fn device_key_rows(
+    account_name: &str,
     device: &[vela_core::wallet_keys::DeviceKey],
     sign_in_credential: &str,
 ) -> Vec<vela_core::wallet_keys::WalletKeyRow> {
-    match vela_core::wallet_keys::step("", device, &[], sign_in_credential) {
+    match vela_core::wallet_keys::step_for_account("", account_name, device, &[], sign_in_credential) {
         vela_core::wallet_keys::KeysStep::Done { keys, .. } => keys,
         // With no address there is nobody to ask.
         vela_core::wallet_keys::KeysStep::Ask { .. } => Vec::new(),
@@ -2674,15 +2678,15 @@ mod keys_tests {
         assert_eq!(KeysPin::Asking(1).answer(), None);
 
         let device = KeysPin::Asking(3).device();
-        let rows = device_key_rows(&device, &device[2].credential_id);
+        let rows = device_key_rows("", &device, &device[2].credential_id);
         assert_eq!(rows.len(), 3);
         let signs: Vec<bool> = rows.iter().map(|row| row.signs_here).collect();
         assert_eq!(signs, [false, false, true]);
         assert!(rows.iter().all(|row| row.credential_id.is_empty()
             && row.synced.is_none()
             && row.user_verified.is_none()));
-        assert_eq!(device_key_rows(&device[..1], "").len(), 1);
-        assert!(device_key_rows(&[], "").is_empty());
+        assert_eq!(device_key_rows("", &device[..1], "").len(), 1);
+        assert!(device_key_rows("", &[], "").is_empty());
     }
 
     /// The copy-record row's status is drawn on ONE line, so the row is one

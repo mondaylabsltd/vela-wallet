@@ -557,6 +557,7 @@ pub fn backup_line(check: Option<&BackupAnswer>) -> Option<BackupLine> {
 /// back marked as the key this device signs with.
 pub fn wallet_keys(
     address: &str,
+    account_name: &str,
     device: &[vela_core::wallet_keys::DeviceKey],
     sign_in_credential: &str,
 ) -> (
@@ -566,14 +567,15 @@ pub fn wallet_keys(
     use vela_core::wallet_keys::{self as keys, KeysSource, KeysStep};
     let mut answers: Vec<LookupAnswer> = Vec::new();
     for _ in 0..MAX_LOOKUP_ROUNDS {
-        match keys::step(address, device, &answers, sign_in_credential) {
+        // r10 follow-up: a row never takes the account's name as a key's.
+        match keys::step_for_account(address, account_name, device, &answers, sign_in_credential) {
             KeysStep::Ask { requests } => answers.extend(requests.iter().map(perform)),
             KeysStep::Done { source, keys, .. } => return (source, keys),
         }
     }
     // The walk never settled: what the device alone says, asked with no address
     // so that it cannot ask anybody.
-    match keys::step("", device, &[], sign_in_credential) {
+    match keys::step_for_account("", account_name, device, &[], sign_in_credential) {
         KeysStep::Done { keys, .. } => (KeysSource::Device, keys),
         KeysStep::Ask { .. } => (KeysSource::Device, Vec::new()),
     }
@@ -1520,7 +1522,8 @@ mod tests {
             name: "Parallel Multi".to_owned(),
             transports: String::new(),
         }];
-        let (source, keys) = wallet_keys("0x88cCA0EeDbF2C4426110bbFc998F048689266894", &device, "");
+        let (source, keys) =
+            wallet_keys("0x88cCA0EeDbF2C4426110bbFc998F048689266894", "Interleave", &device, "");
         assert_eq!(source, vela_core::wallet_keys::KeysSource::Registry);
         assert_eq!(keys.len(), 3);
         assert_eq!(keys[0].public_key_hex, device[0].public_key_hex);

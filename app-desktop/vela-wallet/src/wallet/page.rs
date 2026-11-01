@@ -10756,7 +10756,9 @@ impl WalletPage {
             .unwrap_or_default();
         // What the record itself says, at once and with nobody asked: the
         // block's rows until the registry's answer fills them in.
-        self.keys_device = settings_live::device_key_rows(&device, &sign_in_credential);
+        let account_name = account.name.clone();
+        self.keys_device =
+            settings_live::device_key_rows(&account_name, &device, &sign_in_credential);
         // `VELA_KEYS`: the block is pinned, and nobody is asked.
         if settings_fixtures::keys_pin().is_some() {
             return;
@@ -10768,6 +10770,7 @@ impl WalletPage {
                 .spawn(async move {
                     crate::executor::registry::wallet_keys(
                         &keys_address,
+                        &account_name,
                         &device,
                         &sign_in_credential,
                     )
