@@ -161,14 +161,23 @@ enum MsReading {
 
     // MARK: - Blocks
 
+    /// A call's card title: "Call 2.1 · Send" with the core's leg number
+    /// (`leg`, r10-10); the transaction's one call (`leg` null) carries no
+    /// number at all — never a path joined here, never "Call  · …".
+    @MainActor
+    static func cardTitle(_ call: MsJSON, words: MsWords) -> String {
+        let what = intentTitle(call["intent"] ?? .null, words: words)
+        guard let leg = call["leg"]?.string, !leg.isEmpty else { return what }
+        return "\(words.t("review.callNumber", ["n": leg])) · \(what)"
+    }
+
     /// Each call as a card, a batch's legs after it, every level (r8-5).
     @MainActor
     private static func cards(_ calls: [MsJSON], chainId: Int, words: MsWords) -> [SigningBlock] {
         calls.flatMap { call -> [SigningBlock] in
             let intent = call["intent"] ?? .null
-            let path = (call["path"]?.array ?? []).compactMap(\.int).map(String.init).joined(separator: ".")
             let card = SigningBlock.card(
-                title: "\(words.t("review.callNumber", ["n": path])) · \(intentTitle(intent, words: words))",
+                title: cardTitle(call, words: words),
                 rows: callRows(call, chainId: chainId, words: words),
                 tone: intentTone(intent)
             )
