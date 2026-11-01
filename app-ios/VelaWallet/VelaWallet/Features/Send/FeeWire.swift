@@ -230,6 +230,18 @@ struct FeeOptionWire: Decodable, Equatable {
     /// the fee in it and what it has to pay from, each written by the core
     /// with its unit. `nil` when it can pay, or cannot be weighed (no price).
     var short: FeeShortfallWire?
+    /// r10-3: short only once the operation's own amount of this coin is
+    /// taken first — the fee alone it could pay. Said as amount + fee
+    /// (`send.warnInsufficientForGas`), the send form's sentence. Absent on
+    /// the wire (an older core, a hand-written row): `false`.
+    var shortWithAmount: Bool?
+
+    /// The sentence for this coin's shortfall: amount + fee when the core
+    /// says the amount took what would have paid the fee, else the fee alone.
+    func shortSentence(_ loc: Loc) -> String {
+        loc.t(shortWithAmount == true ? "send.warnInsufficientForGas" : "send.warnInsufficientGas",
+              vars: ["sym": symbol])
+    }
 }
 
 /// A coin's shortfall against the fee — both sides the core's words for the

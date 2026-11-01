@@ -1709,7 +1709,9 @@ enum SigningLive {
             warning = context.loc.t("componentsUi.gas.noCoinPays")
         } else if let fee, fee.fee != nil, !fee.busy, fee.failed == nil, !fee.confirmFeeReady,
            let selected = fee.options.first(where: { $0.selected }), selected.insufficient {
-            warning = context.loc.t("send.warnInsufficientGas", vars: ["sym": selected.symbol])
+            // r10-3: amount + fee when the request's own amount of that coin
+            // is what leaves too little (`short_with_amount`).
+            warning = selected.shortSentence(context.loc)
         } else if let fee, !fee.busy, fee.failed == nil,
                   let selected = fee.options.first(where: { $0.selected }), selected.spentByOperation == true {
             // Spec 096 F2: the person chose a coin the transaction itself
