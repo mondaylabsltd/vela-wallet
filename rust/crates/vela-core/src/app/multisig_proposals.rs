@@ -2278,10 +2278,8 @@ async fn tell_members(io: &Io<Event>, st: &Shared<State>, account: &MultisigAcco
         // r9-14: the rule as the chains say, kept on the multisig's row so a
         // switcher or Settings showing it unfollowed never says the founding
         // "Needs 2 of 3" when the chain says 2 of 4.
-        let original = super::multisig_members::MemberRule::of(
-            account.threshold,
-            account.owners.len(),
-        );
+        let original =
+            super::multisig_members::MemberRule::of(account.threshold, account.owners.len());
         let rule = super::multisig_members::rule_chip(&super::multisig_members::current_rules(
             original, &chains,
         ));
@@ -2290,9 +2288,11 @@ async fn tell_members(io: &Io<Event>, st: &Shared<State>, account: &MultisigAcco
             s.members_told.insert(key.clone(), members.clone());
             members
         });
-        let rule = rule.filter(|r| s.rules_told.get(&key) != Some(r)).inspect(|r| {
-            s.rules_told.insert(key, r.clone());
-        });
+        let rule = rule
+            .filter(|r| s.rules_told.get(&key) != Some(r))
+            .inspect(|r| {
+                s.rules_told.insert(key, r.clone());
+            });
         (members, rule)
     };
     if let Some(members) = members {

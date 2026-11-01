@@ -850,6 +850,9 @@ pub enum BalanceEffect {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "BalanceEvent"))]
+// `ShellCompleted` carries a whole settle (r10-1 added `read_at_ms`): events
+// are dispatched one at a time and never stored in bulk.
+#[allow(clippy::large_enum_variant)]
 pub enum Event {
     /// The active account changed (or was first resolved). Resets the balance
     /// state, paints the hero from cache, and starts a fetch — the port of
@@ -1430,9 +1433,10 @@ impl App for BalanceDashboard {
                 holdings_restored(model, &address, tokens)
             }
             Event::LivesOn { address, chain_ids } => {
-                model
-                    .lives_on
-                    .insert(address.to_ascii_lowercase(), chain_ids.into_iter().collect());
+                model.lives_on.insert(
+                    address.to_ascii_lowercase(),
+                    chain_ids.into_iter().collect(),
+                );
                 Command::done()
             }
             Event::SpaceChanged => {

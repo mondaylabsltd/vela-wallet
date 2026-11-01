@@ -978,8 +978,6 @@ impl State {
         }
     }
 
-    /// r9-12: what `account`'s invite carries of each member.
-
     /// r9-14: the rule `account`'s row shows ([`RowRule`]).
     fn row_rule(&self, account: &MultisigAccount) -> RowRule {
         let key = account.address.to_ascii_lowercase();
@@ -1001,6 +999,8 @@ impl State {
             },
         }
     }
+
+    /// r9-12: what `account`'s invite carries of each member.
     fn invite_members(
         &self,
         account: &MultisigAccount,
@@ -2192,8 +2192,7 @@ async fn start(io: &Io<Event>, st: &Shared<State>) {
             .collect();
         s.rules_now = get(RULES_NOW_KEY)
             .and_then(|r| {
-                serde_json::from_str::<BTreeMap<String, super::multisig_members::RuleChip>>(&r)
-                    .ok()
+                serde_json::from_str::<BTreeMap<String, super::multisig_members::RuleChip>>(&r).ok()
             })
             .unwrap_or_default();
         s.invite_shared = get(INVITE_SHARED_KEY)

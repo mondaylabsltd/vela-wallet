@@ -245,7 +245,9 @@ fn the_simulation_of_an_undeployed_safe_includes_its_deployment() {
     let overrides = reads.sim_state_overrides.expect("the multisig placed");
     let placed = &overrides[&checksum(safe.parse().unwrap())];
     assert!(placed["code"].as_str().is_some_and(|c| c.len() > 2));
-    assert!(placed["stateDiff"].as_object().is_some_and(|s| !s.is_empty()));
+    assert!(placed["stateDiff"]
+        .as_object()
+        .is_some_and(|s| !s.is_empty()));
     // Deployed: the chain already has it.
     input.deployed = true;
     input.owners = vec![A.into(), B.into()];

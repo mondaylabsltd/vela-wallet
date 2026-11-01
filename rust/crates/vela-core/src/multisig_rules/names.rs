@@ -138,8 +138,7 @@ mod tests {
         let cases = v["cases"].as_array().unwrap();
         assert!(cases.len() >= 6);
         for case in cases {
-            let got: String =
-                serde_json::from_str(&call("label", &case["args"]).unwrap()).unwrap();
+            let got: String = serde_json::from_str(&call("label", &case["args"]).unwrap()).unwrap();
             assert_eq!(got, case["expect"].as_str().unwrap(), "{}", case["name"]);
         }
     }
@@ -153,7 +152,10 @@ mod tests {
             label(BOB, Some("Parallel space"), Some("Dana"), Some("x")),
             "x"
         );
-        assert_eq!(label(BOB, Some("Parallel space"), Some("Dana"), None), "Dana");
+        assert_eq!(
+            label(BOB, Some("Parallel space"), Some("Dana"), None),
+            "Dana"
+        );
         assert_eq!(
             label(BOB, Some("Parallel space"), None, Some("Interleave")),
             "Interleave"

@@ -1911,5 +1911,8 @@ fn an_unread_network_is_read_again_on_its_own() {
         sut.view().networks[1].state,
         NetworkState::Deployed { same: true, .. }
     ));
-    assert!(sut.outstanding().is_empty(), "nothing left waiting once read");
+    assert!(
+        sut.outstanding().is_empty(),
+        "nothing left waiting once read"
+    );
 }

@@ -1563,17 +1563,15 @@ async fn read_some(
     chain_ids: &[u64],
     round: u64,
 ) {
-    let reads = chain_ids.iter().map(|id| {
-        async move {
-            let read = read_bounded(io, chain, *id, account).await;
-            {
-                let mut s = lock(st);
-                if s.round == round && s.chain_ids.contains(id) {
-                    s.reads.insert(*id, read);
-                }
+    let reads = chain_ids.iter().map(|id| async move {
+        let read = read_bounded(io, chain, *id, account).await;
+        {
+            let mut s = lock(st);
+            if s.round == round && s.chain_ids.contains(id) {
+                s.reads.insert(*id, read);
             }
-            io.emit(Event::Changed);
         }
+        io.emit(Event::Changed);
     });
     future::join_all(reads).await;
 }
