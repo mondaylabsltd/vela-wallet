@@ -101,10 +101,43 @@ struct MsReviewBody: View {
 
     // MARK: - What moves (the simulation, or the probe's balances)
 
+    /// What the verdict's place holds, as the core's `simulation` says it.
+    enum MovesSaid: Equatable {
+        /// Nothing: the core withholds what moves (`kind` `withheld` —
+        /// refused for a reason other than the state guard's, a delegatecall
+        /// or a batch too deep), or there is no line to say.
+        case nothing
+        /// The balance rows.
+        case deltas
+        /// One line: the core's no-change key (quiet), or its notice.
+        case line(key: String, reason: String?, tone: MsNote.Tone)
+    }
+
+    /// The core's `simulation` in the verdict's place — never "No asset
+    /// changes" for a simulation the core withheld.
+    static func movesSaid(_ review: MsJSON) -> MovesSaid {
+        guard let sim = review["simulation"] else { return .nothing }
+        switch sim["kind"]?.string {
+        case "withheld":
+            return .nothing
+        case "deltas":
+            if !(sim["deltas"]?.array ?? []).isEmpty { return .deltas }
+            return .line(key: sim["no_change_key"]?.string ?? "componentsUi.signing.simResultNoChange",
+                         reason: nil, tone: .neutral)
+        default:
+            guard let key = sim["notice_key"]?.string, !key.isEmpty else { return .nothing }
+            return .line(key: key, reason: sim["revert_reason"]?.string,
+                         tone: sim["notice_risk"]?.string == "danger" ? .danger : .warning)
+        }
+    }
+
     @ViewBuilder private var moves: some View {
         let sim = review["simulation"]
         let deltas = sim?["deltas"]?.array ?? []
-        if sim?["kind"]?.string == "deltas", !deltas.isEmpty {
+        switch Self.movesSaid(review) {
+        case .nothing:
+            EmptyView()
+        case .deltas:
             MsSection(title: words.loc.t("componentsUi.signing.simResultLabel")) {
                 ForEach(Array(deltas.enumerated()), id: \.offset) { _, delta in
                     let text = deltaText(delta)
@@ -117,13 +150,12 @@ struct MsReviewBody: View {
                     MsNote(text: words.t("review.movesProbe"))
                 }
             }
-        } else if sim?["kind"]?.string == "deltas" {
-            MsNote(text: words.loc.t(sim?["no_change_key"]?.string ?? "componentsUi.signing.simResultNoChange"))
-        } else if let key = sim?["notice_key"]?.string, !key.isEmpty {
-            let reason = sim?["revert_reason"]?.string
+        case .line(let key, let reason, let tone) where tone == .neutral:
+            MsNote(text: reason.map { words.loc.t(key, vars: ["reason": $0]) } ?? words.loc.t(key))
+        case .line(let key, let reason, let tone):
             MsNote(
                 text: reason.map { words.loc.t(key, vars: ["reason": $0]) } ?? words.loc.t(key),
-                tone: sim?["notice_risk"]?.string == "danger" ? .danger : .warning,
+                tone: tone,
                 identifier: "multisig.review.sim"
             )
         }
