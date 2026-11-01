@@ -3943,6 +3943,13 @@ pub(crate) async fn look_if_stale(
         if s.looking.contains(&key) {
             return;
         }
+        // r10-6: a refused review is never looked at (a look would say
+        // "expected to fail" beside "Vela won't sign this").
+        if flows::refused_withheld(&s, input.chain_id, &input.item.safe_tx_hash) {
+            s.previews.remove(&key);
+            s.preview_plans.remove(&key);
+            return;
+        }
         let fresh = s.preview_plans.get(&key).is_some_and(|(at, p)| {
             // r7: a look that stops it (nobody can pay, it would fail) is
             // asked again at the sheet's pace even on the home — an

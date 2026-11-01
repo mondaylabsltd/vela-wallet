@@ -1324,3 +1324,33 @@ fn the_trace_runs_a_queued_proposal_at_its_own_number() {
     let diff = &r.trace.unwrap().params[2]["stateOverrides"][checksum(a(SAFE))]["stateDiff"];
     assert_eq!(diff[s(slot(SLOT_NONCE))], json!(n(7)));
 }
+
+/// r10-6: a refusal for what it is never says "expected to fail" either —
+/// a probe that reverted is withheld like one that changed nothing (deep4
+/// still showed it on desktop and Android).
+#[test]
+fn a_refusal_withholds_a_revert_too() {
+    let mut d = keccak256(b"transfer(address,uint256)")[..4].to_vec();
+    d.extend_from_slice(&word_addr(a(C)));
+    d.extend_from_slice(&word(U256::from(1)));
+    let delegate = tx(
+        "0x5555555555555555555555555555555555555555",
+        "0x0",
+        &hex(&d),
+        1,
+    );
+    let k = watch_of(&delegate, &[]);
+    let mut before = snap(&[A, B]);
+    before.watched = zero_watch(k);
+    let mut after = snap(&[A, B]);
+    after.watched = zero_watch(k);
+    let r = review_with(
+        delegate,
+        Some(not_offered_answer()),
+        Some(probe_envelope(&before, &after, false)),
+    );
+    assert_eq!(r.refused.as_ref().unwrap().why, RefusedWhy::Delegatecall);
+    assert_eq!(r.state.verdict, StateVerdict::Withheld);
+    assert!(!r.concerns.iter().any(|c| matches!(c, Concern::Reverts)));
+    assert_eq!(r.simulation.kind, "withheld");
+}

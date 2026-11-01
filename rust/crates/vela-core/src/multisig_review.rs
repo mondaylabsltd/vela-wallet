@@ -1853,7 +1853,10 @@ pub fn multisig_review(input: &ReviewInput) -> Result<MultisigReview, CoreError>
     if withheld
         && matches!(
             state.verdict,
-            StateVerdict::Unchanged | StateVerdict::Declared | StateVerdict::Unavailable { .. }
+            StateVerdict::Unchanged
+                | StateVerdict::Declared
+                | StateVerdict::Unavailable { .. }
+                | StateVerdict::Reverts
         )
     {
         state.verdict = StateVerdict::Withheld;
@@ -1863,13 +1866,11 @@ pub fn multisig_review(input: &ReviewInput) -> Result<MultisigReview, CoreError>
     // as the multisig, a batch too deep is not read in full — "No asset
     // changes" (or its could-not-check, or a revert only the simulation
     // said) beside "Vela won't sign this" is a reassurance nobody can give.
+    // r10-6: nor "expected to fail" — the probe of a transaction Vela does
+    // not read in full says nothing it can stand behind; the refusal is the
+    // one line (deep4 still showed it on desktop and Android).
     let simulation = if withheld {
-        let state_reverts = state.verdict == StateVerdict::Reverts;
-        concerns.retain(|c| match c {
-            Concern::Unsimulated => false,
-            Concern::Reverts => state_reverts,
-            _ => true,
-        });
+        concerns.retain(|c| !matches!(c, Concern::Unsimulated | Concern::Reverts));
         sim_withheld()
     } else {
         simulation
