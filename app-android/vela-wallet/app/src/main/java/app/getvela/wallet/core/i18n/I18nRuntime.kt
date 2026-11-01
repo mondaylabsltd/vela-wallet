@@ -31,6 +31,13 @@ class I18nRuntime(
     private val readCatalog: (tag: String) -> ByteArray,
 ) : VelaStrings {
 
+    /**
+     * Replaced whole (never edited) when an on-demand namespace comes in —
+     * the core's `en` is a field fixed at construction, so a namespace can
+     * only reach the fallback through a new engine ([include]). Readers take
+     * whichever engine is current; each is complete when it is published.
+     */
+    @Volatile
     private lateinit var engine: I18n
 
     private val _state = MutableStateFlow(State(ready = false, language = FALLBACK, direction = "ltr"))
@@ -84,9 +91,17 @@ class I18nRuntime(
         if (!included.add(namespace)) return
         if (!::engine.isInitialized) return
         val active = engine.language()
-        engine.loadCatalog(FALLBACK, catalog(FALLBACK))
-        if (active != FALLBACK) engine.loadCatalog(active, catalog(active))
-        engine.changeLanguage(active)
+        // r10-2: the core's `en` is a field set at construction, and
+        // `load_catalog` fills only the ACTIVE slot. Loading the merged
+        // English there left the pinned fallback without the namespace: the
+        // next switch to English (or any key a language lacks) fell through
+        // to it and drew raw keys until a restart. A new engine, built with
+        // the merged English and then the active language, is published only
+        // once it is whole.
+        val next = I18n(catalog(FALLBACK))
+        if (active != FALLBACK) next.loadCatalog(active, catalog(active))
+        next.changeLanguage(active)
+        engine = next
         plain = emptyMap()
         publish()
         snapshot()

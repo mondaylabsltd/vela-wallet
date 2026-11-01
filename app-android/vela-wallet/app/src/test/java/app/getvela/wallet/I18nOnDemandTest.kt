@@ -79,6 +79,30 @@ class I18nOnDemandTest {
         assertEquals(multisigValue("ja"), strings.t(sample))
     }
 
+    /**
+     * r10-2: the per-app language changed while the app runs, zh-CN → en-US
+     * (Settings → App languages): every multisig word was a raw key until a
+     * restart. The merged English had gone into the core's active slot, not
+     * its pinned fallback, so a switch back to English read the fallback
+     * without the namespace.
+     */
+    @Test
+    fun anIncludedNamespaceSurvivesASwitchBackToEnglish() {
+        val fromChinese = runtime().apply { initialize("zh") }
+        fromChinese.include(I18nCatalogs.MULTISIG)
+        assertEquals(multisigValue("zh"), fromChinese.t(sample))
+        fromChinese.setLocale("en")
+        assertEquals(multisigValue("en"), fromChinese.t(sample))
+        assertEquals(multisigValue("en"), fromChinese.tMany(listOf(sample)).single())
+        assertEquals(multisigValue("en"), fromChinese.t(sample, mapOf("x" to "y")))
+
+        val roundTrip = runtime().apply { initialize("en") }
+        roundTrip.include(I18nCatalogs.MULTISIG)
+        roundTrip.setLocale("zh")
+        roundTrip.setLocale("en")
+        assertEquals(multisigValue("en"), roundTrip.t(sample))
+    }
+
     /** Phase 4: plain lookups are remembered per catalog state, never across a change of it. */
     @Test
     fun aRememberedWordFollowsALanguageChange() {
