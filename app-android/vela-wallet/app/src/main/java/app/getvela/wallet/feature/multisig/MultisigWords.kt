@@ -70,7 +70,10 @@ class MultisigWords(
      * every device. This shell only hands it what it knows.
      */
     fun label(address: String): String =
-        MsRules.string("names.label", mapOf("address" to address, "own" to localName(address), "kept" to keptName(address), "registered" to null))
+        // r9-12 (core §8): the accounts machine's one name per member — the
+        // passkey index's name included — before anything asked here.
+        accounts.memberLabels[address.lowercase()]?.takeIf { it.isNotBlank() }
+            ?: MsRules.string("names.label", mapOf("address" to address, "own" to localName(address), "kept" to keptName(address), "registered" to null))
             ?: localName(address) ?: keptName(address) ?: short(address)
 
     /** A multisig's name: its row's, its record's (when valid), its label, else its rule ("Multisig 2/3"). */
@@ -112,6 +115,20 @@ class MultisigWords(
         else -> null
     }
 
+    /**
+     * r9-14: a multisig's rule chip wherever it is drawn (home, switcher):
+     * the core's `rule_chip` for the multisig the proposals machine follows
+     * (its members as the chains say them now), else what its record says —
+     * the core reads no chain for one it does not follow.
+     */
+    fun rowRuleChip(account: app.getvela.wallet.feature.multisig.core.MsAccount, proposals: app.getvela.wallet.feature.multisig.core.MsProposalsView): String =
+        (if (proposals.followed.equals(account.address, ignoreCase = true)) ruleChip(proposals.ruleChip) else null)
+            ?: ruleChip(account.threshold, account.owners.size)
+
+    /** The rule's title as the machine's chip says it ("Needs 2 of 4 members"); `null` when it says nothing, or differs by network. */
+    fun ruleTitleOf(chip: kotlinx.serialization.json.JsonElement?): String? =
+        if (chip.kind == "needs") chip["rule"].let { r -> r["m"].int?.let { m -> r["n"].int?.let { n -> ruleTitle(m, n) } } } else null
+
     /** The waiting line as the machine parts it (`MultisigWaitingPart[]`): "1 needs your approval · 1 ready to execute". */
     fun waitingParts(parts: List<kotlinx.serialization.json.JsonElement>): String? =
         parts.mapNotNull { p -> p["kind"].str?.let { plural("presence.$it", p["count"].int ?: 0) } }
@@ -149,7 +166,9 @@ class MultisigWords(
             "addOwner" -> t("change.add", "member" to who(action["owner"].str.orEmpty()))
             "removeOwner" -> t("change.remove", "member" to who(action["owner"].str.orEmpty()))
             "swapOwner" -> t("change.replace", "old" to who(action["oldOwner"].str.orEmpty()), "new" to who(action["newOwner"].str.orEmpty()))
-            "changeThreshold" -> t("action.changeThreshold", "threshold" to (action["threshold"].str ?: ""))
+            // r9 words: "Require 1 approval" — the core's plural family (`_one`, `_other`, …).
+            "changeThreshold" -> action["threshold"].int?.let { plural("action.changeThreshold", it) }
+                ?: t("action.changeThreshold", "threshold" to (action["threshold"].str ?: ""))
             "rename" -> t("action.rename", "name" to (action["name"].str ?: ""))
             "call" -> {
                 val value = action["value"].str ?: "0"
@@ -176,6 +195,15 @@ class MultisigWords(
         )
         else -> t("status.progress", "approved" to item.approved.toString(), "threshold" to item.threshold.toString())
     }
+
+    /**
+     * r9-13 (the web's row, r4b-6): where it stands in the core's one word,
+     * and — while others wait at its number (`sameNonce`: a cancellation, a
+     * rival) — "Only one of these can run" beside it.
+     */
+    fun standingLine(standing: JsonElement?, item: MsProposalItem): String =
+        listOfNotNull(this.standing(standing, item), t("status.conflict").takeIf { item.sameNonce.isNotEmpty() && item.status != "done" })
+            .joinToString(" · ")
 
     /** Why a ready transaction cannot run now (`MultisigReadyBlock`). */
     fun blockReason(block: JsonElement?): String {

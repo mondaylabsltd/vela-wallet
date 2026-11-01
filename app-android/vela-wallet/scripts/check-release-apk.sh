@@ -34,6 +34,7 @@ fi
 #    dex as a type descriptor, compressed or not.
 for marker in \
   'Lapp/getvela/wallet/dev/ServiceLaunchInputs;' \
+  'Lapp/getvela/wallet/dev/MultisigPollTrigger;' \
   'Luniffi/vela_dev_fixtures/' \
   'Lapp/getvela/wallet/bench/' \
   'fixtureAssert'
@@ -55,6 +56,7 @@ MAPPING="${VELA_RELEASE_MAPPING:-$HERE/app/build/outputs/mapping/release/mapping
 if [ -f "$MAPPING" ]; then
   for marker in \
     'app.getvela.wallet.dev.ServiceLaunchInputs' \
+    'app.getvela.wallet.dev.MultisigPollTrigger' \
     'uniffi.vela_dev_fixtures.' \
     'app.getvela.wallet.bench.' \
     'fixtureAssert'

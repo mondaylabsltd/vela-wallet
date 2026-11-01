@@ -233,7 +233,10 @@ class WalletFixturesTest {
             assertEquals("$state", "更新中…", refresh?.updating)
             assertEquals("$state", false, refresh?.refreshing)
             // Nothing read yet: H3's skeleton, and H15, whose first read is still out.
-            val expected = if (state == WalletScreenState.H3 || state == WalletScreenState.H15) null else "上次更新 · 2分钟前"
+            // H12: every network failed — a round nobody answered never moves the
+            // core's stamp (r9, be3108b00), so no "Updated" is claimed.
+            val unread = setOf(WalletScreenState.H3, WalletScreenState.H15, WalletScreenState.H12)
+            val expected = if (state in unread) null else "上次更新 · 2分钟前"
             assertEquals("$state", expected, refresh?.updated)
         }
     }

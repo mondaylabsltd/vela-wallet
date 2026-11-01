@@ -120,7 +120,11 @@ fun MultisigAppLayer(
             android.content.pm.PackageManager.PERMISSION_GRANTED
         ) {
             scope.launch {
-                if (app.getvela.wallet.core.data.NotificationAsk.claim(app.getvela.wallet.core.data.VelaStore(context))) {
+                // r9-8: the multisig's own once — a receipt's earlier ask (087
+                // F14) was about a send's outcome; this one is about members
+                // waiting on this device, asked when there first is a multisig.
+                if (MultisigNotifyAsk.claim(app.getvela.wallet.core.data.VelaStore(context))) {
+                    VelaLog.event("multisig.notify", "asking")
                     askLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
                 }
             }
@@ -129,6 +133,14 @@ fun MultisigAppLayer(
     androidx.compose.runtime.DisposableEffect(hub) {
         hub.onProposed = { scope.launch { askNotifications() } }
         onDispose { hub.onProposed = null }
+    }
+    // r9-8: the moment there is something to say — a multisig on this device
+    // (created, added, an invite taken, or one this device became a member of
+    // by a member change), shown on the wallet. Asked once; the create and
+    // add sheets' own asks are the same once.
+    val hasMultisig = accounts.loaded && accounts.accounts.isNotEmpty()
+    LaunchedEffect(hasMultisig, route) {
+        if (hasMultisig && route == SessionRoute.Wallet) askNotifications()
     }
     // The link flow's own outcomes: a member's transaction opens as its sheet
     // (the router's `open_proposal`); an invite is the add sheet (Link).
@@ -216,5 +228,20 @@ fun MultisigWaitingLinkSheet(words: MultisigWords, link: String, onOpen: () -> B
             modifier = androidx.compose.ui.Modifier.fillMaxWidth().testTag("multisig.waitingLink.open"),
         )
         MsNote(words.t("external.linkLater"))
+    }
+}
+
+/**
+ * r9-8: the notification permission asked for the multisig at most ONCE per
+ * install, apart from the send receipt's once (087 F14: never on every
+ * screen, never again after an answer). Android itself shows the system's
+ * ask at most twice before it stops asking; this is the second context.
+ */
+object MultisigNotifyAsk {
+    const val KEY = "vela.multisigNotificationsAsked"
+
+    suspend fun claim(store: app.getvela.wallet.core.data.KeyValueStore): Boolean {
+        if (store.read(KEY) != null) return false
+        return store.write(KEY, "1")
     }
 }

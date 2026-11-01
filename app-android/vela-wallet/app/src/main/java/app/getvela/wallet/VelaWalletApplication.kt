@@ -3,6 +3,7 @@ package app.getvela.wallet
 import app.getvela.wallet.feature.send.SendLive
 import app.getvela.wallet.feature.multisig.MultisigWiring
 import app.getvela.wallet.feature.multisig.MultisigNotifier
+import app.getvela.wallet.feature.multisig.MultisigWords
 import app.getvela.wallet.feature.multisig.core.MultisigHub
 import app.getvela.wallet.core.format.Formats
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -73,6 +74,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.stateIn
 import app.getvela.wallet.core.data.DebugSeed
 import app.getvela.wallet.core.data.VelaStore
@@ -833,17 +835,21 @@ class AppContainer(private val app: Application) {
             // Every wallet address and the active one: every grant follows it.
             follow.launch {
                 // A multisig shown is the account sites see, as on the wallet (M5).
-                kotlinx.coroutines.flow.combine(session.view, multisig.accountsView) { view, ms -> view to ms }.collect { (view, ms) ->
-                    if (!view.loading) {
-                        val shown = ms.activeRow?.account?.address
-                        controller.accountsChanged(
-                            view.accounts.map { it.address } + ms.accounts.map { it.account.address },
-                            shown ?: view.address.takeIf { it.isNotBlank() },
-                            // r8-21: a multisig's own networks (its record's), so a site starts on one.
-                            networks = ms.activeRow?.account?.chainIds.orEmpty(),
-                        )
+                kotlinx.coroutines.flow.combine(session.view, multisig.accountsView, accountChains()) { view, ms, own -> Triple(view, ms, own) }
+                    .collect { (view, ms, own) ->
+                        if (!view.loading) {
+                            val shown = ms.activeRow?.account?.address
+                            controller.accountsChanged(
+                                view.accounts.map { it.address } + ms.accounts.map { it.account.address },
+                                shown ?: view.address.takeIf { it.isNotBlank() },
+                                // r8-21: a multisig's own networks (its record's), so a site starts on one.
+                                // r9 (core `site_start_chain_for`): a Vela account's are where it
+                                // holds something or has sent from — a new site starts on the first
+                                // of them the space offers, never Sepolia for an Arc-only wallet.
+                                networks = ms.activeRow?.account?.chainIds ?: own,
+                            )
+                        }
                     }
-                }
             }
             // The chains a page may switch to are the space in front's
             // networks, live (spec 105): a switch of space is a change of them.
@@ -1204,6 +1210,7 @@ class AppContainer(private val app: Application) {
         app.registerActivityLifecycleCallbacks(activityCounter)
         i18nExecutor.execute {
             i18nRuntime.initialize(LocaleResolver.resolve(currentLocales()))
+            multisigChannels()
         }
         if (BuildConfig.DEBUG) {
             // Spec 048: a raw store seed for the device pass, applied before the
@@ -1226,10 +1233,38 @@ class AppContainer(private val app: Application) {
      */
     private fun startAgent() = agent.start(agentWallet)
 
+    /**
+     * r9-8: the multisig's notification channels, made at the app's start and
+     * named again in a new language (on the i18n thread, after its catalog):
+     * there before the first post, and listed in the system's settings.
+     */
+    private fun multisigChannels() {
+        runCatching {
+            i18nRuntime.include(I18nCatalogs.MULTISIG)
+            MultisigNotifier.ensureChannels(app, MultisigWords(i18nRuntime))
+        }.onFailure { VelaLog.failure("multisig.notify", "channels", it) }
+    }
+
+    /**
+     * r9 (`site_start_chain_for`'s `account_chains`): the networks the Vela
+     * account in front lives on, most telling first — where it holds
+     * something, by worth, then where it has sent from. Facts the wallet
+     * read; where a site starts is the browser machine's.
+     */
+    private fun accountChains(): kotlinx.coroutines.flow.Flow<List<Int>> =
+        kotlinx.coroutines.flow.combine(wallet.balances, wallet.feed) { balances, feed ->
+            val held = balances.tokens
+                .filter { !it.spam && (it.balance.toBigDecimalOrNull()?.signum() ?: 0) > 0 }
+                .sortedByDescending { (it.balance.toDoubleOrNull() ?: 0.0) * (it.price_usd ?: 0.0) }
+                .map { it.chain_id }
+            (held + feed.transactions.map { it.chain_id }).filter { it > 0 }.distinct()
+        }.distinctUntilChanged()
+
     /** Re-resolves the system locale (activity recreation on locale change). */
     fun applySystemLocale() {
         i18nExecutor.execute {
             i18nRuntime.setLocale(LocaleResolver.resolve(currentLocales()))
+            multisigChannels()
         }
     }
 
@@ -1239,6 +1274,7 @@ class AppContainer(private val app: Application) {
         i18nExecutor.execute {
             runCatching { i18nRuntime.setLocale(LocaleResolver.resolve(listOf(java.util.Locale.forLanguageTag(choice)))) }
                 .onFailure { VelaLog.failure("i18n", "language preference failed", it) }
+            multisigChannels()
         }
     }
 

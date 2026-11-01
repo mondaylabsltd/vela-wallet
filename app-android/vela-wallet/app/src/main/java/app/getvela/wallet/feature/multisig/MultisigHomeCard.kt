@@ -70,7 +70,7 @@ fun MultisigHomeCard(
         // Header: the rule in force (each network's, read from the chain).
         Row(horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
             // The machine's `rule_chip` for the one it follows; the record's rule before.
-            val chip = (if (following) words.ruleChip(view.ruleChip) else null) ?: words.ruleChip(account.threshold, account.owners.size)
+            val chip = words.rowRuleChip(account, view)
             MsChip(chip, Modifier.testTag("multisig.home.rule"))
             if (!row.shared) MsChip(words.t("switcher.notShared"), tone = MsTone.Warning)
             if (row.highRiskOn.isNotEmpty()) MsChip(words.t("authority.riskFlag"), tone = MsTone.Danger)
@@ -84,8 +84,7 @@ fun MultisigHomeCard(
         MsNavRow(
             words.t("panel.members"),
             // The rule in force as the machine read it (`rule_chip`); the record's before.
-            subtitle = view.ruleChip?.takeIf { following && it.kind == "needs" }?.get("rule")
-                ?.let { r -> words.ruleTitle(r["m"].int ?: account.threshold, r["n"].int ?: account.owners.size) }
+            subtitle = (if (following) words.ruleTitleOf(view.ruleChip) else null)
                 ?: words.ruleTitle(account.threshold, account.owners.size),
             icon = VelaIcons.UsersRound,
             tag = "multisig.home.settings",
@@ -121,7 +120,7 @@ fun MultisigHomeCard(
                     for (item in open) {
                         val standing = view.standing(item)
                         val title = words.actionTitle(item.chainId, item.action, item.nonce)
-                        val status = "${words.standing(standing, item)} · ${words.network(item.chainId)}"
+                        val status = "${words.standingLine(standing, item)} · ${words.network(item.chainId)}"
                         Row(
                             Modifier.fillMaxWidth().clickable(role = Role.Button) { onOpen(MultisigSheet.Proposal(item.chainId, item.safeTxHash)) }
                                 .padding(vertical = VelaSpacing.lg).testTag("multisig.home.proposal")
@@ -217,7 +216,9 @@ fun MultisigSwitcherSection(
             val count = parts.filter { it["kind"].str != "waitingPayer" }.sumOf { it["count"].int ?: 0 }
             val waitingWords = words.waitingParts(parts)
             val tags = buildList {
-                add(words.ruleChip(row.account.threshold, row.account.owners.size))
+                // r9-14: the rule as the core read it from the chains (`rule_chip`),
+                // the same chip the home draws — never the founding record's.
+                add(words.rowRuleChip(row.account, proposals))
                 if (row.localMembers.isEmpty()) add(words.t("switcher.readOnly"))
                 if (!row.shared) add(words.t("switcher.notShared"))
             }

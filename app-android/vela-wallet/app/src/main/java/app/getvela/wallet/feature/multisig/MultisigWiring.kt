@@ -114,6 +114,23 @@ object MultisigWiring {
             words(container).actionTitle(chainId, action, nonce, info)
         }
         hub.onRecorded = { container.wallet.feedReconciled(1) }
+        // r9-12 (core §8): the passkey index's word on each member the accounts
+        // machine asks about (`index_wanted`, this device's own accounts too) —
+        // the name that account registered, the same on every device. The
+        // lookup is the core's walk (`registry_lookup`); an address nobody
+        // answered for is left out, asked again when the list moves.
+        scope.launch {
+            hub.accountsView.map { it.indexWanted }.distinctUntilChanged().collect { wanted ->
+                if (wanted.isEmpty()) return@collect
+                val answers = linkedMapOf<String, Any?>()
+                for (address in wanted) {
+                    val verdict = runCatching { container.registryNames.verdictFor(address) }.getOrNull() ?: continue
+                    answers[address.lowercase()] = mapOf("vela" to verdict.vela, "name" to verdict.name)
+                }
+                VelaLog.event("multisig.names", "index", "asked" to wanted.size, "answered" to answers.size)
+                if (answers.isNotEmpty()) hub.send(app.getvela.wallet.feature.multisig.core.ev("index_names", "answers" to answers))
+            }
+        }
         hub.openOutsideSession = { request, onOutcome ->
             MultisigOutsideSessionModel(
                 request = request,

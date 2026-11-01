@@ -474,8 +474,20 @@ class MultisigHub(
     suspend fun backgroundRound() {
         proposals.dispatch(ev("others_tick"))
         proposals.dispatch(ev("refresh", "fresh" to true))
-        delay(2_000)
-        proposals.until(20_000) { if (it["loading"].bool == false) true else null }
+        // r9-8: read until the machine has gone quiet — the followed list
+        // read (`loading` false) and no view moved for a moment (the other
+        // multisigs' reads land one by one, each a commit) — bounded, as the
+        // worker that runs it is. A fixed 2 s judged the presence before the
+        // others' reads were in: nothing "needed you" yet, nothing was said.
+        val deadline = System.currentTimeMillis() + 40_000
+        delay(1_500)
+        var seen = proposals.commits.value
+        while (System.currentTimeMillis() < deadline) {
+            delay(QUIET_MS)
+            val now = proposals.commits.value
+            if (now == seen && proposals.view.value["loading"].bool == false) break
+            seen = now
+        }
     }
 
     // -- a dApp's request to a multisig (M5) ------------------------------------
@@ -707,5 +719,8 @@ class MultisigHub(
     private companion object {
         /** A marker: the draft is drawn. */
         const val DRAWN = "__drawn"
+
+        /** r9-8: how long the machine must not move for a background round to be read. */
+        const val QUIET_MS = 2_500L
     }
 }

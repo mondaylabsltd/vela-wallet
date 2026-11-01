@@ -46,7 +46,7 @@ class MsProposalModel(
     val executeState: JsonElement? get() = view.action("execute:$hash")
 
     val title: String get() = words.actionTitle(chainId, item.action, item.nonce)
-    val statusLine: String get() = words.standing(standing, item)
+    val statusLine: String get() = words.standingLine(standing, item)
 
     /** Who approved, by address (lowercased). */
     val approvedBy: Set<String> get() = item.approvers.map { it.lowercase() }.toSet()
@@ -107,9 +107,11 @@ class MsProposalModel(
     val notes: List<MsLine>
         get() {
             val out = mutableListOf<MsLine>()
-            item.refusal?.takeIf { it.isNotEmpty() }?.let { out += MsLine(words.t("proposal.refused", "reason" to it), MsTone.Danger, "refused") }
-            if (item.cancelledBy != null && item.action.kind != "cancel") out += MsLine(words.t("proposal.cancelPending"), MsTone.Warning, "cancelPending")
-            if (item.sameNonce.isNotEmpty() && !isDone) out += MsLine(words.t("proposal.conflict", "nonce" to item.nonce), MsTone.Warning, "conflict")
+            // r9-9: a review that names its refusal (`refused.key`) says it in its
+            // body, once; the core's English `refusal` only from a core without it.
+            if (review["refused"]["key"].str == null) {
+                item.refusal?.takeIf { it.isNotEmpty() }?.let { out += MsLine(words.t("proposal.refused", "reason" to it), MsTone.Danger, "refused") }
+            }
             if (item.status == "queued") out += MsLine(words.t("proposal.queuedNote", "nonce" to previousNonce), MsTone.Neutral, "queued")
             if (item.renameUndeployed) out += MsLine(words.t("proposal.renameUndeployed", "network" to words.network(chainId)), MsTone.Warning, "renameUndeployed")
             if (standing.kind == "blocked") out += MsLine(words.t("status.cannotRun", "reason" to words.blockReason(standing["block"])), MsTone.Warning, "blocked")
@@ -119,13 +121,40 @@ class MsProposalModel(
                 }
             }
             executionLine?.let { out += it }
-            words.actionFailure(approveState, chainId)?.let { out += MsLine(it, MsTone.Danger, "approveFailed") }
-            words.actionFailure(executeState, chainId)?.let { out += MsLine(it, MsTone.Danger, "executeFailed") }
-            if (canApprove.isEmpty() && !approvedByHere && !isDone && account != null && account.owners.isNotEmpty() && canExecute.isEmpty()) {
+            // r9-9: "none is signed in on this device" only when the core says no
+            // member of it is here (`members_here`) — never because a refused
+            // transaction leaves nobody able to approve it.
+            val noMemberHere = item.membersHere?.isEmpty()
+                ?: (canApprove.isEmpty() && !approvedByHere && canExecute.isEmpty() && account != null && account.owners.isNotEmpty())
+            if (noMemberHere && !isDone) {
                 out += MsLine(words.t("proposal.notMember"), MsTone.Neutral, "notMember")
             }
             return out
         }
+
+    /**
+     * r9-5: why the last approve (or execute) pressed here did not go, in
+     * the machine's words (`MultisigActionState`) — said right under the
+     * button that was pressed, with a way forward, never only a haptic (and
+     * never only at the top of a sheet scrolled to its buttons). `null`
+     * while it works, once done, or for the person's own cancel.
+     */
+    val approveFailure: MsLine? get() = words.actionFailure(approveState, chainId)?.let { MsLine(it, MsTone.Danger, "approveFailed") }
+    val executeFailure: MsLine? get() = words.actionFailure(executeState, chainId)?.let { MsLine(it, MsTone.Danger, "executeFailed") }
+
+    /**
+     * r9-13: the core's view of a transaction a cancellation waits on — only
+     * one at its number can run (`sameNonce`), and a cancellation of it is
+     * waiting (`cancelledBy`): said beside its actions, as the web does.
+     */
+    val cancelNotes: List<MsLine>
+        get() = buildList {
+            if (item.sameNonce.isNotEmpty() && !isDone) add(MsLine(words.t("proposal.conflict", "nonce" to item.nonce), MsTone.Warning, "conflict"))
+            if (item.cancelledBy != null && item.action.kind != "cancel" && !isDone) add(MsLine(words.t("proposal.cancelPending"), MsTone.Warning, "cancelPending"))
+        }
+
+    /** r4D-13: proposed from a member on this device — withdrawn, not rejected (the web's `ownProposal`). */
+    val ownProposal: Boolean get() = item.proposer.isNotEmpty() && words.localName(item.proposer) != null
 
     /** r8-16: this one's outbox entry is being sent now (the core's `sending`): no Send again. */
     val outboxSending: Boolean

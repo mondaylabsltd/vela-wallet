@@ -57,6 +57,14 @@ fun MultisigReviewBody(
     chainId: Int,
     words: MultisigWords,
     tokenInfo: suspend (Int, String) -> Pair<String, Int>,
+    /**
+     * S4 (r9): it ran. What it does stays (the reading, its recipients, its
+     * member change, the hashes); what was judged BEFORE it ran — whether it
+     * may be signed, the concerns, the simulated balance changes, the state
+     * guard's "running it changes nothing" — is not said of a transaction
+     * that already ran (the desktop's rule).
+     */
+    executed: Boolean = false,
 ) {
     val tokens = remember { mutableStateMapOf<String, Pair<String, Int>>() }
     val tokenAddresses = review["simulation"]["deltas"].arr.mapNotNull { it["token"].str }
@@ -68,15 +76,20 @@ fun MultisigReviewBody(
     val network = words.network(chainId)
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(VelaSpacing.lg)) {
         // Concerns, the core's, in order.
-        if (review["sign"]["allowed"].bool == false) MsNote(words.t("review.blocked"), tone = MsTone.Danger, tag = "multisig.review.blocked")
-        for (concern in shownConcerns(review)) {
-            reviewConcern(words, concern)?.let { (text, tone) -> MsNote(text, tone = tone, tag = "multisig.review.concern.${concern.kind}") }
+        if (!executed) {
+            // r9-9 (core §8): the refusal's own reason (`refused.key`, a full
+            // corpus key), said ONCE — never "would change who controls" for a
+            // delegatecall; `review.blocked` only from a core without it.
+            refusalLine(review, words)?.let { MsNote(it, tone = MsTone.Danger, tag = "multisig.review.blocked") }
+            for (concern in shownConcerns(review)) {
+                reviewConcern(words, concern)?.let { (text, tone) -> MsNote(text, tone = tone, tag = "multisig.review.concern.${concern.kind}") }
+            }
         }
         Reading(review, chainId, words)
-        Moves(review, chainId, words, tokens)
+        if (!executed) Moves(review, chainId, words, tokens)
         Recipients(review, words)
         MemberChanges(review, words, network)
-        StateGuard(review, words, network)
+        if (!executed) StateGuard(review, words, network)
         Technical(review, words)
     }
 }
@@ -91,6 +104,7 @@ fun MultisigReviewBody(
  * time sending here" twice. Nothing is dropped that is not drawn elsewhere.
  */
 internal fun shownConcerns(review: JsonElement): List<JsonElement> {
+    val refused = review["refused"]["key"].str != null
     val recipients = review["recipients"].arr
     val sim = review["simulation"]
     val simNotice = sim["kind"].str != "deltas" && !sim["notice_key"].str.isNullOrEmpty()
@@ -100,11 +114,18 @@ internal fun shownConcerns(review: JsonElement): List<JsonElement> {
         val drawnElsewhere = when (concern.kind) {
             "firstTime" -> recipients.any { it["address"].str.equals(address, ignoreCase = true) && it["firstTimeCue"].bool == true }
             "unsimulated", "reverts" -> simNotice
+            // r9-9: the refusal line says why it is not signed — not its English again.
+            "notSigned" -> refused
             else -> false
         }
         !drawnElsewhere && said.add(concern.toString())
     }
 }
+
+/** r9-9: the review's one refusal line — the core's `refused.key`, else (an older core) `review.blocked` when it may not be signed. */
+internal fun refusalLine(review: JsonElement, words: MultisigWords): String? =
+    review["refused"]["key"].str?.takeIf { it.isNotBlank() }?.let { words.raw(it) }
+        ?: words.t("review.blocked").takeIf { review["sign"]["allowed"].bool == false }
 
 /** A concern in words (`stateChange` / `stateUnread` are the guard's own block). */
 internal fun reviewConcern(words: MultisigWords, concern: JsonElement): Pair<String, MsTone>? = when (concern.kind) {
