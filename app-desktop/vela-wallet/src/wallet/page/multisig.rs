@@ -260,6 +260,56 @@ impl WalletPage {
             Some("switcher") => self.account_switcher = true,
             Some("close_switcher") => self.account_switcher = false,
             Some("tech") => self.multisig.tech = true,
+            // The network space switched, as the person's press does
+            // (`{"page":"space","to":"testnet"}`).
+            Some("space") => {
+                let to = match ask.get("to").and_then(Value::as_str) {
+                    Some("testnet") => NetworkSpace::Testnet,
+                    _ => NetworkSpace::Mainnet,
+                };
+                crate::agent::invoke_person(Action::SetNetworkSpace { space: to }, cx);
+            }
+            // A section of the sidebar, pressed.
+            Some("section") => {
+                let to = match ask.get("to").and_then(Value::as_str) {
+                    Some("explore") => Section::Explore,
+                    Some("settings") => Section::Settings,
+                    Some("contacts") => Section::Contacts,
+                    _ => Section::Wallet,
+                };
+                self.go_to_section(to, cx);
+            }
+            // A site opened in a new tab of the browser, as the person types
+            // its address into a new tab (`{"page":"browse","url":"…"}`).
+            Some("browse") => {
+                if let Some(url) = ask.get("url").and_then(Value::as_str) {
+                    self.go_to_section(Section::Explore, cx);
+                    self.open_in_new_tab(url.to_owned(), None, cx);
+                }
+            }
+            // A site picked on the start page (`Go::Open`), or an address
+            // typed into the bar (`Go::Typed`), as the person does.
+            Some(kind @ ("open_site" | "type_url")) => {
+                if let Some(url) = ask.get("url").and_then(Value::as_str) {
+                    use crate::wallet::browser_host::Go;
+                    self.go_to_section(Section::Explore, cx);
+                    let go = if kind == "open_site" {
+                        Go::Open(url.to_owned())
+                    } else {
+                        Go::Typed(url.to_owned())
+                    };
+                    self.browser_go(go, cx);
+                }
+            }
+            // What the browser holds now, in the script's log.
+            Some("tabs") => {
+                let explore = resident::resident::<ExploreSites>(cx).read(cx).view();
+                crate::multisig::dev_script::note(&format!(
+                    "tabs {:?} selected {:?}",
+                    explore.tabs.iter().map(|t| (t.id.clone(), t.url.clone())).collect::<Vec<_>>(),
+                    explore.selected_tab
+                ));
+            }
             _ => {}
         }
         cx.notify();

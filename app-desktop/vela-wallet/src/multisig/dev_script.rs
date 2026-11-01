@@ -18,6 +18,10 @@
 //! {"wait_ms": 2000}
 //! {"page": "open_sheet", "chain_id": 100, "safe_tx_hash": "${hash}"} | {"page": "close_sheet"}
 //!   | {"page": "send", "to": "0x…", "amount": "0.1"}           (the send flow, as the person opens it)
+//!   | {"page": "space", "to": "testnet"|"mainnet"}             (the network space switched)
+//!   | {"page": "section", "to": "wallet"|"explore"|…}          (a sidebar section pressed)
+//!   | {"page": "browse", "url": "http://…"}                    (a site in a new browser tab)
+//!   | {"page": "tabs"}                                         (the browser's tabs, logged)
 //! {"answer_risk": true}
 //! {"shot": "name"}                    (writes `SHOT name`, then waits 1.5 s)
 //! {"log": "text"}
