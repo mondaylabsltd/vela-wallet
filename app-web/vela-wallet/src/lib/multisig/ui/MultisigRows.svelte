@@ -2,8 +2,10 @@
 	/**
 	 * The multisigs on this device, as rows of the account switcher's own list
 	 * — a multisig is an account, and its row is drawn as a Vela account's:
-	 * name, address, total (its rule is its settings' to say). `<li>`s, drawn
-	 * inside `AccountsSheetBody`'s list and styled as its rows are.
+	 * name, address, total — and its rule chip ("Needs 2 of 4"), the core's
+	 * `AccountRow.rule` (r9-14, r11-5), marked last known where no chain said
+	 * it this session. `<li>`s, drawn inside `AccountsSheetBody`'s list and
+	 * styled as its rows are.
 	 */
 	import { onMount } from 'svelte';
 	import Button from '$lib/ui/Button.svelte';
@@ -18,6 +20,7 @@
 	import { multisigName, shortenAddress } from '../core/display';
 	import { localOwners } from '../core/owners';
 	import { membersAnywhere } from '../core/proposals.svelte';
+	import { ruleChip } from '../core/shown';
 	import { multisig, type MultisigAccount } from '../core/store.svelte';
 
 	interface Props {
@@ -52,6 +55,7 @@
 {#each multisig.accounts as account (account.address)}
 	{@const selected = active?.address === account.address}
 	{@const row = multisig.row(account.address)}
+	{@const rule = ruleChip(account, m)}
 	<li class="account">
 		<!-- A multisig's mark, as the header draws it: a small disc on the
 		     artwork's lower edge. -->
@@ -75,9 +79,13 @@
 			<span class="text">
 				<span class="name" class:active={selected}>{multisigName(account, m)}</span>
 				<span class="address"
-					>{shortenAddress(
-						account.address
-					)}{#if row ? row.refused_on.length > 0 : account.findings?.some((f) => f.from === 'genesis')}<span
+					>{shortenAddress(account.address)}<span
+						class="rule"
+						data-testid="row-rule"
+						title={rule.title}
+					>
+						· {rule.label}{rule.lastKnown ? ` · ${rule.lastKnown}` : ''}</span
+					>{#if row ? row.refused_on.length > 0 : account.findings?.some((f) => f.from === 'genesis')}<span
 							class="flag risk"
 							data-testid="flag-refused"
 						>
@@ -199,7 +207,8 @@
 	}
 
 	/* What this row's account cannot do yet, said where it is picked. */
-	.flag {
+	.flag,
+	.rule {
 		font-family: var(--font-ui);
 		color: var(--color-fg-muted);
 	}
