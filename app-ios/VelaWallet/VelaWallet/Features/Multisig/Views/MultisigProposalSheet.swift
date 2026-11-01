@@ -73,7 +73,9 @@ struct MsProposalModel {
         }
     }
 
-    var title: String { words.actionTitleNow(chainId: chainId, action: item.action, nonce: item.nonce) }
+    /// r10-8: the core's reading names the call ("Approve · USDC", "Batch
+    /// of 1 call"), as on the web and the desktop; else the proposal's line.
+    var title: String { words.title(item, safe: multisig.isEmpty ? nil : multisig, review: review) }
 
     /// The chip under the title: a finished one says how it ended, never a
     /// count against today's members (r4a-8, r8-17).

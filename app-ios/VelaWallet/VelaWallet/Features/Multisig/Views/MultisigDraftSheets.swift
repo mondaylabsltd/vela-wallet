@@ -38,7 +38,7 @@ struct MultisigDraftReviewSheet: View {
             if let siteNote { MsNote(text: siteNote, identifier: "multisig.draft.site") }
             if let draft {
                 let item = draft.item
-                Text(verbatim: words.actionTitleNow(chainId: item.chainId, action: item.action, nonce: item.nonce))
+                Text(verbatim: words.title(item, review: draft.review.isNull ? nil : draft.review))
                     .typeRole(Typography.title.scaled(textScale))
                     .foregroundStyle(theme.fgBase)
                     .fixedSize(horizontal: false, vertical: true)

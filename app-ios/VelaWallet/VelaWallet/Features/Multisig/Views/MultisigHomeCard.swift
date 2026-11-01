@@ -167,7 +167,7 @@ struct MultisigHomeCard: View {
         Button { onOpen(.proposal(chainId: item.chainId, safeTxHash: item.safeTxHash)) } label: {
             HStack(spacing: Tokens.Space.s12) {
                 VStack(alignment: .leading, spacing: Tokens.Space.s2) {
-                    Text(verbatim: words.actionTitleNow(chainId: item.chainId, action: item.action, nonce: item.nonce))
+                    Text(verbatim: words.title(item))
                         .typeRole(Typography.fieldLabel.scaled(textScale))
                         .foregroundStyle(theme.fgBase)
                         .lineLimit(2)

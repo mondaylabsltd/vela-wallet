@@ -72,6 +72,38 @@ enum MsReading {
         }
     }
 
+    // MARK: - The title
+
+    /// r10-8: what the core read the calls to be, as the sheet's header and a
+    /// row's line — "Send 0.01 USDC", "Approve · USDC", "Batch of 1 call" —
+    /// the web's `readingTitle` and the desktop's `reading::title`, word for
+    /// word. `nil` when the reading names no call (a member change, a rename,
+    /// a refused delegatecall: those have their own titles).
+    @MainActor
+    static func title(_ reading: MsJSON?, chainId: Int, words: MsWords) -> String? {
+        let calls = reading?["calls"]?.array ?? []
+        guard let first = calls.first else { return nil }
+        if calls.count == 1, first["path"]?.array.isEmpty ?? true, let i = first["intent"] {
+            switch i.kind {
+            case "send":
+                return "\(r("send", words)) \(amountText(i["amount"], token: i["token"], chainId: chainId, words: words))"
+            case "approve":
+                return "\(intentTitle(i, words: words)) · \(tokenName(i["token"], chainId: chainId, words: words))"
+            default:
+                return intentTitle(i, words: words)
+            }
+        }
+        return calls.count == 1 ? r("batchOne", words) : r("batchMany", words, ["total": String(calls.count)])
+    }
+
+    /// Whether the reading says more than "a call nobody reads": only then
+    /// does its title stand in for "Contract call" (the desktop's
+    /// `says_more_than_a_call`, the web's row rule).
+    static func saysMoreThanACall(_ reading: MsJSON?) -> Bool {
+        guard let first = reading?["calls"]?.array.first else { return false }
+        return first["intent"]?.kind != "call"
+    }
+
     /// A call's tone: danger for what grants it all or cannot be read.
     static func intentTone(_ intent: MsJSON) -> SigningTone {
         switch intent.kind {

@@ -139,6 +139,49 @@ struct MsWords {
         }
     }
 
+    /// r10-8: a transaction's line — a contract call as the core reads its
+    /// bytes ("Approve · USDC", "Batch of 1 call"; never only "Contract
+    /// call" for one the core can say), anything else as `actionTitleNow`
+    /// says it. The machine's review's reading when the sheet has one, else
+    /// the core's pure reading of the bytes (`review.reading`, the desktop's
+    /// `ms_reading_title`) with the token facts the proposals machine read.
+    func title(_ item: MsProposalItem, safe: String? = nil, review: MsJSON? = nil) -> String {
+        if item.action?.kind == "call" || item.action == nil,
+           let reading = review?["reading"] ?? callReading(item, safe: safe),
+           MsReading.saysMoreThanACall(reading),
+           let title = MsReading.title(reading, chainId: item.chainId, words: self) {
+            return title
+        }
+        return actionTitleNow(chainId: item.chainId, action: item.action, nonce: item.nonce)
+    }
+
+    /// The core's reading of a call's bytes, `nil` when it reads none (or
+    /// there is no multisig to read it for). Kept per transaction and token
+    /// facts: a row is drawn many times and the bytes never change.
+    func callReading(_ item: MsProposalItem, safe: String?) -> MsJSON? {
+        guard let safe = safe ?? hub?.proposalsView.followed, !safe.isEmpty, !item.tx.isNull else { return nil }
+        let prefix = "\(item.chainId):"
+        let facts = (hub?.proposalsView.tokens ?? [:])
+            .filter { $0.key.hasPrefix(prefix) }
+            .sorted { $0.key < $1.key }
+            .map(\.value)
+        // The bytes themselves are in the key, not only the hash a row
+        // names: a hash is the machine's word for them, the reading is of them.
+        let bytes = "\(item.tx["to"]?.string ?? ""):\(item.tx["value"]?.string ?? ""):\(item.tx["operation"]?.int ?? 0):\(item.tx["data"]?.string ?? "")"
+        let key = "\(item.chainId):\(safe.lowercased()):\(item.safeTxHash.lowercased()):\(bytes):\(facts.map { "\($0["symbol"]?.string ?? "")/\($0["decimals"]?.int ?? -1)" })"
+        if let kept = Self.readings[key] { return kept }
+        let answer = MsRules.call("review.reading", [
+            "chainId": item.chainId, "safe": safe, "tx": item.tx.any, "tokenFacts": facts.map(\.any),
+        ]) as? [String: Any]
+        let reading = answer.map { MsJSON(any: $0["reading"]) }
+        if Self.readings.count > 256 { Self.readings.removeAll() }
+        Self.readings[key] = reading
+        return reading
+    }
+
+    /// `callReading`'s answers, by transaction and token facts.
+    private static var readings: [String: MsJSON?] = [:]
+
     /// The core's facts for a token the proposals shown move (r8-2,
     /// `MultisigProposalsView.tokens`): symbol and decimals, either `nil`
     /// when unread.
