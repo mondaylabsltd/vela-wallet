@@ -374,4 +374,48 @@ struct MultisigR9FixTests {
         #expect(words.actionTitleNow(chainId: 100, action: two, nonce: "0") == "Require 2 approvals")
         #expect(words.t("proposal.rejectHint", count: 1, ["count": "1", "threshold": "1"]).contains("1 approval too"))
     }
+
+    // MARK: - A new site starts where the account lives (site_start_chain_for)
+
+    private func token(_ chainId: Int, _ balance: String, price: Double?, spam: Bool = false) throws -> BalanceTokenWire {
+        try CoreJSON.decode(BalanceTokenWire.self, from: [
+            "chain_id": chainId, "symbol": "T", "name": "T", "balance": balance, "decimals": 6,
+            "token_address": NSNull(), "price_usd": price.map { $0 as Any } ?? NSNull(), "spam": spam,
+        ])
+    }
+
+    @Test func aSiteStartsOnTheMultisigsNetworksThenWhereTheAccountHolds() throws {
+        let held = [
+            try token(1, "0.5", price: 2),          // $1
+            try token(5_042_002, "10", price: 1),   // $10
+            try token(137, "0", price: 1),          // nothing held
+            try token(56, "999", price: 1, spam: true),
+        ]
+        // A plain account holding Arc USDC: Arc first, never the empty or the spam.
+        #expect(BrowserController.accountNetworks(multisig: [], held: held, recent: [11_155_111])
+            == [5_042_002, 1, 11_155_111])
+        // A multisig: its own networks first, each once.
+        #expect(BrowserController.accountNetworks(multisig: [100, 1], held: held, recent: [100])
+            == [100, 1, 5_042_002])
+        #expect(BrowserController.accountNetworks(multisig: [], held: [], recent: []) == [])
+        // The browser machine is told them after the switch.
+        let events = BrowserController.accountEvents(
+            addresses: [Self.one], active: Self.one, nowMs: 1, isSpaceAccount: { _ in false }, networks: [5_042_002]
+        )
+        #expect(events.last?["type"] as? String == "account_networks")
+        #expect(events.last?["networks"] as? [Int] == [5_042_002])
+    }
+
+    @Test func theBrowserKeepsTheMultisigBatchesThroughARestart() async throws {
+        #expect(DbrExecutor.operations.contains("write_multisig_batches"))
+        #expect(DbrExecutor.multisigBatchesKey == "vela.dapp.multisigBatches")
+        let store = VelaStore(defaults: UserDefaults(suiteName: "ms.r9.batches.\(UUID().uuidString)")!)
+        let batches = #"[["0xbatch",5042002]]"#
+        let written = try CoreJSON.object(await DbrExecutor(store: store).perform(["type": "write_multisig_batches", "value_json": batches]))
+        #expect(written["type"] as? String == "ack")
+        // A new launch: the sites come back with the batches.
+        let listed = try CoreJSON.object(await DbrExecutor(store: store).perform(["type": "list_sites"]))
+        #expect(listed["type"] as? String == "sites_listed")
+        #expect(listed["multisig_batches_json"] as? String == batches)
+    }
 }

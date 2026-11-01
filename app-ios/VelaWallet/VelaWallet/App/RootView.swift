@@ -1013,6 +1013,9 @@ struct RootView: View {
                 followShown()
                 tellBrowserAboutAccounts()
             }
+            // r9: where the account in front holds something moved — a new
+            // site starts there (`site_start_chain_for`).
+            .onChange(of: heldNetworksKey) { _, _ in tellBrowserAboutAccounts() }
             .onChange(of: onboarding.finished) { _, finished in
                 if finished {
                     router.path.removeAll()
@@ -1908,6 +1911,13 @@ struct RootView: View {
         }
     }
 
+    /// The networks the account in front holds something on, as a key that
+    /// moves only when they do.
+    private var heldNetworksKey: String {
+        BrowserController.accountNetworks(multisig: [], held: wallet.balance?.tokens ?? [], recent: [])
+            .map(String.init).joined(separator: ",")
+    }
+
     /// Every account, then the active one — so every grant follows it and the
     /// pages of re-pinned sites hear `accountsChanged` (spec 070).
     private func tellBrowserAboutAccounts() {
@@ -1917,8 +1927,14 @@ struct RootView: View {
             addresses: accounts.loadAccounts().compactMap { $0["address"] as? String }
                 + multisig.accountsView.accounts.map(\.account.address),
             active: shownAddress,
-            // r8-21: a multisig's own networks, in its record's order.
-            networks: shownMultisig?.account.chainIds ?? []
+            // r8-21: a multisig's own networks, in its record's order; r9:
+            // then where the account holds something, then where this
+            // device's transactions were (the web's extension catalog).
+            networks: BrowserController.accountNetworks(
+                multisig: shownMultisig?.account.chainIds ?? [],
+                held: wallet.balance?.address?.lowercased() == shownAddress.lowercased() ? wallet.balance?.tokens ?? [] : [],
+                recent: multisig.accountsView.recentNetworks
+            )
         )
     }
 
