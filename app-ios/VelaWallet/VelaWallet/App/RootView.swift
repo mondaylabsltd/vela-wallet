@@ -2676,11 +2676,15 @@ struct RootView: View {
             base.balance.refresh = nil
             return base
         }
-        return WalletLive.apply(view, currency: settings.currency ?? .unread, feed: activity.feed,
-                                feedRead: activity.hasRead, on: base, loc: loc,
-                                now: Date(), spinning: wallet.spin.spinning,
-                                networks: walletNetworks,
-                                noValue: space.testnet ? loc.t("networkSpace.noValue") : nil)
+        let applied = WalletLive.apply(view, currency: settings.currency ?? .unread, feed: activity.feed,
+                                       feedRead: activity.hasRead, on: base, loc: loc,
+                                       now: Date(), spinning: wallet.spin.spinning,
+                                       networks: walletNetworks,
+                                       noValue: space.testnet ? loc.t("networkSpace.noValue") : nil)
+        // Real-device S3: the account just switched to (a multisig) is named
+        // before the balance machine has heard of it — never the previous
+        // account's total under its name.
+        return WalletLive.isFor(view, address: shownAddress) ? applied : WalletLive.awaitingAccount(applied)
     }
 
     /// The networks this wallet has, as the core lists them — the built-ins
