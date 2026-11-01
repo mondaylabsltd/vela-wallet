@@ -348,7 +348,11 @@
         "firstRunDismiss": "Entendido",
         "otherSpace": "También en este dispositivo, en {{space}}: {{networks}}. Para crear el multisig en una de ellas, cambia primero a {{space}}.",
         "draftKept": "Retomaste donde lo dejaste.",
-        "discardDraft": "Empezar de nuevo"
+        "discardDraft": "Empezar de nuevo",
+        "closeTitle": "¿Cerrar la nueva multifirma?",
+        "closeBody": "Lo que escribiste se guarda en este dispositivo: abre Nueva multifirma otra vez para seguir donde te quedaste.",
+        "closeKeep": "Seguir editando",
+        "closeConfirm": "Cerrar"
       },
       "invite": {
         "body": "Los miembros escanean el código o abren el enlace: agrega el multisig en Vela con su red y los nombres de los miembros.",
@@ -781,6 +785,15 @@
           "ownTokenLine": "Esto envía tokens al propio contrato del token ({{token}}). Se perderían.",
           "blindLine": "Vela no puede leer qué hace esta llamada. Apruébala solo si sabes exactamente qué es."
         }
+      },
+      "notify": {
+        "title": "Notificaciones",
+        "on": "Activadas. Mientras Vela está cerrada, este teléfono revisa cada 15 minutos aproximadamente; las notificaciones vienen de este dispositivo, no de un servicio push.",
+        "off": "Desactivadas para Vela: no se te avisa cuando una transacción necesita tu aprobación.",
+        "turnOn": "Activar en configuración",
+        "limited": "Este teléfono limita las revisiones de Vela en segundo plano, así que una notificación puede llegar tarde o no llegar. Permite que Vela funcione en segundo plano en la configuración de batería.",
+        "oem": "En algunos teléfonos (Xiaomi, Huawei, OPPO, vivo y otros), el ahorro de batería del fabricante también frena las revisiones en segundo plano. Si las notificaciones llegan tarde, permite que Vela funcione en segundo plano sin restricciones y que se inicie sola, en la configuración de este teléfono.",
+        "openSettings": "Abrir configuración"
       }
     },
     "balanceDetailStatusOwnNode": "Tu nodo no responde",

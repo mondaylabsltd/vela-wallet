@@ -1438,7 +1438,14 @@ if (branchSet.size !== 117) fail(`expected 117 branch paths, got ${branchSet.siz
   //   `{{count}}`; the plain keys stay for shells not moved yet) and
   //   `home.multisig.external.{doneExecuted, doneCancelled}` (r8-24: a link to
   //   a transaction whose number is used says which). 650 + 14 = 664.
-  const pins = { multisig: 664 };
+  // 675 (round 10 Android, 2026-11-01): + `home.multisig.notify.{title, on,
+  //   off, turnOn, limited, oem, openSettings}` (the multisig's
+  //   notifications, said where the person looks for them: on or off, and —
+  //   honestly, never as a nag — that this phone holds background checks
+  //   back, with the way to its settings) and `home.multisig.create.
+  //   {closeTitle, closeBody, closeKeep, closeConfirm}` (Back on a filled
+  //   form asks first, and says the form is kept). 664 + 11 = 675.
+  const pins = { multisig: 675 };
   for (const [name, docs] of Object.entries(onDemand)) {
     const leaves = new Set();
     for (const lng of LOCALES) walk(docs[lng], '', leaves, new Set());

@@ -348,7 +348,11 @@
         "firstRunDismiss": "Ho capito",
         "otherSpace": "Anche su questo dispositivo, in {{space}}: {{networks}}. Per creare il multisig su una di queste, passa prima a {{space}}.",
         "draftKept": "Riprendi da dove avevi lasciato.",
-        "discardDraft": "Ricomincia"
+        "discardDraft": "Ricomincia",
+        "closeTitle": "Chiudere il nuovo multisig?",
+        "closeBody": "Quello che hai inserito resta su questo dispositivo: riapri Nuovo multisig per riprendere da dove avevi lasciato.",
+        "closeKeep": "Continua a modificare",
+        "closeConfirm": "Chiudi"
       },
       "invite": {
         "body": "I membri scansionano il codice o aprono il link: aggiunge il multisig in Vela con la sua rete e i nomi dei membri.",
@@ -781,6 +785,15 @@
           "ownTokenLine": "Questo invia token al contratto del token stesso ({{token}}). Andrebbero persi.",
           "blindLine": "Vela non riesce a leggere cosa fa questa chiamata. Approvala solo se sai esattamente cos'è."
         }
+      },
+      "notify": {
+        "title": "Notifiche",
+        "on": "Attive. Mentre Vela è chiusa, questo telefono controlla circa ogni 15 minuti; le notifiche arrivano da questo dispositivo, non da un servizio push.",
+        "off": "Disattivate per Vela: non ti viene detto nulla quando una transazione aspetta la tua approvazione.",
+        "turnOn": "Attiva nelle impostazioni",
+        "limited": "Questo telefono limita i controlli di Vela in background, quindi una notifica può arrivare in ritardo o non arrivare. Consenti a Vela di funzionare in background nelle impostazioni della batteria.",
+        "oem": "Su alcuni telefoni (Xiaomi, Huawei, OPPO, vivo e altri) anche il risparmio energetico del produttore trattiene i controlli in background. Se le notifiche arrivano in ritardo, consenti a Vela di funzionare in background senza restrizioni e di avviarsi da sola, nelle impostazioni di questo telefono.",
+        "openSettings": "Apri impostazioni"
       }
     },
     "balanceDetailStatusOwnNode": "Il tuo nodo non risponde",

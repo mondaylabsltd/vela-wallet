@@ -344,7 +344,11 @@
         "firstRunDismiss": "Got it",
         "otherSpace": "Also on this device, in {{space}}: {{networks}}. To create the multisig on one of them, switch to {{space}} first.",
         "draftKept": "Picked up where you left off.",
-        "discardDraft": "Start over"
+        "discardDraft": "Start over",
+        "closeTitle": "Close the new multisig?",
+        "closeBody": "What you've entered is kept on this device: open New multisig again to pick up where you left off.",
+        "closeKeep": "Keep editing",
+        "closeConfirm": "Close"
       },
       "invite": {
         "body": "Members scan the code or open the link: it adds the multisig in Vela with its network and the members' names.",
@@ -774,6 +778,15 @@
           "ownTokenLine": "This sends tokens to the token's own contract ({{token}}). They'd be lost.",
           "blindLine": "Vela can't read what this call does. Approve it only if you know exactly what it is."
         }
+      },
+      "notify": {
+        "title": "Notifications",
+        "on": "On. While Vela is closed, this phone checks about every 15 minutes; notifications come from this device, not a push service.",
+        "off": "Off for Vela, so nothing is said when a transaction needs your approval.",
+        "turnOn": "Turn on in settings",
+        "limited": "This phone holds back Vela's background checks, so a notification can come late or not at all. Let Vela run in the background in its battery settings.",
+        "oem": "On some phones (Xiaomi, Huawei, OPPO, vivo and others) the maker's battery saver also holds background checks back. If notifications come late, allow Vela to run in the background without restrictions and to start on its own, in this phone's settings.",
+        "openSettings": "Open settings"
       }
     },
     "balanceDetailStatusOwnNode": "Your node isn't answering",
