@@ -2014,10 +2014,7 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 		...(headline ? { headline } : {}),
 		...(!own && request.space_note
 			? {
-					spaceNote: m.spaceMoved.replace(
-						'{{network}}',
-						chainName(request.space_note.chain_id)
-					)
+					spaceNote: m.spaceMoved.replace('{{network}}', chainName(request.space_note.chain_id))
 				}
 			: {}),
 		blocks,

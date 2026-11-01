@@ -189,7 +189,9 @@ test.describe('a network-space switch and the connected sites', () => {
 		const now = await chainOf();
 		expect(CHAINS.find((c) => c.chainId === parseInt(now, 16))?.testnet ?? true).toBe(false);
 		await expect
-			.poll(async () => (await readState(site)).events.some((e) => e.event === 'chainChanged' && e.data === now))
+			.poll(async () =>
+				(await readState(site)).events.some((e) => e.event === 'chainChanged' && e.data === now)
+			)
 			.toBe(true);
 
 		// A page asking for Arc again is told it is the testnet space's network

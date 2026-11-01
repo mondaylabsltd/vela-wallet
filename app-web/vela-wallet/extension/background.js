@@ -1491,8 +1491,7 @@ async function moveSitesWithSpace(before, after) {
 	for (const [key, value] of Object.entries(all)) {
 		if (key.startsWith(PERM_PREFIX)) {
 			const origin = key.slice(PERM_PREFIX.length);
-			const connectedOn =
-				value && typeof value === 'object' ? parseChainId(value.chainId) : 0;
+			const connectedOn = value && typeof value === 'object' ? parseChainId(value.chainId) : 0;
 			if (connectedOn > 0 && !kept.has(origin)) kept.set(origin, connectedOn);
 		} else if (key.startsWith(CHAIN_PREFIX)) {
 			const picked = parseChainId(value);
@@ -1515,7 +1514,7 @@ async function moveSitesWithSpace(before, after) {
 	}
 	// The pages of sites with no network of their own: their answer to
 	// `eth_chainId` is the space's start now.
-	let tabs = [];
+	let tabs;
 	try {
 		tabs = await chrome.tabs.query({});
 	} catch {
