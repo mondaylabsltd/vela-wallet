@@ -256,7 +256,7 @@ struct R10CoreAdoptionTests {
         }
         for c in v["cadence"] as? [[String: Any]] ?? [] {
             let ms = incomingNextScanMs(visible: c["visible"] as? Bool ?? false,
-                                        sinceInteractionMs: (c["since_interaction_ms"] as? NSNumber)?.doubleValue ?? 0)
+                                        quietScans: UInt32((c["quiet_scans"] as? NSNumber)?.uint32Value ?? 0))
             #expect(Int(ms) == c["expect_ms"] as? Int, "\(c["name"] ?? "?")")
         }
     }

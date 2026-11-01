@@ -47,12 +47,18 @@
 //!   core's half of invariant ⑦ is that a stored `to_name` never even asks,
 //!   and an attempted address is never asked twice.
 //! - The scan cadence is the core's (r9-17): a shell reports the page's
-//!   presence ([`Event::PresenceChanged`] — shown, hidden, online, touched)
-//!   and arms one timer for [`FeedView::next_scan`], answering it with
-//!   [`Event::ScanDue`]; the core decides when to scan
-//!   ([`super::incoming_scan::next_scan_ms`]: 10 s at the page, 30 s idle,
-//!   60 s hidden, at once when shown again or back online). One scan per
-//!   account is out at a time. A shell that has not moved yet sends no
+//!   presence ([`Event::PresenceChanged`] — shown, hidden, online, a
+//!   pull-to-refresh, a send) and arms one timer for [`FeedView::next_scan`],
+//!   answering it with [`Event::ScanDue`]; the core decides when to scan
+//!   ([`super::incoming_scan::next_scan_ms`], r10: a back-off while nothing
+//!   arrives — 15 s, 30 s, 60 s, 2 min; 2 min hidden — and at once when
+//!   shown again, back online, refreshed or after a send). A due scan is
+//!   the scan alone: no store read, nothing drawn until it lands, and then
+//!   one render that carries the next timer (and the new rows, through the
+//!   re-read, when something landed). While the person interacts
+//!   ([`Event::Interacting`]) a due scan is held, and nothing of the cadence
+//!   redraws. One scan per account is out at a time. A shell that has not
+//!   moved yet sends no
 //!   presence, sees no `next_scan`, and drives `FocusTick`/`LiveTick` itself
 //!   as before. The core owns the toast timer.
 //! - `ScanIncomingTransfers` is executed through `token_trust`'s
@@ -880,7 +886,9 @@ pub struct FeedPresence {
     /// The page (the app's window, the browser tab) is shown.
     pub visible: bool,
     /// Milliseconds since the person last touched it (a tap, a key, a
-    /// scroll).
+    /// scroll). Kept on the wire; the cadence no longer reads it (r10: a
+    /// person at the page is a reason NOT to scan right then — see
+    /// [`Event::Interacting`]).
     pub since_interaction_ms: f64,
     /// The shell's clock, epoch ms.
     pub now_ms: f64,
@@ -900,9 +908,17 @@ pub enum FeedPresenceChange {
     Hidden,
     /// Back online: what failed offline can be read now — scan at once.
     Online,
-    /// The person touched the page: back from idle, the next scan comes at
-    /// the active pace rather than the rest of an idle wait.
+    /// The person touched the page. Kept for shells not moved yet: it no
+    /// longer brings a scan closer (r10 — scanning while someone scrolls is
+    /// what made the history janky); it only updates the presence.
     Interacted,
+    /// r10: the person pulled to refresh (or pressed the refresh control):
+    /// read the store and scan at once, and start the back-off again.
+    Refreshed,
+    /// r10: the person sent something from this account: scan at once (the
+    /// change, a refund, the other side's answer) and start the back-off
+    /// again.
+    Sent,
 }
 
 /// r9-17: when the next incoming scan is due — the shell arms ONE timer for
@@ -1075,8 +1091,21 @@ pub enum Event {
     },
     /// r9-17: the shell's timer for [`FeedView::next_scan`] ran out. `seq` is
     /// echoed from it — a timer the core re-armed since is ignored — and
-    /// `presence` is the page as it stands now.
+    /// `presence` is the page as it stands now. While the person is
+    /// interacting ([`Event::Interacting`]) the scan is held until the
+    /// interaction ends.
     ScanDue { seq: u32, presence: FeedPresence },
+    /// r10: the person started (`on`) or stopped interacting with the page —
+    /// a scroll, a fling, a drag in progress. A quiet period: a scan that
+    /// comes due meanwhile is held and runs at `on: false`, and the next
+    /// timer a scan settles on is drawn at `on: false` too — nothing of the
+    /// cadence redraws the page while the person interacts. Say `on` when a
+    /// gesture starts and `off` when it has settled (the list stopped
+    /// moving); repeats are harmless. An `on` never followed by its `off`
+    /// holds a due scan back at most
+    /// [`incoming_scan::CADENCE_INTERACTING_MAX_MS`], and the next `off`,
+    /// shown, online, refresh or send releases what it held.
+    Interacting { on: bool, presence: FeedPresence },
     #[serde(skip)]
     ShellCompleted {
         attempt: u64,
@@ -1209,15 +1238,44 @@ pub struct Model {
     cadence: Option<Cadence>,
 }
 
-/// r9-17: the core's scan cadence ([`Event::PresenceChanged`]).
-#[derive(Clone, Copy, Debug)]
+/// r9-17: the core's scan cadence ([`Event::PresenceChanged`]); r10: a
+/// back-off, quiet while the person interacts, one render per scan.
+#[derive(Clone, Copy, Debug, Default)]
 struct Cadence {
     presence: FeedPresence,
-    /// The timer armed now ([`FeedView::next_scan`]).
+    /// The timer armed now ([`FeedView::next_scan`]); none before the first
+    /// (the hand-off's scan arms it when it lands).
+    armed: bool,
     seq: u32,
     after_ms: u32,
     /// The shell's clock at the last scan the cadence started, when known.
     last_scan_ms: Option<f64>,
+    /// Scans in a row that found nothing — the back-off's step
+    /// ([`incoming_scan::next_scan_ms`]).
+    quiet_scans: u32,
+    /// The shell's clock when the person began interacting
+    /// ([`Event::Interacting`]); `None` when they are not.
+    interacting_since: Option<f64>,
+    /// A scan came due while the person was interacting: it runs when the
+    /// interaction ends.
+    held: bool,
+    /// A scan was asked for (shown, online, refresh, send) while one was out:
+    /// one more runs when that one lands — never two at once.
+    again: bool,
+    /// The next wait, decided when a scan landed but not drawn yet: by the
+    /// re-read a scan that found something asked for (so that scan draws
+    /// once), or — the person was interacting — when they stop.
+    pending_arm: Option<u32>,
+}
+
+impl Cadence {
+    /// The person is in the middle of a gesture ([`Event::Interacting`]) as
+    /// of the shell's clock `now_ms` — an `on` older than
+    /// [`incoming_scan::CADENCE_INTERACTING_MAX_MS`] no longer counts.
+    fn interacting_at(&self, now_ms: f64) -> bool {
+        self.interacting_since
+            .is_some_and(|since| now_ms - since < incoming_scan::CADENCE_INTERACTING_MAX_MS)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1314,23 +1372,21 @@ impl App for ActivityFeed {
                 // r9-17: the previous account's scan answer is dropped with
                 // its attempt; this account's first scan goes out now.
                 model.scan_in_flight = false;
+                if let Some(cadence) = model.cadence.as_mut() {
+                    // r10: a new account starts the back-off afresh; what
+                    // was held or asked for the previous one is spent.
+                    cadence.quiet_scans = 0;
+                    cadence.held = false;
+                    cadence.again = false;
+                    cadence.pending_arm = None;
+                }
                 load_pipeline(model)
             }
             Event::PresenceChanged { presence, change } => {
                 presence_changed(model, presence, change)
             }
-            Event::ScanDue { seq, presence } => {
-                let Some(cadence) = model.cadence.as_mut() else {
-                    return Command::done();
-                };
-                if cadence.seq != seq {
-                    // A timer re-armed since: the newer one stands.
-                    return Command::done();
-                }
-                cadence.presence = presence;
-                cadence.last_scan_ms = Some(presence.now_ms);
-                load_pipeline(model)
-            }
+            Event::ScanDue { seq, presence } => scan_due(model, seq, presence),
+            Event::Interacting { on, presence } => interacting(model, on, presence),
             Event::FocusTick | Event::LiveTick => {
                 // `if (!address) return` (`useHomeController.ts:262`).
                 if model.address.is_empty() {
@@ -1474,7 +1530,7 @@ impl App for ActivityFeed {
             home_empty_key: home_empty_key(model.chain_filter).to_owned(),
             contact_rows,
             hidden: model.privacy_hidden,
-            next_scan: model.cadence.map(|c| FeedNextScan {
+            next_scan: model.cadence.filter(|c| c.armed).map(|c| FeedNextScan {
                 seq: c.seq,
                 after_ms: c.after_ms,
             }),
@@ -1670,6 +1726,12 @@ fn accept(model: &mut Model, result: FeedShellResult) -> Command<FeedEffect, Eve
                 commands.extend(start_time_repair_round(model));
             }
 
+            // r10: the wait a scan that found something settled on is drawn
+            // by this read's render — one redraw for that scan.
+            if let Some(after) = model.cadence.and_then(|c| c.pending_arm) {
+                arm_scan(model, after);
+            }
+
             // This render shows every name known so far.
             model.alias_unshown = 0;
             commands.push(render());
@@ -1726,18 +1788,21 @@ fn accept(model: &mut Model, result: FeedShellResult) -> Command<FeedEffect, Eve
             // landed — the first pass is spent either way (invariant ③).
             let first_pass = !model.initialized;
             model.initialized = true;
-            if new_count == 0 {
-                // No re-read: the feed never flickers behind a no-op sync
-                // (invariant ②).
-                return Command::done();
+            let mut commands = Vec::new();
+            // No re-read when nothing landed: the feed never flickers behind
+            // a no-op sync (invariant ②).
+            if new_count > 0 {
+                let (read_id, op) = read_store(model);
+                if !first_pass {
+                    // Name the read this celebration belongs to — any OTHER
+                    // StoreLoaded, including one already in flight, leaves it
+                    // alone.
+                    model.celebrate_read_id = Some(read_id);
+                }
+                commands.push(shell_request(model.attempt, op));
             }
-            let (read_id, op) = read_store(model);
-            if !first_pass {
-                // Name the read this celebration belongs to — any OTHER
-                // StoreLoaded, including one already in flight, leaves it alone.
-                model.celebrate_read_id = Some(read_id);
-            }
-            shell_request(model.attempt, op)
+            commands.extend(scan_settled(model, new_count));
+            Command::all(commands)
         }
 
         FeedShellResult::AliasResolved { addr, name } => {
@@ -3284,78 +3349,197 @@ fn non_empty(s: &str) -> Option<String> {
 /// runs these sequentially inside one `loadData`; issuing both at once keeps
 /// the same visible behavior (the read commits the cached feed the moment it
 /// answers; the scan re-reads only when something landed).
+///
+/// r10: the account hand-off, a shell's own ticks, and the moments a person
+/// looks (shown, online, refresh). The core's timer does NOT come here — a
+/// due scan scans and nothing else ([`scan_due`]) — and nothing here arms
+/// the timer: the scan's settling does ([`scan_settled`]).
 fn load_pipeline(model: &mut Model) -> Command<FeedEffect, Event> {
-    // r9-17: the next scan is due a cadence after this one.
-    let after = model
-        .cadence
-        .map(|c| incoming_scan::next_scan_ms(c.presence.visible, c.presence.since_interaction_ms));
-    if let Some(after) = after {
-        arm_scan(model, after);
-    }
     if model.address.is_empty() {
         return render();
     }
     let attempt = model.attempt;
     let (_, read_op) = read_store(model);
     let mut commands = vec![shell_request(attempt, read_op)];
-    // r9-17: one scan per account at a time — a tick while one is out only
-    // re-reads the store (its answer re-reads again when it lands).
-    if !model.scan_in_flight {
-        model.scan_in_flight = true;
-        commands.push(shell_request(
-            attempt,
-            FeedOperation::ScanIncomingTransfers {
-                address: model.address.clone(),
-            },
-        ));
-    }
+    commands.extend(start_scan(model, true));
     commands.push(render());
     Command::all(commands)
 }
 
+/// r9-17: one scan of the account at a time. With one out, a scan asked for
+/// by a person's moment (`again_if_out`: shown, online, refresh, send) runs
+/// once more when it lands; a timer's or a tick's is simply not needed. A
+/// scan its shell never answered stops counting as out after
+/// [`incoming_scan::CADENCE_SCAN_LOST_MS`].
+fn start_scan(model: &mut Model, again_if_out: bool) -> Option<Command<FeedEffect, Event>> {
+    if model.address.is_empty() {
+        return None;
+    }
+    if model.scan_in_flight {
+        let Some(cadence) = model.cadence.as_mut() else {
+            return None;
+        };
+        let now = cadence.presence.now_ms;
+        let lost = cadence
+            .last_scan_ms
+            .is_some_and(|at| now - at >= incoming_scan::CADENCE_SCAN_LOST_MS);
+        if !lost {
+            cadence.again |= again_if_out;
+            return None;
+        }
+    }
+    model.scan_in_flight = true;
+    if let Some(cadence) = model.cadence.as_mut() {
+        cadence.last_scan_ms = Some(cadence.presence.now_ms);
+    }
+    Some(shell_request(
+        model.attempt,
+        FeedOperation::ScanIncomingTransfers {
+            address: model.address.clone(),
+        },
+    ))
+}
+
 /// r9-17: arm the next scan `after_ms` from now — a new `seq`, so the
-/// shell's timer for the old one is dropped.
+/// shell's timer for the old one is dropped. The caller renders.
 fn arm_scan(model: &mut Model, after_ms: u32) {
     if let Some(cadence) = model.cadence.as_mut() {
+        cadence.armed = true;
         cadence.seq = cadence.seq.wrapping_add(1);
         cadence.after_ms = after_ms;
+        cadence.pending_arm = None;
     }
+}
+
+/// r10: the shell's timer ran out ([`Event::ScanDue`]). The scan alone — no
+/// store read, no render: the feed's rows only move when the scan found
+/// something, and the next timer is armed when the scan lands, so one scan
+/// is one redraw. Held while the person interacts.
+fn scan_due(model: &mut Model, seq: u32, presence: FeedPresence) -> Command<FeedEffect, Event> {
+    let Some(cadence) = model.cadence.as_mut() else {
+        return Command::done();
+    };
+    if cadence.seq != seq {
+        // A timer re-armed since: the newer one stands.
+        return Command::done();
+    }
+    cadence.presence = presence;
+    if cadence.interacting_at(presence.now_ms) {
+        // A quiet period: the scan runs when the interaction ends.
+        cadence.held = true;
+        return Command::done();
+    }
+    // An `on` older than the hold's limit no longer counts.
+    cadence.interacting_since = None;
+    start_scan(model, false).unwrap_or_else(Command::done)
+}
+
+/// r10: the person began or ended a gesture ([`Event::Interacting`]). The
+/// end releases what the quiet period held: a due scan runs (it draws
+/// nothing until it lands), or a settled scan's next timer is drawn.
+fn interacting(model: &mut Model, on: bool, presence: FeedPresence) -> Command<FeedEffect, Event> {
+    let Some(cadence) = model.cadence.as_mut() else {
+        return Command::done();
+    };
+    cadence.presence = presence;
+    if on {
+        if !cadence.interacting_at(presence.now_ms) {
+            cadence.interacting_since = Some(presence.now_ms);
+        }
+        return Command::done();
+    }
+    cadence.interacting_since = None;
+    if std::mem::take(&mut cadence.held) {
+        return start_scan(model, false).unwrap_or_else(Command::done);
+    }
+    match cadence.pending_arm {
+        Some(after) => {
+            arm_scan(model, after);
+            render()
+        }
+        None => Command::done(),
+    }
+}
+
+/// r10: a scan landed with `new_count` new receipts. The back-off steps up
+/// when it found nothing and starts again when it found something; a scan
+/// asked for while it was out runs now; otherwise the next timer is armed —
+/// drawn now when nothing landed (the one redraw of a quiet scan), by the
+/// re-read when something did, and only once the person stops interacting.
+fn scan_settled(model: &mut Model, new_count: u32) -> Vec<Command<FeedEffect, Event>> {
+    let Some(cadence) = model.cadence.as_mut() else {
+        return Vec::new();
+    };
+    if new_count > 0 {
+        cadence.quiet_scans = 0;
+    } else if !cadence.again {
+        // A scan asked for again (a refresh, a send) starts the count; the
+        // one that was out when it was asked does not step it.
+        cadence.quiet_scans = cadence.quiet_scans.saturating_add(1);
+    }
+    if std::mem::take(&mut cadence.again) {
+        return start_scan(model, false).into_iter().collect();
+    }
+    let after = incoming_scan::next_scan_ms(cadence.presence.visible, cadence.quiet_scans);
+    if new_count > 0 || cadence.interacting_at(cadence.presence.now_ms) {
+        cadence.pending_arm = Some(after);
+        return Vec::new();
+    }
+    arm_scan(model, after);
+    vec![render()]
 }
 
 /// r9-17: the page's presence moved ([`Event::PresenceChanged`]) — the
 /// cadence `incoming-cadence.ts` kept on the web, decided here for every
-/// shell: shown again or back online scans at once; hidden waits the hidden
-/// pace from the last scan; a touch after idle brings the next scan to the
-/// active pace.
+/// shell. r10: shown again, back online, a pull-to-refresh and a send scan
+/// at once and start the back-off again; hidden waits the hidden pace from
+/// the last scan; a touch only updates the presence.
 fn presence_changed(
     model: &mut Model,
     presence: FeedPresence,
     change: FeedPresenceChange,
 ) -> Command<FeedEffect, Event> {
-    let cadence = model.cadence.get_or_insert(Cadence {
-        presence,
-        seq: 0,
-        after_ms: 0,
-        last_scan_ms: None,
-    });
+    let in_flight = model.scan_in_flight;
+    let cadence = model.cadence.get_or_insert_with(Cadence::default);
     cadence.presence = presence;
     match change {
-        FeedPresenceChange::Shown | FeedPresenceChange::Online => {
-            cadence.last_scan_ms = Some(presence.now_ms);
+        FeedPresenceChange::Shown
+        | FeedPresenceChange::Online
+        | FeedPresenceChange::Refreshed
+        | FeedPresenceChange::Sent => {
+            // A person's moment: the back-off starts again, and what a
+            // quiet period held is spent by this scan.
+            cadence.quiet_scans = 0;
+            cadence.held = false;
+            cadence.pending_arm = None;
+            if change != FeedPresenceChange::Sent {
+                // Back at the page, or the pull itself ended: no gesture is
+                // in progress.
+                cadence.interacting_since = None;
+            }
+            if change == FeedPresenceChange::Sent {
+                // The send's own record re-reads the store
+                // (`ReconcileCompleted`); this is the scan alone.
+                return start_scan(model, true).unwrap_or_else(Command::done);
+            }
             load_pipeline(model)
         }
         FeedPresenceChange::Started => {
-            // The account hand-off scans; this counts from it.
+            // The account hand-off scans; this counts from it, and its
+            // settling arms the timer. With no scan out, arm it now.
             if cadence.last_scan_ms.is_none() {
                 cadence.last_scan_ms = Some(presence.now_ms);
             }
-            arm_scan(
-                model,
-                incoming_scan::next_scan_ms(presence.visible, presence.since_interaction_ms),
-            );
+            if in_flight {
+                return Command::done();
+            }
+            let after = incoming_scan::next_scan_ms(presence.visible, cadence.quiet_scans);
+            arm_scan(model, after);
             render()
         }
         FeedPresenceChange::Hidden => {
+            cadence.interacting_since = None;
+            cadence.held = false;
             let hidden = f64::from(incoming_scan::CADENCE_HIDDEN_MS);
             let after = cadence.last_scan_ms.map_or(hidden, |last| {
                 (last + hidden - presence.now_ms).clamp(0.0, hidden)
@@ -3363,13 +3547,8 @@ fn presence_changed(
             arm_scan(model, after as u32);
             render()
         }
-        FeedPresenceChange::Interacted => {
-            if !presence.visible || cadence.after_ms <= incoming_scan::CADENCE_ACTIVE_MS {
-                return Command::done();
-            }
-            arm_scan(model, incoming_scan::CADENCE_ACTIVE_MS);
-            render()
-        }
+        // r10: being at the page no longer brings a scan closer.
+        FeedPresenceChange::Interacted => Command::done(),
     }
 }
 

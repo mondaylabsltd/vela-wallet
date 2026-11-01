@@ -534,6 +534,29 @@ known deploy block. uniffi `incoming_scan_plan`, `incoming_scan_windows`,
 `incoming_next_scan_ms` (wasm `incomingScanPlan`, …). Vectors:
 `tests/vectors/incoming-scan.json`.
 
+**The cadence after round 10 (a follow-up).** Adopting the round-5 numbers
+(10 s while the person was at the page) took a real Redmi K40's 200-row
+history scroll from ~1–2 % janky frames to 5.63 %: the scan ran most
+exactly while someone scrolled, and every scan re-read the store and
+redrew the list twice. Decided by best practice (back off when nothing
+arrives, scan when a person looks, never in a gesture's way):
+
+| Was                                                           | Now                                                                                                                                                                                                                                                                                       |
+| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 10 s touched lately, 30 s idle, 60 s hidden                   | a back-off by scans in a row that found nothing: 15 s → 30 s → 60 s → 2 min (`CADENCE_STEPS_MS`); 2 min hidden. Something arrived: 15 s again. `incoming_next_scan_ms(visible, quiet_scans)` — the second argument changed (was `since_interaction_ms`).                                 |
+| at once on shown / online                                     | at once on shown, online, and NEW `presence_changed` changes `refreshed` (a pull-to-refresh: store read + scan) and `sent` (the person sent from this account: the scan alone); each starts the back-off again. `interacted` is accepted and no longer brings a scan closer.          |
+| a touch brought the next scan to 10 s                         | NEW event `interacting {on, presence}`: say `on` when a scroll / fling / drag starts and `off` when it has settled. A scan that comes due meanwhile is held and runs at `off`; a scan that lands meanwhile draws its next timer at `off`. An `on` older than 60 s holds nothing. |
+| each due scan: store read + scan + render, then render again  | a due scan is the scan alone — no store read, nothing drawn — and its landing renders ONCE, carrying the next timer (and, when something arrived, the new rows through the one re-read). Records other machines change still re-read through `reconcile_completed`.                     |
+| a timer armed at every tick                                   | `next_scan` is absent until the hand-off's scan lands; the timer is armed when a scan lands. A scan asked for while one is out runs once more when it lands (never two at once); a scan its shell never answered stops counting after 5 min.                                      |
+
+Shell work: report `interacting {on}` from the list's scroll state (Android
+`LazyListState.isScrollInProgress`, iOS `ScrollPhase`/`isTracking ||
+isDecelerating`, the web's `scroll`/`wheel`/`touchmove` with a short
+settle), `refreshed` from pull-to-refresh, and `sent` after a send is
+handed off. A shell that sends none of them still gets the back-off and the
+one-redraw scan. Vectors: `cadence` (the rule) and `cadence_steps` (the
+machine, step by step) in `tests/vectors/incoming-scan.json`.
+
 ### 9.5 The review and the outside page
 
 | Was                                                                                       | Now                                                                                                                                                                                                                         |

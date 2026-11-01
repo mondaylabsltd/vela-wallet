@@ -1,5 +1,5 @@
 {
-  "about": "r9-17 / r8-13: the incoming-funds scan as one rule. `plans`: TrustScanFacts -> IncomingScanPlan (incoming_scan::scan_plan; wasm incomingScanPlan, uniffi incoming_scan_plan). `windows`: IncomingScanWindowsAsk -> IncomingScanWindows (scan_windows; incomingScanWindows / incoming_scan_windows). `cadence`: (visible, since_interaction_ms) -> next scan in ms (next_scan_ms; incomingNextScanMs / incoming_next_scan_ms). Replayed by rust/crates/vela-core/tests/app_incoming_scan.rs; every shell replays it through its door.",
+  "about": "r9-17 / r8-13: the incoming-funds scan as one rule. `plans`: TrustScanFacts -> IncomingScanPlan (incoming_scan::scan_plan; wasm incomingScanPlan, uniffi incoming_scan_plan). `windows`: IncomingScanWindowsAsk -> IncomingScanWindows (scan_windows; incomingScanWindows / incoming_scan_windows). `cadence` (r10): (visible, quiet_scans) -> next scan in ms (next_scan_ms; incomingNextScanMs / incoming_next_scan_ms) — a back-off while nothing arrives. `cadence_steps` (r10): the activity_feed machine's cadence, step by step — each step is one thing that happens (`do`), at `at` seconds after the start, on a page shown unless `visible` is false; `expect` says whether the step issued a scan (ScanIncomingTransfers) and a store read (ReadTxStore), how many renders it asked for, and the timer it armed (`armed`: the new next_scan.after_ms, or null when the timer did not move). `do`: account_switched, presence:<change> (presence_changed), scan_due (the current next_scan.seq), scan_due_stale (the seq before it), interacting_on / interacting_off (interacting {on}), scan_answer (SyncCompleted {new_count}), store_answer (every outstanding ReadTxStore answered with no records). Replayed by rust/crates/vela-core/tests/app_incoming_scan.rs; every shell replays `plans`, `windows` and `cadence` through its door, and may replay `cadence_steps` through its feed bridge.",
   "constants": {
     "cursor_key_prefix": "vela.scanCursors.",
     "live_scan_blocks": 100,
@@ -7,10 +7,10 @@
     "backfill_max_blocks": 400000,
     "backfill_chunk_blocks": 10000,
     "backfill_chunks_per_poll": 4,
-    "cadence_active_ms": 10000,
-    "cadence_idle_ms": 30000,
-    "cadence_hidden_ms": 60000,
-    "cadence_active_window_ms": 120000
+    "cadence_steps_ms": [15000, 30000, 60000, 120000],
+    "cadence_hidden_ms": 120000,
+    "cadence_interacting_max_ms": 60000,
+    "cadence_scan_lost_ms": 300000
   },
   "plans": [
     {
@@ -19,7 +19,10 @@
         "held_chain_ids": [137, 1, 137],
         "space_chain_ids": [1, 10, 56, 100, 137, 8453, 42161, 43114]
       },
-      "expect": { "scan_chain_ids": [137, 1], "native_watch_chain_ids": [137, 1] }
+      "expect": {
+        "scan_chain_ids": [137, 1],
+        "native_watch_chain_ids": [137, 1]
+      }
     },
     {
       "name": "a brand-new Vela account in the mainnet space: the main payment chains",
@@ -49,24 +52,38 @@
       },
       "expect": {
         "scan_chain_ids": [777, 11155111, 84532, 421614, 11155420, 97, 80002],
-        "native_watch_chain_ids": [11155111, 84532, 421614, 11155420, 97, 80002, 10200, 5042002, 777]
+        "native_watch_chain_ids": [
+          11155111, 84532, 421614, 11155420, 97, 80002, 10200, 5042002, 777
+        ]
       }
     },
     {
       "name": "r9-17: a multisig on Arc testnet holding nothing yet scans the network it lives on",
       "facts": {
-        "account_networks": [{ "chain_id": 5042002 }],
+        "account_networks": [
+          {
+            "chain_id": 5042002
+          }
+        ],
         "space_chain_ids": [11155111, 84532, 421614, 11155420, 97, 80002, 10200, 5042002]
       },
-      "expect": { "scan_chain_ids": [5042002], "native_watch_chain_ids": [5042002] }
+      "expect": {
+        "scan_chain_ids": [5042002],
+        "native_watch_chain_ids": [5042002]
+      }
     },
     {
       "name": "r9-17: a multisig scans where it holds and where it lives",
       "facts": {
         "held_chain_ids": [5042002],
         "account_networks": [
-          { "chain_id": 5042002, "deploy_block": 31000000 },
-          { "chain_id": 11155111 }
+          {
+            "chain_id": 5042002,
+            "deploy_block": 31000000
+          },
+          {
+            "chain_id": 11155111
+          }
         ],
         "space_chain_ids": [11155111, 84532, 421614, 11155420, 97, 80002, 10200, 5042002]
       },
@@ -82,7 +99,10 @@
         "space_chain_ids": [1, 10, 56, 100, 137, 8453, 42161, 43114],
         "added_chain_ids": [777]
       },
-      "expect": { "scan_chain_ids": [1], "native_watch_chain_ids": [1] }
+      "expect": {
+        "scan_chain_ids": [1],
+        "native_watch_chain_ids": [1]
+      }
     },
     {
       "name": "no space known: every network counts as in it",
@@ -95,7 +115,11 @@
     {
       "name": "a multisig of the other space: scanned where it lives, the native watch falls back to the space",
       "facts": {
-        "account_networks": [{ "chain_id": 100 }],
+        "account_networks": [
+          {
+            "chain_id": 100
+          }
+        ],
         "space_chain_ids": [11155111, 84532, 421614, 11155420, 97, 80002, 10200, 5042002]
       },
       "expect": {
@@ -107,14 +131,32 @@
   "windows": [
     {
       "name": "first scan on Ethereum: the live window, then a week back, four reads a poll, newest first",
-      "ask": { "chain_id": 1, "latest": 20000000 },
+      "ask": {
+        "chain_id": 1,
+        "latest": 20000000
+      },
       "expect": {
-        "live": { "from_block": 19999900, "to_block": 20000000 },
+        "live": {
+          "from_block": 19999900,
+          "to_block": 20000000
+        },
         "backfill": [
-          { "from_block": 19989900, "to_block": 19999899 },
-          { "from_block": 19979900, "to_block": 19989899 },
-          { "from_block": 19969900, "to_block": 19979899 },
-          { "from_block": 19959900, "to_block": 19969899 }
+          {
+            "from_block": 19989900,
+            "to_block": 19999899
+          },
+          {
+            "from_block": 19979900,
+            "to_block": 19989899
+          },
+          {
+            "from_block": 19969900,
+            "to_block": 19979899
+          },
+          {
+            "from_block": 19959900,
+            "to_block": 19969899
+          }
         ],
         "floor": 19949600
       }
@@ -124,23 +166,49 @@
       "ask": {
         "chain_id": 1,
         "latest": 20000050,
-        "covered": [{ "from_block": 19959900, "to_block": 20000000 }]
+        "covered": [
+          {
+            "from_block": 19959900,
+            "to_block": 20000000
+          }
+        ]
       },
       "expect": {
-        "live": { "from_block": 19999950, "to_block": 20000050 },
+        "live": {
+          "from_block": 19999950,
+          "to_block": 20000050
+        },
         "backfill": [
-          { "from_block": 19949900, "to_block": 19959899 },
-          { "from_block": 19949650, "to_block": 19949899 }
+          {
+            "from_block": 19949900,
+            "to_block": 19959899
+          },
+          {
+            "from_block": 19949650,
+            "to_block": 19949899
+          }
         ],
         "floor": 19949650
       }
     },
     {
       "name": "never below the deploy block",
-      "ask": { "chain_id": 1, "latest": 20000000, "deploy_block": 19995000 },
+      "ask": {
+        "chain_id": 1,
+        "latest": 20000000,
+        "deploy_block": 19995000
+      },
       "expect": {
-        "live": { "from_block": 19999900, "to_block": 20000000 },
-        "backfill": [{ "from_block": 19995000, "to_block": 19999899 }],
+        "live": {
+          "from_block": 19999900,
+          "to_block": 20000000
+        },
+        "backfill": [
+          {
+            "from_block": 19995000,
+            "to_block": 19999899
+          }
+        ],
         "floor": 19995000
       }
     },
@@ -149,10 +217,18 @@
       "ask": {
         "chain_id": 1,
         "latest": 20000010,
-        "covered": [{ "from_block": 19949000, "to_block": 20000000 }]
+        "covered": [
+          {
+            "from_block": 19949000,
+            "to_block": 20000000
+          }
+        ]
       },
       "expect": {
-        "live": { "from_block": 19999910, "to_block": 20000010 },
+        "live": {
+          "from_block": 19999910,
+          "to_block": 20000010
+        },
         "backfill": [],
         "floor": 19949610
       }
@@ -162,56 +238,120 @@
       "ask": {
         "chain_id": 1,
         "latest": 20000000,
-        "covered": [{ "from_block": 19900000, "to_block": 19950000 }]
+        "covered": [
+          {
+            "from_block": 19900000,
+            "to_block": 19950000
+          }
+        ]
       },
       "expect": {
-        "live": { "from_block": 19999900, "to_block": 20000000 },
+        "live": {
+          "from_block": 19999900,
+          "to_block": 20000000
+        },
         "backfill": [
-          { "from_block": 19989900, "to_block": 19999899 },
-          { "from_block": 19979900, "to_block": 19989899 },
-          { "from_block": 19969900, "to_block": 19979899 },
-          { "from_block": 19959900, "to_block": 19969899 }
+          {
+            "from_block": 19989900,
+            "to_block": 19999899
+          },
+          {
+            "from_block": 19979900,
+            "to_block": 19989899
+          },
+          {
+            "from_block": 19969900,
+            "to_block": 19979899
+          },
+          {
+            "from_block": 19959900,
+            "to_block": 19969899
+          }
         ],
         "floor": 19949600
       }
     },
     {
       "name": "a fast chain is bounded by blocks, and a capped endpoint reads its cap",
-      "ask": { "chain_id": 42161, "latest": 300000000, "chunk": 1000 },
+      "ask": {
+        "chain_id": 42161,
+        "latest": 300000000,
+        "chunk": 1000
+      },
       "expect": {
-        "live": { "from_block": 299999900, "to_block": 300000000 },
+        "live": {
+          "from_block": 299999900,
+          "to_block": 300000000
+        },
         "backfill": [
-          { "from_block": 299998900, "to_block": 299999899 },
-          { "from_block": 299997900, "to_block": 299998899 },
-          { "from_block": 299996900, "to_block": 299997899 },
-          { "from_block": 299995900, "to_block": 299996899 }
+          {
+            "from_block": 299998900,
+            "to_block": 299999899
+          },
+          {
+            "from_block": 299997900,
+            "to_block": 299998899
+          },
+          {
+            "from_block": 299996900,
+            "to_block": 299997899
+          },
+          {
+            "from_block": 299995900,
+            "to_block": 299996899
+          }
         ],
         "floor": 299600000
       }
     },
     {
       "name": "Gnosis: a week of 5 s blocks",
-      "ask": { "chain_id": 100, "latest": 40000000, "budget": 1 },
+      "ask": {
+        "chain_id": 100,
+        "latest": 40000000,
+        "budget": 1
+      },
       "expect": {
-        "live": { "from_block": 39999900, "to_block": 40000000 },
-        "backfill": [{ "from_block": 39989900, "to_block": 39999899 }],
+        "live": {
+          "from_block": 39999900,
+          "to_block": 40000000
+        },
+        "backfill": [
+          {
+            "from_block": 39989900,
+            "to_block": 39999899
+          }
+        ],
         "floor": 39879040
       }
     },
     {
       "name": "Arc testnet (block time not in the table): 2 s assumed",
-      "ask": { "chain_id": 5042002, "latest": 31000000, "budget": 0 },
+      "ask": {
+        "chain_id": 5042002,
+        "latest": 31000000,
+        "budget": 0
+      },
       "expect": {
-        "live": { "from_block": 30999900, "to_block": 31000000 },
+        "live": {
+          "from_block": 30999900,
+          "to_block": 31000000
+        },
         "backfill": [],
         "floor": 30697600
       }
     },
     {
       "name": "a young chain: nothing below the live window",
-      "ask": { "chain_id": 5042002, "latest": 50 },
+      "ask": {
+        "chain_id": 5042002,
+        "latest": 50
+      },
       "expect": {
-        "live": { "from_block": 0, "to_block": 50 },
+        "live": {
+          "from_block": 0,
+          "to_block": 50
+        },
         "backfill": [],
         "floor": 0
       }
@@ -222,28 +362,1025 @@
         "chain_id": 1,
         "latest": 20000000,
         "covered": [
-          { "from_block": 19980000, "to_block": 19999899 },
-          { "from_block": 19960000, "to_block": 19975000 }
+          {
+            "from_block": 19980000,
+            "to_block": 19999899
+          },
+          {
+            "from_block": 19960000,
+            "to_block": 19975000
+          }
         ],
         "chunk": 5000
       },
       "expect": {
-        "live": { "from_block": 19999900, "to_block": 20000000 },
+        "live": {
+          "from_block": 19999900,
+          "to_block": 20000000
+        },
         "backfill": [
-          { "from_block": 19975001, "to_block": 19979999 },
-          { "from_block": 19955000, "to_block": 19959999 },
-          { "from_block": 19950000, "to_block": 19954999 },
-          { "from_block": 19949600, "to_block": 19949999 }
+          {
+            "from_block": 19975001,
+            "to_block": 19979999
+          },
+          {
+            "from_block": 19955000,
+            "to_block": 19959999
+          },
+          {
+            "from_block": 19950000,
+            "to_block": 19954999
+          },
+          {
+            "from_block": 19949600,
+            "to_block": 19949999
+          }
         ],
         "floor": 19949600
       }
     }
   ],
   "cadence": [
-    { "name": "at the page", "visible": true, "since_interaction_ms": 0, "expect_ms": 10000 },
-    { "name": "touched just under two minutes ago", "visible": true, "since_interaction_ms": 119999, "expect_ms": 10000 },
-    { "name": "shown, idle", "visible": true, "since_interaction_ms": 120000, "expect_ms": 30000 },
-    { "name": "hidden", "visible": false, "since_interaction_ms": 0, "expect_ms": 60000 },
-    { "name": "a figure that is no figure is not lately", "visible": true, "since_interaction_ms": -1, "expect_ms": 30000 }
+    {
+      "name": "after a scan that found something: the first step",
+      "visible": true,
+      "quiet_scans": 0,
+      "expect_ms": 15000
+    },
+    {
+      "name": "the first scan that found nothing: the first step",
+      "visible": true,
+      "quiet_scans": 1,
+      "expect_ms": 15000
+    },
+    {
+      "name": "two quiet scans in a row",
+      "visible": true,
+      "quiet_scans": 2,
+      "expect_ms": 30000
+    },
+    {
+      "name": "three quiet scans in a row",
+      "visible": true,
+      "quiet_scans": 3,
+      "expect_ms": 60000
+    },
+    {
+      "name": "four quiet scans in a row: the longest wait",
+      "visible": true,
+      "quiet_scans": 4,
+      "expect_ms": 120000
+    },
+    {
+      "name": "never longer than two minutes",
+      "visible": true,
+      "quiet_scans": 1000,
+      "expect_ms": 120000
+    },
+    {
+      "name": "hidden: the longest wait",
+      "visible": false,
+      "quiet_scans": 0,
+      "expect_ms": 120000
+    }
+  ],
+  "cadence_steps": [
+    {
+      "name": "a page nobody touches backs off: 15 s, 30 s, 60 s, then 2 min — each scan one redraw, no store read",
+      "steps": [
+        {
+          "do": "account_switched",
+          "at": 0,
+          "expect": {
+            "scan": true,
+            "read": true,
+            "renders": 1,
+            "armed": null
+          }
+        },
+        {
+          "do": "presence:started",
+          "at": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 0,
+            "armed": null
+          }
+        },
+        {
+          "do": "store_answer",
+          "at": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": null
+          }
+        },
+        {
+          "do": "scan_answer",
+          "at": 1,
+          "new_count": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": 15000
+          }
+        },
+        {
+          "do": "scan_due",
+          "at": 16,
+          "expect": {
+            "scan": true,
+            "read": false,
+            "renders": 0,
+            "armed": null
+          }
+        },
+        {
+          "do": "scan_answer",
+          "at": 17,
+          "new_count": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": 30000
+          }
+        },
+        {
+          "do": "scan_due",
+          "at": 47,
+          "expect": {
+            "scan": true,
+            "read": false,
+            "renders": 0,
+            "armed": null
+          }
+        },
+        {
+          "do": "scan_answer",
+          "at": 48,
+          "new_count": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": 60000
+          }
+        },
+        {
+          "do": "scan_due",
+          "at": 108,
+          "expect": {
+            "scan": true,
+            "read": false,
+            "renders": 0,
+            "armed": null
+          }
+        },
+        {
+          "do": "scan_answer",
+          "at": 109,
+          "new_count": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": 120000
+          }
+        },
+        {
+          "do": "scan_due",
+          "at": 229,
+          "expect": {
+            "scan": true,
+            "read": false,
+            "renders": 0,
+            "armed": null
+          }
+        },
+        {
+          "do": "scan_answer",
+          "at": 230,
+          "new_count": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": 120000
+          }
+        }
+      ]
+    },
+    {
+      "name": "money that arrives starts the back-off again, drawn once with its rows",
+      "steps": [
+        {
+          "do": "account_switched",
+          "at": 0,
+          "expect": {
+            "scan": true,
+            "read": true,
+            "renders": 1,
+            "armed": null
+          }
+        },
+        {
+          "do": "presence:started",
+          "at": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 0,
+            "armed": null
+          }
+        },
+        {
+          "do": "store_answer",
+          "at": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": null
+          }
+        },
+        {
+          "do": "scan_answer",
+          "at": 1,
+          "new_count": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": 15000
+          }
+        },
+        {
+          "do": "scan_due",
+          "at": 16,
+          "expect": {
+            "scan": true,
+            "read": false,
+            "renders": 0,
+            "armed": null
+          }
+        },
+        {
+          "do": "scan_answer",
+          "at": 17,
+          "new_count": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": 30000
+          }
+        },
+        {
+          "do": "scan_due",
+          "at": 47,
+          "expect": {
+            "scan": true,
+            "read": false,
+            "renders": 0,
+            "armed": null
+          }
+        },
+        {
+          "do": "scan_answer",
+          "at": 48,
+          "new_count": 1,
+          "expect": {
+            "scan": false,
+            "read": true,
+            "renders": 0,
+            "armed": null
+          }
+        },
+        {
+          "do": "store_answer",
+          "at": 48,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": 15000
+          }
+        },
+        {
+          "do": "scan_due",
+          "at": 63,
+          "expect": {
+            "scan": true,
+            "read": false,
+            "renders": 0,
+            "armed": null
+          }
+        },
+        {
+          "do": "scan_answer",
+          "at": 64,
+          "new_count": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": 15000
+          }
+        }
+      ]
+    },
+    {
+      "name": "the moments a person looks scan at once and start the back-off again",
+      "steps": [
+        {
+          "do": "account_switched",
+          "at": 0,
+          "expect": {
+            "scan": true,
+            "read": true,
+            "renders": 1,
+            "armed": null
+          }
+        },
+        {
+          "do": "presence:started",
+          "at": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 0,
+            "armed": null
+          }
+        },
+        {
+          "do": "store_answer",
+          "at": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": null
+          }
+        },
+        {
+          "do": "scan_answer",
+          "at": 1,
+          "new_count": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": 15000
+          }
+        },
+        {
+          "do": "scan_due",
+          "at": 16,
+          "expect": {
+            "scan": true,
+            "read": false,
+            "renders": 0,
+            "armed": null
+          }
+        },
+        {
+          "do": "scan_answer",
+          "at": 17,
+          "new_count": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": 30000
+          }
+        },
+        {
+          "do": "presence:refreshed",
+          "at": 20,
+          "expect": {
+            "scan": true,
+            "read": true,
+            "renders": 1,
+            "armed": null
+          }
+        },
+        {
+          "do": "store_answer",
+          "at": 20,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": null
+          }
+        },
+        {
+          "do": "scan_answer",
+          "at": 21,
+          "new_count": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": 15000
+          }
+        },
+        {
+          "do": "presence:sent",
+          "at": 25,
+          "expect": {
+            "scan": true,
+            "read": false,
+            "renders": 0,
+            "armed": null
+          }
+        },
+        {
+          "do": "scan_answer",
+          "at": 26,
+          "new_count": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": 15000
+          }
+        },
+        {
+          "do": "presence:hidden",
+          "at": 30,
+          "visible": false,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": 115000
+          }
+        },
+        {
+          "do": "presence:shown",
+          "at": 200,
+          "expect": {
+            "scan": true,
+            "read": true,
+            "renders": 1,
+            "armed": null
+          }
+        },
+        {
+          "do": "store_answer",
+          "at": 200,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": null
+          }
+        },
+        {
+          "do": "scan_answer",
+          "at": 201,
+          "new_count": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": 15000
+          }
+        },
+        {
+          "do": "presence:online",
+          "at": 205,
+          "expect": {
+            "scan": true,
+            "read": true,
+            "renders": 1,
+            "armed": null
+          }
+        },
+        {
+          "do": "store_answer",
+          "at": 205,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": null
+          }
+        },
+        {
+          "do": "scan_answer",
+          "at": 206,
+          "new_count": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": 15000
+          }
+        }
+      ]
+    },
+    {
+      "name": "never two scans at once: asked for while one is out, it runs once more when that one lands",
+      "steps": [
+        {
+          "do": "account_switched",
+          "at": 0,
+          "expect": {
+            "scan": true,
+            "read": true,
+            "renders": 1,
+            "armed": null
+          }
+        },
+        {
+          "do": "presence:started",
+          "at": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 0,
+            "armed": null
+          }
+        },
+        {
+          "do": "store_answer",
+          "at": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": null
+          }
+        },
+        {
+          "do": "presence:refreshed",
+          "at": 1,
+          "expect": {
+            "scan": false,
+            "read": true,
+            "renders": 1,
+            "armed": null
+          }
+        },
+        {
+          "do": "store_answer",
+          "at": 1,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": null
+          }
+        },
+        {
+          "do": "presence:sent",
+          "at": 2,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 0,
+            "armed": null
+          }
+        },
+        {
+          "do": "scan_answer",
+          "at": 3,
+          "new_count": 0,
+          "expect": {
+            "scan": true,
+            "read": false,
+            "renders": 0,
+            "armed": null
+          }
+        },
+        {
+          "do": "scan_answer",
+          "at": 4,
+          "new_count": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": 15000
+          }
+        }
+      ]
+    },
+    {
+      "name": "a scan that comes due while the person scrolls waits for the scroll to end",
+      "steps": [
+        {
+          "do": "account_switched",
+          "at": 0,
+          "expect": {
+            "scan": true,
+            "read": true,
+            "renders": 1,
+            "armed": null
+          }
+        },
+        {
+          "do": "presence:started",
+          "at": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 0,
+            "armed": null
+          }
+        },
+        {
+          "do": "store_answer",
+          "at": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": null
+          }
+        },
+        {
+          "do": "scan_answer",
+          "at": 1,
+          "new_count": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": 15000
+          }
+        },
+        {
+          "do": "interacting_on",
+          "at": 10,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 0,
+            "armed": null
+          }
+        },
+        {
+          "do": "scan_due",
+          "at": 16,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 0,
+            "armed": null
+          }
+        },
+        {
+          "do": "interacting_on",
+          "at": 18,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 0,
+            "armed": null
+          }
+        },
+        {
+          "do": "interacting_off",
+          "at": 20,
+          "expect": {
+            "scan": true,
+            "read": false,
+            "renders": 0,
+            "armed": null
+          }
+        },
+        {
+          "do": "scan_answer",
+          "at": 21,
+          "new_count": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": 30000
+          }
+        }
+      ]
+    },
+    {
+      "name": "a scan that lands while the person scrolls draws its timer when they stop",
+      "steps": [
+        {
+          "do": "account_switched",
+          "at": 0,
+          "expect": {
+            "scan": true,
+            "read": true,
+            "renders": 1,
+            "armed": null
+          }
+        },
+        {
+          "do": "presence:started",
+          "at": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 0,
+            "armed": null
+          }
+        },
+        {
+          "do": "store_answer",
+          "at": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": null
+          }
+        },
+        {
+          "do": "scan_answer",
+          "at": 1,
+          "new_count": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": 15000
+          }
+        },
+        {
+          "do": "scan_due",
+          "at": 16,
+          "expect": {
+            "scan": true,
+            "read": false,
+            "renders": 0,
+            "armed": null
+          }
+        },
+        {
+          "do": "interacting_on",
+          "at": 16.5,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 0,
+            "armed": null
+          }
+        },
+        {
+          "do": "scan_answer",
+          "at": 17,
+          "new_count": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 0,
+            "armed": null
+          }
+        },
+        {
+          "do": "interacting_off",
+          "at": 19,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": 30000
+          }
+        },
+        {
+          "do": "interacting_off",
+          "at": 20,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 0,
+            "armed": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "a gesture whose end was never said holds a due scan at most a minute",
+      "steps": [
+        {
+          "do": "account_switched",
+          "at": 0,
+          "expect": {
+            "scan": true,
+            "read": true,
+            "renders": 1,
+            "armed": null
+          }
+        },
+        {
+          "do": "presence:started",
+          "at": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 0,
+            "armed": null
+          }
+        },
+        {
+          "do": "store_answer",
+          "at": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": null
+          }
+        },
+        {
+          "do": "scan_answer",
+          "at": 1,
+          "new_count": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": 15000
+          }
+        },
+        {
+          "do": "interacting_on",
+          "at": 2,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 0,
+            "armed": null
+          }
+        },
+        {
+          "do": "scan_due",
+          "at": 63,
+          "expect": {
+            "scan": true,
+            "read": false,
+            "renders": 0,
+            "armed": null
+          }
+        },
+        {
+          "do": "scan_answer",
+          "at": 64,
+          "new_count": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": 30000
+          }
+        },
+        {
+          "do": "interacting_on",
+          "at": 70,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 0,
+            "armed": null
+          }
+        },
+        {
+          "do": "scan_due",
+          "at": 94,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 0,
+            "armed": null
+          }
+        },
+        {
+          "do": "presence:shown",
+          "at": 200,
+          "expect": {
+            "scan": true,
+            "read": true,
+            "renders": 1,
+            "armed": null
+          }
+        },
+        {
+          "do": "store_answer",
+          "at": 200,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": null
+          }
+        },
+        {
+          "do": "scan_answer",
+          "at": 201,
+          "new_count": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": 15000
+          }
+        }
+      ]
+    },
+    {
+      "name": "a touch no longer brings a scan closer, and a stale timer is ignored",
+      "steps": [
+        {
+          "do": "account_switched",
+          "at": 0,
+          "expect": {
+            "scan": true,
+            "read": true,
+            "renders": 1,
+            "armed": null
+          }
+        },
+        {
+          "do": "presence:started",
+          "at": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 0,
+            "armed": null
+          }
+        },
+        {
+          "do": "store_answer",
+          "at": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": null
+          }
+        },
+        {
+          "do": "scan_answer",
+          "at": 1,
+          "new_count": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": 15000
+          }
+        },
+        {
+          "do": "presence:interacted",
+          "at": 5,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 0,
+            "armed": null
+          }
+        },
+        {
+          "do": "scan_due",
+          "at": 16,
+          "expect": {
+            "scan": true,
+            "read": false,
+            "renders": 0,
+            "armed": null
+          }
+        },
+        {
+          "do": "scan_answer",
+          "at": 17,
+          "new_count": 0,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 1,
+            "armed": 30000
+          }
+        },
+        {
+          "do": "scan_due_stale",
+          "at": 18,
+          "expect": {
+            "scan": false,
+            "read": false,
+            "renders": 0,
+            "armed": null
+          }
+        }
+      ]
+    }
   ]
 }
