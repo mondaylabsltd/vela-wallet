@@ -380,4 +380,12 @@ window.VelaCS.i18n.register('de', {
   'ui.withdrawnTitle': "Zurückgezogen",
   'ui.walletWithdrew': "Die Wallet wartet nicht mehr auf diese Anfrage, daher wird hier nichts signiert. Du kannst diese Seite schließen.",
   'ui.answerNotTaken': "Die Wallet hat die Antwort dieser Seite nicht angenommen, daher wurde nichts gesendet. Geh zurück zur Wallet.",
+  // r9-10: "… anyway" where the app's review asks for it; a token whose
+  // decimals are unknown in its base units; one approval said as one.
+  'button.msApproveAnyway': "Trotzdem freigeben",
+  'warn.msAppAnyway': "Velas Prüfung dieser Transaktion hat eine Gefahr gefunden, die diese Seite nicht überprüfen kann (zum Beispiel, dass sie fehlschlagen würde): Gib nur frei, wenn du sicher bist.",
+  'value.baseUnitsUnknown': "Basiseinheiten · Dezimalstellen unbekannt",
+  'sentence.msAddOwnerOne': "{owner} wird Mitglied, und es wird {threshold} Freigabe benötigt.",
+  'sentence.msRemoveOwnerOne': "{owner} ist kein Mitglied mehr, und es wird {threshold} Freigabe benötigt.",
+  'sentence.msThresholdOne': "Ab jetzt wird {threshold} Freigabe benötigt.",
 });

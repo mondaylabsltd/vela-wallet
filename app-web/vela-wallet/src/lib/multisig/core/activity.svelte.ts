@@ -6,6 +6,7 @@
  * there rather than as a panel of its own.
  */
 import { fillTemplate } from '$lib/i18n/fill';
+import { formatTime } from '$lib/services/locale-format';
 import { chainLogoURL } from '$lib/flows/marks';
 import { chainName } from '$lib/services/networks';
 import { chainColor } from '$lib/wallet/fixtures';
@@ -50,13 +51,9 @@ export function proposalRowId(item: Pick<ProposalItem, 'chainId' | 'safeTxHash'>
 
 export { progressLine };
 
-/** A time of day the way this browser shows one ("4:36 PM"). */
+/** A time of day as the wallet's time preset writes it (r9: it follows the page's language). */
 function clockTime(at: number): string {
-	try {
-		return new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-	} catch {
-		return new Date(at).toISOString().slice(11, 16);
-	}
+	return formatTime(at);
 }
 
 /** The id of a row for proposals on a network this device does not have. */

@@ -177,9 +177,13 @@ impl Walk {
     /// The store answers the list.
     fn list(&mut self) {
         let sites = self.store.sites();
-        let ops = self
-            .sut
-            .resolve_matching(|op| *op == Op::ListSites, Res::SitesListed { sites });
+        let ops = self.sut.resolve_matching(
+            |op| *op == Op::ListSites,
+            Res::SitesListed {
+                sites,
+                multisig_batches_json: None,
+            },
+        );
         self.took(ops);
     }
 

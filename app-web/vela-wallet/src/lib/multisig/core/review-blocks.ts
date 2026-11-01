@@ -99,6 +99,10 @@ export function stateBlocks(review: MultisigReviewOut, ctx: ReviewContext): Bloc
 		case 'reverts':
 			// The verdict's place says it fails; nothing would change.
 			return [];
+		case 'withheld':
+			// r9-9: refused for another reason, said once (`refused`): no
+			// reassurance beside it.
+			return [];
 	}
 }
 

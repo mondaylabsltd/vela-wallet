@@ -19,6 +19,8 @@ vi.mock('../core/store.svelte', () => ({
 		row: () => null,
 		shared: () => true,
 		inviteShared: (address: string) => invited.push(address),
+		// r9-12: the index's answers go to the accounts machine.
+		send: () => {},
 		accounts: []
 	}
 }));

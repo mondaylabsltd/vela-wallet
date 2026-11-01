@@ -66,13 +66,16 @@
 	import { explorerTxUrl, formatUnits } from '$lib/multisig/core/display';
 	import { rowLabelText, rowOutcomeText } from '$lib/multisig/external/words';
 	import type { OutsideTxShown } from '$lib/multisig/generated/OutsideTxShown';
+	import type { OutsideTxView } from '$lib/multisig/generated/OutsideTxView';
 	import {
 		safeTxHashes,
 		verifyEcdsaApproval,
+		type MultisigReviewOut,
 		type SafeTx,
 		type SafeTxHashes
 	} from '$lib/multisig/core/kernel';
 	import { fillTemplate } from '$lib/i18n/fill';
+	import { refusedLine, rejectHint } from '$lib/multisig/core/approvals-words';
 
 	let { data } = $props();
 	const m = $derived(data.multisigMessages.external);
@@ -816,7 +819,7 @@
 		{:else if linked && !request && tx?.item.status === 'done'}
 			<!-- r8-24: a link to a transaction that already ran says so — never a page with nothing on it. -->
 			<section class="card" data-testid="connect-link-done">
-				<p class="muted" data-testid="outside-done">{m.doneTx}</p>
+				{@render doneLine(tx)}
 			</section>
 		{/if}
 
@@ -854,6 +857,34 @@
 </main>
 
 <!-- ms-14: who is connecting, and whom Vela asked for — a stranger refused aloud. -->
+<!--
+	r8-24: a transaction whose number is used, said as what happened — executed
+	(and where), or cancelled (another ran at its number) — and only "executed
+	or cancelled" while the chain has not said which.
+-->
+{#snippet doneLine(shown: OutsideTxView)}
+	{#if shown.done?.kind === 'executed'}
+		<p class="muted" data-testid="outside-done" data-done="executed">
+			{m.doneExecuted}
+			{#if explorerTxUrl(shown.chainId, shown.done.txHash)}
+				·
+				<!-- eslint-disable svelte/no-navigation-without-resolve -- an external block explorer -->
+				<a
+					href={explorerTxUrl(shown.chainId, shown.done.txHash)}
+					target="_blank"
+					rel="noopener noreferrer">{all.proposal.explorer}</a
+				>
+				<!-- eslint-enable svelte/no-navigation-without-resolve -->
+			{/if}
+		</p>
+		<p class="mono" data-testid="outside-done-tx">{shown.done.txHash}</p>
+	{:else if shown.done?.kind === 'cancelled'}
+		<p class="muted" data-testid="outside-done" data-done="cancelled">{m.doneCancelled}</p>
+	{:else}
+		<p class="muted" data-testid="outside-done">{m.doneTx}</p>
+	{/if}
+{/snippet}
+
 {#snippet who()}
 	{#if account}
 		<p class="who" data-testid="connect-account">
@@ -921,7 +952,10 @@
 				>
 			{:else if gate.kind === 'blocked' && tx.item.status !== 'done'}
 				<!-- §3.6: the core does not sign what it reads as taking the multisig over. -->
-				<p class="error" role="alert" data-testid="outside-blocked">{all.review.blocked}</p>
+				<p class="error" role="alert" data-testid="outside-blocked">
+					{refusedLine(all, (tx.review as MultisigReviewOut | null)?.refused?.key) ??
+						all.review.blocked}
+				</p>
 			{/if}
 			<!-- Counted while it is open; once its number is used, what happened is said instead. -->
 			{#if tx.item.status !== 'done' && step.kind !== 'executed'}
@@ -934,7 +968,7 @@
 				</p>
 			{/if}
 			{#if tx.item.status === 'done' && step.kind !== 'executed'}
-				<p class="muted" data-testid="outside-done">{m.doneTx}</p>
+				{@render doneLine(tx)}
 			{/if}
 
 			{#if riskAsk}
@@ -1150,7 +1184,7 @@
 					{#if can?.canReject}
 						{#if rejecting}
 							<p class="muted">
-								{fillTemplate(all.proposal.rejectHint, { threshold: tx.item.threshold })}
+								{rejectHint(all, tx.item.threshold)}
 							</p>
 							<div class="row">
 								<Button variant="secondary" shape="rounded" onclick={() => (rejecting = false)}

@@ -401,4 +401,12 @@ window.VelaCS.i18n.register('zh', {
   'ui.withdrawnTitle': "已撤回",
   'ui.walletWithdrew': "钱包已不再等待这个请求，这里不会签任何东西。可以关掉这一页了。",
   'ui.answerNotTaken': "钱包没有接受这一页的回答，所以什么都没有发出。请回到钱包。",
+  // r9-10: "… anyway" where the app's review asks for it; a token whose
+  // decimals are unknown in its base units; one approval said as one.
+  'button.msApproveAnyway': "仍然批准",
+  'warn.msAppAnyway': "Vela 的检查发现了本页无法核实的风险（例如执行会失败）：只有在确定时才批准。",
+  'value.baseUnitsUnknown': "个最小单位 · 小数位未知",
+  'sentence.msAddOwnerOne': "{owner} 成为成员，之后需要 {threshold} 个批准。",
+  'sentence.msRemoveOwnerOne': "{owner} 不再是成员，之后需要 {threshold} 个批准。",
+  'sentence.msThresholdOne': "从现在起需要 {threshold} 个批准。",
 });

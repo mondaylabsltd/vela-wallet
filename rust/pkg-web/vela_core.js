@@ -7293,6 +7293,25 @@ export function siteStartChain(space_chain_ids, last_used) {
 }
 
 /**
+ * [`site_start_chain`] for an account (r9): `network_space::
+ * site_start_chain_for` — after the network last used, the first of
+ * `account_chains` (where the account holds something, or used) the space
+ * offers. The extension worker's twin is pinned to this.
+ * @param {Uint32Array} space_chain_ids
+ * @param {number | null | undefined} last_used
+ * @param {Uint32Array} account_chains
+ * @returns {number}
+ */
+export function siteStartChainFor(space_chain_ids, last_used, account_chains) {
+    const ptr0 = passArray32ToWasm0(space_chain_ids, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passArray32ToWasm0(account_chains, wasm.__wbindgen_malloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.siteStartChainFor(ptr0, len0, isLikeNone(last_used) ? Number.MAX_SAFE_INTEGER : (last_used) >>> 0, ptr1, len1);
+    return ret >>> 0;
+}
+
+/**
  * `{value, unit}` — a byte count in 1024s, for the shell to format in the
  * person's numbers.
  * @param {number} bytes
