@@ -43,6 +43,7 @@ import {
 	toHex,
 	userOpHash as localUserOpHash,
 	userOpEstimateFailure,
+	feeEstimateGasOutcome,
 	userOpGasLimits,
 	userOpNotSentDetail,
 	userOpPreviousPendingDetail,
@@ -1592,7 +1593,9 @@ export type UserOpGasSimulation =
 			settlementGas: bigint | null;
 	  }
 	| { kind: 'context_unavailable' }
-	| { kind: 'simulation_failed' };
+	| { kind: 'simulation_failed' }
+	/** r11-8: the relay answered that this operation fails when it runs. */
+	| { kind: 'refused' };
 
 /**
  * Simulate the operation the core built — the user's calls plus the fee leg it
@@ -1722,7 +1725,8 @@ async function runUserOpGasSimulation(params: {
 				err instanceof Error ? err.message : String(err)
 			);
 		}
-		return { kind: 'simulation_failed' };
+		// r11-8: which of the two the body means is the core's one rule.
+		return { kind: feeEstimateGasOutcome(estimateErrorJson(err)) };
 	}
 }
 

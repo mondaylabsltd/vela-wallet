@@ -1578,6 +1578,55 @@ export function userOpEstimateFailure(errorJson: string): EstimateFailure {
 }
 
 /**
+ * How far a failed POST got, as the platform can tell it (r11-9,
+ * `rpc_pool::TransportFailure`). The browser's `fetch` says only two
+ * things: offline before the call, and the shell's own abort timer.
+ */
+export type TransportFailure =
+	| 'offline'
+	| 'dns'
+	| 'connect_refused'
+	| 'connect_timeout'
+	| 'tls'
+	| 'refused'
+	| 'write_failed'
+	| 'after_write'
+	| 'read_timeout'
+	| 'timeout'
+	| 'unknown';
+
+/**
+ * The pool's transport outcome for a failed POST (r11-9,
+ * `rpc_pool::transport_outcome_of`): "not sent" (`not_connected`) only when
+ * nothing of the request can have reached the endpoint — the one rule every
+ * shell's submit verdict rests on.
+ */
+export function transportOutcomeOf(failure: TransportFailure): RpcTransportOutcome {
+	try {
+		return JSON.parse(wasm.transportOutcomeOf(failure)) as RpcTransportOutcome;
+	} catch {
+		return { type: 'network' };
+	}
+}
+
+/**
+ * What a failed `eth_estimateUserOperationGas` tells the fee machine (r11-8,
+ * `fee_policy::estimate_gas_outcome`): `refused` only on the relay's own word
+ * that the operation fails when it runs, `simulation_failed` for anything
+ * else — every shell hands the machine the same outcome for the same body.
+ * `errorJson`: the JSON-RPC `error` member, `''` when nothing answered.
+ */
+export function feeEstimateGasOutcome(errorJson: string): 'refused' | 'simulation_failed' {
+	try {
+		return wasm.feeEstimateGasOutcome(errorJson === '' ? undefined : errorJson) === 'refused'
+			? 'refused'
+			: 'simulation_failed';
+	} catch {
+		return 'simulation_failed';
+	}
+}
+
+/**
  * A signed balance change, as the sheet writes it (`l10n::format_signed_token_amount`,
  * spec 082 RJ15): `null` for zero (never drawn), U+2212 for a minus, `+` for a
  * gain, and a dust amount written exactly instead of `−0`. `preset` is the

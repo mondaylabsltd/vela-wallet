@@ -441,6 +441,28 @@
 	const anyway = $derived(signRule?.anyway === true);
 	/** The signing sheet holds its confirm while its simulation is out; so does this. */
 	const reviewHolding = $derived(!fullReview && !reviewFailed);
+	/**
+	 * r11-4: the core refuses it (`review.refused`: a batch nested too deep,
+	 * a delegatecall, a refund, a state change) — or it is no kind Vela signs
+	 * at all. Every member's Vela runs the same review: nobody signs it, so
+	 * nobody is asked to approve it.
+	 */
+	const nobodySigns = $derived(
+		!!item && (item.review.action === null || !!fullReview?.refused || signBlocked)
+	);
+	/**
+	 * r9-9, r11-4: the ONE line that says why — the core's `refused.key` in
+	 * the corpus' words, whatever the action, never its English `refusal`.
+	 * A transaction no kind Vela signs whose review could not be read says
+	 * the general reason; nothing is said while the review is still read.
+	 */
+	const refusedWords = $derived(
+		fullReview?.refused
+			? (refusedLine(m, fullReview.refused.key) ?? m.review.refusedWhy.other)
+			: item?.review.action === null && !reviewHolding
+				? m.review.refusedWhy.other
+				: null
+	);
 	const valueVariant = $derived<'value' | 'danger'>(anyway ? 'danger' : 'value');
 
 	// The AI's opinion on this proposal (spec 103): published for
@@ -1013,9 +1035,12 @@
 		}
 	}
 
-	/** Owners still to approve, on no device here — while their approval is still needed. */
+	/**
+	 * Owners still to approve, on no device here — while their approval is
+	 * still needed, and only for a transaction someone can sign (r11-4).
+	 */
 	const missingOwners = $derived(
-		!item || item.status === 'done' || item.review.action === null || readOnly
+		!item || item.status === 'done' || nobodySigns || readOnly
 			? []
 			: (members?.owners ?? []).filter(
 					(o) => !item.approvals.some((a) => a.counts && sameAddress(a.owner, o))
@@ -1298,18 +1323,18 @@
 	}
 
 	/**
-	 * r4a-16: every transaction it waits behind — each number between the
-	 * chain's and its own — and, where one is here, the way to it (r4D-19).
+	 * r4a-16: every transaction it waits behind — the core's numbers
+	 * (`waitsFor`, r11 S4: the same on every surface) — and, where one is
+	 * here, the way to it (r4D-19).
 	 */
 	const blocking = $derived.by(() => {
 		if (!item || item.status !== 'queued') return [];
-		const from = store.chain(chainId)?.members.nonce ?? 0n;
-		const out: { nonce: bigint; hash: string | null }[] = [];
-		for (let n = from; n < item.nonce && out.length < 20; n += 1n) {
-			const open = store.chain(chainId)?.items.find((i) => i.nonce === n && i.status !== 'done');
-			out.push({ nonce: n, hash: open?.safeTxHash ?? null });
-		}
-		return out;
+		return (item.waitsFor ?? []).map((n) => ({
+			nonce: n,
+			hash:
+				store.chain(chainId)?.items.find((i) => i.nonce === n && i.status !== 'done')?.safeTxHash ??
+				null
+		}));
 	});
 
 	/** Approvals the mailbox holds from accounts that are not members on this network now. */
@@ -1591,12 +1616,11 @@
 			<AuthorityNotice {m} kind="risk" findings={gate.findings} />
 		{/if}
 
-		{#if item.review.action === null}
-			<p class="warn" role="alert">
+		{#if refusedWords}
+			<p class="warn" role="alert" data-testid="proposal-refused">
 				<Icon icon={UTILITY_ICONS['triangle-alert']} size="sm" />
-				<!-- r9-9: the core's one line for why (never its English reason). -->
-				{refusedLine(m, fullReview?.refused?.key) ??
-					fillTemplate(m.proposal.refused, { reason: item.review.refusal ?? '' })}
+				<!-- r9-9, r11-4: the core's one line for why, whatever the action (never its English reason). -->
+				{refusedWords}
 			</p>
 		{/if}
 
@@ -2144,8 +2168,9 @@
 			</p>
 		{/if}
 
-		<!-- Only while approvals are missing: not once it is being executed. -->
-		{#if !drafting && item.status !== 'done' && phase.kind !== 'sent' && phase.kind !== 'ended' && shownApproved < item.threshold && (velaMissing.length > 0 || (outside.length === 0 && contractMissing.length === 0))}
+		<!-- Only while approvals are missing: not once it is being executed, and
+		     never for a transaction nobody can sign (r11-4). -->
+		{#if !drafting && !nobodySigns && item.status !== 'done' && phase.kind !== 'sent' && phase.kind !== 'ended' && shownApproved < item.threshold && (velaMissing.length > 0 || (outside.length === 0 && contractMissing.length === 0))}
 			<section class="invite">
 				<h3>{m.proposal.invite}</h3>
 				<p class="fine">{m.proposal.inviteHint}</p>
@@ -2191,7 +2216,7 @@
 			</section>
 		{/if}
 
-		{#if !drafting && item.status !== 'done' && phase.kind !== 'sent' && phase.kind !== 'ended' && shownApproved < item.threshold && outsideLink}
+		{#if !drafting && !nobodySigns && item.status !== 'done' && phase.kind !== 'sent' && phase.kind !== 'ended' && shownApproved < item.threshold && outsideLink}
 			<!-- r4C-13: an outside member's own link: it signs from the connect page alone. -->
 			<section class="invite" data-testid="outside-invite">
 				<h3>{m.external.outsideLinkTitle}</h3>

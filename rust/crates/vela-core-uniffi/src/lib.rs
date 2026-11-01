@@ -2982,6 +2982,35 @@ pub fn send_estimate_failure_body_key(failure: String) -> String {
         .to_owned()
 }
 
+/// How far a failed POST got (r11-9), as the shell's HTTP stack can prove
+/// it — `offline`, `dns`, `connect_refused`, `connect_timeout`, `tls`,
+/// `refused`, `write_failed`, `after_write`, `read_timeout`, `timeout`,
+/// `unknown` — to the pool's transport outcome as JSON (`{"type":
+/// "not_connected"}`, `{"type":"timeout"}`, `{"type":"network"}`): the one
+/// rule for "not sent" versus "may have been sent". An unknown class is
+/// `unknown`. See `vela_core::app::rpc_pool::transport_outcome_of`.
+#[uniffi::export]
+pub fn transport_outcome_of(failure: String) -> String {
+    use vela_core::app::rpc_pool::{transport_outcome_of as outcome, TransportFailure};
+    let failure = snake::<TransportFailure>(&failure).unwrap_or(TransportFailure::Unknown);
+    serde_json::to_string(&outcome(failure)).unwrap_or_else(|_| r#"{"type":"network"}"#.to_owned())
+}
+
+/// What a failed `eth_estimateUserOperationGas` tells the fee machine
+/// (r11-8): `error_json` is the relay's JSON-RPC `error` member (or the
+/// whole body), null when nothing answered. Answers the `FeeGasOutcome`
+/// type to send — `refused` or `simulation_failed`. See
+/// `vela_core::app::fee_policy::estimate_gas_outcome`.
+#[uniffi::export]
+pub fn fee_estimate_gas_outcome(error_json: Option<String>) -> String {
+    use vela_core::app::fee_policy::{estimate_gas_outcome, FeeGasOutcome};
+    match estimate_gas_outcome(error_json.as_deref()) {
+        FeeGasOutcome::Refused => "refused",
+        _ => "simulation_failed",
+    }
+    .to_owned()
+}
+
 /// A signed balance change from signed base units (`"-1000"`, `"+2100…"`):
 /// the token ladder, a dust figure written exactly (never `−0`), U+2212 for
 /// a minus, `+` for a plus; `None` for zero or unreadable text (spec 082
@@ -2999,6 +3028,15 @@ pub fn format_signed_token_amount(
         decimals,
         snake::<NumberPreset>(&preset).unwrap_or_default(),
     )
+}
+
+/// An amount already written in the person's marks, signed the one way
+/// money is signed in Vela (r11 S4): U+2212 when `outgoing` is true, `+`
+/// when false, nothing when null; a sign the text carries is replaced. See
+/// `vela_core::l10n::signed_amount_text`.
+#[uniffi::export]
+pub fn signed_amount_text(amount: String, outgoing: Option<bool>) -> String {
+    vela_core::l10n::signed_amount_text(&amount, outgoing)
 }
 
 /// The Safe message hash a passkey signs for EIP-1271 verification (spec

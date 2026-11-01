@@ -341,6 +341,7 @@ function shownOf(tx: SafeTx, over: Partial<OutsideTxShown> = {}): OutsideTxShown
 		title: SEND,
 		review: null,
 		chainNonce: '3',
+		waitsFor: [],
 		...over
 	};
 }
@@ -539,6 +540,7 @@ function readyView(
 			nonce: '3',
 			proposer: STRANGER,
 			renameUndeployed: false,
+			waitsFor: [],
 			review: { action: { kind: 'transfer' }, refusal: null },
 			approvals
 		}

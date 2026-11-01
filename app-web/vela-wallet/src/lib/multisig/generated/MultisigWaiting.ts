@@ -22,4 +22,21 @@ waiting_payer: number,
 /**
  * The one needing an approval first, else the first ready.
  */
-first: MultisigWaitingFirst | null, };
+first: MultisigWaitingFirst | null, 
+/**
+ * r11-1: the transactions `needs_you` counts, each
+ * `<chainId>:<safeTxHash lowercase>`, in order — what a notification
+ * keys "already said" by (a count says nothing of WHICH: one approved
+ * elsewhere and one new left it the same, and the new one went unsaid).
+ */
+needs_you_keys: Array<string>, 
+/**
+ * r11-1: the transactions `ready` counts, keyed as `needs_you_keys`.
+ */
+ready_keys: Array<string>, 
+/**
+ * r11-1: when the list behind these counts was read on this page (ms
+ * since the epoch); `None` for one kept from an earlier page. A
+ * background round says only what a read since it began holds.
+ */
+read_at: number | null, };

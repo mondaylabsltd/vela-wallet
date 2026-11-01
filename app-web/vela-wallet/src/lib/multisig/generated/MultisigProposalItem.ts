@@ -36,4 +36,13 @@ unsent: boolean,
 /**
  * A rename where the multisig is not deployed: never executed there.
  */
-renameUndeployed: boolean, };
+renameUndeployed: boolean, 
+/**
+ * r11 S4: a queued transaction's "It can run once…" — every number it
+ * waits behind, from the multisig's nonce on this network up to its
+ * own, in order (decimal; at most [`WAITS_FOR_MAX`]). Empty unless
+ * queued. Say `proposal.queuedNote` with `{{nonce}}` for one, else
+ * `proposal.queuedNoteMany` with `{{nonces}}` = the platform's list of
+ * `#n` — the same numbers on every surface, the outside page included.
+ */
+waitsFor: Array<string>, };

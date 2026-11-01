@@ -23,7 +23,9 @@
 	import { readingTitle } from '../core/reading-blocks';
 	import { refusedLine } from '../core/approvals-words';
 	import { nativeSymbol } from '$lib/services/networks';
-	import { chainName, shortenAddress } from '../core/display';
+	import { chainName, memberWho, shortenAddress } from '../core/display';
+	import { published } from './published-names.svelte';
+	import { listOf } from '$lib/i18n/list';
 	import type { MultisigReviewOut, SafeTx, SafeTxHashes } from '../core/kernel';
 	import type { OutsideTxShown } from '../generated/OutsideTxShown';
 	import { eip55 } from './eip55';
@@ -45,7 +47,11 @@
 	const review = $derived((shown.review ?? null) as MultisigReviewOut | null);
 	const hashes = $derived(shown.hashes as SafeTxHashes);
 	const chainId = $derived(shown.chainId);
-	const title = $derived(titleText(m, chainId, shown.title, shown.nonce));
+	// r11-6: a member is named as everywhere — its published name (the
+	// passkey index's, the same on every device) and its short form.
+	const title = $derived(
+		titleText(m, chainId, shown.title, shown.nonce, (a) => memberWho(a, published.label(a)))
+	);
 	const recipient = $derived(
 		shown.title.kind === 'send' || shown.title.kind === 'call' ? shown.title.to : null
 	);
@@ -62,6 +68,7 @@
 			: []
 	);
 	const chainNonce = $derived(shown.chainNonce === null ? null : BigInt(shown.chainNonce));
+	const waitsFor = $derived(shown.waitsFor ?? []);
 	const nonce = $derived(BigInt(shown.nonce));
 	/** Its number is used: a record of what it did, nothing checked before signing. */
 	const used = $derived(chainNonce !== null && nonce < chainNonce);
@@ -140,9 +147,14 @@
 			<dd data-testid="review-nonce">
 				<!-- r5reg-23: numbered as Vela numbers it, "#7". -->
 				{numbered(m, shown.nonce)}
-				{#if chainNonce !== null && nonce > chainNonce}
-					<span class="sub"
-						>{fillTemplate(w.queuedTx, { nonce: numbered(m, chainNonce.toString()) })}</span
+				{#if waitsFor.length > 0}
+					<!-- r11 S4: the wallet's own sentence and numbers (the core's `waitsFor`). -->
+					<span class="sub" data-testid="review-queued"
+						>{waitsFor.length > 1
+							? fillTemplate(m.proposal.queuedNoteMany, {
+									nonces: listOf(waitsFor.map((n) => numbered(m, n)))
+								})
+							: fillTemplate(m.proposal.queuedNote, { nonce: waitsFor[0] })}</span
 					>
 				{/if}
 			</dd>

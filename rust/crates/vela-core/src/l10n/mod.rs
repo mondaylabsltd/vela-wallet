@@ -30,6 +30,6 @@ pub use datetime::{
 pub use list::format_list;
 pub use number::{
     cut_token_amount, format_compact, format_number, format_signed_token_amount,
-    format_token_amount, group_digits, parse_locale_number, FractionDigits, NumberPreset,
-    Separators,
+    format_token_amount, group_digits, parse_locale_number, signed_amount_text, FractionDigits,
+    NumberPreset, Separators,
 };

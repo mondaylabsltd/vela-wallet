@@ -28,12 +28,13 @@ interface SessionLike {
  * the proposals machine's `rule_chip` for the multisig it follows (the rule
  * in force on each network it is used on, r4D-7); one not followed shows its
  * row's rule — the rule a chain last said, kept by the core (r9-14), marked
- * last known — never the founding record's when a chain said otherwise.
+ * last known (`lastKnown`: its words, else `null`) — never the founding
+ * record's when a chain said otherwise. The switcher's rows draw it too.
  */
 export function ruleChip(
 	account: Pick<MultisigAccount, 'address' | 'owners' | 'threshold'>,
 	m: MultisigMessages
-): { label: string; title: string } {
+): { label: string; title: string; lastKnown: string | null } {
 	const live = sameAddress(proposals.followed, account.address)
 		? proposalsHost.view?.rule_chip
 		: null;
@@ -43,14 +44,21 @@ export function ruleChip(
 			kind: 'needs',
 			rule: { m: account.threshold, n: account.owners.length, solo: account.owners.length === 1 }
 		};
-	const lastKnown = !live && row?.from_chain === true && row.last_known;
-	const titled = (title: string) => (lastKnown ? `${title} · ${m.presence.ruleLastKnown}` : title);
+	// r9-14, r11-5: a rule a chain said in an earlier session, not read this one.
+	const lastKnown =
+		!live && row?.from_chain === true && row.last_known ? m.presence.ruleLastKnown : null;
+	const titled = (title: string) => (lastKnown ? `${title} · ${lastKnown}` : title);
 	if (chip.kind === 'needs') {
-		return { label: ruleChipText(m, chip.rule), title: titled(ruleTitle(m, chip.rule)) };
+		return {
+			label: ruleChipText(m, chip.rule),
+			title: titled(ruleTitle(m, chip.rule)),
+			lastKnown
+		};
 	}
 	return {
 		label: m.presence.ruleDiffers,
-		title: titled(chip.rules.map((r) => ruleTitle(m, r)).join(' · '))
+		title: titled(chip.rules.map((r) => ruleTitle(m, r)).join(' · ')),
+		lastKnown
 	};
 }
 

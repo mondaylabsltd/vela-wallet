@@ -35,7 +35,14 @@ use crate::multisig_link::eip55;
 use crate::CoreError;
 
 /// `address` as a list shows it: EIP-55, its first eight and last six
-/// characters (the wallet’s own short form).
+/// characters — `0x` and six digits, `…`, six digits (`0x88cCA0…266894`).
+///
+/// r11-6: THE short form, on every shell and every surface (the web and
+/// Android drew 6+6, iOS and the desktop 4+4: `0x88cC…6894`). Six and six,
+/// decided by best practice and the core principle: a 4+4 look-alike is a
+/// 2^32 search for an address-poisoning sender, 6+6 a 2^48 one, and the
+/// short form is what a person compares. Shells call `names.short`
+/// (`multisigLinkCall` / uniffi `multisig_link_call`), never their own.
 pub fn short_address(address: &str) -> String {
     let full = eip55(address);
     let chars: Vec<char> = full.chars().collect();
@@ -66,6 +73,22 @@ pub fn label(
         .map_or_else(|| short_address(address), str::to_owned)
 }
 
+/// A member as a title names it (r11-6) — "Add Interleave
+/// (0x88cCA0…266894)": its label and its short form, or the short form alone
+/// when the label is none (absent, blank, or the short form itself). ONE
+/// rule for every title that names a member — the sheet, Activity rows, the
+/// outside page, notifications — with `label` the accounts machine's
+/// `member_labels` (or [`label`] where no machine runs).
+pub fn who(address: &str, label: Option<&str>) -> String {
+    let short = short_address(address);
+    match named(label) {
+        Some(name) if name != short && !name.eq_ignore_ascii_case(address.trim()) => {
+            format!("{name} ({short})")
+        }
+        _ => short,
+    }
+}
+
 /// What a member is, as far as this device can tell: a Vela account (one
 /// of this device’s own, or the passkey index holds it), else what a
 /// multisig here keeps it as, else `None` — not known (the index’s silence
@@ -87,6 +110,10 @@ pub fn call(name: &str, args: &Value) -> Result<String, CoreError> {
     };
     match name {
         "short" => to_json(&short_address(&arg::<String>(args, "address")?)),
+        "who" => to_json(&who(
+            &arg::<String>(args, "address")?,
+            text("label")?.as_deref(),
+        )),
         "label" => to_json(&label(
             &arg::<String>(args, "address")?,
             text("own")?.as_deref(),
@@ -108,6 +135,17 @@ mod tests {
     use serde_json::json;
 
     const BOB: &str = "0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc";
+
+    #[test]
+    fn a_title_names_a_member_one_way() {
+        assert_eq!(who(BOB, None), "0x3C44Cd…4293BC");
+        assert_eq!(who(BOB, Some("  ")), "0x3C44Cd…4293BC");
+        assert_eq!(who(BOB, Some("0x3C44Cd…4293BC")), "0x3C44Cd…4293BC");
+        assert_eq!(who(BOB, Some(BOB)), "0x3C44Cd…4293BC");
+        assert_eq!(who(BOB, Some("Interleave")), "Interleave (0x3C44Cd…4293BC)");
+        let answer = call("who", &json!({"address": BOB, "label": "Bob"})).unwrap();
+        assert_eq!(answer, "\"Bob (0x3C44Cd…4293BC)\"");
+    }
 
     #[test]
     fn a_member_shows_by_its_short_address_until_a_name_answers() {

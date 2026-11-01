@@ -586,9 +586,11 @@ pub enum FeeGasOutcome {
         #[serde(default)]
         settlement_gas: Option<String>,
     },
-    /// No simulation came back — the relay refused it, could not be reached,
-    /// or answered nothing usable. A shell that cannot tell those apart says
-    /// this, and is treated exactly as before spec 083's fee fix.
+    /// No simulation came back — the relay could not be reached, or answered
+    /// nothing that says how the operation runs. Nothing is priced on it
+    /// (r11-8): the quote fails as [`FeeFailure::EstimateFailed`] and is
+    /// asked again on the schedule. Which answer is which is the core's
+    /// rule, not the shell's: [`estimate_gas_outcome`].
     SimulationFailed,
     ContextUnavailable,
     /// The relay ANSWERED and said this exact operation fails when it runs
@@ -599,6 +601,63 @@ pub enum FeeGasOutcome {
     /// when nobody chose one, and otherwise says the operation would fail
     /// ([`FeeFailure::WouldFail`]) instead of blaming the network.
     Refused,
+}
+
+/// What a failed `eth_estimateUserOperationGas` tells the fee machine
+/// (r11-8) — ONE rule, so every shell hands the machine the same outcome for
+/// the same relay answer. `error_json`: the JSON-RPC `error` member as it
+/// came (or the whole body carrying one); `None` when nothing answered (a
+/// transport failure, a timeout, a body that is not JSON-RPC).
+///
+/// [`FeeGasOutcome::Refused`] only on the relay's own word that the operation
+/// fails when it runs — its message says "simulation failed", "execution
+/// reverted" or "reverted during simulation" — and never for an EntryPoint
+/// validation code (`AA10`…`AA3x`, standing as a word: "AA23 reverted (or
+/// OOG)", "AA25 invalid account nonce"): that is the account's own check —
+/// its signature, nonce or prefund — which no other fee coin changes, and a
+/// nonce that moved on can clear by the next ask. Everything else is
+/// [`FeeGasOutcome::SimulationFailed`]: no answer about the operation.
+/// Vectors: `tests/vectors/fee/estimate-outcome.json`.
+#[must_use]
+pub fn estimate_gas_outcome(error_json: Option<&str>) -> FeeGasOutcome {
+    let Some(text) = error_json else {
+        return FeeGasOutcome::SimulationFailed;
+    };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(text) else {
+        return FeeGasOutcome::SimulationFailed;
+    };
+    let error = value.get("error").unwrap_or(&value);
+    let Some(message) = error.get("message").and_then(serde_json::Value::as_str) else {
+        return FeeGasOutcome::SimulationFailed;
+    };
+    if names_validation_code(message) {
+        return FeeGasOutcome::SimulationFailed;
+    }
+    let lower = message.to_ascii_lowercase();
+    if lower.contains("simulation failed")
+        || lower.contains("execution reverted")
+        || lower.contains("reverted during simulation")
+    {
+        FeeGasOutcome::Refused
+    } else {
+        FeeGasOutcome::SimulationFailed
+    }
+}
+
+/// `message` carries an EntryPoint code — `AA` and two digits, standing as a
+/// word of its own (never the inside of an address or of hex data).
+fn names_validation_code(message: &str) -> bool {
+    let bytes = message.as_bytes();
+    bytes.windows(4).enumerate().any(|(at, window)| {
+        window[0] == b'A'
+            && window[1] == b'A'
+            && window[2].is_ascii_digit()
+            && window[3].is_ascii_digit()
+            && (at == 0 || !bytes[at - 1].is_ascii_alphanumeric())
+            && bytes
+                .get(at + 4)
+                .is_none_or(|next| !next.is_ascii_alphanumeric())
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -2107,8 +2166,9 @@ pub struct FeeEstimate {
 /// The freshness rule: a quote is re-priced once a block
 /// ([`requote_interval_ms`]), and every run clears this before it reads, so
 /// it is never older than one re-pricing interval. A run that did not
-/// simulate (the static fallback, Tempo, a coin switch priced on the same
-/// gas) carries none. The send takes it only for exactly these calls, and
+/// simulate (Tempo, a coin switch priced on the same gas) carries none; the
+/// static model a relay's refusal falls back to carries its own limits
+/// (r11-8), so a fee is never signed beside limits it was not priced on. The send takes it only for exactly these calls, and
 /// drops it the moment the fee card re-quotes or fails.
 ///
 /// What it never carries is the nonce: the submit reads it fresh before the
@@ -3774,21 +3834,34 @@ fn measured_inner_floor(calls: &[FeeCall], gas: &[Option<String>]) -> Option<u12
 /// op costs when nothing simulated it. The fallback price when the relay's
 /// simulation fails, and the yardstick [`auto_pick`] measures coins against
 /// before any simulation has run.
-fn static_total_gas(ctx: &RequestCtx, inner_floor: Option<u128>) -> u128 {
+/// The static model's limits — the ones a fee priced on it is signed with
+/// (r11-8). The L2 rollup data-fee adder (`safe-transaction.ts:723-731`)
+/// rides in `preVerificationGas`, the limit that pays for calldata; the
+/// limits then go through the one in-band rule (`user_op::in_band_gas_limits`)
+/// every simulated quote goes through, so their sum is the gas priced.
+fn static_limits(ctx: &RequestCtx, inner_floor: Option<u128>) -> crate::user_op::GasLimits {
     let verification_gas = if ctx.deployed {
         VERIFICATION_GAS_DEPLOYED
     } else {
         VERIFICATION_GAS_UNDEPLOYED
     };
-    let call_gas = CALL_GAS_LIMIT.max(inner_floor.unwrap_or(0));
-    let mut total_gas = add(add(verification_gas, call_gas), PRE_VERIFICATION_GAS);
-    // L2 rollup data-fee adjustments (`safe-transaction.ts:723-731`).
-    if ARBITRUM_CHAIN_IDS.contains(&ctx.chain_id) {
-        total_gas = add(total_gas, ARBITRUM_STATIC_GAS_ADDER);
+    let adder = if ARBITRUM_CHAIN_IDS.contains(&ctx.chain_id) {
+        ARBITRUM_STATIC_GAS_ADDER
     } else if OP_STACK_CHAIN_IDS.contains(&ctx.chain_id) {
-        total_gas = add(total_gas, OP_STACK_STATIC_GAS_ADDER);
-    }
-    total_gas
+        OP_STACK_STATIC_GAS_ADDER
+    } else {
+        0
+    };
+    crate::user_op::in_band_gas_limits(
+        crate::user_op::GasEstimate {
+            verification_gas_limit: verification_gas,
+            call_gas_limit: CALL_GAS_LIMIT,
+            pre_verification_gas: add(PRE_VERIFICATION_GAS, adder),
+            settlement_gas: None,
+        },
+        ctx.deployed,
+        inner_floor,
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -4286,7 +4359,7 @@ fn static_auto_pick(
     charge: Charge,
     excluded: &[Option<String>],
 ) -> Option<Option<String>> {
-    let provisional = static_total_gas(ctx, None);
+    let provisional = static_limits(ctx, None).total();
     let native = find_quote(rows, None)?;
     let fee_for = |row: &ParsedQuote| charge.amount(provisional, row, native);
     pick_coin(rows, ctx, measured, fee_for, excluded)
@@ -4332,8 +4405,8 @@ fn try_price(model: &mut Model) -> Command<FeeEffect, Event> {
     let Some(outcome) = model.pending.user_op_gas.clone() else {
         return Command::done();
     };
-    // An outcome that fails whatever the floor (missing context, a large op
-    // the relay could not simulate) surfaces at once, never behind a
+    // An outcome that fails whatever the floor (missing context, no
+    // simulation at all, a large op the relay refused) surfaces at once, never behind a
     // measurement it cannot use.
     let floor_matters = match (&plan, &outcome) {
         (PricePlan::Generic { .. }, FeeGasOutcome::Estimated { .. }) => true,
@@ -4341,7 +4414,7 @@ fn try_price(model: &mut Model) -> Command<FeeEffect, Event> {
             PricePlan::Generic {
                 est_calldata_len, ..
             },
-            FeeGasOutcome::SimulationFailed | FeeGasOutcome::Refused,
+            FeeGasOutcome::Refused,
         ) => *est_calldata_len <= ESTIMATION_REQUIRED_CALLDATA,
         _ => false,
     };
@@ -4515,25 +4588,42 @@ fn accept_gas_outcome(
                 });
                 price_generic(model, &ctx, plan, total_gas, charge)
             }
-            FeeGasOutcome::ContextUnavailable => fail(model, FeeFailure::EstimateFailed),
-            failed @ (FeeGasOutcome::SimulationFailed | FeeGasOutcome::Refused) => {
+            // r11-8: no simulation came back — the relay out of reach, or an
+            // answer that says nothing about the operation. Nothing is priced
+            // on a gas figure nobody measured: the submit would measure again
+            // and sign limits this fee was never priced on (the round-11
+            // Android send was charged on the static 600,000 while it signed
+            // the relay's 1,600,000 — 0.045 against 0.12 on every other
+            // shell). Said as the estimate's failure, and asked again on the
+            // schedule like any other outage.
+            FeeGasOutcome::ContextUnavailable | FeeGasOutcome::SimulationFailed => {
+                fail(model, FeeFailure::EstimateFailed)
+            }
+            FeeGasOutcome::Refused => {
                 // For a large/complex op the static fallback would show a
                 // misleading number and the submit would refuse it anyway
                 // (`safe-transaction.ts:703-713`).
                 if *est_calldata_len > ESTIMATION_REQUIRED_CALLDATA {
-                    if failed == FeeGasOutcome::Refused {
-                        return refused_by_relay(model, &ctx, plan);
-                    }
-                    return fail(model, FeeFailure::EstimateFailed);
+                    return refused_by_relay(model, &ctx, plan);
                 }
-                // A small op keeps the static fallback whichever way the
-                // simulation failed — exactly as before spec 083's fee fix —
-                // charged the old way: nothing settled it.
-                let total_gas = static_total_gas(&ctx, inner_floor);
+                // The relay answered that this small operation fails: the
+                // sheet warns, it never blocks (L-D5), so it keeps a fee —
+                // the static model, charged the old way. The limits it is
+                // priced on travel as the prepared gas, so the submit signs
+                // exactly them (what is shown is what is signed).
+                let limits = static_limits(&ctx, inner_floor);
+                model.pending.prepared = Some(PreparedGas {
+                    calls: ctx.calls.clone(),
+                    deployed: ctx.deployed,
+                    verification_gas_limit: limits.verification_gas_limit.to_string(),
+                    call_gas_limit: limits.call_gas_limit.to_string(),
+                    pre_verification_gas: limits.pre_verification_gas.to_string(),
+                    settlement_gas: None,
+                });
                 let charge = Charge::Marked {
                     basis: *in_band_gas_basis,
                 };
-                price_generic(model, &ctx, plan, total_gas, charge)
+                price_generic(model, &ctx, plan, limits.total(), charge)
             }
         },
         PricePlan::Tempo { static_gas, .. } => match outcome {

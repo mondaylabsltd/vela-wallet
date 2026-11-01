@@ -16,7 +16,12 @@
  * one more endpoint failure for the core to route around.
  */
 
-import { rpcEarlyVerdict, rpcHedgeAfterMs, rpcIsHedgedRead } from '$lib/core/kernels';
+import {
+	rpcEarlyVerdict,
+	rpcHedgeAfterMs,
+	rpcIsHedgedRead,
+	transportOutcomeOf
+} from '$lib/core/kernels';
 import { relayRpcHeader } from '$lib/services/relay-rpc-header';
 import { getItem, setItem } from '$lib/services/storage';
 import {
@@ -132,7 +137,10 @@ async function post(
 			: null;
 		return { outcome: { type: 'response', error }, body };
 	} catch {
-		return { outcome: { type: offline ? 'not_connected' : timedOut ? 'timeout' : 'network' } };
+		// r11-9: the class is the browser's to name, what it means the core's.
+		return {
+			outcome: transportOutcomeOf(offline ? 'offline' : timedOut ? 'timeout' : 'unknown')
+		};
 	} finally {
 		clearTimeout(timer);
 	}

@@ -58,8 +58,42 @@ export function formatUnits(amount: string | bigint, decimals: number | null): s
  * alone — a name is a claim, the address is who gets the say.
  */
 export function memberWho(address: string, name: string | null = localName(address)): string {
-	const short = shortenAddress(address);
-	return name && name !== short ? `${name} (${short})` : short;
+	// r11-6: the core's one rule (`names::who`) — every shell, every title.
+	try {
+		return JSON.parse(
+			wasm.multisigLinkCall('names.who', JSON.stringify({ address, label: name }))
+		) as string;
+	} catch {
+		const short = shortenAddress(address);
+		return name && name !== short ? `${name} (${short})` : short;
+	}
+}
+
+/**
+ * A member change's one line, at once ("Add Interleave (0x88cCA0…266894)"):
+ * nothing in it waits on a chain read, so it is drawn with the names as they
+ * stand NOW — Activity kept the first drawing, before the index answered
+ * (r11-6: "Add 0x88cCA0…266894" on Activity beside "Add Interleave (…)" in
+ * the sheet). `null` for any other action.
+ */
+export function memberActionTitle(
+	m: MultisigMessages,
+	action: Action | null,
+	who: (address: string) => string
+): string | null {
+	switch (action?.kind) {
+		case 'addOwner':
+			return fillTemplate(m.change.add, { member: who(action.owner) });
+		case 'removeOwner':
+			return fillTemplate(m.change.remove, { member: who(action.owner) });
+		case 'swapOwner':
+			return fillTemplate(m.change.replace, {
+				old: who(action.oldOwner),
+				new: who(action.newOwner)
+			});
+		default:
+			return null;
+	}
 }
 
 /** A member's name on this device, or `null` when it is not one of its accounts. */

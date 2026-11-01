@@ -96,6 +96,11 @@ export interface ProposalItem {
 	 * executed there — a rename never deploys it (owner, 2026-10-29).
 	 */
 	renameUndeployed: boolean;
+	/**
+	 * r11 S4: every number a queued one waits behind (the core's rule,
+	 * `ProposalItem.waits_for`) — the same numbers on every surface.
+	 */
+	waitsFor: bigint[];
 }
 
 export interface ChainState {
@@ -152,7 +157,8 @@ export function itemOf(i: MultisigProposalItem): ProposalItem {
 		executing: i.executing,
 		createdMs: i.createdMs,
 		unsent: i.unsent,
-		renameUndeployed: i.renameUndeployed
+		renameUndeployed: i.renameUndeployed,
+		waitsFor: (i.waitsFor ?? []).map((n) => BigInt(n))
 	};
 }
 
