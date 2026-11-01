@@ -123,6 +123,15 @@ export interface SendShellPorts {
 	 * warms the relay's gas quote. Omitted = `standard`, the factory default.
 	 */
 	feeTier?(): FeeTier;
+	/**
+	 * The send wrote or patched its records (`PersistTxRecords`,
+	 * `MarkAdmitted`, `DeleteTxRecords`): the Activity feed reads the store
+	 * again (`ReconcileCompleted`), so the send's own row shows at once — the
+	 * feed's shell contract (activity_feed module doc). Since r10 a due scan
+	 * and `sent` scan without reading the store, so nothing else brings the
+	 * row in while the operation is pending. Absent: no feed (a harness).
+	 */
+	recordsWritten?(): void;
 }
 
 /**

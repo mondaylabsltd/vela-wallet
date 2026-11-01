@@ -740,6 +740,8 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 				// really there is what its clearance turns on (RJ1).
 				const ahead = operation.records.find((record) => record.maybe_sent);
 				if (ahead) aheadOnDisk.set(ahead.user_op_hash.toLowerCase(), onDisk);
+				// The feed reads them now: the send's row, pending, in Activity.
+				if (onDisk) ports.recordsWritten?.();
 				return { type: 'records_persisted' };
 			}
 
@@ -811,12 +813,15 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 				// The relay took it: no longer "may have been sent"; still pending
 				// for the tracker. One write for every sibling.
 				await updateTransactions(operation.record_ids, { maybeSent: false }).catch(() => {});
+				ports.recordsWritten?.();
 				return { type: 'records_persisted' };
 			}
 
 			case 'delete_tx_records': {
 				// Proven never sent (RJ1): the write-ahead's records go, in one write.
 				await deleteTransactions(operation.ids).catch(() => {});
+				// …and the row the write-ahead put in Activity goes with them.
+				ports.recordsWritten?.();
 				return { type: 'records_persisted' };
 			}
 
