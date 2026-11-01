@@ -81,20 +81,24 @@ function readJunitPath(path) {
 	return files.flatMap((f) => readJunitXml(readFileSync(f, 'utf8')));
 }
 
-/** `xcresulttool get test-results tests` JSON → results; suite = enclosing Test Suite. */
+/**
+ * `xcresulttool get test-results tests` JSON → results. `suite` is the
+ * innermost Test Suite; `suites` every one it sits in, so a test in a nested
+ * Swift Testing suite still belongs to the type its file declares.
+ */
 export function readXcresultJson(json) {
 	const results = [];
-	const walk = (node, suite) => {
+	const walk = (node, suites) => {
 		if (node.nodeType === 'Test Case') {
 			const r = String(node.result ?? '');
 			const status = r === 'Skipped' ? 'skipped' : r === 'Failed' ? 'failed' : 'passed';
-			results.push({ suite: suite ?? '', name: node.name ?? '', status });
+			results.push({ suite: suites.at(-1) ?? '', suites, name: node.name ?? '', status });
 			return; // its children are arguments, messages and attachments
 		}
-		const next = node.nodeType === 'Test Suite' ? node.name : suite;
+		const next = node.nodeType === 'Test Suite' ? [...suites, node.name] : suites;
 		for (const child of node.children ?? []) walk(child, next);
 	};
-	for (const node of json.testNodes ?? []) walk(node, undefined);
+	for (const node of json.testNodes ?? []) walk(node, []);
 	return results;
 }
 
@@ -109,7 +113,7 @@ function inSuite(platform, result, suite) {
 		const c = result.suite;
 		return c === suite || c.endsWith(`.${suite}`) || c.startsWith(`${suite}$`) || c.includes(`.${suite}$`);
 	}
-	return result.suite === suite;
+	return result.suite === suite || (result.suites ?? []).includes(suite);
 }
 
 /** Does a result's name match a manifest test identifier? */
