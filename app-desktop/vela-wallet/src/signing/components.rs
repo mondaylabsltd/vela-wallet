@@ -247,9 +247,11 @@ pub fn header_view(theme: &Theme, model: &HeaderModel) -> Option<Div> {
         div().flex().flex_col().gap(px(8.)).child(header).child(
             div()
                 .id("signing-space-note")
+                .relative()
                 .text_size(theme::text_row_sub())
                 .text_color(theme.fg_muted)
-                .child(note),
+                .child(note)
+                .children(crate::dev_probe::mark("signing-space-note")),
         ),
     )
 }

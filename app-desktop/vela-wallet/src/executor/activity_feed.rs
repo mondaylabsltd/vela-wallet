@@ -639,6 +639,12 @@ impl Machine for ActivityFeed {
             // persists what it admitted into the same store the send path will
             // write to.
             FeedOperation::ScanIncomingTransfers { address, .. } => {
+                // `VELA_PERF` (developer builds): when each scan went out,
+                // beside the gesture's edges below — the cadence, readable.
+                crate::perf::note(format_args!(
+                    "feed scan at={:.0}",
+                    crate::executor::now_ms()
+                ));
                 let address = address.clone();
                 Answer::Blocking(Box::new(move || FeedShellResult::SyncCompleted {
                     new_count: sync_received(&address),
@@ -881,6 +887,10 @@ pub fn sent(cx: &mut App) {
 /// due meanwhile is held and runs at `off`.
 pub fn interacting(on: bool, cx: &mut App) {
     let presence = presence_now();
+    crate::perf::note(format_args!(
+        "feed interacting on={on} at={:.0}",
+        presence.now_ms
+    ));
     resident::resident::<ActivityFeed>(cx).update(cx, |resident, cx| {
         resident.dispatch(Event::Interacting { on, presence }, cx);
     });

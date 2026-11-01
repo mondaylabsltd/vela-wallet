@@ -22,6 +22,8 @@
 //!   | {"page": "section", "to": "wallet"|"explore"|…}          (a sidebar section pressed)
 //!   | {"page": "browse", "url": "http://…"}                    (a site in a new browser tab)
 //!   | {"page": "tabs"}                                         (the browser's tabs, logged)
+//!   | {"page": "consent"}                                      (the open connection request's Connect)
+//!   | {"page": "space_notes"}                                  (the sheets' space-switch notes, logged)
 //! {"answer_risk": true}
 //! {"shot": "name"}                    (writes `SHOT name`, then waits 1.5 s)
 //! {"log": "text"}

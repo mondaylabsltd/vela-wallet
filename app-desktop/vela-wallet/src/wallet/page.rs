@@ -4000,10 +4000,14 @@ impl WalletPage {
     /// the way of.
     fn lists_moving(&self) -> bool {
         let history = self.panel == PanelId::Flow && self.flows.last() == Some(&FlowPanel::Da1);
+        // `VELA_PERF_SCROLL`'s scripted scroll moves the history's column
+        // too, by its handle rather than the wheel (developer builds).
+        let scripted = self.perf_scroll.is_some();
         self.identity.is_some()
             && !self.gallery
             && self.section == Section::Wallet
-            && (self.content_scroll.moving() || (history && self.panel_scroll.moving()))
+            && (self.content_scroll.moving()
+                || (history && (self.panel_scroll.moving() || scripted)))
     }
 
     /// r10 follow-up: a gesture starting on the home's or the history's
@@ -18567,6 +18571,7 @@ impl WalletPage {
             .children(consent.space_note.as_ref().map(|note| {
                 div()
                     .id("consent-space-note")
+                    .relative()
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_muted)
                     .child(self.loc.t_text(
@@ -18574,6 +18579,7 @@ impl WalletPage {
                         "network",
                         &crate::flows::live::chain_name(note.chain_id),
                     ))
+                    .children(crate::dev_probe::mark("consent-space-note"))
             }))
             .child(row_divider(theme))
             .child(

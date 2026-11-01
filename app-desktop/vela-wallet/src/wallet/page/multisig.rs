@@ -313,6 +313,60 @@ impl WalletPage {
                     self.browser_go(go, cx);
                 }
             }
+            // The open connection request's Connect, as the person presses
+            // it (`{"page":"consent"}`).
+            Some("consent") => {
+                use vela_core::app::dapp_browser::Event as DbrEvent;
+                let host = self.browser_host(cx);
+                host.update(cx, |host, cx| {
+                    host.dispatch(
+                        DbrEvent::ConsentApproved {
+                            now_ms: crate::executor::now_ms(),
+                        },
+                        cx,
+                    );
+                });
+            }
+            // r10 follow-up: the space notes the sheets have now, as each
+            // draws it, in the script's log (`{"page":"space_notes"}`).
+            Some("space_notes") => {
+                let view = self.browser_host(cx).read(cx).view.clone();
+                let worded = |note: &vela_core::app::dapp_browser::DbrSpaceNote| {
+                    self.loc.t_text(
+                        &note.key,
+                        "network",
+                        &crate::flows::live::chain_name(note.chain_id),
+                    )
+                };
+                let consent = view.consent.as_ref().map(|c| {
+                    (
+                        c.origin.clone(),
+                        c.chain_id,
+                        c.space_note.as_ref().map(worded),
+                    )
+                });
+                let signing = view
+                    .signing
+                    .as_ref()
+                    .map(|s| (s.id.clone(), s.space_note.as_ref().map(worded)));
+                let sheet = self.signing_host.as_ref().and_then(|host| {
+                    let request = host.read(cx).view.request.clone()?;
+                    let note = request.space_note?;
+                    Some((
+                        request.id,
+                        note.chain_id,
+                        self.loc.t_text(
+                            &note.key,
+                            "network",
+                            &crate::flows::live::chain_name(note.chain_id),
+                        ),
+                    ))
+                });
+                crate::multisig::dev_script::note(&format!(
+                    "space_notes panel {:?} consent {consent:?} signing {signing:?} sheet {sheet:?}",
+                    self.panel
+                ));
+            }
             // What the browser holds now, in the script's log.
             Some("tabs") => {
                 let explore = resident::resident::<ExploreSites>(cx).read(cx).view();
