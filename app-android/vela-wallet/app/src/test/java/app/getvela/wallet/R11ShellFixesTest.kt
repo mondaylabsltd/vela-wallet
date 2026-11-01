@@ -146,6 +146,69 @@ class R11ShellFixesTest {
         assertTrue(MultisigHub.Round.read(accounts, view(listOf(1), readAt = 600, followedReadAt = 650), since = 500))
     }
 
+    // -- r11-3: a multisig whose money lives in the other space ----------------------------
+
+    /**
+     * r11-3 (Android, iOS; the desktop's r10-4): an Arc-only multisig added
+     * with Mainnet in front read "$0.00", "No activity yet", "Updated now".
+     * Where it lives is said from the record's networks and the core's word
+     * on which space each is in; the home draws the note in place of the
+     * figures (`WalletScreen.otherSpace`).
+     */
+    @Test
+    fun a_multisig_used_only_in_the_other_space_says_where_it_lives() {
+        val mainnet = listOf(1, 100, 8453)
+        val testnet = listOf(5042002, 11155111)
+        val elsewhere = app.getvela.wallet.feature.multisig.OtherSpace.livesElsewhere(listOf(5042002), here = mainnet, other = testnet)
+        assertEquals(listOf(5042002), elsewhere)
+        assertEquals(
+            "Used on Arc Testnet · Testnet space",
+            app.getvela.wallet.feature.multisig.OtherSpace.line(words(), elsewhere, strings.t(app.getvela.wallet.core.i18n.I18nKeys.NetworkSpace.HEADING_TESTNET)),
+        )
+        // One of its networks is here: the home as it is.
+        assertTrue(app.getvela.wallet.feature.multisig.OtherSpace.livesElsewhere(listOf(5042002, 100), here = mainnet, other = testnet).isEmpty())
+        // A network in neither list (taken off the person's lists): nothing to switch to.
+        assertTrue(app.getvela.wallet.feature.multisig.OtherSpace.livesElsewhere(listOf(777), here = mainnet, other = testnet).isEmpty())
+        assertTrue(app.getvela.wallet.feature.multisig.OtherSpace.livesElsewhere(emptyList(), here = mainnet, other = testnet).isEmpty())
+    }
+
+    // -- r11-7: a dead RPC in the testnet space ------------------------------------------------
+
+    /**
+     * r11-7: the RPC dead while the app was up — the stamp aged ("Updated 3m")
+     * and no line said why (the web: "Can't reach Arc Testnet right now").
+     * The testnet space's hero has no figure, and still says the core's
+     * unreachable list.
+     */
+    @Test
+    fun the_testnet_hero_says_the_network_it_cannot_reach() {
+        val view = app.getvela.wallet.feature.wallet.core.BalanceView(
+            address = "0xabc",
+            tokens = listOf(app.getvela.wallet.feature.wallet.core.BalanceToken(chain_id = 5042002, symbol = "USDC", name = "USDC", balance = "2", decimals = 18, price_usd = 1.0)),
+            cached_total_usd = 2.0,
+            last_refreshed_at_ms = 1.0,
+            unreachable_networks = listOf(app.getvela.wallet.feature.wallet.core.UnreachableNetwork(5042002, "held", 2.0, "assets.lastSeen")),
+            unreachable_key = "assets.unreachableOne",
+        )
+        val home = app.getvela.wallet.feature.wallet.WalletLive.home(
+            app.getvela.wallet.feature.wallet.WalletFixtures.buildMobileState(app.getvela.wallet.feature.wallet.WalletScreenState.H1, strings),
+            view, app.getvela.wallet.feature.wallet.core.FeedView(),
+            app.getvela.wallet.feature.settings.core.CurrencyView(code = "USD", committed = true), strings, mapOf(5042002 to "Arc Testnet"),
+            noValue = strings.t(app.getvela.wallet.core.i18n.I18nKeys.NetworkSpace.NO_VALUE),
+        )
+        assertEquals(app.getvela.wallet.feature.wallet.BalanceStateKind.NoValue, home.balance.state)
+        assertEquals("Can't reach Arc Testnet right now", home.balance.status?.text)
+        assertNull("never 'live' in a space with no value", home.balance.liveText)
+        // Every network answered: nothing under the words.
+        val fine = app.getvela.wallet.feature.wallet.WalletLive.home(
+            app.getvela.wallet.feature.wallet.WalletFixtures.buildMobileState(app.getvela.wallet.feature.wallet.WalletScreenState.H1, strings),
+            view.copy(unreachable_networks = emptyList(), unreachable_key = null, display_total_usd = 2.0), app.getvela.wallet.feature.wallet.core.FeedView(),
+            app.getvela.wallet.feature.settings.core.CurrencyView(code = "USD", committed = true), strings, mapOf(5042002 to "Arc Testnet"),
+            noValue = strings.t(app.getvela.wallet.core.i18n.I18nKeys.NetworkSpace.NO_VALUE),
+        )
+        assertNull(fine.balance.status)
+    }
+
     /** r11-1: who is looking — resumed is the person; away needs a round to measure from; a sheet over the app is neither. */
     @Test
     fun who_is_looking() {

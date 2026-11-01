@@ -452,8 +452,11 @@ object WalletLive {
         if (view.hidden) return live.copy(state = BalanceStateKind.Hidden, integer = BALANCE_MASK, decimals = null)
         // The testnet space (spec 105): no figure at all, and no currency
         // beside the label — said in the figure's place, as the web says it.
-        // The line under it says only "Checking…" while the first read is
-        // out: "live" and "can't reach" are about money this space has none of.
+        // "Live" is about money this space has none of; the line under it
+        // still says what the wallet has to say (r11-7, the web's home-1):
+        // the network it cannot reach — the core's `unreachable_networks` —
+        // or that what is shown is the last read. A warm outage drew only an
+        // ageing "Updated 3m" beside "Can't reach Arc Testnet" on the web.
         if (noValue != null) {
             return live.copy(
                 state = BalanceStateKind.NoValue,
@@ -462,7 +465,7 @@ object WalletLive {
                 currency = "",
                 noValueText = noValue,
                 liveText = null,
-                status = null,
+                status = if (view.checking_key != null) null else spaceStatus(view, strings, chainNames),
             )
         }
         return live
@@ -591,6 +594,25 @@ object WalletLive {
             view.notice == BalanceNotice.Unpriced ->
                 BalanceStatusModel(BalanceStatusKind.Warning, strings.t(I18nKeys.Wallet.BALANCE_UNPRICED))
             else -> null
+        }
+    }
+
+    /**
+     * r11-7: the line under a space with no value (the testnet space) — the
+     * web's `networkStatus`: the networks the wallet cannot reach (the
+     * core's list and sentence), the read failing inside Vela, nothing read
+     * at all, or the figure being the last read. Never "unpriced": nothing
+     * here is priced.
+     */
+    internal fun spaceStatus(view: BalanceView, strings: VelaStrings, chainNames: Map<Int, String>): BalanceStatusModel? {
+        view.internal_key?.let { return BalanceStatusModel(BalanceStatusKind.Warning, strings.t(it)) }
+        unreachableLine(view, strings, chainNames)?.let { return BalanceStatusModel(BalanceStatusKind.Warning, it) }
+        if (view.unreachable) return BalanceStatusModel(BalanceStatusKind.Warning, strings.t(I18nKeys.Wallet.BALANCE_UNREACHABLE))
+        val onCache = view.display_total_usd == null && view.cached_total_usd != null
+        return if (onCache || view.notice == BalanceNotice.StillUpdating) {
+            BalanceStatusModel(BalanceStatusKind.Refreshing, strings.t(I18nKeys.Wallet.BALANCE_STALE))
+        } else {
+            null
         }
     }
 
