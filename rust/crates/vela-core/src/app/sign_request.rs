@@ -977,6 +977,12 @@ pub enum Event {
     /// in-wallet chain switch (`id: None`). `chain_id_param` is the raw
     /// `params[0].chainId` string — hex or decimal, parsed here so the
     /// -32602 / 4902 split matches `dapp-connection.tsx:354-388`.
+    /// r10 follow-up: the request `id` came from a site a network-space
+    /// switch moved to `chain_id` (the in-app browser's
+    /// `DbrSigningView.space_note`, the extension's request record): its
+    /// sheet says so once ([`SignRequestView::space_note`]). Send it right
+    /// after [`Event::RequestArrived`]; for any other id it is nothing.
+    SpaceNoted { id: String, chain_id: u32 },
     ChainSwitchRequested {
         id: Option<String>,
         transport_id: Option<String>,
@@ -1514,6 +1520,8 @@ struct Pending {
     dapp: Option<SignDappIdentity>,
     /// [`Event::RequestArrived`]'s `first_party`, kept for the view.
     first_party: bool,
+    /// r10 follow-up: [`Event::SpaceNoted`]'s network, for the view.
+    space_note: Option<u32>,
     /// An error response was already sent for this id — a later approve must
     /// never produce a second response for the same id (invariant ① family).
     responded: bool,
@@ -1928,6 +1936,20 @@ pub struct SignRequestView {
     /// headline is the intent beside the close, and the reading's rows say
     /// the network. `false` for every request a page raised.
     pub first_party: bool,
+    /// r10 follow-up: a network-space switch moved this request's site to
+    /// `chain_id` since its last request ([`Event::SpaceNoted`]): one line
+    /// under the requester — `key` (`connect.browser.spaceMoved`) with
+    /// `network` = that chain's name. Absent otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub space_note: Option<SignSpaceNote>,
+}
+
+/// [`SignRequestView::space_note`].
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct SignSpaceNote {
+    pub chain_id: u32,
+    pub key: String,
 }
 
 /// Why a request is refused outright, for the sheet to explain (spec 081).
@@ -2155,6 +2177,13 @@ impl App for SignRequest {
                 model.last_opts = Some(opts.clone());
                 approve_with(model, opts, false)
             }
+            Event::SpaceNoted { id, chain_id } => match model.pending.as_mut() {
+                Some(pending) if pending.id == id && chain_id > 0 => {
+                    pending.space_note = Some(chain_id);
+                    render()
+                }
+                _ => Command::done(),
+            },
             Event::RejectTapped => reject(model),
             Event::DismissTapped => dismiss(model),
             Event::RetryTapped => retry(model),
@@ -2311,6 +2340,10 @@ impl App for SignRequest {
                 .get(model.active_index as usize)
                 .map(|a| a.address.clone()),
             first_party: p.first_party,
+            space_note: p.space_note.map(|chain_id| SignSpaceNote {
+                chain_id,
+                key: super::network_space::SPACE_MOVED_KEY.to_owned(),
+            }),
         });
 
         let surface = if model.pending.is_none() {
@@ -2744,6 +2777,7 @@ fn on_request_arrived(model: &mut Model, arrival: Arrival) -> Command<SignEffect
             per_request_chain: arrival.per_request_chain,
             dapp: arrival.dapp,
             first_party: arrival.first_party,
+            space_note: None,
             responded: false,
             held: None,
             sim: SimWait::None,
@@ -2766,6 +2800,7 @@ fn on_request_arrived(model: &mut Model, arrival: Arrival) -> Command<SignEffect
         per_request_chain: arrival.per_request_chain,
         dapp: arrival.dapp,
         first_party: arrival.first_party,
+        space_note: None,
         responded: false,
         held: None,
         sim: SimWait::None,

@@ -645,7 +645,9 @@
         "signerNotDiscoverable": "Passkey này không ký được ở đây",
         "signerFailed": "Xác thực passkey thất bại",
         "signingPage": "Trang ký đã không ký",
-        "badRpc": "Trang web không đưa RPC dùng được cho mạng này"
+        "badRpc": "Trang web không đưa RPC dùng được cho mạng này",
+        "otherSpaceTestnet": "Mạng này thuộc không gian testnet của Vela",
+        "otherSpaceMainnet": "Mạng này thuộc không gian mainnet của Vela"
       },
       "requests": "Yêu cầu gần đây",
       "noRequests": "Chưa có yêu cầu",

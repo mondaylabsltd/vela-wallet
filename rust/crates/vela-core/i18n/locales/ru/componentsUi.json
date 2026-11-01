@@ -645,7 +645,9 @@
         "signerNotDiscoverable": "Этот passkey не может подписывать здесь",
         "signerFailed": "Не удалось подтвердить passkey",
         "signingPage": "Страница подписи не подписала",
-        "badRpc": "Сайт не дал пригодного RPC для этой сети"
+        "badRpc": "Сайт не дал пригодного RPC для этой сети",
+        "otherSpaceTestnet": "Эта сеть — в пространстве тестовых сетей Vela",
+        "otherSpaceMainnet": "Эта сеть — в пространстве основных сетей Vela"
       },
       "requests": "Недавние запросы",
       "noRequests": "Запросов пока нет",

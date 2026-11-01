@@ -1177,7 +1177,13 @@
    "signInTitle": "Connectez-vous pour continuer",
    "multisigNoMessagesTitle": "Un multisig ne peut pas encore signer de messages",
    "multisigNoMessagesBody": "{{host}} a demandé à ce multisig de signer un message. La signature d’un multisig exige l’approbation de ses membres, que Vela ne recueille pas encore pour les messages : le site recevra donc un refus. Les transactions fonctionnent toujours : elles deviennent des propositions que les membres approuvent.",
-   "multisigConnectNote": "C’est un multisig : le site peut proposer des transactions que ses membres approuvent, mais pas lui demander de signer des messages."
+   "multisigConnectNote": "C’est un multisig : le site peut proposer des transactions que ses membres approuvent, mais pas lui demander de signer des messages.",
+   "switchRefusal": {
+    "unknown": "La chaîne {{chainId}} ne fait pas partie des réseaux de Vela",
+    "otherSpaceTestnet": "La chaîne {{chainId}} est l’un des réseaux testnet de Vela ; Vela affiche ses réseaux mainnet. Passez à l’espace testnet dans Vela pour l’utiliser.",
+    "otherSpaceMainnet": "La chaîne {{chainId}} est l’un des réseaux mainnet de Vela ; Vela affiche ses réseaux testnet. Passez à l’espace mainnet dans Vela pour l’utiliser."
+   },
+   "spaceMoved": "Le réseau a changé avec l’espace : ce site est maintenant sur {{network}}."
   },
   "ext": {
    "installedNote": "Rechargez les onglets déjà ouverts pour que leurs sites trouvent Vela.",
@@ -1982,7 +1988,9 @@
     "signerNotDiscoverable": "Cette passkey ne peut pas signer ici",
     "signerFailed": "La passkey a échoué",
     "signingPage": "La page de signature ne l'a pas signé",
-    "badRpc": "Le site n'a fourni aucun RPC utilisable pour ce réseau"
+    "badRpc": "Le site n'a fourni aucun RPC utilisable pour ce réseau",
+    "otherSpaceTestnet": "Ce réseau est dans l’espace testnet de Vela",
+    "otherSpaceMainnet": "Ce réseau est dans l’espace mainnet de Vela"
    },
    "requests": "Demandes récentes",
    "noRequests": "Aucune demande pour le moment",

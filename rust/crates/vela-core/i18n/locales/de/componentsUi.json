@@ -645,7 +645,9 @@
         "signerNotDiscoverable": "Dieser Passkey kann hier nicht signieren",
         "signerFailed": "Der Passkey ist fehlgeschlagen",
         "signingPage": "Die Signaturseite hat nicht signiert",
-        "badRpc": "Die Website nannte keinen nutzbaren RPC für dieses Netzwerk"
+        "badRpc": "Die Website nannte keinen nutzbaren RPC für dieses Netzwerk",
+        "otherSpaceTestnet": "Dieses Netzwerk ist im Testnet-Bereich von Vela",
+        "otherSpaceMainnet": "Dieses Netzwerk ist im Mainnet-Bereich von Vela"
       },
       "requests": "Letzte Anfragen",
       "noRequests": "Noch keine Anfragen",

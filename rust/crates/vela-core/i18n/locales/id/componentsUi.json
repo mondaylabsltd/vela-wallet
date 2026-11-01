@@ -645,7 +645,9 @@
         "signerNotDiscoverable": "Passkey ini tidak bisa menandatangani di sini",
         "signerFailed": "Prompt passkey gagal",
         "signingPage": "Halaman tanda tangan tidak menandatanganinya",
-        "badRpc": "Situs tidak memberi RPC yang bisa dipakai untuk jaringan ini"
+        "badRpc": "Situs tidak memberi RPC yang bisa dipakai untuk jaringan ini",
+        "otherSpaceTestnet": "Jaringan ini ada di ruang testnet Vela",
+        "otherSpaceMainnet": "Jaringan ini ada di ruang mainnet Vela"
       },
       "requests": "Permintaan terbaru",
       "noRequests": "Belum ada permintaan",

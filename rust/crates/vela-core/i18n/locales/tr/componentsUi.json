@@ -645,7 +645,9 @@
         "signerNotDiscoverable": "Bu passkey burada imzalayamaz",
         "signerFailed": "Passkey istemi başarısız oldu",
         "signingPage": "İmza sayfası imzalamadı",
-        "badRpc": "Site bu ağ için kullanılabilir bir RPC vermedi"
+        "badRpc": "Site bu ağ için kullanılabilir bir RPC vermedi",
+        "otherSpaceTestnet": "Bu ağ Vela'nın test ağı alanında",
+        "otherSpaceMainnet": "Bu ağ Vela'nın ana ağ alanında"
       },
       "requests": "Son istekler",
       "noRequests": "Henüz istek yok",

@@ -1172,7 +1172,13 @@
    "signInTitle": "Devam etmek için oturum aç",
    "multisigNoMessagesTitle": "Çoklu imza henüz mesaj imzalayamıyor",
    "multisigNoMessagesBody": "{{host}} bu çoklu imzadan bir mesaj imzalamasını istedi. Çoklu imzanın imzası üyelerinin onayını gerektirir; Vela mesajlar için bunu henüz toplamıyor, bu yüzden siteye hayır denecek. İşlemler yine çalışır: üyelerin onayladığı tekliflere dönüşür.",
-   "multisigConnectNote": "Bu bir çoklu imza: site üyelerin onaylayacağı işlemler önerebilir ama mesaj imzalamasını isteyemez."
+   "multisigConnectNote": "Bu bir çoklu imza: site üyelerin onaylayacağı işlemler önerebilir ama mesaj imzalamasını isteyemez.",
+   "switchRefusal": {
+    "unknown": "{{chainId}} zinciri Vela'nın ağlarında yok",
+    "otherSpaceTestnet": "{{chainId}} zinciri Vela'nın test ağlarından biri; Vela şu anda ana ağlarını gösteriyor. Kullanmak için Vela'da test ağı alanına geçin.",
+    "otherSpaceMainnet": "{{chainId}} zinciri Vela'nın ana ağlarından biri; Vela şu anda test ağlarını gösteriyor. Kullanmak için Vela'da ana ağ alanına geçin."
+   },
+   "spaceMoved": "Ağ, alanla birlikte değişti: bu site artık {{network}} üzerinde."
   },
   "ext": {
    "installedNote": "Sitelerin Vela'yı bulabilmesi için önceden açık sekmeleri yenileyin.",
@@ -1977,7 +1983,9 @@
     "signerNotDiscoverable": "Bu passkey burada imzalayamaz",
     "signerFailed": "Passkey istemi başarısız oldu",
     "signingPage": "İmza sayfası imzalamadı",
-    "badRpc": "Site bu ağ için kullanılabilir bir RPC vermedi"
+    "badRpc": "Site bu ağ için kullanılabilir bir RPC vermedi",
+    "otherSpaceTestnet": "Bu ağ Vela'nın test ağı alanında",
+    "otherSpaceMainnet": "Bu ağ Vela'nın ana ağ alanında"
    },
    "requests": "Son istekler",
    "noRequests": "Henüz istek yok",

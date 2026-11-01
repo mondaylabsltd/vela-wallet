@@ -645,7 +645,9 @@
         "signerNotDiscoverable": "이 패스키로는 여기서 서명할 수 없습니다",
         "signerFailed": "패스키 인증에 실패했습니다",
         "signingPage": "서명 페이지에서 서명되지 않았습니다",
-        "badRpc": "사이트가 이 네트워크에 쓸 수 있는 RPC를 주지 않았습니다"
+        "badRpc": "사이트가 이 네트워크에 쓸 수 있는 RPC를 주지 않았습니다",
+        "otherSpaceTestnet": "이 네트워크는 Vela의 테스트넷 공간에 있습니다",
+        "otherSpaceMainnet": "이 네트워크는 Vela의 메인넷 공간에 있습니다"
       },
       "requests": "최근 요청",
       "noRequests": "아직 요청 없음",

@@ -151,6 +151,136 @@ pub fn site_may_switch_to(space_chain_ids: &[u32], chain_id: u32) -> bool {
     space_chain_ids.contains(&chain_id)
 }
 
+/// Why a page may not move a site to a network (its 4902): the network is
+/// one of the OTHER space's, or Vela does not have it at all.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum SwitchRefused {
+    OtherSpace,
+    Unknown,
+}
+
+/// [`site_may_switch_to`], said as why not (r10 follow-up): `None` for a
+/// network of the space in front; [`SwitchRefused::OtherSpace`] for one Vela
+/// has in the other space (`known_chain_ids`: every network Vela has, both
+/// spaces); [`SwitchRefused::Unknown`] otherwise. The extension worker's twin
+/// is `switchRefusal`; both are held to `site-start-chain.json` `switches`.
+#[must_use]
+pub fn site_switch_refused(
+    space_chain_ids: &[u32],
+    known_chain_ids: &[u32],
+    chain_id: u32,
+) -> Option<SwitchRefused> {
+    if site_may_switch_to(space_chain_ids, chain_id) {
+        None
+    } else if known_chain_ids.contains(&chain_id) {
+        Some(SwitchRefused::OtherSpace)
+    } else {
+        Some(SwitchRefused::Unknown)
+    }
+}
+
+/// The corpus key of the sentence a page is told for a refused switch — the
+/// space in front is `front`, so an other-space network is the other one's.
+#[must_use]
+pub fn switch_refusal_key(refused: SwitchRefused, front: NetworkSpace) -> &'static str {
+    match (refused, front) {
+        (SwitchRefused::Unknown, _) => "connect.browser.switchRefusal.unknown",
+        (SwitchRefused::OtherSpace, NetworkSpace::Mainnet) => {
+            "connect.browser.switchRefusal.otherSpaceTestnet"
+        }
+        (SwitchRefused::OtherSpace, NetworkSpace::Testnet) => {
+            "connect.browser.switchRefusal.otherSpaceMainnet"
+        }
+    }
+}
+
+/// The sentence a page is told for a refused switch (the 4902's `message`):
+/// the English of [`switch_refusal_key`] with the chain filled in — word for
+/// word the corpus's `en` (a test holds it there) and the extension worker's
+/// `switchRefusal` (the shared vectors hold it there). A provider error's
+/// message is read by the site's developer and often shown as it is; one
+/// sentence across the in-app browsers and the extension, whatever the
+/// language of the wallet, is what lets a site recognise it. The person's
+/// own words are the status line's ([`switch_refusal_status_key`]).
+#[must_use]
+pub fn switch_refusal_message(
+    refused: SwitchRefused,
+    front: NetworkSpace,
+    chain_id: u32,
+) -> String {
+    let (other, shown) = match front {
+        NetworkSpace::Mainnet => ("testnet", "mainnet"),
+        NetworkSpace::Testnet => ("mainnet", "testnet"),
+    };
+    match refused {
+        SwitchRefused::Unknown => format!("Chain {chain_id} is not in Vela's networks"),
+        SwitchRefused::OtherSpace => format!(
+            "Chain {chain_id} is one of Vela's {other} networks; Vela is showing its {shown} \
+             networks. Switch to the {other} space in Vela to use it."
+        ),
+    }
+}
+
+/// The browser status line's words for a refused switch (corpus keys, no
+/// arguments — every shell draws `DbrFailureNote.key` as it is).
+#[must_use]
+pub fn switch_refusal_status_key(refused: SwitchRefused, front: NetworkSpace) -> &'static str {
+    match (refused, front) {
+        (SwitchRefused::Unknown, _) => "componentsUi.browserStatus.reason.unknownChain",
+        (SwitchRefused::OtherSpace, NetworkSpace::Mainnet) => {
+            "componentsUi.browserStatus.reason.otherSpaceTestnet"
+        }
+        (SwitchRefused::OtherSpace, NetworkSpace::Testnet) => {
+            "componentsUi.browserStatus.reason.otherSpaceMainnet"
+        }
+    }
+}
+
+/// The one line on a moved site's next request (r10 follow-up): "The
+/// network changed with the space: this site is now on {{network}}." —
+/// `network` is the name of the chain it moved to.
+pub const SPACE_MOVED_KEY: &str = "connect.browser.spaceMoved";
+
+/// A site and the network Vela keeps for it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct SiteChain {
+    pub origin: String,
+    pub chain_id: u32,
+}
+
+/// What a space switch does to the sites (r10 follow-up, the owner's spec-105
+/// line: test value is never mistaken for real). Every site Vela keeps a
+/// network for — connected, or switched by its page — whose network is not
+/// one of the new space's moves to the network a new site starts on there
+/// ([`site_start_chain_for`]: the one last used in that space, else one the
+/// account lives on, else the space's first). The rest stay. In `sites`'
+/// order. The in-app browser and the extension worker (`spaceSwitchMoves`)
+/// both do this; `site-start-chain.json` `space_switches` holds them to it.
+#[must_use]
+pub fn sites_moved_by_space_switch(
+    space_chain_ids: &[u32],
+    last_used: Option<u32>,
+    account_chains: &[u32],
+    sites: &[SiteChain],
+) -> Vec<SiteChain> {
+    if space_chain_ids.is_empty() {
+        // A space with no networks says nothing to move to.
+        return Vec::new();
+    }
+    let start = site_start_chain_for(space_chain_ids, last_used, account_chains);
+    sites
+        .iter()
+        .filter(|site| site.chain_id > 0 && !space_chain_ids.contains(&site.chain_id))
+        .map(|site| SiteChain {
+            origin: site.origin.clone(),
+            chain_id: start,
+        })
+        .collect()
+}
+
 /// [`chain_is_testnet`] for a shell holding the stored `vela.customNetworks`
 /// as JSON (the core's own snake-case records; unreadable is none).
 #[must_use]

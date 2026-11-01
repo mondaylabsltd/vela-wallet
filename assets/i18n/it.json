@@ -1177,7 +1177,13 @@
    "signInTitle": "Accedi per continuare",
    "multisigNoMessagesTitle": "Un multisig non può ancora firmare messaggi",
    "multisigNoMessagesBody": "{{host}} ha chiesto a questo multisig di firmare un messaggio. La firma di un multisig richiede le approvazioni dei membri, che Vela non raccoglie ancora per i messaggi, quindi il sito riceverà un rifiuto. Le transazioni funzionano comunque: diventano proposte che i membri approvano.",
-   "multisigConnectNote": "È un multisig: il sito può proporre transazioni da far approvare ai membri, ma non può chiedergli di firmare messaggi."
+   "multisigConnectNote": "È un multisig: il sito può proporre transazioni da far approvare ai membri, ma non può chiedergli di firmare messaggi.",
+   "switchRefusal": {
+    "unknown": "La chain {{chainId}} non è tra le reti di Vela",
+    "otherSpaceTestnet": "La chain {{chainId}} è una delle reti testnet di Vela; Vela sta mostrando le sue reti mainnet. Passa allo spazio testnet in Vela per usarla.",
+    "otherSpaceMainnet": "La chain {{chainId}} è una delle reti mainnet di Vela; Vela sta mostrando le sue reti testnet. Passa allo spazio mainnet in Vela per usarla."
+   },
+   "spaceMoved": "La rete è cambiata con lo spazio: questo sito ora è su {{network}}."
   },
   "ext": {
    "installedNote": "Ricarica le schede già aperte perché i loro siti trovino Vela.",
@@ -1982,7 +1988,9 @@
     "signerNotDiscoverable": "Questa passkey non può firmare qui",
     "signerFailed": "La passkey non è riuscita",
     "signingPage": "La pagina di firma non l'ha firmato",
-    "badRpc": "Il sito non ha fornito un RPC utilizzabile per questa rete"
+    "badRpc": "Il sito non ha fornito un RPC utilizzabile per questa rete",
+    "otherSpaceTestnet": "Questa rete è nello spazio testnet di Vela",
+    "otherSpaceMainnet": "Questa rete è nello spazio mainnet di Vela"
    },
    "requests": "Richieste recenti",
    "noRequests": "Ancora nessuna richiesta",

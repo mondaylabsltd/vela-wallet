@@ -114,6 +114,7 @@ use super::dapp_rpc::{
     event_json, hex_chain_id, parse_page_message, result_json, DappAddOutcome, DappChainAsk,
     PageMessage, PageRequest, Route,
 };
+use super::network_space::{NetworkSpace, SiteChain, SwitchRefused};
 use super::sign_request::SignResponsePayload;
 
 /// core-ms-2: the bundler method a [`DbrOperation::Read`] names for a
@@ -314,9 +315,27 @@ pub enum Event {
     /// The browser came up: list the stored sites once. Page messages that
     /// arrive before the list are held, not refused.
     Start,
-    /// The chains a site may switch or add to.
+    /// The chains a site may switch or add to: the space in front's. A
+    /// shell that says which space that is sends
+    /// [`Event::SpaceNetworksChanged`] instead.
     NetworksChanged {
         chain_ids: Vec<u32>,
+    },
+    /// r10 follow-up: [`Event::NetworksChanged`], with the space in front
+    /// (`space`) and every network Vela has, both spaces
+    /// (`known_chain_ids`). Send it at start and on every change, in place
+    /// of `networks_changed`. With it a page's switch to the other space's
+    /// network is refused naming that space (the extension's sentence),
+    /// never "not in Vela's networks"; an add of one is refused the same way
+    /// (it never reaches the add sheet); and a space switch moves every site
+    /// whose network is outside the new space to that space's start network
+    /// ([`super::network_space::sites_moved_by_space_switch`]) — its pages
+    /// hear `chainChanged`, and its next request that opens a sheet carries
+    /// one line that says so ([`DbrSpaceNote`]).
+    SpaceNetworksChanged {
+        space: NetworkSpace,
+        chain_ids: Vec<u32>,
+        known_chain_ids: Vec<u32>,
     },
     /// Every wallet address. `None` while unknown — cold-load safe.
     AccountsUpdated {
@@ -553,6 +572,10 @@ struct Tab {
 struct Row {
     doc: String,
     row: DbrRequestRow,
+    /// The status line's words when they say more than the reason's own
+    /// (r10 follow-up: a network of the other space is `unknown_chain` on
+    /// the wire, "This network is in Vela's testnet space" in words).
+    status_key: Option<&'static str>,
 }
 
 #[derive(Clone, Debug)]
@@ -567,6 +590,9 @@ struct ConsentEntry {
 struct Consent {
     origin: String,
     entries: Vec<ConsentEntry>,
+    /// r10 follow-up: the space switch moved this site — the network it went
+    /// to ([`DbrSpaceNote`]).
+    space_note: Option<u32>,
 }
 
 #[derive(Clone, Debug)]
@@ -579,6 +605,9 @@ struct SignJob {
     origin: String,
     /// The chain it was forwarded on — where a batch it is answered for went.
     chain_id: u32,
+    /// r10 follow-up: the space switch moved this site — the network it went
+    /// to ([`DbrSpaceNote`]).
+    space_note: Option<u32>,
 }
 
 /// The add-network request whose sheet is open (spec 100).
@@ -611,6 +640,20 @@ pub struct Model {
     active_address: Option<String>,
     /// r8-21: the active account's own networks (a multisig's), or empty.
     account_chains: Vec<u32>,
+    /// r10 follow-up: the space in front, once a shell says it
+    /// ([`Event::SpaceNetworksChanged`]).
+    space: Option<NetworkSpace>,
+    /// r10 follow-up: every network Vela has, both spaces (empty: not said).
+    known_chains: Vec<u32>,
+    /// r10 follow-up: the network the person last put a site on, per space
+    /// (mainnet, testnet) — where a moved site lands first. This session's.
+    last_used: [Option<u32>; 2],
+    /// A space switch came before the stored sites were read: they move
+    /// once they are.
+    space_move_pending: bool,
+    /// r10 follow-up: sites a space switch moved, and the network each went
+    /// to — said once, on the site's next request that opens a sheet.
+    space_notes: BTreeMap<String, u32>,
     /// Settings' debug mode (spec 091) — which origins [`offers_wallet`] lets in.
     debug_mode: bool,
     tabs: BTreeMap<String, Tab>,
@@ -661,6 +704,27 @@ pub struct DbrConsentView {
     /// `https` only.
     #[serde(default)]
     pub lock: OriginLock,
+    /// r10 follow-up: a space switch moved this site since its last request.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub space_note: Option<DbrSpaceNote>,
+}
+
+/// r10 follow-up: the one line on a moved site's next request — the space
+/// switch put it on `chain_id`. Draw `key` (`connect.browser.spaceMoved`)
+/// with `network` = that chain's name, once, on the sheet this request
+/// opens.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct DbrSpaceNote {
+    pub chain_id: u32,
+    pub key: String,
+}
+
+fn space_note_view(chain_id: Option<u32>) -> Option<DbrSpaceNote> {
+    chain_id.map(|chain_id| DbrSpaceNote {
+        chain_id,
+        key: super::network_space::SPACE_MOVED_KEY.to_owned(),
+    })
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -713,6 +777,10 @@ pub struct DbrSiteView {
 pub struct DbrSigningView {
     pub tab: String,
     pub id: String,
+    /// r10 follow-up: a space switch moved this site since its last request
+    /// (signing only; never on the add-network sheet).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub space_note: Option<DbrSpaceNote>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -761,7 +829,14 @@ impl App for DappBrowser {
                     out.request_list();
                 }
             }
-            Event::NetworksChanged { chain_ids } => model.chains = chain_ids,
+            Event::NetworksChanged { chain_ids } => {
+                networks_changed(model, chain_ids, None, Vec::new(), &mut out);
+            }
+            Event::SpaceNetworksChanged {
+                space,
+                chain_ids,
+                known_chain_ids,
+            } => networks_changed(model, chain_ids, Some(space), known_chain_ids, &mut out),
             Event::AccountNetworks { networks } => model.account_chains = networks,
             Event::DebugModeChanged { on } => debug_mode_changed(model, on, &mut out),
             Event::AccountsUpdated { addresses } => {
@@ -925,6 +1000,8 @@ impl App for DappBrowser {
             } => add_network_answered(model, &tab, &id, &outcome, &mut out),
             Event::SiteChainPicked { origin, chain_id } => {
                 if model.chains.contains(&chain_id) {
+                    model.space_notes.remove(&origin);
+                    note_last_used(model, chain_id);
                     set_site_chain(model, &origin, chain_id, &mut out);
                 }
             }
@@ -1019,6 +1096,7 @@ impl App for DappBrowser {
                 address: model.active_address.clone(),
                 chain_id: site_chain(model, &consent.origin),
                 lock: origin_lock(&consent.origin),
+                space_note: space_note_view(consent.space_note),
             }),
             tabs: model
                 .tabs
@@ -1079,7 +1157,7 @@ impl App for DappBrowser {
                                     layer: row.row.layer?,
                                     reason,
                                     method: row.row.method.clone(),
-                                    key: reason.key().to_owned(),
+                                    key: row.status_key.unwrap_or(reason.key()).to_owned(),
                                 })
                             }),
                         origin,
@@ -1090,11 +1168,13 @@ impl App for DappBrowser {
             signing: model.signing.as_ref().map(|job| DbrSigningView {
                 tab: job.tab.clone(),
                 id: job.id.clone(),
+                space_note: space_note_view(job.space_note),
             }),
             queued_signing: model.sign_queue.len() as u32,
             adding_network: model.adding.as_ref().map(|job| DbrSigningView {
                 tab: job.tab.clone(),
                 id: job.id.clone(),
+                space_note: None,
             }),
             inspector: model.inspected.as_ref().and_then(|id| {
                 let tab = model.tabs.get(id)?;
@@ -1146,6 +1226,8 @@ struct Settled {
     id: String,
     code: Option<i64>,
     why: Option<Why>,
+    /// [`Row::status_key`].
+    status_key: Option<&'static str>,
 }
 
 impl Out {
@@ -1292,6 +1374,118 @@ fn trim_multisig_batches(model: &mut Model) {
     }
 }
 
+/// r10 follow-up: the networks of the space in front, and — with a shell
+/// that says them — which space that is and every network Vela has. A page
+/// whose answer to `eth_chainId` moved hears `chainChanged`; on a space
+/// switch the sites outside the new space move ([`move_sites_to_space`]).
+fn networks_changed(
+    model: &mut Model,
+    chain_ids: Vec<u32>,
+    space: Option<NetworkSpace>,
+    known_chain_ids: Vec<u32>,
+    out: &mut Out,
+) {
+    let open: Vec<String> = open_origins(model);
+    let before: Vec<u32> = open.iter().map(|o| site_chain(model, o)).collect();
+    let switched = matches!((model.space, space), (Some(was), Some(now)) if was != now);
+    model.chains = chain_ids;
+    if space.is_some() {
+        model.space = space;
+    }
+    if !known_chain_ids.is_empty() {
+        model.known_chains = known_chain_ids;
+    }
+    let mut moved: Vec<String> = Vec::new();
+    if switched {
+        if model.ready {
+            moved = move_sites_to_space(model, out);
+        } else {
+            model.space_move_pending = true;
+        }
+    }
+    // A page on a site with no network of its own follows the space's
+    // start; its answer moved, so it is told (a moved site was told above).
+    for (origin, was) in open.iter().zip(before) {
+        let now = site_chain(model, origin);
+        if now != was && !moved.contains(origin) {
+            emit_to_origin(
+                model,
+                origin,
+                "chainChanged",
+                Some(Value::String(hex_chain_id(now))),
+                out,
+            );
+        }
+    }
+}
+
+/// The origins of the pages open now, each once.
+fn open_origins(model: &Model) -> Vec<String> {
+    let mut origins: Vec<String> = Vec::new();
+    for tab in model.tabs.values() {
+        if let Some(origin) = &tab.doc_origin {
+            if tab.doc.is_some() && !origins.contains(origin) {
+                origins.push(origin.clone());
+            }
+        }
+    }
+    origins
+}
+
+/// r10 follow-up (the owner's spec-105 line: test value is never mistaken
+/// for real): every site Vela keeps a network for that is outside the space
+/// now in front moves to the network a new site starts on there; its pages
+/// hear `chainChanged` and its next request says so once. The origins moved.
+fn move_sites_to_space(model: &mut Model, out: &mut Out) -> Vec<String> {
+    let kept: Vec<SiteChain> = model
+        .sites
+        .iter()
+        .filter_map(|(origin, site)| {
+            let chain_id = site
+                .chain_id
+                .or(site.grant.as_ref().map(|grant| grant.chain_id))
+                .filter(|chain| *chain > 0)?;
+            Some(SiteChain {
+                origin: origin.clone(),
+                chain_id,
+            })
+        })
+        .collect();
+    let last_used = model
+        .space
+        .and_then(|space| model.last_used[space_slot(space)]);
+    let moves = super::network_space::sites_moved_by_space_switch(
+        &model.chains,
+        last_used,
+        &model.account_chains,
+        &kept,
+    );
+    let mut origins = Vec::new();
+    for moved in moves {
+        set_site_chain(model, &moved.origin, moved.chain_id, out);
+        model
+            .space_notes
+            .insert(moved.origin.clone(), moved.chain_id);
+        origins.push(moved.origin);
+    }
+    origins
+}
+
+fn space_slot(space: NetworkSpace) -> usize {
+    match space {
+        NetworkSpace::Mainnet => 0,
+        NetworkSpace::Testnet => 1,
+    }
+}
+
+/// The network the person (or their page) last put a site on, in the space
+/// in front.
+fn note_last_used(model: &mut Model, chain_id: u32) {
+    if let Some(space) = model.space {
+        model.last_used[space_slot(space)] = Some(chain_id);
+    }
+}
+
 fn sites_listed(model: &mut Model, sites: Vec<DbrStoredSite>, out: &mut Out) {
     if model.ready {
         return;
@@ -1321,6 +1515,9 @@ fn sites_listed(model: &mut Model, sites: Vec<DbrStoredSite>, out: &mut Out) {
     if model.in_space {
         // A launch inside a dev space: what the store holds is the person's.
         set_aside(model, out);
+    }
+    if std::mem::take(&mut model.space_move_pending) {
+        move_sites_to_space(model, out);
     }
     reconcile_grants(model, None, out);
     for held in std::mem::take(&mut model.held) {
@@ -1618,6 +1815,7 @@ fn retire_document(model: &mut Model, tab_id: &str, deliver: bool, why: Why, out
             id: id.clone(),
             code: Some(4900),
             why: Some(why),
+            status_key: None,
         });
     }
 
@@ -1898,14 +2096,14 @@ fn handle_request(model: &mut Model, tab_id: &str, request: PageRequest, out: &m
                 id: id.clone(),
                 method: request.method,
             };
-            model
-                .consent
-                .get_or_insert_with(|| Consent {
-                    origin,
-                    entries: Vec::new(),
-                })
-                .entries
-                .push(entry);
+            let space_note = model.space_notes.remove(&origin);
+            let consent = model.consent.get_or_insert_with(|| Consent {
+                origin,
+                entries: Vec::new(),
+                space_note: None,
+            });
+            consent.space_note = consent.space_note.or(space_note);
+            consent.entries.push(entry);
             open(model, tab_id, &id, OpenKind::Consent);
         }
         route @ (Route::SwitchChain | Route::AddChain) => {
@@ -1921,21 +2119,46 @@ fn handle_request(model: &mut Model, tab_id: &str, request: PageRequest, out: &m
                 );
                 return;
             };
-            if super::network_space::site_may_switch_to(&model.chains, wanted) {
-                set_site_chain(model, &origin, wanted, out);
-                deliver_result(tab_id, &doc, &id, Value::Null, out);
-            } else if route == Route::AddChain {
-                ask_to_add(model, tab_id, &doc, &id, origin, &request.params, out);
-            } else {
-                deliver_error(
-                    tab_id,
-                    &doc,
-                    &id,
-                    4902,
-                    &format!("Chain {wanted} is not in Vela's networks"),
-                    (DbrLayer::Wallet, DbrReason::UnknownChain),
-                    out,
-                );
+            match super::network_space::site_switch_refused(
+                &model.chains,
+                &model.known_chains,
+                wanted,
+            ) {
+                None => {
+                    // The page's own choice: whatever the space switch said
+                    // of this site is said.
+                    model.space_notes.remove(&origin);
+                    note_last_used(model, wanted);
+                    set_site_chain(model, &origin, wanted, out);
+                    deliver_result(tab_id, &doc, &id, Value::Null, out);
+                }
+                // A network Vela lacks may be added (spec 100) — never one
+                // of the other space: moving between spaces is the person's
+                // own choice in Vela (spec 105's line).
+                Some(SwitchRefused::Unknown) if route == Route::AddChain => {
+                    ask_to_add(model, tab_id, &doc, &id, origin, &request.params, out);
+                }
+                Some(refused) => {
+                    let front = model.space.unwrap_or_default();
+                    deliver_unrecorded_error(
+                        tab_id,
+                        &doc,
+                        &id,
+                        4902,
+                        &super::network_space::switch_refusal_message(refused, front, wanted),
+                        out,
+                    );
+                    out.settled.push(Settled {
+                        tab: tab_id.to_owned(),
+                        doc: doc.clone(),
+                        id: id.clone(),
+                        code: Some(4902),
+                        why: Some((DbrLayer::Wallet, DbrReason::UnknownChain)),
+                        status_key: Some(super::network_space::switch_refusal_status_key(
+                            refused, front,
+                        )),
+                    });
+                }
             }
         }
         Route::Sign => {
@@ -1983,6 +2206,7 @@ fn handle_request(model: &mut Model, tab_id: &str, request: PageRequest, out: &m
                     return;
                 }
             }
+            let space_note = model.space_notes.remove(&origin);
             let job = SignJob {
                 tab: tab_id.to_owned(),
                 doc,
@@ -1991,6 +2215,7 @@ fn handle_request(model: &mut Model, tab_id: &str, request: PageRequest, out: &m
                 params_json: request.params.to_string(),
                 origin,
                 chain_id,
+                space_note,
             };
             if model.signing.is_none() {
                 open(model, tab_id, &id, OpenKind::Signing);
@@ -2753,6 +2978,7 @@ impl Out {
             id: id.to_owned(),
             code,
             why,
+            status_key: None,
         });
     }
 }
@@ -2815,6 +3041,7 @@ fn open_row(
             layer: None,
             reason: None,
         },
+        status_key: None,
     });
     while tab.rows.len() > REQUEST_RECORD_CAP {
         tab.rows.pop_front();
@@ -2857,6 +3084,15 @@ fn record_settled(model: &mut Model, out: &mut Out) {
         let Some(tab) = model.tabs.get_mut(&settled.tab) else {
             continue;
         };
+        if let Some(key) = settled.status_key {
+            if let Some(row) = tab.rows.iter_mut().rev().find(|row| {
+                row.doc == settled.doc
+                    && row.row.id == settled.id
+                    && row.row.outcome == DbrOutcome::Open
+            }) {
+                row.status_key = Some(key);
+            }
+        }
         let Some(row) = open_row_mut(tab, &settled.doc, &settled.id) else {
             continue;
         };

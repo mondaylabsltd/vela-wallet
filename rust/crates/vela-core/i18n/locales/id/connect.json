@@ -121,7 +121,13 @@
       "signInTitle": "Masuk untuk melanjutkan",
       "multisigNoMessagesTitle": "Multisig belum bisa menandatangani pesan",
       "multisigNoMessagesBody": "{{host}} meminta multisig ini menandatangani pesan. Tanda tangan multisig butuh persetujuan anggotanya, yang belum dikumpulkan Vela untuk pesan, jadi situs akan menerima penolakan. Transaksi tetap bisa: menjadi usulan yang disetujui anggota.",
-      "multisigConnectNote": "Ini multisig: situs bisa mengusulkan transaksi untuk disetujui anggota, tetapi tidak bisa meminta tanda tangan pesan."
+      "multisigConnectNote": "Ini multisig: situs bisa mengusulkan transaksi untuk disetujui anggota, tetapi tidak bisa meminta tanda tangan pesan.",
+      "switchRefusal": {
+        "unknown": "Chain {{chainId}} tidak ada di jaringan Vela",
+        "otherSpaceTestnet": "Chain {{chainId}} adalah salah satu jaringan testnet Vela; Vela sedang menampilkan jaringan mainnet. Beralihlah ke ruang testnet di Vela untuk menggunakannya.",
+        "otherSpaceMainnet": "Chain {{chainId}} adalah salah satu jaringan mainnet Vela; Vela sedang menampilkan jaringan testnet. Beralihlah ke ruang mainnet di Vela untuk menggunakannya."
+      },
+      "spaceMoved": "Jaringan berubah bersama ruangnya: situs ini sekarang di {{network}}."
     },
     "ext": {
       "installedNote": "Muat ulang tab yang sudah terbuka agar situsnya bisa menemukan Vela.",

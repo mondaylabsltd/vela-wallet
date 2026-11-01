@@ -121,7 +121,13 @@
       "signInTitle": "Entre para continuar",
       "multisigNoMessagesTitle": "Um multisig ainda não assina mensagens",
       "multisigNoMessagesBody": "{{host}} pediu a este multisig que assine uma mensagem. A assinatura de um multisig precisa das aprovações dos membros, que a Vela ainda não reúne para mensagens, então o site vai receber um não. Transações continuam funcionando: viram propostas que os membros aprovam.",
-      "multisigConnectNote": "Este é um multisig: o site pode propor transações para os membros aprovarem, mas não pode pedir que assine mensagens."
+      "multisigConnectNote": "Este é um multisig: o site pode propor transações para os membros aprovarem, mas não pode pedir que assine mensagens.",
+      "switchRefusal": {
+        "unknown": "A rede {{chainId}} não está entre as redes da Vela",
+        "otherSpaceTestnet": "A rede {{chainId}} é uma das redes testnet da Vela; a Vela está mostrando as redes mainnet. Mude para o espaço testnet na Vela para usá-la.",
+        "otherSpaceMainnet": "A rede {{chainId}} é uma das redes mainnet da Vela; a Vela está mostrando as redes testnet. Mude para o espaço mainnet na Vela para usá-la."
+      },
+      "spaceMoved": "A rede mudou com o espaço: este site agora está em {{network}}."
     },
     "ext": {
       "installedNote": "Recarregue as abas que já estavam abertas para que os sites encontrem a Vela.",

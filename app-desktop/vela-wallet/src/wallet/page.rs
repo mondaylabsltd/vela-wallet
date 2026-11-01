@@ -23446,10 +23446,12 @@ mod tests {
             address: None,
             chain_id: 1,
             lock: vela_core::app::dapp_permissions::OriginLock::Secure,
+            space_note: None,
         };
         let sheet = |tab: &str| DbrSigningView {
             tab: tab.to_owned(),
             id: "7".to_owned(),
+            space_note: None,
         };
         let asking = DbrView {
             consent: Some(consent("t2")),

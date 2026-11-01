@@ -1375,9 +1375,17 @@ for (let i = 1; i < PATHS.length; i++) {
 //   the system's raw English ("[50152] RP ID cannot be validated") inside a
 //   translated sheet. 2268 + 8 leaves + 1 branch = 2277 paths, 2159 leaves,
 //   118 branches.
-if (PATHS.length !== 2277) fail(`expected 2277 paths (2159 leaf + 118 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2159) fail(`expected 2159 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 118) fail(`expected 118 branch paths, got ${branchSet.size}`);
+// 2284 (r10 follow-ups, 2026-11-01): a page's switch to a network of the
+//   other space said as that space's, the same sentence in the in-app
+//   browsers and the extension (`connect.browser.switchRefusal.{unknown,
+//   otherSpaceTestnet, otherSpaceMainnet}`), the status line's words for it
+//   (`componentsUi.browserStatus.reason.otherSpace{Testnet,Mainnet}`), and
+//   the one line a site moved by a space switch carries on its next request
+//   (`connect.browser.spaceMoved`). 2277 + 6 leaves + 1 branch = 2284 paths,
+//   2165 leaves, 119 branches.
+if (PATHS.length !== 2284) fail(`expected 2284 paths (2165 leaf + 119 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2165) fail(`expected 2165 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 119) fail(`expected 119 branch paths, got ${branchSet.size}`);
 // The on-demand catalogs, pinned the same way (leaves of every locale's union):
 // a key dropped from one namespace and not landed in the other fails here.
 // 579 (round 6, the outside owner's connect page, 2026-10-30): + 17
