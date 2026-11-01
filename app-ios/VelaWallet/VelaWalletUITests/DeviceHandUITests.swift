@@ -170,8 +170,13 @@ final class Hand: @unchecked Sendable {
             // Read before the tap: the element may be gone after it, and a
             // query that matches nothing fails the test — and closes the hand.
             let frame = NSCoder.string(for: e.frame)
-            if c["long"] as? Bool == true { e.press(forDuration: 1.0) } else { e.tap() }
-            return ok(["frame": frame])
+            // An element behind another (a sheet over a page) is not
+            // hittable, and `tap()` on it fails the test: tap where it is.
+            let hittable = e.isHittable
+            let at = hittable ? e.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+                : t.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: e.frame.midX, dy: e.frame.midY))
+            if c["long"] as? Bool == true { at.press(forDuration: 1.0) } else { at.tap() }
+            return ok(["frame": frame, "hittable": hittable])
         case "exists":
             let e = element(c, in: target(c))
             return ok(["exists": e != nil, "frame": e.map { NSCoder.string(for: $0.frame) } ?? ""])
