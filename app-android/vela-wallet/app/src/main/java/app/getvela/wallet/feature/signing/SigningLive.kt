@@ -1688,8 +1688,13 @@ object SigningLive {
                     selected = option.selected,
                     disabled = option.insufficient,
                     // Issue #408: a refused coin says why — the core's numbers.
-                    reason = option.short?.takeIf { option.insufficient }?.let { gap ->
-                        ctx.strings.t(I18nKeys.Flows.FEE_ROW_SHORT, mapOf("need" to gap.need, "have" to gap.have))
+                    reason = if (option.insufficient && option.short_with_amount) {
+                        // r10-3 (core §9.7): the request's own amount and the fee, from one balance.
+                        ctx.strings.t(I18nKeys.Flows.WARN_INSUFFICIENT_FOR_GAS, mapOf("sym" to option.symbol))
+                    } else {
+                        option.short?.takeIf { option.insufficient }?.let { gap ->
+                            ctx.strings.t(I18nKeys.Flows.FEE_ROW_SHORT, mapOf("need" to gap.need, "have" to gap.have))
+                        }
                     },
                 )
             }
