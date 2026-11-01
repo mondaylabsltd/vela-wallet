@@ -53,6 +53,21 @@ pub struct Waiting {
     pub waiting_payer: u64,
     /// The one needing an approval first, else the first ready.
     pub first: Option<WaitingFirst>,
+    /// r11-1: the transactions `needs_you` counts, each
+    /// `<chainId>:<safeTxHash lowercase>`, in order — what a notification
+    /// keys "already said" by (a count says nothing of WHICH: one approved
+    /// elsewhere and one new left it the same, and the new one went unsaid).
+    #[serde(default)]
+    pub needs_you_keys: Vec<String>,
+    /// r11-1: the transactions `ready` counts, keyed as `needs_you_keys`.
+    #[serde(default)]
+    pub ready_keys: Vec<String>,
+    /// r11-1: when the list behind these counts was read on this page (ms
+    /// since the epoch); `None` for one kept from an earlier page. A
+    /// background round says only what a read since it began holds.
+    #[serde(default)]
+    #[cfg_attr(feature = "bindings", ts(type = "number | null"))]
+    pub read_at: Option<u64>,
 }
 
 impl Waiting {
@@ -208,6 +223,7 @@ pub fn waiting_of(
         .first()
         .map(|i| (**i).clone())
         .or_else(|| ready.first().map(|i| (***i).clone()));
+    let key = |i: &ProposalItem| format!("{}:{}", i.chain_id, i.safe_tx_hash.to_ascii_lowercase());
     Waiting {
         needs_you: needs.len() as u64,
         ready: ready.len() as u64,
@@ -216,6 +232,9 @@ pub fn waiting_of(
             chain_id: i.chain_id,
             safe_tx_hash: i.safe_tx_hash.clone(),
         }),
+        needs_you_keys: needs.iter().map(|i| key(i)).collect(),
+        ready_keys: ready.iter().map(|i| key(i)).collect(),
+        read_at: None,
     }
 }
 

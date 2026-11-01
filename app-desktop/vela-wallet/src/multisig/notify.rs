@@ -600,6 +600,7 @@ mod tests {
                 chain_id: 100,
                 safe_tx_hash: h.to_owned(),
             }),
+            ..Waiting::default()
         }
     }
 
