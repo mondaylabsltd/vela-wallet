@@ -1000,6 +1000,11 @@ pub struct State {
     missing: Vec<MissingChain>,
     cached_at: Option<f64>,
     unreadable: Vec<u64>,
+    /// r10-1: the networks whose mailbox read the service did not answer on
+    /// the last look. "The multisig service can't be reached" is said only
+    /// with one here — a chain that did not answer while the service did is
+    /// `unreadable` (`chainUnreachable`), never the service's outage.
+    mailbox_missed: BTreeSet<u64>,
     history_unreadable: Vec<u64>,
     offline: bool,
     read_at: Option<f64>,
@@ -1577,7 +1582,7 @@ impl App for MultisigProposals {
             read_at: s.read_at,
             loading: s.loading,
             stale: s.stale,
-            unreachable: s.stale && down,
+            unreachable: service_unreachable(&s, down),
             pace_ms: if s.held > 0 || flows::watching(&s) {
                 OPEN_POLL_MS
             } else {
@@ -1760,6 +1765,16 @@ fn seed(s: &mut State) {
     s.cached_at = Some(kept.at);
     s.read_at = Some(kept.at);
     s.stale = true;
+}
+
+/// r10-1: "The multisig service can't be reached" — the list is not fresh,
+/// the service's outage is open, AND the service itself missed a read on the
+/// last look on a network whose chain this device could read. A chain that
+/// did not answer is said as that chain (`unreadable`, "Can't reach Arc
+/// Testnet"), never as the service — also when the service, which reads the
+/// same chain for its members, timed out on it.
+pub(crate) fn service_unreachable(s: &State, down: bool) -> bool {
+    s.stale && down && s.mailbox_missed.iter().any(|c| !s.unreadable.contains(c))
 }
 
 // ---------------------------------------------------------------------------
@@ -1949,6 +1964,21 @@ async fn read_chain(
         }
     };
     let (members, answer) = futures::join!(members_read, list_read);
+    // r10-1: whether the SERVICE answered is known here, whatever the chain
+    // said — the outage note is the service's only when its own read missed.
+    // A list handed in came from the service's all-chains answer; a mailbox
+    // not asked was not asked because the service is away. Only the followed
+    // multisig's reads speak for the note.
+    {
+        let mut s = lock(st);
+        if s.followed(&account.address) {
+            if answer.is_some() {
+                s.mailbox_missed.remove(&chain_id);
+            } else {
+                s.mailbox_missed.insert(chain_id);
+            }
+        }
+    }
     let members = members?;
     let mailbox = answer.is_some();
     let list = answer.unwrap_or_else(|| previous.unwrap_or_default());

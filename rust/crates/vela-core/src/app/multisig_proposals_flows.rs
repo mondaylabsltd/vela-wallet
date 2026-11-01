@@ -330,7 +330,7 @@ pub fn view_more(s: &mut State) -> MoreView {
     let note = waiting_note(&ListFacts {
         offline: s.offline,
         read_at: s.read_at,
-        unreachable: s.stale && down,
+        unreachable: service_unreachable(&s, down),
         unreadable: s.unreadable.clone(),
         cached_at: s.cached_at,
         stale: s.stale,

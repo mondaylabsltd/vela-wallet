@@ -2008,3 +2008,42 @@ fn the_rule_chip_and_the_waiting_line_are_the_machines() {
         })
     );
 }
+
+// -- r10-1: whose outage it is ------------------------------------------------------------
+
+/// r10-1: the chain is dead and the service answered — "Can't reach <network>",
+/// never "The multisig service can't be reached".
+#[test]
+fn a_dead_chain_is_never_said_as_the_service() {
+    let (mut world, mut sut, _) = setup(&[0]);
+    world.silent.insert(100);
+    run(&mut sut, &mut world, Event::Refresh { fresh: true });
+    let view = sut.view();
+    assert_eq!(view.unreadable, vec![100]);
+    assert!(!view.unreachable, "the service answered");
+}
+
+/// r10-1: the service is away AND the chain this device reads it on is dead —
+/// the service reads that chain too, so its silence there is the chain's:
+/// the network is named, not the service.
+#[test]
+fn a_service_silent_on_a_dead_chain_is_that_chain() {
+    let (mut world, mut sut, _) = setup(&[0]);
+    world.silent.insert(100);
+    world.service_down = true;
+    run(&mut sut, &mut world, Event::Refresh { fresh: true });
+    let view = sut.view();
+    assert_eq!(view.unreadable, vec![100]);
+    assert!(!view.unreachable);
+}
+
+/// The service really away, the chain fine: said as the service.
+#[test]
+fn a_service_away_on_a_live_chain_is_the_service() {
+    let (mut world, mut sut, _) = setup(&[0]);
+    world.service_down = true;
+    run(&mut sut, &mut world, Event::Refresh { fresh: true });
+    let view = sut.view();
+    assert!(view.unreadable.is_empty());
+    assert!(view.unreachable, "the service's own read missed");
+}
