@@ -351,9 +351,12 @@ final class AppGraph {
                 // The permission is asked HERE — at the first submit, never at
                 // launch — because this is the first time there is anything to
                 // notify about.
-                trackSubmitted: { [weak trackerStore, weak notify] submission in
+                trackSubmitted: { [weak trackerStore, weak notify, weak activityStore] submission in
                     notify?.askOnceIfNeeded()
                     trackerStore?.submitted(submission)
+                    // r10 follow-up: a send from this account — the incoming
+                    // scan runs at once and its back-off starts again.
+                    activityStore?.sent(userOpHash: submission.userOpHash)
                 },
                 // A write-ahead op proven never sent (spec 082 RJ1): the
                 // tracker drops it, as the store already has.

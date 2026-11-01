@@ -82,6 +82,10 @@ struct FlowHost: View {
     /// A row that opens as something else than a transaction detail — a
     /// multisig transaction opens as its own sheet (r8-17). `true`: it did.
     var opensElsewhere: ((String?) -> Bool)?
+    /// r10 follow-up: the history started moving under a finger (`true`) or
+    /// settled (`false`) — the incoming scan's quiet period. Absent in the
+    /// gallery.
+    var onHistoryScrolling: ((Bool) -> Void)?
     /// Which assets row opened the token sheet.
     var onSelectAsset: ((Int) -> Void)?
     /// 转账 from a token's own sheet, with that token preselected.
@@ -363,7 +367,11 @@ struct FlowHost: View {
                     onSelectActivity?(group, row)
                     onNavigate(.txDetail)
                 })
+                .scrollingProbe(onHistoryScrolling)
             }
+            .reportsScrolling(onHistoryScrolling)
+            // A list taken away mid-fling says nothing more: settled.
+            .onDisappear { onHistoryScrolling?(false) }
         case .assets(let m):
             FlowScaffold(
                 header: m.header,

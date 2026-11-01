@@ -1262,9 +1262,9 @@ struct RootView: View {
                     if let balance = wallet.balance { send.holdingsUpdated(balance, round: round) }
                 }
                 .task(id: state) {
-                    // r9-17: a screen opened is the person at the app — the
-                    // core's cadence (10 s at the app, 30 s idle) decides
-                    // when the next scan is due.
+                    // r9-17: a screen opened is the person at the app. Since
+                    // the r10 follow-up it only updates the presence: the
+                    // core's back-off decides when the next scan is due.
                     activity.interacted()
                     // The viewfinder runs only while it is on screen. A camera
                     // left running behind another screen is a light nobody
@@ -1367,7 +1367,10 @@ struct RootView: View {
                                     onOpen: { multisig.sheet = $0 },
                                     onFund: { enterReceive() }
                                 ))
-                            }
+                            },
+                            // r10 follow-up: no scan in the home's way while
+                            // it moves under a finger.
+                            onScrolling: { activity.scrolling("home", $0) }
                         )
                     }
                     // The hero's status line, as a sheet over the wallet —
@@ -2030,9 +2033,12 @@ struct RootView: View {
                     respond(transportId, id, payload, userOpHash)
                     signingAnswered(incoming, payload: payload, userOpHash: userOpHash)
                 },
-                trackSubmitted: { [tracker, notifier] submission in
+                trackSubmitted: { [tracker, notifier, activity] submission in
                     notifier.askOnceIfNeeded()
                     tracker.submitted(submission)
+                    // r10 follow-up: a dApp's transaction sent from this
+                    // account — the incoming scan runs at once.
+                    activity.sent(userOpHash: submission.userOpHash)
                 },
                 // A write-ahead op the core proved never sent (spec 082 RJ1).
                 trackWithdrawn: { [tracker] hash, ids in
@@ -3453,6 +3459,9 @@ struct RootView: View {
                     },
                     onSelectActivityItem: { activityItemId = $0 },
                     opensElsewhere: { openMultisigRow($0) },
+                    // r10 follow-up: no scan in the history's way while it
+                    // moves under a finger.
+                    onHistoryScrolling: { activity.scrolling("history", $0) },
                     onSelectAsset: { selectAsset($0) },
                     onSendToken: { sendSelectedToken() },
                     onReceiveToken: { receiveSelectedToken() },
@@ -4503,7 +4512,7 @@ struct RootView: View {
         page.erase = { await eraseThisDevice() }
         page.clearStorageItem = { item in clearStorageItem(item) }
         page.clearCaches = { clearSettingsCaches() }
-        page.refreshBalances = { if wallet.pullRefresh() { activity.focusTick() } }
+        page.refreshBalances = { if wallet.pullRefresh() { activity.refreshed() } }
         page.switchAccount = { address in await switchAccountNow(address) }
         page.rejectSigning = {
             guard let signing else { return false }
