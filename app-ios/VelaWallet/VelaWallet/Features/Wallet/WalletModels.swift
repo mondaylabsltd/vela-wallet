@@ -352,7 +352,8 @@ struct WalletHomeModel {
 
     /// `0x1234…cdef` — the house short form, matching the other three clients.
     private static func shorten(_ address: String) -> String {
+        // r11-6: the core's one short form for an address.
         guard address.count > 10 else { return address }
-        return "\(address.prefix(6))\u{2026}\(address.suffix(4))"
+        return AddressText.short(address)
     }
 }

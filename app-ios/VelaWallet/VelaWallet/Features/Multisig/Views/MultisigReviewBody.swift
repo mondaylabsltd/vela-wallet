@@ -138,13 +138,18 @@ struct MsReviewBody: View {
         case .nothing:
             EmptyView()
         case .deltas:
-            MsSection(title: words.loc.t("componentsUi.signing.simResultLabel")) {
+            // r11 S4: headed as the review says (`moves_title_key`, "Balance
+            // changes"), as on the web, the outside page and the desktop.
+            MsSection(title: words.loc.t(review["movesTitleKey"]?.string
+                                         ?? review["moves_title_key"]?.string
+                                         ?? "componentsUi.signing.balanceChangesTitle")) {
                 ForEach(Array(deltas.enumerated()), id: \.offset) { _, delta in
-                    let text = deltaText(delta)
-                    Text(verbatim: text)
-                        .typeRole(Typography.bodyStrong.scaled(textScale))
-                        .foregroundStyle(text.hasPrefix("-") ? theme.fgBase : theme.successBase)
-                        .accessibilityIdentifier("multisig.review.delta")
+                    if let said = deltaText(delta) {
+                        Text(verbatim: said.text)
+                            .typeRole(Typography.bodyStrong.scaled(textScale))
+                            .foregroundStyle(said.negative ? theme.fgBase : theme.successBase)
+                            .accessibilityIdentifier("multisig.review.delta")
+                    }
                 }
                 if review["simulationSource"]?.string == "probe" {
                     MsNote(text: words.t("review.movesProbe"))
@@ -161,17 +166,24 @@ struct MsReviewBody: View {
         }
     }
 
-    private func deltaText(_ delta: MsJSON) -> String {
+    /// One balance change, as the core writes a signed amount
+    /// (`formatSignedTokenAmount`: U+2212 for a minus, the plus written, a
+    /// zero change not drawn) — r11 S4: never a hyphen.
+    private func deltaText(_ delta: MsJSON) -> (text: String, negative: Bool)? {
         let raw = delta["delta"]?.string ?? "0"
-        let negative = raw.hasPrefix("-")
-        let magnitude = negative ? String(raw.dropFirst()) : raw
         let info: (symbol: String, decimals: Int)
         if let token = delta["token"]?.string, !token.isEmpty {
             info = tokens[token.lowercased()] ?? (MsWords.short(token), 18)
         } else {
             info = (words.symbol(chainId), 18)
         }
-        return "\(negative ? "-" : "+")\(MsRules.formatUnits(magnitude, decimals: info.decimals)) \(info.symbol)"
+        return Self.signedDelta(raw, decimals: info.decimals, symbol: info.symbol)
+    }
+
+    /// `raw` signed base units → "−0.01 USDC" (the core's figure).
+    static func signedDelta(_ raw: String, decimals: Int, symbol: String) -> (text: String, negative: Bool)? {
+        guard let figure = SimDeltas.deltaText(raw, decimals: decimals) else { return nil }
+        return ("\(figure) \(symbol)", figure.hasPrefix("\u{2212}"))
     }
 
     private var tokenAddresses: [String] {

@@ -34,9 +34,10 @@ struct MsWords {
 
     // MARK: - Names
 
-    /// "0xd9c79C…a20432": short, in its EIP-55 case.
+    /// "0xd9c79C…a20432": the core's one short form (r11-6, `names.short`:
+    /// 6+6, EIP-55 — the same on every platform; this drew 4+4).
     static func short(_ address: String) -> String {
-        AddressText.short(MsRules.eip55(address))
+        MsRules.string("names.short", ["address": address]) ?? AddressText.short(MsRules.eip55(address))
     }
 
     /// A member's name on this device, or `nil` when it is not one of its accounts.
@@ -65,8 +66,12 @@ struct MsWords {
     /// A member as a line names it: its name and short address, never the
     /// name alone — a name is a claim, the address is who gets the say.
     func who(_ address: String) -> String {
-        let short = Self.short(address)
+        // r11-6: the core's `names.who` over the one label.
         let name = coreLabel(address) ?? localName(address) ?? keptName(address)
+        var args: [String: Any] = ["address": address]
+        if let name { args["label"] = name }
+        if let said = MsRules.string("names.who", args) { return said }
+        let short = Self.short(address)
         guard let name, name != short else { return short }
         return "\(name) (\(short))"
     }
@@ -361,7 +366,14 @@ struct MsWords {
         case "refused": return t("proposal.refused", ["reason": state["reason"]?.string ?? ""])
         case "mailboxRefused": return t("proposal.reason.serviceRefused")
         case "stopped":
-            return t("proposal.wouldFail", ["reason": whyFails(state["preview"]?["why"] ?? state["preview"])])
+            // r11 (core): by the look's kind — it stands in the fee line's
+            // place (`stoppedReplacesFee`), never beside it.
+            switch state["preview"]?["kind"]?.string {
+            case "unpriced": return t("proposal.feeUnpriced")
+            case "unchecked": return t("proposal.feeUnchecked")
+            default:
+                return t("proposal.wouldFail", ["reason": whyFails(state["preview"]?["why"] ?? state["preview"])])
+            }
         case "noOutsideSigner":
             return t("proposal.failed", ["reason": t("proposal.noOutsideSigner")])
         case "failed": return failureText(state["detail"]?.string)

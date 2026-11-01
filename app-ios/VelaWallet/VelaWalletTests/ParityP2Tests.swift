@@ -82,7 +82,7 @@ struct ParityP2Tests {
         #expect(lines.contains("A description calls this “Claim” — that is not what the transaction does"))
         #expect(lines.contains("Goes to an address that is not this account"))
         #expect(lines.contains { $0.hasPrefix("The least this accepts back is almost nothing") })
-        #expect(lines.contains("USDC? · 0x1111…1111 — name given by the token's own contract"))
+        #expect(lines.contains("USDC? · 0x111111…111111 — name given by the token's own contract"))
         let leg = SigningLive.certainLines(graded, reading: graded.reading!, loc: en, prefix: "#2 ").compactMap(texts)
         #expect(leg.allSatisfy { $0.hasPrefix("#2 ") })
     }
@@ -90,10 +90,10 @@ struct ParityP2Tests {
     @Test func theContractIsNamedWithWhoNamedIt() throws {
         let unnamed = try result(["reading": ["source": "vela"]])
         #expect(SigningLive.contractLine(unnamed, reading: unnamed.reading!, context: context).flatMap(texts)
-                == "Contract · 0x8335…2913 · no name known")
+                == "Contract · 0x833589…A02913 · no name known")
         let named = try result(["contract_name": "USD Coin", "reading": ["source": "vela", "contract_named_by": "built_in"]])
         #expect(SigningLive.contractLine(named, reading: named.reading!, context: context).flatMap(texts)
-                == "Contract · 0x8335…2913 · USD Coin, called so by Vela's list of known contracts")
+                == "Contract · 0x833589…A02913 · USD Coin, called so by Vela's list of known contracts")
     }
 
     // MARK: - P2.3 per-leg grant and the boolean card

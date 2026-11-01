@@ -198,7 +198,7 @@ struct ContactsLiveTests {
         #expect(ContactsLive.displayName(contact("0x1", name: "Alice", resolved: "a.eth")) == "Alice")
         #expect(ContactsLive.displayName(contact("0x1", resolved: "a.eth")) == "a.eth")
         let bare = ContactsLive.displayName(contact("0x9F3cA71b04E82f5C55d9B21aE00734F8Dd8021aE"))
-        #expect(bare == "0x9F3c…21aE")
+        #expect(bare == "0x9F3cA7…8021aE")
     }
 
     /// The identicon seed is the FULL address, never lowercased at the call

@@ -582,8 +582,7 @@ enum SettingsLive {
         /// The header's own truncation, so a row and the header above it
         /// never disagree about the same address.
         func shortenAddress(_ address: String) -> String {
-            guard address.count > 14 else { return address }
-            return "\(address.prefix(6))…\(address.suffix(4))"
+            AddressText.short(address)
         }
         func total(for address: String) -> Double? {
             balances.first { $0.address.caseInsensitiveCompare(address) == .orderedSame }?.usd
