@@ -2843,12 +2843,19 @@ pub fn insufficient_gas_warning(fee: &FeeView, s: &SigningStrings) -> Option<Sha
         return None;
     }
     let selected = fee.options.iter().find(|option| option.selected)?;
-    selected.insufficient.then(|| {
-        SharedString::from(crate::signing::fill(
-            &s.warn_insufficient_gas,
-            &[("sym", &selected.symbol)],
-        ))
-    })
+    selected.insufficient.then(|| short_words(selected, s))
+}
+
+/// The selected coin's shortfall, in the send form's words: short of the
+/// fee alone, or (r10-3, `short_with_amount`) short once the request's own
+/// amount of that coin is taken first — "amount + gas fees".
+fn short_words(option: &vela_core::app::fee_policy::FeeOptionView, s: &SigningStrings) -> SharedString {
+    let template = if option.short_with_amount {
+        &s.warn_insufficient_for_gas
+    } else {
+        &s.warn_insufficient_gas
+    };
+    SharedString::from(crate::signing::fill(template, &[("sym", &option.symbol)]))
 }
 
 /// Spec 096 F2: the coin paying is one the transaction itself may spend —
@@ -2896,10 +2903,7 @@ pub fn refused_fee_warning(fee: &FeeView, s: &SigningStrings) -> Option<SharedSt
             .iter()
             .find(|option| option.selected && option.insufficient)
         {
-            Some(selected) => SharedString::from(crate::signing::fill(
-                &s.warn_insufficient_gas,
-                &[("sym", &selected.symbol)],
-            )),
+            Some(selected) => short_words(selected, s),
             None => s.warn_would_fail.clone(),
         },
     )
@@ -6291,9 +6295,22 @@ mod fee_tests {
                 .is_none()
         );
         // Not quoted yet: no verdict at all.
-        let mut unquoted = broke;
+        let mut unquoted = broke.clone();
         unquoted.fee = None;
         assert!(insufficient_gas_warning(&unquoted, &s).is_none());
+
+        // r10-3: the coin covers the fee alone, not with the request's own
+        // amount of it taken first — the core's `short_with_amount`, said
+        // as amount + fee (the send form's sentence), never the fee alone.
+        let mut with_amount = broke;
+        with_amount.options[0].short_with_amount = true;
+        let both = insufficient_gas_warning(&with_amount, &s)
+            .unwrap_or_else(|| unreachable!("the gate is shut and nothing says why"));
+        assert_eq!(
+            both.as_ref(),
+            crate::signing::fill(&s.warn_insufficient_for_gas, &[("sym", "ETH")]).as_str()
+        );
+        assert_ne!(both, text);
     }
 
     /// Spec 096 F2: the person chose a coin the transaction itself spends

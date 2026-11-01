@@ -297,6 +297,10 @@ pub struct SigningStrings {
     /// "Insufficient {{sym}} for gas fees" — the send screen's sentence, said
     /// under the fee row when the coin it was quoted in cannot pay it.
     pub warn_insufficient_gas: SharedString,
+    /// r10-3: "Insufficient {{sym}} to cover amount + gas fees" — the coin
+    /// covers the fee alone, not once the request's own amount of it is
+    /// taken (the core's `FeeOptionView.short_with_amount`).
+    pub warn_insufficient_for_gas: SharedString,
     /// Spec 096 F2: the coin paying is one the transaction itself may spend
     /// ({{sym}}) — the core's `spent_by_operation`.
     pub warn_fee_coin_spent: SharedString,
@@ -584,6 +588,7 @@ impl SigningStrings {
             fee_failure: crate::flows::FeeFailureWords::resolve(loc),
             open_signer: s("openSigner"),
             warn_insufficient_gas: loc.t("send.warnInsufficientGas"),
+            warn_insufficient_for_gas: loc.t("send.warnInsufficientForGas"),
             warn_fee_coin_spent: loc.t("componentsUi.gas.feeCoinSpent"),
             fee_row_short: loc.t(vela_core::app::fee_policy::ROW_SHORT_KEY),
             fee_no_coin_pays: loc.t(vela_core::app::fee_policy::NO_COIN_PAYS_KEY),
