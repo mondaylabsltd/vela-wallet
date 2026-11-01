@@ -199,6 +199,12 @@ struct ApprovalRequestArgs {
     /// r9-10: the review asks for "… anyway" (the passkey purpose's `anyway`).
     #[serde(default)]
     anyway: bool,
+    /// r10 page: the members and approvals needed now (the passkey
+    /// purpose's `owners` / `threshold`), for a member change's before → after.
+    #[serde(default)]
+    owners: Vec<String>,
+    #[serde(default)]
+    threshold: Option<u64>,
 }
 
 /// The page's `{intent, context}` for a member's approval of a SafeTx
@@ -219,6 +225,8 @@ pub fn trusted_signer_approval_request(args_json: &str) -> Result<String, JsValu
         credential_ids_hex: &a.credential_ids_hex,
         key_route: a.key_route.as_ref(),
         anyway: a.anyway,
+        owners: &a.owners,
+        threshold: a.threshold,
     })
     .map_err(js)?;
     Ok(request.to_string())
@@ -377,6 +385,7 @@ pub fn trusted_signer_signature_request(args_json: &str) -> Result<String, JsVal
                 &p.tx,
                 p.name.as_deref(),
                 p.threshold,
+                &p.owners,
             )
             .map_err(js)?,
         )
@@ -418,6 +427,9 @@ struct ExecutionParams {
     name: Option<String>,
     #[serde(default)]
     threshold: Option<u64>,
+    /// r10 page: its members now (the send purpose's `owners`).
+    #[serde(default)]
+    owners: Vec<String>,
 }
 
 #[derive(serde::Deserialize)]

@@ -2523,10 +2523,14 @@ async fn authorize_signing(
 }
 
 /// `owner` approves `hash`: one passkey prompt, in Vela or on its page.
+/// `members` are the multisig's members now on `chain_id` — what a page
+/// draws a member change against (before → after).
+#[allow(clippy::too_many_arguments)]
 async fn sign_approval(
     io: &Io<Event>,
     owner: &LocalAccount,
     account: &MultisigAccount,
+    members: &ChainMembers,
     chain_id: u64,
     hash: &str,
     tx: &SafeTx,
@@ -2557,6 +2561,8 @@ async fn sign_approval(
                     .or_else(|| account.label.clone()),
                 tx: Box::new(tx.clone()),
                 anyway,
+                owners: members.owners.clone(),
+                threshold: members.threshold,
             },
         })
         .await;
@@ -3030,7 +3036,18 @@ async fn confirm_draft(
         return ActionState::Cancelled;
     }
     let hash = multisig::safe_tx_hash(chain_id, &account.address, &tx).unwrap_or_default();
-    let approval = match sign_approval(io, &owner, &account, chain_id, &hash, &tx, anyway).await {
+    let approval = match sign_approval(
+        io,
+        &owner,
+        &account,
+        &chain.members,
+        chain_id,
+        &hash,
+        &tx,
+        anyway,
+    )
+    .await
+    {
         Ok(a) => a,
         Err(Stop::State(s)) => return s,
     };
@@ -3061,7 +3078,7 @@ async fn approve(
                 .cloned(),
         )
     };
-    let (Some((item, _)), Some(account), Some(owner)) = (found, account, owner) else {
+    let (Some((item, members)), Some(account), Some(owner)) = (found, account, owner) else {
         return ActionState::Failed {
             detail: "nothing to approve".to_owned(),
         };
@@ -3070,13 +3087,14 @@ async fn approve(
         Ok(anyway) => anyway,
         Err(Stop::State(s)) => return s,
     };
-    approve_authorized(io, st, &account, &item, &owner, anyway).await
+    approve_authorized(io, st, &account, &members, &item, &owner, anyway).await
 }
 
 async fn approve_authorized(
     io: &Io<Event>,
     st: &Shared<State>,
     account: &MultisigAccount,
+    members: &ChainMembers,
     item: &ProposalItem,
     owner: &LocalAccount,
     anyway: bool,
@@ -3085,6 +3103,7 @@ async fn approve_authorized(
         io,
         owner,
         account,
+        members,
         item.chain_id,
         &item.safe_tx_hash,
         &item.tx,
@@ -3854,6 +3873,7 @@ async fn execute(
                 name: input.account.genesis.name.clone(),
                 threshold: input.members.threshold,
                 tx: Box::new(input.item.tx.clone()),
+                owners: input.members.owners.clone(),
             }),
         })
         .await;

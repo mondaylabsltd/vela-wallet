@@ -78,6 +78,17 @@ pub enum PasskeyPurpose {
         /// word (it may add friction, never take it away).
         #[serde(default)]
         anyway: bool,
+        /// r10 page: the members and the approvals needed NOW, as the
+        /// proposal was gathered against them (the chain's where the
+        /// multisig is deployed). A page draws a member change before →
+        /// after ("Members 3 → 4 · Approvals 2 of 3 → 2 of 4") — the
+        /// "before" as the app's word; it cannot read the chain itself.
+        /// Empty / 0 from a shell that says nothing.
+        #[serde(default)]
+        owners: Vec<String>,
+        #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(type = "number"))]
+        threshold: u64,
     },
     /// The proof asking the genesis service to record a new multisig
     /// (`sponsor_challenge`).
@@ -107,6 +118,10 @@ pub enum SendPurpose {
         threshold: u64,
         #[cfg_attr(feature = "bindings", ts(type = "unknown"))]
         tx: Box<SafeTx>,
+        /// r10 page: its members now, for a member change's before → after
+        /// on the page (the app's word, as `threshold` is).
+        #[serde(default)]
+        owners: Vec<String>,
     },
     /// The Ethereum backup's `record` call for `multisig`: the signing
     /// sheet, as any first-party transaction.

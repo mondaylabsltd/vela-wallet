@@ -151,6 +151,14 @@ pub struct TrustedSignerApprovalInput {
     /// `anyway`): the page says "Approve anyway" in the danger style.
     #[uniffi(default = false)]
     pub anyway: bool,
+    /// r10 page: the multisig's members now (the passkey purpose's
+    /// `owners`), for a member change's before → after on the page.
+    #[uniffi(default = None)]
+    pub owners: Option<Vec<String>>,
+    /// r10 page: the approvals it needs now (the passkey purpose's
+    /// `threshold`; 0 or none says nothing).
+    #[uniffi(default = None)]
+    pub threshold: Option<u64>,
 }
 
 /// The page's `{intent, context}` for a member's approval of a SafeTx
@@ -182,6 +190,8 @@ pub fn trusted_signer_approval_request(
         credential_ids_hex: &input.credential_ids_hex,
         key_route: key_route.as_ref(),
         anyway: input.anyway,
+        owners: input.owners.as_deref().unwrap_or_default(),
+        threshold: input.threshold,
     })?;
     Ok(request.to_string())
 }

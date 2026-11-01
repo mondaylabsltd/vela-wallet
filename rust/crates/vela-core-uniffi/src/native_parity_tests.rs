@@ -173,6 +173,8 @@ fn run(func: &str, i: &Value) -> Value {
                 credential_ids_hex: strings(i, "credential_ids_hex"),
                 key_route_json: opt_s(i, "key_route_json"),
                 anyway: false,
+                owners: None,
+                threshold: None,
             })
             .expect("approval request builds"),
         ),
@@ -513,6 +515,8 @@ fn unreadable_page_answers_are_malformed() {
             credential_ids_hex: Vec::new(),
             key_route_json: None,
             anyway: false,
+            owners: None,
+            threshold: None,
         })
         .is_err()
     );

@@ -780,6 +780,7 @@ fn a_page_executor_signs_one_operation_and_its_page_is_told_what_runs() {
         name,
         threshold,
         tx,
+        owners,
     })) = world.purposes.first().cloned()
     else {
         panic!("{:?}", world.purposes);
@@ -787,6 +788,13 @@ fn a_page_executor_signs_one_operation_and_its_page_is_told_what_runs() {
     assert_eq!(multisig, account.address);
     assert_eq!(name.as_deref(), Some("Quiet Harbor"));
     assert_eq!(threshold, 2);
+    // r10 page: its members now, for a member change's before → after.
+    assert!(
+        owners
+            .iter()
+            .any(|o| o.eq_ignore_ascii_case(&fixture(0).address)),
+        "{owners:?}"
+    );
     let item = sut
         .view()
         .items

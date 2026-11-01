@@ -61,6 +61,29 @@ pub struct ApprovalInput<'a> {
     /// says "Approve anyway" in the danger style — the app's word, which only
     /// adds to what the page reads itself.
     pub anyway: bool,
+    /// r10 page: the multisig's members and the approvals it needs NOW, as
+    /// this device read them (the proposal's chain members). The page draws
+    /// a member change before → after from them — the "before" as the app's
+    /// word (it cannot read the chain). Empty / `None` says nothing.
+    pub owners: &'a [String],
+    pub threshold: Option<u64>,
+}
+
+/// r10 page: `context.multisig.owners` / `.threshold` — the members and the
+/// approvals needed now, when this device knows them. A member change on
+/// the page reads "Members 3 → 4 · Approvals 2 of 3 → 2 of 4", the "before"
+/// marked as the app's; nothing is said for what the device does not know.
+fn members_now(
+    about: &mut serde_json::Map<String, Value>,
+    owners: &[String],
+    threshold: Option<u64>,
+) {
+    if !owners.is_empty() {
+        about.insert("owners".into(), json!(owners));
+    }
+    if let Some(threshold) = threshold.filter(|t| *t > 0) {
+        about.insert("threshold".into(), json!(threshold));
+    }
 }
 
 /// The page's `{intent, context}` for `input` (PROTOCOL.md §12).
@@ -100,6 +123,7 @@ pub fn request(input: &ApprovalInput<'_>) -> Result<Value, crate::error::CoreErr
         if input.anyway {
             about.insert("anyway".into(), json!(true));
         }
+        members_now(&mut about, input.owners, input.threshold);
         context.insert("multisig".into(), Value::Object(about));
     }
     Ok(built)
@@ -117,7 +141,8 @@ pub fn request(input: &ApprovalInput<'_>) -> Result<Value, crate::error::CoreErr
 /// are the app's word: the page recomputes the hash from the bytes at that
 /// number and refuses when the two differ (the app describes one transaction
 /// while the operation runs another), and draws the number, the name and the
-/// threshold as the app's.
+/// threshold as the app's. r10: its members now (`owners`), for a member
+/// change's before → after, also as the app's.
 ///
 /// # Errors
 ///
@@ -128,6 +153,7 @@ pub fn execution_context(
     tx: &SafeTx,
     name: Option<&str>,
     threshold: Option<u64>,
+    owners: &[String],
 ) -> Result<Value, crate::error::CoreError> {
     let safe_tx_hash = multisig::safe_tx_hash(chain_id, multisig, tx)?;
     let mut about = serde_json::Map::new();
@@ -135,9 +161,7 @@ pub fn execution_context(
     if let Some(name) = name.map(str::trim).filter(|n| !n.is_empty()) {
         about.insert("name".into(), json!(name));
     }
-    if let Some(threshold) = threshold.filter(|t| *t > 0) {
-        about.insert("threshold".into(), json!(threshold));
-    }
+    members_now(&mut about, owners, threshold);
     about.insert("nonce".into(), json!(tx.nonce));
     about.insert("safeTxHash".into(), json!(safe_tx_hash));
     Ok(Value::Object(about))
@@ -307,21 +331,38 @@ mod tests {
 
     #[test]
     fn an_execution_names_its_number_and_the_cores_hash_at_it() {
-        let about = execution_context(CHAIN, MULTISIG, &tx(), Some("  Team fund "), Some(2))
-            .unwrap_or_else(|_| unreachable!());
+        let owners = vec![
+            MULTISIG.to_owned(),
+            "0x6813Eb9362372EEF6200f3b1dbC3f819671cBA69".to_owned(),
+        ];
+        let about = execution_context(
+            CHAIN,
+            MULTISIG,
+            &tx(),
+            Some("  Team fund "),
+            Some(2),
+            &owners,
+        )
+        .unwrap_or_else(|_| unreachable!());
         assert_eq!(about["address"], MULTISIG);
         assert_eq!(about["name"], "Team fund");
         assert_eq!(about["threshold"], 2);
+        // r10 page: its members now, for a member change's before → after.
+        assert_eq!(about["owners"], json!(owners));
         assert_eq!(about["nonce"], "0x3");
         assert_eq!(
             about["safeTxHash"],
             multisig::safe_tx_hash(CHAIN, MULTISIG, &tx()).unwrap_or_default()
         );
         // Nothing this device does not know is said: no name, no threshold.
-        let bare = execution_context(CHAIN, MULTISIG, &tx(), Some(" "), Some(0))
+        let bare = execution_context(CHAIN, MULTISIG, &tx(), Some(" "), Some(0), &[])
             .unwrap_or_else(|_| unreachable!());
-        assert!(bare.get("name").is_none() && bare.get("threshold").is_none());
-        assert!(execution_context(CHAIN, "not an address", &tx(), None, None).is_err());
+        assert!(
+            bare.get("name").is_none()
+                && bare.get("threshold").is_none()
+                && bare.get("owners").is_none()
+        );
+        assert!(execution_context(CHAIN, "not an address", &tx(), None, None, &[]).is_err());
     }
 
     #[test]
@@ -340,6 +381,8 @@ mod tests {
             credential_ids_hex: &ids,
             key_route: None,
             anyway: true,
+            owners: &[address.clone(), MULTISIG.to_owned()],
+            threshold: Some(2),
         })
         .unwrap_or_else(|_| unreachable!());
         assert_eq!(request["intent"]["method"], METHOD);
@@ -361,6 +404,10 @@ mod tests {
         assert_eq!(context["multisig"]["name"], "Team fund");
         // r9-10: the review asks for "… anyway": the page is told so.
         assert_eq!(context["multisig"]["anyway"], true);
+        // r10 page: the members and approvals now, for a member change's
+        // before → after (the page draws them as the app's word).
+        assert_eq!(context["multisig"]["owners"], json!([address, MULTISIG]));
+        assert_eq!(context["multisig"]["threshold"], 2);
         assert!(context.get("operation").is_none());
         assert_eq!(
             context["allowCredentials"].as_array().map(Vec::len),
