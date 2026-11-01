@@ -17,8 +17,9 @@ import type { FeeCall } from "./FeeCall";
  * The freshness rule: a quote is re-priced once a block
  * ([`requote_interval_ms`]), and every run clears this before it reads, so
  * it is never older than one re-pricing interval. A run that did not
- * simulate (the static fallback, Tempo, a coin switch priced on the same
- * gas) carries none. The send takes it only for exactly these calls, and
+ * simulate (Tempo, a coin switch priced on the same gas) carries none; the
+ * static model a relay's refusal falls back to carries its own limits
+ * (r11-8), so a fee is never signed beside limits it was not priced on. The send takes it only for exactly these calls, and
  * drops it the moment the fee card re-quotes or fails.
  *
  * What it never carries is the nonce: the submit reads it fresh before the

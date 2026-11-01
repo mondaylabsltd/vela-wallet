@@ -14,4 +14,10 @@ nonce: string, proposer: string, approvals: Array<OutsideApprovalRow>, approved:
 /**
  * A rename runs only where the multisig is deployed.
  */
-renameUndeployed: boolean, };
+renameUndeployed: boolean, 
+/**
+ * r11 S4: what a queued one waits behind — the proposals machine's own
+ * rule (`multisig_proposals::waits_for`), so the page says the same
+ * numbers as the wallet. Empty unless queued.
+ */
+waitsFor: Array<string>, };

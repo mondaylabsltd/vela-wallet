@@ -22,4 +22,10 @@ review: unknown,
 /**
  * The next number of the chain, decimal, when read.
  */
-chainNonce: string | null, };
+chainNonce: string | null, 
+/**
+ * r11 S4: every number it waits behind, once the chain's is read
+ * (`multisig_proposals::waits_for` — the wallet's own rule): say
+ * `proposal.queuedNote` for one, `proposal.queuedNoteMany` for more.
+ */
+waitsFor: Array<string>, };

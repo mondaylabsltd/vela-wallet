@@ -1855,6 +1855,11 @@ pub mod reading {
         pub review: Option<serde_json::Value>,
         /// The next number of the chain, decimal, when read.
         pub chain_nonce: Option<String>,
+        /// r11 S4: every number it waits behind, once the chain's is read
+        /// (`multisig_proposals::waits_for` — the wallet's own rule): say
+        /// `proposal.queuedNote` for one, `proposal.queuedNoteMany` for more.
+        #[serde(default)]
+        pub waits_for: Vec<String>,
     }
 }
 
@@ -3505,6 +3510,15 @@ pub mod page {
                 name: reading::shown_name(genesis.as_ref()),
                 title: reading::title_of(chain_id, r, &tokens),
                 review,
+                waits_for: match (
+                    chain_nonce.as_deref().and_then(|n| n.parse::<u128>().ok()),
+                    reading::decimal(&r.nonce).parse::<u128>().ok(),
+                ) {
+                    (Some(chain), Some(own)) => {
+                        crate::app::multisig_proposals::waits_for(chain, own)
+                    }
+                    _ => Vec::new(),
+                },
                 chain_nonce,
             })
         };
