@@ -36,6 +36,12 @@ export interface ExtensionRequest {
 	origin: string;
 	tabId: number;
 	at: number;
+	/**
+	 * r10 follow-up: a network-space switch moved this site since its last
+	 * request, to `chainId` — the sheet this request opens says so once
+	 * (`connect.browser.spaceMoved`).
+	 */
+	spaceNote?: { chainId: number };
 }
 
 /** EIP-1193's refusal, and the one a dismissed window produces. */

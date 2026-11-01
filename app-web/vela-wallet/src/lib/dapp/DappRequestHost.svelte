@@ -459,6 +459,15 @@
 			// A site's request is never the wallet's own, whatever its words.
 			first_party: false
 		});
+		// r10 follow-up: a network-space switch moved this site since its last
+		// request — its sheet says so once (the worker took the note off).
+		if (incoming.spaceNote && incoming.spaceNote.chainId > 0) {
+			signRequest.dispatch({
+				type: 'space_noted',
+				id: incoming.id,
+				chain_id: incoming.spaceNote.chainId
+			});
+		}
 	}
 
 	/**
@@ -827,6 +836,15 @@
 		};
 	});
 	const consentNetwork = $derived({ name: chainName(chainId), logoUrl: chainLogoURL(chainId) });
+	/**
+	 * r10 follow-up: a network-space switch moved this site since its last
+	 * request — the consent says so once (`connect.browser.spaceMoved`).
+	 */
+	const spaceMovedLine = $derived(
+		request?.spaceNote && request.spaceNote.chainId > 0
+			? m.spaceMoved.replace('{{network}}', chainName(request.spaceNote.chainId))
+			: null
+	);
 	/** dapp-7: a connect for a multisig says what a multisig cannot be asked. */
 	const consentMultisig = $derived(
 		stage.kind === 'consent' && !!stage.address && !!multisig.find(stage.address)
@@ -923,6 +941,9 @@
 					{@render consentFacts()}
 					<p class="body">{m.body}</p>
 					{#if consentMultisig}<p class="body">{m.multisigConnectNote}</p>{/if}
+					{#if spaceMovedLine}<p class="body" data-testid="consent-space-note">
+							{spaceMovedLine}
+						</p>{/if}
 					{@render actions()}
 				</div>
 			</BottomSheet>
@@ -966,6 +987,9 @@
 			{@render consentFacts()}
 			<p class="body">{m.body}</p>
 			{#if consentMultisig}<p class="body">{m.multisigConnectNote}</p>{/if}
+			{#if spaceMovedLine}<p class="body" data-testid="consent-space-note">
+					{spaceMovedLine}
+				</p>{/if}
 			{@render actions()}
 		{:else if stage.kind === 'refused'}
 			<p class="body">{stage.message}</p>

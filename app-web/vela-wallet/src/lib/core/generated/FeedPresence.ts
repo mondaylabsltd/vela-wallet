@@ -10,7 +10,9 @@ export type FeedPresence = {
 visible: boolean, 
 /**
  * Milliseconds since the person last touched it (a tap, a key, a
- * scroll).
+ * scroll). Kept on the wire; the cadence no longer reads it (r10: a
+ * person at the page is a reason NOT to scan right then — see
+ * [`Event::Interacting`]).
  */
 since_interaction_ms: number, 
 /**

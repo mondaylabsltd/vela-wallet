@@ -810,6 +810,12 @@ export function chainKnown(catalog, chainId) {
  * The catalog still serves both spaces, so the refusal names the space the
  * network is in rather than saying Vela lacks it (Safari's r10 report); a
  * chain Vela does not have at all is "not in Vela's networks".
+ *
+ * The sentences are the corpus's English (`connect.browser.switchRefusal.*`,
+ * which every locale translates) and the core's
+ * (`network_space::switch_refusal_message`), word for word — the worker
+ * cannot read the corpus, so the shared vectors (`site-start-chain.json`
+ * `switches[].message`) hold this copy, the core and the corpus together.
  */
 export function switchRefusal(catalog, chainId) {
 	if (!chainKnown(catalog, chainId)) {
@@ -827,6 +833,32 @@ export function switchRefusal(catalog, chainId) {
 		message: `Chain ${chainId} is one of Vela's ${other} networks; Vela is showing its ${front} networks. Switch to the ${other} space in Vela to use it.`
 	};
 }
+
+/**
+ * r10 follow-up: what a space switch does to the sites — the core's
+ * `network_space::sites_moved_by_space_switch`, held to the same vectors
+ * (`site-start-chain.json` `space_switches`). Every site Vela keeps a network
+ * for (`sites`: `[{ origin, chain_id }]`) whose network is not one of the new
+ * space's (`order`) moves to where a new site starts there
+ * (`siteStartChain(order, lastUsed, accountChains)`); the rest stay. The owner's
+ * spec-105 line: test value is never mistaken for real, so a site connected
+ * in the mainnet space never stays on a testnet once the person is in the
+ * testnet space's — and back.
+ */
+export function spaceSwitchMoves(order, lastUsed, accountChains, sites) {
+	if (!Array.isArray(order) || order.length === 0) return [];
+	const start = siteStartChain(order, lastUsed, accountChains);
+	return sites
+		.filter((site) => site.chain_id > 0 && !order.includes(site.chain_id))
+		.map((site) => ({ origin: site.origin, chain_id: start }));
+}
+
+/**
+ * r10 follow-up: a site a space switch moved — `vela.ext.spaceMoved.<origin>`
+ * holds the network it went to, until the site's next request that opens the
+ * wallet's sheet says so (the corpus's `connect.browser.spaceMoved`) once.
+ */
+export const SPACE_MOVED_PREFIX = 'vela.ext.spaceMoved.';
 
 // ---- param / value helpers --------------------------------------------------
 

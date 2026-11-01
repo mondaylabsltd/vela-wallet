@@ -264,6 +264,11 @@
 			closeDisabled={!dismissible}
 			onclose={onclose && !model.dismissOnly ? closeNow : undefined}
 		/>
+		{#if model.spaceNote}
+			<!-- r10 follow-up: the network-space switch moved this site since
+			     it last asked; said once, under who is asking. -->
+			<p class="space-note" data-testid="signing-space-note">{model.spaceNote}</p>
+		{/if}
 	</div>
 	<!-- Spec 102 (D4): a hand-off is drawn by the body, under the sheet's own
 	     fee row and signing account (`SigningBody`). -->
@@ -321,6 +326,12 @@
 		   touch its words — and none of it in the layout at rest. */
 		padding-bottom: var(--space-md);
 		margin-bottom: calc(-1 * var(--space-md));
+	}
+
+	.space-note {
+		margin: var(--space-sm) 0 0;
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		color: var(--color-fg-muted);
 	}
 
 	/* Under the signing account by the rows' own gap (`SigningBody`'s

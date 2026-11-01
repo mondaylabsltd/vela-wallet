@@ -44,6 +44,7 @@ import {
 	chainEndpoints,
 	chainKnown,
 	switchRefusal,
+	spaceSwitchMoves,
 	classifyMethod,
 	droppedChannelAnswer,
 	HELD_BUCKETS,
@@ -422,6 +423,7 @@ describe('where a new site starts (dapp-17)', () => {
 				chain: number;
 				allowed: boolean;
 				refused?: 'otherSpace' | 'unknown';
+				message?: string;
 			}[];
 		};
 		expect(switches.length).toBeGreaterThanOrEqual(4);
@@ -444,6 +446,39 @@ describe('where a new site starts (dapp-17)', () => {
 					s.space === 'testnet' ? "Vela's mainnet networks" : "Vela's testnet networks"
 				);
 			}
+			// r10 follow-up: the sentence word for word — the core's
+			// (`switch_refusal_message`) and the corpus's English.
+			if (s.refused) expect(refusal?.message, s.name).toBe(s.message);
+		}
+	});
+
+	it('a space switch moves the sites outside the new space — the shared vectors (r10 follow-up)', () => {
+		const { space_switches } = JSON.parse(
+			readFileSync(
+				fileURLToPath(
+					new URL(
+						'../../../../../rust/crates/vela-core/tests/vectors/site-start-chain.json',
+						import.meta.url
+					)
+				),
+				'utf8'
+			)
+		) as {
+			space_switches: {
+				name: string;
+				space_chain_ids: number[];
+				last_used: number | null;
+				account_chains: number[];
+				sites: { origin: string; chain_id: number }[];
+				moves: { origin: string; chain_id: number }[];
+			}[];
+		};
+		expect(space_switches.length).toBeGreaterThanOrEqual(6);
+		for (const c of space_switches) {
+			expect(
+				spaceSwitchMoves(c.space_chain_ids, c.last_used, c.account_chains, c.sites),
+				c.name
+			).toEqual(c.moves);
 		}
 	});
 

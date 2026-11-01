@@ -1646,6 +1646,71 @@ describe('where a new site starts (dapp-17)', () => {
 		});
 		expect(unknown.error?.code).toBe(4902);
 	});
+
+	it('a space switch moves every site outside the new space, tells its pages, and its next request says so once (r10 follow-up)', async () => {
+		const env = makeEnv();
+		const chains = {
+			'1': { chainId: 1, name: 'Ethereum', rpc: [], bundler: '' },
+			'8453': { chainId: 8453, name: 'Base', rpc: [], bundler: '' },
+			'11155111': { chainId: 11155111, name: 'Sepolia', rpc: [], bundler: '' },
+			'5042002': { chainId: 5042002, name: 'Arc Testnet', rpc: [], bundler: '' }
+		};
+		const mainnet = { version: 1, space: 'mainnet', order: [1, 8453], chains };
+		const testnet = { version: 1, space: 'testnet', order: [11155111, 5042002], chains };
+		env.local.data['vela.ext.chains'] = mainnet;
+		// The network last used in the testnet space is where moved sites land.
+		env.local.data['vela.ext.lastChain'] = { testnet: 5042002 };
+		// a: connected on Base. b: switched to Ethereum by its page, not connected.
+		env.local.data['vela.perm.https://a.example'] = {
+			origin: 'https://a.example',
+			address: '0x031D7D57c99CAF891e1C250554691Fd12D84772b',
+			chainId: 8453,
+			grantedAtMs: 1
+		};
+		env.local.data['vela.chain.https://b.example'] = 1;
+		await startWorker(env);
+		const a = env.openPage(7, 'doc-a', 'https://a.example');
+		// c: a page with no network of its own — it follows the space's start.
+		env.openPage(9, 'doc-c', 'https://c.example');
+
+		// The person switches to the testnet space: the wallet page publishes.
+		env.local.data['vela.ext.chains'] = testnet;
+		env.emit(
+			'storageChanged',
+			{ 'vela.ext.chains': { oldValue: mainnet, newValue: testnet } },
+			'local'
+		);
+		await settleAll();
+		// Test value is never mistaken for real — and the reverse: no site of
+		// the mainnet space stays on a mainnet network in the testnet space.
+		expect(env.local.data['vela.chain.https://a.example']).toBe(5042002);
+		expect(env.local.data['vela.chain.https://b.example']).toBe(5042002);
+		expect(env.local.data['vela.ext.spaceMoved.https://a.example']).toBe(5042002);
+		// The page with no network of its own is told directly (a moved site's
+		// pages hear it from its `vela.chain.` write, the listener below).
+		expect(env.events).toContainEqual({ tabId: 9, event: 'chainChanged', data: '0x4cef52' });
+
+		// a's next request that opens the sheet carries the one line, once.
+		await env.ask(a, 'r1');
+		await settleAll();
+		const detail = await env.sendFromWallet({ type: 'requestDetail', rid: '7:r1' });
+		expect(detail?.spaceNote).toEqual({ chainId: 5042002 });
+		expect(env.local.data['vela.ext.spaceMoved.https://a.example']).toBeUndefined();
+		await env.ask(a, 'r2');
+		await settleAll();
+		const second = await env.sendFromWallet({ type: 'requestDetail', rid: '7:r2' });
+		expect(second?.spaceNote).toBeUndefined();
+
+		// The same space published again (a network added): nothing moves.
+		env.local.data['vela.chain.https://b.example'] = 11155111;
+		env.emit(
+			'storageChanged',
+			{ 'vela.ext.chains': { oldValue: testnet, newValue: testnet } },
+			'local'
+		);
+		await settleAll();
+		expect(env.local.data['vela.chain.https://b.example']).toBe(11155111);
+	});
 });
 
 describe('chain reads (RF2, G20, G33)', () => {

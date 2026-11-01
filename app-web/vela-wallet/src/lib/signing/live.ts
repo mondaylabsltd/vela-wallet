@@ -2012,6 +2012,14 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 			logoUrl: chainLogoURL(request.chain_id)
 		},
 		...(headline ? { headline } : {}),
+		...(!own && request.space_note
+			? {
+					spaceNote: m.spaceMoved.replace(
+						'{{network}}',
+						chainName(request.space_note.chain_id)
+					)
+				}
+			: {}),
 		blocks,
 		...(!sign.blocked && stillReading(clear) ? { reading: 'out' as const } : {}),
 		tech: techModel(inputs, own, shown),
