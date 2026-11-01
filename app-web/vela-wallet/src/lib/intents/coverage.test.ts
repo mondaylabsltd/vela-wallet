@@ -272,6 +272,8 @@ const CALLED: Record<string, Place> = {
 	// r10 follow-up: the person's moments, for the cadence.
 	'feed.refreshed': { step: 'refresh_balances' },
 	'feed.sent': { step: 'submit_transfer' },
+	// A send's records were written: Activity reads them (the feed's contract).
+	'feed.reconciled': { step: 'submit_transfer' },
 	'feed.interacting': { machine: 'a list scrolled' },
 	'feed.privacyChanged': { step: 'set_balance_privacy' },
 	'feed.chainFilter': { view: 'the network filter' },
