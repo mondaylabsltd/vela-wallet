@@ -554,3 +554,24 @@ known deploy block. uniffi `incoming_scan_plan`, `incoming_scan_windows`,
   (Rust and the worker's JS twin).
 - Welcome reads a multisig link with the core before it says it waits
   (`onboarding.welcomeWeb.linkBroken`).
+
+### 9.7 Outside the multisig machines (every shell drives the same core)
+
+- **Amount + fee (r10-3).** The send rules weigh amount + fee against ONE
+  balance on every confirm path — native fee, in-band fee, Arc's USDC whose
+  coin and ERC-20 interface are one balance (`manage_tokens::same_balance`,
+  `rescale_units`; `fee_policy::fee_in_units_of`), Max's reserve — and the
+  dApp sheet's fee check subtracts the request's own amount. New
+  `FeeOptionView.short_with_amount` (words `send.warnInsufficientForGas`).
+  Vectors `tests/vectors/rules/send-fee-cover.json`. The r10 revert itself
+  came from the harness relay reporting a fixed balance; the fee machine
+  still takes the relay's balance figure (a follow-up: cross-check with the
+  wallet's own read).
+- **Passkey errors (real-device S3).** `app::passkey_error::words(platform,
+domain, code, message) -> {kind, key, failure}` (uniffi
+  `passkey_error_words`, wasm `passkeyErrorWords`): a corpus key
+  (`onboarding.common.passkeyError.*`, `phoneLinkFailed`) for the platform's
+  error facts, never the system's English. Onboarding's `passkey_failed`
+  takes optional `error {platform, domain, code, message}`; the core fills
+  `PromptKind::{CreateFailed, SignInFailed}.words_key`. Vectors
+  `tests/vectors/rules/passkey-errors.json`.
