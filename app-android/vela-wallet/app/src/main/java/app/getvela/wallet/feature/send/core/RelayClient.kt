@@ -386,8 +386,13 @@ class RelayClient(
             val settlementGas: String? = null,
         ) : EstimateAnswer()
 
-        /** The relay answered and refused; `message` is its sentence, for the log. */
-        data class Refused(val message: String) : EstimateAnswer()
+        /**
+         * The relay answered and refused; `message` is its sentence, for the
+         * log. [errorJson]: what it answered (its JSON-RPC `error` member, or
+         * the whole body), as it came — r11-8: what that MEANS for the fee is
+         * the core's rule (`fee_estimate_gas_outcome`), never this file's.
+         */
+        data class Refused(val message: String, val errorJson: String? = null) : EstimateAnswer()
 
         data object Unreachable : EstimateAnswer()
     }
@@ -397,9 +402,9 @@ class RelayClient(
         val body = bundlerCall(chainId, "eth_estimateUserOperationGas", listOf(JSONObject(opJson), entryPointAddress()))
             ?: return EstimateAnswer.Unreachable
         body.optJSONObject("error")?.let { error ->
-            return EstimateAnswer.Refused(error.optString("message").ifBlank { "Gas estimation failed" })
+            return EstimateAnswer.Refused(error.optString("message").ifBlank { "Gas estimation failed" }, error.toString())
         }
-        val result = body.optJSONObject("result") ?: return EstimateAnswer.Refused("Failed to estimate gas — empty result")
+        val result = body.optJSONObject("result") ?: return EstimateAnswer.Refused("Failed to estimate gas — empty result", body.toString())
         return EstimateAnswer.Estimated(
             verificationGasLimit = decimalOfHex(result.opt("verificationGasLimit")) ?: return EstimateAnswer.Refused("verificationGasLimit missing"),
             callGasLimit = decimalOfHex(result.opt("callGasLimit")) ?: return EstimateAnswer.Refused("callGasLimit missing"),
