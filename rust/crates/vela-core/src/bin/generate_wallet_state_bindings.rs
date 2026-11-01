@@ -57,6 +57,9 @@ use vela_core::app::fee_speed::{
 use vela_core::app::fee_tier_pref::{
     Event as FeeTierPrefEvent, FeeTierPrefOperation, FeeTierPrefShellResult, FeeTierPrefView,
 };
+use vela_core::app::incoming_scan::{
+    IncomingScanPlan, IncomingScanWindows, IncomingScanWindowsAsk, TrustScanFacts,
+};
 use vela_core::app::intent_rules::{
     Baseline as IntentBaseline, Ceremony as IntentCeremony, Examined as IntentExamined,
     Preferences as IntentPreferences, Progress as IntentProgress, Verdict as IntentVerdict,
@@ -196,6 +199,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     TrustOperation::export_all(&config)?;
     TrustShellResult::export_all(&config)?;
     TrustView::export_all(&config)?;
+    // r9-17: the incoming scan's pure-rule shapes (`incomingScanPlan`, …).
+    IncomingScanPlan::export_all(&config)?;
+    IncomingScanWindows::export_all(&config)?;
+    IncomingScanWindowsAsk::export_all(&config)?;
+    TrustScanFacts::export_all(&config)?;
     NetEvent::export_all(&config)?;
     NetOperation::export_all(&config)?;
     NetShellResult::export_all(&config)?;

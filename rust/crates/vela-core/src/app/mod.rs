@@ -62,6 +62,8 @@ pub mod fee_policy;
 pub mod fee_speed;
 pub mod fee_tier_pref;
 pub mod genesis_service;
+/// The incoming-funds scan: networks, windows, cadence — one rule (r9-17).
+pub mod incoming_scan;
 pub mod intent_json;
 pub mod intent_rules;
 pub mod intents;
