@@ -265,11 +265,25 @@ fun MsSheet(
     tag: String? = null,
     /** A new key starts the content at its top (a sheet's next step). */
     scrollKey: Any? = null,
+    /**
+     * r10 S4: a form with something in it. A swipe or a tap outside does not
+     * close it, and Back or ✕ go to [onClose] — which asks first — instead
+     * of the form vanishing under a gesture meant for the keyboard.
+     */
+    guarded: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colors = VelaTheme.colors
     val scroll = androidx.compose.runtime.key(scrollKey) { rememberScrollState() }
-    VelaModalSheet(onDismissRequest = onClose, containerColor = colors.bgBase, dismissible = dismissible, followAppTextSize = true) {
+    val guard = androidx.compose.runtime.rememberUpdatedState(guarded)
+    @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+    val sheetState = androidx.compose.material3.rememberModalBottomSheetState(
+        skipPartiallyExpanded = true,
+        confirmValueChange = { it != androidx.compose.material3.SheetValue.Hidden || !guard.value },
+    )
+    VelaModalSheet(onDismissRequest = onClose, sheetState = sheetState, containerColor = colors.bgBase, dismissible = dismissible, followAppTextSize = true) {
+        // Registered inside the sheet's own window, after its own: Back asks.
+        androidx.activity.compose.BackHandler(enabled = guarded && dismissible) { onClose() }
         Column(
             modifier
                 .fillMaxWidth()

@@ -620,7 +620,12 @@ class AppContainer(private val app: Application) {
                 session.view.value.accounts.firstOrNull { it.address.equals(address, ignoreCase = true) }?.name?.ifBlank { null }
                     ?: contacts.view.value.contacts.firstOrNull { it.address.equals(address, ignoreCase = true) }?.name?.ifBlank { null }
             },
-            ownAddress = { address -> session.view.value.accounts.any { it.address.equals(address, ignoreCase = true) } },
+            // r10 S4: a multisig on this device is one of the person's own too —
+            // sending to it was labelled "first time sending here".
+            ownAddress = { address ->
+                session.view.value.accounts.any { it.address.equals(address, ignoreCase = true) } ||
+                    (multisigBuilt && multisig.isMultisig(address))
+            },
             // The importer is opened in the person's currency when that is known —
             // committed, or the stored choice on its way (F8); only before either
             // does it get the placeholder it needs to exist, which its sheet does
@@ -1173,6 +1178,12 @@ class AppContainer(private val app: Application) {
                 wallet.backgrounded()
                 // In the background it hangs up, and what waited is withdrawn.
                 agent.sceneActive(false)
+                // M6 (r10): put away with a multisig to follow — one expedited
+                // round now, the one a restrictive scheduler still runs.
+                if (multisigBuilt && multisig.accountsView.value.accounts.isNotEmpty()) {
+                    runCatching { MultisigNotifier.checkOnLeaving(app) }
+                        .onFailure { VelaLog.failure("multisig.poll", "leaving round", it) }
+                }
             }
         }
 

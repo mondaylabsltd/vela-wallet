@@ -3,6 +3,8 @@ package app.getvela.wallet.feature.multisig
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,7 +33,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.getvela.wallet.core.designsystem.components.VelaDangerButton
 import app.getvela.wallet.core.designsystem.components.VelaIcons
@@ -206,10 +207,42 @@ fun MultisigCreateSheet(
         val at = owners.indexOfFirst { it.equals(address, ignoreCase = true) }
         if (at >= 0) owners.removeAt(at) else owners.add(address)
     }
-    val close = { if (step == CreateStep.Created && created != null) onCreated(created!!) else onClose() }
+    // r10 S4 (real device): Back — reached for to put the keyboard away —
+    // closed a filled form without a word. A form with something in it asks
+    // first, and says what is kept (the machine's draft).
+    val filled = step != CreateStep.Created && createFilled(name, owners.filterNot(::isLocal).size, typed, typedName)
+    var asking by remember { mutableStateOf(false) }
+    val close = {
+        when {
+            step == CreateStep.Created && created != null -> onCreated(created!!)
+            filled -> asking = true
+            else -> onClose()
+        }
+    }
     val colors = VelaTheme.colors
+    if (asking) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { asking = false },
+            title = { androidx.compose.material3.Text(words.t("create.closeTitle")) },
+            text = { androidx.compose.material3.Text(words.t("create.closeBody")) },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    asking = false
+                    // A member still being typed goes into the kept draft too, when it reads as one.
+                    if (typed.isNotBlank()) addMember(typed, typedName)
+                    onClose()
+                }, modifier = Modifier.testTag("multisig.create.closeConfirm")) { androidx.compose.material3.Text(words.t("create.closeConfirm")) }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { asking = false }, modifier = Modifier.testTag("multisig.create.closeKeep")) {
+                    androidx.compose.material3.Text(words.t("create.closeKeep"))
+                }
+            },
+            modifier = Modifier.testTag("multisig.create.closeAsk"),
+        )
+    }
 
-    MsSheet(words.t("create.title"), words.raw("common.done"), onClose = close, dismissible = sheet.phase != MsPhase.Working, tag = "multisig.create", scrollKey = step) {
+    MsSheet(words.t("create.title"), words.raw("common.done"), onClose = close, dismissible = sheet.phase != MsPhase.Working, tag = "multisig.create", scrollKey = step, guarded = filled) {
         when (step) {
             CreateStep.Members -> {
                 MsText(words.t("create.intro"), MsType.Body, color = colors.fgMuted)
@@ -233,16 +266,18 @@ fun MultisigCreateSheet(
                     for (account in accounts) {
                         val on = owners.any { it.equals(account.address, ignoreCase = true) }
                         Row(
-                            Modifier.fillMaxWidth().clickable(role = Role.Switch) { toggle(account.address) }.padding(vertical = VelaSpacing.sm)
-                                .testTag("multisig.create.account")
-                                .semantics(mergeDescendants = true) { stateDescription = if (on) "on" else "off" },
+                            // r10 S4: the row is the switch and says whether it is on
+                            // (TalkBack read "unchecked" for every one: a clickable with a
+                            // switch's role and no state, and an English "on"/"off").
+                            Modifier.fillMaxWidth().toggleable(value = on, role = Role.Switch) { toggle(account.address) }.padding(vertical = VelaSpacing.sm)
+                                .testTag("multisig.create.account"),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Column(Modifier.weight(1f)) {
                                 MsText(account.name, MsType.Field)
                                 MsText(MultisigWords.short(account.address), MsType.Mono, color = colors.fgSubtle)
                             }
-                            Switch(checked = on, onCheckedChange = { toggle(account.address) }, colors = SwitchDefaults.colors(checkedTrackColor = colors.fgBase))
+                            Switch(checked = on, onCheckedChange = null, colors = SwitchDefaults.colors(checkedTrackColor = colors.fgBase))
                         }
                     }
                 }
@@ -347,7 +382,7 @@ fun MultisigCreateSheet(
                     }
                     MsNote(words.t("create.networkHint"))
                     if (sheet.otherSpace.isNotEmpty()) {
-                        MsNote(words.t("create.otherSpace", "space" to otherSpaceName, "networks" to sheet.otherSpace.joinToString(", ", transform = words::network)), tag = "multisig.create.otherSpace")
+                        MsNote(words.t("create.otherSpace", "space" to otherSpaceName, "networks" to words.list(sheet.otherSpace.map(words::network))), tag = "multisig.create.otherSpace")
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg)) {
@@ -453,13 +488,21 @@ fun Stepper(text: String, canFewer: Boolean, canMore: Boolean, fewer: String, mo
     }
 }
 
+/**
+ * r10 S4: the create form holds something a close would take from the
+ * person's sight: a name, a member beyond this device's own accounts, or a
+ * member being typed. (This device's accounts alone are the form's start.)
+ */
+internal fun createFilled(name: String, others: Int, typed: String, typedName: String): Boolean =
+    name.isNotBlank() || others > 0 || typed.isNotBlank() || typedName.isNotBlank()
+
 /** One choice among several, ticked when chosen. */
 @Composable
 fun ChoiceRow(text: String, selected: Boolean, tag: String, onPick: () -> Unit) {
     val colors = VelaTheme.colors
     Row(
-        Modifier.fillMaxWidth().clickable(role = Role.RadioButton, onClick = onPick).padding(vertical = VelaSpacing.md).testTag(tag)
-            .semantics(mergeDescendants = true) { stateDescription = if (selected) "selected" else "" },
+        // r10 S4: selectable — the chosen network is said as selected, never "not checked".
+        Modifier.fillMaxWidth().selectable(selected = selected, role = Role.RadioButton, onClick = onPick).padding(vertical = VelaSpacing.md).testTag(tag),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         MsText(text, MsType.Field, Modifier.weight(1f))
@@ -489,7 +532,7 @@ fun KindChoice(words: MultisigWords, choice: MsKindChoice?, onPick: (String?) ->
             Row(Modifier.testTag("multisig.kind"), horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
                 for ((kind, label) in listOf("vela" to words.t("members.kindVela"), "wallet" to words.t("members.kindWallet"))) {
                     val on = choice.kind == kind
-                    Box(Modifier.clickable(role = Role.RadioButton) { onPick(if (on) null else kind) }.testTag("multisig.kind.$kind")) {
+                    Box(Modifier.selectable(selected = on, role = Role.RadioButton) { onPick(if (on) null else kind) }.testTag("multisig.kind.$kind")) {
                         MsChip(label, tone = if (on) MsTone.Positive else MsTone.Neutral)
                     }
                 }
@@ -612,7 +655,7 @@ fun MultisigAddSheet(
         if (invite != null) {
             Column(Modifier.testTag("multisig.add.invite"), verticalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
                 if (linkChains.isNotEmpty()) {
-                    MsNote(words.t("add.usedOn", "networks" to linkChains.joinToString(", ", transform = words::network)))
+                    MsNote(words.t("add.usedOn", "networks" to words.list(linkChains.map(words::network))))
                 } else if (linkLacks != null) {
                     val title = words.missingTitle(linkLacks, kept?.get("missing_name").str)
                     MsNote(words.t("add.networkMissing", "network" to title), tone = MsTone.Warning, tag = "multisig.add.networkMissing")
@@ -692,7 +735,7 @@ fun MultisigAddSheet(
                     }
                     val on = a in picked
                     Row(
-                        Modifier.fillMaxWidth().clickable(enabled = !already, role = Role.Checkbox) { if (on) picked.remove(a) else picked.add(a) }
+                        Modifier.fillMaxWidth().toggleable(value = on || already, enabled = !already, role = Role.Checkbox) { if (on) picked.remove(a) else picked.add(a) }
                             .padding(vertical = VelaSpacing.sm).testTag("multisig.import.safe"),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {

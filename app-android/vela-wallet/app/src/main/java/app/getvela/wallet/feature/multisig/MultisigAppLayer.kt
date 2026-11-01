@@ -110,15 +110,22 @@ fun MultisigAppLayer(
     // M6: the notification permission, asked when there is first something to
     // say (a multisig created or added, the first proposal) — once per install.
     val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     val askLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
-    ) { granted -> VelaLog.event("multisig.notify", "permission", "granted" to granted) }
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    ) { granted ->
+        VelaLog.event("multisig.notify", "permission", "granted" to granted, "limited" to MultisigNotifier.backgroundLimited(context))
+        scope.launch { MultisigNotifyAsk.answered(app.getvela.wallet.core.data.VelaStore(context)) }
+    }
     val askNotifications: () -> Unit = {
-        if (android.os.Build.VERSION.SDK_INT >= 33 &&
-            androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) !=
+        if (android.os.Build.VERSION.SDK_INT < 33) {
+            VelaLog.event("multisig.notify", "no ask before Android 13", "enabled" to MultisigNotifier.allowed(context))
+        } else if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) ==
             android.content.pm.PackageManager.PERMISSION_GRANTED
         ) {
+            // Said, so a device pass can tell "never asked" from "nothing to ask".
+            VelaLog.event("multisig.notify", "already allowed", "enabled" to MultisigNotifier.allowed(context))
+        } else {
             scope.launch {
                 // r9-8: the multisig's own once — a receipt's earlier ask (087
                 // F14) was about a send's outcome; this one is about members
@@ -240,8 +247,38 @@ fun MultisigWaitingLinkSheet(words: MultisigWords, link: String, onOpen: () -> B
 object MultisigNotifyAsk {
     const val KEY = "vela.multisigNotificationsAsked"
 
+    /** The system's dialog answered (allowed or not): never asked again. */
+    const val ANSWERED = "answered"
+
+    /** Shown, not answered yet (the process may die under it): asked again on a later run. */
+    const val ASKING = "asking"
+
+    /** One ask per process: a screen recreated under the dialog (a language switch) does not ask twice. */
+    @Volatile
+    private var askedThisRun = false
+
+    /**
+     * Whether the system's ask may be shown now — once per install, counted
+     * from its ANSWER (real device, r10: the mark used to be written before
+     * the dialog, so an ask the system never showed — a screen not in front
+     * yet, a process gone — was never made again; the store said "asked" and
+     * the phone had never seen the question).
+     */
     suspend fun claim(store: app.getvela.wallet.core.data.KeyValueStore): Boolean {
-        if (store.read(KEY) != null) return false
-        return store.write(KEY, "1")
+        if (askedThisRun) return false
+        if (store.read(KEY) == ANSWERED) return false
+        if (!store.write(KEY, ASKING)) return false
+        askedThisRun = true
+        return true
+    }
+
+    /** The system's dialog answered: the mark for good. */
+    suspend fun answered(store: app.getvela.wallet.core.data.KeyValueStore) {
+        store.write(KEY, ANSWERED)
+    }
+
+    /** A test's fresh process. */
+    internal fun forgetRun() {
+        askedThisRun = false
     }
 }

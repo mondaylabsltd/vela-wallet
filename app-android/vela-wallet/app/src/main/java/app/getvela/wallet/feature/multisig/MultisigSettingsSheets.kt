@@ -130,6 +130,7 @@ fun MultisigSettingsSheet(
         if (row.account.owners.size > 1) {
             MsNavRow(words.t("panel.invite"), icon = VelaIcons.QrCode, tag = "multisig.settings.invite") { onOpen(MultisigSheet.Invite(address)) }
         }
+        MultisigNotifySection(words)
 
         // The record.
         if (!row.shared) {
@@ -450,3 +451,60 @@ internal fun memberRefusal(words: MultisigWords, verdict: JsonElement?): String 
         else -> words.t("members.refuse.noOne")
     }
 }
+
+/** What the notifications section says (r10): on or off, and whether this phone holds the background checks back. */
+internal data class NotifyStand(val on: Boolean, val limited: Boolean, val oem: Boolean)
+
+/** The lines it draws, in order: the state, then (only while on) why a notification may come late. */
+internal fun notifyLines(words: MultisigWords, stand: NotifyStand): List<Pair<String, MsTone>> = buildList {
+    if (!stand.on) {
+        add(words.t("notify.off") to MsTone.Warning)
+        return@buildList
+    }
+    add(words.t("notify.on") to MsTone.Neutral)
+    if (stand.limited) {
+        add(words.t("notify.limited") to MsTone.Warning)
+    } else if (stand.oem) {
+        add(words.t("notify.oem") to MsTone.Neutral)
+    }
+}
+
+/**
+ * r10 (real device): the multisig's notifications, where the person looks
+ * for them — on or off, with the way to turn them on; and, said here and
+ * never as a banner, that this phone holds Vela's background checks back
+ * (battery optimisation, a background restriction, or — named, since no API
+ * reports it — a maker's own battery saver), with the way to its settings.
+ * Read again whenever the sheet is back in front.
+ */
+@Composable
+internal fun MultisigNotifySection(words: MultisigWords) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var stand by remember { mutableStateOf(readNotifyStand(context)) }
+    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
+        stand = readNotifyStand(context)
+        onPauseOrDispose { }
+    }
+    MsSection(words.t("notify.title"), Modifier.testTag("multisig.settings.notify")) {
+        for ((text, tone) in notifyLines(words, stand)) MsNote(text, tone = tone)
+        if (!stand.on || stand.limited || stand.oem) {
+            MsTextButton(words.t(if (stand.on) "notify.openSettings" else "notify.turnOn"), tag = "multisig.settings.notify.open") {
+                val intent = if (!stand.on && android.os.Build.VERSION.SDK_INT >= 26) {
+                    android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                        .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                } else {
+                    MultisigNotifier.batterySettingsIntent(context)
+                }
+                runCatching { context.startActivity(intent) }
+                    .onFailure { runCatching { context.startActivity(MultisigNotifier.batterySettingsIntent(context)) } }
+            }
+        }
+    }
+}
+
+private fun readNotifyStand(context: android.content.Context) = NotifyStand(
+    on = MultisigNotifier.allowed(context),
+    limited = MultisigNotifier.backgroundLimited(context),
+    oem = MultisigNotifier.oemHint(),
+)

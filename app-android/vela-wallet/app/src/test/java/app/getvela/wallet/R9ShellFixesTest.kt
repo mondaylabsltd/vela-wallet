@@ -316,8 +316,45 @@ class R9ShellFixesTest {
         val store = FakeStore()
         // A send receipt's ask (087 F14) does not use the multisig's.
         store.write(app.getvela.wallet.core.data.NotificationAsk.KEY, "1")
+        MultisigNotifyAsk.forgetRun()
         assertTrue(MultisigNotifyAsk.claim(store))
         assertFalse(MultisigNotifyAsk.claim(store))
+        MultisigNotifyAsk.answered(store)
+        MultisigNotifyAsk.forgetRun()
+        assertFalse("answered: never again, not even in a new process", MultisigNotifyAsk.claim(store))
+    }
+
+    /**
+     * r10 (real device): the mark was written before the dialog, so an ask
+     * the system never showed was never made again. Now the ANSWER is the
+     * mark: a dialog left unanswered (the process gone under it) is asked
+     * on a later run — once per run, never on a recreated screen.
+     */
+    @Test
+    fun an_ask_the_system_never_answered_is_made_again_on_a_later_run() = runBlocking {
+        val store = FakeStore()
+        MultisigNotifyAsk.forgetRun()
+        assertTrue(MultisigNotifyAsk.claim(store))
+        assertEquals(MultisigNotifyAsk.ASKING, store.values[MultisigNotifyAsk.KEY])
+        assertFalse("a recreated screen in the same run does not ask again", MultisigNotifyAsk.claim(store))
+        MultisigNotifyAsk.forgetRun()
+        assertTrue("a later run asks again: nobody answered", MultisigNotifyAsk.claim(store))
+        MultisigNotifyAsk.forgetRun()
+        val refusing = FakeStore().apply { refuseWrites = true }
+        assertFalse("a store that cannot keep the mark does not ask on every screen", MultisigNotifyAsk.claim(refusing))
+    }
+
+    @Test
+    fun the_background_round_is_periodic_with_sensible_constraints_and_replaced_on_update() {
+        val request = MultisigNotifier.periodicRequest()
+        val spec = request.workSpec
+        assertEquals(15 * 60_000L, spec.intervalDuration)
+        assertEquals(5 * 60_000L, spec.flexDuration)
+        assertEquals(androidx.work.NetworkType.CONNECTED, spec.constraints.requiredNetworkType)
+        assertTrue(spec.constraints.requiresBatteryNotLow())
+        assertEquals(androidx.work.BackoffPolicy.EXPONENTIAL, spec.backoffPolicy)
+        assertTrue(MultisigNotifier.oemHint("Xiaomi"))
+        assertFalse(MultisigNotifier.oemHint("Google"))
     }
 
     @Test

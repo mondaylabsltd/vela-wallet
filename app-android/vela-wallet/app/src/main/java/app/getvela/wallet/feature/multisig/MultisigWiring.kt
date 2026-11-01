@@ -85,6 +85,8 @@ object MultisigWiring {
         // The hub's machines open no room of their own today (the web hands them
         // rooms whose news goes nowhere); a session gets its own below.
         val peer = app.getvela.wallet.feature.multisig.core.MultisigPeerConnect(scope, store)
+        // The hub, once built: the shell's facts read whether an address is one of its multisigs.
+        var hubRef: MultisigHub? = null
         val live = MultisigLive(
             pool = container.pool,
             relay = container.relay,
@@ -98,6 +100,10 @@ object MultisigWiring {
                 row?.display_name to row?.native_symbol
             },
             sentTo = { address -> container.wallet.feedExecutor.sentTo(address) },
+            own = { address ->
+                container.session.view.value.accounts.any { it.address.equals(address, ignoreCase = true) } ||
+                    hubRef?.isMultisig(address) == true
+            },
             peer = peer,
         )
         val hub = MultisigHub(
@@ -114,6 +120,7 @@ object MultisigWiring {
             words(container).actionTitle(chainId, action, nonce, info)
         }
         hub.onRecorded = { container.wallet.feedReconciled(1) }
+        hubRef = hub
         // r9-12 (core §8): the passkey index's word on each member the accounts
         // machine asks about (`index_wanted`, this device's own accounts too) —
         // the name that account registered, the same on every device. The

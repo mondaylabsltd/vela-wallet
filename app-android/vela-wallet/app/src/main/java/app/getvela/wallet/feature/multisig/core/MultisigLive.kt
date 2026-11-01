@@ -119,6 +119,8 @@ class MultisigLive(
     private val chainLabel: (Int) -> Pair<String?, String?> = { null to null },
     /** Whether this device has ever sent to [address] (`null`: its history does not read). */
     private val sentTo: suspend (String) -> Boolean? = { null },
+    /** One of the person's own: an account or a multisig on this device (never a "first time" recipient). */
+    private val own: (String) -> Boolean = { false },
     override val peer: MultisigPeerTransport = NoPeer,
 ) : MultisigShellPorts {
 
@@ -420,6 +422,9 @@ class MultisigLive(
 
     override suspend fun recipientFacts(op: MultisigOperation.RecipientRisk): Pair<Boolean?, Boolean?> {
         val contract = runCatching { relay.isContract(op.chain_id.toInt(), op.address) }.getOrNull()
+        // r10 S4: the person's own account or multisig is never "first time
+        // sending here" (the web's `ownAddress`; the send flow's `own`).
+        if (own(op.address)) return contract to false
         val sent = runCatching { sentTo(op.address) }.getOrNull()
         return contract to sent?.let { !it }
     }
