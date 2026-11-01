@@ -854,8 +854,17 @@ class WalletController(
         return settled.sim
     }
 
-    /** The activity feed: day-grouped rows, already in render order. */
+    /**
+     * The activity feed: day-grouped rows, already in render order — as the
+     * screens draw it. `next_scan` is the cadence's (this controller follows
+     * it on [feedHost] directly) and is left out here: a quiet scan's one
+     * render changes only the timer, and handed on it redrew the whole wallet
+     * route — the 200-row history mid-fling (a 60–70 ms frame on a Redmi
+     * K40, every scan). Equal views are not emitted again.
+     */
     val feed: StateFlow<FeedView> = feedHost.view
+        .map { view -> if (view.next_scan == null) view else view.copy(next_scan = null) }
+        .stateIn(scope, SharingStarted.Eagerly, feedHost.view.value.copy(next_scan = null))
 
     /**
      * Open the wallet for an address.

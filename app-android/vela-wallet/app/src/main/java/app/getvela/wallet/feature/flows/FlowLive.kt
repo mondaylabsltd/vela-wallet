@@ -214,9 +214,15 @@ object FlowLive {
         now: Long = System.currentTimeMillis(),
         chainFilter: Int? = null,
         chainNames: Map<Int, String> = emptyMap(),
+        /**
+         * [WalletLive.activity] of this very [feed], already built off the
+         * main thread (the nav host keeps it warm) — so opening the history
+         * does not build 200 rows inside its first frame. `null`: built here.
+         */
+        prebuilt: List<app.getvela.wallet.feature.wallet.ActivityGroupModel>? = null,
     ): HistoryModel {
         // The feed machine narrows the rows itself (`chain_filter_changed`); the pill says which chain.
-        val groups = WalletLive.activity(feed, strings, now, chainNames)
+        val groups = prebuilt ?: WalletLive.activity(feed, strings, now, chainNames)
         return fallback.copy(
             header = fallback.header.copy(pill = pill(fallback.header.pill, chainFilter, chainNames)),
             mode = if (groups.isEmpty()) HistoryMode.Empty else HistoryMode.Rows,

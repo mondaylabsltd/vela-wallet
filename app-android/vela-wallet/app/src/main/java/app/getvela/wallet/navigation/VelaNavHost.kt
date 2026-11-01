@@ -766,6 +766,19 @@ fun VelaNavHost(
                 val chainNames = remember(networks.networks) {
                     networks.networks.associate { it.chain_id.toInt() to it.display_name }
                 }
+                // Perf (r10 follow-up): the history's rows, kept built on a background
+                // thread for the feed as it stands — opening the history draws them
+                // instead of building 200 rows inside its first frame. The day keys
+                // it too, so "Today" moves at midnight.
+                val historyDay = System.currentTimeMillis() / 86_400_000L
+                val historyPrebuilt by produceState<HistoryPrebuilt?>(null, feed, strings, chainNames, historyDay) {
+                    val f = feed
+                    val s = strings
+                    val names = chainNames
+                    value = withContext(Dispatchers.Default) {
+                        HistoryPrebuilt(f, s, names, WalletLive.activity(f, s, System.currentTimeMillis(), names))
+                    }
+                }
                 // r9-15: each network's own coin (Arc's is USDC), from the settings rows.
                 val nativeSymbols = remember(networks.networks) {
                     networks.networks.associate { it.chain_id.toInt() to it.native_symbol }
@@ -1853,14 +1866,25 @@ fun VelaNavHost(
                         pendingReceiveAsset = null
                         wallet.assetPicked(t.chainId, t.tokenAddress, t.symbol, t.decimals, t.networkName)
                     }
+                    // The drawn screen, once per state (and per wording / number preset):
+                    // what it is decides which facts its live model reads.
+                    val drawnFlow = remember(flowState, strings, Formats.current) { FlowFixtures.build(flowState, strings) }
+                    // Only what the screen on top reads is a key (perf, r10 follow-up):
+                    // the history read the balances' every answer and the assets list the
+                    // feed's every scan as a reason to rebuild — 200 rows rebuilt on the
+                    // main thread in the middle of a fling.
+                    val flowBalances = balances.takeIf { drawnFlow.base is FlowBase.Assets || drawnFlow.sheet is FlowSheet.TokenDetail }
+                    val flowFeed = feed.takeIf {
+                        drawnFlow.base is FlowBase.History || drawnFlow.sheet is FlowSheet.TxDetail || drawnFlow.sheet is FlowSheet.TokenDetail
+                    }
                     val flowModel = remember(
-                        flowState,
-                        strings,
+                        drawnFlow,
+                        historyPrebuilt,
                         shownAddress,
                         networks,
                         request,
-                        balances,
-                        feed,
+                        flowBalances,
+                        flowFeed,
                         currency,
                         flows.selected,
                         manageTokens,
@@ -1875,7 +1899,7 @@ fun VelaNavHost(
                         // Spec 049: a figure baked into this model follows the presets.
                         Formats.current,
                     ) {
-                        FlowFixtures.build(flowState, strings).let { drawn ->
+                        drawnFlow.let { drawn ->
                             liveFlow(
                                 drawn = drawn,
                                 address = shownAddress,
@@ -1892,6 +1916,7 @@ fun VelaNavHost(
                                 chainFilter = chainFilter,
                                 explorers = explorers,
                                 noValue = noValue,
+                                history = historyPrebuilt,
                             )
                         }
                     }
@@ -3616,6 +3641,8 @@ private fun liveFlow(
     explorers: Map<Int, String> = emptyMap(),
     /** Spec 105: the testnet space is in front — no holding has a worth to show. */
     noValue: Boolean = false,
+    /** The history's rows, built off the main thread for [feed] ([HistoryPrebuilt]); used only when they are this feed's. */
+    history: HistoryPrebuilt? = null,
 ): FlowScreenModel = drawn.copy(
     base = when (val base = drawn.base) {
         is FlowBase.Receive -> FlowBase.Receive(
@@ -3624,7 +3651,12 @@ private fun liveFlow(
             FlowLive.receiveNetworks(base.model, networks, address, WalletLive::badge),
         )
         is FlowBase.History ->
-            FlowBase.History(FlowLive.history(base.model, feed, strings, chainFilter = chainFilter, chainNames = chainNames))
+            FlowBase.History(
+                FlowLive.history(
+                    base.model, feed, strings, chainFilter = chainFilter, chainNames = chainNames,
+                    prebuilt = history?.takeIf { it.feed === feed && it.strings === strings && it.chainNames == chainNames }?.groups,
+                ),
+            )
         is FlowBase.Assets ->
             FlowBase.Assets(FlowLive.assets(base.model, balances, chainNames, currency, chainFilter, FlowFixtures.assetsEmpty(strings), strings.language, noValue = noValue))
         else -> drawn.base
@@ -3654,6 +3686,20 @@ private fun liveFlow(
         is FlowSheet.AddToken -> FlowSheet.AddToken(FlowLive.addToken(sheet.model, manageTokens, strings))
         else -> drawn.sheet
     },
+)
+
+/**
+ * The history's day groups for one feed, built on a background thread while
+ * the wallet is on screen (perf, r10 follow-up): opening the 200-row history
+ * then draws rows that already exist instead of building them in its first
+ * frame (an 80 ms frame on a Redmi K40, and the run of stuffed buffers behind
+ * it). Matched by identity: rows built for another feed are never shown.
+ */
+private class HistoryPrebuilt(
+    val feed: FeedView,
+    val strings: VelaStrings,
+    val chainNames: Map<Int, String>,
+    val groups: List<app.getvela.wallet.feature.wallet.ActivityGroupModel>,
 )
 
 /** Spec 048: the asset a receive code is asked for — a token detail's 收款, or a network row's QR. */
