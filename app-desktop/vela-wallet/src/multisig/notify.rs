@@ -47,6 +47,7 @@ use vela_core::app::multisig_proposals::{
 };
 use vela_core::multisig::Action;
 
+pub mod attention;
 pub mod deliver;
 #[cfg(target_os = "macos")]
 mod macos;

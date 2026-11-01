@@ -1043,7 +1043,18 @@ Delivery is gpui's `show_system_notification` on every desktop:
   signed app; the permission is asked when the switch is turned on (and at
   launch while it is on). A bare `cargo run` binary has no bundle id, and a
   refused permission is a refusal: either way the notice is shown as a line
-  at the bottom of the window for 8 s instead, and the log says why once.
+  at the bottom of the window instead, and the log says why once. The line
+  stays until it is seen — the window in front for 8 s in all — or
+  dismissed with its × (r10). The permission asked covers alerts, sounds
+  and the Dock badge. Proven locally (r10) with a Developer ID–signed bundle
+  launched through LaunchServices: a banner "<name> — Needs your approval ·
+  <title>" for a proposal another member made. macOS refuses a bundle run
+  from `/private/tmp` ("Failed to find or validate client"), and keeps a
+  person's "Allow notifications" off per bundle identifier.
+- **Unseen** (`src/multisig/notify/attention.rs`): a notice posted while the
+  window is not in front badges the Dock icon with the count (macOS) and asks
+  for attention once (gpui's `request_attention`: a Dock bounce, Windows'
+  taskbar flash); both clear when the window comes forward.
 - **Windows** — a toast under the AppUserModelID `app.getvela.VelaWallet`,
   set at launch; the installer's shortcuts carry the same id (one taskbar
   button). Chosen over the tray icon's balloon, which needs the icon on and

@@ -49,17 +49,40 @@ impl WalletPage {
     }
 
     /// The in-app line: the notification the platform could not show
-    /// (macOS without its bundle or its permission), for a few seconds at
-    /// the bottom of the window — the contacts toast's pill. A press opens
-    /// its transaction.
-    pub(super) fn ms_notify_toast(&self, theme: &Theme, cx: &mut Context<Self>) -> Option<Div> {
+    /// (macOS without its bundle or its permission) at the bottom of the
+    /// window — the contacts toast's pill. A press opens its transaction.
+    /// r10 S4: it stays until it was seen (the window in front for a while,
+    /// `attention::SEEN_FOR`) or dismissed with its ×.
+    pub(super) fn ms_notify_toast(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Option<Div> {
         let line = deliver::in_app(cx)?;
         let tag = line.worded.tag.clone();
         let label = format!("{} — {}", line.worded.title, line.worded.body);
-        let mut pill = div()
+        let mut words = div()
             .id("multisig-notify-line")
             .a11y_button(label.clone())
-            .px(px(16.))
+            .flex_1()
+            .min_w(px(0.))
+            .truncate()
+            .child(label);
+        if line.target.is_some() {
+            words = words
+                .cursor_pointer()
+                .on_click(move |_, _, cx| deliver::clicked(&tag, cx));
+        }
+        let dismiss = self.loc.t("componentsUi.signing.dismiss");
+        let close = div()
+            .id("multisig-notify-dismiss")
+            .a11y_button(dismiss)
+            .flex_none()
+            .cursor_pointer()
+            .child(icon_img(&mut self.icons, Icon::X, false, theme.bg_base, 16.))
+            .on_click(|_, _, cx| deliver::dismiss_in_app(cx));
+        let pill = div()
+            .flex()
+            .items_center()
+            .gap(px(12.))
+            .pl(px(16.))
+            .pr(px(10.))
             .py(px(8.))
             .max_w(px(560.))
             .rounded_full()
@@ -67,13 +90,8 @@ impl WalletPage {
             .text_color(theme.bg_base)
             .text_size(theme::text_label())
             .shadow(crate::ui::dialog::shadow_lg())
-            .truncate()
-            .child(label);
-        if line.target.is_some() {
-            pill = pill
-                .cursor_pointer()
-                .on_click(move |_, _, cx| deliver::clicked(&tag, cx));
-        }
+            .child(words)
+            .child(close);
         Some(
             div()
                 .absolute()
