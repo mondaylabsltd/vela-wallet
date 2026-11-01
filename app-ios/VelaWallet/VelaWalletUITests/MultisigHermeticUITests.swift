@@ -110,11 +110,10 @@ final class MultisigHermeticUITests: XCTestCase {
         if allow.waitForExistence(timeout: 5) { allow.tap() }
     }
 
-    func testCreateATwoOfThreeAndProposeASendAgainstALocalWorld() throws {
-        let world = try XCTUnwrap(world)
-        let app = try launch()
-
-        // MARK: Create (the walk of MultisigLiveUITests.test1CreateATwoOfThree)
+    /// Create a 2-of-3 with Parallel Two and Three on Gnosis, from the
+    /// create sheet, recorded by the local service; the home shows it.
+    /// Answers its address. (The walk of MultisigLiveUITests.test1CreateATwoOfThree.)
+    private func createTwoOfThree(_ app: XCUIApplication, _ world: LocalMultisigWorld) throws -> String {
         tap(app, "wallet.header.name")
         tap(app, "multisig.switcher.create")
         // A draft kept from an earlier run starts over.
@@ -164,8 +163,12 @@ final class MultisigHermeticUITests: XCTestCase {
         XCTAssertTrue(element(app, "multisig.home").waitForExistence(timeout: 20), "the home does not show the multisig")
         allowNotificationsIfAsked()
         shot(app, "hermetic-home")
+        return address
+    }
 
-        // MARK: Propose a send (MultisigLiveUITests.proposeSend)
+    /// A send of 0.5 xDAI to Parallel Three from the multisig, filled and
+    /// continued to its confirm: answers the confirm's "Propose and approve".
+    private func toSendConfirm(_ app: XCUIApplication) -> XCUIElement {
         app.buttons["Send"].firstMatch.tap()
         let coin = app.staticTexts["xDAI"].firstMatch
         XCTAssertTrue(coin.waitForExistence(timeout: 60), "the picker never listed xDAI")
@@ -187,6 +190,16 @@ final class MultisigHermeticUITests: XCTestCase {
         let propose = app.buttons["Propose and approve"].firstMatch
         XCTAssertTrue(propose.waitForExistence(timeout: 60), "no propose on the confirm")
         shot(app, "hermetic-send-confirm")
+        return propose
+    }
+
+    func testCreateATwoOfThreeAndProposeASendAgainstALocalWorld() throws {
+        let world = try XCTUnwrap(world)
+        let app = try launch()
+        let address = try createTwoOfThree(app, world)
+
+        // MARK: Propose a send (MultisigLiveUITests.proposeSend)
+        let propose = toSendConfirm(app)
         propose.tap()
         // The review first (§3.6), then one passkey.
         XCTAssertTrue(element(app, "multisig.draft.propose").waitForExistence(timeout: 60), "no review before the passkey")
@@ -216,5 +229,43 @@ final class MultisigHermeticUITests: XCTestCase {
         XCTAssertTrue(element(app, "multisig.home.proposal").waitForExistence(timeout: 60), "the home does not list it as waiting")
         XCTAssertTrue(world.requests.contains { $0.hasPrefix("GET /api/proposals/") }, "the mailbox was never read back")
         shot(app, "hermetic-home-waiting")
+    }
+
+    /// A proposal's review swiped down is withdrawn at once, as "Don't
+    /// propose": the review goes, the send's confirm is back with "Propose
+    /// and approve" in seconds (before, the propose waited out its 600 s
+    /// limit), nothing reached the mailbox, nothing is said — and proposed
+    /// again, it goes.
+    func testAReviewSwipedDownIsWithdrawnAtOnceAndTheSendCanBeProposedAgain() throws {
+        let world = try XCTUnwrap(world)
+        let app = try launch()
+        _ = try createTwoOfThree(app, world)
+
+        toSendConfirm(app).tap()
+        let title = element(app, "multisig.draft.title")
+        XCTAssertTrue(title.waitForExistence(timeout: 60), "no review before the passkey")
+        XCTAssertTrue(element(app, "multisig.draft.propose").waitForExistence(timeout: 30))
+        shot(app, "swipe-review-up")
+
+        // Swiped down, from its title to the bottom of the screen.
+        title.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.98)))
+        XCTAssertTrue(title.waitForNonExistence(timeout: 10), "the review did not go")
+        let again = app.buttons["Propose and approve"].firstMatch
+        XCTAssertTrue(again.waitForExistence(timeout: 10), "the send's confirm did not come back at once")
+        expectation(for: NSPredicate(format: "isEnabled == true AND isHittable == true"), evaluatedWith: again)
+        waitForExpectations(timeout: 10)
+        XCTAssertFalse(element(app, "multisig.draft.failed").exists, "a withdrawal is not a failure")
+        XCTAssertTrue(world.mailbox.isEmpty, "a swiped review sent something: \(world.mailbox)")
+        shot(app, "swipe-review-withdrawn")
+
+        // Proposed again, on its review this time: it goes.
+        again.tap()
+        XCTAssertTrue(element(app, "multisig.draft.propose").waitForExistence(timeout: 60), "no review the second time")
+        XCTAssertTrue(world.mailbox.isEmpty)
+        tap(app, "multisig.draft.propose")
+        XCTAssertTrue(element(app, "multisig.proposal.title").waitForExistence(timeout: 90), "the proposal sheet never opened")
+        XCTAssertEqual(world.mailbox.count, 1, "mailbox: \(world.mailbox)")
+        shot(app, "swipe-review-proposed")
     }
 }

@@ -592,11 +592,11 @@ struct MultisigFlowTests {
     // MARK: reject — the cancellation's review first (r9-13)
 
     /// The app's hub over the world (`MultisigHub(ports:)`), its proposals
-    /// machine following `record`; a transfer proposed by `owners[0]` and
-    /// read back; the transfer's own sheet open, as when Reject is pressed.
-    private static func rejecting(
+    /// machine following a 2-of-3 deployed on Gnosis, two of whose members
+    /// are here.
+    private static func hubFollowing(
         _ world: MsSimWorld, salt: String
-    ) async throws -> (hub: MultisigHub, safe: String, owners: [String], transfer: MsProposalItem) {
+    ) async throws -> (hub: MultisigHub, record: [String: Any], safe: String, owners: [String]) {
         world.locals = try MsSimWorld.fixtures([0, 1])
         let (record, safe, owners) = try Self.twoOfThree(salt, chains: [100])
         world.deploy(100, safe, SimSafe(owners: owners, threshold: 2))
@@ -612,7 +612,15 @@ struct MultisigFlowTests {
         ])
         hub.proposals.dispatch(["type": "follow", "account": record])
         await Wait.until({ hub.proposalsView.readAt != nil && !hub.proposalsView.loading }, orIdle: { hub.proposals.isIdle })
+        return (hub, record, safe, owners)
+    }
 
+    /// `hubFollowing`; a transfer proposed by `owners[0]` and read back; the
+    /// transfer's own sheet open, as when Reject is pressed.
+    private static func rejecting(
+        _ world: MsSimWorld, salt: String
+    ) async throws -> (hub: MultisigHub, safe: String, owners: [String], transfer: MsProposalItem) {
+        let (hub, _, safe, owners) = try await Self.hubFollowing(world, salt: salt)
         let proposed = await Self.propose(hub.proposals, chainId: 100, [
             "kind": "transfers", "transfers": [["token": NSNull(), "to": Self.bo, "amount": "1"]],
         ], as: owners[0])
@@ -657,6 +665,9 @@ struct MultisigFlowTests {
 
         // Its review, before any signature.
         #expect(hub.sheet == .review(chainId: 100), "the review sheet stands in for the transfer's")
+        // The core draws the draft first and its review once gathered (the
+        // chain read, the simulation): waited for, as the person waits for it.
+        await Wait.until({ hub.proposalsView.draft.map { !$0.review.isNull } ?? false }, orIdle: { hub.proposals.isIdle })
         let draft = try #require(hub.proposalsView.draft, "the cancellation is drawn for its review")
         #expect(draft.item.action?.kind == "cancel")
         #expect(draft.item.nonce == transfer.nonce, "at the transfer's number")
@@ -759,6 +770,115 @@ struct MultisigFlowTests {
         #expect(said?.tone == .danger)
         #expect(said?.text == words.t("proposal.reason.passkeyTimedOut"), "said: \(said?.text ?? "nothing")")
         #expect(hub.sheet == .proposal(chainId: 100, safeTxHash: transfer.safeTxHash))
+    }
+
+    // MARK: a review swiped away — withdrawn at once
+
+    /// The send's own review swiped down (`MultisigHub.sheetDismissed`, the
+    /// root's sheet binding set to nothing): withdrawn exactly as "Don't
+    /// propose" — the send told `cancelled` at once (not at the wait's
+    /// 600 s limit), no passkey, nothing sent, no sheet left. Proposed again,
+    /// it goes: the person can always come back.
+    @Test func aSendsReviewSwipedAwayIsWithdrawnAtOnceAndCanBeProposedAgain() async throws {
+        let world = try MsSimWorld()
+        let (hub, _, safe, owners) = try await Self.hubFollowing(world, salt: "0x51")
+        defer { hub.proposals.dispose(); hub.accounts.dispose(); hub.members.dispose() }
+        let op: [String: Any] = [
+            "chain_id": 100, "multisig": safe,
+            "transfers": [["token": NSNull(), "to": Self.bo, "amount": "1"]],
+        ]
+        func send() async -> Task<[String: Any], Never> {
+            let answered = Flag()
+            let sending = Task { @MainActor in
+                defer { answered.set() }
+                return await hub.proposeFromSend(op)
+            }
+            await Wait.until { (hub.sheet == .review(chainId: 100) && hub.proposalsView.draft != nil) || answered.isSet }
+            return sending
+        }
+
+        var sending = await send()
+        #expect(hub.sheet == .review(chainId: 100), "its review is up")
+        #expect(world.passkeys.isEmpty && world.submits.isEmpty)
+
+        let swiped = ContinuousClock.now
+        hub.sheetDismissed()
+        #expect(hub.sheet == nil, "nothing was under it: no sheet left")
+        let answer = await sending.value
+        #expect(ContinuousClock.now - swiped < .seconds(5), "answered at once, not at the wait's limit")
+        #expect(answer["type"] as? String == "propose_failed")
+        #expect(answer["cancelled"] as? Bool == true, "the person's word, not a failure: \(answer)")
+        #expect(hub.proposalsView.draft == nil, "withdrawn")
+        #expect(hub.proposalsView.action("propose")?.kind == "cancelled")
+        #expect(world.passkeys.isEmpty, "nothing signed")
+        #expect(world.submits.isEmpty && world.mailbox.isEmpty, "nothing sent")
+
+        // Again, and proposed on its review this time.
+        sending = await send()
+        #expect(hub.sheet == .review(chainId: 100), "its review is up again")
+        hub.confirmDraft(as: owners[0])
+        let proposed = await sending.value
+        #expect(proposed["type"] as? String == "proposed", "\(proposed)")
+        #expect(world.passkeys.count == 1 && world.mailbox.count == 1)
+    }
+
+    /// Reject's review (r9-13) swiped down: withdrawn at once, as "Don't
+    /// propose" — nothing signed or said, and the transaction's sheet it
+    /// covered is shown again.
+    @Test func aRejectionsReviewSwipedAwayIsWithdrawnAndItsTransactionShownAgain() async throws {
+        let world = try MsSimWorld()
+        let (hub, _, owners, transfer) = try await Self.rejecting(world, salt: "0x52")
+        defer { hub.proposals.dispose(); hub.accounts.dispose(); hub.members.dispose() }
+
+        let pressed = await Self.pressReject(hub, transfer, as: owners[1])
+        #expect(hub.sheet == .review(chainId: 100))
+        let swiped = ContinuousClock.now
+        hub.sheetDismissed()
+        #expect(hub.sheet == .proposal(chainId: 100, safeTxHash: transfer.safeTxHash), "the transaction's sheet, at once")
+        let settled = await pressed.value
+        #expect(ContinuousClock.now - swiped < .seconds(5), "answered at once, not at the wait's limit")
+        #expect(settled?.kind == "cancelled", "\(String(describing: settled?.raw))")
+        #expect(world.passkeys.count == 1 && world.submits.count == 1, "only the transfer's")
+        #expect(hub.proposalsView.draft == nil)
+        #expect(hub.rejectFailure(chainId: 100, safeTxHash: transfer.safeTxHash) == nil, "nothing said")
+        #expect(hub.sheet == .proposal(chainId: 100, safeTxHash: transfer.safeTxHash), "and it stays")
+    }
+
+    /// A site's request on its review (M5), swiped down: left as its close
+    /// leaves it (`dapp_leave`) — the site answered at once with the
+    /// person's refusal, nothing signed or sent, no sheet left.
+    @Test func aSitesRequestSwipedAwayOnItsReviewIsLeftAndTheSiteAnsweredAtOnce() async throws {
+        let world = try MsSimWorld()
+        let (hub, record, safe, _) = try await Self.hubFollowing(world, salt: "0x53")
+        defer { hub.proposals.dispose(); hub.accounts.dispose(); hub.members.dispose() }
+        world.store["vela.multisigAccounts"] = MsSimWorld.text([record])
+        hub.accounts.dispatch([
+            "type": "start", "service_url": MsSimWorld.service, "accounts": world.localsJson, "networks": [100, 8453],
+        ])
+        await Wait.until({ hub.isMultisig(safe) }, orIdle: { hub.accounts.isIdle })
+        try #require(hub.isMultisig(safe), "the multisig is not on this device")
+
+        var answers: [[String: Any]] = []
+        let params = MsSimWorld.text([["from": safe, "to": Self.bo, "value": "0x1", "data": "0x"]])
+        hub.dappRequest(
+            id: "site-1", address: safe, method: "eth_sendTransaction", paramsJson: params,
+            origin: "https://app.example", chainId: 100, answer: { answers.append($0) }
+        )
+        await Wait.until({ hub.proposalsView.draft != nil || !answers.isEmpty }, orIdle: { hub.proposals.isIdle })
+        #expect(hub.sheet == .dapp(id: "site-1"))
+        #expect(hub.proposalsView.draft != nil, "the request is drawn for its review: \(answers)")
+        #expect(answers.isEmpty)
+
+        let swiped = ContinuousClock.now
+        hub.sheetDismissed()
+        #expect(hub.sheet == nil)
+        await Wait.until({ !answers.isEmpty }, orIdle: { hub.proposals.isIdle })
+        #expect(ContinuousClock.now - swiped < .seconds(5), "answered at once")
+        #expect(answers.count == 1, "answered once: \(answers)")
+        let error = answers.first?["error"] as? [String: Any]
+        #expect((error?["code"] as? NSNumber)?.intValue == 4001, "the person's refusal: \(answers)")
+        #expect(hub.proposalsView.draft == nil, "withdrawn")
+        #expect(world.passkeys.isEmpty && world.submits.isEmpty, "nothing signed, nothing sent")
     }
 
     // MARK: member change

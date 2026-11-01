@@ -25,7 +25,12 @@ struct MultisigHostModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .sheet(item: Binding(get: { hub.sheet }, set: { hub.sheet = $0 })) { sheet in
+            // Swiped away, a sheet takes its own way out (`sheetDismissed`):
+            // a review is withdrawn at once, a site's request left.
+            .sheet(item: Binding(
+                get: { hub.sheet },
+                set: { if $0 == nil { hub.sheetDismissed() } else { hub.sheet = $0 } }
+            )) { sheet in
                 sheetView(sheet)
                     .modifier(MultisigOverlays(hub: hub, words: words, scheme: scheme))
                     .themed(scheme)
