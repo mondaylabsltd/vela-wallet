@@ -320,7 +320,13 @@ pub fn view_more(s: &mut State) -> MoreView {
             .as_ref()
             .is_some_and(|f| same_address(&f.address, &account.address));
         let w = if shown && (s.read_at.is_some() || !s.chains.is_empty()) {
-            Some(waiting_of(&items, |i| ready_block(s, i)))
+            let mut w = waiting_of(&items, |i| ready_block(s, i));
+            // r11-1: a list shown from what an earlier page kept was read by nobody here.
+            w.read_at = s
+                .read_at
+                .filter(|at| at.is_finite() && *at >= 0.0)
+                .map(|at| at as u64);
+            Some(w)
         } else if let Some(w) = (!shown).then(|| s.more.others.get(&key).cloned()).flatten() {
             Some(w)
         } else {
@@ -620,7 +626,11 @@ async fn others_tick(io: &Io<Event>, st: &Shared<State>) {
             {
                 continue;
             }
-            if let Some(w) = read_other(io, st, &service, &account, &networks).await {
+            if let Some(mut w) = read_other(io, st, &service, &account, &networks).await {
+                // r11-1: read on this page, by a tick that began at `now` —
+                // what a round compares with when it began (a kept list has
+                // none; a tick begun before the round is not the round's).
+                w.read_at = (now.is_finite() && now >= 0.0).then_some(now as u64);
                 lock(st)
                     .more
                     .others

@@ -553,6 +553,73 @@ fn the_others_start_from_the_kept_list_then_are_read() {
     );
 }
 
+/// r11-1: what waits is said by WHICH transactions (a notification keys
+/// "already said" by them), and when it was read here — a kept list was
+/// read by nobody on this page, so a background round never says it.
+#[test]
+fn what_waits_names_its_transactions_and_when_it_was_read() {
+    let shown = account_of("0x31");
+    let other = account_of("0x32");
+    let mut world = World {
+        locals: vec![fixture(0)],
+        ..World::default()
+    };
+    let kept_tx = multisig::cancel_tx(&other.address, "0x0").unwrap();
+    let kept = json!({
+        other.address.to_ascii_lowercase(): {
+            "service": SERVICE, "at": 5,
+            "chains": [{"chainId": 100,
+                "members": {"deployed": false, "owners": other.owners, "threshold": 2, "nonce": "0"},
+                "proposals": [stored(&other, 100, &kept_tx)]}],
+        }
+    });
+    world
+        .store
+        .insert("vela.multisigWaiting".to_owned(), kept.to_string());
+    let mut sut = Sut::new();
+    start(&mut sut, &mut world);
+    run(&mut sut, &mut world, Event::Follow { account: Some(shown.clone()) });
+    run(
+        &mut sut,
+        &mut world,
+        Event::Accounts {
+            accounts: vec![shown.clone(), other.clone()],
+        },
+    );
+    let view = sut.view();
+    let kept_w = view.presence[&other.address.to_ascii_lowercase()].clone().unwrap();
+    let kept_key = format!(
+        "100:{}",
+        multisig::safe_tx_hash(100, &other.address, &kept_tx)
+            .unwrap()
+            .to_ascii_lowercase()
+    );
+    assert_eq!(kept_w.needs_you_keys, vec![kept_key]);
+    assert_eq!(kept_w.read_at, None, "kept from an earlier page: read by nobody here");
+    let shown_w = view.presence[&shown.address.to_ascii_lowercase()].clone().unwrap();
+    assert!(shown_w.read_at.is_some(), "the followed list was read");
+    assert!(shown_w.needs_you_keys.is_empty());
+
+    // Two new ones another member made; the tick reads them: both named.
+    let a = multisig::cancel_tx(&other.address, "0x1").unwrap();
+    let b = multisig::cancel_tx(&other.address, "0x2").unwrap();
+    world.mailbox.push(stored(&other, 100, &a));
+    world.mailbox.push(stored(&other, 100, &b));
+    run(&mut sut, &mut world, Event::OthersTick);
+    let w = sut.view().presence[&other.address.to_ascii_lowercase()].clone().unwrap();
+    assert_eq!(w.needs_you as usize, w.needs_you_keys.len(), "the count is the keys'");
+    for tx in [&a, &b] {
+        let key = format!(
+            "100:{}",
+            multisig::safe_tx_hash(100, &other.address, tx)
+                .unwrap()
+                .to_ascii_lowercase()
+        );
+        assert!(w.needs_you_keys.contains(&key), "{key} named");
+    }
+    assert!(w.read_at.is_some(), "read on this page");
+}
+
 /// During an outage the others are not read: what was said stays.
 #[test]
 fn the_others_are_not_read_while_the_service_is_away() {
