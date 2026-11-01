@@ -75,6 +75,7 @@ import {
 	catalogChainIds,
 	chainEndpoints,
 	chainKnown,
+	switchRefusal,
 	chainNameOf,
 	classifyMethod,
 	endpointAnswered,
@@ -1140,9 +1141,10 @@ async function switchChain(method, params, origin) {
 	]);
 	const catalog = all[CHAINS_KEY];
 	if (!catalog) return { error: NOT_OPENED() };
-	if (!chainKnown(catalog, chainId)) {
-		return { error: rpcError(ERR.CHAIN_NOT_ADDED, `Chain ${chainId} is not in Vela's networks`) };
-	}
+	// Spec 105 (r10, coordinator): only a network of the space in front; a
+	// chain of the other space is said as that, one Vela lacks as lacking.
+	const refused = switchRefusal(catalog, chainId);
+	if (refused) return { error: rpcError(refused.code, refused.message) };
 	if (chainOf(origin, all) !== chainId) {
 		try {
 			await chrome.storage.local.set({ [CHAIN_PREFIX + origin]: chainId });

@@ -550,8 +550,15 @@ known deploy block. uniffi `incoming_scan_plan`, `incoming_scan_windows`,
 - The extension's start chain: `vela.ext.accountChains` (per signed-in
   account, written by the wallet page only, never emptied by a page that has
   not read holdings); the catalog's `chains` hold both spaces' networks,
-  `order` the space in front's. Vectors `tests/vectors/site-start-chain.json`
-  (Rust and the worker's JS twin).
+  `order` the space in front's. Spec 105's line, kept (coordinator): a new
+  site starts only on a network of the space in front (the network last used
+  there, else one the account holds or used there, else the space's default),
+  and a page's switch reaches only that space's networks
+  (`network_space::site_may_switch_to`, the worker's `switchRefusal`): a
+  network of the other space is 4902 naming that space, one Vela lacks
+  "not in Vela's networks". Moving between spaces is the person's own choice
+  in Vela. Vectors `tests/vectors/site-start-chain.json` (`cases`,
+  `switches`; Rust and the worker's JS twin).
 - Welcome reads a multisig link with the core before it says it waits
   (`onboarding.welcomeWeb.linkBroken`).
 

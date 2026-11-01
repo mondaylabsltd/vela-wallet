@@ -196,18 +196,48 @@ test.describe('a new site, for an account that holds only Arc USDC', () => {
 		await other.goto(`http://127.0.0.1:${PORT}/`);
 		expect(await chainOf(other)).toBe(ARC_HEX);
 
-		// r10 (Safari): a site may still move to a network of the space NOT in
-		// front — Vela has it; "not in Vela's networks" was untrue.
+		// Spec 105's line (coordinator, r10): a page cannot move a testnet-space
+		// site to a mainnet network (Base) — refused, the site stays on Arc.
 		const moved = (await other.evaluate(() =>
 			window.__ask('wallet_switchEthereumChain', [{ chainId: '0x2105' }])
 		)) as AskResult;
-		expect(moved).toMatchObject({ ok: true, result: null });
-		expect(await chainOf(other)).toBe('0x2105');
+		expect(moved).toMatchObject({ ok: false, code: 4902 });
+		expect(await chainOf(other)).toBe(ARC_HEX);
 		// A chain Vela does not have is 4902, as before.
 		const unknown = (await other.evaluate(() =>
 			window.__ask('wallet_switchEthereumChain', [{ chainId: '0x67932' }])
 		)) as AskResult;
 		expect(unknown).toMatchObject({ ok: false, code: 4902 });
+
+		// The same account with the MAINNET space in front: a new site starts on
+		// the mainnet space's default, never on Arc Testnet; a page asking for
+		// Arc is refused (moving spaces is the person's own choice in Vela).
+		const mainnet = await context.newPage();
+		await mainnet.addInitScript(() => localStorage.setItem('vela.networkSpace', 'mainnet'));
+		await mainnet.goto(`chrome-extension://${id}/en/wallet.html`);
+		await expect
+			.poll(
+				() =>
+					mainnet.evaluate(() =>
+						(window as unknown as Local).chrome.storage.local
+							.get(null)
+							.then((all) => (all['vela.ext.chains'] as { space?: string } | undefined)?.space)
+					),
+				{ timeout: 60_000 }
+			)
+			.toBe('mainnet');
+		await mainnet.close();
+		const third = await context.newPage();
+		await third.goto(`http://127.0.0.1:${PORT}/`);
+		const start = (await chainOf(third)) as string;
+		expect(start).not.toBe(ARC_HEX);
+		expect(CHAINS.find((c) => c.chainId === parseInt(start, 16))?.testnet ?? false).toBe(false);
+		const toArc = (await third.evaluate(
+			(arc) => window.__ask('wallet_switchEthereumChain', [{ chainId: arc }]),
+			ARC_HEX
+		)) as AskResult;
+		expect(toArc).toMatchObject({ ok: false, code: 4902 });
+		expect(await chainOf(third)).toBe(start);
 
 		await context.close();
 	});

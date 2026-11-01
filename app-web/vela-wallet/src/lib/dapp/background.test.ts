@@ -1609,7 +1609,7 @@ describe('where a new site starts (dapp-17)', () => {
 		);
 	});
 
-	it('switches to a network of the space NOT in front, and keeps the last one used here (r10)', async () => {
+	it('refuses a network of the space NOT in front as that space’s, and keeps the site where it is (spec 105, r10)', async () => {
 		const env = makeEnv();
 		// Safari: the wallet in the mainnet space, a site asks for Arc Testnet.
 		env.local.data['vela.ext.chains'] = {
@@ -1629,8 +1629,13 @@ describe('where a new site starts (dapp-17)', () => {
 			method: 'wallet_switchEthereumChain',
 			params: [{ chainId: '0x4cef52' }]
 		});
-		expect(switched).toEqual({ result: null });
-		expect(await chainOfPage(env, page)).toBe('0x4cef52');
+		// Test value never mistaken for real money: a page cannot put a
+		// mainnet-space site on a testnet. Said as the testnet space's network —
+		// never "not in Vela's networks" (Safari's r10 report).
+		expect(switched.error?.code).toBe(4902);
+		expect(switched.error?.message).toContain("Vela's testnet networks");
+		expect(switched.error?.message).not.toContain("not in Vela's networks");
+		expect(await chainOfPage(env, page)).toBe('0x1');
 		expect(env.local.data['vela.ext.lastChain']).toBeUndefined();
 		// A chain Vela does not have is still 4902.
 		const unknown = await env.sendFromPage(page, {

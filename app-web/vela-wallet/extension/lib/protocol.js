@@ -800,6 +800,34 @@ export function chainKnown(catalog, chainId) {
 	return !!(chains && typeof chains === 'object' && chains[String(chainId)]);
 }
 
+/**
+ * Why a site may not move to `chainId` (`wallet_switchEthereumChain`, an add
+ * of a chain Vela has), or `null`: it may. Spec 105's line, kept (coordinator,
+ * r10): a site is only ever on a network of the space in front — test value
+ * is never mistaken for real money, so a site in the mainnet space never lands
+ * on a testnet because a page asked; moving between spaces is the person's own
+ * choice in Vela. The in-app browser refuses the same (4902, `dapp_browser`).
+ * The catalog still serves both spaces, so the refusal names the space the
+ * network is in rather than saying Vela lacks it (Safari's r10 report); a
+ * chain Vela does not have at all is "not in Vela's networks".
+ */
+export function switchRefusal(catalog, chainId) {
+	if (!chainKnown(catalog, chainId)) {
+		return { code: ERR.CHAIN_NOT_ADDED, message: `Chain ${chainId} is not in Vela's networks` };
+	}
+	const order = Array.isArray(catalog.order)
+		? catalog.order.map((id) => parseChainId(id)).filter((id) => id > 0)
+		: [];
+	// A catalog from before dapp-17 says no space: nothing to hold the site to.
+	if (order.length === 0 || order.includes(chainId)) return null;
+	const front = catalog.space === 'testnet' ? 'testnet' : 'mainnet';
+	const other = front === 'testnet' ? 'mainnet' : 'testnet';
+	return {
+		code: ERR.CHAIN_NOT_ADDED,
+		message: `Chain ${chainId} is one of Vela's ${other} networks; Vela is showing its ${front} networks. Switch to the ${other} space in Vela to use it.`
+	};
+}
+
 // ---- param / value helpers --------------------------------------------------
 
 const ADDR_RE = /^0x[0-9a-fA-F]{40}$/;

@@ -43,6 +43,7 @@ import {
 	unreachableChainMessage,
 	chainEndpoints,
 	chainKnown,
+	switchRefusal,
 	classifyMethod,
 	droppedChannelAnswer,
 	HELD_BUCKETS,
@@ -398,6 +399,51 @@ describe('where a new site starts (dapp-17)', () => {
 			const catalog = { version: 1, chains: {}, space: 'testnet', order: c.space_chain_ids };
 			const last = c.last_used === null ? undefined : { testnet: c.last_used };
 			expect(startChainOf(catalog, last, c.account_chains), c.name).toBe(c.start);
+		}
+	});
+
+	it('a page moves a site only within the space in front — the shared switch vectors (spec 105, r10)', () => {
+		const { switches } = JSON.parse(
+			readFileSync(
+				fileURLToPath(
+					new URL(
+						'../../../../../rust/crates/vela-core/tests/vectors/site-start-chain.json',
+						import.meta.url
+					)
+				),
+				'utf8'
+			)
+		) as {
+			switches: {
+				name: string;
+				space: 'mainnet' | 'testnet';
+				space_chain_ids: number[];
+				known: number[];
+				chain: number;
+				allowed: boolean;
+				refused?: 'otherSpace' | 'unknown';
+			}[];
+		};
+		expect(switches.length).toBeGreaterThanOrEqual(4);
+		for (const s of switches) {
+			const catalog = {
+				version: 1,
+				space: s.space,
+				order: s.space_chain_ids,
+				chains: Object.fromEntries(s.known.map((id) => [String(id), { chainId: id }]))
+			};
+			const refusal = switchRefusal(catalog, s.chain);
+			expect(refusal === null, s.name).toBe(s.allowed);
+			if (s.refused === 'unknown') {
+				expect(refusal?.message, s.name).toBe(`Chain ${s.chain} is not in Vela's networks`);
+			}
+			if (s.refused === 'otherSpace') {
+				// Said as the other space's network — never "not in Vela's networks".
+				expect(refusal?.code, s.name).toBe(4902);
+				expect(refusal?.message, s.name).toContain(
+					s.space === 'testnet' ? "Vela's mainnet networks" : "Vela's testnet networks"
+				);
+			}
 		}
 	});
 
