@@ -208,9 +208,9 @@ sealed class FeeGasOutcome {
     data object ContextUnavailable : FeeGasOutcome()
 
     /**
-     * Spec 083 fee: the relay ANSWERED that this operation fails. Declared so
-     * the wire matches the core; this shell does not tell a refusal from an
-     * unreachable relay and answers [SimulationFailed] for both, as before.
+     * Spec 083 fee: the relay ANSWERED that this operation fails. Which relay
+     * answer is this and which is [SimulationFailed] is the core's rule
+     * (r11-8, `fee_estimate_gas_outcome`), never this shell's.
      */
     @Serializable
     @SerialName("refused")
@@ -244,8 +244,8 @@ sealed class FeeFailure {
     /**
      * Spec 083 fee: the relay answered that the operation fails — its answer,
      * where [FeeGasOutcome.SimulationFailed] is no answer at all. The core
-     * says it only to a shell that reports [FeeGasOutcome.Refused], which
-     * this one does not yet.
+     * says it only to a shell that reports [FeeGasOutcome.Refused] (r11-8:
+     * as the core's `fee_estimate_gas_outcome` reads the relay's answer).
      */
     data object WouldFail : FeeFailure() { override val name = "would_fail" }
 

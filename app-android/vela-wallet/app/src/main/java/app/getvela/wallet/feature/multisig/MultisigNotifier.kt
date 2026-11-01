@@ -23,8 +23,11 @@ import app.getvela.wallet.core.data.KeyValueStore
 import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.feature.multisig.core.MsAccountsView
 import app.getvela.wallet.feature.multisig.core.MsProposalsView
+import app.getvela.wallet.feature.multisig.core.MsWaiting
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 
@@ -49,10 +52,17 @@ class MultisigNotifier(
     /** Posts a note (the system's; a test's list). */
     var post: (Note) -> Unit = {},
 ) {
+    /**
+     * What was said (or seen on screen), per multisig (lowercase address) and
+     * transaction (`<chainId>:<safeTxHash lowercase>`) — r11-1: never a
+     * count. A count says nothing of WHICH: one approved elsewhere and one
+     * new left it the same, and the new one went unsaid; a round that read
+     * the list a moment late recorded a proposal it never announced.
+     */
     @Serializable
     data class Seen(
-        val needsYou: Map<String, Int> = emptyMap(),
-        val ready: Map<String, Int> = emptyMap(),
+        val needsYou: Map<String, List<String>> = emptyMap(),
+        val ready: Map<String, List<String>> = emptyMap(),
         /** Approvals counted per `chainId:hash`, for the multisig followed. */
         val approved: Map<String, Int> = emptyMap(),
     )
@@ -71,50 +81,80 @@ class MultisigNotifier(
     /** The four channels a person can turn off apart in the system's settings. */
     enum class Channel(val id: String) { NeedsYou("multisig_needs_you"), Counted("multisig_counted"), Ready("multisig_ready"), Executed("multisig_executed") }
 
+    /**
+     * Who is looking (r11-1). [OnScreen]: the person — what the views hold
+     * is recorded as seen, nothing said. [Away]: a round that began at
+     * [Away.since] (ms) — it says what a read since then holds and was not
+     * said or seen, and records exactly that; a list read before it began
+     * (or kept from an earlier page) is not its to say or to record.
+     */
+    sealed interface Look {
+        data object OnScreen : Look
+        data class Away(val since: Long) : Look
+    }
+
+    private val lock = Mutex()
+
     suspend fun seen(): Seen = store.read(STATE_KEY)?.let { runCatching { Wire.json.decodeFromString(Seen.serializer(), it) }.getOrNull() } ?: Seen()
 
     /**
-     * What the machines' views say now, against what was said last: the notes
-     * to post. [post] `false` records the state and says nothing (the app is on
-     * screen: the views said it).
+     * What the machines' views say now, against what was said or seen: the
+     * notes to post (posted here when [look] is [Look.Away]).
      */
-    suspend fun evaluate(accounts: MsAccountsView, proposals: MsProposalsView, post: Boolean): List<Note> {
+    suspend fun evaluate(accounts: MsAccountsView, proposals: MsProposalsView, look: Look): List<Note> = lock.withLock {
         val w = words()
         val before = seen()
         val needsYou = before.needsYou.toMutableMap()
         val ready = before.ready.toMutableMap()
         val approved = before.approved.toMutableMap()
         val notes = mutableListOf<Note>()
+        val away = look as? Look.Away
+        fun fresh(waiting: MsWaiting): Boolean = away == null || (waiting.readAt != null && waiting.readAt >= away.since)
         for (row in accounts.accounts) {
             val key = row.account.address.lowercase()
             val waiting = proposals.presence[key] ?: continue
+            // Never from a read this round did not make (r11-1).
+            if (!fresh(waiting)) continue
             val name = w.name(row.account, row.name)
-            if (waiting.needsYou > (needsYou[key] ?: 0)) {
-                notes += Note("ms-needs-$key-${waiting.firstHash}", Channel.NeedsYou, name, w.plural("presence.needsYou", waiting.needsYou), waiting.firstChainId, waiting.firstHash, row.account.address)
+            val saidNeeds = needsYou[key].orEmpty()
+            val saidReady = ready[key].orEmpty()
+            if (away != null && waiting.needsYouKeys.any { it !in saidNeeds }) {
+                // One note per multisig, its count the number waiting now (replaced, never stacked).
+                notes += Note("ms-needs-$key", Channel.NeedsYou, name, w.plural("presence.needsYou", waiting.needsYou), waiting.firstChainId, waiting.firstHash, row.account.address)
             }
-            if (waiting.ready > (ready[key] ?: 0)) {
-                notes += Note("ms-ready-$key-${waiting.firstHash}", Channel.Ready, name, w.plural("presence.ready", waiting.ready), waiting.firstChainId, waiting.firstHash, row.account.address)
+            if (away != null && waiting.readyKeys.any { it !in saidReady }) {
+                notes += Note("ms-ready-$key", Channel.Ready, name, w.plural("presence.ready", waiting.ready), waiting.firstChainId, waiting.firstHash, row.account.address)
             }
-            needsYou[key] = waiting.needsYou
-            ready[key] = waiting.ready
+            needsYou[key] = remember(saidNeeds, waiting.needsYouKeys)
+            ready[key] = remember(saidReady, waiting.readyKeys)
         }
         // The multisig followed: an approval counted (another member's, while away).
         val followedName = accounts.row(proposals.followed)?.let { w.name(it.account, it.name) }.orEmpty()
-        for (item in proposals.items.filter { it.status != "done" }) {
-            val was = approved[item.id]
-            if (was != null && item.approved > was) {
-                notes += Note(
-                    "ms-counted-${item.id}-${item.approved}", Channel.Counted, followedName,
-                    "${w.actionTitle(item.chainId, item.action, item.nonce)} · ${w.t("status.progress", "approved" to item.approved.toString(), "threshold" to item.threshold.toString())}",
-                    item.chainId, item.safeTxHash, proposals.followed,
-                )
+        val followedWaiting = proposals.followed?.let { proposals.presence[it.lowercase()] }
+        val followedFresh = if (away == null) true else followedWaiting?.let(::fresh) ?: false
+        if (followedFresh) {
+            for (item in proposals.items.filter { it.status != "done" }) {
+                val was = approved[item.id]
+                if (away != null && was != null && item.approved > was) {
+                    notes += Note(
+                        "ms-counted-${item.id}-${item.approved}", Channel.Counted, followedName,
+                        "${w.actionTitle(item.chainId, item.action, item.nonce)} · ${w.t("status.progress", "approved" to item.approved.toString(), "threshold" to item.threshold.toString())}",
+                        item.chainId, item.safeTxHash, proposals.followed,
+                    )
+                }
+                approved[item.id] = item.approved
             }
-            approved[item.id] = item.approved
         }
-        store.write(STATE_KEY, Wire.json.encodeToString(Seen.serializer(), Seen(needsYou, ready, approved)))
-        if (!post) return emptyList()
+        val after = Seen(needsYou, ready, approved)
+        if (after != before) store.write(STATE_KEY, Wire.json.encodeToString(Seen.serializer(), after))
         notes.forEach(this.post)
-        return notes
+        notes
+    }
+
+    /** What was said, with [now] added — the newest kept, bounded. */
+    private fun remember(said: List<String>, now: List<String>): List<String> {
+        val added = now.filter { it !in said }
+        return if (added.isEmpty()) said else (said + added).takeLast(KEPT_PER_MULTISIG)
     }
 
     /** An executed transaction (the proposals machine's `activity_rows`), said when away. */
@@ -124,12 +164,31 @@ class MultisigNotifier(
     }
 
     companion object {
-        /** What was last said, per multisig and transaction (so nothing is said twice). */
-        const val STATE_KEY = "vela.multisigNotified.v1"
+        /**
+         * What was said, per multisig and transaction (so nothing is said
+         * twice). v2 (r11-1): by transaction — v1's counts are not read.
+         */
+        const val STATE_KEY = "vela.multisigNotified.v2"
+
+        /** How many transactions said are kept per multisig (the newest). */
+        internal const val KEPT_PER_MULTISIG = 200
         const val EXTRA_CHAIN = "vela.multisig.chain"
         const val EXTRA_HASH = "vela.multisig.hash"
         const val EXTRA_ADDRESS = "vela.multisig.address"
         internal const val WORK_NAME = "vela.multisig.poll"
+
+        /**
+         * r11-1: who is looking now — the person ([Look.OnScreen], an
+         * activity resumed), nobody ([Look.Away] since [since], none even
+         * started), or neither (`null`: started but not in front — a system
+         * sheet over the app): neither said over it nor recorded unseen.
+         * [since] `null`: no round in this process, nothing to measure from.
+         */
+        fun lookNow(onScreen: Boolean, started: Boolean, since: Long?): Look? = when {
+            onScreen -> Look.OnScreen
+            !started && since != null -> Look.Away(since)
+            else -> null
+        }
 
         /** The first time there is something to say: ask once (Android 13+; once per install). */
         fun askOnce(context: Context) {
@@ -389,11 +448,18 @@ class MultisigPollWorker(context: Context, params: WorkerParameters) : Coroutine
                 MultisigNotifier.schedule(applicationContext, on = false)
                 return@withTimeoutOrNull true
             }
-            hub.backgroundRound()
-            val notes = container.multisigNotifier.evaluate(hub.accountsView.value, hub.proposalsView.value, post = !container.inForeground())
+            val since = hub.backgroundRound()
+            val look = MultisigNotifier.lookNow(onScreen = container.onScreen(), started = container.inForeground(), since = since)
+            val accounts = hub.accountsView.value
+            val proposals = hub.proposalsView.value
+            val notes = look?.let { container.multisigNotifier.evaluate(accounts, proposals, it) }.orEmpty()
             VelaLog.event(
                 "multisig.poll", "evaluated",
-                "multisigs" to hub.accountsView.value.accounts.size,
+                "multisigs" to accounts.accounts.size,
+                // r11-1: how many of them a read of this round's holds (the rest are not its to say).
+                "read" to accounts.accounts.count { row -> proposals.presence[row.account.address.lowercase()]?.readAt?.let { it >= since } == true },
+                "waiting" to accounts.accounts.sumOf { row -> proposals.presence[row.account.address.lowercase()]?.needsYou ?: 0 },
+                "look" to (look?.let { if (it is MultisigNotifier.Look.Away) "away" else "onScreen" } ?: "neither"),
                 "notes" to notes.size,
                 "allowed" to MultisigNotifier.allowed(applicationContext),
                 "foreground" to container.inForeground(),

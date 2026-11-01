@@ -312,19 +312,63 @@ class OkHttpTransport : RpcTransport {
             .relayRpcHeader(xRpcUrl)
             .build()
 
-        val call = VelaHttp.client.newBuilder()
+        // r11-9: a write (a submit) goes on a connection of its own, never a
+        // pooled one a server or a tunnel may have closed meanwhile: its
+        // failure is then about this request alone. A read that met a dead
+        // pooled connection before any answer came is asked once again on a
+        // new one — what a browser does with a reused keep-alive socket — so
+        // a stale connection is not an unreachable relay ("Couldn't check").
+        val read = readOnly(method)
+        val first = attempt(request, method, timeoutMs, fresh = !read)
+        if (first !is Attempt.Failed) return@withContext (first as Attempt.Answered).result
+        if (read && first.stages.reused && first.kind in STALE_CLASSES) {
+            VelaLog.event("rpc.transport", "stale connection: asked again on a new one", "host" to request.url.host, "method" to method)
+            when (val again = attempt(request, method, timeoutMs, fresh = true)) {
+                is Attempt.Answered -> return@withContext again.result
+                is Attempt.Failed -> return@withContext RpcPostResult(outcomeOfClass(again.kind))
+            }
+        }
+        RpcPostResult(outcomeOfClass(first.kind))
+    }
+
+    private sealed interface Attempt {
+        data class Answered(val result: RpcPostResult) : Attempt
+        data class Failed(val kind: String, val stages: CallStages) : Attempt
+    }
+
+    /** One POST: its answer, or how it failed and how far it got. */
+    private suspend fun attempt(request: Request, method: String, timeoutMs: Int, fresh: Boolean): Attempt {
+        // r11-9: how far the request got — what tells a request that never
+        // left whole (not sent) from one that may have been acted on.
+        val stages = CallStages()
+        val call = (if (fresh) VelaHttp.fresh else VelaHttp.client).newBuilder()
             .callTimeout(timeoutMs.toLong(), TimeUnit.MILLISECONDS)
+            .eventListener(stages)
             .build()
             .newCall(request)
 
-        try {
+        return try {
+            Attempt.Answered(postAnswer(call))
+        } catch (failure: IOException) {
+            val kind = failureClass(failure, stages)
+            VelaLog.event(
+                "rpc.transport", "failed",
+                "host" to request.url.host, "port" to request.url.port, "method" to method,
+                "class" to kind, "error" to failure.javaClass.simpleName, "message" to failure.message?.take(80),
+                "reused" to stages.reused, "connected" to stages.connected, "written" to stages.bodyWritten, "fresh" to fresh,
+            )
+            Attempt.Failed(kind, stages)
+        }
+    }
+
+    private suspend fun postAnswer(call: okhttp3.Call): RpcPostResult =
             call.await().use { response ->
                 if (!response.isSuccessful) {
-                    return@withContext RpcPostResult(RpcTransportOutcome.HttpError(response.code))
+                    return@use RpcPostResult(RpcTransportOutcome.HttpError(response.code))
                 }
                 val text = response.body?.string().orEmpty()
                 val json = runCatching { JSONObject(text) }.getOrNull()
-                    ?: return@withContext RpcPostResult(RpcTransportOutcome.NonJson)
+                    ?: return@use RpcPostResult(RpcTransportOutcome.NonJson)
                 val error = json.optJSONObject("error")?.let {
                     RpcErrorInfo(
                         code = if (it.isNull("code")) null else it.optInt("code"),
@@ -333,8 +377,33 @@ class OkHttpTransport : RpcTransport {
                 }
                 RpcPostResult(RpcTransportOutcome.Response(error), json)
             }
-        } catch (failure: IOException) {
-            RpcPostResult(outcomeOf(failure))
+
+    /**
+     * r11-9: what one call got to (okhttp's [okhttp3.EventListener]) — a
+     * connection in hand (`connectEnd`, or a pooled one acquired), the
+     * request's body written whole (`requestBodyEnd`). Read on failure only.
+     */
+    internal class CallStages : okhttp3.EventListener() {
+        @Volatile var connected = false
+        @Volatile var reused = false
+        @Volatile var bodyWritten = false
+
+        override fun connectEnd(call: okhttp3.Call, inetSocketAddress: java.net.InetSocketAddress, proxy: java.net.Proxy, protocol: okhttp3.Protocol?) {
+            connected = true
+        }
+
+        override fun connectionAcquired(call: okhttp3.Call, connection: okhttp3.Connection) {
+            if (!connected) reused = true
+            connected = true
+        }
+
+        override fun requestBodyEnd(call: okhttp3.Call, byteCount: Long) {
+            bodyWritten = true
+        }
+
+        override fun requestHeadersEnd(call: okhttp3.Call, request: Request) {
+            // A request with no body is whole once its headers are written.
+            if (request.body == null) bodyWritten = true
         }
     }
 
@@ -381,21 +450,71 @@ class OkHttpTransport : RpcTransport {
          * matched before its `IOException` parent, a connect-timeout
          * `SocketTimeoutException` before the `InterruptedIOException` it is.
          */
-        fun outcomeOf(failure: IOException): RpcTransportOutcome = when (failure) {
-            is java.net.UnknownHostException,
-            is java.net.ConnectException,
-            is java.net.NoRouteToHostException,
-            is javax.net.ssl.SSLHandshakeException,
-            -> RpcTransportOutcome.NotConnected
-            is java.net.SocketTimeoutException ->
-                if (failure.message.orEmpty().contains("connect", ignoreCase = true)) RpcTransportOutcome.NotConnected
-                else RpcTransportOutcome.Timeout
-            // okhttp reports a call timeout as an InterruptedIOException, which
-            // is a subclass of IOException — so it must be matched before the
-            // generic case or every timeout would be reported as a network
-            // failure, and the core would ban an endpoint that was merely slow.
-            is java.io.InterruptedIOException -> RpcTransportOutcome.Timeout
-            else -> RpcTransportOutcome.Network
+        fun outcomeOf(failure: IOException): RpcTransportOutcome = outcomeOfClass(failureClass(failure, null))
+
+        /** r11-9: a pooled connection found dead — broken with no answer, the request written or not. */
+        val STALE_CLASSES = setOf("after_write", "write_failed")
+
+        /**
+         * r11-9: a JSON-RPC method that only reads — asked once again on a
+         * new connection when a pooled one was found dead. Anything else (a
+         * submit, a signature's service call) is never sent twice by the
+         * transport: it goes on a connection of its own, and what its failure
+         * means is the core's.
+         */
+        fun readOnly(method: String): Boolean =
+            method == "eth_call" || method.startsWith("eth_get") || method.startsWith("eth_estimate") ||
+                method in setOf("eth_blockNumber", "eth_chainId", "eth_gasPrice", "eth_maxPriorityFeePerGas", "eth_feeHistory", "eth_supportedEntryPoints", "net_version") ||
+                method.startsWith("pimlico_get") || method.startsWith("vela_get")
+
+        /**
+         * r11-9: the platform's failure as the core's CLASS
+         * (`rpc_pool::TransportFailure`, vector `transport-failures.json`) —
+         * what it means (not sent, may have been sent, timed out) is the
+         * core's `transport_outcome_of`, never this file's. [stages]: how far
+         * the call got (`null`: not known — the exception alone decides).
+         *
+         * - the name, a refused or unroutable connect, TLS: nothing left;
+         * - a time-out before a connection: the connect's; once the request
+         *   was written whole: the answer's; in between: it never left whole;
+         * - any other break: after the body was written whole, `after_write`
+         *   (it may have been acted on); before it, `write_failed`; with no
+         *   connection ever made, a refused connect.
+         */
+        fun failureClass(failure: IOException, stages: CallStages?): String = when (failure) {
+            is java.net.UnknownHostException -> "dns"
+            is javax.net.ssl.SSLHandshakeException, is javax.net.ssl.SSLPeerUnverifiedException -> "tls"
+            is java.net.ConnectException, is java.net.NoRouteToHostException, is java.net.PortUnreachableException -> "connect_refused"
+            // A SocketTimeoutException IS an InterruptedIOException: matched first.
+            is java.net.SocketTimeoutException -> when {
+                stages == null -> if (failure.message.orEmpty().contains("connect", ignoreCase = true)) "connect_timeout" else "read_timeout"
+                !stages.connected -> "connect_timeout"
+                stages.bodyWritten -> "read_timeout"
+                else -> "write_failed"
+            }
+            // okhttp's call timeout ("timeout"), at whatever stage the call was.
+            is java.io.InterruptedIOException -> when {
+                stages == null -> "timeout"
+                !stages.connected -> "connect_timeout"
+                stages.bodyWritten -> "read_timeout"
+                else -> "write_failed"
+            }
+            else -> when {
+                stages == null -> "unknown"
+                stages.bodyWritten -> "after_write"
+                stages.connected -> "write_failed"
+                else -> "connect_refused"
+            }
+        }
+
+        /** The core's verdict on a failure [kind] (`transport_outcome_of`). */
+        fun outcomeOfClass(kind: String): RpcTransportOutcome {
+            val type = runCatching { JSONObject(uniffi.vela_core_uniffi.transportOutcomeOf(kind)).optString("type") }.getOrNull()
+            return when (type) {
+                "not_connected" -> RpcTransportOutcome.NotConnected
+                "timeout" -> RpcTransportOutcome.Timeout
+                else -> RpcTransportOutcome.Network
+            }
         }
     }
 }

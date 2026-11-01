@@ -104,16 +104,23 @@ fun WalletScreen(
      * it, its first steps), under the actions. `null` for a Vela account.
      */
     multisigCard: (@Composable () -> Unit)? = null,
+    /**
+     * r11-3: the multisig shown lives in the other space — said here in
+     * place of the figure, the actions, Activity and Assets, which would be
+     * this space's empty reading of it ("$0.00", "No activity yet"). `null`:
+     * the home as it is.
+     */
+    otherSpace: (@Composable () -> Unit)? = null,
 ) {
     if (model.textScale != 1f) {
         val density = LocalDensity.current
         CompositionLocalProvider(
             LocalDensity provides Density(density.density, density.fontScale * model.textScale),
         ) {
-            WalletHomeContent(model, modifier, onSelectTab, onFlow, onSwitcher, onToggleVisibility, onStatusClick, onRefresh, onSpace, onSyncRetry, multisigCard)
+            WalletHomeContent(model, modifier, onSelectTab, onFlow, onSwitcher, onToggleVisibility, onStatusClick, onRefresh, onSpace, onSyncRetry, multisigCard, otherSpace)
         }
     } else {
-        WalletHomeContent(model, modifier, onSelectTab, onFlow, onSwitcher, onToggleVisibility, onStatusClick, onRefresh, onSpace, onSyncRetry, multisigCard)
+        WalletHomeContent(model, modifier, onSelectTab, onFlow, onSwitcher, onToggleVisibility, onStatusClick, onRefresh, onSpace, onSyncRetry, multisigCard, otherSpace)
     }
 
     model.sheet?.let { sheet ->
@@ -146,6 +153,7 @@ private fun WalletHomeContent(
     onSpace: () -> Unit = {},
     onSyncRetry: (() -> Unit)? = null,
     multisigCard: (@Composable () -> Unit)? = null,
+    otherSpace: (@Composable () -> Unit)? = null,
 ) {
     val colors = VelaTheme.colors
     val strings = LocalVelaStrings.current
@@ -220,6 +228,15 @@ private fun WalletHomeContent(
                         onSyncRetry = onSyncRetry,
                     )
                     Spacer(modifier = Modifier.height(VelaSpacing.xl3))
+                    if (otherSpace != null) {
+                        otherSpace()
+                        multisigCard?.let { card ->
+                            Spacer(modifier = Modifier.height(VelaSpacing.xl))
+                            card()
+                        }
+                        Spacer(modifier = Modifier.height(VelaSpacing.xl3))
+                        return@Column
+                    }
                     BalanceDisplay(
                         model = model.balance,
                         onToggleVisibility = onToggleVisibility,

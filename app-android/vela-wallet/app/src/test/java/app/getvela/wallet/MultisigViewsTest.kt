@@ -86,7 +86,7 @@ class MultisigViewsTest {
           "canApprove":[],"canExecute":["$alice"],"sameNonce":[],"executing":false,"createdMs":1,"unsent":false,"renameUndeployed":false,
           "review":{"action":{"kind":"transfer","to":"$bob","amount":"1500000000000000000","token":null},"sign":{"allowed":true,"anyway":false}}}],
          "chains":[{"chainId":100,"members":{"deployed":true,"owners":["$alice","$bob","$carol"],"threshold":2,"nonce":"3"},"items":[],"mailbox":true}],
-         "presence":{"${safe.lowercase()}":{"needs_you":1,"ready":2,"waiting_payer":0,"first":{"chain_id":100,"safe_tx_hash":"$hash"}}},
+         "presence":{"${safe.lowercase()}":{"needs_you":1,"ready":2,"waiting_payer":0,"first":{"chain_id":100,"safe_tx_hash":"$hash"},"needs_you_keys":["100:${hash.lowercase()}"],"ready_keys":["100:0xr1","100:0xr2"],"read_at":10}},
          "standings":{"100:$hash":{"kind":"blocked","block":{"kind":"fails","why":{"kind":"short","token":{"symbol":"XDAI","decimals":18},"have":"280000000000000000","need":"500000000000000000"}}}},
          "signers":{"100:$hash":{"rows":[{"owner":"$bob","kind":"vela"},{"owner":"$carol","kind":"wallet"}],"in_vela":["$bob"],"outside":["$carol"],"either":[],"contract":[],"enough":true}},
          "waiting_parts":{"${safe.lowercase()}":[{"kind":"needsYou","count":1},{"kind":"ready","count":2}]},
@@ -257,6 +257,47 @@ class MultisigViewsTest {
         assertTrue(model.notes.any { it.id == "executed" && it.tone == MsTone.Positive })
     }
 
+    /**
+     * r10-7 (round 11, live): after its own one-press the sheet read "1/2
+     * approved" over "Executed by Interleave · 2 of 2 approvals counted",
+     * and "Executed" twice. Finished: the chip is the heading's word, the
+     * execution said once.
+     */
+    @Test
+    fun an_executed_one_says_executed_once_never_todays_count() {
+        val done = proposalsJson(""","executions":{"100:$hash":{"kind":"executed","txHash":"0xtx"}},"timelines":{"100:$hash":[{"kind":"executed","tx_hash":"0xtx"}]}""")
+            .replace("\"status\":\"ready\"", "\"status\":\"done\"")
+        val view = MsProposalsView.of(json(done))
+        val model = MsProposalModel(view.items.single(), view, words(), null)
+        assertEquals(words().t("proposal.executed"), model.statusLine)
+        assertTrue("the notes say it", model.executedSaidInNotes)
+        assertEquals(1, model.notes.count { it.text == words().t("proposal.executed") })
+    }
+
+    /**
+     * r11-9: one press whose look could not check it showed two boxes —
+     * "Couldn't check whether it would run" and "This would fail if executed
+     * now: it couldn't be checked". The stopped state is the look's own words,
+     * a warning, and the fee line gives way to it.
+     */
+    @Test
+    fun a_stopped_execution_is_said_in_its_looks_words_once() {
+        val unchecked = ""","previews":{"100:${hash}:${alice.lowercase()}":{"kind":"unchecked"}},"actions":{"execute:$hash":{"kind":"stopped","preview":{"kind":"unchecked"}}}"""
+        val view = MsProposalsView.of(json(proposalsJson(unchecked)))
+        val model = MsProposalModel(view.items.single(), view, words(), null)
+        val failure = model.executeFailure!!
+        assertEquals(words().t("proposal.feeUnchecked"), failure.text)
+        assertEquals(MsTone.Warning, failure.tone)
+        assertFalse(failure.text.contains(words().t("proposal.uncheckedReason")))
+        assertNull("one box: the fee line gives way", model.feeLineBeside(alice, failure))
+        // A look that says it fails is still "would fail", with its why.
+        val fails = ""","previews":{"100:${hash}:${alice.lowercase()}":{"kind":"fails","why":{"kind":"reverts","reason":"GS013"}}},"actions":{"execute:$hash":{"kind":"stopped","preview":{"kind":"fails","why":{"kind":"reverts","reason":"GS013"}}}}"""
+        val v2 = MsProposalsView.of(json(proposalsJson(fails)))
+        val m2 = MsProposalModel(v2.items.single(), v2, words(), null)
+        assertTrue(m2.executeFailure!!.text.contains("GS013"))
+        assertEquals(MsTone.Danger, m2.executeFailure!!.tone)
+    }
+
     @Test
     fun the_history_lines_name_who_did_what() {
         val view = MsProposalsView.of(json(proposalsJson()))
@@ -273,7 +314,7 @@ class MultisigViewsTest {
         val w = words()
         assertEquals(MsTone.Danger, reviewConcern(w, json("""{"kind":"lookalike","address":"$bob","label":"Bob","of":"$alice"}"""))!!.second)
         assertNull(reviewConcern(w, json("""{"kind":"stateChange"}""")))
-        assertEquals("-1.5 XDAI", deltaText(json("""{"delta":"-1500000000000000000"}"""), 100, w, emptyMap()))
+        assertEquals("\u22121.5 XDAI", deltaText(json("""{"delta":"-1500000000000000000"}"""), 100, w, emptyMap()))
         assertEquals("+2 USDC", deltaText(json("""{"delta":"2000000","token":"0xA"}"""), 100, w, mapOf("0xa" to ("USDC" to 6))))
         assertTrue(changeText(w, json("""{"kind":"add","added":"$alice"}""")).contains("Alice"))
         val writes: List<JsonElement> = listOf(json("""{"kind":"module","enabled":true,"address":"0xM"}"""), json("""{"kind":"module","enabled":true,"address":"0xM"}"""))
@@ -290,16 +331,18 @@ class MultisigViewsTest {
         val notifier = MultisigNotifier(store, { words() }) { posted += it }
         val accounts = MsAccountsView.of(json(accountsJson))
         // First look: on screen — recorded, nothing said.
-        assertEquals(emptyList<Any>(), notifier.evaluate(accounts, MsProposalsView.of(json(proposalsJson())), post = false))
+        assertEquals(emptyList<Any>(), notifier.evaluate(accounts, MsProposalsView.of(json(proposalsJson())), MultisigNotifier.Look.OnScreen))
         assertTrue(posted.isEmpty())
         // Away: a second approval counted, and one more needs this device.
         val moved = proposalsJson().replace("\"approved\":1", "\"approved\":2").replace("\"needs_you\":1", "\"needs_you\":2")
-        val notes = notifier.evaluate(accounts, MsProposalsView.of(json(moved)), post = true)
+            .replace("\"needs_you_keys\":[", "\"needs_you_keys\":[\"100:0xnew\",")
+        val notes = notifier.evaluate(accounts, MsProposalsView.of(json(moved)), MultisigNotifier.Look.Away(since = 5))
         assertEquals(setOf(MultisigNotifier.Channel.NeedsYou, MultisigNotifier.Channel.Counted), notes.map { it.channel }.toSet())
         assertEquals(2, posted.size)
         assertTrue(notes.all { it.safeTxHash == hash })
+        assertEquals("the count is the number waiting now", "2 need your approval", notes.single { it.channel == MultisigNotifier.Channel.NeedsYou }.body)
         // Said once: the same views again say nothing.
-        assertTrue(notifier.evaluate(accounts, MsProposalsView.of(json(moved)), post = true).isEmpty())
+        assertTrue(notifier.evaluate(accounts, MsProposalsView.of(json(moved)), MultisigNotifier.Look.Away(since = 5)).isEmpty())
         // An execution is said only away.
         notifier.executed("Send 1.5 XDAI", 100, hash, away = false)
         assertEquals(2, posted.size)

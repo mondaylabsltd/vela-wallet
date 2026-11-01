@@ -296,8 +296,8 @@ class R9ShellFixesTest {
 
     private val accountsJson = """{"loaded":true,"active":"$safe","accounts":[{"account":{"address":"$safe","owners":["$alice","$bob"],"threshold":2,"chainIds":[100],"label":"R9 Team"},"name":"R9 Team","shared":true,"record_waiting":false,"local_members":["$alice"]}]}"""
 
-    private fun presence(needs: Int, first: String?) =
-        """{"followed":"$safe","items":[],"presence":{"${safe.lowercase()}":{"needs_you":$needs,"ready":0,"waiting_payer":0,"first":${first?.let { "{\"chain_id\":100,\"safe_tx_hash\":\"$it\"}" } ?: "null"}}}}"""
+    private fun presence(needs: Int, first: String?, readAt: Long = 10) =
+        """{"followed":"$safe","items":[],"presence":{"${safe.lowercase()}":{"needs_you":$needs,"ready":0,"waiting_payer":0,"first":${first?.let { "{\"chain_id\":100,\"safe_tx_hash\":\"$it\"}" } ?: "null"},"needs_you_keys":[${first?.let { "\"100:${it.lowercase()}\"" } ?: ""}],"ready_keys":[],"read_at":$readAt}}}"""
 
     @Test
     fun a_new_proposal_from_another_member_is_said_once_with_its_transaction() = runBlocking {
@@ -306,9 +306,9 @@ class R9ShellFixesTest {
         val notifier = MultisigNotifier(store, { words() }) { posted += it }
         val accounts = MsAccountsView.of(json(accountsJson))
         // The app was on screen with nothing waiting.
-        notifier.evaluate(accounts, MsProposalsView.of(json(presence(0, null))), post = false)
+        notifier.evaluate(accounts, MsProposalsView.of(json(presence(0, null))), MultisigNotifier.Look.OnScreen)
         // Away (a cold process): Eve proposed — it needs this device.
-        val notes = notifier.evaluate(accounts, MsProposalsView.of(json(presence(1, hash))), post = true)
+        val notes = notifier.evaluate(accounts, MsProposalsView.of(json(presence(1, hash))), MultisigNotifier.Look.Away(since = 5))
         assertEquals(1, notes.size)
         val note = notes.single()
         assertEquals(MultisigNotifier.Channel.NeedsYou, note.channel)
@@ -316,7 +316,7 @@ class R9ShellFixesTest {
         assertEquals(100, note.chainId)
         assertEquals(safe, note.address)
         assertEquals(posted, notes)
-        assertTrue("said once", notifier.evaluate(accounts, MsProposalsView.of(json(presence(1, hash))), post = true).isEmpty())
+        assertTrue("said once", notifier.evaluate(accounts, MsProposalsView.of(json(presence(1, hash))), MultisigNotifier.Look.Away(since = 5)).isEmpty())
     }
 
     @Test

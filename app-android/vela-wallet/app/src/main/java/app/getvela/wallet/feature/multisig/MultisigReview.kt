@@ -362,10 +362,12 @@ private fun Moves(review: JsonElement, chainId: Int, words: MultisigWords, token
     val colors = VelaTheme.colors
     when (val said = movesSaid(review)) {
         MovesSaid.Empty -> Unit
-        MovesSaid.Deltas -> MsSection(words.raw("componentsUi.signing.simResultLabel")) {
+        // r11 S4: the heading is the review's own key (`movesTitleKey`, "Balance
+        // changes" — the signing sheet's), never "SIMULATION RESULT".
+        MovesSaid.Deltas -> MsSection(words.raw(movesTitleKey(review))) {
             for (delta in deltas) {
                 val text = deltaText(delta, chainId, words, tokens)
-                MsText(text, MsType.RowTitle, Modifier.testTag("multisig.review.delta"), color = if (text.startsWith("-")) colors.fgBase else colors.successBase)
+                MsText(text, MsType.RowTitle, Modifier.testTag("multisig.review.delta"), color = if (delta["delta"].str?.startsWith("-") == true) colors.fgBase else colors.successBase)
             }
             if (review["simulationSource"].str == "probe") MsNote(words.t("review.movesProbe"))
         }
@@ -382,8 +384,13 @@ internal fun deltaText(delta: JsonElement, chainId: Int, words: MultisigWords, t
     val magnitude = raw.removePrefix("-")
     val token = delta["token"].str?.takeIf { it.isNotEmpty() }
     val (symbol, decimals) = if (token != null) tokens[token.lowercase()] ?: (MultisigWords.short(token) to 18) else words.symbol(chainId) to 18
-    return "${if (negative) "-" else "+"}${MsRules.formatUnits(magnitude, decimals)} $symbol"
+    // r11 S4: signed the one way money is signed in Vela (the core's U+2212 / "+").
+    return "${uniffi.vela_core_uniffi.signedAmountText(MsRules.formatUnits(magnitude, decimals), negative)} $symbol"
 }
+
+/** r11 S4: the heading over what moves — the review's key; the signing sheet's own before a core that names it. */
+internal fun movesTitleKey(review: JsonElement): String =
+    review["movesTitleKey"].str ?: review["moves_title_key"].str ?: "componentsUi.signing.balanceChangesTitle"
 
 @Composable
 private fun Recipients(review: JsonElement, words: MultisigWords) {

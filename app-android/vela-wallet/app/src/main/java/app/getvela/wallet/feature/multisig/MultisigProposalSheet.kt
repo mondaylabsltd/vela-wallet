@@ -190,13 +190,15 @@ fun MultisigProposalSheet(
         Column(verticalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
             MsText(model.title, MsType.Title, Modifier.testTag("multisig.proposal.title"))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
-                MsChip(model.statusLine, Modifier.testTag("multisig.proposal.status"), tone = if (model.standing.kind == "blocked") MsTone.Warning else MsTone.Neutral)
+                model.statusLine.takeIf { it.isNotEmpty() }?.let { line ->
+                    MsChip(line, Modifier.testTag("multisig.proposal.status"), tone = if (model.standing.kind == "blocked") MsTone.Warning else MsTone.Neutral)
+                }
                 MsText("${words.network(chainId)} · ${words.t("action.numberValue", "nonce" to item.nonce)}", MsType.Sub, color = colors.fgSubtle)
             }
         }
         for (note in model.notes) MsNote(note.text, tone = note.tone, tag = "multisig.proposal.note.${note.id}")
         model.executedTx?.let { tx ->
-            MsNote(words.t("proposal.executed"), tone = MsTone.Positive, tag = "multisig.proposal.executed")
+            if (!model.executedSaidInNotes) MsNote(words.t("proposal.executed"), tone = MsTone.Positive, tag = "multisig.proposal.executed")
             explorerTx(chainId, tx)?.let { url ->
                 val context = LocalContext.current
                 MsTextButton(words.t("proposal.explorer"), tag = "multisig.proposal.explorer") {
@@ -319,7 +321,7 @@ fun MultisigProposalSheet(
                 // S4: what the one press costs, before it is pressed — the
                 // machine's look for this member (`previews`), as Execute's.
                 if (oneTap && chosen != null) {
-                    model.feeLine(chosen)?.let { (text, tone) -> MsNote(text, tone = tone, tag = "multisig.proposal.oneTapFee") }
+                    model.feeLineBeside(chosen, model.executeFailure)?.let { (text, tone) -> MsNote(text, tone = tone, tag = "multisig.proposal.oneTapFee") }
                 } else if (chosen != null) {
                     // r10 S4: theirs would complete it, but the one press is not
                     // offered — said why (can't pay the fee, would fail), never
@@ -339,7 +341,7 @@ fun MultisigProposalSheet(
                 if (model.canExecute.size > 1) {
                     MemberPicker(words, words.t("proposal.as"), model.canExecute, chosen, "multisig.proposal.executor") { executor = it }
                 }
-                model.feeLine(chosen)?.let { (text, tone) -> MsNote(text, tone = tone, tag = "multisig.proposal.fee") }
+                model.feeLineBeside(chosen, model.executeFailure)?.let { (text, tone) -> MsNote(text, tone = tone, tag = "multisig.proposal.fee") }
                 for (line in model.setupLines(chosen)) MsNote(line)
                 MsSignButton(
                     text = words.t(if (model.signAnyway) "review.executeAnyway" else "proposal.execute"),
@@ -422,7 +424,10 @@ fun MultisigProposalSheet(
         // ones nothing says yet), the outside-wallet link and code for an
         // outside one, and "Approve with another wallet" (a live session with
         // that wallet) for an outside or either one — as the web and desktop.
-        if (!model.isDone && model.stillNeeded.isNotEmpty() && item.approved < item.threshold) {
+        // r11 S4: a transaction Vela refuses for what it is asks nobody to
+        // approve it (the core leaves it nobody who can, and names why).
+        val refusedForWhatItIs = item.canApprove.isEmpty() && item.review["refused"] != null && item.review["refused"] !is kotlinx.serialization.json.JsonNull
+        if (!model.isDone && !refusedForWhatItIs && model.stillNeeded.isNotEmpty() && item.approved < item.threshold) {
             MsSection(words.t("proposal.invite")) {
                 MsNote(words.t("proposal.stillNeeded", "missing" to words.list(model.stillNeeded.map(words::label))))
                 for (line in model.signerLines) MsNote(line.text, tag = "multisig.proposal.signers.${line.id}")

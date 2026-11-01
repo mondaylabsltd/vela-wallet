@@ -364,6 +364,8 @@ data class MsProposalItem(
      * transaction (`members_here`); `null` from a core without the field.
      */
     val membersHere: List<String>? = null,
+    /** r11 S4: every number a queued one waits behind (`waits_for`, decimal), the same on every surface. */
+    val waitsFor: List<String> = emptyList(),
 ) {
     val id: String get() = "$chainId:${safeTxHash.lowercase()}"
 
@@ -394,6 +396,7 @@ data class MsProposalItem(
             renameUndeployed = e["renameUndeployed"].bool ?: false,
             raw = e,
             membersHere = (e["membersHere"] ?: e["members_here"])?.takeIf { it is kotlinx.serialization.json.JsonArray }?.strings(),
+            waitsFor = (e["waitsFor"] ?: e["waits_for"]).strings(),
         )
     }
 }
@@ -461,7 +464,18 @@ data class MsSigners(
 }
 
 /** What waits on one multisig for this device (`MultisigWaiting`). */
-data class MsWaiting(val needsYou: Int, val ready: Int, val waitingPayer: Int, val first: JsonElement?) {
+data class MsWaiting(
+    val needsYou: Int,
+    val ready: Int,
+    val waitingPayer: Int,
+    val first: JsonElement?,
+    /** r11-1: the transactions [needsYou] counts (`<chainId>:<safeTxHash lowercase>`). */
+    val needsYouKeys: List<String> = emptyList(),
+    /** r11-1: the transactions [ready] counts. */
+    val readyKeys: List<String> = emptyList(),
+    /** r11-1: when the list behind it was read on this page (ms); `null`: kept from an earlier one. */
+    val readAt: Long? = null,
+) {
     val firstChainId: Int? get() = first["chain_id"].int ?: first["chainId"].int
     val firstHash: String? get() = first["safe_tx_hash"].str ?: first["safeTxHash"].str
 
@@ -471,6 +485,9 @@ data class MsWaiting(val needsYou: Int, val ready: Int, val waitingPayer: Int, v
             ready = e["ready"].int ?: 0,
             waitingPayer = e["waiting_payer"].int ?: 0,
             first = e["first"],
+            needsYouKeys = e["needs_you_keys"].arr.mapNotNull { it.str },
+            readyKeys = e["ready_keys"].arr.mapNotNull { it.str },
+            readAt = e["read_at"].long,
         )
     }
 }

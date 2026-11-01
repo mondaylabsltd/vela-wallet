@@ -44,6 +44,21 @@ object VelaHttp {
             .build()
     }
 
+    /**
+     * r11-9: the same client with a pool that keeps nothing — every call a
+     * connection of its own. For a write (a submit), whose failure on a
+     * pooled connection a server or a tunnel had already closed read as
+     * "it may have been sent" though nothing reached anyone (round 11: the
+     * relay behind `adb reverse` answered HTTP/1.0 and closed; okhttp kept
+     * the connection; the next POST met "unexpected end of stream"); and for
+     * a read asked again after meeting such a connection.
+     */
+    val fresh: OkHttpClient by lazy {
+        client.newBuilder()
+            .connectionPool(okhttp3.ConnectionPool(0, 1, TimeUnit.SECONDS))
+            .build()
+    }
+
     private const val CONNECT_TIMEOUT_SECONDS = 10L
     private const val BACKSTOP_TIMEOUT_SECONDS = 60L
 }

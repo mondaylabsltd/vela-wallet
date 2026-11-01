@@ -291,7 +291,9 @@ class RelayClientTest {
             RelayClient.EstimateAnswer.Estimated("100000", "200000", "50000"),
             relay.estimateUserOpGas(100, "{}"),
         )
-        assertEquals(RelayClient.EstimateAnswer.Refused("AA23 reverted"), relay.estimateUserOpGas(100, "{}"))
+        val refused = relay.estimateUserOpGas(100, "{}") as RelayClient.EstimateAnswer.Refused
+        assertEquals("AA23 reverted", refused.message)
+        assertEquals("AA23 reverted", JSONObject(refused.errorJson!!).getString("message"))
         assertEquals(RelayClient.EstimateAnswer.Unreachable, relay.estimateUserOpGas(100, "{}"))
     }
 

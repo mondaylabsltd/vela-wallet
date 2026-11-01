@@ -162,10 +162,21 @@ object MultisigWiring {
     fun attachNotifier(container: AppContainer, application: android.app.Application, hub: MultisigHub) {
         var last = ""
         hub.onProposalsMoved = { accounts, proposals ->
+            // r11-1: decided as the view lands — on screen it is seen; away
+            // (after a round began in this process) a read landing late is
+            // said now, measured from that round; in between, neither.
+            val onScreen = container.onScreen()
+            if (onScreen) hub.awaySince = null
+            val look = MultisigNotifier.lookNow(onScreen = onScreen, started = container.inForeground(), since = hub.awaySince)
             val signature = proposals.presence.toString() + proposals.items.joinToString { "${it.id}=${it.approved}" }
-            if (signature != last && container.inForeground()) {
+            if (look != null && signature != last) {
                 last = signature
-                hub.scope.launch { container.multisigNotifier.evaluate(accounts, proposals, post = false) }
+                hub.scope.launch {
+                    val notes = container.multisigNotifier.evaluate(accounts, proposals, look)
+                    if (look is MultisigNotifier.Look.Away && notes.isNotEmpty()) {
+                        VelaLog.event("multisig.poll", "said as it landed", "notes" to notes.size)
+                    }
+                }
             }
         }
         hub.onExecuted = { title, chainId, hash -> container.multisigNotifier.executed(title, chainId, hash, away = !container.inForeground()) }
