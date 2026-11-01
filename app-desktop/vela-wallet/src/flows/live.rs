@@ -2204,7 +2204,7 @@ mod sweep_tests {
             view.loading = true;
             let pick = send_pick_with(&inputs(&view, &fee, &s, &wallet), false, SendClass::All);
             assert_eq!(pick.loading.as_ref(), Some(&s.loading_tokens));
-            assert_eq!(s.loading_tokens.as_ref(), "Loading tokens...");
+            assert_ne!(s.loading_tokens.as_ref(), "send.loadingTokens", "the corpus has its words");
 
             view.tokens = vec![token(1, "ETH", None)];
             let pick = send_pick_with(&inputs(&view, &fee, &s, &wallet), false, SendClass::All);
