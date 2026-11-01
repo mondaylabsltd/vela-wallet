@@ -378,4 +378,12 @@ window.VelaCS.i18n.register('tr', {
   'ui.withdrawnTitle': "Geri çekildi",
   'ui.walletWithdrew': "Cüzdan bu isteği beklemeyi bıraktı, bu yüzden burada hiçbir şey imzalanmıyor. Bu sayfayı kapatabilirsiniz.",
   'ui.answerNotTaken': "Cüzdan bu sayfanın yanıtını almadı, bu yüzden hiçbir şey gönderilmedi. Cüzdana dönün.",
+  // r9-10: "… anyway" where the app's review asks for it; a token whose
+  // decimals are unknown in its base units; one approval said as one.
+  'button.msApproveAnyway': "Yine de onayla",
+  'warn.msAppAnyway': "Vela’nın kontrolü bu sayfanın doğrulayamadığı bir tehlike buldu (örneğin başarısız olacağı): yalnızca eminsen onayla.",
+  'value.baseUnitsUnknown': "temel birim · ondalık sayısı bilinmiyor",
+  'sentence.msAddOwnerOne': "{owner} üye olur ve {threshold} onay gerekir.",
+  'sentence.msRemoveOwnerOne': "{owner} artık üye değildir ve {threshold} onay gerekir.",
+  'sentence.msThresholdOne': "Bundan sonra {threshold} onay gerekir.",
 });

@@ -47,7 +47,27 @@ export interface ExtChainCatalog {
 	 */
 	space: 'mainnet' | 'testnet';
 	order: number[];
+	/**
+	 * r9: the networks of `order` the active account holds something on or
+	 * used, most telling first — a new site starts on the first of them
+	 * (`network_space::site_start_chain_for`) before the space's first.
+	 */
+	accountChains: number[];
 	updatedAtMs: number;
+}
+
+/** r9: where the active account holds something or used, most telling first. */
+let accountChains: number[] = [];
+
+/**
+ * r9: the active account's networks changed (its holdings were read, it
+ * switched): the catalog says them, so a new site starts where it lives.
+ */
+export function setExtAccountChains(ids: number[]): void {
+	const next = [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))];
+	if (next.join(',') === accountChains.join(',')) return;
+	accountChains = next;
+	void publishExtChains();
 }
 
 /**
@@ -142,6 +162,7 @@ export function buildExtChainCatalog(nowMs = Date.now()): ExtChainCatalog {
 		chains,
 		space: networkSpace.testnet ? 'testnet' : 'mainnet',
 		order,
+		accountChains: accountChains.filter((id) => order.includes(id)),
 		updatedAtMs: nowMs
 	};
 }
@@ -192,4 +213,5 @@ export async function publishExtChains(): Promise<ExtChainCatalog | null> {
 /** Test seam: forget what was published, so the next publish is observable. */
 export function resetExtChainsForTests(): void {
 	lastPublished = null;
+	accountChains = [];
 }

@@ -61,6 +61,12 @@
 /// Every entry is a page published at `sign.getvela.app/b/<hash>/sign.html`.
 /// An empty set would open nothing were it enforced — see [`ENFORCE`].
 pub const BUILD_ALLOWED: &[&str] = &[
+    // 344aacd2's page, round 9 (r9-10): "Approve anyway" in the danger fill
+    // exactly where the app's one review asks for it (`context.multisig.
+    // anyway`, a run that fails, said as the app's word) or the page's own
+    // reading finds a danger; an unknown token's amount in its base units,
+    // "decimals unknown" (never "1,000,000 ? ?"); "1 approval will be needed".
+    "344aacd2785aea2738ee6b984156a84ad65e48fb0289bbd46235acd85256352f",
     // 879e715f's page, round 8 (r8-5): a batch inside a batch lists every
     // leg of every level ("1.1", "1.2"), nested deeper than three is
     // refused, and a danger is confirmed on the danger's outlined button —

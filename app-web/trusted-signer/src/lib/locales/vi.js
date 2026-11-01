@@ -378,4 +378,12 @@ window.VelaCS.i18n.register('vi', {
   'ui.withdrawnTitle': "Đã rút lại",
   'ui.walletWithdrew': "Ví đã ngừng chờ yêu cầu này, nên không có gì được ký ở đây. Bạn có thể đóng trang này.",
   'ui.answerNotTaken': "Ví không nhận câu trả lời của trang này, nên chưa gửi gì. Hãy quay lại ví.",
+  // r9-10: "… anyway" where the app's review asks for it; a token whose
+  // decimals are unknown in its base units; one approval said as one.
+  'button.msApproveAnyway': "Vẫn phê duyệt",
+  'warn.msAppAnyway': "Kiểm tra của Vela phát hiện một nguy cơ mà trang này không thể xác minh (ví dụ: giao dịch sẽ thất bại): chỉ phê duyệt nếu bạn chắc chắn.",
+  'value.baseUnitsUnknown': "đơn vị cơ sở · không rõ số thập phân",
+  'sentence.msAddOwnerOne': "{owner} trở thành thành viên, và sẽ cần {threshold} phê duyệt.",
+  'sentence.msRemoveOwnerOne': "{owner} không còn là thành viên, và sẽ cần {threshold} phê duyệt.",
+  'sentence.msThresholdOne': "Từ nay sẽ cần {threshold} phê duyệt.",
 });

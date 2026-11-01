@@ -26,6 +26,7 @@
 	 */
 	import Button from '$lib/ui/Button.svelte';
 	import { fillTemplate } from '$lib/i18n/fill';
+	import { requireApprovals } from '../core/approvals-words';
 	import { contactsBook } from '$lib/contacts/core/contacts-book.svelte';
 	import Identicon from '$lib/wallet/ui/Identicon.svelte';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
@@ -114,7 +115,7 @@
 					new: names.label(action.newOwner)
 				});
 			case 'changeThreshold':
-				return fillTemplate(m.action.changeThreshold, { threshold: action.threshold });
+				return requireApprovals(m, action.threshold);
 			default:
 				return '';
 		}

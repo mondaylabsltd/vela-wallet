@@ -1072,6 +1072,13 @@ details.fee-wrap[open] summary.fee .chevron { transform: rotate(90deg); }
   color: var(--color-error-base);
 }
 
+/* r9-10: "Approve anyway" — the apps' danger fill, never the accent. */
+.confirm-anyway {
+  border: 0;
+  background: var(--color-error-base);
+  color: var(--color-onAccent);
+}
+
 .confirm-done {
   border: var(--border-hairline) solid var(--color-border-strong);
   background: transparent;

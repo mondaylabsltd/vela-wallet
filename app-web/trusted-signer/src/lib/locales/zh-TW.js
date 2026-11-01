@@ -380,4 +380,12 @@ window.VelaCS.i18n.register('zh-TW', {
   'ui.withdrawnTitle': "已撤回",
   'ui.walletWithdrew': "錢包已不再等待這個請求，這裡不會簽任何東西。你可以關閉這一頁了。",
   'ui.answerNotTaken': "錢包沒有接受這一頁的回答，所以什麼都沒有送出。請回到錢包。",
+  // r9-10: "… anyway" where the app's review asks for it; a token whose
+  // decimals are unknown in its base units; one approval said as one.
+  'button.msApproveAnyway': "仍然核准",
+  'warn.msAppAnyway': "Vela 的檢查發現了本頁無法核實的風險（例如執行會失敗）：只有在確定時才核准。",
+  'value.baseUnitsUnknown': "個最小單位 · 小數位未知",
+  'sentence.msAddOwnerOne': "{owner} 成為成員，之後需要 {threshold} 個核准。",
+  'sentence.msRemoveOwnerOne': "{owner} 不再是成員，之後需要 {threshold} 個核准。",
+  'sentence.msThresholdOne': "從現在起需要 {threshold} 個核准。",
 });

@@ -1,10 +1,14 @@
 /**
- * Members' names — the core's rule (`multisig_rules::names`): this device's
- * own name for one of its accounts, else the name a multisig on this device
- * keeps for it (the accounts machine's `known_members`), else the name the
- * member registered for itself in the passkey index, else the short address.
- * Labels only, never authority. Here only the passkey index is asked (once
- * per address) and its answers kept, reactively, for the rule.
+ * Members' names — the core's rule (`multisig_rules::names`): the name a
+ * multisig on this device keeps for it (the accounts machine's
+ * `known_members`), else the name the member registered for itself in the
+ * passkey index, else this device's own name for one of its accounts, else
+ * the short address. Labels only, never authority.
+ *
+ * r9-12: a member's name is the accounts machine's `member_labels` — the
+ * same view every platform draws. Here only the passkey index is asked (once
+ * per address: what the machine's `index_wanted` names, and any address a
+ * screen shows), and each answer handed to the machine (`index_names`).
  */
 import * as wasm from '../../../../../../rust/pkg-web/vela_core.js';
 import { lookupWalletName } from '$lib/services/public-key-index';
@@ -47,7 +51,17 @@ class Names {
 			this.#answered = { ...this.#answered, [key]: true };
 			if (hit) this.#vela = { ...this.#vela, [key]: true };
 			if (hit?.name) this.#registered = { ...this.#registered, [key]: hit.name };
+			// r9-12: the machine names members from the same answers.
+			multisig.send({
+				type: 'index_names',
+				answers: { [key]: { vela: hit !== null, name: hit?.name ?? null } }
+			});
 		});
+	}
+
+	/** r9-12: ask the index about every member the machine has no answer for yet. */
+	askWanted(): void {
+		for (const address of multisig.view?.index_wanted ?? []) this.#ask(address);
 	}
 
 	/** Whether the passkey index has answered for `address` yet (so `isVela` is its word). */
@@ -81,6 +95,9 @@ class Names {
 		this.#ask(address);
 		// Before the core is here: this device's own name, else the short address.
 		if (!multisig.view) return memberLabel(address);
+		// r9-12: a member's one name, as the machine names it on every platform.
+		const named = multisig.view.member_labels?.[address.toLowerCase()];
+		if (named) return named;
 		return rule<string>('label', {
 			address,
 			own: localName(address),

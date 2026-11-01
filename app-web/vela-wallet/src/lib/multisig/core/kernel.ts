@@ -627,7 +627,9 @@ export type StateVerdict =
 	| { kind: 'declared' }
 	| { kind: 'undeclared'; writes: CriticalWrite[] }
 	| { kind: 'reverts' }
-	| { kind: 'unavailable'; reason: string };
+	| { kind: 'unavailable'; reason: string }
+	/** r9-9: refused for another reason — nothing said in the guard's place. */
+	| { kind: 'withheld' };
 
 /** The state-diff guard's reading: from a trace, the probe, or nothing. */
 export interface StateGuard {
@@ -788,6 +790,14 @@ export interface MultisigReviewOut {
 	concerns: ReviewConcern[];
 	tone: ReviewTone;
 	sign: SignRule;
+	/**
+	 * r9-9: why nothing is signed, ONE line (its corpus key) — said in place of
+	 * any other refusal words; `null` when it may be signed.
+	 */
+	refused?: {
+		why: 'delegatecall' | 'tooDeep' | 'refund' | 'stateChange' | 'other';
+		key: string;
+	} | null;
 	/** What the agent reads as the request on screen: bound to this proposal. */
 	adviceRequest: Record<string, unknown>;
 }

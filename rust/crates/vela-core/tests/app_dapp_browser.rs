@@ -51,7 +51,10 @@ fn booted(sites: Vec<DbrStoredSite>) -> Sut {
         now_ms: T0,
         space: false,
     });
-    sut.resolve(Res::SitesListed { sites });
+    sut.resolve(Res::SitesListed {
+        sites,
+        multisig_batches_json: None,
+    });
     sut
 }
 
@@ -640,7 +643,10 @@ fn a_second_origin_colliding_with_the_sheet_is_4001() {
 fn connect_with_no_account_is_4001() {
     let mut sut = Sut::new();
     sut.dispatch(Event::Start);
-    sut.resolve(Res::SitesListed { sites: Vec::new() });
+    sut.resolve(Res::SitesListed {
+        sites: Vec::new(),
+        multisig_batches_json: None,
+    });
     hello(&mut sut, "t1", "d1", DAPP);
     let answer = only_answer(&ask(
         &mut sut,
@@ -956,6 +962,7 @@ fn a_cold_account_read_never_logs_a_site_out() {
     sut.dispatch(Event::Start);
     sut.dispatch(Event::AccountsUpdated { addresses: None });
     sut.resolve(Res::SitesListed {
+        multisig_batches_json: None,
         sites: vec![DbrStoredSite {
             origin: DAPP.to_owned(),
             grant: Some(grant(DAPP, A3, 100)),
@@ -1923,6 +1930,7 @@ fn messages_before_the_sites_are_listed_are_held_not_refused() {
     hello(&mut sut, "t1", "d1", DAPP);
     assert!(ask(&mut sut, "t1", "d1", DAPP, "1", "eth_accounts", json!([])).is_empty());
     let ops = sut.resolve(Res::SitesListed {
+        multisig_batches_json: None,
         sites: vec![DbrStoredSite {
             origin: DAPP.to_owned(),
             grant: Some(grant(DAPP, A1, 100)),
@@ -2680,7 +2688,10 @@ fn account_changed_carries_the_connect_spelling() {
         now_ms: T0,
         space: false,
     });
-    sut.resolve(Res::SitesListed { sites: Vec::new() });
+    sut.resolve(Res::SitesListed {
+        sites: Vec::new(),
+        multisig_batches_json: None,
+    });
     hello(&mut sut, "t1", "d1", DAPP);
     ask(
         &mut sut,
@@ -2758,6 +2769,7 @@ fn loaded_lower_case_sites_are_normalised() {
         space: false,
     });
     let ops = sut.resolve(Res::SitesListed {
+        multisig_batches_json: None,
         sites: vec![DbrStoredSite {
             origin: DAPP.to_owned(),
             grant: Some(grant(DAPP, V_LOWER, 100)),
@@ -2797,6 +2809,86 @@ fn loaded_lower_case_sites_are_normalised() {
         }) => assert_eq!(granted_address, V),
         other => panic!("forwarded to signing: {other:?}"),
     }
+}
+
+/// r9 (desktop r9-18): a batch a multisig answered is kept on the device —
+/// the core's store, `vela.dapp.multisigBatches` — so its
+/// `wallet_getCallsStatus` after a restart is still the proposals machine's,
+/// never "Unknown bundle id"; the newest 64 are kept.
+#[test]
+fn a_multisig_batch_outlives_a_restart() {
+    use vela_core::app::dapp_browser::{MULTISIG_BATCHES_KEPT, MULTISIG_CALLS_STATUS_METHOD};
+    use vela_core::app::multisig_dapp::DappAnswer;
+    let hash = format!("0x{}", "cd".repeat(32));
+    let mut sut = connected(DAPP);
+    hello(&mut sut, "t1", "d1", DAPP);
+    let ops = ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "1",
+        "wallet_sendCalls",
+        json!([{"version": "2.0.0", "calls": [{"to": A2}]}]),
+    );
+    assert!(forwarded(&ops).is_some());
+    let ops = sut.dispatch(Event::MultisigAnswered {
+        tab: "t1".to_owned(),
+        id: "1".to_owned(),
+        answer: DappAnswer::ok(json!({ "id": hash })),
+        now_ms: 0.0,
+    });
+    let kept = ops
+        .iter()
+        .find_map(|op| match op {
+            Op::WriteMultisigBatches { value_json } => Some(value_json.clone()),
+            _ => None,
+        })
+        .expect("the batch is kept on the device");
+    assert_eq!(
+        serde_json::from_str::<Value>(&kept).unwrap(),
+        json!([[hash.to_ascii_lowercase(), 100]])
+    );
+
+    // A restart: a new machine, the store handed back with the sites.
+    let mut sut = Sut::new();
+    sut.dispatch(Event::Start);
+    sut.dispatch(Event::NetworksChanged {
+        chain_ids: vec![1, 100, 8453],
+    });
+    sut.dispatch(Event::AccountsUpdated {
+        addresses: Some(vec![A1.to_owned(), A2.to_owned()]),
+    });
+    sut.dispatch(Event::AccountSwitched {
+        address: A1.to_owned(),
+        now_ms: T0,
+        space: false,
+    });
+    sut.resolve(Res::SitesListed {
+        sites: vec![DbrStoredSite {
+            origin: DAPP.to_owned(),
+            grant: Some(grant(DAPP, A1, 100)),
+            chain_id: None,
+        }],
+        multisig_batches_json: Some(kept),
+    });
+    hello(&mut sut, "t1", "d1", DAPP);
+    let ops = ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "2",
+        "wallet_getCallsStatus",
+        json!([hash]),
+    );
+    assert!(
+        ops.iter()
+            .any(|op| matches!(op, Op::Read { method, chain_id: 100, .. }
+            if method == MULTISIG_CALLS_STATUS_METHOD)),
+        "asked of the proposals machine, not \"Unknown bundle id\": {ops:?}"
+    );
+    assert_eq!(MULTISIG_BATCHES_KEPT, 64);
 }
 
 /// core-ms-2: a multisig's answer reaches the page as the proposals machine

@@ -6,6 +6,7 @@
  * every money surface formats them.
  */
 import { fillTemplate } from '$lib/i18n/fill';
+import { requireApprovals } from '../core/approvals-words';
 import { nativeSymbol } from '$lib/services/networks';
 import type { MultisigMessages } from '../messages';
 import { chainName, formatUnits, memberWho, shortenAddress } from '../core/display';
@@ -76,7 +77,7 @@ export function titleText(
 				new: who(title.newOwner)
 			});
 		case 'changeThreshold':
-			return fillTemplate(m.action.changeThreshold, { threshold: title.threshold });
+			return requireApprovals(m, title.threshold);
 		case 'rename':
 			return fillTemplate(m.action.rename, { name: title.name });
 		case 'call':
