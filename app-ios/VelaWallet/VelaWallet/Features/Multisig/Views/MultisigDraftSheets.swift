@@ -75,7 +75,7 @@ struct MultisigDraftReviewSheet: View {
         VStack(alignment: .leading, spacing: Tokens.Space.s12) {
             if draft.membersHere.count > 1 {
                 Picker(words.t("proposal.as"), selection: Binding(
-                    get: { member ?? draft.defaultMember ?? draft.membersHere.first },
+                    get: { member ?? first(draft) ?? draft.membersHere.first },
                     set: { member = $0 }
                 )) {
                     ForEach(draft.membersHere, id: \.self) { address in
@@ -98,7 +98,7 @@ struct MultisigDraftReviewSheet: View {
                     haptic: .confirm
                 ) {
                     signing(rule, title: title, draft: draft) {
-                        hub.sendProposal(["type": "propose_execute", "as_member": (member ?? draft.defaultMember).map { $0 as Any } ?? NSNull()])
+                        hub.sendProposal(["type": "propose_execute", "as_member": (member ?? first(draft)).map { $0 as Any } ?? NSNull()])
                     }
                 }
                 .accessibilityIdentifier("multisig.draft.proposeExecute")
@@ -113,7 +113,7 @@ struct MultisigDraftReviewSheet: View {
                 haptic: .confirm
             ) {
                 signing(rule, title: words.t(draft.membersHere.isEmpty ? "send.proposeOnly" : "review.proposeAnyway"), draft: draft) {
-                    hub.confirmDraft(as: member ?? draft.defaultMember)
+                    hub.confirmDraft(as: member ?? first(draft))
                 }
             }
             .accessibilityIdentifier("multisig.draft.propose")
@@ -123,6 +123,20 @@ struct MultisigDraftReviewSheet: View {
             .accessibilityIdentifier("multisig.draft.withdraw")
         }
         .padding(.top, Tokens.Space.s8)
+    }
+
+    /// The member offered first: the one the person was acting as (a Reject's
+    /// member, r9-13) when it is one of this device's members of it, else
+    /// the machine's default.
+    private func first(_ draft: MsDraft) -> String? {
+        Self.firstMember(draft, acting: hub.reviewAs)
+    }
+
+    static func firstMember(_ draft: MsDraft, acting: String?) -> String? {
+        if let acting, let here = draft.membersHere.first(where: { $0.caseInsensitiveCompare(acting) == .orderedSame }) {
+            return here
+        }
+        return draft.defaultMember
     }
 
     private func withdraw() {

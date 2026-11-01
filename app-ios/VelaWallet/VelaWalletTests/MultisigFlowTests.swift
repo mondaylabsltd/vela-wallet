@@ -96,6 +96,9 @@ final class MsSimWorld: MultisigPorts {
     // The person.
     var locals: [FixtureAccountRecord] = []
     var passkeys: [(owner: String, challenge: String)] = []
+    /// The person's next passkeys answered otherwise (closed, timed out),
+    /// in order; none left: the fixture key signs.
+    var passkeyAnswers: [[String: Any]] = []
     var notices: [[String: Any]] = []
     var store: [String: String] = [:]
     private var randomByte: UInt8 = 7
@@ -333,6 +336,7 @@ final class MsSimWorld: MultisigPorts {
         let owner = op["owner"] as? String ?? ""
         let challenge = op["challenge"] as? String ?? ""
         passkeys.append((owner, challenge))
+        if !passkeyAnswers.isEmpty { return passkeyAnswers.removeFirst() }
         guard let local = locals.first(where: { $0.address.caseInsensitiveCompare(owner) == .orderedSame }),
               let bytes = MultisigLive.bytes(challenge)
         else { return ["type": "passkey_failed", "detail": "not an account on this device"] }
@@ -519,11 +523,11 @@ struct MultisigFlowTests {
 
     // MARK: reject
 
-    /// A transfer proposed by one member; another member rejects it from its
-    /// sheet (`MultisigProposalSheet.reject`: a cancellation at the SAME
-    /// number, `review: false`, signed as that member): the mailbox holds both
-    /// at one nonce, the cancellation approved by the rejecting member only,
-    /// and the transfer is said voided by it.
+    /// A transfer proposed by one member; another member rejects it (the
+    /// cancellation at the SAME number, proposed as that member — drawn with
+    /// its review first, below): the mailbox holds both at one nonce, the
+    /// cancellation approved by the rejecting member only, and the transfer
+    /// is said voided by it.
     @Test func rejectingProposesTheSameNumberCancellationApprovedByThatMember() async throws {
         let world = try MsSimWorld()
         world.locals = try MsSimWorld.fixtures([0, 1])
@@ -583,6 +587,178 @@ struct MultisigFlowTests {
         #expect(cancel.approvals.map { $0.owner.lowercased() } == [owners[1].lowercased()])
         #expect(cancel.approvals.first?.counts == true, "a member's verified approval counts")
         #expect(cancel.approved == 1)
+    }
+
+    // MARK: reject — the cancellation's review first (r9-13)
+
+    /// The app's hub over the world (`MultisigHub(ports:)`), its proposals
+    /// machine following `record`; a transfer proposed by `owners[0]` and
+    /// read back; the transfer's own sheet open, as when Reject is pressed.
+    private static func rejecting(
+        _ world: MsSimWorld, salt: String
+    ) async throws -> (hub: MultisigHub, safe: String, owners: [String], transfer: MsProposalItem) {
+        world.locals = try MsSimWorld.fixtures([0, 1])
+        let (record, safe, owners) = try Self.twoOfThree(salt, chains: [100])
+        world.deploy(100, safe, SimSafe(owners: owners, threshold: 2))
+        let shelf = VelaStore(defaults: UserDefaults(suiteName: "vela.tests.msreject.\(UUID().uuidString)")!)
+        let localsJson = world.localsJson
+        let hub = MultisigHub(
+            ports: world, loc: Loc(overrideTag: "en", preferredLanguages: []), shelf: shelf, tokens: nil,
+            facts: { .init(serviceUrl: MsSimWorld.service, accounts: localsJson, networks: [100, 8453], space: [], known: []) }
+        )
+        hub.proposals.dispatch([
+            "type": "start", "service_url": MsSimWorld.service,
+            "accounts": world.localsJson, "networks": [100, 8453], "known": [],
+        ])
+        hub.proposals.dispatch(["type": "follow", "account": record])
+        await Wait.until({ hub.proposalsView.readAt != nil && !hub.proposalsView.loading }, orIdle: { hub.proposals.isIdle })
+
+        let proposed = await Self.propose(hub.proposals, chainId: 100, [
+            "kind": "transfers", "transfers": [["token": NSNull(), "to": Self.bo, "amount": "1"]],
+        ], as: owners[0])
+        #expect(proposed?.kind == "done", "proposing ended \(String(describing: proposed?.raw))")
+        let hash = try #require(proposed?["safe_tx_hash"]?.string)
+        await Wait.until({ hub.proposalsView.items.contains { $0.safeTxHash == hash } }, orIdle: { hub.proposals.isIdle })
+        let transfer = try #require(hub.proposalsView.items.first { $0.safeTxHash == hash })
+        hub.sheet = .proposal(chainId: 100, safeTxHash: hash)
+        return (hub, safe, owners, transfer)
+    }
+
+    /// Reject as `member` (`MultisigProposalSheet.reject` → `MultisigHub.reject`),
+    /// waited on until its review is up — or until it ended without one.
+    private static func pressReject(
+        _ hub: MultisigHub, _ transfer: MsProposalItem, as member: String
+    ) async -> Task<MsTagged?, Never> {
+        let settled = Flag()
+        let pressed = Task { @MainActor in
+            defer { settled.set() }
+            return await hub.reject(chainId: 100, safeTxHash: transfer.safeTxHash, nonce: transfer.nonce, as: member)
+        }
+        // The press reaching the point the person holds it at (its review),
+        // or ending without one — not the machine's idleness, which holds
+        // before the press has asked anything.
+        await Wait.until { (hub.sheet == .review(chainId: 100) && hub.proposalsView.draft != nil) || settled.isSet }
+        return pressed
+    }
+
+    /// r9-13: Reject is a proposal like any other. The question answered,
+    /// the cancellation at the transfer's number is DRAWN for its review —
+    /// the core's review of it, the member who rejects offered first — and
+    /// no passkey runs and nothing reaches the mailbox until the person
+    /// proposes it there. Proposed: one passkey, as that member; the
+    /// transfer's sheet is back; nothing is said.
+    @Test func rejectingShowsTheCancellationsReviewBeforeItsPasskey() async throws {
+        let world = try MsSimWorld()
+        let (hub, safe, owners, transfer) = try await Self.rejecting(world, salt: "0x41")
+        defer { hub.proposals.dispose(); hub.accounts.dispose(); hub.members.dispose() }
+        #expect(world.passkeys.count == 1 && world.submits.count == 1, "the transfer, proposed")
+
+        let pressed = await Self.pressReject(hub, transfer, as: owners[1])
+
+        // Its review, before any signature.
+        #expect(hub.sheet == .review(chainId: 100), "the review sheet stands in for the transfer's")
+        let draft = try #require(hub.proposalsView.draft, "the cancellation is drawn for its review")
+        #expect(draft.item.action?.kind == "cancel")
+        #expect(draft.item.nonce == transfer.nonce, "at the transfer's number")
+        #expect(draft.item.tx["to"]?.string?.lowercased() == safe.lowercased(), "to the multisig itself")
+        #expect(!draft.review.isNull, "the core's review of it is drawn")
+        #expect(draft.review["sign"]?["allowed"]?.bool != false, "and it may be signed")
+        #expect(world.passkeys.count == 1, "no passkey before the person proposes it on its review")
+        #expect(world.submits.count == 1, "nothing sent before it is proposed")
+        // The member who rejects is the one offered first (not the machine's default).
+        let first = MultisigDraftReviewSheet.firstMember(draft, acting: hub.reviewAs)
+        #expect(first?.lowercased() == owners[1].lowercased(), "offered first: \(first ?? "nobody")")
+        #expect(hub.proposalsView.action("propose")?.kind != "working", "waiting on the person, not working")
+
+        // Proposed on its review, as that member: one passkey, the cancellation sent.
+        hub.confirmDraft(as: first)
+        let settled = await pressed.value
+        #expect(settled?.kind == "done", "rejecting ended \(String(describing: settled?.raw))")
+        #expect(world.passkeys.map { $0.owner.lowercased() } == [owners[0].lowercased(), owners[1].lowercased()])
+        #expect(world.submits.count == 2)
+        let cancelTx = try #require(world.submits.last?["safeTx"] as? [String: Any])
+        #expect(Self.lower(cancelTx["to"]) == safe.lowercased())
+        #expect(Self.lower(cancelTx["data"]) == "0x")
+        #expect("\(cancelTx["nonce"] ?? "")" == "\((world.submits.first?["safeTx"] as? [String: Any])?["nonce"] ?? "")")
+        #expect(Self.lower((world.submits.last?["approval"] as? [String: Any])?["owner"]) == owners[1].lowercased())
+        #expect(hub.sheet == .proposal(chainId: 100, safeTxHash: transfer.safeTxHash), "the transfer's sheet is back")
+        #expect(hub.reviewAs == nil)
+        #expect(hub.rejectFailure(chainId: 100, safeTxHash: transfer.safeTxHash) == nil, "nothing to say")
+    }
+
+    /// r9-13: withdrawn on the cancellation's review, nothing is signed,
+    /// nothing is sent, and nothing is said — the transfer's sheet is back
+    /// with Reject on offer again, the transfer voided by nothing.
+    @Test func aRejectionWithdrawnOnItsReviewSignsNothingAndSaysNothing() async throws {
+        let world = try MsSimWorld()
+        let (hub, _, owners, transfer) = try await Self.rejecting(world, salt: "0x42")
+        defer { hub.proposals.dispose(); hub.accounts.dispose(); hub.members.dispose() }
+
+        let pressed = await Self.pressReject(hub, transfer, as: owners[1])
+        #expect(hub.proposalsView.draft?.item.action?.kind == "cancel", "its review is up")
+
+        hub.withdrawDraft()  // "Don't propose" / the review sheet's close
+        let settled = await pressed.value
+        #expect(settled?.kind == "cancelled", "\(String(describing: settled?.raw))")
+        #expect(world.passkeys.count == 1, "no passkey: only the transfer's")
+        #expect(world.submits.count == 1 && world.mailbox.count == 1, "nothing sent")
+        #expect(hub.proposalsView.draft == nil)
+        #expect(hub.sheet == .proposal(chainId: 100, safeTxHash: transfer.safeTxHash), "the transfer's sheet is back")
+        #expect(hub.rejectFailure(chainId: 100, safeTxHash: transfer.safeTxHash) == nil)
+
+        // The transfer's sheet: no failure said, nothing voids it, Reject still on offer.
+        let item = try #require(hub.proposalsView.items.first { $0.safeTxHash == transfer.safeTxHash })
+        let model = MsProposalModel(
+            item: item, view: hub.proposalsView, words: MsWords(loc: hub.loc, hub: nil), account: nil,
+            rejectState: hub.rejectFailure(chainId: 100, safeTxHash: transfer.safeTxHash)
+        )
+        #expect(!model.notes.contains { $0.tone == .danger }, "said: \(model.notes.map(\.text))")
+        #expect(item.cancelledBy == nil)
+        #expect(item.canApprove.contains { $0.caseInsensitiveCompare(owners[1]) == .orderedSame })
+    }
+
+    /// Proposed on its review, the passkey closed by the person: their word,
+    /// nothing said. Timed out: that is said on the transfer's sheet (the
+    /// review stood in for it meanwhile) — until Reject is pressed again.
+    @Test func aRejectionsPasskeyClosedSaysNothingButOneTimedOutIsSaid() async throws {
+        let world = try MsSimWorld()
+        let (hub, _, owners, transfer) = try await Self.rejecting(world, salt: "0x43")
+        defer { hub.proposals.dispose(); hub.accounts.dispose(); hub.members.dispose() }
+        let words = MsWords(loc: hub.loc, hub: nil)
+        func notes() throws -> [(text: String, tone: MsNote.Tone, id: String)] {
+            let item = try #require(hub.proposalsView.items.first { $0.safeTxHash == transfer.safeTxHash })
+            return MsProposalModel(
+                item: item, view: hub.proposalsView, words: words, account: nil,
+                rejectState: hub.rejectFailure(chainId: 100, safeTxHash: transfer.safeTxHash)
+            ).notes
+        }
+
+        // Closed.
+        world.passkeyAnswers = [["type": "passkey_cancelled"]]
+        var pressed = await Self.pressReject(hub, transfer, as: owners[1])
+        hub.confirmDraft(as: owners[1])
+        var settled = await pressed.value
+        #expect(settled?.kind != "done")
+        #expect(world.passkeys.count == 2, "the passkey was asked, after its review")
+        #expect(world.submits.count == 1, "nothing sent")
+        #expect(hub.rejectFailure(chainId: 100, safeTxHash: transfer.safeTxHash) == nil, "closed: \(String(describing: settled?.raw))")
+        #expect(try !notes().contains { $0.id == "rejectFailed" })
+
+        // Timed out.
+        world.passkeyAnswers = [[
+            "type": "passkey_failed",
+            "detail": MultisigShellFailure.passkey(failure: "cancelled", timedOut: true, message: nil).detail,
+        ]]
+        pressed = await Self.pressReject(hub, transfer, as: owners[1])
+        #expect(hub.rejectFailure(chainId: 100, safeTxHash: transfer.safeTxHash) == nil, "a new press starts clean")
+        hub.confirmDraft(as: owners[1])
+        settled = await pressed.value
+        #expect(settled?.kind == "failed", "\(String(describing: settled?.raw))")
+        #expect(world.submits.count == 1, "nothing sent")
+        let said = try notes().first { $0.id == "rejectFailed" }
+        #expect(said?.tone == .danger)
+        #expect(said?.text == words.t("proposal.reason.passkeyTimedOut"), "said: \(said?.text ?? "nothing")")
+        #expect(hub.sheet == .proposal(chainId: 100, safeTxHash: transfer.safeTxHash))
     }
 
     // MARK: member change

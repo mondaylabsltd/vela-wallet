@@ -25,6 +25,10 @@ struct MsProposalModel {
     let view: MsProposalsView
     let words: MsWords
     let account: MsAccount?
+    /// r9-13: how the last Reject of it ended, when there is something to
+    /// say (`MultisigHub.rejectFailure`) — its review stood in for this
+    /// sheet while it was up.
+    var rejectState: MsTagged? = nil
 
     var chainId: Int { item.chainId }
     var hash: String { item.safeTxHash }
@@ -253,6 +257,9 @@ struct MsProposalModel {
         }
         if let failure = words.actionFailure(executeState, chainId: chainId) {
             out.append((failure, .danger, "executeFailed"))
+        }
+        if let failure = words.actionFailure(rejectState, chainId: chainId) {
+            out.append((failure, .danger, "rejectFailed"))
         }
         // r9-9: "none is signed in on this device" only when the core says
         // no member of it is here (`members_here`), whatever this one asks.
@@ -643,7 +650,10 @@ struct MultisigProposalSheet: View {
     var body: some View {
         MsSheet(title: words.t("proposal.title"), closeLabel: words.loc.t("common.done"), tall: true, onClose: close) {
             if let item {
-                content(MsProposalModel(item: item, view: view, words: words, account: hub.accountsView.activeRow?.account))
+                content(MsProposalModel(
+                    item: item, view: view, words: words, account: hub.accountsView.activeRow?.account,
+                    rejectState: hub.rejectFailure(chainId: chainId, safeTxHash: item.safeTxHash)
+                ))
             } else {
                 linkedState
             }
@@ -1183,16 +1193,12 @@ struct MultisigProposalSheet: View {
         hub.sendProposal(["type": "execute", "chain_id": chainId, "safe_tx_hash": model.hash, "executor": executor])
     }
 
+    /// r9-13: the cancellation's review first (the hub's review sheet, the
+    /// member acting here offered there); signed only once proposed there.
     private func reject(_ model: MsProposalModel) {
         let owner = member ?? model.defaultMember ?? model.canExecute.first
         Task { @MainActor in
-            _ = await hub.propose(
-                chainId: chainId,
-                proposal: ["kind": "cancel", "nonce": model.item.nonce],
-                address: hub.accountsView.active,
-                review: false,
-                as: owner
-            )
+            await hub.reject(chainId: chainId, safeTxHash: model.hash, nonce: model.item.nonce, as: owner)
         }
     }
 
