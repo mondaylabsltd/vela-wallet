@@ -245,6 +245,40 @@ enum WalletLive {
         return copy
     }
 
+    /// r11-3: the networks of the other space a multisig lives on, when none
+    /// of its networks (`chainIds`, its record's) is in the space in front
+    /// (`here`) — those Vela has (`known`, both spaces, the core's list).
+    /// Empty when one is here, or it names none: nothing to say.
+    static func livesElsewhere(chainIds: [Int], here: [Int], known: [Int]) -> [Int] {
+        guard !chainIds.isEmpty, !chainIds.contains(where: here.contains) else { return [] }
+        return chainIds.filter(known.contains)
+    }
+
+    /// r11-3: the home of a multisig whose money lives in the other space —
+    /// never a false "CN¥0.00", "Updated now", "No activity yet" or "Deposit
+    /// your first asset" for networks it never lived on. The figure's place
+    /// names the space its money is in (`heading`); the multisig's own card
+    /// says where and offers the switch. Hidden stays hidden.
+    static func livingElsewhere(_ model: WalletHomeModel, heading: String) -> WalletHomeModel {
+        var copy = model
+        if copy.balance.state != .hidden {
+            copy.balance = BalanceModel(
+                label: model.balance.label, currency: "", state: .noValue,
+                a11yHide: model.balance.a11yHide, a11yShow: model.balance.a11yShow,
+                refresh: nil, noValueText: heading
+            )
+        } else {
+            copy.balance.refresh = nil
+        }
+        copy.assetRows = []
+        copy.activityGroups = []
+        copy.assetsSection = SectionModel(title: model.assetsSection.title, action: model.assetsSection.action,
+                                          mode: .rows, empty: nil)
+        copy.activitySection = SectionModel(title: model.activitySection.title, action: model.activitySection.action,
+                                            mode: .rows, empty: nil)
+        return copy
+    }
+
     /// The home Activity's empty line, as the core chose it (spec 082 RG5):
     /// "nothing yet" with its caption, or — the feed narrowed to one chain —
     /// "nothing on this network" alone.
