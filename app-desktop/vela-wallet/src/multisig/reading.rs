@@ -302,17 +302,23 @@ fn call_rows(call: &Call, ctx: &Ctx<'_>) -> Vec<Row> {
     rows
 }
 
-fn path_label(call: &Call, ctx: &Ctx<'_>) -> String {
-    let n: Vec<String> = call.path.iter().map(u32::to_string).collect();
-    words::tv(ctx.loc, "review.callNumber", &[("n", &n.join("."))])
+/// A leg's number, the core's (`Call.leg`, r10-10): "Call 2.1"; `None` for
+/// the transaction's lone call — no number, never one joined here.
+fn leg_label(call: &Call, ctx: &Ctx<'_>) -> Option<String> {
+    let leg = call.leg.as_deref()?;
+    Some(words::tv(ctx.loc, "review.callNumber", &[("n", leg)]))
 }
 
 /// Each call as a card, a batch's legs after it, every level (r8-5).
 fn cards(calls: &[Call], ctx: &Ctx<'_>) -> Vec<Block> {
     let mut out = Vec::new();
     for call in calls {
+        let intent = intent_title(&call.intent, ctx);
         out.push(Block::Card {
-            title: format!("{} · {}", path_label(call, ctx), intent_title(&call.intent, ctx)),
+            title: match leg_label(call, ctx) {
+                Some(leg) => format!("{leg} · {intent}"),
+                None => intent,
+            },
             rows: call_rows(call, ctx),
             tone: intent_tone(&call.intent),
         });
@@ -586,9 +592,20 @@ mod tests {
                 if every.len() > 1 || every.first().is_some_and(|c| !c.path.is_empty()) {
                     assert_eq!(cards, every.len(), "{tag} {name}: a card per call\n{text}");
                     for call in &every {
-                        let n: Vec<String> = call.path.iter().map(u32::to_string).collect();
-                        let label = words::tv(&loc, "review.callNumber", &[("n", &n.join("."))]);
-                        assert!(text.contains(&label), "{tag} {name}: {label} drawn\n{text}");
+                        // r10-10: the core's leg, else no number at all.
+                        match call.leg.as_deref() {
+                            Some(leg) => {
+                                let label = words::tv(&loc, "review.callNumber", &[("n", leg)]);
+                                assert!(text.contains(&label), "{tag} {name}: {label} drawn\n{text}");
+                            }
+                            None => assert!(
+                                !text.contains(&format!(
+                                    "{} ·",
+                                    words::tv(&loc, "review.callNumber", &[("n", "")])
+                                )),
+                                "{tag} {name}: an empty leg number\n{text}"
+                            ),
+                        }
                     }
                 }
                 // "Contract call" only where the core read no more.
