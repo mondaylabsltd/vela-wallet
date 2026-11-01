@@ -158,18 +158,17 @@ struct MultisigR9FixTests {
 
     // MARK: - r9-17: the receipt scan's networks, as the web's
 
-    @Test func theScanReadsHeldNetworksElseTheSpacesOwn() {
-        let mainnets = ActivityExecutor.Space(all: [1, 8453, 100, 137], added: [])
-        #expect(ActivityExecutor.scanChains(active: [5_042_002], space: mainnets) == [5_042_002], "what it holds")
-        #expect(ActivityExecutor.scanChains(active: [], space: mainnets) == ActivityExecutor.defaultMonitorChains)
-        // The testnet space: none of the main payment chains — its own
-        // networks, the one the person added first, never mainnets.
-        let testnet = ActivityExecutor.Space(all: [11_155_111, 84_532, 421_614, 11_155_420, 80_002, 10_200, 5_042_002],
-                                             added: [5_042_002])
-        let chains = ActivityExecutor.scanChains(active: [], space: testnet)
-        #expect(chains.first == 5_042_002)
-        #expect(chains.count == 7 && !chains.contains(1))
-        #expect(ActivityExecutor.scanChains(active: [], space: .init(all: [], added: [])) == ActivityExecutor.defaultMonitorChains)
+    /// r9-17 / r10: the networks are the core's (`incoming_scan::scan_plan`)
+    /// from the facts this device hands it — a multisig's network is scanned
+    /// though it is 8th in its space and holds nothing yet (the "first six
+    /// testnet chains" pick is gone).
+    @Test func theScanReadsTheNetworksTheCorePlansFromTheFacts() {
+        let testnet = ActivityExecutor.Space(all: [11_155_111, 84_532, 421_614, 11_155_420, 80_002, 10_200, 1_315, 5_042_002],
+                                             added: [])
+        let facts = ActivityExecutor.scanFacts(held: [], accountNetworks: [5_042_002], space: testnet)
+        #expect(TokenTrustStore.scanChainIds(facts: facts).contains(5_042_002), "a multisig's own network")
+        let held = ActivityExecutor.scanFacts(held: [100], accountNetworks: [], space: testnet)
+        #expect(TokenTrustStore.scanChainIds(facts: held).contains(100), "what it holds")
     }
 
     // MARK: - r9-20: the form draws who must approve, no fee, no speed

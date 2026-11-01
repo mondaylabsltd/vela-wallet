@@ -537,10 +537,20 @@ struct FeedViewWire: Decodable, Equatable {
     /// contact's page, the transfer and dApp details mask on it, never on a
     /// flag threaded from the balance machine. Absent reads `false`.
     var hidden = false
+    /// r9-17: when the next incoming scan is due, once this shell follows the
+    /// core's cadence (`presence_changed`): ONE timer for `afterMs` whenever
+    /// `seq` changes, answered with `scan_due`. Absent before.
+    var nextScan: FeedNextScanWire? = nil
 
     private enum CodingKeys: String, CodingKey {
-        case rows, homeRows, transactions, newItemId, toast, historyEmptyKey, homeEmptyKey, contactRows, hidden
+        case rows, homeRows, transactions, newItemId, toast, historyEmptyKey, homeEmptyKey, contactRows, hidden, nextScan
     }
+}
+
+/// r9-17: `FeedNextScan`.
+struct FeedNextScanWire: Decodable, Equatable {
+    let seq: Int
+    let afterMs: Int
 }
 
 extension FeedViewWire {
@@ -557,7 +567,8 @@ extension FeedViewWire {
             historyEmptyKey: try c.decodeIfPresent(String.self, forKey: .historyEmptyKey) ?? "history.emptyTitle",
             homeEmptyKey: try c.decodeIfPresent(String.self, forKey: .homeEmptyKey) ?? "home.emptyNoActivity",
             contactRows: try c.decodeIfPresent([FeedItemWire].self, forKey: .contactRows) ?? [],
-            hidden: try c.decodeIfPresent(Bool.self, forKey: .hidden) ?? false
+            hidden: try c.decodeIfPresent(Bool.self, forKey: .hidden) ?? false,
+            nextScan: try c.decodeIfPresent(FeedNextScanWire.self, forKey: .nextScan)
         )
     }
 }

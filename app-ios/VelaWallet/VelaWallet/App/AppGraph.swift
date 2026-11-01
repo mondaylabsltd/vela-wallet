@@ -323,7 +323,9 @@ final class AppGraph {
                 wallet?.chainOutcome(chainId, reached: true)
             }
         }
-        netWatch.onCameBack = { [weak browserController, weak wallet] in
+        netWatch.onCameBack = { [weak browserController, weak wallet, weak activityStore] in
+            // r9-17: back online — the core scans at once.
+            activityStore?.online()
             browserController?.networkCameBack()
             LogoStore.networkCameBack()
             wallet?.refresh(pull: false)
@@ -514,6 +516,14 @@ final class AppGraph {
         // M6: what changed while the app was away, said; the background poll's seam.
         multisig.notifier = MultisigNotifier(loc: loc)
         MultisigBackgroundBridge.hub = multisig
+        // r9-12 / r10: Activity names an address by the accounts machine's
+        // one name; r9-17: a multisig's networks are its scan's facts.
+        activityStore.names(
+            labels: { [weak multisig] in multisig?.accountsView.memberLabels ?? [:] },
+            accountNetworks: { [weak multisig] address in
+                multisig?.accountsView.row(address)?.account.chainIds ?? []
+            }
+        )
         multisig.onRecorded = { [weak activityStore, weak wallet] in
             activityStore?.reconciled()
             wallet?.refresh(pull: false)

@@ -79,8 +79,9 @@ private let CALLS: [String: Place] = [
     "activity.privacyChanged": .step("set_balance_privacy"),
     "activity.spaceChains": .step("set_network_space"),
     "activity.reconciled": .machine(TRACKER),
-    "activity.startLiveTicking": .machine("a tick"),
-    "activity.stopLiveTicking": .machine("a tick"),
+    // r9-17: the app's presence for the core's scan cadence.
+    "activity.interacted": .machine("a tick"),
+    "activity.sceneActive": .machine("a tick"),
     "batch.apply": .step("prepare_batch_transfer"),
     "batch.editRate": .step("prepare_batch_transfer"),
     "batch.open": .view(IMPORTER),
@@ -286,6 +287,8 @@ private let CALLS: [String: Place] = [
     "tracker.withdrawn": .machine(TRACKER),
     "trust.simJudged": .machine("the simulation"),
     "wallet.open": .machine(ACCOUNT),
+    // r10-1: the networks the shown account lives on, for the stamp.
+    "wallet.livesOn": .machine(ACCOUNT),
     "wallet.note": .machine(ACCOUNT),
     "wallet.pullRefresh": .intent("refresh_balances"),
     "wallet.refresh": .intent("refresh_balances"),

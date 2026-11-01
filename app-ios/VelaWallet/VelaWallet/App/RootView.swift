@@ -64,6 +64,10 @@ struct RootView: View {
     private var shownMultisig: MsAccountRow? { multisig.accountsView.activeRow }
     /// Whose wallet the home shows: the multisig shown, else the session's.
     private var shownAddress: String { shownMultisig?.account.address ?? session.view.address }
+    /// r10-1: the networks the account shown lives on though it may hold
+    /// nothing there — a multisig's networks (`lives_on`); none said for a
+    /// Vela account, whose holdings say where it lives.
+    private var shownLivesOn: [Int] { shownMultisig?.account.chainIds ?? [] }
     private var shownName: String {
         shownMultisig.map { multisigWords.name(of: $0.account, rowName: $0.name) } ?? session.view.activeName
     }
@@ -1088,12 +1092,25 @@ struct RootView: View {
             // In front already when this root appears: the scene's first
             // phase is not a change.
             .onAppear { if scenePhase == .active { agent.sceneActive(true) } }
+            // r9-12 / r10: one name per address everywhere — the header, the
+            // switcher, Settings and the signing identity all draw the
+            // accounts machine's `member_labels`, this device's own included.
+            .onChange(of: multisig.accountsView.memberLabels, initial: true) { _, labels in
+                session.nameLabels = labels
+            }
+            // r10-1: a multisig shown gains a network — the stamp speaks for it.
+            .onChange(of: shownLivesOn) { _, chains in
+                if !shownAddress.isEmpty { wallet.livesOn(address: shownAddress, chainIds: chains) }
+            }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active { Task { await refreshSigningPages() } }
                 // The agent answers only while the wallet is in front: in the
                 // background it hangs up, and what waited is withdrawn.
                 if phase != .inactive { agent.sceneActive(phase == .active) }
                 wallet.homePoller.sceneActive(phase == .active)
+                // r9-17: the app shown or hidden — the core's scan cadence
+                // (at once when shown again, the hidden pace away).
+                if phase != .inactive { activity.sceneActive(phase == .active) }
                 // A failed page retries by itself only while the app is in
                 // front (spec 079).
                 browser.appActive(phase == .active)
@@ -1245,15 +1262,10 @@ struct RootView: View {
                     if let balance = wallet.balance { send.holdingsUpdated(balance, round: round) }
                 }
                 .task(id: state) {
-                    // The activity LIST polls at its own faster cadence while
-                    // it is the screen somebody is looking at — the core has a
-                    // separate event for it and this client sent only the
-                    // home's slower one.
-                    if state == .a1 || state == .a2 {
-                        activity.startLiveTicking()
-                    } else {
-                        activity.stopLiveTicking()
-                    }
+                    // r9-17: a screen opened is the person at the app — the
+                    // core's cadence (10 s at the app, 30 s idle) decides
+                    // when the next scan is due.
+                    activity.interacted()
                     // The viewfinder runs only while it is on screen. A camera
                     // left running behind another screen is a light nobody
                     // asked for and a battery nobody budgeted.
@@ -1480,7 +1492,7 @@ struct RootView: View {
                         // picker draws it, and a book first opened by the tap
                         // that raised the picker was a sheet of nobody.
                         contacts.open(myAddress: session.view.address)
-                        wallet.open(address: shownAddress)
+                        wallet.open(address: shownAddress, livesOn: shownLivesOn)
                     }
                     // The 10-minute balance refresh runs exactly while this
                     // screen is showing and the app is active (the web's
@@ -3152,7 +3164,14 @@ struct RootView: View {
                 displayCode: told.code,
                 displayRate: told.rate,
                 fiatDecimals: Self.sendFiatDecimals,
-                multisig: (threshold: shown.account.threshold, owners: shown.account.owners.count)
+                // r9-14: the rule in force as the chains said it (the
+                // followed one's chip, else its row's), not the founding one.
+                multisig: {
+                    let chip = multisig.proposalsView.ruleChip.flatMap { $0.isNull ? nil : $0 } ?? shown.rule?["chip"]
+                    let rule = chip?.kind == "needs" ? chip?["rule"] : nil
+                    return (threshold: rule?["m"]?.int ?? shown.account.threshold,
+                            owners: rule?["n"]?.int ?? shown.account.owners.count)
+                }()
             )
             return
         }
@@ -4670,7 +4689,7 @@ struct RootView: View {
     private func followShown() {
         let address = shownAddress
         guard !address.isEmpty else { return }
-        wallet.open(address: address)
+        wallet.open(address: address, livesOn: shownLivesOn)
         activity.open(address: address, hidden: wallet.balance?.hidden ?? false)
     }
 
@@ -4680,7 +4699,7 @@ struct RootView: View {
         // signed in at launch keeps its own balance and activity (the
         // account's would otherwise land under the multisig's header).
         let shown = shownMultisig?.account.address ?? address
-        wallet.open(address: shown)
+        wallet.open(address: shown, livesOn: shownLivesOn)
         activity.open(address: shown, hidden: wallet.balance?.hidden ?? false)
         contacts.open(myAddress: address)
         Task { await readDeviceKeys(of: address) }
