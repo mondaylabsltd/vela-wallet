@@ -18,8 +18,16 @@
  * so no run writes to the real one), `page` the signing page on this
  * machine's loopback, which onboarding then creates and signs in on
  * (`src/lib/dev/harness-page.ts`), and `next=create` opens the create flow.
+ * Every hand-off the core sends to the production page goes to `page` too —
+ * in this package only: the release package carries no such page and
+ * honours no such setting (r11).
+ *
+ * `page` is an ORIGIN with a port (`http(s)://127.0.0.1|localhost|[::1]:<port>`,
+ * the app's own rule, `loopbackPage`); anything else is dropped, and the
+ * production page stays.
  */
 const LOOPBACK = /^(?:https?|wss?):\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?(?:\/|$)/;
+const LOOPBACK_PAGE = /^https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\]):\d{1,5}\/?$/;
 const out = document.getElementById('out');
 const say = (text) => {
 	if (out) out.textContent = text;
@@ -49,7 +57,8 @@ async function seed() {
 	const relay = loopback(params.get('relay'));
 	const peerconnect = loopback(params.get('peerconnect'));
 	const index = loopback(params.get('index'));
-	const page = loopback(params.get('page'));
+	const asked = params.get('page');
+	const page = typeof asked === 'string' && LOOPBACK_PAGE.test(asked) ? asked : null;
 	const create = params.get('next') === 'create';
 	const networks = params
 		.getAll('rpc')

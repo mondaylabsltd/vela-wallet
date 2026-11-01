@@ -34,6 +34,7 @@ import type { IntegrityLine } from '$lib/core/generated/IntegrityLine';
 import type { KeyLabel } from '$lib/core/generated/KeyLabel';
 import { trustedSignerPageAdmit, trustedSignerPageTarget } from '$lib/core/kernels';
 import { safariSignerDeps } from '$lib/extension/safari-signer';
+import { handoffPage } from '$lib/dev/harness-page';
 
 /** What a browser sends when it navigates to a page (`launch::CHECK_HEADERS`). */
 const CHECK_ACCEPT = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8';
@@ -268,10 +269,13 @@ export async function handOff<T>(
 	const every = deps.setInterval ?? ((fn: () => void, ms: number) => setInterval(fn, ms));
 	const stop =
 		deps.clearInterval ?? ((id: unknown) => clearInterval(id as ReturnType<typeof setInterval>));
-	const official = /(^|\.)getvela\.app$/.test(hostOf(input.page).split(':')[0] ?? '');
+	// The development package's loopback page stands in for the production
+	// one (`$lib/dev/harness-page.ts`); the release package never does.
+	const page = handoffPage(input.page);
+	const official = /(^|\.)getvela\.app$/.test(hostOf(page).split(':')[0] ?? '');
 	const base: Omit<PageHandoff, 'phase' | 'line' | 'open' | 'cancel'> = {
 		kind: input.kind,
-		host: hostOf(input.page),
+		host: hostOf(page),
 		official,
 		member: input.signer,
 		keyLabel: input.keyLabel ?? null,
@@ -337,7 +341,7 @@ export async function handOff<T>(
 		deps.clearTimeout ?? ((id: unknown) => clearTimeout(id as ReturnType<typeof setTimeout>));
 	let deadline: unknown = null;
 	const checked = await Promise.race([
-		checkPage(input.page, deps),
+		checkPage(page, deps),
 		new Promise<null>((resolve) => {
 			deadline = later(() => resolve(null), CHECK_MS);
 		})

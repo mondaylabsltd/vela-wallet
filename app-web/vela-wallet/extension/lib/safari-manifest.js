@@ -53,6 +53,28 @@ export const LOOPBACK_MATCHES = ['http://127.0.0.1/*', 'http://localhost/*'];
  */
 export const SIGNING_PAGES = ['https://sign.getvela.app/*'];
 
+/**
+ * Is `manifest` a DEVELOPMENT package's (`safariManifest(…, { development:
+ * true })`)? It is the one that makes the harness's pages reachable. The
+ * release package is the development one with that entry and those files
+ * removed (`build.mjs`), so the same app bundle asks its own manifest
+ * (`runtime.getManifest()`) whether a developer setting may count — the
+ * harness's signing page (`$lib/dev/harness-page.ts`) — and the release
+ * package never says yes. Chrome's manifest names no harness page either.
+ *
+ * @param {unknown} manifest
+ * @returns {boolean}
+ */
+export function isDevelopmentManifest(manifest) {
+	const listed = /** @type {{ web_accessible_resources?: unknown } | null} */ (manifest)
+		?.web_accessible_resources;
+	if (!Array.isArray(listed)) return false;
+	return listed.some(
+		(entry) =>
+			Array.isArray(entry?.resources) && DEV_PAGES.every((page) => entry.resources.includes(page))
+	);
+}
+
 /** Chrome-only keys the Safari manifest drops. */
 const CHROME_ONLY = ['key', 'minimum_chrome_version', 'side_panel', 'incognito'];
 

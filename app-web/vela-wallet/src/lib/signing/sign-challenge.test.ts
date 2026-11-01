@@ -34,6 +34,8 @@ import { safeTxHash } from '$lib/multisig/core/kernel';
 import { bytesToHex } from '$lib/onboarding/core/passkey';
 import { saveAccount } from '$lib/onboarding/core/storage';
 import type { Account } from '$lib/onboarding/generated/Account';
+import { HARNESS_PAGE_KEY } from '$lib/dev/harness-page';
+import { safariManifest } from '../../../extension/lib/safari-manifest.js';
 import {
 	PageDeclinedError,
 	PageSignFailedError,
@@ -963,5 +965,82 @@ describe('the page, everywhere: the hand-off and the answer the core accepts', (
 		expect(win.closed).toBe(true);
 		// r7-5: told before it closed, in case it does not.
 		expect(sent.some((s) => (s.message as { reason?: string }).reason === 'withdrawn')).toBe(true);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// r11 (Safari): the development package's loopback page, in place of production
+// ---------------------------------------------------------------------------
+
+describe('the page a hand-off goes to, by package (r11: the Safari dev page)', () => {
+	const SOURCE = JSON.parse(
+		readFileSync(
+			fileURLToPath(new URL('../../../extension/manifest.json', import.meta.url)),
+			'utf8'
+		)
+	);
+	const DEV = safariManifest(SOURCE, { development: true });
+	const RELEASE = safariManifest(SOURCE, { development: false });
+	const LOCAL = 'http://127.0.0.1:9694';
+
+	/** A packaged page of `manifest`'s package, with `stored` as the dev setting. */
+	function packagedAs(manifest: unknown, stored: string) {
+		const location = { protocol: __VELA_EXTENSION_PROTOCOL__, hostname: 'x' };
+		vi.stubGlobal('location', location);
+		vi.stubGlobal('window', { location, PublicKeyCredential: function () {} });
+		vi.stubGlobal('chrome', { runtime: { getManifest: () => manifest } });
+		localStorage.setItem(HARNESS_PAGE_KEY, stored);
+	}
+
+	/** Where a message signature for the official-page account is checked and opened. */
+	async function handedTo(): Promise<{ host: string; fetched: string[]; opened: string }> {
+		const { keys } = await pageAccount();
+		const { deps } = browser();
+		const fetched: string[] = [];
+		const fetchFn = deps.fetch;
+		deps.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+			fetched.push(String(input));
+			return fetchFn(input, init);
+		}) as typeof fetch;
+		setPageHandoffDeps(deps);
+		const asks = signature('personal_sign');
+		const pending = signChallenge(asks.challenge!, {
+			account: ADDRESS,
+			keys,
+			credentials: [],
+			request: asks.request
+		}).catch(() => null);
+		await until(() => pageHandoff.current?.phase === 'ready');
+		const host = pageHandoff.current!.host;
+		pageHandoff.current!.open();
+		const opened = String(vi.mocked(deps.open).mock.calls[0]?.[0] ?? '');
+		pageHandoff.current?.cancel();
+		await pending;
+		return { host, fetched, opened };
+	}
+
+	it('the development package checks and opens the dev page named by dev-seed', async () => {
+		packagedAs(DEV, `${LOCAL}/`);
+		const { host, fetched, opened } = await handedTo();
+		expect(host).toBe('127.0.0.1:9694');
+		expect(fetched[0]).toBe(`${LOCAL}/index.json`);
+		expect(fetched.every((url) => url.startsWith(`${LOCAL}/`))).toBe(true);
+		expect(opened.startsWith(`${LOCAL}/b/${VERSION}/sign`)).toBe(true);
+	});
+
+	it('the development package refuses a dev page that is not loopback: production', async () => {
+		packagedAs(DEV, 'https://sign.evil.example:8443/');
+		const { host, fetched, opened } = await handedTo();
+		expect(host).toBe('sign.getvela.app');
+		expect(fetched.every((url) => url.startsWith(`${PAGE_ORIGIN}/`))).toBe(true);
+		expect(opened.startsWith(`${PAGE_ORIGIN}/b/${VERSION}/sign`)).toBe(true);
+	});
+
+	it('the release package never honours the setting: production', async () => {
+		packagedAs(RELEASE, `${LOCAL}/`);
+		const { host, fetched, opened } = await handedTo();
+		expect(host).toBe('sign.getvela.app');
+		expect(fetched.every((url) => url.startsWith(`${PAGE_ORIGIN}/`))).toBe(true);
+		expect(opened.startsWith(`${PAGE_ORIGIN}/b/${VERSION}/sign`)).toBe(true);
 	});
 });
