@@ -279,6 +279,21 @@ sealed class TrustEvent {
     data class PollRequested(val address: String) : TrustEvent()
 
     /**
+     * r9-17 (core §9.4): one poll the core plans whole — its networks
+     * (`incoming_scan::scan_plan` over [facts]), on each the live window and
+     * a bounded backfill of what is still open. [cursors]: what this device
+     * kept of the account's coverage (`vela.scanCursors.<address>`; empty the
+     * first time). Replaces `held_chains_snapshot` + `poll_requested`.
+     */
+    @Serializable
+    @SerialName("scan_requested")
+    data class ScanRequested(
+        val address: String,
+        val facts: TrustScanFacts,
+        val cursors: List<TrustScanCursor> = emptyList(),
+    ) : TrustEvent()
+
+    /**
      * **Authentic** receipt logs of a confirmed transaction — the only path
      * that may ever add a token to somebody's list.
      */
@@ -405,7 +420,33 @@ data class TrustSimView(
 data class TrustView(
     val address: String? = null,
     val scanning: Boolean = false,
+    /** r9-17: the account's coverage after its last poll — kept by the shell, handed back on the next `scan_requested`. */
+    val cursors: List<TrustScanCursor> = emptyList(),
     /** Newest first: block descending, then log index. */
     val incoming: List<TrustIncomingView> = emptyList(),
     val sim: TrustSimView? = null,
 )
+
+/** r9-17 (core §9.4): what this device knows when it scans an account — facts, no choice. */
+@Serializable
+data class TrustScanFacts(
+    /** Networks the account holds a balance on (the balance read's chains). */
+    val held_chain_ids: List<Int> = emptyList(),
+    /** Networks the account lives on: a multisig's (its record's). Empty for a Vela account. */
+    val account_networks: List<TrustAccountNetwork> = emptyList(),
+    /** The space in front's networks, in the list's order. */
+    val space_chain_ids: List<Int> = emptyList(),
+    /** The networks the person added (custom networks). */
+    val added_chain_ids: List<Int> = emptyList(),
+)
+
+/** A network an account lives on, and the block its contract was deployed in when known. */
+@Serializable
+data class TrustAccountNetwork(val chain_id: Int, val deploy_block: Double? = null)
+
+/** What a poll covered on one network: sorted, merged spans, oldest first. */
+@Serializable
+data class TrustScanCursor(val chain_id: Int, val covered: List<TrustBlockSpan> = emptyList())
+
+@Serializable
+data class TrustBlockSpan(val from_block: Double, val to_block: Double)

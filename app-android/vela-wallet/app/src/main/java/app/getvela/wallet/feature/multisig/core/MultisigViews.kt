@@ -78,6 +78,13 @@ data class MsAccountRow(
      * Empty from a core without the field.
      */
     val inviteMembers: List<JsonElement> = emptyList(),
+    /**
+     * r9-14 (core §9.2): the rule in force as the chains last said it
+     * (`MultisigRowRule {chip, from_chain, last_known}`), else the founding
+     * one — what the switcher, the home and Settings draw for a multisig not
+     * followed. `null` from a core without the field.
+     */
+    val rule: JsonElement? = null,
 ) {
     val id: String get() = account.id
 
@@ -94,6 +101,7 @@ data class MsAccountRow(
             checkingOn = e["checking_on"].ints(),
             inviteShared = e["invite_shared"].bool ?: false,
             inviteMembers = e["invite_members"].arr,
+            rule = e["rule"]?.takeUnless { it.isNullish },
         )
     }
 }

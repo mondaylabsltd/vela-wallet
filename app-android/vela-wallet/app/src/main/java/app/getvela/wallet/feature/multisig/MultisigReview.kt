@@ -208,8 +208,10 @@ internal fun readingLines(review: JsonElement, chainId: Int, words: MultisigWord
     val r = { key: String -> words.t("review.reading.$key") }
     fun walk(calls: List<JsonElement>, depth: Int) {
         for (call in calls) {
-            val path = call["path"].arr.mapNotNull { it.int }
-            val label = if (path.isEmpty()) "" else words.t("review.callNumber", "n" to path.joinToString("."))
+            // r10-10 (core §9.5): the leg's number is the core's (`leg`, "2.1");
+            // `null` — the lone call, a lone batch included — draws NO number.
+            // Never joined from `path` here ("第 笔调用").
+            val label = call["leg"].str?.takeIf { it.isNotEmpty() }?.let { words.t("review.callNumber", "n" to it) }.orEmpty()
             val to = MsRules.eip55(call["to"].str.orEmpty())
             val intent = call["intent"]
             val rows = mutableListOf<Pair<String, String>>()

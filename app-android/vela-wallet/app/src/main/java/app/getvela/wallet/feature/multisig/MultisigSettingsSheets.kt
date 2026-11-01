@@ -92,7 +92,14 @@ fun MultisigSettingsSheet(
             IdenticonAvatar(seed = row.account.address, size = VelaIconSize.xl * 1.5f, tappable = false)
             Column {
                 // r9-14: the members machine's `rule_chip` (each network's members now).
-                MsText(members.takeIf { it["address"].str.equals(address, ignoreCase = true) }?.let { words.ruleTitleOf(it["rule_chip"]) } ?: words.ruleTitle(row.account.threshold, row.account.owners.size), MsType.Field)
+                MsText(
+                    members.takeIf { it["address"].str.equals(address, ignoreCase = true) }?.let { words.ruleTitleOf(it["rule_chip"]) }
+                        // r9-14 (core §9.2): before the members machine reads, the
+                        // accounts machine's rule (the chains' last word), never the record's.
+                        ?: words.ruleTitleOf(row.rule["chip"])
+                        ?: words.ruleTitle(row.account.threshold, row.account.owners.size),
+                    MsType.Field,
+                )
                 MsText(row.account.chainIds.joinToString(", ", transform = words::network), MsType.Sub, color = colors.fgSubtle)
             }
         }

@@ -205,12 +205,19 @@ class R9ShellFixesTest {
     @Test
     fun the_switcher_says_the_rule_the_chains_say_for_the_one_followed() {
         val w = words()
-        val account = MsAccount.of(json("""{"address":"$safe","owners":["$alice","$bob","$carol"],"threshold":2,"chainIds":[100]}"""))
+        val account = app.getvela.wallet.feature.multisig.core.MsAccountRow.of(json("""{"account":{"address":"$safe","owners":["$alice","$bob","$carol"],"threshold":2,"chainIds":[100]}}"""))
         val chip = """{"kind":"needs","rule":{"m":2,"n":4,"solo":false}}"""
         assertEquals(strings.t("home.multisig.panel.chip", mapOf("m" to "2", "n" to "4")), w.rowRuleChip(account, proposals(ruleChip = chip)))
-        // A multisig the machine does not follow: its record (no chain read for it).
-        val other = MsAccount.of(json("""{"address":"$bob","owners":["$alice","$bob","$carol"],"threshold":2,"chainIds":[100]}"""))
+        // A multisig the machine does not follow, before any rule is known: its record.
+        val other = app.getvela.wallet.feature.multisig.core.MsAccountRow.of(json("""{"account":{"address":"$bob","owners":["$alice","$bob","$carol"],"threshold":2,"chainIds":[100]}}"""))
         assertEquals(strings.t("home.multisig.panel.chip", mapOf("m" to "2", "n" to "3")), w.rowRuleChip(other, proposals(ruleChip = chip)))
+        assertNull(w.ruleLastKnown(other, proposals(ruleChip = chip)))
+        // r9-14 (core §9.2): one not followed draws the accounts machine's `rule` — the chains' last word, said as last known.
+        val ruled = app.getvela.wallet.feature.multisig.core.MsAccountRow.of(
+            json("""{"account":{"address":"$bob","owners":["$alice","$bob","$carol"],"threshold":2,"chainIds":[100]},"rule":{"chip":$chip,"from_chain":true,"last_known":true}}"""),
+        )
+        assertEquals(strings.t("home.multisig.panel.chip", mapOf("m" to "2", "n" to "4")), w.rowRuleChip(ruled, proposals(ruleChip = chip)))
+        assertEquals(strings.t("home.multisig.presence.ruleLastKnown"), w.ruleLastKnown(ruled, proposals(ruleChip = chip)))
         assertEquals(strings.t("home.multisig.panel.title", mapOf("m" to "2", "n" to "4")), w.ruleTitleOf(json(chip)))
         assertNull(w.ruleTitleOf(json("""{"kind":"differs","rules":[]}""")))
     }

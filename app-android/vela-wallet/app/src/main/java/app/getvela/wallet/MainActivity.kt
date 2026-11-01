@@ -53,6 +53,16 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
 
     /**
+     * r9-17 (core §9.4): the person touched the app — the incoming scan's
+     * cadence comes back to its active pace (the core's rule; said to it at
+     * most every few seconds by the controller).
+     */
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        (application as? VelaWalletApplication)?.container?.walletIfBuilt()?.interacted()
+    }
+
+    /**
      * The security-key ceremony, built HERE because an activity-result launcher
      * must be registered before the activity is STARTED — `attach()` runs from
      * composition, which is already too late and throws.

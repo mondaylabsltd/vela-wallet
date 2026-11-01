@@ -109,7 +109,9 @@ private class DebugParallelSpace(private val app: Application) : ParallelSpacePr
         }
         val account = JSONObject()
             .put("id", pinned.credentialIdHex)
-            .put("name", pinned.name)
+            // r9-12 (core §9.1): the multi-key wallet is named what the passkey index
+            // publishes for it ("Interleave", `fixture_multi_name`), never the pinned key's name.
+            .put("name", uniffi.vela_dev_fixtures.fixtureMultiName())
             .put("address", address)
             .put("public_key_hex", pinned.publicKeyHex)
             .put("created_at_iso", Instant.now().toString())

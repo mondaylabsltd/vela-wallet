@@ -209,6 +209,16 @@ sealed class BalanceEvent {
     data class AccountChanged(val address: String) : BalanceEvent()
 
     /**
+     * r10-1 (core §9.3): the networks the shown account lives on — a
+     * multisig's own networks (its record's), `[]` for a Vela account. The
+     * "Updated" stamp moves only when every one of them the round asked
+     * answered. Sent before `account_changed`.
+     */
+    @Serializable
+    @SerialName("lives_on")
+    data class LivesOn(val address: String, val chain_ids: List<Int>) : BalanceEvent()
+
+    /**
      * P2.4 (perf-10): the signed-in account, for a screen that draws no
      * balance of its own (settings, the address book) — set and its cached
      * total read, no network asked until something shows the balance.
@@ -367,6 +377,12 @@ sealed class BalanceShellResult {
         val own_node_chain_ids: List<Int> = emptyList(),
         /** Chains this round read through a fallback endpoint (the pool's verdict). */
         val fallback_chain_ids: List<Int> = emptyList(),
+        /**
+         * r10-1 (core §9.3): when the rows were read, for an answer from a
+         * token cache that asked no network — never "now" for that. `null`:
+         * read in this round (this shell keeps no token cache).
+         */
+        val read_at_ms: Double? = null,
         val now_ms: Double,
     ) : BalanceShellResult()
 

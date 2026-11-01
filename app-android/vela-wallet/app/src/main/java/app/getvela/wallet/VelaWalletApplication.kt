@@ -22,6 +22,7 @@ import app.getvela.wallet.feature.agent.AgentWallet
 import app.getvela.wallet.feature.agent.KeystoreTokenVault
 import app.getvela.wallet.core.data.ThemePreferenceRepository
 import app.getvela.wallet.core.diagnostics.VelaLog
+import app.getvela.wallet.core.net.NetHealth
 import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.feature.send.core.SendReceiptOutcomes
 import app.getvela.wallet.feature.wallet.core.TrackerWorker
@@ -315,7 +316,7 @@ class AppContainer(private val app: Application) {
     val identity: IdentityResolver by lazy {
         IdentityResolver(
             store = VelaStore(app),
-            ownAccounts = { session.view.value.accounts.map { it.address to it.name } },
+            ownAccounts = { session.view.value.accounts.map { it.address to (memberLabel(it.address) ?: it.name) } },
             registryName = { address -> registryNames.nameFor(address) },
             ethCall = { chainId, to, data ->
                 (pool.call(chainId, "eth_call", listOf(JSONObject().put("to", to).put("data", data), "latest")) as? RpcResult.Body)
@@ -386,7 +387,8 @@ class AppContainer(private val app: Application) {
             // name, and that costs no network call at all.
             ownAccounts = {
                 session.view.value.accounts.map {
-                    FeedExecutor.FeedOwnAccount(address = it.address, name = it.name)
+                    // r9-12 (core §9.1): Activity names an own account as everything does.
+                    FeedExecutor.FeedOwnAccount(address = it.address, name = memberLabel(it.address) ?: it.name)
                 }
             },
             haptic = { Haptics.moneyIn(app) },
@@ -402,9 +404,26 @@ class AppContainer(private val app: Application) {
             },
             backgroundPoll = { TrackerWorker.enqueue(app) },
             testnet = { networkSpace.space.value.testnet },
-        )
+            // r9-17 (core §9.4): a multisig lives on its record's networks — its
+            // first receipt on one where it holds nothing yet is still seen.
+            accountNetworks = { address ->
+                if (multisigBuilt) multisig.accountsView.value.row(address)?.account?.chainIds.orEmpty() else emptyList()
+            },
+        ).also { controller ->
+            // r9-17: back online — what failed offline can be read now (the core decides).
+            CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate).launch {
+                var was = true
+                NetHealth.online.collect { online ->
+                    if (online && !was) controller.online()
+                    was = online
+                }
+            }
+        }
     }
     val wallet: WalletController by walletOnce
+
+    /** The wallet controller when it exists — never built for a touch. */
+    fun walletIfBuilt(): WalletController? = if (walletOnce.isInitialized()) wallet else null
 
     /** The address book, on the same terms as [settings]. */
     /**
@@ -562,6 +581,14 @@ class AppContainer(private val app: Application) {
             post = { note -> MultisigNotifier.postToSystem(app, MultisigWiring.words(this), note) },
         )
     }
+
+    /**
+     * r9-12 (core §9.1): the one name of [address] — the accounts machine's
+     * `member_labels` (the published name, a multisig's kept label, the
+     * local name). `null` before the multisig layer is built, or with no label.
+     */
+    fun memberLabel(address: String): String? =
+        if (multisigBuilt) multisig.accountsView.value.memberLabels[address.lowercase()]?.takeIf { it.isNotBlank() } else null
 
     /** An activity of this app is on screen (a notification is noise then: the screens say it). */
     fun inForeground(): Boolean = foregroundActivities > 0

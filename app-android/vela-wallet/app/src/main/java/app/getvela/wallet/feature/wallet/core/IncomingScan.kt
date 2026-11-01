@@ -12,7 +12,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
-import uniffi.vela_core_uniffi.defaultMonitorChains
 import org.json.JSONObject
 
 /**
@@ -48,6 +47,16 @@ class IncomingScan(
     private val heldTokens: (Int) -> List<String>,
     /** What a chain's native coin is called, for a native receipt's symbol. */
     private val nativeSymbol: (Int) -> String,
+    /**
+     * r9-17 (core §9.4): the rest of the facts the core plans a scan from —
+     * the networks [address] lives on (a multisig's), the space in front's
+     * networks in order, the networks the person added.
+     */
+    private val accountNetworks: (address: String) -> List<Int> = { emptyList() },
+    private val spaceChainIds: () -> List<Int> = { emptyList() },
+    private val addedChainIds: () -> List<Int> = { emptyList() },
+    /** Where an account's scan coverage is kept (`vela.scanCursors.<address>`), across restarts. */
+    private val store: app.getvela.wallet.core.data.KeyValueStore? = null,
 ) {
 
     /** One poll at a time: a second while one runs would re-ask every chain. */
@@ -67,26 +76,32 @@ class IncomingScan(
     }
 
     private suspend fun scan(address: String): Int = coroutineScope {
-        // The chains this wallet actually uses.
-        //
-        // **This waits, and the wait is load-bearing.** The feed's scan is
-        // issued the moment an account is opened, which is the same moment the
-        // balance read starts — so asking without waiting always found nothing
-        // held, and fell back to the six default chains. Anybody whose money
-        // sits on Optimism, Avalanche, Unichain, Monad or World Chain would
-        // then have had no receipt monitoring at all on the first pass, and the
-        // device log said `chains=6` without saying anything was wrong.
-        //
-        // The fallback is still there for its real purpose: a genuinely
-        // brand-new wallet, whose very first receipt is the one that matters
-        // most. The core owns that list; the shell borrows it because it must
-        // fetch each chain's registry document before the poll can start.
+        // The chains this wallet holds something on. **This waits, and the
+        // wait is load-bearing**: the feed's scan is issued the moment an
+        // account is opened, which is when the balance read starts — asked
+        // without waiting it always found nothing held.
         val held = heldChains().distinct()
-        val chains = held.ifEmpty { defaultMonitorChains().map { it.toInt() } }
+        // r9-17 (core §9.4): the networks, the windows, the backfill and the
+        // cadence are the core's. This shell hands it facts — which networks
+        // the account holds something on, lives on, the space's and the
+        // person's own — and the coverage it kept; it no longer picks the
+        // chains itself (it fell back to mainnet chains only, so a multisig on
+        // Arc Testnet never heard of money arriving).
+        val facts = TrustScanFacts(
+            held_chain_ids = held,
+            account_networks = accountNetworks(address).distinct().map { TrustAccountNetwork(it) },
+            space_chain_ids = spaceChainIds(),
+            added_chain_ids = addedChainIds(),
+        )
+        val plan = runCatching {
+            org.json.JSONObject(uniffi.vela_core_uniffi.incomingScanPlan(app.getvela.wallet.core.crux.Wire.json.encodeToString(TrustScanFacts.serializer(), facts)))
+                .optJSONArray("scan_chain_ids")
+        }.getOrNull()
+        val chains = (0 until (plan?.length() ?: 0)).map { plan!!.getInt(it) }
 
-        // The registry's facts FIRST, and awaited: they are what the allowlist
-        // is built from, and a poll that starts without them scans with an
-        // empty allowlist and finds nothing.
+        // The registry's facts FIRST, and awaited, for every network the core
+        // will scan: the allowlist is built from them, and a poll that starts
+        // without them finds nothing.
         chains.map { chainId ->
             async {
                 val info = chainInfo(chainId) ?: return@async
@@ -111,11 +126,7 @@ class IncomingScan(
             }
         }
 
-        trust.dispatch(
-            TrustEvent.HeldChainsSnapshot(address, chains),
-            TrustEvent.serializer(),
-        )
-        trust.dispatch(TrustEvent.PollRequested(address), TrustEvent.serializer())
+        trust.dispatch(TrustEvent.ScanRequested(address, facts, readCursors(address)), TrustEvent.serializer())
 
         // Settled, or the deadline.
         //
@@ -135,6 +146,8 @@ class IncomingScan(
             withTimeoutOrNull(POLL_START_MS) { trust.view.first { it.scanning } }
             trust.view.first { view -> !view.scanning && view.address != null }
         }
+        // What this poll covered, kept for the next (a restart resumes the backfill).
+        settled?.takeIf { it.address.equals(address, ignoreCase = true) }?.cursors?.let { writeCursors(address, it) }
         val incoming = settled?.incoming.orEmpty()
         val records = incoming.mapNotNull { transfer -> record(transfer, address) }
         val stored = if (records.isEmpty()) 0 else feed.mergeRecords(records)
@@ -156,6 +169,21 @@ class IncomingScan(
             "new" to stored,
         )
         stored
+    }
+
+    private suspend fun readCursors(address: String): List<TrustScanCursor> {
+        val raw = store?.read(CURSOR_KEY_PREFIX + address.lowercase()) ?: return emptyList()
+        return runCatching {
+            app.getvela.wallet.core.crux.Wire.json.decodeFromString(kotlinx.serialization.builtins.ListSerializer(TrustScanCursor.serializer()), raw)
+        }.getOrDefault(emptyList())
+    }
+
+    private suspend fun writeCursors(address: String, cursors: List<TrustScanCursor>) {
+        if (cursors.isEmpty()) return
+        store?.write(
+            CURSOR_KEY_PREFIX + address.lowercase(),
+            app.getvela.wallet.core.crux.Wire.json.encodeToString(kotlinx.serialization.builtins.ListSerializer(TrustScanCursor.serializer()), cursors),
+        )
     }
 
     /**
@@ -210,6 +238,8 @@ class IncomingScan(
     }
 
     private companion object {
+        /** The core's key (`incoming_scan::CURSOR_KEY_PREFIX`) + the lowercase address. */
+        const val CURSOR_KEY_PREFIX = "vela.scanCursors."
         const val POLL_DEADLINE_MS = 20_000L
 
         /**

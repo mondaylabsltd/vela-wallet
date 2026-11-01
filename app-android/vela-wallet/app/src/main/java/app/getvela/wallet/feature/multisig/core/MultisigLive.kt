@@ -275,6 +275,10 @@ class MultisigLive(
                     keyRouteJson = plan?.keyRouteJson,
                     // r9-10: the review asked for "… anyway" — the page says it too.
                     anyway = purpose["anyway"].bool ?: false,
+                    // Core §9.5: the members and the rule it is signed under, so the
+                    // page says a member change before → after.
+                    owners = purpose["owners"].arr.mapNotNull { it.str }.takeIf { it.isNotEmpty() },
+                    threshold = purpose["threshold"].long?.toULong(),
                 ),
             )
         }.getOrElse { return failed(MultisigShellFailure.PageSignFailed("not_opened")) }
@@ -416,6 +420,10 @@ class MultisigLive(
     override suspend fun simulate(op: MultisigOperation.Simulate): String? {
         val legs = op.calls.map { SimDeltas.Call(it["to"].str.orEmpty(), decimal(it["value"]), it["data"].str ?: "0x") }
         val body = SimDeltas.body(op.from, legs) ?: return null
+        // Real device S2 (core §9.5): the multisig as its deployment leaves it, as the core gave it.
+        op.state_overrides?.takeUnless { it is JsonNull }?.let { overrides ->
+            body.getJSONArray("blockStateCalls").getJSONObject(0).put("stateOverrides", JSONObject(overrides.toString()))
+        }
         val answer = pool.call(op.chain_id.toInt(), "eth_simulateV1", listOf(body, "latest"))
         return SimDeltas.replyJson(answer)
     }
@@ -454,6 +462,8 @@ class MultisigLive(
                 "multisig" to (purpose["multisig"] ?: JsonNull),
                 "name" to (purpose["name"] ?: JsonNull),
                 "threshold" to (purpose["threshold"] ?: JsonNull),
+                // Core §9.5: the members it runs under (`SendPurpose::Execute.owners`).
+                "owners" to (purpose["owners"] ?: JsonNull),
             )
         }
 

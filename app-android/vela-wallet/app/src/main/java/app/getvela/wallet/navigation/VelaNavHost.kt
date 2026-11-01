@@ -258,6 +258,20 @@ fun VelaNavHost(
     val context = LocalContext.current
     val application = context.applicationContext as VelaWalletApplication
     val session by application.container.session.view.collectAsStateWithLifecycle()
+    // r9-12 (core §9.1): every place an address is named draws the accounts
+    // machine's `member_labels` — this device's own accounts included (the
+    // name the account published, the same on every device); the local name
+    // only while the machine has none.
+    // Only once there is a Vela account here: the multisig layer is built
+    // (and booted) for a wallet, never for the welcome screens.
+    val namedBy: Map<String, String> = if (session.accounts.isNotEmpty()) {
+        application.container.multisig.accountsView.collectAsStateWithLifecycle().value.memberLabels
+    } else {
+        emptyMap()
+    }
+    fun labelOf(address: String, local: String): String =
+        namedBy[address.lowercase()]?.takeIf { it.isNotBlank() } ?: local
+    val activeLabel = labelOf(session.address, session.activeName)
     val onboarding: OnboardingViewModel = viewModel()
 
     // The keys this device's own record gives the account in front, read as
@@ -680,7 +694,7 @@ fun VelaNavHost(
                     app.getvela.wallet.feature.multisig.MultisigWiring.words(application.container, multisigHub)
                 }
                 val shownAddress = shownMultisig?.account?.address ?: session.address
-                val shownName = shownMultisig?.let { msWords.name(it.account, it.name) } ?: session.activeName
+                val shownName = shownMultisig?.let { msWords.name(it.account, it.name) } ?: activeLabel
                 // Fixture-driven still (spec 015 FR-005) apart from the two things
                 // that identify the wallet — its address and its name, both now the
                 // real ones. A home screen showing a fixture address after a real
@@ -775,7 +789,8 @@ fun VelaNavHost(
                     // still has a display currency — and until this runs the core
                     // has no rate and the wallet shows dollars.
                     settings.refreshCurrency()
-                    wallet.open(shownAddress)
+                    // r10-1 (core §9.3): a multisig shown lives on its record's networks.
+                    wallet.open(shownAddress, livesOn = shownMultisig?.account?.chainIds.orEmpty())
                 }
 
                 // Spec 048: the 全部网络 pill and the SD1 class chips are shell render
@@ -1034,7 +1049,7 @@ fun VelaNavHost(
                 if (switcherOpen) {
                     AccountSwitcherSheet(
                         sheet = WalletLive.accountSwitcher(
-                            session.accounts.map { it.name to it.address },
+                            session.accounts.map { labelOf(it.address, it.name) to it.address },
                             // A multisig shown: no Vela account row wears the check (its row does).
                             if (shownMultisig != null) -1 else session.activeIndex,
                             // Spec 105: no account is worth anything in the testnet space.
@@ -1188,7 +1203,7 @@ fun VelaNavHost(
                         chainName = chainNames[signChain] ?: signChain.toString(),
                         chainDot = WalletLive.badge(signChain.toLong()),
                         nativeSymbol = networks.networks.firstOrNull { it.chain_id.toInt() == signChain }?.native_symbol ?: "ETH",
-                        walletName = session.activeName,
+                        walletName = activeLabel,
                         walletAddress = session.address,
                         money = WalletLive.Money.of(currency, strings.language),
                         origin = signRequest?.origin?.substringAfter("://")?.substringBefore('/'),
@@ -1977,9 +1992,9 @@ fun VelaNavHost(
                         // fixture one: a connection panel naming a stranger's
                         // account would be the wallet lying about what it just
                         // granted.
-                        val exploreModel = remember(strings, session.address, session.activeName) {
+                        val exploreModel = remember(strings, session.address, activeLabel) {
                             ExploreFixtures.buildState(ExploreScreenState.E2, strings)
-                                .withIdentity(session.activeName, session.address)
+                                .withIdentity(activeLabel, session.address)
                         }
                         // Spec 044/070: the tab is a browser with a memory — the core's
                         // favourites, groups, tabs and recents — and every page's
@@ -2011,7 +2026,7 @@ fun VelaNavHost(
                             exploreShown?.let { app.getvela.wallet.feature.multisig.MultisigWiring.words(application.container, exploreMsHub).name(it.account, it.name) }
                         }
                         val identity = app.getvela.wallet.feature.browser.ExploreLive.Identity(
-                            accountName = exploreShownName ?: session.activeName,
+                            accountName = exploreShownName ?: activeLabel,
                             accountAddress = exploreShown?.account?.address ?: session.address,
                             chainName = chainNames[siteChain] ?: siteChain.toString(),
                             chainDot = WalletLive.badge(siteChain.toLong()),
@@ -2745,10 +2760,10 @@ fun VelaNavHost(
                 // that identify the account — its name and address, both the real
                 // ones. A fixture name over a real address would tell somebody they
                 // are signed in as a stranger (spec 019's finding).
-                val model = remember(strings, session.address, session.activeName) {
+                val model = remember(strings, session.address, activeLabel) {
                     SettingsFixtures.buildState(SettingsScreenState.ST1, strings)
                         .withIdentity(
-                            name = session.activeName,
+                            name = activeLabel,
                             address = session.address,
                             display = shortenAddress(session.address),
                         )
