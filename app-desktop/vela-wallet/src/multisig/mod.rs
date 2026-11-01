@@ -9,15 +9,15 @@
 //!   router, what one machine's view tells another (no gpui).
 
 pub mod activity;
+pub mod dapp;
 #[cfg(feature = "dev-fixtures")]
 pub mod dev_script;
-pub mod dapp;
 pub mod findings;
 pub mod host;
 pub mod live;
 pub mod machines;
-pub mod notify;
 pub mod member_words;
+pub mod notify;
 pub mod peer;
 pub mod propose;
 pub mod reading;

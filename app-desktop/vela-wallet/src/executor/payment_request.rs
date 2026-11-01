@@ -224,10 +224,7 @@ mod tests {
             refused(&format!("to={TO}&chain=1&token=usdc")),
             Some("receive.pay.invalidToken")
         );
-        assert_eq!(
-            refused("to=nope&chain=1"),
-            Some("receive.pay.invalidBody")
-        );
+        assert_eq!(refused("to=nope&chain=1"), Some("receive.pay.invalidBody"));
         assert_eq!(
             refused(&format!("to={TO}&chain=gnosis")),
             Some("receive.pay.invalidBody")

@@ -960,9 +960,15 @@ mod tests {
             for kept in [988, 4326, 98866] {
                 assert!(record.shown.contains(&kept), "{kept} stays shown");
             }
-            assert!(!record.shown.contains(&1_440_000), "unused: out of the lists");
+            assert!(
+                !record.shown.contains(&1_440_000),
+                "unused: out of the lists"
+            );
             let stored: NetShownNetworks = serde_json::from_value(
-                storage::read_value(shown_networks::KEY).ok().flatten().unwrap_or_default(),
+                storage::read_value(shown_networks::KEY)
+                    .ok()
+                    .flatten()
+                    .unwrap_or_default(),
             )
             .unwrap_or_default();
             assert_eq!(stored, record, "stored before it is used");

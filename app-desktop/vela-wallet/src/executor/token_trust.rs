@@ -451,7 +451,11 @@ fn run(rx: &std::sync::mpsc::Receiver<Request>) {
                 let view = host.view();
                 // The coverage is final once the poll is over (`scanning`
                 // false); a scan still out keeps what was kept before.
-                let cursors = if view.scanning { Vec::new() } else { view.cursors };
+                let cursors = if view.scanning {
+                    Vec::new()
+                } else {
+                    view.cursors
+                };
                 let _ = reply.send((view.incoming, cursors));
             }
             Request::Judge {

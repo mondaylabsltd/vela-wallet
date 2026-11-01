@@ -1522,8 +1522,12 @@ mod tests {
             name: "Parallel Multi".to_owned(),
             transports: String::new(),
         }];
-        let (source, keys) =
-            wallet_keys("0x88cCA0EeDbF2C4426110bbFc998F048689266894", "Interleave", &device, "");
+        let (source, keys) = wallet_keys(
+            "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+            "Interleave",
+            &device,
+            "",
+        );
         assert_eq!(source, vela_core::wallet_keys::KeysSource::Registry);
         assert_eq!(keys.len(), 3);
         assert_eq!(keys[0].public_key_hex, device[0].public_key_hex);

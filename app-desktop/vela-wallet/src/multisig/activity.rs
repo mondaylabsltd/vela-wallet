@@ -22,16 +22,17 @@ pub fn worded_rows(executed: &[Value]) -> Vec<Value> {
 }
 
 /// One executed transaction's rows, worded with `token` (a reader).
-pub fn worded(
-    e: &Value,
-    loc: &Loc,
-    token: &dyn Fn(u64, Option<&str>) -> TokenInfo,
-) -> Vec<Value> {
+pub fn worded(e: &Value, loc: &Loc, token: &dyn Fn(u64, Option<&str>) -> TokenInfo) -> Vec<Value> {
     let Some(planned) = e.get("rows").and_then(Value::as_array) else {
         // A row already a transaction's is kept as it is.
         return vec![e.clone()];
     };
-    let text = |k: &str| e.get(k).and_then(Value::as_str).unwrap_or_default().to_owned();
+    let text = |k: &str| {
+        e.get(k)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned()
+    };
     let chain_id = e.get("chainId").and_then(Value::as_u64).unwrap_or_default();
     let safe_tx_hash = text("safeTxHash");
     let action: Option<Action> = e

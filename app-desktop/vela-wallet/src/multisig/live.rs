@@ -86,12 +86,14 @@ pub fn service_url() -> String {
     storage::read_value(storage::KEY_SERVICE_ENDPOINTS)
         .ok()
         .flatten()
-        .and_then(|v| v.get("genesisServiceURL").and_then(Value::as_str).map(str::to_owned))
+        .and_then(|v| {
+            v.get("genesisServiceURL")
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+        })
         .map(|url| url.trim().to_owned())
         .filter(|url| !url.is_empty())
-        .unwrap_or_else(|| {
-            vela_core::app::multisig_shell::DEFAULT_GENESIS_SERVICE_URL.to_owned()
-        })
+        .unwrap_or_else(|| vela_core::app::multisig_shell::DEFAULT_GENESIS_SERVICE_URL.to_owned())
 }
 
 /// The PeerConnect relay set for this device (the web's
@@ -466,7 +468,8 @@ pub fn quote(chain_id: u64, from: &str, calls: &[SentCall]) -> Value {
                     FeeAssetView::Erc20 { amount, .. } => amount.clone(),
                     FeeAssetView::Native => fee.total_wei.clone(),
                 };
-                if let (Some(recipient), Some(value)) = (fee.fee_recipient.clone(), quantity(&amount))
+                if let (Some(recipient), Some(value)) =
+                    (fee.fee_recipient.clone(), quantity(&amount))
                     && value > 0
                 {
                     let mut out = json!({
@@ -838,7 +841,10 @@ mod tests {
             message: None,
         }
         .detail();
-        assert_eq!(passkey, r#"{"kind":"passkey","failure":"other","timedOut":true}"#);
+        assert_eq!(
+            passkey,
+            r#"{"kind":"passkey","failure":"other","timedOut":true}"#
+        );
         assert_eq!(read_failure("the core's own words"), None);
     }
 
@@ -853,11 +859,14 @@ mod tests {
                 tier: Some(FeeTier::Standard)
             })
         );
-        assert_eq!(quoted_fee(Some(&json!({"amount": "1"}))), None, "no recipient");
+        assert_eq!(
+            quoted_fee(Some(&json!({"amount": "1"}))),
+            None,
+            "no recipient"
+        );
         assert_eq!(quoted_fee(None), None);
         assert_eq!(
-            quoted_fee(Some(&json!({"amount": "0x10", "recipient": "0x1"})))
-                .map(|q| q.amount),
+            quoted_fee(Some(&json!({"amount": "0x10", "recipient": "0x1"}))).map(|q| q.amount),
             Some(16)
         );
     }

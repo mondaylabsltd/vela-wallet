@@ -24,9 +24,8 @@ use std::time::Duration;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    App, Div, FontWeight, Global, InteractiveElement as _,
-    ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _, Window, div,
-    px, relative,
+    App, Div, FontWeight, Global, InteractiveElement as _, ParentElement as _, SharedString,
+    StatefulInteractiveElement as _, Styled as _, Window, div, px, relative,
 };
 
 use super::{PromptWords, Refusal, Release};
@@ -183,15 +182,18 @@ pub fn boot(cx: &mut App) {
     cx.spawn(async move |cx| {
         let mut wait = FIRST_CHECK;
         #[cfg(any(test, debug_assertions, feature = "dev-fixtures"))]
-        if let Some(ms) = crate::dev_env::var!("VELA_UPDATE_CHECK_AFTER_MS")
-            .and_then(|text| text.parse().ok())
+        if let Some(ms) =
+            crate::dev_env::var!("VELA_UPDATE_CHECK_AFTER_MS").and_then(|text| text.parse().ok())
         {
             wait = Duration::from_millis(ms);
         }
         loop {
             cx.background_executor().timer(wait).await;
             wait = RECHECK;
-            let verdict = cx.background_executor().spawn(async { super::check() }).await;
+            let verdict = cx
+                .background_executor()
+                .spawn(async { super::check() })
+                .await;
             let Ok(release) = verdict else { continue };
             let offered = cx.update(|cx| {
                 let words = PromptWords::of(&crate::loc::Loc::from_env());
@@ -319,14 +321,20 @@ pub fn install(cx: &mut App) {
             });
             return;
         }
-        crate::diag::vlog!("update", "download verified: {} bytes", release.artifact.size);
+        crate::diag::vlog!(
+            "update",
+            "download verified: {} bytes",
+            release.artifact.size
+        );
         cx.update(|cx| {
             cx.global_mut::<UpdateState>().downloaded();
             cx.refresh_windows();
         });
         // Never while a submit is out: the app is about to quit.
         while !crate::executor::relay::may_close(std::time::Instant::now()) {
-            cx.background_executor().timer(Duration::from_millis(500)).await;
+            cx.background_executor()
+                .timer(Duration::from_millis(500))
+                .await;
         }
         let handed = {
             let release = release.clone();
@@ -406,17 +414,18 @@ pub fn overlay(root: Div, window: &Window, cx: &App) -> Div {
         return root;
     }
     let theme = Theme::of(theme::ThemeMode::detect(window));
-    root.relative().child(
-        div()
-            .absolute()
-            .right(px(20.))
-            .bottom(px(20.))
-            .child(crate::ui::motion::card_in(
-                card(state, release, words, &theme),
-                "update-card-in",
-                crate::ui::motion::reduced(),
-            )),
-    )
+    root.relative()
+        .child(
+            div()
+                .absolute()
+                .right(px(20.))
+                .bottom(px(20.))
+                .child(crate::ui::motion::card_in(
+                    card(state, release, words, &theme),
+                    "update-card-in",
+                    crate::ui::motion::reduced(),
+                )),
+        )
 }
 
 fn card(
@@ -472,11 +481,7 @@ fn card(
     let actions = match &state.phase {
         Phase::Offered => Some(Some((words.install.clone(), true))),
         // A refusal another attempt would only repeat offers Later alone.
-        Phase::Failed(refusal) => Some(
-            refusal
-                .retryable()
-                .then(|| (words.retry.clone(), true)),
-        ),
+        Phase::Failed(refusal) => Some(refusal.retryable().then(|| (words.retry.clone(), true))),
         Phase::Downloading { .. } => Some(Some((words.install.clone(), false))),
         Phase::Installing | Phase::Hidden => None,
     };
@@ -486,13 +491,27 @@ fn card(
                 .flex()
                 .justify_end()
                 .gap(px(8.))
-                .child(button("update-later", words.later.clone(), false, true, theme, |_, _, cx| {
-                    later(cx);
-                }))
+                .child(button(
+                    "update-later",
+                    words.later.clone(),
+                    false,
+                    true,
+                    theme,
+                    |_, _, cx| {
+                        later(cx);
+                    },
+                ))
                 .when_some(answer, |row, (answer, live)| {
-                    row.child(button("update-install", answer, true, live, theme, |_, _, cx| {
-                        install(cx);
-                    }))
+                    row.child(button(
+                        "update-install",
+                        answer,
+                        true,
+                        live,
+                        theme,
+                        |_, _, cx| {
+                            install(cx);
+                        },
+                    ))
                 }),
         );
     }
@@ -514,7 +533,11 @@ fn refused_line(text: SharedString, theme: &Theme) -> gpui::Stateful<Div> {
 /// The bar and the line under it. A refused step shows the bar in the
 /// error colour, with no figure.
 fn progress(fraction: f32, text: String, failed: bool, theme: &Theme) -> Div {
-    let fill = if failed { theme.error_base } else { theme.fg_base };
+    let fill = if failed {
+        theme.error_base
+    } else {
+        theme.fg_base
+    };
     div()
         .flex()
         .flex_col()
@@ -610,7 +633,11 @@ mod tests {
         assert!(wanted.load(Ordering::SeqCst));
         state.progress(420);
         state.progress(100);
-        assert_eq!(state.phase, Phase::Downloading { received: 420 }, "never backwards");
+        assert_eq!(
+            state.phase,
+            Phase::Downloading { received: 420 },
+            "never backwards"
+        );
         assert_eq!(state.fraction(), Some(0.42));
         assert!(state.start().is_none(), "one download at a time");
         state.downloaded();
@@ -644,7 +671,11 @@ mod tests {
     /// again: Install does nothing, Later still puts it away.
     #[test]
     fn a_refusal_that_cannot_go_differently_is_not_tried_again() {
-        for refusal in [Refusal::NotInstalled, Refusal::SignatureMismatch, Refusal::VersionMismatch] {
+        for refusal in [
+            Refusal::NotInstalled,
+            Refusal::SignatureMismatch,
+            Refusal::VersionMismatch,
+        ] {
             let mut state = UpdateState::default();
             state.offer(release());
             let _ = state.start();
@@ -658,14 +689,23 @@ mod tests {
         state.offer(release());
         let _ = state.start();
         state.fail(Refusal::InstallFailed("EACCES".to_owned()));
-        assert!(state.start().is_some(), "an OS step that failed may not fail again");
+        assert!(
+            state.start().is_some(),
+            "an OS step that failed may not fail again"
+        );
     }
 
     #[test]
     fn the_progress_line() {
         assert_eq!(progress_text(0, 48_600_000), "0% · 0.0 / 48.6 MB");
-        assert_eq!(progress_text(20_412_000, 48_600_000), "42% · 20.4 / 48.6 MB");
-        assert_eq!(progress_text(48_600_000, 48_600_000), "100% · 48.6 / 48.6 MB");
+        assert_eq!(
+            progress_text(20_412_000, 48_600_000),
+            "42% · 20.4 / 48.6 MB"
+        );
+        assert_eq!(
+            progress_text(48_600_000, 48_600_000),
+            "100% · 48.6 / 48.6 MB"
+        );
         assert_eq!(progress_text(5, 0), "0% · 0.0 / 0.0 MB");
     }
 }

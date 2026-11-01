@@ -20,7 +20,12 @@ pub fn finding_words(loc: &Loc, finding: &Value, fallback: &str) -> String {
         .get("chainId")
         .and_then(Value::as_u64)
         .map_or_else(|| fallback.to_owned(), network);
-    let text = |v: &Value, k: &str| v.get(k).and_then(Value::as_str).unwrap_or_default().to_owned();
+    let text = |v: &Value, k: &str| {
+        v.get(k)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned()
+    };
     match finding.get("from").and_then(Value::as_str) {
         Some("chain") => {
             let risk = finding.get("risk").cloned().unwrap_or(Value::Null);
@@ -30,14 +35,20 @@ pub fn finding_words(loc: &Loc, finding: &Value, fallback: &str) -> String {
                 Some("handler") => "authority.riskHandler",
                 _ => "authority.riskSingleton",
             };
-            words::tv(loc, key, &[("address", &text(&risk, "address")), ("network", &net)])
+            words::tv(
+                loc,
+                key,
+                &[("address", &text(&risk, "address")), ("network", &net)],
+            )
         }
         _ => {
             let reason = finding.get("reason").cloned().unwrap_or(Value::Null);
             match reason.get("kind").and_then(Value::as_str) {
-                Some("payment") => {
-                    words::tv(loc, "authority.payment", &[("address", &text(&reason, "receiver"))])
-                }
+                Some("payment") => words::tv(
+                    loc,
+                    "authority.payment",
+                    &[("address", &text(&reason, "receiver"))],
+                ),
                 Some(kind @ ("wrongAddress" | "notSetup" | "badMembers")) => {
                     words::t(loc, &format!("authority.{kind}"))
                 }

@@ -69,9 +69,10 @@ pub fn invalidate() {
 pub fn prices() -> HashMap<String, f64> {
     if let Ok(cache) = cache().lock()
         && let Some((prices, at)) = cache.as_ref()
-            && at.elapsed() < CACHE_TTL {
-                return prices.clone();
-            }
+        && at.elapsed() < CACHE_TTL
+    {
+        return prices.clone();
+    }
 
     let calls: Vec<Call3> = FEEDS
         .iter()

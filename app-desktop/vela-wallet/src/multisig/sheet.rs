@@ -183,9 +183,8 @@ pub fn foot(f: &FootFacts<'_>, picked: Option<&str>) -> Foot {
     } else {
         Vec::new()
     };
-    let find = |who: Option<&str>| {
-        who.and_then(|w| candidates.iter().find(|c| same(c, w)).cloned())
-    };
+    let find =
+        |who: Option<&str>| who.and_then(|w| candidates.iter().find(|c| same(c, w)).cloned());
     let payer = executing
         .then(|| {
             f.can_execute.iter().find(|e| {
@@ -252,7 +251,13 @@ pub fn approve_label(sign: SignRule) -> &'static str {
 /// signature be given, the look is in, and a press that approves first is
 /// one the machine offers (`approve_execute`).
 #[must_use]
-pub fn execute_enabled(reviewed: bool, sign: SignRule, look: Option<&Look>, approve_first: bool, one_tap: bool) -> bool {
+pub fn execute_enabled(
+    reviewed: bool,
+    sign: SignRule,
+    look: Option<&Look>,
+    approve_first: bool,
+    one_tap: bool,
+) -> bool {
     reviewed && sign.allowed && look.is_some() && !(approve_first && !one_tap)
 }
 
@@ -394,10 +399,24 @@ mod tests {
         let mut offered = BTreeMap::new();
         offered.insert(press_key(5_042_002, HASH), vec![DANA.to_owned()]);
         let approved_by = vec![ALICE.to_owned()];
-        let f = facts(ProposalStatus::Pending, 1, &approved_by, &execs, &execs, &previews, &offered);
+        let f = facts(
+            ProposalStatus::Pending,
+            1,
+            &approved_by,
+            &execs,
+            &execs,
+            &previews,
+            &offered,
+        );
         let foot = foot(&f, None);
         assert_eq!(foot.actor.as_deref(), Some(DANA));
-        let FootKind::Execute { look, approve_first, can_approve_only, one_tap } = foot.kind else {
+        let FootKind::Execute {
+            look,
+            approve_first,
+            can_approve_only,
+            one_tap,
+        } = foot.kind
+        else {
             panic!("an executor here: {foot:?}");
         };
         assert!(approve_first && can_approve_only && one_tap);
@@ -409,34 +428,85 @@ mod tests {
                 balance: Some("400000000000000000".into())
             })
         );
-        let allowed = SignRule { allowed: true, anyway: false };
-        assert!(execute_enabled(true, allowed, look.as_ref(), approve_first, one_tap));
-        assert_eq!(execute_label(approve_first, allowed), "proposal.approveAndExecute");
+        let allowed = SignRule {
+            allowed: true,
+            anyway: false,
+        };
+        assert!(execute_enabled(
+            true,
+            allowed,
+            look.as_ref(),
+            approve_first,
+            one_tap
+        ));
+        assert_eq!(
+            execute_label(approve_first, allowed),
+            "proposal.approveAndExecute"
+        );
     }
 
     /// No look yet, or a one press the machine does not offer: the press
     /// waits (never "Approve and execute" from a guess).
     #[test]
     fn no_one_press_before_the_look_or_the_offer() {
-        let allowed = SignRule { allowed: true, anyway: false };
+        let allowed = SignRule {
+            allowed: true,
+            anyway: false,
+        };
         assert!(!execute_enabled(true, allowed, None, false, false));
-        assert!(!execute_enabled(true, allowed, Some(&Look::Unchecked), true, false));
-        assert!(execute_enabled(true, allowed, Some(&Look::Unchecked), true, true));
+        assert!(!execute_enabled(
+            true,
+            allowed,
+            Some(&Look::Unchecked),
+            true,
+            false
+        ));
+        assert!(execute_enabled(
+            true,
+            allowed,
+            Some(&Look::Unchecked),
+            true,
+            true
+        ));
         // The review refuses: nothing at all.
-        let refused = SignRule { allowed: false, anyway: false };
-        assert!(!execute_enabled(true, refused, Some(&Look::Unchecked), false, false));
+        let refused = SignRule {
+            allowed: false,
+            anyway: false,
+        };
+        assert!(!execute_enabled(
+            true,
+            refused,
+            Some(&Look::Unchecked),
+            false,
+            false
+        ));
         // No review yet.
-        assert!(!execute_enabled(false, allowed, Some(&Look::Unchecked), false, false));
+        assert!(!execute_enabled(
+            false,
+            allowed,
+            Some(&Look::Unchecked),
+            false,
+            false
+        ));
     }
 
     /// r8-1 (the shell's half): the review's `anyway` is the press's words.
     #[test]
     fn the_review_rule_names_the_press() {
-        let anyway = SignRule { allowed: true, anyway: true };
+        let anyway = SignRule {
+            allowed: true,
+            anyway: true,
+        };
         assert_eq!(execute_label(true, anyway), "review.approveExecuteAnyway");
         assert_eq!(execute_label(false, anyway), "review.executeAnyway");
         assert_eq!(approve_label(anyway), "review.approveAnyway");
-        assert_eq!(approve_label(SignRule { allowed: true, anyway: false }), "proposal.approve");
+        assert_eq!(
+            approve_label(SignRule {
+                allowed: true,
+                anyway: false
+            }),
+            "proposal.approve"
+        );
     }
 
     /// The executor that can pay is picked over the first one; the
@@ -445,14 +515,33 @@ mod tests {
     fn the_payer_is_picked_unless_the_person_picks() {
         let execs = vec![ALICE.to_owned(), DANA.to_owned()];
         let mut previews = BTreeMap::new();
-        previews.insert(look_key(5_042_002, HASH, ALICE), json!({"kind": "priced", "fee": {"amount": "10"}, "canPay": false}));
-        previews.insert(look_key(5_042_002, HASH, DANA), json!({"kind": "priced", "fee": {"amount": "10"}, "canPay": true}));
+        previews.insert(
+            look_key(5_042_002, HASH, ALICE),
+            json!({"kind": "priced", "fee": {"amount": "10"}, "canPay": false}),
+        );
+        previews.insert(
+            look_key(5_042_002, HASH, DANA),
+            json!({"kind": "priced", "fee": {"amount": "10"}, "canPay": true}),
+        );
         let none = BTreeMap::new();
         let approved_by = vec![ALICE.to_owned(), DANA.to_owned()];
-        let f = facts(ProposalStatus::Ready, 2, &approved_by, &[], &execs, &previews, &none);
+        let f = facts(
+            ProposalStatus::Ready,
+            2,
+            &approved_by,
+            &[],
+            &execs,
+            &previews,
+            &none,
+        );
         assert_eq!(foot(&f, None).actor.as_deref(), Some(DANA));
         assert_eq!(foot(&f, Some(ALICE)).actor.as_deref(), Some(ALICE));
-        let FootKind::Execute { look, approve_first, .. } = foot(&f, Some(ALICE)).kind else {
+        let FootKind::Execute {
+            look,
+            approve_first,
+            ..
+        } = foot(&f, Some(ALICE)).kind
+        else {
             panic!()
         };
         assert!(!approve_first);
@@ -464,7 +553,15 @@ mod tests {
     fn approve_only_and_done() {
         let approvers = vec![DANA.to_owned()];
         let (none, nobody) = (BTreeMap::new(), BTreeMap::new());
-        let f = facts(ProposalStatus::Pending, 0, &[], &approvers, &[], &none, &nobody);
+        let f = facts(
+            ProposalStatus::Pending,
+            0,
+            &[],
+            &approvers,
+            &[],
+            &none,
+            &nobody,
+        );
         assert_eq!(foot(&f, None).kind, FootKind::Approve);
         let f = facts(ProposalStatus::Done, 2, &[], &[], &[], &none, &nobody);
         assert_eq!(foot(&f, None).kind, FootKind::Nothing);
@@ -486,11 +583,20 @@ mod tests {
         assert_eq!(member_way(Some(&signers), EVE, false), MemberWay::Outside);
         assert_eq!(member_way(Some(&signers), ALICE, false), MemberWay::InVela);
         // Even were the core's list to name it, a member here is not asked.
-        let odd = ItemSigners { outside: vec![DANA.into(), EVE.into()], ..signers.clone() };
+        let odd = ItemSigners {
+            outside: vec![DANA.into(), EVE.into()],
+            ..signers.clone()
+        };
         assert_eq!(member_way(Some(&odd), DANA, true), MemberWay::Waiting);
-        assert_eq!(outside_members(Some(&odd), &|a| same(a, DANA)), vec![EVE.to_owned()]);
+        assert_eq!(
+            outside_members(Some(&odd), &|a| same(a, DANA)),
+            vec![EVE.to_owned()]
+        );
         // Enough approved: nobody is asked.
-        let enough = ItemSigners { enough: true, ..signers };
+        let enough = ItemSigners {
+            enough: true,
+            ..signers
+        };
         assert_eq!(member_way(Some(&enough), EVE, false), MemberWay::Waiting);
         assert!(outside_members(Some(&enough), &|_| false).is_empty());
     }
@@ -499,7 +605,10 @@ mod tests {
     #[test]
     fn get_ready_until_it_is_set_up() {
         assert!(get_ready_shown(Some(true), true, false));
-        assert!(get_ready_shown(Some(true), false, true), "set_up is the followed one's");
+        assert!(
+            get_ready_shown(Some(true), false, true),
+            "set_up is the followed one's"
+        );
         assert!(!get_ready_shown(Some(true), true, true));
         assert!(!get_ready_shown(None, true, false));
     }
@@ -508,17 +617,22 @@ mod tests {
     /// executor's approval by sending it too — not the list after.
     #[test]
     fn an_executed_one_counts_what_counted_when_it_ran() {
-        let frozen: vela_core::app::multisig_presence::FrozenFacts = serde_json::from_value(json!({
-            "executor": DANA,
-            "threshold": 2,
-            "approvers": [ALICE, DANA],
-            "executorApproved": true,
-            "source": "chain",
-            "atMs": null
-        }))
-        .expect("frozen facts");
+        let frozen: vela_core::app::multisig_presence::FrozenFacts =
+            serde_json::from_value(json!({
+                "executor": DANA,
+                "threshold": 2,
+                "approvers": [ALICE, DANA],
+                "executorApproved": true,
+                "source": "chain",
+                "atMs": null
+            }))
+            .expect("frozen facts");
         assert_eq!(approvals_shown(true, Some(&frozen), 1, 2), (2, 2));
-        assert_eq!(approvals_shown(false, Some(&frozen), 1, 2), (1, 2), "open: the list's own");
+        assert_eq!(
+            approvals_shown(false, Some(&frozen), 1, 2),
+            (1, 2),
+            "open: the list's own"
+        );
         assert_eq!(approvals_shown(true, None, 1, 2), (1, 2));
         assert_eq!(approvals_shown(false, None, 3, 2), (2, 2));
     }

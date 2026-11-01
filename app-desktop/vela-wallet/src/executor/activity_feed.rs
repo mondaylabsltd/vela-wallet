@@ -905,15 +905,21 @@ mod tests {
             crate::executor::balance_dashboard::remember_lives_on(MS, vec![ARC]);
             let facts = scan_facts(MS);
             assert_eq!(
-                facts.account_networks.iter().map(|n| n.chain_id).collect::<Vec<_>>(),
+                facts
+                    .account_networks
+                    .iter()
+                    .map(|n| n.chain_id)
+                    .collect::<Vec<_>>(),
                 vec![ARC]
             );
             let plan = vela_core::app::incoming_scan::scan_plan(&facts);
             assert!(plan.scan_chain_ids.contains(&ARC), "{plan:?}");
             // A Vela account lives on none of its own.
-            assert!(scan_facts("0x88cca0eedbf2c4426110bbfc998f048689266894")
-                .account_networks
-                .is_empty());
+            assert!(
+                scan_facts("0x88cca0eedbf2c4426110bbfc998f048689266894")
+                    .account_networks
+                    .is_empty()
+            );
         });
     }
 
@@ -929,7 +935,12 @@ mod tests {
             }];
             write_cursors("0xAbC", &kept);
             assert_eq!(read_cursors("0xabc"), kept);
-            assert!(storage::read_value("vela.scanCursors.0xabc").ok().flatten().is_some());
+            assert!(
+                storage::read_value("vela.scanCursors.0xabc")
+                    .ok()
+                    .flatten()
+                    .is_some()
+            );
         });
     }
 

@@ -65,7 +65,6 @@ pub fn request_event(
     }
 }
 
-
 /// One request handed to the machine.
 #[derive(Clone, Debug)]
 struct Holding {
@@ -296,8 +295,8 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
 
     use super::*;
-    use vela_core::app::multisig_dapp::DappError;
     use vela_core::app::dapp_rpc;
+    use vela_core::app::multisig_dapp::DappError;
 
     const HASH: &str = "0x1111111111111111111111111111111111111111111111111111111111111111";
 
@@ -485,7 +484,14 @@ mod tests {
         let Some(Step::Answer { answer, .. }) = steps.last() else {
             panic!()
         };
-        assert_eq!(answer.result.as_ref().and_then(dapp_rpc::batch_id_of).map(str::to_ascii_lowercase), Some(HASH.to_owned()));
+        assert_eq!(
+            answer
+                .result
+                .as_ref()
+                .and_then(dapp_rpc::batch_id_of)
+                .map(str::to_ascii_lowercase),
+            Some(HASH.to_owned())
+        );
 
         let rid = hold(&mut holds, "eth_sendTransaction");
         let mut h = held(&rid, HeldStage::Waiting);
@@ -509,7 +515,8 @@ mod tests {
     #[test]
     fn a_batch_read_is_the_machines_answer_as_it_is() {
         let status = dapp_rpc::multisig_calls_status(HASH, 100, None, false);
-        let body: Value = serde_json::from_str(&read_body(&DappAnswer::ok(status.clone()))).unwrap();
+        let body: Value =
+            serde_json::from_str(&read_body(&DappAnswer::ok(status.clone()))).unwrap();
         assert_eq!(body, json!({ "result": status }));
         let refused = DappError {
             code: 5730,

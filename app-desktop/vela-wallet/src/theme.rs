@@ -1015,7 +1015,12 @@ mod tests {
                 ("fg_subtle/bg_base", t.fg_subtle, t.bg_base, 3.0),
                 ("error_base/bg_base", t.error_base, t.bg_base, 4.5),
                 // r9-19: a danger button.s white label on its fill.
-                ("white/error_fill", gpui::Hsla::from(gpui::rgb(0xffffff)), t.error_fill, 4.5),
+                (
+                    "white/error_fill",
+                    gpui::Hsla::from(gpui::rgb(0xffffff)),
+                    t.error_fill,
+                    4.5,
+                ),
                 // the 家人 membership chip is fg_muted on the sunken pill.
                 ("fg_muted/bg_sunken", t.fg_muted, t.bg_sunken, 4.5),
             ];

@@ -16,9 +16,7 @@
 //! simulated world, synchronously.
 
 use serde_json::Value;
-use vela_core::app::multisig_accounts::{
-    self as accounts, MultisigAccounts, MultisigAccountsView,
-};
+use vela_core::app::multisig_accounts::{self as accounts, MultisigAccounts, MultisigAccountsView};
 use vela_core::app::multisig_members::{self as members, MultisigMembers, MultisigMembersView};
 use vela_core::app::multisig_outside::session::{
     self, OutsideSession, OutsideSessionView, SessionRequest,
@@ -281,7 +279,10 @@ impl Machines {
     /// The rooms the session open now opened.
     #[must_use]
     pub fn session_rooms(&self) -> Vec<String> {
-        self.session.as_ref().map(|s| s.rooms.clone()).unwrap_or_default()
+        self.session
+            .as_ref()
+            .map(|s| s.rooms.clone())
+            .unwrap_or_default()
     }
 
     /// The session open now: its view and the request it asks.

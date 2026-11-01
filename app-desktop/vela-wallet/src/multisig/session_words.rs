@@ -3,8 +3,8 @@
 //! and how this side is getting onto the relay. The session machine decides
 //! each; these are its words.
 
-use vela_core::app::multisig_outside::session::{Failure, OutsideSessionView, Phase};
 use vela_core::app::multisig_outside::relay::{RelayStatus, RelayTrouble};
+use vela_core::app::multisig_outside::session::{Failure, OutsideSessionView, Phase};
 
 use super::words;
 use crate::loc::Loc;
@@ -12,7 +12,10 @@ use crate::loc::Loc;
 fn chain_name(view: &OutsideSessionView) -> String {
     view.chain
         .as_deref()
-        .and_then(|c| c.strip_prefix("0x").map_or_else(|| c.parse().ok(), |h| u64::from_str_radix(h, 16).ok()))
+        .and_then(|c| {
+            c.strip_prefix("0x")
+                .map_or_else(|| c.parse().ok(), |h| u64::from_str_radix(h, 16).ok())
+        })
         .and_then(|id: u64| u32::try_from(id).ok())
         .map_or_else(String::new, crate::executor::custom_tokens::network_name)
 }
@@ -85,10 +88,17 @@ pub fn relay(loc: &Loc, status: &RelayStatus, now_ms: f64) -> Option<String> {
                 "external.velaRelayRetrying",
                 &[
                     ("reason", &why(w, detail)),
-                    ("seconds", &(((at - now_ms) / 1000.).max(0.).ceil()).to_string()),
+                    (
+                        "seconds",
+                        &(((at - now_ms) / 1000.).max(0.).ceil()).to_string(),
+                    ),
                 ],
             ),
-            None => words::tv(loc, "external.velaRelayUnreachable", &[("reason", &why(w, detail))]),
+            None => words::tv(
+                loc,
+                "external.velaRelayUnreachable",
+                &[("reason", &why(w, detail))],
+            ),
         }),
         RelayStatus::Failed { why: w, detail } => Some(words::tv(
             loc,
@@ -119,7 +129,10 @@ mod tests {
                 ..OutsideSessionView::default()
             };
             let line = phase(&loc, &view);
-            assert!(!line.is_empty() && !line.contains("home.multisig"), "{p:?}: {line}");
+            assert!(
+                !line.is_empty() && !line.contains("home.multisig"),
+                "{p:?}: {line}"
+            );
         }
     }
 

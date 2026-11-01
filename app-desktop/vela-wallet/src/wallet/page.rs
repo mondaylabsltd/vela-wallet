@@ -15,9 +15,10 @@ use gpui::AnimationExt as _;
 use gpui::AppContext as _;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    Anchor, Context, Div, ElementId, ExternalPaths, FocusHandle, InteractiveElement as _, IntoElement,
-    KeyDownEvent, MouseButton, MouseDownEvent, ParentElement, Pixels, Point, Render, SharedString,
-    Stateful, StatefulInteractiveElement as _, Styled, Window, anchored, deferred, div, point, px,
+    Anchor, Context, Div, ElementId, ExternalPaths, FocusHandle, InteractiveElement as _,
+    IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, ParentElement, Pixels, Point, Render,
+    SharedString, Stateful, StatefulInteractiveElement as _, Styled, Window, anchored, deferred,
+    div, point, px,
 };
 
 use crate::contacts::ContactsStrings;
@@ -48,16 +49,16 @@ mod agent;
 mod feedback;
 /// Multisig accounts on this page (AUDIT M1–M6).
 pub(crate) mod multisig;
-/// The invite sheet (AUDIT M1).
-mod multisig_sheets;
-/// Multisig notifications: the switch, the in-app line, a click's way in (M6).
-pub(crate) mod multisig_notify;
-/// The create sheet (AUDIT M1).
-mod multisig_create;
 /// The add sheet: an address, an invite, a Safe{Wallet} export (AUDIT M1).
 mod multisig_add;
+/// The create sheet (AUDIT M1).
+mod multisig_create;
 /// Where a multisig link opened here stands (AUDIT M1).
 mod multisig_links;
+/// Multisig notifications: the switch, the in-app line, a click's way in (M6).
+pub(crate) mod multisig_notify;
+/// The invite sheet (AUDIT M1).
+mod multisig_sheets;
 mod palette;
 use feedback::FeedbackDraft;
 
@@ -140,8 +141,8 @@ use vela_core::app::sign_request::{SignErrorKind, SignResponsePayload};
 use super::WalletStrings;
 use super::components::{
     action_pill, activity_row, asset_row, asset_sub, balance_display, chain_row, empty_state,
-    icon_img, identicon_avatar, nav_row, qr_placeholder, section_header_parts,
-    section_header_row, skeleton_row, token_icon, token_icon_logos, wallet_header,
+    icon_img, identicon_avatar, nav_row, qr_placeholder, section_header_parts, section_header_row,
+    skeleton_row, token_icon, token_icon_logos, wallet_header,
 };
 use super::fixtures::{self, ADDRESS_FULL, IDENTICON_BOARD_SEEDS, WALLET_NAME};
 use crate::flows::{
@@ -1533,8 +1534,8 @@ impl WalletPage {
         // N-D3: the section the window showed when it was last closed — on
         // the launch's first wallet only (a later account switch starts on
         // the home, as it always has). `VELA_SECTION` wins in a dev build.
-        let wanted = crate::dev_env::var!("VELA_SECTION")
-            .or_else(crate::window_state::take_launch_section);
+        let wanted =
+            crate::dev_env::var!("VELA_SECTION").or_else(crate::window_state::take_launch_section);
         let section = Section::from_name(wanted.as_deref()).or_wallet();
         // perf-10: a window opened on a screen that draws no balance of its
         // own notes the account and reads no network until the home shows.
@@ -4280,7 +4281,13 @@ impl WalletPage {
                                 .text_size(theme::text_label())
                                 .font_weight(gpui::FontWeight::SEMIBOLD)
                                 .text_color(theme.fg_muted)
-                                .child(icon_img(&mut self.icons, Icon::UsersRound, false, theme.fg_muted, 12.))
+                                .child(icon_img(
+                                    &mut self.icons,
+                                    Icon::UsersRound,
+                                    false,
+                                    theme.fg_muted,
+                                    12.,
+                                ))
                                 .child(label)
                                 .on_click(cx.listener(|this, _, _, cx| {
                                     this.go_to_section(Section::Settings, cx);
@@ -4652,12 +4659,8 @@ impl WalletPage {
                                 // row did; taken apart so a screen reader meets
                                 // the web's `<h2>` and then its button.
                                 let all_label = s_all.clone();
-                                let (title, action) = section_header_parts(
-                                    theme,
-                                    &mut self.icons,
-                                    s_activity,
-                                    s_all,
-                                );
+                                let (title, action) =
+                                    section_header_parts(theme, &mut self.icons, s_activity, s_all);
                                 section_header_row()
                                     .child(
                                         div()
@@ -7189,9 +7192,8 @@ impl WalletPage {
         let window_handle = self.window_handle;
         // AUDIT M2: a multisig shown sends as itself — its confirm proposes.
         let multisig = crate::multisig::shown::current(cx);
-        let host = cx.new(|cx| {
-            SendHost::open_as(account, multisig, params, display, window_handle, cx)
-        });
+        let host =
+            cx.new(|cx| SendHost::open_as(account, multisig, params, display, window_handle, cx));
         // A new send replaces one parked under a report.
         self.send_parked = false;
         cx.observe(&host, |page, _, cx| {
@@ -12533,12 +12535,11 @@ impl WalletPage {
         // Owner decision 2026-10-29: the Vela networks out of the person's
         // list, by name, after the mainnet hint — "Add one from Add Network".
         let view = resident::resident::<NetworkAdmin>(cx).read(cx).view();
-        let more =
-            settings_live::more_networks(
-                &view,
-                &self.loc.t("settingsModals.network.moreNetworks"),
-                self.loc.language(),
-            );
+        let more = settings_live::more_networks(
+            &view,
+            &self.loc.t("settingsModals.network.moreNetworks"),
+            self.loc.language(),
+        );
         let hint = settings_live::space_hint(&self.loc.t(hint), more.as_deref(), testnet);
         Some(
             div()
@@ -14872,7 +14873,10 @@ impl WalletPage {
             })
             .collect();
         let warning = (!unsynced.is_empty()).then(|| {
-            gpui::SharedString::from(s.erase_unsynced.replace("{{names}}", &self.loc.list(&unsynced)))
+            gpui::SharedString::from(
+                s.erase_unsynced
+                    .replace("{{names}}", &self.loc.list(&unsynced)),
+            )
         });
         let ack_text = s.erase_unsynced_ack.clone();
         let acked = self.erase_ack;
@@ -20479,9 +20483,8 @@ impl WalletPage {
             }
             PanelId::BrowserStatus => columns,
             PanelId::Multisig => match self.multisig_panel(theme, cx) {
-                Some((title, body, foot)) => {
-                    columns.child(self.panel_scaffold_foot(theme, title, None, false, body, foot, cx))
-                }
+                Some((title, body, foot)) => columns
+                    .child(self.panel_scaffold_foot(theme, title, None, false, body, foot, cx)),
                 None => columns,
             },
             PanelId::Signing if self.dapp_landing.is_some() && self.no_signing_host() => {
@@ -21759,7 +21762,10 @@ impl WalletPage {
                 kind: crate::inbound::MultisigKind::Proposal | crate::inbound::MultisigKind::Invite,
                 url,
             } => {
-                let hash = url.split_once('#').map_or(url.as_str(), |(_, h)| h).to_owned();
+                let hash = url
+                    .split_once('#')
+                    .map_or(url.as_str(), |(_, h)| h)
+                    .to_owned();
                 let host = self.ms_host(cx);
                 host.update(cx, |host, cx| {
                     host.accounts(
@@ -21820,9 +21826,10 @@ impl WalletPage {
             return;
         }
         // A Safe{Wallet} export dropped on the open add sheet is imported.
-        let export = paths
-            .iter()
-            .find(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("json")));
+        let export = paths.iter().find(|p| {
+            p.extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("json"))
+        });
         if let Some(json) = export.filter(|_| self.multisig.add.is_some()) {
             self.ms_import_file(json.clone(), cx);
             return;
@@ -23143,9 +23150,10 @@ fn drop_overlay(theme: &Theme, icons: &mut crate::icons::IconCache, title: Share
         } else {
             0.
         })
-        .when(crate::dev_env::var_os!("VELA_DROP_PREVIEW").is_some(), |el| {
-            el.bg(tint)
-        })
+        .when(
+            crate::dev_env::var_os!("VELA_DROP_PREVIEW").is_some(),
+            |el| el.bg(tint),
+        )
         .group_drag_over::<ExternalPaths>("wallet-drop", move |style| style.opacity(1.).bg(tint))
         .child(
             div()

@@ -117,11 +117,8 @@ fn signature_of(app: &Path) -> Result<CodeSignature, Refusal> {
 
 fn verifies(app: &Path, requirement: Option<&str>) -> bool {
     let requirement = requirement.map(|text| format!("={text}"));
-    let mut args: Vec<&std::ffi::OsStr> = vec![
-        "--verify".as_ref(),
-        "--deep".as_ref(),
-        "--strict".as_ref(),
-    ];
+    let mut args: Vec<&std::ffi::OsStr> =
+        vec!["--verify".as_ref(), "--deep".as_ref(), "--strict".as_ref()];
     if let Some(requirement) = &requirement {
         args.push("-R".as_ref());
         args.push(requirement.as_ref());
@@ -192,10 +189,7 @@ pub fn check_bundle(update: &Path, running: &Path, release: &Release) -> Result<
 /// the running app is untouched and the staging folder is gone.
 pub fn install(zip: &Path, release: &Release) -> Result<PathBuf, Refusal> {
     let running = running_bundle().ok_or(Refusal::NotInstalled)?;
-    let parent = running
-        .parent()
-        .ok_or(Refusal::NotInstalled)?
-        .to_path_buf();
+    let parent = running.parent().ok_or(Refusal::NotInstalled)?.to_path_buf();
     let stage = parent.join(format!(".vela-update-{}", release.version));
     let _ = std::fs::remove_dir_all(&stage);
     std::fs::create_dir(&stage).map_err(|error| {
@@ -388,14 +382,20 @@ TeamIdentifier=not set";
     fn the_swap_trades_two_folders_in_one_step() {
         let root = std::env::temp_dir().join(format!("vela-swap-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
-        let (old, new) = (root.join("Vela Wallet.app"), root.join("stage/Vela Wallet.app"));
+        let (old, new) = (
+            root.join("Vela Wallet.app"),
+            root.join("stage/Vela Wallet.app"),
+        );
         for (dir, text) in [(&old, "old"), (&new, "new")] {
             std::fs::create_dir_all(dir).unwrap_or_else(|e| unreachable!("{e}"));
             std::fs::write(dir.join("v"), text).unwrap_or_else(|e| unreachable!("{e}"));
         }
         assert_eq!(swap(&new, &old), Ok(()));
         let read = |dir: &Path| std::fs::read_to_string(dir.join("v")).unwrap_or_default();
-        assert_eq!((read(&old), read(&new)), ("new".to_owned(), "old".to_owned()));
+        assert_eq!(
+            (read(&old), read(&new)),
+            ("new".to_owned(), "old".to_owned())
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 }

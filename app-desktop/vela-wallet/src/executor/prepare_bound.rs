@@ -234,7 +234,11 @@ mod tests {
         let at_open = said.load(Ordering::SeqCst);
         assert!(at_open >= 2, "said each tick past the mark ({at_open})");
         std::thread::sleep(Duration::from_millis(40));
-        assert_eq!(said.load(Ordering::SeqCst), at_open, "nothing after it opened");
+        assert_eq!(
+            said.load(Ordering::SeqCst),
+            at_open,
+            "nothing after it opened"
+        );
         watch.finish();
         assert!(!gate.given_up());
     }

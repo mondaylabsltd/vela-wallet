@@ -30,8 +30,11 @@ use super::shell::{
     self, Arrival, Deps, HttpReply, Opened, Perform, RecipientFacts, Rooms, RpcReply,
 };
 
+// The core's own file, formatted by the core's rustfmt (edition 2021): this
+// crate's (edition 2024) would restyle it.
 #[path = "../../../../rust/crates/vela-core/tests/multisig_world/mod.rs"]
 #[allow(dead_code, unused_imports, clippy::all)]
+#[rustfmt::skip]
 mod multisig_world;
 
 /// What the world's `settle` helpers name (unused here: the desktop's own
@@ -121,7 +124,15 @@ impl Deps for Shared {
             bound_ms: bound.map(|b| b.as_millis() as u32),
         }) {
             Res::RpcResult { result } => Ok(RpcReply::Result(result)),
-            Res::RpcError { code, message, data } => Ok(RpcReply::Error { code, message, data }),
+            Res::RpcError {
+                code,
+                message,
+                data,
+            } => Ok(RpcReply::Error {
+                code,
+                message,
+                data,
+            }),
             Res::RpcUnanswered { detail } => Err(detail),
             other => panic!("{other:?}"),
         }
@@ -517,7 +528,12 @@ fn proposed_approved_executed_and_recorded() {
     let hash = propose(&mut sim, transfer("1"));
     assert_eq!(sim.world().mailbox.len(), 1, "in the mailbox");
     // The mailbox took it: the list shown is read again (routed).
-    assert!(sim.world().notices.iter().any(|n| matches!(n, Notice::MailboxTook { .. })));
+    assert!(
+        sim.world()
+            .notices
+            .iter()
+            .any(|n| matches!(n, Notice::MailboxTook { .. }))
+    );
     sim.proposals(ProposalsEvent::Approve {
         chain_id: 100,
         safe_tx_hash: hash.clone(),
@@ -619,7 +635,12 @@ fn one_short_is_looked_at_and_approved_and_executed_in_one_press() {
         "priced: {look:?} {:?}",
         view.previews
     );
-    let approved_by: Vec<String> = item.approvals.iter().filter(|a| a.counts).map(|a| a.owner.clone()).collect();
+    let approved_by: Vec<String> = item
+        .approvals
+        .iter()
+        .filter(|a| a.counts)
+        .map(|a| a.owner.clone())
+        .collect();
     let foot = super::sheet::foot(
         &super::sheet::FootFacts {
             chain_id: 100,
@@ -637,10 +658,19 @@ fn one_short_is_looked_at_and_approved_and_executed_in_one_press() {
         },
         Some(&second),
     );
-    let super::sheet::FootKind::Execute { approve_first, one_tap, .. } = foot.kind else {
+    let super::sheet::FootKind::Execute {
+        approve_first,
+        one_tap,
+        ..
+    } = foot.kind
+    else {
         panic!("{foot:?}");
     };
-    assert!(approve_first && one_tap, "Approve and execute is offered: {:?}", view.approve_execute);
+    assert!(
+        approve_first && one_tap,
+        "Approve and execute is offered: {:?}",
+        view.approve_execute
+    );
 
     let owners: Vec<String> = (0..3).map(|i| fixture(i).address).collect();
     let mut after = DeployedSafe::clean(&owners.iter().map(String::as_str).collect::<Vec<_>>(), 2);
@@ -678,7 +708,11 @@ fn the_members_machine_hears_what_waits() {
     let jobs = sim.machines.show_members(&account, vec![100]);
     sim.run(jobs);
     let view = &sim.machines.members_view;
-    assert!(view.address.as_deref().is_some_and(|a| a.eq_ignore_ascii_case(&address)));
+    assert!(
+        view.address
+            .as_deref()
+            .is_some_and(|a| a.eq_ignore_ascii_case(&address))
+    );
     // The proposal waiting is one the machine was told of: a member change
     // composed now would follow it (its plan reads `waiting`).
     let fed = serde_json::to_value(view).unwrap();
@@ -757,9 +791,14 @@ fn an_outside_member_is_asked_over_a_session() {
         safe_tx_hash: hash.clone(),
     });
     assert!(
-        sim.screen.iter().any(|s| matches!(s, Screen::OutsideSession)),
+        sim.screen
+            .iter()
+            .any(|s| matches!(s, Screen::OutsideSession)),
         "the session's sheet opens: {:?}",
-        sim.machines.proposals_view.actions.get(&format!("approve:{hash}"))
+        sim.machines
+            .proposals_view
+            .actions
+            .get(&format!("approve:{hash}"))
     );
     let (view, request) = sim.machines.session_view().unwrap();
     assert!(view.open);
@@ -946,7 +985,10 @@ fn a_member_change_composed_in_settings_is_proposed_through_its_review() {
         let mut step = Step::Drafting;
         let jobs = propose::start(&mut sim.machines, chain_id, &address, proposal);
         sim.run(jobs);
-        assert_eq!(propose::follow(&mut step, &sim.machines.proposals_view), None);
+        assert_eq!(
+            propose::follow(&mut step, &sim.machines.proposals_view),
+            None
+        );
         assert_eq!(step, Step::Reviewing, "its review comes first");
         let draft = sim.machines.proposals_view.draft.clone().unwrap();
         let review = draft.review.clone().expect("the one review");
@@ -997,8 +1039,16 @@ fn a_rename_withdrawn_on_its_review_signs_nothing() {
         },
     );
     sim.run(jobs);
-    assert_eq!(propose::follow(&mut step, &sim.machines.proposals_view), None);
-    assert_eq!(step, Step::Reviewing, "{:?}", sim.machines.proposals_view.actions);
+    assert_eq!(
+        propose::follow(&mut step, &sim.machines.proposals_view),
+        None
+    );
+    assert_eq!(
+        step,
+        Step::Reviewing,
+        "{:?}",
+        sim.machines.proposals_view.actions
+    );
     let passkeys = sim.world().passkeys.len();
     sim.proposals(ProposalsEvent::Withdraw);
     let end = propose::follow(&mut step, &sim.machines.proposals_view);
@@ -1277,10 +1327,7 @@ fn a_sites_request_declined_or_a_message_is_answered_honestly() {
     );
     sim.proposals(ProposalsEvent::DappLeave { id: rid });
     let steps = holds.step(&sim.machines.proposals_view);
-    let [
-        Step::Answer { answer, .. },
-    ] = steps.as_slice()
-    else {
+    let [Step::Answer { answer, .. }] = steps.as_slice() else {
         panic!("{steps:?}");
     };
     assert_eq!(answer.error.as_ref().map(|e| e.code), Some(4200));

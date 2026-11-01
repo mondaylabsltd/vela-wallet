@@ -188,7 +188,9 @@ pub fn nonce_at(entry_point: &str, sender: &str, chain_id: u32, head: u64) -> Op
     if body.get("error").is_some() {
         return None;
     }
-    body.get("result").and_then(Value::as_str).map(str::to_owned)
+    body.get("result")
+        .and_then(Value::as_str)
+        .map(str::to_owned)
 }
 
 /// How long the submit waits for the head before POSTing without it.

@@ -195,9 +195,11 @@ pub fn waiting_title(loc: &Loc, action: &Action, who: &dyn Fn(&str) -> String) -
             &[("old", &who(old_owner)), ("new", &who(new_owner))],
         ),
         // r9: "Require 1 approval" — plural by the count.
-        Action::ChangeThreshold { threshold } => {
-            tc(loc, "action.changeThreshold", threshold.parse().unwrap_or(0))
-        }
+        Action::ChangeThreshold { threshold } => tc(
+            loc,
+            "action.changeThreshold",
+            threshold.parse().unwrap_or(0),
+        ),
         _ => String::new(),
     }
 }
@@ -383,7 +385,10 @@ mod tests {
         assert!(said.starts_with("Needs 2 of 4 · "), "{said}");
         assert!(said.contains(&t(&loc, "presence.ruleLastKnown")), "{said}");
         let founding = RowRule::default();
-        assert!(!row_chip(&loc, &founding, None).contains('·'), "the founding rule is no chain's");
+        assert!(
+            !row_chip(&loc, &founding, None).contains('·'),
+            "the founding rule is no chain's"
+        );
         let followed = RuleChip::Needs {
             rule: vela_core::app::multisig_members::MemberRule::of(3, 4),
         };

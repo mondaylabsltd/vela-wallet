@@ -288,7 +288,11 @@ pub fn no_value(
     if model.state == BalanceState::Hidden {
         return model;
     }
-    let status = if model.checking.is_some() { None } else { network };
+    let status = if model.checking.is_some() {
+        None
+    } else {
+        network
+    };
     BalanceModel {
         currency: SharedString::default(),
         state: BalanceState::NoValue,
@@ -326,7 +330,10 @@ pub fn network_status(
 /// [`network_status`] of the view the hero draws: on the cache while the
 /// core withholds the live total.
 #[must_use]
-pub fn network_status_of(view: &BalanceView, s: &WalletStrings) -> Option<(StatusKind, SharedString)> {
+pub fn network_status_of(
+    view: &BalanceView,
+    s: &WalletStrings,
+) -> Option<(StatusKind, SharedString)> {
     let on_cache = view.display_total_usd.is_none() && view.cached_total_usd.is_some();
     network_status(view, s, on_cache)
 }
@@ -1275,14 +1282,20 @@ mod tests {
         let shown = balance(&down, &s, "en", &Money::default());
         let testnet = no_value(shown, "Test assets".into(), network_status_of(&down, &s));
         assert_eq!(testnet.state, BalanceState::NoValue);
-        assert_eq!(testnet.status, said, "the testnet hero keeps the network's line");
+        assert_eq!(
+            testnet.status, said,
+            "the testnet hero keeps the network's line"
+        );
 
         let mut hidden = down.clone();
         hidden.hidden = true;
         hidden.display_total_usd = None;
         let masked = balance(&hidden, &s, "en", &Money::default());
         assert_eq!(masked.state, BalanceState::Hidden);
-        assert_eq!(masked.status, said, "a mask hides the figure, not the network");
+        assert_eq!(
+            masked.status, said,
+            "a mask hides the figure, not the network"
+        );
 
         // Every network answered: nothing in the line, either way.
         let mut fine = view(Some(0.6));
@@ -1296,7 +1309,11 @@ mod tests {
         set_unreachable(&mut first, &[5_042_002]);
         assert!(first.checking_key.is_some(), "the core's first frame");
         let checking = balance(&first, &s, "en", &Money::default());
-        let checking = no_value(checking, "Test assets".into(), network_status_of(&first, &s));
+        let checking = no_value(
+            checking,
+            "Test assets".into(),
+            network_status_of(&first, &s),
+        );
         assert!(checking.checking.is_some());
         assert_eq!(checking.status, None);
     }

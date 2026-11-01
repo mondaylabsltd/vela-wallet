@@ -46,12 +46,19 @@ impl WalletPage {
             .flex()
             .flex_col()
             .gap(px(12.))
-            .child(crate::ui::dialog::dialog_body(theme, words::t(&loc, "invite.body")))
+            .child(crate::ui::dialog::dialog_body(
+                theme,
+                words::t(&loc, "invite.body"),
+            ))
             .child(
                 div()
                     .flex()
                     .justify_center()
-                    .child(crate::flows::components::qr_card(theme, None, Some(&invite))),
+                    .child(crate::flows::components::qr_card(
+                        theme,
+                        None,
+                        Some(&invite),
+                    )),
             )
             .child(
                 div()
@@ -60,22 +67,20 @@ impl WalletPage {
                     .text_color(theme.fg_subtle)
                     .child(invite.clone()),
             )
-            .child(
-                crate::ui::vela_button(
-                    "ms-invite-copy",
-                    crate::ui::ButtonVariant::Secondary,
-                    words::t(&loc, "proposal.copyLink").into(),
-                    theme,
-                    cx.listener(move |this, _, _, cx| {
-                        cx.write_to_clipboard(gpui::ClipboardItem::new_string(copy.clone()));
-                        let host = this.ms_host(cx);
-                        let address = shared.clone();
-                        host.update(cx, |host, cx| {
-                            host.accounts(ms_accounts::Event::InviteShared { address }, cx);
-                        });
-                    }),
-                ),
-            )
+            .child(crate::ui::vela_button(
+                "ms-invite-copy",
+                crate::ui::ButtonVariant::Secondary,
+                words::t(&loc, "proposal.copyLink").into(),
+                theme,
+                cx.listener(move |this, _, _, cx| {
+                    cx.write_to_clipboard(gpui::ClipboardItem::new_string(copy.clone()));
+                    let host = this.ms_host(cx);
+                    let address = shared.clone();
+                    host.update(cx, |host, cx| {
+                        host.accounts(ms_accounts::Event::InviteShared { address }, cx);
+                    });
+                }),
+            ))
             .child(
                 div()
                     .text_size(theme::text_label())

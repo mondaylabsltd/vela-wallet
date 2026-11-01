@@ -189,7 +189,8 @@ mod tests {
     /// anywhere else in the review is no signing review.
     #[test]
     fn the_digest_is_read_only_from_the_signing_member() {
-        let opinion = json!({ "review_digest": "d1", "verdict": "caution", "summary": "New spender." });
+        let opinion =
+            json!({ "review_digest": "d1", "verdict": "caution", "summary": "New spender." });
         let (_, kept) = shared::advise(&allowed(), &sheet("d1"), &opinion);
         let kept = kept.expect("accepted");
         let elsewhere = json!({ "transfer": { "review_digest": "d1" } });
@@ -214,7 +215,12 @@ mod tests {
         assert!(card.stale.is_none());
         assert_eq!(card.tone, crate::signing::Tone::Danger);
         assert_eq!(card.points.len(), 1);
-        assert!(card.sources.as_deref().unwrap_or_default().contains("example.org"));
+        assert!(
+            card.sources
+                .as_deref()
+                .unwrap_or_default()
+                .contains("example.org")
+        );
 
         let earlier = shared::advice_card(&kept, &sheet("d2")).unwrap();
         let card = words(&loc, &earlier).unwrap();

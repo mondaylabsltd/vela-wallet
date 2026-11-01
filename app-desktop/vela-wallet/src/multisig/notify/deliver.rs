@@ -374,7 +374,12 @@ pub fn show(worded: Vec<Worded>, cx: &mut App) {
     let Some(last) = worded.into_iter().last() else {
         return;
     };
-    crate::diag::vlog!("multisig-notify", "in-app line {} ({})", last.tag, permission_now());
+    crate::diag::vlog!(
+        "multisig-notify",
+        "in-app line {} ({})",
+        last.tag,
+        permission_now()
+    );
     let serial = in_app(cx).map_or(1, |l| l.serial.wrapping_add(1));
     let target = target_of(&last.tag);
     cx.set_global(InApp(Some(InAppLine {

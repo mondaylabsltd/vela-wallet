@@ -510,7 +510,11 @@ impl BrowserHost {
         }
         let view = crate::network_space::balance_view(cx);
         let mut held: Vec<u32> = Vec::new();
-        for token in view.tokens.iter().filter(|t| !t.spam && t.balance.bytes().any(|b| (b'1'..=b'9').contains(&b))) {
+        for token in view
+            .tokens
+            .iter()
+            .filter(|t| !t.spam && t.balance.bytes().any(|b| (b'1'..=b'9').contains(&b)))
+        {
             if !held.contains(&token.chain_id) {
                 held.push(token.chain_id);
             }
@@ -4078,7 +4082,9 @@ mod tests {
                     Outbound::MultisigCalls(read) => Some(read.clone()),
                     _ => None,
                 })
-                .unwrap_or_else(|| unreachable!("asked of the proposals machine after the restart"));
+                .unwrap_or_else(|| {
+                    unreachable!("asked of the proposals machine after the restart")
+                });
             assert_eq!((read.batch.as_str(), read.chain_id), (batch.as_str(), 100));
             let status = vela_core::app::dapp_rpc::multisig_calls_status(&batch, 100, None, false);
             let out = driver.resolve(

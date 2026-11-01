@@ -18,10 +18,9 @@ use windows_sys::Win32::UI::Shell::{
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu, DestroyWindow,
-    GetCursorPos, HMENU, HWND_MESSAGE, LoadIconW, MF_GRAYED, MF_SEPARATOR, MF_STRING,
-    PostMessageW, RegisterClassW, SetForegroundWindow, TPM_NONOTIFY, TPM_RETURNCMD,
-    TPM_RIGHTBUTTON, TrackPopupMenu, WM_APP, WM_CONTEXTMENU, WM_LBUTTONUP, WM_NULL,
-    WM_RBUTTONUP, WNDCLASSW,
+    GetCursorPos, HMENU, HWND_MESSAGE, LoadIconW, MF_GRAYED, MF_SEPARATOR, MF_STRING, PostMessageW,
+    RegisterClassW, SetForegroundWindow, TPM_NONOTIFY, TPM_RETURNCMD, TPM_RIGHTBUTTON,
+    TrackPopupMenu, WM_APP, WM_CONTEXTMENU, WM_LBUTTONUP, WM_NULL, WM_RBUTTONUP, WNDCLASSW,
 };
 
 use super::{TrayCommand, TrayModel, press};

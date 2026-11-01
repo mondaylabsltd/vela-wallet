@@ -174,9 +174,12 @@ pub fn amount_text(amount: &Amount, token: &TokenFacts, ctx: &Ctx<'_>) -> String
     }
     let name = token_name(token, ctx);
     match amount.decimals {
-        None => format!("{} {name}", ctx.rv("decimalsUnknown", &[("raw", &amount.raw)]))
-            .trim()
-            .to_owned(),
+        None => format!(
+            "{} {name}",
+            ctx.rv("decimalsUnknown", &[("raw", &amount.raw)])
+        )
+        .trim()
+        .to_owned(),
         Some(decimals) => format!("{} {name}", words::units(&amount.raw, decimals))
             .trim()
             .to_owned(),
@@ -197,7 +200,9 @@ pub fn intent_title(intent: &Intent, ctx: &Ctx<'_>) -> String {
             Grant::DaiPermit => "daiPermit",
             Grant::Permit2 => "permit2",
         }),
-        Intent::ApproveAll { granted, .. } => ctx.r(if *granted { "approveAll" } else { "revokeAll" }),
+        Intent::ApproveAll { granted, .. } => {
+            ctx.r(if *granted { "approveAll" } else { "revokeAll" })
+        }
         Intent::Batch { calls, .. } if calls.len() == 1 => ctx.r("batchOne"),
         Intent::Batch { calls, .. } => ctx.rv("batchMany", &[("total", &calls.len().to_string())]),
         Intent::Unreadable => ctx.r("unreadable"),
@@ -272,7 +277,11 @@ fn call_rows(call: &Call, ctx: &Ctx<'_>) -> Vec<Row> {
                 amount_text(amount, token, ctx)
             };
             let row = Row::plain(ctx.r("allowance"), value);
-            rows.push(if unlimited { row.toned(Tone::Danger) } else { row });
+            rows.push(if unlimited {
+                row.toned(Tone::Danger)
+            } else {
+                row
+            });
             rows.push(Row::address(ctx.r("spender"), spender));
         }
         Intent::ApproveAll {
@@ -282,7 +291,11 @@ fn call_rows(call: &Call, ctx: &Ctx<'_>) -> Vec<Row> {
         } => {
             rows.push(Row::address(ctx.r("collection"), collection));
             let row = Row::address(ctx.r("operator"), operator);
-            rows.push(if *granted { row.toned(Tone::Danger) } else { row });
+            rows.push(if *granted {
+                row.toned(Tone::Danger)
+            } else {
+                row
+            });
         }
         Intent::Batch { runner, .. } => rows.push(Row::address(ctx.r("runner"), runner)),
         Intent::Call {
@@ -297,7 +310,10 @@ fn call_rows(call: &Call, ctx: &Ctx<'_>) -> Vec<Row> {
     }
     let sends = !matches!(call.intent, Intent::Send { .. } | Intent::ApproveAll { .. });
     if sends && call.value.raw != "0" {
-        rows.push(Row::plain(ctx.r("alsoSends"), amount_text(&call.value, &coin(), ctx)));
+        rows.push(Row::plain(
+            ctx.r("alsoSends"),
+            amount_text(&call.value, &coin(), ctx),
+        ));
     }
     rows
 }
@@ -343,7 +359,8 @@ pub fn blocks(reading: &Reading, ctx: &Ctx<'_>) -> Vec<Block> {
     let Some(only) = calls.first() else {
         return Vec::new();
     };
-    let lone = calls.len() == 1 && only.path.is_empty() && !matches!(only.intent, Intent::Batch { .. });
+    let lone =
+        calls.len() == 1 && only.path.is_empty() && !matches!(only.intent, Intent::Batch { .. });
     if !lone {
         // A transaction whose one call is itself a batch: its legs, as a batch's.
         return cards(calls, ctx);
@@ -359,15 +376,28 @@ pub fn blocks(reading: &Reading, ctx: &Ctx<'_>) -> Vec<Block> {
     };
     match i {
         Intent::Send { token, to, amount } => {
-            out.push(Block::Rows(vec![Row::plain(ctx.r("amount"), amount_text(amount, token, ctx))]));
+            out.push(Block::Rows(vec![Row::plain(
+                ctx.r("amount"),
+                amount_text(amount, token, ctx),
+            )]));
             out.push(party("to", to));
         }
         Intent::Approve { spender, .. } => {
-            out.push(Block::Rows(call_rows(only, ctx).into_iter().filter(|r| !r.mono).collect()));
+            out.push(Block::Rows(
+                call_rows(only, ctx)
+                    .into_iter()
+                    .filter(|r| !r.mono)
+                    .collect(),
+            ));
             out.push(party("spender", spender));
         }
         Intent::SendFrom { from, to, .. } => {
-            out.push(Block::Rows(call_rows(only, ctx).into_iter().filter(|r| !r.mono).collect()));
+            out.push(Block::Rows(
+                call_rows(only, ctx)
+                    .into_iter()
+                    .filter(|r| !r.mono)
+                    .collect(),
+            ));
             out.push(party("from", from));
             out.push(party("to", to));
         }
@@ -431,8 +461,13 @@ pub fn says_more_than_a_call(reading: &Reading) -> bool {
 fn find_token<'a>(calls: &'a [Call], address: &str) -> Option<&'a TokenFacts> {
     for call in calls {
         match &call.intent {
-            Intent::Send { token, .. } | Intent::SendFrom { token, .. } | Intent::Approve { token, .. }
-                if token.token.as_deref().is_some_and(|t| t.eq_ignore_ascii_case(address)) =>
+            Intent::Send { token, .. }
+            | Intent::SendFrom { token, .. }
+            | Intent::Approve { token, .. }
+                if token
+                    .token
+                    .as_deref()
+                    .is_some_and(|t| t.eq_ignore_ascii_case(address)) =>
             {
                 return Some(token);
             }
@@ -459,15 +494,22 @@ pub fn concern_line(concern: &Concern, reading: &Reading, ctx: &Ctx<'_>) -> Opti
     };
     Some(match concern {
         Concern::UnlimitedApproval { spender, .. } => (
-            ctx.rv("unlimitedLine", &[("spender", &vela_core::multisig_link::eip55(spender))]),
+            ctx.rv(
+                "unlimitedLine",
+                &[("spender", &vela_core::multisig_link::eip55(spender))],
+            ),
             Tone::Danger,
         ),
         Concern::NestedBatch => (ctx.r("nestedLine"), Tone::Danger),
         Concern::UnreadableBatch => (ctx.r("unreadableLine"), Tone::Danger),
-        Concern::DecimalsUnknown { token } => {
-            (ctx.rv("decimalsLine", &[("token", &named(token))]), Tone::Caution)
-        }
-        Concern::ToOwnToken { token } => (ctx.rv("ownTokenLine", &[("token", &named(token))]), Tone::Danger),
+        Concern::DecimalsUnknown { token } => (
+            ctx.rv("decimalsLine", &[("token", &named(token))]),
+            Tone::Caution,
+        ),
+        Concern::ToOwnToken { token } => (
+            ctx.rv("ownTokenLine", &[("token", &named(token))]),
+            Tone::Danger,
+        ),
         Concern::Blind => (ctx.r("blindLine"), Tone::Caution),
         _ => return None,
     })
@@ -485,7 +527,9 @@ pub fn concern_blocks(draw: &ReadingDraw, ctx: &Ctx<'_>) -> Vec<Block> {
     let mut out: Vec<Block> = Vec::new();
     for c in &draw.concerns {
         if let Some((text, tone)) = concern_line(c, &draw.reading, ctx)
-            && !out.iter().any(|b| matches!(b, Block::Warning { text: t, .. } if *t == text))
+            && !out
+                .iter()
+                .any(|b| matches!(b, Block::Warning { text: t, .. } if *t == text))
         {
             out.push(Block::Warning { text, tone });
         }
@@ -552,7 +596,10 @@ mod tests {
                     &facts,
                 )
                 .unwrap();
-                assert_eq!(read["reading"], case["expect"]["reading"], "{name}: the core's reading");
+                assert_eq!(
+                    read["reading"], case["expect"]["reading"],
+                    "{name}: the core's reading"
+                );
                 let draw = ReadingDraw::of(&read).unwrap();
                 let drawn: Vec<Block> = concern_blocks(&draw, &ctx)
                     .into_iter()
@@ -564,12 +611,21 @@ mod tests {
                     .chain(title(&draw.reading, &ctx))
                     .collect::<Vec<_>>()
                     .join("\n");
-                assert!(!text.contains("home.multisig"), "{tag} {name}: a raw key in\n{text}");
-                assert!(!text.contains("{{"), "{tag} {name}: an unfilled variable in\n{text}");
+                assert!(
+                    !text.contains("home.multisig"),
+                    "{tag} {name}: a raw key in\n{text}"
+                );
+                assert!(
+                    !text.contains("{{"),
+                    "{tag} {name}: an unfilled variable in\n{text}"
+                );
 
                 // Every call the core read is drawn, at every level.
                 let every = draw.reading.every();
-                let cards = drawn.iter().filter(|b| matches!(b, Block::Card { .. })).count();
+                let cards = drawn
+                    .iter()
+                    .filter(|b| matches!(b, Block::Card { .. }))
+                    .count();
                 if every.len() > 1 || every.first().is_some_and(|c| !c.path.is_empty()) {
                     assert_eq!(cards, every.len(), "{tag} {name}: a card per call\n{text}");
                     for call in &every {
@@ -577,7 +633,10 @@ mod tests {
                         match call.leg.as_deref() {
                             Some(leg) => {
                                 let label = words::tv(&loc, "review.callNumber", &[("n", leg)]);
-                                assert!(text.contains(&label), "{tag} {name}: {label} drawn\n{text}");
+                                assert!(
+                                    text.contains(&label),
+                                    "{tag} {name}: {label} drawn\n{text}"
+                                );
                             }
                             None => assert!(
                                 !text.contains(&format!(
@@ -590,9 +649,15 @@ mod tests {
                     }
                 }
                 // "Contract call" only where the core read no more.
-                let blind = every.iter().filter(|c| matches!(c.intent, Intent::Call { .. })).count();
+                let blind = every
+                    .iter()
+                    .filter(|c| matches!(c.intent, Intent::Call { .. }))
+                    .count();
                 if blind == 0 {
-                    assert!(!text.contains(&call_words), "{tag} {name}: said \"{call_words}\"\n{text}");
+                    assert!(
+                        !text.contains(&call_words),
+                        "{tag} {name}: said \"{call_words}\"\n{text}"
+                    );
                 }
                 // Each concern the core raised about the calls is said once.
                 for c in draw.concerns.iter().filter(|c| is_reading_concern(c)) {
@@ -615,9 +680,15 @@ mod tests {
                     }
                 }
                 if draw.reading.unlimited {
-                    assert!(text.contains(&ctx.r("unlimited")) || text.contains(&ctx.r("allOfIt"))
-                        || every.iter().any(|c| matches!(c.intent, Intent::ApproveAll { granted: true, .. })),
-                        "{tag} {name}: unlimited said\n{text}");
+                    assert!(
+                        text.contains(&ctx.r("unlimited"))
+                            || text.contains(&ctx.r("allOfIt"))
+                            || every.iter().any(|c| matches!(
+                                c.intent,
+                                Intent::ApproveAll { granted: true, .. }
+                            )),
+                        "{tag} {name}: unlimited said\n{text}"
+                    );
                 }
             }
         }
@@ -657,7 +728,10 @@ mod tests {
         // r8-2: a token nobody read: raw, decimals unknown, never "<0.000001".
         let nodec = case("a token nobody read");
         let text = all(&nodec);
-        assert!(text.contains("10000 base units · decimals unknown"), "{text}");
+        assert!(
+            text.contains("10000 base units · decimals unknown"),
+            "{text}"
+        );
         assert!(!text.contains("<0.000001"), "{text}");
         assert!(text.contains("didn't say how many decimals"), "{text}");
 
@@ -667,7 +741,11 @@ mod tests {
         assert_eq!(title(&approve.reading, &ctx).unwrap(), "Approve · USDC");
         assert!(text.contains("Allowance: Unlimited"), "{text}");
         assert!(text.contains("Unlimited allowance:"), "{text}");
-        assert!(blocks(&approve.reading, &ctx).iter().any(|b| matches!(b, Block::Party { .. })));
+        assert!(
+            blocks(&approve.reading, &ctx)
+                .iter()
+                .any(|b| matches!(b, Block::Party { .. }))
+        );
 
         // r8-5: a nested batch: every leg, the inner ones too.
         let nested = case("whose leg calls multiSend");

@@ -1113,7 +1113,8 @@ impl SendHost {
                             reason: None,
                         },
                     };
-                    this.update(cx, |host, cx| host.resolve_send(id, result, cx)).ok();
+                    this.update(cx, |host, cx| host.resolve_send(id, result, cx))
+                        .ok();
                 })
                 .detach();
                 return;

@@ -109,8 +109,11 @@ pub trait Deps: Send + Sync + 'static {
     fn simulate(&self, chain_id: u64, from: &str, calls: &[SimCall]) -> Option<String>;
     fn recipient_facts(&self, chain_id: u64, address: &str) -> RecipientFacts;
     /// The relay's word on a user operation (status, tx hash), or `None`.
-    fn user_op_status(&self, chain_id: u64, user_op_hash: &str)
-    -> Option<(Option<String>, Option<String>)>;
+    fn user_op_status(
+        &self,
+        chain_id: u64,
+        user_op_hash: &str,
+    ) -> Option<(Option<String>, Option<String>)>;
 }
 
 /// A PeerConnect room as the transport hands it out.
@@ -270,7 +273,8 @@ pub fn perform(op: &Op, deps: &Arc<dyn Deps>, rooms: &Arc<dyn Rooms>) -> Perform
             body,
             timeout_ms,
         } => {
-            let (deps, method, url, body) = (deps.clone(), method.clone(), url.clone(), body.clone());
+            let (deps, method, url, body) =
+                (deps.clone(), method.clone(), url.clone(), body.clone());
             let timeout = Duration::from_millis(u64::from(*timeout_ms));
             Perform::Blocking(Box::new(move || {
                 match deps.http(&method, &url, body.as_deref(), timeout) {
@@ -296,7 +300,15 @@ pub fn perform(op: &Op, deps: &Arc<dyn Deps>, rooms: &Arc<dyn Rooms>) -> Perform
                 match deps.rpc(chain_id, &method, &params, bound) {
                     Ok(RpcReply::Result(result)) => Res::RpcResult { result },
                     // r8-4: the node's data reaches the core (the state probe reads it there).
-                    Ok(RpcReply::Error { code, message, data }) => Res::RpcError { code, message, data },
+                    Ok(RpcReply::Error {
+                        code,
+                        message,
+                        data,
+                    }) => Res::RpcError {
+                        code,
+                        message,
+                        data,
+                    },
                     Err(detail) => Res::RpcUnanswered { detail },
                 }
             }))
@@ -400,7 +412,8 @@ pub fn perform(op: &Op, deps: &Arc<dyn Deps>, rooms: &Arc<dyn Rooms>) -> Perform
         } => {
             let (deps, hash, chain_id) = (deps.clone(), user_op_hash.clone(), *chain_id);
             Perform::Blocking(Box::new(move || {
-                let (status, tx_hash) = deps.user_op_status(chain_id, &hash).unwrap_or((None, None));
+                let (status, tx_hash) =
+                    deps.user_op_status(chain_id, &hash).unwrap_or((None, None));
                 Res::UserOpStatus { status, tx_hash }
             }))
         }
@@ -409,8 +422,12 @@ pub fn perform(op: &Op, deps: &Arc<dyn Deps>, rooms: &Arc<dyn Rooms>) -> Perform
             invite,
             pairing,
         } => {
-            let (rooms, relay, invite, pairing) =
-                (rooms.clone(), relay.clone(), invite.clone(), pairing.clone());
+            let (rooms, relay, invite, pairing) = (
+                rooms.clone(),
+                relay.clone(),
+                invite.clone(),
+                pairing.clone(),
+            );
             Perform::Blocking(Box::new(move || {
                 match rooms.open(relay.as_deref(), invite.as_deref(), pairing.as_deref()) {
                     Ok(opened) => Res::PeerOpened {
@@ -492,7 +509,10 @@ mod tests {
             body: Option<&str>,
             timeout: Duration,
         ) -> Result<HttpReply, String> {
-            self.note(format!("http {method} {url} {body:?} {}", timeout.as_millis()));
+            self.note(format!(
+                "http {method} {url} {body:?} {}",
+                timeout.as_millis()
+            ));
             self.http.lock().unwrap().take().unwrap()
         }
         fn rpc(
@@ -510,7 +530,10 @@ mod tests {
                 return Err("no store".to_owned());
             }
             let store = self.store.lock().unwrap();
-            Ok(keys.iter().map(|k| (k.clone(), store.get(k).cloned())).collect())
+            Ok(keys
+                .iter()
+                .map(|k| (k.clone(), store.get(k).cloned()))
+                .collect())
         }
         fn write(&self, key: &str, value: Option<&str>) -> Result<(), String> {
             if self.store_down {
@@ -536,7 +559,9 @@ mod tests {
             challenge: &str,
             purpose: &PasskeyPurpose,
         ) -> Res {
-            self.note(format!("passkey {owner} {chain_id} {challenge} {purpose:?}"));
+            self.note(format!(
+                "passkey {owner} {chain_id} {challenge} {purpose:?}"
+            ));
             self.passkey.lock().unwrap().take().unwrap()
         }
         fn send_calls(
@@ -590,14 +615,20 @@ mod tests {
             self.open.lock().unwrap().take().unwrap()
         }
         fn send(&self, room: &str, message: &Value) {
-            self.rooms.lock().unwrap().push(format!("send {room} {message}"));
+            self.rooms
+                .lock()
+                .unwrap()
+                .push(format!("send {room} {message}"));
         }
         fn receive(&self, room: &str) -> Arrival {
             self.rooms.lock().unwrap().push(format!("receive {room}"));
             self.arrival.lock().unwrap().take().unwrap()
         }
         fn close(&self, room: &str, end: bool) {
-            self.rooms.lock().unwrap().push(format!("close {room} {end}"));
+            self.rooms
+                .lock()
+                .unwrap()
+                .push(format!("close {room} {end}"));
         }
     }
 
@@ -686,8 +717,16 @@ mod tests {
         let fake = Fake::default();
         *fake.rpc.lock().unwrap() = Some(Ok(RpcReply::Result(json!("0x6080"))));
         let (res, fake) = run(fake, &op);
-        assert_eq!(res, Res::RpcResult { result: json!("0x6080") });
-        assert!(fake.log.lock().unwrap()[0].ends_with("Some(4s)"), "the bound is passed on");
+        assert_eq!(
+            res,
+            Res::RpcResult {
+                result: json!("0x6080")
+            }
+        );
+        assert!(
+            fake.log.lock().unwrap()[0].ends_with("Some(4s)"),
+            "the bound is passed on"
+        );
 
         let fake = Fake::default();
         *fake.rpc.lock().unwrap() = Some(Ok(RpcReply::Error {
@@ -729,10 +768,16 @@ mod tests {
                 &rooms,
             )
         };
-        assert!(matches!(write(Some("[1]")), Perform::Now(Res::StoreWritten)));
+        assert!(matches!(
+            write(Some("[1]")),
+            Perform::Now(Res::StoreWritten)
+        ));
         let Perform::Now(res) = perform(
             &Op::LoadStore {
-                keys: vec!["vela.multisigAccounts".to_owned(), "vela.activeMultisig".to_owned()],
+                keys: vec![
+                    "vela.multisigAccounts".to_owned(),
+                    "vela.activeMultisig".to_owned(),
+                ],
             },
             &deps,
             &rooms,
@@ -751,7 +796,10 @@ mod tests {
             }
         );
         assert!(matches!(write(None), Perform::Now(Res::StoreWritten)));
-        assert!(fake.store.lock().unwrap().is_empty(), "a null value removes the key");
+        assert!(
+            fake.store.lock().unwrap().is_empty(),
+            "a null value removes the key"
+        );
     }
 
     #[test]
@@ -865,17 +913,25 @@ mod tests {
         else {
             panic!("the screen asks");
         };
-        assert_eq!((chain_id, safe.as_str(), findings.len()), (100, "0xSafe", 1));
+        assert_eq!(
+            (chain_id, safe.as_str(), findings.len()),
+            (100, "0xSafe", 1)
+        );
         // A shell that cannot ask says no.
-        assert_eq!(failure_of(&op, "closed"), Res::RiskAnswered { signs: false });
+        assert_eq!(
+            failure_of(&op, "closed"),
+            Res::RiskAnswered { signs: false }
+        );
     }
 
     #[test]
     fn send_and_quote_go_through_the_pipelines() {
-        let calls = vec![serde_json::from_value::<SentCall>(json!({
-            "to": "0x0000000000000000000000000000000000000002", "value": "0x0", "data": "0x"
-        }))
-        .unwrap()];
+        let calls = vec![
+            serde_json::from_value::<SentCall>(json!({
+                "to": "0x0000000000000000000000000000000000000002", "value": "0x0", "data": "0x"
+            }))
+            .unwrap(),
+        ];
         let fake = Fake::default();
         *fake.send.lock().unwrap() = Some(Res::CallsFailed {
             detail: "0xuserop".to_owned(),
@@ -1033,7 +1089,12 @@ mod tests {
         )
         .run_inline()
         .unwrap();
-        assert_eq!(res, Res::PeerMessage { message: json!("hi") });
+        assert_eq!(
+            res,
+            Res::PeerMessage {
+                message: json!("hi")
+            }
+        );
         *fake.arrival.lock().unwrap() = Some(Arrival::Closed("left".to_owned()));
         let res = perform(
             &Op::PeerReceive {

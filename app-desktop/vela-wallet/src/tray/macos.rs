@@ -9,7 +9,9 @@ use std::cell::RefCell;
 
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, NSObject, Sel};
-use objc2::{ClassType, DeclaredClass, class, declare_class, msg_send, msg_send_id, mutability, sel};
+use objc2::{
+    ClassType, DeclaredClass, class, declare_class, msg_send, msg_send_id, mutability, sel,
+};
 use objc2_foundation::{MainThreadMarker, NSData, NSSize, NSString};
 
 use super::{TrayCommand, TrayModel, press};
@@ -181,7 +183,11 @@ pub fn show(model: &TrayModel, mark: &[u8]) {
             add(separator());
         }
         add(menu_item(&model.send, Some(sel!(velaSend:)), Some(&target)));
-        add(menu_item(&model.receive, Some(sel!(velaReceive:)), Some(&target)));
+        add(menu_item(
+            &model.receive,
+            Some(sel!(velaReceive:)),
+            Some(&target),
+        ));
         add(separator());
         add(menu_item(&model.open, Some(sel!(velaOpen:)), Some(&target)));
         let _: () = msg_send![&item, setMenu: &*menu];

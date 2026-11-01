@@ -86,7 +86,9 @@ fn substitute(value: &Value, captured: &BTreeMap<String, Value>) -> Value {
             }
             Value::String(out)
         }
-        Value::Array(items) => Value::Array(items.iter().map(|v| substitute(v, captured)).collect()),
+        Value::Array(items) => {
+            Value::Array(items.iter().map(|v| substitute(v, captured)).collect())
+        }
         Value::Object(map) => Value::Object(
             map.iter()
                 .map(|(k, v)| (k.clone(), substitute(v, captured)))
@@ -118,13 +120,30 @@ fn pointed(view: &Value, pointer: &str) -> Option<Value> {
         .cloned()
 }
 
-fn dispatch(host: &Entity<MultisigHost>, machine: &str, event: Value, cx: &mut App) -> Result<(), String> {
+fn dispatch(
+    host: &Entity<MultisigHost>,
+    machine: &str,
+    event: Value,
+    cx: &mut App,
+) -> Result<(), String> {
     host.update(cx, |host, cx| -> Result<(), String> {
         match machine {
-            "accounts" => host.accounts(serde_json::from_value(event).map_err(|e| e.to_string())?, cx),
-            "proposals" => host.proposals(serde_json::from_value(event).map_err(|e| e.to_string())?, cx),
-            "members" => host.members(serde_json::from_value(event).map_err(|e| e.to_string())?, cx),
-            "session" => host.session(serde_json::from_value(event).map_err(|e| e.to_string())?, cx),
+            "accounts" => host.accounts(
+                serde_json::from_value(event).map_err(|e| e.to_string())?,
+                cx,
+            ),
+            "proposals" => host.proposals(
+                serde_json::from_value(event).map_err(|e| e.to_string())?,
+                cx,
+            ),
+            "members" => host.members(
+                serde_json::from_value(event).map_err(|e| e.to_string())?,
+                cx,
+            ),
+            "session" => host.session(
+                serde_json::from_value(event).map_err(|e| e.to_string())?,
+                cx,
+            ),
             other => return Err(format!("no machine {other}")),
         }
         Ok(())
@@ -191,25 +210,41 @@ async fn run_step(
         }
     }
     if let Some(ms) = step.get("wait_ms").and_then(Value::as_u64) {
-        cx.background_executor().timer(Duration::from_millis(ms)).await;
+        cx.background_executor()
+            .timer(Duration::from_millis(ms))
+            .await;
         return true;
     }
     if let Some(until) = step.get("until") {
-        let machine = until.get("machine").and_then(Value::as_str).unwrap_or("proposals").to_owned();
-        let pointer = until.get("pointer").and_then(Value::as_str).unwrap_or("").to_owned();
+        let machine = until
+            .get("machine")
+            .and_then(Value::as_str)
+            .unwrap_or("proposals")
+            .to_owned();
+        let pointer = until
+            .get("pointer")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_owned();
         let wanted = until.get("equals").cloned();
-        let timeout = Duration::from_millis(step.get("timeout_ms").and_then(Value::as_u64).unwrap_or(60_000));
+        let timeout = Duration::from_millis(
+            step.get("timeout_ms")
+                .and_then(Value::as_u64)
+                .unwrap_or(60_000),
+        );
         let started = Instant::now();
         loop {
-            let seen = cx
-                .update(|cx| pointed(&view_of(host.read(cx), &machine), &pointer));
+            let seen = cx.update(|cx| pointed(&view_of(host.read(cx), &machine), &pointer));
             let met = match (&wanted, &seen) {
                 (Some(w), Some(s)) => w == s,
                 (None, Some(s)) => !s.is_null(),
                 _ => false,
             };
             if met {
-                log_line(&format!("step {i} until {machine}{pointer} = {}", seen.unwrap_or(Value::Null)));
+                log_line(&format!(
+                    "step {i} until {machine}{pointer} = {}",
+                    seen.unwrap_or(Value::Null)
+                ));
                 return true;
             }
             if started.elapsed() > timeout {
@@ -219,15 +254,28 @@ async fn run_step(
                 ));
                 return false;
             }
-            cx.background_executor().timer(Duration::from_millis(250)).await;
+            cx.background_executor()
+                .timer(Duration::from_millis(250))
+                .await;
         }
     }
     if let Some(capture) = step.get("capture") {
-        let name = capture.get("name").and_then(Value::as_str).unwrap_or("value").to_owned();
-        let machine = capture.get("machine").and_then(Value::as_str).unwrap_or("proposals").to_owned();
-        let pointer = capture.get("pointer").and_then(Value::as_str).unwrap_or("").to_owned();
-        let seen = cx
-            .update(|cx| pointed(&view_of(host.read(cx), &machine), &pointer));
+        let name = capture
+            .get("name")
+            .and_then(Value::as_str)
+            .unwrap_or("value")
+            .to_owned();
+        let machine = capture
+            .get("machine")
+            .and_then(Value::as_str)
+            .unwrap_or("proposals")
+            .to_owned();
+        let pointer = capture
+            .get("pointer")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_owned();
+        let seen = cx.update(|cx| pointed(&view_of(host.read(cx), &machine), &pointer));
         return match seen {
             Some(v) if !v.is_null() => {
                 log_line(&format!("step {i} capture {name} = {v}"));
@@ -235,7 +283,9 @@ async fn run_step(
                 true
             }
             _ => {
-                log_line(&format!("step {i} capture {name}: nothing at {machine}{pointer}"));
+                log_line(&format!(
+                    "step {i} capture {name}: nothing at {machine}{pointer}"
+                ));
                 false
             }
         };
@@ -246,11 +296,14 @@ async fn run_step(
         let link = cx.update(|cx| {
             let host = host.read(cx);
             let (view, _) = host.machines().session_view()?;
-            let tx = view.tx.as_ref().map(|t| vela_core::multisig_link::ProposalLink {
-                chain_id: t.chain_id,
-                multisig: t.safe.clone(),
-                safe_tx_hash: t.safe_tx_hash.clone(),
-            });
+            let tx = view
+                .tx
+                .as_ref()
+                .map(|t| vela_core::multisig_link::ProposalLink {
+                    chain_id: t.chain_id,
+                    multisig: t.safe.clone(),
+                    safe_tx_hash: t.safe_tx_hash.clone(),
+                });
             view.invite.as_ref()?;
             Some(vela_core::multisig_link::connect_link(
                 &format!("{}/en/connect", vela_core::multisig_link::SITE_ORIGIN),
@@ -271,10 +324,21 @@ async fn run_step(
         };
     }
     if let Some(dump) = step.get("dump") {
-        let machine = dump.get("machine").and_then(Value::as_str).unwrap_or("proposals").to_owned();
-        let pointer = dump.get("pointer").and_then(Value::as_str).unwrap_or("").to_owned();
+        let machine = dump
+            .get("machine")
+            .and_then(Value::as_str)
+            .unwrap_or("proposals")
+            .to_owned();
+        let pointer = dump
+            .get("pointer")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_owned();
         let seen = cx.update(|cx| pointed(&view_of(host.read(cx), &machine), &pointer));
-        log_line(&format!("step {i} dump {machine}{pointer} = {}", seen.unwrap_or(Value::Null)));
+        log_line(&format!(
+            "step {i} dump {machine}{pointer} = {}",
+            seen.unwrap_or(Value::Null)
+        ));
         return true;
     }
     if step.get("page").is_some() {
@@ -284,21 +348,29 @@ async fn run_step(
             cx.set_global(PageAsk(Some(ask)));
             cx.refresh_windows();
         });
-        cx.background_executor().timer(Duration::from_millis(500)).await;
+        cx.background_executor()
+            .timer(Duration::from_millis(500))
+            .await;
         return true;
     }
     if let Some(ask) = step.get("propose_send") {
         // The send flow's confirm, exactly as `money.rs` hands it over.
         log_line(&format!("step {i} propose_send {ask}"));
         let chain_id = ask.get("chain_id").and_then(Value::as_u64).unwrap_or(100);
-        let multisig = ask.get("multisig").and_then(Value::as_str).unwrap_or_default().to_owned();
+        let multisig = ask
+            .get("multisig")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned();
         let transfers: Vec<vela_core::multisig::Transfer> = ask
             .get("transfers")
             .cloned()
             .and_then(|t| serde_json::from_value(t).ok())
             .unwrap_or_default();
         let answer = cx.update(|cx| {
-            host.update(cx, |host, cx| host.propose_for_send(chain_id, &multisig, transfers, cx))
+            host.update(cx, |host, cx| {
+                host.propose_for_send(chain_id, &multisig, transfers, cx)
+            })
         });
         cx.background_executor()
             .spawn(async move {
@@ -320,7 +392,11 @@ async fn run_step(
         // hands it over: the review first, then the person's word.
         log_line(&format!("step {i} propose {ask}"));
         let chain_id = ask.get("chain_id").and_then(Value::as_u64).unwrap_or(100);
-        let multisig = ask.get("multisig").and_then(Value::as_str).unwrap_or_default().to_owned();
+        let multisig = ask
+            .get("multisig")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned();
         let Some(proposal) = ask
             .get("proposal")
             .cloned()
@@ -330,7 +406,9 @@ async fn run_step(
             return false;
         };
         let answer = cx.update(|cx| {
-            host.update(cx, |host, cx| host.propose(chain_id, &multisig, proposal, cx))
+            host.update(cx, |host, cx| {
+                host.propose(chain_id, &multisig, proposal, cx)
+            })
         });
         cx.background_executor()
             .spawn(async move {
@@ -347,9 +425,13 @@ async fn run_step(
     }
     if let Some(name) = step.get("shot").and_then(Value::as_str) {
         cx.update(|cx| cx.refresh_windows());
-        cx.background_executor().timer(Duration::from_millis(700)).await;
+        cx.background_executor()
+            .timer(Duration::from_millis(700))
+            .await;
         log_line(&format!("SHOT {name}"));
-        cx.background_executor().timer(Duration::from_millis(1500)).await;
+        cx.background_executor()
+            .timer(Duration::from_millis(1500))
+            .await;
         return true;
     }
     if let Some(text) = step.get("log") {
@@ -375,7 +457,11 @@ mod tests {
         ]);
         let step = json!({"proposals": {"type": "approve", "chain_id": "${chain}", "safe_tx_hash": "${hash}", "owner": "x-${hash}"}});
         let out = substitute(&step, &captured);
-        assert_eq!(out["proposals"]["chain_id"], json!(100), "a whole capture keeps its type");
+        assert_eq!(
+            out["proposals"]["chain_id"],
+            json!(100),
+            "a whole capture keeps its type"
+        );
         assert_eq!(out["proposals"]["safe_tx_hash"], json!("0xabc"));
         assert_eq!(out["proposals"]["owner"], json!("x-0xabc"));
     }
@@ -383,7 +469,10 @@ mod tests {
     #[test]
     fn a_pointer_reads_a_view_by_its_lowercase_key_too() {
         let view = json!({"actions": {"approve:0xab": {"kind": "done"}}});
-        assert_eq!(pointed(&view, "/actions/approve:0xAB/kind"), Some(json!("done")));
+        assert_eq!(
+            pointed(&view, "/actions/approve:0xAB/kind"),
+            Some(json!("done"))
+        );
         assert_eq!(pointed(&view, "/actions/none"), None);
     }
 }
