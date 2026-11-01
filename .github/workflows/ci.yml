@@ -23,11 +23,16 @@
 # (CI green ≠ deployed). The `web` job runs the same `pnpm build`, so a broken
 # build fails the PR instead of surfacing only after merge.
 #
-# Deliberately NOT included:
-#   - app-web's Playwright e2e (`pnpm test:e2e` in app-web/vela-wallet): builds
-#     and serves the real worker; run locally. Promote once it has a
-#     proven-stable record on a runner.
+# Deliberately NOT included (they run in nightly.yml — nightly, and on demand
+# with `gh workflow run nightly.yml` — non-blocking until each has a
+# proven-stable record on a runner; see docs/ci/test-loops.md):
+#   - app-web's Playwright e2e (`pnpm test:e2e`) on chromium, firefox, webkit;
+#   - the trusted-signer page suites (app-web/trusted-signer/samples);
+#   - the multisig fork suite (web onchain + vela-core's multisig_fork);
+#   - Android macrobenchmarks, iOS PerfTests, the desktop perf harness.
+# Not anywhere in CI:
 #   - the desktop gallery sweep (`sweep-gallery.sh`): opens real windows.
+# Elsewhere:
 #   - app-web/getvela.app: separate bun/SvelteKit project, own job below.
 name: CI
 
@@ -185,6 +190,15 @@ jobs:
         run: |
           node scripts/check-expo-residue.mjs --self-test
           node scripts/check-expo-residue.mjs
+      # Native parity T1: the cross-platform scenario manifest. Every test it
+      # names — per scenario, per platform — must exist under that name, and a
+      # test the manifest says runs in a required suite must not carry a skip
+      # marker. A rename that orphans an entry fails here; the gaps it records
+      # are printed, not failed (they are the backlog, not a regression).
+      - name: Scenario manifest names real tests
+        run: |
+          node scripts/ci/check-scenarios.mjs --self-test
+          node scripts/ci/check-scenarios.mjs --summary "$GITHUB_STEP_SUMMARY"
 
   # The web wallet: app-web/vela-wallet (SvelteKit → Cloudflare Workers).
   #
@@ -213,8 +227,39 @@ jobs:
           cache: pnpm
           cache-dependency-path: app-web/vela-wallet/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
+      # The browser's copy of the core wasm is gitignored (sync-wasm.mjs says
+      # why), and `pnpm check` runs `sync-wasm --check` — which, on a fresh
+      # checkout, can only say "missing". Copy it first; the check then
+      # proves the copy matches rust/pkg-web, which is its job.
+      - name: Put the committed core wasm where the browser fetches it
+        run: pnpm run sync:wasm
+      - name: Check (tokens, wasm copy, generated core types, svelte-check)
+        run: pnpm run check
+      - name: Lint (prettier + eslint)
+        run: pnpm run lint
       - name: Build (tokens drift + worker types + prerender all locales)
         run: pnpm run build
+      # Both extension packages (spec 027; Safari 2026-10). The vitest suites
+      # below read them — `src/lib/extension/package.test.ts` and
+      # `safari-package.test.ts` assert on the built manifests and pages — so
+      # they are built before the tests, not after.
+      - name: Build the Chrome extension
+        run: pnpm run build:extension
+      - name: Build the Safari extension
+        run: pnpm run build:extension:safari
+      # vitest's `client` project runs in a real Chromium (vitest-browser-playwright).
+      - name: Install Chromium for the browser tests
+        run: pnpm exec playwright install --with-deps chromium
+      # Both projects: `server` (node) and `client` (Chromium). The JUnit file
+      # lets the next step prove the shared core vectors were replayed, not
+      # skipped.
+      - name: Unit tests (vitest server + client)
+        run: pnpm exec vitest run --reporter=default --reporter=junit --outputFile.junit="$RUNNER_TEMP/vitest-junit.xml"
+      - name: The shared core vectors were replayed, none skipped
+        working-directory: .
+        run: |
+          npm ci --prefix scripts --no-audit --no-fund
+          node scripts/ci/assert-test-results.mjs --platform web --junit "$RUNNER_TEMP/vitest-junit.xml"
 
   # The marketing site + API worker, moved under app-web/ with the rest of the
   # web surfaces (2026-08-12). It deploys by hand (`bun run deploy`), so nothing
@@ -253,20 +298,32 @@ jobs:
           workspaces: rust
       - name: Format
         run: cargo fmt --all --check
-      # `vela-core/dev-fixtures` is on for the LINT and the TEST steps only:
-      # the parallel space's software signer (spec 032) is compiled by no
-      # shipping crate, so this is the one place its golden addresses are
-      # locked and its bytes are checked against the real authenticator
-      # parsers. The wasm canary below deliberately does not enable it.
+      # The three features, on for the LINT and the TEST steps alike:
+      #
+      #   - `dev-fixtures`: the parallel space's software signer (spec 032) is
+      #     compiled by no shipping crate, so this is the one place its golden
+      #     addresses are locked and its bytes are checked against the real
+      #     authenticator parsers. The wasm canary below deliberately does not
+      #     enable it.
+      #   - `i18n-all`: REQUIRED, not a nicety. vela-core's default feature set
+      #     is empty, so the compiled-in catalogs are absent and 1,516 of the
+      #     3,554 conformance cases fail with `I18nCatalogUnavailable`.
+      #   - `crux`: every machine (onboarding, multisig, signing…) and the
+      #     tests that drive them (`tests/app_*.rs`, `multisig_fork.rs`'s
+      #     compile). vela-core-uniffi happens to turn it on through feature
+      #     unification today; named here so a `-p vela-core` run, or a
+      #     workspace that stops unifying it, cannot silently drop the machine
+      #     suites from the gate.
+      #
+      # One list for both steps, so the linted code is the tested code.
       - name: Clippy
-        run: cargo clippy --workspace --all-targets --features vela-core/dev-fixtures -- -D warnings
-      # `--features vela-core/i18n-all` is REQUIRED, not a nicety. vela-core's
-      # default feature set is empty, so the compiled-in catalogs are absent and
-      # 1,516 of the 3,554 conformance cases fail with `I18nCatalogUnavailable`.
-      # A bare `cargo test --workspace` is red — spec 004 was verified locally
-      # with the features on and this step was not updated to match.
-      - name: Tests (conformance corpus + proptests)
-        run: cargo test --workspace --features vela-core/i18n-all,vela-core/dev-fixtures
+        run: cargo clippy --workspace --all-targets --features "$VELA_CORE_FEATURES" -- -D warnings
+        env:
+          VELA_CORE_FEATURES: vela-core/i18n-all,vela-core/dev-fixtures,vela-core/crux
+      - name: Tests (conformance corpus + proptests + machines)
+        run: cargo test --workspace --features "$VELA_CORE_FEATURES"
+        env:
+          VELA_CORE_FEATURES: vela-core/i18n-all,vela-core/dev-fixtures,vela-core/crux
       - name: Wasm build (getrandom canary)
         run: cargo build --target wasm32-unknown-unknown -p vela-core-wasm
       # The Windows passkey path. It cannot be built by any job that builds the
@@ -399,6 +456,11 @@ jobs:
           cache-all-crates: true
       - name: Format
         run: cargo fmt --all --check
+      # The lockfile is the one a release builds from: a PR that changes a
+      # dependency without committing Cargo.lock fails here, not on the
+      # release branch. desktop-windows below runs the same on Windows.
+      - name: Check (lockfile honoured)
+        run: cargo check --all-targets --locked
       # NOT `-D warnings`, and the reason is recorded rather than hidden: the
       # BASELINE carries ten clippy warnings in caBLE/Noise transport code
       # (7 in src/ctap/cable.rs, 1 in cable/l2cap.rs, 1 in hardware.rs, 1 in
@@ -406,13 +468,26 @@ jobs:
       # transport code is not spec 029's business (AI-CODING-RULES §2), and a
       # gate that starts red is a gate somebody disables. Raising this to
       # `-D warnings` is a task for whoever clears those ten.
+      #
+      # (Phase 5, 2026-11-02: on macOS the crate itself reports none under
+      # either feature set — the only warning printed is the vendored
+      # gpui_macos's. Linux was not re-measured.)
       - name: Clippy
         run: cargo clippy --all-targets
+      # The parallel space's seam is compiled only with `dev-fixtures`
+      # (Cargo.toml), and so are its tests — 23 more, the multisig page's
+      # vector replay among them. Linted and tested both ways: the plain build
+      # is the shape that ships (the space absent), the featured one is the
+      # shape every scripted pass and the perf harness run.
+      - name: Clippy (dev-fixtures)
+        run: cargo clippy --all-targets --features dev-fixtures
       - name: Tests
         # `sweep-gallery.sh` is deliberately NOT here: it opens real windows and
         # a CI runner has no display. It stays a local gate, and saying so keeps
         # the next reader from assuming a coverage that does not exist.
         run: cargo test
+      - name: Tests (dev-fixtures)
+        run: cargo test --features dev-fixtures
 
   # The Windows half of the desktop app — the code `desktop:` above CANNOT see.
   #
@@ -453,6 +528,17 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: scripts/package-lock.json
+      # The native wire ruler (F0.3) in its strict mode: an operation, result
+      # or required result field the core declares and the Kotlin wire does
+      # not answer fails here, in words and in a second, before the Gradle
+      # build; CoreWireDriftTest is the same question asked at runtime.
+      - name: Native wire parity with the core (strict)
+        run: node scripts/check-native-wire.mjs --strict
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -487,6 +573,24 @@ jobs:
       - name: Compile and unit-test
         working-directory: app-android/vela-wallet
         run: ./gradlew :app:assembleDebug :app:testDebugUnitTest -PvelaSkipRustBuild
+      # Gradle reports a class that ran no test the same as one that passed.
+      # CoreWireDriftTest and every class that replays the core's shared
+      # vectors (listed in docs/scenarios/multisig.yaml, `vector_replays`) must
+      # have RUN, with nothing skipped.
+      - name: CoreWireDriftTest and the shared core vectors ran, none skipped
+        run: |
+          npm ci --prefix scripts --no-audit --no-fund
+          node scripts/ci/assert-test-results.mjs --platform android \
+            --junit app-android/vela-wallet/app/build/test-results/testDebugUnitTest
+      - name: Keep the JVM test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-jvm-test-reports
+          path: |
+            app-android/vela-wallet/app/build/reports/tests/testDebugUnitTest
+            app-android/vela-wallet/app/build/test-results/testDebugUnitTest
+          retention-days: 14
 
   # The unit suite on every PR; the UI suite (16 XCUITests, ~10 min on a
   # simulator) on every push to main and on a PR only when it carries the
@@ -648,6 +752,7 @@ jobs:
             -scheme VelaWallet \
             -destination "id=${{ steps.sim.outputs.udid }}" \
             -derivedDataPath "$RUNNER_TEMP/dd" \
+            -resultBundlePath "$RUNNER_TEMP/${{ matrix.suite }}.xcresult" \
             $TESTS \
             CODE_SIGNING_ALLOWED=NO \
             COMPILER_INDEX_STORE_ENABLE=NO 2>&1 | tee "$RUNNER_TEMP/xcodebuild.log"
@@ -661,6 +766,15 @@ jobs:
               exit 1
             fi
           fi
+      # A count says the filter selected something; it does not say WHICH. The
+      # suites that replay the core's shared vectors (docs/scenarios/
+      # multisig.yaml, `vector_replays`) must each have run, every test in
+      # them passed — not skipped by an `.enabled(if:)` somebody added.
+      - name: The shared core vectors ran, none skipped
+        if: matrix.suite == 'unit'
+        run: |
+          npm ci --prefix scripts --no-audit --no-fund
+          node scripts/ci/assert-test-results.mjs --platform ios --xcresult "$RUNNER_TEMP/unit.xcresult"
       # The suite above runs on the NEWEST runtime, and the deployment target is
       # iOS 17.4. 087 F33: Swift 6.2 builds `nonisolated(nonsending)` function
       # metadata with an iOS 18 runtime entry point it weak-links with no
