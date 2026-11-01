@@ -445,6 +445,9 @@ struct MsProposalItem: Decodable, Equatable, Identifiable {
     /// r9-9: every member of it on this device (the core's), whatever this
     /// transaction asks of them — `nil` from a core without the field.
     var membersHere: [String]?
+    /// r11: every number (decimal) a queued transaction waits behind, the
+    /// core's (`waits_for`, at most 20).
+    var waitsFor: [String]
 
     var id: String { "\(chainId):\(safeTxHash.lowercased())" }
     var key: String { "\(chainId):\(safeTxHash)" }
@@ -473,6 +476,7 @@ struct MsProposalItem: Decodable, Equatable, Identifiable {
         unsent = c.soft(MsKey("unsent"), false)
         renameUndeployed = c.soft(MsKey("renameUndeployed"), false)
         membersHere = c.soft(MsKey("membersHere"))
+        waitsFor = c.soft(MsKey("waitsFor"), [])
     }
 }
 
@@ -563,6 +567,14 @@ struct MsWaiting: Decodable, Equatable {
     var ready: Int
     var waitingPayer: Int
     var first: MsJSON?
+    /// r11-1: the transactions `needsYou` / `ready` count, each
+    /// `<chainId>:<safeTxHash lowercase>` — what a notification keys
+    /// "already said" by (a count says nothing of WHICH).
+    var needsYouKeys: [String]
+    var readyKeys: [String]
+    /// r11-1: when the list behind these was read on this page (ms); `nil`
+    /// for one kept from an earlier page — never news.
+    var readAt: Double?
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: MsKey.self)
@@ -570,6 +582,9 @@ struct MsWaiting: Decodable, Equatable {
         ready = c.soft(MsKey("ready"), 0)
         waitingPayer = c.soft(MsKey("waiting_payer"), 0)
         first = c.soft(MsKey("first"))
+        needsYouKeys = c.soft(MsKey("needs_you_keys"), [])
+        readyKeys = c.soft(MsKey("ready_keys"), [])
+        readAt = c.soft(MsKey("read_at"))
     }
 }
 
