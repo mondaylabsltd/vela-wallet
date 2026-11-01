@@ -105,6 +105,8 @@ struct QrModulesView: View {
             .frame(width: geometry.size.width, height: geometry.size.height)
         }
         .aspectRatio(1, contentMode: .fit)
-        .accessibilityHidden(true)
+        // One element, an image: a caller's identifier and label land on it.
+        .accessibilityElement(children: .ignore)
+        .accessibilityAddTraits(.isImage)
     }
 }
