@@ -137,7 +137,17 @@
       "safariPasskeyBody": "Safari n'autorise pas les pages d'une extension à utiliser une clé d'accès : Vela le fait donc sur sa page de signature. Réessayez.",
       "phoneLinkFailed": "Votre autre appareil ne s'est pas connecté, ou la connexion a été coupée avant la fin. Gardez les deux appareils en ligne et proches, puis scannez à nouveau le code.",
       "keyUnavailableTitle": "Clé de sécurité indisponible",
-      "keyUnavailableBody": "Cet appareil n'a pas pu utiliser la clé de sécurité. Essayez une autre clé de sécurité FIDO2 ou choisissez un autre moyen de continuer."
+      "keyUnavailableBody": "Cet appareil n'a pas pu utiliser la clé de sécurité. Essayez une autre clé de sécurité FIDO2 ou choisissez un autre moyen de continuer.",
+      "passkeyError": {
+        "cancelled": "La fenêtre de la passkey a été fermée avant la fin. Réessayez quand vous êtes prêt.",
+        "notSupported": "Cet appareil ne peut pas utiliser de passkey ici. Essayez un autre appareil ou une clé de sécurité.",
+        "noCredential": "Aucune passkey Vela n'a été trouvée sur cet appareil. Utilisez un appareil ou une clé de sécurité qui en contient une.",
+        "appNotAssociated": "Cet appareil n'a pas pu confirmer que Vela peut utiliser ses passkeys. Vérifiez votre connexion et réessayez — si cela continue, mettez Vela à jour.",
+        "noNetwork": "La passkey a besoin d'une connexion réseau. Vérifiez votre connexion et réessayez.",
+        "alreadyRegistered": "Cet authentificateur contient déjà l'une des clés de ce portefeuille. Utilisez-en un autre.",
+        "timedOut": "La fenêtre de la passkey a expiré. Réessayez.",
+        "other": "La passkey n'a pas pu être utilisée. Réessayez."
+      }
     },
     "create": {
       "accountNameHint": "Ce nom est enregistré avec votre clé publique on-chain pour la connexion multi-appareils.",

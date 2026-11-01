@@ -331,6 +331,15 @@ pub enum ShellResult {
         /// "something went wrong" alert. Absent for classified failures, whose
         /// copy comes from the classification.
         message: Option<String>,
+        /// Round 10 (real-device S3): the platform error's facts — platform,
+        /// domain, code, raw message — from which the core names the sentence
+        /// the failure sheet draws (`PromptKind::{CreateFailed,
+        /// SignInFailed}.words_key`, by `passkey_error::passkey_error_words`).
+        /// `#[serde(default)]`: a shell that does not send it keeps the old
+        /// sheet.
+        #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(optional))]
+        error: Option<super::passkey_error::PasskeyErrorFacts>,
     },
     AccountsLoaded {
         accounts: Vec<Account>,

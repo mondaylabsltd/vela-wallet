@@ -251,6 +251,7 @@ fn cancelling_registration_persists_nothing() {
     let next = sut.resolve(ShellResult::PasskeyFailed {
         kind: FailureKind::Cancelled,
         message: None,
+        error: None,
     });
 
     assert!(
@@ -292,6 +293,7 @@ fn cancelling_a_phone_registration_is_quiet_too() {
     let next = sut.resolve(ShellResult::PasskeyFailed {
         kind: FailureKind::Cancelled,
         message: Some("The code was dismissed".to_owned()),
+        error: None,
     });
     assert!(
         next.is_empty(),
@@ -341,6 +343,7 @@ fn non_discoverable_credential_aborts_without_persisting() {
     let next = sut.resolve(ShellResult::PasskeyFailed {
         kind: FailureKind::NotDiscoverable,
         message: None,
+        error: None,
     });
 
     assert!(
@@ -1172,6 +1175,7 @@ fn the_confirmation_runs_on_the_route_that_minted_the_key() {
     sut.resolve(ShellResult::PasskeyFailed {
         kind: FailureKind::Cancelled,
         message: None,
+        error: None,
     });
     let next = sut.dispatch(Event::ConfirmKey { index: 1 });
     match next.as_slice() {
@@ -1325,6 +1329,7 @@ fn cancelling_an_added_key_keeps_the_existing_drafts() {
     let next = sut.resolve(ShellResult::PasskeyFailed {
         kind: FailureKind::Cancelled,
         message: None,
+        error: None,
     });
     assert!(next.is_empty());
 
@@ -1432,6 +1437,7 @@ fn a_cancelled_confirmation_gates_finish_and_retries_per_row() {
     let next = sut.resolve(ShellResult::PasskeyFailed {
         kind: FailureKind::Cancelled,
         message: None,
+        error: None,
     });
     assert!(next.is_empty());
     let view = sut.view();
@@ -1860,6 +1866,7 @@ fn a_failed_phone_ceremony_is_a_dropped_link_not_a_biometrics_problem() {
     let unanswered = || ShellResult::PasskeyFailed {
         kind: FailureKind::Other,
         message: Some("No phone answered the code.".to_owned()),
+        error: None,
     };
 
     // Registration over the phone.
@@ -1911,6 +1918,7 @@ fn a_failed_phone_ceremony_is_a_dropped_link_not_a_biometrics_problem() {
     let kind = prompt_of(&sut.resolve(ShellResult::PasskeyFailed {
         kind: FailureKind::Other,
         message: Some("The operation couldn't be completed.".to_owned()),
+        error: None,
     }));
     assert!(
         matches!(
@@ -1919,6 +1927,33 @@ fn a_failed_phone_ceremony_is_a_dropped_link_not_a_biometrics_problem() {
                 phone_link: false,
                 ..
             }
+        ),
+        "{kind:?}"
+    );
+
+    // Round 10 (real-device S3): iOS's `localizedDescription` ("The
+    // operation couldn't be completed…") is the detail; with the facts the
+    // core names the sentence the sheet draws instead.
+    let mut sut = registered("Ann");
+    sut.dispatch(Event::AddKey {
+        name: "Laptop".to_owned(),
+        method: KeyMethod::Platform,
+    });
+    let kind = prompt_of(&sut.resolve(ShellResult::PasskeyFailed {
+        kind: FailureKind::Other,
+        message: Some("The operation couldn't be completed.".to_owned()),
+        error: Some(vela_core::app::passkey_error::PasskeyErrorFacts {
+            platform: "ios".to_owned(),
+            domain: "ASAuthorizationErrorDomain".to_owned(),
+            code: Some(1006),
+            message: "The operation couldn't be completed.".to_owned(),
+        }),
+    }));
+    assert!(
+        matches!(
+            &kind,
+            PromptKind::CreateFailed { words_key: Some(key), .. }
+                if key == "onboarding.common.passkeyError.alreadyRegistered"
         ),
         "{kind:?}"
     );
@@ -1938,6 +1973,7 @@ fn a_security_key_that_cannot_register_is_not_blamed_on_biometrics() {
             .resolve(ShellResult::PasskeyFailed {
                 kind: FailureKind::NotSupported,
                 message: None,
+                error: None,
             })
             .as_slice()
         {

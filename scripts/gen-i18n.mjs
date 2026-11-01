@@ -1367,9 +1367,17 @@ for (let i = 1; i < PATHS.length; i++) {
 //   for a damaged invite; the core's codec reads it, and a link that does
 //   not read is said as that). 2267 + 1 = 2268 paths, 2151 leaves, 117
 //   branches.
-if (PATHS.length !== 2268) fail(`expected 2268 paths (2151 leaf + 117 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2151) fail(`expected 2151 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 117) fail(`expected 117 branch paths, got ${branchSet.size}`);
+// 2277 (round 10 core, 2026-11-01): + the passkey's failure said in the
+//   person's language (`onboarding.common.passkeyError.{cancelled,
+//   notSupported, noCredential, appNotAssociated, noNetwork,
+//   alreadyRegistered, timedOut, other}`) — `app::passkey_error` maps the
+//   platform's error facts to one of them, where every shell used to draw
+//   the system's raw English ("[50152] RP ID cannot be validated") inside a
+//   translated sheet. 2268 + 8 leaves + 1 branch = 2277 paths, 2159 leaves,
+//   118 branches.
+if (PATHS.length !== 2277) fail(`expected 2277 paths (2159 leaf + 118 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2159) fail(`expected 2159 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 118) fail(`expected 118 branch paths, got ${branchSet.size}`);
 // The on-demand catalogs, pinned the same way (leaves of every locale's union):
 // a key dropped from one namespace and not landed in the other fails here.
 // 579 (round 6, the outside owner's connect page, 2026-10-30): + 17

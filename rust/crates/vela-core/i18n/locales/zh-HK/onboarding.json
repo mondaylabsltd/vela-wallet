@@ -137,7 +137,17 @@
       "safariPasskeyBody": "Safari 不容許擴充功能自己的頁面使用通行密鑰，所以 Vela 改在簽署頁上完成這一步。請再試一次。",
       "phoneLinkFailed": "另一部裝置沒有連上，或連接在完成前中斷了。請讓兩部裝置保持連網並彼此靠近，然後重新掃描代碼。",
       "keyUnavailableTitle": "無法使用安全密鑰",
-      "keyUnavailableBody": "此裝置無法使用這個安全密鑰。請改用另一個 FIDO2 安全密鑰，或選擇其他方法繼續。"
+      "keyUnavailableBody": "此裝置無法使用這個安全密鑰。請改用另一個 FIDO2 安全密鑰，或選擇其他方法繼續。",
+      "passkeyError": {
+        "cancelled": "通行密鑰視窗在完成前被關閉了。準備好後請再試一次。",
+        "notSupported": "這部裝置無法在這裡使用通行密鑰。請改用另一部裝置或硬件安全密鑰。",
+        "noCredential": "這部裝置上找不到 Vela 的通行密鑰。請使用存有它的裝置或硬件安全密鑰。",
+        "appNotAssociated": "這部裝置無法確認 Vela 可以使用它的通行密鑰。請檢查網絡後再試一次；如果反覆出現，請更新 Vela。",
+        "noNetwork": "使用通行密鑰需要連網。請檢查網絡後再試一次。",
+        "alreadyRegistered": "這個驗證器裡已經有這個錢包的一把密鑰。請改用另一個。",
+        "timedOut": "通行密鑰視窗已逾時。請再試一次。",
+        "other": "無法使用通行密鑰。請再試一次。"
+      }
     },
     "create": {
       "accountNameHint": "此名稱會連同你的公鑰一起儲存於鏈上，以便跨裝置登入。",

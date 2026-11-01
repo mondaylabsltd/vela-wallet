@@ -1,5 +1,5 @@
 //! r10-3: amount + fee against ONE balance, on every path that confirms a
-//! transfer — replayed from `vectors/send-fee-cover.json`, which the shells
+//! transfer — replayed from `vectors/rules/send-fee-cover.json`, which the shells
 //! driving the same machines replay too.
 //!
 //! The finding: a dApp asked 0.001 USDC on Arc from an account holding 0.4,
@@ -28,7 +28,7 @@ use vela_core::app::send::{
 };
 use vela_core::l10n::number::NumberPreset;
 
-const VECTORS: &str = include_str!("vectors/send-fee-cover.json");
+const VECTORS: &str = include_str!("vectors/rules/send-fee-cover.json");
 const ACCOUNT: &str = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const RECIPIENT: &str = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const FEE_COLLECTOR: &str = "0x1111111111111111111111111111111111111111";

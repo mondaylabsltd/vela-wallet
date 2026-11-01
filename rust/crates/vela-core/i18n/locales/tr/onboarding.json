@@ -137,7 +137,17 @@
       "safariPasskeyBody": "Safari, bir uzantının kendi sayfalarının geçiş anahtarı kullanmasına izin vermiyor; bu yüzden Vela bunu imzalama sayfasında yapıyor. Tekrar deneyin.",
       "phoneLinkFailed": "Diğer cihazınız bağlanamadı ya da bağlantı tamamlanmadan koptu. İki cihazı da çevrimiçi ve birbirine yakın tutun, ardından kodu yeniden tarayın.",
       "keyUnavailableTitle": "Güvenlik anahtarı kullanılamıyor",
-      "keyUnavailableBody": "Bu cihaz güvenlik anahtarını kullanamadı. Başka bir FIDO2 güvenlik anahtarı deneyin ya da devam etmek için başka bir yol seçin."
+      "keyUnavailableBody": "Bu cihaz güvenlik anahtarını kullanamadı. Başka bir FIDO2 güvenlik anahtarı deneyin ya da devam etmek için başka bir yol seçin.",
+      "passkeyError": {
+        "cancelled": "Passkey penceresi tamamlanmadan kapatıldı. Hazır olduğunuzda tekrar deneyin.",
+        "notSupported": "Bu cihaz burada passkey kullanamıyor. Başka bir cihaz ya da güvenlik anahtarı deneyin.",
+        "noCredential": "Bu cihazda Vela passkey'i bulunamadı. Passkey'i olan bir cihaz ya da güvenlik anahtarı kullanın.",
+        "appNotAssociated": "Bu cihaz, Vela'nın passkey'lerini kullanabileceğini doğrulayamadı. Bağlantınızı kontrol edip tekrar deneyin — devam ederse Vela'yı güncelleyin.",
+        "noNetwork": "Passkey için ağ bağlantısı gerekiyor. Bağlantınızı kontrol edip tekrar deneyin.",
+        "alreadyRegistered": "Bu doğrulayıcı zaten bu cüzdanın anahtarlarından birini taşıyor. Başka birini kullanın.",
+        "timedOut": "Passkey penceresinin süresi doldu. Tekrar deneyin.",
+        "other": "Passkey kullanılamadı. Tekrar deneyin."
+      }
     },
     "create": {
       "accountNameHint": "Bu ad, cihazlar arası giriş için açık anahtarınızla birlikte zincir üzerinde saklanır.",

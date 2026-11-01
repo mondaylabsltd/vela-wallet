@@ -2658,6 +2658,28 @@ pub fn passkey_ceremony_end(kind: &str, elapsed_ms: f64) -> String {
         .unwrap_or_default()
 }
 
+/// A platform passkey error's facts → the words a sheet draws
+/// (`passkey_error::passkey_error_words`), as JSON text:
+/// `{"kind":"app_not_associated","key":"onboarding.common.passkeyError.…","failure":"other"}`.
+/// `code` is `undefined` when there is none. Round 10 (real-device S3): the
+/// web drew `DOMException.message` — the browser's English — in a
+/// translated sheet.
+#[wasm_bindgen(js_name = passkeyErrorWords)]
+#[must_use]
+pub fn passkey_error_words(
+    platform: &str,
+    domain: &str,
+    code: Option<f64>,
+    message: &str,
+) -> String {
+    #[allow(clippy::cast_possible_truncation)]
+    let code = code.filter(|c| c.is_finite()).map(|c| c as i32);
+    serde_json::to_string(&vela_core::app::passkey_error::passkey_error_words(
+        platform, domain, code, message,
+    ))
+    .unwrap_or_default()
+}
+
 /// The signing prompt's deadline, ms (`passkey_end::SIGN_TIMEOUT_MS`).
 #[wasm_bindgen(js_name = passkeySignTimeoutMs)]
 #[must_use]

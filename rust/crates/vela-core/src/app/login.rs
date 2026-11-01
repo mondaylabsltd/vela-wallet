@@ -622,7 +622,14 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
         (Stage::Completing, ShellResult::OnboardingCompleted) => Command::done(),
 
         // -- ceremony failures anywhere else ------------------------------------
-        (_, ShellResult::PasskeyFailed { kind, message }) => match kind {
+        (
+            _,
+            ShellResult::PasskeyFailed {
+                kind,
+                message,
+                error,
+            },
+        ) => match kind {
             // The user closed the sheet. Not an error, not an alert.
             FailureKind::Cancelled => {
                 model.stage = Stage::Idle;
@@ -633,7 +640,8 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
             }
             _ => idle_with_prompt(
                 model,
-                PromptKind::sign_in_failed_via(message.unwrap_or_default(), model.method),
+                PromptKind::sign_in_failed_via(message.unwrap_or_default(), model.method)
+                    .with_error_words(error.as_ref()),
             ),
         },
 

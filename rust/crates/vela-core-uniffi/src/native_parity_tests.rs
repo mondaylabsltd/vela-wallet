@@ -338,6 +338,30 @@ fn run(func: &str, i: &Value) -> Value {
             })
         }
         "passkey_sign_timeout_ms" => json!(signing::passkey_sign_timeout_ms()),
+        "passkey_error_words" => {
+            use signing::PasskeyErrorKind as K;
+            let words = signing::passkey_error_words(
+                s(i, "platform"),
+                s(i, "domain"),
+                i["code"].as_i64().and_then(|c| i32::try_from(c).ok()),
+                s(i, "message"),
+            );
+            json!({
+                "kind": match words.kind {
+                    K::Cancelled => "cancelled",
+                    K::NotSupported => "not_supported",
+                    K::NoCredential => "no_credential",
+                    K::AppNotAssociated => "app_not_associated",
+                    K::NoNetwork => "no_network",
+                    K::PhoneUnreachable => "phone_unreachable",
+                    K::AlreadyRegistered => "already_registered",
+                    K::TimedOut => "timed_out",
+                    K::Other => "other",
+                },
+                "key": words.key,
+                "failure": words.failure,
+            })
+        }
         "rpc_node_standing" => json!(rules::rpc_node_standing(
             s(i, "view_json"),
             u32_of(i, "chain_id")
@@ -458,6 +482,7 @@ parity!(
     is_localhost_http,
     passkey_ceremony_end,
     passkey_sign_timeout_ms,
+    passkey_error_words,
     rpc_node_standing,
     sim_outcome,
     builtin_network_display_name,

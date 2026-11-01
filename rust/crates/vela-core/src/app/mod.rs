@@ -92,6 +92,7 @@ pub mod net_health;
 pub mod network_admin;
 pub mod network_space;
 pub mod passkey_end;
+pub mod passkey_error;
 pub mod payment_request;
 pub mod privacy;
 pub mod receive_watch;
@@ -1259,6 +1260,16 @@ pub enum PromptKind {
         /// the sheet says "check your connection" rather than blame the index.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         local: bool,
+        /// Round 10 (real-device S3): the corpus key of the sentence for the
+        /// platform's error, when the shell passed its facts
+        /// ([`ShellResult::PasskeyFailed`]'s `error`; the rule is
+        /// [`passkey_error::passkey_error_words`]). A sheet draws it in place
+        /// of `detail` — the system's raw English inside a translated sheet —
+        /// after `phone_link`'s own words. Omitted when absent, so a reader
+        /// that predates it reads the old sheet.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "bindings", ts(optional))]
+        words_key: Option<String>,
     },
     /// Only on Gnosis's verdict that the passkey has no record: the rebuild
     /// makes a ONE-key wallet, and nobody else's "no record" can rule out a
@@ -1280,6 +1291,10 @@ pub enum PromptKind {
         /// As [`PromptKind::CreateFailed`]'s.
         #[serde(default)]
         phone_link: bool,
+        /// As [`PromptKind::CreateFailed`]'s.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "bindings", ts(optional))]
+        words_key: Option<String>,
     },
 }
 
@@ -1294,6 +1309,7 @@ impl PromptKind {
             phone_link,
             key_kept: false,
             local: false,
+            words_key: None,
         }
     }
 
@@ -1306,6 +1322,7 @@ impl PromptKind {
             phone_link: false,
             key_kept: true,
             local,
+            words_key: None,
         }
     }
 
@@ -1313,7 +1330,11 @@ impl PromptKind {
     #[must_use]
     pub fn sign_in_failed(detail: String) -> Self {
         let phone_link = crate::cable::conn::is_link_failure(&detail);
-        Self::SignInFailed { detail, phone_link }
+        Self::SignInFailed {
+            detail,
+            phone_link,
+            words_key: None,
+        }
     }
 
     /// [`PromptKind::create_failed`] for a CEREMONY run with `method`. A
@@ -1330,6 +1351,42 @@ impl PromptKind {
             phone_link,
             key_kept: false,
             local: false,
+            words_key: None,
+        }
+    }
+
+    /// The sentence for the platform's error (round 10, real-device S3):
+    /// with the shell's facts, a failed create or sign-in names the corpus
+    /// key a sheet draws instead of the platform's raw words. A kept key
+    /// (ob-4) keeps its own words; without facts nothing changes.
+    #[must_use]
+    pub fn with_error_words(self, facts: Option<&passkey_error::PasskeyErrorFacts>) -> Self {
+        let Some(facts) = facts else {
+            return self;
+        };
+        let key = Some(passkey_error::words_of(facts).key);
+        match self {
+            Self::CreateFailed {
+                detail,
+                phone_link,
+                key_kept: false,
+                local,
+                ..
+            } => Self::CreateFailed {
+                detail,
+                phone_link,
+                key_kept: false,
+                local,
+                words_key: key,
+            },
+            Self::SignInFailed {
+                detail, phone_link, ..
+            } => Self::SignInFailed {
+                detail,
+                phone_link,
+                words_key: key,
+            },
+            other => other,
         }
     }
 
@@ -1355,7 +1412,11 @@ impl PromptKind {
     pub fn sign_in_failed_via(detail: String, method: KeyMethod) -> Self {
         let phone_link =
             method == KeyMethod::Hybrid || crate::cable::conn::is_link_failure(&detail);
-        Self::SignInFailed { detail, phone_link }
+        Self::SignInFailed {
+            detail,
+            phone_link,
+            words_key: None,
+        }
     }
 }
 
