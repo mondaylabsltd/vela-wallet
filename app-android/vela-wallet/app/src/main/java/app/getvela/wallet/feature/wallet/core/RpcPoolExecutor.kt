@@ -312,23 +312,63 @@ class OkHttpTransport : RpcTransport {
             .relayRpcHeader(xRpcUrl)
             .build()
 
+        // r11-9: a write (a submit) goes on a connection of its own, never a
+        // pooled one a server or a tunnel may have closed meanwhile: its
+        // failure is then about this request alone. A read that met a dead
+        // pooled connection before any answer came is asked once again on a
+        // new one — what a browser does with a reused keep-alive socket — so
+        // a stale connection is not an unreachable relay ("Couldn't check").
+        val read = readOnly(method)
+        val first = attempt(request, method, timeoutMs, fresh = !read)
+        if (first !is Attempt.Failed) return@withContext (first as Attempt.Answered).result
+        if (read && first.stages.reused && first.kind in STALE_CLASSES) {
+            VelaLog.event("rpc.transport", "stale connection: asked again on a new one", "host" to request.url.host, "method" to method)
+            when (val again = attempt(request, method, timeoutMs, fresh = true)) {
+                is Attempt.Answered -> return@withContext again.result
+                is Attempt.Failed -> return@withContext RpcPostResult(outcomeOfClass(again.kind))
+            }
+        }
+        RpcPostResult(outcomeOfClass(first.kind))
+    }
+
+    private sealed interface Attempt {
+        data class Answered(val result: RpcPostResult) : Attempt
+        data class Failed(val kind: String, val stages: CallStages) : Attempt
+    }
+
+    /** One POST: its answer, or how it failed and how far it got. */
+    private suspend fun attempt(request: Request, method: String, timeoutMs: Int, fresh: Boolean): Attempt {
         // r11-9: how far the request got — what tells a request that never
         // left whole (not sent) from one that may have been acted on.
         val stages = CallStages()
-        val call = VelaHttp.client.newBuilder()
+        val call = (if (fresh) VelaHttp.fresh else VelaHttp.client).newBuilder()
             .callTimeout(timeoutMs.toLong(), TimeUnit.MILLISECONDS)
             .eventListener(stages)
             .build()
             .newCall(request)
 
-        try {
+        return try {
+            Attempt.Answered(postAnswer(call))
+        } catch (failure: IOException) {
+            val kind = failureClass(failure, stages)
+            VelaLog.event(
+                "rpc.transport", "failed",
+                "host" to request.url.host, "port" to request.url.port, "method" to method,
+                "class" to kind, "error" to failure.javaClass.simpleName, "message" to failure.message?.take(80),
+                "reused" to stages.reused, "connected" to stages.connected, "written" to stages.bodyWritten, "fresh" to fresh,
+            )
+            Attempt.Failed(kind, stages)
+        }
+    }
+
+    private suspend fun postAnswer(call: okhttp3.Call): RpcPostResult =
             call.await().use { response ->
                 if (!response.isSuccessful) {
-                    return@withContext RpcPostResult(RpcTransportOutcome.HttpError(response.code))
+                    return@use RpcPostResult(RpcTransportOutcome.HttpError(response.code))
                 }
                 val text = response.body?.string().orEmpty()
                 val json = runCatching { JSONObject(text) }.getOrNull()
-                    ?: return@withContext RpcPostResult(RpcTransportOutcome.NonJson)
+                    ?: return@use RpcPostResult(RpcTransportOutcome.NonJson)
                 val error = json.optJSONObject("error")?.let {
                     RpcErrorInfo(
                         code = if (it.isNull("code")) null else it.optInt("code"),
@@ -337,17 +377,6 @@ class OkHttpTransport : RpcTransport {
                 }
                 RpcPostResult(RpcTransportOutcome.Response(error), json)
             }
-        } catch (failure: IOException) {
-            val kind = failureClass(failure, stages)
-            VelaLog.event(
-                "rpc.transport", "failed",
-                "host" to request.url.host, "port" to request.url.port, "method" to method,
-                "class" to kind, "error" to failure.javaClass.simpleName, "message" to failure.message?.take(80),
-                "reused" to stages.reused, "connected" to stages.connected, "written" to stages.bodyWritten,
-            )
-            RpcPostResult(outcomeOfClass(kind))
-        }
-    }
 
     /**
      * r11-9: what one call got to (okhttp's [okhttp3.EventListener]) — a
@@ -422,6 +451,21 @@ class OkHttpTransport : RpcTransport {
          * `SocketTimeoutException` before the `InterruptedIOException` it is.
          */
         fun outcomeOf(failure: IOException): RpcTransportOutcome = outcomeOfClass(failureClass(failure, null))
+
+        /** r11-9: a pooled connection found dead — broken with no answer, the request written or not. */
+        val STALE_CLASSES = setOf("after_write", "write_failed")
+
+        /**
+         * r11-9: a JSON-RPC method that only reads — asked once again on a
+         * new connection when a pooled one was found dead. Anything else (a
+         * submit, a signature's service call) is never sent twice by the
+         * transport: it goes on a connection of its own, and what its failure
+         * means is the core's.
+         */
+        fun readOnly(method: String): Boolean =
+            method == "eth_call" || method.startsWith("eth_get") || method.startsWith("eth_estimate") ||
+                method in setOf("eth_blockNumber", "eth_chainId", "eth_gasPrice", "eth_maxPriorityFeePerGas", "eth_feeHistory", "eth_supportedEntryPoints", "net_version") ||
+                method.startsWith("pimlico_get") || method.startsWith("vela_get")
 
         /**
          * r11-9: the platform's failure as the core's CLASS
