@@ -739,6 +739,8 @@ export type ReadingIntent =
 export interface ReadingCall {
 	/** Leg numbers from the top: `[]` the lone call, `[2, 1]` the first leg of leg 2's batch. */
 	path: number[];
+	/** r10-10: the leg's number as said (`"2.1"`); `null` for the lone call — no number then. */
+	leg?: string | null;
 	to: string;
 	value: ReadingAmount;
 	intent: ReadingIntent;
