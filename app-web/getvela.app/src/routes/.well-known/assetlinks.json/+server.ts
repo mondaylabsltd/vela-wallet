@@ -26,6 +26,21 @@ export const GET: RequestHandler = async () => {
 			}
 		},
 		{
+			// The device-test build (`-PvelaDeviceTest`, app.getvela.wallet.devicetest)
+			// that installs beside the person's own Vela on a real phone, so passkeys
+			// can be tested on hardware (owner, 2026-11-01). Passkeys only: no
+			// handle_all_urls, so it never competes with the real app for links.
+			relation: ['delegate_permission/common.get_login_creds'],
+			target: {
+				namespace: 'android_app',
+				package_name: 'app.getvela.wallet.devicetest',
+				sha256_cert_fingerprints: [
+					// Debug keystore (~/.android/debug.keystore) that signs the device-test build
+					'24:EA:D0:02:B2:AD:B1:D1:B4:9E:FC:B9:63:EB:9E:BC:22:60:76:6E:A5:0C:0B:57:BA:D3:DD:78:1B:0A:4A:B0'
+				]
+			}
+		},
+		{
 			// Passkey 调试台 (app-passkeys-demo). Lets methods 1 & 2 (system Credential
 			// Manager) use rpId=getvela.app without "RP ID cannot be validated".
 			relation: [
