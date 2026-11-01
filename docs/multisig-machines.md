@@ -733,6 +733,16 @@ local-only name presented as the member's own.
 | "SIMULATION RESULT" (Android) vs "Balance changes" | `MultisigReview.moves_title_key` (`componentsUi.signing.balanceChangesTitle`; `null` when the simulation is withheld) |
 | "It can run once…": every earlier number (web), the previous one (natives), "#0" (outside page) | `ProposalItem.waits_for`, `OutsideItem.waits_for`, `OutsideTxShown.waits_for`: every number from the multisig's nonce up to its own, at most 20 (`multisig_proposals::waits_for`). One → `proposal.queuedNote {nonce}`, more → `proposal.queuedNoteMany {nonces}` (the platform's list of `#n`). The outside page now says the wallet's sentence |
 
+### 11.4b What waits names its transactions (r11-1, from the Android lane)
+
+`multisig_presence::Waiting` gains `needs_you_keys` / `ready_keys`
+(`<chainId>:<safeTxHash lowercase>`, from the same lists the counts come
+from — so a refused transaction is in neither) and `read_at` (the followed
+list's read time, an others tick's start, `None` for a list kept from an
+earlier page). A notifier keys "already said" by transaction, and a
+background round speaks only from reads that began after it did. iOS's
+notifier keys by count the same way and can adopt it.
+
 ### 11.5 The web and the extensions (no native change)
 
 - r11-4: the proposal sheet draws `review.refused.key` whenever it is set,
@@ -742,3 +752,9 @@ local-only name presented as the member's own.
   with "Last known".
 - Add member prefills Name with the address's published name (index), never
   a local or kept one, and never over what the person typed.
+- r11-2 (Chrome extension): a request the side panel took whose sheet could
+  not be built (a read before the sheet threw) is answered `-32603` "nothing
+  was signed — try again" instead of staying owed behind the plain wallet.
+- Safari Web Extension: the development package hands signatures to the
+  `dev-seed.html` `page=` origin (loopback with a port only); the release
+  package always names `https://sign.getvela.app`.
