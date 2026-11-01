@@ -808,6 +808,55 @@ fn a_page_executor_signs_one_operation_and_its_page_is_told_what_runs() {
     );
 }
 
+/// r9 (desktop): a balance read nobody answered — or answered with no
+/// amount at all — is "couldn't check", never "the multisig holds 0".
+#[test]
+fn an_unread_balance_is_unchecked_never_zero() {
+    let (mut world, mut sut, account) = setup(&[0, 1]);
+    let hash = hash_of(&propose(&mut sut, &mut world, transfer("1000"), None));
+    run(
+        &mut sut,
+        &mut world,
+        Event::Approve {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+            owner: fixture(1).address,
+        },
+    );
+    let safe = account.address.to_ascii_lowercase();
+    for answer in [
+        vela_core::app::multisig_shell::MultisigShellResult::RpcResult {
+            result: json!("0x"),
+        },
+        vela_core::app::multisig_shell::MultisigShellResult::RpcUnanswered {
+            detail: "not connected".into(),
+        },
+    ] {
+        let safe = safe.clone();
+        world.rpc_hooks.clear();
+        world.rpc_hooks.push(Box::new(move |_, method, params| {
+            (method == "eth_getBalance" && params[0].as_str()?.eq_ignore_ascii_case(&safe))
+                .then(|| answer.clone())
+        }));
+        run(
+            &mut sut,
+            &mut world,
+            Event::Execute {
+                chain_id: 100,
+                safe_tx_hash: hash.clone(),
+                executor: fixture(0).address,
+            },
+        );
+        let state = sut.view().actions[&format!("execute:{hash}")].clone();
+        let said = serde_json::to_value(&state).unwrap();
+        assert!(
+            !said.to_string().contains("\"short\""),
+            "never \"holds 0\": {said}"
+        );
+    }
+    assert!(world.sent.is_empty());
+}
+
 /// r4-5: spending more than the multisig holds fails in its own words,
 /// before any fee or passkey.
 #[test]

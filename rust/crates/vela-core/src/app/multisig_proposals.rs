@@ -3351,12 +3351,21 @@ pub fn plain_reason(reason: Option<&str>) -> Option<String> {
     (!r.is_empty()).then(|| r.to_owned())
 }
 
+/// What a balance read said: the amount; `Ok(None)` — the node answered
+/// with an error (a token whose `balanceOf` reverts: no word on it);
+/// `Err(Unread)` — nobody answered, or the answer is no amount at all (an
+/// empty "0x"). r9 (desktop): a failed read is "couldn't check", never a
+/// balance of 0 ("Can't run now — the multisig holds 0 xDAI" while the RPC
+/// was dead).
+#[derive(Debug)]
+struct Unread;
+
 async fn balance_of(
     io: &Io<Event>,
     chain_id: u64,
     token: Option<&str>,
     holder: &str,
-) -> Option<u128> {
+) -> Result<Option<u128>, Unread> {
     let read = match token {
         None => io
             .rpc_within(chain_id, "eth_getBalance", json!([holder, "latest"]), Some(REVIEW_READ_MS))
@@ -3370,9 +3379,25 @@ async fn balance_of(
             )
             .await,
     };
-    let raw = read.ok()?;
-    let raw = raw.as_str()?;
+    let raw = match read {
+        Ok(raw) => raw,
+        Err(shell::RpcFail::Error { .. }) => return Ok(None),
+        Err(_) => return Err(Unread),
+    };
+    let raw = raw.as_str().ok_or(Unread)?;
+    let digits = raw.strip_prefix("0x").unwrap_or(raw);
+    // `eth_getBalance` is a quantity ("0x0" is zero); `balanceOf` one word.
+    let whole = if token.is_some() {
+        digits.len() >= 64
+    } else {
+        !digits.is_empty()
+    };
+    if !whole {
+        return Err(Unread);
+    }
     shell::quantity(if raw.len() > 66 { &raw[..66] } else { raw })
+        .map(Some)
+        .ok_or(Unread)
 }
 
 async fn call_refusal(io: &Io<Event>, input: &ExecutionInput) -> Option<Value> {
@@ -3425,6 +3450,10 @@ async fn preview_execution(io: &Io<Event>, st: &Shared<State>, input: &Execution
 async fn look(io: &Io<Event>, input: &ExecutionInput) -> Preview {
     for (token, need) in spending_of(input.item.review.action.as_ref()) {
         let have = balance_of(io, input.chain_id, token.as_deref(), &input.account.address).await;
+        let Ok(have) = have else {
+            // Its balance could not be read: not checked, never "holds 0".
+            return Preview::Unchecked;
+        };
         if let Some(have) = have {
             if have < need {
                 return Preview::Fails(
@@ -3451,6 +3480,7 @@ async fn look(io: &Io<Event>, input: &ExecutionInput) -> Preview {
         .await
     };
     let (quote, balance) = futures::join!(quote, balance_of(io, input.chain_id, None, &executor));
+    let balance = balance.ok().flatten();
     let MultisigShellResult::Quoted { quote } = quote else {
         return Preview::Unpriced;
     };
