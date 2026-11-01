@@ -837,6 +837,8 @@ mod tests {
                         name: None,
                         tx: Box::new(tx()),
                         anyway: false,
+                        owners: Vec::new(),
+                        threshold: 0,
                     },
                 },
             );
