@@ -597,6 +597,11 @@ pub struct OutsideItem {
     pub status: ItemStatus,
     /// A rename runs only where the multisig is deployed.
     pub rename_undeployed: bool,
+    /// r11 S4: what a queued one waits behind — the proposals machine's own
+    /// rule (`multisig_proposals::waits_for`), so the page says the same
+    /// numbers as the wallet. Empty unless queued.
+    #[serde(default)]
+    pub waits_for: Vec<String>,
 }
 
 /// `p` for `safe` read against `members` and the chain's own approvals
@@ -675,6 +680,11 @@ pub fn read_item(
         approvals: rows,
         approved,
         threshold: members.threshold,
+        waits_for: if status == ItemStatus::Queued {
+            super::multisig_proposals::waits_for(members.nonce, nonce)
+        } else {
+            Vec::new()
+        },
         status,
         rename_undeployed,
     })
