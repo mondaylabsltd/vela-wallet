@@ -119,7 +119,7 @@ describe('in a packaged page: storage, manifest and protocol together', () => {
 	function packaged(
 		manifest: unknown,
 		stored: string | null,
-		protocol = __VELA_EXTENSION_PROTOCOL__
+		protocol: string = __VELA_EXTENSION_PROTOCOL__
 	) {
 		const storage = new MemoryStorage();
 		if (stored !== null) storage.setItem(HARNESS_PAGE_KEY, stored);
