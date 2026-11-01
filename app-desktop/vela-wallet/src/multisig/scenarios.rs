@@ -1016,12 +1016,11 @@ fn a_rename_withdrawn_on_its_review_signs_nothing() {
 /// exactly as the proposals machine said it.
 #[test]
 fn a_sites_transaction_from_a_multisig_is_proposed_held_and_answered() {
-    use super::dapp::{self, CallsNext, CallsRead, Holds, Step};
+    use super::dapp::{self, CallsRead, Holds, Step};
     use crate::executor::dapp_browser::Forwarded;
     use serde_json::json;
-    use vela_core::app::dapp_rpc;
     use vela_core::app::multisig_dapp::{DappAnswer, HeldStage};
-    use vela_core::app::sign_request::{EXTENSION_REQUEST_TTL_MS, SignResponsePayload};
+    use vela_core::app::sign_request::EXTENSION_REQUEST_TTL_MS;
 
     let mut sim = booted(&[0, 1]);
     sim.long_waits_parked = true;
@@ -1126,8 +1125,7 @@ fn a_sites_transaction_from_a_multisig_is_proposed_held_and_answered() {
             rid: answered,
             tab,
             id,
-            payload,
-            batch: None,
+            answer,
             close: None,
         },
     ] = steps.as_slice()
@@ -1138,12 +1136,7 @@ fn a_sites_transaction_from_a_multisig_is_proposed_held_and_answered() {
         );
     };
     assert_eq!((answered, tab.as_str(), id.as_str()), (&rid, "t1", "7"));
-    assert_eq!(
-        payload,
-        &SignResponsePayload::Ok {
-            result: Some(json!(tx))
-        }
-    );
+    assert_eq!(**answer, DappAnswer::ok(json!(tx)));
     sim.proposals(ProposalsEvent::DappSettled { id: rid });
     assert!(
         sim.machines.proposals_view.dapp.is_empty(),
@@ -1165,57 +1158,33 @@ fn a_sites_transaction_from_a_multisig_is_proposed_held_and_answered() {
     sim.proposals(ask);
     sim.proposals(ProposalsEvent::ConfirmDraft { as_member: None });
     let steps = holds.step(&sim.machines.proposals_view);
-    let Some(Step::Answer {
-        rid,
-        payload,
-        batch: Some((batch, 100)),
-        ..
-    }) = steps.last()
-    else {
+    let Some(Step::Answer { rid, answer, .. }) = steps.last() else {
         panic!("{steps:?}");
     };
-    let batch_hash = batch.clone();
-    assert_eq!(
-        payload,
-        &SignResponsePayload::Ok {
-            result: Some(json!({ "id": batch_hash }))
-        }
-    );
+    let batch_hash = answer
+        .result
+        .as_ref()
+        .and_then(vela_core::app::dapp_rpc::batch_id_of)
+        .map(str::to_owned)
+        .unwrap_or_else(|| panic!("a batch id: {answer:?}"));
     sim.proposals(ProposalsEvent::DappSettled { id: rid.clone() });
 
-    // wallet_getCallsStatus, as the browser machine reads it: pending…
+    // wallet_getCallsStatus, as the browser machine reads it (its one read
+    // of MULTISIG_CALLS_STATUS_METHOD, core-ms-2): pending…
     let status = |sim: &mut Sim, holds: &mut Holds| -> Value {
-        let read = |method: &str| CallsRead {
+        let read = CallsRead {
             read: 1,
-            method: method.to_owned(),
+            method: vela_core::app::dapp_browser::MULTISIG_CALLS_STATUS_METHOD.to_owned(),
             batch: batch_hash.clone(),
             chain_id: 100,
         };
-        let CallsNext::Ask(ask) = holds.calls(read("eth_getUserOperationReceipt")) else {
-            panic!("asked of the machine");
-        };
-        sim.proposals(*ask);
+        let ask = holds.calls(read);
+        sim.proposals(ask);
         let answered = holds.calls_answered(&sim.machines.proposals_view);
-        let [(1, receipt)] = answered.as_slice() else {
+        let [(1, body)] = answered.as_slice() else {
             panic!("{answered:?}");
         };
-        let receipt: Value = serde_json::from_str(receipt).unwrap();
-        let relay = match holds.calls(read(dapp_rpc::USER_OP_STATUS_METHOD)) {
-            CallsNext::Answer { body_json, .. } => {
-                serde_json::from_str::<Value>(&body_json).unwrap()
-            }
-            CallsNext::Ask(_) => panic!("the follow-up read is answered from the first"),
-        };
-        let receipt = receipt.get("result").filter(|r| !r.is_null());
-        let relay = relay.get("result").filter(|r| !r.is_null());
-        let browser = dapp_rpc::calls_status(
-            &batch_hash,
-            100,
-            receipt,
-            (!dapp_rpc::calls_status_landed(receipt))
-                .then_some(relay)
-                .flatten(),
-        );
+        let body: Value = serde_json::from_str(body).unwrap();
         let machine = sim
             .machines
             .proposals_view
@@ -1224,8 +1193,8 @@ fn a_sites_transaction_from_a_multisig_is_proposed_held_and_answered() {
             .last()
             .and_then(|a: &DappAnswer| a.result.clone())
             .unwrap();
-        assert_eq!(browser["status"], machine["status"], "{browser} {machine}");
-        browser
+        assert_eq!(body["result"], machine, "the machine's answer, as it is");
+        machine
     };
     assert_eq!(status(&mut sim, &mut holds)["status"], 100, "pending");
 
@@ -1251,7 +1220,6 @@ fn a_sites_request_declined_or_a_message_is_answered_honestly() {
     use crate::executor::dapp_browser::Forwarded;
     use serde_json::json;
     use vela_core::app::multisig_dapp::HeldStage;
-    use vela_core::app::sign_request::{SignErrorKind, SignResponsePayload};
 
     let mut sim = booted(&[0, 1]);
     sim.long_waits_parked = true;
@@ -1285,17 +1253,10 @@ fn a_sites_request_declined_or_a_message_is_answered_honestly() {
         .unwrap();
     sim.proposals(ProposalsEvent::DappLeave { id: rid });
     let steps = holds.step(&sim.machines.proposals_view);
-    let [Step::Answer { payload, .. }] = steps.as_slice() else {
+    let [Step::Answer { answer, .. }] = steps.as_slice() else {
         panic!("{steps:?}");
     };
-    assert_eq!(
-        payload,
-        &SignResponsePayload::Err {
-            code: 4001,
-            kind: SignErrorKind::UserRejected,
-            message: None
-        }
-    );
+    assert_eq!(answer.error.as_ref().map(|e| e.code), Some(4001));
     assert!(sim.machines.proposals_view.draft.is_none(), "withdrawn");
     assert_eq!(sim.world().passkeys.len(), passkeys, "nothing signed");
 
@@ -1316,12 +1277,10 @@ fn a_sites_request_declined_or_a_message_is_answered_honestly() {
     sim.proposals(ProposalsEvent::DappLeave { id: rid });
     let steps = holds.step(&sim.machines.proposals_view);
     let [
-        Step::Answer {
-            payload: SignResponsePayload::Err { code: 4200, .. },
-            ..
-        },
+        Step::Answer { answer, .. },
     ] = steps.as_slice()
     else {
         panic!("{steps:?}");
     };
+    assert_eq!(answer.error.as_ref().map(|e| e.code), Some(4200));
 }

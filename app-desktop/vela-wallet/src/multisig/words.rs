@@ -9,10 +9,39 @@ use vela_core::multisig::Action;
 use crate::loc::Loc;
 
 /// A token's symbol and decimals, as read for wording (`tokenInfo`).
+/// `decimals` `None`: nobody said (r8-2) — an amount in it is its raw
+/// integer, "decimals unknown", never worded in 18 assumed.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TokenInfo {
     pub symbol: String,
-    pub decimals: u32,
+    pub decimals: Option<u32>,
+}
+
+impl TokenInfo {
+    /// The network's coin: 18 decimals, its symbol.
+    #[must_use]
+    pub fn coin(symbol: String) -> Self {
+        Self {
+            symbol,
+            decimals: Some(18),
+        }
+    }
+}
+
+/// `amount` (base units) in `info`, as a title says it: "1.5 USDC", or the
+/// raw integer with "decimals unknown" when nobody said (r8-2).
+#[must_use]
+pub fn amount_words(loc: &Loc, amount: &str, info: &TokenInfo) -> String {
+    match info.decimals {
+        Some(decimals) => format!("{} {}", units(amount, decimals), info.symbol),
+        None => format!(
+            "{} {}",
+            tv(loc, "review.reading.decimalsUnknown", &[("raw", amount)]),
+            info.symbol
+        ),
+    }
+    .trim()
+    .to_owned()
 }
 
 /// `home.multisig.<key>`.
@@ -86,14 +115,19 @@ pub fn action_title(
     match action {
         Action::Transfer { token: t_, amount, .. } => {
             let info = token(t_.as_deref());
-            tv(
-                loc,
-                "action.send",
-                &[
-                    ("amount", &units(amount, info.decimals)),
-                    ("symbol", &info.symbol),
-                ],
-            )
+            match info.decimals {
+                Some(decimals) => tv(
+                    loc,
+                    "action.send",
+                    &[("amount", &units(amount, decimals)), ("symbol", &info.symbol)],
+                ),
+                // r8-2: never "Send <0.000001" in 18 assumed.
+                None => format!(
+                    "{} {}",
+                    t(loc, "review.reading.send"),
+                    amount_words(loc, amount, &info)
+                ),
+            }
         }
         Action::Batch { calls } => {
             let all = calls.iter().all(|c| matches!(c.action, Action::Transfer { .. }));
@@ -135,7 +169,7 @@ pub fn action_title(
                 loc,
                 "action.callWithValue",
                 &[
-                    ("amount", &units(value, info.decimals)),
+                    ("amount", &units(value, info.decimals.unwrap_or(18))),
                     ("symbol", &info.symbol),
                 ],
             )
@@ -153,27 +187,66 @@ pub fn short(address: &str) -> String {
     format!("{}…{}", &full[..6], &full[full.len() - 4..])
 }
 
+/// The token facts the proposals machine keeps (`view.tokens`).
+pub type ViewTokens =
+    std::collections::BTreeMap<String, vela_core::app::multisig_outside::reading::TokenFacts>;
+
+/// The token's facts on `chain_id` as the proposals machine read them
+/// (`view.tokens`, `<chainId>:<token lowercase>`: the registry's, else the
+/// contract's own answer — r8-2), else the wallet's registry; the coin for
+/// `None`. Reads nothing: a token nobody read yet has no decimals and is
+/// named by its contract — never a symbol or 18 decimals made up.
+#[must_use]
+pub fn token_facts(tokens: &ViewTokens, chain_id: u64, token: Option<&str>) -> TokenInfo {
+    let chain = u32::try_from(chain_id).unwrap_or_default();
+    let Some(address) = token else {
+        return TokenInfo::coin(crate::flows::live::native_symbol(chain));
+    };
+    let key = format!("{chain_id}:{}", address.to_ascii_lowercase());
+    let facts = tokens.get(&key).cloned().unwrap_or_else(|| {
+        vela_core::app::multisig_outside::reading::TokenFacts::of(
+            chain_id,
+            Some(address),
+            &std::collections::BTreeMap::new(),
+        )
+    });
+    TokenInfo {
+        symbol: facts.symbol.unwrap_or_else(|| short(address)),
+        decimals: facts.decimals,
+    }
+}
+
 /// The token's facts on `chain_id`: the chain's coin for `None`, else the
-/// contract's own symbol and decimals, read once (BLOCKS on a contract).
+/// wallet's registry, else the contract's own symbol and decimals, read once
+/// (BLOCKS on a contract: never from a render). A contract that does not
+/// answer leaves the decimals unknown (r8-2), never 18.
 #[must_use]
 pub fn token_info(chain_id: u64, token: Option<&str>) -> TokenInfo {
     let chain = u32::try_from(chain_id).unwrap_or_default();
-    match token {
-        None => TokenInfo {
-            symbol: crate::flows::live::native_symbol(chain),
-            decimals: 18,
-        },
-        Some(address) => crate::executor::send::token_metadata(chain, address).map_or(
-            TokenInfo {
-                symbol: String::new(),
-                decimals: 18,
-            },
-            |meta| TokenInfo {
-                symbol: meta.symbol,
-                decimals: meta.decimals,
-            },
-        ),
+    let Some(address) = token else {
+        return TokenInfo::coin(crate::flows::live::native_symbol(chain));
+    };
+    let registry = vela_core::app::multisig_outside::reading::TokenFacts::of(
+        chain_id,
+        Some(address),
+        &std::collections::BTreeMap::new(),
+    );
+    if registry.known {
+        return TokenInfo {
+            symbol: registry.symbol.unwrap_or_else(|| short(address)),
+            decimals: registry.decimals,
+        };
     }
+    crate::executor::send::token_metadata(chain, address).map_or(
+        TokenInfo {
+            symbol: short(address),
+            decimals: None,
+        },
+        |meta| TokenInfo {
+            symbol: meta.symbol,
+            decimals: Some(meta.decimals),
+        },
+    )
 }
 
 #[cfg(test)]
@@ -182,11 +255,57 @@ mod tests {
     use super::*;
 
     fn coin(_: Option<&str>) -> TokenInfo {
-        TokenInfo {
-            symbol: "xDAI".to_owned(),
-            decimals: 18,
-        }
+        TokenInfo::coin("xDAI".to_owned())
     }
+
+    /// r8-2: a token nobody sized is said raw, never "<0.000001" in 18; the
+    /// proposals view's facts word it once read.
+    #[test]
+    fn a_token_without_decimals_is_said_raw() {
+        let loc = Loc::for_tag("en");
+        let who = |a: &str| a.to_owned();
+        let unknown = |_: Option<&str>| TokenInfo {
+            symbol: "0x0000…0b0b".to_owned(),
+            decimals: None,
+        };
+        let title = action_title(
+            &loc,
+            Some(&Action::Transfer {
+                token: Some("0x00000000000000000000000000000000000b0b0b".to_owned()),
+                to: "0x1".to_owned(),
+                amount: "1000000".to_owned(),
+            }),
+            "1",
+            &who,
+            &unknown,
+        );
+        assert_eq!(title, "Send 1000000 base units · decimals unknown 0x0000…0b0b");
+
+        let mut tokens = ViewTokens::new();
+        tokens.insert(
+            "5042002:0x00000000000000000000000000000000000b0b0b".to_owned(),
+            vela_core::app::multisig_outside::reading::TokenFacts {
+                token: Some("0x00000000000000000000000000000000000b0b0b".to_owned()),
+                symbol: Some("BOB".to_owned()),
+                decimals: Some(6),
+                known: false,
+            },
+        );
+        let bob = token_facts(&tokens, 5_042_002, Some("0x00000000000000000000000000000000000B0B0B"));
+        assert_eq!(
+            bob,
+            TokenInfo {
+                symbol: "BOB".to_owned(),
+                decimals: Some(6)
+            }
+        );
+        // Arc's USDC: the registry's 6, never 18.
+        let usdc = token_facts(&tokens, 5_042_002, Some("0x3600000000000000000000000000000000000000"));
+        assert_eq!(usdc.decimals, Some(6));
+        let nobody = token_facts(&tokens, 5_042_002, Some("0x00000000000000000000000000000000000c0c0c"));
+        assert_eq!(nobody.decimals, None);
+    }
+
 
     #[test]
     fn a_proposal_is_titled_as_the_web_titles_it() {

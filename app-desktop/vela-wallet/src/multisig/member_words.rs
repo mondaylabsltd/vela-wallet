@@ -12,7 +12,7 @@ use vela_core::app::multisig_members::{EntryNote, MemberRule, PlanNetwork, Recov
 use vela_core::multisig::{Action, MemberRefusal, MemberVerdict};
 use vela_core::multisig_reading::{ChangeKind, MemberChanges, Rule};
 
-use super::words::{self, t, tv};
+use super::words::{self, t, tc, tv};
 use crate::loc::Loc;
 
 /// "2 of 3" (`members.ruleValue`): the stepper's value and a plan's sides.
@@ -171,8 +171,9 @@ pub fn waiting_title(loc: &Loc, action: &Action, who: &dyn Fn(&str) -> String) -
             "members.changeReplace",
             &[("old", &who(old_owner)), ("new", &who(new_owner))],
         ),
+        // r9: "Require 1 approval" — plural by the count.
         Action::ChangeThreshold { threshold } => {
-            tv(loc, "action.changeThreshold", &[("threshold", threshold)])
+            tc(loc, "action.changeThreshold", threshold.parse().unwrap_or(0))
         }
         _ => String::new(),
     }

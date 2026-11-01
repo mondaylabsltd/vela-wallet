@@ -83,6 +83,9 @@ pub struct MultisigHost {
     /// When the others' presence was first asked for (ms): a full poll
     /// later it is a live read, never the list an earlier session kept.
     others_since: Option<f64>,
+    /// r9-12: when each address the accounts machine wants named
+    /// (`index_wanted`) was last asked of the passkey index (ms).
+    index_asked: std::collections::BTreeMap<String, f64>,
 }
 
 /// How a send flow's proposal ended (its `Proposed` / `ProposeFailed`),
@@ -277,6 +280,7 @@ impl MultisigHost {
             screen: Vec::new(),
             due: Due::default(),
             checked: false,
+            index_asked: std::collections::BTreeMap::new(),
             generation: 0,
             send_propose: None,
             peer: None,
@@ -319,6 +323,7 @@ impl MultisigHost {
         if !self.machines.accounts_view.loaded {
             return;
         }
+        self.ask_index(now, cx);
         let mut jobs = Vec::new();
         if !self.checked {
             // Once a session: what each shared record is now, and who can
@@ -410,6 +415,54 @@ impl MultisigHost {
     /// What the machines asked the screen to do since the last call.
     pub fn take_screen(&mut self) -> Vec<Screen> {
         std::mem::take(&mut self.screen)
+    }
+
+    /// r9-12: the passkey index asked about each member the accounts machine
+    /// wants named (`index_wanted`), off the UI thread — once per address
+    /// every [`INDEX_ASK_AGAIN_MS`] — and its answers handed to the machine
+    /// (`index_names`), which names every member from them. An address
+    /// nobody answered for is left out: asked again later.
+    fn ask_index(&mut self, now: f64, cx: &mut Context<Self>) {
+        const INDEX_ASK_AGAIN_MS: f64 = 10_000.;
+        let wanted: Vec<String> = self
+            .machines
+            .accounts_view
+            .index_wanted
+            .iter()
+            .map(|a| a.to_ascii_lowercase())
+            .filter(|a| self.index_asked.get(a).is_none_or(|at| now - at >= INDEX_ASK_AGAIN_MS))
+            .collect();
+        if wanted.is_empty() {
+            return;
+        }
+        for address in &wanted {
+            self.index_asked.insert(address.clone(), now);
+        }
+        let lookup = cx.background_executor().spawn(async move {
+            wanted
+                .into_iter()
+                .filter_map(|address| {
+                    let answer = crate::executor::registry::index_answer(&address)?;
+                    Some((
+                        address,
+                        accounts::IndexAnswer {
+                            vela: answer.is_some(),
+                            name: answer,
+                        },
+                    ))
+                })
+                .collect::<std::collections::BTreeMap<_, _>>()
+        });
+        cx.spawn(async move |this, cx| {
+            let answers = lookup.await;
+            if answers.is_empty() {
+                return;
+            }
+            let _ = this.update(cx, |host, cx| {
+                host.accounts(accounts::Event::IndexNames { answers }, cx);
+            });
+        })
+        .detach();
     }
 
     // -- events ------------------------------------------------------------

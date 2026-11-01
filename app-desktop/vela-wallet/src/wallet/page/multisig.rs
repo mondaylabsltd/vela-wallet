@@ -88,6 +88,9 @@ pub(crate) struct MultisigUi {
     pub create_form: Option<super::multisig_create::CreateForm>,
     /// What the person picked on the add sheet (its text is `add`).
     pub add_form: Option<super::multisig_add::AddForm>,
+    /// The proposals machine.s token facts (`view.tokens`, r8-2), as last
+    /// heard: what a title or an amount is worded in, never read here.
+    pub tokens: words::ViewTokens,
     /// A link's own sheet (`multisig_links.rs`).
     pub link_sheet: Option<super::multisig_links::LinkSheet>,
     /// The link stand last drawn (each is drawn once).
@@ -111,24 +114,28 @@ pub(crate) struct ReviewDraw {
     pub state: Option<StateGuard>,
     pub simulation: Option<SimVerdict>,
     pub simulation_source: String,
+    /// A concern of a kind this build does not know is left out (its own
+    /// block says it), never the whole review unread.
+    #[serde(deserialize_with = "known_concerns")]
     pub concerns: Vec<Concern>,
     pub sign: SignRule,
     /// r9-9: why nothing is signed, the core's one line (its corpus key).
     pub refused: Option<Refused>,
+    /// What each call does, as the core read it (r8-1, r9-1).
+    #[serde(skip)]
+    pub reading: Option<crate::multisig::reading::ReadingDraw>,
+}
+
+fn known_concerns<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<Concern>, D::Error> {
+    let all: Vec<Value> = Deserialize::deserialize(d)?;
+    Ok(all.into_iter().filter_map(|c| serde_json::from_value(c).ok()).collect())
 }
 
 impl ReviewDraw {
     fn of(value: &Value) -> Option<Self> {
-        serde_json::from_value(value.clone()).ok()
-    }
-
-    /// The transaction's own refusal (Vela does not sign it), if any.
-    fn refusal(&self) -> Option<String> {
-        self.review
-            .as_ref()
-            .and_then(|r| r.get("refusal"))
-            .and_then(Value::as_str)
-            .map(str::to_owned)
+        let mut draw: Self = serde_json::from_value(value.clone()).ok()?;
+        draw.reading = crate::multisig::reading::ReadingDraw::of(value);
+        Some(draw)
     }
 }
 
@@ -187,6 +194,7 @@ impl WalletPage {
                     Screen::Activated(_) | Screen::ActivityRows(_) => {}
                 }
             }
+            this.multisig.tokens = host.read(cx).machines().proposals_view.tokens.clone();
             this.ms_dapp_follow(cx);
             cx.notify();
         }));
@@ -210,6 +218,21 @@ impl WalletPage {
                 self.open_multisig_sheet(chain_id, hash, cx);
             }
             Some("close_sheet") => self.close_multisig_sheet(cx),
+            // The Send pill, as the person presses it (r9-6: documented,
+            // never wired): the recipient filled where the script names one.
+            Some("send") => {
+                let params = vela_core::app::send::SendOpenParams {
+                    prefilled_recipient: ask.get("to").and_then(Value::as_str).map(str::to_owned),
+                    ..Default::default()
+                };
+                self.enter_flow_with(FlowEntry::Send, params, cx);
+                crate::multisig::dev_script::note(&format!(
+                    "page send: panel {:?}, flows {:?}, send open {}",
+                    self.panel,
+                    self.flows,
+                    self.send_host.is_some()
+                ));
+            }
             Some("approve_as") => {
                 self.multisig.approve_as = ask.get("member").and_then(Value::as_str).map(str::to_owned);
             }
@@ -221,6 +244,14 @@ impl WalletPage {
                 self.multisig.scroll = crate::ui::SmoothScroll::new();
             }
             Some("close_invite") => self.multisig.invite = None,
+            // The add sheet with a link or address pasted, as the person does.
+            Some("add") => {
+                let text = ask.get("text").and_then(Value::as_str).map(str::to_owned);
+                self.open_multisig_add(text, cx);
+                if ask.get("press").and_then(Value::as_bool) == Some(true) {
+                    self.ms_add_press(false, cx);
+                }
+            }
             Some("session") => self.multisig.session = true,
             Some("switcher") => self.account_switcher = true,
             Some("close_switcher") => self.account_switcher = false,
@@ -244,6 +275,19 @@ impl WalletPage {
     /// How a member is named here: this device's account, the name the
     /// multisig keeps, else its short address (the core's `names.label`).
     fn ms_member_name(&self, address: &str, account: Option<&MultisigAccount>, cx: &App) -> String {
+        // r9-12: one name per member, the core's (`member_labels`: kept, the
+        // passkey index, its own name, the short address) — the same on
+        // every platform, never picked here.
+        if let Some(label) = ms_host::booted(cx).and_then(|host| {
+            host.read(cx)
+                .machines()
+                .accounts_view
+                .member_labels
+                .get(&address.to_ascii_lowercase())
+                .cloned()
+        }) {
+            return label;
+        }
         let own = session::view(cx)
             .accounts
             .iter()
@@ -885,11 +929,17 @@ impl WalletPage {
                 view.standings.get(&key),
                 Some(Standing::YourTurn | Standing::Ready)
             );
-            let sub = format!(
-                "{} · {}",
-                network(item.chain_id),
-                words::tv(&loc, "action.numberValue", &[("nonce", &item.nonce.to_string())])
-            );
+            // r4b-6: proposals at one number — only one of them can run.
+            let conflict = (!item.same_nonce.is_empty()).then(|| words::t(&loc, "status.conflict"));
+            let sub = [
+                Some(network(item.chain_id)),
+                Some(words::tv(&loc, "action.numberValue", &[("nonce", &item.nonce.to_string())])),
+                conflict,
+            ]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join(" · ");
             let (chain_id, hash) = (item.chain_id, item.safe_tx_hash.clone());
             group = group.child(
                 div()
@@ -1043,10 +1093,10 @@ impl WalletPage {
         match why.get("kind").and_then(Value::as_str) {
             Some("short") => {
                 let token = why.get("token").and_then(Value::as_str);
-                let info = words::token_info(chain_id, token);
+                let info = words::token_facts(&self.multisig.tokens, chain_id, token);
                 let amount = |k: &str| {
                     let raw = why.get(k).and_then(Value::as_str).unwrap_or("0");
-                    format!("{} {}", words::units(raw, info.decimals), info.symbol)
+                    words::amount_words(loc, raw, &info)
                 };
                 words::tv(
                     loc,
@@ -1064,22 +1114,54 @@ impl WalletPage {
         }
     }
 
-    /// What a proposal is, in one line.
+    /// What a proposal is, in one line: a contract call as the core reads
+    /// it (r8-1, r9-1 — "Approve · USDC", "Batch of 2 calls", never only
+    /// "Contract call" for one the core can say), anything else in the
+    /// proposals view's token facts (r8-2: never 18 decimals assumed).
     fn ms_title(&self, item: &ProposalItem, account: Option<&MultisigAccount>, cx: &App) -> String {
         let chain_id = item.chain_id;
+        if matches!(item.review.action, Some(vela_core::multisig::Action::Call { .. }))
+            && let Some(account) = account
+            && let Some(title) = self.ms_reading_title(chain_id, &account.address, &item.tx)
+        {
+            return title;
+        }
         words::action_title(
             &self.loc,
             item.review.action.as_ref(),
             &item.nonce.to_string(),
             &|a: &str| self.ms_member_name(a, account, cx),
-            &|t: Option<&str>| {
-                // The coin needs no read; a token's symbol is the chain's.
-                match t {
-                    None => words::token_info(chain_id, None),
-                    Some(_) => words::token_info(chain_id, t),
-                }
-            },
+            &|t: Option<&str>| words::token_facts(&self.multisig.tokens, chain_id, t),
         )
+    }
+
+    /// The words a reading is said in, on `chain_id`.
+    fn ms_reading_ctx(&self, chain_id: u64) -> crate::multisig::reading::Ctx<'_> {
+        crate::multisig::reading::Ctx {
+            loc: &self.loc,
+            native_symbol: crate::flows::live::native_symbol(u32::try_from(chain_id).unwrap_or_default()),
+        }
+    }
+
+    /// A call's title from the core's reading of its bytes (the link door's
+    /// `review.reading`, in-process), with the token facts the proposals
+    /// machine read; `None` when the reading says no more than "a call".
+    fn ms_reading_title(&self, chain_id: u64, safe: &str, tx: &vela_core::multisig::SafeTx) -> Option<String> {
+        use crate::multisig::reading;
+        let prefix = format!("{chain_id}:");
+        let facts: Vec<_> = self
+            .multisig
+            .tokens
+            .iter()
+            .filter(|(k, _)| k.starts_with(&prefix))
+            .map(|(_, f)| f.clone())
+            .collect();
+        let read = vela_core::multisig_rules::review::reading_of(chain_id, safe, tx, &facts).ok()?;
+        let draw = reading::ReadingDraw::of(&read)?;
+        if !reading::says_more_than_a_call(&draw.reading) {
+            return None;
+        }
+        reading::title(&draw.reading, &self.ms_reading_ctx(chain_id))
     }
 
     // -- the transaction's sheet ----------------------------------------------
@@ -1129,8 +1211,13 @@ impl WalletPage {
         let review = view.reviews.get(&key).and_then(ReviewDraw::of);
         let mut body = div().flex().flex_col().gap(px(16.)).pb(px(16.));
 
-        // What it is.
-        let heading = self.ms_title(&item, account.as_ref(), cx);
+        // What it is: the review's own reading heads it (r8-1, the web's
+        // `readingTitle`), else the proposal's title.
+        let heading = review
+            .as_ref()
+            .and_then(|r| r.reading.as_ref())
+            .and_then(|d| crate::multisig::reading::title(&d.reading, &self.ms_reading_ctx(chain_id)))
+            .unwrap_or_else(|| self.ms_title(&item, account.as_ref(), cx));
         body = body.child(
             div()
                 .flex()
@@ -1222,7 +1309,9 @@ impl WalletPage {
             body = body.child(ms_note(theme, &text, Tone::Neutral));
         }
         if let Some(entry) = view.outbox.get(&key) {
+            // r8-16: on its way now — "Sending…", never "Not sent yet".
             let text = match (entry.why.as_str(), entry.retry_at) {
+                _ if entry.sending || entry.why == "sending" => words::t(&loc, "proposal.outboxSending"),
                 ("busy", Some(at)) => words::tv(
                     &loc,
                     "proposal.outboxBusy",
@@ -1279,6 +1368,22 @@ impl WalletPage {
                 safe_tx_hash: hash.clone(),
                 executor,
             });
+        }
+        // r9-18: who still approves, and how, asked again while the machine
+        // has no answer for it — a sheet opened the moment a site's proposal
+        // was made asked before the machine held the transaction, and drew
+        // only its own approval for good.
+        if item.status != ms_proposals::ProposalStatus::Done
+            && !view.signers.keys().any(|k| k.eq_ignore_ascii_case(&item_key(chain_id, &hash)))
+        {
+            let key = format!("signers:{}", item_key(chain_id, &hash.to_ascii_lowercase()));
+            if self.multisig.previewed.get(&key).is_none_or(|at| now - at >= LOOK_EVERY_MS) {
+                self.multisig.previewed.insert(key, now);
+                events.push(ms_proposals::Event::ReadSigners {
+                    chain_id,
+                    safe_tx_hash: hash.clone(),
+                });
+            }
         }
         // Done (executed from this sheet, or found so): the machine reads how
         // it ran — who executed, which approvals counted (`frozen`) — once.
@@ -1349,7 +1454,7 @@ impl WalletPage {
         let loc = self.ms_loc();
         let name = self.ms_member_name(actor, account, cx);
         let info = words::token_info(item.chain_id, None);
-        let coin = |raw: &str| format!("{} {}", words::units(raw, info.decimals), info.symbol);
+        let coin = |raw: &str| words::amount_words(&loc, raw, &info);
         let (text, tone, retry) = match look {
             None => (words::t(&loc, "proposal.feeChecking"), Tone::Neutral, false),
             Some(Look::Priced { fee, can_pay: true, .. }) => (
@@ -1543,7 +1648,7 @@ impl WalletPage {
         }
         match (&plan.kind, plan.actor.clone()) {
             (FootKind::Approve, Some(actor)) => {
-                foot = foot.child(self.ms_approve_press(theme, item, actor, crate::ui::ButtonVariant::Primary, rule::approve_label(sign), reviewed && sign.allowed && !executing, approving, cx));
+                foot = foot.child(self.ms_approve_press(theme, item, actor, value_variant(sign), rule::approve_label(sign), reviewed && sign.allowed && !executing, approving, cx));
             }
             (
                 FootKind::Execute {
@@ -1570,13 +1675,13 @@ impl WalletPage {
                     // It cannot run by this executor: approving is the one
                     // thing left to do.
                     if *approve_first && *can_approve_only && look != &Some(rule::Look::Spent) {
-                        presses = presses.child(div().flex_1().child(self.ms_approve_press(theme, item, actor.clone(), crate::ui::ButtonVariant::Primary, rule::approve_label(sign), reviewed && sign.allowed && !executing, approving, cx)));
+                        presses = presses.child(div().flex_1().min_w(px(0.)).child(self.ms_approve_press(theme, item, actor.clone(), value_variant(sign), rule::approve_label(sign), reviewed && sign.allowed && !executing, approving, cx)));
                     }
                 } else {
                     if *approve_first && *can_approve_only {
                         // Executing pays the fee; approving alone does not.
                         // As tall as the press beside it: one row of two answers.
-                        presses = presses.child(div().flex_1().child(
+                        presses = presses.child(div().flex_1().min_w(px(0.)).child(
                             self.ms_approve_press(theme, item, actor.clone(), crate::ui::ButtonVariant::Secondary, rule::approve_label(sign), reviewed && sign.allowed && !executing, approving, cx)
                                 .min_h(px(crate::theme::BTN_H_PRIMARY)),
                         ));
@@ -1589,9 +1694,9 @@ impl WalletPage {
                     };
                     let (chain_id, hash, one_tap) = (item.chain_id, item.safe_tx_hash.clone(), *one_tap);
                     let executor = actor.clone();
-                    presses = presses.child(div().flex_1().child(crate::ui::vela_button_state(
+                    presses = presses.child(div().flex_1().min_w(px(0.)).child(crate::ui::vela_button_state(
                         "ms-execute",
-                        crate::ui::ButtonVariant::Primary,
+                        value_variant(sign),
                         words::t(&loc, rule::execute_label(*approve_first, sign)).into(),
                         state,
                         theme,
@@ -1623,12 +1728,14 @@ impl WalletPage {
             }
             _ => {}
         }
-        if reviewed && !sign.allowed && !matches!(plan.kind, FootKind::Nothing) {
-            // r9-9: the refusal's own reason, as the core keys it.
-            let why = review
-                .and_then(|r| r.refused.as_ref())
-                .map_or_else(|| words::t(&loc, "review.blocked"), |r| loc.t(&r.key).to_string());
-            foot = foot.child(ms_note(theme, &why, Tone::Danger));
+        // r9-9: the refusal is said once, by the review's own line above; a
+        // review that names no reason still says nothing is signed.
+        if reviewed
+            && !sign.allowed
+            && review.is_some_and(|r| r.refused.is_none())
+            && !matches!(plan.kind, FootKind::Nothing)
+        {
+            foot = foot.child(ms_note(theme, &words::t(&loc, "review.blocked"), Tone::Danger));
         }
 
         // An outside member's wallet, from here only when no member here
@@ -1640,7 +1747,8 @@ impl WalletPage {
             foot = foot.child(self.ms_outside_press(theme, item, crate::ui::ButtonVariant::Secondary, cx));
         }
 
-        if view.outbox.contains_key(&key) {
+        // Nothing to send again while it is on its way (r8-16).
+        if view.outbox.get(&key).is_some_and(|e| !(e.sending || e.why == "sending")) {
             let (chain_id, hash) = (item.chain_id, item.safe_tx_hash.clone());
             foot = foot.child(crate::ui::vela_button(
                 "ms-send-again",
@@ -1664,21 +1772,15 @@ impl WalletPage {
         }
 
         // Reject: a cancellation at its number, approved as any other.
-        let members_here = !item.can_approve.is_empty() || !item.can_execute.is_empty()
-            || item.approvals.iter().any(|a| {
-                session::view(cx)
-                    .accounts
-                    .iter()
-                    .any(|row| same(&row.account.address, &a.owner))
-            });
-        if members_here && item.cancelled_by.is_none() && !executing {
+        // r9-9: a member of it on this device, whatever the transaction is
+        // (the core's `members_here`).
+        if !item.members_here.is_empty() && item.cancelled_by.is_none() && !executing {
             if self.multisig.rejecting {
-                let threshold = item.threshold.to_string();
                 let (chain_id, nonce) = (item.chain_id, item.nonce.to_string());
                 foot = foot
                     .child(ms_note(
                         theme,
-                        &words::tv(&loc, "proposal.rejectHint", &[("threshold", &threshold)]),
+                        &words::tc(&loc, "proposal.rejectHint", usize::try_from(item.threshold).unwrap_or(usize::MAX)),
                         Tone::Neutral,
                     ))
                     .child(
@@ -1872,8 +1974,8 @@ impl WalletPage {
                     loc,
                     "proposal.whyShort",
                     &[
-                        ("have", &format!("{} {}", words::units(&have, info.decimals), info.symbol)),
-                        ("need", &format!("{} {}", words::units(&need, info.decimals), info.symbol)),
+                        ("have", &words::amount_words(loc, &have, &info)),
+                        ("need", &words::amount_words(loc, &need, &info)),
                     ],
                 )
             }
@@ -1905,12 +2007,10 @@ impl WalletPage {
         let net = network(chain_id);
         let mut col = div().flex().flex_col().gap(px(12.));
 
-        if let Some(refusal) = review.refusal().filter(|_| !past) {
-            col = col.child(ms_note(
-                theme,
-                &words::tv(&loc, "proposal.refused", &[("reason", &refusal)]),
-                Tone::Danger,
-            ));
+        // r9-9: why nothing is signed — the core's one line, said once here
+        // (the foot says nothing more), never an English reason of its own.
+        if let Some(refused) = review.refused.as_ref().filter(|_| !past) {
+            col = col.child(ms_note(theme, &loc.t(&refused.key), Tone::Danger));
         }
 
         // A member change, read before anything else (`MemberChangeRule`):
@@ -1953,6 +2053,25 @@ impl WalletPage {
             col = col.child(ms_note(theme, &lines.rule, if past { Tone::Neutral } else { Tone::Caution }));
             if let Some(misfit) = lines.does_not_fit.as_ref().filter(|_| !past) {
                 col = col.child(ms_note(theme, misfit, Tone::Danger));
+            }
+        }
+
+        // What each call does, as the core read it (r8-1, r8-2, r8-5, r9-1):
+        // the concern lines first (an unlimited grant, a nested batch, one
+        // that cannot be read, decimals unknown — each once), then the lone
+        // call or every leg of every batch. Nothing decoded here.
+        let mut drawn_parties: Vec<String> = Vec::new();
+        if let Some(draw) = &review.reading {
+            let ctx = self.ms_reading_ctx(chain_id);
+            let lines = if past {
+                Vec::new()
+            } else {
+                crate::multisig::reading::concern_blocks(draw, &ctx)
+            };
+            let blocks = crate::multisig::reading::blocks(&draw.reading, &ctx);
+            drawn_parties = crate::multisig::reading::party_addresses(&blocks);
+            for (i, block) in lines.iter().chain(&blocks).enumerate() {
+                col = col.child(self.ms_reading_block(theme, i, block, review, past, account, cx));
             }
         }
 
@@ -2008,58 +2127,12 @@ impl WalletPage {
                 .as_ref()
                 .map(|k| k.label.clone())
                 .unwrap_or_else(|| self.ms_member_name(&r.address, account, cx));
-            // The row's badge (`recipientBadge`): the cues, else whose it is.
-            let badge = if past {
-                None
-            } else {
-                let tags: Vec<String> = [
-                    r.first_time_cue.then(|| self.loc.t("componentsUi.signing.firstTimeTag").to_string()),
-                    r.contract_cue.then(|| self.loc.t("componentsUi.signing.contractTag").to_string()),
-                ]
-                .into_iter()
-                .flatten()
-                .collect();
-                if tags.is_empty() {
-                    match r.known.as_ref().map(|k| k.kind) {
-                        Some(vela_core::multisig_review::KnownKind::Own) => Some((words::t(&loc, "review.knownOwn"), Tone::Neutral)),
-                        Some(vela_core::multisig_review::KnownKind::Member) if r.role != RecipientRole::Member => {
-                            Some((words::t(&loc, "review.knownMember"), Tone::Neutral))
-                        }
-                        _ => None,
-                    }
-                } else {
-                    Some((tags.join(" · "), if r.lookalike.is_some() { Tone::Danger } else { Tone::Caution }))
-                }
-            };
-            parties = parties.child(
-                div()
-                    .id(ElementId::from(("ms-party", i)))
-                    .flex()
-                    .flex_col()
-                    .gap(px(2.))
-                    .child(ms_label(theme, &role))
-                    .child(
-                        div()
-                            .flex()
-                            .flex_wrap()
-                            .items_center()
-                            .gap(px(8.))
-                            .child(
-                                div()
-                                    .text_size(theme::text_row_title())
-                                    .text_color(theme.fg_base)
-                                    .child(name),
-                            )
-                            .children(badge.map(|(text, tone)| ms_badge(theme, &text, tone))),
-                    )
-                    .child(
-                        div()
-                            .font_family(theme::font_mono())
-                            .text_size(theme::text_label())
-                            .text_color(theme.fg_subtle)
-                            .child(vela_core::multisig_link::eip55(&r.address)),
-                    ),
-            );
+            // The reading names this one already (its party row, r5reg-15):
+            // its notes below are still said, its row not twice.
+            if !drawn_parties.contains(&r.address.to_ascii_lowercase()) {
+                let badge = self.ms_recipient_badge(r, past);
+                parties = parties.child(ms_party_row(theme, ElementId::from(("ms-party", i)), &role, name, badge, &r.address));
+            }
             if !past {
                 if let Some(like) = &r.lookalike {
                     parties = parties.child(ms_note(
@@ -2095,7 +2168,7 @@ impl WalletPage {
                     col = col.child(ms_note(theme, &text, tone));
                 }
                 for (i, delta) in sim.deltas.iter().enumerate() {
-                    let info = words::token_info(chain_id, delta.token.as_deref());
+                    let info = words::token_facts(&self.multisig.tokens, chain_id, delta.token.as_deref());
                     let (sign, raw) = match delta.delta.strip_prefix('-') {
                         Some(raw) => ("−", raw),
                         None => ("+", delta.delta.as_str()),
@@ -2105,7 +2178,7 @@ impl WalletPage {
                             .id(ElementId::from(("ms-delta", i)))
                             .text_size(theme::text_row_title())
                             .text_color(theme.fg_base)
-                            .child(format!("{sign}{} {}", words::units(raw, info.decimals), info.symbol)),
+                            .child(format!("{sign}{}", words::amount_words(&loc, raw, &info))),
                     );
                 }
                 if review.simulation_source == "probe" && sim.kind == "deltas" {
@@ -2113,14 +2186,6 @@ impl WalletPage {
                 }
             }
 
-            // What it says of itself that no block above says (r8-13).
-            for concern in crate::multisig::sheet::concerns_left(&review.concerns) {
-                let (text, tone) = match concern {
-                    Concern::Blind => (self.loc.t("clearSigning.modalNoDescriptor").to_string(), Tone::Caution),
-                    _ => continue,
-                };
-                col = col.child(ms_note(theme, &text, tone));
-            }
         }
 
         // The technical details: the SafeTx as signed and its hashes.
@@ -2153,6 +2218,125 @@ impl WalletPage {
             col = col.child(tech);
         }
         col
+    }
+
+    /// A recipient's badge (`recipientBadge`): the review's cues (first
+    /// time, a contract), else whose it is; nothing on one executed.
+    fn ms_recipient_badge(&self, r: &Recipient, past: bool) -> Option<(String, Tone)> {
+        if past {
+            return None;
+        }
+        let loc = &self.loc;
+        let tags: Vec<String> = [
+            r.first_time_cue.then(|| loc.t("componentsUi.signing.firstTimeTag").to_string()),
+            r.contract_cue.then(|| loc.t("componentsUi.signing.contractTag").to_string()),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        if !tags.is_empty() {
+            return Some((tags.join(" · "), if r.lookalike.is_some() { Tone::Danger } else { Tone::Caution }));
+        }
+        match r.known.as_ref().map(|k| k.kind) {
+            Some(vela_core::multisig_review::KnownKind::Own) => Some((words::t(loc, "review.knownOwn"), Tone::Neutral)),
+            Some(vela_core::multisig_review::KnownKind::Member) if r.role != RecipientRole::Member => {
+                Some((words::t(loc, "review.knownMember"), Tone::Neutral))
+            }
+            _ => None,
+        }
+    }
+
+    /// One block of the core's reading, drawn (r9-1): the lone call's
+    /// verb, its facts, who it reaches (with the name and cue the review
+    /// knows for that address), a leg's card, a batch's runner note, a
+    /// concern's line.
+    #[allow(clippy::too_many_arguments, reason = "the sheet's facts")]
+    fn ms_reading_block(
+        &self,
+        theme: &Theme,
+        i: usize,
+        block: &crate::multisig::reading::Block,
+        review: &ReviewDraw,
+        past: bool,
+        account: Option<&MultisigAccount>,
+        cx: &App,
+    ) -> gpui::AnyElement {
+        use crate::multisig::reading::{Block, Row, Tone as T};
+        let tone = |t: T| match t {
+            T::Neutral => Tone::Neutral,
+            T::Caution => Tone::Caution,
+            T::Danger => Tone::Danger,
+        };
+        let ink = |t: T| match t {
+            T::Neutral => theme.fg_base,
+            T::Caution => theme.fg_base,
+            T::Danger => theme.error_base,
+        };
+        let rows = |rows: &[Row]| {
+            div().flex().flex_col().gap(px(4.)).children(rows.iter().map(|r| {
+                let value = div().text_color(if r.tone == T::Danger { theme.error_base } else { theme.fg_base });
+                let value = if r.mono {
+                    value.font_family(theme::font_mono()).text_size(theme::text_label())
+                } else {
+                    value
+                };
+                div()
+                    .flex()
+                    .justify_between()
+                    .items_start()
+                    .gap(px(12.))
+                    .text_size(theme::text_row_sub())
+                    .child(div().flex_none().text_color(theme.fg_subtle).child(r.label.clone()))
+                    .child(value.min_w(px(0.)).text_right().child(r.value.clone()))
+            }))
+        };
+        match block {
+            Block::Intent { text, tone: t } => div()
+                .id(ElementId::from(("ms-reading", i)))
+                .text_size(theme::text_row_title())
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .text_color(ink(*t))
+                .child(text.clone())
+                .into_any_element(),
+            Block::Rows(r) => rows(r).into_any_element(),
+            Block::Party { label, address } => {
+                let recipient = review.recipients.iter().find(|r| same(&r.address, address));
+                let name = recipient
+                    .and_then(|r| r.known.as_ref().map(|k| k.label.clone()))
+                    .unwrap_or_else(|| self.ms_member_name(address, account, cx));
+                let badge = recipient.and_then(|r| self.ms_recipient_badge(r, past));
+                ms_party_row(theme, ElementId::from(("ms-reading", i)), label, name, badge, address).into_any_element()
+            }
+            Block::Card { title, rows: r, tone: t } => {
+                let edge = match t {
+                    T::Danger => theme.error_base,
+                    T::Caution => theme.warning_base,
+                    T::Neutral => theme.divider,
+                };
+                div()
+                    .id(ElementId::from(("ms-reading", i)))
+                    .flex()
+                    .flex_col()
+                    .gap(px(6.))
+                    .px(px(12.))
+                    .py(px(10.))
+                    .rounded(px(10.))
+                    .border_1()
+                    .border_color(edge)
+                    .child(
+                        div()
+                            .text_size(theme::text_row_sub())
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(ink(*t))
+                            .child(title.clone()),
+                    )
+                    .child(rows(r))
+                    .into_any_element()
+            }
+            Block::Source { text, tone: t } | Block::Warning { text, tone: t } => {
+                ms_note(theme, text, tone(*t)).into_any_element()
+            }
+        }
     }
 
     /// The approvals in, then each member still to approve and how it signs
@@ -2727,7 +2911,7 @@ impl WalletPage {
                     .child(
                         crate::ui::vela_button(
                             "ms-risk-yes",
-                            crate::ui::ButtonVariant::Primary,
+                            crate::ui::ButtonVariant::Danger,
                             words::t(&loc, "authority.signRiskConfirm").into(),
                             theme,
                             cx.listener(|this, _, _, cx| {
@@ -2868,7 +3052,7 @@ impl WalletPage {
                 .child(
                     crate::ui::vela_button_state(
                         "ms-draft-propose",
-                        crate::ui::ButtonVariant::Primary,
+                        value_variant(sign),
                         label.into(),
                         state,
                         theme,
@@ -3072,6 +3256,17 @@ pub(crate) enum Tone {
     Danger,
 }
 
+/// The value press.s style (r9-19, the web.s `valueVariant`): the accent,
+/// or the danger fill where the review asks for "… anyway" — never the
+/// plain accent on a signature the review warns against.
+pub(crate) fn value_variant(sign: SignRule) -> crate::ui::ButtonVariant {
+    if sign.anyway {
+        crate::ui::ButtonVariant::Danger
+    } else {
+        crate::ui::ButtonVariant::Primary
+    }
+}
+
 pub(crate) fn ms_note(theme: &Theme, text: &str, tone: Tone) -> Div {
     let (bg, fg) = match tone {
         Tone::Neutral => (theme.bg_sunken, theme.fg_muted),
@@ -3106,6 +3301,45 @@ fn ms_badge(theme: &Theme, text: &str, tone: Tone) -> Div {
         .font_weight(gpui::FontWeight::SEMIBOLD)
         .text_color(fg)
         .child(text.to_owned())
+}
+
+/// Who a transaction reaches: its role, the name known for it with its
+/// badge, the address whole beneath.
+fn ms_party_row(
+    theme: &Theme,
+    id: ElementId,
+    role: &str,
+    name: String,
+    badge: Option<(String, Tone)>,
+    address: &str,
+) -> gpui::Stateful<Div> {
+    div()
+        .id(id)
+        .flex()
+        .flex_col()
+        .gap(px(2.))
+        .child(ms_label(theme, role))
+        .child(
+            div()
+                .flex()
+                .flex_wrap()
+                .items_center()
+                .gap(px(8.))
+                .child(
+                    div()
+                        .text_size(theme::text_row_title())
+                        .text_color(theme.fg_base)
+                        .child(name),
+                )
+                .children(badge.map(|(text, tone)| ms_badge(theme, &text, tone))),
+        )
+        .child(
+            div()
+                .font_family(theme::font_mono())
+                .text_size(theme::text_label())
+                .text_color(theme.fg_subtle)
+                .child(vela_core::multisig_link::eip55(address)),
+        )
 }
 
 pub(crate) fn ms_label(theme: &Theme, text: &str) -> Div {
@@ -3179,4 +3413,114 @@ fn ms_execution_words(loc: &Loc, execution: &Value) -> Option<String> {
         _ => return None,
     };
     Some(words::t(loc, key))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// r9-9: a delegatecall to a contract Vela does not sign for is refused
+    /// for ITS reason — the core's key, in words in every language — never
+    /// "would change who controls the multisig", and nothing about the
+    /// state is said beside it (`withheld`).
+    #[test]
+    fn a_delegatecall_is_refused_for_its_own_reason() {
+        use vela_core::multisig_review::{ReadsInput, ReviewInput, StateVerdict, multisig_review};
+        let tx = serde_json::from_value(serde_json::json!({
+            "to": "0x5555555555555555555555555555555555555555",
+            "value": "0",
+            "data": "0xa9059cbb00000000000000000000000044444444444444444444444444444444444444440000000000000000000000000000000000000000000000000000000000000001",
+            "operation": 1,
+            "safeTxGas": "0", "baseGas": "0", "gasPrice": "0",
+            "gasToken": "0x0000000000000000000000000000000000000000",
+            "refundReceiver": "0x0000000000000000000000000000000000000000",
+            "nonce": "0x7"
+        }))
+        .unwrap();
+        let review = multisig_review(&ReviewInput {
+            reads: ReadsInput {
+                chain_id: 100,
+                safe: "0x0e96ddc491878645dB7E3a47d2a6Ccbc94f17f32".into(),
+                tx: Some(tx),
+                owners: vec![
+                    "0xD400866e00B055B20752a826CD5C89b811de130b".into(),
+                    "0x031d7D57c99CAF891e1C250554691Fd12D84772b".into(),
+                ],
+                threshold: 1,
+                deployed: true,
+                ..ReadsInput::default()
+            },
+            sim_reply: Some(r#"{"error":{"code":-32601,"message":"method not supported"}}"#.into()),
+            ..ReviewInput::default()
+        })
+        .unwrap();
+        let draw = ReviewDraw::of(&serde_json::to_value(&review).unwrap()).unwrap();
+        assert!(!draw.sign.allowed, "nothing is signed");
+        let refused = draw.refused.as_ref().expect("its reason");
+        assert_eq!(refused.key, "home.multisig.review.refusedWhy.delegatecall");
+        for tag in ["en", "zh"] {
+            let loc = Loc::for_tag(tag);
+            let said = loc.t(&refused.key).to_string();
+            assert!(!said.starts_with("home.multisig"), "{tag}: {said}");
+            assert_ne!(said, words::t(&loc, "review.blocked"), "{tag}: not the state guard's words");
+        }
+        assert!(
+            draw.state.as_ref().is_none_or(|s| !matches!(s.verdict, StateVerdict::Unchanged | StateVerdict::Declared)),
+            "no reassurance beside a refusal"
+        );
+    }
+
+    /// r9-2: Arc's USDC moved as the coin and as its ERC-20 interface is ONE
+    /// balance line — the core drops the interface's (`one_line_per_balance`)
+    /// — and the sheet words that one line in the coin's units: "−0.01 USDC",
+    /// never twice (reading as −0.02).
+    #[test]
+    fn arcs_usdc_moves_one_balance_line() {
+        use vela_core::app::sim_outcome::{SimVerdict, one_line_per_balance};
+        use vela_core::app::token_trust::{TrustAssetDelta, TrustDeltaKind};
+        const ARC: u64 = 5_042_002;
+        let verdict = SimVerdict {
+            kind: "deltas".to_owned(),
+            deltas: vec![
+                TrustAssetDelta {
+                    kind: TrustDeltaKind::Native,
+                    token: None,
+                    delta: "-10000000000000000".to_owned(),
+                },
+                TrustAssetDelta {
+                    kind: TrustDeltaKind::Erc20,
+                    token: Some("0x3600000000000000000000000000000000000000".to_owned()),
+                    delta: "-10000".to_owned(),
+                },
+            ],
+            revert_reason: None,
+            notice_risk: None,
+            notice_key: None,
+            no_change_key: None,
+            recheck: false,
+        };
+        let one = one_line_per_balance(ARC, verdict);
+        assert_eq!(one.deltas.len(), 1, "one balance, one line: {:?}", one.deltas);
+        let loc = Loc::for_tag("en");
+        let delta = &one.deltas[0];
+        let info = words::token_facts(&words::ViewTokens::new(), ARC, delta.token.as_deref());
+        let raw = delta.delta.trim_start_matches('-');
+        assert_eq!(
+            format!("−{}", words::amount_words(&loc, raw, &info)),
+            format!("−0.01 {}", crate::flows::live::native_symbol(5_042_002))
+        );
+    }
+
+    /// r9-19: a signature the review asks for "anyway" wears the danger
+    /// fill, never the plain accent; any other value press the accent.
+    #[test]
+    fn an_anyway_press_is_the_danger_fill() {
+        let anyway = SignRule { allowed: true, anyway: true };
+        let plain = SignRule { allowed: true, anyway: false };
+        assert!(matches!(value_variant(anyway), crate::ui::ButtonVariant::Danger));
+        assert!(matches!(value_variant(plain), crate::ui::ButtonVariant::Primary));
+        for theme in [Theme::light(), Theme::dark()] {
+            assert_ne!(theme.error_fill, theme.accent);
+        }
+    }
 }

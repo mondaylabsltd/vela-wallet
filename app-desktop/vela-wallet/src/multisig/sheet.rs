@@ -11,7 +11,7 @@
 use serde_json::Value;
 use vela_core::app::multisig_members::{MemberRule, RuleChip};
 use vela_core::app::multisig_proposals::{ItemSigners, ProposalStatus};
-use vela_core::multisig_review::{Concern, SignRule};
+use vela_core::multisig_review::SignRule;
 
 fn same(a: &str, b: &str) -> bool {
     a.eq_ignore_ascii_case(b)
@@ -257,20 +257,6 @@ pub fn execute_enabled(reviewed: bool, sign: SignRule, look: Option<&Look>, appr
     reviewed && sign.allowed && look.is_some() && !(approve_first && !one_tap)
 }
 
-/// What the review's own blocks already say (r8-13): the review's
-/// `concerns` repeat its blocks — the guard says when the state could not
-/// be read, the verdict when nothing could be simulated or it reverts, the
-/// recipient rows their first-time, contract and look-alike cues, the
-/// refusal its own line. Only a concern no block says is drawn on its own
-/// (the web draws the blocks, not the list).
-#[must_use]
-pub fn concerns_left(concerns: &[Concern]) -> Vec<&Concern> {
-    concerns
-        .iter()
-        .filter(|c| matches!(c, Concern::Blind))
-        .collect()
-}
-
 /// A member still to approve, as its row in the approvals list says how it
 /// signs (r7-8): the core's split, never this device's own member.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -493,24 +479,6 @@ mod tests {
         assert_eq!(foot(&f, None).kind, FootKind::Approve);
         let f = facts(ProposalStatus::Done, 2, &[], &[], &[], &none, &nobody);
         assert_eq!(foot(&f, None).kind, FootKind::Nothing);
-    }
-
-    /// r8-13: "Couldn't check…" once (the guard's), no lowercase reason
-    /// fragment (the verdict says it), "First time sending here" once (the
-    /// recipient's row) — only a blind call is said on its own.
-    #[test]
-    fn the_concerns_the_blocks_say_are_not_said_again() {
-        let concerns = vec![
-            Concern::StateUnread { reason: "no trace".into() },
-            Concern::Unsimulated,
-            Concern::FirstTime { address: EVE.into() },
-            Concern::ToContract { address: EVE.into() },
-            Concern::Reverts,
-            Concern::StateChange,
-            Concern::NotSigned { why: "delegatecall".into() },
-            Concern::Blind,
-        ];
-        assert_eq!(concerns_left(&concerns), vec![&Concern::Blind]);
     }
 
     /// r7-8: a member on this device is never offered another wallet; an

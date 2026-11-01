@@ -18434,7 +18434,9 @@ impl WalletPage {
                             );
                         });
                     }))
-                    .child(crate::flows::components::accent_button(
+                    // A connection moves no value: the neutral ink, never the
+                    // accent (r9 S4, the web.s `primary`).
+                    .child(crate::flows::components::ink_button(
                         theme,
                         self.explore.consent_connect.clone(),
                     )),
@@ -18825,16 +18827,20 @@ impl WalletPage {
             }
             None => button,
         };
+        // What the site can ask, as it is: a multisig signs no messages yet
+        // (r9 S4) — its note, never "can ask you for signatures".
+        let explainer = match self.ms_dapp_connect_note(theme, granted.as_deref(), cx) {
+            Some(note) => note,
+            None => div()
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_muted)
+                .child(crate::ui::prose(self.explore.connection_explainer.clone())),
+        };
         panel
             .child(account_row)
             .child(row_divider(theme))
             .child(network_row)
-            .child(
-                div()
-                    .text_size(theme::text_row_sub())
-                    .text_color(theme.fg_muted)
-                    .child(crate::ui::prose(self.explore.connection_explainer.clone())),
-            )
+            .child(explainer)
             .child(disconnect)
             .child(
                 div()

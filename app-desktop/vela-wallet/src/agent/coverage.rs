@@ -139,6 +139,7 @@ const EVENTS: &[(&str, Place)] = &[
         View("a site's connection shown"),
     ),
     ("DbrEvent::LoadFinished", Machine("the page in the browser")),
+    ("DbrEvent::MultisigAnswered", NotOne(DAPP)),
     (
         "DbrEvent::NavigationStarted",
         Machine("the page in the browser"),
