@@ -1,0 +1,255 @@
+{
+  "_about": "r10 follow-up #5b (docs/multisig-machines.md §10): what a key row is called. Its own name; else \"Key n\" (settingsModals.keys.keyN, n = its place in the founding order) — never blank, never the account's name. The authenticator is the row's caption, not its label; where a key was made is not recorded honestly. Replayed by tests/wallet_key_labels_vectors.rs (the core, device and registry) and app-web src/lib/services/wallet-keys.test.ts (the wasm door and the web's words, device cases). `device` is step_json's device argument as a shell hands it; `chains`: \"none\" = no address, nobody asked; \"recorded\" = the golden wallet's registry recording (registry-chain.json), `@recorded` = its first key. `rows` = [name, label_key, label_n]; `say_en` = what an English row says.",
+  "label_key": "settingsModals.keys.keyN",
+  "cases": [
+    {
+      "name": "the one key of a legacy record is named as the account: Key 1 (settings-keys-still)",
+      "chains": "none",
+      "device": {
+        "account_name": "E2E Wallet",
+        "keys": [
+          {
+            "credential_id": "c1",
+            "public_key_hex": "0xababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+            "name": "E2E Wallet",
+            "transports": ""
+          }
+        ]
+      },
+      "rows": [
+        [
+          "",
+          "settingsModals.keys.keyN",
+          1
+        ]
+      ],
+      "say_en": [
+        "Key 1"
+      ]
+    },
+    {
+      "name": "three keys, each with a name of its own",
+      "chains": "none",
+      "device": {
+        "account_name": "E2E Wallet",
+        "keys": [
+          {
+            "credential_id": "c1",
+            "public_key_hex": "0411111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111",
+            "name": "MacBook Pro",
+            "transports": ""
+          },
+          {
+            "credential_id": "c2",
+            "public_key_hex": "0422222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222",
+            "name": "YubiKey 5C",
+            "transports": ""
+          },
+          {
+            "credential_id": "c3",
+            "public_key_hex": "0433333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333",
+            "name": "Pixel 9",
+            "transports": ""
+          }
+        ]
+      },
+      "rows": [
+        [
+          "MacBook Pro",
+          "",
+          1
+        ],
+        [
+          "YubiKey 5C",
+          "",
+          2
+        ],
+        [
+          "Pixel 9",
+          "",
+          3
+        ]
+      ],
+      "say_en": [
+        "MacBook Pro",
+        "YubiKey 5C",
+        "Pixel 9"
+      ]
+    },
+    {
+      "name": "blank, spaces, a padded name and the account's name: each its own or its place",
+      "chains": "none",
+      "device": {
+        "account_name": " Savings ",
+        "keys": [
+          {
+            "credential_id": "c1",
+            "public_key_hex": "0411111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111",
+            "name": "Savings",
+            "transports": "internal"
+          },
+          {
+            "credential_id": "c2",
+            "public_key_hex": "0422222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222",
+            "name": "   ",
+            "transports": "usb,nfc"
+          },
+          {
+            "credential_id": "c3",
+            "public_key_hex": "0433333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333",
+            "name": " Work phone ",
+            "transports": "hybrid"
+          },
+          {
+            "credential_id": "c4",
+            "public_key_hex": "0444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444",
+            "name": "",
+            "transports": ""
+          }
+        ]
+      },
+      "rows": [
+        [
+          "",
+          "settingsModals.keys.keyN",
+          1
+        ],
+        [
+          "",
+          "settingsModals.keys.keyN",
+          2
+        ],
+        [
+          "Work phone",
+          "",
+          3
+        ],
+        [
+          "",
+          "settingsModals.keys.keyN",
+          4
+        ]
+      ],
+      "say_en": [
+        "Key 1",
+        "Key 2",
+        "Work phone",
+        "Key 4"
+      ]
+    },
+    {
+      "name": "the older array door, no account name: a name is the key's own",
+      "chains": "none",
+      "device": [
+        {
+          "publicKeyHex": "0411111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111",
+          "name": "Laptop"
+        },
+        {
+          "publicKeyHex": "0422222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222",
+          "name": ""
+        }
+      ],
+      "rows": [
+        [
+          "Laptop",
+          "",
+          1
+        ],
+        [
+          "",
+          "settingsModals.keys.keyN",
+          2
+        ]
+      ],
+      "say_en": [
+        "Laptop",
+        "Key 2"
+      ]
+    },
+    {
+      "name": "the golden wallet from the registry, key 0 fed the published name: Key 1, then the metadata's",
+      "chains": "recorded",
+      "device": {
+        "account_name": "Interleave",
+        "keys": [
+          {
+            "credential_id": "golden-key-0",
+            "public_key_hex": "@recorded",
+            "name": "Interleave",
+            "transports": "internal"
+          }
+        ]
+      },
+      "rows": [
+        [
+          "",
+          "settingsModals.keys.keyN",
+          1
+        ],
+        [
+          "Key 2",
+          "",
+          2
+        ],
+        [
+          "Key 3",
+          "",
+          3
+        ]
+      ],
+      "say_en": [
+        "Key 1",
+        "Key 2",
+        "Key 3"
+      ]
+    },
+    {
+      "name": "the golden wallet from the registry, key 0 with a name of its own",
+      "chains": "recorded",
+      "device": {
+        "account_name": "Interleave",
+        "keys": [
+          {
+            "credential_id": "golden-key-0",
+            "public_key_hex": "@recorded",
+            "name": "Parallel Multi",
+            "transports": "internal"
+          }
+        ]
+      },
+      "rows": [
+        [
+          "Parallel Multi",
+          "",
+          1
+        ],
+        [
+          "Key 2",
+          "",
+          2
+        ],
+        [
+          "Key 3",
+          "",
+          3
+        ]
+      ],
+      "say_en": [
+        "Parallel Multi",
+        "Key 2",
+        "Key 3"
+      ]
+    },
+    {
+      "name": "no key readable: no rows, nothing to call",
+      "chains": "none",
+      "device": {
+        "account_name": "E2E Wallet",
+        "keys": []
+      },
+      "rows": [],
+      "say_en": []
+    }
+  ]
+}
