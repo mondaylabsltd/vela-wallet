@@ -458,8 +458,16 @@ declare_class!(
 
         #[method(authorizationController:didCompleteWithError:)]
         fn did_fail(&self, _controller: &ASAuthorizationController, error: &NSError) {
+            // The error's facts, for the core's words (real-device S3):
+            // its domain and code, never its localised sentence on screen.
+            let facts = vela_core::app::passkey_error::PasskeyErrorFacts {
+                platform: "macos".to_owned(),
+                domain: error.domain().to_string(),
+                code: i32::try_from(error.code()).ok(),
+                message: error.localizedDescription().to_string(),
+            };
             // ASAuthorizationErrorCanceled = 1001: the person closed the sheet.
-            let failure = if error.code() == 1001 {
+            let mut failure = if error.code() == 1001 {
                 PasskeyFailure::cancelled()
             } else {
                 {
@@ -485,6 +493,7 @@ declare_class!(
                     }
                 }
             };
+            failure.facts = Some(facts);
             let _ = self.ivars().tx.send(Err(failure));
             reclaim((self as *const Self).cast());
         }

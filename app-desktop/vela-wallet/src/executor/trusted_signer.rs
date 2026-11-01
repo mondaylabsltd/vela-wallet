@@ -629,6 +629,7 @@ fn busy() -> PasskeyFailure {
     PasskeyFailure {
         kind: FailureKind::Cancelled,
         message: None,
+        facts: None,
     }
 }
 
@@ -1122,6 +1123,7 @@ fn gave_up(channel: &Channel, refusal: Refusal) -> PasskeyFailure {
     PasskeyFailure {
         kind: FailureKind::Cancelled,
         message: None,
+        facts: None,
     }
 }
 

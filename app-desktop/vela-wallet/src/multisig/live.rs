@@ -890,13 +890,15 @@ mod tests {
         assert_eq!(
             passkey_result(&PasskeyFailure {
                 kind: FailureKind::Cancelled,
-                message: None
+                message: None,
+                facts: None,
             }),
             Res::PasskeyCancelled
         );
         let Res::PasskeyFailed { detail } = passkey_result(&PasskeyFailure {
             kind: FailureKind::NotSupported,
             message: Some("no authenticator".to_owned()),
+            facts: None,
         }) else {
             panic!("a failure");
         };
