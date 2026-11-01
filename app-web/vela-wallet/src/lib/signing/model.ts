@@ -505,6 +505,13 @@ export interface SigningModel {
 	 * in `blocks`. Absent for every request a site makes.
 	 */
 	headline?: { text: string; tone: Tone };
+	/**
+	 * r10 follow-up: a network-space switch moved the asking site to another
+	 * network since its last request — the one line under the requester that
+	 * says so (the core's `SignRequestView.space_note`, worded). Absent
+	 * otherwise.
+	 */
+	spaceNote?: string;
 	blocks: Block[];
 	/**
 	 * The request is still being read (spec 096 F7's "Loading…" stands where

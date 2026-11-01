@@ -182,6 +182,8 @@ pub struct BrowserHost {
     /// What the machine was last told, so a refresh that changed nothing
     /// says nothing.
     chains: Vec<u32>,
+    /// The space in front, as last told with `chains`.
+    space: Option<vela_core::app::network_space::NetworkSpace>,
     /// r9: the networks a plain account holds something on, as last told
     /// (`AccountNetworks`, the core's `site_start_chain_for` order).
     account_chains: Vec<u32>,
@@ -281,6 +283,7 @@ impl BrowserHost {
             orders: Vec::new(),
             multisig_calls: Vec::new(),
             chains: Vec::new(),
+            space: None,
             account_chains: Vec::new(),
             wallet: None,
             debug_mode: None,
@@ -455,12 +458,24 @@ impl BrowserHost {
     }
 
     /// The chains a site may switch or add to — the same list the network
-    /// settings show.
+    /// settings show — with the space in front and every network Vela has
+    /// (r10 follow-up): a page's switch to the other space's network is
+    /// refused naming that space, and a space switch moves the sites outside
+    /// it (the core's `SpaceNetworksChanged`).
     pub fn follow_networks(&mut self, cx: &mut Context<Self>) {
         let chains = crate::wallet::signing_host::known_chain_ids();
-        if chains != self.chains {
+        let space = crate::network_space::current();
+        if chains != self.chains || Some(space) != self.space {
             self.chains.clone_from(&chains);
-            self.dispatch(Event::NetworksChanged { chain_ids: chains }, cx);
+            self.space = Some(space);
+            self.dispatch(
+                Event::SpaceNetworksChanged {
+                    space,
+                    chain_ids: chains,
+                    known_chain_ids: crate::executor::network_admin::all_wallet_chain_ids(),
+                },
+                cx,
+            );
         }
     }
 

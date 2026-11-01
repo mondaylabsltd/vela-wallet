@@ -38,6 +38,11 @@ export interface RequestMessages {
 	multisigNoMessagesTitle: string;
 	multisigNoMessagesBody: string;
 	multisigConnectNote: string;
+	/**
+	 * r10 follow-up (template — '{{network}}'): a network-space switch moved
+	 * the site since its last request; the consent says so once.
+	 */
+	spaceMoved: string;
 	gotIt: string;
 	/**
 	 * Spec 096 F11: the consent names what a Connect shares — the account and

@@ -121,7 +121,13 @@
       "signInTitle": "Sign in to continue",
       "multisigNoMessagesTitle": "A multisig can’t sign messages yet",
       "multisigNoMessagesBody": "{{host}} asked this multisig to sign a message. A multisig’s signature needs its members’ approvals, which Vela doesn’t collect for messages yet, so the site will be told no. Transactions still work: they become proposals the members approve.",
-      "multisigConnectNote": "This is a multisig: the site can propose transactions for its members to approve, but it can’t ask it to sign messages."
+      "multisigConnectNote": "This is a multisig: the site can propose transactions for its members to approve, but it can’t ask it to sign messages.",
+      "switchRefusal": {
+        "unknown": "Chain {{chainId}} is not in Vela's networks",
+        "otherSpaceTestnet": "Chain {{chainId}} is one of Vela's testnet networks; Vela is showing its mainnet networks. Switch to the testnet space in Vela to use it.",
+        "otherSpaceMainnet": "Chain {{chainId}} is one of Vela's mainnet networks; Vela is showing its testnet networks. Switch to the mainnet space in Vela to use it."
+      },
+      "spaceMoved": "The network changed with the space: this site is now on {{network}}."
     },
     "ext": {
       "installedNote": "Reload tabs that were already open so their sites can find Vela.",

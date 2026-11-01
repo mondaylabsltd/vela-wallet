@@ -13,7 +13,7 @@
 use serde::Deserialize;
 use serde_json::Value;
 use vela_core::app::multisig_outside::reading::TokenFacts;
-use vela_core::multisig_review::{Concern, Refused, RefusedWhy};
+use vela_core::multisig_review::Concern;
 use vela_core::multisig_review::reading::{Amount, Call, Grant, Intent, Reading};
 
 use super::words;
@@ -476,33 +476,14 @@ pub fn concern_line(concern: &Concern, reading: &Reading, ctx: &Ctx<'_>) -> Opti
 /// The lines the core's concerns about the calls say (r8-1, r8-2, r8-5),
 /// each once (the core deduped them, r8-14): an unlimited grant, a nested
 /// batch, one that cannot be read, decimals unknown, tokens sent to their
-/// own contract, a call nobody reads.
-#[cfg(test)]
+/// own contract, a call nobody reads. Beside a refusal the core has already
+/// left out the concern the refusal says (a batch too deep is refused, and
+/// its "can't be read" is not a second red box — `multisig_review`), so
+/// every concern here is drawn.
 #[must_use]
 pub fn concern_blocks(draw: &ReadingDraw, ctx: &Ctx<'_>) -> Vec<Block> {
-    concern_blocks_beside(draw, ctx, None)
-}
-
-/// A concern the review's refusal line says already (r10, S4: "Vela won't
-/// sign… nested too deep" and "Part of this batch can't be read… Vela won't
-/// sign it." were two red boxes for one reason). The refusal is the ONE
-/// line (§8, `MultisigReview.refused`); the concern it came from is not
-/// said again. Which concern a refusal comes from is the core's
-/// (`RefusedWhy::TooDeep` is its `UnreadableBatch`).
-#[must_use]
-pub fn said_by_refusal(concern: &Concern, refused: Option<&Refused>) -> bool {
-    matches!(
-        (concern, refused.map(|r| r.why)),
-        (Concern::UnreadableBatch, Some(RefusedWhy::TooDeep))
-    )
-}
-
-/// [`concern_blocks`] beside the review's refusal: the concerns it says
-/// already are left out ([`said_by_refusal`]).
-#[must_use]
-pub fn concern_blocks_beside(draw: &ReadingDraw, ctx: &Ctx<'_>, refused: Option<&Refused>) -> Vec<Block> {
     let mut out: Vec<Block> = Vec::new();
-    for c in draw.concerns.iter().filter(|c| !said_by_refusal(c, refused)) {
+    for c in &draw.concerns {
         if let Some((text, tone)) = concern_line(c, &draw.reading, ctx)
             && !out.iter().any(|b| matches!(b, Block::Warning { text: t, .. } if *t == text))
         {
@@ -697,27 +678,10 @@ mod tests {
         assert!(text.contains("A batch inside a batch"), "{text}");
         assert!(text.contains("run from this contract"), "{text}");
 
-        // Four deep: refused, said so.
+        // Four deep: the reading alone says it can't be read. (Beside the
+        // review's too-deep refusal the core leaves that concern out — one
+        // refusal box, `multisig_review` — so the sheet draws what it gets.)
         let deep = case("four deep");
         assert!(all(&deep).contains("can't be read"), "{}", all(&deep));
-        // …once: beside the review's refusal (its `tooDeep`), the concern's
-        // own line is not a second red box; any other refusal leaves it.
-        let too_deep = Refused {
-            why: RefusedWhy::TooDeep,
-            key: "home.multisig.review.refusedWhy.tooDeep".to_owned(),
-        };
-        let beside = concern_blocks_beside(&deep, &ctx, Some(&too_deep));
-        assert!(
-            !beside.iter().map(Block::text).any(|t| t.contains("can't be read")),
-            "{beside:?}"
-        );
-        let other = Refused {
-            why: RefusedWhy::Delegatecall,
-            key: "home.multisig.review.refusedWhy.delegatecall".to_owned(),
-        };
-        assert_eq!(
-            concern_blocks_beside(&deep, &ctx, Some(&other)).len(),
-            concern_blocks(&deep, &ctx).len()
-        );
     }
 }

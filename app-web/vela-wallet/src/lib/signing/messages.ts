@@ -292,6 +292,13 @@ export interface SigningMessages {
 	 * simulation's deadline passed with no verdict.
 	 */
 	warnSimUnavailable: string;
+	/**
+	 * r10 follow-up: the one line on a moved site's next request (template —
+	 * '{{network}}'), `connect.browser.spaceMoved`: a network-space switch
+	 * moved the site to another network since it last asked
+	 * (`SignRequestView.space_note`).
+	 */
+	spaceMoved: string;
 	warnDrain: string;
 	okSelfTransfer: string;
 	okNoNetworkFee: string;

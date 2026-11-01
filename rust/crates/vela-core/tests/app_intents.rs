@@ -1155,6 +1155,7 @@ fn explore_reads_the_browser_machines_own_views() {
         address: Some(MINE.into()),
         chain_id: 1,
         lock: Default::default(),
+        space_note: None,
     });
 
     let facts = explore_facts(&explore, &dapp, &history, true, false, None);
@@ -1175,6 +1176,7 @@ fn explore_reads_the_browser_machines_own_views() {
     dapp.signing = Some(DbrSigningView {
         tab: "t1".into(),
         id: "42".into(),
+        space_note: None,
     });
     let signing = explore_facts(&explore, &dapp, &history, false, false, None)
         .pending

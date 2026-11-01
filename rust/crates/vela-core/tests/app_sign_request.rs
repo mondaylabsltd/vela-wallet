@@ -5637,3 +5637,30 @@ fn a_refusal_after_the_submit_is_told_by_its_reason() {
         assert_eq!(view.failure_refusal_key.as_deref(), Some(key), "{reason:?}");
     }
 }
+
+/// r10 follow-up: a request from a site a network-space switch moved says so
+/// once, under the requester — only for the request it was said for.
+#[test]
+fn a_moved_sites_request_carries_the_space_line() {
+    let mut sut = boot();
+    sut.dispatch(Arrive::extension("ext-1", "personal_sign", r#"["0x00"]"#, 137).event());
+    assert_eq!(sut.view().request.unwrap().space_note, None);
+    // Said for another id: nothing.
+    sut.dispatch(Event::SpaceNoted {
+        id: "other".to_owned(),
+        chain_id: 137,
+    });
+    assert_eq!(sut.view().request.unwrap().space_note, None);
+    sut.dispatch(Event::SpaceNoted {
+        id: "ext-1".to_owned(),
+        chain_id: 137,
+    });
+    let note = sut.view().request.unwrap().space_note.expect("the line");
+    assert_eq!(note.chain_id, 137);
+    assert_eq!(note.key, vela_core::app::network_space::SPACE_MOVED_KEY);
+    // Absent on the wire for a request without it.
+    let mut plain = boot();
+    plain.dispatch(Arrive::extension("ext-2", "personal_sign", r#"["0x00"]"#, 137).event());
+    let wire = serde_json::to_value(plain.view()).unwrap();
+    assert!(wire["request"].get("space_note").is_none());
+}

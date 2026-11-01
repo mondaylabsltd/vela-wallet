@@ -1,10 +1,11 @@
 /**
- * The account-wide incoming-funds check's cadence (owner decision, round 5;
- * r9-17: decided by the core, `incoming_scan::next_scan_ms`): 10 s while
- * someone is at the page, 30 s idle, 60 s hidden, at once when it is shown
- * again or comes online. The page here is a fake; the cadence is the REAL
- * `activity_feed` core, through the port `feed.svelte.ts` gives it — so this
- * is the web's behaviour, end to end, with no rule of its own.
+ * The account-wide incoming-funds check's cadence (r9-17: decided by the
+ * core, `incoming_scan::next_scan_ms`; r10 follow-up): a back-off while
+ * nothing arrives — 15 s, 15 s, 30 s, 60 s, then every 2 min; 2 min hidden;
+ * at once when the page is shown again or comes online. The page here is a
+ * fake; the cadence is the REAL `activity_feed` core, through the port
+ * `feed.svelte.ts` gives it — so this is the web's behaviour, end to end,
+ * with no rule of its own.
  */
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type { FeedNextScan } from '$lib/core/generated/FeedNextScan';
@@ -145,53 +146,48 @@ function follow(page: ReturnType<typeof fakePage>) {
 }
 
 describe('followIncomingCadence (the core decides)', () => {
-	it('scans every 10 s for the two minutes after an interaction, then every 30 s', () => {
+	it('backs off while nothing arrives: 15 s, 15 s, 30 s, 60 s, then every 2 min', () => {
 		const page = fakePage();
 		const { scans } = follow(page);
-		page.advance(120_000);
-		// Mounting counts as being at the page: 10 s apart for two minutes.
-		expect(scans).toEqual([
-			10_000, 20_000, 30_000, 40_000, 50_000, 60_000, 70_000, 80_000, 90_000, 100_000, 110_000,
-			120_000
-		]);
-		scans.length = 0;
-		page.advance(90_000);
-		expect(scans).toEqual([150_000, 180_000, 210_000]);
+		page.advance(360_000);
+		expect(scans).toEqual([15_000, 30_000, 60_000, 120_000, 240_000, 360_000]);
 	});
 
-	it('an interaction after idling brings the next scan within 10 s', () => {
+	it('a touch no longer brings a scan closer (r10: scanning while someone scrolls is what jank is)', () => {
 		const page = fakePage();
 		const { scans } = follow(page);
-		page.advance(181_000); // idle by now: scans 30 s apart, the last at 180 s
+		page.advance(181_000); // scans at 15, 30, 60 and 120 s; the next is due at 240 s
 		scans.length = 0;
 		page.emit('document', 'pointerdown');
 		page.advance(30_000);
-		expect(scans).toEqual([191_000, 201_000, 211_000]);
+		expect(scans).toEqual([]);
+		page.advance(30_000);
+		expect(scans).toEqual([240_000]);
 	});
 
-	it('hidden: every 60 s, counted from the last scan; shown again: at once', () => {
+	it('hidden: 2 min counted from the last scan; shown again: at once, and the back-off starts over', () => {
 		const page = fakePage();
 		const { scans } = follow(page);
-		page.advance(15_000); // one scan at 10 s
+		page.advance(20_000); // one scan at 15 s
 		page.setVisible(false);
 		scans.length = 0;
 		page.advance(130_000);
-		expect(scans).toEqual([70_000, 130_000]);
+		expect(scans).toEqual([135_000]);
 		scans.length = 0;
 		page.setVisible(true);
-		expect(scans).toEqual([145_000]);
-		page.advance(10_000);
-		expect(scans).toEqual([145_000, 155_000]);
+		expect(scans).toEqual([150_000]);
+		page.advance(15_000);
+		expect(scans).toEqual([150_000, 165_000]);
 	});
 
-	it('online: at once, and the cadence starts over from there', () => {
+	it('online: at once, and the back-off starts over from there', () => {
 		const page = fakePage();
 		const { scans } = follow(page);
 		page.advance(4_000);
 		page.emit('window', 'online');
 		expect(scans).toEqual([4_000]);
-		page.advance(10_000);
-		expect(scans).toEqual([4_000, 14_000]);
+		page.advance(15_000);
+		expect(scans).toEqual([4_000, 19_000]);
 	});
 
 	it('a burst of touches is reported once a second', () => {

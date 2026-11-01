@@ -948,11 +948,12 @@ impl WalletPage {
         } else {
             (NetworkSpace::Testnet, "networkSpace.headingTestnet", "networkSpace.toTestnet")
         };
-        let networks = elsewhere
-            .iter()
-            .map(|id| network(u64::from(*id)))
-            .collect::<Vec<_>>()
-            .join(", ");
+        let networks = loc.list(
+            &elsewhere
+                .iter()
+                .map(|id| network(u64::from(*id)))
+                .collect::<Vec<_>>(),
+        );
         let line = format!(
             "{} · {}",
             words::tv(&loc, "add.usedOn", &[("networks", &networks)]),
@@ -1172,7 +1173,7 @@ impl WalletPage {
 
     fn ms_note_words(&self, note: &WaitingNote) -> (String, bool) {
         let loc = &self.loc;
-        let names = |ids: &[u64]| ids.iter().map(|c| network(*c)).collect::<Vec<_>>().join(", ");
+        let names = |ids: &[u64]| loc.list(&ids.iter().map(|c| network(*c)).collect::<Vec<_>>());
         let text = match note {
             WaitingNote::Offline { since } => match since {
                 Some(at) => words::tv(
@@ -2277,8 +2278,9 @@ impl WalletPage {
             let lines = if past {
                 Vec::new()
             } else {
-                // The refusal above says its own concern; not twice.
-                crate::multisig::reading::concern_blocks_beside(draw, &ctx, review.refused.as_ref())
+                // Beside a refusal the core has left out the concern it
+                // says (one refusal box); every concern here is drawn.
+                crate::multisig::reading::concern_blocks(draw, &ctx)
             };
             let blocks = crate::multisig::reading::blocks(&draw.reading, &ctx);
             drawn_parties = crate::multisig::reading::party_addresses(&blocks);
@@ -2814,10 +2816,12 @@ impl WalletPage {
         let contract = of(signers.map(|s| &s.contract));
         let outside = crate::multisig::sheet::outside_members(signers, &here);
         let names = |this: &Self, list: &[String], cx: &App| {
-            list.iter()
-                .map(|a| this.ms_member_name(a, Some(account), cx))
-                .collect::<Vec<_>>()
-                .join(", ")
+            loc.list(
+                &list
+                    .iter()
+                    .map(|a| this.ms_member_name(a, Some(account), cx))
+                    .collect::<Vec<_>>(),
+            )
         };
         let tx = vela_core::multisig_link::ProposalLink {
             chain_id: item.chain_id,

@@ -1819,10 +1819,10 @@
 	});
 
 	// The account-wide incoming-funds check, on the core's cadence (r9-17,
-	// `incoming_scan::next_scan_ms` — the owner's round-5 numbers: 10 s while
-	// someone is at the page, 30 s idle, 60 s hidden, at once when it is shown
-	// again or the browser comes back online). The page reports itself and runs
-	// the timer the core arms (`incoming-cadence.ts`).
+	// `incoming_scan::next_scan_ms`; r10 follow-up: a back-off while nothing
+	// arrives, 15 s up to 2 min, at once when the page is shown again or the
+	// browser comes back online). The page reports itself and runs the timer
+	// the core arms (`incoming-cadence.ts`).
 	onMount(() => followIncomingCadence(feed.cadencePort()));
 
 	// The 10-minute aggregate poll the Expo home ran too (the core's

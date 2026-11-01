@@ -55,9 +55,10 @@ pub fn incoming_scan_windows(ask_json: &str) -> String {
     vela_core::app::incoming_scan::scan_windows_json(ask_json)
 }
 
-/// r9-17: the wait before the next incoming scan
-/// (`incoming_scan::next_scan_ms`).
+/// r9-17 / r10: the wait before the next incoming scan
+/// (`incoming_scan::next_scan_ms`) — shown or not, and how many scans in a
+/// row found nothing (the back-off's step).
 #[wasm_bindgen(js_name = incomingNextScanMs)]
-pub fn incoming_next_scan_ms(visible: bool, since_interaction_ms: f64) -> u32 {
-    vela_core::app::incoming_scan::next_scan_ms(visible, since_interaction_ms)
+pub fn incoming_next_scan_ms(visible: bool, quiet_scans: u32) -> u32 {
+    vela_core::app::incoming_scan::next_scan_ms(visible, quiet_scans)
 }

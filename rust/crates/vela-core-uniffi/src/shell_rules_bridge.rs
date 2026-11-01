@@ -56,13 +56,14 @@ pub fn incoming_scan_windows(ask_json: String) -> String {
     vela_core::app::incoming_scan::scan_windows_json(&ask_json)
 }
 
-/// r9-17: the wait before the next incoming scan for the page as it stands
-/// — `incoming_scan::next_scan_ms`. The feed's `next_scan` already carries
+/// r9-17 / r10: the wait before the next incoming scan — shown or not, and
+/// how many scans in a row found nothing (the back-off's step) —
+/// `incoming_scan::next_scan_ms`. The feed's `next_scan` already carries
 /// it; this is for the shared vectors.
 #[uniffi::export]
 #[must_use]
-pub fn incoming_next_scan_ms(visible: bool, since_interaction_ms: f64) -> u32 {
-    vela_core::app::incoming_scan::next_scan_ms(visible, since_interaction_ms)
+pub fn incoming_next_scan_ms(visible: bool, quiet_scans: u32) -> u32 {
+    vela_core::app::incoming_scan::next_scan_ms(visible, quiet_scans)
 }
 
 #[cfg(test)]
@@ -79,7 +80,8 @@ mod tests {
             plan,
             r#"{"scan_chain_ids":[5042002],"native_watch_chain_ids":[5042002]}"#
         );
-        assert_eq!(incoming_next_scan_ms(false, 0.0), 60_000);
+        assert_eq!(incoming_next_scan_ms(false, 0), 120_000);
+        assert_eq!(incoming_next_scan_ms(true, 9), 120_000);
         assert!(incoming_scan_windows("{}".to_owned()).contains("\"live\""));
     }
 

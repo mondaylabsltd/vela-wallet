@@ -1780,6 +1780,17 @@ pub enum Event {
     DismissRelayUnreachable,
     /// The error panel's retry — back to idle.
     RetryAfterError,
+    /// r10 follow-up: the picker's "Try again" under
+    /// [`SendView::tokens_failed_key`] — the token list is asked again.
+    /// Nothing while the list did not fail.
+    RetryTokens,
+    /// r10 follow-up: the shell left Send without the core's
+    /// [`SendOperation::Close`] — the system back, another tab, a deep link
+    /// over it. What is still out for this screen is dropped: an answer that
+    /// lands after the person left raises nothing over whatever they went to
+    /// (Android drew "Failed to load tokens." over the in-app browser, a
+    /// minute after Send was left). The next [`Event::Open`] starts afresh.
+    Left,
     /// Round 6: the form's network answered a bounded read again after a
     /// submit failed as the network's ([`SendTxErrorKey::ChainUnreachable`] /
     /// [`SendTxErrorKey::ChainBusy`]) — the confirm opens by itself, without
@@ -2177,6 +2188,12 @@ pub struct Model {
     resolving_lock: bool,
     adding_network: bool,
     add_network_msg: Option<SendAddNetworkMsg>,
+    /// r10 follow-up: the first token list could not be read — the picker
+    /// says so, with a way to try again ([`SendView::tokens_failed_key`]).
+    tokens_failed: bool,
+    /// r10 follow-up: the screen was closed or left; nothing it asked for
+    /// is answered on it any more.
+    closed: bool,
     /// Non-zero balances, sorted by USD value descending — the display list.
     tokens: Vec<SendToken>,
     chains: Vec<SendChainInfo>,
@@ -2586,6 +2603,13 @@ pub struct SendReceiptView {
 pub struct SendView {
     pub stage: SendStage,
     pub loading: bool,
+    /// r10 follow-up: the token list could not be read — the corpus key of
+    /// the picker's line ([`TOKENS_FAILED_KEY`]), drawn in place of the list
+    /// with a "Try again" (`common.tryAgain` -> [`Event::RetryTokens`]).
+    /// A shell that draws it draws no `ShowAlert {load_tokens_failed}`
+    /// (still sent, for a shell not moved yet). `None` otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tokens_failed_key: Option<String>,
     pub locked: bool,
     /// The amount is fixed only when the locked request actually named one.
     pub amount_locked: bool,
@@ -3174,6 +3198,17 @@ impl Send {
                 model.relay_unreachable = None;
                 render()
             }
+            Event::RetryTokens => {
+                if !model.tokens_failed || model.closed {
+                    return Command::done();
+                }
+                model.tokens_failed = false;
+                boot_fetch(model)
+            }
+            Event::Left => {
+                left(model);
+                Command::done()
+            }
             Event::RetryAfterError => {
                 if model.tx != SendTxStatus::Error {
                     return Command::done();
@@ -3209,7 +3244,7 @@ impl Send {
                 outcome,
             } => receipt_update(model, &user_op_hash, outcome),
             Event::SendAgain => send_again(model),
-            Event::Done => fire(model, SendOperation::Close),
+            Event::Done => close(model),
             Event::ShellCompleted { attempt, result } => accept(model, attempt, result),
         }
     }
@@ -3386,6 +3421,7 @@ impl Send {
         SendView {
             stage,
             loading: model.loading,
+            tokens_failed_key: model.tokens_failed.then(|| TOKENS_FAILED_KEY.to_owned()),
             locked,
             amount_locked: view_amount_locked(model),
             lock_error: model.lock_error.clone(),
@@ -3636,6 +3672,26 @@ fn alert(model: &mut Model, kind: SendAlertKind) -> Cmd {
     fire(model, SendOperation::ShowAlert { kind })
 }
 
+/// The picker's line when the token list could not be read (r10 follow-up):
+/// honest about what happened and what to do — never the old one-word
+/// dialog that popped up wherever the person had gone since.
+pub const TOKENS_FAILED_KEY: &str = "send.tokensUnavailable";
+
+/// The flow asks the shell to close it — and stops listening (r10
+/// follow-up): a late answer is answered on no screen.
+fn close(model: &mut Model) -> Cmd {
+    left(model);
+    fire(model, SendOperation::Close)
+}
+
+/// The screen is gone: what it still had out is dropped, so nothing lands on
+/// whatever the person went to.
+fn left(model: &mut Model) {
+    model.closed = true;
+    model.flights.tokens = None;
+    model.loading = false;
+}
+
 // ---------------------------------------------------------------------------
 // Boot & tokens
 // ---------------------------------------------------------------------------
@@ -3852,8 +3908,13 @@ fn tokens_loaded(model: &mut Model, tokens: Option<Vec<SendToken>>, purpose: Tok
     let Some(full) = tokens.map(with_display_symbols) else {
         model.loading = false;
         return match purpose {
-            // `catch(() => showAlert(...))`.
-            TokensPurpose::Initial => alert(model, SendAlertKind::LoadTokensFailed),
+            // r10 follow-up: an honest, recoverable state — the picker says
+            // it and offers to try again (`tokens_failed_key`). The alert
+            // still goes, for a shell that has not moved to the state yet.
+            TokensPurpose::Initial => {
+                model.tokens_failed = true;
+                alert(model, SendAlertKind::LoadTokensFailed)
+            }
             // `refreshTokens`'s `.catch(() => {})`.
             TokensPurpose::Refresh => render(),
         };
@@ -6923,7 +6984,7 @@ fn handle_back(model: &mut Model) -> Cmd {
             let keep_recipient = model.recipient_handed_in;
             back_to_picker(model, keep_recipient)
         }
-        SendStep::SelectToken => fire(model, SendOperation::Close),
+        SendStep::SelectToken => close(model),
     }
 }
 

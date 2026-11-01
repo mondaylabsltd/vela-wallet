@@ -2,10 +2,10 @@
  * The page's half of the account-wide incoming-funds check's cadence.
  *
  * r9-17: WHEN to scan is the core's (`incoming_scan::next_scan_ms`, driven by
- * `activity_feed`): 10 s while the person is at the page, 30 s while it sits
- * idle, 60 s hidden, at once when it is shown again or the browser comes back
- * online — the owner's round-5 numbers, which used to be decided here and in
- * each app on its own. This module only reports the page's facts (shown or
+ * `activity_feed`; r10 follow-up): a back-off while nothing arrives — 15 s,
+ * 30 s, 60 s, then every 2 min; 2 min hidden — and at once when the page is
+ * shown again or the browser comes back online. A touch no longer brings a
+ * scan closer. This module only reports the page's facts (shown or
  * not, when it was last touched) and runs the one timer the core asks for:
  * the feed's `next_scan` is armed whenever its `seq` changes, and answered
  * with `scan_due` and the page as it stands then. One check at a time is the

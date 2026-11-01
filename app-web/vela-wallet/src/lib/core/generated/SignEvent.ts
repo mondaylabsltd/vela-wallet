@@ -30,7 +30,7 @@ requested_address: string | null, request_ts_ms: number | null, now_ms: number,
  * Absent on the wire = `false`, so a shell that predates the field
  * keeps today's third-party header.
  */
-first_party: boolean, } | { "type": "chain_switch_requested", id: string | null, transport_id: string | null, chain_id_param: string | null, } | { "type": "approve_tapped", opts: SignApproveOpts, } | { "type": "reject_tapped" } | { "type": "dismiss_tapped" } | { "type": "retry_tapped" } | { "type": "swipe_dismissed" } | { "type": "funding_complete_tapped" } | { "type": "funding_cancelled" } | { "type": "op_submitted", id: string, user_op_hash: string, now_ms: number, 
+first_party: boolean, } | { "type": "space_noted", id: string, chain_id: number, } | { "type": "chain_switch_requested", id: string | null, transport_id: string | null, chain_id_param: string | null, } | { "type": "approve_tapped", opts: SignApproveOpts, } | { "type": "reject_tapped" } | { "type": "dismiss_tapped" } | { "type": "retry_tapped" } | { "type": "swipe_dismissed" } | { "type": "funding_complete_tapped" } | { "type": "funding_cancelled" } | { "type": "op_submitted", id: string, user_op_hash: string, now_ms: number, 
 /**
  * The submit's reply was lost and `user_op_hash` is the local hash
  * (spec 082 RA2/RA3): the op is recorded and tracked all the same,

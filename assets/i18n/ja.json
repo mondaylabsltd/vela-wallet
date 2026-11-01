@@ -384,6 +384,7 @@
   "alertInvalidAmountBody": "0 より大きい有効な金額を入力してください。",
   "alertInsufficientBalanceTitle": "残高不足",
   "alertLoadTokensError": "トークンの読み込みに失敗しました。",
+  "tokensUnavailable": "トークンを読み込めませんでした。接続を確認してから、もう一度お試しください。",
   "warnNotEnoughToken": "このアカウントには {{symbol}} の残高が足りません",
   "warnInsufficientForGas": "金額とガス代の合計で {{sym}} が不足しています",
   "warnInsufficientGas": "ガス代の支払いに必要な {{sym}} が不足しています",
@@ -1172,7 +1173,13 @@
    "signInTitle": "サインインして続行",
    "multisigNoMessagesTitle": "マルチシグはまだメッセージに署名できません",
    "multisigNoMessagesBody": "{{host}} がこのマルチシグにメッセージへの署名を求めました。マルチシグの署名にはメンバーの承認が必要ですが、Vela はメッセージについてまだ承認を集められないため、サイトには拒否が伝えられます。取引は引き続き使えます。メンバーが承認する提案になります。",
-   "multisigConnectNote": "これはマルチシグです。サイトはメンバーが承認する取引を提案できますが、メッセージへの署名は求められません。"
+   "multisigConnectNote": "これはマルチシグです。サイトはメンバーが承認する取引を提案できますが、メッセージへの署名は求められません。",
+   "switchRefusal": {
+    "unknown": "チェーン {{chainId}} は Vela のネットワークにありません",
+    "otherSpaceTestnet": "チェーン {{chainId}} は Vela のテストネットのネットワークです。Vela は現在メインネットのネットワークを表示しています。使うには Vela でテストネットスペースに切り替えてください。",
+    "otherSpaceMainnet": "チェーン {{chainId}} は Vela のメインネットのネットワークです。Vela は現在テストネットのネットワークを表示しています。使うには Vela でメインネットスペースに切り替えてください。"
+   },
+   "spaceMoved": "スペースの切り替えでネットワークが変わりました。このサイトは現在 {{network}} を使っています。"
   },
   "ext": {
    "installedNote": "開いていたタブを再読み込みすると、サイトから Vela が見つかります。",
@@ -1977,7 +1984,9 @@
     "signerNotDiscoverable": "このパスキーはここで署名できません",
     "signerFailed": "パスキーの認証に失敗しました",
     "signingPage": "署名ページで署名されませんでした",
-    "badRpc": "サイトが使える RPC を示しませんでした"
+    "badRpc": "サイトが使える RPC を示しませんでした",
+    "otherSpaceTestnet": "このネットワークは Vela のテストネットスペースにあります",
+    "otherSpaceMainnet": "このネットワークは Vela のメインネットスペースにあります"
    },
    "requests": "最近の要求",
    "noRequests": "要求はまだありません",

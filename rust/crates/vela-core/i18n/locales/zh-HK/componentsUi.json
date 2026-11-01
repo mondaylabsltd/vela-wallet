@@ -645,7 +645,9 @@
         "signerNotDiscoverable": "此通行密鑰無法在此處簽名",
         "signerFailed": "通行密鑰驗證失敗",
         "signingPage": "簽名頁冇簽",
-        "badRpc": "網站沒有提供此網絡可用的 RPC"
+        "badRpc": "網站沒有提供此網絡可用的 RPC",
+        "otherSpaceTestnet": "此網絡在 Vela 的測試網空間中",
+        "otherSpaceMainnet": "此網絡在 Vela 的主網空間中"
       },
       "requests": "最近的請求",
       "noRequests": "未有請求",

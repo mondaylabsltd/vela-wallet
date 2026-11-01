@@ -645,7 +645,9 @@
         "signerNotDiscoverable": "このパスキーはここで署名できません",
         "signerFailed": "パスキーの認証に失敗しました",
         "signingPage": "署名ページで署名されませんでした",
-        "badRpc": "サイトが使える RPC を示しませんでした"
+        "badRpc": "サイトが使える RPC を示しませんでした",
+        "otherSpaceTestnet": "このネットワークは Vela のテストネットスペースにあります",
+        "otherSpaceMainnet": "このネットワークは Vela のメインネットスペースにあります"
       },
       "requests": "最近の要求",
       "noRequests": "要求はまだありません",

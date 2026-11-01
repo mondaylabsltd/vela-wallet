@@ -5,8 +5,8 @@
 //! rules and their JSON doors; then the machines that run them —
 //! `token_trust`'s planned scan (`ScanRequested`: the networks, the live
 //! window, the bounded backfill, the coverage handed back) and
-//! `activity_feed`'s cadence (`PresenceChanged` / `ScanDue`) and its one scan
-//! per account at a time.
+//! `activity_feed`'s cadence (`PresenceChanged` / `ScanDue` / `Interacting`,
+//! the shared `cadence_steps`) and its one scan per account at a time.
 
 #![cfg(feature = "crux")]
 
@@ -15,8 +15,8 @@ mod support;
 use serde_json::Value;
 use support::DomainDriver;
 use vela_core::app::activity_feed::{
-    ActivityFeed, Event as FeedEvent, FeedNextScan, FeedOperation as FeedOp, FeedPresence,
-    FeedPresenceChange, FeedShellResult as FeedRes,
+    ActivityFeed, Event as FeedEvent, FeedOperation as FeedOp, FeedPresence, FeedPresenceChange,
+    FeedShellResult as FeedRes,
 };
 use vela_core::app::incoming_scan::{
     self, next_scan_ms, scan_plan, scan_plan_json, scan_windows_json, IncomingScanPlan,
@@ -63,21 +63,24 @@ fn the_vectors_state_the_cores_constants() {
         n("backfill_chunks_per_poll"),
         incoming_scan::BACKFILL_CHUNKS_PER_POLL as u64
     );
-    assert_eq!(
-        n("cadence_active_ms"),
-        u64::from(incoming_scan::CADENCE_ACTIVE_MS)
-    );
-    assert_eq!(
-        n("cadence_idle_ms"),
-        u64::from(incoming_scan::CADENCE_IDLE_MS)
-    );
+    let steps: Vec<u32> = c["cadence_steps_ms"]
+        .as_array()
+        .expect("cadence_steps_ms")
+        .iter()
+        .map(|s| s.as_u64().expect("a step") as u32)
+        .collect();
+    assert_eq!(steps, incoming_scan::CADENCE_STEPS_MS);
     assert_eq!(
         n("cadence_hidden_ms"),
         u64::from(incoming_scan::CADENCE_HIDDEN_MS)
     );
     assert_eq!(
-        n("cadence_active_window_ms") as f64,
-        incoming_scan::CADENCE_ACTIVE_WINDOW_MS
+        n("cadence_interacting_max_ms") as f64,
+        incoming_scan::CADENCE_INTERACTING_MAX_MS
+    );
+    assert_eq!(
+        n("cadence_scan_lost_ms") as f64,
+        incoming_scan::CADENCE_SCAN_LOST_MS
     );
 }
 
@@ -134,7 +137,7 @@ fn every_cadence_vector_holds() {
         let name = case["name"].as_str().unwrap_or("?");
         let got = next_scan_ms(
             case["visible"].as_bool().expect("visible"),
-            case["since_interaction_ms"].as_f64().expect("since"),
+            case["quiet_scans"].as_u64().expect("quiet_scans") as u32,
         );
         assert_eq!(
             u64::from(got),
@@ -558,82 +561,183 @@ fn no_presence_no_core_cadence() {
     assert!(wire.get("next_scan").is_none());
 }
 
-/// The cadence is the core's once the shell reports presence: 10 s at the
-/// page, a stale timer ignored, a due one scans and re-arms.
+/// r10: the shared cadence steps (`cadence_steps`) through the machine —
+/// the back-off, the moments a person looks, one scan at a time, the quiet
+/// period while the person interacts, and one redraw per scan.
 #[test]
-fn the_cadence_follows_the_page() {
+fn every_cadence_step_vector_holds_through_the_machine() {
+    let v = vectors();
+    let scenarios = v["cadence_steps"].as_array().expect("cadence_steps");
+    assert!(scenarios.len() >= 8);
+    for scenario in scenarios {
+        let name = scenario["name"].as_str().unwrap_or("?");
+        let mut sut = Feed::new();
+        for (i, step) in scenario["steps"]
+            .as_array()
+            .expect("steps")
+            .iter()
+            .enumerate()
+        {
+            let what = step["do"].as_str().expect("do");
+            let at = T0 + step["at"].as_f64().expect("at") * 1_000.0;
+            let shown = step["visible"].as_bool().unwrap_or(true);
+            let here = presence(shown, 0.0, at);
+            let before = sut.view().next_scan;
+            let renders = sut.renders();
+            let ops = match what {
+                "account_switched" => sut.dispatch(FeedEvent::AccountSwitched {
+                    address: ME.to_owned(),
+                }),
+                "scan_due" | "scan_due_stale" => {
+                    let seq = before.expect("a timer").seq;
+                    let seq = if what == "scan_due" {
+                        seq
+                    } else {
+                        seq.wrapping_sub(1)
+                    };
+                    sut.dispatch(FeedEvent::ScanDue {
+                        seq,
+                        presence: here,
+                    })
+                }
+                "interacting_on" | "interacting_off" => sut.dispatch(FeedEvent::Interacting {
+                    on: what == "interacting_on",
+                    presence: here,
+                }),
+                "scan_answer" => sut.resolve_matching(
+                    is_scan,
+                    FeedRes::SyncCompleted {
+                        new_count: step["new_count"].as_u64().expect("new_count") as u32,
+                    },
+                ),
+                "store_answer" => {
+                    let mut ops = Vec::new();
+                    while sut
+                        .outstanding()
+                        .iter()
+                        .any(|op| matches!(op, FeedOp::ReadTxStore { .. }))
+                    {
+                        let read_id = sut
+                            .outstanding()
+                            .iter()
+                            .find_map(|op| match op {
+                                FeedOp::ReadTxStore { read_id, .. } => Some(*read_id),
+                                _ => None,
+                            })
+                            .expect("a read");
+                        ops.extend(sut.resolve_matching(
+                            |op| matches!(op, FeedOp::ReadTxStore { .. }),
+                            FeedRes::StoreLoaded {
+                                records: Vec::new(),
+                                now_ms: at,
+                                read_id,
+                            },
+                        ));
+                    }
+                    ops
+                }
+                presence_change => {
+                    let change = presence_change
+                        .strip_prefix("presence:")
+                        .unwrap_or_else(|| panic!("{name} #{i}: unknown step {what}"));
+                    let change: FeedPresenceChange =
+                        serde_json::from_value(Value::String(change.to_owned())).expect("change");
+                    sut.dispatch(FeedEvent::PresenceChanged {
+                        presence: here,
+                        change,
+                    })
+                }
+            };
+            let expect = &step["expect"];
+            let step_name = format!("{name} — #{i} {what} at {}", step["at"]);
+            assert_eq!(
+                ops.iter().any(is_scan),
+                expect["scan"].as_bool().expect("scan"),
+                "{step_name}: scan? {ops:?}"
+            );
+            assert_eq!(
+                ops.iter()
+                    .any(|op| matches!(op, FeedOp::ReadTxStore { .. })),
+                expect["read"].as_bool().expect("read"),
+                "{step_name}: read? {ops:?}"
+            );
+            assert_eq!(
+                (sut.renders() - renders) as u64,
+                expect["renders"].as_u64().expect("renders"),
+                "{step_name}: renders"
+            );
+            let after = sut.view().next_scan;
+            let armed = match (before, after) {
+                (Some(b), Some(a)) if a.seq == b.seq => None,
+                (_, a) => a.map(|a| u64::from(a.after_ms)),
+            };
+            assert_eq!(armed, expect["armed"].as_u64(), "{step_name}: armed");
+            // The machine renders every change (`RENDERS_EVERY_CHANGE`): the
+            // shell's view is never behind.
+            if sut.rendered_view().is_some() {
+                assert_eq!(sut.rendered_view(), Some(&sut.view()), "{step_name}: drawn");
+            }
+        }
+    }
+}
+
+/// r10: a shell that never said `started` follows no core cadence: the
+/// quiet-period event changes nothing for it.
+#[test]
+fn interacting_without_the_cadence_is_nothing() {
+    let mut sut = feed();
+    let ops = sut.dispatch(FeedEvent::Interacting {
+        on: true,
+        presence: presence(true, 0.0, T0),
+    });
+    assert!(ops.is_empty());
+    assert_eq!(sut.view().next_scan, None);
+}
+
+/// r10: a scan its shell never answered stops holding the next one after
+/// five minutes — the person's next moment scans again.
+#[test]
+fn a_scan_never_answered_is_let_go() {
     let mut sut = feed();
     sut.dispatch(FeedEvent::PresenceChanged {
         presence: presence(true, 0.0, T0),
         change: FeedPresenceChange::Started,
     });
-    let first = sut.view().next_scan.expect("armed");
-    assert_eq!(first.after_ms, 10_000);
-
-    // The hand-off's scan answered; due: a scan, and the next is armed.
-    sut.resolve_matching(is_scan, FeedRes::SyncCompleted { new_count: 0 });
-    let ops = sut.dispatch(FeedEvent::ScanDue {
-        seq: first.seq,
-        presence: presence(true, 200_000.0, T0 + 10_000.0),
-    });
-    assert!(ops.iter().any(is_scan), "{ops:?}");
-    let second = sut.view().next_scan.expect("re-armed");
-    assert_ne!(second.seq, first.seq);
-    assert_eq!(second.after_ms, 30_000, "idle now: 30 s");
-
-    // The old timer, late: ignored.
-    let ops = sut.dispatch(FeedEvent::ScanDue {
-        seq: first.seq,
-        presence: presence(true, 0.0, T0 + 11_000.0),
-    });
-    assert!(ops.is_empty());
-
-    // A touch after idle: the next scan at the active pace.
-    sut.dispatch(FeedEvent::PresenceChanged {
-        presence: presence(true, 0.0, T0 + 12_000.0),
-        change: FeedPresenceChange::Interacted,
-    });
-    let third = sut.view().next_scan.expect("armed");
-    assert_eq!(third.after_ms, 10_000);
-    // Touching again changes nothing.
-    let renders = sut.renders();
-    sut.dispatch(FeedEvent::PresenceChanged {
-        presence: presence(true, 0.0, T0 + 12_500.0),
-        change: FeedPresenceChange::Interacted,
-    });
-    assert_eq!(sut.view().next_scan, Some(third));
-    assert_eq!(sut.renders(), renders);
-
-    // Hidden: the hidden pace, counted from the last scan (T0 + 10 s).
-    sut.dispatch(FeedEvent::PresenceChanged {
-        presence: presence(false, 0.0, T0 + 25_000.0),
-        change: FeedPresenceChange::Hidden,
-    });
-    let hidden = sut.view().next_scan.expect("armed");
-    assert_eq!(hidden.after_ms, 45_000);
-
-    // Shown again: a scan at once (the previous one answered first).
-    sut.resolve_matching(is_scan, FeedRes::SyncCompleted { new_count: 0 });
+    // The hand-off's scan is never answered.
     let ops = sut.dispatch(FeedEvent::PresenceChanged {
-        presence: presence(true, 0.0, T0 + 90_000.0),
-        change: FeedPresenceChange::Shown,
+        presence: presence(true, 0.0, T0 + 60_000.0),
+        change: FeedPresenceChange::Refreshed,
     });
-    assert!(ops.iter().any(is_scan), "{ops:?}");
-    assert_eq!(
-        sut.view().next_scan.map(|n: FeedNextScan| n.after_ms),
-        Some(10_000)
-    );
+    assert!(!ops.iter().any(is_scan), "one is still out: {ops:?}");
+    let ops = sut.dispatch(FeedEvent::PresenceChanged {
+        presence: presence(true, 0.0, T0 + 300_000.0),
+        change: FeedPresenceChange::Refreshed,
+    });
+    assert!(ops.iter().any(is_scan), "let go after 5 min: {ops:?}");
 }
 
-/// Back online: a scan at once.
+/// r10: the account hand-off starts the back-off afresh — what was held for
+/// the previous account is spent.
 #[test]
-fn back_online_scans_at_once() {
+fn a_new_account_starts_the_back_off_again() {
     let mut sut = feed();
-    sut.resolve_matching(is_scan, FeedRes::SyncCompleted { new_count: 0 });
-    let ops = sut.dispatch(FeedEvent::PresenceChanged {
-        presence: presence(true, 500_000.0, T0),
-        change: FeedPresenceChange::Online,
+    sut.dispatch(FeedEvent::PresenceChanged {
+        presence: presence(true, 0.0, T0),
+        change: FeedPresenceChange::Started,
     });
-    assert!(ops.iter().any(is_scan));
-    assert_eq!(sut.view().next_scan.map(|n| n.after_ms), Some(30_000));
+    for k in 0..4 {
+        sut.resolve_matching(is_scan, FeedRes::SyncCompleted { new_count: 0 });
+        let seq = sut.view().next_scan.expect("armed").seq;
+        sut.dispatch(FeedEvent::ScanDue {
+            seq,
+            presence: presence(true, 0.0, T0 + f64::from(k) * 1_000.0),
+        });
+    }
+    sut.resolve_matching(is_scan, FeedRes::SyncCompleted { new_count: 0 });
+    assert_eq!(sut.view().next_scan.map(|n| n.after_ms), Some(120_000));
+    sut.dispatch(FeedEvent::AccountSwitched {
+        address: "0xB0b".to_owned(),
+    });
+    sut.resolve_matching(is_scan, FeedRes::SyncCompleted { new_count: 0 });
+    assert_eq!(sut.view().next_scan.map(|n| n.after_ms), Some(15_000));
 }

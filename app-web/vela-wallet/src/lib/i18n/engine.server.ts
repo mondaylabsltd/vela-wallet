@@ -1077,6 +1077,7 @@ export function resolveRequestMessages(locale: Locale): RequestMessages {
 		multisigNoMessagesTitle: k('connect.browser.multisigNoMessagesTitle'),
 		multisigNoMessagesBody: k('connect.browser.multisigNoMessagesBody'),
 		multisigConnectNote: k('connect.browser.multisigConnectNote'),
+		spaceMoved: k('connect.browser.spaceMoved'),
 		gotIt: k('common.gotIt'),
 		addNetwork: {
 			title: k('settingsModals.addNetwork.modalTitle'),
@@ -1536,6 +1537,7 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		warnDescriptorFetched: k('componentsUi.signing.descriptorFetchedWarning'),
 		warnOrderTerms: k('componentsUi.signing.warnOrderTerms'),
 		warnSimUnavailable: k(SIM_COULD_NOT_CHECK_KEY),
+		spaceMoved: k('connect.browser.spaceMoved'),
 		warnDrain: k('componentsUi.signing.drainWarning'),
 		okSelfTransfer: k('componentsUi.signing.balanceSelfTransfer'),
 		okNoNetworkFee: k('componentsUi.signing.noNetworkFee'),

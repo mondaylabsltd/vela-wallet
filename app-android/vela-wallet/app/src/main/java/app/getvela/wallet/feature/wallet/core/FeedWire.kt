@@ -698,6 +698,15 @@ sealed class FeedEvent {
     @Serializable
     @SerialName("scan_due")
     data class ScanDue(val seq: Int, val presence: FeedPresence) : FeedEvent()
+
+    /**
+     * r10 follow-up (core §9.4): a gesture started ([on]) or settled — a quiet
+     * period: a scan due meanwhile is held until `on = false`. Declared for the
+     * Android lane to send from the list's scroll state.
+     */
+    @Serializable
+    @SerialName("interacting")
+    data class Interacting(val on: Boolean, val presence: FeedPresence) : FeedEvent()
 }
 
 /** r9-17: the page as it stands — shown, how long since the person touched it, the clock. */
@@ -712,6 +721,12 @@ enum class FeedPresenceChange {
     @SerialName("hidden") Hidden,
     @SerialName("online") Online,
     @SerialName("interacted") Interacted,
+
+    /** r10 follow-up: a pull-to-refresh — scan at once, the back-off starts again. */
+    @SerialName("refreshed") Refreshed,
+
+    /** r10 follow-up: the person sent from this account — scan at once. */
+    @SerialName("sent") Sent,
 }
 
 /** r9-17: when the next incoming scan is due — ONE timer per [seq]. */

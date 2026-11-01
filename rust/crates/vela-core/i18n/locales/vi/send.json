@@ -26,6 +26,7 @@
     "alertInvalidAmountBody": "Vui lòng nhập một số lượng hợp lệ lớn hơn 0.",
     "alertInsufficientBalanceTitle": "Số dư không đủ",
     "alertLoadTokensError": "Không tải được token.",
+    "tokensUnavailable": "Không tải được token của bạn. Hãy kiểm tra kết nối rồi thử lại.",
     "warnNotEnoughToken": "Tài khoản này không đủ {{symbol}}",
     "warnInsufficientForGas": "Không đủ {{sym}} để trả số tiền + phí gas",
     "warnInsufficientGas": "Không đủ {{sym}} để trả phí gas",

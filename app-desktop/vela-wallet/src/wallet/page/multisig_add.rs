@@ -592,7 +592,7 @@ impl WalletPage {
                             .child(words::tv(
                                 &loc,
                                 "add.usedOn",
-                                &[("networks", &names.join(", "))],
+                                &[("networks", &loc.list(&names))],
                             )),
                     );
                 } else if let Some(lacks) = link_lacks {

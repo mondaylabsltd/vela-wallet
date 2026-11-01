@@ -387,10 +387,15 @@ describe('the core reads every call itself, the same on every platform (r8-1)', 
 		expect(review.sign.anyway).toBe(true);
 	});
 
-	it('a batch nested too deep: refused, nothing signed (r8-5)', () => {
+	it('a batch nested too deep: refused, nothing signed (r8-5) — said once, by the refusal (r10)', () => {
 		const review = reviewOf(named('multiSend called four deep'));
 		expect(review.sign.allowed).toBe(false);
-		expect(text(concernBlocks(review, readingCtx))).toContain(m.review.reading.unreadableLine);
+		// One refusal box: the core says it as the refusal (`refused.why =
+		// tooDeep`) and leaves the "can't be read" concern out at the source.
+		expect(review.refused?.why).toBe('tooDeep');
+		expect(text(concernBlocks(review, readingCtx))).not.toContain(
+			m.review.reading.unreadableLine
+		);
 	});
 });
 

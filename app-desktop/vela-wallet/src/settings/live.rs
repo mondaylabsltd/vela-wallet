@@ -462,12 +462,16 @@ pub fn currency_menu(priced: &[(String, f64)], selected: &str, locale: &str) -> 
 /// until the registry answered, then grew to the wallet's keys, and
 /// everything under it dropped (~250 pt on the iPhone, 151 px on the
 /// Xiaomi); on the desktop the same, 177 pt for a wallet of three keys.
+///
+/// `account_name`: the account's own name — never a key row's label (r10
+/// follow-up, `vela_core::wallet_keys::step_for_account`).
 #[must_use]
 pub fn device_key_rows(
+    account_name: &str,
     device: &[vela_core::wallet_keys::DeviceKey],
     sign_in_credential: &str,
 ) -> Vec<vela_core::wallet_keys::WalletKeyRow> {
-    match vela_core::wallet_keys::step("", device, &[], sign_in_credential) {
+    match vela_core::wallet_keys::step_for_account("", account_name, device, &[], sign_in_credential) {
         vela_core::wallet_keys::KeysStep::Done { keys, .. } => keys,
         // With no address there is nobody to ask.
         vela_core::wallet_keys::KeysStep::Ask { .. } => Vec::new(),
@@ -698,16 +702,21 @@ mod tests {
         let template = "Also supported, not in your list: {{names}}.";
         let mut view = view_with(Vec::new());
         view.hidden_vela_chain_ids = Vec::new();
-        assert_eq!(more_networks(&view, template), None);
+        assert_eq!(more_networks(&view, template, "en"), None);
         view.hidden_vela_chain_ids = vec![988, 4326];
-        let more = more_networks(&view, template);
+        let more = more_networks(&view, template, "en");
         assert_eq!(
             more.as_deref(),
-            Some("Also supported, not in your list: Stable, MegaETH.")
+            Some("Also supported, not in your list: Stable and MegaETH.")
         );
         assert_eq!(
             space_hint("Real money.", more.as_deref(), false),
-            "Real money. Also supported, not in your list: Stable, MegaETH."
+            "Real money. Also supported, not in your list: Stable and MegaETH."
+        );
+        // r10 follow-up: the list is the language's, not ", " everywhere.
+        assert_eq!(
+            more_networks(&view, "{{names}}", "zh").as_deref(),
+            Some("Stable和MegaETH")
         );
         assert_eq!(space_hint("Test coins.", more.as_deref(), true), "Test coins.");
         assert_eq!(space_hint("Real money.", None, false), "Real money.");
@@ -1198,9 +1207,10 @@ pub fn network_rows(view: &NetView) -> Vec<NetworkRowModel> {
 
 /// "Also supported, not in your list: Stable, MegaETH…" — the Vela networks
 /// the core says are out of the person's lists (`hidden_vela_chain_ids`), by
-/// name; none, no line (the web's `moreNetworks`).
+/// name; none, no line (the web's `moreNetworks`). The names are one list in
+/// `language` (`vela_core::l10n::format_list`, r10 follow-up).
 #[must_use]
-pub fn more_networks(view: &NetView, template: &str) -> Option<String> {
+pub fn more_networks(view: &NetView, template: &str, language: &str) -> Option<String> {
     if view.hidden_vela_chain_ids.is_empty() {
         return None;
     }
@@ -1214,7 +1224,11 @@ pub fn more_networks(view: &NetView, template: &str) -> Option<String> {
                 .map_or_else(|| format!("Chain {id}"), |chain| chain.display_name.to_owned())
         })
         .collect();
-    Some(crate::wallet::fill(template, "names", &names.join(", ")))
+    Some(crate::wallet::fill(
+        template,
+        "names",
+        &vela_core::l10n::format_list(language, &names),
+    ))
 }
 
 /// The network list heading's hint (the web's `liveSpaceHeading`): the
@@ -2674,15 +2688,15 @@ mod keys_tests {
         assert_eq!(KeysPin::Asking(1).answer(), None);
 
         let device = KeysPin::Asking(3).device();
-        let rows = device_key_rows(&device, &device[2].credential_id);
+        let rows = device_key_rows("", &device, &device[2].credential_id);
         assert_eq!(rows.len(), 3);
         let signs: Vec<bool> = rows.iter().map(|row| row.signs_here).collect();
         assert_eq!(signs, [false, false, true]);
         assert!(rows.iter().all(|row| row.credential_id.is_empty()
             && row.synced.is_none()
             && row.user_verified.is_none()));
-        assert_eq!(device_key_rows(&device[..1], "").len(), 1);
-        assert!(device_key_rows(&[], "").is_empty());
+        assert_eq!(device_key_rows("", &device[..1], "").len(), 1);
+        assert!(device_key_rows("", &[], "").is_empty());
     }
 
     /// The copy-record row's status is drawn on ONE line, so the row is one

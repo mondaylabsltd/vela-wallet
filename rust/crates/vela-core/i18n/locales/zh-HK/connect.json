@@ -121,7 +121,13 @@
       "signInTitle": "登入後繼續",
       "multisigNoMessagesTitle": "多簽暫時還不能簽署訊息",
       "multisigNoMessagesBody": "{{host}} 請求這個多簽簽署一則訊息。多簽的簽名需要成員批准，而 Vela 目前還不為訊息收集批准，所以網站會收到拒絕。交易仍然可用：它們會變成由成員批准的提案。",
-      "multisigConnectNote": "這是一個多簽：網站可以發起交易供成員批准，但不能請求它簽署訊息。"
+      "multisigConnectNote": "這是一個多簽：網站可以發起交易供成員批准，但不能請求它簽署訊息。",
+      "switchRefusal": {
+        "unknown": "Vela 的網絡中沒有鏈 {{chainId}}",
+        "otherSpaceTestnet": "鏈 {{chainId}} 屬於 Vela 的測試網網絡；Vela 正在顯示主網網絡。請在 Vela 中切換到測試網空間後再使用。",
+        "otherSpaceMainnet": "鏈 {{chainId}} 屬於 Vela 的主網網絡；Vela 正在顯示測試網網絡。請在 Vela 中切換到主網空間後再使用。"
+      },
+      "spaceMoved": "網絡已隨空間切換：此網站現在使用 {{network}}。"
     },
     "ext": {
       "installedNote": "之前已開啟的分頁需要重新載入，網站才能找到 Vela。",

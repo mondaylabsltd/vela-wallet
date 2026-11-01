@@ -89,6 +89,8 @@ import {
 	resolveGrantedAccounts,
 	rpcError,
 	signedInChangeEvent,
+	SPACE_MOVED_PREFIX,
+	spaceSwitchMoves,
 	startChainOf,
 	switchChainParam,
 	toHexChainId,
@@ -363,7 +365,8 @@ function publicRecord(record) {
 		params: record.params,
 		origin: record.origin,
 		tabId: record.tabId,
-		at: record.at
+		at: record.at,
+		...(record.spaceNote ? { spaceNote: record.spaceNote } : {})
 	};
 }
 
@@ -744,6 +747,16 @@ async function admit(record, panelAttempt) {
 		if (existing.documentId === record.documentId) return;
 		// Another document in the same tab reusing an id: the old page is gone.
 		await settle(existing.rid, 'page_left');
+	}
+	// r10 follow-up: a space switch moved this site since its last request —
+	// this one, which opens the sheet, says so once (`spaceNote`).
+	const movedKey = SPACE_MOVED_PREFIX + record.origin;
+	const moved = parseChainId((await readLocal([movedKey]))[movedKey]);
+	if (moved > 0) {
+		record.spaceNote = { chainId: moved };
+		await chrome.storage.local.remove(movedKey).catch(() => {
+			/* best-effort: said again on the next request at worst */
+		});
 	}
 	records.set(record.rid, record);
 	await persist(record);
@@ -1152,6 +1165,10 @@ async function switchChain(method, params, origin) {
 			return { error: rpcError(ERR.INTERNAL, 'Could not record the chain switch') };
 		}
 	}
+	// The page chose its network itself: what a space switch said of it is over.
+	chrome.storage.local.remove(SPACE_MOVED_PREFIX + origin).catch(() => {
+		/* best-effort: one line too many on its next request at worst */
+	});
 	// dapp-17: where the next new site in this space starts. Best-effort.
 	const last = withLastChain(catalog, all[LAST_CHAIN_KEY], chainId);
 	if (last) {
@@ -1449,6 +1466,72 @@ async function broadcast(origin, event, data) {
 }
 
 /**
+ * r10 follow-up (the owner's spec-105 line): the wallet page published a
+ * catalog whose space differs from the one before — the person switched
+ * spaces. Every site Vela keeps a network for whose network is not the new
+ * space's moves to where a new site starts there (`spaceSwitchMoves`, the
+ * core's rule and vectors); writing its `vela.chain.<origin>` is what tells
+ * its pages (`chainChanged`, the listener below), and its next request says
+ * so once (`SPACE_MOVED_PREFIX`). A page on a site with no network of its own
+ * follows the space's start, so it is told too.
+ */
+async function moveSitesWithSpace(before, after) {
+	const was = before && typeof before === 'object' ? before.space : undefined;
+	const now = after && typeof after === 'object' ? after.space : undefined;
+	if (typeof was !== 'string' || typeof now !== 'string' || was === now) return;
+	const all = await readLocal(null);
+	const order = Array.isArray(after.order)
+		? after.order.map((id) => parseChainId(id)).filter((id) => id > 0)
+		: [];
+	const lastBySpace = all[LAST_CHAIN_KEY];
+	const lastUsed =
+		lastBySpace && typeof lastBySpace === 'object' ? parseChainId(lastBySpace[now]) : 0;
+	const lives = accountChainsOf(all[ACCOUNT_CHAINS_KEY], signedInOf(all[EXT_CACHE_KEY]));
+	const kept = new Map();
+	for (const [key, value] of Object.entries(all)) {
+		if (key.startsWith(PERM_PREFIX)) {
+			const origin = key.slice(PERM_PREFIX.length);
+			const connectedOn = value && typeof value === 'object' ? parseChainId(value.chainId) : 0;
+			if (connectedOn > 0 && !kept.has(origin)) kept.set(origin, connectedOn);
+		} else if (key.startsWith(CHAIN_PREFIX)) {
+			const picked = parseChainId(value);
+			if (picked > 0) kept.set(key.slice(CHAIN_PREFIX.length), picked);
+		}
+	}
+	const sites = [...kept].map(([origin, chain_id]) => ({ origin, chain_id }));
+	const moves = spaceSwitchMoves(order, lastUsed > 0 ? lastUsed : null, lives, sites);
+	const writes = {};
+	for (const move of moves) {
+		writes[CHAIN_PREFIX + move.origin] = move.chain_id;
+		writes[SPACE_MOVED_PREFIX + move.origin] = move.chain_id;
+	}
+	if (moves.length > 0) {
+		try {
+			await chrome.storage.local.set(writes);
+		} catch {
+			/* the next switch tries again; until then the page keeps its network */
+		}
+	}
+	// The pages of sites with no network of their own: their answer to
+	// `eth_chainId` is the space's start now.
+	let tabs;
+	try {
+		tabs = await chrome.tabs.query({});
+	} catch {
+		return;
+	}
+	const told = new Set(moves.map((move) => move.origin));
+	const beforeAll = { ...all, [CHAINS_KEY]: before };
+	const afterAll = { ...all, [CHAINS_KEY]: after };
+	for (const origin of new Set(tabs.map((tab) => originOfUrl(tab.url)).filter(Boolean))) {
+		if (told.has(origin) || kept.has(origin)) continue;
+		const then = chainOf(origin, beforeAll);
+		const next = chainOf(origin, afterAll);
+		if (next > 0 && next !== then) void broadcast(origin, 'chainChanged', toHexChainId(next));
+	}
+}
+
+/**
  * The wallet signed in, out, or to another account (its snapshot's address
  * changed): tell each granted origin what it may see now — `signedInChangeEvent`
  * says what, from the same twin rule `eth_accounts` answers with.
@@ -1478,6 +1561,8 @@ chrome.storage.onChanged.addListener((changes, area) => {
 			surfacePreference = change.newValue === 'window' ? 'window' : 'panel';
 		} else if (key === EXT_CACHE_KEY) {
 			void announceSignedIn(change.oldValue, change.newValue);
+		} else if (key === CHAINS_KEY) {
+			void moveSitesWithSpace(change.oldValue, change.newValue);
 		} else if (key.startsWith(PERM_PREFIX)) {
 			const origin = key.slice(PERM_PREFIX.length);
 			const before = change.oldValue?.address;

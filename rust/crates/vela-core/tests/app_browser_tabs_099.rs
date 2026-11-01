@@ -607,11 +607,13 @@ mod navigation {
         dapp.adding_network = Some(DbrSigningView {
             tab: "t3".to_owned(),
             id: "1".to_owned(),
+            space_note: None,
         });
         assert_eq!(waiting_tab(&dapp).as_deref(), Some("t3"));
         dapp.signing = Some(DbrSigningView {
             tab: "t2".to_owned(),
             id: "2".to_owned(),
+            space_note: None,
         });
         assert_eq!(waiting_tab(&dapp).as_deref(), Some("t2"));
         dapp.consent = Some(DbrConsentView {
@@ -621,6 +623,7 @@ mod navigation {
             address: None,
             chain_id: 1,
             lock: Default::default(),
+            space_note: None,
         });
         assert_eq!(waiting_tab(&dapp).as_deref(), Some("t1"));
         // The same answer over JSON, from the whole view.

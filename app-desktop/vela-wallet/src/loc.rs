@@ -253,6 +253,15 @@ impl Loc {
         self.engine.language()
     }
 
+    /// `items` as one "and" list in this language — the core's CLDR pattern
+    /// (`vela_core::l10n::format_list`), what the phones' system formatters
+    /// draw: zh "Base、Arbitrum和Ethereum", never "Base, Arbitrum, Ethereum"
+    /// (r10 follow-up). For a list inside a translated sentence.
+    #[must_use]
+    pub fn list<S: AsRef<str>>(&self, items: &[S]) -> String {
+        vela_core::l10n::format_list(self.language(), items)
+    }
+
     /// The engine that holds `key`: the on-demand one for an `ON_DEMAND`
     /// namespace (P2.6, merged at run time as the web merges it at build
     /// time), the compiled one for everything else.

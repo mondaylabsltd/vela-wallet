@@ -21,9 +21,11 @@
 //!   already covered (the coverage is kept per account and network by the
 //!   shell, [`TrustScanCursor`], so a restart resumes and nothing is scanned
 //!   twice). `token_trust` runs these windows on its `ScanRequested`.
-//! - **Cadence** ([`next_scan_ms`]): when the next scan is due, from the facts
-//!   of the page (shown or not, touched lately or not) — the owner's round-5
-//!   numbers, which lived in the web's `incoming-cadence.ts`.
+//! - **Cadence** ([`next_scan_ms`]): when the next scan is due — a back-off
+//!   while nothing arrives (15 s → 30 s → 60 s → 2 min), at once when the
+//!   page comes back, on a pull-to-refresh and after a send, and never while
+//!   the person is interacting (`activity_feed` holds a due scan until the
+//!   interaction ends).
 //!
 //! The shared vectors are `tests/vectors/incoming-scan.json`; every shell
 //! replays them through its door.
@@ -100,14 +102,27 @@ pub const CURSOR_KEY_PREFIX: &str = "vela.scanCursors.";
 /// only moves how much of the week [`BACKFILL_MAX_BLOCKS`] lets in.
 pub const DEFAULT_BLOCK_MS: u64 = 2_000;
 
-/// While the person is at the page (round 5, `incoming-cadence.ts`).
-pub const CADENCE_ACTIVE_MS: u32 = 10_000;
-/// Shown, nobody at it.
-pub const CADENCE_IDLE_MS: u32 = 30_000;
-/// Hidden: a background page still hears of money within a minute.
-pub const CADENCE_HIDDEN_MS: u32 = 60_000;
-/// An interaction this recent counts as "at the page".
-pub const CADENCE_ACTIVE_WINDOW_MS: f64 = 120_000.0;
+/// The waits between scans while the page is shown, by how many scans in a
+/// row found nothing (r10 follow-up, decided by best practice: back off when
+/// nothing arrives). 15 s after a scan that found something, or the first
+/// that found nothing (the page came back, a pull-to-refresh, a send all
+/// scan at once and start here), then 30 s, 60 s, and 2 min at most. Round 5's 10 s pace while someone was at the page scanned most
+/// exactly when the person was scrolling: a real Redmi K40's 200-row history
+/// went from ~1–2 % janky frames to 5.6 %. Money that arrives is still seen
+/// within two minutes on a page nobody touches, and at once on every moment
+/// a person looks for it (back to the app, pull to refresh, after a send).
+pub const CADENCE_STEPS_MS: [u32; 4] = [15_000, 30_000, 60_000, 120_000];
+/// Hidden: the longest wait — nothing is drawn, and shown again scans at
+/// once.
+pub const CADENCE_HIDDEN_MS: u32 = 120_000;
+/// A scan lost by its shell (never answered) stops holding the next one
+/// after this long: the person's next return, refresh or send scans again.
+/// Shells answer every scan (a failure answers 0); this only keeps a shell
+/// bug from stopping the scan for good.
+pub const CADENCE_SCAN_LOST_MS: f64 = 300_000.0;
+/// An interaction that said it began and not that it ended holds a scan back
+/// no longer than this: a shell that missed the end never stops the scan.
+pub const CADENCE_INTERACTING_MAX_MS: f64 = 60_000.0;
 
 // ---------------------------------------------------------------------------
 // Networks
@@ -452,20 +467,19 @@ pub fn scan_windows_json(ask_json: &str) -> String {
 // Cadence
 // ---------------------------------------------------------------------------
 
-/// The wait before the next scan, for the page as it stands (round 5): 10 s
-/// while someone is at it (touched in the last two minutes), 30 s shown and
-/// idle, 60 s hidden.
+/// The wait before the next scan: hidden, [`CADENCE_HIDDEN_MS`]; shown, a
+/// step of [`CADENCE_STEPS_MS`] by `quiet_scans` — how many scans in a row
+/// found nothing up to the one that just landed. The first step follows a
+/// scan that found something (0) and the first that found nothing (1); each
+/// further quiet scan goes one step up, to the last.
 #[must_use]
-pub fn next_scan_ms(visible: bool, since_interaction_ms: f64) -> u32 {
+pub fn next_scan_ms(visible: bool, quiet_scans: u32) -> u32 {
     if !visible {
         return CADENCE_HIDDEN_MS;
     }
-    // A figure that is no figure (NaN, negative) is "not lately".
-    if (0.0..CADENCE_ACTIVE_WINDOW_MS).contains(&since_interaction_ms) {
-        CADENCE_ACTIVE_MS
-    } else {
-        CADENCE_IDLE_MS
-    }
+    let last = CADENCE_STEPS_MS.len() - 1;
+    let step = (quiet_scans.saturating_sub(1) as usize).min(last);
+    CADENCE_STEPS_MS[step]
 }
 
 #[cfg(test)]

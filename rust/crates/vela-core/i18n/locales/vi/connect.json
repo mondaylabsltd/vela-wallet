@@ -121,7 +121,13 @@
       "signInTitle": "Đăng nhập để tiếp tục",
       "multisigNoMessagesTitle": "Multisig chưa thể ký tin nhắn",
       "multisigNoMessagesBody": "{{host}} yêu cầu multisig này ký một tin nhắn. Chữ ký của multisig cần các thành viên phê duyệt, mà Vela chưa thu thập cho tin nhắn, nên trang web sẽ bị từ chối. Giao dịch vẫn hoạt động: chúng trở thành đề xuất để các thành viên phê duyệt.",
-      "multisigConnectNote": "Đây là multisig: trang web có thể đề xuất giao dịch để thành viên phê duyệt, nhưng không thể yêu cầu ký tin nhắn."
+      "multisigConnectNote": "Đây là multisig: trang web có thể đề xuất giao dịch để thành viên phê duyệt, nhưng không thể yêu cầu ký tin nhắn.",
+      "switchRefusal": {
+        "unknown": "Chuỗi {{chainId}} không có trong các mạng của Vela",
+        "otherSpaceTestnet": "Chuỗi {{chainId}} là một mạng testnet của Vela; Vela đang hiển thị các mạng mainnet. Hãy chuyển sang không gian testnet trong Vela để dùng nó.",
+        "otherSpaceMainnet": "Chuỗi {{chainId}} là một mạng mainnet của Vela; Vela đang hiển thị các mạng testnet. Hãy chuyển sang không gian mainnet trong Vela để dùng nó."
+      },
+      "spaceMoved": "Mạng đã đổi theo không gian: trang này giờ ở trên {{network}}."
     },
     "ext": {
       "installedNote": "Hãy tải lại các thẻ đã mở trước đó để các trang tìm thấy Vela.",

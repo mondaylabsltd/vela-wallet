@@ -26,6 +26,7 @@
     "alertInvalidAmountBody": "Informe um valor válido maior que zero.",
     "alertInsufficientBalanceTitle": "Saldo insuficiente",
     "alertLoadTokensError": "Não foi possível carregar os tokens.",
+    "tokensUnavailable": "Não foi possível carregar seus tokens. Verifique sua conexão e tente de novo.",
     "warnNotEnoughToken": "Você não tem {{symbol}} suficiente nesta conta",
     "warnInsufficientForGas": "{{sym}} insuficiente para cobrir o valor + as taxas de gas",
     "warnInsufficientGas": "{{sym}} insuficiente para as taxas de gas",

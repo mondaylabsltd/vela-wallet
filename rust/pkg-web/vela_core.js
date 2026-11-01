@@ -5423,14 +5423,15 @@ export function inFlightOps(track_view_json) {
 }
 
 /**
- * r9-17: the wait before the next incoming scan
- * (`incoming_scan::next_scan_ms`).
+ * r9-17 / r10: the wait before the next incoming scan
+ * (`incoming_scan::next_scan_ms`) — shown or not, and how many scans in a
+ * row found nothing (the back-off's step).
  * @param {boolean} visible
- * @param {number} since_interaction_ms
+ * @param {number} quiet_scans
  * @returns {number}
  */
-export function incomingNextScanMs(visible, since_interaction_ms) {
-    const ret = wasm.incomingNextScanMs(visible, since_interaction_ms);
+export function incomingNextScanMs(visible, quiet_scans) {
+    const ret = wasm.incomingNextScanMs(visible, quiet_scans);
     return ret >>> 0;
 }
 

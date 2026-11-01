@@ -384,6 +384,7 @@
   "alertInvalidAmountBody": "請輸入大於零的有效金額。",
   "alertInsufficientBalanceTitle": "餘額不足",
   "alertLoadTokensError": "載入代幣失敗。",
+  "tokensUnavailable": "無法載入你的代幣。請檢查網路連線後再試一次。",
   "warnNotEnoughToken": "此帳戶的 {{symbol}} 不足",
   "warnInsufficientForGas": "{{sym}} 不足以支付金額 + Gas 費",
   "warnInsufficientGas": "{{sym}} 不足以支付 Gas 費",
@@ -1172,7 +1173,13 @@
    "signInTitle": "登入後繼續",
    "multisigNoMessagesTitle": "多簽暫時還不能簽署訊息",
    "multisigNoMessagesBody": "{{host}} 請求這個多簽簽署一則訊息。多簽的簽章需要成員核准，而 Vela 目前還不為訊息收集核准，所以網站會收到拒絕。交易仍然可用：它們會變成由成員核准的提案。",
-   "multisigConnectNote": "這是一個多簽：網站可以發起交易供成員核准，但不能請求它簽署訊息。"
+   "multisigConnectNote": "這是一個多簽：網站可以發起交易供成員核准，但不能請求它簽署訊息。",
+   "switchRefusal": {
+    "unknown": "Vela 的網路中沒有鏈 {{chainId}}",
+    "otherSpaceTestnet": "鏈 {{chainId}} 屬於 Vela 的測試網網路；Vela 正在顯示主網網路。請在 Vela 中切換到測試網空間後再使用。",
+    "otherSpaceMainnet": "鏈 {{chainId}} 屬於 Vela 的主網網路；Vela 正在顯示測試網網路。請在 Vela 中切換到主網空間後再使用。"
+   },
+   "spaceMoved": "網路已隨空間切換：此網站現在使用 {{network}}。"
   },
   "ext": {
    "installedNote": "重新載入先前已開啟的分頁，網站才能找到 Vela。",
@@ -1977,7 +1984,9 @@
     "signerNotDiscoverable": "這個通行密鑰無法在這裡簽名",
     "signerFailed": "通行密鑰驗證失敗",
     "signingPage": "簽名頁沒有簽",
-    "badRpc": "網站未提供此網路可用的 RPC"
+    "badRpc": "網站未提供此網路可用的 RPC",
+    "otherSpaceTestnet": "這個網路在 Vela 的測試網空間中",
+    "otherSpaceMainnet": "這個網路在 Vela 的主網空間中"
    },
    "requests": "最近的請求",
    "noRequests": "尚無請求",

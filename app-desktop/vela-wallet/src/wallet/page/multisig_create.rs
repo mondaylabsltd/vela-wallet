@@ -1570,7 +1570,7 @@ impl WalletPage {
                             .child(crate::ui::prose(words::tv(
                                 &loc,
                                 "create.otherSpace",
-                                &[("space", &space), ("networks", &other.join(", "))],
+                                &[("space", &space), ("networks", &loc.list(&other))],
                             ))),
                     )
                     .child(

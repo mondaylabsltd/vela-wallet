@@ -3,4 +3,4 @@
 /**
  * r9-17: what moved the page's presence.
  */
-export type FeedPresenceChange = "started" | "shown" | "hidden" | "online" | "interacted";
+export type FeedPresenceChange = "started" | "shown" | "hidden" | "online" | "interacted" | "refreshed" | "sent";

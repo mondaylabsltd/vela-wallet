@@ -1892,6 +1892,14 @@ pub fn multisig_review(input: &ReviewInput) -> Result<MultisigReview, CoreError>
         allowed: tone != Tone::Refused,
         anyway: tone == Tone::Danger || blind,
     };
+    // One refusal box (r10 follow-up): a batch too deep is refused for
+    // being unreadable, so "Part of this batch can't be read" beside "Vela
+    // won't sign… nested too deep" is the same reason twice. The refusal
+    // (`refused`) is the one line; the concern it came from leaves the list
+    // here, at the source, after it decided the tone — no shell filters it.
+    if refused == Some(RefusedWhy::TooDeep) {
+        concerns.retain(|c| *c != Concern::UnreadableBatch);
+    }
     let refused = refused.map(|why| Refused {
         why,
         key: why.key().to_owned(),

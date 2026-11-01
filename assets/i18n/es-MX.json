@@ -384,6 +384,7 @@
   "alertInvalidAmountBody": "Ingresa un monto válido mayor que cero.",
   "alertInsufficientBalanceTitle": "Saldo insuficiente",
   "alertLoadTokensError": "No se pudieron cargar los tokens.",
+  "tokensUnavailable": "No se pudieron cargar tus tokens. Revisa tu conexión y vuelve a intentarlo.",
   "warnNotEnoughToken": "No tienes suficiente {{symbol}} en esta cuenta",
   "warnInsufficientForGas": "{{sym}} insuficiente para cubrir la cantidad y las comisiones de gas",
   "warnInsufficientGas": "{{sym}} insuficiente para las comisiones de gas",
@@ -1177,7 +1178,13 @@
    "signInTitle": "Inicia sesión para continuar",
    "multisigNoMessagesTitle": "Una multifirma aún no puede firmar mensajes",
    "multisigNoMessagesBody": "{{host}} pidió a esta multifirma firmar un mensaje. La firma de una multifirma necesita la aprobación de sus miembros, que Vela aún no reúne para mensajes, así que el sitio recibirá un no. Las transacciones siguen funcionando: se convierten en propuestas que aprueban los miembros.",
-   "multisigConnectNote": "Es una multifirma: el sitio puede proponer transacciones para que las aprueben sus miembros, pero no puede pedirle que firme mensajes."
+   "multisigConnectNote": "Es una multifirma: el sitio puede proponer transacciones para que las aprueben sus miembros, pero no puede pedirle que firme mensajes.",
+   "switchRefusal": {
+    "unknown": "La cadena {{chainId}} no está en las redes de Vela",
+    "otherSpaceTestnet": "La cadena {{chainId}} es una de las redes testnet de Vela; Vela está mostrando sus redes mainnet. Cambia al espacio testnet en Vela para usarla.",
+    "otherSpaceMainnet": "La cadena {{chainId}} es una de las redes mainnet de Vela; Vela está mostrando sus redes testnet. Cambia al espacio mainnet en Vela para usarla."
+   },
+   "spaceMoved": "La red cambió con el espacio: este sitio ahora está en {{network}}."
   },
   "ext": {
    "installedNote": "Recarga las pestañas que ya tenías abiertas para que sus sitios encuentren Vela.",
@@ -1982,7 +1989,9 @@
     "signerNotDiscoverable": "Esta passkey no puede firmar aquí",
     "signerFailed": "Falló la passkey",
     "signingPage": "La página de firma no lo firmó",
-    "badRpc": "El sitio no dio un RPC utilizable para esta red"
+    "badRpc": "El sitio no dio un RPC utilizable para esta red",
+    "otherSpaceTestnet": "Esta red está en el espacio testnet de Vela",
+    "otherSpaceMainnet": "Esta red está en el espacio mainnet de Vela"
    },
    "requests": "Solicitudes recientes",
    "noRequests": "Aún no hay solicitudes",

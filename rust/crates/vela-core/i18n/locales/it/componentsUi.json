@@ -645,7 +645,9 @@
         "signerNotDiscoverable": "Questa passkey non può firmare qui",
         "signerFailed": "La passkey non è riuscita",
         "signingPage": "La pagina di firma non l'ha firmato",
-        "badRpc": "Il sito non ha fornito un RPC utilizzabile per questa rete"
+        "badRpc": "Il sito non ha fornito un RPC utilizzabile per questa rete",
+        "otherSpaceTestnet": "Questa rete è nello spazio testnet di Vela",
+        "otherSpaceMainnet": "Questa rete è nello spazio mainnet di Vela"
       },
       "requests": "Richieste recenti",
       "noRequests": "Ancora nessuna richiesta",

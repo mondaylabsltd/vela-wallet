@@ -384,6 +384,7 @@
   "alertInvalidAmountBody": "Bitte geben Sie einen gültigen Betrag größer als null ein.",
   "alertInsufficientBalanceTitle": "Unzureichendes Guthaben",
   "alertLoadTokensError": "Token konnten nicht geladen werden.",
+  "tokensUnavailable": "Deine Token konnten nicht geladen werden. Prüfe deine Verbindung und versuche es erneut.",
   "warnNotEnoughToken": "Sie haben nicht genügend {{symbol}} in diesem Konto",
   "warnInsufficientForGas": "{{sym}} reicht nicht für Betrag + Gas-Gebühren",
   "warnInsufficientGas": "{{sym}} reicht nicht für die Gas-Gebühren",
@@ -1172,7 +1173,13 @@
    "signInTitle": "Zum Fortfahren anmelden",
    "multisigNoMessagesTitle": "Ein Multisig kann noch keine Nachrichten signieren",
    "multisigNoMessagesBody": "{{host}} hat diesen Multisig gebeten, eine Nachricht zu signieren. Die Signatur eines Multisigs braucht die Genehmigungen seiner Mitglieder, die Vela für Nachrichten noch nicht sammelt, daher erhält die Website eine Absage. Transaktionen funktionieren weiterhin: Sie werden zu Vorschlägen, die die Mitglieder genehmigen.",
-   "multisigConnectNote": "Dies ist ein Multisig: Die Website kann Transaktionen vorschlagen, die die Mitglieder genehmigen, aber keine Nachrichten signieren lassen."
+   "multisigConnectNote": "Dies ist ein Multisig: Die Website kann Transaktionen vorschlagen, die die Mitglieder genehmigen, aber keine Nachrichten signieren lassen.",
+   "switchRefusal": {
+    "unknown": "Chain {{chainId}} gehört nicht zu den Netzwerken von Vela",
+    "otherSpaceTestnet": "Chain {{chainId}} ist eines der Testnet-Netzwerke von Vela; Vela zeigt gerade seine Mainnet-Netzwerke. Wechsle in Vela zum Testnet-Bereich, um es zu nutzen.",
+    "otherSpaceMainnet": "Chain {{chainId}} ist eines der Mainnet-Netzwerke von Vela; Vela zeigt gerade seine Testnet-Netzwerke. Wechsle in Vela zum Mainnet-Bereich, um es zu nutzen."
+   },
+   "spaceMoved": "Das Netzwerk hat sich mit dem Bereich geändert: Diese Seite ist jetzt auf {{network}}."
   },
   "ext": {
    "installedNote": "Laden Sie bereits geöffnete Tabs neu, damit deren Websites Vela finden.",
@@ -1977,7 +1984,9 @@
     "signerNotDiscoverable": "Dieser Passkey kann hier nicht signieren",
     "signerFailed": "Der Passkey ist fehlgeschlagen",
     "signingPage": "Die Signaturseite hat nicht signiert",
-    "badRpc": "Die Website nannte keinen nutzbaren RPC für dieses Netzwerk"
+    "badRpc": "Die Website nannte keinen nutzbaren RPC für dieses Netzwerk",
+    "otherSpaceTestnet": "Dieses Netzwerk ist im Testnet-Bereich von Vela",
+    "otherSpaceMainnet": "Dieses Netzwerk ist im Mainnet-Bereich von Vela"
    },
    "requests": "Letzte Anfragen",
    "noRequests": "Noch keine Anfragen",

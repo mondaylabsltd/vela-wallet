@@ -386,6 +386,7 @@
   "alertInvalidAmountBody": "请输入大于零的有效金额。",
   "alertInsufficientBalanceTitle": "余额不足",
   "alertLoadTokensError": "加载代币失败。",
+  "tokensUnavailable": "无法加载你的代币。请检查网络连接后重试。",
   "warnNotEnoughToken": "账户中 {{symbol}} 余额不足",
   "warnInsufficientForGas": "{{sym}} 余额不足以支付金额及 Gas 费",
   "warnInsufficientGas": "{{sym}} 余额不足以支付 Gas 费",
@@ -1172,7 +1173,13 @@
    "signInTitle": "登录后继续",
    "multisigNoMessagesTitle": "多签暂时还不能签名消息",
    "multisigNoMessagesBody": "{{host}} 请求这个多签签名一条消息。多签的签名需要成员批准，而 Vela 目前还不为消息收集批准，所以网站会收到拒绝。交易仍然可用：它们会变成由成员批准的提案。",
-   "multisigConnectNote": "这是一个多签：网站可以发起交易供成员批准，但不能请求它签名消息。"
+   "multisigConnectNote": "这是一个多签：网站可以发起交易供成员批准，但不能请求它签名消息。",
+   "switchRefusal": {
+    "unknown": "Vela 的网络中没有链 {{chainId}}",
+    "otherSpaceTestnet": "链 {{chainId}} 属于 Vela 的测试网网络；Vela 正在显示主网网络。请在 Vela 中切换到测试网空间后再使用。",
+    "otherSpaceMainnet": "链 {{chainId}} 属于 Vela 的主网网络；Vela 正在显示测试网网络。请在 Vela 中切换到主网空间后再使用。"
+   },
+   "spaceMoved": "网络已随空间切换：此网站现在使用 {{network}}。"
   },
   "ext": {
    "installedNote": "重新加载之前已打开的标签页，网站才能找到 Vela。",
@@ -1977,7 +1984,9 @@
     "signerNotDiscoverable": "这个通行密钥无法在这里签名",
     "signerFailed": "通行密钥验证失败",
     "signingPage": "签名页没有签",
-    "badRpc": "网站未提供此网络可用的 RPC"
+    "badRpc": "网站未提供此网络可用的 RPC",
+    "otherSpaceTestnet": "这个网络在 Vela 的测试网空间中",
+    "otherSpaceMainnet": "这个网络在 Vela 的主网空间中"
    },
    "requests": "最近的请求",
    "noRequests": "暂无请求",

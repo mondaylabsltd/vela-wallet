@@ -384,6 +384,7 @@
   "alertInvalidAmountBody": "Informe um valor válido maior que zero.",
   "alertInsufficientBalanceTitle": "Saldo insuficiente",
   "alertLoadTokensError": "Não foi possível carregar os tokens.",
+  "tokensUnavailable": "Não foi possível carregar seus tokens. Verifique sua conexão e tente de novo.",
   "warnNotEnoughToken": "Você não tem {{symbol}} suficiente nesta conta",
   "warnInsufficientForGas": "{{sym}} insuficiente para cobrir o valor + as taxas de gas",
   "warnInsufficientGas": "{{sym}} insuficiente para as taxas de gas",
@@ -1177,7 +1178,13 @@
    "signInTitle": "Entre para continuar",
    "multisigNoMessagesTitle": "Um multisig ainda não assina mensagens",
    "multisigNoMessagesBody": "{{host}} pediu a este multisig que assine uma mensagem. A assinatura de um multisig precisa das aprovações dos membros, que a Vela ainda não reúne para mensagens, então o site vai receber um não. Transações continuam funcionando: viram propostas que os membros aprovam.",
-   "multisigConnectNote": "Este é um multisig: o site pode propor transações para os membros aprovarem, mas não pode pedir que assine mensagens."
+   "multisigConnectNote": "Este é um multisig: o site pode propor transações para os membros aprovarem, mas não pode pedir que assine mensagens.",
+   "switchRefusal": {
+    "unknown": "A rede {{chainId}} não está entre as redes da Vela",
+    "otherSpaceTestnet": "A rede {{chainId}} é uma das redes testnet da Vela; a Vela está mostrando as redes mainnet. Mude para o espaço testnet na Vela para usá-la.",
+    "otherSpaceMainnet": "A rede {{chainId}} é uma das redes mainnet da Vela; a Vela está mostrando as redes testnet. Mude para o espaço mainnet na Vela para usá-la."
+   },
+   "spaceMoved": "A rede mudou com o espaço: este site agora está em {{network}}."
   },
   "ext": {
    "installedNote": "Recarregue as abas que já estavam abertas para que os sites encontrem a Vela.",
@@ -1982,7 +1989,9 @@
     "signerNotDiscoverable": "Esta passkey não pode assinar aqui",
     "signerFailed": "A passkey falhou",
     "signingPage": "A página de assinatura não assinou",
-    "badRpc": "O site não deu um RPC utilizável para esta rede"
+    "badRpc": "O site não deu um RPC utilizável para esta rede",
+    "otherSpaceTestnet": "Esta rede está no espaço testnet da Vela",
+    "otherSpaceMainnet": "Esta rede está no espaço mainnet da Vela"
    },
    "requests": "Solicitações recentes",
    "noRequests": "Nenhuma solicitação ainda",

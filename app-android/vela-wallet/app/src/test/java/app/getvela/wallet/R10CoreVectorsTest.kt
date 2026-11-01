@@ -72,7 +72,7 @@ class R10CoreVectorsTest {
             assertEquals(
                 case.getString("name"),
                 case.getLong("expect_ms"),
-                incomingNextScanMs(case.getBoolean("visible"), case.getDouble("since_interaction_ms")).toLong(),
+                incomingNextScanMs(case.getBoolean("visible"), case.getInt("quiet_scans").toUInt()).toLong(),
             )
         }
     }
