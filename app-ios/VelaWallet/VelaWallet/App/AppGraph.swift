@@ -311,8 +311,15 @@ final class AppGraph {
         // read — nobody has to tap anything.
         let netWatch = NetWatch()
         // Health per source (spec 082 RJ14): each call names its chain.
-        pool.onOutcome = { [weak netWatch] outcome, chainId in
+        pool.onOutcome = { [weak netWatch, weak wallet] outcome, chainId in
             netWatch?.observe(outcome, chainId: chainId)
+            // r10-1: one network back while the rest never went (no
+            // "came back" edge for that): a network the balance could not
+            // read answered — the balance reads it again now.
+            switch outcome {
+            case .ok, .rpcError: wallet?.chainAnswered(chainId)
+            default: break
+            }
         }
         netWatch.onCameBack = { [weak browserController, weak wallet] in
             browserController?.networkCameBack()

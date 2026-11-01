@@ -254,6 +254,31 @@ final class WalletStore {
         core.dispatch(Self.autoRefreshEvent)
     }
 
+    /// r10-1: a network the balance could not read answered another call (a
+    /// multisig's poll, a fee, a page): the balance reads again now, instead
+    /// of on the core's next recovery step — which can be five minutes off
+    /// after a long outage, the home saying "Updated 5m" over a network that
+    /// has been back for three. The core's view says which networks failed;
+    /// the read and what it stamps are the core's. Once per network per
+    /// outage and minute: a network the balance still cannot read (its token
+    /// list, say) is not asked again on every call that reaches it.
+    @discardableResult
+    func chainAnswered(_ chainId: Int, nowMs: Double = Date().timeIntervalSince1970 * 1000) -> Bool {
+        guard let view = balance,
+              recovery.shouldRead(chainId, unreadable: Self.unreadable(view), refreshing: view.refreshing, nowMs: nowMs)
+        else { return false }
+        refresh(pull: false)
+        return true
+    }
+
+    /// The networks the balance's last read could not reach (the core's
+    /// failed and unreachable lists).
+    static func unreadable(_ view: BalanceViewWire) -> Set<Int> {
+        Set(view.failedChainIds).union(view.unreachableNetworks.map(\.chainId))
+    }
+
+    @ObservationIgnored private var recovery = RecoveryNudge()
+
     static let autoRefreshEvent = CoreJSON.string([
         "type": "refresh_requested", "force": false, "pull": false,
     ])
@@ -343,4 +368,23 @@ final class WalletStore {
 
     func appFocused() { core.dispatch(CoreJSON.string(["type": "app_focused"])) }
     func appBackgrounded() { core.dispatch(CoreJSON.string(["type": "app_backgrounded"])) }
+}
+
+/// When a network's answer elsewhere reads the balance again (r10-1): only a
+/// network the balance's last read could not reach, not while a round is
+/// out, and once per network a minute — a network the balance still cannot
+/// read is not asked again on every call that reaches it. A network read
+/// again is forgotten, so its next outage nudges at once.
+struct RecoveryNudge {
+    static let gapMs: Double = 60_000
+    private(set) var nudged: [Int: Double] = [:]
+
+    mutating func shouldRead(_ chainId: Int, unreadable: Set<Int>, refreshing: Bool, nowMs: Double) -> Bool {
+        nudged = nudged.filter { unreadable.contains($0.key) }
+        guard !refreshing, unreadable.contains(chainId),
+              nowMs - (nudged[chainId] ?? -.infinity) >= Self.gapMs
+        else { return false }
+        nudged[chainId] = nowMs
+        return true
+    }
 }
