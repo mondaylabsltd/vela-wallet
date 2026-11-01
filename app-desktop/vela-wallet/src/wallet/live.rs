@@ -1100,6 +1100,7 @@ mod tests {
                 registry_chain_ids: Vec::new(),
                 own_node_chain_ids: vec![],
                 fallback_chain_ids: vec![],
+                read_at_ms: None,
                 now_ms: 1.0,
             }
         };

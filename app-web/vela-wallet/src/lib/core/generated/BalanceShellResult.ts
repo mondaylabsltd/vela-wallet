@@ -48,7 +48,14 @@ own_node_chain_ids: Array<number>,
  * figures came from public nodes for now (`rpc_pool`'s
  * `fallback_chains`) — read, but said ([`BalanceView::fallback_chain_ids`]).
  */
-fallback_chain_ids: Array<number>, now_ms: number, } | { "type": "fetch_errored", address: string, pull: boolean, 
+fallback_chain_ids: Array<number>, 
+/**
+ * r10-1: when these rows were read, when the shell answered from its
+ * own token cache (its TTL) instead of asking the networks — the
+ * stamp is that time, never `now_ms`: a cache hit while offline is
+ * not "Updated now". Absent: read now.
+ */
+read_at_ms: number | null, now_ms: number, } | { "type": "fetch_errored", address: string, pull: boolean, 
 /**
  * It threw inside the app before anything left it (PR 2 note 11):
  * said as Vela's own fault, never "can't reach".

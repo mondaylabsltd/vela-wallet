@@ -119,8 +119,10 @@ export function createBalanceExecutor(stream: BalanceStreamSink) {
 				let failed: number[] = [];
 				let internal: number[] = [];
 				let registry: number[] = [];
+				let readAt: number | null = null;
 				const tokens = await fetchTokens(operation.address, {
 					forceRefresh: operation.force,
+					onCached: (at) => (readAt = at),
 					onProgress: (partial) =>
 						stream.chainAssetsArrived(operation.address, partial.map(toBalanceToken)),
 					onFailedChains: (ids, insideApp, tokenListUnread) => {
@@ -158,6 +160,8 @@ export function createBalanceExecutor(stream: BalanceStreamSink) {
 					// pool's lists, as the rate-limited ones are.
 					own_node_chain_ids: failed.filter((id) => getOwnNodeUnreachedChains().includes(id)),
 					fallback_chain_ids: [...getFallbackChains()],
+					// r10-1: a cache hit is stamped when it was read, never "now".
+					read_at_ms: readAt,
 					now_ms: Date.now()
 				};
 			}

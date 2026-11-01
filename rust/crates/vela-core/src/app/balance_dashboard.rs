@@ -792,6 +792,12 @@ pub enum BalanceShellResult {
         /// `fallback_chains`) — read, but said ([`BalanceView::fallback_chain_ids`]).
         #[serde(default)]
         fallback_chain_ids: Vec<u32>,
+        /// r10-1: when these rows were read, when the shell answered from its
+        /// own token cache (its TTL) instead of asking the networks — the
+        /// stamp is that time, never `now_ms`: a cache hit while offline is
+        /// not "Updated now". Absent: read now.
+        #[serde(default)]
+        read_at_ms: Option<f64>,
         now_ms: f64,
     },
     /// The fetch itself threw (`useHomeController.ts:367`) — keep last-known
@@ -937,6 +943,15 @@ pub enum Event {
     /// the cache read again (the shell keeps one per space) and a forced
     /// read — so the mainnet space never says it cannot reach a testnet.
     SpaceChanged,
+    /// r10-1: the networks this account lives on though it may hold nothing
+    /// there — a multisig's networks, the networks its history used. With
+    /// the networks it holds something on, they are the networks the hero's
+    /// "Updated …" speaks for ([`stamp_moves`]). Said any time, for any
+    /// address; the last word for an address stands.
+    LivesOn {
+        address: String,
+        chain_ids: Vec<u32>,
+    },
     /// Internal: an effect resolved. `attempt` is the account generation
     /// captured when the request was made; an older attempt belongs to a
     /// previous account and is dropped — this IS the `addressRef` check
@@ -988,8 +1003,13 @@ pub struct Model {
     /// said: a cached zero before any read, or after a read that threw, is
     /// nobody's answer ([`BalanceView::live_key`]).
     last_round_answered: bool,
-    /// Survives account switches — ported verbatim.
+    /// When the networks the shown account lives on last all answered
+    /// (r10-1, [`stamp_moves`]). Cleared by an account or space switch: the
+    /// stamp speaks for the account and networks on screen, never for the
+    /// previous ones (it used to survive the switch, a port of the TS quirk).
     last_refreshed_at_ms: Option<f64>,
+    /// [`Event::LivesOn`], per lowercase address.
+    lives_on: BTreeMap<String, BTreeSet<u32>>,
     partial_retries_left: u32,
     /// The armed retry timer's id; a `RetryElapsed` for any other id is a
     /// cancelled timer's late echo and is ignored (`clearTimeout`).
@@ -1408,6 +1428,12 @@ impl App for BalanceDashboard {
             Event::HoldingsRestored { address, tokens } => {
                 holdings_restored(model, &address, tokens)
             }
+            Event::LivesOn { address, chain_ids } => {
+                model
+                    .lives_on
+                    .insert(address.to_ascii_lowercase(), chain_ids.into_iter().collect());
+                Command::done()
+            }
             Event::SpaceChanged => {
                 let Some(address) = model.address.clone() else {
                     return Command::done();
@@ -1574,6 +1600,8 @@ fn reset_for(
 ) -> Command<BalanceEffect, Event> {
     model.attempt += 1;
     model.address = Some(address.clone());
+    // r10-1: the stamp is the shown account's, on the shown networks.
+    model.last_refreshed_at_ms = None;
     // The reset block (`useHomeController.ts:399-416`) — note what it does
     // NOT reset: `rateLimitedChainIds` and `lastRefreshedAt` survive the
     // switch, ported verbatim.
@@ -1773,6 +1801,7 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
             registry_chain_ids,
             own_node_chain_ids,
             fallback_chain_ids,
+            read_at_ms,
             now_ms,
         } => {
             if model.address.as_deref() != Some(address.as_str()) {
@@ -1819,6 +1848,10 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
             let doubted =
                 doubt_vanished_holdings(model, &mut live, &failed_chain_ids, &read_chain_ids);
             sort_by_usd_desc(&mut live);
+            // r10-1: the networks the stamp speaks for, as known BEFORE this
+            // round forgets anything: where it lives, where it held something
+            // when last read (or restored), where it holds something now.
+            let home = home_chains(model, &address, &live);
             let unanswered: Vec<u32> = failed_chain_ids
                 .iter()
                 .copied()
@@ -1833,8 +1866,14 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
             // so the stamp stays at the last that did, and the home says the
             // networks it cannot reach (`unreachable_networks`). A round some
             // answered moves it, and its failed ones are listed the same way.
-            if !nothing_answered {
-                model.last_refreshed_at_ms = Some(now_ms);
+            //
+            // r10-1: and only for the networks the shown account lives on — a
+            // testnet answering never stamps "now" over Arc's cached rows while
+            // Arc is down; a cache hit is stamped when it was read.
+            if stamp_moves(&home, &read_chain_ids, &model.failed_chain_ids) {
+                let at = read_at_ms.unwrap_or(now_ms);
+                model.last_refreshed_at_ms =
+                    Some(model.last_refreshed_at_ms.map_or(at, |was| was.max(at)));
             }
             model.rate_limited_chain_ids = rate_limited_chain_ids;
             model.internal_chain_ids = internal_chain_ids;
@@ -2231,6 +2270,54 @@ fn arm_list_recheck(model: &mut Model, operations: &mut Vec<BalanceOperation>) {
 /// on screen was said by a chain, whatever the cache holds.
 fn some_chain_answered(model: &Model) -> bool {
     !model.last_read.is_empty() || (model.last_round_answered && model.failed_chain_ids.is_empty())
+}
+
+/// The networks the hero's stamp speaks for (r10-1): the ones `address` lives
+/// on ([`Event::LivesOn`]), held something on when last read or restored, or
+/// holds something on in this round's rows.
+fn home_chains(model: &Model, address: &str, live: &[BalanceToken]) -> BTreeSet<u32> {
+    let mut home: BTreeSet<u32> = model
+        .lives_on
+        .get(&address.to_ascii_lowercase())
+        .cloned()
+        .unwrap_or_default();
+    home.extend(
+        model
+            .last_read
+            .iter()
+            .filter(|(_, held)| !held.is_empty())
+            .map(|(chain, _)| *chain),
+    );
+    home.extend(
+        model
+            .tokens
+            .iter()
+            .chain(live.iter())
+            .filter(|t| !t.spam && token_balance_double(&t.balance) > 0.0)
+            .map(|t| t.chain_id),
+    );
+    home
+}
+
+/// r10-1 — the one rule for "Updated …": a round moves the stamp only when
+/// every network the account lives on that this round asked answered. A
+/// network it lives on that did not answer keeps the stamp where it was (on a
+/// cold start: no stamp at all), and the home names that network as
+/// unreachable. An account that lives on none of the asked networks (nothing
+/// held anywhere yet, or its networks are in the other space) is stamped by
+/// any network answering — what the screen shows is then that read. A round
+/// in which nothing answered never moves it. `read` empty (a shell that does
+/// not say what it asked): the failed ones are the asked ones it knows.
+pub fn stamp_moves(home: &BTreeSet<u32>, read: &[u32], failed: &[u32]) -> bool {
+    let asked_home: Vec<u32> = home
+        .iter()
+        .copied()
+        .filter(|c| read.contains(c) || failed.contains(c))
+        .collect();
+    if !asked_home.is_empty() {
+        return asked_home.iter().all(|c| !failed.contains(c));
+    }
+    read.is_empty() || !read.iter().all(|c| failed.contains(c))
 }
 
 fn remember_reads(model: &mut Model, live: &[BalanceToken], failed: &[u32], read: &[u32]) {

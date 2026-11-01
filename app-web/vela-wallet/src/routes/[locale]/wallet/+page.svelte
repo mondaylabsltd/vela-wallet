@@ -1789,7 +1789,11 @@
 	$effect(() => {
 		const address = identity?.address;
 		if (address !== undefined) {
-			void balance.setAccount(address);
+			// r10-1: a multisig lives on its networks, held or not — the stamp
+			// speaks for them, never for a testnet that happened to answer.
+			const shownMultisig = multisig.active;
+			const lives = shownMultisig?.address === address ? shownMultisig.chainIds : [];
+			void balance.livesOn(address, lives).then(() => balance.setAccount(address));
 			void feed.setAccount(address);
 			// Read at sign-in, like iOS's store: the book is in memory before
 			// anybody opens 通讯录 or the send picker.
