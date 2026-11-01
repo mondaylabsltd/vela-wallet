@@ -888,7 +888,17 @@
    "safariPasskeyBody": "Safari erlaubt den eigenen Seiten einer Erweiterung keinen Passkey, darum erledigt Vela das auf der Signaturseite. Versuche es erneut.",
    "phoneLinkFailed": "Ihr anderes Gerät hat sich nicht verbunden, oder die Verbindung ist vor dem Abschluss abgebrochen. Halten Sie beide Geräte online und nah beieinander und scannen Sie den Code erneut.",
    "keyUnavailableTitle": "Sicherheitsschlüssel nicht verfügbar",
-   "keyUnavailableBody": "Dieses Gerät konnte den Sicherheitsschlüssel nicht verwenden. Versuchen Sie es mit einem anderen FIDO2-Sicherheitsschlüssel oder wählen Sie einen anderen Weg."
+   "keyUnavailableBody": "Dieses Gerät konnte den Sicherheitsschlüssel nicht verwenden. Versuchen Sie es mit einem anderen FIDO2-Sicherheitsschlüssel oder wählen Sie einen anderen Weg.",
+   "passkeyError": {
+    "cancelled": "Die Passkey-Abfrage wurde geschlossen, bevor sie fertig war. Versuchen Sie es erneut, wenn Sie bereit sind.",
+    "notSupported": "Dieses Gerät kann hier keinen Passkey verwenden. Versuchen Sie ein anderes Gerät oder einen Sicherheitsschlüssel.",
+    "noCredential": "Auf diesem Gerät wurde kein Vela-Passkey gefunden. Verwenden Sie ein Gerät oder einen Sicherheitsschlüssel, auf dem einer liegt.",
+    "appNotAssociated": "Dieses Gerät konnte nicht bestätigen, dass Vela seine Passkeys verwenden darf. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut — wenn das weiter passiert, aktualisieren Sie Vela.",
+    "noNetwork": "Der Passkey braucht eine Netzwerkverbindung. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
+    "alreadyRegistered": "Dieser Authenticator enthält bereits einen der Schlüssel dieser Wallet. Verwenden Sie einen anderen.",
+    "timedOut": "Die Passkey-Abfrage ist abgelaufen. Versuchen Sie es erneut.",
+    "other": "Der Passkey konnte nicht verwendet werden. Versuchen Sie es erneut."
+   }
   },
   "create": {
    "accountNameHint": "Dieser Name wird zusammen mit Ihrem öffentlichen Schlüssel on-chain für die geräteübergreifende Anmeldung gespeichert.",

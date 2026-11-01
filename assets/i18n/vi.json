@@ -888,7 +888,17 @@
    "safariPasskeyBody": "Safari không cho trang riêng của tiện ích dùng khóa truy cập, nên Vela thực hiện bước này trên trang ký. Hãy thử lại.",
    "phoneLinkFailed": "Thiết bị kia không kết nối được, hoặc kết nối bị ngắt trước khi hoàn tất. Hãy giữ cả hai thiết bị trực tuyến và ở gần nhau, rồi quét lại mã.",
    "keyUnavailableTitle": "Không dùng được khóa bảo mật",
-   "keyUnavailableBody": "Thiết bị này không dùng được khóa bảo mật. Hãy thử một khóa bảo mật FIDO2 khác, hoặc chọn cách khác để tiếp tục."
+   "keyUnavailableBody": "Thiết bị này không dùng được khóa bảo mật. Hãy thử một khóa bảo mật FIDO2 khác, hoặc chọn cách khác để tiếp tục.",
+   "passkeyError": {
+    "cancelled": "Cửa sổ passkey đã bị đóng trước khi xong. Hãy thử lại khi bạn sẵn sàng.",
+    "notSupported": "Thiết bị này không thể dùng passkey ở đây. Hãy thử thiết bị khác hoặc khoá bảo mật.",
+    "noCredential": "Không tìm thấy passkey Vela trên thiết bị này. Hãy dùng thiết bị hoặc khoá bảo mật có passkey đó.",
+    "appNotAssociated": "Thiết bị này không xác nhận được rằng Vela được phép dùng passkey của nó. Hãy kiểm tra kết nối rồi thử lại — nếu vẫn xảy ra, hãy cập nhật Vela.",
+    "noNetwork": "Passkey cần kết nối mạng. Hãy kiểm tra kết nối rồi thử lại.",
+    "alreadyRegistered": "Trình xác thực này đã giữ một trong các khoá của ví này. Hãy dùng trình khác.",
+    "timedOut": "Cửa sổ passkey đã hết thời gian. Hãy thử lại.",
+    "other": "Không dùng được passkey. Hãy thử lại."
+   }
   },
   "create": {
    "accountNameHint": "Tên này được lưu trên chuỗi cùng khóa công khai của bạn để đăng nhập trên nhiều thiết bị.",

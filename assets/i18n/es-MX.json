@@ -891,7 +891,17 @@
    "safariPasskeyBody": "Safari no permite que las páginas propias de una extensión usen una llave de acceso, así que Vela lo hace en su página de firma. Inténtalo de nuevo.",
    "phoneLinkFailed": "Tu otro dispositivo no se conectó, o la conexión se cortó antes de terminar. Mantén ambos dispositivos en línea y cerca, y vuelve a escanear el código.",
    "keyUnavailableTitle": "Llave de seguridad no disponible",
-   "keyUnavailableBody": "Este dispositivo no pudo usar la llave de seguridad. Prueba con otra llave de seguridad FIDO2 o elige otra forma de continuar."
+   "keyUnavailableBody": "Este dispositivo no pudo usar la llave de seguridad. Prueba con otra llave de seguridad FIDO2 o elige otra forma de continuar.",
+   "passkeyError": {
+    "cancelled": "La ventana de la passkey se cerró antes de terminar. Inténtalo de nuevo cuando quieras.",
+    "notSupported": "Este dispositivo no puede usar una passkey aquí. Prueba con otro dispositivo o con una llave de seguridad.",
+    "noCredential": "No se encontró ninguna passkey de Vela en este dispositivo. Usa un dispositivo o una llave de seguridad que tenga una.",
+    "appNotAssociated": "Este dispositivo no pudo confirmar que Vela puede usar sus passkeys. Revisa tu conexión e inténtalo de nuevo; si sigue pasando, actualiza Vela.",
+    "noNetwork": "La passkey necesita conexión a internet. Revisa tu conexión e inténtalo de nuevo.",
+    "alreadyRegistered": "Este autenticador ya guarda una de las llaves de esta wallet. Usa otro.",
+    "timedOut": "Se agotó el tiempo de la ventana de la passkey. Inténtalo de nuevo.",
+    "other": "No se pudo usar la passkey. Inténtalo de nuevo."
+   }
   },
   "create": {
    "accountNameHint": "Este nombre se guarda con tu llave pública on-chain para iniciar sesión entre dispositivos.",

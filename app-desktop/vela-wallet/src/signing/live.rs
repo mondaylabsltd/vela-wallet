@@ -5314,6 +5314,7 @@ mod fee_tests {
             selected,
             spent_by_operation: false,
             short: None,
+            short_with_amount: false,
         }
     }
 

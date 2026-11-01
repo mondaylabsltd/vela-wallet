@@ -888,7 +888,17 @@
    "safariPasskeyBody": "Safari doesn't let an extension's own pages use a passkey, so Vela does this on its signing page. Try again.",
    "phoneLinkFailed": "Your other device didn't connect, or the link dropped. Keep both devices online and nearby, then scan again.",
    "keyUnavailableTitle": "Security key unavailable",
-   "keyUnavailableBody": "This device couldn't use the security key. Try another FIDO2 key, or another way to continue."
+   "keyUnavailableBody": "This device couldn't use the security key. Try another FIDO2 key, or another way to continue.",
+   "passkeyError": {
+    "cancelled": "The passkey prompt was closed before it finished. Try again when you're ready.",
+    "notSupported": "This device can't use a passkey here. Try another device or a security key.",
+    "noCredential": "No Vela passkey was found on this device. Use a device or security key that holds one.",
+    "appNotAssociated": "This device couldn't confirm that Vela may use its passkeys. Check your connection and try again — if it keeps happening, update Vela.",
+    "noNetwork": "The passkey needs a network connection. Check your connection and try again.",
+    "alreadyRegistered": "This authenticator already holds one of this wallet's keys. Use a different one.",
+    "timedOut": "The passkey prompt timed out. Try again.",
+    "other": "The passkey couldn't be used. Try again."
+   }
   },
   "create": {
    "accountNameHint": "This name is stored with your public key on-chain for cross-device sign-in.",
