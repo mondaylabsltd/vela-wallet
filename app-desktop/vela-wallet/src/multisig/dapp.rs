@@ -89,7 +89,7 @@ pub enum Step {
         tab: String,
         id: String,
         /// The machine's answer, delivered as it is (`MultisigAnswered`).
-        answer: DappAnswer,
+        answer: Box<DappAnswer>,
         /// An error the site was not told of before: its sheet goes.
         close: Option<(u64, String)>,
     },
@@ -241,7 +241,7 @@ impl Holds {
                 rid: rid.clone(),
                 tab: holding.tab.clone(),
                 id: holding.id.clone(),
-                answer: answer.clone(),
+                answer: Box::new(answer.clone()),
                 close,
             });
             self.held.remove(&rid);
@@ -460,7 +460,7 @@ mod tests {
         };
         assert_eq!(
             (tab.as_str(), id.as_str(), answer, close),
-            ("t1", "7", &DappAnswer::ok(json!("0xcd")), &None)
+            ("t1", "7", &Box::new(DappAnswer::ok(json!("0xcd"))), &None)
         );
         assert!(holds.is_empty());
         assert!(holds.step(&view).is_empty(), "answered once");

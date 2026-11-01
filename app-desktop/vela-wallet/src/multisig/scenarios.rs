@@ -1136,7 +1136,7 @@ fn a_sites_transaction_from_a_multisig_is_proposed_held_and_answered() {
         );
     };
     assert_eq!((answered, tab.as_str(), id.as_str()), (&rid, "t1", "7"));
-    assert_eq!(answer, &DappAnswer::ok(json!(tx)));
+    assert_eq!(**answer, DappAnswer::ok(json!(tx)));
     sim.proposals(ProposalsEvent::DappSettled { id: rid });
     assert!(
         sim.machines.proposals_view.dapp.is_empty(),

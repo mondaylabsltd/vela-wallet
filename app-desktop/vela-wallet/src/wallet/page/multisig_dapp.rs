@@ -160,7 +160,7 @@ impl WalletPage {
                             DbrEvent::MultisigAnswered {
                                 tab: tab.clone(),
                                 id,
-                                answer,
+                                answer: *answer,
                                 now_ms: crate::executor::now_ms(),
                             },
                             cx,
