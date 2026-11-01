@@ -244,6 +244,17 @@ android {
         getByName("debug") {
             kotlin.srcDir(velaRepoRoot.resolve("rust/bindings/kotlin-dev"))
         }
+        // The multisig's simulated world (MultisigWorld.kt), shared by the JVM
+        // flow tests (testDebug: the host dylib) and the instrumented ones (the
+        // app's own .so) — both sign with the dev-fixtures keyset, debug only.
+        // On a device it reads Safe's canonical code from the test APK's assets.
+        getByName("testDebug") {
+            kotlin.srcDir("src/sharedTest/java")
+        }
+        getByName("androidTest") {
+            kotlin.srcDir("src/sharedTest/java")
+            assets.srcDir(velaRepoRoot.resolve("rust/crates/vela-core/tests/vectors/safe-code"))
+        }
         // Phase 4: the baseline-profile plugin's build types are release with
         // another name — so they take release's own sources (the no-op
         // parallel-space and launch-input bindings), plus the one thing a

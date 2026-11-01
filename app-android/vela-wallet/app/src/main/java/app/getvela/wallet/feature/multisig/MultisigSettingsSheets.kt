@@ -269,7 +269,6 @@ private fun MemberLine(words: MultisigWords, member: JsonElement, added: Boolean
 fun MultisigMembersSheet(hub: MultisigHub, words: MultisigWords, address: String, onClose: () -> Unit) {
     val viewState by hub.membersView.collectAsStateWithLifecycle()
     val view: kotlinx.serialization.json.JsonElement = viewState
-    val scope = rememberCoroutineScope()
     val haptic = rememberVelaHaptic()
     var entry by remember { mutableStateOf("") }
     val proposing = remember { androidx.compose.runtime.mutableStateMapOf<Int, String>() }
@@ -410,7 +409,12 @@ fun MultisigMembersSheet(hub: MultisigHub, words: MultisigWords, address: String
                     val toPropose = networks.filter { !it["proposal"].isNullish }
                     hub.sendMembers(ev("proposing"))
                     proposing.clear()
-                    scope.launch {
+                    // On the hub's scope, as Reject's: each network's review
+                    // takes this sheet's place while it is up, and a scope
+                    // tied to this sheet died with it — the first network
+                    // was proposed, the rest never drawn, and the review
+                    // sheet stayed on "Opening…".
+                    hub.scope.launch {
                         for (network in toPropose) {
                             val chainId = network["chain_id"].int ?: 0
                             val proposal = network["proposal"].obj
