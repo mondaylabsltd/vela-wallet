@@ -605,7 +605,11 @@ object WalletLive {
      */
     fun refresh(view: BalanceView, strings: VelaStrings, now: Long = System.currentTimeMillis()): BalanceRefreshModel =
         BalanceRefreshModel(
-            updated = view.last_refreshed_at_ms?.let { at ->
+            // r10-1: while the core says the first read is out ("Checking…"),
+            // nothing has been read — the control is named for what it does,
+            // never "Updated now" beside "Checking…" (the line's words or
+            // TalkBack's). Otherwise the stamp is the core's, drawn as said.
+            updated = view.last_refreshed_at_ms?.takeIf { view.checking_key == null }?.let { at ->
                 strings.t(I18nKeys.Wallet.LAST_UPDATED, mapOf("ago" to RelativeTime.ago(at, now, strings)))
             },
             updating = strings.t(I18nKeys.Wallet.UPDATING),

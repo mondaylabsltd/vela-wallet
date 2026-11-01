@@ -2006,6 +2006,7 @@ fun VelaNavHost(
                             chainName = chainNames[siteChain] ?: siteChain.toString(),
                             chainDot = WalletLive.badge(siteChain.toLong()),
                             chainId = siteChain,
+                            multisig = exploreShown != null,
                         )
                         val reloaded = reloadedTab != null && reloadedTab == exploreView.selected_tab
                         val shownSeen = exploreView.selected_tab?.let { statusSeen[it] }
