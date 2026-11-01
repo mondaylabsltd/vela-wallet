@@ -342,6 +342,12 @@ export interface SigningMessages {
 	/** Issue 262: the selected coin cannot pay — the send form's issue-211 sentence ({{sym}}). */
 	feeShort: string;
 	/**
+	 * r10-3: the coin in force covers the fee alone, not once the request has
+	 * taken what it moves of the same balance (the core's
+	 * `short_with_amount`) — the send form's amount + gas sentence ({{sym}}).
+	 */
+	feeShortWithAmount: string;
+	/**
 	 * Spec 096 F2: the coin in force is one the transaction itself may spend
 	 * (the core's `spent_by_operation`), so too little may be left for the fee
 	 * ({{sym}}).

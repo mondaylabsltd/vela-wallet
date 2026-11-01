@@ -252,6 +252,7 @@ describe('the fee the sheet shows', () => {
 					insufficient: false,
 					selected: true,
 					spent_by_operation: false,
+					short_with_amount: false,
 					short: null
 				}
 			]
@@ -301,6 +302,7 @@ describe('the fee the sheet shows', () => {
 					insufficient: false,
 					selected: true,
 					spent_by_operation: false,
+					short_with_amount: false,
 					short: null
 				},
 				{
@@ -315,6 +317,7 @@ describe('the fee the sheet shows', () => {
 					insufficient: false,
 					selected: false,
 					spent_by_operation: false,
+					short_with_amount: false,
 					short: null
 				}
 			]
@@ -344,6 +347,7 @@ describe('the fee the sheet shows', () => {
 					insufficient: false,
 					selected: true,
 					spent_by_operation: false,
+					short_with_amount: false,
 					short: null
 				}
 			]
@@ -367,6 +371,7 @@ describe('the fee the sheet shows', () => {
 			insufficient: true,
 			selected: true,
 			spent_by_operation: false,
+			short_with_amount: false,
 			short: null
 		};
 		const usdt = {
@@ -381,6 +386,7 @@ describe('the fee the sheet shows', () => {
 			insufficient: false,
 			selected: false,
 			spent_by_operation: false,
+			short_with_amount: false,
 			short: null
 		};
 		const short = { ...QUOTED_FEE, options: [eth, usdt], confirm_fee_ready: false };
@@ -441,6 +447,7 @@ describe('the fee can be refreshed, and says why it failed', () => {
 		insufficient: false,
 		selected: true,
 		spent_by_operation: false,
+		short_with_amount: false,
 		short: null
 	};
 	const failedWith = (failed: NonNullable<FeeView['failed']>): FeeView => ({
@@ -1833,6 +1840,7 @@ describe('the fee coin can be switched, as it can when sending', () => {
 		insufficient: false,
 		selected: true,
 		spent_by_operation: false,
+		short_with_amount: false,
 		short: null,
 		...over
 	});
@@ -1856,6 +1864,7 @@ describe('the fee coin can be switched, as it can when sending', () => {
 				insufficient: true,
 				selected: false,
 				spent_by_operation: false,
+				short_with_amount: false,
 				short: null
 			})
 		]
@@ -1919,6 +1928,7 @@ describe('the fee coin can be switched, as it can when sending', () => {
 					amount: '1270000',
 					selected: true,
 					spent_by_operation: true,
+					short_with_amount: false,
 					short: null
 				})
 			]
@@ -2022,6 +2032,36 @@ describe('the fee coin can be switched, as it can when sending', () => {
 		expect(oneShort.fee).toMatchObject({ warning: m.feeShort.replace('{{sym}}', 'ETH') });
 		expect(oneShort.confirm.enabled).toBe(false);
 		expect(oneShort.confirm.note).toBeUndefined();
+	});
+
+	// r10-3 (Chrome extension, Arc): a dApp asked for part of a balance whose
+	// fee in the same coin fits the balance alone, not what is left once the
+	// request takes its amount. The core shuts the gate (`confirm_fee_ready`
+	// false, the coin `short_with_amount`) and the line says amount + fee —
+	// never a live "Confirm send" over a transaction that reverts on chain.
+	it('r10-3: a coin short only of amount + fee shuts the confirm and says so', () => {
+		const amountAndFee: FeeView = {
+			...two,
+			confirm_fee_ready: false,
+			options: [
+				option({
+					symbol: 'USDC',
+					balance: '400000000000000000',
+					amount: '350000000000000000',
+					insufficient: true,
+					short: { need: '0.35 USDC', have: '0.3 USDC' },
+					short_with_amount: true
+				})
+			]
+		};
+		const sheet = buildSigningModel(inputs({ fee: amountAndFee }))!;
+		expect(sheet.fee).toMatchObject({
+			warning: m.feeShortWithAmount.replace('{{sym}}', 'USDC')
+		});
+		expect(m.feeShortWithAmount).toBe('Insufficient {{sym}} to cover amount + gas fees');
+		expect(sheet.confirm.enabled).toBe(false);
+		// The fee says it; the confirm does not say it a second time (issue 438).
+		expect(sheet.confirm.note).toBeUndefined();
 	});
 });
 
@@ -3239,6 +3279,7 @@ describe('no fiat figure before the display currency commits — the signing she
 				insufficient: false,
 				selected: true,
 				spent_by_operation: false,
+				short_with_amount: false,
 				short: null
 			}
 		]

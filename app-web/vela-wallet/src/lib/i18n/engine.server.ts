@@ -1555,6 +1555,7 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		feePayWithAnotherCoin: k('componentsUi.gas.payWithAnotherCoin'),
 		feeTokenTitle: k('componentsUi.signing.feeTokenTitle'),
 		feeShort: k('send.warnInsufficientGas'),
+		feeShortWithAmount: k('send.warnInsufficientForGas'),
 		feeCoinSpent: k('componentsUi.gas.feeCoinSpent'),
 		feeRowShort: k('componentsUi.gas.rowShort'),
 		feeNoCoinPays: k('componentsUi.gas.noCoinPays'),
