@@ -1,0 +1,249 @@
+{
+  "about": "r9-17 / r8-13: the incoming-funds scan as one rule. `plans`: TrustScanFacts -> IncomingScanPlan (incoming_scan::scan_plan; wasm incomingScanPlan, uniffi incoming_scan_plan). `windows`: IncomingScanWindowsAsk -> IncomingScanWindows (scan_windows; incomingScanWindows / incoming_scan_windows). `cadence`: (visible, since_interaction_ms) -> next scan in ms (next_scan_ms; incomingNextScanMs / incoming_next_scan_ms). Replayed by rust/crates/vela-core/tests/app_incoming_scan.rs; every shell replays it through its door.",
+  "constants": {
+    "cursor_key_prefix": "vela.scanCursors.",
+    "live_scan_blocks": 100,
+    "backfill_lookback_secs": 604800,
+    "backfill_max_blocks": 400000,
+    "backfill_chunk_blocks": 10000,
+    "backfill_chunks_per_poll": 4,
+    "cadence_active_ms": 10000,
+    "cadence_idle_ms": 30000,
+    "cadence_hidden_ms": 60000,
+    "cadence_active_window_ms": 120000
+  },
+  "plans": [
+    {
+      "name": "a Vela account with balances scans where it holds",
+      "facts": {
+        "held_chain_ids": [137, 1, 137],
+        "space_chain_ids": [1, 10, 56, 100, 137, 8453, 42161, 43114]
+      },
+      "expect": { "scan_chain_ids": [137, 1], "native_watch_chain_ids": [137, 1] }
+    },
+    {
+      "name": "a brand-new Vela account in the mainnet space: the main payment chains",
+      "facts": {
+        "space_chain_ids": [1, 10, 56, 100, 137, 8453, 42161, 43114]
+      },
+      "expect": {
+        "scan_chain_ids": [1, 56, 137, 42161, 8453, 100],
+        "native_watch_chain_ids": [1, 56, 137, 42161, 8453, 100]
+      }
+    },
+    {
+      "name": "a brand-new Vela account in the testnet space: the space's first six, every network's native coin",
+      "facts": {
+        "space_chain_ids": [11155111, 84532, 421614, 11155420, 97, 80002, 10200, 5042002]
+      },
+      "expect": {
+        "scan_chain_ids": [11155111, 84532, 421614, 11155420, 97, 80002],
+        "native_watch_chain_ids": [11155111, 84532, 421614, 11155420, 97, 80002, 10200, 5042002]
+      }
+    },
+    {
+      "name": "a network the person added to the testnet space is never left out",
+      "facts": {
+        "space_chain_ids": [11155111, 84532, 421614, 11155420, 97, 80002, 10200, 5042002, 777],
+        "added_chain_ids": [777]
+      },
+      "expect": {
+        "scan_chain_ids": [777, 11155111, 84532, 421614, 11155420, 97, 80002],
+        "native_watch_chain_ids": [11155111, 84532, 421614, 11155420, 97, 80002, 10200, 5042002, 777]
+      }
+    },
+    {
+      "name": "r9-17: a multisig on Arc testnet holding nothing yet scans the network it lives on",
+      "facts": {
+        "account_networks": [{ "chain_id": 5042002 }],
+        "space_chain_ids": [11155111, 84532, 421614, 11155420, 97, 80002, 10200, 5042002]
+      },
+      "expect": { "scan_chain_ids": [5042002], "native_watch_chain_ids": [5042002] }
+    },
+    {
+      "name": "r9-17: a multisig scans where it holds and where it lives",
+      "facts": {
+        "held_chain_ids": [5042002],
+        "account_networks": [
+          { "chain_id": 5042002, "deploy_block": 31000000 },
+          { "chain_id": 11155111 }
+        ],
+        "space_chain_ids": [11155111, 84532, 421614, 11155420, 97, 80002, 10200, 5042002]
+      },
+      "expect": {
+        "scan_chain_ids": [5042002, 11155111],
+        "native_watch_chain_ids": [5042002, 11155111]
+      }
+    },
+    {
+      "name": "a network added outside the space in front is not watched",
+      "facts": {
+        "held_chain_ids": [1],
+        "space_chain_ids": [1, 10, 56, 100, 137, 8453, 42161, 43114],
+        "added_chain_ids": [777]
+      },
+      "expect": { "scan_chain_ids": [1], "native_watch_chain_ids": [1] }
+    },
+    {
+      "name": "no space known: every network counts as in it",
+      "facts": {},
+      "expect": {
+        "scan_chain_ids": [1, 56, 137, 42161, 8453, 100],
+        "native_watch_chain_ids": [1, 56, 137, 42161, 8453, 100]
+      }
+    },
+    {
+      "name": "a multisig of the other space: scanned where it lives, the native watch falls back to the space",
+      "facts": {
+        "account_networks": [{ "chain_id": 100 }],
+        "space_chain_ids": [11155111, 84532, 421614, 11155420, 97, 80002, 10200, 5042002]
+      },
+      "expect": {
+        "scan_chain_ids": [100],
+        "native_watch_chain_ids": [11155111, 84532, 421614, 11155420, 97, 80002]
+      }
+    }
+  ],
+  "windows": [
+    {
+      "name": "first scan on Ethereum: the live window, then a week back, four reads a poll, newest first",
+      "ask": { "chain_id": 1, "latest": 20000000 },
+      "expect": {
+        "live": { "from_block": 19999900, "to_block": 20000000 },
+        "backfill": [
+          { "from_block": 19989900, "to_block": 19999899 },
+          { "from_block": 19979900, "to_block": 19989899 },
+          { "from_block": 19969900, "to_block": 19979899 },
+          { "from_block": 19959900, "to_block": 19969899 }
+        ],
+        "floor": 19949600
+      }
+    },
+    {
+      "name": "the next poll resumes below what is covered, and stops at the floor",
+      "ask": {
+        "chain_id": 1,
+        "latest": 20000050,
+        "covered": [{ "from_block": 19959900, "to_block": 20000000 }]
+      },
+      "expect": {
+        "live": { "from_block": 19999950, "to_block": 20000050 },
+        "backfill": [
+          { "from_block": 19949900, "to_block": 19959899 },
+          { "from_block": 19949650, "to_block": 19949899 }
+        ],
+        "floor": 19949650
+      }
+    },
+    {
+      "name": "never below the deploy block",
+      "ask": { "chain_id": 1, "latest": 20000000, "deploy_block": 19995000 },
+      "expect": {
+        "live": { "from_block": 19999900, "to_block": 20000000 },
+        "backfill": [{ "from_block": 19995000, "to_block": 19999899 }],
+        "floor": 19995000
+      }
+    },
+    {
+      "name": "a covered week reads only the live window",
+      "ask": {
+        "chain_id": 1,
+        "latest": 20000010,
+        "covered": [{ "from_block": 19949000, "to_block": 20000000 }]
+      },
+      "expect": {
+        "live": { "from_block": 19999910, "to_block": 20000010 },
+        "backfill": [],
+        "floor": 19949610
+      }
+    },
+    {
+      "name": "after the app was closed: the gap is read, newest first",
+      "ask": {
+        "chain_id": 1,
+        "latest": 20000000,
+        "covered": [{ "from_block": 19900000, "to_block": 19950000 }]
+      },
+      "expect": {
+        "live": { "from_block": 19999900, "to_block": 20000000 },
+        "backfill": [
+          { "from_block": 19989900, "to_block": 19999899 },
+          { "from_block": 19979900, "to_block": 19989899 },
+          { "from_block": 19969900, "to_block": 19979899 },
+          { "from_block": 19959900, "to_block": 19969899 }
+        ],
+        "floor": 19949600
+      }
+    },
+    {
+      "name": "a fast chain is bounded by blocks, and a capped endpoint reads its cap",
+      "ask": { "chain_id": 42161, "latest": 300000000, "chunk": 1000 },
+      "expect": {
+        "live": { "from_block": 299999900, "to_block": 300000000 },
+        "backfill": [
+          { "from_block": 299998900, "to_block": 299999899 },
+          { "from_block": 299997900, "to_block": 299998899 },
+          { "from_block": 299996900, "to_block": 299997899 },
+          { "from_block": 299995900, "to_block": 299996899 }
+        ],
+        "floor": 299600000
+      }
+    },
+    {
+      "name": "Gnosis: a week of 5 s blocks",
+      "ask": { "chain_id": 100, "latest": 40000000, "budget": 1 },
+      "expect": {
+        "live": { "from_block": 39999900, "to_block": 40000000 },
+        "backfill": [{ "from_block": 39989900, "to_block": 39999899 }],
+        "floor": 39879040
+      }
+    },
+    {
+      "name": "Arc testnet (block time not in the table): 2 s assumed",
+      "ask": { "chain_id": 5042002, "latest": 31000000, "budget": 0 },
+      "expect": {
+        "live": { "from_block": 30999900, "to_block": 31000000 },
+        "backfill": [],
+        "floor": 30697600
+      }
+    },
+    {
+      "name": "a young chain: nothing below the live window",
+      "ask": { "chain_id": 5042002, "latest": 50 },
+      "expect": {
+        "live": { "from_block": 0, "to_block": 50 },
+        "backfill": [],
+        "floor": 0
+      }
+    },
+    {
+      "name": "a gap inside the coverage is read before the older open span",
+      "ask": {
+        "chain_id": 1,
+        "latest": 20000000,
+        "covered": [
+          { "from_block": 19980000, "to_block": 19999899 },
+          { "from_block": 19960000, "to_block": 19975000 }
+        ],
+        "chunk": 5000
+      },
+      "expect": {
+        "live": { "from_block": 19999900, "to_block": 20000000 },
+        "backfill": [
+          { "from_block": 19975001, "to_block": 19979999 },
+          { "from_block": 19955000, "to_block": 19959999 },
+          { "from_block": 19950000, "to_block": 19954999 },
+          { "from_block": 19949600, "to_block": 19949999 }
+        ],
+        "floor": 19949600
+      }
+    }
+  ],
+  "cadence": [
+    { "name": "at the page", "visible": true, "since_interaction_ms": 0, "expect_ms": 10000 },
+    { "name": "touched just under two minutes ago", "visible": true, "since_interaction_ms": 119999, "expect_ms": 10000 },
+    { "name": "shown, idle", "visible": true, "since_interaction_ms": 120000, "expect_ms": 30000 },
+    { "name": "hidden", "visible": false, "since_interaction_ms": 0, "expect_ms": 60000 },
+    { "name": "a figure that is no figure is not lately", "visible": true, "since_interaction_ms": -1, "expect_ms": 30000 }
+  ]
+}

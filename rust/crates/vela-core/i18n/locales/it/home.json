@@ -371,6 +371,7 @@
         "waitingPayer_many": "{{count}} attendono un membro che possa pagare",
         "waitingPayer_other": "{{count}} attendono un membro che possa pagare",
         "ruleDiffers": "Regola diversa per rete",
+        "ruleLastKnown": "Ultima nota — riletta all’apertura",
         "othersWaiting": "Un altro account ha transazioni in attesa"
       },
       "add": {

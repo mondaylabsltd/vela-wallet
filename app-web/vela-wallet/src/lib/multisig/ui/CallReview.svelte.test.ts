@@ -49,6 +49,14 @@ describe('a member reads a multisig’s calls, as the core read them (r8-1)', ()
 		expect(screen.container.querySelectorAll('button').length).toBe(0);
 	});
 
+	it('a transaction whose one call is a batch: no empty leg number (r10-10)', async () => {
+		const screen = shown(named('multiSend called four deep'));
+		const text = screen.container.textContent ?? '';
+		// The lone call has no number ("第 笔调用" was {{n}} filled with nothing).
+		expect(text).not.toMatch(/call \{\{n\}\}|call\s+·/);
+		expect(text).toContain('call 1');
+	});
+
 	it('a nested batch: every leg of every level, and the nested line (r8-5)', async () => {
 		const screen = shown(named('a batch whose leg calls multiSend'));
 		const text = screen.container.textContent ?? '';

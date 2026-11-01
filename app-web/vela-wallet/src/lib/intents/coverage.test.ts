@@ -249,6 +249,8 @@ const CALLED: Record<string, Place> = {
 	'balance.boot': { machine: 'boot' },
 	'balance.setAccount': { machine: 'the account' },
 	'balance.noteAccount': { machine: 'the account' },
+	// r10-1: the networks the shown account lives on, for the stamp.
+	'balance.livesOn': { machine: 'the account' },
 	'balance.settledFor': { machine: 'a read' },
 	'balance.openSwitcher': { view: 'the account switcher shown' },
 	'balance.closeSwitcher': { view: 'the account switcher shown' },
@@ -264,6 +266,8 @@ const CALLED: Record<string, Place> = {
 	'feed.liveTick': { machine: 'a tick' },
 	'feed.boot': { machine: 'boot' },
 	'feed.setAccount': { machine: 'the account' },
+	// r9-17: the page's presence, for the core's scan cadence.
+	'feed.cadencePort': { machine: 'a tick' },
 	'feed.privacyChanged': { step: 'set_balance_privacy' },
 	'feed.chainFilter': { view: 'the network filter' },
 	'feed.contactFilter': { view: 'a contact’s page shown' },

@@ -290,6 +290,7 @@
     "waitingPayer_one": "{{count}} 件が支払えるメンバー待ち",
     "waitingPayer_other": "{{count}} 件が支払えるメンバー待ち",
     "ruleDiffers": "ルールはネットワークごとに異なります",
+    "ruleLastKnown": "前回確認した内容（開くと再確認します）",
     "othersWaiting": "別のアカウントに保留中のトランザクションがあります"
    },
    "add": {

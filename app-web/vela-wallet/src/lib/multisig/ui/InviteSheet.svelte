@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { listOf } from '$lib/i18n/list';
 	/**
 	 * Inviting the other members (r4D-16): a code to scan and a link to send
 	 * — Share where the browser has it — that adds the multisig in Vela with
@@ -101,7 +102,7 @@
 		<p class="address">{account.address}</p>
 		{#if shown.chainIds.length > 0}
 			<p class="network" data-testid="invite-network">
-				{fillTemplate(m.add.usedOn, { networks: shown.chainIds.map(chainName).join(', ') })}
+				{fillTemplate(m.add.usedOn, { networks: listOf(shown.chainIds.map(chainName), locale) })}
 			</p>
 		{/if}
 		<p class="hint">{m.invite.body}</p>

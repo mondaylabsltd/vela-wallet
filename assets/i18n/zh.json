@@ -816,7 +816,8 @@
      "description": "多数网络支持用稳定币支付手续费，不用先备一份原生币。"
     }
    },
-   "linkWaiting": "有一个多签链接在等你。创建钱包或登录后就会打开。"
+   "linkWaiting": "有一个多签链接在等你。创建钱包或登录后就会打开。",
+   "linkBroken": "这个多签链接不完整，请让对方重新发送。"
   },
   "settings": {
    "title": "设置",
@@ -887,7 +888,17 @@
    "safariPasskeyBody": "Safari 不允许扩展自己的页面使用通行密钥，所以 Vela 改在签名页上完成这一步。请再试一次。",
    "phoneLinkFailed": "另一台设备没有连上，或连接在完成前中断了。请让两台设备保持联网并彼此靠近，然后重新扫码。",
    "keyUnavailableTitle": "无法使用安全密钥",
-   "keyUnavailableBody": "这台设备无法使用这把安全密钥。请换一把 FIDO2 安全密钥，或换一种方式继续。"
+   "keyUnavailableBody": "这台设备无法使用这把安全密钥。请换一把 FIDO2 安全密钥，或换一种方式继续。",
+   "passkeyError": {
+    "cancelled": "通行密钥窗口在完成前被关闭了。准备好后请重试。",
+    "notSupported": "这台设备无法在这里使用通行密钥。请换一台设备或使用硬件安全密钥。",
+    "noCredential": "这台设备上没有找到 Vela 的通行密钥。请使用存有它的设备或硬件安全密钥。",
+    "appNotAssociated": "这台设备无法确认 Vela 可以使用它的通行密钥。请检查网络后重试；如果反复出现，请更新 Vela。",
+    "noNetwork": "使用通行密钥需要联网。请检查网络后重试。",
+    "alreadyRegistered": "这个验证器里已经有这个钱包的一把密钥。请换一个。",
+    "timedOut": "通行密钥窗口已超时。请重试。",
+    "other": "无法使用通行密钥。请重试。"
+   }
   },
   "create": {
    "accountNameHint": "此名称将与您的公钥一起存储上链，用于跨设备登录。",

@@ -2,6 +2,7 @@
 import type { Account } from "./Account";
 import type { Assertion } from "./Assertion";
 import type { FailureKind } from "./FailureKind";
+import type { PasskeyErrorFacts } from "./PasskeyErrorFacts";
 import type { Registration } from "./Registration";
 import type { RegistryProof } from "./RegistryProof";
 import type { RegistryUnitMember } from "./RegistryUnitMember";
@@ -23,7 +24,16 @@ group_public_key_hex: string, } | { "type": "member_proof_signed", proof: Regist
  * "something went wrong" alert. Absent for classified failures, whose
  * copy comes from the classification.
  */
-message: string | null, } | { "type": "accounts_loaded", accounts: Array<Account>, } | { "type": "account_saved" } | { "type": "pending_upload_saved" } | { "type": "pending_upload_removed" } | { "type": "storage_failed", message: string, } | { "type": "registry_published" } | { "type": "registry_accepted", task_id: string, } | { "type": "registry_key_status", registered: boolean, 
+message: string | null, 
+/**
+ * Round 10 (real-device S3): the platform error's facts — platform,
+ * domain, code, raw message — from which the core names the sentence
+ * the failure sheet draws (`PromptKind::{CreateFailed,
+ * SignInFailed}.words_key`, by `passkey_error::passkey_error_words`).
+ * `#[serde(default)]`: a shell that does not send it keeps the old
+ * sheet.
+ */
+error?: PasskeyErrorFacts, } | { "type": "accounts_loaded", accounts: Array<Account>, } | { "type": "account_saved" } | { "type": "pending_upload_saved" } | { "type": "pending_upload_removed" } | { "type": "storage_failed", message: string, } | { "type": "registry_published" } | { "type": "registry_accepted", task_id: string, } | { "type": "registry_key_status", registered: boolean, 
 /**
  * The ids of the groups (Units) this key is a founding member of,
  * ascending. Empty for a registered key predating groups.

@@ -3185,6 +3185,7 @@ mod tests {
             selected: symbol == "xDAI",
             spent_by_operation: false,
             short: None,
+            short_with_amount: false,
         };
         let fee = FeeView {
             options: vec![option("xDAI", false), option("USDC", true)],

@@ -1328,7 +1328,11 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 	const warning = fee.no_coin_pays
 		? m.feeNoCoinPays
 		: !measuring && fee.failed === null && !fee.confirm_fee_ready && selected?.insufficient === true
-			? fill(m.feeShort, { sym: selected.symbol })
+			? // r10-3: short only once the request's own amount of that coin is
+				// taken first — said as amount + fee, the send form's sentence.
+				fill(selected.short_with_amount === true ? m.feeShortWithAmount : m.feeShort, {
+					sym: selected.symbol
+				})
 			: !measuring && selected?.spent_by_operation === true
 				? fill(m.feeCoinSpent, { sym: selected.symbol })
 				: undefined;

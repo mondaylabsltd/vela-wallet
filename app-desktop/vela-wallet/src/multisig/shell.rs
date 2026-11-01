@@ -376,6 +376,7 @@ pub fn perform(op: &Op, deps: &Arc<dyn Deps>, rooms: &Arc<dyn Rooms>) -> Perform
             chain_id,
             from,
             calls,
+            ..
         } => {
             let (deps, from, calls, chain_id) =
                 (deps.clone(), from.clone(), calls.clone(), *chain_id);
@@ -836,6 +837,8 @@ mod tests {
                         name: None,
                         tx: Box::new(tx()),
                         anyway: false,
+                        owners: Vec::new(),
+                        threshold: 0,
                     },
                 },
             );
@@ -926,6 +929,7 @@ mod tests {
                 chain_id: 100,
                 from: "0xSafe".to_owned(),
                 calls: Vec::new(),
+                state_overrides: None,
             },
         );
         assert_eq!(res, Res::Simulated { reply: None });
@@ -1184,6 +1188,7 @@ mod tests {
                     chain_id: 1,
                     from: "f".into(),
                     calls: vec![],
+                    state_overrides: None,
                 },
                 "simulated",
             ),

@@ -290,6 +290,7 @@
     "waitingPayer_one": "{{count}} işlem ücreti ödeyebilecek bir üyeyi bekliyor",
     "waitingPayer_other": "{{count}} işlem ücreti ödeyebilecek bir üyeyi bekliyor",
     "ruleDiffers": "Kural ağa göre değişiyor",
+    "ruleLastKnown": "Son bilinen — açtığınızda yeniden okunur",
     "othersWaiting": "Başka bir hesapta bekleyen işlemler var"
    },
    "add": {

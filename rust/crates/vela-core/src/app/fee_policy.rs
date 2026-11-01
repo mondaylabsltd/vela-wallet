@@ -1460,6 +1460,73 @@ pub fn same_asset_fee_limit(
     })
 }
 
+/// The fee in base units of `asset` (`None` = native) with `places`
+/// decimals, when it is drawn from the SAME balance as that asset: the same
+/// identity, or (r10-3) the native coin and its ERC-20 interface
+/// (`manage_tokens::native_alias_token`), converted between their places and
+/// rounded up — a fee never reads cheaper than it is. `None` when the fee
+/// comes out of another balance.
+///
+/// Every "the fee comes out of the money being sent" rule asks this instead
+/// of comparing identities: on Arc a native USDC send quoted in `0x3600…`
+/// USDC compared unequal, and amount + fee was never weighed against the one
+/// balance both come out of (r10-3: confirmable, reverted on chain).
+#[must_use]
+pub fn fee_in_units_of(
+    fee: &FeeEstimate,
+    asset: Option<&str>,
+    places: u32,
+    round_up: bool,
+) -> Option<u128> {
+    use super::manage_tokens::{native_alias_places, rescale_units, same_balance};
+    let chain_id = fee.chain_id;
+    let native_places = |fallback: u32| native_alias_places(chain_id).map_or(fallback, |(n, _)| n);
+    match &fee.fee_asset {
+        FeeAsset::Native => {
+            if !same_balance(chain_id, asset, None) {
+                return None;
+            }
+            // The native coin itself: its own places. Its interface: the
+            // chain's native places.
+            let from = if asset.is_none() {
+                places
+            } else {
+                native_places(places)
+            };
+            Some(rescale_units(fee.total_wei, from, places, round_up))
+        }
+        FeeAsset::Erc20 {
+            token,
+            decimals,
+            amount,
+            ..
+        } => {
+            if !same_balance(chain_id, asset, Some(token)) {
+                return None;
+            }
+            Some(rescale_units(*amount, *decimals, places, round_up))
+        }
+    }
+}
+
+/// [`same_asset_fee_limit`] over ONE balance rather than one identity
+/// (r10-3): the fee is counted against the transfer whenever it is drawn from
+/// the same money — including the native coin and its ERC-20 interface — in
+/// the transfer's own `places`. `None` when the fee rides on another balance.
+#[must_use]
+pub fn same_balance_fee_limit(
+    fee: Option<&FeeEstimate>,
+    transfer_asset: Option<&str>,
+    places: u32,
+    balance: u128,
+) -> Option<FeeLimit> {
+    let fee_amount = fee_in_units_of(fee?, transfer_asset, places, true)?;
+    Some(FeeLimit {
+        fee_amount,
+        max_transfer_amount: balance.saturating_sub(fee_amount),
+    })
+}
+
 /// `rawBundlerGasCost` (`safe-transaction.ts:424-427`): divide the tier
 /// markup back out so a funding pre-check compares against what the bundler
 /// actually requires.
@@ -2478,6 +2545,14 @@ pub struct FeeOptionView {
     /// it reads `None`.
     #[serde(default)]
     pub short: Option<FeeShortfall>,
+    /// r10-3: this coin's balance covers the fee alone, and not once the
+    /// operation has taken what it moves of the same balance — a dApp's
+    /// 0.1 USDC out of 0.4 with a 0.35 USDC fee. The fee line then says
+    /// "to cover amount + gas fees" (`send.warnInsufficientForGas`), not that
+    /// the coin cannot pay a fee at all. Set only with [`Self::short`].
+    /// `#[serde(default)]`: a reader that predates it reads `false`.
+    #[serde(default)]
+    pub short_with_amount: bool,
 }
 
 /// A coin's shortfall against this fee (issue 408), each side written out
@@ -3740,6 +3815,62 @@ struct Outflows {
     /// Every call that is more than a plain transfer, as `(target, calldata)`
     /// — both lower-case hex without `0x`.
     open: Vec<(String, String)>,
+    /// The chain's native coin and its ERC-20 interface, where it has the
+    /// pair (r10-3): one balance, so what either face moves is moved from
+    /// both rows.
+    alias: Option<OneBalance>,
+}
+
+/// r10-3: a chain whose native coin also wears an ERC-20 interface
+/// (`manage_tokens::native_alias_token` — Arc's USDC at `0x3600…`, Stable's
+/// USDT0). The relay may quote the fee in either face while the operation
+/// moves the other; both rows then hold the SAME money, in 18 and 6 places.
+/// Compared by raw identity, a native send of 0.4 USDC paid in `0x3600…` USDC
+/// left the fee row "untouched", and amount + fee was never weighed against
+/// the one balance it comes out of.
+#[derive(Clone, Copy, Debug)]
+struct OneBalance {
+    token: &'static str,
+    native_places: u32,
+    token_places: u32,
+}
+
+impl OneBalance {
+    fn on(chain_id: u32) -> Option<Self> {
+        let token = super::manage_tokens::native_alias_token(chain_id)?;
+        let (native_places, token_places) = super::manage_tokens::native_alias_places(chain_id)?;
+        Some(Self {
+            token,
+            native_places,
+            token_places,
+        })
+    }
+
+    fn is_token(self, contract: &str) -> bool {
+        self.token.eq_ignore_ascii_case(contract.trim())
+    }
+
+    /// Whether `row` is a face of this balance, and which: `Some(true)` the
+    /// native coin, `Some(false)` the interface.
+    fn face(self, row: &ParsedQuote) -> Option<bool> {
+        if row.is_native {
+            Some(true)
+        } else {
+            row.fee_token
+                .as_deref()
+                .is_some_and(|contract| self.is_token(contract))
+                .then_some(false)
+        }
+    }
+
+    /// Places of the face that is NOT `native`'s.
+    fn twin_places(self, native: bool) -> u32 {
+        if native {
+            self.token_places
+        } else {
+            self.native_places
+        }
+    }
 }
 
 /// `transfer(address,uint256)`.
@@ -3755,8 +3886,11 @@ fn bare_hex(hex: &str) -> String {
 }
 
 impl Outflows {
-    fn of_calls(calls: &[FeeCall]) -> Self {
-        let mut out = Self::default();
+    fn of_calls(calls: &[FeeCall], chain_id: u32) -> Self {
+        let mut out = Self {
+            alias: OneBalance::on(chain_id),
+            ..Self::default()
+        };
         for call in calls {
             out.native = out
                 .native
@@ -3783,18 +3917,37 @@ impl Outflows {
         out
     }
 
-    /// How much of this row's coin the transaction moves.
+    /// How much of this row's coin the transaction moves — counting what it
+    /// moves of the other face of the same balance (r10-3), in this row's
+    /// places, rounded up.
     fn of(&self, row: &ParsedQuote) -> u128 {
-        if row.is_native {
-            return self.native;
-        }
-        row.fee_token
-            .as_deref()
-            .and_then(|contract| {
-                self.tokens
-                    .iter()
-                    .find(|(token, _)| token.eq_ignore_ascii_case(contract))
-            })
+        let own = if row.is_native {
+            self.native
+        } else {
+            row.fee_token
+                .as_deref()
+                .map_or(0, |contract| self.token_sum(contract))
+        };
+        let Some(alias) = self.alias else {
+            return own;
+        };
+        let twin = match alias.face(row) {
+            Some(true) => self.token_sum(alias.token),
+            Some(false) => self.native,
+            None => return own,
+        };
+        own.saturating_add(super::manage_tokens::rescale_units(
+            twin,
+            alias.twin_places(row.is_native),
+            row.decimals,
+            true,
+        ))
+    }
+
+    fn token_sum(&self, contract: &str) -> u128 {
+        self.tokens
+            .iter()
+            .find(|(token, _)| token.eq_ignore_ascii_case(contract))
             .map_or(0, |(_, amount)| *amount)
     }
 
@@ -3813,10 +3966,15 @@ impl Outflows {
     /// Never the chain's own coin: a call can move it only by the `value` it
     /// states, which [`Self::of`] counts.
     fn spends_unstated(&self, row: &ParsedQuote) -> bool {
-        if row.is_native {
-            return false;
-        }
-        let Some(token) = row.fee_token.as_deref().map(bare_hex) else {
+        // The chain's own coin moves only by the `value` a call states —
+        // unless it also wears an ERC-20 interface (r10-3): an `approve` of
+        // that interface lets a contract pull the native balance itself.
+        let token = if row.is_native {
+            self.alias.map(|alias| bare_hex(alias.token))
+        } else {
+            row.fee_token.as_deref().map(bare_hex)
+        };
+        let Some(token) = token else {
             return false;
         };
         if token.len() != 40 {
@@ -3846,19 +4004,49 @@ fn measured_for<'a>(ctx: &RequestCtx, measured: Option<&'a Measured>) -> Option<
 }
 
 /// The net measured change of `row`'s coin, `0` when it does not move.
-fn measured_change(changes: &Measured, row: &ParsedQuote) -> i128 {
-    changes
-        .iter()
-        .filter(
-            |(token, _)| match (token.as_deref(), row.fee_token.as_deref()) {
-                (None, _) => row.is_native,
-                (Some(token), Some(contract)) => {
-                    !row.is_native && token.eq_ignore_ascii_case(contract)
-                }
+///
+/// r10-3: on a chain whose native coin wears an ERC-20 interface, a
+/// simulation may report the one balance's move under either face (or both —
+/// the interface emits a `Transfer` for a native send). The row's own face
+/// is read when the simulation names it; otherwise the other face's change,
+/// in this row's places — never both, which would count one move twice.
+fn measured_change(changes: &Measured, row: &ParsedQuote, alias: Option<OneBalance>) -> i128 {
+    let face_change = |native: bool, contract: Option<&str>| -> Option<i128> {
+        changes
+            .iter()
+            .filter(|(token, _)| match (token.as_deref(), contract) {
+                (None, _) => native,
+                (Some(token), Some(contract)) => !native && token.eq_ignore_ascii_case(contract),
                 (Some(_), None) => false,
-            },
-        )
-        .fold(0i128, |sum, (_, delta)| sum.saturating_add(*delta))
+            })
+            .map(|(_, delta)| *delta)
+            .reduce(i128::saturating_add)
+    };
+    if let Some(own) = face_change(row.is_native, row.fee_token.as_deref()) {
+        return own;
+    }
+    let Some((alias, native)) = alias.and_then(|alias| alias.face(row).map(|n| (alias, n))) else {
+        return 0;
+    };
+    let twin = if native {
+        face_change(false, Some(alias.token))
+    } else {
+        face_change(true, None)
+    }
+    .unwrap_or(0);
+    // An outflow rounds up, an inflow down: never money that is not there.
+    let size = super::manage_tokens::rescale_units(
+        twin.unsigned_abs(),
+        alias.twin_places(native),
+        row.decimals,
+        twin < 0,
+    );
+    let size = i128::try_from(size).unwrap_or(i128::MAX);
+    if twin < 0 {
+        -size
+    } else {
+        size
+    }
 }
 
 /// What the operation brings in counts towards its fee only in part: one
@@ -3904,9 +4092,9 @@ struct Spend<'a> {
 }
 
 impl<'a> Spend<'a> {
-    fn new(calls: &[FeeCall], measured: Option<&'a Measured>) -> Self {
+    fn new(ctx: &RequestCtx, measured: Option<&'a Measured>) -> Self {
         Self {
-            decoded: Outflows::of_calls(calls),
+            decoded: Outflows::of_calls(&ctx.calls, ctx.chain_id),
             measured,
         }
     }
@@ -3934,7 +4122,10 @@ impl<'a> Spend<'a> {
     /// The most this coin's fee leg can move once the operation has run.
     fn usable(&self, row: &ParsedQuote) -> u128 {
         match self.measured {
-            Some(changes) => after_change(row.balance, measured_change(changes, row)),
+            Some(changes) => after_change(
+                row.balance,
+                measured_change(changes, row, self.decoded.alias),
+            ),
             None if self.decoded.spends_unstated(row) => 0,
             None => row.balance.saturating_sub(self.decoded.of(row)),
         }
@@ -4049,18 +4240,18 @@ fn auto_pick(
 /// [`auto_pick`]'s usual order. `None` when no coin can pay.
 fn measured_auto_pick(
     rows: &[ParsedQuote],
-    calls: &[FeeCall],
+    ctx: &RequestCtx,
     measured: &Measured,
     fee_for: impl Fn(&ParsedQuote) -> Option<u128>,
     excluded: &[Option<String>],
 ) -> Option<Option<String>> {
-    let spend = Spend::new(calls, Some(measured));
+    let spend = Spend::new(ctx, Some(measured));
     let pays = |coin: Option<&str>| {
         find_quote(rows, coin)
             .filter(|row| !is_listed(excluded, row))
             .is_some_and(|row| fee_for(row).is_some_and(|fee| spend.covers(row, fee)))
     };
-    if let Some(usual) = auto_pick(rows, &Spend::new(calls, None), &fee_for, excluded) {
+    if let Some(usual) = auto_pick(rows, &Spend::new(ctx, None), &fee_for, excluded) {
         if pays(usual.as_deref()) {
             return Some(usual);
         }
@@ -4075,14 +4266,14 @@ fn measured_auto_pick(
 /// changes are known, [`auto_pick`] on the calls alone until then.
 fn pick_coin(
     rows: &[ParsedQuote],
-    calls: &[FeeCall],
+    ctx: &RequestCtx,
     measured: Option<&Measured>,
     fee_for: impl Fn(&ParsedQuote) -> Option<u128>,
     excluded: &[Option<String>],
 ) -> Option<Option<String>> {
     match measured {
-        Some(measured) => measured_auto_pick(rows, calls, measured, fee_for, excluded),
-        None => auto_pick(rows, &Spend::new(calls, None), fee_for, excluded),
+        Some(measured) => measured_auto_pick(rows, ctx, measured, fee_for, excluded),
+        None => auto_pick(rows, &Spend::new(ctx, None), fee_for, excluded),
     }
 }
 
@@ -4098,7 +4289,7 @@ fn static_auto_pick(
     let provisional = static_total_gas(ctx, None);
     let native = find_quote(rows, None)?;
     let fee_for = |row: &ParsedQuote| charge.amount(provisional, row, native);
-    pick_coin(rows, &ctx.calls, measured, fee_for, excluded)
+    pick_coin(rows, ctx, measured, fee_for, excluded)
 }
 
 /// Whether the coin in force still pays once the real gas is known. The pick
@@ -4189,7 +4380,7 @@ fn advance_tempo(
     // often not held at all: nobody chose, so pay in one that is.
     if picks_coin(model) {
         // Tempo weighs coins by the calls alone (spec 083 leaves it as it was).
-        let spend = Spend::new(&ctx.calls, None);
+        let spend = Spend::new(ctx, None);
         let fee_for = |row: &ParsedQuote| {
             (!row.is_native).then(|| tempo_reimbursement(static_gas, gas.gas_price, row.decimals))
         };
@@ -4408,7 +4599,7 @@ fn price_generic(
             // landed before this quote or after it.
             Some(pick_coin(
                 &model.quotes,
-                &ctx.calls,
+                ctx,
                 measured,
                 fee_for,
                 &model.refused,
@@ -4416,18 +4607,12 @@ fn price_generic(
         } else if auto_pick_holds(
             &model.quotes,
             model.fee_token.as_deref(),
-            &Spend::new(&ctx.calls, None),
+            &Spend::new(ctx, None),
             &fee_for,
         ) {
             None
         } else {
-            Some(pick_coin(
-                &model.quotes,
-                &ctx.calls,
-                None,
-                fee_for,
-                &model.refused,
-            ))
+            Some(pick_coin(&model.quotes, ctx, None, fee_for, &model.refused))
         };
         if let Some(next) = next {
             model.fee_token = next.unwrap_or_else(|| when_no_coin_pays(model));
@@ -4539,7 +4724,7 @@ fn price_tempo(
     {
         // The simulation can price above the static model; the coin picked
         // on that model must still pay, or the pick is made again here.
-        let spend = Spend::new(&ctx.calls, None);
+        let spend = Spend::new(ctx, None);
         let price = *gas_price_atto;
         let fee_for = |row: &ParsedQuote| {
             (!row.is_native).then(|| tempo_reimbursement(expected_gas, price, row.decimals))
@@ -4875,7 +5060,7 @@ fn refused_by_relay(
 /// operation's own reason, not for the USDC it drained — ending on the USDC
 /// said the wrong one.
 fn landing_coin(model: &Model, ctx: &RequestCtx) -> Option<Option<String>> {
-    let spend = Spend::new(&ctx.calls, measured_for(ctx, model.measured.as_deref()));
+    let spend = Spend::new(ctx, measured_for(ctx, model.measured.as_deref()));
     model
         .refused
         .iter()
@@ -4892,7 +5077,7 @@ fn landing_coin(model: &Model, ctx: &RequestCtx) -> Option<Option<String>> {
 /// ([`Spend::usable`] — a fee leg of even one unit of a drained coin fails).
 /// The chain's own coin first, then the relay's row order.
 fn next_coin_to_try(model: &Model, ctx: &RequestCtx) -> Option<Option<String>> {
-    let spend = Spend::new(&ctx.calls, measured_for(ctx, model.measured.as_deref()));
+    let spend = Spend::new(ctx, measured_for(ctx, model.measured.as_deref()));
     let mut candidates = model
         .quotes
         .iter()
@@ -5028,7 +5213,7 @@ fn repick_quoted(model: &mut Model, ctx: &RequestCtx) {
     let fee_for = |row: &ParsedQuote| charge.amount(total_gas, row, &native);
     let target = pick_coin(
         &model.quotes,
-        &ctx.calls,
+        ctx,
         measured_for(ctx, model.measured.as_deref()),
         fee_for,
         &model.refused,
@@ -5283,17 +5468,25 @@ fn selected_fee_is_short(model: &Model) -> bool {
     })
 }
 
-/// What a fee coin has to pay the fee from: its balance — or, once the shell
-/// measured the operation (spec 083 fee), what the operation leaves of it.
-/// Tempo, and every operation nobody measured, read the balance as before.
+/// What a fee coin has to pay the fee from: what the operation leaves of it.
+/// Once the shell measured the operation (spec 083 fee), the measured change;
+/// until then — and on Tempo — what its calls STATE they move of it: a native
+/// `value`, an ERC-20 `transfer`, of either face of one balance (r10-3).
+///
+/// r10-3: this read the bare balance whenever nothing was measured, so a
+/// request moving 0.1 of a 0.4 balance with a 0.35 fee in the same coin was
+/// ready to confirm — the fee leg runs last, finds 0.3, and the whole batch
+/// reverts on chain. An amount no call states (an `approve`) is not
+/// subtracted: only a PROVABLE shortfall refuses, and that coin is flagged
+/// [`FeeOptionView::spent_by_operation`] instead.
 fn payable_balance(model: &Model, row: &ParsedQuote) -> u128 {
-    let measured = model
-        .ctx
-        .as_ref()
-        .and_then(|ctx| measured_for(ctx, model.measured.as_deref()));
-    match measured {
-        Some(changes) => after_change(row.balance, measured_change(changes, row)),
-        None => row.balance,
+    let Some(ctx) = model.ctx.as_ref() else {
+        return row.balance;
+    };
+    let decoded = Outflows::of_calls(&ctx.calls, ctx.chain_id);
+    match measured_for(ctx, model.measured.as_deref()) {
+        Some(changes) => after_change(row.balance, measured_change(changes, row, decoded.alias)),
+        None => row.balance.saturating_sub(decoded.of(row)),
     }
 }
 
@@ -5323,7 +5516,7 @@ fn option_views(model: &Model) -> Vec<FeeOptionView> {
     let spend = model
         .ctx
         .as_ref()
-        .map(|ctx| Spend::new(&ctx.calls, measured_for(ctx, model.measured.as_deref())));
+        .map(|ctx| Spend::new(ctx, measured_for(ctx, model.measured.as_deref())));
     picker_rows(model)
         .map(|row| {
             let amount = fee_amount_for_option(model, row);
@@ -5364,6 +5557,8 @@ fn option_views(model: &Model) -> Vec<FeeOptionView> {
                 insufficient,
                 selected,
                 spent_by_operation: spend.as_ref().is_some_and(|spend| spend.unstated(row)),
+                short_with_amount: short.is_some()
+                    && amount.is_some_and(|need| row.balance >= need),
                 short,
             }
         })

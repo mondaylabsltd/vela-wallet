@@ -162,8 +162,11 @@ function callRows(call: ReadingCall, ctx: ReadingContext): KeyValueRow[] {
 	return rows;
 }
 
-function pathLabel(call: ReadingCall, ctx: ReadingContext): string {
-	return fillTemplate(ctx.callNumber, { n: call.path.join('.') });
+/** r10-10: the core's leg number; the lone call has none (never "Call  · …"). */
+function cardTitle(call: ReadingCall, ctx: ReadingContext): string {
+	const leg = call.leg === undefined ? call.path.join('.') || null : call.leg;
+	const title = intentTitle(call.intent, ctx);
+	return leg === null ? title : `${fillTemplate(ctx.callNumber, { n: leg })} · ${title}`;
 }
 
 /** Each call as a card, a batch's legs after it, every level (r8-5). */
@@ -171,7 +174,7 @@ function cards(calls: ReadingCall[], ctx: ReadingContext): Block[] {
 	return calls.flatMap((call): Block[] => {
 		const card: Block = {
 			kind: 'card',
-			title: `${pathLabel(call, ctx)} · ${intentTitle(call.intent, ctx)}`,
+			title: cardTitle(call, ctx),
 			rows: callRows(call, ctx),
 			tone: intentTone(call.intent)
 		};

@@ -1000,6 +1000,11 @@ pub struct State {
     missing: Vec<MissingChain>,
     cached_at: Option<f64>,
     unreadable: Vec<u64>,
+    /// r10-1: the networks whose mailbox read the service did not answer on
+    /// the last look. "The multisig service can't be reached" is said only
+    /// with one here — a chain that did not answer while the service did is
+    /// `unreadable` (`chainUnreachable`), never the service's outage.
+    mailbox_missed: BTreeSet<u64>,
     history_unreadable: Vec<u64>,
     offline: bool,
     read_at: Option<f64>,
@@ -1044,6 +1049,8 @@ pub struct State {
     tokens: BTreeMap<(u64, String), TokenFacts>,
     /// r8-7: the members last told to the accounts machine, per multisig.
     members_told: BTreeMap<String, Vec<String>>,
+    /// r9-14: the rule last told to the accounts machine, per multisig.
+    rules_told: BTreeMap<String, super::multisig_members::RuleChip>,
 }
 
 impl State {
@@ -1577,7 +1584,7 @@ impl App for MultisigProposals {
             read_at: s.read_at,
             loading: s.loading,
             stale: s.stale,
-            unreachable: s.stale && down,
+            unreachable: service_unreachable(&s, down),
             pace_ms: if s.held > 0 || flows::watching(&s) {
                 OPEN_POLL_MS
             } else {
@@ -1760,6 +1767,16 @@ fn seed(s: &mut State) {
     s.cached_at = Some(kept.at);
     s.read_at = Some(kept.at);
     s.stale = true;
+}
+
+/// r10-1: "The multisig service can't be reached" — the list is not fresh,
+/// the service's outage is open, AND the service itself missed a read on the
+/// last look on a network whose chain this device could read. A chain that
+/// did not answer is said as that chain (`unreadable`, "Can't reach Arc
+/// Testnet"), never as the service — also when the service, which reads the
+/// same chain for its members, timed out on it.
+pub(crate) fn service_unreachable(s: &State, down: bool) -> bool {
+    s.stale && down && s.mailbox_missed.iter().any(|c| !s.unreadable.contains(c))
 }
 
 // ---------------------------------------------------------------------------
@@ -1949,6 +1966,21 @@ async fn read_chain(
         }
     };
     let (members, answer) = futures::join!(members_read, list_read);
+    // r10-1: whether the SERVICE answered is known here, whatever the chain
+    // said — the outage note is the service's only when its own read missed.
+    // A list handed in came from the service's all-chains answer; a mailbox
+    // not asked was not asked because the service is away. Only the followed
+    // multisig's reads speak for the note.
+    {
+        let mut s = lock(st);
+        if s.followed(&account.address) {
+            if answer.is_some() {
+                s.mailbox_missed.remove(&chain_id);
+            } else {
+                s.mailbox_missed.insert(chain_id);
+            }
+        }
+    }
     let members = members?;
     let mailbox = answer.is_some();
     let list = answer.unwrap_or_else(|| previous.unwrap_or_default());
@@ -2232,7 +2264,7 @@ async fn refresh_once(io: &Io<Event>, st: &Shared<State>, tick: bool) {
 /// network it is used on was read (an unread one could hide its founding
 /// members), and only when that changed.
 async fn tell_members(io: &Io<Event>, st: &Shared<State>, account: &MultisigAccount) {
-    let members = {
+    let (members, rule) = {
         let mut s = lock(st);
         if !s.followed(&account.address)
             || !s.unreadable.is_empty()
@@ -2243,18 +2275,40 @@ async fn tell_members(io: &Io<Event>, st: &Shared<State>, account: &MultisigAcco
         }
         let chains: Vec<&ChainMembers> = s.chains.iter().map(|c| &c.members).collect();
         let members = super::multisig_members::members_anywhere(&account.owners, &chains);
+        // r9-14: the rule as the chains say, kept on the multisig's row so a
+        // switcher or Settings showing it unfollowed never says the founding
+        // "Needs 2 of 3" when the chain says 2 of 4.
+        let original =
+            super::multisig_members::MemberRule::of(account.threshold, account.owners.len());
+        let rule = super::multisig_members::rule_chip(&super::multisig_members::current_rules(
+            original, &chains,
+        ));
         let key = account.address.to_ascii_lowercase();
-        if s.members_told.get(&key) == Some(&members) {
-            return;
-        }
-        s.members_told.insert(key, members.clone());
-        members
+        let members = (s.members_told.get(&key) != Some(&members)).then(|| {
+            s.members_told.insert(key.clone(), members.clone());
+            members
+        });
+        let rule = rule
+            .filter(|r| s.rules_told.get(&key) != Some(r))
+            .inspect(|r| {
+                s.rules_told.insert(key, r.clone());
+            });
+        (members, rule)
     };
-    io.notice(Notice::Account {
-        address: account.address.clone(),
-        update: AccountUpdate::MembersNow { members },
-    })
-    .await;
+    if let Some(members) = members {
+        io.notice(Notice::Account {
+            address: account.address.clone(),
+            update: AccountUpdate::MembersNow { members },
+        })
+        .await;
+    }
+    if let Some(chip) = rule {
+        io.notice(Notice::Account {
+            address: account.address.clone(),
+            update: AccountUpdate::RuleNow { chip },
+        })
+        .await;
+    }
 }
 
 /// The tokens a proposal on the list moves (ERC-20 transfers, alone or in a
@@ -2469,10 +2523,14 @@ async fn authorize_signing(
 }
 
 /// `owner` approves `hash`: one passkey prompt, in Vela or on its page.
+/// `members` are the multisig's members now on `chain_id` — what a page
+/// draws a member change against (before → after).
+#[allow(clippy::too_many_arguments)]
 async fn sign_approval(
     io: &Io<Event>,
     owner: &LocalAccount,
     account: &MultisigAccount,
+    members: &ChainMembers,
     chain_id: u64,
     hash: &str,
     tx: &SafeTx,
@@ -2503,6 +2561,8 @@ async fn sign_approval(
                     .or_else(|| account.label.clone()),
                 tx: Box::new(tx.clone()),
                 anyway,
+                owners: members.owners.clone(),
+                threshold: members.threshold,
             },
         })
         .await;
@@ -2976,7 +3036,18 @@ async fn confirm_draft(
         return ActionState::Cancelled;
     }
     let hash = multisig::safe_tx_hash(chain_id, &account.address, &tx).unwrap_or_default();
-    let approval = match sign_approval(io, &owner, &account, chain_id, &hash, &tx, anyway).await {
+    let approval = match sign_approval(
+        io,
+        &owner,
+        &account,
+        &chain.members,
+        chain_id,
+        &hash,
+        &tx,
+        anyway,
+    )
+    .await
+    {
         Ok(a) => a,
         Err(Stop::State(s)) => return s,
     };
@@ -3007,7 +3078,7 @@ async fn approve(
                 .cloned(),
         )
     };
-    let (Some((item, _)), Some(account), Some(owner)) = (found, account, owner) else {
+    let (Some((item, members)), Some(account), Some(owner)) = (found, account, owner) else {
         return ActionState::Failed {
             detail: "nothing to approve".to_owned(),
         };
@@ -3016,13 +3087,14 @@ async fn approve(
         Ok(anyway) => anyway,
         Err(Stop::State(s)) => return s,
     };
-    approve_authorized(io, st, &account, &item, &owner, anyway).await
+    approve_authorized(io, st, &account, &members, &item, &owner, anyway).await
 }
 
 async fn approve_authorized(
     io: &Io<Event>,
     st: &Shared<State>,
     account: &MultisigAccount,
+    members: &ChainMembers,
     item: &ProposalItem,
     owner: &LocalAccount,
     anyway: bool,
@@ -3031,6 +3103,7 @@ async fn approve_authorized(
         io,
         owner,
         account,
+        members,
         item.chain_id,
         &item.safe_tx_hash,
         &item.tx,
@@ -3800,6 +3873,7 @@ async fn execute(
                 name: input.account.genesis.name.clone(),
                 threshold: input.members.threshold,
                 tx: Box::new(input.item.tx.clone()),
+                owners: input.members.owners.clone(),
             }),
         })
         .await;
@@ -3887,6 +3961,13 @@ pub(crate) async fn look_if_stale(
     {
         let mut s = lock(st);
         if s.looking.contains(&key) {
+            return;
+        }
+        // r10-6: a refused review is never looked at (a look would say
+        // "expected to fail" beside "Vela won't sign this").
+        if flows::refused_withheld(&s, input.chain_id, &input.item.safe_tx_hash) {
+            s.previews.remove(&key);
+            s.preview_plans.remove(&key);
             return;
         }
         let fresh = s.preview_plans.get(&key).is_some_and(|(at, p)| {

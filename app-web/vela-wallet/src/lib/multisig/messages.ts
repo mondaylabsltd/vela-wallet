@@ -395,6 +395,8 @@ export interface MultisigMessages {
 		/** r5reg-6: ready, but no member here can pay its fee. */
 		waitingPayer: PluralCopy;
 		ruleDiffers: string;
+		/** r9-14: the chip is the rule a chain last said, not read since it was shown. */
+		ruleLastKnown: string;
 		/** The switcher button's dot, in words. */
 		othersWaiting: string;
 	};
@@ -1211,6 +1213,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		ready: { locale: '', forms: {} },
 		waitingPayer: { locale: '', forms: {} },
 		ruleDiffers: '',
+		ruleLastKnown: '',
 		othersWaiting: ''
 	},
 	external: {

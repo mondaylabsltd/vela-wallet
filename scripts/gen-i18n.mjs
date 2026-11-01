@@ -1362,9 +1362,22 @@ for (let i = 1; i < PATHS.length; i++) {
 // 2267 (round 8 core, 2026-11-01): + `onboarding.welcomeWeb.linkWaiting`
 //   (Welcome says a multisig link opened here is waiting for a wallet,
 //   r5reg). 2266 + 1 = 2267 paths, 2150 leaves, 117 branches.
-if (PATHS.length !== 2267) fail(`expected 2267 paths (2150 leaf + 117 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2150) fail(`expected 2150 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 117) fail(`expected 117 branch paths, got ${branchSet.size}`);
+// 2268 (round 10 core, 2026-11-01): + `onboarding.welcomeWeb.linkBroken`
+//   (Welcome on a device with no account said "a multisig link is waiting"
+//   for a damaged invite; the core's codec reads it, and a link that does
+//   not read is said as that). 2267 + 1 = 2268 paths, 2151 leaves, 117
+//   branches.
+// 2277 (round 10 core, 2026-11-01): + the passkey's failure said in the
+//   person's language (`onboarding.common.passkeyError.{cancelled,
+//   notSupported, noCredential, appNotAssociated, noNetwork,
+//   alreadyRegistered, timedOut, other}`) — `app::passkey_error` maps the
+//   platform's error facts to one of them, where every shell used to draw
+//   the system's raw English ("[50152] RP ID cannot be validated") inside a
+//   translated sheet. 2268 + 8 leaves + 1 branch = 2277 paths, 2159 leaves,
+//   118 branches.
+if (PATHS.length !== 2277) fail(`expected 2277 paths (2159 leaf + 118 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2159) fail(`expected 2159 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 118) fail(`expected 118 branch paths, got ${branchSet.size}`);
 // The on-demand catalogs, pinned the same way (leaves of every locale's union):
 // a key dropped from one namespace and not landed in the other fails here.
 // 579 (round 6, the outside owner's connect page, 2026-10-30): + 17
@@ -1438,14 +1451,17 @@ if (branchSet.size !== 117) fail(`expected 117 branch paths, got ${branchSet.siz
   //   `{{count}}`; the plain keys stay for shells not moved yet) and
   //   `home.multisig.external.{doneExecuted, doneCancelled}` (r8-24: a link to
   //   a transaction whose number is used says which). 650 + 14 = 664.
-  // 675 (round 10 Android, 2026-11-01): + `home.multisig.notify.{title, on,
+  // 665 (round 10 core, 2026-11-01): + `home.multisig.presence.ruleLastKnown`
+  //   (r9-14: the rule chip of a multisig not read this session is the one a
+  //   chain last said, marked as the last known). 664 + 1 = 665.
+  // 676 (round 10 Android, 2026-11-01): + `home.multisig.notify.{title, on,
   //   off, turnOn, limited, oem, openSettings}` (the multisig's
   //   notifications, said where the person looks for them: on or off, and —
   //   honestly, never as a nag — that this phone holds background checks
   //   back, with the way to its settings) and `home.multisig.create.
   //   {closeTitle, closeBody, closeKeep, closeConfirm}` (Back on a filled
-  //   form asks first, and says the form is kept). 664 + 11 = 675.
-  const pins = { multisig: 675 };
+  //   form asks first, and says the form is kept). 665 + 11 = 676.
+  const pins = { multisig: 676 };
   for (const [name, docs] of Object.entries(onDemand)) {
     const leaves = new Set();
     for (const lng of LOCALES) walk(docs[lng], '', leaves, new Set());

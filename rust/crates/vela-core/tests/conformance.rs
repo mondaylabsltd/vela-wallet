@@ -38,6 +38,16 @@ struct Case {
     divergence: Option<Value>,
 }
 
+/// Vector files beside the corpus that are not suites: each has its own
+/// runner, which every shell replays by name (r9-17's incoming scan,
+/// `app_incoming_scan.rs`; r10-1's balance stamp, `app_balance_dashboard.rs`;
+/// r9 S4's new site's chain, `site_start_chain_vectors.rs`).
+const OWN_RUNNER_FILES: [&str; 3] = [
+    "incoming-scan.json",
+    "balance-stamp.json",
+    "site-start-chain.json",
+];
+
 /// The corpus is seven suites, discovered by scanning the directory. Every runner
 /// asserts that exact set is present: without it, a vector file lost to a bad merge
 /// or a partial checkout would make all four surfaces report "green" over a corpus
@@ -1130,6 +1140,13 @@ fn conformance_corpus() {
     for entry in entries {
         let path = entry.path();
         if path.extension().and_then(|e| e.to_str()) != Some("json") {
+            continue;
+        }
+        if path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|n| OWN_RUNNER_FILES.contains(&n))
+        {
             continue;
         }
         let raw = match fs::read_to_string(&path) {

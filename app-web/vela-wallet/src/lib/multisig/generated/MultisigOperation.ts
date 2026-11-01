@@ -15,4 +15,13 @@ purpose: MultisigSendPurpose | null, } | { "type": "quote_calls", chain_id: numb
 /**
  * A pairing kept from an earlier session, to reconnect without a scan.
  */
-pairing: string | null, } | { "type": "peer_send", room: string, message: unknown, } | { "type": "peer_receive", room: string, } | { "type": "peer_close", room: string, cancel: boolean, end: boolean, } | { "type": "wallet_request", method: string, params: unknown, } | { "type": "simulate", chain_id: number, from: string, calls: unknown[], } | { "type": "recipient_risk", chain_id: number, address: string, } | { "type": "user_op_status", chain_id: number, user_op_hash: string, } | { "type": "notice", notice: MultisigNotice, };
+pairing: string | null, } | { "type": "peer_send", room: string, message: unknown, } | { "type": "peer_receive", room: string, } | { "type": "peer_close", room: string, cancel: boolean, end: boolean, } | { "type": "wallet_request", method: string, params: unknown, } | { "type": "simulate", chain_id: number, from: string, calls: unknown[], 
+/**
+ * Real-device S2: the multisig as its deployment leaves it, where it
+ * is not deployed yet (its code and setup storage) — `eth_simulateV1`'s
+ * `blockStateCalls[0].stateOverrides`, passed as it is. Without it an
+ * undeployed multisig's first transaction was simulated from a bare
+ * address and said "expected to fail", then ran fine. `None` for a
+ * deployed one.
+ */
+state_overrides?: unknown, } | { "type": "recipient_risk", chain_id: number, address: string, } | { "type": "user_op_status", chain_id: number, user_op_hash: string, } | { "type": "notice", notice: MultisigNotice, };

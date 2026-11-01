@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-ElnUZsJxXyU1lhCUndK7yV0u9wEGkeWSj3ZSzKarvCw='; style-src 'sha256-IvjEd3Od02b8rk0e1KtXxPCSfUrwsnqsHIkMkYUW80A='; img-src data:; font-src data:; base-uri 'none'; form-action 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-DopTw0ryDVhERgkqznoLduFkzILA20GdYs/YiilxoSI='; style-src 'sha256-IvjEd3Od02b8rk0e1KtXxPCSfUrwsnqsHIkMkYUW80A='; img-src data:; font-src data:; base-uri 'none'; form-action 'none'" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Vela</title>
     <style>
@@ -1746,6 +1746,17 @@ window.VelaCS.i18n.register('en', {
   'sentence.msAddOwnerOne': "{owner} becomes a member, and {threshold} approval will be needed.",
   'sentence.msRemoveOwnerOne': "{owner} stops being a member, and {threshold} approval will be needed.",
   'sentence.msThresholdOne': "From now on {threshold} approval will be needed.",
+  // r10: a multisig's coins are the multisig's, not the signer's; a member
+  // change reads before → after against the members the app says it has now.
+  'sentence.approveMs': "This lets {spender} spend up to {amount} of the multisig’s.",
+  'sentence.approveUnlimitedMs': "This lets {spender} spend all of the multisig’s {symbol} — no ceiling.",
+  'warn.unlimitedMs': "Unlimited — this contract can spend every {symbol} the multisig has.",
+  'warn.approveAllMs': "Every NFT the multisig holds in this collection, now and later, can be taken at any time.",
+  'warn.nativeValueMs': "This also sends {amount} from the multisig to the contract it calls, on top of anything else shown here.",
+  'field.msMembers': "Members",
+  'value.msCountChange': "{before} → {after}",
+  'value.msApprovalsChange': "{before} of {beforeOf} → {after} of {afterOf}",
+  'warn.msMembersClaimOff': "This change doesn’t fit the members the app says the multisig has now — it may fail when it runs. Check the members with the others before you approve.",
 });
 
 // 简体中文。每一句签名提示的措辞都在这里，改词不用碰逻辑。
@@ -2159,6 +2170,17 @@ window.VelaCS.i18n.register('zh', {
   'sentence.msAddOwnerOne': "{owner} 成为成员，之后需要 {threshold} 个批准。",
   'sentence.msRemoveOwnerOne': "{owner} 不再是成员，之后需要 {threshold} 个批准。",
   'sentence.msThresholdOne': "从现在起需要 {threshold} 个批准。",
+  // r10: a multisig's coins are the multisig's, not the signer's; a member
+  // change reads before → after against the members the app says it has now.
+  'sentence.approveMs': "这允许 {spender} 最多动用多签的 {amount}。",
+  'sentence.approveUnlimitedMs': "这允许 {spender} 动用多签全部 {symbol} —— 没有上限。",
+  'warn.unlimitedMs': "无限额 — 该合约可以花费多签所有 {symbol}。",
+  'warn.approveAllMs': "这个合集里多签现在和以后持有的全部 NFT，对方都能随时取走。",
+  'warn.nativeValueMs': "此外，这笔调用会从多签转出 {amount} 给它调用的合约。",
+  'field.msMembers': "成员",
+  'value.msCountChange': "{before} → {after}",
+  'value.msApprovalsChange': "{before} / {beforeOf} → {after} / {afterOf}",
+  'warn.msMembersClaimOff': "这项变更与 App 所说的多签现有成员对不上 —— 执行时可能会失败。批准前，和其他成员核对成员名单。",
 });
 
 // 繁體中文（台灣）。每一句簽署提示的措辭都在這裡，改字不用動到邏輯。
@@ -2551,6 +2573,17 @@ window.VelaCS.i18n.register('zh-TW', {
   'sentence.msAddOwnerOne': "{owner} 成為成員，之後需要 {threshold} 個核准。",
   'sentence.msRemoveOwnerOne': "{owner} 不再是成員，之後需要 {threshold} 個核准。",
   'sentence.msThresholdOne': "從現在起需要 {threshold} 個核准。",
+  // r10: a multisig's coins are the multisig's, not the signer's; a member
+  // change reads before → after against the members the app says it has now.
+  'sentence.approveMs': "這允許 {spender} 最多動用多簽的 {amount}。",
+  'sentence.approveUnlimitedMs': "這允許 {spender} 動用多簽全部的 {symbol}——沒有上限。",
+  'warn.unlimitedMs': "無上限——此合約可以花費多簽所有的 {symbol}。",
+  'warn.approveAllMs': "這個系列中多簽現在和以後持有的每一個 NFT，對方都可以隨時拿走。",
+  'warn.nativeValueMs': "此外，這筆呼叫會從多簽轉出 {amount} 給它呼叫的合約。",
+  'field.msMembers': "成員",
+  'value.msCountChange': "{before} → {after}",
+  'value.msApprovalsChange': "{before} / {beforeOf} → {after} / {afterOf}",
+  'warn.msMembersClaimOff': "這項變更與 App 所說的多簽現有成員對不上——執行時可能會失敗。核准前，和其他成員核對成員名單。",
 });
 
 // 繁體中文（香港）。每一句簽署提示的措辭都在這裏，改字不用動到邏輯。
@@ -2943,6 +2976,17 @@ window.VelaCS.i18n.register('zh-HK', {
   'sentence.msAddOwnerOne': "{owner} 成為成員，之後需要 {threshold} 個批准。",
   'sentence.msRemoveOwnerOne': "{owner} 唔再係成員，之後需要 {threshold} 個批准。",
   'sentence.msThresholdOne': "由而家起需要 {threshold} 個批准。",
+  // r10: a multisig's coins are the multisig's, not the signer's; a member
+  // change reads before → after against the members the app says it has now.
+  'sentence.approveMs': "呢個允許 {spender} 最多動用多簽嘅 {amount}。",
+  'sentence.approveUnlimitedMs': "呢個允許 {spender} 動用多簽全部 {symbol}——沒有上限。",
+  'warn.unlimitedMs': "無上限——此合約可以動用多簽全部 {symbol}。",
+  'warn.approveAllMs': "多簽在這個系列中現在和日後持有的每一個 NFT，對方都可以隨時取走。",
+  'warn.nativeValueMs': "此外，這筆調用會從多簽轉出 {amount} 給它調用的合約。",
+  'field.msMembers': "成員",
+  'value.msCountChange': "{before} → {after}",
+  'value.msApprovalsChange': "{before} / {beforeOf} → {after} / {afterOf}",
+  'warn.msMembersClaimOff': "呢項變更同 App 所講嘅多簽現有成員對唔上——執行時可能會失敗。批准之前，同其他成員核對成員名單。",
 });
 
 // 日本語。署名ページに表示される文言はすべてここにあります。言い回しを変えるのにロジックに触れる必要はありません。
@@ -3333,6 +3377,17 @@ window.VelaCS.i18n.register('ja', {
   'sentence.msAddOwnerOne': "{owner} がメンバーになり、承認は {threshold} 件必要になります。",
   'sentence.msRemoveOwnerOne': "{owner} がメンバーでなくなり、承認は {threshold} 件必要になります。",
   'sentence.msThresholdOne': "今後は承認が {threshold} 件必要になります。",
+  // r10: a multisig's coins are the multisig's, not the signer's; a member
+  // change reads before → after against the members the app says it has now.
+  'sentence.approveMs': "{spender} がマルチシグの資産を最大 {amount} まで使えるようにします。",
+  'sentence.approveUnlimitedMs': "{spender} がマルチシグの {symbol} をすべて使えるようにします — 上限はありません。",
+  'warn.unlimitedMs': "無制限 — このコントラクトはマルチシグの {symbol} をすべて使用できます。",
+  'warn.approveAllMs': "このコレクションでマルチシグが現在および今後保有するすべての NFT が、いつでも持ち出される可能性があります。",
+  'warn.nativeValueMs': "この呼び出しは、ここに表示された内容とは別に、マルチシグから呼び出し先のコントラクトへ {amount} を送ります。",
+  'field.msMembers': "メンバー",
+  'value.msCountChange': "{before} → {after}",
+  'value.msApprovalsChange': "{beforeOf} 件中 {before} 件 → {afterOf} 件中 {after} 件",
+  'warn.msMembersClaimOff': "この変更は、アプリが示すマルチシグの現在のメンバーと合いません — 実行時に失敗する可能性があります。承認する前に、ほかのメンバーとメンバー構成を確認してください。",
 });
 
 // 한국어. 서명 페이지에 표시되는 모든 문구가 여기에 있습니다. 표현을 바꿀 때 로직은 건드리지 않아도 됩니다.
@@ -3723,6 +3778,17 @@ window.VelaCS.i18n.register('ko', {
   'sentence.msAddOwnerOne': "{owner} 님이 멤버가 되고, 승인이 {threshold}개 필요해집니다.",
   'sentence.msRemoveOwnerOne': "{owner} 님이 더 이상 멤버가 아니며, 승인이 {threshold}개 필요해집니다.",
   'sentence.msThresholdOne': "이제부터 승인이 {threshold}개 필요합니다.",
+  // r10: a multisig's coins are the multisig's, not the signer's; a member
+  // change reads before → after against the members the app says it has now.
+  'sentence.approveMs': "{spender}이(가) 멀티시그 자산을 최대 {amount}까지 사용하도록 허용합니다.",
+  'sentence.approveUnlimitedMs': "{spender}이(가) 멀티시그의 {symbol} 전부를 사용하도록 허용합니다 — 한도가 없습니다.",
+  'warn.unlimitedMs': "무제한 — 이 컨트랙트가 멀티시그의 {symbol}을(를) 모두 사용할 수 있습니다.",
+  'warn.approveAllMs': "이 컬렉션에서 멀티시그가 지금과 앞으로 보유하는 모든 NFT를 상대가 언제든 가져갈 수 있게 됩니다.",
+  'warn.nativeValueMs': "이 호출은 여기 표시된 내용과 별도로 멀티시그에서 호출 대상 컨트랙트로 {amount}을(를) 보냅니다.",
+  'field.msMembers': "멤버",
+  'value.msCountChange': "{before} → {after}",
+  'value.msApprovalsChange': "{beforeOf}개 중 {before}개 → {afterOf}개 중 {after}개",
+  'warn.msMembersClaimOff': "이 변경은 앱이 말하는 멀티시그의 현재 멤버와 맞지 않습니다 — 실행될 때 실패할 수 있습니다. 승인하기 전에 다른 멤버와 멤버 구성을 확인하세요.",
 });
 
 // Tiếng Việt. Mọi câu chữ của trang ký nằm ở đây; đổi chữ không cần đụng tới logic.
@@ -4113,6 +4179,17 @@ window.VelaCS.i18n.register('vi', {
   'sentence.msAddOwnerOne': "{owner} trở thành thành viên, và sẽ cần {threshold} phê duyệt.",
   'sentence.msRemoveOwnerOne': "{owner} không còn là thành viên, và sẽ cần {threshold} phê duyệt.",
   'sentence.msThresholdOne': "Từ nay sẽ cần {threshold} phê duyệt.",
+  // r10: a multisig's coins are the multisig's, not the signer's; a member
+  // change reads before → after against the members the app says it has now.
+  'sentence.approveMs': "Việc này cho phép {spender} chi tối đa {amount} của ví đa chữ ký.",
+  'sentence.approveUnlimitedMs': "Việc này cho phép {spender} chi toàn bộ {symbol} của ví đa chữ ký — không có giới hạn.",
+  'warn.unlimitedMs': "Không giới hạn — hợp đồng này có thể chi toàn bộ {symbol} mà ví đa chữ ký có.",
+  'warn.approveAllMs': "Mọi NFT ví đa chữ ký có trong bộ sưu tập này, cả hiện tại lẫn sau này, đều có thể bị lấy đi bất cứ lúc nào.",
+  'warn.nativeValueMs': "Lệnh gọi này còn gửi {amount} từ ví đa chữ ký tới hợp đồng được gọi, ngoài mọi thứ hiển thị ở đây.",
+  'field.msMembers': "Thành viên",
+  'value.msCountChange': "{before} → {after}",
+  'value.msApprovalsChange': "{before} trên {beforeOf} → {after} trên {afterOf}",
+  'warn.msMembersClaimOff': "Thay đổi này không khớp với các thành viên hiện tại mà ứng dụng nói ví đa chữ ký đang có — có thể thất bại khi chạy. Hãy đối chiếu danh sách thành viên với những người khác trước khi phê duyệt.",
 });
 
 // Bahasa Indonesia. Semua kalimat halaman tanda tangan ada di sini; mengganti kata tidak perlu menyentuh logika.
@@ -4503,6 +4580,17 @@ window.VelaCS.i18n.register('id', {
   'sentence.msAddOwnerOne': "{owner} menjadi anggota, dan {threshold} persetujuan akan dibutuhkan.",
   'sentence.msRemoveOwnerOne': "{owner} tidak lagi menjadi anggota, dan {threshold} persetujuan akan dibutuhkan.",
   'sentence.msThresholdOne': "Mulai sekarang {threshold} persetujuan dibutuhkan.",
+  // r10: a multisig's coins are the multisig's, not the signer's; a member
+  // change reads before → after against the members the app says it has now.
+  'sentence.approveMs': "Ini mengizinkan {spender} membelanjakan hingga {amount} milik multisig.",
+  'sentence.approveUnlimitedMs': "Ini mengizinkan {spender} membelanjakan seluruh {symbol} milik multisig — tanpa batas.",
+  'warn.unlimitedMs': "Tanpa batas — kontrak ini dapat membelanjakan seluruh {symbol} yang dimiliki multisig.",
+  'warn.approveAllMs': "Semua NFT milik multisig di koleksi ini, sekarang maupun nanti, bisa diambil kapan saja.",
+  'warn.nativeValueMs': "Panggilan ini juga mengirim {amount} dari multisig ke kontrak yang dipanggil, di luar semua yang ditampilkan di sini.",
+  'field.msMembers': "Anggota",
+  'value.msCountChange': "{before} → {after}",
+  'value.msApprovalsChange': "{before} dari {beforeOf} → {after} dari {afterOf}",
+  'warn.msMembersClaimOff': "Perubahan ini tidak cocok dengan anggota multisig saat ini menurut aplikasi — bisa gagal saat dijalankan. Periksa daftar anggota bersama anggota lain sebelum menyetujui.",
 });
 
 // Türkçe. İmza sayfasının tüm cümleleri burada; bir sözcüğü değiştirmek için mantığa dokunmak gerekmez.
@@ -4893,6 +4981,17 @@ window.VelaCS.i18n.register('tr', {
   'sentence.msAddOwnerOne': "{owner} üye olur ve {threshold} onay gerekir.",
   'sentence.msRemoveOwnerOne': "{owner} artık üye değildir ve {threshold} onay gerekir.",
   'sentence.msThresholdOne': "Bundan sonra {threshold} onay gerekir.",
+  // r10: a multisig's coins are the multisig's, not the signer's; a member
+  // change reads before → after against the members the app says it has now.
+  'sentence.approveMs': "Bu, {spender} tarafının çoklu imzanın varlığından en fazla {amount} harcamasına izin verir.",
+  'sentence.approveUnlimitedMs': "Bu, {spender} tarafının çoklu imzanın tüm {symbol} varlığını harcamasına izin verir — üst sınır yok.",
+  'warn.unlimitedMs': "Sınırsız — bu sözleşme çoklu imzanın sahip olduğu tüm {symbol} varlığını harcayabilir.",
+  'warn.approveAllMs': "Çoklu imzanın bu koleksiyonda şimdi ve ileride sahip olacağı tüm NFT'ler her an alınabilir.",
+  'warn.nativeValueMs': "Bu çağrı, burada gösterilen her şeye ek olarak çoklu imzadan çağrılan sözleşmeye {amount} de gönderir.",
+  'field.msMembers': "Üyeler",
+  'value.msCountChange': "{before} → {after}",
+  'value.msApprovalsChange': "{beforeOf} onaydan {before} → {afterOf} onaydan {after}",
+  'warn.msMembersClaimOff': "Bu değişiklik, uygulamanın söylediği mevcut çoklu imza üyeleriyle uyuşmuyor — çalıştığında başarısız olabilir. Onaylamadan önce üyeleri diğerleriyle kontrol edin.",
 });
 
 // Español (México). Cada frase de la página de firma vive aquí; cambiar una palabra no toca la lógica.
@@ -5283,6 +5382,17 @@ window.VelaCS.i18n.register('es-MX', {
   'sentence.msAddOwnerOne': "{owner} se vuelve miembro y se necesitará {threshold} aprobación.",
   'sentence.msRemoveOwnerOne': "{owner} deja de ser miembro y se necesitará {threshold} aprobación.",
   'sentence.msThresholdOne': "A partir de ahora se necesitará {threshold} aprobación.",
+  // r10: a multisig's coins are the multisig's, not the signer's; a member
+  // change reads before → after against the members the app says it has now.
+  'sentence.approveMs': "Esto permite que {spender} gaste hasta {amount} de la multifirma.",
+  'sentence.approveUnlimitedMs': "Esto permite que {spender} gaste todos los {symbol} de la multifirma — sin límite.",
+  'warn.unlimitedMs': "Ilimitado — este contrato puede gastar todos los {symbol} de la multifirma.",
+  'warn.approveAllMs': "Pueden llevarse en cualquier momento todos los NFT que la multifirma tiene en esta colección, ahora y en el futuro.",
+  'warn.nativeValueMs': "Esta llamada además envía {amount} desde la multifirma al contrato que llama, aparte de todo lo que se muestra aquí.",
+  'field.msMembers': "Miembros",
+  'value.msCountChange': "{before} → {after}",
+  'value.msApprovalsChange': "{before} de {beforeOf} → {after} de {afterOf}",
+  'warn.msMembersClaimOff': "Este cambio no cuadra con los miembros que, según la app, tiene ahora la multifirma — podría fallar al ejecutarse. Revisa los miembros con los demás antes de aprobar.",
 });
 
 // Português (Brasil). Cada frase da página de assinatura mora aqui; trocar uma palavra não mexe na lógica.
@@ -5673,6 +5783,17 @@ window.VelaCS.i18n.register('pt-BR', {
   'sentence.msAddOwnerOne': "{owner} passa a ser membro, e será necessária {threshold} aprovação.",
   'sentence.msRemoveOwnerOne': "{owner} deixa de ser membro, e será necessária {threshold} aprovação.",
   'sentence.msThresholdOne': "A partir de agora será necessária {threshold} aprovação.",
+  // r10: a multisig's coins are the multisig's, not the signer's; a member
+  // change reads before → after against the members the app says it has now.
+  'sentence.approveMs': "Isto permite que {spender} gaste até {amount} do multisig.",
+  'sentence.approveUnlimitedMs': "Isto permite que {spender} gaste todo o {symbol} do multisig — sem limite.",
+  'warn.unlimitedMs': "Ilimitado — este contrato pode gastar todo o {symbol} do multisig.",
+  'warn.approveAllMs': "Todos os NFTs que o multisig tem nesta coleção, agora e no futuro, podem ser levados a qualquer momento.",
+  'warn.nativeValueMs': "Esta chamada também envia {amount} do multisig para o contrato chamado, além de tudo o que aparece aqui.",
+  'field.msMembers': "Membros",
+  'value.msCountChange': "{before} → {after}",
+  'value.msApprovalsChange': "{before} de {beforeOf} → {after} de {afterOf}",
+  'warn.msMembersClaimOff': "Esta mudança não bate com os membros que, segundo o app, o multisig tem agora — pode falhar ao ser executada. Confira os membros com os outros antes de aprovar.",
 });
 
 // Français. Chaque phrase de la page de signature est ici ; changer un mot ne touche pas à la logique.
@@ -6065,6 +6186,17 @@ window.VelaCS.i18n.register('fr', {
   'sentence.msAddOwnerOne': "{owner} devient membre, et {threshold} approbation sera requise.",
   'sentence.msRemoveOwnerOne': "{owner} n’est plus membre, et {threshold} approbation sera requise.",
   'sentence.msThresholdOne': "Désormais, {threshold} approbation sera requise.",
+  // r10: a multisig's coins are the multisig's, not the signer's; a member
+  // change reads before → after against the members the app says it has now.
+  'sentence.approveMs': "Ceci autorise {spender} à dépenser jusqu’à {amount} des fonds du multisig.",
+  'sentence.approveUnlimitedMs': "Ceci autorise {spender} à dépenser tous les {symbol} du multisig — sans aucun plafond.",
+  'warn.unlimitedMs': "Illimité — ce contrat peut dépenser tous les {symbol} du multisig.",
+  'warn.approveAllMs': "Tous les NFT que le multisig détient dans cette collection, maintenant et à l’avenir, peuvent être pris à tout moment.",
+  'warn.nativeValueMs': "Cet appel envoie aussi {amount} du multisig au contrat appelé, en plus de tout ce qui est affiché ici.",
+  'field.msMembers': "Membres",
+  'value.msCountChange': "{before} → {after}",
+  'value.msApprovalsChange': "{before} sur {beforeOf} → {after} sur {afterOf}",
+  'warn.msMembersClaimOff': "Ce changement ne correspond pas aux membres que l’app attribue au multisig aujourd’hui — il pourrait échouer à l’exécution. Vérifiez les membres avec les autres avant d’approuver.",
 });
 
 // Deutsch. Jede Formulierung der Signaturseite steht hier; ein Wort zu ändern berührt keine Logik.
@@ -6457,6 +6589,17 @@ window.VelaCS.i18n.register('de', {
   'sentence.msAddOwnerOne': "{owner} wird Mitglied, und es wird {threshold} Freigabe benötigt.",
   'sentence.msRemoveOwnerOne': "{owner} ist kein Mitglied mehr, und es wird {threshold} Freigabe benötigt.",
   'sentence.msThresholdOne': "Ab jetzt wird {threshold} Freigabe benötigt.",
+  // r10: a multisig's coins are the multisig's, not the signer's; a member
+  // change reads before → after against the members the app says it has now.
+  'sentence.approveMs': "Damit darf {spender} bis zu {amount} aus dem Guthaben des Multisig ausgeben.",
+  'sentence.approveUnlimitedMs': "Damit darf {spender} das gesamte {symbol} des Multisig ausgeben — ohne Obergrenze.",
+  'warn.unlimitedMs': "Unbegrenzt — dieser Contract kann das gesamte {symbol} des Multisig ausgeben.",
+  'warn.approveAllMs': "Jedes NFT, das das Multisig in dieser Kollektion hält, jetzt und künftig, kann jederzeit genommen werden.",
+  'warn.nativeValueMs': "Dieser Aufruf sendet zusätzlich {amount} vom Multisig an den aufgerufenen Vertrag – neben allem, was hier angezeigt wird.",
+  'field.msMembers': "Mitglieder",
+  'value.msCountChange': "{before} → {after}",
+  'value.msApprovalsChange': "{before} von {beforeOf} → {after} von {afterOf}",
+  'warn.msMembersClaimOff': "Diese Änderung passt nicht zu den Mitgliedern, die das Multisig laut App jetzt hat — sie kann bei der Ausführung fehlschlagen. Prüfen Sie die Mitglieder mit den anderen, bevor Sie freigeben.",
 });
 
 // Русский. Все формулировки страницы подписи собраны здесь; правка слов не затрагивает логику.
@@ -6849,6 +6992,17 @@ window.VelaCS.i18n.register('ru', {
   'sentence.msAddOwnerOne': "{owner} становится участником, и понадобится одобрений: {threshold}.",
   'sentence.msRemoveOwnerOne': "{owner} перестаёт быть участником, и понадобится одобрений: {threshold}.",
   'sentence.msThresholdOne': "Отныне понадобится одобрений: {threshold}.",
+  // r10: a multisig's coins are the multisig's, not the signer's; a member
+  // change reads before → after against the members the app says it has now.
+  'sentence.approveMs': "Это разрешает {spender} потратить до {amount} средств мультиподписи.",
+  'sentence.approveUnlimitedMs': "Это разрешает {spender} тратить все {symbol} мультиподписи — без лимита.",
+  'warn.unlimitedMs': "Без лимита — этот контракт может потратить все {symbol} мультиподписи.",
+  'warn.approveAllMs': "Любой NFT из этой коллекции, который есть у мультиподписи сейчас или появится позже, могут забрать в любой момент.",
+  'warn.nativeValueMs': "Этот вызов также отправляет {amount} с мультиподписи вызываемому контракту — сверх всего, что показано здесь.",
+  'field.msMembers': "Участники",
+  'value.msCountChange': "{before} → {after}",
+  'value.msApprovalsChange': "{before} из {beforeOf} → {after} из {afterOf}",
+  'warn.msMembersClaimOff': "Это изменение не сходится с участниками, которые, по словам приложения, сейчас есть у мультиподписи, — при выполнении оно может не пройти. Сверьте состав с другими участниками, прежде чем одобрять.",
 });
 
 // Italiano. Ogni frase della pagina di firma vive qui; cambiare una parola non tocca la logica.
@@ -7239,6 +7393,17 @@ window.VelaCS.i18n.register('it', {
   'sentence.msAddOwnerOne': "{owner} diventa membro e servirà {threshold} approvazione.",
   'sentence.msRemoveOwnerOne': "{owner} non è più membro e servirà {threshold} approvazione.",
   'sentence.msThresholdOne': "D’ora in poi servirà {threshold} approvazione.",
+  // r10: a multisig's coins are the multisig's, not the signer's; a member
+  // change reads before → after against the members the app says it has now.
+  'sentence.approveMs': "Questo permette a {spender} di spendere fino a {amount} dal multisig.",
+  'sentence.approveUnlimitedMs': "Questo permette a {spender} di spendere tutti i {symbol} del multisig — senza alcun limite.",
+  'warn.unlimitedMs': "Illimitato — questo contratto può spendere tutti i {symbol} del multisig.",
+  'warn.approveAllMs': "Ogni NFT che il multisig possiede in questa collezione, ora e in futuro, può essere sottratto in qualsiasi momento.",
+  'warn.nativeValueMs': "Questa chiamata invia anche {amount} dal multisig al contratto chiamato, oltre a tutto ciò che è mostrato qui.",
+  'field.msMembers': "Membri",
+  'value.msCountChange': "{before} → {after}",
+  'value.msApprovalsChange': "{before} su {beforeOf} → {after} su {afterOf}",
+  'warn.msMembersClaimOff': "Questa modifica non torna con i membri che, secondo l’app, il multisig ha ora — potrebbe fallire quando viene eseguita. Verifica i membri con gli altri prima di approvare.",
 });
 
 // @generated by samples/gen-catalog.mjs from vela-core — do not edit.
@@ -9138,7 +9303,7 @@ window.VelaCS = window.VelaCS || {};
         view.sentence = text('sentence.sendSelf', { amount: amount.text + ' ' + amount.symbol });
       } else {
         // The sentence names the address, not a label: "to 0x9A8b…1a09".
-        view.sentence = text('sentence.transfer', {
+        view.sentence = text(multisigFunds(ctx) ? 'sentence.msSends' : 'sentence.transfer', {
           amount: amount.text + ' ' + amount.symbol, to: meta.short,
         });
       }
@@ -9175,7 +9340,7 @@ window.VelaCS = window.VelaCS || {};
     var phrase = amount.text + ' ' + amount.symbol;
     view.nativeShown = true;
     view.fields.unshift({ label: 'field.nativeAttached', amount: amount, format: 'tokenAmount', role: 'native-out' });
-    view.warnings.push({ tone: 'caution', key: 'warn.nativeValue', params: { amount: phrase } });
+    view.warnings.push({ tone: 'caution', key: whose('warn.nativeValue', ctx), params: { amount: phrase } });
     raise(view, 'caution');
     if (view.tech) view.tech.params.unshift({ name: 'value', value: phrase });
   }
@@ -9421,7 +9586,7 @@ window.VelaCS = window.VelaCS || {};
     applyRecipientGuards(call, view, rows);
     outputGuards(descriptor, values, call, ctx, view, binding);
 
-    if (!view.sentence) view.sentence = sentenceFor(descriptor, rows, meta, view);
+    if (!view.sentence) view.sentence = sentenceFor(descriptor, rows, meta, view, ctx);
 
     var parsed2 = abi.parseSignature(descriptor.signature);
     view.tech = techFor(descriptor.signature, values, call.data, {
@@ -9575,11 +9740,25 @@ window.VelaCS = window.VelaCS || {};
     return abi.quantity(ctx.currentAllowance);
   }
 
+  /**
+   * r10: whose coins a card speaks of. On a multisig's transaction — a
+   * member's approval, an executor's run of it — they are the multisig's,
+   * never the signer's: "all of the multisig's USDC", not "all of your USDC".
+   * `selfTag` is set by this page only (resolve clears the requester's).
+   */
+  function multisigFunds(ctx) {
+    return !!ctx && ctx.selfTag === 'tag.thisMultisig';
+  }
+
+  function whose(key, ctx) {
+    return multisigFunds(ctx) ? key + 'Ms' : key;
+  }
+
   function applyApprovalGuard(approval, view, ctx) {
     if (approval.mode === 'all') {
       if (approval.all) {
         view.risk = 'danger';
-        view.warnings.push({ tone: 'danger', key: 'warn.approveAll' });
+        view.warnings.push({ tone: 'danger', key: whose('warn.approveAll', ctx) });
         view.warnings.push({ tone: 'danger', key: 'warn.approveAllLocked' });
         view.refuse = true;
       } else {
@@ -9597,7 +9776,7 @@ window.VelaCS = window.VelaCS || {};
     }
     if (amount.unlimited) {
       view.risk = 'danger';
-      view.warnings.push({ tone: 'danger', key: 'warn.unlimited', params: { symbol: amount.symbol } });
+      view.warnings.push({ tone: 'danger', key: whose('warn.unlimited', ctx), params: { symbol: amount.symbol } });
       view.warnings.push({ tone: 'danger', key: 'warn.unlimitedLocked' });
     } else if (approval.mode === 'increase') {
       var current = claimedAllowance(ctx);
@@ -9642,7 +9821,7 @@ window.VelaCS = window.VelaCS || {};
     });
   }
 
-  function sentenceFor(descriptor, rows, meta, view) {
+  function sentenceFor(descriptor, rows, meta, view, ctx) {
     var send = rows.find(function (r) { return r.amount && r.role === 'send-amount'; });
     var to = rows.find(function (r) { return r.identity && (r.role === 'recipient' || r.role === 'spender'); });
     var kind = descriptor.kind;
@@ -9659,15 +9838,17 @@ window.VelaCS = window.VelaCS || {};
         var cap = rows.find(function (r) { return r.amount; });
         if (cap && to) {
           return cap.amount.unlimited
-            ? text('sentence.approveUnlimited', { spender: label(to.identity), symbol: cap.amount.symbol })
-            : text('sentence.approve', { spender: label(to.identity), amount: amountPhrase(cap.amount) });
+            ? text(whose('sentence.approveUnlimited', ctx), { spender: label(to.identity), symbol: cap.amount.symbol })
+            : text(whose('sentence.approve', ctx), { spender: label(to.identity), amount: amountPhrase(cap.amount) });
         }
       }
       return null;
     }
     var amount = amountPhrase(send.amount);
     if (kind === 'transfer' || kind === 'transferFrom') {
-      return text('sentence.transfer', { amount: amount, to: to ? label(to.identity) : '—' });
+      // r10: a multisig's transfer is the multisig's ("The multisig sends …").
+      return text(multisigFunds(ctx) ? 'sentence.msSends' : 'sentence.transfer',
+        { amount: amount, to: to ? label(to.identity) : '—' });
     }
     if (kind === 'swap') {
       var receive = rows.find(function (r) { return r.role === 'receive-amount'; });
@@ -9717,13 +9898,19 @@ window.VelaCS = window.VelaCS || {};
     return view;
   }
 
-  /** The deepest batch inside a batch this page lists (vela-core `reading::MAX_NESTING`). */
-  var MAX_NESTING = 3;
+  /**
+   * The levels of legs this page lists: the top batch and vela-core's
+   * `reading::MAX_NESTING` (3) batches inside it. r10: its own name — it
+   * shared `MAX_NESTING` with the takeover guard's (4) below, one `var` in
+   * one scope, so the "3" written here never applied; 4 is the value that
+   * agrees with the core level for level (multisig-test.mjs, r10 section).
+   */
+  var LISTED_LEVELS = 4;
 
   /**
    * r8-5: every leg of every level, in order — a leg that is itself a batch
    * is followed by its own legs ("1.1", "1.2"), never a card with nothing
-   * under it. Deeper than MAX_NESTING, nothing is read: refused, as the
+   * under it. Deeper than LISTED_LEVELS, nothing is read: refused, as the
    * wallet's core refuses it.
    */
   function flattenLegs(legs, view, prefix, depth) {
@@ -9734,7 +9921,7 @@ window.VelaCS = window.VelaCS || {};
       out.push({ index: index, view: leg.view });
       var inner = leg.view.legs || [];
       if (!inner.length) return;
-      if (depth >= MAX_NESTING) {
+      if (depth >= LISTED_LEVELS) {
         refuseWith(view, 'refuse.msBatchUnreadable');
         return;
       }
@@ -9752,7 +9939,8 @@ window.VelaCS = window.VelaCS || {};
   function liftLegWarnings(view) {
     view.legs.forEach(function (leg) {
       leg.view.warnings.forEach(function (w) {
-        if (w.tone === 'danger' || w.key === 'warn.nativeValue' || w.key === 'warn.invisibleChars') {
+        if (w.tone === 'danger' || w.key === 'warn.nativeValue' || w.key === 'warn.nativeValueMs' ||
+            w.key === 'warn.invisibleChars' || w.key === 'warn.msMembersClaimOff') {
           var seen = view.warnings.some(function (o) {
             return o.key === w.key && JSON.stringify(o.params || null) === JSON.stringify(w.params || null);
           });
@@ -10825,6 +11013,100 @@ window.VelaCS = window.VelaCS || {};
     return String(threshold) === '1' ? 'One' : '';
   }
 
+  /** The most members a claim may name: more is not a Vela multisig's, and not drawn. */
+  var MAX_MEMBERS = 256;
+
+  /**
+   * r10: the multisig's members and the approvals it needs NOW, as the app
+   * says (`context.multisig.owners` / `.threshold`, vela-core
+   * `approval::request` / `approval::execution_context`). This page cannot
+   * read the chain, so they are the app's word and drawn as such. Only a
+   * well-formed claim is used — distinct addresses, a threshold within them;
+   * anything else is no claim (the change is drawn as before, without the
+   * "before").
+   */
+  function membersClaim(ctx) {
+    var about = ctx.multisig && typeof ctx.multisig === 'object' && !Array.isArray(ctx.multisig) ? ctx.multisig : {};
+    var owners = about.owners;
+    var threshold = about.threshold;
+    if (!Array.isArray(owners) || !owners.length || owners.length > MAX_MEMBERS) return null;
+    if (!owners.every(function (o) { return typeof o === 'string' && ADDRESS.test(o); })) return null;
+    var lower = owners.map(function (o) { return o.toLowerCase(); });
+    if (lower.some(function (o, i) { return lower.indexOf(o) !== i; })) return null;
+    if (typeof threshold !== 'number' || !Number.isSafeInteger(threshold) || threshold < 1 || threshold > lower.length) {
+      return null;
+    }
+    return { owners: lower, threshold: BigInt(threshold), byApp: true };
+  }
+
+  /**
+   * The members after `action` on `now`, or null when the change does not
+   * fit them (adds a member it has, removes or replaces one it has not,
+   * asks more approvals than members, or none) — the Safe itself would
+   * refuse it, or the app's account of the members is wrong.
+   */
+  function membersAfter(now, action) {
+    var owners = now.owners.slice();
+    var threshold = now.threshold;
+    var has = function (a) { return owners.indexOf(String(a).toLowerCase()) >= 0; };
+    if (action.kind === 'addOwner') {
+      if (has(action.owner)) return null;
+      owners.push(action.owner.toLowerCase());
+      threshold = BigInt(action.threshold);
+    } else if (action.kind === 'removeOwner') {
+      if (!has(action.owner)) return null;
+      owners.splice(owners.indexOf(action.owner.toLowerCase()), 1);
+      threshold = BigInt(action.threshold);
+    } else if (action.kind === 'swapOwner') {
+      if (!has(action.oldOwner) || has(action.newOwner)) return null;
+      owners[owners.indexOf(action.oldOwner.toLowerCase())] = action.newOwner.toLowerCase();
+    } else {
+      threshold = BigInt(action.threshold);
+    }
+    if (threshold < 1n || threshold > BigInt(owners.length)) return null;
+    return { owners: owners, threshold: threshold, byApp: now.byApp };
+  }
+
+  /**
+   * r10: "Members 3 → 4 · Approvals 2 of 3 → 2 of 4" — the change against
+   * the members now. The "after" is read from the bytes; the "before" is
+   * the app's (`tag.byApp`) unless this very operation sets the multisig up
+   * (its setup, verified here, says it). A batch's member changes run one
+   * after another, so each leg's "before" is the leg before's "after".
+   * Returns whether the rows were drawn.
+   */
+  function beforeAfter(action, ctx, view) {
+    var now = ctx.membersNow;
+    if (!now) return false;
+    var after = membersAfter(now, action);
+    if (!after) {
+      // The change and the members the app names do not fit: no figures
+      // this page cannot stand behind, and a caution saying so.
+      ctx.membersNow = null;
+      raise(view, 'caution');
+      view.warnings.push({ tone: 'caution', key: 'warn.msMembersClaimOff' });
+      return false;
+    }
+    var tag = now.byApp ? 'tag.byApp' : undefined;
+    view.fields.push({
+      label: 'field.msMembers',
+      value: text('value.msCountChange', { before: now.owners.length, after: after.owners.length }),
+      emphasis: true, tagKey: tag,
+    });
+    // "Approvals needed", not "Approvals": an execution's card already has
+    // an "Approvals" row — the ones its signatures carry.
+    view.fields.push({
+      label: 'field.threshold',
+      value: text('value.msApprovalsChange', {
+        before: now.threshold.toString(), beforeOf: now.owners.length,
+        after: after.threshold.toString(), afterOf: after.owners.length,
+      }),
+      emphasis: true, tagKey: tag,
+    });
+    ctx.membersNow = after;
+    return true;
+  }
+
   /** The rows and words of a member change, the multisig's own call. */
   function memberChange(action, ctx, view) {
     view.intentKey = MEMBER_INTENTS[action.kind];
@@ -10833,7 +11115,9 @@ window.VelaCS = window.VelaCS || {};
     if (action.kind === 'addOwner' || action.kind === 'removeOwner') {
       var who = memberIdentity(action.owner, ctx);
       view.fields.push({ label: action.kind === 'addOwner' ? 'field.newMember' : 'field.member', identity: who });
-      view.fields.push({ label: 'field.threshold', value: action.threshold, emphasis: true });
+      if (!beforeAfter(action, ctx, view)) {
+        view.fields.push({ label: 'field.threshold', value: action.threshold, emphasis: true });
+      }
       view.sentence = text(
         (action.kind === 'addOwner' ? 'sentence.msAddOwner' : 'sentence.msRemoveOwner') + one(action.threshold),
         { owner: who.short, threshold: action.threshold });
@@ -10842,9 +11126,12 @@ window.VelaCS = window.VelaCS || {};
       var next = memberIdentity(action.newOwner, ctx);
       view.fields.push({ label: 'field.newMember', identity: next });
       view.fields.push({ label: 'field.oldMember', identity: gone });
+      beforeAfter(action, ctx, view);
       view.sentence = text('sentence.msSwapOwner', { newOwner: next.short, oldOwner: gone.short });
     } else {
-      view.fields.push({ label: 'field.threshold', value: action.threshold, emphasis: true });
+      if (!beforeAfter(action, ctx, view)) {
+        view.fields.push({ label: 'field.threshold', value: action.threshold, emphasis: true });
+      }
       view.sentence = text('sentence.msThreshold' + one(action.threshold), { threshold: action.threshold });
     }
     if (!view.warnings.some(function (w) { return w.key === 'warn.msMembers'; })) {
@@ -10883,6 +11170,9 @@ window.VelaCS = window.VelaCS || {};
     if (!request.error) ctx.chainId = request.chainId;
     ctx.selfAccount = request.error ? null : request.safe;
     ctx.selfTag = 'tag.thisMultisig';
+    // r10: the members and approvals now, as the app says — a member change
+    // reads before → after against them.
+    ctx.membersNow = membersClaim(ctx);
     ctx.coin = coinOf(ctx);
     var view = baseView(intent, ctx);
     view.method = intent.method;
@@ -11035,6 +11325,15 @@ window.VelaCS = window.VelaCS || {};
     // The transaction's own reading is the multisig's: "this multisig" is
     // the one the operation executes on, never the executor.
     var inner = Object.assign({}, ctx, { selfAccount: multisig, selfTag: 'tag.thisMultisig' });
+    // r10: a member change reads before → after. When this operation sets the
+    // multisig up, its setup (verified above, in lib/multisig.js) says who the
+    // members are — a fact; otherwise they are the app's word.
+    inner.membersNow = reading.deploy
+      ? {
+        owners: reading.deploy.owners.map(function (o) { return o.toLowerCase(); }),
+        threshold: reading.deploy.threshold, byApp: false,
+      }
+      : membersClaim(ctx);
     if (claim.address && claim.address.toLowerCase() !== multisig.toLowerCase()) {
       refuseWith(view, 'refuse.msExecMismatch');
     }
@@ -11046,11 +11345,14 @@ window.VelaCS = window.VelaCS || {};
     } else if (action.action.kind === 'cancel') {
       view.sentence = text('sentence.msExecCancel');
     } else if (action.action.kind === 'batch') {
-      view.legs = action.action.calls.map(function (leg, i) {
+      // r10: every leg of every level, as a member's approval lists them
+      // (r8-5) — a leg that is itself a batch was drawn with nothing under
+      // it here, its own legs never shown, and no depth limit applied.
+      view.legs = flattenLegs(action.action.calls.map(function (leg, i) {
         var legView = baseView({ origin: '' }, inner);
         multisigAction(leg.action, { to: leg.to, value: hexValue(leg.value), data: leg.data }, inner, legView, true);
         return { index: i + 1, view: legView };
-      });
+      }), view);
       view.sentence = text('sentence.msBatch', { count: action.action.calls.length });
       view.legs.forEach(function (leg) { raise(view, leg.view.risk); });
       view.refuse = view.refuse || view.legs.some(function (leg) { return leg.view.refuse; });
@@ -11062,6 +11364,9 @@ window.VelaCS = window.VelaCS || {};
       // risk — said as the multisig's ("The multisig sends …").
       view.hero = drawn.hero;
       view.fields = view.fields.concat(drawn.fields);
+      // r10: a lone call that is itself a batch (a CALL to a MultiSend) has
+      // its legs listed — they were read, then left off this card.
+      view.legs = drawn.legs || [];
       view.warnings = view.warnings.concat(drawn.warnings);
       view.tech = drawn.tech;
       view.level = drawn.level;
@@ -11198,6 +11503,11 @@ window.VelaCS = window.VelaCS || {};
     if (ns.multisig && ctx.method === ns.multisig.METHOD) return resolveMultisig(requested, ctx);
     ctx.siteRelayed = relayedSite(requested, ctx);
     ctx.selfAccount = selfAccountOf(requested, ctx);
+    // Ours too (r10): "this multisig", and the multisig's coins in the words,
+    // only where this page reads a multisig's transaction; the members the
+    // app says it has only where this page puts them.
+    ctx.selfTag = null;
+    ctx.membersNow = null;
     ctx.coin = coinOf(ctx);
     var view = baseView(requested, ctx);
     var ceremony = ns.ceremony && ns.ceremony.kindOf(requested && requested.method);

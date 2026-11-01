@@ -1,0 +1,78 @@
+{
+  "about": "r10-1 / r9-3 — the hero's \"Updated …\" (BalanceView.last_refreshed_at_ms) speaks only for the networks the shown account lives on: those it holds something on (read or restored) and those the shell says it lives on (event lives_on: a multisig's networks, the networks its history used). Steps are replayed in order through the balance-dashboard machine: an `event` is dispatched, an `answer` resolves the outstanding operation of its kind (fetch_settled -> fetch_tokens, cached_total_loaded -> read_balance_cache). `stamp` after a step is the view's last_refreshed_at_ms (null: no stamp is drawn). Every shell (web, desktop, Android, iOS) drives the same machine: send lives_on, pass read_chain_ids (every chain the round asked) and read_at_ms (a token-cache hit), draw last_refreshed_at_ms as it is.",
+  "cases": [
+    {
+      "name": "cold start, Arc dead, Sepolia answers: no 'Updated now' over Arc's restored rows",
+      "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "steps": [
+        { "answer": { "type": "cached_total_loaded", "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "usd": 0.6 } },
+        { "event": { "type": "holdings_restored", "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "tokens": [{ "chain_id": 5042002, "symbol": "USDC", "name": "USDC", "balance": "0.6", "decimals": 18, "token_address": null, "price_usd": 1.0, "spam": false }] } },
+        { "answer": { "type": "fetch_settled", "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "pull": false, "tokens": [], "failed_chain_ids": [5042002], "rate_limited_chain_ids": [], "read_chain_ids": [5042002, 11155111], "now_ms": 1700000060000 }, "stamp": null }
+      ]
+    },
+    {
+      "name": "Arc answers again: the stamp moves",
+      "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "steps": [
+        { "answer": { "type": "cached_total_loaded", "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "usd": null } },
+        { "answer": { "type": "fetch_settled", "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "pull": false, "tokens": [{ "chain_id": 5042002, "symbol": "USDC", "name": "USDC", "balance": "0.6", "decimals": 18, "token_address": null, "price_usd": 1.0, "spam": false }], "failed_chain_ids": [], "rate_limited_chain_ids": [], "read_chain_ids": [5042002, 11155111], "now_ms": 1700000000000 }, "stamp": 1700000000000 },
+        { "event": { "type": "refresh_requested", "force": true, "pull": false } },
+        { "answer": { "type": "fetch_settled", "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "pull": false, "tokens": [], "failed_chain_ids": [5042002], "rate_limited_chain_ids": [], "read_chain_ids": [5042002, 11155111], "now_ms": 1700000060000 }, "stamp": 1700000000000 },
+        { "event": { "type": "refresh_requested", "force": true, "pull": false } },
+        { "answer": { "type": "fetch_settled", "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "pull": false, "tokens": [{ "chain_id": 5042002, "symbol": "USDC", "name": "USDC", "balance": "0.6", "decimals": 18, "token_address": null, "price_usd": 1.0, "spam": false }], "failed_chain_ids": [], "rate_limited_chain_ids": [], "read_chain_ids": [5042002, 11155111], "now_ms": 1700000180000 }, "stamp": 1700000180000 }
+      ]
+    },
+    {
+      "name": "a multisig holding nothing lives on Arc (lives_on): Sepolia answering alone is not its read",
+      "address": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "steps": [
+        { "event": { "type": "lives_on", "address": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "chain_ids": [5042002] } },
+        { "answer": { "type": "cached_total_loaded", "address": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "usd": null } },
+        { "answer": { "type": "fetch_settled", "address": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "pull": false, "tokens": [], "failed_chain_ids": [5042002], "rate_limited_chain_ids": [], "read_chain_ids": [5042002, 11155111], "now_ms": 1700000060000 }, "stamp": null }
+      ]
+    },
+    {
+      "name": "an account that lives nowhere yet: any network answering is its read",
+      "address": "0xcccccccccccccccccccccccccccccccccccccccc",
+      "steps": [
+        { "answer": { "type": "cached_total_loaded", "address": "0xcccccccccccccccccccccccccccccccccccccccc", "usd": null } },
+        { "answer": { "type": "fetch_settled", "address": "0xcccccccccccccccccccccccccccccccccccccccc", "pull": false, "tokens": [], "failed_chain_ids": [5042002], "rate_limited_chain_ids": [], "read_chain_ids": [5042002, 11155111], "now_ms": 1700000060000 }, "stamp": 1700000060000 }
+      ]
+    },
+    {
+      "name": "every network down: nothing answered, no stamp",
+      "address": "0xcccccccccccccccccccccccccccccccccccccccc",
+      "steps": [
+        { "answer": { "type": "cached_total_loaded", "address": "0xcccccccccccccccccccccccccccccccccccccccc", "usd": null } },
+        { "answer": { "type": "fetch_settled", "address": "0xcccccccccccccccccccccccccccccccccccccccc", "pull": false, "tokens": [], "failed_chain_ids": [5042002, 11155111], "rate_limited_chain_ids": [], "read_chain_ids": [5042002, 11155111], "now_ms": 1700000060000 }, "stamp": null }
+      ]
+    },
+    {
+      "name": "offline, rows from the shell's token cache: stamped when they were read, never now",
+      "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "steps": [
+        { "answer": { "type": "cached_total_loaded", "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "usd": null } },
+        { "answer": { "type": "fetch_settled", "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "pull": false, "tokens": [{ "chain_id": 5042002, "symbol": "USDC", "name": "USDC", "balance": "0.6", "decimals": 18, "token_address": null, "price_usd": 1.0, "spam": false }], "failed_chain_ids": [], "rate_limited_chain_ids": [], "read_chain_ids": [5042002, 11155111], "read_at_ms": 1699999880000, "now_ms": 1700000000000 }, "stamp": 1699999880000 }
+      ]
+    },
+    {
+      "name": "a stamp never moves back: an older cache hit after a live read keeps the live time",
+      "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "steps": [
+        { "answer": { "type": "cached_total_loaded", "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "usd": null } },
+        { "answer": { "type": "fetch_settled", "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "pull": false, "tokens": [{ "chain_id": 5042002, "symbol": "USDC", "name": "USDC", "balance": "0.6", "decimals": 18, "token_address": null, "price_usd": 1.0, "spam": false }], "failed_chain_ids": [], "rate_limited_chain_ids": [], "read_chain_ids": [5042002], "now_ms": 1700000000000 }, "stamp": 1700000000000 },
+        { "event": { "type": "refresh_requested", "force": false, "pull": false } },
+        { "answer": { "type": "fetch_settled", "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "pull": false, "tokens": [{ "chain_id": 5042002, "symbol": "USDC", "name": "USDC", "balance": "0.6", "decimals": 18, "token_address": null, "price_usd": 1.0, "spam": false }], "failed_chain_ids": [], "rate_limited_chain_ids": [], "read_chain_ids": [5042002], "read_at_ms": 1699999990000, "now_ms": 1700000030000 }, "stamp": 1700000000000 }
+      ]
+    },
+    {
+      "name": "an account switch drops the other account's stamp",
+      "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "steps": [
+        { "answer": { "type": "cached_total_loaded", "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "usd": null } },
+        { "answer": { "type": "fetch_settled", "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "pull": false, "tokens": [{ "chain_id": 11155111, "symbol": "ETH", "name": "Ether", "balance": "1", "decimals": 18, "token_address": null, "price_usd": 1.0, "spam": false }], "failed_chain_ids": [], "rate_limited_chain_ids": [], "read_chain_ids": [5042002, 11155111], "now_ms": 1700000000000 }, "stamp": 1700000000000 },
+        { "event": { "type": "account_changed", "address": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" }, "stamp": null }
+      ]
+    }
+  ]
+}

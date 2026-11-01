@@ -386,4 +386,15 @@ window.VelaCS.i18n.register('vi', {
   'sentence.msAddOwnerOne': "{owner} trở thành thành viên, và sẽ cần {threshold} phê duyệt.",
   'sentence.msRemoveOwnerOne': "{owner} không còn là thành viên, và sẽ cần {threshold} phê duyệt.",
   'sentence.msThresholdOne': "Từ nay sẽ cần {threshold} phê duyệt.",
+  // r10: a multisig's coins are the multisig's, not the signer's; a member
+  // change reads before → after against the members the app says it has now.
+  'sentence.approveMs': "Việc này cho phép {spender} chi tối đa {amount} của ví đa chữ ký.",
+  'sentence.approveUnlimitedMs': "Việc này cho phép {spender} chi toàn bộ {symbol} của ví đa chữ ký — không có giới hạn.",
+  'warn.unlimitedMs': "Không giới hạn — hợp đồng này có thể chi toàn bộ {symbol} mà ví đa chữ ký có.",
+  'warn.approveAllMs': "Mọi NFT ví đa chữ ký có trong bộ sưu tập này, cả hiện tại lẫn sau này, đều có thể bị lấy đi bất cứ lúc nào.",
+  'warn.nativeValueMs': "Lệnh gọi này còn gửi {amount} từ ví đa chữ ký tới hợp đồng được gọi, ngoài mọi thứ hiển thị ở đây.",
+  'field.msMembers': "Thành viên",
+  'value.msCountChange': "{before} → {after}",
+  'value.msApprovalsChange': "{before} trên {beforeOf} → {after} trên {afterOf}",
+  'warn.msMembersClaimOff': "Thay đổi này không khớp với các thành viên hiện tại mà ứng dụng nói ví đa chữ ký đang có — có thể thất bại khi chạy. Hãy đối chiếu danh sách thành viên với những người khác trước khi phê duyệt.",
 });

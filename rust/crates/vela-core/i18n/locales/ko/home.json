@@ -364,6 +364,7 @@
         "waitingPayer_one": "{{count}}건이 수수료를 낼 수 있는 멤버를 기다리는 중",
         "waitingPayer_other": "{{count}}건이 수수료를 낼 수 있는 멤버를 기다리는 중",
         "ruleDiffers": "네트워크마다 규칙이 다름",
+        "ruleLastKnown": "마지막으로 확인된 규칙 — 열면 다시 확인합니다",
         "othersWaiting": "다른 계정에 대기 중인 트랜잭션이 있습니다"
       },
       "add": {

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { accountName } from '$lib/multisig/core/account-name';
 	import { multisig } from '$lib/multisig/core/store.svelte';
 	import { multisigAccountsForExt, multisigAsAccount } from '$lib/multisig/core/ext';
 	import { multisigUi } from '$lib/multisig/core/ui.svelte';
@@ -815,7 +816,11 @@
 		// A multisig shown is the account the site sees: named as the wallet names it.
 		const shared = multisig.find(address);
 		return {
-			name: row?.account.name ?? (shared ? multisigAsAccount(shared).name : ''),
+			name: row
+				? accountName(row.account.address, row.account.name)
+				: shared
+					? multisigAsAccount(shared).name
+					: '',
 			address,
 			short: shortenAddress(address),
 			identiconSvg: identiconSvgForClient(address)

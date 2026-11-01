@@ -588,6 +588,7 @@ fn passkey_failed(failure: PasskeyFailure) -> ShellResult {
             }
             FailureKind::Cancelled => None,
         },
+        error: None,
     }
 }
 

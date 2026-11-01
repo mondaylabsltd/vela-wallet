@@ -816,7 +816,8 @@
      "description": "Sebagian besar jaringan menerima stablecoin untuk biaya — tidak perlu menyiapkan koin native dulu."
     }
    },
-   "linkWaiting": "Ada tautan multisig yang menunggu. Buat wallet atau masuk, lalu tautan itu terbuka."
+   "linkWaiting": "Ada tautan multisig yang menunggu. Buat wallet atau masuk, lalu tautan itu terbuka.",
+   "linkBroken": "Tautan multisig ini tidak sampai utuh. Minta lagi."
   },
   "settings": {
    "title": "Pengaturan",
@@ -887,7 +888,17 @@
    "safariPasskeyBody": "Safari tidak mengizinkan halaman ekstensi sendiri memakai passkey, jadi Vela melakukannya di halaman penandatanganan. Coba lagi.",
    "phoneLinkFailed": "Perangkat lain tidak terhubung, atau koneksinya terputus sebelum selesai. Pastikan kedua perangkat tetap online dan berdekatan, lalu pindai kodenya lagi.",
    "keyUnavailableTitle": "Kunci keamanan tidak tersedia",
-   "keyUnavailableBody": "Perangkat ini tidak dapat memakai kunci keamanan tersebut. Coba kunci keamanan FIDO2 lain, atau pilih cara lain untuk melanjutkan."
+   "keyUnavailableBody": "Perangkat ini tidak dapat memakai kunci keamanan tersebut. Coba kunci keamanan FIDO2 lain, atau pilih cara lain untuk melanjutkan.",
+   "passkeyError": {
+    "cancelled": "Jendela passkey ditutup sebelum selesai. Coba lagi saat Anda siap.",
+    "notSupported": "Perangkat ini tidak dapat memakai passkey di sini. Coba perangkat lain atau kunci keamanan.",
+    "noCredential": "Tidak ada passkey Vela di perangkat ini. Gunakan perangkat atau kunci keamanan yang menyimpannya.",
+    "appNotAssociated": "Perangkat ini tidak dapat memastikan bahwa Vela boleh memakai passkey-nya. Periksa koneksi Anda lalu coba lagi — jika terus terjadi, perbarui Vela.",
+    "noNetwork": "Passkey memerlukan koneksi jaringan. Periksa koneksi Anda lalu coba lagi.",
+    "alreadyRegistered": "Autentikator ini sudah menyimpan salah satu kunci dompet ini. Gunakan yang lain.",
+    "timedOut": "Waktu jendela passkey habis. Coba lagi.",
+    "other": "Passkey tidak dapat digunakan. Coba lagi."
+   }
   },
   "create": {
    "accountNameHint": "Nama ini disimpan di blockchain bersama kunci publik Anda untuk masuk lintas perangkat.",

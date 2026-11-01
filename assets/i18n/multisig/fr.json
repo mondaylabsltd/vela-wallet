@@ -296,6 +296,7 @@
     "waitingPayer_many": "{{count}} attendent un membre qui peut payer",
     "waitingPayer_other": "{{count}} attendent un membre qui peut payer",
     "ruleDiffers": "Règle différente selon le réseau",
+    "ruleLastKnown": "Dernière règle connue — relue à l’ouverture",
     "othersWaiting": "Un autre compte a des transactions en attente"
    },
    "add": {

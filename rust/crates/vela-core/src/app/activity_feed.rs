@@ -46,9 +46,20 @@
 //!   (`useHomeController.ts:432-434` — the shell owns the accounts list); the
 //!   core's half of invariant ⑦ is that a stored `to_name` never even asks,
 //!   and an attempted address is never asked twice.
-//! - `FocusTick`/`LiveTick` cadence (focus + 30s auto-refresh, 10s while the
-//!   Activity tab is visible) stays in the shell: which tab is visible is
-//!   render-domain state the core never sees. The core owns the toast timer.
+//! - The scan cadence is the core's (r9-17): a shell reports the page's
+//!   presence ([`Event::PresenceChanged`] — shown, hidden, online, touched)
+//!   and arms one timer for [`FeedView::next_scan`], answering it with
+//!   [`Event::ScanDue`]; the core decides when to scan
+//!   ([`super::incoming_scan::next_scan_ms`]: 10 s at the page, 30 s idle,
+//!   60 s hidden, at once when shown again or back online). One scan per
+//!   account is out at a time. A shell that has not moved yet sends no
+//!   presence, sees no `next_scan`, and drives `FocusTick`/`LiveTick` itself
+//!   as before. The core owns the toast timer.
+//! - `ScanIncomingTransfers` is executed through `token_trust`'s
+//!   `ScanRequested` with the account's facts
+//!   ([`super::incoming_scan::TrustScanFacts`]): the networks, the windows
+//!   and the backfill are the core's; the shell keeps the coverage it hands
+//!   back (`TrustView::cursors`).
 //! - After every `PersistRecord` / `UpdateRecord` a shell dispatches
 //!   `ReconcileCompleted { resolved_count: 1 }`, so a new or patched row
 //!   shows at once instead of on the next tick (spec 082 RG3).
@@ -126,6 +137,7 @@ use ts_rs::TS;
 
 use super::clear_signing::ClearTerm;
 use super::dapp_activity::{contract_name_of, permit2_owner, protocol_of, DappAction, DappSummary};
+use super::incoming_scan;
 use super::token_trust::{TrustSimDirection, TrustSimJudgment};
 use super::tx_tracker::{TrackFailure, TrackMove, TrackSettlement};
 
@@ -861,6 +873,48 @@ pub struct FeedToast {
 // Protocol
 // ---------------------------------------------------------------------------
 
+/// r9-17: the page as the scan cadence sees it — facts only.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct FeedPresence {
+    /// The page (the app's window, the browser tab) is shown.
+    pub visible: bool,
+    /// Milliseconds since the person last touched it (a tap, a key, a
+    /// scroll).
+    pub since_interaction_ms: f64,
+    /// The shell's clock, epoch ms.
+    pub now_ms: f64,
+}
+
+/// r9-17: what moved the page's presence.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum FeedPresenceChange {
+    /// The shell starts following the core's cadence (the account hand-off
+    /// already scans; this arms the next one).
+    Started,
+    /// Shown again: a stale list would be seen now — scan at once.
+    Shown,
+    /// Hidden: the hidden pace, counted from the last scan.
+    Hidden,
+    /// Back online: what failed offline can be read now — scan at once.
+    Online,
+    /// The person touched the page: back from idle, the next scan comes at
+    /// the active pace rather than the rest of an idle wait.
+    Interacted,
+}
+
+/// r9-17: when the next incoming scan is due — the shell arms ONE timer for
+/// `after_ms` whenever `seq` changes (dropping the one before) and answers
+/// it with [`Event::ScanDue`] carrying the same `seq`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct FeedNextScan {
+    pub seq: u32,
+    pub after_ms: u32,
+}
+
 /// The most name answers one render of the feed waits for. Names render in
 /// batches that double from one (`FeedShellResult::AliasResolved`); this caps
 /// the batch so a long history fills in steadily rather than all at the end.
@@ -1010,6 +1064,19 @@ pub enum Event {
     ContactFilterChanged { address: Option<String> },
     /// Optimistic per-row delete: tombstone + instant removal + storage write.
     DeleteRequested { id: String },
+    /// r9-17: the page's presence moved — the facts the scan cadence is
+    /// decided from ([`incoming_scan::next_scan_ms`]). The first one (any
+    /// change; `started` by convention) makes the shell a follower of the
+    /// core's cadence: from then on [`FeedView::next_scan`] says when the
+    /// next scan is due. Shown again and back online scan at once.
+    PresenceChanged {
+        presence: FeedPresence,
+        change: FeedPresenceChange,
+    },
+    /// r9-17: the shell's timer for [`FeedView::next_scan`] ran out. `seq` is
+    /// echoed from it — a timer the core re-armed since is ignored — and
+    /// `presence` is the page as it stands now.
+    ScanDue { seq: u32, presence: FeedPresence },
     #[serde(skip)]
     ShellCompleted {
         attempt: u64,
@@ -1133,6 +1200,24 @@ pub struct Model {
     attempt: u64,
     /// The background repair of `receive` records' times.
     time_repair: TimeRepair,
+    /// r9-17: a `ScanIncomingTransfers` of THIS account is out — one at a
+    /// time per account; a tick meanwhile only re-reads the store. Reset by
+    /// an account switch (the old account's answer is dropped with its
+    /// attempt), so a slow scan of one account never holds up another's.
+    scan_in_flight: bool,
+    /// r9-17: the scan cadence, once the shell follows it.
+    cadence: Option<Cadence>,
+}
+
+/// r9-17: the core's scan cadence ([`Event::PresenceChanged`]).
+#[derive(Clone, Copy, Debug)]
+struct Cadence {
+    presence: FeedPresence,
+    /// The timer armed now ([`FeedView::next_scan`]).
+    seq: u32,
+    after_ms: u32,
+    /// The shell's clock at the last scan the cadence started, when known.
+    last_scan_ms: Option<f64>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1186,6 +1271,11 @@ pub struct FeedView {
     /// "to Alice" on Alice's page is noise). Empty when no contact is open.
     #[serde(default)]
     pub contact_rows: Vec<FeedItem>,
+    /// r9-17: when the next incoming scan is due, once the shell follows the
+    /// core's cadence ([`Event::PresenceChanged`]); absent before (and on
+    /// the wire), so a shell not moved yet keeps its own ticks.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_scan: Option<FeedNextScan>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1221,6 +1311,24 @@ impl App for ActivityFeed {
                 // attempt: a batch waiting on them would never close.
                 model.alias_in_flight.clear();
                 model.alias_unshown = 0;
+                // r9-17: the previous account's scan answer is dropped with
+                // its attempt; this account's first scan goes out now.
+                model.scan_in_flight = false;
+                load_pipeline(model)
+            }
+            Event::PresenceChanged { presence, change } => {
+                presence_changed(model, presence, change)
+            }
+            Event::ScanDue { seq, presence } => {
+                let Some(cadence) = model.cadence.as_mut() else {
+                    return Command::done();
+                };
+                if cadence.seq != seq {
+                    // A timer re-armed since: the newer one stands.
+                    return Command::done();
+                }
+                cadence.presence = presence;
+                cadence.last_scan_ms = Some(presence.now_ms);
                 load_pipeline(model)
             }
             Event::FocusTick | Event::LiveTick => {
@@ -1366,6 +1474,10 @@ impl App for ActivityFeed {
             home_empty_key: home_empty_key(model.chain_filter).to_owned(),
             contact_rows,
             hidden: model.privacy_hidden,
+            next_scan: model.cadence.map(|c| FeedNextScan {
+                seq: c.seq,
+                after_ms: c.after_ms,
+            }),
         }
     }
 }
@@ -1609,6 +1721,7 @@ fn accept(model: &mut Model, result: FeedShellResult) -> Command<FeedEffect, Eve
         }
 
         FeedShellResult::SyncCompleted { new_count } => {
+            model.scan_in_flight = false;
             // `initializedRef.current = true` runs whether or not anything
             // landed — the first pass is spent either way (invariant ③).
             let first_pass = !model.initialized;
@@ -3172,21 +3285,92 @@ fn non_empty(s: &str) -> Option<String> {
 /// the same visible behavior (the read commits the cached feed the moment it
 /// answers; the scan re-reads only when something landed).
 fn load_pipeline(model: &mut Model) -> Command<FeedEffect, Event> {
+    // r9-17: the next scan is due a cadence after this one.
+    let after = model
+        .cadence
+        .map(|c| incoming_scan::next_scan_ms(c.presence.visible, c.presence.since_interaction_ms));
+    if let Some(after) = after {
+        arm_scan(model, after);
+    }
     if model.address.is_empty() {
         return render();
     }
     let attempt = model.attempt;
     let (_, read_op) = read_store(model);
-    Command::all([
-        shell_request(attempt, read_op),
-        shell_request(
+    let mut commands = vec![shell_request(attempt, read_op)];
+    // r9-17: one scan per account at a time — a tick while one is out only
+    // re-reads the store (its answer re-reads again when it lands).
+    if !model.scan_in_flight {
+        model.scan_in_flight = true;
+        commands.push(shell_request(
             attempt,
             FeedOperation::ScanIncomingTransfers {
                 address: model.address.clone(),
             },
-        ),
-        render(),
-    ])
+        ));
+    }
+    commands.push(render());
+    Command::all(commands)
+}
+
+/// r9-17: arm the next scan `after_ms` from now — a new `seq`, so the
+/// shell's timer for the old one is dropped.
+fn arm_scan(model: &mut Model, after_ms: u32) {
+    if let Some(cadence) = model.cadence.as_mut() {
+        cadence.seq = cadence.seq.wrapping_add(1);
+        cadence.after_ms = after_ms;
+    }
+}
+
+/// r9-17: the page's presence moved ([`Event::PresenceChanged`]) — the
+/// cadence `incoming-cadence.ts` kept on the web, decided here for every
+/// shell: shown again or back online scans at once; hidden waits the hidden
+/// pace from the last scan; a touch after idle brings the next scan to the
+/// active pace.
+fn presence_changed(
+    model: &mut Model,
+    presence: FeedPresence,
+    change: FeedPresenceChange,
+) -> Command<FeedEffect, Event> {
+    let cadence = model.cadence.get_or_insert(Cadence {
+        presence,
+        seq: 0,
+        after_ms: 0,
+        last_scan_ms: None,
+    });
+    cadence.presence = presence;
+    match change {
+        FeedPresenceChange::Shown | FeedPresenceChange::Online => {
+            cadence.last_scan_ms = Some(presence.now_ms);
+            load_pipeline(model)
+        }
+        FeedPresenceChange::Started => {
+            // The account hand-off scans; this counts from it.
+            if cadence.last_scan_ms.is_none() {
+                cadence.last_scan_ms = Some(presence.now_ms);
+            }
+            arm_scan(
+                model,
+                incoming_scan::next_scan_ms(presence.visible, presence.since_interaction_ms),
+            );
+            render()
+        }
+        FeedPresenceChange::Hidden => {
+            let hidden = f64::from(incoming_scan::CADENCE_HIDDEN_MS);
+            let after = cadence.last_scan_ms.map_or(hidden, |last| {
+                (last + hidden - presence.now_ms).clamp(0.0, hidden)
+            });
+            arm_scan(model, after as u32);
+            render()
+        }
+        FeedPresenceChange::Interacted => {
+            if !presence.visible || cadence.after_ms <= incoming_scan::CADENCE_ACTIVE_MS {
+                return Command::done();
+            }
+            arm_scan(model, incoming_scan::CADENCE_ACTIVE_MS);
+            render()
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

@@ -65,11 +65,13 @@ use crux_core::{render::render, render::RenderOperation, App, Command};
 use serde::{Deserialize, Serialize};
 
 use super::fee_policy::{
-    encode_erc20_transfer, from_base_units, is_tempo_chain, max_native_sendable,
-    parse_amount_units, reserve_fee_token, reserve_native_gas, same_asset_fee_limit, to_base_units,
-    AmountIssue, FeeAsset, FeeAssetView, FeeCall, FeeEstimate, FeeEstimateView, FeeFailure,
-    FeeTier, MultiTokenSpec, PreparedGas, TEMPO_DEFAULT_FEE_TOKEN, TEMPO_FEE_TOKEN_DECIMALS,
+    encode_erc20_transfer, fee_in_units_of, from_base_units, is_tempo_chain, max_native_sendable,
+    parse_amount_units, reserve_fee_token, reserve_native_gas, same_balance_fee_limit,
+    to_base_units, AmountIssue, FeeAsset, FeeAssetView, FeeCall, FeeEstimate, FeeEstimateView,
+    FeeFailure, FeeTier, MultiTokenSpec, PreparedGas, TEMPO_DEFAULT_FEE_TOKEN,
+    TEMPO_FEE_TOKEN_DECIMALS,
 };
+use super::manage_tokens::{native_alias_places, native_alias_token, rescale_units, same_balance};
 use super::money::{js_parse_float, Denom, DenominatedAmount, TokenPrice};
 use super::tx_tracker::{TrackEntryView, TrackOutcome, TrackStatus};
 use crate::signed_review::{ReviewedFee, ReviewedTransfer, SignedReview};
@@ -4843,20 +4845,14 @@ fn full_balance(token: &SendToken) -> String {
 /// would eventually disagree, and the shape of that disagreement is a screen
 /// showing `0` while insisting the balance covers the fee.
 fn max_fee_reserve(token: &SendToken, fee: &FeeEstimate) -> Option<u128> {
-    if token.is_native() {
-        return Some(fee.total_wei);
-    }
-    let addr = token.token_address.as_deref()?;
+    // The same BALANCE, not the same identity (r10-3): on Arc a Max of the
+    // native USDC with the fee quoted in its `0x3600…` interface held nothing
+    // back, filled the whole balance, and the fee leg had nothing to pay from.
+    let owed = fee_in_units_of(fee, token.token_address.as_deref(), token.decimals, true)?;
     match &fee.fee_asset {
-        FeeAsset::Erc20 {
-            token: fee_token,
-            amount,
-            ..
-        } if fee_token.eq_ignore_ascii_case(addr) => {
-            // Reserve 1.5× the quoted fee (+50% for send-time re-quote drift).
-            Some(amount.saturating_mul(3) / 2)
-        }
-        _ => None,
+        // Reserve 1.5× the quoted fee (+50% for send-time re-quote drift).
+        FeeAsset::Erc20 { .. } => Some(owed.saturating_mul(3) / 2),
+        FeeAsset::Native => Some(owed),
     }
 }
 
@@ -5765,8 +5761,13 @@ fn derive_amount_warning(model: &Model) -> Option<SendAmountWarning> {
             });
         }
         if let Some(fee) = fee {
-            // totalWei is the fully marked-up, reviewed in-band reimbursement.
-            if !can_cover_native_transfer(amount_wei, balance_wei, fee.total_wei) {
+            // totalWei is the fully marked-up, reviewed in-band reimbursement
+            // — and a fee quoted in this coin's own ERC-20 interface (r10-3:
+            // Arc's `0x3600…` USDC) is this same balance, in its places. Its
+            // `total_wei` is 0, so a native send of 0.4 of 0.4 USDC with a
+            // 0.488 USDC fee in the interface passed here unmeasured.
+            let owed = fee_in_units_of(fee, None, token.decimals, true).unwrap_or(0);
+            if !can_cover_native_transfer(amount_wei, balance_wei, owed) {
                 return Some(SendAmountWarning::InsufficientForGas {
                     symbol: chain_native_symbol(model, token.chain_id),
                 });
@@ -5789,29 +5790,25 @@ fn derive_amount_warning(model: &Model) -> Option<SendAmountWarning> {
     // case): sending the fee asset reserves its fee; otherwise the separate
     // fee-token balance must cover it.
     if let Some(fee) = fee {
-        // Sending the fee asset itself: the amount and the fee come out of one
-        // balance, so the ceiling is their sum.
-        if let FeeAsset::Erc20 {
-            token: fee_token,
-            amount: fee_amount,
-            symbol: fee_symbol,
-            ..
-        } = &fee.fee_asset
+        // Sending the money that pays the fee: the amount and the fee come out
+        // of one balance, so the ceiling is their sum. The fee asset itself —
+        // or (r10-3) the native coin's ERC-20 interface with the fee in the
+        // coin: one balance, two identities, and the raw compare saw two.
+        if let Some(owed) =
+            fee_in_units_of(fee, token.token_address.as_deref(), token.decimals, true)
         {
-            let is_fee_token = token
-                .token_address
-                .as_deref()
-                .is_some_and(|a| a.eq_ignore_ascii_case(fee_token));
-            if is_fee_token {
-                let balance_units = to_base_units(&token.balance, token.decimals).unwrap_or(0);
-                let send_units = to_base_units(&token_amount, token.decimals).unwrap_or(0);
-                if send_units.saturating_add(*fee_amount) > balance_units {
-                    return Some(SendAmountWarning::InsufficientForGas {
-                        symbol: Some(fee_symbol.clone().unwrap_or_else(|| token.symbol.clone())),
-                    });
-                }
-                return None;
+            let balance_units = to_base_units(&token.balance, token.decimals).unwrap_or(0);
+            let send_units = to_base_units(&token_amount, token.decimals).unwrap_or(0);
+            if send_units.saturating_add(owed) > balance_units {
+                let symbol = match &fee.fee_asset {
+                    FeeAsset::Erc20 { symbol, .. } => symbol.clone(),
+                    FeeAsset::Native => chain_native_symbol(model, token.chain_id),
+                };
+                return Some(SendAmountWarning::InsufficientForGas {
+                    symbol: Some(symbol.unwrap_or_else(|| token.symbol.clone())),
+                });
             }
+            return None;
         }
     }
     // Any other fee asset — a second token, or the native coin, whose own
@@ -5883,27 +5880,36 @@ fn fee_asset_shortfall(
             ..
         } => (Some(token.as_str()), *amount, symbol.clone()),
     };
-    // The fee comes out of an asset this operation is already moving: the
+    // The fee comes out of a BALANCE this operation is already moving — the
+    // same asset, or (r10-3) the native coin and its ERC-20 interface: the
     // ceiling is then amount + fee against one balance, which is the caller's
     // own rule, not this one.
-    if sent.iter().any(|asset| match (contract, asset) {
-        (None, None) => true,
-        (Some(fee_token), Some(addr)) => fee_token.eq_ignore_ascii_case(addr),
-        _ => false,
-    }) {
+    if sent
+        .iter()
+        .any(|asset| same_balance(chain_id, contract, *asset))
+    {
         return None;
     }
-    let row = model.tokens.iter().find(|tk| {
-        tk.chain_id == chain_id
-            && match (contract, tk.token_address.as_deref()) {
-                (None, None) => true,
-                (Some(fee_token), Some(addr)) => fee_token.eq_ignore_ascii_case(addr),
-                _ => false,
-            }
-    });
-    let balance = row
-        .and_then(|tk| to_base_units(&tk.balance, tk.decimals))
-        .unwrap_or(0);
+    // The row that holds the fee's money: its own identity, else (r10-3) the
+    // other face of the same balance — the interface is never a listed
+    // token, so a fee quoted in it is paid from the native row.
+    let on_chain = || model.tokens.iter().filter(|tk| tk.chain_id == chain_id);
+    let row = on_chain()
+        .find(|tk| match (contract, tk.token_address.as_deref()) {
+            (None, None) => true,
+            (Some(fee_token), Some(addr)) => fee_token.eq_ignore_ascii_case(addr),
+            _ => false,
+        })
+        .or_else(|| {
+            on_chain().find(|tk| same_balance(chain_id, contract, tk.token_address.as_deref()))
+        });
+    let (balance, owed) = match row {
+        Some(tk) => (
+            to_base_units(&tk.balance, tk.decimals).unwrap_or(0),
+            fee_in_units_of(fee, tk.token_address.as_deref(), tk.decimals, true).unwrap_or(owed),
+        ),
+        None => (0, owed),
+    };
     if balance >= owed {
         return None;
     }
@@ -5939,7 +5945,14 @@ fn derive_same_asset_issue(model: &Model) -> Option<SendFeeIssueView> {
         to_base_units(&model_token_amount(model, token), token.decimals)?
     };
     let balance = to_base_units(&token.balance, token.decimals)?;
-    let limit = same_asset_fee_limit(Some(fee), token.token_address.as_deref(), balance)?;
+    // One balance, not one identity (r10-3): the native coin and its ERC-20
+    // interface pay each other's fee, in the token's own places.
+    let limit = same_balance_fee_limit(
+        Some(fee),
+        token.token_address.as_deref(),
+        token.decimals,
+        balance,
+    )?;
     if transfer_amount <= limit.max_transfer_amount {
         return None;
     }
@@ -5969,14 +5982,60 @@ fn multi_token_specs(model: &Model, chain_id: u32) -> Vec<MultiTokenSpec> {
         .fee_estimate
         .as_ref()
         .filter(|f| f.chain_id == chain_id);
+    // r10-3: on a chain whose native coin wears an ERC-20 interface, the fee
+    // may be quoted in the face the sweep does not hold a line for — the
+    // reserve then comes out of the line that holds that money.
+    let alias = native_alias_token(chain_id);
+    let places = native_alias_places(chain_id);
+    let has_line = |addr: Option<&str>| {
+        specs
+            .iter()
+            .any(|s| match (addr, s.token_address.as_deref()) {
+                (None, None) => true,
+                (Some(a), Some(b)) => a.eq_ignore_ascii_case(b),
+                _ => false,
+            })
+    };
     match fee.map(|f| &f.fee_asset) {
-        Some(FeeAsset::Erc20 { token, amount, .. }) => {
+        Some(FeeAsset::Erc20 {
+            token,
+            amount,
+            decimals,
+            ..
+        }) => {
             // 2×: a sweep has more sub-calls than its initial quote and may
             // also deploy the Safe; the signed fee still uses the reviewed
             // quote.
-            reserve_fee_token(&specs, token, amount.saturating_mul(2))
+            let reserve = amount.saturating_mul(2);
+            match places {
+                Some((native_places, _))
+                    if same_balance(chain_id, Some(token), None)
+                        && !has_line(Some(token))
+                        && has_line(None) =>
+                {
+                    reserve_native_gas(
+                        &specs,
+                        rescale_units(reserve, *decimals, native_places, true),
+                    )
+                }
+                _ => reserve_fee_token(&specs, token, reserve),
+            }
         }
-        _ => reserve_native_gas(&specs, fee.map(|f| f.total_wei).unwrap_or(0)),
+        _ => {
+            let wei = fee.map(|f| f.total_wei).unwrap_or(0);
+            match (alias, places) {
+                (Some(alias), Some((native_places, alias_places)))
+                    if !has_line(None) && has_line(Some(alias)) =>
+                {
+                    reserve_fee_token(
+                        &specs,
+                        alias,
+                        rescale_units(wei, native_places, alias_places, true),
+                    )
+                }
+                _ => reserve_native_gas(&specs, wei),
+            }
+        }
     }
 }
 

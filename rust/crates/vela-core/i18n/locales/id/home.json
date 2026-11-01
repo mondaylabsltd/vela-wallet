@@ -364,6 +364,7 @@
         "waitingPayer_one": "{{count}} menunggu anggota yang bisa membayar",
         "waitingPayer_other": "{{count}} menunggu anggota yang bisa membayar",
         "ruleDiffers": "Aturan berbeda per jaringan",
+        "ruleLastKnown": "Terakhir diketahui — dibaca ulang saat dibuka",
         "othersWaiting": "Akun lain punya transaksi yang menunggu"
       },
       "add": {

@@ -386,4 +386,15 @@ window.VelaCS.i18n.register('tr', {
   'sentence.msAddOwnerOne': "{owner} üye olur ve {threshold} onay gerekir.",
   'sentence.msRemoveOwnerOne': "{owner} artık üye değildir ve {threshold} onay gerekir.",
   'sentence.msThresholdOne': "Bundan sonra {threshold} onay gerekir.",
+  // r10: a multisig's coins are the multisig's, not the signer's; a member
+  // change reads before → after against the members the app says it has now.
+  'sentence.approveMs': "Bu, {spender} tarafının çoklu imzanın varlığından en fazla {amount} harcamasına izin verir.",
+  'sentence.approveUnlimitedMs': "Bu, {spender} tarafının çoklu imzanın tüm {symbol} varlığını harcamasına izin verir — üst sınır yok.",
+  'warn.unlimitedMs': "Sınırsız — bu sözleşme çoklu imzanın sahip olduğu tüm {symbol} varlığını harcayabilir.",
+  'warn.approveAllMs': "Çoklu imzanın bu koleksiyonda şimdi ve ileride sahip olacağı tüm NFT'ler her an alınabilir.",
+  'warn.nativeValueMs': "Bu çağrı, burada gösterilen her şeye ek olarak çoklu imzadan çağrılan sözleşmeye {amount} de gönderir.",
+  'field.msMembers': "Üyeler",
+  'value.msCountChange': "{before} → {after}",
+  'value.msApprovalsChange': "{beforeOf} onaydan {before} → {afterOf} onaydan {after}",
+  'warn.msMembersClaimOff': "Bu değişiklik, uygulamanın söylediği mevcut çoklu imza üyeleriyle uyuşmuyor — çalıştığında başarısız olabilir. Onaylamadan önce üyeleri diğerleriyle kontrol edin.",
 });

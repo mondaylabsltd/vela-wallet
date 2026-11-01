@@ -5,4 +5,9 @@
  * on the sender's signing page and pick its pipeline — never told from
  * what else rides along.
  */
-export type MultisigSendPurpose = { "kind": "execute", multisig: string, name: string | null, threshold: number, tx: unknown, } | { "kind": "record", multisig: string, };
+export type MultisigSendPurpose = { "kind": "execute", multisig: string, name: string | null, threshold: number, tx: unknown, 
+/**
+ * r10 page: its members now, for a member change's before → after
+ * on the page (the app's word, as `threshold` is).
+ */
+owners: Array<string>, } | { "kind": "record", multisig: string, };
