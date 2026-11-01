@@ -72,6 +72,17 @@ class SettingsController(
             ?.let { row -> row.value.ifBlank { row.default_value } }
             .orEmpty()
 
+    /**
+     * The endpoint the person set, as the network machine holds it — `null`
+     * when it holds none (not set, OR not loaded yet: before the machine has
+     * read `vela.serviceEndpoints` its rows are the defaults, and a caller
+     * that took that default would skip what the store says).
+     */
+    internal fun endpointOverride(field: NetEndpointField): String? =
+        networkHost.view.value.endpoints
+            .firstOrNull { row -> row.field == field }
+            ?.value?.trim()?.ifBlank { null }
+
     private val rates = pool?.let {
         CurrencyRates(
             pool = it,

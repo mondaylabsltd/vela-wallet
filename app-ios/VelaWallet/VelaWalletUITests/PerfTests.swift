@@ -55,7 +55,18 @@ final class PerfTests: XCTestCase {
 
     private let golden = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
 
+    /// On a phone, the harness on the Mac through the cable
+    /// (`VELA_DEVICE_HAND_REVERSE`, app-ios/devicetest/README.md), so
+    /// Confirm → passkey can read the fork's nonce and the relay's quote.
+    private static let tunnels: [ReverseTunnel] = {
+        let ports = (ProcessInfo.processInfo.environment["VELA_DEVICE_HAND_REVERSE"] ?? "").split(separator: ",")
+        let tunnels = ports.compactMap { UInt16($0) }.compactMap(ReverseTunnel.init(port:))
+        tunnels.forEach { $0.start() }
+        return tunnels
+    }()
+
     override func setUpWithError() throws {
+        _ = Self.tunnels
         continueAfterFailure = false
     }
 

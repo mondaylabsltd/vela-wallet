@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!--
+  A device pass on somebody's iPhone (app-ios/devicetest/README.md): the Debug
+  build installed as `app.getvela.VelaWallet.devicetest`, BESIDE the Vela the
+  phone already holds, never over it.
+
+  Deliberately empty, for every target of that build (app, widgets, Safari
+  extension, test runners):
+
+  - no associated domains: getvela.app's apple-app-site-association names
+    F9W689P9NE.app.getvela.VelaWallet only, so `webcredentials:` could not
+    verify for this id anyway — a real passkey ceremony is refused and the
+    parallel space signs instead; universal links stay in Safari
+    (`VELA_OPEN_LINK` opens one);
+  - no app group: `group.app.getvela.VelaWallet` is the store app's, and its
+    widget would read this build's balance;
+  - so the team's wildcard development profile signs it, and nothing is
+    registered on the developer portal.
+-->
+<dict/>
+</plist>

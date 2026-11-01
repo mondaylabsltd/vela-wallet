@@ -38,6 +38,18 @@ ANDROID_SERIAL=emulator-5554 scripts/run-macrobenchmarks.sh build/macrobenchmark
 python3 scripts/summarize-macrobenchmarks.py build/macrobenchmark-results
 ```
 
+On a **physical phone** — which may hold the person's own
+`app.getvela.wallet` — build with `-PvelaDeviceTest` so the app under test is
+`app.getvela.wallet.devicetest`, installed beside theirs; the script refuses
+the plain id on a physical device and passes the id it installed to the
+journeys (`vela.targetPackage`):
+
+```sh
+./gradlew :app:assembleBenchmarkRelease :macrobenchmark:assembleBenchmarkRelease -PvelaSkipRustBuild -PvelaDeviceTest
+ANDROID_SERIAL=<phone> scripts/run-macrobenchmarks.sh build/macrobenchmark-results
+adb -s <phone> uninstall app.getvela.wallet.devicetest   # afterwards; and app.getvela.wallet.macrobenchmark
+```
+
 The JSON (`*-benchmarkData.json`) and one Perfetto trace per iteration land in
 the output directory; open a trace at ui.perfetto.dev. A journey step that
 never arrives leaves `journey-failure-*.png` / `.xml` beside them.

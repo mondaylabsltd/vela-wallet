@@ -56,6 +56,19 @@ val velaUploadKeyProblems: List<String> = buildList {
 val velaUnsignedRelease: Boolean = providers.gradleProperty("velaUnsignedRelease").isPresent
 /** See the debug build type: R8 on a debug build, for a device pass of release's shrinking. */
 val velaMinifyDebug: Boolean = providers.gradleProperty("velaMinifyDebug").isPresent
+// A device pass on somebody's phone (`-PvelaDeviceTest`): every variant is
+// built as `app.getvela.wallet.devicetest`, so it installs BESIDE the store or
+// debug app already there and never over it (`adb install -r` onto a held
+// wallet replaces its code and keeps its data — or, signed differently, is
+// refused only after the tester has stopped looking). Its storage, keystore
+// and WorkManager queue are its own. What it gives up: getvela.app's
+// assetlinks.json names `app.getvela.wallet` alone, so Credential Manager
+// refuses a real passkey ceremony for this package (the parallel space signs
+// instead) and the App Links stay unverified (`adb shell am start -p …`
+// opens them). Never an upload: `velaCheckUploadKey` refuses a signed
+// release with it (an unsigned one, `-PvelaUnsignedRelease`, is for a device
+// pass signed by hand with the debug key).
+val velaDeviceTest: Boolean = providers.gradleProperty("velaDeviceTest").isPresent
 
 // Spec 088 FR-012: every upload needs a higher versionCode than any before it.
 // `-PvelaVersionCode=N`, else `VELA_VERSION_CODE`, else the number of commits
@@ -116,6 +129,7 @@ android {
 
     defaultConfig {
         applicationId = "app.getvela.wallet"
+        if (velaDeviceTest) applicationIdSuffix = ".devicetest"
         // 29 (Android 10) is the lowest level we can regression-test on real
         // hardware; every library floor is ≤23 and passkeys need only 28+, but
         // shipping below what we can reproduce bugs on is a support trap.
@@ -379,7 +393,14 @@ val velaCheckUploadKey = tasks.register("velaCheckUploadKey") {
     description = "Fails a release build whose Play upload key is not configured (spec 088)."
     val problems = velaUploadKeyProblems
     val unsignedAsked = velaUnsignedRelease
+    val deviceTest = velaDeviceTest
     doLast {
+        if (deviceTest && !unsignedAsked) {
+            throw GradleException(
+                "-PvelaDeviceTest builds app.getvela.wallet.devicetest, which is never uploaded. " +
+                    "For a device pass of the release build, add -PvelaUnsignedRelease and sign the APK with the debug key.",
+            )
+        }
         if (problems.isNotEmpty() && !unsignedAsked) {
             throw GradleException(
                 "The release build has no upload key, so it would not be accepted by Google Play.\n" +

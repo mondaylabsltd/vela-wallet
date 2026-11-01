@@ -205,11 +205,27 @@ object MultisigWiring {
     }
 
     /** The multisig service in use, as the machines are told it. */
-    suspend fun serviceUrl(container: AppContainer, store: KeyValueStore): String {
-        val fromSettings = runCatching { container.settings.endpointUrl(NetEndpointField.GenesisService) }.getOrNull()
-        val raw = fromSettings?.ifBlank { null }
-            ?: store.read(KeyValueStore.Keys.SERVICE_ENDPOINTS)?.let { runCatching { JSONObject(it).optString("genesisServiceURL") }.getOrNull() }
-        return raw?.trim()?.trimEnd('/')?.ifBlank { null } ?: DEFAULT_SERVICE
+    suspend fun serviceUrl(container: AppContainer, store: KeyValueStore): String =
+        resolveServiceUrl(
+            fromSettings = runCatching { container.settings.endpointOverride(NetEndpointField.GenesisService) }.getOrNull(),
+            storedEndpoints = store.read(KeyValueStore.Keys.SERVICE_ENDPOINTS),
+        )
+
+    /**
+     * Which multisig service: the person's own (as Settings holds it, else as
+     * `vela.serviceEndpoints` stores it), else Vela's.
+     *
+     * Real-device pass 2026-11-01: this used to take Settings' row with its
+     * DEFAULT filled in, so whenever the network machine had not loaded the
+     * stored endpoints yet the answer was Vela's service and the store was
+     * never read — a phone pointed at its own (or a test harness's) service
+     * created its multisig on safe-genesis.getvela.app. The store is the
+     * source Settings itself writes, so it is read before any default.
+     */
+    internal fun resolveServiceUrl(fromSettings: String?, storedEndpoints: String?): String {
+        val stored = storedEndpoints?.let { runCatching { JSONObject(it).optString("genesisServiceURL") }.getOrNull() }
+        val raw = fromSettings?.trim()?.ifBlank { null } ?: stored?.trim()?.ifBlank { null }
+        return raw?.trimEnd('/')?.ifBlank { null } ?: DEFAULT_SERVICE
     }
 
     /** Vela's connect page, at the wallet's public web address, in the person's language. */

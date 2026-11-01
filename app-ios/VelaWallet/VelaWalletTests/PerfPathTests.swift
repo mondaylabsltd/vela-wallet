@@ -245,4 +245,13 @@ struct PerfPathTests {
         #expect(HoldingsCache.load(address: address, space: "mainnet", store: store).count == PerfSeed.holdings.count)
         #expect(!PerfSeed.apply(environment: ["VELA_PERF_SEED": "200"], store: store), "no address, nothing written")
     }
+
+    /// On a phone the seed runs for the device-test build alone — never the
+    /// store app's id, whose history it would replace.
+    @Test func onAPhoneOnlyTheDeviceTestBuildSeeds() {
+        #expect(PerfSeed.isDeviceTestBuild("app.getvela.VelaWallet.devicetest"))
+        #expect(!PerfSeed.isDeviceTestBuild("app.getvela.VelaWallet"))
+        #expect(!PerfSeed.isDeviceTestBuild("app.getvela.VelaWallet.devicetest.extra"))
+        #expect(!PerfSeed.isDeviceTestBuild(nil))
+    }
 }

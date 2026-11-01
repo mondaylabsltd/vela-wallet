@@ -30,12 +30,24 @@ for apk in "$APP_APK" "$TEST_APK"; do
 done
 
 a() { "$ADB" -s "$ANDROID_SERIAL" "$@"; }
+# The app id the APK carries: app.getvela.wallet, or .devicetest when it was
+# built with -PvelaDeviceTest. A physical phone may hold the person's own
+# app.getvela.wallet, and `install -r` would replace it: there, only the
+# device-test id is installed.
+AAPT="$(ls -d "${ANDROID_HOME:-$HOME/Library/Android/sdk}"/build-tools/*/ 2>/dev/null | sort -V | tail -1)aapt2"
+APP_ID="$("$AAPT" dump packagename "$APP_APK" 2>/dev/null || true)"
+[ -n "$APP_ID" ] || { echo "run-macrobenchmarks: could not read the app id of $APP_APK" >&2; exit 2; }
+if [ "$(a shell getprop ro.kernel.qemu | tr -d '\r')" != 1 ] && [ "$APP_ID" = app.getvela.wallet ]; then
+  echo "run-macrobenchmarks: $ANDROID_SERIAL is a physical device and the APK is app.getvela.wallet —" >&2
+  echo "  rebuild with -PvelaDeviceTest so it installs as app.getvela.wallet.devicetest beside the person's app." >&2
+  exit 2
+fi
 a install -r -d "$APP_APK" >/dev/null
 a install -r -d -t "$TEST_APK" >/dev/null
 DEVICE_DIR="/sdcard/Android/media/$TEST_PKG"
 a shell rm -rf "$DEVICE_DIR" >/dev/null 2>&1 || true
 
-ARGS=(-w -r -e androidx.benchmark.suppressErrors EMULATOR)
+ARGS=(-w -r -e androidx.benchmark.suppressErrors EMULATOR -e vela.targetPackage "$APP_ID")
 [ -n "$FILTER" ] && ARGS+=(-e class "$FILTER")
 mkdir -p "$OUT"
 LOG="$OUT/instrumentation.log"
