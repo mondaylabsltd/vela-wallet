@@ -228,13 +228,16 @@ struct ConnectionPanelView: View {
                             .contentShape(RoundedRectangle(cornerRadius: Tokens.Radius.r12))
                     }
                     .buttonStyle(.plain)
+                    // Connecting moves no value and signs nothing: the
+                    // neutral inverse ink, never the accent (design rule 8,
+                    // app-web CLAUDE.md rule 4).
                     Button(action: onApprove) {
                         Text(verbatim: consent.approve)
                             .typeRole(Typography.button.scaled(textScale))
-                            .foregroundStyle(theme.onAccent)
+                            .foregroundStyle(theme.fgInverse)
                             .frame(maxWidth: .infinity)
                             .frame(height: Tokens.Control.lg)
-                            .background(theme.accentBase, in: RoundedRectangle(cornerRadius: Tokens.Radius.r12))
+                            .background(theme.fgBase, in: RoundedRectangle(cornerRadius: Tokens.Radius.r12))
                             .contentShape(RoundedRectangle(cornerRadius: Tokens.Radius.r12))
                     }
                     .buttonStyle(.plain)
