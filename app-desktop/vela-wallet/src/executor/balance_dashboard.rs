@@ -343,6 +343,7 @@ fn settled_result(
         registry_chain_ids: registry,
         own_node_chain_ids,
         fallback_chain_ids: own.falling_back(),
+        read_at_ms: None,
         now_ms: crate::executor::now_ms(),
     }
 }

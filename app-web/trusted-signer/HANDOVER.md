@@ -1,5 +1,19 @@
 # 交接：可信签名器页面
 
+> **第十轮（2026-11-01）：多签的钱是多签的；成员变更写出前后。** 新版本 **797489e6**（`BUILD_ALLOWED` 第一位，LAUNCH 不变）。
+> ① 多签批准 / 执行卡上（`ctx.selfTag = 'tag.thisMultisig'`）无限额授权写「多签全部 USDC」而不是「你全部 USDC」，
+> 限额授权、NFT 合集授权、随调用转出的原生币同理（`*Ms` 键），转账句写「多签向 … 发送」；`resolve()` 清掉请求方给的
+> `selfTag`，网站改不了「谁的钱」。Permit2 凭证是消息签名，多签不签消息，那一句不变。
+> ② 成员变更（加 / 删 / 替换 / 改门槛）写「成员 4 → 5 · 所需批准数 2 / 4 → 1 / 5」：「之前」来自钱包在
+> `context.multisig.owners` / `.threshold` 里给的现有成员与门槛（vela-core `approval::request` / `execution_context`
+> 新加的两个字段，取自提案所对的链上成员），标「App 的说法」；同一笔操作里部署了多签时由本页核实的 setup 给出，是事实。
+> 批量里逐腿接着算；说法与变更对不上（加已有成员、删不存在的成员、门槛超过人数）就不写数字，挂一条
+> `warn.msMembersClaimOff`；格式不对的说法当作没给（照旧只写门槛）。
+> ③ 执行卡（`resolveExecution`）上的嵌套批量逐层列出（「1」「1.1」），单独一笔调用本身是批量时也列出它的腿，
+> 过深照核心拒签；以前这两种在执行卡上什么都不列、也不拒。腿号永远有数字（钱包那边「第 笔调用」是核心语料的事，本页没有）。
+> `flattenLegs` 的层数常量改名 `LISTED_LEVELS = 4`：它和接管拦截的 `MAX_NESTING` 同名同作用域，写的 3 从未生效，4 才与核心逐层一致。
+> 十五种语言都有新键（`locales-test` 84/84）；`multisig-test.mjs` 355/355。部署顺序同上：`dist/` 先上线（含 `/b/797489e6…/sign`）。
+
 > ## ⚠️ 现状（2026-09-27）：App 只走一条通道
 >
 > 桌面、iPhone、Android 都把请求放进 URL 片段（`sign.html?ch=url#i=…`）打开本页，
@@ -115,7 +129,7 @@ node samples/gen-fonts.mjs --check  # src/fonts.css 就是 assets/fonts/ 的 Plu
 bun samples/single-file-test.mjs   # 15/15 发布出去的单文件页：CSP 实测、App 的字体在页内加载、自定义 scheme 不被 CSP 拦
 bun samples/desktop-demo.mjs --auto #  8/8 桌面应用全流程 + 自验签（开测试页 samples/loopback-sign.html：只有它接受回环答复）
 bun samples/takeover-test.mjs      # 18/18 自调用 / delegatecall / SafeTx 拒签（与 vela-core self_call_guard 同一规则）
-node samples/multisig-test.mjs     # 320/320 多签批准与多签执行（第七轮）：哈希、批准字节、读法与发布的 wasm 逐例对拍；执行者的操作逐腿读、部署从 setup 核实；敌意输入；十五种语言
+node samples/multisig-test.mjs     # 355/355 多签批准与多签执行（第七轮）：哈希、批准字节、读法与发布的 wasm 逐例对拍；执行者的操作逐腿读、部署从 setup 核实；敌意输入；十五种语言；第十轮：多签的钱写多签的、成员变更前后、执行卡的嵌套批量、嵌套层数与核心逐层一致
 bun samples/unlimited-line-test.mjs # 11/11 「无限额」的线：uint256 2^200、uint160 2^152（与 vela-core approval_guard 同一条线）
 node samples/origin-line-test.mjs   # 31/31 站点名就是主机时页头只写一次（082 L-HOST，与 vela-core site_label 同一规则）；不是主机的名字只作它的自称，不作页头（`source: 'vela_browser'` 不算证明）；仪式副标题只说一次钱包；网络旁「App 提供」只标 App 给的链名，本页不认识的链总显示链 ID
 node samples/plain-send-test.mjs    # 183/183 没有 calldata 的调用就是发送，金额 0 也是；金额精确到 wei 且整串装得进卡片；站点的 value 按钱包组装时的读法去对（"0X…"、带空格、JSON 数字，同桌面 wei_of），对得上就不能说「组装时被改过」；真读不懂的不出数、在操作里拒签（082 G14/RC4/RC5，与 vela-core is_empty_calldata、exact_native_amount 同一规则）；带 calldata 的调用附带的原生币是一行粗体金额加一条提示，批量每一腿都有；解不开的腿列出合约、函数选择器、金额（0 也写）和 calldata（2026-10-28）

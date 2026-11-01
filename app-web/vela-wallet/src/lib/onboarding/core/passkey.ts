@@ -14,6 +14,7 @@
 import { isPackagedApp } from '$lib/extension/page-url';
 import type { FailureKind } from '../generated/FailureKind';
 import type { KeyMethod } from '../generated/KeyMethod';
+import type { PasskeyErrorFacts } from '../generated/PasskeyErrorFacts';
 
 /** The native relying party, shared by the extension. See `relyingPartyId`. */
 const RELYING_PARTY_NATIVE = 'getvela.app';
@@ -34,12 +35,33 @@ export class PasskeyError extends Error {
 	 * said differently on the screen.
 	 */
 	readonly timedOut: boolean;
-	constructor(kind: FailureKind, message: string, timedOut = false) {
+	/**
+	 * Round 10 (real-device S3): the browser's error as facts — its
+	 * `DOMException` name and raw message — handed to the core
+	 * (`PasskeyFailed.error`), which names the sentence the sheet draws
+	 * (`PromptKind.words_key`). The message stays the detail for the report;
+	 * it is never the sentence on the screen.
+	 */
+	readonly facts: PasskeyErrorFacts | undefined;
+	constructor(kind: FailureKind, message: string, timedOut = false, facts?: PasskeyErrorFacts) {
 		super(message);
 		this.name = 'PasskeyError';
 		this.kind = kind;
 		this.timedOut = timedOut;
+		this.facts = facts;
 	}
+}
+
+/** A browser error's facts for the core's passkey-error rule. */
+function webFacts(
+	error: { name?: unknown; message?: unknown } | null | undefined
+): PasskeyErrorFacts {
+	return {
+		platform: 'web',
+		domain: typeof error?.name === 'string' ? error.name : '',
+		code: null,
+		message: typeof error?.message === 'string' ? error.message : ''
+	};
 }
 
 /**
@@ -604,7 +626,12 @@ function classify(error: unknown): PasskeyError {
 		return new PasskeyError('cancelled', 'User cancelled the operation');
 	}
 	if (e?.name === 'NotSupportedError') {
-		return new PasskeyError('not_supported', e.message || 'Authenticator not supported');
+		return new PasskeyError(
+			'not_supported',
+			e.message || 'Authenticator not supported',
+			false,
+			webFacts(e)
+		);
 	}
 	if (e?.name === 'SecurityError' && isPackagedApp()) {
 		// Two packages, two different facts behind the same error. Chrome
@@ -623,9 +650,14 @@ function classify(error: unknown): PasskeyError {
 	if (e?.name === 'InvalidStateError') {
 		// With excludeCredentials set this means the chosen authenticator
 		// already holds one of this wallet's founding keys.
-		return new PasskeyError('other', "This authenticator already holds one of this wallet's keys");
+		return new PasskeyError(
+			'other',
+			"This authenticator already holds one of this wallet's keys",
+			false,
+			webFacts(e)
+		);
 	}
-	return new PasskeyError('other', e?.message ?? 'Unknown WebAuthn error');
+	return new PasskeyError('other', e?.message ?? 'Unknown WebAuthn error', false, webFacts(e));
 }
 
 export function bytesToHex(buffer: ArrayBuffer | Uint8Array): string {

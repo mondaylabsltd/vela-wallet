@@ -57,6 +57,8 @@ import type { SimVerdict } from '$lib/core/generated/SimVerdict';
 import type { TrustAssetDelta } from '$lib/core/generated/TrustAssetDelta';
 import type { TrustSimView } from '$lib/core/generated/TrustSimView';
 import type { TrustTokenMeta } from '$lib/core/generated/TrustTokenMeta';
+import type { IncomingScanPlan } from '$lib/core/generated/IncomingScanPlan';
+import type { TrustScanFacts } from '$lib/core/generated/TrustScanFacts';
 
 export {
 	PROXY_CREATION_CODE,
@@ -800,6 +802,9 @@ export function trustedSignerApprovalRequest(args: {
 	keyRoute?: unknown;
 	/** r9-10: the review asks for "… anyway": the page says so, in the danger style. */
 	anyway?: boolean;
+	/** r10 page: the members and approvals now — a member change reads before → after. */
+	owners?: string[];
+	threshold?: number | null;
 }): { intent: unknown; context: unknown } {
 	return JSON.parse(wasm.trustedSignerApprovalRequest(JSON.stringify(args))) as {
 		intent: unknown;
@@ -1692,6 +1697,18 @@ export function siteStartChainFor(
 		lastUsed ?? undefined,
 		Uint32Array.from(accountChains)
 	);
+}
+
+/**
+ * r9-17: the networks an account's incoming scan reads, and where its native
+ * balance is watched — the core's `incoming_scan::scan_plan` over the facts
+ * the shell gathered (held chains, a multisig's networks, the space, the
+ * networks the person added). The scan itself plans from the same facts
+ * (`token_trust`'s `scan_requested`); this is asked to prime the registry and
+ * the native watch.
+ */
+export function incomingScanPlan(facts: TrustScanFacts): IncomingScanPlan {
+	return JSON.parse(wasm.incomingScanPlan(JSON.stringify(facts))) as IncomingScanPlan;
 }
 
 /** The extension's request lifetime — the core's `EXTENSION_REQUEST_TTL_MS` (RB11). */

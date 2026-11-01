@@ -9,6 +9,7 @@
  * core's module doc assigns to shells.
  */
 
+import { accountName } from '$lib/multisig/core/account-name';
 import { resetEndpointsQuestion } from './questions';
 import { fill } from '$lib/wallet/messages';
 import { pluralForm } from '$lib/i18n/plural';
@@ -1385,7 +1386,8 @@ function liveAccountRows(input: LiveAccountsInput, syncing: string) {
 		return {
 			// ob-2: saved here, not yet findable elsewhere — said on its row.
 			...(unsynced.has(row.account.address.toLowerCase()) ? { note: syncing } : {}),
-			name: row.account.name,
+			// r9-12: the one name the core gives this address everywhere.
+			name: accountName(row.account.address, row.account.name),
 			addressDisplay: shortenAddress(row.account.address),
 			addressFull: row.account.address,
 			identiconSvg: input.identicon(row.account.address),

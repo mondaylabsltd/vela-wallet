@@ -368,7 +368,9 @@ function passkeyFailure(error: unknown): ShellResult {
 		return {
 			type: 'passkey_failed',
 			kind: error.kind,
-			message: error.kind === 'other' ? error.message : null
+			message: error.kind === 'other' ? error.message : null,
+			// Round 10: the platform's facts — the core names the sentence.
+			...(error.facts ? { error: error.facts } : {})
 		};
 	}
 	return { type: 'passkey_failed', kind: 'other', message: describe(error) };

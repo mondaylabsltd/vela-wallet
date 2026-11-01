@@ -4,6 +4,7 @@
  * settings) reads it here, so moving between them never changes whose
  * balance, activity or contacts are on screen.
  */
+import { accountName } from '$lib/multisig/core/account-name';
 import { resolve } from '$app/paths';
 import { identiconSvgForClient } from '$lib/wallet/identicon';
 import type { WalletIdentity } from '$lib/wallet/identity';
@@ -25,25 +26,31 @@ interface SessionLike {
 /**
  * The rule chip's words: "Needs 2 of 3", or that it differs by network —
  * the proposals machine's `rule_chip` for the multisig it follows (the rule
- * in force on each network it is used on, r4D-7); one not followed shows
- * the rule it was made with.
+ * in force on each network it is used on, r4D-7); one not followed shows its
+ * row's rule — the rule a chain last said, kept by the core (r9-14), marked
+ * last known — never the founding record's when a chain said otherwise.
  */
 export function ruleChip(
 	account: Pick<MultisigAccount, 'address' | 'owners' | 'threshold'>,
 	m: MultisigMessages
 ): { label: string; title: string } {
-	const chip: MultisigRuleChip = (sameAddress(proposals.followed, account.address)
+	const live = sameAddress(proposals.followed, account.address)
 		? proposalsHost.view?.rule_chip
-		: null) ?? {
-		kind: 'needs',
-		rule: { m: account.threshold, n: account.owners.length, solo: account.owners.length === 1 }
-	};
+		: null;
+	const row = multisig.row(account.address)?.rule;
+	const chip: MultisigRuleChip = live ??
+		row?.chip ?? {
+			kind: 'needs',
+			rule: { m: account.threshold, n: account.owners.length, solo: account.owners.length === 1 }
+		};
+	const lastKnown = !live && row?.from_chain === true && row.last_known;
+	const titled = (title: string) => (lastKnown ? `${title} · ${m.presence.ruleLastKnown}` : title);
 	if (chip.kind === 'needs') {
-		return { label: ruleChipText(m, chip.rule), title: ruleTitle(m, chip.rule) };
+		return { label: ruleChipText(m, chip.rule), title: titled(ruleTitle(m, chip.rule)) };
 	}
 	return {
 		label: m.presence.ruleDiffers,
-		title: chip.rules.map((r) => ruleTitle(m, r)).join(' · ')
+		title: titled(chip.rules.map((r) => ruleTitle(m, r)).join(' · '))
 	};
 }
 
@@ -65,7 +72,8 @@ export function shownIdentity(
 		};
 	}
 	return {
-		name: view.accounts[view.active_index]?.account.name ?? '',
+		// r9-12: the one name the core gives this address everywhere.
+		name: accountName(view.address, view.accounts[view.active_index]?.account.name ?? ''),
 		address: view.address,
 		identiconSvg: identiconSvgForClient(view.address),
 		...waiting

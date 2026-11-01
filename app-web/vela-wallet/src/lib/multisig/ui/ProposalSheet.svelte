@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { listOf } from '$lib/i18n/list';
 	/**
 	 * One multisig transaction — what every member sees, and where each of
 	 * them approves.
@@ -1709,7 +1710,10 @@
 			<!-- r7: said honestly — their approvals (EIP-1271) aren't collected yet. -->
 			<p class="fine" data-testid="contract-members">
 				{fillTemplate(m.proposal.contractMembers, {
-					names: contractMissing.map((o) => names.label(o)).join(', ')
+					names: listOf(
+						contractMissing.map((o) => names.label(o)),
+						locale
+					)
 				})}
 			</p>
 		{/if}
@@ -1719,7 +1723,10 @@
 			<p class="fine" data-testid="not-counted">
 				{fillTemplate(m.proposal.notCounted, {
 					network: chainName(chainId),
-					names: notCounted.map((o) => names.label(o)).join(', ')
+					names: listOf(
+						notCounted.map((o) => names.label(o)),
+						locale
+					)
 				})}
 			</p>
 		{/if}
@@ -1733,7 +1740,10 @@
 					{fillTemplate(m.proposal.startsOriginalNote, {
 						m: account.threshold,
 						n: account.owners.length,
-						networks: startsOriginal.map((id) => chainName(id)).join(', ')
+						networks: listOf(
+							startsOriginal.map((id) => chainName(id)),
+							locale
+						)
 					})}
 				</p>
 				<ul class="starts-members">
@@ -1805,7 +1815,10 @@
 			<p class="quiet" data-testid="proposal-queued">
 				{blocking.length > 1
 					? fillTemplate(m.proposal.queuedNoteMany, {
-							nonces: blocking.map((b) => `#${b.nonce}`).join(', ')
+							nonces: listOf(
+								blocking.map((b) => `#${b.nonce}`),
+								locale
+							)
 						})
 					: fillTemplate(m.proposal.queuedNote, {
 							nonce: (blocking[0]?.nonce ?? store.chain(chainId)?.members.nonce ?? 0n).toString()
@@ -2140,7 +2153,10 @@
 					<!-- Vela members elsewhere: never an outside wallet — the link, in Vela (r4-9). -->
 					<p class="fine" data-testid="approves-in-vela">
 						{fillTemplate(m.proposal.approvesInVela, {
-							names: elsewhere.map((o) => names.label(o)).join(', ')
+							names: listOf(
+								elsewhere.map((o) => names.label(o)),
+								locale
+							)
 						})}
 					</p>
 				{/if}
@@ -2148,7 +2164,10 @@
 					<!-- r7-8: nothing says how they sign yet — said once, both ways offered. -->
 					<p class="fine" data-testid="either-way">
 						{fillTemplate(m.proposal.eitherWay, {
-							names: either.map((o) => names.label(o)).join(', ')
+							names: listOf(
+								either.map((o) => names.label(o)),
+								locale
+							)
 						})}
 					</p>
 				{/if}

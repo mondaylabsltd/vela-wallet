@@ -1326,7 +1326,14 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
             // per key, back to back; the publish then needs NO prompts.
             begin_sign_member(model, model.drafts.len() - 1)
         }
-        (Stage::Registering, ShellResult::PasskeyFailed { kind, message }) => match kind {
+        (
+            Stage::Registering,
+            ShellResult::PasskeyFailed {
+                kind,
+                message,
+                error,
+            },
+        ) => match kind {
             FailureKind::Cancelled => {
                 // Back to the key list with the existing drafts intact — for
                 // the first key that list is empty, and returning THERE rather
@@ -1348,7 +1355,8 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
                 let method = model.registering_method;
                 fail_registration(
                     model,
-                    PromptKind::create_failed_via(message.unwrap_or_default(), method),
+                    PromptKind::create_failed_via(message.unwrap_or_default(), method)
+                        .with_error_words(error.as_ref()),
                 )
             }
         },
@@ -1364,7 +1372,14 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
             model.status = None;
             render()
         }
-        (Stage::SigningKey, ShellResult::PasskeyFailed { kind, message }) => {
+        (
+            Stage::SigningKey,
+            ShellResult::PasskeyFailed {
+                kind,
+                message,
+                error,
+            },
+        ) => {
             let method = model
                 .signing_index
                 .and_then(|index| model.drafts.get(index))
@@ -1385,7 +1400,8 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
                             PromptKind::create_failed_via(message.unwrap_or_default(), method)
                         }
                         None => PromptKind::create_failed(message.unwrap_or_default()),
-                    },
+                    }
+                    .with_error_words(error.as_ref()),
                 ),
             }
         }

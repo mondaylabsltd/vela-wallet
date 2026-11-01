@@ -2,5 +2,7 @@
 import type { TrustAssetDelta } from "./TrustAssetDelta";
 import type { TrustCustomToken } from "./TrustCustomToken";
 import type { TrustReceiptLog } from "./TrustReceiptLog";
+import type { TrustScanCursor } from "./TrustScanCursor";
+import type { TrustScanFacts } from "./TrustScanFacts";
 
-export type TrustEvent = { "type": "held_chains_snapshot", address: string, chain_ids: Array<number>, } | { "type": "held_tokens_snapshot", address: string, chain_id: number, tokens: Array<string>, } | { "type": "registry_tokens_snapshot", chain_id: number, stables: Array<string>, wrapped_native: string | null, } | { "type": "custom_tokens_loaded", tokens: Array<TrustCustomToken>, } | { "type": "poll_requested", address: string, } | { "type": "receipt_logs_confirmed", from: string, chain_id: number, logs: Array<TrustReceiptLog>, } | { "type": "sim_deltas_computed", address: string, chain_id: number, deltas: Array<TrustAssetDelta>, };
+export type TrustEvent = { "type": "held_chains_snapshot", address: string, chain_ids: Array<number>, } | { "type": "held_tokens_snapshot", address: string, chain_id: number, tokens: Array<string>, } | { "type": "registry_tokens_snapshot", chain_id: number, stables: Array<string>, wrapped_native: string | null, } | { "type": "custom_tokens_loaded", tokens: Array<TrustCustomToken>, } | { "type": "poll_requested", address: string, } | { "type": "scan_requested", address: string, facts: TrustScanFacts, cursors: Array<TrustScanCursor>, } | { "type": "receipt_logs_confirmed", from: string, chain_id: number, logs: Array<TrustReceiptLog>, } | { "type": "sim_deltas_computed", address: string, chain_id: number, deltas: Array<TrustAssetDelta>, };

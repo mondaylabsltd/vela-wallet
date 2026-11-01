@@ -388,4 +388,15 @@ window.VelaCS.i18n.register('zh-TW', {
   'sentence.msAddOwnerOne': "{owner} 成為成員，之後需要 {threshold} 個核准。",
   'sentence.msRemoveOwnerOne': "{owner} 不再是成員，之後需要 {threshold} 個核准。",
   'sentence.msThresholdOne': "從現在起需要 {threshold} 個核准。",
+  // r10: a multisig's coins are the multisig's, not the signer's; a member
+  // change reads before → after against the members the app says it has now.
+  'sentence.approveMs': "這允許 {spender} 最多動用多簽的 {amount}。",
+  'sentence.approveUnlimitedMs': "這允許 {spender} 動用多簽全部的 {symbol}——沒有上限。",
+  'warn.unlimitedMs': "無上限——此合約可以花費多簽所有的 {symbol}。",
+  'warn.approveAllMs': "這個系列中多簽現在和以後持有的每一個 NFT，對方都可以隨時拿走。",
+  'warn.nativeValueMs': "此外，這筆呼叫會從多簽轉出 {amount} 給它呼叫的合約。",
+  'field.msMembers': "成員",
+  'value.msCountChange': "{before} → {after}",
+  'value.msApprovalsChange': "{before} / {beforeOf} → {after} / {afterOf}",
+  'warn.msMembersClaimOff': "這項變更與 App 所說的多簽現有成員對不上——執行時可能會失敗。核准前，和其他成員核對成員名單。",
 });

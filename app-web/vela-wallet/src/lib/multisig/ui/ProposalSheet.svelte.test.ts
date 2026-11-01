@@ -1911,7 +1911,8 @@ describe('what the sheet says of where it stands (r4b-4, r4b-6, r4b-17, r4a-16)'
 		fake.chain.items = [item({ nonce: 3n, status: 'queued' })];
 		const screen = show({ m });
 		await settle();
-		expect(document.body.textContent).toContain('after #0, #1, #2');
+		// r10-10: a list in the page's language (Intl.ListFormat), never a bare comma list.
+		expect(document.body.textContent).toContain('after #0, #1, and #2');
 		await screen.unmount();
 	});
 });

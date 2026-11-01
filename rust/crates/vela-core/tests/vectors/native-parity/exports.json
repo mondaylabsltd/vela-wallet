@@ -3107,6 +3107,635 @@
    }
   },
   {
+   "name": "passkey_error_words/android/cancelled_get",
+   "fn": "passkey_error_words",
+   "input": {
+    "platform": "android",
+    "domain": "androidx.credentials.exceptions.GetCredentialCancellationException",
+    "code": null,
+    "message": "activity is cancelled by the user."
+   },
+   "expect": {
+    "value": {
+     "kind": "cancelled",
+     "key": "onboarding.common.passkeyError.cancelled",
+     "failure": "cancelled"
+    }
+   }
+  },
+  {
+   "name": "passkey_error_words/android/cancelled_create_simple_name",
+   "fn": "passkey_error_words",
+   "input": {
+    "platform": "android",
+    "domain": "CreateCredentialCancellationException",
+    "code": null,
+    "message": ""
+   },
+   "expect": {
+    "value": {
+     "kind": "cancelled",
+     "key": "onboarding.common.passkeyError.cancelled",
+     "failure": "cancelled"
+    }
+   }
+  },
+  {
+   "name": "passkey_error_words/android/rp_id_50152_in_message",
+   "fn": "passkey_error_words",
+   "input": {
+    "platform": "android",
+    "domain": "androidx.credentials.exceptions.GetCredentialUnknownException",
+    "code": null,
+    "message": "[50152] RP ID cannot be validated."
+   },
+   "expect": {
+    "value": {
+     "kind": "app_not_associated",
+     "key": "onboarding.common.passkeyError.appNotAssociated",
+     "failure": "other"
+    }
+   }
+  },
+  {
+   "name": "passkey_error_words/android/rp_id_50152_as_code",
+   "fn": "passkey_error_words",
+   "input": {
+    "platform": "android",
+    "domain": "androidx.credentials.exceptions.CreateCredentialUnknownException",
+    "code": 50152,
+    "message": ""
+   },
+   "expect": {
+    "value": {
+     "kind": "app_not_associated",
+     "key": "onboarding.common.passkeyError.appNotAssociated",
+     "failure": "other"
+    }
+   }
+  },
+  {
+   "name": "passkey_error_words/android/no_credential",
+   "fn": "passkey_error_words",
+   "input": {
+    "platform": "android",
+    "domain": "androidx.credentials.exceptions.NoCredentialException",
+    "code": null,
+    "message": "No credentials available"
+   },
+   "expect": {
+    "value": {
+     "kind": "no_credential",
+     "key": "onboarding.common.passkeyError.noCredential",
+     "failure": "other"
+    }
+   }
+  },
+  {
+   "name": "passkey_error_words/android/no_credential_by_type",
+   "fn": "passkey_error_words",
+   "input": {
+    "platform": "android",
+    "domain": "android.credentials.GetCredentialException.TYPE_NO_CREDENTIAL",
+    "code": null,
+    "message": ""
+   },
+   "expect": {
+    "value": {
+     "kind": "no_credential",
+     "key": "onboarding.common.passkeyError.noCredential",
+     "failure": "other"
+    }
+   }
+  },
+  {
+   "name": "passkey_error_words/android/provider_configuration",
+   "fn": "passkey_error_words",
+   "input": {
+    "platform": "android",
+    "domain": "androidx.credentials.exceptions.GetCredentialProviderConfigurationException",
+    "code": null,
+    "message": "getCredentialAsync no provider dependencies found"
+   },
+   "expect": {
+    "value": {
+     "kind": "not_supported",
+     "key": "onboarding.common.passkeyError.notSupported",
+     "failure": "not_supported"
+    }
+   }
+  },
+  {
+   "name": "passkey_error_words/android/unsupported",
+   "fn": "passkey_error_words",
+   "input": {
+    "platform": "android",
+    "domain": "GetCredentialUnsupportedException",
+    "code": null,
+    "message": ""
+   },
+   "expect": {
+    "value": {
+     "kind": "not_supported",
+     "key": "onboarding.common.passkeyError.notSupported",
+     "failure": "not_supported"
+    }
+   }
+  },
+  {
+   "name": "passkey_error_words/android/no_create_option",
+   "fn": "passkey_error_words",
+   "input": {
+    "platform": "android",
+    "domain": "androidx.credentials.exceptions.CreateCredentialNoCreateOptionException",
+    "code": null,
+    "message": ""
+   },
+   "expect": {
+    "value": {
+     "kind": "not_supported",
+     "key": "onboarding.common.passkeyError.notSupported",
+     "failure": "not_supported"
+    }
+   }
+  },
+  {
+   "name": "passkey_error_words/android/interrupted",
+   "fn": "passkey_error_words",
+   "input": {
+    "platform": "android",
+    "domain": "androidx.credentials.exceptions.GetCredentialInterruptedException",
+    "code": null,
+    "message": ""
+   },
+   "expect": {
+    "value": {
+     "kind": "other",
+     "key": "onboarding.common.passkeyError.other",
+     "failure": "other"
+    }
+   }
+  },
+  {
+   "name": "passkey_error_words/android/dom_invalid_state",
+   "fn": "passkey_error_words",
+   "input": {
+    "platform": "android",
+    "domain": "androidx.credentials.TYPE_INVALID_STATE_ERROR",
+    "code": null,
+    "message": "One of the excluded credentials exists on the local device"
+   },
+   "expect": {
+    "value": {
+     "kind": "already_registered",
+     "key": "onboarding.common.passkeyError.alreadyRegistered",
+     "failure": "other"
+    }
+   }
+  },
+  {
+   "name": "passkey_error_words/android/dom_type_string_whole",
+   "fn": "passkey_error_words",
+   "input": {
+    "platform": "android",
+    "domain": "androidx.credentials.TYPE_CREATE_PUBLIC_KEY_CREDENTIAL_DOM_EXCEPTION/androidx.credentials.TYPE_NOT_ALLOWED_ERROR",
+    "code": null,
+    "message": ""
+   },
+   "expect": {
+    "value": {
+     "kind": "cancelled",
+     "key": "onboarding.common.passkeyError.cancelled",
+     "failure": "cancelled"
+    }
+   }
+  },
+  {
+   "name": "passkey_error_words/android/dom_security",
+   "fn": "passkey_error_words",
+   "input": {
+    "platform": "android",
+    "domain": "androidx.credentials.TYPE_SECURITY_ERROR",
+    "code": null,
+    "message": ""
+   },
+   "expect": {
+    "value": {
+     "kind": "app_not_associated",
+     "key": "onboarding.common.passkeyError.appNotAssociated",
+     "failure": "other"
+    }
+   }
+  },
+  {
+   "name": "passkey_error_words/android/play_network_code",
+   "fn": "passkey_error_words",
+   "input": {
+    "platform": "android",
+    "domain": "GetCredentialUnknownException",
+    "code": 7,
+    "message": ""
+   },
+   "expect": {
+    "value": {
+     "kind": "no_network",
+     "key": "onboarding.common.passkeyError.noNetwork",
+     "failure": "other"
+    }
+   }
+  },
+  {
+   "name": "passkey_error_words/android/gpm_cannot_connect_is_generic",
+   "fn": "passkey_error_words",
+   "input": {
+    "platform": "android",
+    "domain": "androidx.credentials.exceptions.GetCredentialUnknownException",
+    "code": null,
+    "message": "Your device can't connect"
+   },
+   "expect": {
+    "value": {
+     "kind": "other",
+     "key": "onboarding.common.passkeyError.other",
+     "failure": "other"
+    }
+   }
+  },
+  {
+   "name": "passkey_error_words/ios/canceled_1001",
+   "fn": "passkey_error_words",
+   "input": {
+    "platform": "ios",
+    "domain": "com.apple.AuthenticationServices.AuthorizationError",
+    "code": 1001,
+    "message": "The operation couldn’t be completed. (com.apple.AuthenticationServices.AuthorizationError error 1001.)"
+   },
+   "expect": {
+    "value": {
+     "kind": "cancelled",
+     "key": "onboarding.common.passkeyError.cancelled",
+     "failure": "cancelled"
+    }
+   }
+  },
+  {
+   "name": "passkey_error_words/ios/unknown_1000",
+   "fn": "passkey_error_words",
+   "input": {
+    "platform": "ios",
+    "domain": "ASAuthorizationErrorDomain",
+    "code": 1000,
+    "message": "The operation couldn’t be completed."
+   },
+   "expect": {
+    "value": {
+     "kind": "other",
+     "key": "onboarding.common.passkeyError.other",
+     "failure": "other"
+    }
+   }
+  },
+  {
+   "name": "passkey_error_words/ios/invalid_response_1002",
+   "fn": "passkey_error_words",
+   "input": {
+    "platform": "ios",
+    "domain": "ASAuthorizationErrorDomain",
+    "code": 1002,
+    "message": ""
+   },
+   "expect": {
+    "value": {
+     "kind": "other",
+     "key": "onboarding.common.passkeyError.other",
+     "failure": "other"
+    }
+   }
+  },
+  {
+   "name": "passkey_error_words/ios/not_handled_1003",
+   "fn": "passkey_error_words",
+   "input": {
+    "platform": "ios",
+    "domain": "ASAuthorizationErrorDomain",
+    "code": 1003,
+    "message": ""
+   },
+   "expect": {
+    "value": {
+     "kind": "not_supported",
+     "key": "onboarding.common.passkeyError.notSupported",
+     "failure": "not_supported"
+    }
+   }
+  },
+  {
+   "name": "passkey_error_words/ios/failed_1004",
+   "fn": "passkey_error_words",
+   "input": {
+    "platform": "ios",
+    "domain": "ASAuthorizationErrorDomain",
+    "code": 1004,
+    "message": "无法完成操作。"
+   },
+   "expect": {
+    "value": {
+     "kind": "other",
+     "key": "onboarding.common.passkeyError.other",
+     "failure": "other"
+    }
+   }
+  },
+  {
+   "name": "passkey_error_words/ios/failed_1004_not_associated",
+   "fn": "passkey_error_words",
+   "input": {
+    "platform": "ios",
+    "domain": "com.apple.AuthenticationServices.AuthorizationError",
+    "code": 1004,
+    "message": "Application with identifier ABCDE12345.app.getvela.wallet is not associated with domain getvela.app"
+   },
+   "expect": {
+    "value": {
+     "kind": "app_not_associated",
+     "key": "onboarding.common.passkeyError.appNotAssociated",
+     "failure": "other"
+    }
+   }
+  },
+  {
+   "name": "passkey_error_words/ios/not_interactive_1005",
+   "fn": "passkey_error_words",
+   "input": {
+    "platform": "ios",
+    "domain": "ASAuthorizationErrorDomain",
+    "code": 1005,
+    "message": ""
+   },
+   "expect": {
+    "value": {
+     "kind": "not_supported",
+     "key": "onboarding.common.passkeyError.notSupported",
+     "failure": "not_supported"
+    }
+   }
+  },
+  {
+   "name": "passkey_error_words/ios/matched_excluded_1006",
+   "fn": "passkey_error_words",
+   "input": {
+    "platform": "ios",
+    "domain": "ASAuthorizationErrorDomain",
+    "code": 1006,
+    "message": ""
+   },
+   "expect": {
+    "value": {
+     "kind": "already_registered",
+     "key": "onboarding.common.passkeyError.alreadyRegistered",
+     "failure": "other"
+    }
+   }
+  },
+  {
+   "name": "passkey_error_words/ios/url_not_connected",
+   "fn": "passkey_error_words",
+   "input": {
+    "platform": "ios",
+    "domain": "NSURLErrorDomain",
+    "code": -1009,
+    "message": "The Internet connection appears to be offline."
+   },
+   "expect": {
+    "value": {
+     "kind": "no_network",
+     "key": "onboarding.common.passkeyError.noNetwork",
+     "failure": "other"
+    }
+   }
+  },
+  {
+   "name": "passkey_error_words/ios/url_timed_out",
+   "fn": "passkey_error_words",
+   "input": {
+    "platform": "ios",
+    "domain": "NSURLErrorDomain",
+    "code": -1001,
+    "message": ""
+   },
+   "expect": {
+    "value": {
+     "kind": "timed_out",
+     "key": "onboarding.common.passkeyError.timedOut",
+     "failure": "cancelled"
+    }
+   }
+  },
+  {
+   "name": "passkey_error_words/ios/web_kit",
+   "fn": "passkey_error_words",
+   "input": {
+    "platform": "ios",
+    "domain": "WKErrorDomain",
+    "code": 1,
+    "message": ""
+   },
+   "expect": {
+    "value": {
+     "kind": "other",
+     "key": "onboarding.common.passkeyError.other",
+     "failure": "other"
+    }
+   }
+  },
+  {
+   "name": "passkey_error_words/ios/a_bracketed_number_is_not_a_play_code",
+   "fn": "passkey_error_words",
+   "input": {
+    "platform": "ios",
+    "domain": "SomeOtherDomain",
+    "code": null,
+    "message": "[50152] RP ID cannot be validated."
+   },
+   "expect": {
+    "value": {
+     "kind": "other",
+     "key": "onboarding.common.passkeyError.other",
+     "failure": "other"
+    }
+   }
+  },
+  {
+   "name": "passkey_error_words/macos/canceled",
+   "fn": "passkey_error_words",
+   "input": {
+    "platform": "macos",
+    "domain": "ASAuthorizationErrorDomain",
+    "code": 1001,
+    "message": ""
+   },
+   "expect": {
+    "value": {
+     "kind": "cancelled",
+     "key": "onboarding.common.passkeyError.cancelled",
+     "failure": "cancelled"
+    }
+   }
+  },
+  {
+   "name": "passkey_error_words/web/not_allowed",
+   "fn": "passkey_error_words",
+   "input": {
+    "platform": "web",
+    "domain": "NotAllowedError",
+    "code": null,
+    "message": "The operation either timed out or was not allowed."
+   },
+   "expect": {
+    "value": {
+     "kind": "cancelled",
+     "key": "onboarding.common.passkeyError.cancelled",
+     "failure": "cancelled"
+    }
+   }
+  },
+  {
+   "name": "passkey_error_words/web/abort",
+   "fn": "passkey_error_words",
+   "input": {
+    "platform": "web",
+    "domain": "AbortError",
+    "code": null,
+    "message": ""
+   },
+   "expect": {
+    "value": {
+     "kind": "cancelled",
+     "key": "onboarding.common.passkeyError.cancelled",
+     "failure": "cancelled"
+    }
+   }
+  },
+  {
+   "name": "passkey_error_words/web/invalid_state",
+   "fn": "passkey_error_words",
+   "input": {
+    "platform": "web",
+    "domain": "InvalidStateError",
+    "code": null,
+    "message": "The user attempted to register an authenticator that contains one of the credentials already registered with the relying party."
+   },
+   "expect": {
+    "value": {
+     "kind": "already_registered",
+     "key": "onboarding.common.passkeyError.alreadyRegistered",
+     "failure": "other"
+    }
+   }
+  },
+  {
+   "name": "passkey_error_words/web/security",
+   "fn": "passkey_error_words",
+   "input": {
+    "platform": "web",
+    "domain": "SecurityError",
+    "code": null,
+    "message": "The relying party ID is not a registrable domain suffix of, nor equal to the current domain."
+   },
+   "expect": {
+    "value": {
+     "kind": "app_not_associated",
+     "key": "onboarding.common.passkeyError.appNotAssociated",
+     "failure": "other"
+    }
+   }
+  },
+  {
+   "name": "passkey_error_words/web/not_supported",
+   "fn": "passkey_error_words",
+   "input": {
+    "platform": "web",
+    "domain": "NotSupportedError",
+    "code": null,
+    "message": ""
+   },
+   "expect": {
+    "value": {
+     "kind": "not_supported",
+     "key": "onboarding.common.passkeyError.notSupported",
+     "failure": "not_supported"
+    }
+   }
+  },
+  {
+   "name": "passkey_error_words/web/timeout",
+   "fn": "passkey_error_words",
+   "input": {
+    "platform": "web",
+    "domain": "TimeoutError",
+    "code": null,
+    "message": ""
+   },
+   "expect": {
+    "value": {
+     "kind": "timed_out",
+     "key": "onboarding.common.passkeyError.timedOut",
+     "failure": "cancelled"
+    }
+   }
+  },
+  {
+   "name": "passkey_error_words/web/unknown",
+   "fn": "passkey_error_words",
+   "input": {
+    "platform": "web",
+    "domain": "UnknownError",
+    "code": null,
+    "message": "An unknown error occurred while talking to the credential manager."
+   },
+   "expect": {
+    "value": {
+     "kind": "other",
+     "key": "onboarding.common.passkeyError.other",
+     "failure": "other"
+    }
+   }
+  },
+  {
+   "name": "passkey_error_words/any/phone_link_core_words",
+   "fn": "passkey_error_words",
+   "input": {
+    "platform": "android",
+    "domain": "",
+    "code": null,
+    "message": "caBLE transport: tunnel closed"
+   },
+   "expect": {
+    "value": {
+     "kind": "phone_unreachable",
+     "key": "onboarding.common.phoneLinkFailed",
+     "failure": "other"
+    }
+   }
+  },
+  {
+   "name": "passkey_error_words/any/nothing_known",
+   "fn": "passkey_error_words",
+   "input": {
+    "platform": "",
+    "domain": "",
+    "code": null,
+    "message": ""
+   },
+   "expect": {
+    "value": {
+     "kind": "other",
+     "key": "onboarding.common.passkeyError.other",
+     "failure": "other"
+    }
+   }
+  },
+  {
    "name": "rpc_node_standing/own_node_unreached",
    "fn": "rpc_node_standing",
    "input": {

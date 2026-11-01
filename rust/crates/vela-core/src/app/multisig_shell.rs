@@ -78,6 +78,17 @@ pub enum PasskeyPurpose {
         /// word (it may add friction, never take it away).
         #[serde(default)]
         anyway: bool,
+        /// r10 page: the members and the approvals needed NOW, as the
+        /// proposal was gathered against them (the chain's where the
+        /// multisig is deployed). A page draws a member change before →
+        /// after ("Members 3 → 4 · Approvals 2 of 3 → 2 of 4") — the
+        /// "before" as the app's word; it cannot read the chain itself.
+        /// Empty / 0 from a shell that says nothing.
+        #[serde(default)]
+        owners: Vec<String>,
+        #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(type = "number"))]
+        threshold: u64,
     },
     /// The proof asking the genesis service to record a new multisig
     /// (`sponsor_challenge`).
@@ -107,6 +118,10 @@ pub enum SendPurpose {
         threshold: u64,
         #[cfg_attr(feature = "bindings", ts(type = "unknown"))]
         tx: Box<SafeTx>,
+        /// r10 page: its members now, for a member change's before → after
+        /// on the page (the app's word, as `threshold` is).
+        #[serde(default)]
+        owners: Vec<String>,
     },
     /// The Ethereum backup's `record` call for `multisig`: the signing
     /// sheet, as any first-party transaction.
@@ -240,6 +255,15 @@ pub enum MultisigOperation {
         from: String,
         #[cfg_attr(feature = "bindings", ts(type = "unknown[]"))]
         calls: Vec<crate::multisig_review::SimCall>,
+        /// Real-device S2: the multisig as its deployment leaves it, where it
+        /// is not deployed yet (its code and setup storage) — `eth_simulateV1`'s
+        /// `blockStateCalls[0].stateOverrides`, passed as it is. Without it an
+        /// undeployed multisig's first transaction was simulated from a bare
+        /// address and said "expected to fail", then ran fine. `None` for a
+        /// deployed one.
+        #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(optional, type = "unknown"))]
+        state_overrides: Option<Value>,
     },
     /// What the send flow knows of a recipient (`resolveRecipientRisk`):
     /// whether it is a contract, and whether this device sent to it before.
@@ -335,6 +359,12 @@ pub enum AccountUpdate {
     /// r8-7: its members as the chains say now — its members where it is
     /// deployed, its founding ones where it is not (`members_anywhere`).
     MembersNow { members: Vec<String> },
+    /// r9-14: the rule in force as the chains last said — its rule where it
+    /// is deployed, the founding one where it is not, per network
+    /// (`current_rules`) — kept per multisig and served on its row.
+    RuleNow {
+        chip: super::multisig_members::RuleChip,
+    },
 }
 
 /// What the shell answers.

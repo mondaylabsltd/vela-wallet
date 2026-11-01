@@ -488,7 +488,7 @@ window.VelaCS = window.VelaCS || {};
         view.sentence = text('sentence.sendSelf', { amount: amount.text + ' ' + amount.symbol });
       } else {
         // The sentence names the address, not a label: "to 0x9A8b…1a09".
-        view.sentence = text('sentence.transfer', {
+        view.sentence = text(multisigFunds(ctx) ? 'sentence.msSends' : 'sentence.transfer', {
           amount: amount.text + ' ' + amount.symbol, to: meta.short,
         });
       }
@@ -525,7 +525,7 @@ window.VelaCS = window.VelaCS || {};
     var phrase = amount.text + ' ' + amount.symbol;
     view.nativeShown = true;
     view.fields.unshift({ label: 'field.nativeAttached', amount: amount, format: 'tokenAmount', role: 'native-out' });
-    view.warnings.push({ tone: 'caution', key: 'warn.nativeValue', params: { amount: phrase } });
+    view.warnings.push({ tone: 'caution', key: whose('warn.nativeValue', ctx), params: { amount: phrase } });
     raise(view, 'caution');
     if (view.tech) view.tech.params.unshift({ name: 'value', value: phrase });
   }
@@ -771,7 +771,7 @@ window.VelaCS = window.VelaCS || {};
     applyRecipientGuards(call, view, rows);
     outputGuards(descriptor, values, call, ctx, view, binding);
 
-    if (!view.sentence) view.sentence = sentenceFor(descriptor, rows, meta, view);
+    if (!view.sentence) view.sentence = sentenceFor(descriptor, rows, meta, view, ctx);
 
     var parsed2 = abi.parseSignature(descriptor.signature);
     view.tech = techFor(descriptor.signature, values, call.data, {
@@ -925,11 +925,25 @@ window.VelaCS = window.VelaCS || {};
     return abi.quantity(ctx.currentAllowance);
   }
 
+  /**
+   * r10: whose coins a card speaks of. On a multisig's transaction — a
+   * member's approval, an executor's run of it — they are the multisig's,
+   * never the signer's: "all of the multisig's USDC", not "all of your USDC".
+   * `selfTag` is set by this page only (resolve clears the requester's).
+   */
+  function multisigFunds(ctx) {
+    return !!ctx && ctx.selfTag === 'tag.thisMultisig';
+  }
+
+  function whose(key, ctx) {
+    return multisigFunds(ctx) ? key + 'Ms' : key;
+  }
+
   function applyApprovalGuard(approval, view, ctx) {
     if (approval.mode === 'all') {
       if (approval.all) {
         view.risk = 'danger';
-        view.warnings.push({ tone: 'danger', key: 'warn.approveAll' });
+        view.warnings.push({ tone: 'danger', key: whose('warn.approveAll', ctx) });
         view.warnings.push({ tone: 'danger', key: 'warn.approveAllLocked' });
         view.refuse = true;
       } else {
@@ -947,7 +961,7 @@ window.VelaCS = window.VelaCS || {};
     }
     if (amount.unlimited) {
       view.risk = 'danger';
-      view.warnings.push({ tone: 'danger', key: 'warn.unlimited', params: { symbol: amount.symbol } });
+      view.warnings.push({ tone: 'danger', key: whose('warn.unlimited', ctx), params: { symbol: amount.symbol } });
       view.warnings.push({ tone: 'danger', key: 'warn.unlimitedLocked' });
     } else if (approval.mode === 'increase') {
       var current = claimedAllowance(ctx);
@@ -992,7 +1006,7 @@ window.VelaCS = window.VelaCS || {};
     });
   }
 
-  function sentenceFor(descriptor, rows, meta, view) {
+  function sentenceFor(descriptor, rows, meta, view, ctx) {
     var send = rows.find(function (r) { return r.amount && r.role === 'send-amount'; });
     var to = rows.find(function (r) { return r.identity && (r.role === 'recipient' || r.role === 'spender'); });
     var kind = descriptor.kind;
@@ -1009,15 +1023,17 @@ window.VelaCS = window.VelaCS || {};
         var cap = rows.find(function (r) { return r.amount; });
         if (cap && to) {
           return cap.amount.unlimited
-            ? text('sentence.approveUnlimited', { spender: label(to.identity), symbol: cap.amount.symbol })
-            : text('sentence.approve', { spender: label(to.identity), amount: amountPhrase(cap.amount) });
+            ? text(whose('sentence.approveUnlimited', ctx), { spender: label(to.identity), symbol: cap.amount.symbol })
+            : text(whose('sentence.approve', ctx), { spender: label(to.identity), amount: amountPhrase(cap.amount) });
         }
       }
       return null;
     }
     var amount = amountPhrase(send.amount);
     if (kind === 'transfer' || kind === 'transferFrom') {
-      return text('sentence.transfer', { amount: amount, to: to ? label(to.identity) : '—' });
+      // r10: a multisig's transfer is the multisig's ("The multisig sends …").
+      return text(multisigFunds(ctx) ? 'sentence.msSends' : 'sentence.transfer',
+        { amount: amount, to: to ? label(to.identity) : '—' });
     }
     if (kind === 'swap') {
       var receive = rows.find(function (r) { return r.role === 'receive-amount'; });
@@ -1067,13 +1083,19 @@ window.VelaCS = window.VelaCS || {};
     return view;
   }
 
-  /** The deepest batch inside a batch this page lists (vela-core `reading::MAX_NESTING`). */
-  var MAX_NESTING = 3;
+  /**
+   * The levels of legs this page lists: the top batch and vela-core's
+   * `reading::MAX_NESTING` (3) batches inside it. r10: its own name — it
+   * shared `MAX_NESTING` with the takeover guard's (4) below, one `var` in
+   * one scope, so the "3" written here never applied; 4 is the value that
+   * agrees with the core level for level (multisig-test.mjs, r10 section).
+   */
+  var LISTED_LEVELS = 4;
 
   /**
    * r8-5: every leg of every level, in order — a leg that is itself a batch
    * is followed by its own legs ("1.1", "1.2"), never a card with nothing
-   * under it. Deeper than MAX_NESTING, nothing is read: refused, as the
+   * under it. Deeper than LISTED_LEVELS, nothing is read: refused, as the
    * wallet's core refuses it.
    */
   function flattenLegs(legs, view, prefix, depth) {
@@ -1084,7 +1106,7 @@ window.VelaCS = window.VelaCS || {};
       out.push({ index: index, view: leg.view });
       var inner = leg.view.legs || [];
       if (!inner.length) return;
-      if (depth >= MAX_NESTING) {
+      if (depth >= LISTED_LEVELS) {
         refuseWith(view, 'refuse.msBatchUnreadable');
         return;
       }
@@ -1102,7 +1124,8 @@ window.VelaCS = window.VelaCS || {};
   function liftLegWarnings(view) {
     view.legs.forEach(function (leg) {
       leg.view.warnings.forEach(function (w) {
-        if (w.tone === 'danger' || w.key === 'warn.nativeValue' || w.key === 'warn.invisibleChars') {
+        if (w.tone === 'danger' || w.key === 'warn.nativeValue' || w.key === 'warn.nativeValueMs' ||
+            w.key === 'warn.invisibleChars' || w.key === 'warn.msMembersClaimOff') {
           var seen = view.warnings.some(function (o) {
             return o.key === w.key && JSON.stringify(o.params || null) === JSON.stringify(w.params || null);
           });
@@ -2175,6 +2198,100 @@ window.VelaCS = window.VelaCS || {};
     return String(threshold) === '1' ? 'One' : '';
   }
 
+  /** The most members a claim may name: more is not a Vela multisig's, and not drawn. */
+  var MAX_MEMBERS = 256;
+
+  /**
+   * r10: the multisig's members and the approvals it needs NOW, as the app
+   * says (`context.multisig.owners` / `.threshold`, vela-core
+   * `approval::request` / `approval::execution_context`). This page cannot
+   * read the chain, so they are the app's word and drawn as such. Only a
+   * well-formed claim is used — distinct addresses, a threshold within them;
+   * anything else is no claim (the change is drawn as before, without the
+   * "before").
+   */
+  function membersClaim(ctx) {
+    var about = ctx.multisig && typeof ctx.multisig === 'object' && !Array.isArray(ctx.multisig) ? ctx.multisig : {};
+    var owners = about.owners;
+    var threshold = about.threshold;
+    if (!Array.isArray(owners) || !owners.length || owners.length > MAX_MEMBERS) return null;
+    if (!owners.every(function (o) { return typeof o === 'string' && ADDRESS.test(o); })) return null;
+    var lower = owners.map(function (o) { return o.toLowerCase(); });
+    if (lower.some(function (o, i) { return lower.indexOf(o) !== i; })) return null;
+    if (typeof threshold !== 'number' || !Number.isSafeInteger(threshold) || threshold < 1 || threshold > lower.length) {
+      return null;
+    }
+    return { owners: lower, threshold: BigInt(threshold), byApp: true };
+  }
+
+  /**
+   * The members after `action` on `now`, or null when the change does not
+   * fit them (adds a member it has, removes or replaces one it has not,
+   * asks more approvals than members, or none) — the Safe itself would
+   * refuse it, or the app's account of the members is wrong.
+   */
+  function membersAfter(now, action) {
+    var owners = now.owners.slice();
+    var threshold = now.threshold;
+    var has = function (a) { return owners.indexOf(String(a).toLowerCase()) >= 0; };
+    if (action.kind === 'addOwner') {
+      if (has(action.owner)) return null;
+      owners.push(action.owner.toLowerCase());
+      threshold = BigInt(action.threshold);
+    } else if (action.kind === 'removeOwner') {
+      if (!has(action.owner)) return null;
+      owners.splice(owners.indexOf(action.owner.toLowerCase()), 1);
+      threshold = BigInt(action.threshold);
+    } else if (action.kind === 'swapOwner') {
+      if (!has(action.oldOwner) || has(action.newOwner)) return null;
+      owners[owners.indexOf(action.oldOwner.toLowerCase())] = action.newOwner.toLowerCase();
+    } else {
+      threshold = BigInt(action.threshold);
+    }
+    if (threshold < 1n || threshold > BigInt(owners.length)) return null;
+    return { owners: owners, threshold: threshold, byApp: now.byApp };
+  }
+
+  /**
+   * r10: "Members 3 → 4 · Approvals 2 of 3 → 2 of 4" — the change against
+   * the members now. The "after" is read from the bytes; the "before" is
+   * the app's (`tag.byApp`) unless this very operation sets the multisig up
+   * (its setup, verified here, says it). A batch's member changes run one
+   * after another, so each leg's "before" is the leg before's "after".
+   * Returns whether the rows were drawn.
+   */
+  function beforeAfter(action, ctx, view) {
+    var now = ctx.membersNow;
+    if (!now) return false;
+    var after = membersAfter(now, action);
+    if (!after) {
+      // The change and the members the app names do not fit: no figures
+      // this page cannot stand behind, and a caution saying so.
+      ctx.membersNow = null;
+      raise(view, 'caution');
+      view.warnings.push({ tone: 'caution', key: 'warn.msMembersClaimOff' });
+      return false;
+    }
+    var tag = now.byApp ? 'tag.byApp' : undefined;
+    view.fields.push({
+      label: 'field.msMembers',
+      value: text('value.msCountChange', { before: now.owners.length, after: after.owners.length }),
+      emphasis: true, tagKey: tag,
+    });
+    // "Approvals needed", not "Approvals": an execution's card already has
+    // an "Approvals" row — the ones its signatures carry.
+    view.fields.push({
+      label: 'field.threshold',
+      value: text('value.msApprovalsChange', {
+        before: now.threshold.toString(), beforeOf: now.owners.length,
+        after: after.threshold.toString(), afterOf: after.owners.length,
+      }),
+      emphasis: true, tagKey: tag,
+    });
+    ctx.membersNow = after;
+    return true;
+  }
+
   /** The rows and words of a member change, the multisig's own call. */
   function memberChange(action, ctx, view) {
     view.intentKey = MEMBER_INTENTS[action.kind];
@@ -2183,7 +2300,9 @@ window.VelaCS = window.VelaCS || {};
     if (action.kind === 'addOwner' || action.kind === 'removeOwner') {
       var who = memberIdentity(action.owner, ctx);
       view.fields.push({ label: action.kind === 'addOwner' ? 'field.newMember' : 'field.member', identity: who });
-      view.fields.push({ label: 'field.threshold', value: action.threshold, emphasis: true });
+      if (!beforeAfter(action, ctx, view)) {
+        view.fields.push({ label: 'field.threshold', value: action.threshold, emphasis: true });
+      }
       view.sentence = text(
         (action.kind === 'addOwner' ? 'sentence.msAddOwner' : 'sentence.msRemoveOwner') + one(action.threshold),
         { owner: who.short, threshold: action.threshold });
@@ -2192,9 +2311,12 @@ window.VelaCS = window.VelaCS || {};
       var next = memberIdentity(action.newOwner, ctx);
       view.fields.push({ label: 'field.newMember', identity: next });
       view.fields.push({ label: 'field.oldMember', identity: gone });
+      beforeAfter(action, ctx, view);
       view.sentence = text('sentence.msSwapOwner', { newOwner: next.short, oldOwner: gone.short });
     } else {
-      view.fields.push({ label: 'field.threshold', value: action.threshold, emphasis: true });
+      if (!beforeAfter(action, ctx, view)) {
+        view.fields.push({ label: 'field.threshold', value: action.threshold, emphasis: true });
+      }
       view.sentence = text('sentence.msThreshold' + one(action.threshold), { threshold: action.threshold });
     }
     if (!view.warnings.some(function (w) { return w.key === 'warn.msMembers'; })) {
@@ -2233,6 +2355,9 @@ window.VelaCS = window.VelaCS || {};
     if (!request.error) ctx.chainId = request.chainId;
     ctx.selfAccount = request.error ? null : request.safe;
     ctx.selfTag = 'tag.thisMultisig';
+    // r10: the members and approvals now, as the app says — a member change
+    // reads before → after against them.
+    ctx.membersNow = membersClaim(ctx);
     ctx.coin = coinOf(ctx);
     var view = baseView(intent, ctx);
     view.method = intent.method;
@@ -2385,6 +2510,15 @@ window.VelaCS = window.VelaCS || {};
     // The transaction's own reading is the multisig's: "this multisig" is
     // the one the operation executes on, never the executor.
     var inner = Object.assign({}, ctx, { selfAccount: multisig, selfTag: 'tag.thisMultisig' });
+    // r10: a member change reads before → after. When this operation sets the
+    // multisig up, its setup (verified above, in lib/multisig.js) says who the
+    // members are — a fact; otherwise they are the app's word.
+    inner.membersNow = reading.deploy
+      ? {
+        owners: reading.deploy.owners.map(function (o) { return o.toLowerCase(); }),
+        threshold: reading.deploy.threshold, byApp: false,
+      }
+      : membersClaim(ctx);
     if (claim.address && claim.address.toLowerCase() !== multisig.toLowerCase()) {
       refuseWith(view, 'refuse.msExecMismatch');
     }
@@ -2396,11 +2530,14 @@ window.VelaCS = window.VelaCS || {};
     } else if (action.action.kind === 'cancel') {
       view.sentence = text('sentence.msExecCancel');
     } else if (action.action.kind === 'batch') {
-      view.legs = action.action.calls.map(function (leg, i) {
+      // r10: every leg of every level, as a member's approval lists them
+      // (r8-5) — a leg that is itself a batch was drawn with nothing under
+      // it here, its own legs never shown, and no depth limit applied.
+      view.legs = flattenLegs(action.action.calls.map(function (leg, i) {
         var legView = baseView({ origin: '' }, inner);
         multisigAction(leg.action, { to: leg.to, value: hexValue(leg.value), data: leg.data }, inner, legView, true);
         return { index: i + 1, view: legView };
-      });
+      }), view);
       view.sentence = text('sentence.msBatch', { count: action.action.calls.length });
       view.legs.forEach(function (leg) { raise(view, leg.view.risk); });
       view.refuse = view.refuse || view.legs.some(function (leg) { return leg.view.refuse; });
@@ -2412,6 +2549,9 @@ window.VelaCS = window.VelaCS || {};
       // risk — said as the multisig's ("The multisig sends …").
       view.hero = drawn.hero;
       view.fields = view.fields.concat(drawn.fields);
+      // r10: a lone call that is itself a batch (a CALL to a MultiSend) has
+      // its legs listed — they were read, then left off this card.
+      view.legs = drawn.legs || [];
       view.warnings = view.warnings.concat(drawn.warnings);
       view.tech = drawn.tech;
       view.level = drawn.level;
@@ -2548,6 +2688,11 @@ window.VelaCS = window.VelaCS || {};
     if (ns.multisig && ctx.method === ns.multisig.METHOD) return resolveMultisig(requested, ctx);
     ctx.siteRelayed = relayedSite(requested, ctx);
     ctx.selfAccount = selfAccountOf(requested, ctx);
+    // Ours too (r10): "this multisig", and the multisig's coins in the words,
+    // only where this page reads a multisig's transaction; the members the
+    // app says it has only where this page puts them.
+    ctx.selfTag = null;
+    ctx.membersNow = null;
     ctx.coin = coinOf(ctx);
     var view = baseView(requested, ctx);
     var ceremony = ns.ceremony && ns.ceremony.kindOf(requested && requested.method);

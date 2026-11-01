@@ -151,6 +151,14 @@ pub struct TrustedSignerApprovalInput {
     /// `anyway`): the page says "Approve anyway" in the danger style.
     #[uniffi(default = false)]
     pub anyway: bool,
+    /// r10 page: the multisig's members now (the passkey purpose's
+    /// `owners`), for a member change's before → after on the page.
+    #[uniffi(default = None)]
+    pub owners: Option<Vec<String>>,
+    /// r10 page: the approvals it needs now (the passkey purpose's
+    /// `threshold`; 0 or none says nothing).
+    #[uniffi(default = None)]
+    pub threshold: Option<u64>,
 }
 
 /// The page's `{intent, context}` for a member's approval of a SafeTx
@@ -182,6 +190,8 @@ pub fn trusted_signer_approval_request(
         credential_ids_hex: &input.credential_ids_hex,
         key_route: key_route.as_ref(),
         anyway: input.anyway,
+        owners: input.owners.as_deref().unwrap_or_default(),
+        threshold: input.threshold,
     })?;
     Ok(request.to_string())
 }
@@ -334,6 +344,88 @@ pub fn passkey_ceremony_end(kind: String, elapsed_ms: f64) -> PasskeyCeremonyEnd
     let kind = serde_json::from_value(serde_json::Value::String(kind))
         .unwrap_or(vela_core::app::FailureKind::Other);
     vela_core::app::passkey_end::ceremony_end(kind, elapsed_ms).into()
+}
+
+// ---------------------------------------------------------------------------
+// A passkey failure, said in the person's language (round 10, real-device S3)
+// ---------------------------------------------------------------------------
+
+/// What kind of failure a passkey prompt ended in —
+/// `passkey_error::PasskeyErrorKind`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum PasskeyErrorKind {
+    Cancelled,
+    NotSupported,
+    NoCredential,
+    AppNotAssociated,
+    NoNetwork,
+    PhoneUnreachable,
+    AlreadyRegistered,
+    TimedOut,
+    Other,
+}
+
+impl From<vela_core::app::passkey_error::PasskeyErrorKind> for PasskeyErrorKind {
+    fn from(kind: vela_core::app::passkey_error::PasskeyErrorKind) -> Self {
+        use vela_core::app::passkey_error::PasskeyErrorKind as K;
+        match kind {
+            K::Cancelled => Self::Cancelled,
+            K::NotSupported => Self::NotSupported,
+            K::NoCredential => Self::NoCredential,
+            K::AppNotAssociated => Self::AppNotAssociated,
+            K::NoNetwork => Self::NoNetwork,
+            K::PhoneUnreachable => Self::PhoneUnreachable,
+            K::AlreadyRegistered => Self::AlreadyRegistered,
+            K::TimedOut => Self::TimedOut,
+            K::Other => Self::Other,
+        }
+    }
+}
+
+/// What a shell draws for a failed passkey prompt
+/// (`passkey_error::PasskeyErrorWords`).
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct PasskeyErrorWords {
+    pub kind: PasskeyErrorKind,
+    /// The corpus key of the sentence (`onboarding.common.passkeyError.*`,
+    /// or `onboarding.common.phoneLinkFailed`), resolved through the shell's
+    /// own catalog like every other key.
+    pub key: String,
+    /// The `FailureKind` wire name the onboarding machines branch on
+    /// (`cancelled`, `not_supported`, `other`) — what `PasskeyFailed.kind`
+    /// carries and [`passkey_ceremony_end`] takes.
+    pub failure: String,
+}
+
+/// A platform passkey error's facts → the words a sheet draws, instead of
+/// the platform's raw message (`passkey_error::passkey_error_words`).
+///
+/// - `platform`: `"android"`, `"ios"`, `"macos"`, `"web"`.
+/// - `domain`: Android — the exception's class name (simple or qualified) or
+///   its `type`; for a `*PublicKeyCredentialDomException`, `domError.type`.
+///   Apple — the `NSError` domain. Web — the `DOMException` name.
+/// - `code`: the `NSError` code, or a Play Services status code; `None` when
+///   there is none (a `[50152] …` message head is read as one).
+/// - `message`: the raw message, read only for stable tokens.
+#[uniffi::export]
+#[must_use]
+#[allow(clippy::needless_pass_by_value)]
+pub fn passkey_error_words(
+    platform: String,
+    domain: String,
+    code: Option<i32>,
+    message: String,
+) -> PasskeyErrorWords {
+    let words =
+        vela_core::app::passkey_error::passkey_error_words(&platform, &domain, code, &message);
+    PasskeyErrorWords {
+        kind: words.kind.into(),
+        key: words.key,
+        failure: serde_json::to_value(words.failure)
+            .ok()
+            .and_then(|v| v.as_str().map(str::to_owned))
+            .unwrap_or_else(|| "other".to_owned()),
+    }
 }
 
 /// The signing prompt's deadline, ms — what a shell asks its platform's

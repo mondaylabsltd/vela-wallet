@@ -222,8 +222,11 @@ impl Live {
         page: &str,
         chain_id: u64,
         purpose: (&str, &str, Option<&str>, &vela_core::multisig::SafeTx, bool),
+        // r10 page: the members and approvals needed now, for before → after.
+        now: (&[String], u64),
     ) -> Res {
         let (multisig, safe_tx_hash, name, tx, anyway) = purpose;
+        let (owners, threshold) = now;
         let keys = user_op::key_set_of(account);
         let credential_ids: Vec<String> = keys.iter().map(|k| k.credential_id.clone()).collect();
         let plan = account.signing_plan();
@@ -244,6 +247,8 @@ impl Live {
                 key_route: plan.key.as_ref(),
                 // r9-10: the page says "Approve anyway" where the core asks.
                 anyway,
+                owners,
+                threshold: (threshold > 0).then_some(threshold),
             },
         );
         let request = match request {
@@ -348,11 +353,13 @@ impl Live {
                 name,
                 threshold,
                 tx,
+                owners,
             }) => json!({
                 "tx": tx,
                 "multisig": multisig,
                 "name": name,
                 "threshold": threshold,
+                "owners": owners,
             }),
             _ => json!({}),
         };
@@ -662,6 +669,8 @@ impl Deps for Live {
             name,
             tx,
             anyway,
+            owners,
+            threshold,
         } = purpose
         {
             match signing_route(&account.signing_plan(), SignatureKind::MultisigApproval) {
@@ -679,6 +688,7 @@ impl Deps for Live {
                         &url,
                         chain_id,
                         (multisig, safe_tx_hash, name.as_deref(), tx, *anyway),
+                        (owners, *threshold),
                     );
                 }
                 SigningRoute::InVela => {}

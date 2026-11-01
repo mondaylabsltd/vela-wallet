@@ -1,0 +1,35 @@
+{
+  "about": "r9-12 / r8-25 / r4D-5 — ONE name per address in every place it is named (headers, the switcher, Activity, Settings, sheets, invites; this device's own accounts too). The rule is the link door's `names.label {address, own, kept, registered}`: `registered` (the passkey index's name — the account's own published name, the same answer on every device) first, then `kept` (what a multisig on this device keeps for it), then `own` (this device's local account name — a fallback only), then the short EIP-55 address. Every shell draws the accounts machine's `member_labels[lowercase address]`, which is this rule over what the device knows; a shell never picks a name itself. Replay each case through the door and compare the answer.",
+  "cases": [
+    {
+      "name": "the phones' account: the index's published name, never the local fixture name (r10 'Interleave' vs 'Parallel One')",
+      "args": { "address": "0x88cca0eedbf2c4426110bbfc998f048689266894", "own": "Parallel One", "kept": null, "registered": "Interleave" },
+      "expect": "Interleave"
+    },
+    {
+      "name": "the published name before a label an invite carried",
+      "args": { "address": "0x88cca0eedbf2c4426110bbfc998f048689266894", "own": null, "kept": "Phones", "registered": "Interleave" },
+      "expect": "Interleave"
+    },
+    {
+      "name": "no index name: the kept label (an invite's, or the name typed when the member was added)",
+      "args": { "address": "0xd400866e0f1ad3a05dd5e9c1a2a0e0bfb2de130b", "own": null, "kept": "Dana", "registered": null },
+      "expect": "Dana"
+    },
+    {
+      "name": "this device's own account the index does not hold yet: its local name",
+      "args": { "address": "0xd400866e0f1ad3a05dd5e9c1a2a0e0bfb2de130b", "own": "Parallel One", "kept": null, "registered": null },
+      "expect": "Parallel One"
+    },
+    {
+      "name": "a blank name is no name",
+      "args": { "address": "0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc", "own": "  ", "kept": "", "registered": " " },
+      "expect": "0x3C44Cd…4293BC"
+    },
+    {
+      "name": "nothing known: the short address",
+      "args": { "address": "0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc", "own": null, "kept": null, "registered": null },
+      "expect": "0x3C44Cd…4293BC"
+    }
+  ]
+}

@@ -11,6 +11,7 @@ export * from './FailureKind';
 export * from './KeyMethod';
 export * from './LoginEvent';
 export * from './LoginView';
+export * from './PasskeyErrorFacts';
 export * from './PendingPublish';
 export * from './PendingUpload';
 export * from './PendingUploadMember';

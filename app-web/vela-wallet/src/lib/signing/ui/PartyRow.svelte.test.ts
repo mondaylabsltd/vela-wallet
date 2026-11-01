@@ -43,4 +43,22 @@ describe('the party row at the side panel’s width (089)', () => {
 				expect(rect.right).toBeLessThanOrEqual(right + 0.5);
 		});
 	}
+
+	// r10: the outside page names an unnamed "To" by its whole address, in the
+	// name's larger type — it ran past the card at 430 px.
+	it('a party named by its whole address stays inside the card', async () => {
+		host = document.createElement('div');
+		host.style.cssText = `width:${PANEL_PX}px;padding:0 ${PAD_PX}px;box-sizing:border-box;`;
+		document.body.appendChild(host);
+		render(PartyRow, {
+			target: host,
+			props: { label: 'To', name: ADDRESS, address: ADDRESS }
+		});
+		await tick();
+		await document.fonts.ready;
+		const right = host.getBoundingClientRect().right - PAD_PX;
+		const range = document.createRange();
+		range.selectNodeContents(host.querySelector<HTMLElement>('.name')!);
+		for (const rect of range.getClientRects()) expect(rect.right).toBeLessThanOrEqual(right + 0.5);
+	});
 });

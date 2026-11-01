@@ -386,4 +386,15 @@ window.VelaCS.i18n.register('ja', {
   'sentence.msAddOwnerOne': "{owner} がメンバーになり、承認は {threshold} 件必要になります。",
   'sentence.msRemoveOwnerOne': "{owner} がメンバーでなくなり、承認は {threshold} 件必要になります。",
   'sentence.msThresholdOne': "今後は承認が {threshold} 件必要になります。",
+  // r10: a multisig's coins are the multisig's, not the signer's; a member
+  // change reads before → after against the members the app says it has now.
+  'sentence.approveMs': "{spender} がマルチシグの資産を最大 {amount} まで使えるようにします。",
+  'sentence.approveUnlimitedMs': "{spender} がマルチシグの {symbol} をすべて使えるようにします — 上限はありません。",
+  'warn.unlimitedMs': "無制限 — このコントラクトはマルチシグの {symbol} をすべて使用できます。",
+  'warn.approveAllMs': "このコレクションでマルチシグが現在および今後保有するすべての NFT が、いつでも持ち出される可能性があります。",
+  'warn.nativeValueMs': "この呼び出しは、ここに表示された内容とは別に、マルチシグから呼び出し先のコントラクトへ {amount} を送ります。",
+  'field.msMembers': "メンバー",
+  'value.msCountChange': "{before} → {after}",
+  'value.msApprovalsChange': "{beforeOf} 件中 {before} 件 → {afterOf} 件中 {after} 件",
+  'warn.msMembersClaimOff': "この変更は、アプリが示すマルチシグの現在のメンバーと合いません — 実行時に失敗する可能性があります。承認する前に、ほかのメンバーとメンバー構成を確認してください。",
 });

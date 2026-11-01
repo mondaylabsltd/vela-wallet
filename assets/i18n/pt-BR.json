@@ -819,7 +819,8 @@
      "description": "A maioria das redes aceita stablecoins para as taxas — sem precisar ter a moeda nativa antes."
     }
    },
-   "linkWaiting": "Um link de multisig está esperando. Crie uma carteira ou entre, e ele abre."
+   "linkWaiting": "Um link de multisig está esperando. Crie uma carteira ou entre, e ele abre.",
+   "linkBroken": "Este link de multisig não chegou inteiro. Peça de novo."
   },
   "settings": {
    "title": "Configurações",
@@ -890,7 +891,17 @@
    "safariPasskeyBody": "O Safari não permite que as páginas da própria extensão usem uma chave de acesso, então a Vela faz isso na página de assinatura. Tente de novo.",
    "phoneLinkFailed": "Seu outro dispositivo não se conectou, ou a conexão caiu antes de terminar. Mantenha os dois dispositivos online e próximos e escaneie o código de novo.",
    "keyUnavailableTitle": "Chave de segurança indisponível",
-   "keyUnavailableBody": "Este dispositivo não conseguiu usar a chave de segurança. Tente outra chave de segurança FIDO2 ou escolha outra forma de continuar."
+   "keyUnavailableBody": "Este dispositivo não conseguiu usar a chave de segurança. Tente outra chave de segurança FIDO2 ou escolha outra forma de continuar.",
+   "passkeyError": {
+    "cancelled": "A janela da passkey foi fechada antes de terminar. Tente de novo quando quiser.",
+    "notSupported": "Este dispositivo não consegue usar uma passkey aqui. Tente outro dispositivo ou uma chave de segurança.",
+    "noCredential": "Nenhuma passkey do Vela foi encontrada neste dispositivo. Use um dispositivo ou chave de segurança que tenha uma.",
+    "appNotAssociated": "Este dispositivo não conseguiu confirmar que o Vela pode usar suas passkeys. Verifique sua conexão e tente de novo — se continuar, atualize o Vela.",
+    "noNetwork": "A passkey precisa de conexão de rede. Verifique sua conexão e tente de novo.",
+    "alreadyRegistered": "Este autenticador já guarda uma das chaves desta carteira. Use outro.",
+    "timedOut": "O tempo da janela da passkey esgotou. Tente de novo.",
+    "other": "Não foi possível usar a passkey. Tente de novo."
+   }
   },
   "create": {
    "accountNameHint": "Este nome é armazenado junto com sua chave pública on-chain para login em vários dispositivos.",

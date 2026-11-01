@@ -388,4 +388,15 @@ window.VelaCS.i18n.register('ru', {
   'sentence.msAddOwnerOne': "{owner} становится участником, и понадобится одобрений: {threshold}.",
   'sentence.msRemoveOwnerOne': "{owner} перестаёт быть участником, и понадобится одобрений: {threshold}.",
   'sentence.msThresholdOne': "Отныне понадобится одобрений: {threshold}.",
+  // r10: a multisig's coins are the multisig's, not the signer's; a member
+  // change reads before → after against the members the app says it has now.
+  'sentence.approveMs': "Это разрешает {spender} потратить до {amount} средств мультиподписи.",
+  'sentence.approveUnlimitedMs': "Это разрешает {spender} тратить все {symbol} мультиподписи — без лимита.",
+  'warn.unlimitedMs': "Без лимита — этот контракт может потратить все {symbol} мультиподписи.",
+  'warn.approveAllMs': "Любой NFT из этой коллекции, который есть у мультиподписи сейчас или появится позже, могут забрать в любой момент.",
+  'warn.nativeValueMs': "Этот вызов также отправляет {amount} с мультиподписи вызываемому контракту — сверх всего, что показано здесь.",
+  'field.msMembers': "Участники",
+  'value.msCountChange': "{before} → {after}",
+  'value.msApprovalsChange': "{before} из {beforeOf} → {after} из {afterOf}",
+  'warn.msMembersClaimOff': "Это изменение не сходится с участниками, которые, по словам приложения, сейчас есть у мультиподписи, — при выполнении оно может не пройти. Сверьте состав с другими участниками, прежде чем одобрять.",
 });

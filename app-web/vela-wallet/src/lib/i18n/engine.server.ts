@@ -148,7 +148,8 @@ export function resolveWelcomeMessages(locale: Locale): WelcomeMessages {
 		heroSubtitle: t(locale, 'onboarding.welcome.heroSubtitle'),
 		createWallet: t(locale, 'onboarding.welcome.createWallet'),
 		alreadyHaveWallet: t(locale, 'onboarding.welcome.alreadyHaveWallet'),
-		linkWaiting: t(locale, 'onboarding.welcomeWeb.linkWaiting')
+		linkWaiting: t(locale, 'onboarding.welcomeWeb.linkWaiting'),
+		linkBroken: t(locale, 'onboarding.welcomeWeb.linkBroken')
 	};
 }
 
@@ -1554,6 +1555,7 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		feePayWithAnotherCoin: k('componentsUi.gas.payWithAnotherCoin'),
 		feeTokenTitle: k('componentsUi.signing.feeTokenTitle'),
 		feeShort: k('send.warnInsufficientGas'),
+		feeShortWithAmount: k('send.warnInsufficientForGas'),
 		feeCoinSpent: k('componentsUi.gas.feeCoinSpent'),
 		feeRowShort: k('componentsUi.gas.rowShort'),
 		feeNoCoinPays: k('componentsUi.gas.noCoinPays'),

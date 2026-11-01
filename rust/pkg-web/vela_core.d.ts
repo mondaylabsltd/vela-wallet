@@ -1420,6 +1420,26 @@ export function identiconSvgCircular(seed: string): string;
 export function inFlightOps(track_view_json: string): string;
 
 /**
+ * r9-17: the wait before the next incoming scan
+ * (`incoming_scan::next_scan_ms`).
+ */
+export function incomingNextScanMs(visible: boolean, since_interaction_ms: number): number;
+
+/**
+ * r9-17: the networks an account's incoming scan reads, and where its
+ * native balance is watched (`incoming_scan::scan_plan`): `TrustScanFacts`
+ * JSON in, `IncomingScanPlan` JSON out. The uniffi twin is
+ * `shell_rules_bridge.rs`'s `incoming_scan_plan`.
+ */
+export function incomingScanPlan(facts_json: string): string;
+
+/**
+ * r9-17: one poll's reads on one network (`incoming_scan::scan_windows`):
+ * `IncomingScanWindowsAsk` JSON in, `IncomingScanWindows` JSON out.
+ */
+export function incomingScanWindows(ask_json: string): string;
+
+/**
  * `vela_advise`: the agent's opinion, sanitized and bound to a review digest.
  */
 export function intentAdvice(input_json: string): string;
@@ -1636,6 +1656,16 @@ export function passkeyDirectoryEntry(aaguid: string, json: string, dark: boolea
  * name (spec 038 #E4); absent, the crate's default.
  */
 export function passkeyDirectoryUrl(aaguid: string, origin?: string | null): string | undefined;
+
+/**
+ * A platform passkey error's facts → the words a sheet draws
+ * (`passkey_error::passkey_error_words`), as JSON text:
+ * `{"kind":"app_not_associated","key":"onboarding.common.passkeyError.…","failure":"other"}`.
+ * `code` is `undefined` when there is none. Round 10 (real-device S3): the
+ * web drew `DOMException.message` — the browser's English — in a
+ * translated sheet.
+ */
+export function passkeyErrorWords(platform: string, domain: string, code: number | null | undefined, message: string): string;
 
 /**
  * **The security-key fallback mark**, as an `image/svg+xml` data URI, for a
@@ -2575,6 +2605,9 @@ export interface InitOutput {
     readonly identiconSvg: (a: number, b: number) => [number, number, number, number];
     readonly identiconSvgCircular: (a: number, b: number) => [number, number, number, number];
     readonly inFlightOps: (a: number, b: number) => [number, number];
+    readonly incomingNextScanMs: (a: number, b: number) => number;
+    readonly incomingScanPlan: (a: number, b: number) => [number, number];
+    readonly incomingScanWindows: (a: number, b: number) => [number, number];
     readonly intentAdvice: (a: number, b: number) => [number, number];
     readonly intentAdviceStanding: (a: number, b: number) => [number, number];
     readonly intentAgentReads: (a: number, b: number, c: number, d: number) => [number, number];
@@ -2651,6 +2684,7 @@ export interface InitOutput {
     readonly passkeyCeremonyEnd: (a: number, b: number, c: number) => [number, number];
     readonly passkeyDirectoryEntry: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number];
     readonly passkeyDirectoryUrl: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly passkeyErrorWords: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
     readonly passkeyFallbackIconDataUri: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number];
     readonly passkeyProviderIconDataUri: (a: number, b: number, c: number) => [number, number];
     readonly passkeyProviderName: (a: number, b: number) => [number, number];

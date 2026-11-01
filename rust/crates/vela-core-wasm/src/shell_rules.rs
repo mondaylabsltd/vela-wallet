@@ -38,3 +38,26 @@ pub fn ens_namehash(name: &str) -> String {
 pub fn ens_reverse_node(address: &str) -> Result<String, JsValue> {
     vela_core::ens::ens_reverse_node(address).map_err(err)
 }
+
+/// r9-17: the networks an account's incoming scan reads, and where its
+/// native balance is watched (`incoming_scan::scan_plan`): `TrustScanFacts`
+/// JSON in, `IncomingScanPlan` JSON out. The uniffi twin is
+/// `shell_rules_bridge.rs`'s `incoming_scan_plan`.
+#[wasm_bindgen(js_name = incomingScanPlan)]
+pub fn incoming_scan_plan(facts_json: &str) -> String {
+    vela_core::app::incoming_scan::scan_plan_json(facts_json)
+}
+
+/// r9-17: one poll's reads on one network (`incoming_scan::scan_windows`):
+/// `IncomingScanWindowsAsk` JSON in, `IncomingScanWindows` JSON out.
+#[wasm_bindgen(js_name = incomingScanWindows)]
+pub fn incoming_scan_windows(ask_json: &str) -> String {
+    vela_core::app::incoming_scan::scan_windows_json(ask_json)
+}
+
+/// r9-17: the wait before the next incoming scan
+/// (`incoming_scan::next_scan_ms`).
+#[wasm_bindgen(js_name = incomingNextScanMs)]
+pub fn incoming_next_scan_ms(visible: bool, since_interaction_ms: f64) -> u32 {
+    vela_core::app::incoming_scan::next_scan_ms(visible, since_interaction_ms)
+}

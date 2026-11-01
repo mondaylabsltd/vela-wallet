@@ -245,6 +245,12 @@ export type FetchTokensOptions = {
 	 * loaded (`TokenListUnreadError`, PR 3 note 4): never an RPC fix for those.
 	 */
 	onFailedChains?: (chainIds: number[], internalIds: number[], registryIds: number[]) => void;
+	/**
+	 * r10-1: called when the answer is the TTL cache's, with the time those rows
+	 * were read — no network was asked, so the balance machine stamps that time
+	 * (`read_at_ms`), never "Updated now" (offline, a cache hit said "now").
+	 */
+	onCached?: (fetchedAt: number) => void;
 };
 
 /**
@@ -285,7 +291,10 @@ export async function fetchTokens(
 			if (failed.length > 0) options.onFailedChains?.(failed, internal, registry);
 			return cloneTokens(tokens);
 		}
-		if (now - cached.fetchedAt < maxAgeMs) return cloneTokens(cached.tokens);
+		if (now - cached.fetchedAt < maxAgeMs) {
+			options.onCached?.(cached.fetchedAt);
+			return cloneTokens(cached.tokens);
+		}
 	}
 
 	let partial = false;

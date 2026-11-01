@@ -58,10 +58,16 @@
 		min-width: 0;
 	}
 
+	/*
+	  r10 (outside page at 430 px): a party nobody has named is named by its
+	  whole address — forty hex digits at this size ran past the card's right
+	  edge. It wraps anywhere, as the address line under it does.
+	*/
 	.name {
 		font-size: calc(var(--text-lg) * var(--text-scale, 1));
 		font-weight: var(--weight-semibold);
 		color: var(--color-fg-base);
+		overflow-wrap: anywhere;
 	}
 
 	/*
