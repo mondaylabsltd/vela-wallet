@@ -569,7 +569,7 @@ impl WalletPage {
                     .accounts
                     .iter()
                     .find(|r| same(&r.account.address, address))
-                    .map(|r| r.account.name.clone())
+                    .map(|r| crate::multisig::shown::name_or(&r.account.address, &r.account.name))
             };
             let named = link
                 .members

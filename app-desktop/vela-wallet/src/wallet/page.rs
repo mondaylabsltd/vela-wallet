@@ -1423,7 +1423,12 @@ fn consent_account(
             name: accounts
                 .iter()
                 .find(|row| row.account.address.eq_ignore_ascii_case(address))
-                .map(|row| SharedString::from(row.account.name.clone()))
+                .map(|row| {
+                    SharedString::from(crate::multisig::shown::name_or(
+                        &row.account.address,
+                        &row.account.name,
+                    ))
+                })
                 .unwrap_or_default(),
             address: address.to_owned(),
         },
@@ -1698,10 +1703,21 @@ impl WalletPage {
 
     /// What the header, the receive panel and the identicon are drawn from.
     fn identity(&self) -> Identity {
-        self.identity.clone().unwrap_or_else(|| Identity {
-            name: WALLET_NAME.into(),
-            address: ADDRESS_FULL.to_owned(),
-        })
+        match self.identity.clone() {
+            // §9.1 (r9-12): the account's one name, the core's label — the
+            // same on the header as in Activity, Settings and every sheet;
+            // this device's own name only while the machine has none. (A
+            // multisig shown is in the labels only as a member of another,
+            // under the name the core gives it there.)
+            Some(identity) => Identity {
+                name: crate::multisig::shown::name_or(&identity.address, &identity.name).into(),
+                ..identity
+            },
+            None => Identity {
+                name: WALLET_NAME.into(),
+                address: ADDRESS_FULL.to_owned(),
+            },
+        }
     }
 
     /// `VELA_PAGE=settings` opens straight onto 设置 (spec 023).
@@ -2090,7 +2106,8 @@ impl WalletPage {
     /// disagree about an address. `None` when there is nobody to receive as,
     /// or nothing to encode yet.
     fn receive_share_card(&mut self, cx: &mut Context<Self>) -> Option<ShareCardFacts> {
-        let identity = self.identity.clone()?;
+        self.identity.as_ref()?;
+        let identity = self.identity();
         let pay = resident::resident::<PaymentRequest>(cx).read(cx).view();
         // The gate: no card before the warning has been read, for the same
         // reason there is no address on screen (phase 38). A saved picture is
@@ -7752,9 +7769,10 @@ impl WalletPage {
     fn flow_body(&mut self, panel: FlowPanel, cx: &mut Context<Self>) -> flow_fixtures::FlowBody {
         // What currency every `≈` figure below is drawn in.
         let currency = self.money(cx);
-        let Some(identity) = self.identity.clone() else {
+        if self.identity.is_none() {
             return self.mock_flow_body(panel);
-        };
+        }
+        let identity = self.identity();
         match panel {
             FlowPanel::Dt1 | FlowPanel::Dt4 => {
                 let view = crate::network_space::balance_view(cx);
@@ -10342,7 +10360,11 @@ impl WalletPage {
                                 .font_weight(gpui::FontWeight::SEMIBOLD)
                                 .text_color(name_colour)
                                 .truncate()
-                                .child(gpui::SharedString::from(row.account.name.clone())),
+                                // §9.1: the account's one name, the core's.
+                                .child(gpui::SharedString::from(crate::multisig::shown::name_or(
+                                    &row.account.address,
+                                    &row.account.name,
+                                ))),
                         )
                         .child(
                             div()
@@ -19273,7 +19295,7 @@ impl WalletPage {
             {
                 model.signer_name = money::account_by_address(&address).map_or_else(
                     || crate::wallet::live::shorten_address(&address).into(),
-                    |account| account.name.into(),
+                    |account| crate::multisig::shown::name_or(&address, &account.name).into(),
                 );
                 model.signer_seed = address.into();
             }
