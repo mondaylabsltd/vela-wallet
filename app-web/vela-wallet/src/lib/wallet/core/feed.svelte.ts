@@ -12,6 +12,7 @@
 import { accountName } from '$lib/multisig/core/account-name';
 import { multisigAccountsForExt } from '$lib/multisig/core/ext';
 import { loadCore } from '$lib/core/client';
+import type { FeedPresence } from '$lib/core/generated/FeedPresence';
 import type { FeedView } from '$lib/core/generated/FeedView';
 import { session } from '$lib/session/core/session.svelte';
 import { balance } from '$lib/wallet/core/balance.svelte';
@@ -157,6 +158,51 @@ class Feed {
 				return subscribeActivityFeed((view) => listener(view.next_scan ?? null));
 			}
 		};
+	}
+
+	/**
+	 * r10 follow-up: the person's own moments, for the cadence. Each is the
+	 * page as it stands now; the person has just acted, so it was touched
+	 * just now (`since_interaction_ms` is kept on the wire, unread).
+	 */
+	#presence(): FeedPresence {
+		return {
+			visible: document.visibilityState === 'visible',
+			since_interaction_ms: 0,
+			now_ms: Date.now()
+		};
+	}
+
+	/**
+	 * The home's refresh was pressed (`refreshed`): the core reads the store
+	 * and scans at once, and the back-off starts again.
+	 */
+	refreshed(): void {
+		if (!this.#booted) return;
+		dispatchActivityFeed({
+			type: 'presence_changed',
+			presence: this.#presence(),
+			change: 'refreshed'
+		});
+	}
+
+	/**
+	 * A send left this account — handed to the relay (`sent`): the scan
+	 * alone (the send's own record re-reads the store), and the back-off
+	 * starts again.
+	 */
+	sent(): void {
+		if (!this.#booted) return;
+		dispatchActivityFeed({ type: 'presence_changed', presence: this.#presence(), change: 'sent' });
+	}
+
+	/**
+	 * A list's scroll, wheel or drag started (`on`) or settled (`off`) —
+	 * `list-gesture.ts`. A scan that comes due meanwhile waits for `off`.
+	 */
+	interacting(on: boolean): void {
+		if (!this.#booted) return;
+		dispatchActivityFeed({ type: 'interacting', on, presence: this.#presence() });
 	}
 
 	/**

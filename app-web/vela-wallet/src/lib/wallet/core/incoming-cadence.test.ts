@@ -10,6 +10,7 @@
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type { FeedNextScan } from '$lib/core/generated/FeedNextScan';
 import type { FeedView } from '$lib/core/generated/FeedView';
+import { GESTURE_SETTLE_MS, GestureTracker } from '../list-gesture';
 import { followIncomingCadence, type CadenceHost, type CadencePort } from './incoming-cadence';
 
 type Core = {
@@ -142,7 +143,13 @@ function follow(page: ReturnType<typeof fakePage>) {
 		}
 	};
 	const stop = followIncomingCadence(port, page.host);
-	return { scans, stop, followers };
+	/** The page as `feed.svelte.ts` reports it for the person's own moments. */
+	const presence = () => ({
+		visible: page.host.visible(),
+		since_interaction_ms: 0,
+		now_ms: page.host.now()
+	});
+	return { scans, stop, followers, send, presence };
 }
 
 describe('followIncomingCadence (the core decides)', () => {
@@ -203,6 +210,61 @@ describe('followIncomingCadence (the core decides)', () => {
 		}
 		expect(reports).toEqual(['started', 'interacted', 'interacted']);
 		stop();
+	});
+
+	it('a list scrolling holds a due scan; it runs once the list settles (r10 follow-up)', () => {
+		const page = fakePage();
+		const { scans, send, presence } = follow(page);
+		// `feed.interacting`, from the list's gesture (`list-gesture.ts`).
+		const list = new GestureTracker(
+			(on) => send({ type: 'interacting', on, presence: presence() }),
+			page.host
+		);
+		page.advance(10_000); // the first scan is due at 15 s
+		// A long scroll: a scroll event every 100 ms from 10 s to 20 s.
+		for (let at = 10_000; at < 20_000; at += 100) {
+			list.input('moved');
+			page.advance(100);
+		}
+		expect(scans).toEqual([]);
+		// The list settles: `GESTURE_SETTLE_MS` after its last move, at 19.9 s.
+		page.advance(GESTURE_SETTLE_MS);
+		expect(scans).toEqual([19_900 + GESTURE_SETTLE_MS]);
+	});
+
+	it('a finger on the list keeps the hold; scrollend after a fling releases it', () => {
+		const page = fakePage();
+		const { scans, send, presence } = follow(page);
+		const list = new GestureTracker(
+			(on) => send({ type: 'interacting', on, presence: presence() }),
+			page.host
+		);
+		page.advance(14_000);
+		list.input('finger-down');
+		list.input('moved');
+		page.advance(3_000); // the finger rests past the due scan
+		expect(scans).toEqual([]);
+		list.input('finger-up');
+		list.input('moved'); // the fling
+		page.advance(100);
+		expect(scans).toEqual([]);
+		list.input('settled'); // scrollend
+		expect(scans).toEqual([17_100]);
+	});
+
+	it('refreshed and sent scan at once and start the back-off over', () => {
+		const page = fakePage();
+		const { scans, send, presence } = follow(page);
+		page.advance(100_000); // scans at 15, 30 and 60 s; the next waits 60 s
+		scans.length = 0;
+		send({ type: 'presence_changed', presence: presence(), change: 'refreshed' });
+		expect(scans).toEqual([100_000]);
+		page.advance(15_000);
+		expect(scans).toEqual([100_000, 115_000]);
+		send({ type: 'presence_changed', presence: presence(), change: 'sent' });
+		expect(scans).toEqual([100_000, 115_000, 115_000]);
+		page.advance(15_000);
+		expect(scans).toEqual([100_000, 115_000, 115_000, 130_000]);
 	});
 
 	it('stopping removes the timer, every listener and the follow', () => {
