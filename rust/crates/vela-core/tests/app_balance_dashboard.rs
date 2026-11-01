@@ -1470,6 +1470,9 @@ fn unreachable_names_only_the_networks_a_multisig_lives_on() {
     round(&mut sut, vec![11_155_420]);
     assert!(down(&sut).is_empty(), "{:?}", down(&sut));
     assert_eq!(sut.view().unreachable_key, None);
+    // ...nor "still updating": its figure is whole.
+    assert!(!sut.view().balance_partial);
+    assert_eq!(sut.view().notice, None);
     // Its own network out of reach: said, and only it.
     round(&mut sut, vec![5_042_002, 11_155_420]);
     assert_eq!(down(&sut), vec![5_042_002]);
