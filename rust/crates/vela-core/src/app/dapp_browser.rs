@@ -121,6 +121,15 @@ use super::sign_request::SignResponsePayload;
 /// `calls_status`, never a bundler's: its body is that machine's answer.
 pub const MULTISIG_CALLS_STATUS_METHOD: &str = "wallet_getCallsStatus";
 
+/// r9: where the batches a multisig answered pages with are kept
+/// ([`DbrOperation::WriteMultisigBatches`], read back with the sites): a
+/// site's `wallet_getCallsStatus` after a restart still reaches the
+/// proposals machine, never "Unknown bundle id".
+pub const MULTISIG_BATCHES_KEY: &str = "vela.dapp.multisigBatches";
+/// The most batches kept, the newest: a site follows its batch for minutes,
+/// not for ever.
+pub const MULTISIG_BATCHES_KEPT: usize = 64;
+
 /// A site with no stored chain and no grant starts on Ethereum — the
 /// extension's `DEFAULT_EXT_CHAIN_ID` (research R5).
 pub const DEFAULT_CHAIN_ID: u32 = 1;
@@ -167,6 +176,13 @@ pub enum DbrOperation {
     WriteSiteChain {
         origin: String,
         chain_id: u32,
+    },
+    /// r9: keep `value_json` under [`MULTISIG_BATCHES_KEY`] (the multisig
+    /// batches, `[[batch, chainId], …]`, oldest first, at most
+    /// [`MULTISIG_BATCHES_KEPT`]) and answer `Ack`; hand it back as
+    /// `SitesListed.multisig_batches_json` on the next launch.
+    WriteMultisigBatches {
+        value_json: String,
     },
     /// Hand `message_json` to `window.__velaDeliver` in `tab`. The bridge
     /// drops it unless its document is `doc`; a shell with no such tab drops
@@ -254,6 +270,10 @@ pub enum DbrOperation {
 pub enum DbrShellResult {
     SitesListed {
         sites: Vec<DbrStoredSite>,
+        /// r9: what [`MULTISIG_BATCHES_KEY`] holds (`None`: nothing, or a
+        /// shell that keeps no batches).
+        #[serde(default)]
+        multisig_batches_json: Option<String>,
     },
     /// The JSON-RPC response body — `{"result":…}` or `{"error":{…}}` — or
     /// `None` when no endpoint answered; `failure` says why not, when the
@@ -434,6 +454,7 @@ pub enum Event {
     #[serde(skip)]
     SitesListed {
         sites: Vec<DbrStoredSite>,
+        multisig_batches_json: Option<String>,
     },
     #[serde(skip)]
     ReadDone {
@@ -605,6 +626,8 @@ pub struct Model {
     /// proposal's safeTxHash), and the chain each is on — their status is
     /// the proposals machine's.
     multisig_batches: BTreeMap<String, u32>,
+    /// r9: those batches, oldest first (the order they are kept and let go in).
+    multisig_batch_order: VecDeque<String>,
     /// Tabs the shell closed. A straggler from one of them is ignored, never
     /// adopted as a new page.
     closed_tabs: VecDeque<String>,
@@ -766,7 +789,11 @@ impl App for DappBrowser {
                 }
                 reconcile_grants(model, Some(now_ms), &mut out);
             }
-            Event::SitesListed { sites } => {
+            Event::SitesListed {
+                sites,
+                multisig_batches_json,
+            } => {
+                read_multisig_batches(model, multisig_batches_json.as_deref());
                 sites_listed(model, sites, &mut out);
             }
             Event::PageMessage {
@@ -1131,9 +1158,18 @@ impl Out {
     fn request_list(&mut self) {
         self.commands.push(
             Command::request_from_shell(DbrOperation::ListSites).then_send(|result| match result {
-                DbrShellResult::SitesListed { sites } => Event::SitesListed { sites },
+                DbrShellResult::SitesListed {
+                    sites,
+                    multisig_batches_json,
+                } => Event::SitesListed {
+                    sites,
+                    multisig_batches_json,
+                },
                 // A neutral or wrong answer: nothing stored.
-                _ => Event::SitesListed { sites: Vec::new() },
+                _ => Event::SitesListed {
+                    sites: Vec::new(),
+                    multisig_batches_json: None,
+                },
             }),
         );
     }
@@ -1211,6 +1247,50 @@ impl Out {
 // ---------------------------------------------------------------------------
 // Sites
 // ---------------------------------------------------------------------------
+
+/// r9: the batches kept from an earlier launch (`[[batch, chainId], …]`,
+/// oldest first). What does not read is no batch. Batches answered on this
+/// launch already stand.
+fn read_multisig_batches(model: &mut Model, stored: Option<&str>) {
+    let Some(rows) = stored.and_then(|s| serde_json::from_str::<Vec<(String, u32)>>(s).ok()) else {
+        return;
+    };
+    for (batch, chain) in rows {
+        let batch = batch.to_ascii_lowercase();
+        if chain == 0 || model.multisig_batches.contains_key(&batch) {
+            continue;
+        }
+        model.multisig_batches.insert(batch.clone(), chain);
+        model.multisig_batch_order.push_front(batch);
+    }
+    trim_multisig_batches(model);
+}
+
+/// r9: keep a batch a multisig answered a page with — and on the device, so
+/// its status is still asked after a restart. The newest
+/// [`MULTISIG_BATCHES_KEPT`] are kept.
+fn keep_multisig_batch(model: &mut Model, batch: String, chain: u32, out: &mut Out) {
+    model.multisig_batch_order.retain(|b| *b != batch);
+    model.multisig_batch_order.push_back(batch.clone());
+    model.multisig_batches.insert(batch, chain);
+    trim_multisig_batches(model);
+    let rows: Vec<(&String, u32)> = model
+        .multisig_batch_order
+        .iter()
+        .filter_map(|b| model.multisig_batches.get(b).map(|c| (b, *c)))
+        .collect();
+    out.op(DbrOperation::WriteMultisigBatches {
+        value_json: serde_json::to_string(&rows).unwrap_or_else(|_| "[]".to_owned()),
+    });
+}
+
+fn trim_multisig_batches(model: &mut Model) {
+    while model.multisig_batch_order.len() > MULTISIG_BATCHES_KEPT {
+        if let Some(gone) = model.multisig_batch_order.pop_front() {
+            model.multisig_batches.remove(&gone);
+        }
+    }
+}
 
 fn sites_listed(model: &mut Model, sites: Vec<DbrStoredSite>, out: &mut Out) {
     if model.ready {
@@ -2460,7 +2540,7 @@ fn multisig_answered(
             .and_then(dapp_rpc::batch_id_of)
             .map(str::to_ascii_lowercase);
         if let Some(batch) = batch {
-            model.multisig_batches.insert(batch, job.chain_id);
+            keep_multisig_batch(model, batch, job.chain_id, out);
         }
         if close_open(model, tab_id, &job.doc, id) {
             let (code, why) = dapp_answer_why(answer);

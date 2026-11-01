@@ -56,7 +56,10 @@ fn browser() -> Browser {
         now_ms: T0,
         space: false,
     });
-    sut.resolve(DRes::SitesListed { sites: Vec::new() });
+    sut.resolve(DRes::SitesListed {
+        sites: Vec::new(),
+        multisig_batches_json: None,
+    });
     sut.dispatch(page("t1", json!({"t":"hello","doc":"d1"})));
     sut
 }

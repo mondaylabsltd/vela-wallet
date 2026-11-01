@@ -2,4 +2,9 @@
 import type { DbrReadFailure } from "./DbrReadFailure";
 import type { DbrStoredSite } from "./DbrStoredSite";
 
-export type DbrShellResult = { "type": "sites_listed", sites: Array<DbrStoredSite>, } | { "type": "read_answered", body_json: string | null, now_ms: number, failure: DbrReadFailure | null, } | { "type": "user_op_resolved", tx_hash: string | null, now_ms: number, } | { "type": "ack" };
+export type DbrShellResult = { "type": "sites_listed", sites: Array<DbrStoredSite>, 
+/**
+ * r9: what [`MULTISIG_BATCHES_KEY`] holds (`None`: nothing, or a
+ * shell that keeps no batches).
+ */
+multisig_batches_json: string | null, } | { "type": "read_answered", body_json: string | null, now_ms: number, failure: DbrReadFailure | null, } | { "type": "user_op_resolved", tx_hash: string | null, now_ms: number, } | { "type": "ack" };
