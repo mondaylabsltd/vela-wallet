@@ -342,6 +342,10 @@ fn a_batch_is_one_proposal_answered_its_id_then_followed() {
     );
     let held = sut.view().dapp["b1"].clone();
     let hash = held.safe_tx_hash.clone().unwrap();
+    // Where the shell tells its site's status reader to look — the
+    // proposal's number — is known with the answer, whatever the list has
+    // read back yet.
+    assert_eq!(held.nonce.as_deref(), Some("0"), "{held:?}");
     assert_eq!(held.answer.unwrap().result, Some(json!({ "id": hash })));
     assert!(long_waits(&sut).is_empty(), "never followed for a hash");
 
@@ -380,6 +384,67 @@ fn a_batch_is_one_proposal_answered_its_id_then_followed() {
         sut.view().calls_status["u"].error.clone().unwrap().code,
         5730
     );
+}
+
+/// A batch proposed while a read of the list is already on its way (the
+/// shells' poll, every few seconds while the sheet is open): the read that
+/// would bring it back is queued behind that one, and the site is answered
+/// first. Its number is the one it was drafted and signed at — what the
+/// shell hands its status reader (`wallet_getCallsStatus` reads the
+/// multisig's nonce against it); without it the batch is never followed.
+#[test]
+fn a_batch_proposed_while_the_list_is_read_still_says_its_number() {
+    let (mut world, mut sut, account) = setup(&[0, 1]);
+    run(
+        &mut sut,
+        &mut world,
+        ask(
+            &account,
+            "b1",
+            "wallet_sendCalls",
+            json!([{ "version": "2.0.0", "chainId": "0x64", "from": account.address,
+                "atomicRequired": true, "calls": [{ "to": DEAD, "value": "0x1" }] }]),
+        ),
+    );
+    assert!(sut.view().draft.is_some(), "its review first");
+    // A poll's read of the list, on its way to the service and not back yet.
+    let before = sut.outstanding();
+    sut.dispatch(Event::Refresh { fresh: false });
+    let mut held_back = Vec::new();
+    for _ in 0..100 {
+        let fresh: Vec<Op> = sut
+            .outstanding()
+            .into_iter()
+            .filter(|op| !before.contains(op))
+            .collect();
+        if let Some(read) = fresh.iter().find(|op| matches!(op, Op::Http { .. })) {
+            held_back.push(read.clone());
+            break;
+        }
+        let Some(op) = fresh.first().cloned() else {
+            break;
+        };
+        let res = world.answer(&op);
+        sut.resolve_matching(|o| *o == op, res);
+    }
+    assert_eq!(held_back.len(), 1, "the poll's read is out");
+    sut.dispatch(Event::ConfirmDraft { as_member: None });
+    for _ in 0..20_000 {
+        let next = sut
+            .outstanding()
+            .into_iter()
+            .find(|op| !held_back.contains(op) && !matches!(op, Op::Wait { ms } if *ms >= 100_000));
+        let Some(op) = next else { break };
+        let res = world.answer(&op);
+        sut.resolve_matching(|o| *o == op, res);
+        if sut.view().dapp["b1"].answer.is_some() {
+            break;
+        }
+    }
+    let held = sut.view().dapp["b1"].clone();
+    let hash = held.safe_tx_hash.clone().expect("proposed");
+    assert_eq!(held.answer.unwrap().result, Some(json!({ "id": hash })));
+    assert_eq!(held.nonce.as_deref(), Some("0"), "{:?}", held.nonce);
 }
 
 /// dapp-7: a multisig signs no messages yet — said in the window first, the

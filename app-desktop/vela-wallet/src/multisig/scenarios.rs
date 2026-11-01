@@ -1057,6 +1057,217 @@ fn a_rename_withdrawn_on_its_review_signs_nothing() {
     assert!(sim.world().mailbox.is_empty(), "nothing sent");
 }
 
+/// The proposal at `hash` as the proposals machine lists it now.
+fn listed(sim: &Sim, hash: &str) -> vela_core::app::multisig_proposals::ProposalItem {
+    sim.machines
+        .proposals_view
+        .items
+        .iter()
+        .find(|i| i.safe_tx_hash.eq_ignore_ascii_case(hash))
+        .cloned()
+        .unwrap_or_else(|| panic!("{hash} listed: {:?}", sim.machines.proposals_view.items))
+}
+
+/// The member on this device that is not `proposer` (fixtures 0 and 1 here).
+fn other_than(proposer: &str) -> String {
+    [fixture(0).address, fixture(1).address]
+        .into_iter()
+        .find(|a| !a.eq_ignore_ascii_case(proposer))
+        .unwrap()
+}
+
+/// r4D-14: another member's proposal, rejected on the sheet by a second
+/// member on this device (the page's own presses: "Reject", its question's
+/// "Cancel" — nothing asked, nothing signed — "Reject" again). The rejection
+/// is a cancellation at the SAME number, through the review-first path: its
+/// review is drawn before any passkey; confirmed as the rejecting member, it
+/// is signed once and lands in the mailbox beside the original. The two then
+/// know each other — only one of them can run — and the original offers no
+/// second rejection.
+#[test]
+fn anothers_proposal_rejected_is_a_cancellation_reviewed_then_approved_at_its_number() {
+    use crate::wallet::page::multisig::{MultisigUi, RejectPress, reject_offered};
+    use vela_core::multisig::{Action, SafeTx};
+
+    let mut sim = booted(&[0, 1]);
+    let address = created(&mut sim);
+    let hash = propose(&mut sim, transfer("1"));
+    let original = listed(&sim, &hash);
+    let rejecter = other_than(&original.proposer);
+    assert!(
+        original
+            .members_here
+            .iter()
+            .any(|m| m.eq_ignore_ascii_case(&rejecter)),
+        "{:?}",
+        original.members_here
+    );
+    assert!(reject_offered(&original, false), "Reject is offered");
+    let passkeys = sim.world().passkeys.len();
+    let mailbox = sim.world().mailbox.clone();
+    assert_eq!(mailbox.len(), 1);
+
+    // The question, and its way back: nothing asked of a machine.
+    let mut ui = MultisigUi::default();
+    assert!(ui.reject_press(RejectPress::Ask).is_none());
+    assert!(ui.rejecting, "the question is up");
+    assert!(ui.reject_press(RejectPress::Back).is_none());
+    assert!(!ui.rejecting, "the question went");
+    assert!(sim.machines.proposals_view.draft.is_none());
+    assert_eq!(sim.world().passkeys.len(), passkeys, "nothing signed");
+
+    // Asked again and confirmed: the cancellation's draft, its review first.
+    assert!(ui.reject_press(RejectPress::Ask).is_none());
+    let event = ui
+        .reject_press(RejectPress::Confirm {
+            chain_id: original.chain_id,
+            nonce: original.nonce,
+        })
+        .expect("the machine is asked");
+    assert!(!ui.rejecting);
+    sim.proposals(event);
+    let draft = sim
+        .machines
+        .proposals_view
+        .draft
+        .clone()
+        .unwrap_or_else(|| {
+            panic!(
+                "the review comes first: {:?}",
+                sim.machines.proposals_view.actions.get("propose")
+            )
+        });
+    assert_eq!(draft.item.nonce, original.nonce, "at the same number");
+    assert!(
+        matches!(draft.item.review.action, Some(Action::Cancel)),
+        "read as a cancellation: {:?}",
+        draft.item.review.action
+    );
+    assert!(draft.item.tx.to.eq_ignore_ascii_case(&address), "to itself");
+    assert!(
+        matches!(draft.item.tx.value.as_str(), "0" | "0x0") && draft.item.tx.data == "0x",
+        "nothing moves: {:?}",
+        draft.item.tx
+    );
+    assert!(
+        draft
+            .members_here
+            .iter()
+            .any(|m| m.eq_ignore_ascii_case(&rejecter))
+    );
+    assert_eq!(sim.world().passkeys.len(), passkeys, "nothing signed yet");
+    assert_eq!(sim.world().mailbox, mailbox, "nothing sent yet");
+
+    // Confirmed as the rejecting member: one passkey, one more proposal.
+    sim.proposals(ProposalsEvent::ConfirmDraft {
+        as_member: Some(rejecter.clone()),
+    });
+    let cancel_hash = match sim.machines.proposals_view.actions.get("propose") {
+        Some(ActionState::Done { safe_tx_hash, .. }) => safe_tx_hash.clone(),
+        other => panic!("{other:?}"),
+    };
+    assert!(!cancel_hash.eq_ignore_ascii_case(&hash));
+    assert_eq!(sim.world().passkeys.len(), passkeys + 1, "signed once");
+    let (signer, _) = sim.world().passkeys[passkeys].clone();
+    assert!(
+        signer.eq_ignore_ascii_case(&rejecter),
+        "by the rejecting member: {signer}"
+    );
+    let world = sim.world();
+    assert_eq!(world.mailbox.len(), 2, "beside the original");
+    let stored = world
+        .mailbox
+        .iter()
+        .find(|p| {
+            p["safeTxHash"]
+                .as_str()
+                .is_some_and(|h| h.eq_ignore_ascii_case(&cancel_hash))
+        })
+        .unwrap();
+    assert!(
+        stored["proposer"]
+            .as_str()
+            .is_some_and(|p| p.eq_ignore_ascii_case(&rejecter))
+    );
+    let cancel: SafeTx = serde_json::from_value(stored["safeTx"].clone()).unwrap();
+    let first: SafeTx = serde_json::from_value(mailbox[0]["safeTx"].clone()).unwrap();
+    assert_eq!(cancel.nonce, first.nonce, "the same number");
+    assert!(cancel.to.eq_ignore_ascii_case(&address));
+    drop(world);
+
+    // The two know each other: only one can run.
+    let transfer_item = listed(&sim, &hash);
+    let cancel_item = listed(&sim, &cancel_hash);
+    assert_eq!(cancel_item.nonce, transfer_item.nonce);
+    assert!(
+        transfer_item
+            .cancelled_by
+            .as_deref()
+            .is_some_and(|c| c.eq_ignore_ascii_case(&cancel_hash)),
+        "{:?}",
+        transfer_item.cancelled_by
+    );
+    assert_eq!(transfer_item.same_nonce.len(), 1);
+    assert!(transfer_item.same_nonce[0].eq_ignore_ascii_case(&cancel_hash));
+    assert_eq!(cancel_item.same_nonce.len(), 1);
+    assert!(cancel_item.same_nonce[0].eq_ignore_ascii_case(&hash));
+    assert_eq!(
+        cancel_item.cancelled_by, None,
+        "the cancellation is not voided"
+    );
+    assert!(
+        !reject_offered(&transfer_item, false),
+        "rejected once: no second rejection"
+    );
+    // The cancellation waits for its own approvals: one of two, by the
+    // rejecting member.
+    assert_eq!(
+        (cancel_item.approved, cancel_item.status),
+        (1, ProposalStatus::Pending)
+    );
+}
+
+/// r4D-14: the rejection's review has its own way back — withdrawn there,
+/// nothing is signed or sent, and the original stands uncancelled with
+/// Reject still offered.
+#[test]
+fn a_rejection_withdrawn_on_its_review_signs_nothing_and_cancels_nothing() {
+    use crate::wallet::page::multisig::{MultisigUi, RejectPress, reject_offered};
+
+    let mut sim = booted(&[0, 1]);
+    created(&mut sim);
+    let hash = propose(&mut sim, transfer("1"));
+    let original = listed(&sim, &hash);
+    let passkeys = sim.world().passkeys.len();
+    let mailbox = sim.world().mailbox.clone();
+
+    let mut ui = MultisigUi::default();
+    let _ = ui.reject_press(RejectPress::Ask);
+    let event = ui
+        .reject_press(RejectPress::Confirm {
+            chain_id: original.chain_id,
+            nonce: original.nonce,
+        })
+        .unwrap();
+    sim.proposals(event);
+    assert!(
+        sim.machines.proposals_view.draft.is_some(),
+        "the review is up"
+    );
+    sim.proposals(ProposalsEvent::Withdraw);
+    assert!(sim.machines.proposals_view.draft.is_none());
+    assert!(matches!(
+        sim.machines.proposals_view.actions.get("propose"),
+        Some(ActionState::Cancelled)
+    ));
+    assert_eq!(sim.world().passkeys.len(), passkeys, "nothing signed");
+    assert_eq!(sim.world().mailbox, mailbox, "nothing sent");
+    let after = listed(&sim, &hash);
+    assert_eq!(after.cancelled_by, None);
+    assert!(after.same_nonce.is_empty(), "{:?}", after.same_nonce);
+    assert!(reject_offered(&after, false), "Reject is offered again");
+}
+
 /// M5: a site's transaction from a multisig, through the desktop's carrier
 /// ([`super::dapp`]): the grant's address is a multisig here, so the request
 /// goes to the proposals machine — its review first, nothing signed before

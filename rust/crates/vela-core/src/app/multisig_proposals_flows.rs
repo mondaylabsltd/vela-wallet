@@ -1020,13 +1020,16 @@ pub fn on_withdraw(s: &mut State) {
 
 /// A draft was proposed (or handed to an outside wallet): a dApp's request
 /// it was is answered (a batch's id), or held for its execution — told
-/// "proposed" before its limit.
+/// "proposed" before its limit. `drafted`: the transaction it was drafted
+/// and signed as — its number stands when the list has not read the
+/// proposal back yet (a read already on its way queues the next one).
 pub async fn on_proposed(
     io: &Io<Event>,
     st: &Shared<State>,
     round: u64,
     outcome: &ActionState,
     claimed: Option<f64>,
+    drafted: Option<&SafeTx>,
 ) {
     let tell = {
         let mut s = lock(st);
@@ -1044,7 +1047,14 @@ pub async fn on_proposed(
             _ => return,
         };
         let chain_id = s.more.dapp[&id].view.chain_id;
-        let nonce = s.item(chain_id, &hash).map(|(i, _)| i.nonce.to_string());
+        let nonce = s
+            .item(chain_id, &hash)
+            .map(|(i, _)| i.nonce.to_string())
+            .or_else(|| {
+                drafted
+                    .and_then(|tx| shell::quantity(&tx.nonce))
+                    .map(|n| n.to_string())
+            });
         let Some(h) = s.more.dapp.get_mut(&id) else {
             return;
         };
@@ -1517,7 +1527,7 @@ async fn outside_answered(
     if matches!(state, ActionState::Done { .. }) {
         refresh(io, st, false, true).await;
         if let Some(round) = p.round {
-            on_proposed(io, st, round, &state, None).await;
+            on_proposed(io, st, round, &state, None, Some(&p.tx)).await;
         }
     }
 }

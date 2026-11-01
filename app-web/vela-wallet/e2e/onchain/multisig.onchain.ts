@@ -1414,3 +1414,133 @@ test('members changed from Settings: one proposal per deployed network, executed
 	expect(thrown).toEqual([]);
 	await ctx.close();
 });
+
+/**
+ * A rejection, on chain (r4D-14, r9-13): one member proposes a send; the
+ * other rejects it from its sheet — a way back first, then a cancellation at
+ * the same number, reviewed before its passkey — and both transactions say
+ * only one of them can run. The first member approves and executes the
+ * cancellation: the send is replaced for good, said so on the sheet still
+ * open on it, and its funds never move.
+ */
+test('a rejection on chain: the cancellation reviewed, then executed first; the send can never run', async ({
+	browser
+}) => {
+	const a = await browser.newContext({ viewport: { width: 430, height: 900 } });
+	const b = await browser.newContext({ viewport: { width: 430, height: 900 } });
+	await useHarness(a);
+	await useHarness(b);
+	const pageA = await a.newPage();
+	const pageB = await b.newPage();
+	const thrownA = errors(pageA);
+	const thrownB = errors(pageB);
+	await enterParallel(pageA, [FIXTURES.one]);
+	await enterParallel(pageB, [FIXTURES.two]);
+
+	await pageA
+		.getByRole('button', { name: /Parallel One/ })
+		.first()
+		.click();
+	await pageA.getByRole('button', { name: 'Add account' }).click();
+	await pageA.getByRole('button', { name: /^Create multisig/ }).click();
+	await pageA.getByRole('textbox', { name: /^Name/ }).fill('Rejected once');
+	await pageA.getByPlaceholder("Member's address (0x…)").fill(FIXTURES.two);
+	await pageA.getByRole('button', { name: 'Add', exact: true }).click();
+	await pageA.getByRole('button', { name: 'Next' }).click();
+	await pageA.getByRole('button', { name: 'Next' }).click();
+	await pickFirstNetwork(pageA);
+	await pageA.getByRole('button', { name: 'Create', exact: true }).click();
+	await pageA.getByRole('button', { name: 'Done' }).click();
+	const multisig = (await pageA.evaluate(() => localStorage.getItem('vela.activeMultisig')))!;
+	const genesis = await servedGenesis(multisig);
+	await setBalance(multisig, 2n * 10n ** 18n);
+
+	await test.step('device A proposes a send', async () => {
+		await pageA.reload();
+		await proposeSend(pageA, '0.3', 'j1-propose');
+		await expect(pageA.getByText('1/2 approved').first()).toBeVisible();
+		await pageA.keyboard.press('Escape');
+	});
+
+	await test.step('device B rejects it: a way back, then the cancellation reviewed and proposed', async () => {
+		await pageB.evaluate(
+			({ address, genesis, owners }) => {
+				localStorage.setItem(
+					'vela.multisigAccounts',
+					JSON.stringify([
+						{
+							address,
+							genesis,
+							owners,
+							threshold: 2,
+							recorded: true,
+							shared: true,
+							chainIds: [100],
+							addedMs: Date.now()
+						}
+					])
+				);
+				localStorage.setItem('vela.activeMultisig', address);
+			},
+			{ address: multisig, genesis, owners: [FIXTURES.one, FIXTURES.two] }
+		);
+		await pageB.reload();
+		const row = pageB.getByRole('main').getByText('Send 0.3 xDAI').first();
+		await expect(row).toBeVisible({ timeout: 60_000 });
+		await row.click();
+		await pageB.getByRole('button', { name: 'Reject', exact: true }).click();
+		await expect(
+			pageB.getByText(/^Rejecting proposes a cancellation at the same number/)
+		).toBeVisible();
+		await pageB.getByRole('button', { name: 'Cancel', exact: true }).click();
+		await expect(pageB.getByText(/^Rejecting proposes a cancellation/)).toHaveCount(0);
+		await pageB.getByRole('button', { name: 'Reject', exact: true }).click();
+		await pageB.getByRole('button', { name: 'Reject', exact: true }).last().click();
+		// r9-13: reviewed at its number before the passkey, on top of the send's sheet.
+		const review = pageB
+			.getByRole('dialog')
+			.filter({ hasText: 'Cancel transaction #0' })
+			.filter({ has: pageB.getByTestId('review-hashes') });
+		await expect(review).toBeVisible({ timeout: 60_000 });
+		await shot(pageB, 'j2-cancel-review');
+		await review.getByRole('button', { name: /^Propose( and approve)?$/ }).click();
+		await expect(
+			pageB.getByText('A cancellation of this transaction is waiting for approval.')
+		).toBeVisible({ timeout: 60_000 });
+		await expect(pageB.getByTestId('proposal-conflict')).toHaveText(
+			'Only one of the transactions waiting at #0 can run: the first one executed replaces the others.'
+		);
+		await shot(pageB, 'j3-conflict');
+	});
+
+	await test.step('device A approves and executes the cancellation', async () => {
+		const before = await balanceOf(RECIPIENT);
+		await pageA.reload();
+		const row = pageA.getByRole('main').getByText('Cancel transaction #0').first();
+		await expect(row).toBeVisible({ timeout: 60_000 });
+		await row.click();
+		await pageA.getByRole('button', { name: 'Approve and execute' }).click();
+		await expect(pageA.getByText('Executed', { exact: true }).first()).toBeVisible({
+			timeout: 120_000
+		});
+		await shot(pageA, 'j4-cancel-executed');
+		// The multisig's number moved on; the send's value never left.
+		const nonce = await rpc<string>('eth_call', [{ to: multisig, data: '0xaffed0e0' }, 'latest']);
+		expect(BigInt(nonce)).toBe(1n);
+		expect((await balanceOf(RECIPIENT)) - before).toBe(0n);
+	});
+
+	await test.step("the send's sheet, still open on device B: replaced for good", async () => {
+		await expect(pageB.getByTestId('proposal-voided')).toHaveText(
+			'Replaced by a cancellation at #0: this transaction can never run.',
+			{ timeout: 90_000 }
+		);
+		await expect(pageB.getByRole('button', { name: 'Approve and execute' })).toHaveCount(0);
+		await shot(pageB, 'j5-voided');
+	});
+
+	expect(thrownA).toEqual([]);
+	expect(thrownB).toEqual([]);
+	await a.close();
+	await b.close();
+});

@@ -36,7 +36,9 @@
 #
 # Mapped 2026-11-02 against feat/multisig-account 6cbc1e1e5; native gaps
 # (android-instrumented, android-jvm member change, ios-unit, ios-ui) filled
-# 2026-11-02 on gaps-native.
+# 2026-11-02 on gaps-native; the web and desktop gaps filled 2026-11-02
+# (multisig-world.e2e.ts, extension-multisig-dapp, the fork suite's
+# rejection, the desktop's reject scenarios).
 
 version: 1
 
@@ -78,7 +80,8 @@ scenarios:
       web-unit:
         - { file: app-web/vela-wallet/src/lib/multisig/ui/InviteSheet.svelte.test.ts, test: 'r4D-16: a code to scan, the network, the outside-wallet hint, and a link that carries them', ci: required }
         - { file: app-web/vela-wallet/src/lib/multisig/core/link.test.ts, test: 'round-trip a multisig to add, with its networks and members', ci: required }
-      web-e2e: { gap: 'the onchain suite opens a PROPOSAL link on a second device, never an invite' }
+      web-e2e:
+        - { file: app-web/vela-wallet/e2e/multisig-world.e2e.ts, test: 'an invite link: its network and members by kind before anything is added, then added', ci: nightly, note: 'hermetic multisig world (stub-multisig.ts); chromium, firefox, webkit' }
       android-jvm:
         - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/R9ShellFixesTest.kt, test: a_scanned_invite_opens_the_add_sheet_never_send, ci: required }
         - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/R9ShellFixesTest.kt, test: the_invite_is_the_cores_members_through_add_link, ci: required }
@@ -163,7 +166,10 @@ scenarios:
         - { file: app-web/vela-wallet/src/lib/multisig/ui/ProposalSheet.svelte.test.ts, test: 'has a way back', ci: required, note: 'in describe Reject (r4D-14)' }
         - { file: app-web/vela-wallet/src/lib/multisig/ui/ProposalSheet.svelte.test.ts, test: 'replaced by its executed cancellation: one wording, nothing that says otherwise', ci: required }
         - { file: app-web/vela-wallet/src/lib/multisig/ui/ProposalSheet.svelte.test.ts, test: 'can withdraw its own proposal after approving it', ci: required }
-      web-e2e: { gap: 'no onchain reject/cancellation flow' }
+        - { file: app-web/vela-wallet/src/lib/multisig/ui/ProposalSheet.svelte.test.ts, test: 'r9-13: the cancellation at its number is drawn for its review first, never signed at once', ci: required }
+      web-e2e:
+        - { file: app-web/vela-wallet/e2e/multisig-world.e2e.ts, test: 'a rejection: a cancellation at the same number, read as one; only one of the two can run', ci: nightly, note: 'two devices, hermetic world; the cancellation reviewed before its passkey (r9-13), withdrawn there signs nothing; chromium, firefox, webkit' }
+        - { file: app-web/vela-wallet/e2e/onchain/multisig.onchain.ts, test: 'a rejection on chain: the cancellation reviewed, then executed first; the send can never run', ci: nightly, note: 'fork harness: the cancellation executed, the send said replaced, its funds never moved' }
       android-jvm:
         - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/R9ShellFixesTest.kt, test: ones_own_proposal_is_withdrawn_anothers_rejected, ci: required }
         - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/R9ShellFixesTest.kt, test: a_cancellation_waiting_is_said_beside_the_actions_with_the_conflict, ci: required }
@@ -172,7 +178,10 @@ scenarios:
       ios-unit:
         - { file: app-ios/VelaWallet/VelaWalletTests/MultisigFlowTests.swift, test: rejectingProposesTheSameNumberCancellationApprovedByThatMember, ci: required }
       ios-ui: { gap: 'no reject UI test' }
-      desktop: { gap: 'the reject path in src/wallet/page/multisig.rs (rejecting, ms-reject-cancel) has no test; a_rename_withdrawn_on_its_review_signs_nothing covers only a withdrawal on the review' }
+      desktop:
+        - { file: app-desktop/vela-wallet/src/multisig/scenarios.rs, test: anothers_proposal_rejected_is_a_cancellation_reviewed_then_approved_at_its_number, ci: required, note: 'dev-fixtures job; the page''s reject presses (reject_press) drive the machines' }
+        - { file: app-desktop/vela-wallet/src/multisig/scenarios.rs, test: a_rejection_withdrawn_on_its_review_signs_nothing_and_cancels_nothing, ci: required, note: 'dev-fixtures job' }
+        - { file: app-desktop/vela-wallet/src/wallet/page/multisig.rs, test: the_reject_question_has_a_way_back_and_confirms_a_cancellation_at_its_number, ci: required }
       trusted-signer:
         - { file: app-web/trusted-signer/samples/multisig-test.mjs, test: 'a rejection is read as one, with its own button', ci: nightly }
 
@@ -243,10 +252,12 @@ scenarios:
         - { file: rust/crates/vela-core/tests/app_multisig_dapp.rs, test: its_review_comes_first_and_proposed_is_not_answered, ci: required }
         - { file: rust/crates/vela-core/tests/app_multisig_dapp.rs, test: executed_the_site_gets_the_transaction_that_ran_it, ci: required }
         - { file: rust/crates/vela-core/tests/app_multisig_outside_propose.rs, test: a_dapps_transaction_proposed_through_an_outside_wallet_is_held, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_dapp.rs, test: a_batch_proposed_while_the_list_is_read_still_says_its_number, ci: required }
       web-unit:
         - { file: app-web/vela-wallet/src/lib/multisig/shell/dapp-requests.test.ts, test: 'its review opens on the held request; a close before proposing is 4001, the sheet goes', ci: required }
         - { file: app-web/vela-wallet/src/lib/multisig/ui/ProposalSheet.svelte.test.ts, test: 'is reviewed first: what the site asks, and nothing signed until Propose and approve', ci: required }
-      web-e2e: { gap: 'no dApp-from-multisig flow in e2e/onchain or the extension suites' }
+      web-e2e:
+        - { file: app-web/vela-wallet/e2e/extension-multisig-dapp.e2e.ts, test: 'eth_sendTransaction and wallet_sendCalls are held until executed; getCallsStatus 100, then 200', ci: nightly, note: 'the packaged extension (chromium) against the hermetic world; an outside member executes on chain' }
       android-jvm:
         - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/MultisigShellTest.kt, test: a_sites_request_is_waiting_from_the_dispatch_until_the_site_is_answered, ci: required }
         - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/R10ShellFixesTest.kt, test: a_multisig_connect_sheet_never_says_ask_you_to_sign, ci: required }
@@ -273,7 +284,8 @@ scenarios:
         - { file: app-web/vela-wallet/src/lib/multisig/core/presence.test.ts, test: 'says it in one line, plurals by count; nothing when nothing waits', ci: required }
         - { file: app-web/vela-wallet/src/lib/multisig/shell/proposals-host.test.ts, test: 'says what waits on every multisig — the kept list first — and reads the others apart from the shown one', ci: required }
         - { file: app-web/vela-wallet/src/lib/multisig/ui/ProposalSheet.svelte.test.ts, test: 'r5reg-14: open on a waiting transaction, it holds the faster poll — and lets go', ci: required }
-      web-e2e: { gap: 'no notification/waiting-count e2e' }
+      web-e2e:
+        - { file: app-web/vela-wallet/e2e/multisig-world.e2e.ts, test: 'what waits: one line on the home, the other multisig in the switcher, a new one counted', ci: nightly, note: 'the web has no OS notifications: what waits, said in the app; chromium, firefox, webkit' }
       android-jvm:
         - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/R9ShellFixesTest.kt, test: a_new_proposal_from_another_member_is_said_once_with_its_transaction, ci: required }
         - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/R9ShellFixesTest.kt, test: the_background_round_is_periodic_with_sensible_constraints_and_replaced_on_update, ci: required }
