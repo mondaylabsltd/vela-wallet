@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import app.getvela.wallet.core.designsystem.motion.ReportListGesture
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -147,7 +149,12 @@ fun FlowLazyScaffold(
             .background(colors.bgBase)
             .statusBarsPadding(),
     ) {
+        // r10 follow-up (core §9.4): a scan due while the person scrolls
+        // the history waits for the scroll to settle.
+        val listState = rememberLazyListState()
+        ReportListGesture { listState.isScrollInProgress }
         LazyColumn(
+            state = listState,
             modifier = listModifier.weight(1f).fillMaxWidth(),
             contentPadding = PaddingValues(horizontal = VelaSizing.screenPaddingX),
         ) {

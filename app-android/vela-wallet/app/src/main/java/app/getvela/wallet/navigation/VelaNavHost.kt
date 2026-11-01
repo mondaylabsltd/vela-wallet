@@ -597,7 +597,14 @@ fun VelaNavHost(
     // Spec 102 D4: the send confirm is on screen — a send's hand-off card is
     // drawn there, in its button's place, and not as a sheet over it.
     var sendConfirmUp by remember { mutableStateOf(false) }
-    CompositionLocalProvider(LocalIdenticonViewer provides { seed -> identiconViewer = seed }, LocalAgentStore provides agent) {
+    // r10 follow-up (core §9.4): the home's and the history's scroll reach
+    // the activity feed's quiet period — a scan waits out a gesture.
+    val listGesture = remember(application) { { on: Boolean -> application.container.walletIfBuilt()?.interacting(on); Unit } }
+    CompositionLocalProvider(
+        LocalIdenticonViewer provides { seed -> identiconViewer = seed },
+        LocalAgentStore provides agent,
+        app.getvela.wallet.core.designsystem.motion.LocalListGesture provides listGesture,
+    ) {
         NavHost(
             navController = navController,
             startDestination = startDestination,

@@ -114,6 +114,7 @@ class AgentCoverageTest {
             ),
             "container.refreshSignerPages" to Place.Machine("the signing pages checked again"),
             "container.signInCredentialOf" to Place.Machine(READ),
+            "container.walletIfBuilt" to Place.Machine("a list's scroll: the incoming scan's quiet period (core §9.4)"),
             "controller.approve" to Place.Later(SIGN),
             "controller.feeTapped" to Place.Later(SIGN),
             "controller.guardCustomAmount" to Place.Later(GUARD),
