@@ -3376,9 +3376,7 @@ fn start_scan(model: &mut Model, again_if_out: bool) -> Option<Command<FeedEffec
         return None;
     }
     if model.scan_in_flight {
-        let Some(cadence) = model.cadence.as_mut() else {
-            return None;
-        };
+        let cadence = model.cadence.as_mut()?;
         let now = cadence.presence.now_ms;
         let lost = cadence
             .last_scan_ms
