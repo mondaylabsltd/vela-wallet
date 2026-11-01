@@ -105,6 +105,51 @@ pub(crate) struct MultisigUi {
     pub network_wait: Option<super::multisig_links::NetworkWait>,
 }
 
+/// The reject question's presses on a transaction's foot (r4D-14).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum RejectPress {
+    /// `ms-reject`: the question is up; nothing is asked of a machine.
+    Ask,
+    /// `ms-reject-cancel`: the question goes; nothing is asked or signed.
+    Back,
+    /// `ms-reject-confirm`: the cancellation at the transaction's number is
+    /// drafted — its review first, no passkey yet.
+    Confirm { chain_id: u64, nonce: u128 },
+}
+
+impl MultisigUi {
+    /// What a reject press does to the sheet's state, and what (if
+    /// anything) it asks of the proposals machine.
+    pub(crate) fn reject_press(&mut self, press: RejectPress) -> Option<ms_proposals::Event> {
+        match press {
+            RejectPress::Ask => {
+                self.rejecting = true;
+                None
+            }
+            RejectPress::Back => {
+                self.rejecting = false;
+                None
+            }
+            RejectPress::Confirm { chain_id, nonce } => {
+                self.rejecting = false;
+                Some(ms_proposals::Event::Draft {
+                    chain_id,
+                    proposal: ms_proposals::ProposalKind::Cancel {
+                        nonce: nonce.to_string(),
+                    },
+                })
+            }
+        }
+    }
+}
+
+/// Reject is offered: a member of it on this device (r9-9: the core's
+/// `members_here`, whatever the transaction is), nothing at its number
+/// cancelling it already, and no execution of it on its way.
+pub(crate) fn reject_offered(item: &ProposalItem, executing: bool) -> bool {
+    !item.members_here.is_empty() && item.cancelled_by.is_none() && !executing
+}
+
 /// r11 S4: a transaction Vela refuses for what it is (a delegatecall, a
 /// refund, a batch too deep) has nobody who can approve it at the source
 /// (`can_approve` empty): no member is asked to, and no link is handed on.
@@ -2476,9 +2521,9 @@ impl WalletPage {
         // Reject: a cancellation at its number, approved as any other.
         // r9-9: a member of it on this device, whatever the transaction is
         // (the core's `members_here`).
-        if !item.members_here.is_empty() && item.cancelled_by.is_none() && !executing {
+        if reject_offered(item, executing) {
             if self.multisig.rejecting {
-                let (chain_id, nonce) = (item.chain_id, item.nonce.to_string());
+                let (chain_id, nonce) = (item.chain_id, item.nonce);
                 foot = foot
                     .child(ms_note(
                         theme,
@@ -2499,7 +2544,7 @@ impl WalletPage {
                                 words::t(&loc, "proposal.rejectCancel").into(),
                                 theme,
                                 cx.listener(|this, _, _, cx| {
-                                    this.multisig.rejecting = false;
+                                    let _ = this.multisig.reject_press(RejectPress::Back);
                                     cx.notify();
                                 }),
                             ))
@@ -2509,20 +2554,12 @@ impl WalletPage {
                                 words::t(&loc, "proposal.reject").into(),
                                 theme,
                                 cx.listener(move |this, _, _, cx| {
-                                    this.multisig.rejecting = false;
+                                    let press = RejectPress::Confirm { chain_id, nonce };
+                                    let Some(event) = this.multisig.reject_press(press) else {
+                                        return;
+                                    };
                                     let host = this.ms_host(cx);
-                                    let nonce = nonce.clone();
-                                    host.update(cx, |host, cx| {
-                                        host.proposals(
-                                            ms_proposals::Event::Draft {
-                                                chain_id,
-                                                proposal: ms_proposals::ProposalKind::Cancel {
-                                                    nonce,
-                                                },
-                                            },
-                                            cx,
-                                        );
-                                    });
+                                    host.update(cx, |host, cx| host.proposals(event, cx));
                                 }),
                             )),
                     );
@@ -2534,7 +2571,7 @@ impl WalletPage {
                         words::t(&loc, "proposal.reject").into(),
                     )
                     .on_click(cx.listener(|this, _, _, cx| {
-                        this.multisig.rejecting = true;
+                        let _ = this.multisig.reject_press(RejectPress::Ask);
                         cx.notify();
                     })),
                 );
@@ -4678,5 +4715,38 @@ mod tests {
         for theme in [Theme::light(), Theme::dark()] {
             assert_ne!(theme.error_fill, theme.accent);
         }
+    }
+
+    /// r4D-14: "Reject" puts the question up and asks nothing of a machine;
+    /// its "Cancel" takes it down, nothing asked (nothing can be signed);
+    /// its "Reject" takes it down and drafts the cancellation at the
+    /// transaction's own number on its own network — a number the core reads
+    /// as that number (decimal here, hex on the web: the same quantity).
+    #[test]
+    fn the_reject_question_has_a_way_back_and_confirms_a_cancellation_at_its_number() {
+        let mut ui = MultisigUi::default();
+        assert!(!ui.rejecting);
+        assert!(ui.reject_press(RejectPress::Ask).is_none());
+        assert!(ui.rejecting, "the question is up");
+        assert!(ui.reject_press(RejectPress::Back).is_none());
+        assert!(!ui.rejecting, "the question went, nothing asked");
+
+        assert!(ui.reject_press(RejectPress::Ask).is_none());
+        let event = ui.reject_press(RejectPress::Confirm {
+            chain_id: 8453,
+            nonce: 26,
+        });
+        assert!(!ui.rejecting, "the question gives way to the review");
+        let Some(ms_proposals::Event::Draft {
+            chain_id,
+            proposal: ms_proposals::ProposalKind::Cancel { nonce },
+        }) = event
+        else {
+            panic!("a cancellation's draft (its review first): {event:?}");
+        };
+        assert_eq!(chain_id, 8453);
+        let safe = "0x0e96ddc491878645dB7E3a47d2a6Ccbc94f17f32";
+        let cancel = vela_core::multisig::cancel_tx(safe, &nonce).unwrap();
+        assert_eq!(cancel.nonce, "0x1a", "the transaction's own number");
     }
 }
