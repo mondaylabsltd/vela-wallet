@@ -169,6 +169,9 @@ const FUNCTIONS: Record<string, Place> = {
 	'dapp/request.approve': { none: DAPP },
 	'dapp/request.evaluate': { machine: 'a read' },
 	'dapp/transport.answerRequest': { machine: 'the answer, sent to the page that asked' },
+	'dapp/transport.answerNotShown': {
+		machine: 'the answer, sent to the page that asked: nothing was shown or signed (r11-2)'
+	},
 	'dapp/transport.readRequest': { machine: 'a read' },
 	'dapp/transport.rejectRequest': {
 		later:
