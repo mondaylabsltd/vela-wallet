@@ -10,7 +10,9 @@ import type { TrustAssetDelta } from "./TrustAssetDelta";
 export type SimVerdict = { 
 /**
  * `deltas | reverts | not_offered | unreachable`. Only `deltas` means
- * the node checked the transaction.
+ * the node checked the transaction. A multisig review adds `withheld`
+ * (`multisig_review::sim_withheld`): refused, so nothing is said about
+ * what moves — every other field empty.
  */
 kind: string, 
 /**
