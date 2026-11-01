@@ -177,6 +177,47 @@ fun MultisigHomeCard(
     }
 }
 
+/**
+ * r11-3 (the desktop's r10-4): where a multisig shown from the space it does
+ * not live in lives — none of its networks is in the space in front and
+ * these are in the other one. Empty: one of them is here, or it names none.
+ * Which space a network is in is the core's word (`network_space_chain_ids`,
+ * [app.getvela.wallet.feature.settings.core.NetworkSpaces]). Pure.
+ */
+object OtherSpace {
+    fun livesElsewhere(chainIds: List<Int>, here: Collection<Int>, other: Collection<Int>): List<Int> =
+        if (chainIds.isEmpty() || chainIds.any { it in here }) emptyList() else chainIds.filter { it in other }
+
+    /** "Used on Arc Testnet · Testnet space": the record's networks, then the space they are in. */
+    fun line(words: MultisigWords, elsewhere: List<Int>, heading: String): String =
+        "${words.t("add.usedOn", "networks" to words.list(elsewhere.map(words::network)))} · $heading"
+}
+
+/**
+ * r11-3: the note in place of the home's figures for a multisig whose money
+ * lives in the other space — said with the switch there. Its "$0.00", "No
+ * activity yet" and "Updated now" would be this space's reading of an
+ * address that holds nothing here: not drawn at all.
+ */
+@Composable
+fun MultisigOtherSpaceNote(line: String, switchLabel: String, onSwitch: () -> Unit, modifier: Modifier = Modifier) {
+    val colors = VelaTheme.colors
+    Column(
+        modifier.fillMaxWidth().background(colors.warningSoft, RoundedCornerShape(VelaRadius.xl)).padding(VelaSpacing.xl).testTag("multisig.home.otherSpace"),
+        verticalArrangement = Arrangement.spacedBy(VelaSpacing.md),
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md), verticalAlignment = Alignment.Top) {
+            Icon(VelaIcons.Info, null, tint = colors.fgBase, modifier = Modifier.size(VelaIconSize.md))
+            MsText(line, MsType.Field, Modifier.weight(1f))
+        }
+        app.getvela.wallet.core.designsystem.components.VelaSecondaryButton(
+            text = switchLabel,
+            onClick = onSwitch,
+            modifier = Modifier.testTag("multisig.home.otherSpace.switch"),
+        )
+    }
+}
+
 @Composable
 private fun FirstStep(title: String, note: String?, done: Boolean, tag: String, icon: androidx.compose.ui.graphics.vector.ImageVector = VelaIcons.ArrowDownLeft, onClick: () -> Unit) {
     val colors = VelaTheme.colors

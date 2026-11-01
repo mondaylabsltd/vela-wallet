@@ -765,6 +765,8 @@ fun VelaNavHost(
                 // Spec 105: the space in front's networks — receive, the chain
                 // filter and the assets' names are that space's alone.
                 val networks by application.container.spaceNetworks.collectAsStateWithLifecycle()
+                // r11-3: both spaces' networks — where a multisig shown lives, when not here.
+                val allNetworks by application.container.settings.networks.collectAsStateWithLifecycle()
                 val noValue = space.testnet
                 val chainNames = remember(networks.networks) {
                     networks.networks.associate { it.chain_id.toInt() to it.display_name }
@@ -2361,6 +2363,30 @@ fun VelaNavHost(
                                         onOpen = { multisigHub.sheet.value = it },
                                         onFund = { flows.enter(WalletFlowEntry.Receive) },
                                     )
+                                }
+                            },
+                            // r11-3: a multisig whose networks are all in the other
+                            // space — said, with the switch, in place of a false "$0.00".
+                            otherSpace = shownMultisig?.let { row ->
+                                val elsewhere = app.getvela.wallet.feature.multisig.OtherSpace.livesElsewhere(
+                                    row.account.chainIds,
+                                    here = app.getvela.wallet.feature.settings.core.NetworkSpaces.chainIds(space, allNetworks.networks),
+                                    other = app.getvela.wallet.feature.settings.core.NetworkSpaces.chainIds(space.other, allNetworks.networks),
+                                )
+                                if (elsewhere.isEmpty()) {
+                                    null
+                                } else {
+                                    {
+                                        app.getvela.wallet.feature.multisig.MultisigOtherSpaceNote(
+                                            line = app.getvela.wallet.feature.multisig.OtherSpace.line(
+                                                msWords, elsewhere,
+                                                strings.t(if (space.testnet) I18nKeys.NetworkSpace.HEADING_MAINNET else I18nKeys.NetworkSpace.HEADING_TESTNET),
+                                            ),
+                                            switchLabel = strings.t(if (space.testnet) I18nKeys.NetworkSpace.TO_MAINNET else I18nKeys.NetworkSpace.TO_TESTNET),
+                                            // A switch of space moves no value: the person's press, as the space sheet answers.
+                                            onSwitch = { agent.person(intent("set_network_space", "space" to space.other.wire)) },
+                                        )
+                                    }
                                 }
                             },
                             onSpace = { application.container.networkSpace.switcherOpen.value = true },
