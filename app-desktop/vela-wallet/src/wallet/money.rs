@@ -1027,6 +1027,12 @@ impl SendHost {
                     },
                     cx,
                 );
+                // The send's records are on disk (`TrackSubmitted` follows
+                // `RecordsPersisted`): Activity reads them now, pending — the
+                // feed's shell contract. Since r10 neither a due scan nor
+                // `sent` reads the store, so nothing else would bring the
+                // row in before the tracker's verdict.
+                crate::executor::activity_feed::reconciled(1, cx);
                 // r10 follow-up: a send left this account — the incoming
                 // check looks at once and its back-off starts again.
                 crate::executor::activity_feed::sent(cx);
@@ -1049,6 +1055,8 @@ impl SendHost {
                 record_ids,
             } => {
                 tracker::withdrawn(user_op_hash, record_ids, cx);
+                // The write-ahead's records are gone: so is their row.
+                crate::executor::activity_feed::reconciled(1, cx);
                 self.resolve_send(id, SendShellResult::TrackHandedOff, cx);
                 return;
             }
