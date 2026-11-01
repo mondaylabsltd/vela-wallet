@@ -578,7 +578,13 @@ fn what_waits_names_its_transactions_and_when_it_was_read() {
         .insert("vela.multisigWaiting".to_owned(), kept.to_string());
     let mut sut = Sut::new();
     start(&mut sut, &mut world);
-    run(&mut sut, &mut world, Event::Follow { account: Some(shown.clone()) });
+    run(
+        &mut sut,
+        &mut world,
+        Event::Follow {
+            account: Some(shown.clone()),
+        },
+    );
     run(
         &mut sut,
         &mut world,
@@ -587,7 +593,9 @@ fn what_waits_names_its_transactions_and_when_it_was_read() {
         },
     );
     let view = sut.view();
-    let kept_w = view.presence[&other.address.to_ascii_lowercase()].clone().unwrap();
+    let kept_w = view.presence[&other.address.to_ascii_lowercase()]
+        .clone()
+        .unwrap();
     let kept_key = format!(
         "100:{}",
         multisig::safe_tx_hash(100, &other.address, &kept_tx)
@@ -595,8 +603,13 @@ fn what_waits_names_its_transactions_and_when_it_was_read() {
             .to_ascii_lowercase()
     );
     assert_eq!(kept_w.needs_you_keys, vec![kept_key]);
-    assert_eq!(kept_w.read_at, None, "kept from an earlier page: read by nobody here");
-    let shown_w = view.presence[&shown.address.to_ascii_lowercase()].clone().unwrap();
+    assert_eq!(
+        kept_w.read_at, None,
+        "kept from an earlier page: read by nobody here"
+    );
+    let shown_w = view.presence[&shown.address.to_ascii_lowercase()]
+        .clone()
+        .unwrap();
     assert!(shown_w.read_at.is_some(), "the followed list was read");
     assert!(shown_w.needs_you_keys.is_empty());
 
@@ -606,8 +619,14 @@ fn what_waits_names_its_transactions_and_when_it_was_read() {
     world.mailbox.push(stored(&other, 100, &a));
     world.mailbox.push(stored(&other, 100, &b));
     run(&mut sut, &mut world, Event::OthersTick);
-    let w = sut.view().presence[&other.address.to_ascii_lowercase()].clone().unwrap();
-    assert_eq!(w.needs_you as usize, w.needs_you_keys.len(), "the count is the keys'");
+    let w = sut.view().presence[&other.address.to_ascii_lowercase()]
+        .clone()
+        .unwrap();
+    assert_eq!(
+        w.needs_you as usize,
+        w.needs_you_keys.len(),
+        "the count is the keys'"
+    );
     for tx in [&a, &b] {
         let key = format!(
             "100:{}",
