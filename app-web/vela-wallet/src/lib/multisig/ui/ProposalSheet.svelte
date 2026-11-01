@@ -2154,9 +2154,9 @@
 					<p class="fine" data-testid="approves-in-vela">
 						{fillTemplate(m.proposal.approvesInVela, {
 							names: listOf(
-							elsewhere.map((o) => names.label(o)),
-							locale
-						)
+								elsewhere.map((o) => names.label(o)),
+								locale
+							)
 						})}
 					</p>
 				{/if}
@@ -2165,9 +2165,9 @@
 					<p class="fine" data-testid="either-way">
 						{fillTemplate(m.proposal.eitherWay, {
 							names: listOf(
-							either.map((o) => names.label(o)),
-							locale
-						)
+								either.map((o) => names.label(o)),
+								locale
+							)
 						})}
 					</p>
 				{/if}

@@ -59,7 +59,6 @@ describe('the party row at the side panel’s width (089)', () => {
 		const right = host.getBoundingClientRect().right - PAD_PX;
 		const range = document.createRange();
 		range.selectNodeContents(host.querySelector<HTMLElement>('.name')!);
-		for (const rect of range.getClientRects())
-			expect(rect.right).toBeLessThanOrEqual(right + 0.5);
+		for (const rect of range.getClientRects()) expect(rect.right).toBeLessThanOrEqual(right + 0.5);
 	});
 });
