@@ -1135,6 +1135,14 @@ struct RootView: View {
             // The send machine closed its journey — its back from the picker,
             // or done — and the screens go with it (087 F27).
             .onChange(of: send.closes) { _, _ in sendClosed() }
+            // r10 follow-up: the send screens went by a door the core never
+            // heard — the system back, another tab, a link over them — and
+            // the core drops what was still out for them (`left`), so a late
+            // answer raises nothing over wherever the person went. After the
+            // core's own close it changes nothing.
+            .onChange(of: flows.stack.contains { sendStates.contains($0) }) { was, open in
+                if was, !open { send.left() }
+            }
             // …and it hears the display currency commit or change while its
             // journey is open (final note F25).
             .onChange(of: settings.currency) { _, _ in sendDisplayStands() }
@@ -3528,6 +3536,7 @@ struct RootView: View {
                         sendClassFilter = id
                     },
                     onPickCta: { sendPickCta() },
+                    onRetryTokens: { send.retryTokens() },
                     onMax: { send.tapMax() },
                     onChangeToken: { send.changeToken() },
                     onDenom: { send.toggleFiatInput() },

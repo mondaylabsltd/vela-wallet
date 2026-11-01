@@ -119,7 +119,14 @@ final class SendStore {
             ])
             self?.onCeremony?("signed")
         }
-        executor.ports.alert = { [weak self] kind in self?.alert = kind }
+        // r10 follow-up: a list that failed to load is the picker's own
+        // state (`tokens_failed_key`, with "Try again") — the core's alert
+        // for it goes to a shell that does not draw that state, and this one
+        // does. Every other alert is the core's words, as raised.
+        executor.ports.alert = { [weak self] kind in
+            guard kind["type"] as? String != "load_tokens_failed" else { return }
+            self?.alert = kind
+        }
         executor.ports.trustedSignerEnded = { [weak self] notice in self?.trustedSignerNotice = notice }
         // What the asset list has so far, while the first fetch waits for its
         // round. Display-only: the core takes it only while that load is out.
@@ -580,6 +587,14 @@ final class SendStore {
     func retryAfterBootstrap() { dispatch(["type": "retry_after_bootstrap"]) }
     func done() { dispatch(["type": "done"]) }
     func refreshTokens() { dispatch(["type": "refresh_tokens"]) }
+    /// r10 follow-up: the picker's "Try again" under `tokens_failed_key`.
+    func retryTokens() { dispatch(["type": "retry_tokens"]) }
+
+    /// r10 follow-up: the send screens went away without the core's own
+    /// close — the system back, another tab, a link over them. What is
+    /// still out for the journey is dropped, so a late answer raises nothing
+    /// over wherever the person went; the next `open` starts afresh.
+    func left() { dispatch(["type": "left"]) }
     /// The display currency changed under a screen that already has a figure on
     /// it. The core re-denominates rather than relabelling.
     func displayChanged(code: String, rate: Double?, fiatDecimals: Int) {

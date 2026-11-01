@@ -210,6 +210,8 @@ private let CALLS: [String: Place] = [
     "send.pickedAddress": .step("prepare_transfer"),
     "send.recipientsChanged": .step("prepare_batch_transfer"),
     "send.retryAfterBootstrap": .view(RETRY),
+    "send.retryTokens": .view("the token list read again after it failed"),
+    "send.left": .machine(FLOW),
     "send.retryAfterError": .view(RETRY),
     "send.retryRelayUnreachable": .view(RETRY),
     "send.scanned": .none("a code handed to the send — the camera's or a pay link's"),

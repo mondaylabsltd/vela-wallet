@@ -138,6 +138,8 @@ struct FlowHost: View {
     /// confirming a sweep once one is under way — the screen cannot tell those
     /// apart, and the shell's own picking flag can.
     var onPickCta: (() -> Void)?
+    /// r10 follow-up: the picker's "Try again" on a list that failed.
+    var onRetryTokens: (() -> Void)?
     var onMax: (() -> Void)?
     /// Issue #326: the form's token card — back to the asset picker, the
     /// payee kept. Only where the core offers it (`can_change_token`).
@@ -403,7 +405,8 @@ struct FlowHost: View {
                     onCta: {
                         if let onPickCta { onPickCta() }
                         else { onNavigate(.sendMulti) }
-                    }
+                    },
+                    onRetry: { onRetryTokens?() }
                 )
             }
         case .sendForm(let m):

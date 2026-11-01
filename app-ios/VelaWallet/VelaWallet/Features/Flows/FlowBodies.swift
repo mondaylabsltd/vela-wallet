@@ -800,6 +800,8 @@ struct SendPickBody: View {
     /// and "select all valuable" must not sweep holdings a person cannot see.
     var onSelectAll: ([Int]) -> Void = { _ in }
     var onCta: () -> Void = {}
+    /// r10 follow-up: "Try again" on a list that could not be read.
+    var onRetry: () -> Void = {}
 
     @State private var query = ""
 
@@ -876,6 +878,13 @@ struct SendPickBody: View {
                     .frame(maxWidth: .infinity)
                     .multilineTextAlignment(.center)
                     .padding(.vertical, Tokens.Space.s12)
+                    .accessibilityIdentifier("send.pick.empty")
+                // r10 follow-up: a list that could not be read is recoverable
+                // here, on the screen that failed.
+                if let retry = model.retry {
+                    VelaButton(title: retry, kind: .secondary, action: onRetry)
+                        .accessibilityIdentifier("send.pick.retry")
+                }
             }
             if let selection = model.selection {
                 Button { onSelectAll(shown.map(\.offset)) } label: {

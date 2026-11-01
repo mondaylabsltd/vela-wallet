@@ -411,6 +411,11 @@ struct SendFeeCoinWire: Decodable, Equatable {
 struct SendViewWire: Decodable, Equatable {
     let stage: SendStageWire
     let loading: Bool
+    /// r10 follow-up: the token list could not be read — the corpus key of
+    /// the picker's line (`send.tokensUnavailable`), drawn in place of the
+    /// list with "Try again" (`retry_tokens`). Drawn here, so the core's
+    /// `load_tokens_failed` alert is not. Absent: the list did not fail.
+    var tokensFailedKey: String? = nil
     let locked: Bool
     let amountLocked: Bool
     let resolvingLock: Bool
