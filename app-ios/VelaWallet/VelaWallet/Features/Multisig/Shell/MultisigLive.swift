@@ -215,7 +215,8 @@ final class MultisigLive: MultisigPorts {
         } catch let refused as UserOpSpine.Refused {
             return Self.passkeyAnswer(refused.failure)
         } catch {
-            return Self.passkeyFailed(.unknown(MultisigExecutor.describe(error)))
+            // Real-device S3: the core's words for the platform's error.
+            return Self.passkeyFailed(Self.passkeyError(error))
         }
     }
 
@@ -268,6 +269,14 @@ final class MultisigLive: MultisigPorts {
             if notice == .closed { return ["type": "passkey_cancelled"] }
             return Self.passkeyFailed(.pageSignFailed(page: notice.pageFailure ?? "refused", message: nil))
         }
+    }
+
+    /// A passkey ceremony's error as the core reads it (`passkey_error_words`):
+    /// its failure, and the corpus key the sheet says — never the system's
+    /// "domain code: description".
+    static func passkeyError(_ error: Error) -> MultisigShellFailure {
+        let words = PasskeyErrorFacts.of(error).words
+        return .passkey(failure: words.failure, timedOut: words.kind == .timedOut, message: words.key)
     }
 
     static func passkeyFailed(_ failure: MultisigShellFailure) -> [String: Any] {

@@ -198,7 +198,10 @@ func promptCopy(_ kind: PromptKind, loc: Loc) -> PromptCopy {
             title: loc.t(I18nKeys.Create.alertErrorTitle),
             // Issue #446: the link to the other device failed — the core says
             // which; its raw words stay in the bug report, not on the sheet.
-            message: kind.phoneLink ? loc.t(I18nKeys.Flow.phoneLinkFailed) : kind.detail ?? ""
+            // Real-device S3: then the core's sentence for the platform's
+            // error (`words_key`), never the system's English.
+            message: kind.phoneLink ? loc.t(I18nKeys.Flow.phoneLinkFailed)
+                : kind.wordsKey.map { loc.t($0) } ?? kind.detail ?? ""
         )
     case "recover_offer":
         PromptCopy(
@@ -229,7 +232,9 @@ func promptCopy(_ kind: PromptKind, loc: Loc) -> PromptCopy {
             // Issue #446: not "set up Face ID" when it was the phone link.
             message: kind.phoneLink
                 ? loc.t(I18nKeys.Flow.phoneLinkFailed)
-                : loc.t(I18nKeys.Login.alertSignInFailedBody, vars: ["message": kind.detail ?? ""])
+                // Real-device S3: the core's sentence for the platform's error.
+                : kind.wordsKey.map { loc.t($0) }
+                    ?? loc.t(I18nKeys.Login.alertSignInFailedBody, vars: ["message": kind.detail ?? ""])
         )
     default:
         // Cannot happen while the core and this file agree. Rather than showing

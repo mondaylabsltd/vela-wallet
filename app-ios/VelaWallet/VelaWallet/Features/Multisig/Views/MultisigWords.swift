@@ -355,7 +355,13 @@ struct MsWords {
             switch object["failure"] as? String {
             case "cancelled": return t("proposal.reason.passkeyClosed")
             case "not_discoverable", "not_supported": return t("proposal.reason.passkeyMissing")
-            default: return t("proposal.reason.passkeyFailed")
+            default:
+                // Real-device S3: the core's sentence for the platform's error
+                // (`passkey_error_words`), when the shell had one.
+                if let key = object["message"] as? String, key.hasPrefix("onboarding.common.") {
+                    return t("proposal.failed", ["reason": loc.t(key)])
+                }
+                return t("proposal.reason.passkeyFailed")
             }
         case "passkey_check": return t("proposal.reason.passkeyFailed")
         case "venue_blocked":

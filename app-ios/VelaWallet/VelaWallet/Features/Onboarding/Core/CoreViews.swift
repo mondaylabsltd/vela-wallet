@@ -301,6 +301,9 @@ struct PromptKind: Equatable, Identifiable {
     /// (no network) — the sheet says "check your network" rather than "Vela
     /// couldn't check".
     let local: Bool
+    /// Real-device S3: the core's sentence for the platform's error
+    /// (`words_key`, a corpus key) — drawn in place of the raw detail.
+    var wordsKey: String? = nil
 
     var id: String { detail.map { "\(type)|\($0)" } ?? (local ? "\(type)|local" : type) }
 
@@ -321,6 +324,7 @@ struct PromptKind: Equatable, Identifiable {
         self.phoneLink = json["phone_link"] as? Bool ?? false
         self.securityKey = json["security_key"] as? Bool ?? false
         self.local = json["local"] as? Bool ?? false
+        self.wordsKey = (json["words_key"] as? String).flatMap { $0.isEmpty ? nil : $0 }
     }
 }
 

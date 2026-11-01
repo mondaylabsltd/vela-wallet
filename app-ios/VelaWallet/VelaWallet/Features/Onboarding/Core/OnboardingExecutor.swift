@@ -638,6 +638,11 @@ final class OnboardingExecutor {
             // `other` and `not_supported` carry the platform's own words,
             // because those go into the bug report and must not be prettified.
             "message": failure.kind == .cancelled ? NSNull() : failure.message,
+            // Real-device S3: the facts the core names the sheet's sentence
+            // from (`PromptKind.words_key`). A failure this app wrote itself
+            // (a phone that never answered, a link that broke) carries its
+            // own words as the message, which the core reads too.
+            "error": (failure.facts ?? PasskeyErrorFacts(domain: "", code: nil, message: failure.message)).wire,
         ]
     }
 
