@@ -2157,14 +2157,14 @@ impl WalletPage {
         col = col.child(parties);
 
         if !past {
-            // What moves (the simulation, or the probe's balances).
-            if let Some(sim) = &review.simulation {
-                if let Some(key) = sim.notice_key.as_ref().or(sim.no_change_key.as_ref()) {
+            // What moves (the simulation, or the probe's balances) — nothing
+            // when the core withholds it beside a refusal.
+            if let Some(sim) = ms_moves(review) {
+                if let Some((key, tone)) = ms_moves_line(sim) {
                     let text = self
                         .loc
                         .t_texts(key, &[("reason", sim.revert_reason.as_deref().unwrap_or_default())])
                         .to_string();
-                    let tone = if sim.kind == "reverts" { Tone::Danger } else if sim.notice_key.is_some() { Tone::Caution } else { Tone::Neutral };
                     col = col.child(ms_note(theme, &text, tone));
                 }
                 for (i, delta) in sim.deltas.iter().enumerate() {
@@ -3256,6 +3256,32 @@ pub(crate) enum Tone {
     Danger,
 }
 
+/// What the review says moves, as drawn: `None` when the core withholds it
+/// (`simulation.kind` `withheld` — refused for a reason other than the state
+/// guard's, a delegatecall or a batch too deep): nothing in its place, never
+/// "No asset changes" under "Vela won't sign this".
+pub(crate) fn ms_moves(review: &ReviewDraw) -> Option<&SimVerdict> {
+    review
+        .simulation
+        .as_ref()
+        .filter(|sim| sim.kind != vela_core::multisig_review::SIM_WITHHELD)
+}
+
+/// The one line in the verdict's place: the notice (a revert in danger, a
+/// could-not-check in caution) or the core's no-change line; `None` when
+/// the deltas speak for themselves.
+pub(crate) fn ms_moves_line(sim: &SimVerdict) -> Option<(&str, Tone)> {
+    let key = sim.notice_key.as_deref().or(sim.no_change_key.as_deref())?;
+    let tone = if sim.kind == "reverts" {
+        Tone::Danger
+    } else if sim.notice_key.is_some() {
+        Tone::Caution
+    } else {
+        Tone::Neutral
+    };
+    Some((key, tone))
+}
+
 /// The value press.s style (r9-19, the web.s `valueVariant`): the accent,
 /// or the danger fill where the review asks for "… anyway" — never the
 /// plain accent on a signature the review warns against.
@@ -3468,6 +3494,36 @@ mod tests {
             draw.state.as_ref().is_none_or(|s| !matches!(s.verdict, StateVerdict::Unchanged | StateVerdict::Declared)),
             "no reassurance beside a refusal"
         );
+    }
+
+    /// A refused delegatecall (Bybit's shape, on the fork) says nothing about
+    /// what moves: the core withholds the simulation, and the sheet draws no
+    /// line in its place — never "No asset changes" under the refusal.
+    #[test]
+    fn a_refused_delegatecall_says_no_asset_changes_nowhere() {
+        use vela_core::app::sim_outcome::{SimOutcome, verdict_of};
+        for vector in [
+            include_str!("../../../../../rust/crates/vela-core/tests/vectors/multisig-review/fork-bybit-probe.json"),
+            include_str!("../../../../../rust/crates/vela-core/tests/vectors/multisig-review/fork-bybit-trace.json"),
+        ] {
+            let v: Value = serde_json::from_str(vector).unwrap();
+            let out = vela_core::multisig::call_json(
+                "multisigReview",
+                &serde_json::json!({ "input": v["input"] }).to_string(),
+            )
+            .unwrap();
+            let draw = ReviewDraw::of(&serde_json::from_str(&out).unwrap()).unwrap();
+            assert_eq!(draw.refused.as_ref().unwrap().key, "home.multisig.review.refusedWhy.delegatecall");
+            assert_eq!(draw.simulation.as_ref().unwrap().kind, "withheld");
+            assert!(ms_moves(&draw).is_none(), "nothing in the place of what moves");
+            assert!(!draw.concerns.iter().any(|c| matches!(c, Concern::Unsimulated)));
+        }
+        // The same sheet still says "No asset changes" where the core checked.
+        let quiet = verdict_of(SimOutcome::Deltas { deltas: Vec::new() });
+        let draw = ReviewDraw { simulation: Some(quiet), ..ReviewDraw::default() };
+        let (key, tone) = ms_moves_line(ms_moves(&draw).unwrap()).unwrap();
+        assert_eq!(key, "componentsUi.signing.simResultNoChange");
+        assert!(tone == Tone::Neutral);
     }
 
     /// r9-2: Arc's USDC moved as the coin and as its ERC-20 interface is ONE
