@@ -273,20 +273,62 @@ pub fn refresh_turning(
 /// no figure, no currency code, nothing that reads as money. A hidden hero
 /// stays hidden; "Checking…", the time it was read and the refresh control
 /// stay, since they say what the wallet is doing rather than what it is worth.
+///
+/// r10-1 (the web's home-1): the line under it still says what the wallet
+/// has to say about its networks — `network`, [`network_status`] of the same
+/// view — never a bare "Updated now" over a network that did not answer.
+/// Only a line about the figure itself (what could not be priced) goes with
+/// the figure.
 #[must_use]
-pub fn no_value(model: BalanceModel, words: SharedString) -> BalanceModel {
+pub fn no_value(
+    model: BalanceModel,
+    words: SharedString,
+    network: Option<(StatusKind, SharedString)>,
+) -> BalanceModel {
     if model.state == BalanceState::Hidden {
         return model;
     }
+    let status = if model.checking.is_some() { None } else { network };
     BalanceModel {
         currency: SharedString::default(),
         state: BalanceState::NoValue,
         integer: words,
         decimals: None,
         live: None,
-        status: None,
+        status,
         ..model
     }
+}
+
+/// What the hero's line says about the networks, whatever the figure above
+/// it shows — a figure, a mask, or the testnet space's words (the web's
+/// `networkStatus`, home-1 / home-8): a read that failed inside Vela first
+/// (PR 2 note 11), else the networks the wallet cannot reach (spec 092), else
+/// nothing known at all; else that what is shown is still the last read
+/// (`on_cache`, or the core's "still updating"). `None` when the networks
+/// have nothing to say. Every fact is the core's view.
+#[must_use]
+pub fn network_status(
+    view: &BalanceView,
+    s: &WalletStrings,
+    on_cache: bool,
+) -> Option<(StatusKind, SharedString)> {
+    if let Some(line) = internal_line(view, s).or_else(|| unreachable_line(view, s)) {
+        return Some((StatusKind::Warning, line));
+    }
+    if view.unreachable {
+        return Some((StatusKind::Warning, s.balance_unreachable.clone()));
+    }
+    (on_cache || view.notice == Some(BalanceNotice::StillUpdating))
+        .then(|| (StatusKind::Refreshing, s.balance_stale.clone()))
+}
+
+/// [`network_status`] of the view the hero draws: on the cache while the
+/// core withholds the live total.
+#[must_use]
+pub fn network_status_of(view: &BalanceView, s: &WalletStrings) -> Option<(StatusKind, SharedString)> {
+    let on_cache = view.display_total_usd.is_none() && view.cached_total_usd.is_some();
+    network_status(view, s, on_cache)
 }
 
 /// The home's holdings in the testnet space (spec 105): no worth on a row.
@@ -347,10 +389,18 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
             integer: SharedString::from(BALANCE_MASK),
             decimals: None,
             live: None,
-            // No line under a hidden figure, "Checking…" included — the
-            // web's hidden hero, which says nothing at all (078 H-03).
+            // No "Checking…" under a hidden figure (078 H-03).
             checking: None,
-            status: None,
+            // r10-1, the web's home-8: hidden, the figure is masked — never
+            // what the wallet has to say about its networks. A network it
+            // cannot reach is no secret, and a masked hero under "Updated
+            // now" read as a wallet read a moment ago. Not while the first
+            // read is still out: nothing has failed to answer yet.
+            status: if checking.is_some() {
+                None
+            } else {
+                network_status(view, s, on_cache)
+            },
             updated: None,
             // The control under a hidden hero still turns: hiding the
             // figure is not hiding that it is being read.
@@ -1202,6 +1252,52 @@ mod tests {
             1 => Some(UNREACHABLE_ONE.to_owned()),
             _ => Some(UNREACHABLE_MANY.to_owned()),
         };
+    }
+
+    /// r10-1 (the web's home-1 / home-8): a network the wallet cannot reach
+    /// is said under the testnet space's words and under a hidden figure —
+    /// never a bare "Updated now" over a network that did not answer. The
+    /// testnet hero drops only the figure's own lines; a first read still
+    /// out keeps "Checking…" alone.
+    #[test]
+    fn a_network_out_of_reach_is_said_under_any_figure() {
+        let s = strings();
+        let mut down = view(Some(0.6));
+        down.checking_key = None;
+        set_unreachable(&mut down, &[5_042_002]);
+        let said = network_status_of(&down, &s);
+        assert!(
+            matches!(&said, Some((StatusKind::Warning, line)) if line.contains("Arc Testnet")),
+            "{said:?}"
+        );
+
+        let shown = balance(&down, &s, "en", &Money::default());
+        let testnet = no_value(shown, "Test assets".into(), network_status_of(&down, &s));
+        assert_eq!(testnet.state, BalanceState::NoValue);
+        assert_eq!(testnet.status, said, "the testnet hero keeps the network's line");
+
+        let mut hidden = down.clone();
+        hidden.hidden = true;
+        hidden.display_total_usd = None;
+        let masked = balance(&hidden, &s, "en", &Money::default());
+        assert_eq!(masked.state, BalanceState::Hidden);
+        assert_eq!(masked.status, said, "a mask hides the figure, not the network");
+
+        // Every network answered: nothing in the line, either way.
+        let mut fine = view(Some(0.6));
+        fine.checking_key = None;
+        assert_eq!(network_status_of(&fine, &s), None);
+        let shown = balance(&fine, &s, "en", &Money::default());
+        assert_eq!(no_value(shown, "Test assets".into(), None).status, None);
+
+        // The first read still out: "Checking…", and no network line yet.
+        let mut first = view(None);
+        set_unreachable(&mut first, &[5_042_002]);
+        assert!(first.checking_key.is_some(), "the core's first frame");
+        let checking = balance(&first, &s, "en", &Money::default());
+        let checking = no_value(checking, "Test assets".into(), network_status_of(&first, &s));
+        assert!(checking.checking.is_some());
+        assert_eq!(checking.status, None);
     }
 
     fn view(usd: Option<f64>) -> BalanceView {

@@ -5589,7 +5589,11 @@ impl WalletPage {
         // The testnet space (spec 105): no figure at all — a "$12" of test
         // coins would read as money. Said in the figure's place.
         if crate::network_space::testnet() {
-            model = wallet_live::no_value(model, self.loc.t("networkSpace.noValue"));
+            model = wallet_live::no_value(
+                model,
+                self.loc.t("networkSpace.noValue"),
+                wallet_live::network_status_of(&view, &self.strings),
+            );
         }
         model
     }
