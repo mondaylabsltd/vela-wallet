@@ -594,6 +594,14 @@ class AppContainer(private val app: Application) {
     fun inForeground(): Boolean = foregroundActivities > 0
 
     /**
+     * r11-1: an activity of this app is RESUMED — in front of the person, not
+     * merely started. What the views hold now is what the person can see;
+     * Home pauses at once, the stop comes later, and a read landing in
+     * between was recorded "seen" by a screen nobody was looking at.
+     */
+    fun onScreen(): Boolean = resumedActivities > 0
+
+    /**
      * A multisig link (`#ms=…` / `#msa=…`, the fragment with its `#`) that
      * reached the app — a verified App Link, text shared in, a code scanned —
      * for the accounts machine's one link flow once the wallet is in front.
@@ -1200,6 +1208,10 @@ class AppContainer(private val app: Application) {
     @Volatile
     private var foregroundActivities = 0
 
+    /** r11-1: activities resumed now ([onScreen]). */
+    @Volatile
+    private var resumedActivities = 0
+
     /**
      * The one place this app learns it has been put away.
      *
@@ -1240,8 +1252,13 @@ class AppContainer(private val app: Application) {
         }
 
         override fun onActivityCreated(activity: android.app.Activity, state: android.os.Bundle?) = Unit
-        override fun onActivityResumed(activity: android.app.Activity) = Unit
-        override fun onActivityPaused(activity: android.app.Activity) = Unit
+        override fun onActivityResumed(activity: android.app.Activity) {
+            resumedActivities += 1
+        }
+
+        override fun onActivityPaused(activity: android.app.Activity) {
+            resumedActivities = (resumedActivities - 1).coerceAtLeast(0)
+        }
         override fun onActivitySaveInstanceState(activity: android.app.Activity, out: android.os.Bundle) = Unit
         override fun onActivityDestroyed(activity: android.app.Activity) = Unit
     }

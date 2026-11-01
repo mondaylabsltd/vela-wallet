@@ -468,27 +468,41 @@ class MultisigHub(
 
     /**
      * One background round (M6): every multisig here read again, the one
-     * followed refreshed, then what changed is said — bounded, as the worker
-     * that runs it is.
+     * followed refreshed — bounded, as the worker that runs it is. Returns
+     * when it began (ms): what it may say is what a read since then holds.
+     *
+     * r11-1: the round waits for ITS reads — every multisig's list read
+     * since it began (`read_at`, the core's), not "the machine went quiet":
+     * a chain read takes 8 s and more on a slow network, and the quiet came
+     * before the reads, so the round judged a kept list (said nothing) and
+     * the read that landed after it was never said. A tick already out when
+     * the round began is not the round's: the tick is asked again until one
+     * of its own has read every multisig, or the time is up.
      */
-    suspend fun backgroundRound() {
+    suspend fun backgroundRound(): Long {
+        val since = System.currentTimeMillis()
+        awaySince = since
         proposals.dispatch(ev("others_tick"))
         proposals.dispatch(ev("refresh", "fresh" to true))
-        // r9-8: read until the machine has gone quiet — the followed list
-        // read (`loading` false) and no view moved for a moment (the other
-        // multisigs' reads land one by one, each a commit) — bounded, as the
-        // worker that runs it is. A fixed 2 s judged the presence before the
-        // others' reads were in: nothing "needed you" yet, nothing was said.
-        val deadline = System.currentTimeMillis() + 40_000
-        delay(1_500)
-        var seen = proposals.commits.value
+        val deadline = since + ROUND_WAIT_MS
+        var asked = since
         while (System.currentTimeMillis() < deadline) {
-            delay(QUIET_MS)
-            val now = proposals.commits.value
-            if (now == seen && proposals.view.value["loading"].bool == false) break
-            seen = now
+            delay(ROUND_POLL_MS)
+            if (roundRead(_accountsView.value, _proposalsView.value, since)) break
+            if (System.currentTimeMillis() - asked >= ROUND_ASK_AGAIN_MS) {
+                asked = System.currentTimeMillis()
+                proposals.dispatch(ev("others_tick"))
+            }
         }
+        return since
     }
+
+    /**
+     * r11-1: the app was put away with a round in this process — a read that
+     * lands later (while still away) is said when it lands, measured from the
+     * round's start. `null`: on screen, or no round yet.
+     */
+    @Volatile var awaySince: Long? = null
 
     // -- a dApp's request to a multisig (M5) ------------------------------------
 
@@ -720,7 +734,27 @@ class MultisigHub(
         /** A marker: the draft is drawn. */
         const val DRAWN = "__drawn"
 
-        /** r9-8: how long the machine must not move for a background round to be read. */
-        const val QUIET_MS = 2_500L
+        /** r11-1: how long a background round waits for its reads (the worker gives it 60 s). */
+        const val ROUND_WAIT_MS = 40_000L
+
+        /** r11-1: how often a round looks whether its reads are in. */
+        const val ROUND_POLL_MS = 500L
+
+        /** r11-1: a tick still not the round's after this is asked again. */
+        const val ROUND_ASK_AGAIN_MS = 5_000L
     }
+
+    /**
+     * r11-1: every multisig here has a list read since [since] (the core's
+     * `read_at`), and the followed one is not loading — what a round may say
+     * is now its own reads'. Pure.
+     */
+    object Round {
+        fun read(accounts: MsAccountsView, proposals: MsProposalsView, since: Long): Boolean =
+            !proposals.loading && accounts.accounts.isNotEmpty() && accounts.accounts.all { row ->
+                proposals.presence[row.account.address.lowercase()]?.readAt?.let { it >= since } == true
+            }
+    }
+
+    private fun roundRead(accounts: MsAccountsView, proposals: MsProposalsView, since: Long) = Round.read(accounts, proposals, since)
 }

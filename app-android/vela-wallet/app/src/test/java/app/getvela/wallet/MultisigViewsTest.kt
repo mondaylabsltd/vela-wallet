@@ -86,7 +86,7 @@ class MultisigViewsTest {
           "canApprove":[],"canExecute":["$alice"],"sameNonce":[],"executing":false,"createdMs":1,"unsent":false,"renameUndeployed":false,
           "review":{"action":{"kind":"transfer","to":"$bob","amount":"1500000000000000000","token":null},"sign":{"allowed":true,"anyway":false}}}],
          "chains":[{"chainId":100,"members":{"deployed":true,"owners":["$alice","$bob","$carol"],"threshold":2,"nonce":"3"},"items":[],"mailbox":true}],
-         "presence":{"${safe.lowercase()}":{"needs_you":1,"ready":2,"waiting_payer":0,"first":{"chain_id":100,"safe_tx_hash":"$hash"}}},
+         "presence":{"${safe.lowercase()}":{"needs_you":1,"ready":2,"waiting_payer":0,"first":{"chain_id":100,"safe_tx_hash":"$hash"},"needs_you_keys":["100:${hash.lowercase()}"],"ready_keys":["100:0xr1","100:0xr2"],"read_at":10}},
          "standings":{"100:$hash":{"kind":"blocked","block":{"kind":"fails","why":{"kind":"short","token":{"symbol":"XDAI","decimals":18},"have":"280000000000000000","need":"500000000000000000"}}}},
          "signers":{"100:$hash":{"rows":[{"owner":"$bob","kind":"vela"},{"owner":"$carol","kind":"wallet"}],"in_vela":["$bob"],"outside":["$carol"],"either":[],"contract":[],"enough":true}},
          "waiting_parts":{"${safe.lowercase()}":[{"kind":"needsYou","count":1},{"kind":"ready","count":2}]},
@@ -290,16 +290,18 @@ class MultisigViewsTest {
         val notifier = MultisigNotifier(store, { words() }) { posted += it }
         val accounts = MsAccountsView.of(json(accountsJson))
         // First look: on screen — recorded, nothing said.
-        assertEquals(emptyList<Any>(), notifier.evaluate(accounts, MsProposalsView.of(json(proposalsJson())), post = false))
+        assertEquals(emptyList<Any>(), notifier.evaluate(accounts, MsProposalsView.of(json(proposalsJson())), MultisigNotifier.Look.OnScreen))
         assertTrue(posted.isEmpty())
         // Away: a second approval counted, and one more needs this device.
         val moved = proposalsJson().replace("\"approved\":1", "\"approved\":2").replace("\"needs_you\":1", "\"needs_you\":2")
-        val notes = notifier.evaluate(accounts, MsProposalsView.of(json(moved)), post = true)
+            .replace("\"needs_you_keys\":[", "\"needs_you_keys\":[\"100:0xnew\",")
+        val notes = notifier.evaluate(accounts, MsProposalsView.of(json(moved)), MultisigNotifier.Look.Away(since = 5))
         assertEquals(setOf(MultisigNotifier.Channel.NeedsYou, MultisigNotifier.Channel.Counted), notes.map { it.channel }.toSet())
         assertEquals(2, posted.size)
         assertTrue(notes.all { it.safeTxHash == hash })
+        assertEquals("the count is the number waiting now", "2 need your approval", notes.single { it.channel == MultisigNotifier.Channel.NeedsYou }.body)
         // Said once: the same views again say nothing.
-        assertTrue(notifier.evaluate(accounts, MsProposalsView.of(json(moved)), post = true).isEmpty())
+        assertTrue(notifier.evaluate(accounts, MsProposalsView.of(json(moved)), MultisigNotifier.Look.Away(since = 5)).isEmpty())
         // An execution is said only away.
         notifier.executed("Send 1.5 XDAI", 100, hash, away = false)
         assertEquals(2, posted.size)
