@@ -5423,6 +5423,62 @@ export function inFlightOps(track_view_json) {
 }
 
 /**
+ * r9-17: the wait before the next incoming scan
+ * (`incoming_scan::next_scan_ms`).
+ * @param {boolean} visible
+ * @param {number} since_interaction_ms
+ * @returns {number}
+ */
+export function incomingNextScanMs(visible, since_interaction_ms) {
+    const ret = wasm.incomingNextScanMs(visible, since_interaction_ms);
+    return ret >>> 0;
+}
+
+/**
+ * r9-17: the networks an account's incoming scan reads, and where its
+ * native balance is watched (`incoming_scan::scan_plan`): `TrustScanFacts`
+ * JSON in, `IncomingScanPlan` JSON out. The uniffi twin is
+ * `shell_rules_bridge.rs`'s `incoming_scan_plan`.
+ * @param {string} facts_json
+ * @returns {string}
+ */
+export function incomingScanPlan(facts_json) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(facts_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.incomingScanPlan(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * r9-17: one poll's reads on one network (`incoming_scan::scan_windows`):
+ * `IncomingScanWindowsAsk` JSON in, `IncomingScanWindows` JSON out.
+ * @param {string} ask_json
+ * @returns {string}
+ */
+export function incomingScanWindows(ask_json) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(ask_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.incomingScanWindows(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
  * `vela_advise`: the agent's opinion, sanitized and bound to a review digest.
  * @param {string} input_json
  * @returns {string}
@@ -6201,6 +6257,38 @@ export function passkeyDirectoryUrl(aaguid, origin) {
         wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     }
     return v3;
+}
+
+/**
+ * A platform passkey error's facts → the words a sheet draws
+ * (`passkey_error::passkey_error_words`), as JSON text:
+ * `{"kind":"app_not_associated","key":"onboarding.common.passkeyError.…","failure":"other"}`.
+ * `code` is `undefined` when there is none. Round 10 (real-device S3): the
+ * web drew `DOMException.message` — the browser's English — in a
+ * translated sheet.
+ * @param {string} platform
+ * @param {string} domain
+ * @param {number | null | undefined} code
+ * @param {string} message
+ * @returns {string}
+ */
+export function passkeyErrorWords(platform, domain, code, message) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(platform, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(domain, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(message, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.passkeyErrorWords(ptr0, len0, ptr1, len1, !isLikeNone(code), isLikeNone(code) ? 0 : code, ptr2, len2);
+        deferred4_0 = ret[0];
+        deferred4_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
 }
 
 /**
