@@ -1056,6 +1056,9 @@ pub struct WalletPage {
     /// History's rows, measured, for drawing it a window at a time
     /// (`ui::windowed`, Phase 4).
     history_window: crate::ui::Windowed,
+    /// r10 follow-up: the home's and the history's columns scrolling, as
+    /// the incoming check hears it (`wallet::list_gesture`).
+    list_gesture: crate::wallet::list_gesture::ListGesture,
     /// History's rows as last built, and what they were built from (Phase 4).
     history_model: Option<(HistoryKey, flow_fixtures::HistoryPanel)>,
     panel_scroll_subject: String,
@@ -1998,6 +2001,7 @@ impl WalletPage {
             panel_scroll: crate::ui::SmoothScroll::new(),
             perf_scroll: None,
             history_window: crate::ui::Windowed::new(),
+            list_gesture: crate::wallet::list_gesture::ListGesture::default(),
             history_model: None,
             panel_scroll_subject: String::new(),
             verdict_seen: None,
@@ -3991,6 +3995,56 @@ impl WalletPage {
         ]
     }
 
+    /// r10 follow-up: the home's column, or the history's, is moving under
+    /// the wheel or the trackpad — the lists the incoming check keeps out of
+    /// the way of.
+    fn lists_moving(&self) -> bool {
+        let history = self.panel == PanelId::Flow && self.flows.last() == Some(&FlowPanel::Da1);
+        self.identity.is_some()
+            && !self.gallery
+            && self.section == Section::Wallet
+            && (self.content_scroll.moving() || (history && self.panel_scroll.moving()))
+    }
+
+    /// r10 follow-up: a gesture starting on the home's or the history's
+    /// column says `interacting {on}`; a look every
+    /// [`list_gesture::LOOK`](crate::wallet::list_gesture::LOOK) then says
+    /// `off` once the columns have settled — no frame is drawn after they
+    /// stop. A page that goes away mid-gesture still says `off`.
+    fn watch_list_gesture(&mut self, cx: &mut Context<Self>) {
+        use crate::wallet::list_gesture::LOOK;
+        if self.list_gesture.is_on() {
+            return;
+        }
+        let moving = self.lists_moving();
+        if self.list_gesture.look(moving, std::time::Instant::now()) != Some(true) {
+            return;
+        }
+        crate::executor::activity_feed::interacting(true, cx);
+        cx.spawn(async move |page, cx| {
+            loop {
+                cx.background_executor().timer(LOOK).await;
+                let ended = page.update(cx, |this, cx| {
+                    let moving = this.lists_moving();
+                    let edge = this.list_gesture.look(moving, std::time::Instant::now());
+                    if edge == Some(false) {
+                        crate::executor::activity_feed::interacting(false, cx);
+                    }
+                    !this.list_gesture.is_on()
+                });
+                match ended {
+                    Ok(false) => {}
+                    Ok(true) => return,
+                    Err(_) => {
+                        cx.update(|cx| crate::executor::activity_feed::interacting(false, cx));
+                        return;
+                    }
+                }
+            }
+        })
+        .detach();
+    }
+
     /// Escape: the dialog on top goes, and only that one — the same order
     /// `render` stacks them in, read from the top. False when none was open.
     fn dismiss_top_dialog(&mut self, cx: &mut Context<Self>) -> bool {
@@ -5675,7 +5729,9 @@ impl WalletPage {
         let until = now + wallet_live::REFRESH_MIN_SPIN;
         self.refresh_hold = Some(until);
         crate::executor::balance_dashboard::pull(cx);
-        crate::executor::activity_feed::focus_tick(cx);
+        // r10 follow-up: a refresh, to the incoming check's cadence — the
+        // store read and the scan, and its back-off starts again.
+        crate::executor::activity_feed::refreshed(cx);
         // The hold ends on a frame of its own: a round that settled inside
         // it drew nothing after, and the glyph would turn on until the next
         // unrelated redraw.
@@ -22712,6 +22768,7 @@ impl Render for WalletPage {
         for scroll in self.scrolls() {
             scroll.step(window);
         }
+        self.watch_list_gesture(cx);
         // Phase 4 (`VELA_PERF_SCROLL`): the scripted scroll over the panel,
         // after the column's own step so the run's offset is the frame's.
         if let Some(run) = self.perf_scroll.as_mut()

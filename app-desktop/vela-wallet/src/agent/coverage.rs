@@ -660,6 +660,10 @@ const CALLS: &[(&str, Place)] = &[
         View("a contact's page shown"),
     ),
     ("activity_feed::focus_tick", Step("refresh_balances")),
+    // r10 follow-up: the person's moments, for the incoming check's cadence.
+    ("activity_feed::refreshed", Step("refresh_balances")),
+    ("activity_feed::sent", Step("submit_transfer")),
+    ("activity_feed::interacting", Machine("a list scrolled")),
     ("activity_feed::is_stable", Machine("a read")),
     (
         "activity_feed::privacy_changed",

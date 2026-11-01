@@ -1027,6 +1027,9 @@ impl SendHost {
                     },
                     cx,
                 );
+                // r10 follow-up: a send left this account — the incoming
+                // check looks at once and its back-off starts again.
+                crate::executor::activity_feed::sent(cx);
                 // Round 3 (send-5): what the submit knew of an op that may
                 // have been sent — the nonce it signed — once the hand-off
                 // has named its records, as the web's `noteSubmitFacts`.
