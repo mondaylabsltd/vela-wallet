@@ -275,6 +275,19 @@ impl WalletPage {
     /// How a member is named here: this device's account, the name the
     /// multisig keeps, else its short address (the core's `names.label`).
     fn ms_member_name(&self, address: &str, account: Option<&MultisigAccount>, cx: &App) -> String {
+        // r9-12: one name per member, the core's (`member_labels`: kept, the
+        // passkey index, its own name, the short address) — the same on
+        // every platform, never picked here.
+        if let Some(label) = ms_host::booted(cx).and_then(|host| {
+            host.read(cx)
+                .machines()
+                .accounts_view
+                .member_labels
+                .get(&address.to_ascii_lowercase())
+                .cloned()
+        }) {
+            return label;
+        }
         let own = session::view(cx)
             .accounts
             .iter()
@@ -1759,21 +1772,15 @@ impl WalletPage {
         }
 
         // Reject: a cancellation at its number, approved as any other.
-        let members_here = !item.can_approve.is_empty() || !item.can_execute.is_empty()
-            || item.approvals.iter().any(|a| {
-                session::view(cx)
-                    .accounts
-                    .iter()
-                    .any(|row| same(&row.account.address, &a.owner))
-            });
-        if members_here && item.cancelled_by.is_none() && !executing {
+        // r9-9: a member of it on this device, whatever the transaction is
+        // (the core's `members_here`).
+        if !item.members_here.is_empty() && item.cancelled_by.is_none() && !executing {
             if self.multisig.rejecting {
-                let threshold = item.threshold.to_string();
                 let (chain_id, nonce) = (item.chain_id, item.nonce.to_string());
                 foot = foot
                     .child(ms_note(
                         theme,
-                        &words::tv(&loc, "proposal.rejectHint", &[("threshold", &threshold)]),
+                        &words::tc(&loc, "proposal.rejectHint", usize::try_from(item.threshold).unwrap_or(usize::MAX)),
                         Tone::Neutral,
                     ))
                     .child(
@@ -3411,6 +3418,47 @@ fn ms_execution_words(loc: &Loc, execution: &Value) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// r9-2: Arc's USDC moved as the coin and as its ERC-20 interface is ONE
+    /// balance line — the core drops the interface's (`one_line_per_balance`)
+    /// — and the sheet words that one line in the coin's units: "−0.01 USDC",
+    /// never twice (reading as −0.02).
+    #[test]
+    fn arcs_usdc_moves_one_balance_line() {
+        use vela_core::app::sim_outcome::{SimVerdict, one_line_per_balance};
+        use vela_core::app::token_trust::{TrustAssetDelta, TrustDeltaKind};
+        const ARC: u64 = 5_042_002;
+        let verdict = SimVerdict {
+            kind: "deltas".to_owned(),
+            deltas: vec![
+                TrustAssetDelta {
+                    kind: TrustDeltaKind::Native,
+                    token: None,
+                    delta: "-10000000000000000".to_owned(),
+                },
+                TrustAssetDelta {
+                    kind: TrustDeltaKind::Erc20,
+                    token: Some("0x3600000000000000000000000000000000000000".to_owned()),
+                    delta: "-10000".to_owned(),
+                },
+            ],
+            revert_reason: None,
+            notice_risk: None,
+            notice_key: None,
+            no_change_key: None,
+            recheck: false,
+        };
+        let one = one_line_per_balance(ARC, verdict);
+        assert_eq!(one.deltas.len(), 1, "one balance, one line: {:?}", one.deltas);
+        let loc = Loc::for_tag("en");
+        let delta = &one.deltas[0];
+        let info = words::token_facts(&words::ViewTokens::new(), ARC, delta.token.as_deref());
+        let raw = delta.delta.trim_start_matches('-');
+        assert_eq!(
+            format!("−{}", words::amount_words(&loc, raw, &info)),
+            format!("−0.01 {}", crate::flows::live::native_symbol(5_042_002))
+        );
+    }
 
     /// r9-19: a signature the review asks for "anyway" wears the danger
     /// fill, never the plain accent; any other value press the accent.

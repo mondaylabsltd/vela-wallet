@@ -380,10 +380,18 @@ fn perform(request: &LookupRequest) -> LookupAnswer {
 /// Every failure is `None`. This is best-effort enrichment for a badge; it
 /// must never be the reason something else does not happen.
 pub fn wallet_name_by_address(address: &str) -> Option<String> {
+    index_answer(address).flatten()
+}
+
+/// r9-12: the passkey index's word on `address` — `Some(Some(name))` a Vela
+/// account and the name it registered, `Some(None)` none there, `None`
+/// nobody answered (not a verdict: asked again later). The same walk and
+/// cache as [`wallet_name_by_address`].
+pub fn index_answer(address: &str) -> Option<Option<String>> {
     let address = address.to_lowercase();
     let now_ms = super::now_ms();
     if let Some(known) = cached_name(&address, now_ms) {
-        return known;
+        return Some(known);
     }
     let mut answers: Vec<LookupAnswer> = Vec::new();
     for _ in 0..MAX_LOOKUP_ROUNDS {
@@ -417,7 +425,11 @@ pub fn wallet_name_by_address(address: &str) -> Option<String> {
                     }
                     _ => {}
                 }
-                return found.map(|hit| hit.name);
+                return match (found, remember) {
+                    (Some(hit), _) => Some(Some(hit.name)),
+                    (None, LookupRemember::No) => None,
+                    (None, _) => Some(None),
+                };
             }
         }
     }

@@ -2,17 +2,15 @@
 //! sent. The create and add sheets are `multisig_create.rs` and
 //! `multisig_add.rs`; a link's stand is `multisig_links.rs`.
 
-use std::collections::BTreeMap;
-
 use vela_core::app::multisig_accounts as ms_accounts;
-use vela_core::multisig_link::{self as link, InviteAccount, MemberInfo};
+use vela_core::multisig_link as link;
 
 use super::*;
 use crate::multisig::words;
 
 impl WalletPage {
     /// The invite a multisig's members are sent (`#msa=`, the core's
-    /// `invite_link`): its link and its code, copied or shown. Copying it
+    /// `add_link` over its `invite_members`): its link and its code, copied or shown. Copying it
     /// ticks the home's first step (`invite_shared`).
     pub(crate) fn ms_invite_dialog(
         &mut self,
@@ -23,54 +21,23 @@ impl WalletPage {
         let address = self.multisig.invite.clone()?;
         let loc = self.ms_loc();
         let host = self.ms_host(cx);
-        let (row, now) = {
-            let machines = host.read(cx).machines();
-            let row = machines
-                .accounts_view
-                .accounts
-                .iter()
-                .find(|r| r.account.address.eq_ignore_ascii_case(&address))
-                .cloned()?;
-            let followed = machines
-                .proposals_view
-                .followed
-                .as_deref()
-                .is_some_and(|f| f.eq_ignore_ascii_case(&address));
-            let now = if followed {
-                machines.proposals_view.members_anywhere.clone()
-            } else {
-                Vec::new()
-            };
-            (row, now)
-        };
-        let known: BTreeMap<String, MemberInfo> = row
-            .account
-            .members
-            .clone()
-            .unwrap_or_default()
-            .into_iter()
-            .map(|(k, v)| {
-                (
-                    k,
-                    MemberInfo {
-                        name: v.name,
-                        kind: v
-                            .kind
-                            .and_then(|k| serde_json::from_value(serde_json::json!(k)).ok()),
-                    },
-                )
-            })
-            .collect();
-        let invite = link::invite_link(
+        let row = host
+            .read(cx)
+            .machines()
+            .accounts_view
+            .accounts
+            .iter()
+            .find(|r| r.account.address.eq_ignore_ascii_case(&address))
+            .cloned()?;
+        // r9-12: the members the core puts in the invite (`invite_members`:
+        // founding members, then members now; a name only where one is known,
+        // and the kind) — never a list built here.
+        let invite = link::add_link(
             link::SITE_ORIGIN,
             loc.language(),
-            &InviteAccount {
-                address: row.account.address.clone(),
-                owners: row.account.owners.clone(),
-                chain_ids: row.account.chain_ids.clone(),
-            },
-            &now,
-            &known,
+            &row.account.address,
+            &row.account.chain_ids,
+            &row.invite_members,
         )
         .ok()?;
         let copy = invite.clone();

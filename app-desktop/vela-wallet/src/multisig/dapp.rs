@@ -27,7 +27,6 @@
 use std::collections::BTreeMap;
 
 use serde_json::{Value, json};
-use vela_core::app::dapp_rpc;
 use vela_core::app::multisig_accounts::AccountRow;
 use vela_core::app::multisig_dapp::{DappAnswer, HeldRequest, HeldStage};
 use vela_core::app::multisig_proposals::{Event, ProposalsView};
@@ -298,6 +297,7 @@ mod tests {
 
     use super::*;
     use vela_core::app::multisig_dapp::DappError;
+    use vela_core::app::dapp_rpc;
 
     const HASH: &str = "0x1111111111111111111111111111111111111111111111111111111111111111";
 

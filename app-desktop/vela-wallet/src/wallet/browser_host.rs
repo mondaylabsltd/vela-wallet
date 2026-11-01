@@ -182,6 +182,9 @@ pub struct BrowserHost {
     /// What the machine was last told, so a refresh that changed nothing
     /// says nothing.
     chains: Vec<u32>,
+    /// r9: the networks a plain account holds something on, as last told
+    /// (`AccountNetworks`, the core's `site_start_chain_for` order).
+    account_chains: Vec<u32>,
     wallet: Option<ToldWallet>,
     /// Settings' debug mode as last told (spec 091).
     debug_mode: Option<bool>,
@@ -278,6 +281,7 @@ impl BrowserHost {
             orders: Vec::new(),
             multisig_calls: Vec::new(),
             chains: Vec::new(),
+            account_chains: Vec::new(),
             wallet: None,
             debug_mode: None,
             chain_health: ChainHealth::default(),
@@ -416,6 +420,7 @@ impl BrowserHost {
         {
             self.follow_networks(cx);
         }
+        self.follow_account_chains(cx);
         self.dispatch(
             Event::PageMessage {
                 tab,
@@ -474,6 +479,32 @@ impl BrowserHost {
         for event in events {
             self.dispatch(event, cx);
         }
+        // A new account: its networks are said again for it.
+        self.account_chains.clear();
+        self.follow_account_chains(cx);
+    }
+
+    /// r9 (the core's `site_start_chain_for`): a plain account's new site
+    /// starts on a network it holds something on (most worth first), never
+    /// a network of the space it has nothing on — a wallet holding only Arc
+    /// USDC no longer starts a site on Sepolia. A multisig in front says its
+    /// own networks ([`wallet_news_with`]). Told again only when they move.
+    pub fn follow_account_chains(&mut self, cx: &mut Context<Self>) {
+        if crate::multisig::shown::current(cx).is_some() {
+            return;
+        }
+        let view = crate::network_space::balance_view(cx);
+        let mut held: Vec<u32> = Vec::new();
+        for token in view.tokens.iter().filter(|t| !t.spam && t.balance.bytes().any(|b| (b'1'..=b'9').contains(&b))) {
+            if !held.contains(&token.chain_id) {
+                held.push(token.chain_id);
+            }
+        }
+        if held.is_empty() || held == self.account_chains {
+            return;
+        }
+        self.account_chains.clone_from(&held);
+        self.dispatch(Event::AccountNetworks { networks: held }, cx);
     }
 
     /// The 1 s beat while a page's read is in flight (RJ11): the notice
