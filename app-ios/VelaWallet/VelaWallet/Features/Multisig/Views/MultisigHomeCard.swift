@@ -124,22 +124,20 @@ struct MultisigHomeCard: View {
     /// its members now where it is deployed, its original ones where not).
     private var ruleChip: String {
         guard following, let chip = view.ruleChip, !chip.isNull else {
-            return words.ruleChip(m: account.threshold, n: account.owners.count)
+            // r9-14: a multisig not followed draws its row's rule (the
+            // chains' last word), never the founding numbers.
+            return words.chipText(hub.accountsView.row(account.address)?.rule?["chip"], fallback: account)
         }
-        if chip.kind == "differs" { return words.t("presence.ruleDiffers") }
-        let rule = chip["rule"]
-        return words.ruleChip(m: rule?["m"]?.int ?? account.threshold, n: rule?["n"]?.int ?? account.owners.count)
+        return words.chipText(chip, fallback: account)
     }
 
     /// The members row's line: the same rule in force as the chip (the
     /// record's members are the original ones, not who approves now).
     private var ruleTitle: String {
         guard following, let chip = view.ruleChip, !chip.isNull else {
-            return words.ruleTitle(m: account.threshold, n: account.owners.count)
+            return words.chipTitle(hub.accountsView.row(account.address)?.rule?["chip"], fallback: account)
         }
-        if chip.kind == "differs" { return words.t("presence.ruleDiffers") }
-        let rule = chip["rule"]
-        return words.ruleTitle(m: rule?["m"]?.int ?? account.threshold, n: rule?["n"]?.int ?? account.owners.count)
+        return words.chipTitle(chip, fallback: account)
     }
 
     /// The waiting line's parts as the core ordered them, in words.
@@ -318,7 +316,11 @@ struct MultisigSwitcherSection: View {
         // core-ms-2: what waits on it, as the core counts it (`waiting_parts`).
         let parts = hub.proposalsView.waitingParts[row.account.address.lowercased()] ?? []
         let count = parts.filter { $0.kind != "waitingPayer" }.reduce(0) { $0 + ($1["count"]?.int ?? 0) }
-        var tags: [String] = [words.ruleChip(m: row.account.threshold, n: row.account.owners.count)]
+        // r9-14: the row's rule from the chains (`AccountRow.rule`), and
+        // that it is the last known when no read this session said it.
+        let rule = words.rowRule(row)
+        var tags: [String] = [rule.chip]
+        if let lastKnown = rule.lastKnown { tags.append(lastKnown) }
         if row.localMembers.isEmpty { tags.append(words.t("switcher.readOnly")) }
         if !row.shared { tags.append(words.t("switcher.notShared")) }
         return Button { onSelect(row.account.address) } label: {

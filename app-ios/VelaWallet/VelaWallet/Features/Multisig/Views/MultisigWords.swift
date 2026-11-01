@@ -101,6 +101,33 @@ struct MsWords {
         n == 1 ? t("panel.chipSolo") : t("panel.chip", ["m": String(m), "n": String(n)])
     }
 
+    /// r9-14: a `MultisigRuleChip` as its chip says it — "Needs 2 of 4",
+    /// "One member", or that the rule differs by network — never the
+    /// record's founding numbers when the core gave one.
+    func chipText(_ chip: MsJSON?, fallback account: MsAccount) -> String {
+        guard let chip, !chip.isNull else { return ruleChip(m: account.threshold, n: account.owners.count) }
+        if chip.kind == "differs" { return t("presence.ruleDiffers") }
+        let rule = chip["rule"]
+        return ruleChip(m: rule?["m"]?.int ?? account.threshold, n: rule?["n"]?.int ?? account.owners.count)
+    }
+
+    /// The same, as a title ("Needs 2 of 4 members").
+    func chipTitle(_ chip: MsJSON?, fallback account: MsAccount) -> String {
+        guard let chip, !chip.isNull else { return ruleTitle(m: account.threshold, n: account.owners.count) }
+        if chip.kind == "differs" { return t("presence.ruleDiffers") }
+        let rule = chip["rule"]
+        return ruleTitle(m: rule?["m"]?.int ?? account.threshold, n: rule?["n"]?.int ?? account.owners.count)
+    }
+
+    /// A row's rule (`AccountRow.rule`): its chip, and "last known" when a
+    /// chain said it but no read this session did.
+    func rowRule(_ row: MsAccountRow) -> (chip: String, title: String, lastKnown: String?) {
+        let chip = row.rule?["chip"]
+        let lastKnown = row.rule?["last_known"]?.bool == true && row.rule?["from_chain"]?.bool == true
+        return (chipText(chip, fallback: row.account), chipTitle(chip, fallback: row.account),
+                lastKnown ? t("presence.ruleLastKnown") : nil)
+    }
+
     func ruleText(m: Int, n: Int) -> String {
         t("create.thresholdValue", ["m": String(m), "n": String(n)])
     }

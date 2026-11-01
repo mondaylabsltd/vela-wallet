@@ -77,10 +77,11 @@ struct MultisigSettingsSheet: View {
             HStack(spacing: Tokens.Space.s12) {
                 IdenticonAvatar(seed: row.account.address, size: 40, tappable: false)
                 VStack(alignment: .leading, spacing: Tokens.Space.s2) {
-                    Text(verbatim: words.ruleTitle(m: row.account.threshold, n: row.account.owners.count))
+                    // r9-14: the rule as the chains said it (`AccountRow.rule`).
+                    Text(verbatim: words.rowRule(row).title)
                         .typeRole(Typography.fieldLabel.scaled(textScale))
                         .foregroundStyle(theme.fgBase)
-                    Text(verbatim: row.account.chainIds.map(words.network).joined(separator: ", "))
+                    Text(verbatim: words.loc.list(row.account.chainIds.map(words.network)))
                         .typeRole(Typography.rowSub.scaled(textScale))
                         .foregroundStyle(theme.fgSubtle)
                 }
