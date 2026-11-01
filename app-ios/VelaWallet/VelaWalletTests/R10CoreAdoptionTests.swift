@@ -271,17 +271,22 @@ struct R10CoreAdoptionTests {
     }
 
     /// The cadence is the core's: once the app says it follows, the feed
-    /// names when the next scan is due, and its timer answers with `scan_due`.
+    /// names when the next scan is due — armed when the hand-off's scan lands
+    /// (r10 follow-up: a back-off, 15 s first) — and its timer answers with
+    /// `scan_due`.
     @Test func theFeedNamesTheNextScanOnceTheAppFollows() throws {
         let core = ActivityFeedCore()
-        _ = try core.dispatch(eventJson: CoreJSON.string(["type": "account_switched", "address": "0x88cCA0EeDbF2C4426110bbFc998F048689266894"]))
+        let switched = try CoreJSON.object(core.dispatch(eventJson: CoreJSON.string(["type": "account_switched", "address": "0x88cCA0EeDbF2C4426110bbFc998F048689266894"])))
         let presence: [String: Any] = ["visible": true, "since_interaction_ms": 0, "now_ms": 1_800_000_000_000]
-        let answer = try CoreJSON.object(core.dispatch(eventJson: CoreJSON.string(["type": "presence_changed", "presence": presence, "change": "started"])))
-        let viewObject: [String: Any]
-        if let given = answer["view"] as? [String: Any] { viewObject = given } else { viewObject = try CoreJSON.object(core.view()) }
-        let view = try CoreJSON.decode(FeedViewWire.self, from: viewObject)
+        _ = try core.dispatch(eventJson: CoreJSON.string(["type": "presence_changed", "presence": presence, "change": "started"]))
+        // The hand-off's scan lands, having found nothing: the timer is armed.
+        let effects = switched["effects"] as? [[String: Any]] ?? []
+        let scan = try #require(effects.first { ($0["operation"] as? [String: Any])?["type"] as? String == "scan_incoming_transfers" })
+        let scanId = try #require((scan["id"] as? NSNumber)?.uint64Value)
+        _ = try core.resolveEffect(effectId: scanId, resultJson: CoreJSON.string(["type": "sync_completed", "new_count": 0]))
+        let view = try CoreJSON.decode(FeedViewWire.self, from: try CoreJSON.object(core.view()))
         let next = try #require(view.nextScan)
-        #expect(next.afterMs == 10_000, "at the app: 10 s")
+        #expect(next.afterMs == 15_000, "a quiet first scan: 15 s")
         let due = try CoreJSON.object(core.dispatch(eventJson: CoreJSON.string(["type": "scan_due", "seq": next.seq, "presence": presence])))
         let ops = (due["effects"] as? [[String: Any]] ?? []).compactMap { ($0["operation"] as? [String: Any])?["type"] as? String }
         #expect(ops.contains("scan_incoming_transfers") || ops.contains("read_tx_store"), "\(ops)")

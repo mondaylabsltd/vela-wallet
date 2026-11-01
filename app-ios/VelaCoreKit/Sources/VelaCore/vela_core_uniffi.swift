@@ -22321,16 +22321,17 @@ public func ensReverseNode(address: String)throws  -> String  {
 })
 }
 /**
- * r9-17: the wait before the next incoming scan for the page as it stands
- * — `incoming_scan::next_scan_ms`. The feed's `next_scan` already carries
+ * r9-17 / r10: the wait before the next incoming scan — shown or not, and
+ * how many scans in a row found nothing (the back-off's step) —
+ * `incoming_scan::next_scan_ms`. The feed's `next_scan` already carries
  * it; this is for the shared vectors.
  */
-public func incomingNextScanMs(visible: Bool, sinceInteractionMs: Double) -> UInt32  {
+public func incomingNextScanMs(visible: Bool, quietScans: UInt32) -> UInt32  {
     return try!  FfiConverterUInt32.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_incoming_next_scan_ms(
         FfiConverterBool.lower(visible),
-        FfiConverterDouble.lower(sinceInteractionMs),uniffiCallStatus
+        FfiConverterUInt32.lower(quietScans),uniffiCallStatus
     )
 })
 }
@@ -23763,7 +23764,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_ens_reverse_node() != 48082) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_func_incoming_next_scan_ms() != 58337) {
+    if (uniffi_vela_core_uniffi_checksum_func_incoming_next_scan_ms() != 65454) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_incoming_scan_plan() != 44741) {
