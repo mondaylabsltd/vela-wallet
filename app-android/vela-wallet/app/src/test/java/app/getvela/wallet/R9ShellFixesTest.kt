@@ -375,4 +375,15 @@ class R9ShellFixesTest {
         assertEquals("Require 3 approvals", w.actionTitle(100, json("""{"kind":"changeThreshold","threshold":3}"""), "4"))
         assertTrue(w.plural("proposal.rejectHint", 1).contains("1 approval too"))
     }
+
+    @Test
+    fun a_site_starts_where_the_account_lives() {
+        // r9 (core `site_start_chain_for`): an Arc-only wallet in the testnet space starts a new site on Arc.
+        assertEquals(5042002u, uniffi.vela_core_uniffi.siteStartChainFor(listOf(11155111u, 84532u, 5042002u), null, listOf(5042002u)))
+        // Nothing held or used: the space's first network.
+        assertEquals(11155111u, uniffi.vela_core_uniffi.siteStartChainFor(listOf(11155111u, 5042002u), null, emptyList()))
+        // The browser machine is told the account's networks after the switch.
+        val events = app.getvela.wallet.feature.browser.core.BrowserAccounts.events(listOf(alice), alice, 1.0, isSpaceAccount = { false }, networks = listOf(5042002))
+        assertEquals(app.getvela.wallet.feature.browser.core.DbrEvent.AccountNetworks(listOf(5042002)), events.last())
+    }
 }

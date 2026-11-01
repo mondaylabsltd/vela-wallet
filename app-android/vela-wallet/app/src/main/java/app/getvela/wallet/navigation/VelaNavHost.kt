@@ -885,11 +885,6 @@ fun VelaNavHost(
                 // logos a bad minute lost (RE10), and loads again the page the
                 // network failed (the core's `browserLoadRetryWhenNetworkReturns`).
                 val online by NetHealth.online.collectAsStateWithLifecycle()
-                // S4 (r9): when the figure was last read while there was a network.
-                var readOnline by remember { mutableStateOf<Double?>(null) }
-                LaunchedEffect(online, balances.last_refreshed_at_ms) {
-                    if (online) balances.last_refreshed_at_ms?.let { readOnline = it }
-                }
                 var wasOffline by remember { mutableStateOf(false) }
                 LaunchedEffect(online) {
                     if (!online) {
@@ -2261,15 +2256,10 @@ fun VelaNavHost(
                                 noValue = strings.t(I18nKeys.NetworkSpace.NO_VALUE).takeIf { noValue },
                             ).let { home ->
                                 // Spec 047 D9: no network at all is said on the hero, not guessed from a slow pool.
-                                // S4 (r9): and its "Updated" is the last read made while
-                                // online — a round that settled offline read nothing, and
-                                // "Updated now" over it said the figure was fresh.
-                                if (online) home else home.copy(
-                                    balance = home.balance.copy(
-                                        status = BalanceStatusModel(BalanceStatusKind.Warning, strings.t(I18nKeys.SettingsUi.NETWORK_OFFLINE)),
-                                        refresh = WalletLive.refresh(balances.copy(last_refreshed_at_ms = readOnline), strings, homeNow),
-                                    ),
-                                )
+                                // S4 (r9): its "Updated" is the core's stamp, which a round
+                                // no network answered no longer moves (be3108b00; this
+                                // shell passes `read_chain_ids` in `fetch_settled`).
+                                if (online) home else home.copy(balance = home.balance.copy(status = BalanceStatusModel(BalanceStatusKind.Warning, strings.t(I18nKeys.SettingsUi.NETWORK_OFFLINE))))
                             }.let { home ->
                                 // Spec 105: the space in front, beside the account name.
                                 home.copy(
