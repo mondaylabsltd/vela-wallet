@@ -319,13 +319,15 @@ fn remember(address: &str, identity: &ContactIdentity, now_ms: f64) {
 #[must_use]
 pub fn own_account_name(address: &str) -> Option<String> {
     let wanted = address.to_lowercase();
-    storage::load_accounts()
+    let account = storage::load_accounts()
         .ok()?
         .into_iter()
-        .find_map(|account| {
-            (account.address.to_lowercase() == wanted && !account.name.trim().is_empty())
-                .then_some(account.name)
-        })
+        .find(|account| account.address.to_lowercase() == wanted)?;
+    // §9.1 (r9-12): this account's one name — the core's label (its
+    // published index name first), the same in Activity as on the header;
+    // the local name only while the machine has none.
+    crate::multisig::shown::label(&wanted)
+        .or_else(|| (!account.name.trim().is_empty()).then_some(account.name))
 }
 
 /// Is this a real address worth asking about?

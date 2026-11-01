@@ -227,10 +227,14 @@ fn erc20_meta(chain_id: u32, addrs: &[String]) -> Vec<TrustMetaEntry> {
 enum Request {
     /// A fact the shell learned. Fire and forget — nothing waits on a snapshot.
     Learned(Box<Event>),
-    /// One scan, driven to quiescence. The reply is what it found.
-    Poll {
+    /// r9-17 (§9.4): one poll the core plans whole from the account's facts
+    /// (`ScanRequested`). The reply is what it found, and the coverage to
+    /// keep for the next poll (`TrustView::cursors`).
+    Scan {
         address: String,
-        reply: Sender<Vec<TrustIncomingView>>,
+        facts: vela_core::app::incoming_scan::TrustScanFacts,
+        cursors: Vec<vela_core::app::incoming_scan::TrustScanCursor>,
+        reply: Sender<Scanned>,
     },
     /// Judge one simulation's deltas (spec 037). UNTRUSTED input, and the core
     /// says so in its own header: this path can reach no write at all.
@@ -344,27 +348,38 @@ pub fn receipt_confirmed(
     });
 }
 
-/// Run one scan and return what it found. **Blocks** — call it from a worker.
-///
-/// The core is single-flight: a poll requested while one is running is ignored
-/// and the next tick retries. So an empty answer can mean "nothing new" or
-/// "already scanning", and both are the same instruction to the caller: do
-/// nothing this tick.
+/// What one planned scan found, and the coverage to keep.
+pub type Scanned = (
+    Vec<TrustIncomingView>,
+    Vec<vela_core::app::incoming_scan::TrustScanCursor>,
+);
+
+/// r9-17 (§9.4): run one scan the core plans — its networks
+/// (`incoming_scan::scan_plan` over `facts`), the live window and a bounded
+/// backfill below it, resumed from `cursors` — and return what it found and
+/// the coverage to keep. **Blocks** — call it from a worker. The core is
+/// single-flight: a scan asked while one runs answers what is known.
 #[must_use]
-pub fn poll(address: &str) -> Vec<TrustIncomingView> {
+pub fn scan(
+    address: &str,
+    facts: vela_core::app::incoming_scan::TrustScanFacts,
+    cursors: Vec<vela_core::app::incoming_scan::TrustScanCursor>,
+) -> Scanned {
     let (reply, answer) = channel();
     {
         let Ok(tx) = sender().lock() else {
-            return Vec::new();
+            return Scanned::default();
         };
         if tx
-            .send(Request::Poll {
+            .send(Request::Scan {
                 address: address.to_owned(),
+                facts,
+                cursors,
                 reply,
             })
             .is_err()
         {
-            return Vec::new();
+            return Scanned::default();
         }
     }
     answer.recv().unwrap_or_default()
@@ -421,10 +436,23 @@ fn run(rx: &std::sync::mpsc::Receiver<Request>) {
                 let pending = host.dispatch(*event);
                 drain(&mut host, pending);
             }
-            Request::Poll { address, reply } => {
-                let pending = host.dispatch(Event::PollRequested { address });
+            Request::Scan {
+                address,
+                facts,
+                cursors,
+                reply,
+            } => {
+                let pending = host.dispatch(Event::ScanRequested {
+                    address,
+                    facts,
+                    cursors,
+                });
                 drain(&mut host, pending);
-                let _ = reply.send(host.view().incoming);
+                let view = host.view();
+                // The coverage is final once the poll is over (`scanning`
+                // false); a scan still out keeps what was kept before.
+                let cursors = if view.scanning { Vec::new() } else { view.cursors };
+                let _ = reply.send((view.incoming, cursors));
             }
             Request::Judge {
                 address,
@@ -800,6 +828,19 @@ mod tests {
             }),
             TrustShellResult::CacheInvalidated
         );
+    }
+
+    /// One planned scan of `address` on Gnosis (§9.4), what it found.
+    fn poll(address: &str) -> Vec<TrustIncomingView> {
+        scan(
+            address,
+            vela_core::app::incoming_scan::TrustScanFacts {
+                held_chain_ids: vec![100],
+                ..Default::default()
+            },
+            Vec::new(),
+        )
+        .0
     }
 
     /// The whole scan, live: snapshots in, a poll out.

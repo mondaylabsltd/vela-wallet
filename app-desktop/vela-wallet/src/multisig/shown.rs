@@ -37,6 +37,43 @@ pub fn address(cx: &App) -> String {
     current(cx).map_or_else(|| crate::session::view(cx).address, |s| s.address)
 }
 
+/// r9-12 / §9.1: one name per address, everywhere — the accounts machine's
+/// `member_labels` (index → kept → own → short, the core's `names::label`),
+/// this device's own accounts included. Kept here as the machine last said
+/// it, for the surfaces that are not the multisig's own: the header, the
+/// switcher, Settings, Activity (read off the UI thread too).
+static LABELS: std::sync::Mutex<Option<std::collections::BTreeMap<String, String>>> =
+    std::sync::Mutex::new(None);
+
+/// The machine's labels, as its view now says them.
+pub fn set_labels(labels: &std::collections::BTreeMap<String, String>) {
+    let mut guard = LABELS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if guard.as_ref() != Some(labels) {
+        *guard = Some(labels.clone());
+    }
+}
+
+/// The one name for `address` the core gives, if it gives one.
+#[must_use]
+pub fn label(address: &str) -> Option<String> {
+    LABELS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .as_ref()?
+        .get(&address.to_ascii_lowercase())
+        .filter(|label| !label.trim().is_empty())
+        .cloned()
+}
+
+/// `address`'s name: the core's label, else `local` (this device's own name
+/// for it) while the machine has none.
+#[must_use]
+pub fn name_or(address: &str, local: &str) -> String {
+    label(address).unwrap_or_else(|| local.to_owned())
+}
+
 /// Set what is shown; observers wake only on a change.
 pub fn set(shown: Option<ShownAccount>, cx: &mut App) {
     if current(cx) != shown || !cx.has_global::<Shown>() {

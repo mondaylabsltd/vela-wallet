@@ -72,8 +72,11 @@ pub fn bundled() -> bool {
     }
 }
 
-/// `UNAuthorizationOptionSound | UNAuthorizationOptionAlert`.
-const ALERT_AND_SOUND: usize = (1 << 1) | (1 << 2);
+/// `UNAuthorizationOptionBadge | UNAuthorizationOptionSound |
+/// UNAuthorizationOptionAlert`. The badge too (r10 S4): the Dock icon's
+/// count of unseen notices (`super::attention`) is shown only for an app
+/// the person let badge its icon.
+const ALERT_SOUND_BADGE: usize = (1 << 0) | (1 << 1) | (1 << 2);
 
 /// Ask for the permission (the system asks the person once; later calls
 /// answer at once with what they chose). Without a bundle the center is
@@ -128,7 +131,7 @@ pub fn ask() {
         };
         let () = msg_send![
             &center,
-            requestAuthorizationWithOptions: ALERT_AND_SOUND,
+            requestAuthorizationWithOptions: ALERT_SOUND_BADGE,
             completionHandler: &*answered
         ];
     }

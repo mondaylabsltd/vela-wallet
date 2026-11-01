@@ -2085,6 +2085,12 @@ fn send_pick(
     if shown == 0 && !model.rows.is_empty() {
         col = col.child(search_empty(theme, model.no_match.clone()));
     }
+    // r10 S4: nothing listed yet because the list is still being read.
+    if model.rows.is_empty()
+        && let Some(loading) = model.loading.clone()
+    {
+        col = col.child(search_empty(theme, loading));
+    }
 
     if let Some(selection) = model.selection.as_ref() {
         col = col.child(clickable(

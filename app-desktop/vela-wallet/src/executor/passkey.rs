@@ -80,6 +80,11 @@ pub struct PasskeyFailure {
     /// The platform's own words. `None` for a classified failure, whose copy
     /// comes from the classification.
     pub message: Option<String>,
+    /// The platform error's facts (its domain, code and raw message), where
+    /// the platform handed an error object: the core words it
+    /// (`passkey_error::words`, real-device S3) — the sheet never says the
+    /// system's own English.
+    pub facts: Option<vela_core::app::passkey_error::PasskeyErrorFacts>,
 }
 
 // Only the Windows mapping and the macOS platform-vault module construct these
@@ -90,6 +95,7 @@ impl PasskeyFailure {
         Self {
             kind: FailureKind::Other,
             message: Some(message.into()),
+            facts: None,
         }
     }
 
@@ -98,6 +104,7 @@ impl PasskeyFailure {
         Self {
             kind: FailureKind::Cancelled,
             message: None,
+            facts: None,
         }
     }
 
@@ -109,6 +116,7 @@ impl PasskeyFailure {
             // the same sentence as "plug in your key", and the sheet has to be
             // able to say the second one.
             message: Some(message.into()),
+            facts: None,
         }
     }
 
@@ -186,6 +194,7 @@ fn ceremony_failure(error: CeremonyError) -> PasskeyFailure {
             ceremony::FailureKind::Other => FailureKind::Other,
         },
         message: error.message,
+        facts: None,
     }
 }
 
@@ -424,6 +433,7 @@ fn win_failure(error: vela_passkey_win::WinError) -> PasskeyFailure {
         WinError::Cancelled => PasskeyFailure {
             kind: FailureKind::Cancelled,
             message: None,
+            facts: None,
         },
         WinError::Unavailable | WinError::NotSupported => PasskeyFailure::classified(
             FailureKind::NotSupported,

@@ -44,6 +44,29 @@ pub fn rule_title(loc: &Loc, rule: &MemberRule) -> String {
     words::rule_title(loc, rule.m, rule.n)
 }
 
+/// A switcher row's chip (r9-14, §9.2): the followed multisig's from the
+/// proposals machine, any other's as the accounts machine keeps it
+/// (`AccountRow.rule`) — "Last known — read again when you open it" beside
+/// a rule a chain said in an earlier session.
+#[must_use]
+pub fn row_chip(
+    loc: &Loc,
+    rule: &vela_core::app::multisig_accounts::RowRule,
+    followed: Option<&RuleChip>,
+) -> String {
+    match followed {
+        Some(chip) => self::chip(loc, chip).0,
+        None => {
+            let text = self::chip(loc, &rule.chip).0;
+            if rule.from_chain && rule.last_known {
+                format!("{text} · {}", t(loc, "presence.ruleLastKnown"))
+            } else {
+                text
+            }
+        }
+    }
+}
+
 /// The chip and its title (`ruleChip`): "Needs 2 of 3", or "Rule differs
 /// by network" with each rule in the title.
 #[must_use]
@@ -333,6 +356,38 @@ mod tests {
 
     fn net(id: u64) -> String {
         format!("Net{id}")
+    }
+
+    /// r9-14 (§9.2): a multisig not followed wears the rule the accounts
+    /// machine keeps — the chain's "2 of 4", never the founding "2 of 3" —
+    /// with "Last known" when a chain said it in an earlier session; the
+    /// followed one wears the proposals machine's chip.
+    #[test]
+    fn a_switcher_row_wears_the_chains_rule() {
+        use vela_core::app::multisig_accounts::RowRule;
+        let loc = en();
+        let chain = RuleChip::Needs {
+            rule: vela_core::app::multisig_members::MemberRule::of(2, 4),
+        };
+        let now = RowRule {
+            chip: chain.clone(),
+            from_chain: true,
+            last_known: false,
+        };
+        assert_eq!(row_chip(&loc, &now, None), "Needs 2 of 4");
+        let kept = RowRule {
+            last_known: true,
+            ..now.clone()
+        };
+        let said = row_chip(&loc, &kept, None);
+        assert!(said.starts_with("Needs 2 of 4 · "), "{said}");
+        assert!(said.contains(&t(&loc, "presence.ruleLastKnown")), "{said}");
+        let founding = RowRule::default();
+        assert!(!row_chip(&loc, &founding, None).contains('·'), "the founding rule is no chain's");
+        let followed = RuleChip::Needs {
+            rule: vela_core::app::multisig_members::MemberRule::of(3, 4),
+        };
+        assert_eq!(row_chip(&loc, &kept, Some(&followed)), "Needs 3 of 4");
     }
 
     #[test]

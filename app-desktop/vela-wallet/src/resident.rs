@@ -374,6 +374,23 @@ where
     entity
 }
 
+/// The resident for `A` if it has booted — never booting it.
+#[must_use]
+pub fn existing<A>(cx: &App) -> Option<Entity<ResidentCore<A>>>
+where
+    A: Machine,
+    A::Model: Default,
+    A::Effect: SplitEffect,
+    Op<A>: Clone + 'static,
+    Out<A>: 'static,
+    A::ViewModel: Clone + PartialEq,
+{
+    cx.try_global::<Residents>()
+        .and_then(|residents| residents.0.get(&TypeId::of::<A>()))
+        .and_then(|any| any.downcast_ref::<Entity<ResidentCore<A>>>())
+        .cloned()
+}
+
 /// Forget one machine: its store was cleared under it (spec 072), and the
 /// next use boots it from what is on disk now — rather than a machine that
 /// still holds the cleared list writing it back.

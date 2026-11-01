@@ -363,13 +363,37 @@ impl Prompt {
 /// resolve the core's prompt; the other two are affordances that leave it open,
 /// because opening the endpoint settings or copying a diagnostic is not an
 /// answer to "did you accept?".
+/// A prompt's copy: its outcome's, with the core's sentence for a failed
+/// passkey prompt in the body when the core gave one (real-device S3,
+/// `PromptKind::{CreateFailed, SignInFailed}.words_key` — the platform
+/// error's facts, worded by `passkey_error::words`). The platform's own
+/// words stay in the details, never the sentence.
+#[must_use]
+pub fn prompt_spec(kind: &PromptKind, loc: &Loc) -> OutcomeSpec {
+    let mut spec = OutcomeKind::for_prompt(kind).spec(loc);
+    let key = match kind {
+        PromptKind::CreateFailed { words_key, .. } | PromptKind::SignInFailed { words_key, .. } => {
+            words_key.as_deref()
+        }
+        _ => None,
+    };
+    if let Some(key) = key {
+        let words = loc.t(key);
+        // A key this build's corpus lacks keeps the outcome's own body.
+        if words.as_ref() != key {
+            spec.body = words;
+        }
+    }
+    spec
+}
+
 pub fn outcome_sheet(
     theme: &Theme,
     loc: &Loc,
     prompt: &Prompt,
     on_action: impl Fn(ActionId, &mut Window, &mut App) + Clone + 'static,
 ) -> Stateful<Div> {
-    let spec = OutcomeKind::for_prompt(&prompt.kind).spec(loc);
+    let spec = prompt_spec(&prompt.kind, loc);
 
     let mut card = div()
         .w(px(SHEET_W))
@@ -567,6 +591,37 @@ mod tests {
             spec.headline,
             loc.t("onboarding.create.securityKeyRequiredTitle")
         );
+    }
+
+    /// Real-device S3: a failed passkey prompt whose platform error the core
+    /// worded says the core's sentence — never the system's English — and a
+    /// prompt without one keeps its outcome's own body.
+    #[test]
+    fn a_failed_prompt_says_the_cores_words_for_the_platform_error() {
+        let loc = Loc::from_env();
+        let facts = vela_core::app::passkey_error::PasskeyErrorFacts {
+            platform: "macos".to_owned(),
+            domain: "com.apple.AuthenticationServices.AuthorizationError".to_owned(),
+            code: Some(1004),
+            message: "The operation couldn't be completed.".to_owned(),
+        };
+        let words = vela_core::app::passkey_error::words_of(&facts);
+        let worded = PromptKind::SignInFailed {
+            detail: facts.message.clone(),
+            phone_link: false,
+            words_key: Some(words.key.clone()),
+        };
+        let spec = prompt_spec(&worded, &loc);
+        assert_eq!(spec.body, loc.t(&words.key));
+        assert_ne!(spec.body.as_ref(), facts.message);
+        assert_eq!(spec.headline, OutcomeKind::SignInFailed.spec(&loc).headline);
+
+        let bare = PromptKind::SignInFailed {
+            detail: "x".to_owned(),
+            phone_link: false,
+            words_key: None,
+        };
+        assert_eq!(prompt_spec(&bare, &loc).body, OutcomeKind::SignInFailed.spec(&loc).body);
     }
 
     /// The prompt a missing key produces really is the one above.

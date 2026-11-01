@@ -2144,6 +2144,7 @@ mod tests {
             Err(PasskeyFailure {
                 kind: FailureKind::Cancelled,
                 message: None,
+                facts: None,
             })
         };
         let declined = Signer::Passkey(&mut dismissed).sign(

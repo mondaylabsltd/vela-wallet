@@ -588,7 +588,9 @@ fn passkey_failed(failure: PasskeyFailure) -> ShellResult {
             }
             FailureKind::Cancelled => None,
         },
-        error: None,
+        // Real-device S3: the platform error's facts, where it handed one;
+        // the core words them (`PromptKind::*Failed.words_key`).
+        error: failure.facts,
     }
 }
 

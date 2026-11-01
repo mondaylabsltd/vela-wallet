@@ -58,6 +58,10 @@ pub(crate) struct MultisigUi {
     pub copied: bool,
     /// "Copied" under the outside-wallet link, until the next sheet.
     pub outside_copied: bool,
+    /// r10 S4: the link the sheet's foot offers as its main press (what this
+    /// person can do next, once their own members have acted) — the
+    /// section above then does not offer it a second time.
+    pub foot_link: Option<String>,
     /// The outside owner's session sheet is up.
     pub session: bool,
     /// The person asked to reject: the question is up.
@@ -256,6 +260,56 @@ impl WalletPage {
             Some("switcher") => self.account_switcher = true,
             Some("close_switcher") => self.account_switcher = false,
             Some("tech") => self.multisig.tech = true,
+            // The network space switched, as the person's press does
+            // (`{"page":"space","to":"testnet"}`).
+            Some("space") => {
+                let to = match ask.get("to").and_then(Value::as_str) {
+                    Some("testnet") => NetworkSpace::Testnet,
+                    _ => NetworkSpace::Mainnet,
+                };
+                crate::agent::invoke_person(Action::SetNetworkSpace { space: to }, cx);
+            }
+            // A section of the sidebar, pressed.
+            Some("section") => {
+                let to = match ask.get("to").and_then(Value::as_str) {
+                    Some("explore") => Section::Explore,
+                    Some("settings") => Section::Settings,
+                    Some("contacts") => Section::Contacts,
+                    _ => Section::Wallet,
+                };
+                self.go_to_section(to, cx);
+            }
+            // A site opened in a new tab of the browser, as the person types
+            // its address into a new tab (`{"page":"browse","url":"…"}`).
+            Some("browse") => {
+                if let Some(url) = ask.get("url").and_then(Value::as_str) {
+                    self.go_to_section(Section::Explore, cx);
+                    self.open_in_new_tab(url.to_owned(), None, cx);
+                }
+            }
+            // A site picked on the start page (`Go::Open`), or an address
+            // typed into the bar (`Go::Typed`), as the person does.
+            Some(kind @ ("open_site" | "type_url")) => {
+                if let Some(url) = ask.get("url").and_then(Value::as_str) {
+                    use crate::wallet::browser_host::Go;
+                    self.go_to_section(Section::Explore, cx);
+                    let go = if kind == "open_site" {
+                        Go::Open(url.to_owned())
+                    } else {
+                        Go::Typed(url.to_owned())
+                    };
+                    self.browser_go(go, cx);
+                }
+            }
+            // What the browser holds now, in the script's log.
+            Some("tabs") => {
+                let explore = resident::resident::<ExploreSites>(cx).read(cx).view();
+                crate::multisig::dev_script::note(&format!(
+                    "tabs {:?} selected {:?}",
+                    explore.tabs.iter().map(|t| (t.id.clone(), t.url.clone())).collect::<Vec<_>>(),
+                    explore.selected_tab
+                ));
+            }
             _ => {}
         }
         cx.notify();
@@ -441,11 +495,13 @@ impl WalletPage {
     ) -> Div {
         let loc = self.ms_loc();
         let host = self.ms_host(cx);
-        let (view, presence) = {
+        let (view, presence, followed, followed_chip) = {
             let machines = host.read(cx).machines();
             (
                 machines.accounts_view.clone(),
                 machines.proposals_view.presence.clone(),
+                machines.proposals_view.followed.clone(),
+                machines.proposals_view.rule_chip.clone(),
             )
         };
         let prefix = if in_dialog { "switcher-ms" } else { "settings-ms" };
@@ -469,7 +525,15 @@ impl WalletPage {
                 .unwrap_or_else(|| {
                     words::tv(&loc, "switcher.rowName", &[("m", &m.to_string()), ("n", &n.to_string())])
                 });
-            let mut flags: Vec<String> = vec![words::rule_chip(&loc, m, n)];
+            // r9-14 (§9.2): the rule in force from the chain — the followed
+            // multisig's from proposals, any other's as the accounts machine
+            // keeps it (`AccountRow.rule`), "last known" when not read now.
+            let is_followed = followed.as_deref().is_some_and(|f| same(f, &address));
+            let mut flags: Vec<String> = vec![crate::multisig::member_words::row_chip(
+                &loc,
+                &row.rule,
+                followed_chip.as_ref().filter(|_| is_followed),
+            )];
             if !row.shared {
                 flags.push(words::t(&loc, "switcher.notShared"));
             }
@@ -689,11 +753,14 @@ impl WalletPage {
         let host = ms_host::booted(cx)?;
         let view = &host.read(cx).machines().proposals_view;
         let followed = view.followed.as_deref().is_some_and(|f| same(f, &row.account.address));
-        let chip = crate::multisig::sheet::home_chip(
-            view.rule_chip.as_ref().filter(|_| followed),
-            row.account.threshold,
-            row.account.owners.len(),
-        );
+        // The followed multisig's chip from proposals; until it is followed,
+        // the rule the accounts machine keeps for it (§9.2), never the
+        // founding rule while a chain has said another.
+        let chip = view
+            .rule_chip
+            .clone()
+            .filter(|_| followed)
+            .unwrap_or_else(|| row.rule.chip.clone());
         Some(crate::multisig::member_words::chip(&loc, &chip))
     }
 
@@ -855,6 +922,82 @@ impl WalletPage {
             )),
         );
         Some(card)
+    }
+
+    /// r10-4: a multisig shown from the space it does not live in — used
+    /// only on networks of the other space — reads as empty here ("$0.00",
+    /// "Deposit your first asset"): where it lives is said, with the switch
+    /// there (the create sheet's way, r7-9). Its networks are its record's
+    /// (`chain_ids`); which space a network is in is the core's word.
+    pub(crate) fn multisig_other_space(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Option<Div> {
+        let row = self.shown_multisig(cx)?;
+        let ids: Vec<u32> = row
+            .account
+            .chain_ids
+            .iter()
+            .filter_map(|id| u32::try_from(*id).ok())
+            .collect();
+        let elsewhere = crate::network_space::lives_elsewhere(&ids);
+        if elsewhere.is_empty() {
+            return None;
+        }
+        let loc = self.ms_loc();
+        let testnet = crate::network_space::testnet();
+        let (to, heading, switch) = if testnet {
+            (NetworkSpace::Mainnet, "networkSpace.headingMainnet", "networkSpace.toMainnet")
+        } else {
+            (NetworkSpace::Testnet, "networkSpace.headingTestnet", "networkSpace.toTestnet")
+        };
+        let networks = elsewhere
+            .iter()
+            .map(|id| network(u64::from(*id)))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let line = format!(
+            "{} · {}",
+            words::tv(&loc, "add.usedOn", &[("networks", &networks)]),
+            self.loc.t(heading)
+        );
+        Some(
+            div()
+                .flex()
+                .flex_col()
+                .items_start()
+                .gap(px(8.))
+                .mb(px(16.))
+                .p(px(16.))
+                .rounded(px(12.))
+                .border_1()
+                .border_color(theme.warning_border)
+                .bg(theme.warning_soft)
+                .child(
+                    div()
+                        .flex()
+                        .items_start()
+                        .gap(px(8.))
+                        .child(div().flex_none().child(icon_img(&mut self.icons, Icon::Info, false, theme.fg_base, 18.)))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w(px(0.))
+                                .text_size(theme::text_row_sub())
+                                .text_color(theme.fg_base)
+                                .child(crate::ui::prose(line)),
+                        ),
+                )
+                .child(crate::ui::vela_button(
+                    "ms-other-space-switch",
+                    crate::ui::ButtonVariant::Secondary,
+                    self.loc.t(switch),
+                    theme,
+                    // A switch of space moves no value: the person's press,
+                    // through the same intent the space dialog answers with.
+                    cx.listener(move |_, _, _, cx| {
+                        crate::agent::invoke_person(Action::SetNetworkSpace { space: to }, cx);
+                        cx.notify();
+                    }),
+                )),
+        )
     }
 
     /// The multisig's transactions waiting, first on its home (the web's
@@ -1336,11 +1479,12 @@ impl WalletPage {
         // Vela link for Vela members and those nothing says yet; the
         // outside-wallet link for an outside wallet; nothing for a smart
         // contract account (said). Only while approvals are missing.
+        // The foot first: the link it offers as its main press is not
+        // offered again in the section (r10 S4).
+        let foot = self.ms_actions(theme, &view, &item, review.as_ref(), account.as_ref(), cx);
         if let Some(account) = &account {
             body = body.children(self.ms_invite_links(theme, &item, signers.as_ref(), account, cx));
         }
-
-        let foot = self.ms_actions(theme, &view, &item, review.as_ref(), account.as_ref(), cx);
         Some((title, body, foot))
     }
 
@@ -1738,12 +1882,79 @@ impl WalletPage {
             foot = foot.child(ms_note(theme, &words::t(&loc, "review.blocked"), Tone::Danger));
         }
 
+        // r10 S4: this device's members have done their part (none of them
+        // can approve or execute it now) and approvals are still missing —
+        // what this person can do next is hand the link on to the members
+        // still to approve: the main press. Which link (Vela's, or the
+        // outside-wallet one) is the core's split (`signers`).
+        let next_is_asking = matches!(plan.kind, FootKind::Nothing)
+            && !item.members_here.is_empty()
+            && item.approved < item.threshold
+            && !executing;
+        self.multisig.foot_link = None;
+        if next_is_asking
+            && let Some(account) = account
+            && let Some((link, outside_link)) = self.ms_ask_link(item, view.signers.get(&key), account, cx)
+        {
+            let copied = if outside_link {
+                self.multisig.outside_copied
+            } else {
+                self.multisig.copied
+            };
+            self.multisig.foot_link = Some(link.clone());
+            let label: SharedString = words::t(&loc, if copied { "proposal.copied" } else { "proposal.copyLink" }).into();
+            // Handing a link on moves no value: the neutral ink, never the
+            // accent (the web's `primary`).
+            foot = foot.child(
+                div()
+                    .id("ms-ask-copy")
+                    .a11y_button(label.clone())
+                    .cursor_pointer()
+                    .child(crate::flows::components::ink_button(theme, label))
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        cx.write_to_clipboard(gpui::ClipboardItem::new_string(link.clone()));
+                        if outside_link {
+                            this.multisig.outside_copied = true;
+                        } else {
+                            this.multisig.copied = true;
+                        }
+                        cx.notify();
+                    })),
+            );
+        }
+
         // An outside member's wallet, from here only when no member here
         // can act (ms-21): beside each outside member's row otherwise
-        // (r7-8 — never as if this device's member signed elsewhere).
+        // (r7-8 — never as if this device's member signed elsewhere). Once
+        // this device's own members have acted it is not the main press —
+        // asking the others is (r10 S4) — but still a way, quietly.
         let outside = matches!(plan.kind, FootKind::Nothing)
             && !crate::multisig::sheet::outside_members(view.signers.get(&key), &|_| false).is_empty();
-        if outside {
+        if outside && next_is_asking {
+            let (chain_id, hash) = (item.chain_id, item.safe_tx_hash.clone());
+            foot = foot.child(
+                text_action(
+                    "ms-outside",
+                    theme,
+                    &mut self.icons,
+                    None,
+                    words::t(&loc, "external.signWithWallet").into(),
+                )
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    let host = this.ms_host(cx);
+                    let hash = hash.clone();
+                    host.update(cx, |host, cx| {
+                        host.proposals(
+                            ms_proposals::Event::ApproveOutside {
+                                chain_id,
+                                safe_tx_hash: hash,
+                            },
+                            cx,
+                        );
+                    });
+                })),
+            );
+        } else if outside {
             foot = foot.child(self.ms_outside_press(theme, item, crate::ui::ButtonVariant::Secondary, cx));
         }
 
@@ -2066,7 +2277,8 @@ impl WalletPage {
             let lines = if past {
                 Vec::new()
             } else {
-                crate::multisig::reading::concern_blocks(draw, &ctx)
+                // The refusal above says its own concern; not twice.
+                crate::multisig::reading::concern_blocks_beside(draw, &ctx, review.refused.as_ref())
             };
             let blocks = crate::multisig::reading::blocks(&draw.reading, &ctx);
             drawn_parties = crate::multisig::reading::party_addresses(&blocks);
@@ -2166,6 +2378,12 @@ impl WalletPage {
                         .t_texts(key, &[("reason", sim.revert_reason.as_deref().unwrap_or_default())])
                         .to_string();
                     col = col.child(ms_note(theme, &text, tone));
+                }
+                // r10 S4: the lines below are headed, as on the web, the
+                // outside page and the phones — a bare "−0.01 USDC" did not
+                // say whose balance it was or that it was a change.
+                if !sim.deltas.is_empty() {
+                    col = col.child(ms_label(theme, &self.loc.t("componentsUi.signing.balanceChangesTitle")));
                 }
                 for (i, delta) in sim.deltas.iter().enumerate() {
                     let info = words::token_facts(&self.multisig.tokens, chain_id, delta.token.as_deref());
@@ -2515,6 +2733,60 @@ impl WalletPage {
     /// the Vela link for Vela members and those nothing says yet (never
     /// this device's), the outside-wallet link for an outside wallet — each
     /// only while approvals are missing; a smart contract account is said.
+    /// The link the members still to approve open it with, as the sheet's
+    /// section offers it ([`Self::ms_invite_links`]): Vela's for Vela
+    /// members elsewhere, those nothing says yet, or while they are read;
+    /// else the outside-wallet link (`true`). `None`: none to hand on (only
+    /// smart contract accounts are left).
+    fn ms_ask_link(
+        &self,
+        item: &ProposalItem,
+        signers: Option<&ms_proposals::ItemSigners>,
+        account: &MultisigAccount,
+        cx: &App,
+    ) -> Option<(String, bool)> {
+        let local: Vec<String> = session::view(cx)
+            .accounts
+            .iter()
+            .map(|row| row.account.address.clone())
+            .collect();
+        let here = |a: &str| local.iter().any(|l| same(l, a));
+        let of = |list: Option<&Vec<String>>| -> Vec<String> {
+            list.map(|l| l.iter().filter(|a| !here(a)).cloned().collect()).unwrap_or_default()
+        };
+        let in_vela = of(signers.map(|s| &s.in_vela));
+        let either = of(signers.map(|s| &s.either));
+        let contract = of(signers.map(|s| &s.contract));
+        let outside = crate::multisig::sheet::outside_members(signers, &here);
+        let tx = vela_core::multisig_link::ProposalLink {
+            chain_id: item.chain_id,
+            multisig: account.address.clone(),
+            safe_tx_hash: item.safe_tx_hash.clone(),
+        };
+        if !in_vela.is_empty() || !either.is_empty() || (outside.is_empty() && contract.is_empty()) {
+            return Some((
+                vela_core::multisig_link::proposal_link(
+                    vela_core::multisig_link::SITE_ORIGIN,
+                    self.loc.language(),
+                    &tx,
+                ),
+                false,
+            ));
+        }
+        if outside.is_empty() {
+            return None;
+        }
+        let page = format!(
+            "{}/{}/connect",
+            vela_core::multisig_link::share_origin(vela_core::multisig_link::SITE_ORIGIN),
+            self.loc.language()
+        );
+        Some((
+            vela_core::multisig_link::connect_link(&page, None, &outside, Some(&tx)),
+            true,
+        ))
+    }
+
     fn ms_invite_links(
         &mut self,
         theme: &Theme,
@@ -2586,7 +2858,8 @@ impl WalletPage {
                     Tone::Neutral,
                 ));
             }
-            section = section.child(
+            let in_foot = self.multisig.foot_link.as_deref() == Some(link.as_str());
+            section = section.when(!in_foot, |section| section.child(
                 outline_button(
                     "ms-copy-link",
                     theme,
@@ -2599,7 +2872,7 @@ impl WalletPage {
                     this.multisig.copied = true;
                     cx.notify();
                 })),
-            );
+            ));
             out.push(section);
         }
         if !contract.is_empty() {
@@ -2619,6 +2892,7 @@ impl WalletPage {
             );
             let link = vela_core::multisig_link::connect_link(&page, None, &outside, Some(&tx));
             let copied = self.multisig.outside_copied;
+            let in_foot = self.multisig.foot_link.as_deref() == Some(link.as_str());
             out.push(
                 div()
                     .flex()
@@ -2631,7 +2905,7 @@ impl WalletPage {
                             .text_color(theme.fg_subtle)
                             .child(crate::ui::prose(words::t(&loc, "external.outsideLinkHint"))),
                     )
-                    .child(
+                    .when(!in_foot, |section| section.child(
                         outline_button(
                             "ms-copy-outside-link",
                             theme,
@@ -2644,7 +2918,7 @@ impl WalletPage {
                             this.multisig.outside_copied = true;
                             cx.notify();
                         })),
-                    ),
+                    )),
             );
         }
         out

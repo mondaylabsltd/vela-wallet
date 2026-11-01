@@ -602,7 +602,12 @@ impl WalletPage {
         let locals: Vec<(String, String)> = session::view(cx)
             .accounts
             .iter()
-            .map(|r| (r.account.address.clone(), r.account.name.clone()))
+            .map(|r| {
+                (
+                    r.account.address.clone(),
+                    crate::multisig::shown::name_or(&r.account.address, &r.account.name),
+                )
+            })
             .collect();
         {
             let form = self.multisig.create_form.as_mut()?;

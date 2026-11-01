@@ -504,6 +504,10 @@ pub struct SendPick {
     pub rows: Vec<AssetRowModel>,
     /// A search that hides every row.
     pub no_match: SharedString,
+    /// r10 S4: no rows yet because the list's first read is still out
+    /// (the core's `SendView.loading`) — said, never an empty column for
+    /// seconds (the web's `send.loadingTokens`).
+    pub loading: Option<SharedString>,
     pub cta: SharedString,
     /// Spec 033 — the sweep picker (SD1b). `None` is the ordinary
     /// one-token list, which is what the mock draws.
@@ -1410,6 +1414,7 @@ fn send_pick(s: &FlowStrings) -> SendPick {
         cta_accent: false,
         search_placeholder: s.send_search.clone(),
         no_match: s.no_matching_tokens.clone(),
+        loading: None,
         filters: vec![
             FilterChip {
                 label: s.filter_all.clone(),

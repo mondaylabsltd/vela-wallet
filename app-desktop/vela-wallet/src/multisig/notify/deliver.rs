@@ -53,9 +53,6 @@ pub const APP_NAME: &str = "Vela Wallet";
 /// A notification's tag starts with this (the click's way back).
 const TAG: &str = "vela-multisig";
 
-/// How long the in-app line stays.
-const IN_APP_FOR: Duration = Duration::from_secs(8);
-
 static WANTED: Mutex<Option<bool>> = Mutex::new(None);
 
 /// Whether the person turned notifications on (`VELA_MULTISIG_NOTIFY=1`
@@ -319,12 +316,14 @@ pub fn in_app(cx: &App) -> Option<InAppLine> {
     cx.try_global::<InApp>().and_then(|g| g.0.clone())
 }
 
-/// Take the in-app line away (pressed, or its time is up).
+/// Take the in-app line away (pressed, dismissed, or read: in front for
+/// [`super::attention::SEEN_FOR`]).
 pub fn dismiss_in_app(cx: &mut App) {
     if in_app(cx).is_some() {
         cx.set_global(InApp(None));
         cx.refresh_windows();
     }
+    super::attention::seen();
 }
 
 /// Word `notices` off the UI thread, then post them.
@@ -351,6 +350,9 @@ pub fn post(notices: Vec<Notice>, cx: &mut App) {
 
 /// Post worded notifications now: the platform's center, else the line.
 pub fn show(worded: Vec<Worded>, cx: &mut App) {
+    // r10 S4: posted while the window is not in front, the app's icon says
+    // so until it is (the Dock badge, the taskbar's flash).
+    super::attention::noticed(worded.len(), cx);
     if system_can_show() {
         for w in &worded {
             crate::diag::vlog!("multisig-notify", "posted {} ({})", w.tag, permission_now());
@@ -381,15 +383,9 @@ pub fn show(worded: Vec<Worded>, cx: &mut App) {
         serial,
     })));
     cx.refresh_windows();
-    cx.spawn(async move |cx| {
-        cx.background_executor().timer(IN_APP_FOR).await;
-        cx.update(|cx| {
-            if in_app(cx).is_some_and(|l| l.serial == serial) {
-                dismiss_in_app(cx);
-            }
-        });
-    })
-    .detach();
+    // r10 S4: it stays until it was seen — the window in front for a while —
+    // or dismissed; 8 s on a clock missed it with the window off-screen.
+    super::attention::watch(cx);
 }
 
 /// A notification was clicked (or the in-app line pressed): the window in

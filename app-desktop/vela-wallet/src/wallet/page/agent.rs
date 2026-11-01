@@ -1032,7 +1032,10 @@ impl WalletPage {
             col = col.child(toggle_row(
                 SharedString::from(format!("agent-wallet-{address}")),
                 theme,
-                SharedString::from(row.account.name.clone()),
+                SharedString::from(crate::multisig::shown::name_or(
+                    &row.account.address,
+                    &row.account.name,
+                )),
                 SharedString::from(short),
                 on,
                 move |_, _, cx| {

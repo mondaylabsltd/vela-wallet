@@ -13,7 +13,7 @@
 use serde::Deserialize;
 use serde_json::Value;
 use vela_core::app::multisig_outside::reading::TokenFacts;
-use vela_core::multisig_review::Concern;
+use vela_core::multisig_review::{Concern, Refused, RefusedWhy};
 use vela_core::multisig_review::reading::{Amount, Call, Grant, Intent, Reading};
 
 use super::words;
@@ -302,17 +302,23 @@ fn call_rows(call: &Call, ctx: &Ctx<'_>) -> Vec<Row> {
     rows
 }
 
-fn path_label(call: &Call, ctx: &Ctx<'_>) -> String {
-    let n: Vec<String> = call.path.iter().map(u32::to_string).collect();
-    words::tv(ctx.loc, "review.callNumber", &[("n", &n.join("."))])
+/// A leg's number, the core's (`Call.leg`, r10-10): "Call 2.1"; `None` for
+/// the transaction's lone call — no number, never one joined here.
+fn leg_label(call: &Call, ctx: &Ctx<'_>) -> Option<String> {
+    let leg = call.leg.as_deref()?;
+    Some(words::tv(ctx.loc, "review.callNumber", &[("n", leg)]))
 }
 
 /// Each call as a card, a batch's legs after it, every level (r8-5).
 fn cards(calls: &[Call], ctx: &Ctx<'_>) -> Vec<Block> {
     let mut out = Vec::new();
     for call in calls {
+        let intent = intent_title(&call.intent, ctx);
         out.push(Block::Card {
-            title: format!("{} · {}", path_label(call, ctx), intent_title(&call.intent, ctx)),
+            title: match leg_label(call, ctx) {
+                Some(leg) => format!("{leg} · {intent}"),
+                None => intent,
+            },
             rows: call_rows(call, ctx),
             tone: intent_tone(&call.intent),
         });
@@ -471,10 +477,32 @@ pub fn concern_line(concern: &Concern, reading: &Reading, ctx: &Ctx<'_>) -> Opti
 /// each once (the core deduped them, r8-14): an unlimited grant, a nested
 /// batch, one that cannot be read, decimals unknown, tokens sent to their
 /// own contract, a call nobody reads.
+#[cfg(test)]
 #[must_use]
 pub fn concern_blocks(draw: &ReadingDraw, ctx: &Ctx<'_>) -> Vec<Block> {
+    concern_blocks_beside(draw, ctx, None)
+}
+
+/// A concern the review's refusal line says already (r10, S4: "Vela won't
+/// sign… nested too deep" and "Part of this batch can't be read… Vela won't
+/// sign it." were two red boxes for one reason). The refusal is the ONE
+/// line (§8, `MultisigReview.refused`); the concern it came from is not
+/// said again. Which concern a refusal comes from is the core's
+/// (`RefusedWhy::TooDeep` is its `UnreadableBatch`).
+#[must_use]
+pub fn said_by_refusal(concern: &Concern, refused: Option<&Refused>) -> bool {
+    matches!(
+        (concern, refused.map(|r| r.why)),
+        (Concern::UnreadableBatch, Some(RefusedWhy::TooDeep))
+    )
+}
+
+/// [`concern_blocks`] beside the review's refusal: the concerns it says
+/// already are left out ([`said_by_refusal`]).
+#[must_use]
+pub fn concern_blocks_beside(draw: &ReadingDraw, ctx: &Ctx<'_>, refused: Option<&Refused>) -> Vec<Block> {
     let mut out: Vec<Block> = Vec::new();
-    for c in &draw.concerns {
+    for c in draw.concerns.iter().filter(|c| !said_by_refusal(c, refused)) {
         if let Some((text, tone)) = concern_line(c, &draw.reading, ctx)
             && !out.iter().any(|b| matches!(b, Block::Warning { text: t, .. } if *t == text))
         {
@@ -564,9 +592,20 @@ mod tests {
                 if every.len() > 1 || every.first().is_some_and(|c| !c.path.is_empty()) {
                     assert_eq!(cards, every.len(), "{tag} {name}: a card per call\n{text}");
                     for call in &every {
-                        let n: Vec<String> = call.path.iter().map(u32::to_string).collect();
-                        let label = words::tv(&loc, "review.callNumber", &[("n", &n.join("."))]);
-                        assert!(text.contains(&label), "{tag} {name}: {label} drawn\n{text}");
+                        // r10-10: the core's leg, else no number at all.
+                        match call.leg.as_deref() {
+                            Some(leg) => {
+                                let label = words::tv(&loc, "review.callNumber", &[("n", leg)]);
+                                assert!(text.contains(&label), "{tag} {name}: {label} drawn\n{text}");
+                            }
+                            None => assert!(
+                                !text.contains(&format!(
+                                    "{} ·",
+                                    words::tv(&loc, "review.callNumber", &[("n", "")])
+                                )),
+                                "{tag} {name}: an empty leg number\n{text}"
+                            ),
+                        }
                     }
                 }
                 // "Contract call" only where the core read no more.
@@ -661,5 +700,24 @@ mod tests {
         // Four deep: refused, said so.
         let deep = case("four deep");
         assert!(all(&deep).contains("can't be read"), "{}", all(&deep));
+        // …once: beside the review's refusal (its `tooDeep`), the concern's
+        // own line is not a second red box; any other refusal leaves it.
+        let too_deep = Refused {
+            why: RefusedWhy::TooDeep,
+            key: "home.multisig.review.refusedWhy.tooDeep".to_owned(),
+        };
+        let beside = concern_blocks_beside(&deep, &ctx, Some(&too_deep));
+        assert!(
+            !beside.iter().map(Block::text).any(|t| t.contains("can't be read")),
+            "{beside:?}"
+        );
+        let other = Refused {
+            why: RefusedWhy::Delegatecall,
+            key: "home.multisig.review.refusedWhy.delegatecall".to_owned(),
+        };
+        assert_eq!(
+            concern_blocks_beside(&deep, &ctx, Some(&other)).len(),
+            concern_blocks(&deep, &ctx).len()
+        );
     }
 }

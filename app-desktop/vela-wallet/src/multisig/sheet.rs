@@ -9,7 +9,6 @@
 //! them, as the web does.
 
 use serde_json::Value;
-use vela_core::app::multisig_members::{MemberRule, RuleChip};
 use vela_core::app::multisig_proposals::{ItemSigners, ProposalStatus};
 use vela_core::multisig_review::SignRule;
 
@@ -324,16 +323,6 @@ pub fn approvals_shown(
     }
 }
 
-/// The home's rule chip (r8-13, the web's `ruleChip`): the proposals
-/// machine's `rule_chip` for the multisig it follows (the rule in force on
-/// each network it is used on), else the rule it was made with.
-#[must_use]
-pub fn home_chip(followed: Option<&RuleChip>, threshold: u64, owners: usize) -> RuleChip {
-    followed.cloned().unwrap_or(RuleChip::Needs {
-        rule: MemberRule::of(threshold, owners),
-    })
-}
-
 /// The home's "Get it ready" card (r4D-8, r8-13): while the multisig is
 /// kept as just created here (`first_run`) and the machine has not read it
 /// set up on any network (`set_up`, for the multisig it follows).
@@ -504,16 +493,6 @@ mod tests {
         let enough = ItemSigners { enough: true, ..signers };
         assert_eq!(member_way(Some(&enough), EVE, false), MemberWay::Waiting);
         assert!(outside_members(Some(&enough), &|_| false).is_empty());
-    }
-
-    /// r8-13: the home's chip is the machine's rule; one not followed yet
-    /// says the rule it was made with.
-    #[test]
-    fn the_home_chip_is_the_machines_rule() {
-        let rule = MemberRule::of(2, 3);
-        assert_eq!(home_chip(None, 2, 3), RuleChip::Needs { rule });
-        let differs = RuleChip::Differs { rules: vec![rule, MemberRule::of(2, 4)] };
-        assert_eq!(home_chip(Some(&differs), 2, 3), differs);
     }
 
     /// r8-13: "Get it ready" while just created here, until it is set up.
