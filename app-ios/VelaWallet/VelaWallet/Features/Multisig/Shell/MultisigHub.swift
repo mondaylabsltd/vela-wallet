@@ -586,6 +586,38 @@ final class MultisigHub {
         proposals.dispatch(["type": "withdraw"])
     }
 
+    /// The person swiped the sheet that is up away (an interactive dismiss —
+    /// the root's sheet binding set to nothing). It is that sheet's own way
+    /// out, at once:
+    ///
+    /// - a proposal's review: withdrawn, exactly as "Don't propose" — nothing
+    ///   signed, nothing said, the caller's `propose` answered `cancelled`
+    ///   now (not at its wait's limit), and the sheet it covered shown again;
+    /// - a site's request: left (`dapp_leave`), so the site is answered as it
+    ///   stands, as its close does;
+    /// - anything else: closed.
+    ///
+    /// Not `onDismiss`: that also runs when the hub moves a review aside
+    /// itself — on "Propose", while its passkey runs — and a withdraw then
+    /// would void what the person just signed. A review being signed cannot
+    /// be swiped (`interactiveDismissDisabled` while working); should one
+    /// be, it is only moved aside.
+    func sheetDismissed() {
+        guard let shown = sheet else { return }
+        switch shown {
+        case .review(let chainId):
+            sheet = drafting == chainId ? reviewReturn : nil
+            if drafting == chainId { reviewReturn = nil }
+            let working = proposalsView.action("propose")?.kind == "working"
+            if proposalsView.draft != nil, !working { withdrawDraft() }
+        case .dapp(let id):
+            dappLeave(id)
+            if sheet == .dapp(id: id) { sheet = nil }
+        default:
+            sheet = nil
+        }
+    }
+
     // MARK: - A dApp's request to a multisig (M5)
 
     /// The requests held by the machine, by id: who answers the site.
