@@ -237,10 +237,25 @@ class PasskeyExecutor(
             "excluded" to excludeCredentialIds.size,
         )
         val response = try {
-            credentialManager.createCredential(
-                context = context,
-                request = CreatePublicKeyCredentialRequest(request.toString()),
-            )
+            // Real device (Redmi, Google unreachable): the create waited 87 s
+            // behind a spinner — no system sheet ever up, Google Play services
+            // checking the domain over a network that could not reach it —
+            // before "[50152] RP ID cannot be validated". The same honest
+            // bound the sign-in has: a sheet that draws takes this window's
+            // focus; this window keeping it for SELECTOR_WATCHDOG_MS unbroken
+            // means none is up, and the wait ends, said. A sheet that IS up
+            // gets the core's own passkey deadline, never longer.
+            awaitingSelector("passkey.register") {
+                kotlinx.coroutines.withTimeout(uniffi.vela_core_uniffi.passkeySignTimeoutMs().toLong()) {
+                    credentialManager.createCredential(
+                        context = context,
+                        request = CreatePublicKeyCredentialRequest(request.toString()),
+                    )
+                }
+            }
+        } catch (deadline: kotlinx.coroutines.TimeoutCancellationException) {
+            VelaLog.event("passkey.register", "deadline passed")
+            throw PasskeyFailure(FailureKind.Cancelled, "the passkey prompt timed out")
         } catch (error: CreateCredentialException) {
             val failure = classifyCreate(error)
             VelaLog.failure(
@@ -710,7 +725,7 @@ class PasskeyExecutor(
      * Fail-safe by construction: no activity, or no focus to begin with (one of
      * our own dialogs holds it), and this is a plain call — never a false alarm.
      */
-    private suspend fun <T> awaitingSelector(request: suspend () -> T): T {
+    private suspend fun <T> awaitingSelector(tag: String = "passkey.assert", request: suspend () -> T): T {
         val activity = context as? Activity
         if (activity == null) return request()
         return coroutineScope {
@@ -735,7 +750,7 @@ class PasskeyExecutor(
             } catch (cancelled: CancellationException) {
                 if (!gaveUp) throw cancelled
                 VelaLog.event(
-                    "passkey.assert",
+                    tag,
                     "system selector never appeared",
                     "waitedMs" to SELECTOR_WATCHDOG_MS,
                 )
