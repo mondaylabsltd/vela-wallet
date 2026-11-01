@@ -1,6 +1,7 @@
 package app.getvela.wallet.feature.multisig
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -105,15 +106,25 @@ fun MultisigReviewBody(
  */
 internal fun shownConcerns(review: JsonElement): List<JsonElement> {
     val refused = review["refused"]["key"].str != null
+    val refusedWhy = review["refused"]["why"].str
     val recipients = review["recipients"].arr
     val sim = review["simulation"]
+    val withheld = sim["kind"].str == "withheld"
     val simNotice = sim["kind"].str != "deltas" && !sim["notice_key"].str.isNullOrEmpty()
     val said = mutableSetOf<String>()
     return review["concerns"].arr.filter { concern ->
         val address = concern["address"].str
         val drawnElsewhere = when (concern.kind) {
             "firstTime" -> recipients.any { it["address"].str.equals(address, ignoreCase = true) && it["firstTimeCue"].bool == true }
-            "unsimulated", "reverts" -> simNotice
+            // r10-6 (core §8): a review refused for another reason withholds
+            // what running it would do — nothing in the simulation's place,
+            // so no "expected to fail" either (the core keeps a `reverts`
+            // concern when its state probe reverted; a refusal is not a
+            // prediction about running it).
+            "unsimulated", "reverts" -> withheld || simNotice
+            // r10 S4: a batch too deep is the refusal's own reason — said
+            // once, by the refusal line, not again in a second red box.
+            "unreadableBatch" -> refusedWhy == "tooDeep"
             // r9-9: the refusal line says why it is not signed — not its English again.
             "notSigned" -> refused
             else -> false
@@ -168,12 +179,21 @@ internal fun tokenName(facts: JsonElement?, words: MultisigWords, chainId: Int):
  */
 internal fun amountText(amount: JsonElement?, symbol: String, words: MultisigWords): String {
     if (amount["unlimited"].bool == true) return words.t("review.reading.unlimited")
-    amount["plain"].str?.let { return "${app.getvela.wallet.core.format.Formats.current.plain(it)} $symbol".trim() }
+    // r10 S4: grouped, as the title above it and the web say it ("1,000,000
+    // USDC", never "1000000"), in the person's own separators — every digit
+    // the core read kept (no rounding: as many places as it has).
+    amount["plain"].str?.let { return "${groupedAmount(it)} $symbol".trim() }
     val raw = amount["raw"].str ?: "0"
     val said = words.t("review.reading.decimalsUnknown", "raw" to raw)
     // The raw base units are said whatever the catalog holds (a catalog
     // older than the key still never hides the figure, nor guesses it).
     return if (said.contains(raw)) said else "$raw · ${words.raw("componentsUi.signingApprove.decimalsUnverified")}"
+}
+
+/** A plain decimal (`1000000.25`) grouped in the person's style, every place kept. */
+internal fun groupedAmount(plain: String): String {
+    val places = plain.substringAfter('.', "").length
+    return app.getvela.wallet.core.format.Formats.current.number(plain, 0, places)
 }
 
 /**
@@ -251,6 +271,35 @@ internal fun readingLines(review: JsonElement, chainId: Int, words: MultisigWord
     }
     walk(review["reading"]["calls"].arr, 0)
     return out
+}
+
+/**
+ * r10-8: the core reading's title for the sheet's header (the web's
+ * `readingTitle`): a lone call by its intent ("Send 0.01 USDC",
+ * "Approve · USDC"), more than one call — or a call that is itself a batch's
+ * legs — as the batch ("Batch of 1 call"); `null` when the reading has no
+ * calls (the multisig's own change, said by its action's title).
+ */
+internal fun readingTitle(review: JsonElement?, chainId: Int, words: MultisigWords): String? {
+    val calls = review["reading"]["calls"].arr
+    if (calls.isEmpty()) return null
+    val r = { key: String -> words.t("review.reading.$key") }
+    val first = calls.first()
+    if (calls.size == 1 && first["path"].arr.isEmpty()) {
+        val intent = first["intent"]
+        return when (intent.kind) {
+            "send" -> "${r("send")} ${amountText(intent["amount"], tokenName(intent["token"], words, chainId), words)}"
+            "sendFrom" -> r("sendFrom")
+            "approve" -> "${r(intent["grant"].str ?: "approve")} · ${tokenName(intent["token"], words, chainId)}"
+            "approveAll" -> if (intent["granted"].bool == false) r("revokeAll") else r("approveAll")
+            "batch" -> intent["calls"].arr.size.let { n -> if (n == 1) r("batchOne") else words.t("review.reading.batchMany", "total" to n.toString()) }
+            "unreadable" -> r("unreadable")
+            "members" -> r("members")
+            "rename" -> words.t("review.reading.rename", "name" to intent["name"].str.orEmpty())
+            else -> r("call")
+        }
+    }
+    return if (calls.size == 1) r("batchOne") else words.t("review.reading.batchMany", "total" to calls.size.toString())
 }
 
 @Composable
@@ -585,7 +634,7 @@ fun MemberPicker(words: MultisigWords, label: String, members: List<String>, sel
         for (address in members) {
             val on = address.equals(selected, ignoreCase = true)
             Row(
-                Modifier.fillMaxWidth().clickable(role = Role.RadioButton) { onPick(address) }.padding(vertical = VelaSpacing.sm),
+                Modifier.fillMaxWidth().selectable(selected = on, role = Role.RadioButton) { onPick(address) }.padding(vertical = VelaSpacing.sm),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md),
             ) {

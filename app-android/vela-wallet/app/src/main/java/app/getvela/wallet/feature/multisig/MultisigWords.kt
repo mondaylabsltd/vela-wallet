@@ -42,6 +42,19 @@ class MultisigWords(
     fun t(key: String, vararg vars: Pair<String, String>): String =
         if (vars.isEmpty()) strings.t("home.multisig.$key") else strings.t("home.multisig.$key", vars.toMap())
 
+    /**
+     * A list inside a translated sentence (members, networks, numbers), in
+     * the UI language's own way (`ListFormatter`: "A, B and C", "A、B 和 C") —
+     * never an English ", " (r10, the core's rule). A JVM without ICU (a unit
+     * test) joins with ", ".
+     */
+    fun list(items: List<String>): String {
+        if (items.size < 2) return items.firstOrNull().orEmpty()
+        return runCatching {
+            android.icu.text.ListFormatter.getInstance(java.util.Locale.forLanguageTag(strings.language)).format(items)
+        }.getOrNull()?.takeIf { it.isNotEmpty() } ?: items.joinToString(", ")
+    }
+
     /** A plural key: [count] picks the form (the core's CLDR rule) and fills `{{count}}`. */
     fun plural(key: String, count: Int): String = strings.t("home.multisig.$key", count)
 

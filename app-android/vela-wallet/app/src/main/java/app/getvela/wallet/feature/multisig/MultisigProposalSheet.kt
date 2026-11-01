@@ -100,6 +100,13 @@ fun MultisigProposalSheet(
         }
         onDispose { release() }
     }
+    // r10-7: once it is done (executed from this sheet, or seen executed),
+    // the machine reads how it ran — the executor, the approvals that
+    // counted (`frozen`), the timeline's "Executed by" — asked again then,
+    // not only as the sheet opened on an open one.
+    LaunchedEffect(chainId, safeTxHash, item?.status == "done") {
+        if (item?.status == "done") hub.sendProposal(ev("timeline", "chain_id" to chainId, "safe_tx_hash" to safeTxHash))
+    }
     // The one review (§3.6), asked once the machine HAS the transaction —
     // the machine answers nothing for one it has not read yet, and a sheet
     // that asked only as it opened (a link, a notification, a dApp's
@@ -226,18 +233,16 @@ fun MultisigProposalSheet(
         }
 
         // Approvals.
-        MsSection("${words.t("proposal.approvals")} · ${item.approved}/${item.threshold}") {
-            for (m in model.members) {
-                val done = m.lowercase() in model.approvedBy
-                // S4 (r9): an executed one waits on nobody — a member with no
-                // approval in the mailbox (one who approved by executing it, or
-                // was not needed) is not said to be "Waiting".
-                val state = when {
-                    done -> words.t("proposal.approved")
-                    model.isDone -> ""
-                    item.approved >= item.threshold -> words.t("proposal.notNeeded")
-                    else -> words.t("proposal.waiting")
-                }
+        // r10-7: an executed one is never re-counted against the mailbox —
+        // "Executed", the members whose approvals counted when it ran (the
+        // machine's `frozen`), the executor's own row "Executed", and who
+        // sent it under the list (the web's r4a-8).
+        val count = model.approvalsCount
+        MsSection(if (count.isEmpty()) words.t("proposal.approvals") else "${words.t("proposal.approvals")} · $count", Modifier.testTag("multisig.proposal.approvals")) {
+            for (m in model.listedMembers) {
+                val said = model.memberState(m)
+                val done = said.done
+                val state = said.text
                 Row(
                     Modifier.fillMaxWidth().padding(vertical = VelaSpacing.sm).testTag("multisig.proposal.member")
                         .semantics(mergeDescendants = true) { contentDescription = if (state.isEmpty()) words.label(m) else "${words.label(m)}, $state" },
@@ -252,6 +257,7 @@ fun MultisigProposalSheet(
                     MsText(state, MsType.Sub, color = if (done) colors.successBase else colors.fgSubtle)
                 }
             }
+            model.executedFacts?.let { MsText(it, MsType.Sub, Modifier.testTag("multisig.proposal.executedFacts"), color = colors.fgMuted) }
         }
 
         // Actions.
@@ -314,6 +320,11 @@ fun MultisigProposalSheet(
                 // machine's look for this member (`previews`), as Execute's.
                 if (oneTap && chosen != null) {
                     model.feeLine(chosen)?.let { (text, tone) -> MsNote(text, tone = tone, tag = "multisig.proposal.oneTapFee") }
+                } else if (chosen != null) {
+                    // r10 S4: theirs would complete it, but the one press is not
+                    // offered — said why (can't pay the fee, would fail), never
+                    // a silent "Approve" alone (the web's execute-cant-pay).
+                    model.approveOnlyWhy(chosen)?.let { (text, tone) -> MsNote(text, tone = tone, tag = "multisig.proposal.approveOnlyWhy") }
                 }
                 // r9-5: why the press did not go, here where it was pressed.
                 ActionFailure(listOfNotNull(model.approveFailure, if (oneTap) model.executeFailure else null), words) {
@@ -413,7 +424,7 @@ fun MultisigProposalSheet(
         // that wallet) for an outside or either one — as the web and desktop.
         if (!model.isDone && model.stillNeeded.isNotEmpty() && item.approved < item.threshold) {
             MsSection(words.t("proposal.invite")) {
-                MsNote(words.t("proposal.stillNeeded", "missing" to model.stillNeeded.joinToString(", ", transform = words::label)))
+                MsNote(words.t("proposal.stillNeeded", "missing" to words.list(model.stillNeeded.map(words::label))))
                 for (line in model.signerLines) MsNote(line.text, tag = "multisig.proposal.signers.${line.id}")
                 if (model.showVelaLink) model.link?.let { link -> ShareRow(words, link, "multisig.proposal") }
                 if (model.outsideCanSign) {
@@ -442,7 +453,8 @@ fun MultisigProposalSheet(
             }
         }
         MsRow(words.t("proposal.hash"), item.safeTxHash, mono = true, copyable = true)
-        MsNote(words.t("proposal.noExpiry"))
+        // r10-7: approvals that "count until it is executed" — not said of one that was.
+        if (!model.isDone) MsNote(words.t("proposal.noExpiry"))
     }
 }
 

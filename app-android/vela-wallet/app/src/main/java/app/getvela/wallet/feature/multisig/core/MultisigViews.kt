@@ -558,6 +558,8 @@ data class MsProposalsView(
     fun timeline(item: MsProposalItem): List<JsonElement> = lookup(timelines, item.chainId, item.safeTxHash) ?: emptyList()
     fun signers(item: MsProposalItem): MsSigners? = lookup(signers, item.chainId, item.safeTxHash)
     fun execution(item: MsProposalItem): JsonElement? = lookup(executions, item.chainId, item.safeTxHash)
+    /** r10-7: how it ran (`FrozenFacts`: executor, approvers that counted, the threshold then, executorApproved). */
+    fun frozen(item: MsProposalItem): JsonElement? = lookup(frozen, item.chainId, item.safeTxHash)?.takeUnless { it.isNullish }
 
     fun preview(item: MsProposalItem, executor: String): JsonElement? {
         val key = "${item.chainId}:${item.safeTxHash.lowercase()}:${executor.lowercase()}"
