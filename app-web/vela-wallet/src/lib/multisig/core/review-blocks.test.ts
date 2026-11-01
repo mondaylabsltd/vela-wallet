@@ -393,9 +393,7 @@ describe('the core reads every call itself, the same on every platform (r8-1)', 
 		// One refusal box: the core says it as the refusal (`refused.why =
 		// tooDeep`) and leaves the "can't be read" concern out at the source.
 		expect(review.refused?.why).toBe('tooDeep');
-		expect(text(concernBlocks(review, readingCtx))).not.toContain(
-			m.review.reading.unreadableLine
-		);
+		expect(text(concernBlocks(review, readingCtx))).not.toContain(m.review.reading.unreadableLine);
 	});
 });
 
