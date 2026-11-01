@@ -1074,7 +1074,9 @@ struct SendFormBody: View {
                 if let fund { FundAddressView(model: fund) }
                 if let report { RelayReportButton(title: report, action: onReport) }
             }
-            VelaButton(title: model.cta, kind: .primary, action: onContinue)
+            // Real-device S4: Continue moves nothing yet — the neutral ink;
+            // the accent is the confirm's, where value moves (rule 8).
+            VelaButton(title: model.cta, kind: .ink, action: onContinue)
                 .disabled(ctaDisabled)
                 .opacity(ctaDisabled ? Tokens.Opacity.disabled : 1)
                 .padding(.top, Tokens.Space.s4)
