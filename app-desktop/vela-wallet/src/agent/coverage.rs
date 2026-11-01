@@ -494,6 +494,11 @@ const EVENTS: &[(&str, Place)] = &[
         "sign_request::Event::TransportDropped",
         Machine("the dApp's connection"),
     ),
+    // r10 follow-up: the site's request after a space switch moved it.
+    (
+        "sign_request::Event::SpaceNoted",
+        Machine("a dApp's request from a site the space switch moved"),
+    ),
     ("tx_tracker::Event::Submitted", Machine("the chain tracker")),
     // AUDIT M1/M3: a multisig's own Settings (`multisig_settings.rs`) — its
     // members, the change composed, its record. Proposing goes through the

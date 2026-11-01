@@ -102,6 +102,9 @@ pub struct HeaderModel {
     /// there is no requester to name, so no header is drawn at all — the
     /// column's scaffold already says what this is and owns the ✕.
     pub first_party: bool,
+    /// r10 follow-up: the site was moved by a network-space switch — the
+    /// line under the requester ([`SigningModel::space_note`]).
+    pub space_note: Option<SharedString>,
     pub dapp_icon_urls: Vec<SharedString>,
     pub network_name: SharedString,
     pub network_dot: Hsla,
@@ -117,6 +120,7 @@ impl HeaderModel {
             dapp_letter: model.dapp_letter.clone(),
             dapp_tint: model.dapp_tint,
             first_party: model.first_party,
+            space_note: model.space_note.clone(),
             dapp_icon_urls: model.dapp_icon_urls.clone(),
             network_name: model.network_name.clone(),
             network_dot: model.network_dot,
@@ -234,7 +238,20 @@ pub fn header_view(theme: &Theme, model: &HeaderModel) -> Option<Div> {
                         .child(model.network_name.clone()),
                 ),
         );
-    Some(header)
+    // r10 follow-up: a space switch moved this site — said once, under who
+    // is asking, so the network beside it is not a surprise.
+    let Some(note) = model.space_note.clone() else {
+        return Some(header);
+    };
+    Some(
+        div().flex().flex_col().gap(px(8.)).child(header).child(
+            div()
+                .id("signing-space-note")
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_muted)
+                .child(note),
+        ),
+    )
 }
 
 /// The intent as the sheet's headline (issue #314): a request with no figure

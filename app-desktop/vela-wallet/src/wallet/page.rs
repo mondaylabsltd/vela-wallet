@@ -17505,7 +17505,7 @@ impl WalletPage {
 
     /// What the browser machine decided, acted on once.
     fn browser_host_changed(&mut self, host: gpui::Entity<BrowserHost>, cx: &mut Context<Self>) {
-        let (orders, calls, consent) = host.update(cx, |host, _| {
+        let (orders, calls, consent, space_noted) = host.update(cx, |host, _| {
             (
                 host.take_orders(),
                 host.take_multisig_calls(),
@@ -17513,6 +17513,12 @@ impl WalletPage {
                     .consent
                     .as_ref()
                     .map(|consent| (consent.tab.clone(), consent.origin.clone())),
+                // r10 follow-up: the signature a space switch moved its site
+                // for — which request, and the network it is on now.
+                host.view.signing.as_ref().and_then(|signing| {
+                    let note = signing.space_note.as_ref()?;
+                    Some((signing.id.clone(), note.chain_id))
+                }),
             )
         });
         // A NEW question has to be in front of somebody to be answered. Only
@@ -17524,7 +17530,15 @@ impl WalletPage {
         self.browser_consent = consent;
         for order in orders {
             match order {
-                SigningOrder::Forward(forwarded) => self.open_dapp_signing(forwarded, cx),
+                SigningOrder::Forward(forwarded) => {
+                    let id = forwarded.id.clone();
+                    self.open_dapp_signing(forwarded, cx);
+                    if let Some((noted, chain_id)) = &space_noted
+                        && *noted == id
+                    {
+                        self.space_noted(&id, *chain_id, cx);
+                    }
+                }
                 // AUDIT M5: a multisig's request is left with its machine.
                 SigningOrder::Cancel { tab, id } => {
                     if !self.ms_dapp_cancel(&tab, &id, cx) {
@@ -17700,6 +17714,38 @@ impl WalletPage {
         };
         self.open_signing_request(&account, request, Some(forwarded.tab), cx);
     }
+
+    /// r10 follow-up: a network-space switch moved the site whose request
+    /// `id` just opened its column — the sign machine hears it right after
+    /// the arrival (`space_noted`), and the sheet says so once under the
+    /// requester (`SignRequestView.space_note`). Nothing for a column that is
+    /// not this request's (refused as busy, or a multisig's proposal).
+    #[cfg(not(target_os = "linux"))]
+    fn space_noted(&mut self, id: &str, chain_id: u32, cx: &mut Context<Self>) {
+        let Some(host) = self.signing_host.clone() else {
+            return;
+        };
+        let ours = {
+            let host = host.read(cx);
+            host.transport_id == crate::wallet::signing_host::BROWSER_TRANSPORT
+                && host.request_id == id
+        };
+        if !ours {
+            return;
+        }
+        host.update(cx, |host, cx| {
+            host.dispatch_sign(
+                vela_core::app::sign_request::Event::SpaceNoted {
+                    id: id.to_owned(),
+                    chain_id,
+                },
+                cx,
+            );
+        });
+    }
+
+    #[cfg(target_os = "linux")]
+    fn space_noted(&mut self, _id: &str, _chain_id: u32, _cx: &mut Context<Self>) {}
 
     /// No signing column on this platform, and no page to have asked. Refused
     /// rather than left hanging, should that ever change.
@@ -18516,6 +18562,19 @@ impl WalletPage {
             .children(self.ms_dapp_connect_note(theme, consent.address.as_deref(), cx))
             .child(row_divider(theme))
             .child(self.site_network_row(theme, consent.chain_id, Some(consent.origin.clone()), cx))
+            // r10 follow-up: a space switch moved this site since its last
+            // request — said once, under the network it is on now.
+            .children(consent.space_note.as_ref().map(|note| {
+                div()
+                    .id("consent-space-note")
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_muted)
+                    .child(self.loc.t_text(
+                        &note.key,
+                        "network",
+                        &crate::flows::live::chain_name(note.chain_id),
+                    ))
+            }))
             .child(row_divider(theme))
             .child(
                 div()
@@ -19465,6 +19524,22 @@ impl WalletPage {
                 .as_ref()
                 .is_some_and(|request| request.first_party);
             model.first_party = own;
+            // r10 follow-up: a space switch moved this site since its last
+            // request — the core says so (`space_note`), worded here with
+            // the network's name, under the requester.
+            model.space_note = host
+                .view
+                .request
+                .as_ref()
+                .filter(|_| !own)
+                .and_then(|request| request.space_note.as_ref())
+                .map(|note| {
+                    self.loc.t_text(
+                        &note.key,
+                        "network",
+                        &crate::flows::live::chain_name(note.chain_id),
+                    )
+                });
             // Its words are the core's terms like any reading's
             // (`localized_terms`, above): the backup's intent and its Network
             // / Address / Public keys rows arrive named, so nothing here
