@@ -269,10 +269,22 @@ enum MsReading {
 struct MsReadingView: View {
     let blocks: [SigningBlock]
 
+    /// r9 S4: a danger call's intent is a tag (the error tokens' soft fill
+    /// and base ink), not red words that read as a link.
+    static func isTag(_ tone: SigningTone) -> Bool { tone == .danger }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s8) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
                 switch block {
+                case .intent(let text, let tone) where Self.isTag(tone):
+                    // r9 S4: what a danger call is ("Approve" an unlimited
+                    // allowance), under its warning, as a danger TAG — the
+                    // error tokens' soft fill and base ink — never bare red
+                    // words, which read as a link or an action.
+                    MsChip(text: text, tone: .danger)
+                        .accessibilityAddTraits(.isStaticText)
+                        .accessibilityIdentifier("multisig.review.intent.danger")
                 case .intent(let text, let tone):
                     SigningIntentLabel(text: text, tone: tone)
                 case .card(let title, let rows, let tone):

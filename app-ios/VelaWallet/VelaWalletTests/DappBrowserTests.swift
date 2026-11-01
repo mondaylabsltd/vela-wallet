@@ -660,8 +660,8 @@ struct DappBrowserTests {
         let suite = "vela.tests.dbr.ops.\(UUID().uuidString)"
         let executor = DbrExecutor(store: VelaStore(defaults: UserDefaults(suiteName: suite)!))
         #expect(
-            DbrExecutor.operations.count == 13,
-            "spec 099 added `log`; spec 100 `forward_to_add_network` and `cancel_add_network`"
+            DbrExecutor.operations.count == 14,
+            "spec 099 added `log`; spec 100 `forward_to_add_network` and `cancel_add_network`; r9 `write_multisig_batches`"
         )
         for name in DbrExecutor.operations {
             let reply = try CoreJSON.object(await executor.perform(["type": name]))

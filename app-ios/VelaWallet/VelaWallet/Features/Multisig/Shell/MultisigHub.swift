@@ -60,6 +60,13 @@ final class MultisigHub {
     @ObservationIgnored var onActive: ((String?) -> Void)?
     /// Words for a row's title (the proposal's own): the screens' Loc.
     @ObservationIgnored let loc: Loc
+    /// r9-12: the passkey index's verdict on an address (the app's
+    /// `RecipientIdentity`); `nil` answer: nobody answered.
+    @ObservationIgnored var indexLookup: (@MainActor (String) async -> RegistryNameLookup.Verdict?)?
+    /// Addresses asked of the index, and when (an unanswered one is asked
+    /// again after `indexRetry`).
+    @ObservationIgnored private var indexAsked: [String: Date] = [:]
+    static let indexRetry: TimeInterval = 300
 
     // MARK: - Facts
 
@@ -161,7 +168,14 @@ final class MultisigHub {
     // MARK: - Views moved
 
     private func accountsMoved() {
+        let had = accountsView.accounts.count
         accountsView = accounts.accountsView
+        askIndex(accountsView.indexWanted)
+        // r9-8: the first multisig created, added, opened from an invite or
+        // found as a member here — there is now something to say: the
+        // notifications are asked for once (never at launch: a count read
+        // from the store is not one arriving).
+        if loaded, appActive, accountsView.accounts.count > had { MultisigNotifier.askOnce() }
         // Every multisig on this device, to the proposals machine (what waits
         // on each is its to read) — said again only when they changed.
         let records = (accounts.view["accounts"] as? [[String: Any]] ?? []).compactMap { $0["account"] }
@@ -187,7 +201,13 @@ final class MultisigHub {
         proposalsView = proposals.proposalsView
         if !dappAnswers.isEmpty { settleDapps() }
         // On screen, the views say it: the notifier only keeps up (M6).
-        if appActive, loaded { notifier?.evaluate(accounts: accountsView, proposals: proposalsView, words: MsWords(loc: loc, hub: self), post: false) }
+        // r9-8: away, a read that lands later than the round waited for (a
+        // slow network, a service seconds away) is said when it lands —
+        // never recorded as seen by the next look on screen, unsaid.
+        if loaded, let notifier,
+           let post = Self.notifying(appActive: appActive, inBackground: notifier.inBackground()) {
+            notifier.evaluate(accounts: accountsView, proposals: proposalsView, words: MsWords(loc: loc, hub: self), post: post)
+        }
         if proposalsView.paceMs != before { restartProposalTimer() }
         // The member changes waiting, as the members machine reads them.
         let waiting = proposalsView.items.map { item -> [String: Any] in
@@ -203,6 +223,36 @@ final class MultisigHub {
         guard told != lastWaitingJson else { return }
         lastWaitingJson = told
         members.dispatch(["type": "waiting", "proposals": waiting])
+    }
+
+    /// r9-12: the names the core wants from the passkey index (every member
+    /// it names and this device's own accounts) — looked up, each answer
+    /// sent as `index_names`. What a name IS stays the core's.
+    private func askIndex(_ wanted: [String]) {
+        guard let lookup = indexLookup else { return }
+        let now = Date()
+        let due = Self.indexDue(wanted, asked: indexAsked, now: now, retry: Self.indexRetry)
+        guard !due.isEmpty else { return }
+        for address in due { indexAsked[address] = now }
+        Task { @MainActor [weak self] in
+            var answers: [String: Any] = [:]
+            for address in due {
+                guard let verdict = await lookup(address) else { continue }
+                answers[address] = ["vela": verdict.vela, "name": verdict.name.map { $0 as Any } ?? NSNull()]
+            }
+            guard let self, !answers.isEmpty else { return }
+            self.accounts.dispatch(["type": "index_names", "answers": answers])
+        }
+    }
+
+    /// The wanted addresses not asked within `retry` (lowercased, each once).
+    static func indexDue(_ wanted: [String], asked: [String: Date], now: Date, retry: TimeInterval) -> [String] {
+        var out: [String] = []
+        for address in wanted.map({ $0.lowercased() }) where !out.contains(address) {
+            if let at = asked[address], now.timeIntervalSince(at) < retry { continue }
+            out.append(address)
+        }
+        return out
     }
 
     /// The stored record of the multisig shown, whole (as the core keeps it).
@@ -427,11 +477,45 @@ final class MultisigHub {
     /// followed refreshed, then what changed is said — bounded, as iOS bounds
     /// a refresh.
     func backgroundRound() async {
+        let since = Date().timeIntervalSince1970 * 1000
         proposals.dispatch(["type": "others_tick"])
         proposals.dispatch(["type": "refresh", "fresh": true])
-        try? await Task.sleep(nanoseconds: 2_000_000_000)
-        _ = await proposals.until(timeout: 20) { $0["loading"] as? Bool == false ? true : nil }
+        // r9-8: the round waits for the followed list read AFTER it began
+        // (`read_at`), not for `loading` — which a list already shown never
+        // sets, so the round said what was known before the new proposal
+        // was read. Bounded: iOS gives a refresh about 30 s.
+        guard followed != nil else {
+            // Nothing followed: only the others' reads, which say nothing
+            // when they land — a few seconds for them.
+            try? await Task.sleep(nanoseconds: 6_000_000_000)
+            notifier?.evaluate(accounts: accountsView, proposals: proposalsView, words: MsWords(loc: loc, hub: self), post: true)
+            return
+        }
+        _ = await proposals.until(timeout: Self.roundWait) { view -> Bool? in
+            Self.roundRead(view, since: since) ? true : nil
+        }
         notifier?.evaluate(accounts: accountsView, proposals: proposalsView, words: MsWords(loc: loc, hub: self), post: true)
+    }
+
+    /// How long one background round waits for its read (r9-8).
+    static let roundWait: TimeInterval = 22
+
+    /// r9-8: the followed list was read since `since` (ms) and is not
+    /// loading — what a round may say is now this read's.
+    static func roundRead(_ view: [String: Any], since: Double) -> Bool {
+        guard view["loading"] as? Bool != true,
+              let readAt = (view["read_at"] as? NSNumber)?.doubleValue
+        else { return false }
+        return readAt >= since
+    }
+
+    /// r9-8: what a view landing now does with the notifier — on screen it
+    /// is recorded (`false`: the screen says it), in the background it is
+    /// said (`true`), merely inactive (a system sheet, Control Center) it
+    /// waits (`nil`): neither said over the app nor recorded unsaid.
+    static func notifying(appActive: Bool, inBackground: Bool) -> Bool? {
+        if appActive { return false }
+        return inBackground ? true : nil
     }
 
     func confirmDraft(as member: String?) {

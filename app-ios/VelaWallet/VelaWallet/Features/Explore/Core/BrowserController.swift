@@ -365,6 +365,25 @@ final class BrowserController {
         return events
     }
 
+    /// r9 (`network_space::site_start_chain_for`, as the web's extension
+    /// catalog says it): where the account in front lives, most telling
+    /// first — a multisig's own networks, then where it holds something (in
+    /// its holdings' worth order), then where this device's transactions
+    /// were — each once. A new site starts on the first of them the space
+    /// offers (the browser machine's `account_networks`), before the space's
+    /// first; which one is the core's.
+    static func accountNetworks(multisig: [Int], held: [BalanceTokenWire], recent: [Int]) -> [Int] {
+        func amount(_ token: BalanceTokenWire) -> Double { Double(token.balance) ?? 0 }
+        func worth(_ token: BalanceTokenWire) -> Double { (token.priceUsd ?? 0) * amount(token) }
+        let kept: [BalanceTokenWire] = held.filter { !$0.spam && amount($0) > 0 }
+        let holding: [Int] = kept.sorted { worth($0) > worth($1) }.map(\.chainId)
+        var out: [Int] = []
+        for id in multisig + holding + recent where id > 0 && !out.contains(id) {
+            out.append(id)
+        }
+        return out
+    }
+
     // MARK: - A page from outside (spec 088 FR-004)
 
     /// A page another app or website asked this wallet to open, and the host

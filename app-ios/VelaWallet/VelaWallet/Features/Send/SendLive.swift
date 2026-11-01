@@ -443,7 +443,8 @@ enum SendLive {
         on model: SendFormModel,
         loc: Loc,
         speed: SpeedInputs? = nil,
-        networks: WalletNetworks = .builtin
+        networks: WalletNetworks = .builtin,
+        multisig: MultisigConfirmWords? = nil
     ) -> SendFormModel {
         var live = model
         let token = view.selectedToken
@@ -651,9 +652,16 @@ enum SendLive {
             recipients: live.recipients,
             recipientActions: live.recipientActions,
             summary: live.summary,
-            fee: feeRow(model.fee, view: view, fee: fee, display: display, loc: loc, speed: speed,
+            // r9-20: a multisig's proposal has no fee for its proposer and
+            // no speed to pick — the member who executes it pays. Where the
+            // fee would stand, who must approve and who pays (the web's
+            // `feeRow` for `send.multisig`), as the confirm says it.
+            fee: view.multisig.map { ref in
+                multisigFeeRow(model.fee, ref: ref, words: multisig, loc: loc)
+            } ?? feeRow(model.fee, view: view, fee: fee, display: display, loc: loc, speed: speed,
                         networks: networks),
-            speed: speed.map { speedModel($0, view: view, display: display, loc: loc, networks: networks) },
+            speed: view.multisig != nil ? nil
+                : speed.map { speedModel($0, view: view, display: display, loc: loc, networks: networks) },
             cta: stopRetry(view, loc: loc) ?? live.cta,
             // While the pre-check is out the button is busy, not unfinished.
             hint: view.splitMode && !view.estimatingGas ? splitHint(issues, loc: loc) : nil,
@@ -767,6 +775,23 @@ enum SendLive {
         // No rate means the figure is still USD, and it says so rather than
         // wearing another currency's glyph (FR-009, since 050).
         return display.fiatLine(usd, prefix: "≈ ")
+    }
+
+    /// r9-20: a multisig's form row — "Approvals · Needs 2 of 3 members",
+    /// and under it who pays the network fee. A fact, not a figure: no coin,
+    /// no refresh, no tap.
+    static func multisigFeeRow(
+        _ fallback: FeeRowModel, ref: SendMultisigRefWire, words: MultisigConfirmWords?, loc: Loc
+    ) -> FeeRowModel {
+        FeeRowModel(
+            label: words?.label ?? loc.t("home.multisig.proposal.approvals"),
+            mark: fallback.mark,
+            value: words?.rule ?? MultisigConfirmWords.rule(m: ref.threshold, n: ref.owners, loc: loc),
+            openLabel: fallback.openLabel,
+            staleNote: loc.t("home.multisig.proposal.feeNote"),
+            tap: .nothing,
+            plain: true
+        )
     }
 
     private static func feeRow(

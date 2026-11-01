@@ -69,6 +69,15 @@ indirect enum MsJSON: Decodable, Equatable {
         }
     }
     var bool: Bool? { if case .bool(let b) = self { return b }; return nil }
+    /// A number as it is (a time in ms is past `Int`'s comfort on no platform,
+    /// but a fraction must not be cut).
+    var double: Double? {
+        switch self {
+        case .number(let n): return n
+        case .string(let s): return Double(s)
+        default: return nil
+        }
+    }
     var array: [MsJSON] { if case .array(let a) = self { return a }; return [] }
     var object: [String: MsJSON] { if case .object(let o) = self { return o }; return [:] }
     var isNull: Bool { self == .null }
@@ -159,6 +168,10 @@ struct MsAccountRow: Decodable, Equatable, Identifiable {
     var checkedOn: [Int]
     var checkingOn: [Int]
     var inviteShared: Bool
+    /// r9-12: the invite's members as the core builds them (founding, then
+    /// members now; a name only where one is known, and the kind) — the
+    /// link door's `addLink` takes them as they are.
+    var inviteMembers: MsJSON
 
     var id: String { account.id }
 
@@ -174,6 +187,7 @@ struct MsAccountRow: Decodable, Equatable, Identifiable {
         checkedOn = c.soft(MsKey("checked_on"), [])
         checkingOn = c.soft(MsKey("checking_on"), [])
         inviteShared = c.soft(MsKey("invite_shared"), false)
+        inviteMembers = c.soft(MsKey("invite_members"), MsJSON.array([]))
     }
 }
 
@@ -343,6 +357,13 @@ struct MsAccountsView: Decodable, Equatable {
     var link: MsLinkStand?
     var memberKinds: [String: MsKindChoice] = [:]
     var knownMembers: [String: MsMemberInfo] = [:]
+    /// r9-12: ONE name per member, by lowercase address, by the core's rule
+    /// (kept, then the passkey index, then this device's own name, then the
+    /// short address). Drawn as it is; no shell picks a name.
+    var memberLabels: [String: String] = [:]
+    /// r9-12: the addresses the passkey index has not answered for yet
+    /// (this device's own among them): looked up, answered `index_names`.
+    var indexWanted: [String] = []
     /// core-ms-2: the invite the machine opened (`MultisigInviteView`).
     var invite: MsJSON?
     /// core-ms-2: the network hints, read by the core.
@@ -366,6 +387,8 @@ struct MsAccountsView: Decodable, Equatable {
         link = c.soft(MsKey("link"))
         memberKinds = c.soft(MsKey("member_kinds"), [:])
         knownMembers = c.soft(MsKey("known_members"), [:])
+        memberLabels = c.soft(MsKey("member_labels"), [:])
+        indexWanted = c.soft(MsKey("index_wanted"), [])
         invite = c.soft(MsKey("invite"))
         recentNetworks = c.soft(MsKey("recent_networks"), [])
         usedNetworks = c.soft(MsKey("used_networks"), [])
@@ -413,6 +436,9 @@ struct MsProposalItem: Decodable, Equatable, Identifiable {
     var createdMs: Double
     var unsent: Bool
     var renameUndeployed: Bool
+    /// r9-9: every member of it on this device (the core's), whatever this
+    /// transaction asks of them — `nil` from a core without the field.
+    var membersHere: [String]?
 
     var id: String { "\(chainId):\(safeTxHash.lowercased())" }
     var key: String { "\(chainId):\(safeTxHash)" }
@@ -440,6 +466,7 @@ struct MsProposalItem: Decodable, Equatable, Identifiable {
         createdMs = c.soft(MsKey("createdMs"), 0)
         unsent = c.soft(MsKey("unsent"), false)
         renameUndeployed = c.soft(MsKey("renameUndeployed"), false)
+        membersHere = c.soft(MsKey("membersHere"))
     }
 }
 

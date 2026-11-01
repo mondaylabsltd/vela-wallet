@@ -14024,6 +14024,11 @@ public struct TrustedSignerApprovalInput: Equatable, Hashable {
      * The member's key route as JSON (`signing_plan`'s `key`), as it came.
      */
     public var keyRouteJson: String?
+    /**
+     * r9-10: the review asks for "… anyway" (the passkey purpose's
+     * `anyway`): the page says "Approve anyway" in the danger style.
+     */
+    public var anyway: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -14048,7 +14053,11 @@ public struct TrustedSignerApprovalInput: Equatable, Hashable {
          */credentialIdsHex: [String], 
         /**
          * The member's key route as JSON (`signing_plan`'s `key`), as it came.
-         */keyRouteJson: String?) {
+         */keyRouteJson: String?, 
+        /**
+         * r9-10: the review asks for "… anyway" (the passkey purpose's
+         * `anyway`): the page says "Approve anyway" in the danger style.
+         */anyway: Bool = false) {
         self.chainId = chainId
         self.chainName = chainName
         self.nativeSymbol = nativeSymbol
@@ -14059,6 +14068,7 @@ public struct TrustedSignerApprovalInput: Equatable, Hashable {
         self.memberName = memberName
         self.credentialIdsHex = credentialIdsHex
         self.keyRouteJson = keyRouteJson
+        self.anyway = anyway
     }
 
     
@@ -14086,7 +14096,8 @@ public struct FfiConverterTypeTrustedSignerApprovalInput: FfiConverterRustBuffer
                 member: FfiConverterString.read(from: &buf), 
                 memberName: FfiConverterOptionString.read(from: &buf), 
                 credentialIdsHex: FfiConverterSequenceString.read(from: &buf), 
-                keyRouteJson: FfiConverterOptionString.read(from: &buf)
+                keyRouteJson: FfiConverterOptionString.read(from: &buf), 
+                anyway: FfiConverterBool.read(from: &buf)
         )
     }
 
@@ -14101,6 +14112,7 @@ public struct FfiConverterTypeTrustedSignerApprovalInput: FfiConverterRustBuffer
         FfiConverterOptionString.write(value.memberName, into: &buf)
         FfiConverterSequenceString.write(value.credentialIdsHex, into: &buf)
         FfiConverterOptionString.write(value.keyRouteJson, into: &buf)
+        FfiConverterBool.write(value.anyway, into: &buf)
     }
 }
 
@@ -21839,6 +21851,21 @@ public func siteStartChain(spaceChainIds: [UInt32], lastUsed: UInt32?) -> UInt32
 })
 }
 /**
+ * [`site_start_chain`] for an account (r9): after the network last used,
+ * the first of `account_chains` — where the account holds something, or
+ * used — that the space offers; then the space's first.
+ */
+public func siteStartChainFor(spaceChainIds: [UInt32], lastUsed: UInt32?, accountChains: [UInt32]) -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_site_start_chain_for(
+        FfiConverterSequenceUInt32.lower(spaceChainIds),
+        FfiConverterOptionUInt32.lower(lastUsed),
+        FfiConverterSequenceUInt32.lower(accountChains),uniffiCallStatus
+    )
+})
+}
+/**
  * Who vouches for a token's name on its chain (`app::token_provenance`):
  * `{"trust": "native" | "vouched" | "unverified", "imitates": "USDC" | null}`.
  * `token` empty is the native coin.
@@ -23365,6 +23392,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_site_start_chain() != 36503) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_site_start_chain_for() != 953) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_token_provenance() != 26831) {

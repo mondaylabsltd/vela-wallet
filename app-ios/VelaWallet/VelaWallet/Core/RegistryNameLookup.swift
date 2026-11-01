@@ -64,15 +64,28 @@ final class RegistryNameLookup {
     }
 
     func name(for address: String) async -> String? {
+        await lookup(for: address)?.name
+    }
+
+    /// What the index said of `address` (r9-12, the multisig's
+    /// `index_names`): a Vela account's registered name (`vela` with its
+    /// `name`), a miss (`vela` false), or `nil` — nobody answered, so
+    /// nothing is said and it is asked again later.
+    struct Verdict: Equatable {
+        let vela: Bool
+        let name: String?
+    }
+
+    func lookup(for address: String) async -> Verdict? {
         let key = address.lowercased()
         guard key.count == 42, key.hasPrefix("0x") else { return nil }
 
         let stored = store.readObject(Self.cachePrefix + key)
         if let hit = stored["hit"] as? [String: Any], let name = hit["name"] as? String, !name.isEmpty {
-            return name
+            return Verdict(vela: true, name: name)
         }
         if let missAt = (stored["missAt"] as? NSNumber)?.doubleValue, now() - missAt < Self.missTTLMs {
-            return nil
+            return Verdict(vela: false, name: nil)
         }
 
         var answers: [[String: Any]] = []
@@ -110,9 +123,10 @@ final class RegistryNameLookup {
             case "briefly":
                 if name == nil { store.writeObject(Self.cachePrefix + key, ["missAt": now()]) }
             default:
-                break
+                // Not to be kept: nobody answered — no verdict.
+                if name == nil { return nil }
             }
-            return name
+            return Verdict(vela: name != nil, name: name)
         }
         return nil
     }

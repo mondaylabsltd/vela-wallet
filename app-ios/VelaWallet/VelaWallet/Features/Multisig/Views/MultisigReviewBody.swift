@@ -55,7 +55,8 @@ struct MsReviewBody: View {
     /// note. What no block carries is drawn here: nothing is signed.
     @ViewBuilder private var concerns: some View {
         if review["sign"]?["allowed"]?.bool == false {
-            MsNote(text: words.t("review.blocked"), tone: .danger, identifier: "multisig.review.blocked")
+            // r9-9: the core's own reason, said once.
+            MsNote(text: words.refusalLine(review), tone: .danger, identifier: "multisig.review.blocked")
         }
     }
 
@@ -64,7 +65,7 @@ struct MsReviewBody: View {
     static func concernText(_ concern: MsJSON, review: MsJSON? = nil, words: MsWords) -> String? {
         switch concern.kind {
         case "notSigned":
-            return words.t("proposal.refused", ["reason": concern["why"]?.string ?? ""])
+            return words.refusalLine(review)
         case "stateChange":
             return words.t("review.stateTitle")
         case "stateUnread":
@@ -294,6 +295,10 @@ struct MsReviewBody: View {
             }
         case "unavailable":
             MsNote(text: words.t("review.stateUnread", ["network": network]), tone: .warning, identifier: "multisig.review.state.unread")
+        case "withheld":
+            // r9-9: refused for another reason, said once above — nothing in
+            // the guard's place (no "changes nothing" beside "won't sign").
+            EmptyView()
         default:
             EmptyView()
         }

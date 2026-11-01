@@ -210,8 +210,10 @@ struct MsProposalModel {
     /// The lines that say where it stands, in order.
     var notes: [(text: String, tone: MsNote.Tone, id: String)] {
         var out: [(String, MsNote.Tone, String)] = []
-        if let refusal = item.refusal, !refusal.isEmpty {
-            out.append((words.t("proposal.refused", ["reason": refusal]), .danger, "refused"))
+        // r9-9: a refusal is said once, by the review's body in the core's
+        // words; with no review to draw, the plain line.
+        if let refusal = item.refusal, !refusal.isEmpty, review == nil, !reviewHolding {
+            out.append((words.refusalLine(nil), .danger, "refused"))
         }
         if item.cancelledBy != nil, item.action?.kind != "cancel" {
             out.append((words.t("proposal.cancelPending"), .warning, "cancelPending"))
@@ -239,7 +241,10 @@ struct MsProposalModel {
         if let failure = words.actionFailure(executeState, chainId: chainId) {
             out.append((failure, .danger, "executeFailed"))
         }
-        if canApprove.isEmpty, !approvedByHere, !isDone, account != nil, (account?.owners.count ?? 0) > 0, canExecute.isEmpty {
+        // r9-9: "none is signed in on this device" only when the core says
+        // no member of it is here (`members_here`), whatever this one asks.
+        if !isDone, item.membersHere?.isEmpty ?? (canApprove.isEmpty && !approvedByHere && account != nil
+            && (account?.owners.count ?? 0) > 0 && canExecute.isEmpty) {
             out.append((words.t("proposal.notMember"), .neutral, "notMember"))
         }
         return out.map { (text: $0.0, tone: $0.1, id: $0.2) }
@@ -344,6 +349,18 @@ struct MsProposalModel {
         case "spent": return (words.t("proposal.doneNote"), .neutral)
         default: return nil
         }
+    }
+
+    /// core-ms-2: whose ONE press approves and executes it — the member
+    /// picked, when the machine offers it that press, else the first it
+    /// offers; `nil` when it offers none. Its look is the fee said before
+    /// the press (r9 S4).
+    func oneTouchExecutor(chosen: String?) -> String? {
+        let offered = view.approveExecute(item)
+        if let chosen, let match = offered.first(where: { $0.caseInsensitiveCompare(chosen) == .orderedSame }) {
+            return match
+        }
+        return offered.first
     }
 
     /// The setup an execution carries (deploying the multisig, activating accounts).
@@ -474,6 +491,22 @@ struct MsProposalModel {
     /// or one nothing says yet (the web's `signWithWallet`).
     var offersOutsideWallet: Bool { !(outside + either).isEmpty }
 
+    /// r9-7: a member still to approve whom the machine's split has not
+    /// placed yet — its answer not in, or a read that did not answer (a
+    /// network out of reach, a read bounded right after this device's own
+    /// proposal, when every look goes out at once). The sheet asks the
+    /// machine again (`read_signers`); nothing is offered on a guess
+    /// meanwhile. This device's own members are never read.
+    var signersUnread: Bool {
+        guard !past, !enough else { return false }
+        let others = stillNeeded.filter { words.localName($0) == nil && !canApprove.contains($0) }
+        guard !others.isEmpty else { return false }
+        guard let signers else { return true }
+        return others.contains { owner in
+            signers.rows.first { $0.owner.caseInsensitiveCompare(owner) == .orderedSame }?.kind == nil
+        }
+    }
+
     // MARK: - History
 
     func timelineLine(_ step: MsTagged) -> String? {
@@ -494,6 +527,14 @@ struct MsProposalModel {
         case "replaced": return words.t("proposal.voided")
         default: return nil
         }
+    }
+
+    /// When a step happened, as the web's timeline says it under the step
+    /// (`formatDateTime` of the machine's `at_ms`) — nothing when the machine
+    /// has no time for it (r9 S4: History had no timestamps).
+    func timelineWhen(_ step: MsTagged) -> String? {
+        guard let ms = step["at_ms"]?.double, ms > 0 else { return nil }
+        return Formats.dateTime(Date(timeIntervalSince1970: ms / 1000))
     }
 }
 
@@ -532,6 +573,11 @@ struct MultisigProposalSheet: View {
     /// (`REVIEW_RETRY_MS`).
     static let reviewFreshSeconds: Double = 30
     static let reviewRetrySeconds: Double = 5
+    /// r9-7: while a member still to approve is unplaced, the split is asked
+    /// again this often (past the core's own bound on one read,
+    /// `SIGNER_READ_MS`, 8 s), at most `signersRetries` times per change.
+    static let signersRetrySeconds: Double = 10
+    static let signersRetries = 6
 
     /// Which signature an "… anyway" step is for.
     enum SignKind { case approve, approveExecute, execute }
@@ -577,7 +623,11 @@ struct MultisigProposalSheet: View {
     private var askKey: String {
         guard let item else { return "none" }
         let members = view.chain(chainId)?.members
-        return "\(item.safeTxHash.lowercased()):\(item.status):\(members?.owners.joined(separator: ",") ?? ""):\(members?.threshold ?? 0)"
+        // r9-7: the approvals that count, too (the web's `signersKey` over
+        // the members still to approve): this device's own proposal lands
+        // with its approval, and the split is asked for again then.
+        let counted = item.approvals.filter(\.counts).map { $0.owner.lowercased() }.sorted().joined(separator: ",")
+        return "\(item.safeTxHash.lowercased()):\(item.status):\(members?.owners.joined(separator: ",") ?? ""):\(members?.threshold ?? 0):\(counted)"
     }
 
     /// The review now, again every `reviewFreshSeconds` while the sheet is
@@ -595,10 +645,20 @@ struct MultisigProposalSheet: View {
         }
         let started = ContinuousClock.now
         var lastAsk = ContinuousClock.now
+        var lastSignersAsk = ContinuousClock.now
+        var signersAsked = 0
         while !Task.isCancelled {
             try? await Task.sleep(for: .seconds(1))
             guard let current = self.item else { continue }
             let model = MsProposalModel(item: current, view: view, words: words, account: nil)
+            // r9-7: a member the split has not placed is asked for again —
+            // bounded, so a network that never answers costs a few reads.
+            if model.signersUnread, signersAsked < Self.signersRetries,
+               ContinuousClock.now - lastSignersAsk >= .seconds(Self.signersRetrySeconds) {
+                hub.sendProposal(["type": "read_signers", "chain_id": chainId, "safe_tx_hash": current.safeTxHash])
+                lastSignersAsk = ContinuousClock.now
+                signersAsked += 1
+            }
             if model.reviewHolding, ContinuousClock.now - started >= Self.reviewWaitCap {
                 reviewWaitedOut = true
             }
@@ -809,6 +869,16 @@ struct MultisigProposalSheet: View {
                     let oneTouch = model.view.approveExecute(model.item)
                     let completes = !oneTouch.isEmpty
                     if completes {
+                        // r9 S4: the fee before the passkey — the machine's
+                        // look for the member whose press executes (the web
+                        // draws the executor's priced look under its one press).
+                        let presser = model.oneTouchExecutor(chosen: member) ?? oneTouch[0]
+                        if let line = model.feeLine(for: presser) {
+                            MsNote(text: line.text, tone: line.tone, identifier: "multisig.proposal.approveExecuteFee")
+                        }
+                        ForEach(model.setupLines(for: presser), id: \.self) { line in
+                            MsNote(text: line)
+                        }
                         VelaButton(
                             title: model.signLabel("proposal.approveAndExecute", anyway: "review.approveExecuteAnyway"),
                             kind: model.signAnyway ? .danger : .primary,
@@ -816,8 +886,7 @@ struct MultisigProposalSheet: View {
                             loading: approving || executing,
                             haptic: .confirm
                         ) {
-                            let chosen = member.flatMap { m in oneTouch.first { $0.caseInsensitiveCompare(m) == .orderedSame } }
-                            let executor = chosen ?? oneTouch[0]
+                            let executor = model.oneTouchExecutor(chosen: member) ?? oneTouch[0]
                             signing(model, .approveExecute) {
                                 hub.sendProposal([
                                     "type": "approve_execute", "chain_id": chainId, "safe_tx_hash": model.hash,
@@ -889,7 +958,9 @@ struct MultisigProposalSheet: View {
                             Button(words.t("proposal.reject"), role: .destructive) { reject(model) }
                             Button(words.t("proposal.rejectCancel"), role: .cancel) {}
                         } message: {
-                            Text(verbatim: words.t("proposal.rejectHint", ["threshold": String(model.item.threshold)]))
+                            Text(verbatim: words.t("proposal.rejectHint", count: model.item.threshold, [
+                                "threshold": String(model.item.threshold), "count": String(model.item.threshold),
+                            ]))
                         }
                 }
             }
@@ -987,14 +1058,25 @@ struct MultisigProposalSheet: View {
     // MARK: - History
 
     @ViewBuilder private func history(_ model: MsProposalModel) -> some View {
-        let lines = model.timeline.compactMap(model.timelineLine)
+        let lines = model.timeline.compactMap { step in
+            model.timelineLine(step).map { (text: $0, when: model.timelineWhen(step)) }
+        }
         if !lines.isEmpty {
             MsSection(title: words.t("timeline.heading")) {
                 ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
-                    Text(verbatim: line)
-                        .typeRole(Typography.rowSub.scaled(textScale))
-                        .foregroundStyle(theme.fgMuted)
-                        .fixedSize(horizontal: false, vertical: true)
+                    VStack(alignment: .leading, spacing: Tokens.Space.s2) {
+                        Text(verbatim: line.text)
+                            .typeRole(Typography.rowSub.scaled(textScale))
+                            .foregroundStyle(theme.fgMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if let when = line.when {
+                            Text(verbatim: when)
+                                .typeRole(Typography.flowCaption.scaled(textScale))
+                                .foregroundStyle(theme.fgSubtle)
+                                .accessibilityIdentifier("multisig.proposal.history.when")
+                        }
+                    }
+                    .accessibilityElement(children: .combine)
                 }
             }
             .accessibilityIdentifier("multisig.proposal.history")

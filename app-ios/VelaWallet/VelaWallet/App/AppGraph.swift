@@ -477,6 +477,8 @@ final class AppGraph {
                 await MultisigFacts.read(accounts: store, port: port, shelf: shelf)
             }
         )
+        // r9-12: the passkey index's names, for the core's one name per member.
+        multisig.indexLookup = { [identity] address in await identity.passkeyIndex(address) }
         // A multisig's send proposes (its confirm): the proposals machine's
         // draft, review and one passkey.
         sendExecutor.ports.proposeSafeTx = { [weak multisig] operation in

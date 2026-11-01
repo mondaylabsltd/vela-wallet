@@ -47,8 +47,10 @@ struct MultisigDraftReviewSheet: View {
                 Text(verbatim: "\(words.network(item.chainId)) · \(words.t("action.numberValue", ["nonce": item.nonce]))")
                     .typeRole(Typography.rowSub.scaled(textScale))
                     .foregroundStyle(theme.fgSubtle)
-                if let refusal = item.refusal, !refusal.isEmpty {
-                    MsNote(text: words.t("proposal.refused", ["reason": refusal]), tone: .danger)
+                // r9-9: why it is not signed is the review's one line (its
+                // body below), never the core's English reason.
+                if let refusal = item.refusal, !refusal.isEmpty, draft.review.isNull {
+                    MsNote(text: words.refusalLine(nil), tone: .danger)
                 }
                 if !draft.review.isNull {
                     MsReviewBody(review: draft.review, chainId: item.chainId, words: words)
