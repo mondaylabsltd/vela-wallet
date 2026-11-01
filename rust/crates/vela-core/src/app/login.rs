@@ -622,7 +622,14 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
         (Stage::Completing, ShellResult::OnboardingCompleted) => Command::done(),
 
         // -- ceremony failures anywhere else ------------------------------------
-        (_, ShellResult::PasskeyFailed { kind, message }) => match kind {
+        (
+            _,
+            ShellResult::PasskeyFailed {
+                kind,
+                message,
+                error,
+            },
+        ) => match kind {
             // The user closed the sheet. Not an error, not an alert.
             FailureKind::Cancelled => {
                 model.stage = Stage::Idle;
@@ -633,7 +640,8 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
             }
             _ => idle_with_prompt(
                 model,
-                PromptKind::sign_in_failed_via(message.unwrap_or_default(), model.method),
+                PromptKind::sign_in_failed_via(message.unwrap_or_default(), model.method)
+                    .with_error_words(error.as_ref()),
             ),
         },
 
@@ -942,9 +950,17 @@ fn reconstruct_account(
 
     let ordered = reorder_to_address(members, &metadata.address)?;
 
-    let name = assertion
-        .user_name()
-        .or_else(|| metadata.key_names.first().cloned())
+    // r9-12 / r8-25: the name the wallet published in the passkey index is
+    // its name on every device (the index answers it to every other device
+    // that names this account); the signing key's own user handle — one
+    // key's name, which differs per key of a multi-key wallet — only when
+    // the index holds none.
+    let name = metadata
+        .key_names
+        .first()
+        .map(|n| n.trim().to_owned())
+        .filter(|n| !n.is_empty())
+        .or_else(|| assertion.user_name())
         .unwrap_or_else(|| FALLBACK_ACCOUNT_NAME.to_owned());
     let keys: Vec<AccountKey> = ordered
         .iter()

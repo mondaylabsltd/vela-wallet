@@ -13,6 +13,18 @@
 //! label is an unauthenticated hint: none of them decides anything, and a
 //! carried one never overwrites what this device keeps (`name_members`).
 //!
+//! r10 (r9-12 / r8-25 / r4D-5 still seen, decided by best practice and the
+//! core principle): the member's OWN published name — the passkey index's,
+//! written with its founding key, the same answer on every device — comes
+//! FIRST, before what a multisig here keeps. A kept label is one device's
+//! (or one inviter's) word for someone else; the published name is the
+//! member's own, and only it can be the same on a device that never took the
+//! invite. So one address reads the same in every place it is named —
+//! headers, the switcher, Activity, Settings, sheets and invites, this
+//! device's own accounts included (their local name is the fallback when the
+//! index holds none; login keeps the published name too). Every shell draws
+//! the accounts machine's `member_labels` for any address it names.
+//!
 //! The shell keeps the passkey index’s answers (its I/O and its reactive
 //! cache) and asks here: `names.label`, `names.kind`, `names.short`.
 
@@ -39,17 +51,17 @@ fn named(name: Option<&str>) -> Option<&str> {
     name.map(str::trim).filter(|n| !n.is_empty())
 }
 
-/// The name to show for `address` (r8-25): `kept` (what a multisig here
-/// keeps), else `registered` (the passkey index’s), else `own` (this
-/// device’s account name), else its short address.
+/// The name to show for `address` (r10, r8-25): `registered` (the member's
+/// own name in the passkey index), else `kept` (what a multisig here keeps),
+/// else `own` (this device’s account name), else its short address.
 pub fn label(
     address: &str,
     own: Option<&str>,
     kept: Option<&str>,
     registered: Option<&str>,
 ) -> String {
-    named(kept)
-        .or_else(|| named(registered))
+    named(registered)
+        .or_else(|| named(kept))
         .or_else(|| named(own))
         .map_or_else(|| short_address(address), str::to_owned)
 }
@@ -104,9 +116,10 @@ mod tests {
         assert_eq!(label(BOB, None, None, Some("bob.vela")), "bob.vela");
         assert_eq!(
             label(BOB, None, Some("Bob"), Some("bob.vela")),
-            "Bob",
-            "kept before the index"
+            "bob.vela",
+            "r10: the member's own published name before a kept label"
         );
+        assert_eq!(label(BOB, None, Some("Bob"), None), "Bob");
         assert_eq!(
             label(BOB, None, Some("  "), None),
             "0x3C44Cd…4293BC",
@@ -114,13 +127,33 @@ mod tests {
         );
     }
 
+    /// The shared vectors every shell replays through the door (r10).
+    #[test]
+    fn the_name_vectors_hold() {
+        let path = format!(
+            "{}/tests/vectors/multisig/names.json",
+            env!("CARGO_MANIFEST_DIR")
+        );
+        let v: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        let cases = v["cases"].as_array().unwrap();
+        assert!(cases.len() >= 6);
+        for case in cases {
+            let got: String = serde_json::from_str(&call("label", &case["args"]).unwrap()).unwrap();
+            assert_eq!(got, case["expect"].as_str().unwrap(), "{}", case["name"]);
+        }
+    }
+
     #[test]
     fn one_name_per_member_on_every_device_the_shared_names_first() {
-        // r8-25: what the multisig keeps (the invite's words), then the
-        // member's own registered name — the same on every device — before
-        // this device's private nickname for its account.
+        // r10: the member's own registered name — the same on every device —
+        // then what the multisig keeps (the invite's words), before this
+        // device's private nickname for its account.
         assert_eq!(
             label(BOB, Some("Parallel space"), Some("Dana"), Some("x")),
+            "x"
+        );
+        assert_eq!(
+            label(BOB, Some("Parallel space"), Some("Dana"), None),
             "Dana"
         );
         assert_eq!(

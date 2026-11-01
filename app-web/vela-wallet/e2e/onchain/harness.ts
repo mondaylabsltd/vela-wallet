@@ -133,7 +133,8 @@ export async function withInjectedWallet(context: BrowserContext, account: strin
 	);
 }
 
-async function seedNetwork(page: Page): Promise<void> {
+/** The fork as this profile's network for chain 100 (and the unread fork): what the person's own node override does. */
+export async function seedNetwork(page: Page): Promise<void> {
 	await page.evaluate(
 		(networks) => {
 			return new Promise<void>((resolve, reject) => {

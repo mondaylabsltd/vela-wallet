@@ -65,6 +65,18 @@ export function linkWaiting(now = Date.now()): boolean {
 	}
 }
 
+/** r10: drop the kept record if it is `hash` (a link the core's codec cannot read). */
+export function forgetKeptLink(hash: string): void {
+	try {
+		const raw = localStorage.getItem(KEPT_LINK_KEY);
+		if (raw && (JSON.parse(raw) as { hash?: unknown }).hash === hash) {
+			localStorage.removeItem(KEPT_LINK_KEY);
+		}
+	} catch {
+		// Storage refused or the record does not read: nothing kept to drop.
+	}
+}
+
 /** Keep `hash` if it is a multisig link. Whether it was kept. */
 export function keepLink(hash: string, now = Date.now()): boolean {
 	if (!isMultisigLink(hash)) return false;

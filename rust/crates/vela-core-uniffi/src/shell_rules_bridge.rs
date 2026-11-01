@@ -35,9 +35,53 @@ pub fn ens_reverse_node(address: String) -> Result<String, CoreError> {
     Ok(vela_core::ens::ens_reverse_node(&address)?)
 }
 
+/// r9-17: the networks an account's incoming scan reads, and where its
+/// native balance is watched — `incoming_scan::scan_plan`. `facts_json` is a
+/// `TrustScanFacts`; the answer an `IncomingScanPlan`, both JSON. The scan
+/// itself plans this from the same facts (`token_trust`'s `ScanRequested`);
+/// a shell asks only to prime the registry and the native watch.
+#[uniffi::export]
+#[must_use]
+pub fn incoming_scan_plan(facts_json: String) -> String {
+    vela_core::app::incoming_scan::scan_plan_json(&facts_json)
+}
+
+/// r9-17: one poll's reads on one network — `incoming_scan::scan_windows`
+/// (`IncomingScanWindowsAsk` JSON in, `IncomingScanWindows` JSON out). For
+/// the shared vectors (`tests/vectors/incoming-scan.json`); the scan runs
+/// them inside `token_trust`.
+#[uniffi::export]
+#[must_use]
+pub fn incoming_scan_windows(ask_json: String) -> String {
+    vela_core::app::incoming_scan::scan_windows_json(&ask_json)
+}
+
+/// r9-17: the wait before the next incoming scan for the page as it stands
+/// — `incoming_scan::next_scan_ms`. The feed's `next_scan` already carries
+/// it; this is for the shared vectors.
+#[uniffi::export]
+#[must_use]
+pub fn incoming_next_scan_ms(visible: bool, since_interaction_ms: f64) -> u32 {
+    vela_core::app::incoming_scan::next_scan_ms(visible, since_interaction_ms)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_incoming_scan_exports_are_the_core_rules() {
+        let plan = incoming_scan_plan(
+            r#"{"account_networks":[{"chain_id":5042002}],"space_chain_ids":[11155111,5042002]}"#
+                .to_owned(),
+        );
+        assert_eq!(
+            plan,
+            r#"{"scan_chain_ids":[5042002],"native_watch_chain_ids":[5042002]}"#
+        );
+        assert_eq!(incoming_next_scan_ms(false, 0.0), 60_000);
+        assert!(incoming_scan_windows("{}".to_owned()).contains("\"live\""));
+    }
 
     #[test]
     fn the_exports_are_the_core_rules() {

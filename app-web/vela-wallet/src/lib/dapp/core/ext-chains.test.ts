@@ -34,16 +34,20 @@ describe('the published network catalog', () => {
 
 	afterEach(() => local.clear());
 
-	// Spec 105: a dApp is offered the space in front's chains — the mainnet
-	// space here, every built-in mainnet and no testnet.
+	// Spec 105: a new site starts among the space in front's chains — the
+	// mainnet space here; the worker still serves both spaces (r10).
 	const MAINNETS = DEFAULT_NETWORKS.filter((n) => !n.isTestnet);
 
-	it('lists every built-in chain of the space by id, and nothing the wallet does not have', () => {
+	it('lists every built-in chain of BOTH spaces by id, and nothing the wallet does not have', () => {
+		// r10: the worker serves every network Vela has — Safari, in the
+		// mainnet space, refused a switch to Arc Testnet as "not in Vela's
+		// networks". Where a new site starts is the space's (`order`).
 		expect(
 			Object.keys(catalog.chains)
 				.map(Number)
 				.sort((a, b) => a - b)
-		).toEqual(MAINNETS.map((n) => n.chainId).sort((a, b) => a - b));
+		).toEqual(DEFAULT_NETWORKS.map((n) => n.chainId).sort((a, b) => a - b));
+		expect(catalog.chains['5042002']?.name).toBe('Arc Testnet');
 		expect(MAINNETS.length).toBeLessThan(DEFAULT_NETWORKS.length);
 		expect(catalog.version).toBe(1);
 		expect(catalog.updatedAtMs).toBe(1_800_000_000_000);
@@ -65,17 +69,15 @@ describe('the published network catalog', () => {
 		}
 	});
 
-	it('in the testnet space, offers the testnets and no mainnet', () => {
+	it('in the testnet space, starts sites on the testnets and still serves the mainnets', () => {
 		networkSpace.set('testnet');
 		try {
-			const ids = Object.keys(buildExtChainCatalog().chains).map(Number);
-			expect(ids.sort((a, b) => a - b)).toEqual(
-				DEFAULT_NETWORKS.filter((n) => n.isTestnet)
-					.map((n) => n.chainId)
-					.sort((a, b) => a - b)
-			);
+			const testnet = buildExtChainCatalog();
+			const ids = Object.keys(testnet.chains).map(Number);
 			expect(ids).toContain(11155111);
-			expect(ids).not.toContain(1);
+			expect(ids).toContain(1);
+			expect(testnet.order).toContain(11155111);
+			expect(testnet.order).not.toContain(1);
 		} finally {
 			networkSpace.set('mainnet');
 		}

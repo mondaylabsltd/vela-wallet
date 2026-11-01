@@ -316,11 +316,11 @@ export function firstCallData(request: LocalTransaction['signedRequest']): strin
 /**
  * One receipt sweep per account at a time.
  *
- * `ScanIncomingTransfers` is a multi-chain `eth_getLogs` sweep, and the shell
- * issues it from three places that can overlap (the account hand-off, the focus
- * tick, the incoming cadence's live tick — `incoming-cadence.ts`). `fetchTokens`
- * solves the same problem for balances with an in-flight promise; this is
- * that, one layer up.
+ * `ScanIncomingTransfers` is a multi-chain `eth_getLogs` sweep. The core asks
+ * for one per account at a time (r9-17); this guard is the executor's own
+ * belt to that: a feed session replaced while its sweep runs (a reload of the
+ * resident) never doubles it. `fetchTokens` solves the same problem for
+ * balances with an in-flight promise; this is that, one layer up.
  *
  * A follower answers `0`, and that is not a fudge — it is the literal truth the
  * operation is defined to report: `new_count` is how many receipts THIS scan

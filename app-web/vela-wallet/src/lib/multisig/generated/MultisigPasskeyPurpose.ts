@@ -10,4 +10,13 @@ export type MultisigPasskeyPurpose = { "kind": "approve", multisig: string, safe
  * a page signing it says so, in the danger style, as the app's
  * word (it may add friction, never take it away).
  */
-anyway: boolean, } | { "kind": "record", multisig: string, };
+anyway: boolean, 
+/**
+ * r10 page: the members and the approvals needed NOW, as the
+ * proposal was gathered against them (the chain's where the
+ * multisig is deployed). A page draws a member change before →
+ * after ("Members 3 → 4 · Approvals 2 of 3 → 2 of 4") — the
+ * "before" as the app's word; it cannot read the chain itself.
+ * Empty / 0 from a shell that says nothing.
+ */
+owners: Array<string>, threshold: number, } | { "kind": "record", multisig: string, };

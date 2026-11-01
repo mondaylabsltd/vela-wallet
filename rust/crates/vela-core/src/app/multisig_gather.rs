@@ -158,6 +158,7 @@ pub async fn gather_review<Ev: Send + 'static>(
                 chain_id,
                 from: subject.safe.clone(),
                 calls: reads.sim_calls.clone(),
+                state_overrides: reads.sim_state_overrides.clone(),
             })
             .await
         {

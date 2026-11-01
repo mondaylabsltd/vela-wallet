@@ -26,6 +26,8 @@ export interface WelcomeMessages {
 	alreadyHaveWallet: string;
 	/** r5reg: a multisig link opened here waits for a wallet: said, never silent. */
 	linkWaiting: string;
+	/** r10: the link opened here does not read (cut short, damaged): said, never "waiting". */
+	linkBroken: string;
 }
 
 /**
@@ -50,7 +52,8 @@ export const WELCOME_KEYS = [
 	'onboarding.welcome.heroSubtitle',
 	'onboarding.welcome.createWallet',
 	'onboarding.welcome.alreadyHaveWallet',
-	'onboarding.welcomeWeb.linkWaiting'
+	'onboarding.welcomeWeb.linkWaiting',
+	'onboarding.welcomeWeb.linkBroken'
 ] as const;
 
 /* ------------------------------------------------------------------------ */
@@ -196,6 +199,22 @@ export const FLOW_PLURAL_KEYS = [
 	'onboarding.create.progressSubtitle'
 ] as const;
 
+/**
+ * Every sentence `passkey_error::PasskeyErrorKind::key` can name (round 10,
+ * real-device S3) — `onboarding.common.phoneLinkFailed` is the tenth, listed
+ * with the prompts.
+ */
+export const PASSKEY_ERROR_KEYS = [
+	'onboarding.common.passkeyError.cancelled',
+	'onboarding.common.passkeyError.notSupported',
+	'onboarding.common.passkeyError.noCredential',
+	'onboarding.common.passkeyError.appNotAssociated',
+	'onboarding.common.passkeyError.noNetwork',
+	'onboarding.common.passkeyError.alreadyRegistered',
+	'onboarding.common.passkeyError.timedOut',
+	'onboarding.common.passkeyError.other'
+] as const;
+
 /** Every prompt the two machines can raise (spec 019). */
 const FLOW_PROMPT_KEYS = [
 	'onboarding.create.alertErrorTitle',
@@ -222,6 +241,16 @@ const FLOW_PROMPT_KEYS = [
 	'onboarding.login.alertSelectorUnresponsive',
 	'onboarding.common.siteAccessBody',
 	'onboarding.common.safariPasskeyBody',
+	// Issue #446 / #450: the link to the other device, a security key this
+	// device could not use. `promptCopy` names them; without them here the
+	// sheet drew the bare key.
+	'onboarding.common.phoneLinkFailed',
+	'onboarding.common.keyUnavailableTitle',
+	'onboarding.common.keyUnavailableBody',
+	// Round 10 (real-device S3): the platform's passkey error, said in the
+	// person's language — the core names one (`PromptKind.words_key`, from
+	// `passkey_error::passkey_error_words`) in place of the browser's English.
+	...PASSKEY_ERROR_KEYS,
 	'onboarding.login.recoverOfferTitle',
 	'onboarding.login.recoverOfferBody',
 	'onboarding.login.recoverConfirm',

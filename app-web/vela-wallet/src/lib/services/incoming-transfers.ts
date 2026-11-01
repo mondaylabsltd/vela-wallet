@@ -24,6 +24,7 @@
 import { pollIncoming } from '$lib/wallet/core/token-trust-resident';
 import type { IncomingTransfer } from './transfer-types';
 import type { TrustIncomingView } from '$lib/core/generated/TrustIncomingView';
+import type { TrustScanFacts } from '$lib/core/generated/TrustScanFacts';
 
 /** The judged feed row in the shape `activity.ts` consumes. */
 function toTransfer(row: TrustIncomingView): IncomingTransfer {
@@ -42,15 +43,19 @@ function toTransfer(row: TrustIncomingView): IncomingTransfer {
 }
 
 /**
- * Scan `chainIds` for incoming transfers to `address`. Newest-first, the same
- * ordering `fetchIncomingTransfers` promised (the core's view sorts by block
- * then log index descending).
+ * Scan for incoming transfers to `address`. Newest-first, the same ordering
+ * `fetchIncomingTransfers` promised (the core's view sorts by block then log
+ * index descending). r9-17: the core plans the scan from `facts` — the
+ * networks, the live window, the bounded backfill; `scanChainIds` is its own
+ * answer for those facts (`incomingScanPlan`), here only to prime the
+ * registry's stablecoins of those networks before it runs.
  */
 export async function fetchIncomingTransfers(
 	address: string,
-	chainIds: number[]
+	facts: TrustScanFacts,
+	scanChainIds: number[]
 ): Promise<IncomingTransfer[]> {
 	if (!address) return [];
-	const incoming = await pollIncoming(address, chainIds);
+	const incoming = await pollIncoming(address, facts, scanChainIds);
 	return incoming.map(toTransfer);
 }

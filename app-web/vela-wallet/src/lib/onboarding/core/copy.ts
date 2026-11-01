@@ -266,7 +266,11 @@ export function promptCopy(kind: PromptKind, t: Translate): PromptCopy {
 							: // Issue #446: the link to the other device failed — the core says which.
 								kind.phone_link
 								? t('onboarding.common.phoneLinkFailed')
-								: kind.detail
+								: // Round 10: the core's sentence for the platform's error,
+									// never the browser's English in a translated sheet.
+									kind.words_key
+									? t(kind.words_key)
+									: kind.detail
 			};
 		case 'recover_offer':
 			return {
@@ -314,7 +318,10 @@ export function promptCopy(kind: PromptKind, t: Translate): PromptCopy {
 								: // Issue #446: not "set up Face ID" when it was the phone link.
 									kind.phone_link
 									? t('onboarding.common.phoneLinkFailed')
-									: t('onboarding.login.alertSignInFailedBody', { message: kind.detail })
+									: // Round 10: the core's sentence for the platform's error.
+										kind.words_key
+										? t(kind.words_key)
+										: t('onboarding.login.alertSignInFailedBody', { message: kind.detail })
 			};
 		default:
 			return unreachable(kind);

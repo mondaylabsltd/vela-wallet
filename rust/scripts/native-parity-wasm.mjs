@@ -168,6 +168,9 @@ export function nativeParityDispatch(wasm) {
     is_localhost_http: (i) => wasm.isLocalhostHttp(i.url),
     passkey_ceremony_end: (i) => wasm.passkeyCeremonyEnd(i.kind, i.elapsed_ms),
     passkey_sign_timeout_ms: () => wasm.passkeySignTimeoutMs(),
+    // `{ kind, key, failure }` — uniffi's `PasskeyErrorWords`, wire names.
+    passkey_error_words: (i) =>
+      json(wasm.passkeyErrorWords(i.platform, i.domain, i.code === null ? undefined : i.code, i.message)),
     rpc_node_standing: (i) => wasm.rpcNodeStanding(i.view_json, i.chain_id),
     // The verdict record, as uniffi's `SimOutcomeRecord` carries it (its
     // `deltas_json` parsed as `deltas`).

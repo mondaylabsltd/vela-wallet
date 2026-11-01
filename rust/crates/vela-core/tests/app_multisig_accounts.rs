@@ -2269,3 +2269,48 @@ fn one_name_per_member_and_the_invite_carries_every_known_one() {
     assert_eq!(kind(A), json!("passkey"));
     assert_eq!(kind(B), json!("wallet"));
 }
+
+/// r9-14: the rule a chain read last said is kept per multisig and served on
+/// its row, marked last known once it was not read this session — never the
+/// founding "Needs 2 of 3" when the chain said 2 of 4.
+#[test]
+fn the_rule_the_chain_said_is_kept_on_the_row() {
+    use vela_core::app::multisig_members::{MemberRule, RuleChip};
+    let g = genesis(&[A], 1, "0x18");
+    let mut world = World::default();
+    world.store.insert(
+        keys::ACCOUNTS.to_owned(),
+        json!([stored_row(&g, &[100], true)]).to_string(),
+    );
+    let mut sut = started(&mut world, vec![100]);
+    let row = sut.view().accounts[0].rule.clone();
+    assert_eq!(
+        row.chip,
+        RuleChip::Needs {
+            rule: MemberRule::of(1, 1)
+        },
+        "the founding rule before any read"
+    );
+    assert!(!row.from_chain);
+    assert!(row.last_known);
+    let now = RuleChip::Needs {
+        rule: MemberRule::of(2, 4),
+    };
+    run(
+        &mut sut,
+        &mut world,
+        Event::Apply {
+            address: g.address.clone(),
+            update: AccountUpdate::RuleNow { chip: now.clone() },
+        },
+    );
+    let row = sut.view().accounts[0].rule.clone();
+    assert_eq!(row.chip, now);
+    assert!(row.from_chain);
+    assert!(!row.last_known, "read this session");
+    let again = started(&mut world, vec![100]);
+    let row = again.view().accounts[0].rule.clone();
+    assert_eq!(row.chip, now, "kept across a reload");
+    assert!(row.from_chain);
+    assert!(row.last_known, "not read since");
+}

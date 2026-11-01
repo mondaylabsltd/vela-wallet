@@ -5565,6 +5565,7 @@ mod tests {
             selected: true,
             spent_by_operation: false,
             short: None,
+            short_with_amount: false,
         }];
         assert_eq!(
             fee_line(

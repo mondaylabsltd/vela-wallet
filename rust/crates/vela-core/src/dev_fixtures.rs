@@ -203,6 +203,13 @@ pub fn by_credential_id(id: &str) -> Result<Option<FixtureAccount>, CoreError> {
     Ok(None)
 }
 
+/// r9-12: the multi-key fixture wallet's name — the name the passkey index
+/// publishes for it (unit 10's `key_names[0]`, what every device that looks
+/// 0x88cC… up is answered). Each fixture KEY keeps its own name (Parallel
+/// One, Two, Three); the wallet of all three is never named after one of
+/// them: two different addresses must never share a name.
+pub const MULTI_NAME: &str = "Interleave";
+
 /// The multi-key fixture wallet: ALL fixture keys founding one Safe, fixture
 /// #1 pinned as `keys[0]`. Its address is what a parallel-space multi-key
 /// creation must derive and what a key-#2/#3 login must reconstruct.

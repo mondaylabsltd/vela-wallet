@@ -139,6 +139,18 @@ pub fn site_start_chain_for(
         .unwrap_or(1)
 }
 
+/// Whether a site may move to `chain_id` (`wallet_switchEthereumChain`, or an
+/// add of a network Vela has): only to a network of the space in front (spec
+/// 105's line, kept by the coordinator in r10 — test value is never mistaken
+/// for real money, so a page never puts a mainnet-space site on a testnet;
+/// moving between spaces is the person's own choice in Vela). The in-app
+/// browser asks this; the extension worker's twin is `switchRefusal`, held
+/// to the same vectors (`tests/vectors/site-start-chain.json` `switches`).
+#[must_use]
+pub fn site_may_switch_to(space_chain_ids: &[u32], chain_id: u32) -> bool {
+    space_chain_ids.contains(&chain_id)
+}
+
 /// [`chain_is_testnet`] for a shell holding the stored `vela.customNetworks`
 /// as JSON (the core's own snake-case records; unreadable is none).
 #[must_use]

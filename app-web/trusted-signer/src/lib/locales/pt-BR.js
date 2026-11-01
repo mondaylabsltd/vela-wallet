@@ -386,4 +386,15 @@ window.VelaCS.i18n.register('pt-BR', {
   'sentence.msAddOwnerOne': "{owner} passa a ser membro, e será necessária {threshold} aprovação.",
   'sentence.msRemoveOwnerOne': "{owner} deixa de ser membro, e será necessária {threshold} aprovação.",
   'sentence.msThresholdOne': "A partir de agora será necessária {threshold} aprovação.",
+  // r10: a multisig's coins are the multisig's, not the signer's; a member
+  // change reads before → after against the members the app says it has now.
+  'sentence.approveMs': "Isto permite que {spender} gaste até {amount} do multisig.",
+  'sentence.approveUnlimitedMs': "Isto permite que {spender} gaste todo o {symbol} do multisig — sem limite.",
+  'warn.unlimitedMs': "Ilimitado — este contrato pode gastar todo o {symbol} do multisig.",
+  'warn.approveAllMs': "Todos os NFTs que o multisig tem nesta coleção, agora e no futuro, podem ser levados a qualquer momento.",
+  'warn.nativeValueMs': "Esta chamada também envia {amount} do multisig para o contrato chamado, além de tudo o que aparece aqui.",
+  'field.msMembers': "Membros",
+  'value.msCountChange': "{before} → {after}",
+  'value.msApprovalsChange': "{before} de {beforeOf} → {after} de {afterOf}",
+  'warn.msMembersClaimOff': "Esta mudança não bate com os membros que, segundo o app, o multisig tem agora — pode falhar ao ser executada. Confira os membros com os outros antes de aprovar.",
 });

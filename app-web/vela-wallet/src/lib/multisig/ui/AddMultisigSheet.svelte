@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { listOf } from '$lib/i18n/list';
 	/**
 	 * Adding a multisig by its address — all another member needs. The
 	 * genesis comes from the service and is accepted only if the core
@@ -521,7 +522,7 @@
 				<div class="invite" data-testid="invite-summary">
 					{#if linkHas.length > 0}
 						<p class="line">
-							{fillTemplate(m.add.usedOn, { networks: linkHas.map(chainName).join(', ') })}
+							{fillTemplate(m.add.usedOn, { networks: listOf(linkHas.map(chainName), locale) })}
 						</p>
 					{:else if linkLacks !== null}
 						<p class="line" role="status">
