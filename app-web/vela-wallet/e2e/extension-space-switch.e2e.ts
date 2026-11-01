@@ -177,17 +177,22 @@ test.describe('a network-space switch and the connected sites', () => {
 		expect(switched.ok).toBe(true);
 		expect(await chainOf()).toBe(ARC_HEX);
 
-		// The person switches to the mainnet space in Vela.
-		await wallet.evaluate(() => localStorage.setItem('vela.networkSpace', 'mainnet'));
-		await wallet.reload();
-		await expect.poll(() => publishedSpace(wallet), { timeout: 60_000 }).toBe('mainnet');
+		// The person switches to the mainnet space in Vela: the wallet, opened
+		// in it, publishes the mainnet space's catalog.
 		await wallet.close();
+		const mainnet = await context.newPage();
+		await mainnet.addInitScript(() => localStorage.setItem('vela.networkSpace', 'mainnet'));
+		await mainnet.goto(`chrome-extension://${id}/en/wallet.html`);
+		await expect.poll(() => publishedSpace(mainnet), { timeout: 60_000 }).toBe('mainnet');
+		await mainnet.close();
 
 		// The site is on a network of the mainnet space now — never Arc — and
 		// its page was told.
 		await expect.poll(chainOf, { timeout: 15_000 }).not.toBe(ARC_HEX);
 		const now = await chainOf();
-		expect(CHAINS.find((c) => c.chainId === parseInt(now, 16))?.testnet ?? true).toBe(false);
+		const network = CHAINS.find((c) => c.chainId === parseInt(now, 16));
+		expect(network, `a network Vela has: ${now}`).toBeDefined();
+		expect(network?.testnet === true).toBe(false);
 		await expect
 			.poll(async () =>
 				(await readState(site)).events.some((e) => e.event === 'chainChanged' && e.data === now)
