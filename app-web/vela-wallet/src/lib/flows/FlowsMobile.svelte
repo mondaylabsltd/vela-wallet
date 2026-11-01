@@ -192,6 +192,12 @@
 		 * host then adds no box of its own — the sheet takes the page's.
 		 */
 		sheetOnly?: boolean;
+		/**
+		 * r10 follow-up: the history list's scroll or drag started (`true`) or
+		 * settled (`false`) — the incoming check waits meanwhile. Absent in
+		 * the gallery.
+		 */
+		ongesture?: (on: boolean) => void;
 	}
 
 	let {
@@ -206,7 +212,8 @@
 		ondeletetx,
 		onchains,
 		onincludenetwork,
-		sheetOnly = false
+		sheetOnly = false,
+		ongesture
 	}: Props = $props();
 
 	const base = $derived(model.base);
@@ -259,7 +266,7 @@
 		</FlowScreen>
 	{:else if base.kind === 'history'}
 		<FlowScreen header={base.model.header} {onback} onpill={onchains}>
-			<History model={base.model} onselect={(g, r) => go('tx-detail', g * 100 + r)} />
+			<History model={base.model} onselect={(g, r) => go('tx-detail', g * 100 + r)} {ongesture} />
 		</FlowScreen>
 	{:else if base.kind === 'assets'}
 		<FlowScreen

@@ -837,6 +837,9 @@
 			);
 			// Usage statistics: the op is with the relay; the tracker says how it ends.
 			track('send_submitted', { chain: handoff.chainId });
+			// r10 follow-up: a send left this account — the incoming check
+			// looks at once and its back-off starts again.
+			feed.sent();
 			watchSendOutcome(handoff.userOpHash, handoff.chainId);
 		});
 		startTxTracker();
@@ -1824,6 +1827,11 @@
 	// browser comes back online). The page reports itself and runs the timer
 	// the core arms (`incoming-cadence.ts`).
 	onMount(() => followIncomingCadence(feed.cadencePort()));
+	/**
+	 * r10 follow-up: the home's and the history's lists scrolling — a scan
+	 * that comes due meanwhile waits until they settle (`list-gesture.ts`).
+	 */
+	const listGestured = (on: boolean) => feed.interacting(on);
 
 	// The 10-minute aggregate poll the Expo home ran too (the core's
 	// `AUTO_REFRESH_MS`; the timer is the shell's). A native coin arriving
@@ -2901,6 +2909,7 @@
 		batch={batchActions}
 		ondeletetx={deleteSelectedTx}
 		onincludenetwork={includeNetwork}
+		ongesture={listGestured}
 	/>
 {/snippet}
 
@@ -2942,6 +2951,7 @@
 				onassetclose={() => (selectedAssetId = null)}
 				onactivity={openActivity}
 				ongroupaction={groupAction}
+				ongesture={listGestured}
 			/>
 		</div>
 		{#if desktopFlow === 'ds1'}
@@ -2983,6 +2993,7 @@
 					onasset={(row) => (selectedAssetId = row.id ?? null)}
 					narrowed={homeNarrowed}
 					onshowall={() => chainFilter.select(null)}
+					ongesture={listGestured}
 				/>
 				{#if shownFlowState !== undefined}
 					<!-- Note 16: a transaction or a holding tapped on the home opens
@@ -3119,6 +3130,7 @@
 		onchains={() => (chainSheetOpen = true)}
 		onincludenetwork={includeNetwork}
 		{sheetOnly}
+		ongesture={listGestured}
 	/>
 {/snippet}
 

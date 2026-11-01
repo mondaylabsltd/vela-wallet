@@ -368,7 +368,8 @@ impl Machine for TxTracker {
                 sender,
                 user_op_hash,
             } => {
-                let (chain_id, entry_point, sender) = (*chain_id, entry_point.clone(), sender.clone());
+                let (chain_id, entry_point, sender) =
+                    (*chain_id, entry_point.clone(), sender.clone());
                 let user_op_hash = user_op_hash.to_lowercase();
                 Answer::Blocking(Box::new(move || {
                     let read = crate::executor::chain::head_block(chain_id).and_then(|head| {
@@ -668,7 +669,12 @@ pub fn submitted(handoff: Handoff, cx: &mut App) {
 /// account's nonce while the op is in doubt instead of waiting out the
 /// relay's grace (the web's `noteSubmitFacts`). Sent after the
 /// [`submitted`] that named its records.
-pub fn submit_facts(user_op_hash: &str, nonce: String, relay_refusal: Option<String>, cx: &mut App) {
+pub fn submit_facts(
+    user_op_hash: &str,
+    nonce: String,
+    relay_refusal: Option<String>,
+    cx: &mut App,
+) {
     resident::resident::<TxTracker>(cx).update(cx, |resident, cx| {
         resident.dispatch(
             Event::SubmitFacts {

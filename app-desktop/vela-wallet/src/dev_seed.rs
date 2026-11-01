@@ -42,14 +42,18 @@ const ENDPOINT_FIELDS: [&str; 5] = [
 /// does not parse is said in the log and skipped.
 pub fn apply() {
     if let Some(seed) = crate::dev_env::var!("VELA_SERVICE_ENDPOINTS") {
-        let stored = storage::read_value(storage::KEY_SERVICE_ENDPOINTS).ok().flatten();
+        let stored = storage::read_value(storage::KEY_SERVICE_ENDPOINTS)
+            .ok()
+            .flatten();
         match merge_endpoints(stored, &seed) {
             Ok(value) => write(storage::KEY_SERVICE_ENDPOINTS, value),
             Err(why) => vlog!("dev_seed", "VELA_SERVICE_ENDPOINTS skipped: {why}"),
         }
     }
     if let Some(seed) = crate::dev_env::var!("VELA_RPC_OVERRIDES") {
-        let stored = storage::read_value(storage::KEY_NETWORK_CONFIG).ok().flatten();
+        let stored = storage::read_value(storage::KEY_NETWORK_CONFIG)
+            .ok()
+            .flatten();
         match merge_rpc_overrides(stored, &seed) {
             Ok(value) => write(storage::KEY_NETWORK_CONFIG, value),
             Err(why) => vlog!("dev_seed", "VELA_RPC_OVERRIDES skipped: {why}"),
@@ -227,9 +231,9 @@ pub fn merge_rpc_overrides(stored: Option<Value>, seed: &str) -> Result<Value, S
         let Some(url) = url.as_str().map(str::trim).filter(|url| !url.is_empty()) else {
             return Err(format!("chain {chain_id}: not a URL"));
         };
-        let at = rows
-            .iter()
-            .position(|row| row.get("chainId").and_then(Value::as_u64) == Some(u64::from(chain_id)));
+        let at = rows.iter().position(|row| {
+            row.get("chainId").and_then(Value::as_u64) == Some(u64::from(chain_id))
+        });
         match at {
             Some(at) => rows[at]["rpcURL"] = Value::String(url.to_owned()),
             None => rows.push(serde_json::json!({
@@ -259,7 +263,10 @@ mod tests {
         assert_eq!(merged["fiatRatesURL"], "https://rates.example");
         assert_eq!(merged["bundlerServiceURL"], "http://127.0.0.1:9190");
         assert_eq!(merged["genesisServiceURL"], "http://127.0.0.1:9187");
-        assert!(merge_endpoints(None, r#"{"bundler":"x"}"#).is_err(), "an unknown name");
+        assert!(
+            merge_endpoints(None, r#"{"bundler":"x"}"#).is_err(),
+            "an unknown name"
+        );
         assert!(merge_endpoints(None, r#"{"bundlerServiceURL":""}"#).is_err());
         assert!(merge_endpoints(None, "[1]").is_err());
         assert!(merge_endpoints(None, "not json").is_err());
@@ -293,10 +300,14 @@ mod tests {
     #[test]
     fn a_seeded_store_reads_back_as_seeded() {
         crate::executor::storage::tests::with_temp_state("dev-seed", || {
-            let endpoints = merge_endpoints(None, r#"{"bundlerServiceURL":"http://127.0.0.1:9190"}"#)
-                .unwrap_or_default();
+            let endpoints =
+                merge_endpoints(None, r#"{"bundlerServiceURL":"http://127.0.0.1:9190"}"#)
+                    .unwrap_or_default();
             write(storage::KEY_SERVICE_ENDPOINTS, endpoints);
-            write(PEERCONNECT_KEY, Value::String("ws://127.0.0.1:9192".to_owned()));
+            write(
+                PEERCONNECT_KEY,
+                Value::String("ws://127.0.0.1:9192".to_owned()),
+            );
             let stored = storage::read_value(storage::KEY_SERVICE_ENDPOINTS)
                 .ok()
                 .flatten()

@@ -15,9 +15,10 @@ use gpui::AnimationExt as _;
 use gpui::AppContext as _;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    Anchor, Context, Div, ElementId, ExternalPaths, FocusHandle, InteractiveElement as _, IntoElement,
-    KeyDownEvent, MouseButton, MouseDownEvent, ParentElement, Pixels, Point, Render, SharedString,
-    Stateful, StatefulInteractiveElement as _, Styled, Window, anchored, deferred, div, point, px,
+    Anchor, Context, Div, ElementId, ExternalPaths, FocusHandle, InteractiveElement as _,
+    IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, ParentElement, Pixels, Point, Render,
+    SharedString, Stateful, StatefulInteractiveElement as _, Styled, Window, anchored, deferred,
+    div, point, px,
 };
 
 use crate::contacts::ContactsStrings;
@@ -48,16 +49,16 @@ mod agent;
 mod feedback;
 /// Multisig accounts on this page (AUDIT M1–M6).
 pub(crate) mod multisig;
-/// The invite sheet (AUDIT M1).
-mod multisig_sheets;
-/// Multisig notifications: the switch, the in-app line, a click's way in (M6).
-pub(crate) mod multisig_notify;
-/// The create sheet (AUDIT M1).
-mod multisig_create;
 /// The add sheet: an address, an invite, a Safe{Wallet} export (AUDIT M1).
 mod multisig_add;
+/// The create sheet (AUDIT M1).
+mod multisig_create;
 /// Where a multisig link opened here stands (AUDIT M1).
 mod multisig_links;
+/// Multisig notifications: the switch, the in-app line, a click's way in (M6).
+pub(crate) mod multisig_notify;
+/// The invite sheet (AUDIT M1).
+mod multisig_sheets;
 mod palette;
 use feedback::FeedbackDraft;
 
@@ -140,8 +141,8 @@ use vela_core::app::sign_request::{SignErrorKind, SignResponsePayload};
 use super::WalletStrings;
 use super::components::{
     action_pill, activity_row, asset_row, asset_sub, balance_display, chain_row, empty_state,
-    icon_img, identicon_avatar, nav_row, qr_placeholder, section_header_parts,
-    section_header_row, skeleton_row, token_icon, token_icon_logos, wallet_header,
+    icon_img, identicon_avatar, nav_row, qr_placeholder, section_header_parts, section_header_row,
+    skeleton_row, token_icon, token_icon_logos, wallet_header,
 };
 use super::fixtures::{self, ADDRESS_FULL, IDENTICON_BOARD_SEEDS, WALLET_NAME};
 use crate::flows::{
@@ -1055,6 +1056,9 @@ pub struct WalletPage {
     /// History's rows, measured, for drawing it a window at a time
     /// (`ui::windowed`, Phase 4).
     history_window: crate::ui::Windowed,
+    /// r10 follow-up: the home's and the history's columns scrolling, as
+    /// the incoming check hears it (`wallet::list_gesture`).
+    list_gesture: crate::wallet::list_gesture::ListGesture,
     /// History's rows as last built, and what they were built from (Phase 4).
     history_model: Option<(HistoryKey, flow_fixtures::HistoryPanel)>,
     panel_scroll_subject: String,
@@ -1533,8 +1537,8 @@ impl WalletPage {
         // N-D3: the section the window showed when it was last closed — on
         // the launch's first wallet only (a later account switch starts on
         // the home, as it always has). `VELA_SECTION` wins in a dev build.
-        let wanted = crate::dev_env::var!("VELA_SECTION")
-            .or_else(crate::window_state::take_launch_section);
+        let wanted =
+            crate::dev_env::var!("VELA_SECTION").or_else(crate::window_state::take_launch_section);
         let section = Section::from_name(wanted.as_deref()).or_wallet();
         // perf-10: a window opened on a screen that draws no balance of its
         // own notes the account and reads no network until the home shows.
@@ -1997,6 +2001,7 @@ impl WalletPage {
             panel_scroll: crate::ui::SmoothScroll::new(),
             perf_scroll: None,
             history_window: crate::ui::Windowed::new(),
+            list_gesture: crate::wallet::list_gesture::ListGesture::default(),
             history_model: None,
             panel_scroll_subject: String::new(),
             verdict_seen: None,
@@ -3990,6 +3995,60 @@ impl WalletPage {
         ]
     }
 
+    /// r10 follow-up: the home's column, or the history's, is moving under
+    /// the wheel or the trackpad — the lists the incoming check keeps out of
+    /// the way of.
+    fn lists_moving(&self) -> bool {
+        let history = self.panel == PanelId::Flow && self.flows.last() == Some(&FlowPanel::Da1);
+        // `VELA_PERF_SCROLL`'s scripted scroll moves the history's column
+        // too, by its handle rather than the wheel (developer builds).
+        let scripted = self.perf_scroll.is_some();
+        self.identity.is_some()
+            && !self.gallery
+            && self.section == Section::Wallet
+            && (self.content_scroll.moving()
+                || (history && (self.panel_scroll.moving() || scripted)))
+    }
+
+    /// r10 follow-up: a gesture starting on the home's or the history's
+    /// column says `interacting {on}`; a look every
+    /// [`list_gesture::LOOK`](crate::wallet::list_gesture::LOOK) then says
+    /// `off` once the columns have settled — no frame is drawn after they
+    /// stop. A page that goes away mid-gesture still says `off`.
+    fn watch_list_gesture(&mut self, cx: &mut Context<Self>) {
+        use crate::wallet::list_gesture::LOOK;
+        if self.list_gesture.is_on() {
+            return;
+        }
+        let moving = self.lists_moving();
+        if self.list_gesture.look(moving, std::time::Instant::now()) != Some(true) {
+            return;
+        }
+        crate::executor::activity_feed::interacting(true, cx);
+        cx.spawn(async move |page, cx| {
+            loop {
+                cx.background_executor().timer(LOOK).await;
+                let ended = page.update(cx, |this, cx| {
+                    let moving = this.lists_moving();
+                    let edge = this.list_gesture.look(moving, std::time::Instant::now());
+                    if edge == Some(false) {
+                        crate::executor::activity_feed::interacting(false, cx);
+                    }
+                    !this.list_gesture.is_on()
+                });
+                match ended {
+                    Ok(false) => {}
+                    Ok(true) => return,
+                    Err(_) => {
+                        cx.update(|cx| crate::executor::activity_feed::interacting(false, cx));
+                        return;
+                    }
+                }
+            }
+        })
+        .detach();
+    }
+
     /// Escape: the dialog on top goes, and only that one — the same order
     /// `render` stacks them in, read from the top. False when none was open.
     fn dismiss_top_dialog(&mut self, cx: &mut Context<Self>) -> bool {
@@ -4280,7 +4339,13 @@ impl WalletPage {
                                 .text_size(theme::text_label())
                                 .font_weight(gpui::FontWeight::SEMIBOLD)
                                 .text_color(theme.fg_muted)
-                                .child(icon_img(&mut self.icons, Icon::UsersRound, false, theme.fg_muted, 12.))
+                                .child(icon_img(
+                                    &mut self.icons,
+                                    Icon::UsersRound,
+                                    false,
+                                    theme.fg_muted,
+                                    12.,
+                                ))
                                 .child(label)
                                 .on_click(cx.listener(|this, _, _, cx| {
                                     this.go_to_section(Section::Settings, cx);
@@ -4652,12 +4717,8 @@ impl WalletPage {
                                 // row did; taken apart so a screen reader meets
                                 // the web's `<h2>` and then its button.
                                 let all_label = s_all.clone();
-                                let (title, action) = section_header_parts(
-                                    theme,
-                                    &mut self.icons,
-                                    s_activity,
-                                    s_all,
-                                );
+                                let (title, action) =
+                                    section_header_parts(theme, &mut self.icons, s_activity, s_all);
                                 section_header_row()
                                     .child(
                                         div()
@@ -5672,7 +5733,9 @@ impl WalletPage {
         let until = now + wallet_live::REFRESH_MIN_SPIN;
         self.refresh_hold = Some(until);
         crate::executor::balance_dashboard::pull(cx);
-        crate::executor::activity_feed::focus_tick(cx);
+        // r10 follow-up: a refresh, to the incoming check's cadence — the
+        // store read and the scan, and its back-off starts again.
+        crate::executor::activity_feed::refreshed(cx);
         // The hold ends on a frame of its own: a round that settled inside
         // it drew nothing after, and the glyph would turn on until the next
         // unrelated redraw.
@@ -7189,9 +7252,8 @@ impl WalletPage {
         let window_handle = self.window_handle;
         // AUDIT M2: a multisig shown sends as itself — its confirm proposes.
         let multisig = crate::multisig::shown::current(cx);
-        let host = cx.new(|cx| {
-            SendHost::open_as(account, multisig, params, display, window_handle, cx)
-        });
+        let host =
+            cx.new(|cx| SendHost::open_as(account, multisig, params, display, window_handle, cx));
         // A new send replaces one parked under a report.
         self.send_parked = false;
         cx.observe(&host, |page, _, cx| {
@@ -12533,12 +12595,11 @@ impl WalletPage {
         // Owner decision 2026-10-29: the Vela networks out of the person's
         // list, by name, after the mainnet hint — "Add one from Add Network".
         let view = resident::resident::<NetworkAdmin>(cx).read(cx).view();
-        let more =
-            settings_live::more_networks(
-                &view,
-                &self.loc.t("settingsModals.network.moreNetworks"),
-                self.loc.language(),
-            );
+        let more = settings_live::more_networks(
+            &view,
+            &self.loc.t("settingsModals.network.moreNetworks"),
+            self.loc.language(),
+        );
         let hint = settings_live::space_hint(&self.loc.t(hint), more.as_deref(), testnet);
         Some(
             div()
@@ -14872,7 +14933,10 @@ impl WalletPage {
             })
             .collect();
         let warning = (!unsynced.is_empty()).then(|| {
-            gpui::SharedString::from(s.erase_unsynced.replace("{{names}}", &self.loc.list(&unsynced)))
+            gpui::SharedString::from(
+                s.erase_unsynced
+                    .replace("{{names}}", &self.loc.list(&unsynced)),
+            )
         });
         let ack_text = s.erase_unsynced_ack.clone();
         let acked = self.erase_ack;
@@ -17445,7 +17509,7 @@ impl WalletPage {
 
     /// What the browser machine decided, acted on once.
     fn browser_host_changed(&mut self, host: gpui::Entity<BrowserHost>, cx: &mut Context<Self>) {
-        let (orders, calls, consent) = host.update(cx, |host, _| {
+        let (orders, calls, consent, space_noted) = host.update(cx, |host, _| {
             (
                 host.take_orders(),
                 host.take_multisig_calls(),
@@ -17453,6 +17517,12 @@ impl WalletPage {
                     .consent
                     .as_ref()
                     .map(|consent| (consent.tab.clone(), consent.origin.clone())),
+                // r10 follow-up: the signature a space switch moved its site
+                // for — which request, and the network it is on now.
+                host.view.signing.as_ref().and_then(|signing| {
+                    let note = signing.space_note.as_ref()?;
+                    Some((signing.id.clone(), note.chain_id))
+                }),
             )
         });
         // A NEW question has to be in front of somebody to be answered. Only
@@ -17464,7 +17534,15 @@ impl WalletPage {
         self.browser_consent = consent;
         for order in orders {
             match order {
-                SigningOrder::Forward(forwarded) => self.open_dapp_signing(forwarded, cx),
+                SigningOrder::Forward(forwarded) => {
+                    let id = forwarded.id.clone();
+                    self.open_dapp_signing(forwarded, cx);
+                    if let Some((noted, chain_id)) = &space_noted
+                        && *noted == id
+                    {
+                        self.space_noted(&id, *chain_id, cx);
+                    }
+                }
                 // AUDIT M5: a multisig's request is left with its machine.
                 SigningOrder::Cancel { tab, id } => {
                     if !self.ms_dapp_cancel(&tab, &id, cx) {
@@ -17640,6 +17718,38 @@ impl WalletPage {
         };
         self.open_signing_request(&account, request, Some(forwarded.tab), cx);
     }
+
+    /// r10 follow-up: a network-space switch moved the site whose request
+    /// `id` just opened its column — the sign machine hears it right after
+    /// the arrival (`space_noted`), and the sheet says so once under the
+    /// requester (`SignRequestView.space_note`). Nothing for a column that is
+    /// not this request's (refused as busy, or a multisig's proposal).
+    #[cfg(not(target_os = "linux"))]
+    fn space_noted(&mut self, id: &str, chain_id: u32, cx: &mut Context<Self>) {
+        let Some(host) = self.signing_host.clone() else {
+            return;
+        };
+        let ours = {
+            let host = host.read(cx);
+            host.transport_id == crate::wallet::signing_host::BROWSER_TRANSPORT
+                && host.request_id == id
+        };
+        if !ours {
+            return;
+        }
+        host.update(cx, |host, cx| {
+            host.dispatch_sign(
+                vela_core::app::sign_request::Event::SpaceNoted {
+                    id: id.to_owned(),
+                    chain_id,
+                },
+                cx,
+            );
+        });
+    }
+
+    #[cfg(target_os = "linux")]
+    fn space_noted(&mut self, _id: &str, _chain_id: u32, _cx: &mut Context<Self>) {}
 
     /// No signing column on this platform, and no page to have asked. Refused
     /// rather than left hanging, should that ever change.
@@ -18456,6 +18566,21 @@ impl WalletPage {
             .children(self.ms_dapp_connect_note(theme, consent.address.as_deref(), cx))
             .child(row_divider(theme))
             .child(self.site_network_row(theme, consent.chain_id, Some(consent.origin.clone()), cx))
+            // r10 follow-up: a space switch moved this site since its last
+            // request — said once, under the network it is on now.
+            .children(consent.space_note.as_ref().map(|note| {
+                div()
+                    .id("consent-space-note")
+                    .relative()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_muted)
+                    .child(self.loc.t_text(
+                        &note.key,
+                        "network",
+                        &crate::flows::live::chain_name(note.chain_id),
+                    ))
+                    .children(crate::dev_probe::mark("consent-space-note"))
+            }))
             .child(row_divider(theme))
             .child(
                 div()
@@ -19405,6 +19530,22 @@ impl WalletPage {
                 .as_ref()
                 .is_some_and(|request| request.first_party);
             model.first_party = own;
+            // r10 follow-up: a space switch moved this site since its last
+            // request — the core says so (`space_note`), worded here with
+            // the network's name, under the requester.
+            model.space_note = host
+                .view
+                .request
+                .as_ref()
+                .filter(|_| !own)
+                .and_then(|request| request.space_note.as_ref())
+                .map(|note| {
+                    self.loc.t_text(
+                        &note.key,
+                        "network",
+                        &crate::flows::live::chain_name(note.chain_id),
+                    )
+                });
             // Its words are the core's terms like any reading's
             // (`localized_terms`, above): the backup's intent and its Network
             // / Address / Public keys rows arrive named, so nothing here
@@ -20479,9 +20620,8 @@ impl WalletPage {
             }
             PanelId::BrowserStatus => columns,
             PanelId::Multisig => match self.multisig_panel(theme, cx) {
-                Some((title, body, foot)) => {
-                    columns.child(self.panel_scaffold_foot(theme, title, None, false, body, foot, cx))
-                }
+                Some((title, body, foot)) => columns
+                    .child(self.panel_scaffold_foot(theme, title, None, false, body, foot, cx)),
                 None => columns,
             },
             PanelId::Signing if self.dapp_landing.is_some() && self.no_signing_host() => {
@@ -21759,7 +21899,10 @@ impl WalletPage {
                 kind: crate::inbound::MultisigKind::Proposal | crate::inbound::MultisigKind::Invite,
                 url,
             } => {
-                let hash = url.split_once('#').map_or(url.as_str(), |(_, h)| h).to_owned();
+                let hash = url
+                    .split_once('#')
+                    .map_or(url.as_str(), |(_, h)| h)
+                    .to_owned();
                 let host = self.ms_host(cx);
                 host.update(cx, |host, cx| {
                     host.accounts(
@@ -21820,9 +21963,10 @@ impl WalletPage {
             return;
         }
         // A Safe{Wallet} export dropped on the open add sheet is imported.
-        let export = paths
-            .iter()
-            .find(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("json")));
+        let export = paths.iter().find(|p| {
+            p.extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("json"))
+        });
         if let Some(json) = export.filter(|_| self.multisig.add.is_some()) {
             self.ms_import_file(json.clone(), cx);
             return;
@@ -22705,6 +22849,7 @@ impl Render for WalletPage {
         for scroll in self.scrolls() {
             scroll.step(window);
         }
+        self.watch_list_gesture(cx);
         // Phase 4 (`VELA_PERF_SCROLL`): the scripted scroll over the panel,
         // after the column's own step so the run's offset is the frame's.
         if let Some(run) = self.perf_scroll.as_mut()
@@ -23143,9 +23288,10 @@ fn drop_overlay(theme: &Theme, icons: &mut crate::icons::IconCache, title: Share
         } else {
             0.
         })
-        .when(crate::dev_env::var_os!("VELA_DROP_PREVIEW").is_some(), |el| {
-            el.bg(tint)
-        })
+        .when(
+            crate::dev_env::var_os!("VELA_DROP_PREVIEW").is_some(),
+            |el| el.bg(tint),
+        )
         .group_drag_over::<ExternalPaths>("wallet-drop", move |style| style.opacity(1.).bg(tint))
         .child(
             div()

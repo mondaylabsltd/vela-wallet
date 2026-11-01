@@ -306,10 +306,11 @@ fn stable_preference(stables: &[StableToken]) -> Vec<usize> {
         .and_then(|wanted| stables.iter().position(|s| std::ptr::eq(s, wanted)));
     let mut order: Vec<usize> = (0..stables.len()).collect();
     if let Some(index) = preferred
-        && index > 0 {
-            order.remove(index);
-            order.insert(0, index);
-        }
+        && index > 0
+    {
+        order.remove(index);
+        order.insert(0, index);
+    }
     order
 }
 

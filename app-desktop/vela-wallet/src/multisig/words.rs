@@ -113,13 +113,18 @@ pub fn action_title(
         return t(loc, "action.unsupported");
     };
     match action {
-        Action::Transfer { token: t_, amount, .. } => {
+        Action::Transfer {
+            token: t_, amount, ..
+        } => {
             let info = token(t_.as_deref());
             match info.decimals {
                 Some(decimals) => tv(
                     loc,
                     "action.send",
-                    &[("amount", &units(amount, decimals)), ("symbol", &info.symbol)],
+                    &[
+                        ("amount", &units(amount, decimals)),
+                        ("symbol", &info.symbol),
+                    ],
                 ),
                 // r8-2: never "Send <0.000001" in 18 assumed.
                 None => format!(
@@ -130,7 +135,9 @@ pub fn action_title(
             }
         }
         Action::Batch { calls } => {
-            let all = calls.iter().all(|c| matches!(c.action, Action::Transfer { .. }));
+            let all = calls
+                .iter()
+                .all(|c| matches!(c.action, Action::Transfer { .. }));
             tv(
                 loc,
                 if all {
@@ -279,7 +286,10 @@ mod tests {
             &who,
             &unknown,
         );
-        assert_eq!(title, "Send 1000000 base units · decimals unknown 0x0000…0b0b");
+        assert_eq!(
+            title,
+            "Send 1000000 base units · decimals unknown 0x0000…0b0b"
+        );
 
         let mut tokens = ViewTokens::new();
         tokens.insert(
@@ -291,7 +301,11 @@ mod tests {
                 known: false,
             },
         );
-        let bob = token_facts(&tokens, 5_042_002, Some("0x00000000000000000000000000000000000B0B0B"));
+        let bob = token_facts(
+            &tokens,
+            5_042_002,
+            Some("0x00000000000000000000000000000000000B0B0B"),
+        );
         assert_eq!(
             bob,
             TokenInfo {
@@ -300,12 +314,19 @@ mod tests {
             }
         );
         // Arc's USDC: the registry's 6, never 18.
-        let usdc = token_facts(&tokens, 5_042_002, Some("0x3600000000000000000000000000000000000000"));
+        let usdc = token_facts(
+            &tokens,
+            5_042_002,
+            Some("0x3600000000000000000000000000000000000000"),
+        );
         assert_eq!(usdc.decimals, Some(6));
-        let nobody = token_facts(&tokens, 5_042_002, Some("0x00000000000000000000000000000000000c0c0c"));
+        let nobody = token_facts(
+            &tokens,
+            5_042_002,
+            Some("0x00000000000000000000000000000000000c0c0c"),
+        );
         assert_eq!(nobody.decimals, None);
     }
-
 
     #[test]
     fn a_proposal_is_titled_as_the_web_titles_it() {

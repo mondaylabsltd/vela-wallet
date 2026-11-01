@@ -14,6 +14,7 @@
 	import SkeletonRow from './ui/SkeletonRow.svelte';
 	import TabBar from './ui/TabBar.svelte';
 	import WalletHeader from './ui/WalletHeader.svelte';
+	import { listGesture } from './list-gesture';
 
 	interface Props {
 		model: WalletHomeModel;
@@ -54,6 +55,11 @@
 		 */
 		narrowed?: { label: string; action: string };
 		onshowall?: () => void;
+		/**
+		 * r10 follow-up: the list's scroll or drag started (`true`) or settled
+		 * (`false`) — the incoming check waits meanwhile. Absent in the gallery.
+		 */
+		ongesture?: (on: boolean) => void;
 	}
 
 	let {
@@ -70,7 +76,8 @@
 		banner,
 		ongroupaction,
 		narrowed,
-		onshowall
+		onshowall,
+		ongesture
 	}: Props = $props();
 
 	// Pure UI state: the fixture-provided sheet, once dismissed, stays dismissed.
@@ -80,7 +87,7 @@
 </script>
 
 <div class="home" style:--text-scale={model.textScale === 1 ? undefined : model.textScale}>
-	<div class="scroll">
+	<div class="scroll" {@attach ongesture && listGesture(ongesture)}>
 		<!-- The header owns the whole width. The network filter pill used to sit
 		     at its trailing edge and cost the name and address the room they
 		     needed — a wallet called "kimik3 · something" showed as "kimik3 ·…"

@@ -14,6 +14,7 @@
 	import SectionHeader from './ui/SectionHeader.svelte';
 	import Sidebar from './ui/Sidebar.svelte';
 	import ThirdPanel from './ui/ThirdPanel.svelte';
+	import { listGesture } from './list-gesture';
 
 	interface Props {
 		model: WalletDesktopModel;
@@ -65,6 +66,11 @@
 		banner?: Snippet;
 		/** An activity group's own action (its note's Retry), by id. Live only. */
 		ongroupaction?: (id: string) => void;
+		/**
+		 * r10 follow-up: the list's scroll or drag started (`true`) or settled
+		 * (`false`) — the incoming check waits meanwhile. Absent in the gallery.
+		 */
+		ongesture?: (on: boolean) => void;
 	}
 
 	let {
@@ -81,7 +87,8 @@
 		onbalancerefresh,
 		column,
 		banner,
-		ongroupaction
+		ongroupaction,
+		ongesture
 	}: Props = $props();
 
 	// The third column replaces the mobile bottom sheet (research.md D5).
@@ -98,7 +105,7 @@
 <div class="desktop">
 	<Sidebar sidebar={model.sidebar} {onnav} {onaccounts} {onchainselect} />
 
-	<main>
+	<main {@attach ongesture && listGesture(ongesture)}>
 		<!-- vis-16: the page's heading — the account's name, drawn in the sidebar. -->
 		<h1 class="visually-hidden">{model.sidebar.header.name}</h1>
 		<div class="content">

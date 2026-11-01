@@ -174,16 +174,10 @@ mod tests {
         let bytes = vec![1u8; 300_000];
         let artifact = artifact_of(&bytes);
         let reads = std::cell::Cell::new(0);
-        let verdict = receive(
-            bytes.as_slice(),
-            Vec::new(),
-            &artifact,
-            &|_| {},
-            &|| {
-                reads.set(reads.get() + 1);
-                reads.get() < 2
-            },
-        );
+        let verdict = receive(bytes.as_slice(), Vec::new(), &artifact, &|_| {}, &|| {
+            reads.set(reads.get() + 1);
+            reads.get() < 2
+        });
         assert_eq!(verdict, Err(Refusal::Unreachable));
     }
 

@@ -1647,7 +1647,10 @@ impl Simulation {
     /// holds the confirm or says its wait ran out (the line the person reads
     /// is the core's step's then).
     #[must_use]
-    pub(crate) fn recheck_offer(&self, sign: &vela_core::app::sign_request::SignView) -> Option<bool> {
+    pub(crate) fn recheck_offer(
+        &self,
+        sign: &vela_core::app::sign_request::SignView,
+    ) -> Option<bool> {
         if !self.announced || self.ask.is_none() {
             return None;
         }

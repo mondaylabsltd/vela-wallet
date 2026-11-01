@@ -195,12 +195,12 @@ pub fn local_accounts() -> Vec<LocalAccount> {
         .unwrap_or_default()
         .into_iter()
         .map(|account| {
-            let route = match signing_route(&account.signing_plan(), SignatureKind::MultisigApproval)
-            {
-                SigningRoute::InVela => ApprovalRoute::Vela,
-                SigningRoute::Page { .. } => ApprovalRoute::Page,
-                SigningRoute::Blocked { .. } => ApprovalRoute::Blocked,
-            };
+            let route =
+                match signing_route(&account.signing_plan(), SignatureKind::MultisigApproval) {
+                    SigningRoute::InVela => ApprovalRoute::Vela,
+                    SigningRoute::Page { .. } => ApprovalRoute::Page,
+                    SigningRoute::Blocked { .. } => ApprovalRoute::Blocked,
+                };
             LocalAccount {
                 address: account.address.clone(),
                 name: account.name.clone(),
@@ -378,7 +378,10 @@ impl MultisigHost {
     pub fn shown_again(&mut self, cx: &mut Context<Self>) {
         let mut jobs = self.machines.accounts(accounts::Event::Tick);
         if self.machines.proposals_view.followed.is_some() {
-            jobs.extend(self.machines.proposals(proposals::Event::Refresh { fresh: false }));
+            jobs.extend(
+                self.machines
+                    .proposals(proposals::Event::Refresh { fresh: false }),
+            );
         }
         self.run(jobs, cx);
     }
@@ -430,7 +433,11 @@ impl MultisigHost {
             .index_wanted
             .iter()
             .map(|a| a.to_ascii_lowercase())
-            .filter(|a| self.index_asked.get(a).is_none_or(|at| now - at >= INDEX_ASK_AGAIN_MS))
+            .filter(|a| {
+                self.index_asked
+                    .get(a)
+                    .is_none_or(|at| now - at >= INDEX_ASK_AGAIN_MS)
+            })
             .collect();
         if wanted.is_empty() {
             return;
@@ -804,14 +811,7 @@ impl MultisigHost {
     /// Blocking work on a thread of its own; its answer back on this one.
     /// A thread that dies answers the operation's own failure — never a
     /// machine left waiting.
-    fn spawn(
-        &mut self,
-        which: Which,
-        id: u64,
-        op: Op,
-        work: shell::Work,
-        cx: &mut Context<Self>,
-    ) {
+    fn spawn(&mut self, which: Which, id: u64, op: Op, work: shell::Work, cx: &mut Context<Self>) {
         let (tx, rx) = futures::channel::oneshot::channel();
         let started = std::thread::Builder::new()
             .name("vela-multisig".to_owned())

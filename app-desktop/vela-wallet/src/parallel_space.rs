@@ -97,8 +97,8 @@ pub fn seed_wallets() -> usize {
     if !active() || std::env::var("VELA_PARALLEL_SEED").as_deref() != Ok("1") {
         return 0;
     }
-    let storage_has_wallets = crate::executor::storage::load_accounts()
-        .map_or(true, |accounts| !accounts.is_empty());
+    let storage_has_wallets =
+        crate::executor::storage::load_accounts().map_or(true, |accounts| !accounts.is_empty());
     if storage_has_wallets {
         return 0;
     }

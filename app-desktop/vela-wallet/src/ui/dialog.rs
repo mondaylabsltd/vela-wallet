@@ -88,7 +88,9 @@ pub fn dialog(
     scroll: &crate::ui::SmoothScroll,
     close: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
 ) -> Stateful<Div> {
-    dialog_with_foot(id, theme, window, title, subtitle, close_icon, body, None, scroll, close)
+    dialog_with_foot(
+        id, theme, window, title, subtitle, close_icon, body, None, scroll, close,
+    )
 }
 
 /// The room a pinned foot takes from the scrolling body: one row of

@@ -621,7 +621,10 @@ mod tests {
             phone_link: false,
             words_key: None,
         };
-        assert_eq!(prompt_spec(&bare, &loc).body, OutcomeKind::SignInFailed.spec(&loc).body);
+        assert_eq!(
+            prompt_spec(&bare, &loc).body,
+            OutcomeKind::SignInFailed.spec(&loc).body
+        );
     }
 
     /// The prompt a missing key produces really is the one above.

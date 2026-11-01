@@ -471,7 +471,13 @@ pub fn device_key_rows(
     device: &[vela_core::wallet_keys::DeviceKey],
     sign_in_credential: &str,
 ) -> Vec<vela_core::wallet_keys::WalletKeyRow> {
-    match vela_core::wallet_keys::step_for_account("", account_name, device, &[], sign_in_credential) {
+    match vela_core::wallet_keys::step_for_account(
+        "",
+        account_name,
+        device,
+        &[],
+        sign_in_credential,
+    ) {
         vela_core::wallet_keys::KeysStep::Done { keys, .. } => keys,
         // With no address there is nobody to ask.
         vela_core::wallet_keys::KeysStep::Ask { .. } => Vec::new(),
@@ -718,7 +724,10 @@ mod tests {
             more_networks(&view, "{{names}}", "zh").as_deref(),
             Some("Stable和MegaETH")
         );
-        assert_eq!(space_hint("Test coins.", more.as_deref(), true), "Test coins.");
+        assert_eq!(
+            space_hint("Test coins.", more.as_deref(), true),
+            "Test coins."
+        );
         assert_eq!(space_hint("Real money.", None, false), "Real money.");
     }
 
@@ -1221,7 +1230,10 @@ pub fn more_networks(view: &NetView, template: &str, language: &str) -> Option<S
             vela_core::app::network_admin::BUILTIN_CHAINS
                 .iter()
                 .find(|chain| chain.chain_id == *id)
-                .map_or_else(|| format!("Chain {id}"), |chain| chain.display_name.to_owned())
+                .map_or_else(
+                    || format!("Chain {id}"),
+                    |chain| chain.display_name.to_owned(),
+                )
         })
         .collect();
     Some(crate::wallet::fill(

@@ -7,6 +7,7 @@
 pub mod browser_host;
 pub mod components;
 pub mod fixtures;
+pub mod list_gesture;
 pub mod live;
 pub mod money;
 pub mod page;

@@ -269,6 +269,10 @@ const CALLED: Record<string, Place> = {
 	'feed.setAccount': { machine: 'the account' },
 	// r9-17: the page's presence, for the core's scan cadence.
 	'feed.cadencePort': { machine: 'a tick' },
+	// r10 follow-up: the person's moments, for the cadence.
+	'feed.refreshed': { step: 'refresh_balances' },
+	'feed.sent': { step: 'submit_transfer' },
+	'feed.interacting': { machine: 'a list scrolled' },
 	'feed.privacyChanged': { step: 'set_balance_privacy' },
 	'feed.chainFilter': { view: 'the network filter' },
 	'feed.contactFilter': { view: 'a contact’s page shown' },

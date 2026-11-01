@@ -818,7 +818,13 @@ mod tests {
             let mut host = CoreHost::<BalanceDashboard>::new();
             let mut out: Vec<Pending<BalanceOperation>> =
                 host.dispatch(Event::AccountChanged { address });
-            for (i, step) in case["steps"].as_array().cloned().unwrap_or_default().iter().enumerate() {
+            for (i, step) in case["steps"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+                .iter()
+                .enumerate()
+            {
                 if let Some(event) = step.get("event") {
                     let event: Event = serde_json::from_value(event.clone())
                         .unwrap_or_else(|e| unreachable!("{name} step {i}: {e}"));
@@ -841,7 +847,11 @@ mod tests {
                     out.extend(host.resolve(id, answer));
                 }
                 if let Some(stamp) = step.get("stamp") {
-                    assert_eq!(host.view().last_refreshed_at_ms, stamp.as_f64(), "{name}, step {i}");
+                    assert_eq!(
+                        host.view().last_refreshed_at_ms,
+                        stamp.as_f64(),
+                        "{name}, step {i}"
+                    );
                 }
             }
         }

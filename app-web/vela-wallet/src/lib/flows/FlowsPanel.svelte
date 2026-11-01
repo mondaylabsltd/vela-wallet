@@ -147,6 +147,12 @@
 		ondeletetx?: () => void;
 		/** Spec 090: the receive code's "include network" switch. Absent in the gallery. */
 		onincludenetwork?: (include: boolean) => void;
+		/**
+		 * r10 follow-up: the history list's scroll or drag started (`true`) or
+		 * settled (`false`) — the incoming check waits meanwhile. Absent in
+		 * the gallery.
+		 */
+		ongesture?: (on: boolean) => void;
 	}
 
 	let {
@@ -158,7 +164,8 @@
 		send,
 		batch,
 		ondeletetx,
-		onincludenetwork
+		onincludenetwork,
+		ongesture
 	}: Props = $props();
 
 	const body = $derived(model.body);
@@ -178,7 +185,7 @@
 	{:else if body.kind === 'receive-qr'}
 		<ReceiveQr model={body.model} {onincludenetwork} />
 	{:else if body.kind === 'history'}
-		<History model={body.model} onselect={(g, r) => go('tx-detail', g * 100 + r)} />
+		<History model={body.model} onselect={(g, r) => go('tx-detail', g * 100 + r)} {ongesture} />
 	{:else if body.kind === 'tx-detail'}
 		<TxDetail model={body.model} ondelete={ondeletetx} />
 	{:else if body.kind === 'assets'}

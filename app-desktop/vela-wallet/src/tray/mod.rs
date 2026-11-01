@@ -245,7 +245,11 @@ mod tests {
             let [r, g, b, a] = pixel.0;
             if a > 0 {
                 inked += 1;
-                assert!(r < 8 && g < 8 && b < 8, "a template is black: {:?}", pixel.0);
+                assert!(
+                    r < 8 && g < 8 && b < 8,
+                    "a template is black: {:?}",
+                    pixel.0
+                );
             }
         }
         assert!(inked > 200, "the mark is drawn ({inked} px)");

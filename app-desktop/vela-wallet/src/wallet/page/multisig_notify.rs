@@ -75,7 +75,13 @@ impl WalletPage {
             .a11y_button(dismiss)
             .flex_none()
             .cursor_pointer()
-            .child(icon_img(&mut self.icons, Icon::X, false, theme.bg_base, 16.))
+            .child(icon_img(
+                &mut self.icons,
+                Icon::X,
+                false,
+                theme.bg_base,
+                16.,
+            ))
             .on_click(|_, _, cx| deliver::dismiss_in_app(cx));
         let pill = div()
             .flex()

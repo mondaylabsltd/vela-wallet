@@ -147,8 +147,7 @@ pub fn channel() -> Channel {
         return Channel::Store;
     }
     // An RPM or DEB installs under /usr and updates with the system.
-    if cfg!(target_os = "linux")
-        && std::env::current_exe().is_ok_and(|exe| exe.starts_with("/usr"))
+    if cfg!(target_os = "linux") && std::env::current_exe().is_ok_and(|exe| exe.starts_with("/usr"))
     {
         return Channel::Store;
     }
@@ -187,9 +186,14 @@ pub fn url_allowed(url: &str) -> bool {
 }
 
 fn is_loopback_http(url: &str) -> bool {
-    ["http://127.0.0.1:", "http://127.0.0.1/", "http://localhost:", "http://localhost/"]
-        .iter()
-        .any(|prefix| url.starts_with(prefix))
+    [
+        "http://127.0.0.1:",
+        "http://127.0.0.1/",
+        "http://localhost:",
+        "http://localhost/",
+    ]
+    .iter()
+    .any(|prefix| url.starts_with(prefix))
 }
 
 #[derive(Debug, Deserialize)]
@@ -461,13 +465,7 @@ pub fn check() -> Result<Release, Refusal> {
         return Err(Refusal::InsecureUrl);
     }
     let body = fetch(FEED_URL, MAX_MANIFEST).ok_or(Refusal::Unreachable)?;
-    let verdict = verify_manifest(
-        &body,
-        key,
-        current_version(),
-        platform(),
-        last_issued(),
-    );
+    let verdict = verify_manifest(&body, key, current_version(), platform(), last_issued());
     match &verdict {
         Ok(release) => {
             let _ = crate::executor::storage::write_value(
@@ -491,12 +489,11 @@ pub fn check() -> Result<Release, Refusal> {
 /// bytes read.
 fn fetch(url: &str, limit: usize) -> Option<Vec<u8>> {
     use std::io::Read as _;
-    let mut response = crate::executor::proxy::with_routes(
-        url,
-        std::time::Duration::from_secs(20),
-        |agent| agent.get(url).call(),
-    )
-    .ok()?;
+    let mut response =
+        crate::executor::proxy::with_routes(url, std::time::Duration::from_secs(20), |agent| {
+            agent.get(url).call()
+        })
+        .ok()?;
     let mut body = Vec::new();
     response
         .body_mut()
@@ -621,12 +618,19 @@ mod tests {
             .filter(|refusal| refusal.retryable())
             .map(Refusal::word)
             .collect();
-        assert_eq!(retryable, ["artifactMismatch", "unreachable", "installFailed"]);
+        assert_eq!(
+            retryable,
+            ["artifactMismatch", "unreachable", "installFailed"]
+        );
     }
 
     fn key_hex() -> String {
         let point = signer().verifying_key().to_encoded_point(false);
-        point.as_bytes().iter().map(|b| format!("{b:02x}")).collect()
+        point
+            .as_bytes()
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect()
     }
 
     fn sign(payload: &str, with: &SigningKey) -> Vec<u8> {
@@ -729,7 +733,10 @@ mod tests {
             verify_manifest(&old, &key_hex(), "0.9.8", "macos-aarch64", 101),
             Err(Refusal::Replayed)
         );
-        let http = sign(&payload("0.10.0", 100, "http://getvela.app/x.dmg"), &signer());
+        let http = sign(
+            &payload("0.10.0", 100, "http://getvela.app/x.dmg"),
+            &signer(),
+        );
         assert_eq!(
             verify_manifest(&http, &key_hex(), "0.9.8", "macos-aarch64", 0),
             Err(Refusal::InsecureUrl)

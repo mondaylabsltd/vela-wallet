@@ -2849,7 +2849,10 @@ pub fn insufficient_gas_warning(fee: &FeeView, s: &SigningStrings) -> Option<Sha
 /// The selected coin's shortfall, in the send form's words: short of the
 /// fee alone, or (r10-3, `short_with_amount`) short once the request's own
 /// amount of that coin is taken first — "amount + gas fees".
-fn short_words(option: &vela_core::app::fee_policy::FeeOptionView, s: &SigningStrings) -> SharedString {
+fn short_words(
+    option: &vela_core::app::fee_policy::FeeOptionView,
+    s: &SigningStrings,
+) -> SharedString {
     let template = if option.short_with_amount {
         &s.warn_insufficient_for_gas
     } else {

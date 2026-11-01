@@ -214,6 +214,10 @@ pub struct SigningModel {
     /// `SignRequestView.first_party`, never read off the request's bytes: no
     /// requester header, and the intent leads as the headline.
     pub first_party: bool,
+    /// r10 follow-up: a network-space switch moved the site since its last
+    /// request — the core's `SignRequestView.space_note`, worded
+    /// (`connect.browser.spaceMoved`): one line under the requester.
+    pub space_note: Option<SharedString>,
     /// The site's own icon, tried in order OVER the letter (founder ruling 2026-09-19).
     pub dapp_icon_urls: Vec<SharedString>,
     /// The chain's logo; the dot shows until it lands, and when there is none.
@@ -682,6 +686,7 @@ fn base(
         network_name: "Ethereum".into(),
         network_dot: chain_ethereum(),
         first_party: false,
+        space_note: None,
         dapp_icon_urls: Vec::new(),
         network_logo: None,
         blocks,

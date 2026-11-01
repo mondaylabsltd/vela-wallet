@@ -52,12 +52,17 @@ pub fn noticed(count: usize, cx: &mut App) {
         return;
     }
     let count = u32::try_from(count).unwrap_or(u32::MAX);
-    let now = UNSEEN.fetch_add(count, Ordering::SeqCst).saturating_add(count);
+    let now = UNSEEN
+        .fetch_add(count, Ordering::SeqCst)
+        .saturating_add(count);
     set_badge(now);
     if let Some(window) = cx.windows().first().copied() {
         let _ = window.update(cx, |_, window, _| window.request_attention());
     }
-    crate::diag::vlog!("multisig-notify", "unseen {now}: the icon says so until the window is in front");
+    crate::diag::vlog!(
+        "multisig-notify",
+        "unseen {now}: the icon says so until the window is in front"
+    );
     watch(cx);
 }
 

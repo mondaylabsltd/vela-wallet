@@ -494,6 +494,11 @@ const EVENTS: &[(&str, Place)] = &[
         "sign_request::Event::TransportDropped",
         Machine("the dApp's connection"),
     ),
+    // r10 follow-up: the site's request after a space switch moved it.
+    (
+        "sign_request::Event::SpaceNoted",
+        Machine("a dApp's request from a site the space switch moved"),
+    ),
     ("tx_tracker::Event::Submitted", Machine("the chain tracker")),
     // AUDIT M1/M3: a multisig's own Settings (`multisig_settings.rs`) — its
     // members, the change composed, its record. Proposing goes through the
@@ -511,7 +516,10 @@ const EVENTS: &[(&str, Place)] = &[
         "ms_accounts::Event::PlanRename",
         View("where the multisig's shared name can be renamed"),
     ),
-    ("ms_accounts::Event::SaveToEthereum", Later(MULTISIG_SETTINGS)),
+    (
+        "ms_accounts::Event::SaveToEthereum",
+        Later(MULTISIG_SETTINGS),
+    ),
     ("ms_accounts::Event::ShareAgain", Later(MULTISIG_SETTINGS)),
     ("ms_members::Event::Compose", Later(MULTISIG_SETTINGS)),
     (
@@ -536,44 +544,104 @@ const EVENTS: &[(&str, Place)] = &[
     ("ms_accounts::Event::Activate", Later(MULTISIG_SHOWN)),
     ("ms_accounts::Event::Remove", Later(MULTISIG_SHOWN)),
     ("ms_accounts::Event::NewDraft", Later(MULTISIG_SHOWN)),
-    ("ms_accounts::Event::InviteShared", View("the invite was handed on")),
+    (
+        "ms_accounts::Event::InviteShared",
+        View("the invite was handed on"),
+    ),
     ("multisig_accounts::Event::OpenLink", Later(MULTISIG_SHOWN)),
     ("ms_proposals::Event::Approve", Later(MULTISIG_SIGNS)),
     ("ms_proposals::Event::ApproveOutside", Later(MULTISIG_SIGNS)),
     ("ms_proposals::Event::Execute", Later(MULTISIG_SIGNS)),
     ("ms_proposals::Event::ApproveExecute", Later(MULTISIG_SIGNS)),
     ("ms_proposals::Event::ProposeExecute", Later(MULTISIG_SIGNS)),
-    ("ms_accounts::Event::SetFirstRun", View("the home's first steps, set aside")),
+    (
+        "ms_accounts::Event::SetFirstRun",
+        View("the home's first steps, set aside"),
+    ),
     ("ms_proposals::Event::Draft", Later(MULTISIG_SIGNS)),
     ("ms_proposals::Event::SendAgain", Later(MULTISIG_SIGNS)),
-    ("ms_proposals::Event::CloseLinked", View("a link's transaction let go")),
-    ("ms_proposals::Event::Preview", Machine("the executor's look: fee and whether it runs")),
-    ("ms_proposals::Event::ReadSigners", Machine("how the remaining approvals can come")),
-    ("ms_proposals::Event::Retry", Machine("the multisig service asked again")),
-    ("ms_proposals::Event::Review", Machine("the one review, gathered")),
-    ("ms_proposals::Event::Timeline", Machine("a transaction's history")),
-    ("ms_proposals::Event::Watch", View("a transaction's sheet opened")),
-    ("ms_proposals::Event::Unwatch", View("a transaction's sheet closed")),
+    (
+        "ms_proposals::Event::CloseLinked",
+        View("a link's transaction let go"),
+    ),
+    (
+        "ms_proposals::Event::Preview",
+        Machine("the executor's look: fee and whether it runs"),
+    ),
+    (
+        "ms_proposals::Event::ReadSigners",
+        Machine("how the remaining approvals can come"),
+    ),
+    (
+        "ms_proposals::Event::Retry",
+        Machine("the multisig service asked again"),
+    ),
+    (
+        "ms_proposals::Event::Review",
+        Machine("the one review, gathered"),
+    ),
+    (
+        "ms_proposals::Event::Timeline",
+        Machine("a transaction's history"),
+    ),
+    (
+        "ms_proposals::Event::Watch",
+        View("a transaction's sheet opened"),
+    ),
+    (
+        "ms_proposals::Event::Unwatch",
+        View("a transaction's sheet closed"),
+    ),
     ("session::Event::AskAgain", Later(MULTISIG_SIGNS)),
     // AUDIT M1: the multisig create and add sheets, and a link's stand.
     ("ms_accounts::Event::Add", Later(MULTISIG)),
-    ("ms_accounts::Event::Apply", Machine("an invite's networks, kept with what it added")),
-    ("ms_accounts::Event::CheckNetworks", Machine("which networks hold the Safe contracts")),
-    ("ms_accounts::Event::CloseLink", View("a link's stand, drawn")),
+    (
+        "ms_accounts::Event::Apply",
+        Machine("an invite's networks, kept with what it added"),
+    ),
+    (
+        "ms_accounts::Event::CheckNetworks",
+        Machine("which networks hold the Safe contracts"),
+    ),
+    (
+        "ms_accounts::Event::CloseLink",
+        View("a link's stand, drawn"),
+    ),
     ("ms_accounts::Event::Create", Later(MULTISIG)),
     ("ms_accounts::Event::DiscardDraft", Later(MULTISIG)),
-    ("ms_accounts::Event::Draft", Machine("the draft's address, as the form moves")),
-    ("ms_accounts::Event::DropLink", View("a link's missing-network sheet closed")),
+    (
+        "ms_accounts::Event::Draft",
+        Machine("the draft's address, as the form moves"),
+    ),
+    (
+        "ms_accounts::Event::DropLink",
+        View("a link's missing-network sheet closed"),
+    ),
     ("ms_accounts::Event::Import", Later(MULTISIG)),
-    ("ms_accounts::Event::KeepDraft", Machine("the create form, kept as it moves")),
+    (
+        "ms_accounts::Event::KeepDraft",
+        Machine("the create form, kept as it moves"),
+    ),
     ("ms_accounts::Event::KeepFound", Later(MULTISIG)),
-    ("ms_accounts::Event::KeepInvited", Machine("an invite's labels, kept with what it added")),
-    ("ms_accounts::Event::KeepLink", Machine("an invite kept while its network is added")),
+    (
+        "ms_accounts::Event::KeepInvited",
+        Machine("an invite's labels, kept with what it added"),
+    ),
+    (
+        "ms_accounts::Event::KeepLink",
+        Machine("an invite kept while its network is added"),
+    ),
     ("ms_accounts::Event::OpenLink", Later(MULTISIG)),
     ("ms_accounts::Event::ParseExport", NotOne(FILE)),
     ("ms_accounts::Event::PickKind", Later(MULTISIG)),
-    ("ms_accounts::Event::ReadKinds", Machine("what the chain says of a member")),
-    ("ms_accounts::Event::ResolveEns", Machine("an ENS name read on Ethereum")),
+    (
+        "ms_accounts::Event::ReadKinds",
+        Machine("what the chain says of a member"),
+    ),
+    (
+        "ms_accounts::Event::ResolveEns",
+        Machine("an ENS name read on Ethereum"),
+    ),
 ];
 
 /// Which account the wallet shows, among a person's multisigs.
@@ -597,6 +665,10 @@ const CALLS: &[(&str, Place)] = &[
         View("a contact's page shown"),
     ),
     ("activity_feed::focus_tick", Step("refresh_balances")),
+    // r10 follow-up: the person's moments, for the incoming check's cadence.
+    ("activity_feed::refreshed", Step("refresh_balances")),
+    ("activity_feed::sent", Step("submit_transfer")),
+    ("activity_feed::interacting", Machine("a list scrolled")),
     ("activity_feed::is_stable", Machine("a read")),
     (
         "activity_feed::privacy_changed",

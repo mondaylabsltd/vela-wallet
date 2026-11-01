@@ -1822,7 +1822,10 @@ mod endpoint_rule {
             kind: ProxyFailureKind::PacFailed,
         };
         let said = super::transport_words(&loc, Some(&pac));
-        assert!(said.contains("automatic proxy configuration (wpad.corp.example)"), "{said}");
+        assert!(
+            said.contains("automatic proxy configuration (wpad.corp.example)"),
+            "{said}"
+        );
         assert!(said.contains("Proxies"), "{said}");
         let dead = ProxyFailure {
             proxy: "127.0.0.1:9".into(),

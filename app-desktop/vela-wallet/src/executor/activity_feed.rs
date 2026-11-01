@@ -639,6 +639,12 @@ impl Machine for ActivityFeed {
             // persists what it admitted into the same store the send path will
             // write to.
             FeedOperation::ScanIncomingTransfers { address, .. } => {
+                // `VELA_PERF` (developer builds): when each scan went out,
+                // beside the gesture's edges below — the cadence, readable.
+                crate::perf::note(format_args!(
+                    "feed scan at={:.0}",
+                    crate::executor::now_ms()
+                ));
                 let address = address.clone();
                 Answer::Blocking(Box::new(move || FeedShellResult::SyncCompleted {
                     new_count: sync_received(&address),
@@ -841,6 +847,55 @@ pub fn start_ticks(cx: &mut App) {
     .detach();
 }
 
+/// r10 follow-up: the page as it stands at one of the person's own moments
+/// — a refresh, a send, a list's gesture. They have just acted, so it was
+/// touched just now (`since_interaction_ms` stays on the wire, unread).
+fn presence_now() -> vela_core::app::activity_feed::FeedPresence {
+    vela_core::app::activity_feed::FeedPresence {
+        visible: activity_on_screen(),
+        since_interaction_ms: 0.,
+        now_ms: crate::executor::now_ms(),
+    }
+}
+
+fn presence_changed(change: vela_core::app::activity_feed::FeedPresenceChange, cx: &mut App) {
+    let presence = presence_now();
+    resident::resident::<ActivityFeed>(cx).update(cx, |resident, cx| {
+        resident.dispatch(Event::PresenceChanged { presence, change }, cx);
+    });
+}
+
+/// r10 follow-up: the hero's refresh was pressed (`refreshed`) — the core
+/// reads the store and scans at once, and its back-off starts again. The
+/// phone's pull-to-refresh.
+pub fn refreshed(cx: &mut App) {
+    presence_changed(
+        vela_core::app::activity_feed::FeedPresenceChange::Refreshed,
+        cx,
+    );
+}
+
+/// r10 follow-up: a send left this account — handed to the tracker
+/// (`sent`). The scan alone (the send's own record re-reads the store), and
+/// the back-off starts again.
+pub fn sent(cx: &mut App) {
+    presence_changed(vela_core::app::activity_feed::FeedPresenceChange::Sent, cx);
+}
+
+/// r10 follow-up: the home's or the history's column started scrolling
+/// (`on`) or settled (`off`) — `wallet::list_gesture`. A scan that comes
+/// due meanwhile is held and runs at `off`.
+pub fn interacting(on: bool, cx: &mut App) {
+    let presence = presence_now();
+    crate::perf::note(format_args!(
+        "feed interacting on={on} at={:.0}",
+        presence.now_ms
+    ));
+    resident::resident::<ActivityFeed>(cx).update(cx, |resident, cx| {
+        resident.dispatch(Event::Interacting { on, presence }, cx);
+    });
+}
+
 /// The window came back, or something changed the store under it.
 ///
 /// `FocusTick` is the core's own "look again now" — the same event the 30 s
@@ -905,15 +960,21 @@ mod tests {
             crate::executor::balance_dashboard::remember_lives_on(MS, vec![ARC]);
             let facts = scan_facts(MS);
             assert_eq!(
-                facts.account_networks.iter().map(|n| n.chain_id).collect::<Vec<_>>(),
+                facts
+                    .account_networks
+                    .iter()
+                    .map(|n| n.chain_id)
+                    .collect::<Vec<_>>(),
                 vec![ARC]
             );
             let plan = vela_core::app::incoming_scan::scan_plan(&facts);
             assert!(plan.scan_chain_ids.contains(&ARC), "{plan:?}");
             // A Vela account lives on none of its own.
-            assert!(scan_facts("0x88cca0eedbf2c4426110bbfc998f048689266894")
-                .account_networks
-                .is_empty());
+            assert!(
+                scan_facts("0x88cca0eedbf2c4426110bbfc998f048689266894")
+                    .account_networks
+                    .is_empty()
+            );
         });
     }
 
@@ -929,7 +990,12 @@ mod tests {
             }];
             write_cursors("0xAbC", &kept);
             assert_eq!(read_cursors("0xabc"), kept);
-            assert!(storage::read_value("vela.scanCursors.0xabc").ok().flatten().is_some());
+            assert!(
+                storage::read_value("vela.scanCursors.0xabc")
+                    .ok()
+                    .flatten()
+                    .is_some()
+            );
         });
     }
 

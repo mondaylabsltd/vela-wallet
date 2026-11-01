@@ -26,13 +26,11 @@ use gpui::{
 };
 
 /// `--motion-panel-in`: the third column opening.
-pub const PANEL_IN: Duration =
-    Duration::from_millis(crate::theme::CONTACTS_MOTION_PANEL_OPEN_MS);
+pub const PANEL_IN: Duration = Duration::from_millis(crate::theme::CONTACTS_MOTION_PANEL_OPEN_MS);
 /// `--motion-sheet-in`: a card or a toast arriving.
 pub const SHEET_IN: Duration = Duration::from_millis(220);
 /// `--motion-crossfade`: what every movement degrades to under Reduce Motion.
-pub const CROSSFADE: Duration =
-    Duration::from_millis(crate::theme::CONTACTS_MOTION_CROSSFADE_MS);
+pub const CROSSFADE: Duration = Duration::from_millis(crate::theme::CONTACTS_MOTION_CROSSFADE_MS);
 /// `--space-5xl`: how far a card rises as it arrives.
 pub const CARD_RISE: f32 = 48.;
 /// `--space-lg`: how far a toast drops as it arrives.

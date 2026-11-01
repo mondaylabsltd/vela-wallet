@@ -215,7 +215,10 @@ mod tests {
         assert_eq!(classify(&eip681, "en"), Inbound::Payment(eip681.clone()));
         // A refused payment link still goes there: the scan path says why.
         let refused = "https://getvela.app/pay?to=nope&chain=100";
-        assert_eq!(classify(refused, "en"), Inbound::Payment(refused.to_owned()));
+        assert_eq!(
+            classify(refused, "en"),
+            Inbound::Payment(refused.to_owned())
+        );
     }
 
     #[test]
@@ -253,7 +256,10 @@ mod tests {
                 kind: MultisigKind::Invite,
                 url,
             } => {
-                assert!(url.starts_with("https://wallet.getvela.app/en/wallet#msa="), "{url}");
+                assert!(
+                    url.starts_with("https://wallet.getvela.app/en/wallet#msa="),
+                    "{url}"
+                );
                 assert!(url.contains(SAFE), "{url}");
             }
             other => unreachable!("{other:?}"),
@@ -283,9 +289,7 @@ mod tests {
     #[test]
     fn a_connect_link_keeps_only_what_reads() {
         let lower = SAFE.to_lowercase();
-        let link = format!(
-            "https://wallet.getvela.app/en/connect#for={lower}&ms=100.{lower}.{TX}"
-        );
+        let link = format!("https://wallet.getvela.app/en/connect#for={lower}&ms=100.{lower}.{TX}");
         match classify(&link, "ja") {
             Inbound::Multisig {
                 kind: MultisigKind::Connect,
@@ -305,7 +309,13 @@ mod tests {
 
     #[test]
     fn other_text_is_nothing() {
-        for text in ["", "hello", "https://example.org/#ms=1", "0x1234", "velawallet://settings"] {
+        for text in [
+            "",
+            "hello",
+            "https://example.org/#ms=1",
+            "0x1234",
+            "velawallet://settings",
+        ] {
             assert_eq!(classify(text, "en"), Inbound::Nothing, "{text}");
         }
         assert_eq!(classify(&"a".repeat(MAX_TEXT + 1), "en"), Inbound::Nothing);

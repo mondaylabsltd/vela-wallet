@@ -137,6 +137,14 @@ impl SmoothScroll {
             })
     }
 
+    /// The column is moving under the wheel or the trackpad (or gliding to a
+    /// place it was sent) — not yet caught up with its input. Between two
+    /// trackpad reports it can be caught up, so a gesture's end is this
+    /// staying false for a while (`wallet::list_gesture`).
+    pub fn moving(&self) -> bool {
+        self.motion.borrow().moving
+    }
+
     /// Bring a box of this column's content into view, gliding: the whole of
     /// it when it fits the column, else from its top. A box already in view
     /// moves nothing.

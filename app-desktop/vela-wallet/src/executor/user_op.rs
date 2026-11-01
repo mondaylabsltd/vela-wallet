@@ -1591,7 +1591,10 @@ mod tests {
         );
         assert!(matches!(
             passkey_failure(PasskeyFailure::other("broken"), SIGN_TIMEOUT_MS),
-            SubmitFailure::Signer { kind: FailureKind::Other, .. }
+            SubmitFailure::Signer {
+                kind: FailureKind::Other,
+                ..
+            }
         ));
         assert_eq!(
             SendSubmitFailure::from(SubmitFailure::PasskeyTimedOut),

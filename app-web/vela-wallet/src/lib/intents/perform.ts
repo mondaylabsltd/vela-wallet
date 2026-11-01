@@ -297,9 +297,11 @@ export async function perform(
 			networkSpace.set(action.space);
 			return null;
 		case 'refresh_balances':
-			// The home's refresh: balances read again, the feed looks again.
+			// The home's refresh: balances read again, the feed looks again —
+			// a refresh to the cadence (r10 follow-up), which reads the store,
+			// scans, and starts the back-off again.
 			balance.refresh(true, true);
-			feed.focusTick();
+			feed.refreshed();
 			return null;
 		case 'set_contact_favorite':
 			contactsBook.dispatch({ type: 'toggle_favorite', address: action.address, now_ms: nowMs });
