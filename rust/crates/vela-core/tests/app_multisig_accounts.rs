@@ -2202,6 +2202,19 @@ fn one_name_per_member_and_the_invite_carries_every_known_one() {
     );
     assert_eq!(labels[B], "Bo", "kept");
     assert_eq!(labels[A], "0x000000…0000AA", "nothing names it");
+    // r11-6: this device's own name for its account is its own: an invite
+    // (what other devices keep) never carries it — only a published or kept one.
+    let mine = view.accounts[0]
+        .invite_members
+        .iter()
+        .find(|m| {
+            m.address
+                .as_deref()
+                .is_some_and(|x| x.eq_ignore_ascii_case(&me))
+        })
+        .cloned()
+        .unwrap();
+    assert_eq!(mine.name, None, "a local-only name stays on this device");
     let mut wanted = view.index_wanted.clone();
     wanted.sort();
     let mut want = vec![A.to_owned(), B.to_owned(), me.to_ascii_lowercase()];

@@ -961,6 +961,15 @@ impl State {
         crate::multisig_rules::names::label(address, own, kept.as_deref(), registered)
     }
 
+    /// [`Self::label_of`] without this device's own account names: what may
+    /// travel to another device (an invite).
+    fn shared_label_of(&self, address: &str) -> String {
+        let key = address.to_ascii_lowercase();
+        let kept = kept_member(&self.accounts, address).name;
+        let registered = self.index.get(&key).and_then(|a| a.name.as_deref());
+        crate::multisig_rules::names::label(address, None, kept.as_deref(), registered)
+    }
+
     /// r9-12: what `address` is as far as this device can tell (`names::kind`).
     fn invite_kind_of(&self, address: &str) -> Option<crate::multisig_link::MemberKind> {
         use crate::multisig_link::MemberKind as K;
@@ -1008,7 +1017,11 @@ impl State {
         self.members_of(account)
             .into_iter()
             .map(|member| {
-                let label = self.label_of(&member);
+                // r11-6: an invite carries only names others may see — the
+                // member's published one or a kept label — never this
+                // device's own name for one of its accounts (Dana's
+                // "Parallel One" is hers alone; the index publishes none).
+                let label = self.shared_label_of(&member);
                 let named = label != crate::multisig_rules::names::short_address(&member);
                 crate::multisig_link::InvitedMember {
                     name: named.then_some(label),
