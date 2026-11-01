@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { accountName } from '$lib/multisig/core/account-name';
 	/**
 	 * The wallet a signed-in person lands in — the web's answer to the iOS root
 	 * view and the desktop's `SessionRoute::Wallet` branch (spec 019).
@@ -887,7 +888,7 @@
 					const own = session.view.accounts.find(
 						(row) => row.account.address.toLowerCase() === low
 					);
-					if (own) return own.account.name;
+					if (own) return accountName(own.account.address, own.account.name);
 					// r4a-18: a multisig here, or a member of the multisig sending.
 					const kept = multisigKnownName(address, sendingMultisig);
 					if (kept) return kept;

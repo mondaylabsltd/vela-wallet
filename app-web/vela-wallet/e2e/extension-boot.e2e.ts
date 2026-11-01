@@ -58,7 +58,7 @@ test.describe('the packaged extension', () => {
 		// The multi-key account is the one founded on all three fixture keys.
 		await page.evaluate(() => localStorage.setItem('vela.activeAccountIndex', '3'));
 		await page.goto(`chrome-extension://${id}/en/wallet.html`);
-		await expect(page.getByText('Parallel Multi').first()).toBeVisible({ timeout: 30_000 });
+		await expect(page.getByText('Interleave').first()).toBeVisible({ timeout: 30_000 });
 		// The shortened form the hero shows for the golden Safe. Same keys, same
 		// core, same derivation — inside a `chrome-extension://` origin.
 		await expect(page.getByText('0x88cCA0…266894').first()).toBeVisible();

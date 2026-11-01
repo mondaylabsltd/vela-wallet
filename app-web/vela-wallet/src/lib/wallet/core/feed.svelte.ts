@@ -9,6 +9,7 @@
  * — local names win over the network — comes from the session store.
  */
 
+import { accountName } from '$lib/multisig/core/account-name';
 import { multisigAccountsForExt } from '$lib/multisig/core/ext';
 import { loadCore } from '$lib/core/client';
 import type { FeedView } from '$lib/core/generated/FeedView';
@@ -76,7 +77,7 @@ class Feed {
 			ensureActivityFeed(() => [
 				...session.view.accounts.map((row) => ({
 					address: row.account.address,
-					name: row.account.name
+					name: accountName(row.account.address, row.account.name)
 				})),
 				...multisigAccountsForExt().accounts.map((a) => ({ address: a.address, name: a.name }))
 			]);
