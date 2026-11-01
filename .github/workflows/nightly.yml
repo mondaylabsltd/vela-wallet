@@ -1,0 +1,479 @@
+# The heavy suites (native parity Phase 5, test loops) — nightly, and on
+# demand:
+#
+#   gh workflow run nightly.yml --ref <branch>                      everything
+#   gh workflow run nightly.yml --ref <branch> -f only=trusted-signer,web-e2e
+#   gh workflow run nightly.yml --ref <branch> -f only=multisig-fork -f genesis_ref=<sha>
+#
+# NON-BLOCKING by design: nothing here is a pull-request check, so a red night
+# gates no merge. Each job still fails honestly — a red run is the signal, and
+# its artifacts (logs, screenshots, traces, perf numbers) are what to read.
+# Promote a job into ci.yml only once it has a proven-stable record on a
+# runner (docs/ci/test-loops.md says how, and what each job needs).
+#
+# The fast checks every PR must pass are in ci.yml.
+#
+# Secrets and variables (names only; none is required for the job to run or
+# skip cleanly — see docs/ci/test-loops.md):
+#   vars.SGR_MAILBOX_REF       pinned commit of mondaylabsltd/safe-genesis-registry
+#                              carrying the proposal mailbox the wallet speaks to.
+#                              Unset → the multisig fork job SKIPS, saying so.
+#   vars.PEERCONNECT_REF       pinned commit of atshelchin/peerconnect (default below).
+#   secrets.GNOSIS_FORK_RPC_URL  a Gnosis RPC to fork from (default: the public
+#                              https://rpc.gnosischain.com, which rate-limits).
+#   secrets.ONCHAIN_REPOS_TOKEN  read access to the two service repos, only if
+#                              either is ever made private (both are public today).
+name: Nightly
+
+on:
+  schedule:
+    # 03:17 UTC: off the hour, when GitHub's scheduler is least loaded.
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+    inputs:
+      only:
+        description: 'Comma-separated jobs to run (empty = all): web-e2e, trusted-signer, multisig-fork, android-macrobench, ios-perf, desktop-perf'
+        required: false
+        default: ''
+      genesis_ref:
+        description: 'safe-genesis-registry commit/branch for the multisig fork job (default: vars.SGR_MAILBOX_REF)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # app-web's Playwright suite on the three engines (playwright.config.ts):
+  # chromium runs everything (the extension suites included — they load the
+  # unpacked package with --headless=new), firefox and webkit run the storage
+  # suites. The config's webServer builds the site and the extension and
+  # serves the deploy bundle on workerd.
+  web-e2e:
+    if: ${{ !inputs.only || contains(format(',{0},', inputs.only), ',web-e2e,') }}
+    name: web e2e (${{ matrix.project }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [chromium, firefox, webkit]
+    defaults:
+      run:
+        working-directory: app-web/vela-wallet
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: app-web/vela-wallet/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: app-web/vela-wallet/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      # The chromium project drives the extension too, which needs chromium
+      # itself (not the headless shell); the other two need only their engine.
+      - name: Install ${{ matrix.project }}
+        run: pnpm exec playwright install --with-deps ${{ matrix.project }}
+      - name: Playwright (${{ matrix.project }})
+        run: pnpm exec playwright test --project=${{ matrix.project }} --reporter=list,junit,html
+        env:
+          PLAYWRIGHT_JUNIT_OUTPUT_NAME: ${{ runner.temp }}/e2e-${{ matrix.project }}.xml
+          PLAYWRIGHT_HTML_OUTPUT_DIR: ${{ runner.temp }}/e2e-report-${{ matrix.project }}
+          PLAYWRIGHT_HTML_OPEN: never
+          VELA_GIT_COMMIT: ${{ github.sha }}
+      - name: Keep the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-e2e-${{ matrix.project }}
+          path: |
+            ${{ runner.temp }}/e2e-${{ matrix.project }}.xml
+            ${{ runner.temp }}/e2e-report-${{ matrix.project }}
+            app-web/vela-wallet/test-results
+            app-web/vela-wallet/e2e/__screenshots__
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # The trusted-signer page suites (app-web/trusted-signer/HANDOVER.md): the
+  # page on a real getvela.app origin over TLS, driven through the DevTools
+  # protocol in Chrome for Testing. $SB's three files — tls-serve.py and a
+  # throwaway getvela.app certificate — are generated here, per run.
+  trusted-signer:
+    if: ${{ !inputs.only || contains(format(',{0},', inputs.only), ',trusted-signer,') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # The browser suites run on bun: node's fetch refuses the page server's
+      # self-signed certificate (HANDOVER.md), and plain-send/provenance run
+      # on both to cover JavaScriptCore.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      # gen-fonts --check rebuilds the subset byte for byte: the same fontTools
+      # and brotli the committed src/fonts.css was made with.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: fontTools for gen-fonts --check
+        run: python -m pip install fonttools==4.54.1 brotli==1.1.0
+      - name: Chrome for Testing
+        id: cft
+        run: |
+          path=$(npx -y @puppeteer/browsers@3.2.4 install chrome@stable --path "$RUNNER_TEMP/cft" --format '{{path}}' | tail -1)
+          "$path" --version
+          echo "chrome=$path" >> "$GITHUB_OUTPUT"
+      - name: Page suites
+        env:
+          CHROME_BIN: ${{ steps.cft.outputs.chrome }}
+        run: scripts/ci/trusted-signer-suites.sh "$RUNNER_TEMP/trusted-signer"
+      - name: Keep the logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trusted-signer-suites
+          # Not the sb/ directory: its key is throwaway, but it is a key.
+          path: |
+            ${{ runner.temp }}/trusted-signer/*.log
+            ${{ runner.temp }}/trusted-signer/summary.md
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # The multisig fork suite (scripts/onchain/multisig-fork/README.md): anvil
+  # forking Gnosis (and a second fork answering as Base), the genesis service
+  # with its proposal mailbox, a PeerConnect relay and the local bundler
+  # relay — then vela-core's headless `multisig_fork` test and the web
+  # wallet's `e2e/onchain` Playwright suite against them.
+  #
+  # The genesis service is another repository. It is checked out at a PINNED
+  # commit (vars.SGR_MAILBOX_REF, or the genesis_ref input); with none set, or
+  # one GitHub cannot serve, the job says so and stops green-but-skipped
+  # rather than testing against a service build nobody chose.
+  multisig-fork:
+    if: ${{ !inputs.only || contains(format(',{0},', inputs.only), ',multisig-fork,') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      GENESIS_REF: ${{ inputs.genesis_ref || vars.SGR_MAILBOX_REF }}
+      # atshelchin/peerconnect main as of 2026-11-02; the relay only carries
+      # ciphertext, and the protocol crate the wallet uses is vendored.
+      PEERCONNECT_REF: ${{ vars.PEERCONNECT_REF || '11f8ca81a99172b1a38f76edce682e05b6118638' }}
+      FORK_STATE: ${{ github.workspace }}/.fork-state
+    steps:
+      - uses: actions/checkout@v4
+      - name: The genesis service (pinned)
+        id: genesis
+        if: env.GENESIS_REF != ''
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: mondaylabsltd/safe-genesis-registry
+          ref: ${{ env.GENESIS_REF }}
+          path: _services/safe-genesis-registry
+          submodules: recursive
+          token: ${{ secrets.ONCHAIN_REPOS_TOKEN || github.token }}
+          persist-credentials: false
+      - name: The PeerConnect relay (pinned)
+        id: peerconnect
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: atshelchin/peerconnect
+          ref: ${{ env.PEERCONNECT_REF }}
+          path: _services/peerconnect
+          token: ${{ secrets.ONCHAIN_REPOS_TOKEN || github.token }}
+          persist-credentials: false
+      - name: Are the services available?
+        id: gate
+        env:
+          GENESIS_OUTCOME: ${{ steps.genesis.outcome }}
+          PEERCONNECT_OUTCOME: ${{ steps.peerconnect.outcome }}
+        run: scripts/ci/onchain-gate.sh
+      - uses: foundry-rs/foundry-toolchain@v1
+        if: steps.gate.outputs.ready == 'true'
+        with:
+          version: v1.5.1
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.gate.outputs.ready == 'true'
+        with:
+          toolchain: 1.97.1
+      - uses: Swatinem/rust-cache@v2
+        if: steps.gate.outputs.ready == 'true'
+        with:
+          workspaces: |
+            rust
+            _services/safe-genesis-registry
+            _services/peerconnect
+      - uses: pnpm/action-setup@v4
+        if: steps.gate.outputs.ready == 'true'
+        with:
+          package_json_file: app-web/vela-wallet/package.json
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.ready == 'true'
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: app-web/vela-wallet/pnpm-lock.yaml
+      - name: Web dependencies and Chromium
+        if: steps.gate.outputs.ready == 'true'
+        working-directory: app-web/vela-wallet
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec playwright install --with-deps chromium
+      - name: Start the harness (forks, genesis service, relays)
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          GENESIS_REPO: ${{ github.workspace }}/_services/safe-genesis-registry
+          PEERCONNECT_REPO: ${{ github.workspace }}/_services/peerconnect
+          FORK_URL: ${{ secrets.GNOSIS_FORK_RPC_URL }}
+        run: |
+          # An empty secret must not reach up.sh as an empty URL.
+          [ -n "$FORK_URL" ] || unset FORK_URL
+          STATE="$FORK_STATE" scripts/onchain/multisig-fork/up.sh
+      - name: vela-core against the fork (multisig_fork)
+        if: steps.gate.outputs.ready == 'true'
+        working-directory: rust
+        env:
+          VELA_MULTISIG_FORK: '1'
+        run: cargo test -p vela-core --features crux,dev-fixtures --test multisig_fork -- --ignored --nocapture
+      - name: The web wallet against the fork (e2e/onchain)
+        if: steps.gate.outputs.ready == 'true' && !cancelled()
+        working-directory: app-web/vela-wallet
+        run: |
+          pnpm run sync:wasm
+          pnpm dev --host 127.0.0.1 --port 5173 > "$FORK_STATE/vite.log" 2>&1 &
+          for _ in $(seq 1 120); do
+            curl -sf -o /dev/null http://127.0.0.1:5173/ && break
+            sleep 1
+          done
+          pnpm exec playwright test -c playwright.onchain.config.ts --reporter=list,junit
+        env:
+          PLAYWRIGHT_JUNIT_OUTPUT_NAME: ${{ runner.temp }}/e2e-onchain.xml
+      - name: Stop the harness
+        if: always() && steps.gate.outputs.ready == 'true'
+        run: STATE="$FORK_STATE" scripts/onchain/multisig-fork/down.sh
+      - name: Keep the logs and screenshots
+        if: always() && steps.gate.outputs.ready == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: multisig-fork
+          path: |
+            ${{ env.FORK_STATE }}/*.log
+            ${{ runner.temp }}/e2e-onchain.xml
+            app-web/vela-wallet/e2e/onchain/.results
+            app-web/vela-wallet/e2e/onchain/.shots
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # Android Macrobenchmarks (app-android/vela-wallet/macrobenchmark/README.md)
+  # on an API 34 x86_64 emulator: startup (TTID/TTFD, memory) and the three
+  # journeys (history scroll, Send → Confirm, signing sheet). Emulator figures
+  # are indicative — they compare nights on one runner class, not devices —
+  # so the budgets are summarised, not enforced.
+  android-macrobench:
+    if: ${{ !inputs.only || contains(format(',{0},', inputs.only), ',android-macrobench,') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Let the emulator use KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.97.1
+          targets: x86_64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+          shared-key: android-emulator
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+      - name: Generate the Kotlin bindings
+        working-directory: rust
+        run: bash scripts/build-kotlin-bindings.sh
+      - name: The core for the emulator's ABI only
+        run: scripts/ci/android-core-emulator.sh x86_64
+      - name: Assemble the benchmark APKs
+        working-directory: app-android/vela-wallet
+        run: ./gradlew :app:assembleBenchmarkRelease :macrobenchmark:assembleBenchmarkRelease -PvelaSkipRustBuild --console=plain
+      - name: Run the benchmarks on the emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_7
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
+          working-directory: app-android/vela-wallet
+          script: |
+            ANDROID_SERIAL=emulator-5554 scripts/run-macrobenchmarks.sh "$RUNNER_TEMP/macrobenchmark"
+            python3 scripts/summarize-macrobenchmarks.py "$RUNNER_TEMP/macrobenchmark" | tee "$RUNNER_TEMP/macrobenchmark/summary.txt"
+            adb -s emulator-5554 shell dumpsys meminfo app.getvela.wallet | grep -E "TOTAL PSS|TOTAL:" | tee "$RUNNER_TEMP/macrobenchmark/meminfo.txt" || true
+      - name: Summary
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/macrobenchmark/summary.txt" ]; then
+            { echo '### Android macrobenchmarks (emulator, indicative)'; echo '```'; cat "$RUNNER_TEMP/macrobenchmark/summary.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Keep the results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-macrobenchmark
+          path: ${{ runner.temp }}/macrobenchmark
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # ---------------------------------------------------------------------------
+  # iOS PerfTests (app-ios/scripts/perf/run-perf.sh): a Debug launch seeds the
+  # parallel space's account and 200 history rows, then the RELEASE build runs
+  # PerfTests (cold start to the cached home, scroll hitches, memory). The
+  # core is built `release` here — what ships — not ci.yml's `ci-ios` profile,
+  # so the numbers measure the shipped optimisation. Simulator figures are
+  # indicative; run-perf.sh reports OVER without failing.
+  ios-perf:
+    if: ${{ !inputs.only || contains(format(',{0},', inputs.only), ',ios-perf,') }}
+    runs-on: macos-15
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use the newest Xcode on this runner
+        # As ci.yml's `ios` job: the source needs Swift 6.2 (spec 058).
+        run: |
+          newest=$(printf '%s\n' /Applications/Xcode*.app | sort -V | tail -1)
+          sudo xcode-select -s "$newest/Contents/Developer"
+          xcodebuild -version
+      - name: Cache the release xcframework
+        id: xcframework
+        uses: actions/cache@v4
+        with:
+          path: app-ios/VelaCoreKit/Artifacts
+          key: xcframework-release-${{ hashFiles('rust/crates/**', '!rust/crates/**/tests/**', 'rust/Cargo.lock', 'rust/Cargo.toml', 'rust/scripts/build-ios-xcframework.sh') }}
+      - name: Cache the dev-fixtures xcframework
+        id: devfixtures
+        uses: actions/cache@v4
+        with:
+          path: app-ios/VelaDevFixturesKit/Artifacts
+          key: devfixtures-sim-ci-${{ hashFiles('rust/crates/**', '!rust/crates/**/tests/**', 'rust/Cargo.lock', 'rust/Cargo.toml', 'rust/scripts/build-ios-dev-fixtures.sh') }}
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.xcframework.outputs.cache-hit != 'true' || steps.devfixtures.outputs.cache-hit != 'true'
+        with:
+          toolchain: 1.97.1
+          targets: aarch64-apple-ios, aarch64-apple-ios-sim
+      - uses: Swatinem/rust-cache@v2
+        if: steps.xcframework.outputs.cache-hit != 'true' || steps.devfixtures.outputs.cache-hit != 'true'
+        with:
+          workspaces: rust
+          shared-key: ios-perf
+      - name: Build the xcframework (release)
+        if: steps.xcframework.outputs.cache-hit != 'true'
+        run: ./rust/scripts/build-ios-xcframework.sh
+      # Only the Debug seed launch links the fixtures; the simulator slice will do.
+      - name: Build the dev-fixtures xcframework
+        if: steps.devfixtures.outputs.cache-hit != 'true'
+        env:
+          VELA_IOS_SIM_ONLY: '1'
+        run: ./rust/scripts/build-ios-dev-fixtures.sh
+      - name: Resolve a simulator that actually exists
+        id: sim
+        run: |
+          udid=$(xcrun simctl list devices available -j | python3 -c '
+          import json,sys
+          d=json.load(sys.stdin)["devices"]
+          best=None
+          for runtime, devices in d.items():
+              if "iOS" not in runtime: continue
+              ver=tuple(int(x) for x in runtime.split(".iOS-")[-1].split("-"))
+              for dev in devices:
+                  if dev.get("isAvailable") and dev["name"].startswith("iPhone"):
+                      if best is None or ver > best[0]: best=(ver, dev["udid"], dev["name"], runtime)
+          if best is None: sys.exit("no available iPhone simulator")
+          print(best[1])
+          print(f"using {best[2]} on {best[3]}", file=sys.stderr)
+          ')
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+      - name: PerfTests
+        run: |
+          mkdir -p "$RUNNER_TEMP/ios-perf"
+          app-ios/scripts/perf/run-perf.sh "${{ steps.sim.outputs.udid }}" "$RUNNER_TEMP/dd" "$RUNNER_TEMP/ios-perf/perf.xcresult" \
+            | tee "$RUNNER_TEMP/ios-perf/run-perf.log"
+      - name: Report
+        if: always()
+        run: |
+          [ -d "$RUNNER_TEMP/ios-perf/perf.xcresult" ] || exit 0
+          node app-ios/scripts/perf/report-perf.mjs "$RUNNER_TEMP/ios-perf/perf.xcresult" --json "$RUNNER_TEMP/ios-perf/perf.json" \
+            | tee "$RUNNER_TEMP/ios-perf/report.txt"
+          { echo '### iOS PerfTests (simulator, indicative)'; echo '```'; cat "$RUNNER_TEMP/ios-perf/report.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          (cd "$RUNNER_TEMP/ios-perf" && ditto -c -k --keepParent perf.xcresult perf.xcresult.zip && rm -rf perf.xcresult)
+      - name: Keep the results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-perf
+          path: ${{ runner.temp }}/ios-perf
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # ---------------------------------------------------------------------------
+  # The desktop perf harness (app-desktop/vela-wallet/scripts/perf-run.sh,
+  # README "Performance"): the release build with dev-fixtures, signed in
+  # through the parallel space against a throwaway state directory — five
+  # launches to the cached home, one 200-row History scroll. macOS, because
+  # that is where the targets are set and where a runner has a window server.
+  desktop-perf:
+    if: ${{ !inputs.only || contains(format(',{0},', inputs.only), ',desktop-perf,') }}
+    runs-on: macos-15
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: app-desktop/vela-wallet
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.97.1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app-desktop/vela-wallet
+          cache-all-crates: true
+          shared-key: desktop-perf
+      - name: Build (release, dev-fixtures)
+        run: cargo build --release --features dev-fixtures --locked
+      - name: perf-run.sh
+        run: scripts/perf-run.sh --runs 5 --out "$RUNNER_TEMP/desktop-perf"
+      - name: Summary
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/desktop-perf/summary.txt" ]; then
+            { echo '### Desktop perf (macOS runner, indicative)'; echo '```'; cat "$RUNNER_TEMP/desktop-perf/summary.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Keep the results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-perf
+          path: ${{ runner.temp }}/desktop-perf
+          if-no-files-found: ignore
+          retention-days: 30
