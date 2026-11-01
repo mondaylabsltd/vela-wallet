@@ -105,6 +105,15 @@ pub(crate) struct MultisigUi {
     pub network_wait: Option<super::multisig_links::NetworkWait>,
 }
 
+/// r11 S4: a transaction Vela refuses for what it is (a delegatecall, a
+/// refund, a batch too deep) has nobody who can approve it at the source
+/// (`can_approve` empty): no member is asked to, and no link is handed on.
+fn nobody_approves(item: &ProposalItem) -> bool {
+    item.can_approve.is_empty()
+        && vela_core::multisig_review::refused_for_what_it_is(item.chain_id, &item.tx, &item.review)
+            .is_some()
+}
+
 /// The one review, as drawn (`multisig_review::MultisigReview`'s JSON):
 /// read, never decided again.
 #[derive(Clone, Debug, Default, Deserialize)]
@@ -2350,7 +2359,8 @@ impl WalletPage {
         let next_is_asking = matches!(plan.kind, FootKind::Nothing)
             && !item.members_here.is_empty()
             && item.approved < item.threshold
-            && !executing;
+            && !executing
+            && !nobody_approves(item);
         self.multisig.foot_link = None;
         if next_is_asking
             && let Some(account) = account
@@ -2770,7 +2780,10 @@ impl WalletPage {
         let mut drawn_parties: Vec<String> = Vec::new();
         if let Some(draw) = &review.reading {
             let ctx = self.ms_reading_ctx(chain_id);
-            let lines = if past {
+            // r11 (deep4 "two red boxes"): a review Vela refuses says why in
+            // ONE line — the refusal's, above; the concern lines (a nested
+            // batch, …) would be a second box for a transaction nobody signs.
+            let lines = if past || review.refused.is_some() {
                 Vec::new()
             } else {
                 // Beside a refusal the core has left out the concern it
@@ -3401,14 +3414,7 @@ impl WalletPage {
         // r11 S4: a transaction Vela refuses for what it is (a delegatecall,
         // a refund, a batch too deep) has nobody who can approve it at the
         // source (`can_approve` empty): no member is asked to.
-        if item.can_approve.is_empty()
-            && vela_core::multisig_review::refused_for_what_it_is(
-                item.chain_id,
-                &item.tx,
-                &item.review,
-            )
-            .is_some()
-        {
+        if nobody_approves(item) {
             return out;
         }
         let loc = self.ms_loc();
