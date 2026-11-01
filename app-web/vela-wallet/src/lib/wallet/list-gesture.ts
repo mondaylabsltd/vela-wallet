@@ -2,9 +2,10 @@
  * A list's scroll and gesture state, as the incoming check's cadence hears
  * it (r10 follow-up, docs/multisig-machines.md §9.4 / §10): `on` when a
  * scroll, a wheel or a drag starts on the home's or the history's list, and
- * `off` once it has settled — `scrollend`, or nothing moved for
- * [`GESTURE_SETTLE_MS`] with no finger down. The core holds a scan that
- * comes due meanwhile and runs it at `off`; when to scan stays the core's.
+ * `off` once it has settled — nothing moved for [`SCROLLEND_GRACE_MS`]
+ * after a `scrollend`, or for [`GESTURE_SETTLE_MS`] without one, with no
+ * finger down. The core holds a scan that comes due meanwhile and runs it at
+ * `off`; when to scan stays the core's.
  *
  * Transport only: each edge is reported once (a scroll fires dozens of
  * events a second; the core needs the two edges), and an `on` is always
@@ -20,6 +21,15 @@ import type { Attachment } from 'svelte/attachments';
  * runs right after.
  */
 export const GESTURE_SETTLE_MS = 250;
+
+/**
+ * How long a list must stay still after a `scrollend` to count as settled.
+ * Not at once: a wheel's notch is a short smooth scroll of its own, so a
+ * browser fires `scrollend` after every notch while the wheel is still
+ * turning — measured on Chromium: one per 50 ms notch. The next notch inside
+ * this grace keeps the gesture.
+ */
+export const SCROLLEND_GRACE_MS = 120;
 
 /** What the tracker needs of the page: a clock's timers. */
 export interface GestureHost {
@@ -62,7 +72,7 @@ export class GestureTracker {
 					this.#on = true;
 					this.#report(true);
 				}
-				this.#arm();
+				this.#arm(GESTURE_SETTLE_MS);
 				return;
 			case 'finger-down':
 				// A finger resting on the list is not yet a gesture; a move is.
@@ -73,10 +83,12 @@ export class GestureTracker {
 				// A fling may carry on; its scroll events keep the gesture, and
 				// `scrollend` or the settle ends it.
 				this.#fingers = false;
-				if (this.#on) this.#arm();
+				if (this.#on) this.#arm(GESTURE_SETTLE_MS);
 				return;
 			case 'settled':
-				if (!this.#fingers) this.#end();
+				// `scrollend`: the list stopped — unless the next notch or a
+				// finger moves it again within the grace.
+				if (this.#on) this.#arm(SCROLLEND_GRACE_MS);
 				return;
 		}
 	}
@@ -94,13 +106,13 @@ export class GestureTracker {
 		this.#report(false);
 	}
 
-	#arm(): void {
+	#arm(ms: number): void {
 		this.#disarm();
 		if (this.#fingers) return;
 		this.#timer = this.#host.setTimeout(() => {
 			this.#timer = null;
-			this.input('settled');
-		}, GESTURE_SETTLE_MS);
+			this.#end();
+		}, ms);
 	}
 
 	#disarm(): void {

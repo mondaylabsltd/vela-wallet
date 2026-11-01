@@ -10,7 +10,7 @@
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type { FeedNextScan } from '$lib/core/generated/FeedNextScan';
 import type { FeedView } from '$lib/core/generated/FeedView';
-import { GESTURE_SETTLE_MS, GestureTracker } from '../list-gesture';
+import { GESTURE_SETTLE_MS, GestureTracker, SCROLLEND_GRACE_MS } from '../list-gesture';
 import { followIncomingCadence, type CadenceHost, type CadencePort } from './incoming-cadence';
 
 type Core = {
@@ -249,7 +249,8 @@ describe('followIncomingCadence (the core decides)', () => {
 		page.advance(100);
 		expect(scans).toEqual([]);
 		list.input('settled'); // scrollend
-		expect(scans).toEqual([17_100]);
+		page.advance(SCROLLEND_GRACE_MS);
+		expect(scans).toEqual([17_100 + SCROLLEND_GRACE_MS]);
 	});
 
 	it('refreshed and sent scan at once and start the back-off over', () => {

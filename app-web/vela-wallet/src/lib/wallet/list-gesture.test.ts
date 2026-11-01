@@ -1,10 +1,16 @@
 /**
  * A list's gesture, as the incoming check's cadence hears it (r10
  * follow-up): one `on` when it starts, one `off` once it has settled —
- * `scrollend`, or still for `GESTURE_SETTLE_MS` with no finger down.
+ * still for `SCROLLEND_GRACE_MS` after a `scrollend`, or for
+ * `GESTURE_SETTLE_MS` without one, with no finger down.
  */
 import { describe, expect, it } from 'vitest';
-import { GESTURE_SETTLE_MS, GestureTracker, type GestureHost } from './list-gesture';
+import {
+	GESTURE_SETTLE_MS,
+	GestureTracker,
+	SCROLLEND_GRACE_MS,
+	type GestureHost
+} from './list-gesture';
 
 function clock() {
 	let now = 0;
@@ -53,12 +59,28 @@ describe('GestureTracker', () => {
 		expect(edges).toEqual([true, false]);
 	});
 
-	it('scrollend ends it at once', () => {
-		const { tracker, edges, pending } = tracked();
+	it('scrollend ends it once the list stays still for the grace', () => {
+		const { tracker, advance, edges, pending } = tracked();
 		tracker.input('moved');
 		tracker.input('settled');
+		advance(SCROLLEND_GRACE_MS - 1);
+		expect(edges).toEqual([true]);
+		advance(1);
 		expect(edges).toEqual([true, false]);
 		expect(pending()).toBe(0);
+	});
+
+	it('a wheel turning notch by notch is one gesture, though each notch ends in a scrollend', () => {
+		const { tracker, advance, edges } = tracked();
+		for (let notch = 0; notch < 40; notch++) {
+			tracker.input('moved');
+			advance(30);
+			tracker.input('settled'); // Chromium: scrollend after every notch
+			advance(20);
+		}
+		expect(edges).toEqual([true]);
+		advance(SCROLLEND_GRACE_MS);
+		expect(edges).toEqual([true, false]);
 	});
 
 	it('a finger down holds the gesture until it lifts and the list settles', () => {
