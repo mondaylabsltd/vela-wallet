@@ -800,6 +800,9 @@ export function trustedSignerApprovalRequest(args: {
 	keyRoute?: unknown;
 	/** r9-10: the review asks for "… anyway": the page says so, in the danger style. */
 	anyway?: boolean;
+	/** r10 page: the members and approvals now — a member change reads before → after. */
+	owners?: string[];
+	threshold?: number | null;
 }): { intent: unknown; context: unknown } {
 	return JSON.parse(wasm.trustedSignerApprovalRequest(JSON.stringify(args))) as {
 		intent: unknown;

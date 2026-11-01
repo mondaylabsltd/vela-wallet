@@ -124,6 +124,10 @@ async function passkey(op: Op<'passkey'>, signal: AbortSignal): Promise<Multisig
 					multisig: op.purpose.multisig,
 					multisigName: op.purpose.name,
 					anyway: op.purpose.anyway,
+					// r10 page: the members and approvals now, so a member
+					// change reads before → after there (as the app's word).
+					owners: op.purpose.owners,
+					threshold: op.purpose.threshold || null,
 					tx: op.purpose.tx as never,
 					safeTxHash: op.purpose.safe_tx_hash,
 					keys,
@@ -187,9 +191,9 @@ function feeOf(fee: unknown): QuotedInBandFee | undefined {
  * What the executor's trusted signing page is shown beside the operation
  * (round 7, r7-1): the page reads what runs from the operation's bytes; this
  * says what they do not carry — the transaction (the number it runs at; the
- * core adds its safeTxHash there), the multisig, its name and how many
- * approvals it needs — each drawn as the app's word, the hash checked
- * against the bytes.
+ * core adds its safeTxHash there), the multisig, its name, how many
+ * approvals it needs and its members now — each drawn as the app's word,
+ * the hash checked against the bytes.
  */
 export function executeRequest(purpose: Op<'send_calls'>['purpose']): {
 	method: 'vela_multisigExecute';
@@ -202,7 +206,9 @@ export function executeRequest(purpose: Op<'send_calls'>['purpose']): {
 			tx: purpose.tx,
 			multisig: purpose.multisig,
 			name: purpose.name ?? null,
-			threshold: purpose.threshold
+			threshold: purpose.threshold,
+			// r10 page: its members now, for a member change's before → after.
+			owners: purpose.owners
 		}
 	};
 }

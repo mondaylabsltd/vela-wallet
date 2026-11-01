@@ -70,7 +70,7 @@ function signApproval(
 	owner: { address: string },
 	chainId: number,
 	hash: string,
-	subject: { multisig: string; name?: string; tx: SafeTx }
+	subject: { multisig: string; name?: string; tx: SafeTx; owners?: string[]; threshold?: number }
 ) {
 	return deps.passkey(
 		{
@@ -83,7 +83,10 @@ function signApproval(
 				multisig: subject.multisig,
 				safe_tx_hash: hash,
 				name: subject.name ?? null,
-				tx: subject.tx
+				tx: subject.tx,
+				anyway: false,
+				owners: subject.owners ?? [],
+				threshold: subject.threshold ?? 0
 			}
 		} as never,
 		new AbortController().signal
@@ -102,7 +105,9 @@ describe('a member approves where it reviews and signs', () => {
 		await signApproval(owner, 5042002, HASH, {
 			multisig: '0x' + '44'.repeat(20),
 			name: 'Team fund',
-			tx: TX
+			tx: TX,
+			owners: [owner.address, '0x' + '55'.repeat(20)],
+			threshold: 2
 		});
 		expect(onPage).toHaveBeenCalledTimes(1);
 		const input = (onPage.mock.calls[0] as unknown as [Record<string, unknown>])[0];
@@ -110,6 +115,10 @@ describe('a member approves where it reviews and signs', () => {
 		expect(input.tx).toEqual(TX);
 		expect(input.safeTxHash).toBe(HASH);
 		expect(input.multisigName).toBe('Team fund');
+		// r10 page: the members and approvals now go along, for a member
+		// change's before → after on the page.
+		expect(input.owners).toEqual([owner.address, '0x' + '55'.repeat(20)]);
+		expect(input.threshold).toBe(2);
 		expect(input.keyRoute).toMatchObject({ credential_id: 'aa01', method: 'platform' });
 		expect(inVela).not.toHaveBeenCalled();
 	});
