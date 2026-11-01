@@ -701,8 +701,8 @@ sealed class FeedEvent {
 
     /**
      * r10 follow-up (core §9.4): a gesture started ([on]) or settled — a quiet
-     * period: a scan due meanwhile is held until `on = false`. Declared for the
-     * Android lane to send from the list's scroll state.
+     * period: a scan due meanwhile is held until `on = false`. Sent from the
+     * home's and the history's scroll state ([app.getvela.wallet.core.designsystem.motion.ReportListGesture]).
      */
     @Serializable
     @SerialName("interacting")

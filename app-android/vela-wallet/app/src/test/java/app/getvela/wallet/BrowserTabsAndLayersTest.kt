@@ -448,6 +448,32 @@ class BrowserTabsAndLayersTest {
         assertEquals(strings.t(I18nKeys.Flows.TX_RETRY), receipt.retry)
     }
 
+    // -- r10 follow-up (core §10.4): a site moved by a space switch says so once ------
+
+    @Test
+    fun `a request from a site a space switch moved says so under the requester, and only that request`() = runBlocking<Unit> {
+        val rig = signRig(SignSubmitOutcome.Succeeded("0xsig"))
+        arrive(rig)
+        // Another request's note is nothing.
+        rig.host.dispatch(SignEvent.SpaceNoted(id = "elsewhere", chain_id = 84532), SignEvent.serializer())
+        rig.host.dispatch(SignEvent.SpaceNoted(id = "s1", chain_id = 84532), SignEvent.serializer())
+        val noted = withTimeout(10_000) { rig.host.view.first { it.request?.space_note != null } }
+        assertEquals(84532, noted.request?.space_note?.chain_id)
+        assertEquals("connect.browser.spaceMoved", noted.request?.space_note?.key)
+
+        val drawn = SigningFixtures.build(SigningScreenState.CS1, strings)
+        val ctx = SigningLive.Context(strings, "Gnosis", androidx.compose.ui.graphics.Color.Red, "XDAI", "Me", safe, networkName = { if (it == 84532) "Base Sepolia" else it.toString() })
+        val request = IncomingRequest("s1", "personal_sign", message, origin, "t1", 100)
+        val model = SigningLive.model(drawn, request, noted, ClearSigningView(), GuardView(), app.getvela.wallet.feature.send.core.FeeView(), ctx)
+        assertEquals(strings.t("connect.browser.spaceMoved", mapOf("network" to "Base Sepolia")), model.spaceNote)
+        assertTrue("the network is named: ${model.spaceNote}", model.spaceNote!!.contains("Base Sepolia"))
+
+        // A request with no note draws none.
+        val unmoved = noted.copy(request = noted.request!!.copy(space_note = null))
+        val plain = SigningLive.model(drawn, request, unmoved, ClearSigningView(), GuardView(), app.getvela.wallet.feature.send.core.FeeView(), ctx)
+        assertEquals(null, plain.spaceNote)
+    }
+
     // -- R8: the passkey's kind, from the app's own classifier -----------------
 
     @Test

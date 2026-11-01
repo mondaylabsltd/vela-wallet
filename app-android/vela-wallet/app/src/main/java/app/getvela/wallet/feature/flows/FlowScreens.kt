@@ -1182,6 +1182,8 @@ fun SendPickBody(
     onCta: () -> Unit = {},
     /** F6 / F27: "Add this network" on a request's lock (`add_network_tapped`), with the chain it names. */
     onAddNetwork: (Int) -> Unit = {},
+    /** r10 follow-up: "Try again" under a list that could not be read (`retry_tokens`). */
+    onRetryTokens: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     var query by remember { mutableStateOf("") }
@@ -1251,8 +1253,28 @@ fun SendPickBody(
                 )
             }
         }
+        // r10 follow-up (core §10.7): a list nobody could read says that, and
+        // offers to read it again — it is not "nothing held".
+        model.failed?.let { failed ->
+            Text(
+                text = failed.text,
+                color = colors.fgMuted,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.sm,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = VelaSpacing.lg, bottom = VelaSpacing.md)
+                    .testTag("send-tokens-failed"),
+            )
+            VelaSecondaryButton(
+                text = failed.retry,
+                onClick = onRetryTokens,
+                modifier = Modifier.fillMaxWidth().testTag("send-tokens-retry"),
+            )
+        }
         // Issue 209: a list with nothing in it says so rather than showing a blank panel.
-        if (shown.isEmpty()) {
+        if (shown.isEmpty() && model.failed == null) {
             model.empty?.let {
                 Text(
                     text = it,

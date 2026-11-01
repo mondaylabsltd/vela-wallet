@@ -543,7 +543,13 @@ data class SendPickModel(
     val cta: SendCtaModel,
     /** Issue 209: what an empty list says — nothing held, or nothing matching. */
     val empty: String? = null,
+    /** r10 follow-up: the list could not be read — said in its place, with "Try again". */
+    val failed: SendPickFailedModel? = null,
 )
+
+/** r10 follow-up (core §10.7): the picker's list could not be read ([text]) and the way to read it again ([retry]). */
+@Immutable
+data class SendPickFailedModel(val text: String, val retry: String)
 
 /** The token card at the top of the send form. */
 @Immutable

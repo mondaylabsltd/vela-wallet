@@ -174,6 +174,11 @@ class SendController(
         }
 
         override fun alert(kind: SendAlertKind) {
+            // r10 follow-up (core §10.7): a token list that could not be read
+            // is the picker's own state (`tokens_failed_key`, with "Try
+            // again"), drawn on Send alone — never a title-only alert that
+            // can surface over another screen.
+            if (kind is SendAlertKind.LoadTokensFailed) return
             _alert.value = kind
         }
 
@@ -574,6 +579,11 @@ class SendController(
      * gone. The next [open] asks afresh.
      */
     fun left() {
+        // r10 follow-up (core §10.7): the core drops what is still out for
+        // this Send, so a late answer raises nothing over the next screen —
+        // and an alert raised for it is not left standing either.
+        dispatch(SendEvent.Left)
+        _alert.value = null
         _journeyOpen.value = false
         // No journey: a display change has nobody to tell, and the next
         // [open] carries the money of its own moment.
@@ -899,6 +909,9 @@ class SendController(
     /** The tracker's verdict for a hash this attempt submitted. */
     fun receiptUpdate(userOpHash: String, outcome: SendReceiptOutcome) =
         dispatch(SendEvent.ReceiptUpdate(userOpHash, outcome))
+
+    /** r10 follow-up: the picker's "Try again" — the token list is asked again. */
+    fun retryTokens() = dispatch(SendEvent.RetryTokens)
 
     fun dismissAlert() {
         _alert.value = null

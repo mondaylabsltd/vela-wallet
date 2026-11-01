@@ -885,8 +885,18 @@ class AppContainer(private val app: Application) {
             }
             // The chains a page may switch to are the space in front's
             // networks, live (spec 105): a switch of space is a change of them.
+            // r10 follow-up (core §10.3): said with the space and every network
+            // Vela has, so the other space's network is refused by name and a
+            // space switch moves the sites it leaves behind.
             follow.launch {
-                spaceNetworks.collect { view -> controller.networksChanged(view.networks.map { it.chain_id.toInt() }) }
+                combine(settings.networks, networkSpace.space) { all, space -> all to space }
+                    .collect { (all, space) ->
+                        controller.spaceNetworksChanged(
+                            space = space,
+                            chainIds = NetworkSpaces.view(space, all).networks.map { it.chain_id.toInt() },
+                            knownChainIds = all.networks.map { it.chain_id.toInt() },
+                        )
+                    }
             }
             // Spec 091: Settings' debug mode, live — revealed, switched, or
             // hidden again by an erase, it is the preferences' to store and
@@ -921,6 +931,12 @@ class AppContainer(private val app: Application) {
                 transportId = operation.tab,
                 chainId = operation.chain_id,
                 grantedAddress = operation.granted_address,
+                // r10 follow-up (core §10.4): a space switch moved this site
+                // since its last request — the browser's view of the request
+                // it forwards says so, committed before the forward runs.
+                spaceNoteChainId = browser.dapp.value.signing
+                    ?.takeIf { it.tab == operation.tab && it.id == operation.id }
+                    ?.space_note?.chain_id,
             ),
             answer = { payload -> browser.signingAnswered(operation.tab, operation.id, payload, userOpHash) },
             rememberUserOp = { userOpHash = it },
@@ -980,17 +996,26 @@ class AppContainer(private val app: Application) {
     }
 
     /**
-     * The account record's keys in founding order, as the keys walk wants them.
-     * The record keeps no per-key label, so only key 0 — whose name IS the
-     * wallet's — arrives named; the registry's metadata names the rest.
+     * The account record's keys in founding order, as the keys walk wants them
+     * — each with its OWN name and transports as the record keeps them (r10
+     * follow-up, core §10.5). The account's name is never handed in as a key's:
+     * the walk takes it beside the keys ([WalletKeys.read]'s `accountName`), and
+     * a key labelled with it is "Key n". A legacy record (no `keys` array) is
+     * its one scalar key, unnamed.
      */
-    suspend fun deviceKeysOf(address: String, walletName: String): List<WalletKeys.DeviceKey> {
+    suspend fun deviceKeysOf(address: String): List<WalletKeys.DeviceKey> {
         val port = StoreAccountPort(AccountStore(app))
-        return port.keysOf(address).mapIndexed { index, key ->
+        val record = port.accountJson(address)?.let { runCatching { JSONObject(it) }.getOrNull() }
+        val named = record?.optJSONArray("keys")
+        return port.keysOf(address).map { key ->
+            val stored = named?.let { keys ->
+                (0 until keys.length()).asSequence().mapNotNull { keys.optJSONObject(it) }
+                    .firstOrNull { it.optString("credential_id") == key.credentialId }
+            }
             WalletKeys.DeviceKey(
                 publicKeyHex = key.publicKeyHex,
-                name = if (index == 0) walletName else "",
-                transports = "",
+                name = stored?.optString("name").orEmpty(),
+                transports = stored?.optString("transports").orEmpty(),
                 credentialId = key.credentialId,
             )
         }

@@ -64,7 +64,17 @@ data class DbrConsentView(
     val chain_id: Int = 1,
     /** The mark beside the site's name: a padlock for `https` only. */
     val lock: OriginLock = OriginLock.Insecure,
+    /** r10 follow-up: a space switch moved this site since its last request — said once, on this sheet. */
+    val space_note: DbrSpaceNote? = null,
 )
+
+/**
+ * r10 follow-up (core §10.4): the one line on a moved site's next request —
+ * the space switch put it on [chain_id]. Draw [key]
+ * (`connect.browser.spaceMoved`) with `network` = that chain's name.
+ */
+@Serializable
+data class DbrSpaceNote(val chain_id: Int, val key: String)
 
 @Serializable
 data class DbrTabView(
@@ -289,7 +299,12 @@ data class DbrSiteView(
 )
 
 @Serializable
-data class DbrSigningView(val tab: String, val id: String)
+data class DbrSigningView(
+    val tab: String,
+    val id: String,
+    /** r10 follow-up: the site was moved by a space switch — the sign machine hears it as `space_noted`. */
+    val space_note: DbrSpaceNote? = null,
+)
 
 @Serializable
 data class DbrView(
@@ -465,6 +480,17 @@ sealed class DbrEvent {
     @Serializable
     @SerialName("networks_changed")
     data class NetworksChanged(val chain_ids: List<Int>) : DbrEvent()
+
+    /**
+     * r10 follow-up (core §10.3): [NetworksChanged] with the space in front
+     * ([space], `mainnet` / `testnet`) and every network Vela has, both
+     * spaces ([known_chain_ids]). Sent in its place: the other space's
+     * network is then refused naming that space, and a space switch moves
+     * each site outside it to the new space's start network.
+     */
+    @Serializable
+    @SerialName("space_networks_changed")
+    data class SpaceNetworksChanged(val space: String, val chain_ids: List<Int>, val known_chain_ids: List<Int>) : DbrEvent()
 
     @Serializable
     @SerialName("accounts_updated")

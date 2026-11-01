@@ -16,6 +16,7 @@ import androidx.compose.foundation.verticalScroll
 import android.os.SystemClock
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import app.getvela.wallet.core.designsystem.motion.ReportListGesture
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
@@ -198,11 +199,15 @@ private fun WalletHomeContent(
                 isRefreshing = pulled && spin.spinning,
                 modifier = Modifier.weight(1f),
             ) {
+                // r10 follow-up (core §9.4): a scan due while the person
+                // scrolls the home waits for the scroll to settle.
+                val homeScroll = rememberScrollState()
+                ReportListGesture { homeScroll.isScrollInProgress }
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .testTag("wallet-home")
-                        .verticalScroll(rememberScrollState())
+                        .verticalScroll(homeScroll)
                         .padding(horizontal = VelaSizing.screenPaddingX),
                 ) {
                     Spacer(modifier = Modifier.height(VelaSpacing.xl))

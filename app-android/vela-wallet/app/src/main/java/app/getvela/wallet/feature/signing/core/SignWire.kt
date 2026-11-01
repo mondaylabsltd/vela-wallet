@@ -590,7 +590,17 @@ data class SignRequestView(
      * for every request a page raised.
      */
     val first_party: Boolean = false,
+    /**
+     * r10 follow-up (core §10.4): a network-space switch moved this request's
+     * site to `chain_id` since its last request ([SignEvent.SpaceNoted]): one
+     * line under the requester. Absent otherwise.
+     */
+    val space_note: SignSpaceNote? = null,
 )
+
+/** [SignRequestView.space_note]: `key` (`connect.browser.spaceMoved`) with `network` = [chain_id]'s name. */
+@Serializable
+data class SignSpaceNote(val chain_id: Int, val key: String)
 
 @Serializable
 data class SignView(
@@ -816,6 +826,15 @@ sealed class SignEvent {
          */
         val first_party: Boolean = false,
     ) : SignEvent()
+
+    /**
+     * r10 follow-up (core §10.4): request [id] came from a site a space switch
+     * moved to [chain_id] (the browser's `DbrSigningView.space_note`). Sent
+     * right after [RequestArrived]; for any other id it is nothing.
+     */
+    @Serializable
+    @SerialName("space_noted")
+    data class SpaceNoted(val id: String, val chain_id: Int) : SignEvent()
 
     @Serializable
     @SerialName("chain_switch_requested")

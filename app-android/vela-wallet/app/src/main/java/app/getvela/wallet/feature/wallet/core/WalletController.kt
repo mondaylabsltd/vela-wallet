@@ -388,6 +388,10 @@ class WalletController(
         },
         foreground = foreground,
         haptic = haptic,
+        // The payment the person is waiting for shows in the history now: the
+        // feed reads its rows again and scans (`live_tick`, as the web's watcher
+        // does), without waiting out the scan's back-off.
+        deposited = { feedHost.dispatch(FeedEvent.LiveTick, FeedEvent.serializer()) },
     )
 
     private val watchHost = CoreHost(
@@ -600,6 +604,14 @@ class WalletController(
             "sender" to handoff.sender?.take(10),
         )
         host.dispatch(handoff.event(), TrackEvent.serializer())
+        // r10 follow-up (core §9.4): the person sent from the account on
+        // screen — scan for what came back (a swap's other half, a refund)
+        // at once, and start the back-off again. The send's own row reaches
+        // the feed by its record (`ReconcileCompleted`), not by this.
+        val shown = balanceHost.view.value.address
+        if (followingCadence && (handoff.sender == null || handoff.sender.equals(shown, ignoreCase = true))) {
+            presence(FeedPresenceChange.Sent)
+        }
         // Round 3 (send-5): a lost reply's nonce — the tracker reads the chain
         // with it instead of waiting the relay's grace out.
         handoff.submitFacts()?.let { host.dispatch(it, TrackEvent.serializer()) }
@@ -842,8 +854,17 @@ class WalletController(
         return settled.sim
     }
 
-    /** The activity feed: day-grouped rows, already in render order. */
+    /**
+     * The activity feed: day-grouped rows, already in render order — as the
+     * screens draw it. `next_scan` is the cadence's (this controller follows
+     * it on [feedHost] directly) and is left out here: a quiet scan's one
+     * render changes only the timer, and handed on it redrew the whole wallet
+     * route — the 200-row history mid-fling (a 60–70 ms frame on a Redmi
+     * K40, every scan). Equal views are not emitted again.
+     */
     val feed: StateFlow<FeedView> = feedHost.view
+        .map { view -> if (view.next_scan == null) view else view.copy(next_scan = null) }
+        .stateIn(scope, SharingStarted.Eagerly, feedHost.view.value.copy(next_scan = null))
 
     /**
      * Open the wallet for an address.
@@ -913,6 +934,17 @@ class WalletController(
         val idle = now - lastInteractionMs
         lastInteractionMs = now
         if (followingCadence && idle > INTERACTION_SAID_MS) presence(FeedPresenceChange.Interacted)
+    }
+
+    /**
+     * r10 follow-up (core §9.4): a scroll, fling or drag on the home or the
+     * history started ([on]) or settled. A scan that comes due meanwhile is
+     * held by the core and runs once the list is still, so no scan lands in
+     * the middle of a gesture. Said on the main thread, at each edge only.
+     */
+    fun interacting(on: Boolean) {
+        if (on) lastInteractionMs = System.currentTimeMillis()
+        if (followingCadence) feedHost.dispatch(FeedEvent.Interacting(on, presenceNow()), FeedEvent.serializer())
     }
 
     /** Back online: what failed offline can be read now. */
@@ -989,7 +1021,9 @@ class WalletController(
     fun pullRefresh() {
         VelaLog.event("balance", "pull refresh")
         refresh(force = true, pull = true)
-        feedHost.dispatch(FeedEvent.FocusTick, FeedEvent.serializer())
+        // r10 follow-up (core §9.4): the person's own refresh — the store
+        // read again and a scan at once, and the scan's back-off starts over.
+        if (followingCadence) presence(FeedPresenceChange.Refreshed) else feedHost.dispatch(FeedEvent.FocusTick, FeedEvent.serializer())
     }
 
     fun togglePrivacy() {

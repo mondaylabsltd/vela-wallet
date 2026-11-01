@@ -106,7 +106,6 @@ fun MultisigReviewBody(
  */
 internal fun shownConcerns(review: JsonElement): List<JsonElement> {
     val refused = review["refused"]["key"].str != null
-    val refusedWhy = review["refused"]["why"].str
     val recipients = review["recipients"].arr
     val sim = review["simulation"]
     val withheld = sim["kind"].str == "withheld"
@@ -122,9 +121,6 @@ internal fun shownConcerns(review: JsonElement): List<JsonElement> {
             // concern when its state probe reverted; a refusal is not a
             // prediction about running it).
             "unsimulated", "reverts" -> withheld || simNotice
-            // r10 S4: a batch too deep is the refusal's own reason — said
-            // once, by the refusal line, not again in a second red box.
-            "unreadableBatch" -> refusedWhy == "tooDeep"
             // r9-9: the refusal line says why it is not signed — not its English again.
             "notSigned" -> refused
             else -> false

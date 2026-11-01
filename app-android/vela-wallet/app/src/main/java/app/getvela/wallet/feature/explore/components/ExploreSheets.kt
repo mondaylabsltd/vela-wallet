@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -365,6 +366,17 @@ fun ConnectionPanel(
                 color = colors.fgMuted,
                 fontFamily = VelaFontFamily,
                 fontSize = VelaTextSize.base,
+            )
+        }
+
+        // r10 follow-up: the space switch moved this site — said once, here.
+        connection.spaceNote?.let { note ->
+            Text(
+                text = note,
+                color = colors.fgMuted,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.base,
+                modifier = Modifier.testTag("consent-space-note"),
             )
         }
 

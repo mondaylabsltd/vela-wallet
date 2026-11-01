@@ -111,6 +111,8 @@ object SigningLive {
          * review on screen. `null`: no agent linked, or none has spoken.
          */
         val advice: AdviceModel? = null,
+        /** A chain's name by id — the space note's `{{network}}` (it names the chain the site was moved to). */
+        val networkName: (Int) -> String = { it.toString() },
     )
 
     /**
@@ -422,6 +424,10 @@ object SigningLive {
             dappTint = ExploreLive.tintOf(host),
             dappOwn = own,
             headline = headline,
+            // r10 follow-up: said once, under who is asking; never on the wallet's own request.
+            spaceNote = sign.request?.space_note?.takeIf { !own && it.chain_id > 0 }?.let { note ->
+                s.t(note.key, mapOf("network" to ctx.networkName(note.chain_id)))
+            },
             dappIconUrls = if (own) emptyList() else siteIconUrls(request.origin),
             networkName = ctx.chainName,
             networkDot = ctx.chainDot,

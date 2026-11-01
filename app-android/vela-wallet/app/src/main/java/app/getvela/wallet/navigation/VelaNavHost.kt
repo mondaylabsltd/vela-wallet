@@ -282,11 +282,14 @@ fun VelaNavHost(
     // 2026-10-11). Kept with the address it was read for: another account's
     // rows are never shown under this one.
     var deviceKeys by remember { mutableStateOf<Pair<String, app.getvela.wallet.feature.settings.core.WalletKeys.Result>?>(null) }
-    LaunchedEffect(session.address, session.activeName) {
+    // r10 follow-up (core §10.5): the account's name beside the keys is the one
+    // every screen shows for it (`activeLabel`, the published name) — a key row
+    // never repeats what the header says.
+    LaunchedEffect(session.address, activeLabel) {
         val address = session.address
         if (address.isBlank()) return@LaunchedEffect
-        val device = application.container.deviceKeysOf(address, session.activeName)
-        deviceKeys = address to application.container.walletKeys.deviceOnly(device, application.container.signInCredentialOf(address))
+        val device = application.container.deviceKeysOf(address)
+        deviceKeys = address to application.container.walletKeys.deviceOnly(device, application.container.signInCredentialOf(address), activeLabel)
     }
 
     // Which body the signed-in shell shows. 钱包 and 探索 are SECTIONS of the
@@ -597,7 +600,14 @@ fun VelaNavHost(
     // Spec 102 D4: the send confirm is on screen — a send's hand-off card is
     // drawn there, in its button's place, and not as a sheet over it.
     var sendConfirmUp by remember { mutableStateOf(false) }
-    CompositionLocalProvider(LocalIdenticonViewer provides { seed -> identiconViewer = seed }, LocalAgentStore provides agent) {
+    // r10 follow-up (core §9.4): the home's and the history's scroll reach
+    // the activity feed's quiet period — a scan waits out a gesture.
+    val listGesture = remember(application) { { on: Boolean -> application.container.walletIfBuilt()?.interacting(on); Unit } }
+    CompositionLocalProvider(
+        LocalIdenticonViewer provides { seed -> identiconViewer = seed },
+        LocalAgentStore provides agent,
+        app.getvela.wallet.core.designsystem.motion.LocalListGesture provides listGesture,
+    ) {
         NavHost(
             navController = navController,
             startDestination = startDestination,
@@ -758,6 +768,19 @@ fun VelaNavHost(
                 val noValue = space.testnet
                 val chainNames = remember(networks.networks) {
                     networks.networks.associate { it.chain_id.toInt() to it.display_name }
+                }
+                // Perf (r10 follow-up): the history's rows, kept built on a background
+                // thread for the feed as it stands — opening the history draws them
+                // instead of building 200 rows inside its first frame. The day keys
+                // it too, so "Today" moves at midnight.
+                val historyDay = System.currentTimeMillis() / 86_400_000L
+                val historyPrebuilt by produceState<HistoryPrebuilt?>(null, feed, strings, chainNames, historyDay) {
+                    val f = feed
+                    val s = strings
+                    val names = chainNames
+                    value = withContext(Dispatchers.Default) {
+                        HistoryPrebuilt(f, s, names, WalletLive.activity(f, s, System.currentTimeMillis(), names))
+                    }
                 }
                 // r9-15: each network's own coin (Arc's is USDC), from the settings rows.
                 val nativeSymbols = remember(networks.networks) {
@@ -1201,6 +1224,7 @@ fun VelaNavHost(
                     val signCtx = app.getvela.wallet.feature.signing.SigningLive.Context(
                         strings = strings,
                         chainName = chainNames[signChain] ?: signChain.toString(),
+                        networkName = remember(chainNames) { { id: Int -> chainNames[id] ?: app.getvela.wallet.feature.multisig.core.MsRules.networkName(id) ?: id.toString() } },
                         chainDot = WalletLive.badge(signChain.toLong()),
                         nativeSymbol = networks.networks.firstOrNull { it.chain_id.toInt() == signChain }?.native_symbol ?: "ETH",
                         walletName = activeLabel,
@@ -1454,7 +1478,10 @@ fun VelaNavHost(
                         flows.enter(WalletFlowEntry.TxDetail, hash)
                     }
                 }
-                sendAlert?.let { kind ->
+                // r10 follow-up (core §10.7): Send's alerts are Send's — drawn
+                // while Send is on screen and never over Explore, the home or
+                // any other screen it was left for (leaving clears them too).
+                sendAlert?.takeIf { sendOpen }?.let { kind ->
                     // The selected token's chain, by name: a chain out of reach is said as that one (PR 2 note 13).
                     val alertChain = sendView.selected_token?.let { chainNames[it.chain_id] ?: it.network }.orEmpty()
                     SendAlertDialog(kind = kind, strings = strings, chainName = alertChain, onDismiss = send::dismissAlert)
@@ -1802,6 +1829,7 @@ fun VelaNavHost(
                             onRecipientCheckRetry = { send.retryRiskCheck() },
                             onSendAgain = { send.sendAgain() },
                             onAddNetwork = { chainId -> send.addNetworkTapped(chainId) },
+                            onRetryTokens = { send.retryTokens() },
                             // Issue #466: snapshot the core's report NOW and open the report sheet with it.
                             onRelayReport = {
                                 sendView.relay_report?.let { report ->
@@ -1841,14 +1869,25 @@ fun VelaNavHost(
                         pendingReceiveAsset = null
                         wallet.assetPicked(t.chainId, t.tokenAddress, t.symbol, t.decimals, t.networkName)
                     }
+                    // The drawn screen, once per state (and per wording / number preset):
+                    // what it is decides which facts its live model reads.
+                    val drawnFlow = remember(flowState, strings, Formats.current) { FlowFixtures.build(flowState, strings) }
+                    // Only what the screen on top reads is a key (perf, r10 follow-up):
+                    // the history read the balances' every answer and the assets list the
+                    // feed's every scan as a reason to rebuild — 200 rows rebuilt on the
+                    // main thread in the middle of a fling.
+                    val flowBalances = balances.takeIf { drawnFlow.base is FlowBase.Assets || drawnFlow.sheet is FlowSheet.TokenDetail }
+                    val flowFeed = feed.takeIf {
+                        drawnFlow.base is FlowBase.History || drawnFlow.sheet is FlowSheet.TxDetail || drawnFlow.sheet is FlowSheet.TokenDetail
+                    }
                     val flowModel = remember(
-                        flowState,
-                        strings,
+                        drawnFlow,
+                        historyPrebuilt,
                         shownAddress,
                         networks,
                         request,
-                        balances,
-                        feed,
+                        flowBalances,
+                        flowFeed,
                         currency,
                         flows.selected,
                         manageTokens,
@@ -1863,7 +1902,7 @@ fun VelaNavHost(
                         // Spec 049: a figure baked into this model follows the presets.
                         Formats.current,
                     ) {
-                        FlowFixtures.build(flowState, strings).let { drawn ->
+                        drawnFlow.let { drawn ->
                             liveFlow(
                                 drawn = drawn,
                                 address = shownAddress,
@@ -1880,6 +1919,7 @@ fun VelaNavHost(
                                 chainFilter = chainFilter,
                                 explorers = explorers,
                                 noValue = noValue,
+                                history = historyPrebuilt,
                             )
                         }
                     }
@@ -2044,7 +2084,7 @@ fun VelaNavHost(
                         }
                         val consentCard = dapp.consent?.let { c ->
                             // Secure is the core's word (a loopback test page is), not a prefix check.
-                            app.getvela.wallet.feature.browser.ExploreLive.consent(exploreModel.connection, c, strings, identity.copy(chainName = chainNames[c.chain_id] ?: app.getvela.wallet.feature.multisig.core.MsRules.networkName(c.chain_id) ?: c.chain_id.toString(), chainDot = WalletLive.badge(c.chain_id.toLong())))
+                            app.getvela.wallet.feature.browser.ExploreLive.consent(exploreModel.connection, c, strings, identity.copy(chainName = chainNames[c.chain_id] ?: app.getvela.wallet.feature.multisig.core.MsRules.networkName(c.chain_id) ?: c.chain_id.toString(), chainDot = WalletLive.badge(c.chain_id.toLong())), networkName = { id -> chainNames[id] ?: app.getvela.wallet.feature.multisig.core.MsRules.networkName(id) ?: id.toString() })
                         }
                         // One-line notices the browser raises (a WalletConnect link, say).
                         LaunchedEffect(browser) {
@@ -2853,19 +2893,20 @@ fun VelaNavHost(
                 }
                 // Which passkeys control this wallet — the block the backup sits under.
                 var walletKeys by remember(session.address) { mutableStateOf<app.getvela.wallet.feature.settings.core.WalletKeys.Result?>(null) }
-                LaunchedEffect(session.address) {
+                LaunchedEffect(session.address, activeLabel) {
                     val address = session.address
                     if (address.isBlank()) return@LaunchedEffect
                     // P2.4 (perf-10): Settings draws no balance of its own — the
                     // account is noted, not read (the web's `noteAccount`).
                     application.container.wallet.noteAccount(address)
-                    val device = application.container.deviceKeysOf(address, session.activeName)
+                    val device = application.container.deviceKeysOf(address)
                     val signIn = application.container.signInCredentialOf(address)
                     // The record as it stands NOW — a key added since the
                     // account came to the front is a row before the registry
-                    // says so — and then the registry.
-                    deviceKeys = address to application.container.walletKeys.deviceOnly(device, signIn)
-                    walletKeys = application.container.walletKeys.read(address, device, signIn)
+                    // says so — and then the registry. r10 follow-up: the
+                    // account's name goes beside the keys, never as key 0's.
+                    deviceKeys = address to application.container.walletKeys.deviceOnly(device, signIn, activeLabel)
+                    walletKeys = application.container.walletKeys.read(address, device, signIn, activeLabel)
                 }
                 // What this device may say about itself in a report — five named
                 // fields, never an address, a balance or an endpoint URL.
@@ -3603,6 +3644,8 @@ private fun liveFlow(
     explorers: Map<Int, String> = emptyMap(),
     /** Spec 105: the testnet space is in front — no holding has a worth to show. */
     noValue: Boolean = false,
+    /** The history's rows, built off the main thread for [feed] ([HistoryPrebuilt]); used only when they are this feed's. */
+    history: HistoryPrebuilt? = null,
 ): FlowScreenModel = drawn.copy(
     base = when (val base = drawn.base) {
         is FlowBase.Receive -> FlowBase.Receive(
@@ -3611,7 +3654,12 @@ private fun liveFlow(
             FlowLive.receiveNetworks(base.model, networks, address, WalletLive::badge),
         )
         is FlowBase.History ->
-            FlowBase.History(FlowLive.history(base.model, feed, strings, chainFilter = chainFilter, chainNames = chainNames))
+            FlowBase.History(
+                FlowLive.history(
+                    base.model, feed, strings, chainFilter = chainFilter, chainNames = chainNames,
+                    prebuilt = history?.takeIf { it.feed === feed && it.strings === strings && it.chainNames == chainNames }?.groups,
+                ),
+            )
         is FlowBase.Assets ->
             FlowBase.Assets(FlowLive.assets(base.model, balances, chainNames, currency, chainFilter, FlowFixtures.assetsEmpty(strings), strings.language, noValue = noValue))
         else -> drawn.base
@@ -3641,6 +3689,20 @@ private fun liveFlow(
         is FlowSheet.AddToken -> FlowSheet.AddToken(FlowLive.addToken(sheet.model, manageTokens, strings))
         else -> drawn.sheet
     },
+)
+
+/**
+ * The history's day groups for one feed, built on a background thread while
+ * the wallet is on screen (perf, r10 follow-up): opening the 200-row history
+ * then draws rows that already exist instead of building them in its first
+ * frame (an 80 ms frame on a Redmi K40, and the run of stuffed buffers behind
+ * it). Matched by identity: rows built for another feed are never shown.
+ */
+private class HistoryPrebuilt(
+    val feed: FeedView,
+    val strings: VelaStrings,
+    val chainNames: Map<Int, String>,
+    val groups: List<app.getvela.wallet.feature.wallet.ActivityGroupModel>,
 )
 
 /** Spec 048: the asset a receive code is asked for — a token detail's 收款, or a network row's QR. */

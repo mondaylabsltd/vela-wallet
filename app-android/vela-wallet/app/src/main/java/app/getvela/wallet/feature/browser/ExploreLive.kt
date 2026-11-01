@@ -423,7 +423,14 @@ object ExploreLive {
      * not-yet-connected form. The origin is the CORE's (`DpermConsentView`);
      * the words are `connect.browser.*`; the site's own name is not asked.
      */
-    fun consent(fallback: ConnectionModel, consent: DbrConsentView, strings: VelaStrings, identity: Identity): ConnectionModel {
+    fun consent(
+        fallback: ConnectionModel,
+        consent: DbrConsentView,
+        strings: VelaStrings,
+        identity: Identity,
+        /** A chain's name, for the space note's `{{network}}`. */
+        networkName: (Int) -> String = { it.toString() },
+    ): ConnectionModel {
         val host = consent.origin.substringAfter("://").substringBefore('/')
         // Spec 096 F11: the account and the network a Connect shares are the
         // CORE's (`DbrConsentView.address`, `.chain_id`) — the same facts every
@@ -453,6 +460,11 @@ object ExploreLive {
             explainer = strings.t(if (isActive && identity.multisig) "connect.browser.multisigConnectNote" else "connect.browser.body"),
             disconnect = strings.t("connect.browser.connect"),
             footnote = "",
+            // r10 follow-up (core §10.4): a space switch moved this site since
+            // it last asked — said once, on this sheet, in the core's key.
+            spaceNote = consent.space_note?.takeIf { it.chain_id > 0 }?.let { note ->
+                strings.t(note.key, mapOf("network" to networkName(note.chain_id)))
+            },
         )
     }
 

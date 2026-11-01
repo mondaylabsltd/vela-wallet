@@ -228,6 +228,12 @@ data class ConnectionModel(
     /** Spec 079: the consent card — its action is the primary one. */
     val primaryAction: Boolean = false,
     /**
+     * r10 follow-up (core §10.4): "The network changed with the space: this
+     * site is now on {network}." — on the consent of a site a space switch
+     * moved since its last request; `null` otherwise.
+     */
+    val spaceNote: String? = null,
+    /**
      * Spec 097 E: the core holds a grant for this site. Not connected (and not
      * asking), the panel offers nothing that implies access — no account it
      * sees, no explainer, no Disconnect, no "requests appear here".

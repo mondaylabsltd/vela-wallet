@@ -880,6 +880,13 @@ data class SendDisplayContext(val code: String, val rate: Double? = null, val fi
 data class SendView(
     val stage: SendStage = SendStage.SelectToken,
     val loading: Boolean = false,
+    /**
+     * r10 follow-up (core §10.7): the token list could not be read — the
+     * corpus key of the picker's line (`send.tokensUnavailable`), drawn in
+     * place of the list with "Try again" ([SendEvent.RetryTokens]). `null`
+     * otherwise. Drawn here, so the `load_tokens_failed` alert is not.
+     */
+    val tokens_failed_key: String? = null,
     val locked: Boolean = false,
     val amount_locked: Boolean = false,
     val lock_error: SendLockError? = null,
@@ -1519,6 +1526,21 @@ sealed class SendEvent {
     @Serializable
     @SerialName("retry_after_error")
     data object RetryAfterError : SendEvent()
+
+    /** r10 follow-up: the picker's "Try again" under [SendView.tokens_failed_key] — the token list is asked again. */
+    @Serializable
+    @SerialName("retry_tokens")
+    data object RetryTokens : SendEvent()
+
+    /**
+     * r10 follow-up: Send was left without the core's `close` — the system
+     * back, another tab, a deep link over it. What is still out for it is
+     * dropped: an answer landing after the person left raises nothing over
+     * whatever they went to. The next `open` starts afresh.
+     */
+    @Serializable
+    @SerialName("left")
+    data object Left : SendEvent()
 
     /** The confirm opened without the recipient's check (`risk_unfinished`): ask it again ("Check again"). */
     @Serializable

@@ -375,7 +375,7 @@ class RegistryBackupTest {
             .read("0xsafe", listOf(WalletKeys.DeviceKey("04ab", "A", "", credentialId = "c2")), "c2")
         assertTrue(credentials.size > 1)
         assertTrue("every call: $credentials", credentials.all { it == "c2" })
-        assertEquals("c2", JSONArray(devices.first()).getJSONObject(0).getString("credential_id"))
+        assertEquals("c2", JSONObject(devices.first()).getJSONArray("keys").getJSONObject(0).getString("credential_id"))
     }
 
     /** Through the real core: the row whose public key the sign-in credential names, and no other. */

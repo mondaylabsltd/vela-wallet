@@ -607,6 +607,12 @@ data class SigningScreenModel(
      * repeated below. `null` for a site's request, whose header names the site.
      */
     val headline: String? = null,
+    /**
+     * r10 follow-up (core §10.4): the network-space switch moved this site
+     * since it last asked — one line under the requester, the core's
+     * `SignRequestView.space_note` in words. `null` otherwise.
+     */
+    val spaceNote: String? = null,
     /** The site's own icon, tried in order OVER the letter (founder ruling 2026-09-19). Https only. */
     val dappIconUrls: List<String> = emptyList(),
     /** The chain's logo from the chain-data endpoint; the dot shows until it lands. */
