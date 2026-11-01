@@ -114,6 +114,58 @@ describe('a failed phone ceremony', () => {
 });
 
 /**
+ * Round 10 (real-device S3): the platform's raw English ("[50152] RP ID cannot
+ * be validated", a `DOMException.message`) inside a translated sheet. The
+ * core names the sentence (`words_key`) from the error's facts; the detail
+ * stays for the report. Without the key, the old sheet.
+ */
+describe('a passkey failure the core named', () => {
+	it("draws the core's sentence, never the platform's words", async () => {
+		const { promptCopy } = await import('./copy');
+		const t = (key: string, params?: Record<string, string | number>) =>
+			params ? `${key}:${JSON.stringify(params)}` : key;
+		const words_key = 'onboarding.common.passkeyError.appNotAssociated';
+		expect(
+			promptCopy(
+				{
+					type: 'create_failed',
+					detail: '[50152] RP ID cannot be validated.',
+					phone_link: false,
+					words_key
+				},
+				t
+			).message
+		).toBe(words_key);
+		expect(
+			promptCopy(
+				{
+					type: 'sign_in_failed',
+					detail: '[50152] RP ID cannot be validated.',
+					phone_link: false,
+					words_key
+				},
+				t
+			).message
+		).toBe(words_key);
+		// The phone link's own words still come first.
+		expect(
+			promptCopy({ type: 'sign_in_failed', detail: 'x', phone_link: true, words_key }, t).message
+		).toBe('onboarding.common.phoneLinkFailed');
+		// No key: the old sheet.
+		expect(
+			promptCopy({ type: 'sign_in_failed', detail: 'boom', phone_link: false }, t).message
+		).toBe('onboarding.login.alertSignInFailedBody:{"message":"boom"}');
+	});
+
+	it('every sentence the core can name ships in the flow catalog', async () => {
+		const { FLOW_KEYS, PASSKEY_ERROR_KEYS } = await import('$lib/i18n/messages');
+		for (const key of [...PASSKEY_ERROR_KEYS, 'onboarding.common.phoneLinkFailed']) {
+			expect(FLOW_KEYS).toContain(key);
+		}
+	});
+});
+
+/**
  * ob-4 — the index unreachable while a new key confirms: the key is kept, and
  * the sheet says so (offline or the index) instead of "Error" over the raw
  * fetch failure. The core sets `key_kept` and `local`.
