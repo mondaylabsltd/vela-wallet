@@ -360,6 +360,13 @@ final class ActivityExecutor {
     /// the same resolver the address book uses, so one address has one name.
     private func ownAccountName(_ addr: String) async -> String? {
         let wanted = addr.lowercased()
+        // r9-12 / r10: the one name the accounts machine gives the address
+        // (published, kept, own, short) — never a different one here.
+        if let label = labels()[wanted], !label.isEmpty,
+           label.caseInsensitiveCompare(AddressText.short(addr)) != .orderedSame,
+           label != MsRules.string("names.short", ["address": addr]) {
+            return label
+        }
         for account in await accounts.loadAccounts() {
             guard let address = account["address"] as? String,
                   address.lowercased() == wanted,

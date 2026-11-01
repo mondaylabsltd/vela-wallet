@@ -205,12 +205,14 @@ struct LoginView: Decodable, Equatable {
 /// never dispatch a display position.
 struct SessionAccountRow: Decodable, Equatable {
     struct Account: Decodable, Equatable {
-        let name: String
+        /// `var`: the one name for the address (r9-12) replaces the local
+        /// one once the accounts machine has it (`SessionView.labelled`).
+        var name: String
         let address: String
     }
 
     let index: Int
-    let account: Account
+    var account: Account
 }
 
 /// Present iff the sign-out confirmation dialog is open.
@@ -236,7 +238,7 @@ struct SessionView: Decodable, Equatable {
     /// is `accounts[activeIndex].address` by construction.
     let address: String
     let activeIndex: Int
-    let accounts: [SessionAccountRow]
+    var accounts: [SessionAccountRow]
     let allowedRoute: SessionRoute
     let signOut: SessionSignOutView?
     /// The stored account list could not be read (settings set-21). Absent
@@ -258,6 +260,28 @@ struct SessionView: Decodable, Equatable {
     /// than render an empty header.
     var activeName: String {
         accounts.indices.contains(activeIndex) ? accounts[activeIndex].account.name : ""
+    }
+
+    /// r9-12 / r10: every account named by the ONE rule — the multisig
+    /// accounts machine's `member_labels` (the passkey index's published
+    /// name, then a kept label, then this device's own, then the short
+    /// address), this device's own accounts included. The local name stands
+    /// while the machine has no label, and a label that is only the short
+    /// address is no name.
+    func labelled(_ labels: [String: String]) -> SessionView {
+        guard !labels.isEmpty else { return self }
+        var out = self
+        out.accounts = accounts.map { row in
+            var row = row
+            let address = row.account.address
+            if let label = labels[address.lowercased()], !label.isEmpty,
+               label.caseInsensitiveCompare(AddressText.short(address)) != .orderedSame,
+               label != MsRules.string("names.short", ["address": address]) {
+                row.account.name = label
+            }
+            return row
+        }
+        return out
     }
 
     static let booting = SessionView(
