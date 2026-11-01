@@ -1569,6 +1569,7 @@ struct RootView: View {
                             .withIdentity(name: session.view.activeName,
                                           address: session.view.address),
                         signingLive: signingSheetModel,
+                        signingSpaceNote: signingSpaceNote,
                         onSigningConfirm: { signing?.approve() },
                         // **Every chip on the editor is a PRESET, 撤销 included.**
                         //
@@ -1823,6 +1824,15 @@ struct RootView: View {
     /// What the signing sheet shows: the live request, or — once the core
     /// has answered the page — its ending, in the same sheet, which never
     /// closes in between.
+    /// r10 follow-up: a network-space switch moved the asking site — the
+    /// line both signing sheets (Explore's and the app's) draw under the
+    /// requester.
+    private var signingSpaceNote: String? {
+        signing.flatMap { live in
+            SigningLive.spaceNote(live.sign, networks: WalletNetworks(settings.networkAdmin?.networks), loc: loc)
+        }
+    }
+
     private var signingSheetModel: SigningModel? {
         if let live = liveSigning { return signingModel(for: live) }
         return signingEnding.map(endingModel)
@@ -4084,9 +4094,7 @@ struct RootView: View {
             if let model = signingSheetModel {
                 SigningSheet(
                     model: model,
-                    spaceNote: signing.flatMap { live in
-                        SigningLive.spaceNote(live.sign, networks: WalletNetworks(settings.networkAdmin?.networks), loc: loc)
-                    },
+                    spaceNote: signingSpaceNote,
                     onConfirm: { signing?.approve() },
                     onAllowanceChip: { chip in signing?.guardChip(chip) },
                     onAllowanceAmount: { text in signing?.guardCustomAmount(text) },

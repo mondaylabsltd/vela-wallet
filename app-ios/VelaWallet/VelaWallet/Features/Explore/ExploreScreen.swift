@@ -33,6 +33,9 @@ struct ExploreScreen: View {
     /// A **live** signing request. Present means a page is asking for a
     /// signature right now, and the sheet is up.
     var signingLive: SigningModel?
+    /// r10 follow-up: the line that says a space switch moved the asking
+    /// site (`SigningLive.spaceNote`), drawn under the requester.
+    var signingSpaceNote: String?
     var onSigningConfirm: () -> Void = {}
     /// The spending-cap chips and the person's own figure. The core decides
     /// what each means; the sheet only reports the tap.
@@ -609,6 +612,7 @@ struct ExploreScreen: View {
             if let signingLive {
                 SigningSheet(
                     model: signingLive,
+                    spaceNote: signingSpaceNote,
                     onConfirm: onSigningConfirm,
                     onAllowanceChip: onAllowanceChip,
                     onAllowanceAmount: onAllowanceAmount,
