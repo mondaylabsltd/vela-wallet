@@ -150,7 +150,7 @@ struct ParallelSpaceSitesTests {
         func launch() async -> BrowserHarness {
             let harness = BrowserHarness(defaults: defaults)
             harness.browser.startConnections()
-            harness.browser.networksChanged([1, 100, 8453])
+            harness.browser.networksChanged([1, 100, 8453], space: .mainnet, known: [1, 100, 8453])
             harness.browser.accountsChanged(addresses: await addresses(), active: await inFront())
             await harness.until { harness.browser.dbr.ready }
             await harness.settle()

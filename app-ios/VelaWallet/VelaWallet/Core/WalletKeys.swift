@@ -77,25 +77,46 @@ final class WalletKeys {
         self.step = step
     }
 
-    /// The record's keys as the walk wants them. The record keeps no per-key
-    /// label, so only key 0 — whose name IS the wallet's — arrives named; the
-    /// registry's metadata names the rest.
+    /// The record's keys as the walk wants them, each with its OWN name as
+    /// the record keeps it (r10 follow-up: keys and accounts are different
+    /// things). The account's name never stands in for a key's — handing it
+    /// over as key 0's label is what drew "Interleave" over "Parallel One".
+    /// A record from before the key set names none; the registry's metadata
+    /// names them, and the core says "Key n" for one nobody named.
     ///
     /// No page rides along any more (spec 102): a row is captioned by where
     /// its key LIVES — this device, a phone, a USB key — never by the page it
     /// was made on, and an account on its own domain says so once, above the
     /// list (`settings.signing.keysOn`), from its signing plan.
     static func deviceKeys(
-        of address: String, walletName: String, in accounts: UserOpSpine.AccountPort
+        of address: String, in accounts: UserOpSpine.AccountPort
     ) async -> [DeviceKey] {
-        await accounts.keys(of: address).enumerated().map { index, key in
+        let names = await recordKeyNames(of: address, in: accounts)
+        return await accounts.keys(of: address).map { key in
             DeviceKey(
                 credentialId: key.credentialId,
                 publicKeyHex: key.publicKeyHex,
-                name: index == 0 ? walletName : "",
+                name: names[key.publicKeyHex.lowercased()] ?? "",
                 transports: ""
             )
         }
+    }
+
+    /// Each key's own name in the stored record, by public key.
+    private static func recordKeyNames(
+        of address: String, in accounts: UserOpSpine.AccountPort
+    ) async -> [String: String] {
+        guard let json = await accounts.accountJson(of: address),
+              let record = object(json)
+        else { return [:] }
+        var names: [String: String] = [:]
+        for key in record["keys"] as? [[String: Any]] ?? [] {
+            guard let hex = key["public_key_hex"] as? String ?? key["publicKeyHex"] as? String,
+                  let name = key["name"] as? String
+            else { continue }
+            names[hex.lowercased()] = name
+        }
+        return names
     }
 
     /// The credential the account signs with (its plan's key route) — the row
@@ -110,14 +131,13 @@ final class WalletKeys {
         return key.credentialId
     }
 
-    func read(address: String, device: [DeviceKey], signInCredential: String) async -> Result {
+    /// `accountName`: the account's own name, beside its keys — a key
+    /// labelled with it is labelled with nothing (`step_for_account`).
+    func read(
+        address: String, accountName: String = "", device: [DeviceKey], signInCredential: String
+    ) async -> Result {
         let empty = Result(source: .device, rows: [])
-        let deviceJson = Self.json(device.map {
-            [
-                "credential_id": $0.credentialId,
-                "public_key_hex": $0.publicKeyHex, "name": $0.name, "transports": $0.transports,
-            ]
-        })
+        let deviceJson = Self.deviceJson(accountName: accountName, device: device)
         var answers: [[String: Any]] = []
         for _ in 0..<Self.maxRounds {
             guard let next = Self.object(step(address, deviceJson, Self.json(answers), signInCredential))
@@ -147,13 +167,8 @@ final class WalletKeys {
     /// Settings draws these from its first frame (iPhone walk 2026-10-10: the
     /// block was ONE skeleton row until the registry answered, then grew to
     /// the wallet's three keys and pushed the page down ~250 pt).
-    func deviceOnly(device: [DeviceKey], signInCredential: String) -> Result {
-        let deviceJson = Self.json(device.map {
-            [
-                "credential_id": $0.credentialId,
-                "public_key_hex": $0.publicKeyHex, "name": $0.name, "transports": $0.transports,
-            ]
-        })
+    func deviceOnly(accountName: String = "", device: [DeviceKey], signInCredential: String) -> Result {
+        let deviceJson = Self.deviceJson(accountName: accountName, device: device)
         return Self.object(step("", deviceJson, "[]", signInCredential)).map(Self.parse)
             ?? Result(source: .device, rows: [])
     }
@@ -200,6 +215,21 @@ final class WalletKeys {
             )
         }
         return Result(source: source, rows: rows)
+    }
+
+    /// The walk's device argument in its fuller shape (r10 follow-up):
+    /// `{"account_name", "keys"}`, so the core can tell the account's name
+    /// from a key's.
+    private static func deviceJson(accountName: String, device: [DeviceKey]) -> String {
+        json([
+            "account_name": accountName,
+            "keys": device.map {
+                [
+                    "credential_id": $0.credentialId,
+                    "public_key_hex": $0.publicKeyHex, "name": $0.name, "transports": $0.transports,
+                ]
+            },
+        ])
     }
 
     private static func json(_ value: Any) -> String {

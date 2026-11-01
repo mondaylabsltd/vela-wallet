@@ -1135,6 +1135,14 @@ struct RootView: View {
             // The send machine closed its journey — its back from the picker,
             // or done — and the screens go with it (087 F27).
             .onChange(of: send.closes) { _, _ in sendClosed() }
+            // r10 follow-up: the send screens went by a door the core never
+            // heard — the system back, another tab, a link over them — and
+            // the core drops what was still out for them (`left`), so a late
+            // answer raises nothing over wherever the person went. After the
+            // core's own close it changes nothing.
+            .onChange(of: flows.stack.contains { sendStates.contains($0) }) { was, open in
+                if was, !open { send.left() }
+            }
             // …and it hears the display currency commit or change while its
             // journey is open (final note F25).
             .onChange(of: settings.currency) { _, _ in sendDisplayStands() }
@@ -1262,9 +1270,9 @@ struct RootView: View {
                     if let balance = wallet.balance { send.holdingsUpdated(balance, round: round) }
                 }
                 .task(id: state) {
-                    // r9-17: a screen opened is the person at the app — the
-                    // core's cadence (10 s at the app, 30 s idle) decides
-                    // when the next scan is due.
+                    // r9-17: a screen opened is the person at the app. Since
+                    // the r10 follow-up it only updates the presence: the
+                    // core's back-off decides when the next scan is due.
                     activity.interacted()
                     // The viewfinder runs only while it is on screen. A camera
                     // left running behind another screen is a light nobody
@@ -1367,7 +1375,10 @@ struct RootView: View {
                                     onOpen: { multisig.sheet = $0 },
                                     onFund: { enterReceive() }
                                 ))
-                            }
+                            },
+                            // r10 follow-up: no scan in the home's way while
+                            // it moves under a finger.
+                            onScrolling: { activity.scrolling("home", $0) }
                         )
                     }
                     // The hero's status line, as a sheet over the wallet —
@@ -1558,6 +1569,7 @@ struct RootView: View {
                             .withIdentity(name: session.view.activeName,
                                           address: session.view.address),
                         signingLive: signingSheetModel,
+                        signingSpaceNote: signingSpaceNote,
                         onSigningConfirm: { signing?.approve() },
                         // **Every chip on the editor is a PRESET, 撤销 included.**
                         //
@@ -1645,9 +1657,10 @@ struct RootView: View {
                     // or a renderer dying settles a page — the core's rule.
                     .onChange(of: session.view.address) { _, _ in tellBrowserAboutAccounts() }
                     // The space in front's chains (spec 105): a switch of space
-                    // is a change of what a site may use.
-                    .onChange(of: walletNetworks.chains.map(\.chainId)) { _, chains in
-                        if !chains.isEmpty { browser.networksChanged(chains) }
+                    // is a change of what a site may use — and, r10 follow-up,
+                    // of which space a refused network belongs to.
+                    .onChange(of: browserNetworks) { _, networks in
+                        if !networks.chains.isEmpty { tellBrowserAboutNetworks() }
                     }
                     .task {
                         // A sheet that finished while 探索 was not on screen
@@ -1685,7 +1698,7 @@ struct RootView: View {
                         // The settings machine may not have read them yet; the
                         // catalogue stands in until it has, and the change
                         // handler above replaces it the moment it does.
-                        browser.networksChanged(walletNetworks.chains.map(\.chainId))
+                        tellBrowserAboutNetworks()
                         tellBrowserAboutAccounts()
                         // The device harness opens its own page. Not a product
                         // affordance: a browser that launched a URL somebody
@@ -1757,7 +1770,8 @@ struct RootView: View {
                 origin: forward.origin,
                 transportId: forward.tab,
                 chainId: forward.chainId,
-                grantedAddress: forward.grantedAddress
+                grantedAddress: forward.grantedAddress,
+                spaceNote: forward.spaceNote
             ),
             respond: { [browser] transportId, id, payload, userOpHash in
                 // The core builds the page's message, and delivers it to the
@@ -1810,6 +1824,15 @@ struct RootView: View {
     /// What the signing sheet shows: the live request, or — once the core
     /// has answered the page — its ending, in the same sheet, which never
     /// closes in between.
+    /// r10 follow-up: a network-space switch moved the asking site — the
+    /// line both signing sheets (Explore's and the app's) draw under the
+    /// requester.
+    private var signingSpaceNote: String? {
+        signing.flatMap { live in
+            SigningLive.spaceNote(live.sign, networks: WalletNetworks(settings.networkAdmin?.networks), loc: loc)
+        }
+    }
+
     private var signingSheetModel: SigningModel? {
         if let live = liveSigning { return signingModel(for: live) }
         return signingEnding.map(endingModel)
@@ -2030,9 +2053,12 @@ struct RootView: View {
                     respond(transportId, id, payload, userOpHash)
                     signingAnswered(incoming, payload: payload, userOpHash: userOpHash)
                 },
-                trackSubmitted: { [tracker, notifier] submission in
+                trackSubmitted: { [tracker, notifier, activity] submission in
                     notifier.askOnceIfNeeded()
                     tracker.submitted(submission)
+                    // r10 follow-up: a dApp's transaction sent from this
+                    // account — the incoming scan runs at once.
+                    activity.sent(userOpHash: submission.userOpHash)
                 },
                 // A write-ahead op the core proved never sent (spec 082 RJ1).
                 trackWithdrawn: { [tracker] hash, ids in
@@ -2705,6 +2731,21 @@ struct RootView: View {
     /// here, and every receive row's index is an index into its `chains`.
     private var walletNetworks: WalletNetworks {
         WalletNetworks(settings.networkAdmin?.networks, space: space.current)
+    }
+
+    /// What the in-app browser is told of the networks (r10 follow-up): the
+    /// space in front, its chains, and every chain Vela has in both spaces.
+    private var browserNetworks: BrowserNetworks {
+        BrowserNetworks(
+            space: space.current,
+            chains: walletNetworks.chains.map(\.chainId),
+            known: WalletNetworks(settings.networkAdmin?.networks).chains.map(\.chainId)
+        )
+    }
+
+    private func tellBrowserAboutNetworks() {
+        let networks = browserNetworks
+        browser.networksChanged(networks.chains, space: networks.space, known: networks.known)
     }
 
     /// The receive list's row `receiveNetwork`, from the same list it was
@@ -3453,6 +3494,9 @@ struct RootView: View {
                     },
                     onSelectActivityItem: { activityItemId = $0 },
                     opensElsewhere: { openMultisigRow($0) },
+                    // r10 follow-up: no scan in the history's way while it
+                    // moves under a finger.
+                    onHistoryScrolling: { activity.scrolling("history", $0) },
                     onSelectAsset: { selectAsset($0) },
                     onSendToken: { sendSelectedToken() },
                     onReceiveToken: { receiveSelectedToken() },
@@ -3502,6 +3546,7 @@ struct RootView: View {
                         sendClassFilter = id
                     },
                     onPickCta: { sendPickCta() },
+                    onRetryTokens: { send.retryTokens() },
                     onMax: { send.tapMax() },
                     onChangeToken: { send.changeToken() },
                     onDenom: { send.toggleFiatInput() },
@@ -4049,6 +4094,7 @@ struct RootView: View {
             if let model = signingSheetModel {
                 SigningSheet(
                     model: model,
+                    spaceNote: signingSpaceNote,
                     onConfirm: { signing?.approve() },
                     onAllowanceChip: { chip in signing?.guardChip(chip) },
                     onAllowanceAmount: { text in signing?.guardCustomAmount(text) },
@@ -4316,9 +4362,10 @@ struct RootView: View {
     private func readWalletKeys() async {
         let address = session.view.address
         guard !address.isEmpty else { return }
-        let device = await WalletKeys.deviceKeys(
-            of: address, walletName: session.view.activeName, in: sendAccountPort
-        )
+        // r10 follow-up: each key by its own name, and the account's name
+        // beside them — never as key 0's label.
+        let accountName = session.view.activeName
+        let device = await WalletKeys.deviceKeys(of: address, in: sendAccountPort)
         let signingKey = await WalletKeys.signInCredential(of: address, in: sendAccountPort)
         let reader = WalletKeys(ethCall: { [pool] chainId, to, data in
             let outcome = await pool.call(
@@ -4330,8 +4377,10 @@ struct RootView: View {
             return hex
         })
         // What the device knows, before the first chain is asked.
-        deviceKeys = (address, reader.deviceOnly(device: device, signInCredential: signingKey))
-        walletKeys = (address, await reader.read(address: address, device: device, signInCredential: signingKey))
+        deviceKeys = (address, reader.deviceOnly(accountName: accountName, device: device, signInCredential: signingKey))
+        walletKeys = (address, await reader.read(
+            address: address, accountName: accountName, device: device, signInCredential: signingKey
+        ))
     }
 
     /// The account in front's keys as this device's record has them — no
@@ -4339,14 +4388,14 @@ struct RootView: View {
     /// person can reach Settings, so the keys block opens on its rows.
     private func readDeviceKeys(of address: String) async {
         guard !address.isEmpty else { return }
-        let device = await WalletKeys.deviceKeys(
-            of: address, walletName: session.view.activeName, in: sendAccountPort
-        )
+        let accountName = session.view.activeName
+        let device = await WalletKeys.deviceKeys(of: address, in: sendAccountPort)
         let signingKey = await WalletKeys.signInCredential(of: address, in: sendAccountPort)
         guard address.caseInsensitiveCompare(session.view.address) == .orderedSame else { return }
         deviceKeys = (
             address,
-            WalletKeys(ethCall: { _, _, _ in nil }).deviceOnly(device: device, signInCredential: signingKey)
+            WalletKeys(ethCall: { _, _, _ in nil })
+                .deviceOnly(accountName: accountName, device: device, signInCredential: signingKey)
         )
     }
 
@@ -4503,7 +4552,7 @@ struct RootView: View {
         page.erase = { await eraseThisDevice() }
         page.clearStorageItem = { item in clearStorageItem(item) }
         page.clearCaches = { clearSettingsCaches() }
-        page.refreshBalances = { if wallet.pullRefresh() { activity.focusTick() } }
+        page.refreshBalances = { if wallet.pullRefresh() { activity.refreshed() } }
         page.switchAccount = { address in await switchAccountNow(address) }
         page.rejectSigning = {
             guard let signing else { return false }
@@ -5068,4 +5117,12 @@ private struct SpeedBridge: ViewModifier {
 struct PayRefusalNotice: Equatable {
     let serial: Int
     let body: String
+}
+
+/// The in-app browser's network facts (`space_networks_changed`), compared
+/// whole so a change of any one of them is said once.
+private struct BrowserNetworks: Equatable {
+    let space: NetworkSpaceKind
+    let chains: [Int]
+    let known: [Int]
 }

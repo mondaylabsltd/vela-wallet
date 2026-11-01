@@ -518,6 +518,9 @@ struct SendPickModel {
     /// the network a scanned code named, issue #312), or nothing matching.
     /// The web's and Android's line since issue 209.
     var empty: String?
+    /// r10 follow-up: the list could not be read — `empty` says so, and this
+    /// is the "Try again" under it (`retry_tokens`). `nil` otherwise.
+    var retry: String?
 }
 
 /// The token card at the top of the send form.

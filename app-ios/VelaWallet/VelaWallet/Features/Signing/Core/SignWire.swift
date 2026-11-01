@@ -236,6 +236,15 @@ struct SignRequestViewWire: Decodable, Equatable {
     /// submit byte for byte. The core always sends it; the default is only
     /// for hand-built views.
     var firstParty: Bool = false
+    /// r10 follow-up (`SignSpaceNote`): a network-space switch moved this
+    /// request's site to `chainId` since its last request — one line under
+    /// the requester, `key` with `network` = that chain's name.
+    var spaceNote: SignSpaceNoteWire? = nil
+}
+
+struct SignSpaceNoteWire: Decodable, Equatable {
+    let chainId: Int
+    let key: String
 }
 
 /// What the tracker must be handed the moment it appears. Idempotent — the

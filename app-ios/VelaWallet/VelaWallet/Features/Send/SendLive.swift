@@ -200,8 +200,11 @@ enum SendLive {
                 : model.cta,
             // An empty list says why, once the core has looked: on a network a
             // scanned code named, "nothing here" is the answer (issue #312).
-            empty: view.loading ? nil
-                : loc.t(view.tokens.isEmpty ? "send.noTokensWithBalance" : "send.noMatchingTokens")
+            // A list that could not be read says THAT, with a way to try
+            // again (r10 follow-up) — never "nothing held".
+            empty: view.tokensFailedKey.map { loc.t($0) } ?? (view.loading ? nil
+                : loc.t(view.tokens.isEmpty ? "send.noTokensWithBalance" : "send.noMatchingTokens")),
+            retry: view.tokensFailedKey == nil ? nil : loc.t("common.tryAgain")
         )
     }
 

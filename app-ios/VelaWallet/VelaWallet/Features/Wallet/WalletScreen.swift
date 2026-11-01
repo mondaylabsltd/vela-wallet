@@ -77,6 +77,10 @@ struct WalletScreen: View {
     /// The multisig shown's own lines (native multisig): its rule, what
     /// waits on it, its first steps. Absent for a Vela account.
     var multisigCard: AnyView?
+    /// r10 follow-up: the list started moving under a finger (`true`) or
+    /// settled (`false`) — the incoming scan's quiet period. Absent in the
+    /// gallery.
+    var onScrolling: ((Bool) -> Void)?
     @State private var sheetShown = false
     @State private var viewingIdenticon = false
 
@@ -106,7 +110,11 @@ struct WalletScreen: View {
                 }
                 .padding(.horizontal, Tokens.Layout.screenPaddingX)
                 .padding(.bottom, Tokens.Space.s24)
+                .scrollingProbe(onScrolling)
             }
+            .reportsScrolling(onScrolling)
+            // A list taken away mid-fling says nothing more: settled.
+            .onDisappear { onScrolling?(false) }
             .refreshableIf(onRefresh)
             WalletTabBar(tabs: model.tabs, onSelect: onSelectTab)
         }

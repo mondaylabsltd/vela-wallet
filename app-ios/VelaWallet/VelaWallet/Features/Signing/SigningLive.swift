@@ -223,6 +223,20 @@ enum SigningLive {
         }
     }
 
+    /// r10 follow-up: a network-space switch moved the asking site since its
+    /// last request — the core's line (`SignRequestView.space_note`), drawn
+    /// once under the requester, with the network it is on now. `nil` for
+    /// the wallet's own request and for a site nothing moved.
+    ///
+    /// Beside the model, not in it: `SigningModel` is copied through every
+    /// unoptimised frame of its builders (`ScreenModelStackTests`).
+    static func spaceNote(_ sign: SignViewWire, networks: WalletNetworks, loc: Loc) -> String? {
+        guard let request = sign.request, !request.firstParty, let note = request.spaceNote else { return nil }
+        return loc.t(note.key, vars: [
+            "network": networks.meta(note.chainId)?.displayName ?? String(note.chainId),
+        ])
+    }
+
     static func model(
         fallback: SigningModel,
         request: SigningController.Incoming,

@@ -82,6 +82,10 @@ struct FlowHost: View {
     /// A row that opens as something else than a transaction detail — a
     /// multisig transaction opens as its own sheet (r8-17). `true`: it did.
     var opensElsewhere: ((String?) -> Bool)?
+    /// r10 follow-up: the history started moving under a finger (`true`) or
+    /// settled (`false`) — the incoming scan's quiet period. Absent in the
+    /// gallery.
+    var onHistoryScrolling: ((Bool) -> Void)?
     /// Which assets row opened the token sheet.
     var onSelectAsset: ((Int) -> Void)?
     /// 转账 from a token's own sheet, with that token preselected.
@@ -134,6 +138,8 @@ struct FlowHost: View {
     /// confirming a sweep once one is under way — the screen cannot tell those
     /// apart, and the shell's own picking flag can.
     var onPickCta: (() -> Void)?
+    /// r10 follow-up: the picker's "Try again" on a list that failed.
+    var onRetryTokens: (() -> Void)?
     var onMax: (() -> Void)?
     /// Issue #326: the form's token card — back to the asset picker, the
     /// payee kept. Only where the core offers it (`can_change_token`).
@@ -363,7 +369,11 @@ struct FlowHost: View {
                     onSelectActivity?(group, row)
                     onNavigate(.txDetail)
                 })
+                .scrollingProbe(onHistoryScrolling)
             }
+            .reportsScrolling(onHistoryScrolling)
+            // A list taken away mid-fling says nothing more: settled.
+            .onDisappear { onHistoryScrolling?(false) }
         case .assets(let m):
             FlowScaffold(
                 header: m.header,
@@ -395,7 +405,8 @@ struct FlowHost: View {
                     onCta: {
                         if let onPickCta { onPickCta() }
                         else { onNavigate(.sendMulti) }
-                    }
+                    },
+                    onRetry: { onRetryTokens?() }
                 )
             }
         case .sendForm(let m):

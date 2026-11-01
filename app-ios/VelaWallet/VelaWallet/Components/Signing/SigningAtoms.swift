@@ -31,6 +31,24 @@ extension SigningTone {
 
 // MARK: - Header
 
+/// r10 follow-up: "The network changed with the space: this site is now on
+/// {network}." — under the requester on the signing and connection sheets,
+/// once. A fact about the site, in the notice's quiet ink: not a warning.
+struct SpaceNoteLine: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.walletTextScale) private var textScale
+
+    let text: String
+
+    var body: some View {
+        Text(verbatim: text)
+            .typeRole(Typography.rowSub.scaled(textScale))
+            .foregroundStyle(theme.fgMuted)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("sheet.spaceNote")
+    }
+}
+
 struct SigningHeaderView: View {
     @Environment(\.theme) private var theme
     @Environment(\.walletTextScale) private var textScale
@@ -47,6 +65,9 @@ struct SigningHeaderView: View {
     var headline: (text: String, tone: SigningTone)?
     var iconUrls: [String] = []
     var networkLogoUrl: String?
+    /// r10 follow-up: a network-space switch moved this site since its last
+    /// request — one line under the network chip. `nil` otherwise.
+    var spaceNote: String?
     /// Spec 079: the sheet's one explicit close. It no longer closes on a
     /// swipe (owner ruling), so the close has to be drawn. `nil` in the
     /// gallery, which has nothing to close.
@@ -129,6 +150,10 @@ struct SigningHeaderView: View {
                 .background(theme.bgSunken, in: Capsule())
                 .fixedSize()
                 .padding(.top, Tokens.Space.s4)
+                if let spaceNote {
+                    SpaceNoteLine(text: spaceNote)
+                        .padding(.top, Tokens.Space.s4)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             closeButton

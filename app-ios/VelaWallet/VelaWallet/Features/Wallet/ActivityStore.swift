@@ -12,11 +12,14 @@
 //  ## The cadence is the core's (r9-17)
 //
 //  When to scan for incoming funds is `incoming_scan::next_scan_ms`, driven by
-//  `activity_feed`: 10 s while the person is at the app, 30 s idle, 60 s in
-//  the background, at once when it is shown again or back online — the same
-//  rule on every platform. This store only reports the app's presence
-//  (`presence_changed`: shown, hidden, online, touched) and runs the one timer
-//  the core asks for (`next_scan`, answered with `scan_due`).
+//  `activity_feed` (r10 follow-up): a back-off while nothing arrives — 15 s,
+//  30 s, 60 s, 2 min; 2 min hidden — and at once when the app is shown again,
+//  back online, pulled to refresh or after a send — the same rule on every
+//  platform. This store only reports the app's presence (`presence_changed`:
+//  shown, hidden, online, refreshed, sent), says when a list is being
+//  scrolled (`interacting {on}`: a scan is held, never in a gesture's way)
+//  and runs the one timer the core asks for (`next_scan`, answered with
+//  `scan_due`).
 //
 
 import Foundation
@@ -62,6 +65,10 @@ final class ActivityStore {
     private var visible = true
     private var lastInteractionMs = Date().timeIntervalSince1970 * 1000
     private var lastReportMs = -Double.infinity
+    /// r10 follow-up: the lists that are moving under a finger right now
+    /// (the home, the history). The core hears `on` when the first starts
+    /// and `off` when the last has settled.
+    private var movingLists: Set<String> = []
 
     init(
         store: VelaStore,
@@ -191,6 +198,45 @@ final class ActivityStore {
 
     /// A pull to refresh: the core re-reads and re-scans by its own rules.
     func focusTick() { core.dispatch(CoreJSON.string(["type": "focus_tick"])) }
+
+    /// r10 follow-up: the person pulled to refresh (or pressed the hero's
+    /// refresh). Following the cadence, the core reads the store, scans at
+    /// once and starts the back-off again (`presence_changed {refreshed}`);
+    /// before that, the plain re-read.
+    func refreshed() {
+        guard following else { return focusTick() }
+        lastInteractionMs = Date().timeIntervalSince1970 * 1000
+        report("refreshed")
+    }
+
+    /// r10 follow-up: the person sent from this account — the operation was
+    /// handed to the tracker. The core scans at once (the change, a refund,
+    /// the other side's answer) and starts the back-off again; the send's own
+    /// record re-reads the store through `reconciled`. One op is handed off
+    /// twice when its write-ahead is admitted (spec 082 RJ1): said once.
+    func sent(userOpHash: String) {
+        let op = userOpHash.lowercased()
+        guard !op.isEmpty, !sentOps.contains(op) else { return }
+        sentOps.append(op)
+        if sentOps.count > 16 { sentOps.removeFirst() }
+        report("sent")
+    }
+
+    private var sentOps: [String] = []
+
+    /// r10 follow-up: a list (`list`: the home, the history) started moving
+    /// under a finger — a drag, a fling — or settled. A scan that comes due
+    /// meanwhile is held and runs when the last list settles; nothing of the
+    /// cadence redraws while one moves (`interacting {on, presence}`).
+    /// Repeats are dropped here; the core would take them too.
+    func scrolling(_ list: String, _ on: Bool) {
+        let was = !movingLists.isEmpty
+        if on { movingLists.insert(list) } else { movingLists.remove(list) }
+        let now = !movingLists.isEmpty
+        guard now != was, following else { return }
+        if now { lastInteractionMs = Date().timeIntervalSince1970 * 1000 }
+        core.dispatch(CoreJSON.string(["type": "interacting", "on": now, "presence": presence()]))
+    }
 
     /// The balance's hide state. The core suppresses the receipt toast while it
     /// is on — the row still glows and the haptic still fires, which is exactly

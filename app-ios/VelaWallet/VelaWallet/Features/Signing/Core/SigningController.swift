@@ -80,6 +80,11 @@ final class SigningController {
         /// raises one, `RootView.openEthereumBackup`, and nowhere else. A page
         /// never is, whatever bytes it submits.
         var firstParty: Bool = false
+        /// r10 follow-up: a network-space switch moved the asking site to
+        /// this chain since its last request (the browser's `space_note`).
+        /// Said to the core right after the request (`space_noted`); the
+        /// sheet draws the core's `space_note`.
+        var spaceNote: Int? = nil
     }
 
     struct Ports {
@@ -499,6 +504,9 @@ final class SigningController {
             "request_ts_ms": NSNull(),
             "now_ms": nowMs,
         ])
+        if let chainId = incoming.spaceNote {
+            dispatchSign(["type": "space_noted", "id": incoming.id, "chain_id": chainId])
+        }
 
         // What it does, in words. The BROWSER's fact about who is asking,
         // never the page's claim.

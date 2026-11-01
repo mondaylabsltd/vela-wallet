@@ -75,9 +75,13 @@ struct ConnectionPanelView: View {
                         SiteLockMark(lock: connection.lock, localLabel: localLabel,
                                      insecureLabel: insecureLabel, idPrefix: "explore.connection")
                         if !connection.statusLine.isEmpty {
+                            // Also, while a site asks, the line that says a
+                            // space switch moved it (r10 follow-up): a
+                            // sentence, so it wraps.
                             Text(verbatim: connection.statusLine)
                                 .typeRole(Typography.rowSub.scaled(textScale))
                                 .foregroundStyle(theme.fgMuted)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                 }

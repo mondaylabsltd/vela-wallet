@@ -368,12 +368,16 @@ enum ExploreLive {
                 ? loc.t("explore.connectionTitle")
                 : loc.t("connect.browser.title", vars: ["host": host]),
             site: asked,
-            // Asking: no words under the host (the title asks). Otherwise
-            // the core's fact about the grant — "已连接", or that there is
-            // none (spec 097 E).
+            // Asking: no words under the host (the title asks) — unless a
+            // network-space switch moved the asking site since its last
+            // request (r10 follow-up, `DbrConsentView.space_note`): that one
+            // line, once. Otherwise the core's fact about the grant —
+            // "已连接", or that there is none (spec 097 E).
             statusLine: consent == nil
                 ? statusLine(connected: connected, loc: loc)
-                : "",
+                : consent?.spaceNote.map { note in
+                    loc.t(note.key, vars: ["network": chainName(note.chainId, networks: networks)])
+                } ?? "",
             // WHICH account this site holds, not which one the wallet is on.
             //
             // A grant is pinned to the address it was given to, so the two can
