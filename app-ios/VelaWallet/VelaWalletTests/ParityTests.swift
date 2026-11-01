@@ -163,7 +163,7 @@ struct ParityTests {
         let model = receipt(try CoreJSON.decode(SendViewWire.self, from: object))
         let title = loc.t("send.recipientCount_other", vars: ["count": "2"])
         #expect(model.breakdownTitle == title)
-        #expect(model.breakdown.map(\.label) == ["Alice", "0x88cc…6894"])
+        #expect(model.breakdown.map(\.label) == ["Alice", "0x88cCA0…266894"])
         #expect(model.breakdown.map(\.value) == ["2 USDC", "3 USDC"])
         #expect(model.captions.first?.hasPrefix(title) == true)
     }

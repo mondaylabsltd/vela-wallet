@@ -34,6 +34,9 @@ struct MsProposalModel {
     var execution: MsJSON? { view.execution(item) }
     var approveState: MsTagged? { view.action("approve:\(hash)") }
     var executeState: MsTagged? { view.action("execute:\(hash)") }
+    /// r11 one-press: the look stopped the last press — its line (the
+    /// action's words) stands in the fee line's place, never beside it.
+    var executeStopped: Bool { executeState?.kind == "stopped" }
 
     // MARK: - The one review (§3.6)
 
@@ -224,7 +227,15 @@ struct MsProposalModel {
             out.append((words.t("proposal.conflict", ["nonce": item.nonce]), .warning, "conflict"))
         }
         if item.status == "queued" {
-            out.append((words.t("proposal.queuedNote", ["nonce": previousNonce]), .neutral, "queued"))
+            // r11 (core `waits_for`): every number it waits behind.
+            switch item.waitsFor.count {
+            case 0: break
+            case 1:
+                out.append((words.t("proposal.queuedNote", ["nonce": item.waitsFor[0]]), .neutral, "queued"))
+            default:
+                out.append((words.t("proposal.queuedNoteMany",
+                                    ["nonces": words.loc.list(item.waitsFor.map { "#\($0)" })]), .neutral, "queued"))
+            }
         }
         if item.renameUndeployed {
             out.append((words.t("proposal.renameUndeployed", ["network": words.network(chainId)]), .warning, "renameUndeployed"))
@@ -258,11 +269,6 @@ struct MsProposalModel {
             (view.chain(chainId)?.members?.owners ?? []).contains { $0.lowercased() == approval.owner.lowercased() }
                 && words.localName(approval.owner) != nil
         }
-    }
-
-    private var previousNonce: String {
-        let n = (Int(item.nonce) ?? 1) - 1
-        return String(max(0, n))
     }
 
     /// This transaction's entry in the machine's outbox (signed here, not in
@@ -428,9 +434,17 @@ struct MsProposalModel {
     /// The members still to approve (verified approvals count; nothing once
     /// it can no longer move).
     var stillNeeded: [String] {
-        guard !past else { return [] }
+        guard !past, !refusedForWhatItIs else { return [] }
         let have = Set(item.approvals.filter(\.counts).map { $0.owner.lowercased() })
         return members.filter { !have.contains($0.lowercased()) }
+    }
+
+    /// r11 S4: Vela refuses it for what it is (a delegatecall, a refund, a
+    /// batch too deep) — the core leaves nobody who can approve it
+    /// (`can_approve` empty) and says why (`refused`): no member is asked.
+    var refusedForWhatItIs: Bool {
+        guard item.canApprove.isEmpty, let refused = review?["refused"] else { return false }
+        return !refused.isNull
     }
 
     /// Enough approved: nobody else is asked (r4D-6).
@@ -910,7 +924,7 @@ struct MultisigProposalSheet: View {
                         // look for the member whose press executes (the web
                         // draws the executor's priced look under its one press).
                         let presser = model.oneTouchExecutor(chosen: member) ?? oneTouch[0]
-                        if let line = model.feeLine(for: presser) {
+                        if !model.executeStopped, let line = model.feeLine(for: presser) {
                             MsNote(text: line.text, tone: line.tone, identifier: "multisig.proposal.approveExecuteFee")
                         }
                         ForEach(model.setupLines(for: presser), id: \.self) { line in
@@ -957,7 +971,7 @@ struct MultisigProposalSheet: View {
                     if model.canExecute.count > 1 {
                         memberPicker(model.canExecute, selection: Binding(get: { chosen }, set: { executor = $0 }))
                     }
-                    if let line = model.feeLine(for: chosen) {
+                    if !model.executeStopped, let line = model.feeLine(for: chosen) {
                         MsNote(text: line.text, tone: line.tone, identifier: "multisig.proposal.fee")
                     }
                     ForEach(model.setupLines(for: chosen), id: \.self) { line in

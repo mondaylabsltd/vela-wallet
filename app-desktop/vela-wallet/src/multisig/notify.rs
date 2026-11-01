@@ -11,7 +11,7 @@
 //!
 //! Nothing here decides anything about a multisig. Every fact is a view's:
 //! "needs you" and "ready" are the core's own `waiting_of` (per item for the
-//! followed multisig, its presence counts for the others), "approved" is the
+//! followed multisig, its presence keys for the others), "approved" is the
 //! item's count, "executed" is the execution verdict or the timeline the
 //! proposals machine keeps. This only notices that a fact rose.
 //!
@@ -84,6 +84,10 @@ pub struct Notice {
     pub chain_id: u64,
     pub safe_tx_hash: String,
     pub what: Option<What>,
+    /// r11-10: for a multisig not shown, how many wait now — said when
+    /// several new ones arrived at once ("2 need your approval"); `None`
+    /// names one transaction.
+    pub count: Option<u64>,
 }
 
 /// One proposal of the followed multisig, as far as notifications care.
@@ -302,6 +306,7 @@ pub fn transitions(prev: &Snapshot, next: &Snapshot, memory: &mut Memory) -> Vec
             chain_id,
             safe_tx_hash: hash.to_owned(),
             what,
+            count: None,
         }
     };
 
@@ -389,26 +394,42 @@ pub fn transitions(prev: &Snapshot, next: &Snapshot, memory: &mut Memory) -> Vec
         }
     }
 
-    // The others: what their presence names first. Counts alone prove
-    // nothing about WHICH transaction; `first` names one.
+    // The others (r11-10): every transaction their presence names
+    // (`needs_you_keys`, `ready_keys`, the core's), each said once — a
+    // second one proposed behind a first already known is news by its own
+    // key, never lost behind a count that stayed the same. One new: said
+    // by itself; several at once: by the count ("2 need your approval"),
+    // opening the first new one. A multisig first seen, or a list kept
+    // from an earlier page (`read_at` none), is the silent baseline.
     for (m, w) in &next.presence {
-        let named = if w.needs_you > 0 {
-            w.first.as_ref().map(|f| (Kind::ApprovalNeeded, f))
-        } else if w.ready > 0 {
-            w.first.as_ref().map(|f| (Kind::ReadyToExecute, f))
-        } else {
-            None
-        };
-        let Some((kind, first)) = named else {
-            continue;
-        };
-        let loud = next.presence_live && prev.presence_live && prev.presence.contains_key(m);
-        if memory
-            .known
-            .insert((m.clone(), lower(&first.safe_tx_hash), kind))
-            && loud
-        {
-            out.push(notice(m, kind, first.chain_id, &first.safe_tx_hash, None));
+        let loud = next.presence_live
+            && prev.presence_live
+            && prev.presence.contains_key(m)
+            && w.read_at.is_some();
+        for (kind, keys) in [
+            (Kind::ApprovalNeeded, &w.needs_you_keys),
+            (Kind::ReadyToExecute, &w.ready_keys),
+        ] {
+            let fresh: Vec<(u64, String)> = keys
+                .iter()
+                .filter_map(|key| {
+                    let (chain, hash) = key.split_once(':')?;
+                    Some((chain.parse().ok()?, lower(hash)))
+                })
+                .filter(|(_, hash)| memory.known.insert((m.clone(), hash.clone(), kind)))
+                .collect();
+            if !loud {
+                continue;
+            }
+            match fresh.as_slice() {
+                [] => {}
+                [(chain_id, hash)] => out.push(notice(m, kind, *chain_id, hash, None)),
+                [(chain_id, hash), ..] => {
+                    let mut n = notice(m, kind, *chain_id, hash, None);
+                    n.count = Some(keys.len() as u64);
+                    out.push(n);
+                }
+            }
         }
     }
     out
@@ -528,17 +549,27 @@ mod tests {
         }
     }
 
-    fn waiting(needs_you: u64, ready: u64, first: Option<&str>) -> Waiting {
+    /// What waits on a multisig not shown, as the core's presence says it:
+    /// the transactions by key, their counts, the first, read on this page.
+    fn waiting(needs: &[&str], ready: &[&str]) -> Waiting {
+        let key = |h: &&str| format!("100:{h}");
         Waiting {
-            needs_you,
-            ready,
+            needs_you: needs.len() as u64,
+            ready: ready.len() as u64,
             waiting_payer: 0,
-            first: first.map(|h| WaitingFirst {
+            first: needs.first().or(ready.first()).map(|h| WaitingFirst {
                 chain_id: 100,
-                safe_tx_hash: h.to_owned(),
+                safe_tx_hash: (*h).to_owned(),
             }),
-            ..Waiting::default()
+            needs_you_keys: needs.iter().map(key).collect(),
+            ready_keys: ready.iter().map(key).collect(),
+            read_at: Some(1),
         }
+    }
+
+    /// The same, as a list kept from an earlier page (`read_at` none).
+    fn kept(w: Waiting) -> Waiting {
+        Waiting { read_at: None, ..w }
     }
 
     fn kinds(notices: &[Notice]) -> Vec<(String, Kind)> {
@@ -553,7 +584,7 @@ mod tests {
         let mut n = Notifier::default();
         let first = snap(
             Some(followed(A, &[item(H1, &[]), item(H2, &[ME, THEM])])),
-            &[(B, waiting(1, 0, Some(H1)))],
+            &[(B, waiting(&[H1], &[]))],
             true,
         );
         assert!(n.observe(first.clone()).is_empty(), "the baseline");
@@ -677,36 +708,68 @@ mod tests {
     #[test]
     fn the_others_presence_names_what_needs_you() {
         let mut n = Notifier::default();
-        n.observe(snap(None, &[(B, waiting(0, 0, None))], true));
-        let got = n.observe(snap(None, &[(B, waiting(1, 0, Some(H1)))], true));
+        n.observe(snap(None, &[(B, waiting(&[], &[]))], true));
+        let got = n.observe(snap(None, &[(B, waiting(&[H1], &[]))], true));
         assert_eq!(kinds(&got), vec![(H1.to_owned(), Kind::ApprovalNeeded)]);
         assert!(got[0].what.is_none(), "the presence names no action");
         assert_eq!(got[0].name, None);
-        // Approved elsewhere, then a second one becomes first: said.
-        n.observe(snap(None, &[(B, waiting(0, 0, None))], true));
-        let got = n.observe(snap(None, &[(B, waiting(1, 0, Some(H2)))], true));
+        assert_eq!(got[0].count, None);
+        // Approved elsewhere, then a second one: said.
+        n.observe(snap(None, &[(B, waiting(&[], &[]))], true));
+        let got = n.observe(snap(None, &[(B, waiting(&[H2], &[]))], true));
         assert_eq!(kinds(&got), vec![(H2.to_owned(), Kind::ApprovalNeeded)]);
-        // H1 back as first (the list flapped): never twice.
+        // H1 back (the list flapped): never twice.
         assert!(
-            n.observe(snap(None, &[(B, waiting(2, 0, Some(H1)))], true))
+            n.observe(snap(None, &[(B, waiting(&[H1, H2], &[]))], true))
                 .is_empty()
         );
         // Nothing needs you, one is ready to run here.
-        let got = n.observe(snap(None, &[(B, waiting(0, 1, Some(H1)))], true));
+        let got = n.observe(snap(None, &[(B, waiting(&[], &[H1]))], true));
         assert_eq!(kinds(&got), vec![(H1.to_owned(), Kind::ReadyToExecute)]);
+    }
+
+    /// r11-10: a multisig not shown, its first one still waiting — a second
+    /// and a third proposed behind it are each said by their own key; one
+    /// approved elsewhere as another arrives (the count unchanged) is said.
+    #[test]
+    fn a_second_one_behind_a_known_first_is_said() {
+        const H3: &str = "0x3333";
+        const H4: &str = "0x4444";
+        let mut n = Notifier::default();
+        n.observe(snap(None, &[(B, waiting(&[], &[]))], true));
+        let got = n.observe(snap(None, &[(B, waiting(&[H1], &[]))], true));
+        assert_eq!(kinds(&got), vec![(H1.to_owned(), Kind::ApprovalNeeded)]);
+        let got = n.observe(snap(None, &[(B, waiting(&[H1, H2], &[]))], true));
+        assert_eq!(kinds(&got), vec![(H2.to_owned(), Kind::ApprovalNeeded)]);
+        // The same read again: nothing.
+        assert!(
+            n.observe(snap(None, &[(B, waiting(&[H1, H2], &[]))], true))
+                .is_empty()
+        );
+        // H2 approved elsewhere and H3 proposed: still two, and H3 is news.
+        let got = n.observe(snap(None, &[(B, waiting(&[H1, H3], &[]))], true));
+        assert_eq!(kinds(&got), vec![(H3.to_owned(), Kind::ApprovalNeeded)]);
+        // Two at once: said once, by the count, opening the first new.
+        let got = n.observe(snap(
+            None,
+            &[(B, waiting(&[H1, H3, H4, "0x5555"], &[]))],
+            true,
+        ));
+        assert_eq!(kinds(&got), vec![(H4.to_owned(), Kind::ApprovalNeeded)]);
+        assert_eq!(got[0].count, Some(4));
     }
 
     #[test]
     fn the_list_an_earlier_session_kept_is_never_news() {
         let mut n = Notifier::default();
         // Launch: the kept list, then the first live round lands.
-        n.observe(snap(None, &[(B, waiting(1, 0, Some(H1)))], false));
-        let got = n.observe(snap(None, &[(B, waiting(1, 0, Some(H2)))], false));
+        n.observe(snap(None, &[(B, kept(waiting(&[H1], &[])))], false));
+        let got = n.observe(snap(None, &[(B, kept(waiting(&[H2], &[])))], false));
         assert!(got.is_empty(), "not live yet");
-        let got = n.observe(snap(None, &[(B, waiting(1, 0, Some(H2)))], true));
-        assert!(got.is_empty(), "live now: the baseline, still silent");
-        let got = n.observe(snap(None, &[(B, waiting(1, 0, Some(H1)))], true));
-        assert!(got.is_empty(), "H1 was seen at launch");
+        let got = n.observe(snap(None, &[(B, kept(waiting(&[H2], &[])))], true));
+        assert!(got.is_empty(), "a kept list, even live: silent");
+        let got = n.observe(snap(None, &[(B, waiting(&[H1, H2], &[]))], true));
+        assert!(got.is_empty(), "H1 and H2 were seen at launch");
     }
 
     #[test]
@@ -715,23 +778,18 @@ mod tests {
         n.observe(snap(None, &[], true));
         // B added (or first read): silent.
         assert!(
-            n.observe(snap(None, &[(B, waiting(1, 0, Some(H1)))], true))
+            n.observe(snap(None, &[(B, waiting(&[H1], &[]))], true))
                 .is_empty()
         );
         // B removed: nothing said, nothing kept but the memory.
         assert!(n.observe(snap(None, &[], true)).is_empty());
         // B added back with something new: a first sight again, silent.
         assert!(
-            n.observe(snap(None, &[(B, waiting(1, 0, Some(H2)))], true))
+            n.observe(snap(None, &[(B, waiting(&[H2], &[]))], true))
                 .is_empty()
         );
         // From then on, news is news.
-        let mut later = waiting(1, 0, Some(H1));
-        later.first = Some(WaitingFirst {
-            chain_id: 100,
-            safe_tx_hash: "0x3333".to_owned(),
-        });
-        let got = n.observe(snap(None, &[(B, later)], true));
+        let got = n.observe(snap(None, &[(B, waiting(&[H2, "0x3333"], &[]))], true));
         assert_eq!(
             kinds(&got),
             vec![("0x3333".to_owned(), Kind::ApprovalNeeded)]
@@ -741,34 +799,41 @@ mod tests {
     #[test]
     fn switching_the_followed_multisig_says_nothing_already_known() {
         let mut n = Notifier::default();
-        // A followed with H1 needing you; B elsewhere, nothing waiting.
+        // A followed with H1 and H2 needing you; B elsewhere, nothing waiting.
         n.observe(snap(
-            Some(followed(A, &[item(H1, &[])])),
-            &[(B, waiting(0, 0, None))],
+            Some(followed(A, &[item(H1, &[]), item(H2, &[])])),
+            &[(B, waiting(&[], &[]))],
             true,
         ));
-        // Switched to B: A's presence falls back to an older read naming H1;
-        // B's list is read for the first time with H2 needing you.
+        // Switched to B: A's presence is an older read naming H1.
         let got = n.observe(snap(
-            Some(followed(B, &[item(H2, &[])])),
-            &[(A, waiting(1, 0, Some(H1)))],
+            Some(followed(B, &[])),
+            &[(A, waiting(&[H1], &[]))],
             true,
         ));
         assert!(got.is_empty(), "{got:?}");
-        // A, now an "other", reads live: H1 is still first — known.
-        assert!(
-            n.observe(snap(
-                Some(followed(B, &[item(H2, &[])])),
-                &[(A, waiting(1, 0, Some(H1)))],
-                true,
-            ))
-            .is_empty()
-        );
-        // Back to A: H1 known; a new H2 on A is news only once A's list
-        // has been read once as followed again.
+        // A, now an "other", reads live: H1 and H2, both seen while followed.
         let got = n.observe(snap(
-            Some(followed(A, &[item(H1, &[]), item("0x4444", &[])])),
-            &[(B, waiting(1, 0, Some(H2)))],
+            Some(followed(B, &[])),
+            &[(A, waiting(&[H1, H2], &[]))],
+            true,
+        ));
+        assert!(got.is_empty(), "{got:?}");
+        // A third, proposed now: news.
+        let got = n.observe(snap(
+            Some(followed(B, &[])),
+            &[(A, waiting(&[H1, H2, "0x4444"], &[]))],
+            true,
+        ));
+        assert_eq!(
+            kinds(&got),
+            vec![("0x4444".to_owned(), Kind::ApprovalNeeded)]
+        );
+        // Back to A: everything known; a new one on A is news only once A's
+        // list has been read once as followed again.
+        let got = n.observe(snap(
+            Some(followed(A, &[item(H1, &[]), item("0x5555", &[])])),
+            &[(B, waiting(&[], &[]))],
             true,
         ));
         assert!(got.is_empty(), "{got:?}");

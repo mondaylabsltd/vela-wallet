@@ -453,7 +453,7 @@ mod tests {
         ]));
         assert_eq!(rows[0].name, SharedString::from("Ada"));
         assert_eq!(rows[1].name, SharedString::from("bob.eth"));
-        assert_eq!(rows[2].name, SharedString::from("0xcccc…0003"));
+        assert_eq!(rows[2].name, SharedString::from("0xccCc00…000003"));
     }
 
     /// The detail is about the contact that was opened, and its avatar is

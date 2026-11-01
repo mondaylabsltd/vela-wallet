@@ -105,6 +105,15 @@ pub(crate) struct MultisigUi {
     pub network_wait: Option<super::multisig_links::NetworkWait>,
 }
 
+/// r11 S4: a transaction Vela refuses for what it is (a delegatecall, a
+/// refund, a batch too deep) has nobody who can approve it at the source
+/// (`can_approve` empty): no member is asked to, and no link is handed on.
+fn nobody_approves(item: &ProposalItem) -> bool {
+    item.can_approve.is_empty()
+        && vela_core::multisig_review::refused_for_what_it_is(item.chain_id, &item.tx, &item.review)
+            .is_some()
+}
+
 /// The one review, as drawn (`multisig_review::MultisigReview`'s JSON):
 /// read, never decided again.
 #[derive(Clone, Debug, Default, Deserialize)]
@@ -123,6 +132,8 @@ pub(crate) struct ReviewDraw {
     #[serde(deserialize_with = "known_concerns")]
     pub concerns: Vec<Concern>,
     pub sign: SignRule,
+    /// r11: the heading over what moves ("Balance changes"), the core's key.
+    pub moves_title_key: Option<String>,
     /// r9-9: why nothing is signed, the core's one line (its corpus key).
     pub refused: Option<Refused>,
     /// What each call does, as the core read it (r8-1, r9-1).
@@ -272,6 +283,12 @@ impl WalletPage {
             Some("switcher") => self.account_switcher = true,
             Some("close_switcher") => self.account_switcher = false,
             Some("tech") => self.multisig.tech = true,
+            // Settings → Appearance's multisig-notifications switch, pressed
+            // (`{"page":"notify","on":true}`): the same call its press makes.
+            Some("notify") => {
+                let on = ask.get("on").and_then(Value::as_bool).unwrap_or(true);
+                crate::multisig::notify::deliver::set_wanted(on);
+            }
             // The network space switched, as the person's press does
             // (`{"page":"space","to":"testnet"}`).
             Some("space") => {
@@ -1120,6 +1137,23 @@ impl WalletPage {
         Some(card)
     }
 
+    /// r10-4 / r11: the networks of the other space the multisig shown
+    /// lives on, when none of its networks is in the space in front (its
+    /// record's `chain_ids`; which space a network is in is the core's
+    /// word). Empty for a Vela account, or a multisig used here.
+    pub(crate) fn multisig_elsewhere(&self, cx: &App) -> Vec<u32> {
+        let Some(row) = self.shown_multisig(cx) else {
+            return Vec::new();
+        };
+        let ids: Vec<u32> = row
+            .account
+            .chain_ids
+            .iter()
+            .filter_map(|id| u32::try_from(*id).ok())
+            .collect();
+        crate::network_space::lives_elsewhere(&ids)
+    }
+
     /// r10-4: a multisig shown from the space it does not live in — used
     /// only on networks of the other space — reads as empty here ("$0.00",
     /// "Deposit your first asset"): where it lives is said, with the switch
@@ -1130,14 +1164,7 @@ impl WalletPage {
         theme: &Theme,
         cx: &mut Context<Self>,
     ) -> Option<Div> {
-        let row = self.shown_multisig(cx)?;
-        let ids: Vec<u32> = row
-            .account
-            .chain_ids
-            .iter()
-            .filter_map(|id| u32::try_from(*id).ok())
-            .collect();
-        let elsewhere = crate::network_space::lives_elsewhere(&ids);
+        let elsewhere = self.multisig_elsewhere(cx);
         if elsewhere.is_empty() {
             return None;
         }
@@ -1504,7 +1531,8 @@ impl WalletPage {
             &self.loc,
             item.review.action.as_ref(),
             &item.nonce.to_string(),
-            &|a: &str| self.ms_member_name(a, account, cx),
+            // r11-6: the core's `names::who` over the one label.
+            &|a: &str| words::who(a, Some(&self.ms_member_name(a, account, cx))),
             &|t: Option<&str>| words::token_facts(&self.multisig.tokens, chain_id, t),
         )
     }
@@ -1652,15 +1680,23 @@ impl WalletPage {
             body = body.children(self.ms_preview_keep(theme, cx));
         }
         if item.status == ms_proposals::ProposalStatus::Queued {
-            body = body.child(ms_note(
-                theme,
-                &words::tv(
+            // r11 (core `waits_for`): every number it waits behind, the same
+            // on every surface — one said as "#n", several as a list.
+            let text = match item.waits_for.as_slice() {
+                [] => None,
+                [one] => Some(words::tv(&loc, "proposal.queuedNote", &[("nonce", one)])),
+                many => Some(words::tv(
                     &loc,
-                    "proposal.queuedNote",
-                    &[("nonce", &item.nonce.saturating_sub(1).to_string())],
-                ),
-                Tone::Neutral,
-            ));
+                    "proposal.queuedNoteMany",
+                    &[(
+                        "nonces",
+                        &loc.list(&many.iter().map(|n| format!("#{n}")).collect::<Vec<_>>()),
+                    )],
+                )),
+            };
+            if let Some(text) = text {
+                body = body.child(ms_note(theme, &text, Tone::Neutral));
+            }
         }
         if !item.same_nonce.is_empty() {
             body = body.child(ms_note(
@@ -2279,15 +2315,27 @@ impl WalletPage {
                     ));
                 }
                 foot = foot.child(presses);
-                foot = foot.child(self.ms_look_line(
-                    theme,
-                    item,
-                    &actor,
-                    look.as_ref(),
-                    payer.as_deref(),
-                    account,
-                    cx,
-                ));
+                // r11 one-press: a press the look stopped says why in its own
+                // line (`ActionState::Stopped`), which replaces the fee line —
+                // never the two side by side.
+                let stopped = matches!(
+                    view.actions.get(&format!(
+                        "execute:{}",
+                        item.safe_tx_hash.to_ascii_lowercase()
+                    )),
+                    Some(ActionState::Stopped { .. })
+                );
+                if !stopped {
+                    foot = foot.child(self.ms_look_line(
+                        theme,
+                        item,
+                        &actor,
+                        look.as_ref(),
+                        payer.as_deref(),
+                        account,
+                        cx,
+                    ));
+                }
             }
             _ => {}
         }
@@ -2313,7 +2361,8 @@ impl WalletPage {
         let next_is_asking = matches!(plan.kind, FootKind::Nothing)
             && !item.members_here.is_empty()
             && item.approved < item.threshold
-            && !executing;
+            && !executing
+            && !nobody_approves(item);
         self.multisig.foot_link = None;
         if next_is_asking
             && let Some(account) = account
@@ -2595,17 +2644,12 @@ impl WalletPage {
             }
             ActionState::MailboxRefused { .. } => reason("serviceRefused"),
             // The look stopped it before the passkey: why, as the look says.
+            // r11 (core): by the look's kind — fails → wouldFail, unpriced →
+            // feeUnpriced, unchecked → feeUnchecked; it stands in the fee
+            // line's place.
             ActionState::Stopped { preview } => match preview.get("kind").and_then(Value::as_str) {
-                Some("unpriced") => words::tv(
-                    loc,
-                    "proposal.failed",
-                    &[("reason", &words::t(loc, "proposal.unpricedReason"))],
-                ),
-                Some("unchecked") => words::tv(
-                    loc,
-                    "proposal.failed",
-                    &[("reason", &words::t(loc, "proposal.uncheckedReason"))],
-                ),
+                Some("unpriced") => words::t(loc, "proposal.feeUnpriced"),
+                Some("unchecked") => words::t(loc, "proposal.feeUnchecked"),
                 _ => words::tv(
                     loc,
                     "proposal.wouldFail",
@@ -2738,7 +2782,10 @@ impl WalletPage {
         let mut drawn_parties: Vec<String> = Vec::new();
         if let Some(draw) = &review.reading {
             let ctx = self.ms_reading_ctx(chain_id);
-            let lines = if past {
+            // r11 (deep4 "two red boxes"): a review Vela refuses says why in
+            // ONE line — the refusal's, above; the concern lines (a nested
+            // batch, …) would be a second box for a transaction nobody signs.
+            let lines = if past || review.refused.is_some() {
                 Vec::new()
             } else {
                 // Beside a refusal the core has left out the concern it
@@ -2872,11 +2919,12 @@ impl WalletPage {
                 // r10 S4: the lines below are headed, as on the web, the
                 // outside page and the phones — a bare "−0.01 USDC" did not
                 // say whose balance it was or that it was a change.
-                if !sim.deltas.is_empty() {
-                    col = col.child(ms_label(
-                        theme,
-                        &self.loc.t("componentsUi.signing.balanceChangesTitle"),
-                    ));
+                // r11: the heading's key is the review's (`moves_title_key`,
+                // none when what moves is withheld).
+                if !sim.deltas.is_empty()
+                    && let Some(key) = review.moves_title_key.as_deref()
+                {
+                    col = col.child(ms_label(theme, &self.loc.t(key)));
                 }
                 for (i, delta) in sim.deltas.iter().enumerate() {
                     let info =
@@ -3363,6 +3411,12 @@ impl WalletPage {
             || item.approved >= item.threshold
             || item.executing
         {
+            return out;
+        }
+        // r11 S4: a transaction Vela refuses for what it is (a delegatecall,
+        // a refund, a batch too deep) has nobody who can approve it at the
+        // source (`can_approve` empty): no member is asked to.
+        if nobody_approves(item) {
             return out;
         }
         let loc = self.ms_loc();

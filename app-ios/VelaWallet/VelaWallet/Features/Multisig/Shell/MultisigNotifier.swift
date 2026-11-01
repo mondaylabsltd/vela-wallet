@@ -41,6 +41,36 @@ final class MultisigNotifier {
         var ready: [String: Int] = [:]
         /// Approvals counted per `chainId:hash`, for the multisig followed.
         var approved: [String: Int] = [:]
+        /// r11-1: per multisig, the transactions already said (or seen on
+        /// screen) as needing this device / ready — the core's keys.
+        var needsYouKeys: [String: [String]] = [:]
+        var readyKeys: [String: [String]] = [:]
+
+        init() {}
+
+        /// A record kept by an older build (no keys) still reads.
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            needsYou = try c.decodeIfPresent([String: Int].self, forKey: .needsYou) ?? [:]
+            ready = try c.decodeIfPresent([String: Int].self, forKey: .ready) ?? [:]
+            approved = try c.decodeIfPresent([String: Int].self, forKey: .approved) ?? [:]
+            needsYouKeys = try c.decodeIfPresent([String: [String]].self, forKey: .needsYouKeys) ?? [:]
+            readyKeys = try c.decodeIfPresent([String: [String]].self, forKey: .readyKeys) ?? [:]
+        }
+    }
+
+    /// The most keys kept per multisig and kind (the oldest go first).
+    static let keptKeys = 200
+
+    /// r11-1: what a presence names that was not said before — by key when
+    /// the core names them, else (an older core) by a rise in the count.
+    static func news(keys: [String], count: Int, saidKeys: [String]?, saidCount: Int?) -> [String]? {
+        if !keys.isEmpty || count == 0 {
+            let said = Set(saidKeys ?? [])
+            let fresh = keys.filter { !said.contains($0) }
+            return fresh.isEmpty ? nil : fresh
+        }
+        return count > (saidCount ?? 0) ? [] : nil
     }
 
     /// One notification to post (testable without the center).
@@ -105,21 +135,36 @@ final class MultisigNotifier {
         for row in accounts.accounts {
             let key = row.account.address.lowercased()
             guard let waiting = proposals.presence[key] ?? nil else { continue }
+            // r11-1: a list kept from an earlier page is no news, and is not
+            // recorded as said either (a round that evaluated a kept list
+            // recorded a proposal it never announced).
+            let keyed = !waiting.needsYouKeys.isEmpty || !waiting.readyKeys.isEmpty
+            if keyed && waiting.readAt == nil { continue }
             let name = words.name(of: row.account, rowName: row.name)
             let first = waiting.first
-            let chain = first?["chain_id"]?.int ?? first?["chainId"]?.int
-            let hash = first?["safe_tx_hash"]?.string ?? first?["safeTxHash"]?.string
-            if waiting.needsYou > (state.needsYou[key] ?? 0) {
+            // A note opens the first NEW transaction it names, else the first.
+            func target(_ fresh: [String]) -> (chain: Int?, hash: String?) {
+                if let one = fresh.first, let colon = one.firstIndex(of: ":") {
+                    return (Int(one[..<colon]), String(one[one.index(after: colon)...]))
+                }
+                return (first?["chain_id"]?.int ?? first?["chainId"]?.int,
+                        first?["safe_tx_hash"]?.string ?? first?["safeTxHash"]?.string)
+            }
+            if let fresh = Self.news(keys: waiting.needsYouKeys, count: waiting.needsYou,
+                                     saidKeys: state.needsYouKeys[key], saidCount: state.needsYou[key]) {
+                let (chain, hash) = target(fresh)
                 notes.append(Note(
-                    // The count in the id: a request with the id of one
-                    // still in Notification Center replaces it without a
-                    // banner, and a second new proposal went unsaid.
+                    // The new transaction (and the count) in the id: a request
+                    // with the id of one still in Notification Center replaces
+                    // it without a banner, and a second new proposal went unsaid.
                     id: "ms-needs-\(key)-\(hash ?? "")-\(waiting.needsYou)", title: name,
                     body: words.t("presence.needsYou", count: waiting.needsYou, ["count": String(waiting.needsYou)]),
                     chainId: chain, safeTxHash: hash, address: row.account.address
                 ))
             }
-            if waiting.ready > (state.ready[key] ?? 0) {
+            if let fresh = Self.news(keys: waiting.readyKeys, count: waiting.ready,
+                                     saidKeys: state.readyKeys[key], saidCount: state.ready[key]) {
+                let (chain, hash) = target(fresh)
                 notes.append(Note(
                     id: "ms-ready-\(key)-\(hash ?? "")-\(waiting.ready)", title: name,
                     body: words.t("presence.ready", count: waiting.ready, ["count": String(waiting.ready)]),
@@ -128,6 +173,10 @@ final class MultisigNotifier {
             }
             state.needsYou[key] = waiting.needsYou
             state.ready[key] = waiting.ready
+            state.needsYouKeys[key] = Array(((state.needsYouKeys[key] ?? []).filter { !waiting.needsYouKeys.contains($0) }
+                + waiting.needsYouKeys).suffix(Self.keptKeys))
+            state.readyKeys[key] = Array(((state.readyKeys[key] ?? []).filter { !waiting.readyKeys.contains($0) }
+                + waiting.readyKeys).suffix(Self.keptKeys))
         }
         // The multisig followed: an approval counted on a transaction this
         // device has approved (another member's, while it was away).

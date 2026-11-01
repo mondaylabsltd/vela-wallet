@@ -184,23 +184,44 @@ enum CoreHTTP {
         case notConnected
     }
 
-    /// Whether a `URLError` proves the request never left the device — the
-    /// contract's iOS list (§2), plus `.badURL`: a URL the loader refused
-    /// (the per-app proxy refusing CONNECT surfaces as -1000, research RE4)
-    /// is a request that was never written.
-    static func neverLeftTheDevice(_ error: URLError) -> Bool {
+    /// r11-9: how far a failed request got, as `URLError` can prove it —
+    /// the core's classes (`rpc_pool::TransportFailure`). What a class
+    /// means (not sent, or may have been sent) is the core's one rule,
+    /// `transportOutcomeOf`; nothing is decided here.
+    static func failureClass(_ error: URLError) -> String {
         switch error.code {
-        case .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed,
-             .notConnectedToInternet, .secureConnectionFailed,
-             .serverCertificateHasBadDate, .serverCertificateUntrusted,
+        case .notConnectedToInternet, .internationalRoamingOff, .dataNotAllowed, .callIsActive:
+            return "offline"
+        case .cannotFindHost, .dnsLookupFailed:
+            return "dns"
+        case .cannotConnectToHost:
+            return "connect_refused"
+        case .secureConnectionFailed, .serverCertificateHasBadDate, .serverCertificateUntrusted,
              .serverCertificateHasUnknownRoot, .serverCertificateNotYetValid,
-             .clientCertificateRejected, .clientCertificateRequired,
-             .appTransportSecurityRequiresSecureConnection,
-             .internationalRoamingOff, .dataNotAllowed, .callIsActive,
-             .badURL, .unsupportedURL:
-            return true
+             .clientCertificateRejected, .clientCertificateRequired:
+            return "tls"
+        // A URL the loader refused (the per-app proxy refusing CONNECT
+        // surfaces as -1000, research RE4) was never written.
+        case .appTransportSecurityRequiresSecureConnection, .badURL, .unsupportedURL:
+            return "refused"
+        case .timedOut:
+            return "timeout"
+        case .networkConnectionLost:
+            return "after_write"
         default:
-            return false
+            return "unknown"
+        }
+    }
+
+    /// The pool's outcome for a failed request (`not_connected`, `timeout`,
+    /// `network`), as the core reads its class.
+    static func transportReply(_ error: URLError) -> RpcReply {
+        let json = transportOutcomeOf(failure: failureClass(error))
+        let type = (try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])?["type"] as? String
+        switch type {
+        case "not_connected": return .notConnected
+        case "timeout": return .timeout
+        default: return .network
         }
     }
 
@@ -238,10 +259,8 @@ enum CoreHTTP {
             guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
             else { return .nonJSON }
             return .response(object)
-        } catch let error as URLError where error.code == .timedOut {
-            return .timeout
-        } catch let error as URLError where neverLeftTheDevice(error) {
-            return .notConnected
+        } catch let error as URLError {
+            return transportReply(error)
         } catch {
             return .network
         }

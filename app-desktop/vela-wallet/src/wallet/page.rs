@@ -4423,6 +4423,10 @@ impl WalletPage {
         let balance = self.balance_model(cx);
         let activity = self.activity_models(cx);
         let assets = self.asset_models(cx);
+        // r11 (r10-4's body): a multisig used only in the other space — its
+        // note says where its money and its history are, so no "No activity
+        // yet" nor "Deposit your first asset" is said here.
+        let elsewhere = self.identity.is_some() && !self.multisig_elsewhere(cx).is_empty();
         self.keep_hero_clock(cx);
         // Phase 4 (`VELA_PERF`): the frame a signed-in home first reaches the
         // screen, and the frame its figure does — from the stored rows, or
@@ -4562,6 +4566,7 @@ impl WalletPage {
                         .child(skeleton_row(theme))
                         .child(skeleton_row(theme));
                 }
+                wallet_live::HomeActivity::Empty { .. } if elsewhere => {}
                 wallet_live::HomeActivity::Empty { title, caption } => {
                     activity_col = activity_col.child(empty_state(
                         theme,
@@ -4613,6 +4618,7 @@ impl WalletPage {
             Self::pinned_first_read().map(fixtures::first_read_view)
         };
         if assets.is_empty()
+            && !elsewhere
             && strip_view
                 .is_some_and(|view| wallet_live::assets_strip_empty(&view, self.chain_filter))
         {
@@ -5677,6 +5683,19 @@ impl WalletPage {
                 self.loc.t("networkSpace.noValue"),
                 wallet_live::network_status_of(&view, &self.strings),
             );
+        }
+        // r11 (r10-4's body): a multisig whose networks are all in the other
+        // space holds nothing HERE — not "$0.00", and no "Updated now" for
+        // networks it never lived on. The figure's place names the space its
+        // money is in; the note below says where and offers the switch.
+        if !self.multisig_elsewhere(cx).is_empty() {
+            let heading = if crate::network_space::testnet() {
+                "networkSpace.headingMainnet"
+            } else {
+                "networkSpace.headingTestnet"
+            };
+            model = wallet_live::no_value(model, self.loc.t(heading), None);
+            model.updated = None;
         }
         model
     }

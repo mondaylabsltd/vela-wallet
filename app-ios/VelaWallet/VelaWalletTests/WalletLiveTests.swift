@@ -394,7 +394,7 @@ struct ActivityRowTests {
         #expect(sent.amount == "\u{2212}2")
         // Nobody named them, so the address is shown — a fact, where a made-up
         // label would not be.
-        #expect(sent.subtitle.contains("0x9F3c\u{2026}8021"))
+        #expect(sent.subtitle.contains("0x9f3cA7\u{2026}1b8021"))
     }
 
     /// Privacy hides the FIGURE, not the fact that something moved: the row

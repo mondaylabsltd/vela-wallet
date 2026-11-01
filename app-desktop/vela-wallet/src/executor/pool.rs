@@ -1471,27 +1471,36 @@ fn log_post(chain_id: u32, url: &str, method: &str, outcome: &RpcTransportOutcom
 /// resolve or connect phase; the global timeout it reports otherwise is the
 /// safe side.
 pub fn transport_outcome_of(error: &ureq::Error) -> RpcTransportOutcome {
-    use std::io::ErrorKind;
-    use ureq::Timeout;
     match error {
         ureq::Error::StatusCode(status) => RpcTransportOutcome::HttpError { status: *status },
-        ureq::Error::Timeout(Timeout::Resolve | Timeout::Connect) => {
-            RpcTransportOutcome::NotConnected
-        }
-        ureq::Error::Timeout(_) => RpcTransportOutcome::Timeout,
+        // r11-9: how far it got is this transport's to say; what that means
+        // — not sent, or may have been sent — is the core's one rule.
+        other => vela_core::app::rpc_pool::transport_outcome_of(transport_failure_of(other)),
+    }
+}
+
+/// How far a failed request got, as ureq can prove it (r11-9's classes,
+/// `rpc_pool::TransportFailure`).
+fn transport_failure_of(error: &ureq::Error) -> vela_core::app::rpc_pool::TransportFailure {
+    use std::io::ErrorKind;
+    use ureq::Timeout;
+    use vela_core::app::rpc_pool::TransportFailure as F;
+    match error {
+        ureq::Error::Timeout(Timeout::Resolve) => F::Dns,
+        ureq::Error::Timeout(Timeout::Connect) => F::ConnectTimeout,
+        ureq::Error::Timeout(_) => F::Timeout,
         // The proxy's CONNECT was refused (502), closed with no reply, or
         // answered something else: the tunnel never opened, so the request
         // never left.
         ureq::Error::ConnectProxyFailed(_)
-        | ureq::Error::HostNotFound
-        | ureq::Error::ConnectionFailed
         | ureq::Error::BadUri(_)
         | ureq::Error::InvalidProxyUrl
         | ureq::Error::Http(_)
-        | ureq::Error::Tls(_)
-        | ureq::Error::TlsRequired
-        | ureq::Error::RequireHttpsOnly(_) => RpcTransportOutcome::NotConnected,
-        ureq::Error::Rustls(tls) if is_handshake_refusal(tls) => RpcTransportOutcome::NotConnected,
+        | ureq::Error::RequireHttpsOnly(_) => F::Refused,
+        ureq::Error::HostNotFound => F::Dns,
+        ureq::Error::ConnectionFailed => F::ConnectRefused,
+        ureq::Error::Tls(_) | ureq::Error::TlsRequired => F::Tls,
+        ureq::Error::Rustls(tls) if is_handshake_refusal(tls) => F::Tls,
         ureq::Error::Io(io) => {
             let refused_here = matches!(
                 io.kind(),
@@ -1505,13 +1514,17 @@ pub fn transport_outcome_of(error: &ureq::Error) -> RpcTransportOutcome {
                 .get_ref()
                 .and_then(|inner| inner.downcast_ref::<rustls::Error>())
                 .is_some_and(is_handshake_refusal);
-            if refused_here || tls_refused || resolver_said_no(&io.to_string()) {
-                RpcTransportOutcome::NotConnected
+            if refused_here {
+                F::ConnectRefused
+            } else if tls_refused {
+                F::Tls
+            } else if resolver_said_no(&io.to_string()) {
+                F::Dns
             } else {
-                RpcTransportOutcome::Network
+                F::AfterWrite
             }
         }
-        _ => RpcTransportOutcome::Network,
+        _ => F::Unknown,
     }
 }
 

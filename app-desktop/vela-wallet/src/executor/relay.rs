@@ -621,7 +621,11 @@ impl EstimateError {
     /// machine's `FeeGasOutcome::Refused`, never "cannot reach Vela".
     #[must_use]
     pub fn refuses(&self) -> bool {
-        self.error_json.is_some() && is_simulation_refusal(&self.message)
+        // r11-8: the core's one reading of a failed estimate
+        // (`fee_policy::estimate_gas_outcome`) — no answer is never one.
+        self.error_json.is_some()
+            && vela_core::app::fee_policy::estimate_gas_outcome(self.error_json.as_deref())
+                == vela_core::app::fee_policy::FeeGasOutcome::Refused
     }
 
     /// The core's reading of it (RJ19): `Reverts` only on the relay's own
@@ -639,43 +643,6 @@ impl std::fmt::Display for EstimateError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.message)
     }
-}
-
-/// The relay's error says the operation itself fails when it runs — its
-/// simulation failed, or the execution reverted — rather than that the relay
-/// is busy, limited or broken. Only those words are an answer about the
-/// operation; anything else stays an unexplained failure, asked again on
-/// the growing wait as it always was.
-///
-/// An EntryPoint validation code (`AA10`…`AA3x`: "AA23 reverted (or OOG)",
-/// "AA25 invalid account nonce") is never one of them, whatever words wrap
-/// it. It is the account's own check — its signature, nonce or prefund — and
-/// nothing another fee coin changes; a nonce that moved on can clear by the
-/// next ask. Spec 083 fee review.
-fn is_simulation_refusal(message: &str) -> bool {
-    if names_validation_code(message) {
-        return false;
-    }
-    let message = message.to_ascii_lowercase();
-    message.contains("simulation failed")
-        || message.contains("execution reverted")
-        || message.contains("reverted during simulation")
-}
-
-/// `message` carries an EntryPoint code — `AA` and two digits, standing as a
-/// word of its own (never the inside of an address or of hex data).
-fn names_validation_code(message: &str) -> bool {
-    let bytes = message.as_bytes();
-    bytes.windows(4).enumerate().any(|(at, window)| {
-        window[0] == b'A'
-            && window[1] == b'A'
-            && window[2].is_ascii_digit()
-            && window[3].is_ascii_digit()
-            && (at == 0 || !bytes[at - 1].is_ascii_alphanumeric())
-            && bytes
-                .get(at + 4)
-                .is_none_or(|next| !next.is_ascii_alphanumeric())
-    })
 }
 
 /// `eth_estimateUserOperationGas` — the relay's raw limits, or why not.
@@ -1414,30 +1381,24 @@ mod tests {
     /// the submit, which reads only them.
     #[test]
     fn a_failed_simulation_is_an_answer_and_a_busy_relay_is_not() {
-        assert!(is_simulation_refusal("UserOperation simulation failed"));
-        assert!(is_simulation_refusal("execution reverted: STF"));
-        assert!(is_simulation_refusal(
-            "user operation reverted during simulation"
-        ));
-        // The review: an EntryPoint validation code is the account's own
-        // check, retried on the growing wait as before — whatever words wrap
-        // it.
-        assert!(!is_simulation_refusal("AA23 reverted (or OOG)"));
-        assert!(!is_simulation_refusal(
-            "UserOperation reverted during simulation with reason: AA23 reverted"
-        ));
-        assert!(!is_simulation_refusal(
+        let refuses = |message: &str| {
+            EstimateError {
+                message: message.to_owned(),
+                error_json: Some(json!({ "code": -32500, "message": message }).to_string()),
+            }
+            .refuses()
+        };
+        assert!(refuses("UserOperation simulation failed"));
+        assert!(refuses("execution reverted: STF"));
+        assert!(refuses("user operation reverted during simulation"));
+        // An EntryPoint validation code is the account's own check.
+        assert!(!refuses("AA23 reverted (or OOG)"));
+        assert!(!refuses(
             "UserOperation simulation failed: AA25 invalid account nonce"
         ));
-        assert!(!is_simulation_refusal("reverted"), "no operation named");
-        // Hex that happens to hold "AA" and two digits is not a code.
-        assert!(is_simulation_refusal(
-            "execution reverted: 0x08c379a0AA12ff"
-        ));
-        assert!(is_simulation_refusal("execution reverted: to 0x12AA34"));
-        assert!(!is_simulation_refusal("Retry later"));
-        assert!(!is_simulation_refusal("rate limited"));
-        assert!(!is_simulation_refusal("Gas estimation failed"));
+        assert!(refuses("execution reverted: 0x08c379a0AA12ff"));
+        assert!(!refuses("Retry later"));
+        assert!(!refuses("Gas estimation failed"));
         // The relay's word that it fails is a refusal; no answer never is.
         let answered = |message: &str| EstimateError {
             message: message.to_owned(),

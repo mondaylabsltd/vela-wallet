@@ -68,6 +68,16 @@ struct RootView: View {
     /// nothing there — a multisig's networks (`lives_on`); none said for a
     /// Vela account, whose holdings say where it lives.
     private var shownLivesOn: [Int] { shownMultisig?.account.chainIds ?? [] }
+    /// r11-3: the other space's networks the multisig shown lives on, when
+    /// none of its networks is in the space in front (empty otherwise).
+    private var shownElsewhere: [Int] {
+        guard shownMultisig != nil else { return [] }
+        return WalletLive.livesElsewhere(
+            chainIds: shownLivesOn,
+            here: walletNetworks.chains.map(\.chainId),
+            known: WalletNetworks(settings.networkAdmin?.networks).chains.map(\.chainId)
+        )
+    }
     private var shownName: String {
         shownMultisig.map { multisigWords.name(of: $0.account, rowName: $0.name) } ?? session.view.activeName
     }
@@ -1373,7 +1383,14 @@ struct RootView: View {
                                             && token.balance.contains { "123456789".contains($0) }
                                     },
                                     onOpen: { multisig.sheet = $0 },
-                                    onFund: { enterReceive() }
+                                    onFund: { enterReceive() },
+                                    elsewhere: shownElsewhere,
+                                    otherSpace: space.current.other,
+                                    onSwitchSpace: {
+                                        // The person's press, through the intent the
+                                        // space prompt answers with.
+                                        agent.person(["type": "set_network_space", "space": space.current.other.rawValue])
+                                    }
                                 ))
                             },
                             // r10 follow-up: no scan in the home's way while
@@ -2719,6 +2736,12 @@ struct RootView: View {
                                        now: Date(), spinning: wallet.spin.spinning,
                                        networks: walletNetworks,
                                        noValue: space.testnet ? loc.t("networkSpace.noValue") : nil)
+        // r11-3: a multisig whose money is in the other space says so —
+        // never a false zero or empty state for networks it never lived on.
+        if !shownElsewhere.isEmpty {
+            return WalletLive.livingElsewhere(
+                applied, heading: loc.t(space.testnet ? "networkSpace.headingMainnet" : "networkSpace.headingTestnet"))
+        }
         // Real-device S3: the account just switched to (a multisig) is named
         // before the balance machine has heard of it — never the previous
         // account's total under its name.
@@ -4811,8 +4834,7 @@ struct RootView: View {
     /// `0x14fB1f…D1eA5c` — the phone's short form, matching the wallet header's
     /// own truncation so one account never reads as two.
     private static func shortenAddress(_ address: String) -> String {
-        guard address.count > 14 else { return address }
-        return "\(address.prefix(6))…\(address.suffix(4))"
+        AddressText.short(address)
     }
 
     /// The single onboarding sheet's presentation. A swipe-to-dismiss routes to

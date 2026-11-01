@@ -27,6 +27,12 @@ struct MultisigHomeCard: View {
     var funded = false
     var onOpen: (MultisigSheet) -> Void
     var onFund: () -> Void
+    /// r11-3: the other space's networks it lives on when none of its
+    /// networks is in the space in front (empty: it lives here).
+    var elsewhere: [Int] = []
+    /// The space its money is in, and the person's switch there.
+    var otherSpace: NetworkSpaceKind = .testnet
+    var onSwitchSpace: (() -> Void)? = nil
 
     private var view: MsProposalsView { hub.proposalsView }
     private var account: MsAccount { row.account }
@@ -34,6 +40,9 @@ struct MultisigHomeCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s12) {
+            if !elsewhere.isEmpty {
+                otherSpaceNote
+            }
             header
             // core-ms-2: the banner — said only when something waits and there
             // is one to open (`banner {parts, first}`).
@@ -89,6 +98,26 @@ struct MultisigHomeCard: View {
         .padding(.vertical, Tokens.Space.s12)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("multisig.home")
+    }
+
+    // MARK: - The other space (r11-3, the desktop's r10-4 note)
+
+    /// "Used on Arc Testnet · Testnet space", and the switch there: a
+    /// multisig shown from the space it does not live in holds nothing here.
+    private var otherSpaceNote: some View {
+        let testnet = otherSpace == .testnet
+        let line = words.t("add.usedOn", ["networks": words.loc.list(elsewhere.map(words.network))])
+            + " · " + words.loc.t(testnet ? "networkSpace.headingTestnet" : "networkSpace.headingMainnet")
+        return VStack(alignment: .leading, spacing: Tokens.Space.s8) {
+            MsNote(text: line, tone: .warning, identifier: "multisig.home.otherSpace")
+            if let onSwitchSpace {
+                VelaButton(
+                    title: words.loc.t(testnet ? "networkSpace.toTestnet" : "networkSpace.toMainnet"),
+                    kind: .secondary
+                ) { onSwitchSpace() }
+                .accessibilityIdentifier("multisig.home.otherSpaceSwitch")
+            }
+        }
     }
 
     // MARK: - Header

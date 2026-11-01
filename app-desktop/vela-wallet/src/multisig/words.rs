@@ -184,14 +184,20 @@ pub fn action_title(
     }
 }
 
-/// The short EIP-55 form of an address (`0x1234…cdef`).
+/// The short EIP-55 form of an address — the core's one short form
+/// (`names::short_address`, r11-6: `0x88cCA0…266894`, 6+6, the same on
+/// every platform).
 #[must_use]
 pub fn short(address: &str) -> String {
-    let full = vela_core::multisig_link::eip55(address);
-    if full.len() <= 14 {
-        return full;
-    }
-    format!("{}…{}", &full[..6], &full[full.len() - 4..])
+    vela_core::multisig_rules::names::short_address(address)
+}
+
+/// A member named in a title (r11-6, the core's `names::who`): "Interleave
+/// (0x88cCA0…266894)", or the short form alone when nothing names it —
+/// `label` is the accounts view's `member_labels` entry.
+#[must_use]
+pub fn who(address: &str, label: Option<&str>) -> String {
+    vela_core::multisig_rules::names::who(address, label)
 }
 
 /// The token facts the proposals machine keeps (`view.tokens`).

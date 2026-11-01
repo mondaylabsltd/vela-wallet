@@ -1034,8 +1034,14 @@ here — a proposal made here, an approval given by a member on this device,
 and the "ready" it caused — is not news. "Executed" is said only for a
 transaction seen open this session whose verdict or timeline says it ran;
 one that merely left a list may have been replaced, and is not said. For
-a multisig other than the one shown, the list names only the transaction
-waiting first, so a second one behind it is said when it comes first.
+a multisig other than the one shown, its presence names every transaction
+waiting on this device by key (the core's `needs_you_keys` / `ready_keys`),
+and each is said once — r11-10: it named only the first, so once one
+transaction waited on a multisig not shown, the next ones went unsaid.
+Several new at once are said by the count ("R11 Team — 2 need your
+approval", opening the first new one). What the shown list had is known
+when it becomes an "other" again, and a list kept from an earlier page
+(`read_at` none) is never news.
 
 Delivery is gpui's `show_system_notification` on every desktop:
 

@@ -1471,8 +1471,10 @@ impl App for BalanceDashboard {
         // Never mid-refresh: before prices arrive every token is unpriced,
         // and "some tokens couldn't be priced" flashing while chains are still
         // answering was #188's second half.
-        let notice = if partial && model.notice_allowed && !model.fetch_in_flight {
-            Some(if !coverage_partial(model) {
+        let said_partial = coverage_partial_said(model)
+            || (!model.tokens.is_empty() && has_unpriced(&model.tokens));
+        let notice = if partial && said_partial && model.notice_allowed && !model.fetch_in_flight {
+            Some(if !coverage_partial_said(model) {
                 BalanceNotice::Unpriced
             } else {
                 BalanceNotice::StillUpdating
@@ -1521,7 +1523,7 @@ impl App for BalanceDashboard {
             },
             balance_unknown: unknown,
             unpriced_only,
-            balance_partial: partial,
+            balance_partial: said_partial,
             unreachable,
             notice,
             hidden: model.hidden,
@@ -2348,15 +2350,48 @@ fn network_rank(chain_id: u32) -> u64 {
     super::network_admin::builtin_rank(chain_id)
 }
 
+/// r11: the networks whose failure is said for the account shown — its
+/// [`home_chains`] when it was said to live somewhere (`lives_on`, a
+/// multisig), else `None`: every network.
+fn said_home(model: &Model) -> Option<BTreeSet<u32>> {
+    model.address.as_deref().and_then(|address| {
+        model
+            .lives_on
+            .contains_key(&address.to_ascii_lowercase())
+            .then(|| home_chains(model, address, &[]))
+    })
+}
+
+/// r11: [`coverage_partial`] as the home SAYS it ("Some balances are still
+/// updating") — a network a multisig does not live on that did not answer
+/// leaves its figure whole. The floor and the retries keep the full rule.
+fn coverage_partial_said(model: &Model) -> bool {
+    let home = said_home(model);
+    model
+        .failed_chain_ids
+        .iter()
+        .any(|id| home.as_ref().is_none_or(|home| home.contains(id)))
+        || !model.suspect_chain_ids.is_empty()
+}
+
 /// The list behind the home line (spec 092): every failed chain that is not
 /// merely rate-limited, each with what it held when last read — those last
 /// seen holding something first, by that worth, then the rest in network
 /// order.
+///
+/// r11 (desktop S4): an account said to live on some networks
+/// ([`Event::LivesOn`] — a multisig's) is named unreachable only on the
+/// networks it lives on or held something on ([`home_chains`]): "Can't
+/// reach OP Sepolia" said nothing about a multisig used only on Arc
+/// Testnet. An account nothing was said of (a Vela account, which can be
+/// paid on any network) keeps every failed network.
 fn unreachable_networks(model: &Model) -> Vec<UnreachableNetwork> {
+    let home = said_home(model);
     let chains: BTreeSet<u32> = model
         .failed_chain_ids
         .iter()
         .copied()
+        .filter(|id| home.as_ref().is_none_or(|home| home.contains(id)))
         .filter(|id| !model.rate_limited_chain_ids.contains(id))
         // A fault inside the app is not the network's (PR 2 note 11).
         .filter(|id| !model.internal_chain_ids.contains(id))

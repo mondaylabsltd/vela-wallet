@@ -35,7 +35,18 @@ enum AddressText {
     /// a malformed address tells a person less than the malformed address does.
     static func short(_ address: String) -> String {
         guard address.count > 14 else { return address }
+        // r11-6: an address is said in the core's one short form (`names.short`:
+        // 6+6, EIP-55, `0x88cCA0…266894`) on every platform; anything else
+        // keeps the cut below.
+        if isAddress(address), let said = MsRules.string("names.short", ["address": address]) {
+            return said
+        }
         return "\(address.prefix(6))\u{2026}\(address.suffix(4))"
+    }
+
+    private static func isAddress(_ text: String) -> Bool {
+        guard text.count == 42, text.hasPrefix("0x") || text.hasPrefix("0X") else { return false }
+        return text.dropFirst(2).allSatisfy(\.isHexDigit)
     }
 
     /// The mock's two mono lines: the address split in half, never mid-byte.

@@ -515,6 +515,14 @@ hit says when its rows were read — never "now". Shells pass `read_chain_ids`
 (every chain asked) and draw the field as it is (`null`: no "Updated").
 Vectors: `tests/vectors/balance-stamp.json` (machine steps).
 
+r11 (desktop S4): for an account said to live somewhere (`lives_on`), the
+home names only those networks (and ones it held something on) in
+`unreachable_networks`, and `balance_partial` / `notice` ("Some balances
+are still updating") count only their failures: "Can't reach OP Sepolia"
+said nothing about a multisig used only on Arc Testnet. A Vela account
+(nothing said) keeps every network. The floor and the retries are
+unchanged. Shells draw the fields as they are.
+
 `ProposalsView.unreachable` ("The multisig service can't be reached") is
 true only when the service itself missed a mailbox read on a network whose
 chain this device could read; a dead chain is `chainUnreachable`.
