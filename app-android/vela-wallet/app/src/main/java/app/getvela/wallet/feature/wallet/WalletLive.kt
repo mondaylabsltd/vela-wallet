@@ -175,26 +175,24 @@ object WalletLive {
         /** What each network is called, for the core's `network` parts of a row's second line (spec 093). */
         chainNames: Map<Int, String> = emptyMap(),
     ): List<ActivityGroupModel> {
-        val groups = mutableListOf<ActivityGroupModel>()
+        // Each day's rows gathered in one list, the group made once: a copy of
+        // the group per row (`rows + model`) was quadratic in a day's rows.
+        val groups = mutableListOf<Pair<String, MutableList<ActivityRowModel>>>()
         for (row in feed.rows) {
             when (row) {
-                is FeedRow.Header -> groups += ActivityGroupModel(dayLabel(row.day_start_ms, strings, now), emptyList())
+                is FeedRow.Header -> groups += dayLabel(row.day_start_ms, strings, now) to mutableListOf()
                 is FeedRow.Item -> {
                     val model = activityRow(row.item, strings, chainNames, now, feed.hidden)
-                    val last = groups.lastOrNull()
-                    if (last == null) {
-                        // An item before any header cannot happen — but if the
-                        // core ever emits one, it gets shown rather than
-                        // dropped. A payment silently missing from a history is
-                        // the worse failure.
-                        groups += ActivityGroupModel("", listOf(model))
-                    } else {
-                        groups[groups.lastIndex] = last.copy(rows = last.rows + model)
-                    }
+                    // An item before any header cannot happen — but if the
+                    // core ever emits one, it gets shown rather than
+                    // dropped. A payment silently missing from a history is
+                    // the worse failure.
+                    if (groups.isEmpty()) groups += "" to mutableListOf()
+                    groups.last().second += model
                 }
             }
         }
-        return groups.filter { it.rows.isNotEmpty() }
+        return groups.filter { it.second.isNotEmpty() }.map { (label, rows) -> ActivityGroupModel(label, rows) }
     }
 
     /**
@@ -605,7 +603,11 @@ object WalletLive {
      */
     fun refresh(view: BalanceView, strings: VelaStrings, now: Long = System.currentTimeMillis()): BalanceRefreshModel =
         BalanceRefreshModel(
-            updated = view.last_refreshed_at_ms?.let { at ->
+            // r10-1: while the core says the first read is out ("Checking…"),
+            // nothing has been read — the control is named for what it does,
+            // never "Updated now" beside "Checking…" (the line's words or
+            // TalkBack's). Otherwise the stamp is the core's, drawn as said.
+            updated = view.last_refreshed_at_ms?.takeIf { view.checking_key == null }?.let { at ->
                 strings.t(I18nKeys.Wallet.LAST_UPDATED, mapOf("ago" to RelativeTime.ago(at, now, strings)))
             },
             updating = strings.t(I18nKeys.Wallet.UPDATING),

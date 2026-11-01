@@ -347,6 +347,12 @@ data class PromptKind(
      * so the sheet says "check your connection" rather than blame the registry.
      */
     val local: Boolean = false,
+    /**
+     * Real device S3 (core §9.7): `create_failed` / `sign_in_failed` — the
+     * corpus key the core named from the platform error's facts. Drawn in
+     * place of [detail], which stays the bug report's.
+     */
+    val wordsKey: String? = null,
 ) {
     companion object {
         fun from(json: JSONObject): PromptKind =
@@ -356,6 +362,7 @@ data class PromptKind(
                 json.optBoolean("phone_link", false),
                 json.optBoolean("security_key", false),
                 json.optBoolean("local", false),
+                json.nullableString("words_key"),
             )
     }
 }

@@ -684,13 +684,47 @@ sealed class FeedEvent {
     @Serializable
     @SerialName("delete_requested")
     data class DeleteRequested(val id: String) : FeedEvent()
+
+    /**
+     * r9-17 (core §9.4): the page's presence moved — the facts the scan
+     * cadence is decided from. The first (`started`) makes this shell a
+     * follower of the core's cadence ([FeedView.next_scan]).
+     */
+    @Serializable
+    @SerialName("presence_changed")
+    data class PresenceChanged(val presence: FeedPresence, val change: FeedPresenceChange) : FeedEvent()
+
+    /** r9-17: the timer for [FeedView.next_scan] ran out; [seq] echoed from it. */
+    @Serializable
+    @SerialName("scan_due")
+    data class ScanDue(val seq: Int, val presence: FeedPresence) : FeedEvent()
 }
+
+/** r9-17: the page as it stands — shown, how long since the person touched it, the clock. */
+@Serializable
+data class FeedPresence(val visible: Boolean, val since_interaction_ms: Double, val now_ms: Double)
+
+/** r9-17: what moved the page's presence. */
+@Serializable
+enum class FeedPresenceChange {
+    @SerialName("started") Started,
+    @SerialName("shown") Shown,
+    @SerialName("hidden") Hidden,
+    @SerialName("online") Online,
+    @SerialName("interacted") Interacted,
+}
+
+/** r9-17: when the next incoming scan is due — ONE timer per [seq]. */
+@Serializable
+data class FeedNextScan(val seq: Int, val after_ms: Long)
 
 // -- what the screen renders -------------------------------------------------
 
 @Serializable
 data class FeedView(
     val rows: List<FeedRow> = emptyList(),
+    /** r9-17 (core §9.4): when the next incoming scan is due; `null` before `presence_changed`. */
+    val next_scan: FeedNextScan? = null,
     /**
      * Issue #469: the home's Activity — the newest three items of [rows], in
      * the same order, with only the day headers over them. The core makes the

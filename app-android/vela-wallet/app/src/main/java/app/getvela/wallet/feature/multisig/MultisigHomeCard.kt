@@ -70,7 +70,7 @@ fun MultisigHomeCard(
         // Header: the rule in force (each network's, read from the chain).
         Row(horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
             // The machine's `rule_chip` for the one it follows; the record's rule before.
-            val chip = words.rowRuleChip(account, view)
+            val chip = words.rowRuleChip(row, view)
             MsChip(chip, Modifier.testTag("multisig.home.rule"))
             if (!row.shared) MsChip(words.t("switcher.notShared"), tone = MsTone.Warning)
             if (row.highRiskOn.isNotEmpty()) MsChip(words.t("authority.riskFlag"), tone = MsTone.Danger)
@@ -218,7 +218,8 @@ fun MultisigSwitcherSection(
             val tags = buildList {
                 // r9-14: the rule as the core read it from the chains (`rule_chip`),
                 // the same chip the home draws — never the founding record's.
-                add(words.rowRuleChip(row.account, proposals))
+                add(words.rowRuleChip(row, proposals))
+                words.ruleLastKnown(row, proposals)?.let(::add)
                 if (row.localMembers.isEmpty()) add(words.t("switcher.readOnly"))
                 if (!row.shared) add(words.t("switcher.notShared"))
             }

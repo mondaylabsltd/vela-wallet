@@ -40,6 +40,7 @@ import app.getvela.wallet.feature.settings.core.CurrencyView
 import app.getvela.wallet.feature.wallet.WalletLive
 import app.getvela.wallet.feature.wallet.core.ScannedLink
 import java.io.File
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonElement
 import org.junit.Assert.assertEquals
@@ -204,12 +205,19 @@ class R9ShellFixesTest {
     @Test
     fun the_switcher_says_the_rule_the_chains_say_for_the_one_followed() {
         val w = words()
-        val account = MsAccount.of(json("""{"address":"$safe","owners":["$alice","$bob","$carol"],"threshold":2,"chainIds":[100]}"""))
+        val account = app.getvela.wallet.feature.multisig.core.MsAccountRow.of(json("""{"account":{"address":"$safe","owners":["$alice","$bob","$carol"],"threshold":2,"chainIds":[100]}}"""))
         val chip = """{"kind":"needs","rule":{"m":2,"n":4,"solo":false}}"""
         assertEquals(strings.t("home.multisig.panel.chip", mapOf("m" to "2", "n" to "4")), w.rowRuleChip(account, proposals(ruleChip = chip)))
-        // A multisig the machine does not follow: its record (no chain read for it).
-        val other = MsAccount.of(json("""{"address":"$bob","owners":["$alice","$bob","$carol"],"threshold":2,"chainIds":[100]}"""))
+        // A multisig the machine does not follow, before any rule is known: its record.
+        val other = app.getvela.wallet.feature.multisig.core.MsAccountRow.of(json("""{"account":{"address":"$bob","owners":["$alice","$bob","$carol"],"threshold":2,"chainIds":[100]}}"""))
         assertEquals(strings.t("home.multisig.panel.chip", mapOf("m" to "2", "n" to "3")), w.rowRuleChip(other, proposals(ruleChip = chip)))
+        assertNull(w.ruleLastKnown(other, proposals(ruleChip = chip)))
+        // r9-14 (core §9.2): one not followed draws the accounts machine's `rule` — the chains' last word, said as last known.
+        val ruled = app.getvela.wallet.feature.multisig.core.MsAccountRow.of(
+            json("""{"account":{"address":"$bob","owners":["$alice","$bob","$carol"],"threshold":2,"chainIds":[100]},"rule":{"chip":$chip,"from_chain":true,"last_known":true}}"""),
+        )
+        assertEquals(strings.t("home.multisig.panel.chip", mapOf("m" to "2", "n" to "4")), w.rowRuleChip(ruled, proposals(ruleChip = chip)))
+        assertEquals(strings.t("home.multisig.presence.ruleLastKnown"), w.ruleLastKnown(ruled, proposals(ruleChip = chip)))
         assertEquals(strings.t("home.multisig.panel.title", mapOf("m" to "2", "n" to "4")), w.ruleTitleOf(json(chip)))
         assertNull(w.ruleTitleOf(json("""{"kind":"differs","rules":[]}""")))
     }
@@ -316,8 +324,62 @@ class R9ShellFixesTest {
         val store = FakeStore()
         // A send receipt's ask (087 F14) does not use the multisig's.
         store.write(app.getvela.wallet.core.data.NotificationAsk.KEY, "1")
+        MultisigNotifyAsk.forgetRun()
         assertTrue(MultisigNotifyAsk.claim(store))
         assertFalse(MultisigNotifyAsk.claim(store))
+        MultisigNotifyAsk.answered(store)
+        MultisigNotifyAsk.forgetRun()
+        assertFalse("answered: never again, not even in a new process", MultisigNotifyAsk.claim(store))
+    }
+
+    /**
+     * r10 (real device): the mark was written before the dialog, so an ask
+     * the system never showed was never made again. Now the ANSWER is the
+     * mark: a dialog left unanswered (the process gone under it) is asked
+     * on a later run — once per run, never on a recreated screen.
+     */
+    @Test
+    fun an_ask_the_system_never_answered_is_made_again_on_a_later_run() = runBlocking {
+        val store = FakeStore()
+        MultisigNotifyAsk.forgetRun()
+        assertTrue(MultisigNotifyAsk.claim(store))
+        assertEquals(MultisigNotifyAsk.ASKING, store.values[MultisigNotifyAsk.KEY])
+        assertFalse("a recreated screen in the same run does not ask again", MultisigNotifyAsk.claim(store))
+        MultisigNotifyAsk.forgetRun()
+        assertTrue("a later run asks again: nobody answered", MultisigNotifyAsk.claim(store))
+        MultisigNotifyAsk.forgetRun()
+        val refusing = FakeStore().apply { refuseWrites = true }
+        assertFalse("a store that cannot keep the mark does not ask on every screen", MultisigNotifyAsk.claim(refusing))
+    }
+
+    /**
+     * Real device (Redmi, MIUI): the add sheet's ask and the layer's "there
+     * is a multisig now" ask came in the same frame; both passed the store
+     * read before either wrote, the system request went out twice 250 ms
+     * apart and the second came back "denied" at once. Only one passes.
+     */
+    @Test
+    fun two_asks_in_the_same_frame_launch_one_request() = runBlocking {
+        MultisigNotifyAsk.forgetRun()
+        val store = FakeStore()
+        val answers = kotlinx.coroutines.coroutineScope {
+            List(4) { async(kotlinx.coroutines.Dispatchers.Default) { MultisigNotifyAsk.claim(store) } }.map { it.await() }
+        }
+        assertEquals(1, answers.count { it })
+        MultisigNotifyAsk.forgetRun()
+    }
+
+    @Test
+    fun the_background_round_is_periodic_with_sensible_constraints_and_replaced_on_update() {
+        val request = MultisigNotifier.periodicRequest()
+        val spec = request.workSpec
+        assertEquals(15 * 60_000L, spec.intervalDuration)
+        assertEquals(5 * 60_000L, spec.flexDuration)
+        assertEquals(androidx.work.NetworkType.CONNECTED, spec.constraints.requiredNetworkType)
+        assertTrue(spec.constraints.requiresBatteryNotLow())
+        assertEquals(androidx.work.BackoffPolicy.EXPONENTIAL, spec.backoffPolicy)
+        assertTrue(MultisigNotifier.oemHint("Xiaomi"))
+        assertFalse(MultisigNotifier.oemHint("Google"))
     }
 
     @Test

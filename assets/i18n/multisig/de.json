@@ -270,7 +270,11 @@
     "firstRunDismiss": "Verstanden",
     "otherSpace": "Ebenfalls auf diesem Gerät, unter {{space}}: {{networks}}. Um das Multisig in einem davon zu erstellen, wechseln Sie zuerst zu {{space}}.",
     "draftKept": "Sie machen dort weiter, wo Sie aufgehört haben.",
-    "discardDraft": "Neu beginnen"
+    "discardDraft": "Neu beginnen",
+    "closeTitle": "Neues Multisig schließen?",
+    "closeBody": "Deine Eingaben bleiben auf diesem Gerät: Öffne „Neues Multisig“ wieder, um dort weiterzumachen, wo du aufgehört hast.",
+    "closeKeep": "Weiter bearbeiten",
+    "closeConfirm": "Schließen"
    },
    "invite": {
     "body": "Mitglieder scannen den Code oder öffnen den Link: Er fügt das Multisig in Vela mit seinem Netzwerk und den Namen der Mitglieder hinzu.",
@@ -701,6 +705,15 @@
      "ownTokenLine": "Das sendet Token an den eigenen Vertrag des Tokens ({{token}}). Sie wären verloren.",
      "blindLine": "Vela kann nicht lesen, was dieser Aufruf tut. Genehmige ihn nur, wenn du genau weißt, was er ist."
     }
+   },
+   "notify": {
+    "title": "Mitteilungen",
+    "on": "Ein. Solange Vela geschlossen ist, prüft dieses Telefon etwa alle 15 Minuten; Mitteilungen kommen von diesem Gerät, nicht von einem Push-Dienst.",
+    "off": "Für Vela aus: Es wird nichts gemeldet, wenn eine Transaktion deine Freigabe braucht.",
+    "turnOn": "In den Einstellungen einschalten",
+    "limited": "Dieses Telefon hält Velas Hintergrundprüfungen zurück, daher kann eine Mitteilung spät oder gar nicht kommen. Erlaube Vela in den Akku-Einstellungen, im Hintergrund zu laufen.",
+    "oem": "Auf manchen Telefonen (Xiaomi, Huawei, OPPO, vivo und anderen) hält auch der Energiesparmodus des Herstellers Hintergrundprüfungen zurück. Kommen Mitteilungen spät, erlaube Vela in den Einstellungen dieses Telefons, ohne Einschränkungen im Hintergrund zu laufen und selbst zu starten.",
+    "openSettings": "Einstellungen öffnen"
    }
   }
  }

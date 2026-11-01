@@ -1242,7 +1242,11 @@ object SendLive {
                 // a row that looks like the others and silently does nothing is
                 // how gas ends up "paid" in a coin the account does not hold.
                 insufficient = option.insufficient,
-                insufficientNote = ctx.strings.t(I18nKeys.Flows.WARN_INSUFFICIENT_GAS, mapOf("sym" to option.symbol)),
+                // r10-3 (core §9.7): short only because the amount comes from the same balance — said as that.
+                insufficientNote = ctx.strings.t(
+                    if (option.short_with_amount) I18nKeys.Flows.WARN_INSUFFICIENT_FOR_GAS else I18nKeys.Flows.WARN_INSUFFICIENT_GAS,
+                    mapOf("sym" to option.symbol),
+                ),
             )
         },
     )

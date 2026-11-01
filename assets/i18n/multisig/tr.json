@@ -270,7 +270,11 @@
     "firstRunDismiss": "Anladım",
     "otherSpace": "Bu cihazda {{space}} altında da var: {{networks}}. Multisig’i bunlardan birinde oluşturmak için önce {{space}} alanına geçin.",
     "draftKept": "Kaldığınız yerden devam ediliyor.",
-    "discardDraft": "Baştan başla"
+    "discardDraft": "Baştan başla",
+    "closeTitle": "Yeni çoklu imza kapatılsın mı?",
+    "closeBody": "Girdikleriniz bu cihazda saklanır: kaldığınız yerden devam etmek için Yeni çoklu imza'yı yeniden açın.",
+    "closeKeep": "Düzenlemeye devam et",
+    "closeConfirm": "Kapat"
    },
    "invite": {
     "body": "Üyeler kodu tarar veya bağlantıyı açar: multisig, ağı ve üye adlarıyla Vela'ya eklenir.",
@@ -701,6 +705,15 @@
      "ownTokenLine": "Bu, tokenleri tokenin kendi sözleşmesine ({{token}}) gönderir. Kaybolurlar.",
      "blindLine": "Vela bu çağrının ne yaptığını okuyamıyor. Yalnızca ne olduğunu tam olarak biliyorsan onayla."
     }
+   },
+   "notify": {
+    "title": "Bildirimler",
+    "on": "Açık. Vela kapalıyken bu telefon yaklaşık 15 dakikada bir kontrol eder; bildirimler bir anlık bildirim hizmetinden değil, bu cihazdan gelir.",
+    "off": "Vela için kapalı; bir işlem onayınızı beklediğinde size haber verilmez.",
+    "turnOn": "Ayarlardan aç",
+    "limited": "Bu telefon Vela'nın arka plan kontrollerini kısıtlıyor; bildirimler gecikebilir ya da hiç gelmeyebilir. Pil ayarlarından Vela'nın arka planda çalışmasına izin verin.",
+    "oem": "Bazı telefonlarda (Xiaomi, Huawei, OPPO, vivo ve diğerleri) üreticinin pil tasarrufu da arka plan kontrollerini kısıtlar. Bildirimler geç geliyorsa bu telefonun ayarlarından Vela'nın arka planda kısıtlamasız çalışmasına ve kendiliğinden başlamasına izin verin.",
+    "openSettings": "Ayarları aç"
    }
   }
  }

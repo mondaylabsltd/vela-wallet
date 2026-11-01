@@ -1454,7 +1454,14 @@ if (branchSet.size !== 118) fail(`expected 118 branch paths, got ${branchSet.siz
   // 665 (round 10 core, 2026-11-01): + `home.multisig.presence.ruleLastKnown`
   //   (r9-14: the rule chip of a multisig not read this session is the one a
   //   chain last said, marked as the last known). 664 + 1 = 665.
-  const pins = { multisig: 665 };
+  // 676 (round 10 Android, 2026-11-01): + `home.multisig.notify.{title, on,
+  //   off, turnOn, limited, oem, openSettings}` (the multisig's
+  //   notifications, said where the person looks for them: on or off, and —
+  //   honestly, never as a nag — that this phone holds background checks
+  //   back, with the way to its settings) and `home.multisig.create.
+  //   {closeTitle, closeBody, closeKeep, closeConfirm}` (Back on a filled
+  //   form asks first, and says the form is kept). 665 + 11 = 676.
+  const pins = { multisig: 676 };
   for (const [name, docs] of Object.entries(onDemand)) {
     const leaves = new Set();
     for (const lng of LOCALES) walk(docs[lng], '', leaves, new Set());

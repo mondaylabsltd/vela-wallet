@@ -209,14 +209,119 @@ class MultisigNotifier(
             val work = WorkManager.getInstance(context)
             if (!on) {
                 work.cancelUniqueWork(WORK_NAME)
+                work.cancelUniqueWork(LEAVING_NAME)
                 return
             }
-            val request = PeriodicWorkRequestBuilder<MultisigPollWorker>(15, TimeUnit.MINUTES)
-                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            work.enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.UPDATE, periodicRequest())
+            VelaLog.event("multisig.poll", "scheduled", "everyMin" to PERIOD_MINUTES, "flexMin" to FLEX_MINUTES)
+        }
+
+        /**
+         * The periodic round (real device, r10: on MIUI it never ran on its
+         * own). What a scheduler that defers work keeps honouring:
+         * - Android's floor period with a flex window, so the system can
+         *   batch it with other work instead of waking for it alone;
+         * - a network (the only thing a round needs) and a battery not low —
+         *   the constraints a battery saver uses to hold work back anyway,
+         *   said up front so the job is not judged costly;
+         * - an exponential back-off for a round that could not finish;
+         * - UPDATE, never KEEP: an install with an older request (its
+         *   constraints, its period) gets this one, its schedule kept.
+         */
+        internal fun periodicRequest(): androidx.work.PeriodicWorkRequest =
+            PeriodicWorkRequestBuilder<MultisigPollWorker>(PERIOD_MINUTES, TimeUnit.MINUTES, FLEX_MINUTES, TimeUnit.MINUTES)
+                .setConstraints(constraints())
+                .setBackoffCriteria(androidx.work.BackoffPolicy.EXPONENTIAL, 1, TimeUnit.MINUTES)
                 .addTag(WORK_NAME)
                 .build()
-            work.enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.KEEP, request)
+
+        internal fun constraints(): Constraints =
+            Constraints.Builder()
+                .anyInternet()
+                .setRequiresBatteryNotLow(true)
+                .build()
+
+        /**
+         * A network with internet — NOT one Android has "validated". The
+         * system validates a network by reaching Google; where Google is out
+         * of reach (much of this wallet's market, a VPN off) the network is
+         * never validated, and a job asking for `CONNECTED` (which JobScheduler
+         * reads as INTERNET + VALIDATED) never runs at all — measured on the
+         * emulator behind such a network: CONNECTIVITY unsatisfied for good.
+         * The round reads the multisig service and the chains, not Google.
+         */
+        private fun Constraints.Builder.anyInternet(): Constraints.Builder =
+            if (Build.VERSION.SDK_INT >= 28) {
+                setRequiredNetworkRequest(
+                    android.net.NetworkRequest.Builder()
+                        .addCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                        .removeCapability(android.net.NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+                        .build(),
+                    NetworkType.CONNECTED,
+                )
+            } else {
+                setRequiredNetworkType(NetworkType.CONNECTED)
+            }
+
+        /**
+         * The app was put away (its last screen stopped) with a multisig to
+         * follow: one round now, EXPEDITED — the work an OEM scheduler still
+         * runs promptly (a periodic job it may hold for hours) — so what
+         * changes next is measured from what the person last saw, and the
+         * first round does not wait for the periodic one. Out of expedited
+         * quota it runs as ordinary work. Foreground-safe: a round posts
+         * nothing while a screen of the app is in front (the worker asks).
+         * Replaced, never stacked: leaving twice is one round.
+         */
+        fun checkOnLeaving(context: Context) {
+            val request = androidx.work.OneTimeWorkRequestBuilder<MultisigPollWorker>()
+                .setExpedited(androidx.work.OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+                .setConstraints(Constraints.Builder().anyInternet().build())
+                .addTag(LEAVING_NAME)
+                .build()
+            WorkManager.getInstance(context).enqueueUniqueWork(LEAVING_NAME, androidx.work.ExistingWorkPolicy.REPLACE, request)
+            VelaLog.event("multisig.poll", "leaving round asked")
         }
+
+        /**
+         * Whether the system holds this app's background work back — the
+         * honest fact behind "a notification may come late": the person
+         * restricted it outright (Android 9+'s background restriction,
+         * "Restricted" battery use), or the system put it in a standby
+         * bucket that runs jobs rarely or never (`rare`, `restricted`).
+         * Android's default "Optimized" battery use is NOT that: periodic
+         * work still runs in its maintenance windows, and saying otherwise
+         * would be a warning every phone shows. OEM schedulers (MIUI's
+         * battery saver, autostart) add their own, which no API reports;
+         * [oemHint] names the makers whose settings are known to.
+         */
+        fun backgroundLimited(context: Context): Boolean {
+            if (Build.VERSION.SDK_INT < 28) return false
+            val activity = context.getSystemService(android.app.ActivityManager::class.java)
+            if (activity?.isBackgroundRestricted == true) return true
+            val usage = context.getSystemService(android.app.usage.UsageStatsManager::class.java)
+            val bucket = runCatching { usage?.appStandbyBucket }.getOrNull() ?: return false
+            return bucket >= android.app.usage.UsageStatsManager.STANDBY_BUCKET_RARE
+        }
+
+        /** The phone's maker is one whose own battery manager holds background work beyond Android's (MIUI, HyperOS, ColorOS, …). */
+        fun oemHint(manufacturer: String = Build.MANUFACTURER): Boolean =
+            manufacturer.lowercase() in setOf("xiaomi", "redmi", "poco", "huawei", "honor", "oppo", "realme", "oneplus", "vivo", "iqoo", "meizu", "samsung")
+
+        /**
+         * The system's page for this app's battery use — where the person
+         * lets it run in the background. The app's own details page when the
+         * maker has no direct one (the battery entry is one tap from it).
+         */
+        fun batterySettingsIntent(context: Context): Intent =
+            Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.fromParts("package", context.packageName, null))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+        internal const val PERIOD_MINUTES = 15L
+        internal const val FLEX_MINUTES = 5L
+
+        /** The name the leaving round goes under (never two at once). */
+        internal const val LEAVING_NAME = "vela.multisig.poll.leaving"
 
         /** The name a one-off round goes under (a debug build's trigger; never two at once). */
         internal const val ONCE_NAME = "vela.multisig.poll.once"
@@ -242,6 +347,31 @@ class MultisigNotifier(
  * what changed is said — bounded, as a worker's time is.
  */
 class MultisigPollWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+    /**
+     * An expedited round ([MultisigNotifier.checkOnLeaving]) before Android
+     * 12 runs as a foreground service, which must show a notification: a
+     * silent, low one in its own channel, named in the corpus's words
+     * ("Checking for transactions waiting for approval…"), gone with the
+     * round. From Android 12 an expedited job needs none and this is not asked.
+     */
+    override suspend fun getForegroundInfo(): androidx.work.ForegroundInfo {
+        val words = MultisigWiring.words((applicationContext as VelaWalletApplication).container)
+        val manager = applicationContext.getSystemService(NotificationManager::class.java)
+        if (Build.VERSION.SDK_INT >= 26) {
+            manager?.createNotificationChannel(
+                NotificationChannel(CHECK_CHANNEL, words.t("panel.checking"), NotificationManager.IMPORTANCE_MIN).apply { setShowBadge(false) },
+            )
+        }
+        val notification = NotificationCompat.Builder(applicationContext, CHECK_CHANNEL)
+            .setSmallIcon(android.R.drawable.stat_notify_sync)
+            .setContentTitle(words.t("panel.checking"))
+            .setPriority(NotificationCompat.PRIORITY_MIN)
+            .setSilent(true)
+            .setOngoing(true)
+            .build()
+        return androidx.work.ForegroundInfo(CHECK_NOTIFICATION_ID, notification)
+    }
+
     override suspend fun doWork(): Result {
         val container = (applicationContext as VelaWalletApplication).container
         val hub = container.multisig
@@ -267,10 +397,19 @@ class MultisigPollWorker(context: Context, params: WorkerParameters) : Coroutine
                 "notes" to notes.size,
                 "allowed" to MultisigNotifier.allowed(applicationContext),
                 "foreground" to container.inForeground(),
+                "limited" to MultisigNotifier.backgroundLimited(applicationContext),
+                "tags" to tags.joinToString(","),
             )
             true
         }
-        VelaLog.event("multisig.poll", if (done == true) "round" else "timed out")
-        return Result.success()
+        VelaLog.event("multisig.poll", if (done == true) "round" else "timed out", "attempt" to runAttemptCount)
+        // A round that could not finish (no network answer in time) is tried
+        // again on WorkManager's back-off, a few times — then the next period.
+        return if (done == true || runAttemptCount >= 3) Result.success() else Result.retry()
+    }
+
+    private companion object {
+        const val CHECK_CHANNEL = "multisig_check"
+        const val CHECK_NOTIFICATION_ID = 0x5e1a
     }
 }

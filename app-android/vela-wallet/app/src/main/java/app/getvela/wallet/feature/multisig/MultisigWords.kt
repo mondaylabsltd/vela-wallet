@@ -42,6 +42,19 @@ class MultisigWords(
     fun t(key: String, vararg vars: Pair<String, String>): String =
         if (vars.isEmpty()) strings.t("home.multisig.$key") else strings.t("home.multisig.$key", vars.toMap())
 
+    /**
+     * A list inside a translated sentence (members, networks, numbers), in
+     * the UI language's own way (`ListFormatter`: "A, B and C", "A、B 和 C") —
+     * never an English ", " (r10, the core's rule). A JVM without ICU (a unit
+     * test) joins with ", ".
+     */
+    fun list(items: List<String>): String {
+        if (items.size < 2) return items.firstOrNull().orEmpty()
+        return runCatching {
+            android.icu.text.ListFormatter.getInstance(java.util.Locale.forLanguageTag(strings.language)).format(items)
+        }.getOrNull()?.takeIf { it.isNotEmpty() } ?: items.joinToString(", ")
+    }
+
     /** A plural key: [count] picks the form (the core's CLDR rule) and fills `{{count}}`. */
     fun plural(key: String, count: Int): String = strings.t("home.multisig.$key", count)
 
@@ -121,9 +134,23 @@ class MultisigWords(
      * (its members as the chains say them now), else what its record says —
      * the core reads no chain for one it does not follow.
      */
-    fun rowRuleChip(account: app.getvela.wallet.feature.multisig.core.MsAccount, proposals: app.getvela.wallet.feature.multisig.core.MsProposalsView): String =
-        (if (proposals.followed.equals(account.address, ignoreCase = true)) ruleChip(proposals.ruleChip) else null)
-            ?: ruleChip(account.threshold, account.owners.size)
+    fun rowRuleChip(row: app.getvela.wallet.feature.multisig.core.MsAccountRow, proposals: app.getvela.wallet.feature.multisig.core.MsProposalsView): String =
+        (if (proposals.followed.equals(row.account.address, ignoreCase = true)) ruleChip(proposals.ruleChip) else null)
+            // r9-14 (core §9.2): one not followed draws the accounts machine's
+            // `rule.chip` (the chains' last word), never the founding record's.
+            ?: ruleChip(row.rule["chip"])
+            ?: ruleChip(row.account.threshold, row.account.owners.size)
+
+    /**
+     * r9-14 (core §9.2): "Last known — read again when you open it", beside a
+     * chip of a multisig not followed whose rule a chain said in an earlier
+     * session; `null` otherwise.
+     */
+    fun ruleLastKnown(row: app.getvela.wallet.feature.multisig.core.MsAccountRow, proposals: app.getvela.wallet.feature.multisig.core.MsProposalsView): String? {
+        if (proposals.followed.equals(row.account.address, ignoreCase = true)) return null
+        val rule = row.rule ?: return null
+        return if (rule["from_chain"].bool == true && rule["last_known"].bool == true) t("presence.ruleLastKnown") else null
+    }
 
     /** The rule's title as the machine's chip says it ("Needs 2 of 4 members"); `null` when it says nothing, or differs by network. */
     fun ruleTitleOf(chip: kotlinx.serialization.json.JsonElement?): String? =
@@ -249,6 +276,13 @@ class MultisigWords(
         }
     }
 
+    /** The core's sentence for a passkey error's own words; `null` when it names nothing more than "it failed". */
+    private fun passkeyWords(message: String?): String? {
+        if (message.isNullOrBlank()) return null
+        val words = runCatching { uniffi.vela_core_uniffi.passkeyErrorWords("android", "", null, message) }.getOrNull() ?: return null
+        return if (words.kind == uniffi.vela_core_uniffi.PasskeyErrorKind.OTHER) null else raw(words.key)
+    }
+
     /** A shell failure ([MultisigShellFailure]'s JSON), or the core's own words, said as the corpus says them. */
     fun failureText(detail: String?): String {
         val failure = MultisigShellFailure.read(detail)
@@ -258,7 +292,9 @@ class MultisigWords(
                 failure["timedOut"].bool == true -> t("proposal.reason.passkeyTimedOut")
                 failure["failure"].str == "cancelled" -> t("proposal.reason.passkeyClosed")
                 failure["failure"].str in setOf("not_discoverable", "not_supported") -> t("proposal.reason.passkeyMissing")
-                else -> t("proposal.reason.passkeyFailed")
+                // Real device S3 (core §9.7): the platform's error in the corpus's
+                // words (`passkey_error_words`), never its English.
+                else -> passkeyWords(failure["message"].str) ?: t("proposal.reason.passkeyFailed")
             }
             "passkey_check" -> t("proposal.reason.passkeyFailed")
             "venue_blocked" -> failure["block"]?.let { block ->

@@ -19,6 +19,9 @@ import kotlinx.serialization.json.JsonNull
 /** One line a sheet says, with how it reads and a stable tag. */
 data class MsLine(val text: String, val tone: MsTone, val id: String)
 
+/** A member's word in the approvals list, and whether it is a done one (drawn in the success tone). */
+data class MemberState(val text: String, val done: Boolean)
+
 /**
  * What one multisig transaction's sheet draws, read from the proposals
  * machine's view — apart from the composable, so a JVM test reads every
@@ -45,7 +48,12 @@ class MsProposalModel(
     val approveState: JsonElement? get() = view.action("approve:$hash")
     val executeState: JsonElement? get() = view.action("execute:$hash")
 
-    val title: String get() = words.actionTitle(chainId, item.action, item.nonce)
+    /**
+     * r10-8: the core's reading names a call or a batch ("Approve · USDC",
+     * "Batch of 1 call", as the web and the desktop head it); else the
+     * multisig's own line (a member change, a cancellation, a rename).
+     */
+    val title: String get() = readingTitle(review, chainId, words) ?: words.actionTitle(chainId, item.action, item.nonce)
     val statusLine: String get() = words.standingLine(standing, item)
 
     /** Who approved, by address (lowercased). */
@@ -243,6 +251,19 @@ class MsProposalModel(
         return listOf(head) + lines
     }
 
+    /**
+     * r10 S4: why [member]'s approval — which would complete it — is offered
+     * as Approve alone: its look says it cannot pay the fee, or it would
+     * fail. `null` when theirs would not complete it, or nothing stops it.
+     */
+    fun approveOnlyWhy(member: String): Pair<String, MsTone>? {
+        if (item.approved + 1 < item.threshold) return null
+        if (view.approveExecuteBy(item).any { it.equals(member, ignoreCase = true) }) return null
+        val look = preview(member) ?: return null
+        val stops = look.kind == "fails" || (look.kind == "priced" && look["canPay"].bool == false)
+        return if (stops) feeLine(member) else null
+    }
+
     /** The preview stops it (would fail, nobody can pay): Execute waits. */
     fun executeHeld(executor: String): Boolean {
         val preview = preview(executor) ?: return false
@@ -254,14 +275,70 @@ class MsProposalModel(
 
     val stillNeeded: List<String> get() = members.filter { it.lowercase() !in approvedBy }
 
+    // -- the approvals section (r10-7; the web's r4a-8) ---------------------------------
+
+    /** How it ran, as the machine read it (`frozen`): never today's members re-counted. */
+    val frozen: JsonElement? get() = view.frozen(item)
+
+    /**
+     * The approvals heading's count: an executed one says "Executed" (never
+     * "1/2" beside an execution that counted 2), one that finished otherwise
+     * nothing, an open one its approvals against today's threshold.
+     */
+    val approvalsCount: String
+        get() = when {
+            isDone && (frozen != null || timeline.any { it.kind == "executed" }) -> words.t("proposal.executed")
+            isDone -> ""
+            else -> "${item.approved}/${item.threshold}"
+        }
+
+    /**
+     * Whom the list names: the members whose approvals counted when it ran;
+     * an executed one's approvers while those are not known (never a
+     * "Waiting" row on one that can no longer move); else the members now.
+     */
+    val listedMembers: List<String>
+        get() = frozen?.get("approvers").arr.mapNotNull { it.str }.takeIf { it.isNotEmpty() }
+            ?: if (isDone) item.approvers else members
+
+    /** A listed member's one word: Executed (its press approved and sent it), Approved, Not needed, Waiting, or nothing. */
+    fun memberState(member: String): MemberState {
+        val f = frozen
+        if (f != null && f["executorApproved"].bool == true && f["executor"].str.equals(member, ignoreCase = true)) {
+            return MemberState(words.t("proposal.executed"), done = true)
+        }
+        if (f != null || member.lowercase() in approvedBy) return MemberState(words.t("proposal.approved"), done = true)
+        return when {
+            isDone -> MemberState("", done = false)
+            item.approved >= item.threshold -> MemberState(words.t("proposal.notNeeded"), done = false)
+            else -> MemberState(words.t("proposal.waiting"), done = false)
+        }
+    }
+
+    /** Under the list of an executed one: who sent it and what counted then; or that this device does not know which counted. */
+    val executedFacts: String?
+        get() {
+            if (!isDone) return null
+            val f = frozen
+            if (f == null) return if (timeline.any { it.kind == "executed" }) words.t("proposal.approvalsSigned") else null
+            return listOfNotNull(
+                f["executor"].str?.takeIf { it.isNotBlank() }?.let { words.t("proposal.executedBy", "name" to words.label(it)) },
+                words.t(
+                    "proposal.countedThen",
+                    "approved" to f["approvers"].arr.size.toString(),
+                    "threshold" to (f["threshold"].long ?: item.threshold.toLong()).toString(),
+                ),
+            ).joinToString(" · ")
+        }
+
     val signerLines: List<MsLine>
         get() {
             val s = signers ?: return emptyList()
             if (isDone) return emptyList()
             val out = mutableListOf<MsLine>()
-            if (s.inVela.isNotEmpty()) out += MsLine(words.t("proposal.approvesInVela", "names" to s.inVela.joinToString(", ", transform = words::label)), MsTone.Neutral, "inVela")
-            if (s.either.isNotEmpty()) out += MsLine(words.t("proposal.eitherWay", "names" to s.either.joinToString(", ", transform = words::label)), MsTone.Neutral, "either")
-            if (s.contract.isNotEmpty()) out += MsLine(words.t("proposal.contractMembers", "names" to s.contract.joinToString(", ", transform = words::label)), MsTone.Neutral, "contract")
+            if (s.inVela.isNotEmpty()) out += MsLine(words.t("proposal.approvesInVela", "names" to words.list(s.inVela.map(words::label))), MsTone.Neutral, "inVela")
+            if (s.either.isNotEmpty()) out += MsLine(words.t("proposal.eitherWay", "names" to words.list(s.either.map(words::label))), MsTone.Neutral, "either")
+            if (s.contract.isNotEmpty()) out += MsLine(words.t("proposal.contractMembers", "names" to words.list(s.contract.map(words::label))), MsTone.Neutral, "contract")
             return out
         }
 
@@ -336,7 +413,7 @@ class MsProposalModel(
  */
 fun waitingNote(words: MultisigWords, note: JsonElement?, time: (Long) -> String): Pair<String, Boolean>? {
     note ?: return null
-    val networks = { note["chain_ids"].arr.mapNotNull { it.int }.joinToString(", ", transform = words::network) }
+    val networks = { words.list(note["chain_ids"].arr.mapNotNull { it.int }.map(words::network)) }
     return when (note.kind) {
         "offline" -> note["since"].long?.let { words.t("service.offlineSince", "time" to time(it)) to false } ?: (words.t("service.offline") to false)
         "unreachable" -> words.t("service.unreachableNote") to true

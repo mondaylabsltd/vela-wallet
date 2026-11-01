@@ -348,7 +348,11 @@
         "firstRunDismiss": "Compris",
         "otherSpace": "Aussi sur cet appareil, dans {{space}} : {{networks}}. Pour y créer le multisig, passez d’abord à {{space}}.",
         "draftKept": "Vous reprenez là où vous vous étiez arrêté.",
-        "discardDraft": "Recommencer"
+        "discardDraft": "Recommencer",
+        "closeTitle": "Fermer le nouveau multisig ?",
+        "closeBody": "Ce que vous avez saisi est conservé sur cet appareil : rouvrez Nouveau multisig pour reprendre là où vous en étiez.",
+        "closeKeep": "Continuer",
+        "closeConfirm": "Fermer"
       },
       "invite": {
         "body": "Les membres scannent le code ou ouvrent le lien : il ajoute le multisig dans Vela avec son réseau et les noms des membres.",
@@ -782,6 +786,15 @@
           "ownTokenLine": "Ceci envoie des jetons au contrat du jeton lui-même ({{token}}). Ils seraient perdus.",
           "blindLine": "Vela ne peut pas lire ce que fait cet appel. Ne l'approuvez que si vous savez exactement ce que c'est."
         }
+      },
+      "notify": {
+        "title": "Notifications",
+        "on": "Activées. Quand Vela est fermée, ce téléphone vérifie environ toutes les 15 minutes ; les notifications viennent de cet appareil, pas d'un service push.",
+        "off": "Désactivées pour Vela : rien ne vous est signalé quand une transaction attend votre approbation.",
+        "turnOn": "Activer dans les réglages",
+        "limited": "Ce téléphone restreint les vérifications de Vela en arrière-plan : une notification peut arriver en retard, ou pas du tout. Autorisez Vela à fonctionner en arrière-plan dans les réglages de batterie.",
+        "oem": "Sur certains téléphones (Xiaomi, Huawei, OPPO, vivo et d'autres), l'économiseur de batterie du fabricant retient aussi les vérifications en arrière-plan. Si les notifications arrivent en retard, autorisez Vela à fonctionner en arrière-plan sans restriction et à démarrer seule, dans les réglages de ce téléphone.",
+        "openSettings": "Ouvrir les réglages"
       }
     },
     "balanceDetailStatusOwnNode": "Votre nœud ne répond pas",

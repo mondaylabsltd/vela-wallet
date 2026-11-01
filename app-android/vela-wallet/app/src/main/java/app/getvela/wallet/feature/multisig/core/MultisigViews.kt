@@ -78,6 +78,13 @@ data class MsAccountRow(
      * Empty from a core without the field.
      */
     val inviteMembers: List<JsonElement> = emptyList(),
+    /**
+     * r9-14 (core §9.2): the rule in force as the chains last said it
+     * (`MultisigRowRule {chip, from_chain, last_known}`), else the founding
+     * one — what the switcher, the home and Settings draw for a multisig not
+     * followed. `null` from a core without the field.
+     */
+    val rule: JsonElement? = null,
 ) {
     val id: String get() = account.id
 
@@ -94,6 +101,7 @@ data class MsAccountRow(
             checkingOn = e["checking_on"].ints(),
             inviteShared = e["invite_shared"].bool ?: false,
             inviteMembers = e["invite_members"].arr,
+            rule = e["rule"]?.takeUnless { it.isNullish },
         )
     }
 }
@@ -558,6 +566,8 @@ data class MsProposalsView(
     fun timeline(item: MsProposalItem): List<JsonElement> = lookup(timelines, item.chainId, item.safeTxHash) ?: emptyList()
     fun signers(item: MsProposalItem): MsSigners? = lookup(signers, item.chainId, item.safeTxHash)
     fun execution(item: MsProposalItem): JsonElement? = lookup(executions, item.chainId, item.safeTxHash)
+    /** r10-7: how it ran (`FrozenFacts`: executor, approvers that counted, the threshold then, executorApproved). */
+    fun frozen(item: MsProposalItem): JsonElement? = lookup(frozen, item.chainId, item.safeTxHash)?.takeUnless { it.isNullish }
 
     fun preview(item: MsProposalItem, executor: String): JsonElement? {
         val key = "${item.chainId}:${item.safeTxHash.lowercase()}:${executor.lowercase()}"

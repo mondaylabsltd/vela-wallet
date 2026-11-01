@@ -258,6 +258,20 @@ fun VelaNavHost(
     val context = LocalContext.current
     val application = context.applicationContext as VelaWalletApplication
     val session by application.container.session.view.collectAsStateWithLifecycle()
+    // r9-12 (core §9.1): every place an address is named draws the accounts
+    // machine's `member_labels` — this device's own accounts included (the
+    // name the account published, the same on every device); the local name
+    // only while the machine has none.
+    // Only once there is a Vela account here: the multisig layer is built
+    // (and booted) for a wallet, never for the welcome screens.
+    val namedBy: Map<String, String> = if (session.accounts.isNotEmpty()) {
+        application.container.multisig.accountsView.collectAsStateWithLifecycle().value.memberLabels
+    } else {
+        emptyMap()
+    }
+    fun labelOf(address: String, local: String): String =
+        namedBy[address.lowercase()]?.takeIf { it.isNotBlank() } ?: local
+    val activeLabel = labelOf(session.address, session.activeName)
     val onboarding: OnboardingViewModel = viewModel()
 
     // The keys this device's own record gives the account in front, read as
@@ -666,6 +680,7 @@ fun VelaNavHost(
             }
 
             composable(VelaDestinations.WALLET) {
+
                 val strings = LocalVelaStrings.current
                 // Native multisig: the multisig shown, when one is — the wallet
                 // wears its identity (its address's balance and activity; its
@@ -679,7 +694,7 @@ fun VelaNavHost(
                     app.getvela.wallet.feature.multisig.MultisigWiring.words(application.container, multisigHub)
                 }
                 val shownAddress = shownMultisig?.account?.address ?: session.address
-                val shownName = shownMultisig?.let { msWords.name(it.account, it.name) } ?: session.activeName
+                val shownName = shownMultisig?.let { msWords.name(it.account, it.name) } ?: activeLabel
                 // Fixture-driven still (spec 015 FR-005) apart from the two things
                 // that identify the wallet — its address and its name, both now the
                 // real ones. A home screen showing a fixture address after a real
@@ -774,7 +789,8 @@ fun VelaNavHost(
                     // still has a display currency — and until this runs the core
                     // has no rate and the wallet shows dollars.
                     settings.refreshCurrency()
-                    wallet.open(shownAddress)
+                    // r10-1 (core §9.3): a multisig shown lives on its record's networks.
+                    wallet.open(shownAddress, livesOn = shownMultisig?.account?.chainIds.orEmpty())
                 }
 
                 // Spec 048: the 全部网络 pill and the SD1 class chips are shell render
@@ -1033,7 +1049,7 @@ fun VelaNavHost(
                 if (switcherOpen) {
                     AccountSwitcherSheet(
                         sheet = WalletLive.accountSwitcher(
-                            session.accounts.map { it.name to it.address },
+                            session.accounts.map { labelOf(it.address, it.name) to it.address },
                             // A multisig shown: no Vela account row wears the check (its row does).
                             if (shownMultisig != null) -1 else session.activeIndex,
                             // Spec 105: no account is worth anything in the testnet space.
@@ -1120,7 +1136,16 @@ fun VelaNavHost(
                 // aftercare keeps its header once the core has closed it.
                 val trackView by application.container.wallet.tracker.collectAsStateWithLifecycle()
                 val aftercare by application.container.signingAftercare.collectAsStateWithLifecycle()
-                var lastSigning by remember { mutableStateOf<Pair<app.getvela.wallet.feature.signing.SigningScreenModel, app.getvela.wallet.feature.signing.SigningLive.Context>?>(null) }
+                // The last sheet drawn, for the ending's header. A plain holder,
+                // NOT state (perf, real device: signing sheet open 10.7-13.8% janky):
+                // as state, the SideEffect below wrote a new pair after every
+                // composition — the model and its context are rebuilt each time
+                // and never equal — and the write recomposed this whole route,
+                // which wrote again: the wallet route recomposed on EVERY frame
+                // (5-10 ms each on the Redmi) for as long as a sheet was up. It is
+                // read only once the controller is gone, a change that recomposes
+                // this route by itself.
+                val lastSigning = remember { LastSigning() }
                 val explorerContext = LocalContext.current
                 fun openExplorer(chainId: Int, txHash: String?) {
                     val base = networks.networks.firstOrNull { it.chain_id.toInt() == chainId }?.explorer_url?.trimEnd('/')
@@ -1178,7 +1203,7 @@ fun VelaNavHost(
                         chainName = chainNames[signChain] ?: signChain.toString(),
                         chainDot = WalletLive.badge(signChain.toLong()),
                         nativeSymbol = networks.networks.firstOrNull { it.chain_id.toInt() == signChain }?.native_symbol ?: "ETH",
-                        walletName = session.activeName,
+                        walletName = activeLabel,
                         walletAddress = session.address,
                         money = WalletLive.Money.of(currency, strings.language),
                         origin = signRequest?.origin?.substringAfter("://")?.substringBefore('/'),
@@ -1214,7 +1239,7 @@ fun VelaNavHost(
                                     app.getvela.wallet.feature.signing.SigningLive.confirmState(signJson, guardJson, clearJson, feeJson, signSpeed.tier)
                                 },
                             )
-                            SideEffect { lastSigning = signingModel to signCtx }
+                            SideEffect { lastSigning.value = signingModel to signCtx }
                             app.getvela.wallet.feature.signing.SigningSheet(
                                 model = signingModel,
                                 // The ✕ (spec 079: the ONLY close): a reject before the
@@ -1247,7 +1272,7 @@ fun VelaNavHost(
                 // the ending stays on screen — a tick that leaves by itself, or
                 // "not landed yet" until closed or seen landing.
                 val ending = aftercare
-                val endingHeader = lastSigning
+                val endingHeader = lastSigning.value
                 if (ending != null && endingHeader != null && signingController == null) {
                     val (headerModel, headerCtx) = endingHeader
                     // Spec 082 RA8: the tracker's entry for the operation this
@@ -1967,9 +1992,9 @@ fun VelaNavHost(
                         // fixture one: a connection panel naming a stranger's
                         // account would be the wallet lying about what it just
                         // granted.
-                        val exploreModel = remember(strings, session.address, session.activeName) {
+                        val exploreModel = remember(strings, session.address, activeLabel) {
                             ExploreFixtures.buildState(ExploreScreenState.E2, strings)
-                                .withIdentity(session.activeName, session.address)
+                                .withIdentity(activeLabel, session.address)
                         }
                         // Spec 044/070: the tab is a browser with a memory — the core's
                         // favourites, groups, tabs and recents — and every page's
@@ -2001,11 +2026,12 @@ fun VelaNavHost(
                             exploreShown?.let { app.getvela.wallet.feature.multisig.MultisigWiring.words(application.container, exploreMsHub).name(it.account, it.name) }
                         }
                         val identity = app.getvela.wallet.feature.browser.ExploreLive.Identity(
-                            accountName = exploreShownName ?: session.activeName,
+                            accountName = exploreShownName ?: activeLabel,
                             accountAddress = exploreShown?.account?.address ?: session.address,
                             chainName = chainNames[siteChain] ?: siteChain.toString(),
                             chainDot = WalletLive.badge(siteChain.toLong()),
                             chainId = siteChain,
+                            multisig = exploreShown != null,
                         )
                         val reloaded = reloadedTab != null && reloadedTab == exploreView.selected_tab
                         val shownSeen = exploreView.selected_tab?.let { statusSeen[it] }
@@ -2734,10 +2760,10 @@ fun VelaNavHost(
                 // that identify the account — its name and address, both the real
                 // ones. A fixture name over a real address would tell somebody they
                 // are signed in as a stranger (spec 019's finding).
-                val model = remember(strings, session.address, session.activeName) {
+                val model = remember(strings, session.address, activeLabel) {
                     SettingsFixtures.buildState(SettingsScreenState.ST1, strings)
                         .withIdentity(
-                            name = session.activeName,
+                            name = activeLabel,
                             address = session.address,
                             display = shortenAddress(session.address),
                         )
@@ -3680,4 +3706,9 @@ internal fun launchFlowEntry(flow: app.getvela.wallet.core.platform.LaunchEntry.
     app.getvela.wallet.core.platform.LaunchEntry.Flow.Send -> WalletFlowEntry.Send
     app.getvela.wallet.core.platform.LaunchEntry.Flow.Receive -> WalletFlowEntry.Receive
     app.getvela.wallet.core.platform.LaunchEntry.Flow.Scan -> WalletFlowEntry.Scan
+}
+
+/** The last signing sheet drawn and its context, kept for the ending's header — not observed. */
+private class LastSigning {
+    var value: Pair<app.getvela.wallet.feature.signing.SigningScreenModel, app.getvela.wallet.feature.signing.SigningLive.Context>? = null
 }

@@ -134,6 +134,13 @@ sealed class MultisigOperation {
         val chain_id: Long,
         val from: String,
         val calls: List<JsonElement> = emptyList(),
+        /**
+         * Real device S2 (core §9.5): the undeployed multisig placed as its
+         * deployment leaves it — put AS IS into `eth_simulateV1`'s
+         * `blockStateCalls[0].stateOverrides` (its first transaction was
+         * "expected to fail", simulated from a bare address).
+         */
+        val state_overrides: JsonElement? = null,
     ) : MultisigOperation()
 
     @Serializable

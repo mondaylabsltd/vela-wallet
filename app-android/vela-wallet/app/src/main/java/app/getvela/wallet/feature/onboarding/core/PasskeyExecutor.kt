@@ -237,10 +237,25 @@ class PasskeyExecutor(
             "excluded" to excludeCredentialIds.size,
         )
         val response = try {
-            credentialManager.createCredential(
-                context = context,
-                request = CreatePublicKeyCredentialRequest(request.toString()),
-            )
+            // Real device (Redmi, Google unreachable): the create waited 87 s
+            // behind a spinner — no system sheet ever up, Google Play services
+            // checking the domain over a network that could not reach it —
+            // before "[50152] RP ID cannot be validated". The same honest
+            // bound the sign-in has: a sheet that draws takes this window's
+            // focus; this window keeping it for SELECTOR_WATCHDOG_MS unbroken
+            // means none is up, and the wait ends, said. A sheet that IS up
+            // gets the core's own passkey deadline, never longer.
+            awaitingSelector("passkey.register") {
+                kotlinx.coroutines.withTimeout(uniffi.vela_core_uniffi.passkeySignTimeoutMs().toLong()) {
+                    credentialManager.createCredential(
+                        context = context,
+                        request = CreatePublicKeyCredentialRequest(request.toString()),
+                    )
+                }
+            }
+        } catch (deadline: kotlinx.coroutines.TimeoutCancellationException) {
+            VelaLog.event("passkey.register", "deadline passed")
+            throw PasskeyFailure(FailureKind.Cancelled, "the passkey prompt timed out")
         } catch (error: CreateCredentialException) {
             val failure = classifyCreate(error)
             VelaLog.failure(
@@ -710,7 +725,7 @@ class PasskeyExecutor(
      * Fail-safe by construction: no activity, or no focus to begin with (one of
      * our own dialogs holds it), and this is a plain call — never a false alarm.
      */
-    private suspend fun <T> awaitingSelector(request: suspend () -> T): T {
+    private suspend fun <T> awaitingSelector(tag: String = "passkey.assert", request: suspend () -> T): T {
         val activity = context as? Activity
         if (activity == null) return request()
         return coroutineScope {
@@ -735,7 +750,7 @@ class PasskeyExecutor(
             } catch (cancelled: CancellationException) {
                 if (!gaveUp) throw cancelled
                 VelaLog.event(
-                    "passkey.assert",
+                    tag,
                     "system selector never appeared",
                     "waitedMs" to SELECTOR_WATCHDOG_MS,
                 )
@@ -887,7 +902,19 @@ enum class FailureKind(val wire: String) {
  * narrow: everything unrecognised becomes `other` carrying the platform's own
  * words, which the core forwards verbatim into the bug report.
  */
-open class PasskeyFailure(val kind: FailureKind, message: String) : Exception(message)
+open class PasskeyFailure(
+    val kind: FailureKind,
+    message: String,
+    /**
+     * Real device S3 (core §9.7): the platform error's identity — the
+     * Credential Manager type, or a DOM error's type — and its Play Services
+     * status code when there is one, for the core's `passkey_error_words`
+     * (a corpus sentence, never the system's English). Stable across R8: a
+     * `type` string, never a class name.
+     */
+    val domain: String? = null,
+    val code: Int? = null,
+) : Exception(message)
 
 /**
  * The system's passkey sheet never appeared (see `awaitingSelector`). To the
@@ -919,7 +946,9 @@ data class Assertion(
 // Classification
 // ---------------------------------------------------------------------------
 
-internal fun classifyCreate(error: CreateCredentialException): PasskeyFailure = when (error) {
+internal fun classifyCreate(error: CreateCredentialException): PasskeyFailure = classifyCreateKind(error).withFacts(createDomain(error))
+
+private fun classifyCreateKind(error: CreateCredentialException): PasskeyFailure = when (error) {
     is CreateCredentialCancellationException ->
         PasskeyFailure(FailureKind.Cancelled, "User cancelled the operation")
 
@@ -969,7 +998,9 @@ internal fun isSystemRouteUnavailable(error: GetCredentialException): Boolean =
     error is GetCredentialProviderConfigurationException ||
         error is GetCredentialUnsupportedException
 
-internal fun classifyGet(error: GetCredentialException): PasskeyFailure = when (error) {
+internal fun classifyGet(error: GetCredentialException): PasskeyFailure = classifyGetKind(error).withFacts(getDomain(error))
+
+private fun classifyGetKind(error: GetCredentialException): PasskeyFailure = when (error) {
     is GetCredentialCancellationException ->
         PasskeyFailure(FailureKind.Cancelled, "User cancelled the operation")
 
@@ -1002,6 +1033,16 @@ internal fun classifyGet(error: GetCredentialException): PasskeyFailure = when (
  * would quietly turn every refusal into "other".
  */
 private fun domType(domError: androidx.credentials.exceptions.domerrors.DomError): String = domError.type
+
+/** The error's facts for the core's words: a DOM error's type, else the exception's own `type` (both stable under R8). */
+private fun createDomain(error: CreateCredentialException): String =
+    (error as? CreatePublicKeyCredentialDomException)?.domError?.type ?: error.type
+
+private fun getDomain(error: GetCredentialException): String =
+    (error as? GetPublicKeyCredentialDomException)?.domError?.type ?: error.type
+
+/** [this] classification, carrying the platform error's facts (`domain`; a Play Services `[code]` in the message is the core's to read). */
+private fun PasskeyFailure.withFacts(domain: String): PasskeyFailure = PasskeyFailure(kind, message.orEmpty(), domain = domain, code = code)
 
 private const val DOM_INVALID_STATE = "androidx.credentials.TYPE_INVALID_STATE_ERROR"
 private const val DOM_NOT_SUPPORTED = "androidx.credentials.TYPE_NOT_SUPPORTED_ERROR"

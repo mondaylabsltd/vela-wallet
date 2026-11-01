@@ -344,7 +344,11 @@
         "firstRunDismiss": "Đã hiểu",
         "otherSpace": "Thiết bị này còn có trong {{space}}: {{networks}}. Để tạo multisig trên một trong số đó, hãy chuyển sang {{space}} trước.",
         "draftKept": "Tiếp tục từ chỗ bạn đã dừng.",
-        "discardDraft": "Bắt đầu lại"
+        "discardDraft": "Bắt đầu lại",
+        "closeTitle": "Đóng ví đa chữ ký mới?",
+        "closeBody": "Những gì bạn đã nhập được giữ trên thiết bị này: mở lại Ví đa chữ ký mới để tiếp tục từ chỗ đã dừng.",
+        "closeKeep": "Tiếp tục chỉnh sửa",
+        "closeConfirm": "Đóng"
       },
       "invite": {
         "body": "Thành viên quét mã hoặc mở liên kết: multisig được thêm vào Vela cùng mạng và tên các thành viên.",
@@ -775,6 +779,15 @@
           "ownTokenLine": "Lệnh này gửi token vào chính hợp đồng của token ({{token}}). Số token đó sẽ mất.",
           "blindLine": "Vela không đọc được lệnh gọi này làm gì. Chỉ phê duyệt nếu bạn biết chính xác nó là gì."
         }
+      },
+      "notify": {
+        "title": "Thông báo",
+        "on": "Đang bật. Khi Vela đóng, điện thoại này kiểm tra khoảng 15 phút một lần; thông báo đến từ thiết bị này, không phải từ dịch vụ đẩy.",
+        "off": "Thông báo của Vela đang tắt, nên bạn sẽ không được báo khi có giao dịch cần bạn phê duyệt.",
+        "turnOn": "Bật trong cài đặt",
+        "limited": "Điện thoại này đang hạn chế việc kiểm tra nền của Vela, nên thông báo có thể đến muộn hoặc không đến. Hãy cho phép Vela chạy nền trong cài đặt pin.",
+        "oem": "Trên một số điện thoại (Xiaomi, Huawei, OPPO, vivo và các hãng khác), trình tiết kiệm pin của nhà sản xuất cũng hạn chế việc kiểm tra nền. Nếu thông báo đến muộn, hãy cho phép Vela chạy nền không hạn chế và tự khởi động trong cài đặt của điện thoại này.",
+        "openSettings": "Mở cài đặt"
       }
     },
     "balanceDetailStatusOwnNode": "Node của bạn không phản hồi",

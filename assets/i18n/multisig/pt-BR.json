@@ -273,7 +273,11 @@
     "firstRunDismiss": "Entendi",
     "otherSpace": "Também neste dispositivo, em {{space}}: {{networks}}. Para criar o multisig em uma delas, mude primeiro para {{space}}.",
     "draftKept": "Você continua de onde parou.",
-    "discardDraft": "Começar de novo"
+    "discardDraft": "Começar de novo",
+    "closeTitle": "Fechar a nova multisig?",
+    "closeBody": "O que você preencheu fica guardado neste dispositivo: abra Nova multisig de novo para continuar de onde parou.",
+    "closeKeep": "Continuar editando",
+    "closeConfirm": "Fechar"
    },
    "invite": {
     "body": "Os membros escaneiam o código ou abrem o link: ele adiciona o multisig no Vela com a rede e os nomes dos membros.",
@@ -707,6 +711,15 @@
      "ownTokenLine": "Isto envia tokens para o próprio contrato do token ({{token}}). Eles seriam perdidos.",
      "blindLine": "A Vela não consegue ler o que esta chamada faz. Aprove só se souber exatamente o que é."
     }
+   },
+   "notify": {
+    "title": "Notificações",
+    "on": "Ativadas. Enquanto o Vela está fechado, este celular verifica a cada 15 minutos, mais ou menos; as notificações vêm deste dispositivo, não de um serviço de push.",
+    "off": "Desativadas para o Vela: nada é avisado quando uma transação precisa da sua aprovação.",
+    "turnOn": "Ativar nas configurações",
+    "limited": "Este celular limita as verificações do Vela em segundo plano, então uma notificação pode atrasar ou não chegar. Permita que o Vela rode em segundo plano nas configurações de bateria.",
+    "oem": "Em alguns celulares (Xiaomi, Huawei, OPPO, vivo e outros), a economia de bateria do fabricante também segura as verificações em segundo plano. Se as notificações atrasarem, permita que o Vela rode em segundo plano sem restrições e inicie sozinho, nas configurações deste celular.",
+    "openSettings": "Abrir configurações"
    }
   }
  }

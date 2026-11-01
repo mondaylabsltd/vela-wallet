@@ -78,6 +78,8 @@ object ExploreLive {
         val chainDot: Color = Color.Unspecified,
         /** Spec 079: the page's chain, for its logo. */
         val chainId: Int = 0,
+        /** r10-9: the account sites see is a multisig shown (it proposes; it cannot sign messages). */
+        val multisig: Boolean = false,
     )
 
     /**
@@ -445,7 +447,10 @@ object ExploreLive {
             networkDot = if (identity.chainDot == Color.Unspecified) fallback.networkDot else identity.chainDot,
             // One sentence above the buttons and no footnote (spec 082 RE6):
             // the header's ✕ is the cancel.
-            explainer = strings.t("connect.browser.body"),
+            // r10-9: a multisig can't sign messages — the site is told what is
+            // true of it (it proposes transactions for the members to approve),
+            // never "ask you to sign".
+            explainer = strings.t(if (isActive && identity.multisig) "connect.browser.multisigConnectNote" else "connect.browser.body"),
             disconnect = strings.t("connect.browser.connect"),
             footnote = "",
         )

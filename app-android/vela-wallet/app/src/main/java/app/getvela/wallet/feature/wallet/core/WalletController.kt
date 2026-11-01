@@ -130,6 +130,8 @@ class WalletController(
     backgroundPoll: () -> Unit = {},
     /** Spec 105: the testnet space is in front — no saved total is read or written. */
     private val testnet: () -> Boolean = { false },
+    /** r9-17 (core §9.4): the networks [address] lives on — a multisig's record's; empty for a Vela account. */
+    private val accountNetworks: (address: String) -> List<Int> = { emptyList() },
 ) {
 
     private val store = VelaStore(context)
@@ -280,6 +282,10 @@ class WalletController(
                 ?.native_symbol
                 .orEmpty()
         },
+        accountNetworks = accountNetworks,
+        spaceChainIds = { networks.value.networks.map { it.chain_id.toInt() } },
+        addedChainIds = { networks.value.networks.filter { it.is_custom }.map { it.chain_id.toInt() } },
+        store = store,
     )
 
     /** The activity feed's view as the core wrote it — the AI agent reads the wallet whole (spec 104). */
@@ -845,11 +851,14 @@ class WalletController(
      * Safe to call on every entry: the core supersedes an in-flight read rather
      * than stacking another one.
      */
-    suspend fun open(address: String) {
+    suspend fun open(address: String, livesOn: List<Int> = emptyList()) {
         pool.start()
         val hidden = executor.storedPrivacy()
         balanceHost.dispatch(BalanceEvent.PrivacyHydrated(hidden), BalanceEvent.serializer())
         val changed = balanceHost.view.value.address != address
+        // r10-1 (core §9.3): where it lives first, so the stamp of this
+        // account moves only when those networks answered.
+        balanceHost.dispatch(BalanceEvent.LivesOn(address, livesOn), BalanceEvent.serializer())
         balanceHost.dispatch(BalanceEvent.AccountChanged(address), BalanceEvent.serializer())
         // P2.4: the first frame of another account is what it held last time
         // (web `setAccount` → `#restoreRows`). Queued after the switch, so the
@@ -860,7 +869,55 @@ class WalletController(
         // buzzes. That distinction is the core's, and it needs telling.
         feedHost.dispatch(FeedEvent.PrivacyChanged(hidden), FeedEvent.serializer())
         feedHost.dispatch(FeedEvent.AccountSwitched(address), FeedEvent.serializer())
+        // r9-17 (core §9.4): from the first open on, the scan's cadence is the
+        // core's (`next_scan`); this shell only says how the page stands.
+        if (!followingCadence) {
+            followingCadence = true
+            presence(FeedPresenceChange.Started)
+            followCadence()
+        }
         trackerResumed()
+    }
+
+    // -- r9-17: the incoming scan's cadence is the core's (core §9.4) ----------
+
+    @Volatile private var followingCadence = false
+    @Volatile private var lastInteractionMs = System.currentTimeMillis()
+    private var scanTimer: kotlinx.coroutines.Job? = null
+
+    private fun presenceNow(): FeedPresence {
+        val now = System.currentTimeMillis()
+        return FeedPresence(visible = foreground(), since_interaction_ms = (now - lastInteractionMs).coerceAtLeast(0).toDouble(), now_ms = now.toDouble())
+    }
+
+    private fun presence(change: FeedPresenceChange) =
+        feedHost.dispatch(FeedEvent.PresenceChanged(presenceNow(), change), FeedEvent.serializer())
+
+    /** ONE timer per `next_scan.seq`, answered with `scan_due` carrying the same seq; a new seq drops the old timer. */
+    private fun followCadence() {
+        scope.launch {
+            feedHost.view.map { it.next_scan }.distinctUntilChanged().collect { next ->
+                scanTimer?.cancel()
+                if (next == null) return@collect
+                scanTimer = scope.launch {
+                    kotlinx.coroutines.delay(next.after_ms.coerceAtLeast(0))
+                    feedHost.dispatch(FeedEvent.ScanDue(next.seq, presenceNow()), FeedEvent.serializer())
+                }
+            }
+        }
+    }
+
+    /** The person touched the app (a tap, a scroll): back from idle — the core's active pace. Said at most every few seconds. */
+    fun interacted() {
+        val now = System.currentTimeMillis()
+        val idle = now - lastInteractionMs
+        lastInteractionMs = now
+        if (followingCadence && idle > INTERACTION_SAID_MS) presence(FeedPresenceChange.Interacted)
+    }
+
+    /** Back online: what failed offline can be read now. */
+    fun online() {
+        if (followingCadence) presence(FeedPresenceChange.Online)
     }
 
     /**
@@ -945,17 +1002,16 @@ class WalletController(
 
     fun focused() {
         balanceHost.dispatch(BalanceEvent.AppFocused, BalanceEvent.serializer())
-        feedHost.dispatch(FeedEvent.FocusTick, FeedEvent.serializer())
+        // r9-17: shown again — the core scans at once (its cadence, not a tick of ours).
+        if (followingCadence) presence(FeedPresenceChange.Shown) else feedHost.dispatch(FeedEvent.FocusTick, FeedEvent.serializer())
         trackerResumed()
     }
 
     fun backgrounded() {
         balanceHost.dispatch(BalanceEvent.AppBackgrounded, BalanceEvent.serializer())
+        if (followingCadence) presence(FeedPresenceChange.Hidden)
         if (trackerHasPending()) backgroundPollPort()
     }
-
-    /** The Activity surface's near-real-time poll, while it is on screen. */
-    fun liveTick() = feedHost.dispatch(FeedEvent.LiveTick, FeedEvent.serializer())
 
     /**
      * Rows changed under the feed — a send wrote its pending row (spec 043),
@@ -981,6 +1037,8 @@ class WalletController(
     suspend fun storedRequest(id: String): String? = feedExecutor.storedRequest(id)
 
     private companion object {
+        /** An interaction is said to the core at most this often (the cadence's active window is two minutes). */
+        const val INTERACTION_SAID_MS = 5_000L
         /**
          * How long a receipt scan waits for the balance read that tells it
          * which chains to watch. Long enough for a dozen chains on a phone

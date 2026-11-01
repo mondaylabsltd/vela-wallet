@@ -344,7 +344,11 @@
         "firstRunDismiss": "Mengerti",
         "otherSpace": "Juga di perangkat ini, di {{space}}: {{networks}}. Untuk membuat multisig di salah satunya, beralih dulu ke {{space}}.",
         "draftKept": "Melanjutkan dari yang terakhir Anda isi.",
-        "discardDraft": "Mulai dari awal"
+        "discardDraft": "Mulai dari awal",
+        "closeTitle": "Tutup multisig baru?",
+        "closeBody": "Yang sudah Anda isi disimpan di perangkat ini: buka lagi Multisig baru untuk melanjutkan dari tempat terakhir.",
+        "closeKeep": "Lanjut mengisi",
+        "closeConfirm": "Tutup"
       },
       "invite": {
         "body": "Anggota memindai kode atau membuka tautan: multisig ditambahkan di Vela dengan jaringan dan nama anggotanya.",
@@ -775,6 +779,15 @@
           "ownTokenLine": "Ini mengirim token ke kontrak token itu sendiri ({{token}}). Token itu akan hilang.",
           "blindLine": "Vela tidak bisa membaca apa yang dilakukan panggilan ini. Setujui hanya jika kamu tahu persis apa itu."
         }
+      },
+      "notify": {
+        "title": "Notifikasi",
+        "on": "Aktif. Saat Vela ditutup, ponsel ini memeriksa sekitar setiap 15 menit; notifikasi berasal dari perangkat ini, bukan dari layanan push.",
+        "off": "Notifikasi Vela nonaktif, jadi tidak ada pemberitahuan saat transaksi memerlukan persetujuan Anda.",
+        "turnOn": "Aktifkan di pengaturan",
+        "limited": "Ponsel ini membatasi pemeriksaan latar belakang Vela, sehingga notifikasi bisa terlambat atau tidak datang. Izinkan Vela berjalan di latar belakang di pengaturan baterai.",
+        "oem": "Di beberapa ponsel (Xiaomi, Huawei, OPPO, vivo, dan lainnya), penghemat baterai bawaan pabrikan juga menahan pemeriksaan latar belakang. Jika notifikasi terlambat, izinkan Vela berjalan di latar belakang tanpa batasan dan mulai otomatis di pengaturan ponsel ini.",
+        "openSettings": "Buka pengaturan"
       }
     },
     "balanceDetailStatusOwnNode": "Node Anda tidak merespons",

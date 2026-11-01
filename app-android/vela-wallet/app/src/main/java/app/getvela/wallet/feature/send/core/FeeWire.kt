@@ -353,6 +353,12 @@ data class FeeOptionView(
      * with its unit. `null` when it can pay, or cannot be weighed (no price).
      */
     val short: FeeShortfall? = null,
+    /**
+     * r10-3 (core §9.7): this coin cannot pay the fee ON TOP of the amount
+     * being sent from the same balance (Arc's USDC coin and its ERC-20 are
+     * one balance) — said "Insufficient {{sym}} to cover amount + gas fees".
+     */
+    val short_with_amount: Boolean = false,
 )
 
 /** A coin's shortfall against the fee, both sides written by the core (`3.58361 USDT`). */

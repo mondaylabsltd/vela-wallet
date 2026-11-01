@@ -236,7 +236,14 @@ class WalletFixturesTest {
             // H12: every network failed — a round nobody answered never moves the
             // core's stamp (r9, be3108b00), so no "Updated" is claimed.
             val unread = setOf(WalletScreenState.H3, WalletScreenState.H15, WalletScreenState.H12)
-            val expected = if (state in unread) null else "上次更新 · 2分钟前"
+            // H14: Tempo — a network it holds on — failed in the second round, so
+            // the core's stamp stays at the first round's, a minute older (r10-1,
+            // core §9.3: the stamp moves only when every network it lives on answered).
+            val expected = when (state) {
+                in unread -> null
+                WalletScreenState.H14 -> "上次更新 · 3分钟前"
+                else -> "上次更新 · 2分钟前"
+            }
             assertEquals("$state", expected, refresh?.updated)
         }
     }
