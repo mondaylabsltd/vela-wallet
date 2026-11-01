@@ -1976,7 +1976,7 @@ fn payee_name(payee: &SendPayee, s: &FlowStrings) -> Option<String> {
 
 /// How a payee is named on a row (spec 097 F, S2): the name alone — the line
 /// a long name may cut — over the line nothing cuts, whose word the name is
-/// and the short address it stands for ("Vela User · 0x14fB…eA5c"); or the
+/// and the short address it stands for ("Vela User · 0x14fB1f…D1eA5c"); or the
 /// short address alone, in mono. A name never stands in for the address on
 /// the page that signs, and a long registered name cannot push the tag out
 /// of sight.
@@ -5874,7 +5874,7 @@ mod tests {
             .map(|row| row.label.as_ref())
             .collect();
         assert_eq!(labels[0], "Alice");
-        assert!(labels[1].starts_with("0xef"), "{}", labels[1]);
+        assert!(labels[1].to_ascii_lowercase().starts_with("0xef"), "{}", labels[1]);
         assert!(receipt.breakdown.iter().all(|row| row.seed.is_some()));
         assert_eq!(receipt.breakdown[1].value.as_ref(), "0.3 ETH");
         assert!(
@@ -7584,7 +7584,7 @@ mod tests {
         let refused = detail("dapp-transfer");
         assert_eq!(
             refused.facts[2].value.as_ref(),
-            "0x7687…D141",
+            "0x76875e…C0D141",
             "the recipient, not the contract"
         );
         assert!(
@@ -10354,7 +10354,7 @@ mod payee_tests {
                 // The name may be cut; the tag rides with the address on the
                 // line that never is.
                 assert_eq!(to.value.as_ref(), "Wallet");
-                assert_eq!(to.detail.as_deref(), Some("Vela User · 0x14fB…eA5c"));
+                assert_eq!(to.detail.as_deref(), Some("Vela User · 0x14fB1f…D1eA5c"));
                 // Issue #423: the first line is the NAME — "Vela User" is
                 // whose word it is, on the line under it, never the name.
                 assert_ne!(to.value.as_ref(), s.vela_user.as_ref());
@@ -10387,7 +10387,7 @@ mod payee_tests {
                 let to =
                     to_row(&send_confirm(i).facts, s).unwrap_or_else(|| unreachable!("no To row"));
                 assert_eq!(to.value.as_ref(), "Savings");
-                assert_eq!(to.detail.as_deref(), Some("0x031d…772b"));
+                assert_eq!(to.detail.as_deref(), Some("0x031d7D…84772b"));
             });
 
             let view = form_paying(BOB).view();
@@ -10395,7 +10395,7 @@ mod payee_tests {
                 let to =
                     to_row(&send_confirm(i).facts, s).unwrap_or_else(|| unreachable!("no To row"));
                 assert_eq!(to.value.as_ref(), "bob.eth");
-                assert_eq!(to.detail.as_deref(), Some("ENS · 0x7687…D141"));
+                assert_eq!(to.detail.as_deref(), Some("ENS · 0x76875e…C0D141"));
             });
         });
     }
@@ -10433,12 +10433,12 @@ mod payee_tests {
                 let rows = &confirm.breakdown;
                 assert_eq!(rows.len(), 2);
                 assert_eq!(rows[0].label.as_ref(), "Mum");
-                assert_eq!(rows[0].detail.as_deref(), Some("0x031d…772b"));
+                assert_eq!(rows[0].detail.as_deref(), Some("0x031d7D…84772b"));
                 assert!(!rows[0].mono);
                 assert_eq!(rows[0].seed.as_deref(), Some(SAVINGS));
                 // The registry's "Wallet" is not a row's name: a row is named
                 // only in the person's own word.
-                assert_eq!(rows[1].label.as_ref(), "0x14fB…eA5c");
+                assert_eq!(rows[1].label.as_ref(), "0x14fB1f…D1eA5c");
                 assert!(rows[1].mono, "an address alone is set in mono");
                 assert!(rows[1].detail.is_none());
                 assert_eq!(rows[1].value.as_ref(), "2 xDAI");

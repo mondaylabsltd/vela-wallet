@@ -88,6 +88,9 @@ pub fn set_wanted(on: bool) {
     if let Ok(mut cached) = WANTED.lock() {
         *cached = Some(on);
     }
+    if on {
+        prepare();
+    }
     // r11-10: the switch says what it did — the log, and (on) where the
     // notices will show: the platform's center, or the window's line.
     crate::diag::vlog!(
@@ -95,6 +98,7 @@ pub fn set_wanted(on: bool) {
         "turned {}{}",
         if on { "on" } else { "off" },
         if on {
+            // After the ask: a bundle-less build is known by now.
             if system_can_show() {
                 " (the notification center)"
             } else {
@@ -104,9 +108,6 @@ pub fn set_wanted(on: bool) {
             ""
         }
     );
-    if on {
-        prepare();
-    }
 }
 
 /// Ready the platform: on macOS, the permission asked (once; a later call

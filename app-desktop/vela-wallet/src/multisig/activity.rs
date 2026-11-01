@@ -45,7 +45,10 @@ pub fn worded(e: &Value, loc: &Loc, token: &dyn Fn(u64, Option<&str>) -> TokenIn
             loc,
             action.as_ref(),
             &nonce,
-            &|a: &str| words::short(a),
+            // r11-6: a member named as every title names one (the core's
+            // `names::who`, with its one label) — never a bare short form
+            // where the other surfaces say "Interleave (0x88cCA0…266894)".
+            &|a: &str| words::who(a, crate::multisig::shown::label(a).as_deref()),
             &|t: Option<&str>| token(chain_id, t),
         )
     };

@@ -1982,7 +1982,7 @@ mod tests {
             format!(
                 "{} · {}",
                 s.status_unknown,
-                crate::wallet::fill(&s.to_name, "name", "0xAbCd…0001")
+                crate::wallet::fill(&s.to_name, "name", "0xaBCdEf…000001")
             )
         );
         assert_eq!(
@@ -2345,7 +2345,7 @@ mod tests {
         );
         assert_eq!(
             super::shorten_address("0xAbCd000000000000000000000000000000000001"),
-            "0xAbCd…0001"
+            "0xaBcd00…000001"
         );
         assert_eq!(super::shorten_address(""), "");
     }
@@ -4939,9 +4939,10 @@ pub(crate) fn amount_text(item: &FeedItem, incoming: bool) -> SharedString {
     } else {
         ""
     };
+    // r11 S4: signed the one way money is signed (`l10n::signed_amount_text`).
     SharedString::from(format!(
-        "{about}{}{formatted}",
-        if incoming { "+" } else { "\u{2212}" }
+        "{about}{}",
+        vela_core::l10n::signed_amount_text(&formatted, Some(!incoming))
     ))
 }
 
@@ -4951,6 +4952,12 @@ pub(crate) fn amount_text(item: &FeedItem, incoming: bool) -> SharedString {
 /// panics, which took the desktop down on every launch while the row stayed
 /// on the disk (083 H2 review). An address is ASCII, so it reads as before.
 pub(crate) fn shorten_address(address: &str) -> String {
+    // r11-6: an address is said in the core's one short form (6+6, EIP-55)
+    // on every platform; anything else keeps the character cut below.
+    let hex = address.strip_prefix("0x").or_else(|| address.strip_prefix("0X"));
+    if hex.is_some_and(|h| h.len() == 40 && h.bytes().all(|b| b.is_ascii_hexdigit())) {
+        return vela_core::multisig_rules::names::short_address(address);
+    }
     let count = address.chars().count();
     if count <= 14 {
         return address.to_owned();
