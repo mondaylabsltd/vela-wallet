@@ -61,7 +61,7 @@ struct AccountFollowTests {
         // The home wears what is shown: the account, or a multisig shown
         // over it (restored before the account signed in at launch).
         #expect(follow.contains("let shown = shownMultisig?.account.address ?? address"))
-        #expect(follow.contains("wallet.open(address: shown)"), "the balances and assets stay on the previous account")
+        #expect(follow.contains { $0.hasPrefix("wallet.open(address: shown") }, "the balances and assets stay on the previous account")
         #expect(follow.contains { $0.hasPrefix("activity.open(address: shown") }, "the activity stays on the previous account")
         #expect(follow.contains("contacts.open(myAddress: address)"))
     }

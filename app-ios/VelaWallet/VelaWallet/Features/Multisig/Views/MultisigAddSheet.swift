@@ -102,7 +102,7 @@ struct MultisigAddSheet: View {
     private func inviteFacts(_ invite: MsLinkStand) -> some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s8) {
             if !linkChains.isEmpty {
-                MsNote(text: words.t("add.usedOn", ["networks": linkChains.map(networkName).joined(separator: ", ")]))
+                MsNote(text: words.t("add.usedOn", ["networks": words.loc.list(linkChains.map(networkName))]))
             }
             // core-ms-2: an invite naming a network this device lacks.
             if let missing = hub.accountsView.invite?["missing"]?.int {

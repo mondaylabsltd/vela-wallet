@@ -64,10 +64,6 @@ final class ActivityExecutor {
     /// NULL on iOS 17 (087 F33).
     typealias ChainRead = @MainActor (_ chainId: Int, _ method: String, _ params: [Any]) async -> RpcOutcome
 
-    /// The chains a brand-new wallet is watched on, so a first receipt is
-    /// still caught before it holds anything. Mirrored from
-    /// `token_trust.rs`'s `DEFAULT_MONITOR_CHAINS`.
-    static let defaultMonitorChains = [1, 56, 137, 42_161, 8_453, 100]
 
     /// Symbols treated as ≈ $1 so a stablecoin receipt is never stored as
     /// "$0.00". Copied verbatim from `activity_feed.rs`'s `STABLE_SYMBOLS`.
@@ -89,6 +85,13 @@ final class ActivityExecutor {
     /// The chain, for a receipt's block time: the pool `token_trust` scans
     /// through (`TokenTrustStore.chainRead`), unless a test hands its own.
     private let read: ChainRead
+    /// r9-12 / r10: the multisig accounts machine's names (`member_labels`)
+    /// — one name per address, this device's own accounts included.
+    var labels: @MainActor () -> [String: String] = { [:] }
+    /// r9-17: the networks a multisig lives on, by address (`account_networks`
+    /// of the scan's facts) — none for a Vela account.
+    var accountNetworks: @MainActor (String) -> [Int] = { _ in [] }
+
     /// One scan per account at a time. The shell issues this from three places
     /// that can overlap — the account hand-off, the focus tick and the 10s
     /// poll — and a follower answering the leader's count would make the core
@@ -203,28 +206,27 @@ final class ActivityExecutor {
 
     // MARK: - Receipt discovery
 
-    /// The chains a receipt scan reads (the web's `syncReceivedTransfers`):
-    /// those the account holds something on; else the main payment chains
-    /// if the space in front has any of them; else the space's own networks
-    /// — its first `nativeWatchFallback` and every one the person added.
-    static func scanChains(active: [Int], space: Space) -> [Int] {
-        if !active.isEmpty { return active }
-        if defaultMonitorChains.contains(where: space.all.contains) { return defaultMonitorChains }
-        var out: [Int] = []
-        for id in space.added + Array(space.all.prefix(nativeWatchFallback)) where !out.contains(id) {
-            out.append(id)
-        }
-        return out.isEmpty ? defaultMonitorChains : out
-    }
-
-    /// The space in front: every network, and those the person added.
+    /// The space in front: every network (in list order), and those the
+    /// person added.
     struct Space: Equatable {
         var all: [Int]
         var added: [Int]
     }
 
-    /// The web's `NATIVE_WATCH_FALLBACK`.
-    static let nativeWatchFallback = 6
+    /// r9-17: what this device knows when it scans `address` — facts, no
+    /// choice. Which networks are scanned, how far back and how often is the
+    /// core's (`incoming_scan`), the same rule the web and the other apps run:
+    /// where it holds, where it lives (a multisig's networks — so its first
+    /// receipt on a network it holds nothing on yet is seen, Arc 8th in its
+    /// space or not), else the space's defaults.
+    static func scanFacts(held: [Int], accountNetworks: [Int], space: Space) -> [String: Any] {
+        [
+            "held_chain_ids": held,
+            "account_networks": accountNetworks.map { ["chain_id": $0, "deploy_block": NSNull()] as [String: Any] },
+            "space_chain_ids": space.all,
+            "added_chain_ids": space.added,
+        ]
+    }
 
     /// Discover and persist new receipts. Answers how many landed.
     private func scan(address: String) async -> Int {
@@ -232,17 +234,11 @@ final class ActivityExecutor {
         scanning.insert(address.lowercased())
         defer { scanning.remove(address.lowercased()) }
 
-        // Only the chains the wallet actually uses — twelve chains for an
-        // account that holds one is twenty-four `eth_getLogs` nobody asked for.
-        // With none held yet (a multisig just made, waiting for its first
-        // coin), the web's choice (r4a-17, r4D-18): the main payment chains
-        // when the space in front has them, else the space's own networks —
-        // never mainnets for an account that lives on Arc Testnet (r9-17).
-        let chainIds = Self.scanChains(
-            active: held.chainIds(address: address), space: spaceChains()
+        // r9-17: the facts; the networks, windows and backfill are the core's.
+        let facts = Self.scanFacts(
+            held: held.chainIds(address: address), accountNetworks: accountNetworks(address), space: spaceChains()
         )
-
-        let incoming = await trust.pollIncoming(address: address, chainIds: chainIds)
+        let incoming = await trust.scan(address: address, facts: facts)
         return ingest(incoming, address: address)
     }
 
@@ -360,6 +356,13 @@ final class ActivityExecutor {
     /// the same resolver the address book uses, so one address has one name.
     private func ownAccountName(_ addr: String) async -> String? {
         let wanted = addr.lowercased()
+        // r9-12 / r10: the one name the accounts machine gives the address
+        // (published, kept, own, short) — never a different one here.
+        if let label = labels()[wanted], !label.isEmpty,
+           label.caseInsensitiveCompare(AddressText.short(addr)) != .orderedSame,
+           label != MsRules.string("names.short", ["address": addr]) {
+            return label
+        }
         for account in await accounts.loadAccounts() {
             guard let address = account["address"] as? String,
                   address.lowercased() == wanted,

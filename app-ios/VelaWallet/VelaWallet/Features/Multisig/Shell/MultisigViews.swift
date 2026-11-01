@@ -172,6 +172,11 @@ struct MsAccountRow: Decodable, Equatable, Identifiable {
     /// members now; a name only where one is known, and the kind) — the
     /// link door's `addLink` takes them as they are.
     var inviteMembers: MsJSON
+    /// r9-14: the rule every surface draws for it (`MultisigRowRule`): the
+    /// chip as the chains last said (`from_chain`), else the founding one;
+    /// `last_known` when no chain read this session said it. `nil` from a
+    /// core without the field.
+    var rule: MsJSON?
 
     var id: String { account.id }
 
@@ -188,6 +193,7 @@ struct MsAccountRow: Decodable, Equatable, Identifiable {
         checkingOn = c.soft(MsKey("checking_on"), [])
         inviteShared = c.soft(MsKey("invite_shared"), false)
         inviteMembers = c.soft(MsKey("invite_members"), MsJSON.array([]))
+        rule = c.soft(MsKey("rule"))
     }
 }
 

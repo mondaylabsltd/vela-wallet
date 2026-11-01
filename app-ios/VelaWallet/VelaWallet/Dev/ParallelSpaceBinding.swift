@@ -189,7 +189,11 @@ final class ParallelSpaceBinding: ParallelSpaceProvider {
         let signedInWith = fixtures.first { $0.index == preferredSigner } ?? first
         let record: [String: Any] = [
             "id": first.credentialIdHex,
-            "name": first.name,
+            // r9-12 / r10: the multi-key wallet is named what the passkey
+            // index publishes for it ("Interleave", `fixtureMultiName`) —
+            // never a key's own name, so two addresses never share one. A
+            // single-key Safe keeps its key's ("Parallel One").
+            "name": single == nil ? fixtureMultiName() : first.name,
             "address": address,
             "public_key_hex": first.publicKeyHex,
             "created_at_iso": ISO8601DateFormatter().string(from: Date()),

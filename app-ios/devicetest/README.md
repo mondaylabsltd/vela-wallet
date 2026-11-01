@@ -37,9 +37,10 @@ What the device-test build gives up, and why that is right:
 - **Widgets** read nothing (no app group — the store app's group would show
   this build's balance on the owner's widget).
 
-**Local services.** The app sends plain `http` only to localhost
-(`CoreHTTP`, the core's `is_localhost_http`), so a harness on the Mac's LAN
-address is refused for RPC and the relay. Reach it over the cable instead, as
+**Local services.** The app sends plain `http` (and `ws`) only to localhost
+— one rule, `CoreHTTP.allowsTransport` over the core's `is_localhost_http` —
+so a harness on the Mac's LAN address is refused for RPC, the relay, the
+multisig service and its PeerConnect rooms alike. Reach it over the cable instead, as
 Android's `adb reverse` does: start the hand with
 `TEST_RUNNER_VELA_DEVICE_HAND_REVERSE="9545,9587,9590"` and run
 `python3 app-ios/devicetest/reverse.py <udid> 9545 9587 9590` on the Mac;

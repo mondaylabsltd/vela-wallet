@@ -216,6 +216,35 @@ enum WalletLive {
         return copy
     }
 
+    /// Whether the balance view is the shown account's. Real-device S3: a
+    /// switch to a multisig drew the previous account's total for a moment —
+    /// the home names the new account a frame before the balance machine
+    /// has been told of it, and its view still holds the old one's figure.
+    static func isFor(_ view: BalanceViewWire, address: String) -> Bool {
+        guard let scoped = view.address, !scoped.isEmpty, !address.isEmpty else { return false }
+        return scoped.caseInsensitiveCompare(address) == .orderedSame
+    }
+
+    /// The home while the balance machine has not yet been told of the
+    /// account it names: no figure, no "Updated" stamp, no rows — the
+    /// skeleton the core's first read of an account draws — never another
+    /// account's money under this one's name. The activity stays (it is the
+    /// feed's, scoped on its own).
+    static func awaitingAccount(_ model: WalletHomeModel) -> WalletHomeModel {
+        var copy = model
+        copy.balance = BalanceModel(
+            label: model.balance.label, currency: model.balance.currency, state: .loading,
+            a11yHide: model.balance.a11yHide, a11yShow: model.balance.a11yShow,
+            refresh: nil
+        )
+        copy.assetRows = []
+        copy.assetsSection = SectionModel(
+            title: model.assetsSection.title, action: model.assetsSection.action,
+            mode: .loading, empty: model.assetsSection.empty
+        )
+        return copy
+    }
+
     /// The home Activity's empty line, as the core chose it (spec 082 RG5):
     /// "nothing yet" with its caption, or — the feed narrowed to one chain —
     /// "nothing on this network" alone.

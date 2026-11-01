@@ -1068,7 +1068,7 @@ enum SettingsLive {
     static func moreNetworks(_ view: NetViewWire, loc: Loc) -> String? {
         let names = view.hiddenVelaChainIds.map { ChainCatalog.meta($0)?.displayName ?? "\($0)" }
         guard !names.isEmpty else { return nil }
-        return loc.t("settingsModals.network.moreNetworks", vars: ["names": names.joined(separator: ", ")])
+        return loc.t("settingsModals.network.moreNetworks", vars: ["names": loc.list(names)])
     }
 
     static let velaNetworkKey = "settingsModals.addNetwork.velaNetwork"

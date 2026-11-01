@@ -206,8 +206,11 @@ final class BalanceExecutor {
         // twelve identical calls to Ethereum on every cold refresh.
         let chainlinkPrices = await prices.mainnetPrices()
 
+        // r10-1: every network this round asks — said as such, failed ones
+        // included (`read_chain_ids`), whatever comes back.
+        let asked = chainIds()
         let results = await withTaskGroup(of: TokenReads.ChainResult.self) { group in
-            for chainId in chainIds() {
+            for chainId in asked {
                 let tokens = customTokens(chainId: chainId)
                 let documentOf = chainDocument
                 let deadline = chainDeadlineMs
@@ -274,7 +277,9 @@ final class BalanceExecutor {
             "rate_limited_chain_ids": results.filter(\.rateLimited).map(\.chainId),
             // Spec 092: every chain this round asked, so one that answered
             // holding nothing is "nothing when last read", not "not read yet".
-            "read_chain_ids": results.map(\.chainId),
+            // r10-1: every network asked, failed ones included — the stamp
+            // moves only when the account's own networks among them answered.
+            "read_chain_ids": asked,
             // A subset of the failed ones, as the throttled are: Vela's own
             // fault, which the home says as that — never "Can't reach
             // Ethereum" (issue 483, PR 2 note 11).
@@ -289,6 +294,9 @@ final class BalanceExecutor {
             // pool's lists, as the rate-limited ones are.
             "own_node_chain_ids": Self.ownNodeChains(failed: failedChains, poolViewJson: pool.viewJson),
             "fallback_chain_ids": pool.fallbackChains,
+            // r10-1: every row here was read now from the networks — this
+            // executor keeps no token cache to answer from (`read_at_ms`).
+            "read_at_ms": NSNull(),
             "now_ms": Date().timeIntervalSince1970 * 1000,
         ])
     }

@@ -96,6 +96,10 @@ final class MultisigLive: MultisigPorts {
         guard let target = URL(string: url) else {
             throw MultisigWalletRefusal(code: nil, message: "not a URL: \(url)")
         }
+        // Real-device S3: the RPC's rule, not a looser one — https, or plain
+        // http to this device only. A LAN address over plain http is refused
+        // here as it is for a node (answered `http_unreachable`).
+        if let refusal = Self.transportRefusal(url) { throw refusal }
         var request = URLRequest(url: target, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData)
         request.httpMethod = method
         request.timeoutInterval = max(1, Double(timeoutMs) / 1000)
@@ -110,6 +114,13 @@ final class MultisigLive: MultisigPorts {
             retryAfter: http?.value(forHTTPHeaderField: "retry-after"),
             body: String(decoding: data, as: UTF8.self)
         )
+    }
+
+    /// The app's one transport rule (`CoreHTTP.allowsTransport`), as the
+    /// refusal the multisig service's `http` answers with; `nil` when the
+    /// URL may be sent to.
+    nonisolated static func transportRefusal(_ url: String) -> MultisigWalletRefusal? {
+        CoreHTTP.allowsTransport(url) ? nil : MultisigWalletRefusal(code: nil, message: "not https: \(url)")
     }
 
     // MARK: - RPC
@@ -204,7 +215,8 @@ final class MultisigLive: MultisigPorts {
         } catch let refused as UserOpSpine.Refused {
             return Self.passkeyAnswer(refused.failure)
         } catch {
-            return Self.passkeyFailed(.unknown(MultisigExecutor.describe(error)))
+            // Real-device S3: the core's words for the platform's error.
+            return Self.passkeyFailed(Self.passkeyError(error))
         }
     }
 
@@ -236,7 +248,11 @@ final class MultisigLive: MultisigPorts {
             keyRouteJson: plan?.key?.json,
             // r9-10: the review asks for "… anyway" — the page says
             // "Approve anyway" in the danger style, as the app does.
-            anyway: purpose["anyway"] as? Bool ?? false
+            anyway: purpose["anyway"] as? Bool ?? false,
+            // r10: the members now and the rule, so a member change reads
+            // before → after on the page.
+            owners: purpose["owners"] as? [String],
+            threshold: (purpose["threshold"] as? NSNumber).map { UInt64(truncating: $0) }
         )
         guard let request = try? trustedSignerApprovalRequest(input: input) else {
             return Self.passkeyFailed(.pageSignFailed(page: "not_opened", message: nil))
@@ -257,6 +273,14 @@ final class MultisigLive: MultisigPorts {
             if notice == .closed { return ["type": "passkey_cancelled"] }
             return Self.passkeyFailed(.pageSignFailed(page: notice.pageFailure ?? "refused", message: nil))
         }
+    }
+
+    /// A passkey ceremony's error as the core reads it (`passkey_error_words`):
+    /// its failure, and the corpus key the sheet says — never the system's
+    /// "domain code: description".
+    static func passkeyError(_ error: Error) -> MultisigShellFailure {
+        let words = PasskeyErrorFacts.of(error).words
+        return .passkey(failure: words.failure, timedOut: words.kind == .timedOut, message: words.key)
     }
 
     static func passkeyFailed(_ failure: MultisigShellFailure) -> [String: Any] {
@@ -390,6 +414,8 @@ final class MultisigLive: MultisigPorts {
             "multisig": purpose["multisig"] ?? NSNull(),
             "name": purpose["name"] ?? NSNull(),
             "threshold": purpose["threshold"] ?? NSNull(),
+            // r10: its members now, for a member change's before → after.
+            "owners": purpose["owners"] ?? [],
         ]
     }
 
@@ -441,9 +467,23 @@ final class MultisigLive: MultisigPorts {
         let legs = (op["calls"] as? [[String: Any]] ?? []).map {
             SimDeltas.Call(to: $0["to"] as? String ?? "", value: Self.decimal($0["value"]), data: $0["data"] as? String ?? "0x")
         }
-        guard let payload = SimDeltas.payload(from: from, calls: legs) else { return nil }
+        guard let payload = Self.simulatePayload(from: from, calls: legs, stateOverrides: op["state_overrides"]) else { return nil }
         let answer = await deps.pool.call(chainId: chainId, method: "eth_simulateV1", params: payload, kind: "rpc")
         return SigningController.simReply(answer)
+    }
+
+    /// `eth_simulateV1`'s params, with the core's `state_overrides` put AS
+    /// IS into the first block's `stateOverrides` (real-device S2: an
+    /// undeployed multisig placed as its deployment leaves it, so its first
+    /// transaction is not "expected to fail").
+    static func simulatePayload(from: String, calls: [SimDeltas.Call], stateOverrides: Any?) -> [Any]? {
+        guard var body = SimDeltas.body(from: from, calls: calls) else { return nil }
+        if let overrides = stateOverrides as? [String: Any], !overrides.isEmpty,
+           var blocks = body["blockStateCalls"] as? [[String: Any]], !blocks.isEmpty {
+            blocks[0]["stateOverrides"] = overrides
+            body["blockStateCalls"] = blocks
+        }
+        return [body, "latest"]
     }
 
     func recipientFacts(_ op: [String: Any]) async -> (isContract: Bool?, firstTime: Bool?) {

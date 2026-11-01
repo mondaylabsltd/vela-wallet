@@ -106,9 +106,12 @@ struct ConnectionPanelView: View {
                             Text(verbatim: connection.account.name)
                                 .typeRole(Typography.rowTitle.literal.scaled(textScale))
                                 .foregroundStyle(theme.fgBase)
-                            Text(verbatim: connection.account.address)
-                                .typeRole(Typography.monoSmall.scaled(textScale))
-                                .foregroundStyle(theme.fgMuted)
+                            // r10-9: an unnamed account is its address — once.
+                            if connection.account.address != connection.account.name {
+                                Text(verbatim: connection.account.address)
+                                    .typeRole(Typography.monoSmall.scaled(textScale))
+                                    .foregroundStyle(theme.fgMuted)
+                            }
                         }
                         Spacer(minLength: Tokens.Space.s12)
                         HStack(spacing: Tokens.Space.s4) {
@@ -225,13 +228,16 @@ struct ConnectionPanelView: View {
                             .contentShape(RoundedRectangle(cornerRadius: Tokens.Radius.r12))
                     }
                     .buttonStyle(.plain)
+                    // Connecting moves no value and signs nothing: the
+                    // neutral inverse ink, never the accent (design rule 8,
+                    // app-web CLAUDE.md rule 4).
                     Button(action: onApprove) {
                         Text(verbatim: consent.approve)
                             .typeRole(Typography.button.scaled(textScale))
-                            .foregroundStyle(theme.onAccent)
+                            .foregroundStyle(theme.fgInverse)
                             .frame(maxWidth: .infinity)
                             .frame(height: Tokens.Control.lg)
-                            .background(theme.accentBase, in: RoundedRectangle(cornerRadius: Tokens.Radius.r12))
+                            .background(theme.fgBase, in: RoundedRectangle(cornerRadius: Tokens.Radius.r12))
                             .contentShape(RoundedRectangle(cornerRadius: Tokens.Radius.r12))
                     }
                     .buttonStyle(.plain)

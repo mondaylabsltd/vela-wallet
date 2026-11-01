@@ -137,7 +137,7 @@ final class MultisigNotifier {
             if let before, item.approved > before {
                 notes.append(Note(
                     id: "ms-counted-\(item.id)-\(item.approved)", title: followedName,
-                    body: "\(words.actionTitleNow(chainId: item.chainId, action: item.action, nonce: item.nonce)) · "
+                    body: "\(words.title(item, safe: proposals.followed)) · "
                         + words.t("status.progress", ["approved": String(item.approved), "threshold": String(item.threshold)]),
                     chainId: item.chainId, safeTxHash: item.safeTxHash, address: proposals.followed
                 ))

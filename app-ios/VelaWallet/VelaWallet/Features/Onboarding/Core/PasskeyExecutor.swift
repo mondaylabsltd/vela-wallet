@@ -35,6 +35,41 @@ enum FailureKind: String {
 struct PasskeyFailure: Error {
     let kind: FailureKind
     let message: String
+    /// Real-device S3: the platform error's facts (its domain and code),
+    /// from which the core names the sentence a sheet draws
+    /// (`passkey_error_words`) — never the system's English in a translated
+    /// sheet. `nil` for a failure this app wrote itself.
+    var facts: PasskeyErrorFacts? = nil
+}
+
+/// A platform passkey error's facts, as the core reads them
+/// (`passkey_error::PasskeyErrorFacts`).
+struct PasskeyErrorFacts: Equatable {
+    var domain: String
+    var code: Int?
+    var message: String
+
+    static let platform = "ios"
+
+    /// The facts of any error: an `NSError`'s domain and code.
+    static func of(_ error: Error) -> PasskeyErrorFacts {
+        if let failure = error as? PasskeyFailure {
+            return failure.facts ?? PasskeyErrorFacts(domain: "", code: nil, message: failure.message)
+        }
+        let ns = error as NSError
+        return PasskeyErrorFacts(domain: ns.domain, code: ns.code, message: ns.localizedDescription)
+    }
+
+    /// The wire object `passkey_failed.error` carries.
+    var wire: [String: Any] {
+        ["platform": Self.platform, "domain": domain, "code": code.map { $0 as Any } ?? NSNull(), "message": message]
+    }
+
+    /// The core's words for these facts: the kind, the corpus key a sheet
+    /// draws, and the failure the machines branch on.
+    var words: PasskeyErrorWords {
+        passkeyErrorWords(platform: Self.platform, domain: domain, code: code.map { Int32(clamping: $0) }, message: message)
+    }
 }
 
 /// A completed registration, in the core's hex vocabulary.
@@ -540,25 +575,16 @@ extension PasskeyExecutor: ASAuthorizationControllerDelegate {
         finish(.failure(Self.classify(error)))
     }
 
-    /// The platform's error, in the core's vocabulary.
+    /// The platform's error, in the core's vocabulary: its kind is the
+    /// core's reading of the error's facts (`passkey_error_words`, real-device
+    /// S3 — one rule on every platform), and the facts ride along so the
+    /// sheet says the core's sentence, never the system's English.
     static func classify(_ error: Error) -> PasskeyFailure {
         if let failure = error as? PasskeyFailure { return failure }
-        guard let authError = error as? ASAuthorizationError else {
-            return PasskeyFailure(kind: .other, message: error.localizedDescription)
-        }
-        switch authError.code {
-        case .canceled:
-            return PasskeyFailure(kind: .cancelled, message: "User cancelled the operation")
-        case .notHandled, .notInteractive:
-            // The system declined to show anything. On a device with no
-            // credential and no way to make one, that is "this device will not
-            // do it", which is what `not_supported` is for.
-            return PasskeyFailure(kind: .notSupported, message: authError.localizedDescription)
-        case .failed, .invalidResponse, .unknown:
-            return PasskeyFailure(kind: .other, message: authError.localizedDescription)
-        @unknown default:
-            return PasskeyFailure(kind: .other, message: authError.localizedDescription)
-        }
+        let facts = PasskeyErrorFacts.of(error)
+        let kind = FailureKind(rawValue: facts.words.failure) ?? .other
+        let message = kind == .cancelled ? "User cancelled the operation" : facts.message
+        return PasskeyFailure(kind: kind, message: message, facts: facts)
     }
 }
 

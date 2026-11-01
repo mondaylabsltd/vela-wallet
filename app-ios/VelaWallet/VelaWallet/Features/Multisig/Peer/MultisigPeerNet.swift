@@ -51,11 +51,16 @@ final class URLSessionPeerNet: MultisigPeerNet {
     static let shared = URLSessionPeerNet()
 
     func open(url: URL, events: @escaping @MainActor (PeerSocketEvent) -> Bool) -> any PeerSocket {
-        URLSessionPeerSocket(url: url, events: events)
+        // A relay off this device over plain `ws://` is refused as a node over
+        // plain `http://` is (`CoreHTTP.allowsTransport`): a failed connection.
+        guard CoreHTTP.allowsTransport(url.absoluteString) else { return RefusedPeerSocket(events: events) }
+        return URLSessionPeerSocket(url: url, events: events)
     }
 
     func post(url: String, body: String?) async -> (status: Int?, body: String) {
         guard let target = URL(string: url) else { return (nil, "not a URL") }
+        // The app's one transport rule (`CoreHTTP.allowsTransport`).
+        guard CoreHTTP.allowsTransport(url) else { return (nil, "not https: \(url)") }
         var request = URLRequest(url: target)
         request.httpMethod = "POST"
         request.timeoutInterval = 15
@@ -70,6 +75,19 @@ final class URLSessionPeerNet: MultisigPeerNet {
             return (nil, error.localizedDescription)
         }
     }
+}
+
+/// A connection the transport rule refused: it closes at once, as a relay
+/// that never answered does.
+@MainActor
+final class RefusedPeerSocket: PeerSocket {
+    init(events: @escaping @MainActor (PeerSocketEvent) -> Bool) {
+        Task { @MainActor in _ = events(.closed(code: nil)) }
+    }
+
+    func send(_ data: Data) {}
+    func send(text: String) {}
+    func close() {}
 }
 
 @MainActor

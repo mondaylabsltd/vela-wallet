@@ -77,10 +77,11 @@ struct MultisigSettingsSheet: View {
             HStack(spacing: Tokens.Space.s12) {
                 IdenticonAvatar(seed: row.account.address, size: 40, tappable: false)
                 VStack(alignment: .leading, spacing: Tokens.Space.s2) {
-                    Text(verbatim: words.ruleTitle(m: row.account.threshold, n: row.account.owners.count))
+                    // r9-14: the rule as the chains said it (`AccountRow.rule`).
+                    Text(verbatim: words.rowRule(row).title)
                         .typeRole(Typography.fieldLabel.scaled(textScale))
                         .foregroundStyle(theme.fgBase)
-                    Text(verbatim: row.account.chainIds.map(words.network).joined(separator: ", "))
+                    Text(verbatim: words.loc.list(row.account.chainIds.map(words.network)))
                         .typeRole(Typography.rowSub.scaled(textScale))
                         .foregroundStyle(theme.fgSubtle)
                 }
@@ -133,9 +134,21 @@ struct MultisigSettingsSheet: View {
         }
     }
 
+    /// A member's name as the core gave it — `nil` when the core names it by
+    /// its short address alone: that is no name, and the row says the
+    /// address once, never "0x031d…772b / 0x031d…772b" (r10, r9-12).
+    static func memberName(_ given: String?, address: String) -> String? {
+        guard let given, !given.isEmpty, given.caseInsensitiveCompare(MsWords.short(address)) != .orderedSame,
+              given != MsRules.string("names.short", ["address": address])
+        else { return nil }
+        return given
+    }
+
     private func memberLine(_ member: MsJSON, added: Bool = false, removed: Bool = false) -> some View {
         let address = member["address"]?.string ?? ""
-        let name = member["name"]?.string ?? words.localName(address) ?? words.keptName(address)
+        let short = MsWords.short(address)
+        let name = Self.memberName(member["name"]?.string, address: address)
+            ?? words.localName(address) ?? words.keptName(address)
         var tags: [String] = []
         if member["on_device"]?.bool == true || words.localName(address) != nil { tags.append(words.t("panel.thisDevice")) }
         if added { tags.append(words.t("settings.added")) }
@@ -143,13 +156,16 @@ struct MultisigSettingsSheet: View {
         return HStack(spacing: Tokens.Space.s12) {
             IdenticonAvatar(seed: address, size: 28, tappable: false)
             VStack(alignment: .leading, spacing: Tokens.Space.s2) {
-                Text(verbatim: name ?? MsWords.short(address))
-                    .typeRole(Typography.fieldLabel.scaled(textScale))
+                Text(verbatim: name ?? short)
+                    .typeRole((name == nil ? Typography.monoSmall : Typography.fieldLabel).scaled(textScale))
                     .foregroundStyle(removed ? theme.fgSubtle : theme.fgBase)
                     .strikethrough(removed)
-                Text(verbatim: ([MsWords.short(address)] + tags).joined(separator: " · "))
-                    .typeRole(Typography.rowSub.scaled(textScale))
-                    .foregroundStyle(theme.fgSubtle)
+                let sub = (name == nil ? [] : [short]) + tags
+                if !sub.isEmpty {
+                    Text(verbatim: sub.joined(separator: " · "))
+                        .typeRole(Typography.rowSub.scaled(textScale))
+                        .foregroundStyle(theme.fgSubtle)
+                }
             }
         }
         .padding(.vertical, Tokens.Space.s4)
@@ -322,11 +338,16 @@ struct MultisigMembersSheet: View {
             MsSection(title: words.t("panel.members")) {
                 ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                     let address = row["address"]?.string ?? ""
-                    let name = row["name"]?.string ?? words.label(address)
+                    let name = MultisigSettingsSheet.memberName(row["name"]?.string, address: address) ?? words.label(address)
+                    let short = MsWords.short(address)
                     HStack {
                         VStack(alignment: .leading, spacing: Tokens.Space.s2) {
-                            Text(verbatim: name).typeRole(Typography.fieldLabel.scaled(textScale))
-                            Text(verbatim: MsWords.short(address)).typeRole(Typography.monoSmall.scaled(textScale)).foregroundStyle(theme.fgSubtle)
+                            // An unnamed member is its address — once.
+                            Text(verbatim: name)
+                                .typeRole((name == short ? Typography.monoSmall : Typography.fieldLabel).scaled(textScale))
+                            if name != short {
+                                Text(verbatim: short).typeRole(Typography.monoSmall.scaled(textScale)).foregroundStyle(theme.fgSubtle)
+                            }
                         }
                         Spacer()
                         Menu {
@@ -594,19 +615,9 @@ struct MultisigInviteSheet: View {
 struct MsQrView: View {
     let modules: [[Bool]]
 
+    /// Real-device S3: whole-pixel modules (`QrModulesView`), not a
+    /// fraction of a point each — a screenshot of the invite decodes.
     var body: some View {
-        Canvas { context, size in
-            let width = modules.count
-            guard width > 0 else { return }
-            let quiet = 2
-            let cell = min(size.width, size.height) / CGFloat(width + quiet * 2)
-            context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.white))
-            for (row, line) in modules.enumerated() {
-                for (col, on) in line.enumerated() where on {
-                    let rect = CGRect(x: CGFloat(col + quiet) * cell, y: CGFloat(row + quiet) * cell, width: cell, height: cell)
-                    context.fill(Path(rect), with: .color(.black))
-                }
-            }
-        }
+        QrModulesView(modules: modules, quiet: 2)
     }
 }

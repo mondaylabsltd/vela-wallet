@@ -192,18 +192,37 @@ final class WalletStore {
     ///
     /// The privacy state is hydrated **before** the account, so a person who
     /// hid their balance never sees it flash on a cold start.
-    func open(address: String) {
+    /// `livesOn`: the networks the account lives on though it may hold
+    /// nothing there (a multisig's networks; r10-1) — said to the core
+    /// before the switch, so the "Updated" stamp speaks for them.
+    func open(address: String, livesOn: [Int]? = nil) {
         guard !address.isEmpty else { return }
         if core.boot(CoreJSON.string(["type": "privacy_hydrated",
                                       "hidden": executor.hiddenAtLaunch])) {
             scopedTo = nil
+            saidLivesOn = [:]
         }
+        if let livesOn { self.livesOn(address: address, chainIds: livesOn) }
         guard scopedTo != address else { return }
         scopedTo = address
         core.dispatch(CoreJSON.string(["type": "account_changed", "address": address]))
         // Assets opens on the rows kept from the last visit, not a skeleton.
         restoreRows()
     }
+
+    /// r10-1 (`lives_on`): the networks `address` lives on — a multisig's
+    /// networks — the core's stamp speaks for, with those it holds something
+    /// on. Said again only when they change; the last word stands.
+    func livesOn(address: String, chainIds: [Int]) {
+        let key = address.lowercased()
+        let chains = chainIds.sorted()
+        guard saidLivesOn[key] != chains else { return }
+        saidLivesOn[key] = chains
+        core.dispatch(CoreJSON.string(["type": "lives_on", "address": address, "chain_ids": chains]))
+    }
+
+    /// What `lives_on` last said, per lowercase address.
+    @ObservationIgnored private var saidLivesOn: [String: [Int]] = [:]
 
     /// Pull to refresh. `pull` is carried so the core can tell a person's own
     /// gesture from a background refresh and answer it differently.
@@ -253,6 +272,43 @@ final class WalletStore {
     func autoRefresh() {
         core.dispatch(Self.autoRefreshEvent)
     }
+
+    /// r10-1: a network came back — a call to it answered after calls to it
+    /// went unanswered, or the balance's own last read could not reach it —
+    /// and the balance reads again now. Nothing else would: the home's poll
+    /// is ten minutes, and the core's recovery ladder is armed only by a
+    /// read of its own that failed, so after an outage the multisig's polls
+    /// noticed the home said "Updated 5m" over a network back for three
+    /// minutes. The read and what it stamps are the core's; this only says
+    /// when. Once per network a minute, never while a round is out.
+    @discardableResult
+    func chainOutcome(_ chainId: Int, reached: Bool, nowMs: Double = Date().timeIntervalSince1970 * 1000) -> Bool {
+        let view = balance
+        guard recovery.observe(
+            chainId, reached: reached,
+            unreadable: view.map(Self.unreadable) ?? [], home: view.map(home) ?? [],
+            refreshing: view?.refreshing ?? false, nowMs: nowMs
+        ), view != nil else { return false }
+        refresh(pull: false)
+        return true
+    }
+
+    /// The networks the shown account lives on — the ones the core's stamp
+    /// speaks for (`balance_dashboard::home_chains`): those said with
+    /// `lives_on`, and those it holds something on. One rule for when the
+    /// stamp moves and when a network coming back reads it again.
+    private func home(_ view: BalanceViewWire) -> Set<Int> {
+        let said = view.address.flatMap { saidLivesOn[$0.lowercased()] } ?? []
+        return Set(said).union(view.tokens.map(\.chainId))
+    }
+
+    /// The networks the balance's last read could not reach (the core's
+    /// failed and unreachable lists).
+    static func unreadable(_ view: BalanceViewWire) -> Set<Int> {
+        Set(view.failedChainIds).union(view.unreachableNetworks.map(\.chainId))
+    }
+
+    @ObservationIgnored private var recovery = RecoveryNudge()
 
     static let autoRefreshEvent = CoreJSON.string([
         "type": "refresh_requested", "force": false, "pull": false,
@@ -343,4 +399,33 @@ final class WalletStore {
 
     func appFocused() { core.dispatch(CoreJSON.string(["type": "app_focused"])) }
     func appBackgrounded() { core.dispatch(CoreJSON.string(["type": "app_backgrounded"])) }
+}
+
+/// When a network's answer reads the balance again (r10-1): a network that
+/// came back — calls to it went unanswered and one now answered — that the
+/// account lives on (`home`, the networks the core's stamp speaks for; any
+/// network while it lives on none), or one the balance's last read could not
+/// reach, answering. Not while a round is out, and once per network a
+/// minute, so a network the balance still cannot read (its token list, say)
+/// is not asked again on every call that reaches it.
+struct RecoveryNudge {
+    static let gapMs: Double = 60_000
+    /// Networks whose last call went unanswered (not rate limited).
+    private(set) var down: Set<Int> = []
+    private(set) var nudged: [Int: Double] = [:]
+
+    mutating func observe(
+        _ chainId: Int, reached: Bool, unreadable: Set<Int>, home: Set<Int> = [], refreshing: Bool, nowMs: Double
+    ) -> Bool {
+        guard reached else {
+            down.insert(chainId)
+            return false
+        }
+        let cameBack = down.remove(chainId) != nil && (home.isEmpty || home.contains(chainId))
+        guard cameBack || unreadable.contains(chainId), !refreshing,
+              nowMs - (nudged[chainId] ?? -.infinity) >= Self.gapMs
+        else { return false }
+        nudged[chainId] = nowMs
+        return true
+    }
 }

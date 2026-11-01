@@ -1962,7 +1962,7 @@ enum SendLive {
                 // The core's verdict, passed on: every published row is drawn,
                 // and the ones that cannot pay are drawn as that.
                 insufficient: option.insufficient,
-                insufficientNote: loc.t("send.warnInsufficientGas", vars: ["sym": option.symbol])
+                insufficientNote: option.shortSentence(loc)
             )
         }
         return FeeTokenPickModel(

@@ -101,6 +101,33 @@ struct MsWords {
         n == 1 ? t("panel.chipSolo") : t("panel.chip", ["m": String(m), "n": String(n)])
     }
 
+    /// r9-14: a `MultisigRuleChip` as its chip says it — "Needs 2 of 4",
+    /// "One member", or that the rule differs by network — never the
+    /// record's founding numbers when the core gave one.
+    func chipText(_ chip: MsJSON?, fallback account: MsAccount) -> String {
+        guard let chip, !chip.isNull else { return ruleChip(m: account.threshold, n: account.owners.count) }
+        if chip.kind == "differs" { return t("presence.ruleDiffers") }
+        let rule = chip["rule"]
+        return ruleChip(m: rule?["m"]?.int ?? account.threshold, n: rule?["n"]?.int ?? account.owners.count)
+    }
+
+    /// The same, as a title ("Needs 2 of 4 members").
+    func chipTitle(_ chip: MsJSON?, fallback account: MsAccount) -> String {
+        guard let chip, !chip.isNull else { return ruleTitle(m: account.threshold, n: account.owners.count) }
+        if chip.kind == "differs" { return t("presence.ruleDiffers") }
+        let rule = chip["rule"]
+        return ruleTitle(m: rule?["m"]?.int ?? account.threshold, n: rule?["n"]?.int ?? account.owners.count)
+    }
+
+    /// A row's rule (`AccountRow.rule`): its chip, and "last known" when a
+    /// chain said it but no read this session did.
+    func rowRule(_ row: MsAccountRow) -> (chip: String, title: String, lastKnown: String?) {
+        let chip = row.rule?["chip"]
+        let lastKnown = row.rule?["last_known"]?.bool == true && row.rule?["from_chain"]?.bool == true
+        return (chipText(chip, fallback: row.account), chipTitle(chip, fallback: row.account),
+                lastKnown ? t("presence.ruleLastKnown") : nil)
+    }
+
     func ruleText(m: Int, n: Int) -> String {
         t("create.thresholdValue", ["m": String(m), "n": String(n)])
     }
@@ -138,6 +165,49 @@ struct MsWords {
             return actionTitleNow(chainId: chainId, action: action, nonce: nonce)
         }
     }
+
+    /// r10-8: a transaction's line — a contract call as the core reads its
+    /// bytes ("Approve · USDC", "Batch of 1 call"; never only "Contract
+    /// call" for one the core can say), anything else as `actionTitleNow`
+    /// says it. The machine's review's reading when the sheet has one, else
+    /// the core's pure reading of the bytes (`review.reading`, the desktop's
+    /// `ms_reading_title`) with the token facts the proposals machine read.
+    func title(_ item: MsProposalItem, safe: String? = nil, review: MsJSON? = nil) -> String {
+        if item.action?.kind == "call" || item.action == nil,
+           let reading = review?["reading"] ?? callReading(item, safe: safe),
+           MsReading.saysMoreThanACall(reading),
+           let title = MsReading.title(reading, chainId: item.chainId, words: self) {
+            return title
+        }
+        return actionTitleNow(chainId: item.chainId, action: item.action, nonce: item.nonce)
+    }
+
+    /// The core's reading of a call's bytes, `nil` when it reads none (or
+    /// there is no multisig to read it for). Kept per transaction and token
+    /// facts: a row is drawn many times and the bytes never change.
+    func callReading(_ item: MsProposalItem, safe: String?) -> MsJSON? {
+        guard let safe = safe ?? hub?.proposalsView.followed, !safe.isEmpty, !item.tx.isNull else { return nil }
+        let prefix = "\(item.chainId):"
+        let facts = (hub?.proposalsView.tokens ?? [:])
+            .filter { $0.key.hasPrefix(prefix) }
+            .sorted { $0.key < $1.key }
+            .map(\.value)
+        // The bytes themselves are in the key, not only the hash a row
+        // names: a hash is the machine's word for them, the reading is of them.
+        let bytes = "\(item.tx["to"]?.string ?? ""):\(item.tx["value"]?.string ?? ""):\(item.tx["operation"]?.int ?? 0):\(item.tx["data"]?.string ?? "")"
+        let key = "\(item.chainId):\(safe.lowercased()):\(item.safeTxHash.lowercased()):\(bytes):\(facts.map { "\($0["symbol"]?.string ?? "")/\($0["decimals"]?.int ?? -1)" })"
+        if let kept = Self.readings[key] { return kept }
+        let answer = MsRules.call("review.reading", [
+            "chainId": item.chainId, "safe": safe, "tx": item.tx.any, "tokenFacts": facts.map(\.any),
+        ]) as? [String: Any]
+        let reading = answer.map { MsJSON(any: $0["reading"]) }
+        if Self.readings.count > 256 { Self.readings.removeAll() }
+        Self.readings[key] = reading
+        return reading
+    }
+
+    /// `callReading`'s answers, by transaction and token facts.
+    private static var readings: [String: MsJSON?] = [:]
 
     /// The core's facts for a token the proposals shown move (r8-2,
     /// `MultisigProposalsView.tokens`): symbol and decimals, either `nil`
@@ -312,7 +382,13 @@ struct MsWords {
             switch object["failure"] as? String {
             case "cancelled": return t("proposal.reason.passkeyClosed")
             case "not_discoverable", "not_supported": return t("proposal.reason.passkeyMissing")
-            default: return t("proposal.reason.passkeyFailed")
+            default:
+                // Real-device S3: the core's sentence for the platform's error
+                // (`passkey_error_words`), when the shell had one.
+                if let key = object["message"] as? String, key.hasPrefix("onboarding.common.") {
+                    return t("proposal.failed", ["reason": loc.t(key)])
+                }
+                return t("proposal.reason.passkeyFailed")
             }
         case "passkey_check": return t("proposal.reason.passkeyFailed")
         case "venue_blocked":

@@ -73,7 +73,9 @@ struct MsProposalModel {
         }
     }
 
-    var title: String { words.actionTitleNow(chainId: chainId, action: item.action, nonce: item.nonce) }
+    /// r10-8: the core's reading names the call ("Approve · USDC", "Batch
+    /// of 1 call"), as on the web and the desktop; else the proposal's line.
+    var title: String { words.title(item, safe: multisig.isEmpty ? nil : multisig, review: review) }
 
     /// The chip under the title: a finished one says how it ended, never a
     /// count against today's members (r4a-8, r8-17).
@@ -301,7 +303,10 @@ struct MsProposalModel {
         guard let verdict = execution else { return nil }
         let paid = verdict["paid"]?.bool == true
         switch verdict.kind {
-        case "executed": return (words.t("proposal.executed"), .positive, "executed")
+        // Real-device S4: "Executed" is said once, by the executed row with
+        // its explorer link (`executedRow`, from the same hash) — never a
+        // second line above it.
+        case "executed": return executedTx == nil ? (words.t("proposal.executed"), .positive, "executed") : nil
         case "executedByOther": return (words.t(paid ? "proposal.lostRacePaid" : "proposal.lostRace"), .warning, "lostRace")
         case "replaced": return (words.t(paid ? "proposal.replacedFirstPaid" : "proposal.replacedFirst", ["nonce": item.nonce]), .warning, "replaced")
         case "failed": return (words.t("proposal.execFailed"), .danger, "execFailed")
@@ -361,6 +366,38 @@ struct MsProposalModel {
             return match
         }
         return offered.first
+    }
+
+    /// r10 S4: why the member's press approves only, when theirs would be
+    /// the last approval needed — the machine offered no one press because
+    /// its look at them says they cannot pay, the call would fail, or it may
+    /// not be executed here. Said before the person presses (the web's
+    /// `execute-cant-pay`); `nil` when one press is offered, when their
+    /// approval would not complete it, or while nothing has been looked at
+    /// (the look is asked; Approve stands meanwhile, as on the web).
+    func approveOnlyReason(chosen: String?) -> (text: String, tone: MsNote.Tone)? {
+        guard !isDone, view.approveExecute(item).isEmpty else { return nil }
+        guard let approver = chosen ?? defaultMember,
+              canApprove.contains(where: { $0.caseInsensitiveCompare(approver) == .orderedSame }),
+              canExecute.contains(where: { $0.caseInsensitiveCompare(approver) == .orderedSame }),
+              item.approved + 1 >= item.threshold,
+              let look = preview(for: approver)
+        else { return nil }
+        switch look.kind {
+        case "priced" where look["canPay"]?.bool == false:
+            // Another member here who can pay is named, as on the web.
+            if let other = canExecute.first(where: { executor in
+                executor.caseInsensitiveCompare(approver) != .orderedSame
+                    && preview(for: executor)?.kind == "priced" && preview(for: executor)?["canPay"]?.bool != false
+            }) {
+                return (words.t("proposal.cantPayOther", ["name": words.label(approver), "other": words.label(other)]), .warning)
+            }
+            return feeLine(for: approver)
+        case "fails", "refused":
+            return feeLine(for: approver)
+        default:
+            return nil
+        }
     }
 
     /// The setup an execution carries (deploying the multisig, activating accounts).
@@ -445,10 +482,10 @@ struct MsProposalModel {
     var signerLines: [(text: String, id: String)] {
         var out: [(String, String)] = []
         if !inVela.isEmpty {
-            out.append((words.t("proposal.approvesInVela", ["names": inVela.map(words.label).joined(separator: ", ")]), "inVela"))
+            out.append((words.t("proposal.approvesInVela", ["names": words.loc.list(inVela.map(words.label))]), "inVela"))
         }
         if !either.isEmpty {
-            out.append((words.t("proposal.eitherWay", ["names": either.map(words.label).joined(separator: ", ")]), "either"))
+            out.append((words.t("proposal.eitherWay", ["names": words.loc.list(either.map(words.label))]), "either"))
         }
         return out.map { (text: $0.0, id: $0.1) }
     }
@@ -456,7 +493,7 @@ struct MsProposalModel {
     /// r7: smart-contract members still to approve, said honestly.
     var contractLine: String? {
         contract.isEmpty ? nil
-            : words.t("proposal.contractMembers", ["names": contract.map(words.label).joined(separator: ", ")])
+            : words.t("proposal.contractMembers", ["names": words.loc.list(contract.map(words.label))])
     }
 
     /// The multisig this transaction is of: the one shown, else the link's.
@@ -896,6 +933,10 @@ struct MultisigProposalSheet: View {
                         }
                         .accessibilityIdentifier("multisig.proposal.approveExecute")
                         MsNote(text: words.t("proposal.feeNote"))
+                    } else if let why = model.approveOnlyReason(chosen: member) {
+                        // r10 S4: Approve alone, where theirs completes it —
+                        // said why (cannot pay, would fail), never silently.
+                        MsNote(text: why.text, tone: why.tone, identifier: "multisig.proposal.approveOnly")
                     }
                     VelaButton(
                         // Approving alone beside the one press is the plain
@@ -1006,7 +1047,7 @@ struct MultisigProposalSheet: View {
             // reads, reviews and signs the transaction alone.
             MsSection(title: words.t("external.outsideLinkTitle")) {
                 MsNote(text: words.t("external.outsideLinkHint"))
-                Text(verbatim: words.t("proposal.stillNeeded", ["missing": model.outside.map(words.label).joined(separator: ", ")]))
+                Text(verbatim: words.t("proposal.stillNeeded", ["missing": words.loc.list(model.outside.map(words.label))]))
                     .typeRole(Typography.rowSub.scaled(textScale))
                     .foregroundStyle(theme.fgMuted)
                     .fixedSize(horizontal: false, vertical: true)

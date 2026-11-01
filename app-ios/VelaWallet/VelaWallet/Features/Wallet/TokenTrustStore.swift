@@ -51,6 +51,8 @@ final class TokenTrustStore {
     private let pool: RpcPool
     private let registry: ChainTokens
     private let held: HeldTokens
+    /// Where each account's scan coverage is kept (`vela.scanCursors.*`).
+    private let shelf: VelaStore
     private var core: CoreStore<TrustViewWire>!
     /// Callers waiting for a settled scan.
     private var waiting: [(TrustViewWire) -> Void] = []
@@ -69,6 +71,7 @@ final class TokenTrustStore {
             metadata: TokenMetadata(store: store, pool: pool)
         )
         self.pool = pool
+        self.shelf = store
         self.registry = ChainTokens(accounts: accounts)
         self.held = held
         self.core = CoreStore(
@@ -127,6 +130,57 @@ final class TokenTrustStore {
 
         let settled = await waitForSettledScan()
         return settled?.incoming ?? []
+    }
+
+    // MARK: - r9-17: the core's planned scan
+
+    /// Where an account's scan coverage is kept — the core's
+    /// `TrustScanCursor` list as JSON, the web's key.
+    static func cursorsKey(_ address: String) -> String { "vela.scanCursors.\(address.lowercased())" }
+
+    /// The coverage kept for `address` (empty when none, or unreadable: no
+    /// coverage, the week read again — a cost, never a lost receipt).
+    func cursors(address: String) -> [Any] {
+        guard let raw = shelf.readString(Self.cursorsKey(address)),
+              let parsed = try? JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [Any]
+        else { return [] }
+        return parsed
+    }
+
+    /// One planned scan poll (r9-17): the networks, the live window and the
+    /// bounded backfill are the core's (`incoming_scan`) from `facts`; the
+    /// coverage kept here goes in and the new coverage is kept once the poll
+    /// settles. `scanChainIds` is the core's own plan for those facts
+    /// (`incomingScanPlan`), used only to push the registry's stablecoins of
+    /// those networks first — a fetch the core cannot make.
+    func scan(address: String, facts: [String: Any]) async -> [TrustIncomingWire] {
+        guard !address.isEmpty, !polling else { return [] }
+        polling = true
+        defer { polling = false }
+
+        let scanChainIds = Self.scanChainIds(facts: facts)
+        await primeRegistry(chainIds: scanChainIds)
+        for chainId in scanChainIds {
+            send(["type": "held_tokens_snapshot", "address": address, "chain_id": chainId,
+                  "tokens": held.erc20Addresses(address: address, chainId: chainId)])
+        }
+        send(["type": "scan_requested", "address": address, "facts": facts, "cursors": cursors(address: address)])
+
+        let settled = await waitForSettledScan()
+        // What the poll read, kept for the next one (and the next session).
+        if settled?.address?.lowercased() == address.lowercased(),
+           let json = core.json, let view = try? CoreJSON.object(json),
+           let kept = view["cursors"] as? [Any], !kept.isEmpty,
+           let data = try? JSONSerialization.data(withJSONObject: kept) {
+            shelf.writeString(Self.cursorsKey(address), String(decoding: data, as: UTF8.self))
+        }
+        return settled?.incoming ?? []
+    }
+
+    /// The core's networks for these facts (`incoming_scan::scan_plan`).
+    static func scanChainIds(facts: [String: Any]) -> [Int] {
+        guard let answer = try? CoreJSON.object(incomingScanPlan(factsJson: CoreJSON.string(facts))) else { return [] }
+        return (answer["scan_chain_ids"] as? [NSNumber] ?? []).map(\.intValue)
     }
 
     /// The token registry's facts per chain — the same read web primes with,

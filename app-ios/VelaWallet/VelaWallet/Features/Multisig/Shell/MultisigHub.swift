@@ -699,9 +699,7 @@ final class MultisigHub {
                     base["symbol"] = some ? info.symbol : ""
                     base["decimals"] = info.decimals
                     base["type"] = "dapp_tx"
-                    base["intent"] = await MsWords(loc: loc, hub: self).actionTitle(
-                        chainId: chainId, action: MsJSON(any: e["action"]), nonce: (e["nonce"] as? String) ?? "0"
-                    )
+                    base["intent"] = await executedTitle(e, chainId: chainId, hash: hash)
                     base["dappSummary"] = [
                         "action": "call", "calls": row["calls"] ?? 1, "contract": row["contract"] ?? "",
                     ]
@@ -716,11 +714,23 @@ final class MultisigHub {
         for e in executed {
             let chainId = MultisigExecutor.int(e["chainId"]) ?? 0
             let hash = e["safeTxHash"] as? String ?? ""
-            let title = await MsWords(loc: loc, hub: self).actionTitle(
-                chainId: chainId, action: MsJSON(any: e["action"]), nonce: e["nonce"] as? String ?? "0"
-            )
+            let title = await executedTitle(e, chainId: chainId, hash: hash)
             notifier?.executed(title: title, body: loc.t("home.multisig.proposal.executed"), chainId: chainId, safeTxHash: hash)
         }
+    }
+
+    /// An executed proposal's title for Activity and its notification: a
+    /// contract call as the core reads its bytes ("Approve · USDC", r10-8 —
+    /// the proposal is still in the machine's view when it runs), anything
+    /// else the proposal's own line.
+    private func executedTitle(_ e: [String: Any], chainId: Int, hash: String) async -> String {
+        let words = MsWords(loc: loc, hub: self)
+        if let item = proposalsView.item(chainId: chainId, hash: hash), item.action?.kind == "call" {
+            return words.title(item, safe: e["from"] as? String)
+        }
+        return await words.actionTitle(
+            chainId: chainId, action: MsJSON(any: e["action"]), nonce: (e["nonce"] as? String) ?? "0"
+        )
     }
 
     /// A token's symbol and decimals: the chain's coin from the catalogue,

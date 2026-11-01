@@ -23,6 +23,17 @@ import VelaCore
 final class SessionController {
 
     private(set) var view: SessionView = .booting
+    /// The core's view as it came, before the names (`labelled`).
+    @ObservationIgnored private var coreView: SessionView = .booting
+    /// r9-12 / r10: the multisig accounts machine's `member_labels` — every
+    /// account this device shows is named by them (`SessionView.labelled`).
+    var nameLabels: [String: String] = [:] {
+        didSet {
+            guard nameLabels != oldValue else { return }
+            let labelled = coreView.labelled(nameLabels)
+            if labelled != view { view = labelled }
+        }
+    }
     /// The same view as the core wrote it — the AI agent reads the wallet
     /// whole (`AgentShellBridge.views`, spec 104).
     @ObservationIgnored private(set) var viewJson: String?
@@ -51,7 +62,8 @@ final class SessionController {
                     print("[vela-wallet] session view did not decode")
                     return
                 }
-                self?.view = decoded
+                self?.coreView = decoded
+                self?.view = decoded.labelled(self?.nameLabels ?? [:])
                 self?.viewJson = CoreJSON.string(json)
                 self?.scheduleSync(decoded)
             },

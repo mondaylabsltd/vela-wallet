@@ -44,6 +44,10 @@ enum ExploreLive {
         /// The wallet's networks, the person's own included — what names the
         /// page's network in the panel, its chip and its switcher.
         networks: WalletNetworks = .builtin,
+        /// r10-9: a multisig on this device, by address — its name. The
+        /// account a site sees may be one; it is named, and never told it
+        /// can be asked to sign.
+        multisigName: (String) -> String? = { _ in nil },
         loc: Loc
     ) -> ExploreHomeModel {
         let populated = !explore.favorites.isEmpty || !history.entries.isEmpty
@@ -58,7 +62,8 @@ enum ExploreLive {
 
         let connection = connectionModel(
             dbr: dbr, tab: tab, engine: engine, identity: identity,
-            chainIds: chainIds, holdings: holdings, networks: networks, loc: loc
+            chainIds: chainIds, holdings: holdings, networks: networks,
+            multisigName: multisigName, loc: loc
         )
         let bookmarked = engine.map { current in
             explore.favorites.contains { $0.origin == current.origin }
@@ -322,6 +327,7 @@ enum ExploreLive {
         chainIds: [Int] = [],
         holdings: [Int: String] = [:],
         networks: WalletNetworks = .builtin,
+        multisigName: (String) -> String? = { _ in nil },
         loc: Loc
     ) -> ConnectionModel {
         // The origin that is ASKING outranks the one in front. They are
@@ -348,6 +354,10 @@ enum ExploreLive {
         // active account, which it is unless a switch is still landing.
         let shown = consent?.address ?? tab?.connectedAddress ?? identity.address
         let isActive = shown.caseInsensitiveCompare(identity.address) == .orderedSame
+        // r10-9: the account may be a multisig shown on this device — named
+        // by its own name, and the sheet says what a site can do with one
+        // (propose transactions for its members; never ask it to sign).
+        let multisig = shown.isEmpty ? nil : multisigName(shown)
 
         return ConnectionModel(
             // A site that is ASKING is named in the title — "连接到 {host}".
@@ -377,8 +387,10 @@ enum ExploreLive {
             //
             // A consent card has no grant yet, so `shown` falls through to the
             // account that is about to get one, which IS the active one.
+            // An account with no name here is its address, said once (the
+            // row draws no second line under it).
             account: (
-                name: isActive ? identity.name : AddressText.short(shown),
+                name: multisig ?? (isActive ? identity.name : AddressText.short(shown)),
                 address: AddressText.short(shown),
                 seed: shown
             ),
@@ -394,7 +406,9 @@ enum ExploreLive {
             // explainers said it twice). Connected: unchanged.
             // Not connected (spec 097 E): no sentence about what the site can
             // see — it can see nothing.
-            explainer: consent != nil
+            explainer: multisig != nil && (consent != nil || connected)
+                ? loc.t("connect.browser.multisigConnectNote")
+                : consent != nil
                 ? loc.t("connect.browser.body")
                 : connected ? loc.t("explore.connectionExplainer") : "",
             disconnect: loc.t("explore.disconnect"),

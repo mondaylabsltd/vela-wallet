@@ -12723,6 +12723,88 @@ public func FfiConverterTypePasskeyDirectoryEntry_lower(_ value: PasskeyDirector
 
 
 /**
+ * What a shell draws for a failed passkey prompt
+ * (`passkey_error::PasskeyErrorWords`).
+ */
+public struct PasskeyErrorWords: Equatable, Hashable {
+    public var kind: PasskeyErrorKind
+    /**
+     * The corpus key of the sentence (`onboarding.common.passkeyError.*`,
+     * or `onboarding.common.phoneLinkFailed`), resolved through the shell's
+     * own catalog like every other key.
+     */
+    public var key: String
+    /**
+     * The `FailureKind` wire name the onboarding machines branch on
+     * (`cancelled`, `not_supported`, `other`) — what `PasskeyFailed.kind`
+     * carries and [`passkey_ceremony_end`] takes.
+     */
+    public var failure: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(kind: PasskeyErrorKind, 
+        /**
+         * The corpus key of the sentence (`onboarding.common.passkeyError.*`,
+         * or `onboarding.common.phoneLinkFailed`), resolved through the shell's
+         * own catalog like every other key.
+         */key: String, 
+        /**
+         * The `FailureKind` wire name the onboarding machines branch on
+         * (`cancelled`, `not_supported`, `other`) — what `PasskeyFailed.kind`
+         * carries and [`passkey_ceremony_end`] takes.
+         */failure: String) {
+        self.kind = kind
+        self.key = key
+        self.failure = failure
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension PasskeyErrorWords: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePasskeyErrorWords: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PasskeyErrorWords {
+        return
+            try PasskeyErrorWords(
+                kind: FfiConverterTypePasskeyErrorKind.read(from: &buf), 
+                key: FfiConverterString.read(from: &buf), 
+                failure: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PasskeyErrorWords, into buf: inout [UInt8]) {
+        FfiConverterTypePasskeyErrorKind.write(value.kind, into: &buf)
+        FfiConverterString.write(value.key, into: &buf)
+        FfiConverterString.write(value.failure, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePasskeyErrorWords_lift(_ buf: RustBuffer) throws -> PasskeyErrorWords {
+    return try FfiConverterTypePasskeyErrorWords.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePasskeyErrorWords_lower(_ value: PasskeyErrorWords) -> RustBuffer {
+    return FfiConverterTypePasskeyErrorWords.lower(value)
+}
+
+
+/**
  * A room's record (`Room`'s string form, kept to reopen it), and — for a
  * room just created — the invite to hand the other peer.
  */
@@ -14029,6 +14111,16 @@ public struct TrustedSignerApprovalInput: Equatable, Hashable {
      * `anyway`): the page says "Approve anyway" in the danger style.
      */
     public var anyway: Bool
+    /**
+     * r10 page: the multisig's members now (the passkey purpose's
+     * `owners`), for a member change's before → after on the page.
+     */
+    public var owners: [String]?
+    /**
+     * r10 page: the approvals it needs now (the passkey purpose's
+     * `threshold`; 0 or none says nothing).
+     */
+    public var threshold: UInt64?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -14057,7 +14149,15 @@ public struct TrustedSignerApprovalInput: Equatable, Hashable {
         /**
          * r9-10: the review asks for "… anyway" (the passkey purpose's
          * `anyway`): the page says "Approve anyway" in the danger style.
-         */anyway: Bool = false) {
+         */anyway: Bool = false, 
+        /**
+         * r10 page: the multisig's members now (the passkey purpose's
+         * `owners`), for a member change's before → after on the page.
+         */owners: [String]? = nil, 
+        /**
+         * r10 page: the approvals it needs now (the passkey purpose's
+         * `threshold`; 0 or none says nothing).
+         */threshold: UInt64? = nil) {
         self.chainId = chainId
         self.chainName = chainName
         self.nativeSymbol = nativeSymbol
@@ -14069,6 +14169,8 @@ public struct TrustedSignerApprovalInput: Equatable, Hashable {
         self.credentialIdsHex = credentialIdsHex
         self.keyRouteJson = keyRouteJson
         self.anyway = anyway
+        self.owners = owners
+        self.threshold = threshold
     }
 
     
@@ -14097,7 +14199,9 @@ public struct FfiConverterTypeTrustedSignerApprovalInput: FfiConverterRustBuffer
                 memberName: FfiConverterOptionString.read(from: &buf), 
                 credentialIdsHex: FfiConverterSequenceString.read(from: &buf), 
                 keyRouteJson: FfiConverterOptionString.read(from: &buf), 
-                anyway: FfiConverterBool.read(from: &buf)
+                anyway: FfiConverterBool.read(from: &buf), 
+                owners: FfiConverterOptionSequenceString.read(from: &buf), 
+                threshold: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
 
@@ -14113,6 +14217,8 @@ public struct FfiConverterTypeTrustedSignerApprovalInput: FfiConverterRustBuffer
         FfiConverterSequenceString.write(value.credentialIdsHex, into: &buf)
         FfiConverterOptionString.write(value.keyRouteJson, into: &buf)
         FfiConverterBool.write(value.anyway, into: &buf)
+        FfiConverterOptionSequenceString.write(value.owners, into: &buf)
+        FfiConverterOptionUInt64.write(value.threshold, into: &buf)
     }
 }
 
@@ -15791,6 +15897,125 @@ public func FfiConverterTypePasskeyCeremonyEnd_lower(_ value: PasskeyCeremonyEnd
 
 
 /**
+ * What kind of failure a passkey prompt ended in —
+ * `passkey_error::PasskeyErrorKind`.
+ */
+
+public enum PasskeyErrorKind: Equatable, Hashable {
+    
+    case cancelled
+    case notSupported
+    case noCredential
+    case appNotAssociated
+    case noNetwork
+    case phoneUnreachable
+    case alreadyRegistered
+    case timedOut
+    case other
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension PasskeyErrorKind: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePasskeyErrorKind: FfiConverterRustBuffer {
+    typealias SwiftType = PasskeyErrorKind
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PasskeyErrorKind {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .cancelled
+        
+        case 2: return .notSupported
+        
+        case 3: return .noCredential
+        
+        case 4: return .appNotAssociated
+        
+        case 5: return .noNetwork
+        
+        case 6: return .phoneUnreachable
+        
+        case 7: return .alreadyRegistered
+        
+        case 8: return .timedOut
+        
+        case 9: return .other
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: PasskeyErrorKind, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .cancelled:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .notSupported:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .noCredential:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .appNotAssociated:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .noNetwork:
+            writeInt(&buf, Int32(5))
+        
+        
+        case .phoneUnreachable:
+            writeInt(&buf, Int32(6))
+        
+        
+        case .alreadyRegistered:
+            writeInt(&buf, Int32(7))
+        
+        
+        case .timedOut:
+            writeInt(&buf, Int32(8))
+        
+        
+        case .other:
+            writeInt(&buf, Int32(9))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePasskeyErrorKind_lift(_ buf: RustBuffer) throws -> PasskeyErrorKind {
+    return try FfiConverterTypePasskeyErrorKind.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePasskeyErrorKind_lower(_ value: PasskeyErrorKind) -> RustBuffer {
+    return FfiConverterTypePasskeyErrorKind.lower(value)
+}
+
+
+
+/**
  * What the peer asks of its driver, one at a time.
  */
 
@@ -17374,6 +17599,30 @@ fileprivate struct FfiConverterOptionUInt32: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterUInt32.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionInt32: FfiConverterRustBuffer {
+    typealias SwiftType = Int32?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterInt32.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterInt32.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -22072,6 +22321,49 @@ public func ensReverseNode(address: String)throws  -> String  {
 })
 }
 /**
+ * r9-17: the wait before the next incoming scan for the page as it stands
+ * — `incoming_scan::next_scan_ms`. The feed's `next_scan` already carries
+ * it; this is for the shared vectors.
+ */
+public func incomingNextScanMs(visible: Bool, sinceInteractionMs: Double) -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_incoming_next_scan_ms(
+        FfiConverterBool.lower(visible),
+        FfiConverterDouble.lower(sinceInteractionMs),uniffiCallStatus
+    )
+})
+}
+/**
+ * r9-17: the networks an account's incoming scan reads, and where its
+ * native balance is watched — `incoming_scan::scan_plan`. `facts_json` is a
+ * `TrustScanFacts`; the answer an `IncomingScanPlan`, both JSON. The scan
+ * itself plans this from the same facts (`token_trust`'s `ScanRequested`);
+ * a shell asks only to prime the registry and the native watch.
+ */
+public func incomingScanPlan(factsJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_incoming_scan_plan(
+        FfiConverterString.lower(factsJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * r9-17: one poll's reads on one network — `incoming_scan::scan_windows`
+ * (`IncomingScanWindowsAsk` JSON in, `IncomingScanWindows` JSON out). For
+ * the shared vectors (`tests/vectors/incoming-scan.json`); the scan runs
+ * them inside `token_trust`.
+ */
+public func incomingScanWindows(askJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_incoming_scan_windows(
+        FfiConverterString.lower(askJson),uniffiCallStatus
+    )
+})
+}
+/**
  * Does the launch animation play on this cold start? `stored_last_played_ms`:
  * what is stored under [`launch_animation_storage_key`] (`None` when nothing,
  * or nothing readable, is); `disabled`: turned off, or a start that never
@@ -22127,6 +22419,29 @@ public func passkeyCeremonyEnd(kind: String, elapsedMs: Double) -> PasskeyCeremo
     uniffi_vela_core_uniffi_fn_func_passkey_ceremony_end(
         FfiConverterString.lower(kind),
         FfiConverterDouble.lower(elapsedMs),uniffiCallStatus
+    )
+})
+}
+/**
+ * A platform passkey error's facts → the words a sheet draws, instead of
+ * the platform's raw message (`passkey_error::passkey_error_words`).
+ *
+ * - `platform`: `"android"`, `"ios"`, `"macos"`, `"web"`.
+ * - `domain`: Android — the exception's class name (simple or qualified) or
+ * its `type`; for a `*PublicKeyCredentialDomException`, `domError.type`.
+ * Apple — the `NSError` domain. Web — the `DOMException` name.
+ * - `code`: the `NSError` code, or a Play Services status code; `None` when
+ * there is none (a `[50152] …` message head is read as one).
+ * - `message`: the raw message, read only for stable tokens.
+ */
+public func passkeyErrorWords(platform: String, domain: String, code: Int32?, message: String) -> PasskeyErrorWords  {
+    return try!  FfiConverterTypePasskeyErrorWords_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_passkey_error_words(
+        FfiConverterString.lower(platform),
+        FfiConverterString.lower(domain),
+        FfiConverterOptionInt32.lower(code),
+        FfiConverterString.lower(message),uniffiCallStatus
     )
 })
 }
@@ -23448,6 +23763,15 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_ens_reverse_node() != 48082) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_incoming_next_scan_ms() != 58337) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_incoming_scan_plan() != 44741) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_incoming_scan_windows() != 24529) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_launch_animation_due() != 57674) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -23458,6 +23782,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_passkey_ceremony_end() != 19399) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_passkey_error_words() != 4040) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_passkey_sign_timeout_ms() != 55664) {
