@@ -4954,7 +4954,9 @@ pub(crate) fn amount_text(item: &FeedItem, incoming: bool) -> SharedString {
 pub(crate) fn shorten_address(address: &str) -> String {
     // r11-6: an address is said in the core's one short form (6+6, EIP-55)
     // on every platform; anything else keeps the character cut below.
-    let hex = address.strip_prefix("0x").or_else(|| address.strip_prefix("0X"));
+    let hex = address
+        .strip_prefix("0x")
+        .or_else(|| address.strip_prefix("0X"));
     if hex.is_some_and(|h| h.len() == 40 && h.bytes().all(|b| b.is_ascii_hexdigit())) {
         return vela_core::multisig_rules::names::short_address(address);
     }

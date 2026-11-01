@@ -5874,7 +5874,11 @@ mod tests {
             .map(|row| row.label.as_ref())
             .collect();
         assert_eq!(labels[0], "Alice");
-        assert!(labels[1].to_ascii_lowercase().starts_with("0xef"), "{}", labels[1]);
+        assert!(
+            labels[1].to_ascii_lowercase().starts_with("0xef"),
+            "{}",
+            labels[1]
+        );
         assert!(receipt.breakdown.iter().all(|row| row.seed.is_some()));
         assert_eq!(receipt.breakdown[1].value.as_ref(), "0.3 ETH");
         assert!(

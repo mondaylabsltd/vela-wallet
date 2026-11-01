@@ -750,7 +750,11 @@ mod tests {
         let got = n.observe(snap(None, &[(B, waiting(&[H1, H3], &[]))], true));
         assert_eq!(kinds(&got), vec![(H3.to_owned(), Kind::ApprovalNeeded)]);
         // Two at once: said once, by the count, opening the first new.
-        let got = n.observe(snap(None, &[(B, waiting(&[H1, H3, H4, "0x5555"], &[]))], true));
+        let got = n.observe(snap(
+            None,
+            &[(B, waiting(&[H1, H3, H4, "0x5555"], &[]))],
+            true,
+        ));
         assert_eq!(kinds(&got), vec![(H4.to_owned(), Kind::ApprovalNeeded)]);
         assert_eq!(got[0].count, Some(4));
     }
@@ -821,7 +825,10 @@ mod tests {
             &[(A, waiting(&[H1, H2, "0x4444"], &[]))],
             true,
         ));
-        assert_eq!(kinds(&got), vec![("0x4444".to_owned(), Kind::ApprovalNeeded)]);
+        assert_eq!(
+            kinds(&got),
+            vec![("0x4444".to_owned(), Kind::ApprovalNeeded)]
+        );
         // Back to A: everything known; a new one on A is news only once A's
         // list has been read once as followed again.
         let got = n.observe(snap(

@@ -270,12 +270,16 @@ pub fn word(
     // r11-10: a count said for a multisig not shown ("2 need your
     // approval"), in the words its switcher row and home use.
     let kind = match (notice.kind, notice.count) {
-        (Kind::ApprovalNeeded, Some(n)) => {
-            words::tc(loc, "presence.needsYou", usize::try_from(n).unwrap_or(usize::MAX))
-        }
-        (Kind::ReadyToExecute, Some(n)) => {
-            words::tc(loc, "presence.ready", usize::try_from(n).unwrap_or(usize::MAX))
-        }
+        (Kind::ApprovalNeeded, Some(n)) => words::tc(
+            loc,
+            "presence.needsYou",
+            usize::try_from(n).unwrap_or(usize::MAX),
+        ),
+        (Kind::ReadyToExecute, Some(n)) => words::tc(
+            loc,
+            "presence.ready",
+            usize::try_from(n).unwrap_or(usize::MAX),
+        ),
         (kind, _) => kind_words(loc, kind),
     };
     let body = match &notice.what {

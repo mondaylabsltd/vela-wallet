@@ -1381,11 +1381,13 @@ mod tests {
     /// the submit, which reads only them.
     #[test]
     fn a_failed_simulation_is_an_answer_and_a_busy_relay_is_not() {
-        let refuses = |message: &str| EstimateError {
-            message: message.to_owned(),
-            error_json: Some(json!({ "code": -32500, "message": message }).to_string()),
-        }
-        .refuses();
+        let refuses = |message: &str| {
+            EstimateError {
+                message: message.to_owned(),
+                error_json: Some(json!({ "code": -32500, "message": message }).to_string()),
+            }
+            .refuses()
+        };
         assert!(refuses("UserOperation simulation failed"));
         assert!(refuses("execution reverted: STF"));
         assert!(refuses("user operation reverted during simulation"));

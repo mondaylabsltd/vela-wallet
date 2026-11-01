@@ -2319,8 +2319,10 @@ impl WalletPage {
                 // line (`ActionState::Stopped`), which replaces the fee line —
                 // never the two side by side.
                 let stopped = matches!(
-                    view.actions
-                        .get(&format!("execute:{}", item.safe_tx_hash.to_ascii_lowercase())),
+                    view.actions.get(&format!(
+                        "execute:{}",
+                        item.safe_tx_hash.to_ascii_lowercase()
+                    )),
                     Some(ActionState::Stopped { .. })
                 );
                 if !stopped {
