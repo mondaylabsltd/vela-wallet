@@ -629,6 +629,7 @@ function item(overrides: Record<string, unknown> = {}) {
 		createdMs: 1,
 		unsent: false,
 		renameUndeployed: false,
+		waitsFor: [],
 		...overrides
 	};
 }
@@ -1993,7 +1994,8 @@ describe('what the sheet says of where it stands (r4b-4, r4b-6, r4b-17, r4a-16)'
 	it('queued behind several: every number named', async () => {
 		const m = words();
 		m.proposal.queuedNoteMany = 'after {{nonces}}';
-		fake.chain.items = [item({ nonce: 3n, status: 'queued' })];
+		// r11 S4: the numbers are the core's (`waitsFor`), drawn as they come.
+		fake.chain.items = [item({ nonce: 3n, status: 'queued', waitsFor: [0n, 1n, 2n] })];
 		const screen = show({ m });
 		await settle();
 		// r10-10: a list in the page's language (Intl.ListFormat), never a bare comma list.
