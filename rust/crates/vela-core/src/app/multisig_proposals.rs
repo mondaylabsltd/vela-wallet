@@ -3672,10 +3672,14 @@ async fn gas_of(io: &Io<Event>, chain_id: u64, from: &str, call: &Call) -> Optio
 /// Propose the draft (`ConfirmDraft`) — and, `then_execute`, execute it
 /// once the proposer's own approval made it ready (`ProposeExecute`).
 fn propose_draft(model: &Model, as_member: Option<String>, then_execute: bool) -> Cmd {
-    let (round, chain_id) = {
+    let (round, chain_id, drafted) = {
         let mut s = lock(&model.state);
         s.actions.insert("propose".to_owned(), ActionState::Working);
-        (s.draft_round, s.draft.as_ref().map(|d| d.chain.chain_id))
+        (
+            s.draft_round,
+            s.draft.as_ref().map(|d| d.chain.chain_id),
+            s.draft.as_ref().map(|d| d.tx.clone()),
+        )
     };
     flow(model, move |io, st| async move {
         let claimed = flows::claim(&io, &st, round).await;
@@ -3703,7 +3707,7 @@ fn propose_draft(model: &Model, as_member: Option<String>, then_execute: bool) -
                 );
             }
         }
-        flows::on_proposed(&io, &st, round, &outcome, claimed).await;
+        flows::on_proposed(&io, &st, round, &outcome, claimed, drafted.as_ref()).await;
         let Some((chain_id, hash)) = executing else {
             return;
         };
