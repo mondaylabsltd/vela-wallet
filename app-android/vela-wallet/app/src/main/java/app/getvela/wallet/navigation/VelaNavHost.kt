@@ -1462,7 +1462,10 @@ fun VelaNavHost(
                         flows.enter(WalletFlowEntry.TxDetail, hash)
                     }
                 }
-                sendAlert?.let { kind ->
+                // r10 follow-up (core §10.7): Send's alerts are Send's — drawn
+                // while Send is on screen and never over Explore, the home or
+                // any other screen it was left for (leaving clears them too).
+                sendAlert?.takeIf { sendOpen }?.let { kind ->
                     // The selected token's chain, by name: a chain out of reach is said as that one (PR 2 note 13).
                     val alertChain = sendView.selected_token?.let { chainNames[it.chain_id] ?: it.network }.orEmpty()
                     SendAlertDialog(kind = kind, strings = strings, chainName = alertChain, onDismiss = send::dismissAlert)
@@ -1810,6 +1813,7 @@ fun VelaNavHost(
                             onRecipientCheckRetry = { send.retryRiskCheck() },
                             onSendAgain = { send.sendAgain() },
                             onAddNetwork = { chainId -> send.addNetworkTapped(chainId) },
+                            onRetryTokens = { send.retryTokens() },
                             // Issue #466: snapshot the core's report NOW and open the report sheet with it.
                             onRelayReport = {
                                 sendView.relay_report?.let { report ->

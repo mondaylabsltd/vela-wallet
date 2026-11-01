@@ -188,6 +188,7 @@ class AgentCoverageTest {
             "send.retryAfterError" to Place.View(RETRY),
             "send.retryRelayUnreachable" to Place.View(RETRY),
             "send.retryRiskCheck" to Place.View(RETRY),
+            "send.retryTokens" to Place.Machine("the token list read again (the picker's Try again)"),
             "send.scanned" to Place.None(CODE),
             "send.seedSplit" to Place.Step("prepare_batch_transfer"),
             "send.selectAllValuable" to Place.Later(SWEEP),

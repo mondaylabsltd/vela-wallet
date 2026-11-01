@@ -216,6 +216,12 @@ object SendLive {
         // core's own token list tells "holds nothing" from "a filter or the
         // search hid everything".
         val empty = s.t(if (view.tokens.isEmpty()) I18nKeys.Flows.NO_TOKENS_WITH_BALANCE else I18nKeys.Flows.NO_MATCHING_TOKENS)
+        // r10 follow-up (core §10.7): a list that could not be read says so,
+        // with the way to read it again — never "nothing held" for a list
+        // nobody could read, and never an alert over another screen.
+        val failed = view.tokens_failed_key?.takeIf { it.isNotBlank() }?.let { key ->
+            app.getvela.wallet.feature.flows.SendPickFailedModel(text = s.t(key), retry = s.t(I18nKeys.Common.TRY_AGAIN))
+        }
         val recipient = pickRecipient(view, s)
         // Issue #312: the network a scanned code named, in the receive card's
         // own words ("BNB Chain payments only") — above an empty list it is
@@ -275,6 +281,7 @@ object SendLive {
                 rows = rows,
                 cta = SendCtaModel(s.t(I18nKeys.Flows.MULTI_SEND_TITLE), accent = false),
                 empty = empty,
+                failed = failed,
             )
         }
         // Spec 045 US2: the tick per row is `multi_selected_ids`, the greying
@@ -287,6 +294,7 @@ object SendLive {
             recipient = recipient,
             filters = filters,
             empty = empty,
+            failed = failed,
             notice = lockNotice ?: requestNotice ?: chain?.let {
                 SendNoticeModel(
                     mark = WalletLive.chainMark(it, nativeSymbol(it, ctx)),

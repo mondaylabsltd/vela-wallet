@@ -228,6 +228,7 @@ private fun FlowHostContent(
                     onSelect = { index -> send?.onSelectToken?.invoke(index) ?: onNavigate(FlowStep.SendForm) },
                     onSelectAll = { send?.onSelectAll?.invoke() },
                     onAddNetwork = { chainId -> send?.onAddNetwork?.invoke(chainId) },
+                    onRetryTokens = { send?.onRetryTokens?.invoke() },
                     onCta = {
                         val cta = send?.onPickCta
                         when {
@@ -540,6 +541,8 @@ class SendCallbacks(
     val onSendAgain: () -> Unit = {},
     /** F6 / F27: "Add this network" on a request's lock (`add_network_tapped`). */
     val onAddNetwork: (Int) -> Unit = {},
+    /** r10 follow-up: the picker's "Try again" under a list that could not be read (`retry_tokens`). */
+    val onRetryTokens: () -> Unit = {},
     // Spec 045 US1 — the split's rows. Absent, the form keeps the fixture's hops.
     val onAddRecipient: (() -> Unit)? = null,
     val onRecipientAction: ((RecipientAction) -> Unit)? = null,

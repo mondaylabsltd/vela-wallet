@@ -1124,6 +1124,20 @@ class SendLiveTest {
     }
 
     /**
+     * r10 follow-up (core §10.7): a list nobody could read is not "nothing
+     * held" — the picker says it could not load them, with "Try again".
+     */
+    @Test
+    fun `a token list that could not be read says so, with a way to try again`() {
+        val drawn = FlowFixtures.build(FlowState.SD1, strings).base as FlowBase.SendPick
+        val failed = SendLive.pick(drawn.model, SendView(tokens_failed_key = "send.tokensUnavailable"), ctx())
+        assertEquals(strings.t("send.tokensUnavailable"), failed.failed?.text)
+        assertEquals(strings.t(I18nKeys.Common.TRY_AGAIN), failed.failed?.retry)
+        assertTrue("the words are the corpus's: ${failed.failed}", failed.failed!!.text != "send.tokensUnavailable")
+        assertNull("no state to recover from, nothing drawn", SendLive.pick(drawn.model, SendView(), ctx()).failed)
+    }
+
+    /**
      * Issue #332: Home → Scan lands on the picker with the address the code
      * read, and the picker showed no sign of it — the person could not tell the
      * scan had worked. It says whom they are paying now, as the confirm does.
