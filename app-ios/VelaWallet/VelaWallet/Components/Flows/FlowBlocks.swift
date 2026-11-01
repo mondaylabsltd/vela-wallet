@@ -78,25 +78,13 @@ struct QrCardView<Centre: View>: View {
 
     var body: some View {
         ZStack {
-            Canvas { context, size in
-                let cells = modules ?? QrPattern.cells
-                let count = cells.count
-                let module = min(size.width, size.height) / CGFloat(count)
-                for r in 0..<count {
-                    for c in 0..<cells[r].count where cells[r][c] {
-                        let rect = CGRect(
-                            x: CGFloat(c) * module,
-                            y: CGFloat(r) * module,
-                            // Rounded up so neighbouring modules meet: a
-                            // hairline of white between them is what a camera
-                            // reads as a broken code.
-                            width: module.rounded(.up),
-                            height: module.rounded(.up)
-                        )
-                        context.fill(Path(rect), with: .color(WalletGeometry.qrInk))
-                    }
-                }
-            }
+            // Real-device S3: every module the same whole number of pixels,
+            // hard-edged (`QrModulesView`) — a code a decoder reads off a
+            // screenshot. The card's padding is its quiet zone.
+            QrModulesView(
+                modules: modules ?? QrPattern.cells, quiet: 0,
+                ink: WalletGeometry.qrInk, paper: WalletGeometry.qrCard
+            )
             .padding(WalletFlowGeometry.qrCardPadding)
             centre()
                 .padding(Tokens.Space.s2)

@@ -81,32 +81,16 @@ struct CableQrSheet: View {
 
 /// The module matrix as pixels: a light card with a quiet zone, dark modules
 /// only. Always black-on-white regardless of theme — scanners want contrast,
-/// not palette.
+/// not palette. Real-device S3: whole-pixel modules (`QrModulesView`) — the
+/// code drawn at 17.93 pixels a module was one a decoder could not read.
 private struct QrView: View {
     let matrix: QrMatrix
 
     var body: some View {
-        Canvas { context, size in
-            let width = Int(matrix.width)
-            let quiet = 2
-            let units = CGFloat(width + quiet * 2)
-            let cell = min(size.width, size.height) / units
-            context.fill(
-                Path(CGRect(origin: .zero, size: size)),
-                with: .color(.white)
-            )
-            for row in 0..<width {
-                for col in 0..<width {
-                    guard matrix.modules[row * width + col] else { continue }
-                    let rect = CGRect(
-                        x: (CGFloat(col) + CGFloat(quiet)) * cell,
-                        y: (CGFloat(row) + CGFloat(quiet)) * cell,
-                        width: cell,
-                        height: cell
-                    )
-                    context.fill(Path(rect), with: .color(.black))
-                }
-            }
-        }
+        let width = Int(matrix.width)
+        let rows: [[Bool]] = width > 0 && matrix.modules.count == width * width
+            ? (0..<width).map { Array(matrix.modules[($0 * width)..<(($0 + 1) * width)]) }
+            : []
+        QrModulesView(modules: rows, quiet: 2)
     }
 }

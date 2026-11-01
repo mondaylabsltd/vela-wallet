@@ -594,19 +594,9 @@ struct MultisigInviteSheet: View {
 struct MsQrView: View {
     let modules: [[Bool]]
 
+    /// Real-device S3: whole-pixel modules (`QrModulesView`), not a
+    /// fraction of a point each — a screenshot of the invite decodes.
     var body: some View {
-        Canvas { context, size in
-            let width = modules.count
-            guard width > 0 else { return }
-            let quiet = 2
-            let cell = min(size.width, size.height) / CGFloat(width + quiet * 2)
-            context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.white))
-            for (row, line) in modules.enumerated() {
-                for (col, on) in line.enumerated() where on {
-                    let rect = CGRect(x: CGFloat(col + quiet) * cell, y: CGFloat(row + quiet) * cell, width: cell, height: cell)
-                    context.fill(Path(rect), with: .color(.black))
-                }
-            }
-        }
+        QrModulesView(modules: modules, quiet: 2)
     }
 }
