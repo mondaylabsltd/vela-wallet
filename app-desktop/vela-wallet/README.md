@@ -1035,7 +1035,12 @@ and the "ready" it caused — is not news. "Executed" is said only for a
 transaction seen open this session whose verdict or timeline says it ran;
 one that merely left a list may have been replaced, and is not said. For
 a multisig other than the one shown, the list names only the transaction
-waiting first, so a second one behind it is said when it comes first.
+waiting first; a second one proposed behind it raises the count, and that
+is said by the count ("R11 Team — 2 need your approval", opening the
+first) — r11-10: before, nothing was said until it came first, so every
+multisig not shown went quiet once one transaction waited on it. The
+count the shown multisig's own list had is the baseline when it becomes
+an "other" again, so a switch says nothing already seen.
 
 Delivery is gpui's `show_system_notification` on every desktop:
 

@@ -24,6 +24,7 @@
 //!   | {"page": "tabs"}                                         (the browser's tabs, logged)
 //!   | {"page": "consent"}                                      (the open connection request's Connect)
 //!   | {"page": "space_notes"}                                  (the sheets' space-switch notes, logged)
+//!   | {"page": "notify", "on": true}                           (Settings' multisig-notifications switch)
 //! {"answer_risk": true}
 //! {"shot": "name"}                    (writes `SHOT name`, then waits 1.5 s)
 //! {"log": "text"}

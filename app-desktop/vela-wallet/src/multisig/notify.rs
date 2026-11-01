@@ -84,6 +84,10 @@ pub struct Notice {
     pub chain_id: u64,
     pub safe_tx_hash: String,
     pub what: Option<What>,
+    /// r11-10: for a multisig not shown, how many wait now — said when the
+    /// count rose behind a first one already known ("2 need your
+    /// approval"); `None` names one transaction.
+    pub count: Option<u64>,
 }
 
 /// One proposal of the followed multisig, as far as notifications care.
@@ -146,6 +150,10 @@ pub struct Memory {
     known: BTreeSet<(String, String, Kind)>,
     /// `(multisig, safeTxHash)`, lowercase: seen open.
     open: BTreeSet<(String, String)>,
+    /// r11-10: how many needed an approval here / were ready, per multisig
+    /// (lowercase) and kind, as last seen — the followed list's own count
+    /// or the others' presence. A rise behind a known first one is news.
+    counts: BTreeMap<(String, Kind), u64>,
 }
 
 fn lower(s: &str) -> String {
@@ -302,6 +310,7 @@ pub fn transitions(prev: &Snapshot, next: &Snapshot, memory: &mut Memory) -> Vec
             chain_id,
             safe_tx_hash: hash.to_owned(),
             what,
+            count: None,
         }
     };
 
@@ -387,10 +396,21 @@ pub fn transitions(prev: &Snapshot, next: &Snapshot, memory: &mut Memory) -> Vec
                 ));
             }
         }
+        // What this list counts, for when it is an "other" again.
+        let needs_you = f.items.values().filter(|i| i.needs_you).count() as u64;
+        let ready = f.items.values().filter(|i| i.ready).count() as u64;
+        memory
+            .counts
+            .insert((m.to_owned(), Kind::ApprovalNeeded), needs_you);
+        memory
+            .counts
+            .insert((m.to_owned(), Kind::ReadyToExecute), ready);
     }
 
-    // The others: what their presence names first. Counts alone prove
-    // nothing about WHICH transaction; `first` names one.
+    // The others: what their presence names first, and (r11-10) how many
+    // wait. `first` names one transaction; a second one proposed behind a
+    // first already known leaves `first` as it was and raises the count —
+    // said as the count ("2 need your approval"), opening the first.
     for (m, w) in &next.presence {
         let named = if w.needs_you > 0 {
             w.first.as_ref().map(|f| (Kind::ApprovalNeeded, f))
@@ -399,16 +419,59 @@ pub fn transitions(prev: &Snapshot, next: &Snapshot, memory: &mut Memory) -> Vec
         } else {
             None
         };
-        let Some((kind, first)) = named else {
-            continue;
-        };
-        let loud = next.presence_live && prev.presence_live && prev.presence.contains_key(m);
-        if memory
-            .known
-            .insert((m.clone(), lower(&first.safe_tx_hash), kind))
+        let was = prev.presence.get(m);
+        let loud = next.presence_live && prev.presence_live && was.is_some();
+        let mut said = false;
+        if let Some((kind, first)) = named
+            && memory
+                .known
+                .insert((m.clone(), lower(&first.safe_tx_hash), kind))
             && loud
         {
+            said = true;
             out.push(notice(m, kind, first.chain_id, &first.safe_tx_hash, None));
+        }
+        // The kind that names the first: "needs you" over "ready".
+        let first_kind = if w.needs_you > 0 {
+            Kind::ApprovalNeeded
+        } else {
+            Kind::ReadyToExecute
+        };
+        for (kind, now) in [
+            (Kind::ApprovalNeeded, w.needs_you),
+            (Kind::ReadyToExecute, w.ready),
+        ] {
+            let key = (m.clone(), kind);
+            let known = memory.counts.get(&key).copied();
+            // First sight (a multisig added, or just switched away from,
+            // whose presence may be an older read): the baseline, never
+            // below what its own list counted.
+            let (Some(before), Some(known)) = (was, known) else {
+                memory.counts.insert(key, now.max(known.unwrap_or(0)));
+                continue;
+            };
+            // The same first as before: a rise is a new one behind it. A
+            // first that changed is the rule above's (never twice).
+            let same_first = match (&before.first, &w.first) {
+                (Some(a), Some(b)) => {
+                    a.chain_id == b.chain_id
+                        && a.safe_tx_hash.eq_ignore_ascii_case(&b.safe_tx_hash)
+                }
+                _ => false,
+            };
+            if loud
+                && !said
+                && same_first
+                && now > known
+                && kind == first_kind
+                && let Some(first) = w.first.as_ref()
+            {
+                said = true;
+                let mut n = notice(m, kind, first.chain_id, &first.safe_tx_hash, None);
+                n.count = Some(now);
+                out.push(n);
+            }
+            memory.counts.insert(key, now);
         }
     }
     out
@@ -693,6 +756,78 @@ mod tests {
         // Nothing needs you, one is ready to run here.
         let got = n.observe(snap(None, &[(B, waiting(0, 1, Some(H1)))], true));
         assert_eq!(kinds(&got), vec![(H1.to_owned(), Kind::ReadyToExecute)]);
+    }
+
+    /// r11-10: a multisig not shown, its first one still waiting — a second
+    /// and a third proposed behind it are said, by count, opening the first.
+    #[test]
+    fn a_second_one_behind_a_known_first_is_said_by_its_count() {
+        let mut n = Notifier::default();
+        n.observe(snap(None, &[(B, waiting(0, 0, None))], true));
+        let got = n.observe(snap(None, &[(B, waiting(1, 0, Some(H1)))], true));
+        assert_eq!(kinds(&got), vec![(H1.to_owned(), Kind::ApprovalNeeded)]);
+        assert_eq!(got[0].count, None);
+        let got = n.observe(snap(None, &[(B, waiting(2, 0, Some(H1)))], true));
+        assert_eq!(kinds(&got), vec![(H1.to_owned(), Kind::ApprovalNeeded)]);
+        assert_eq!(got[0].count, Some(2));
+        // The same read again: nothing.
+        assert!(
+            n.observe(snap(None, &[(B, waiting(2, 0, Some(H1)))], true))
+                .is_empty()
+        );
+        let got = n.observe(snap(None, &[(B, waiting(3, 0, Some(H1)))], true));
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].count, Some(3));
+        // One approved elsewhere, then another proposed: said again.
+        assert!(
+            n.observe(snap(None, &[(B, waiting(2, 0, Some(H1)))], true))
+                .is_empty()
+        );
+        let got = n.observe(snap(None, &[(B, waiting(3, 0, Some(H1)))], true));
+        assert_eq!(got.len(), 1);
+        // Not live yet (the list an earlier session kept): silent.
+        let mut quiet = Notifier::default();
+        quiet.observe(snap(None, &[(B, waiting(1, 0, Some(H1)))], false));
+        assert!(
+            quiet
+                .observe(snap(None, &[(B, waiting(2, 0, Some(H1)))], false))
+                .is_empty()
+        );
+    }
+
+    /// r11-10: the count the followed list had is the baseline once it is an
+    /// "other" again — an older presence read and then the live one say
+    /// nothing already seen.
+    #[test]
+    fn a_count_seen_while_followed_is_never_news() {
+        let mut n = Notifier::default();
+        n.observe(snap(
+            Some(followed(A, &[item(H1, &[]), item(H2, &[])])),
+            &[(B, waiting(0, 0, None))],
+            true,
+        ));
+        // Switched to B: A's presence is an older read (one waiting)...
+        let got = n.observe(snap(
+            Some(followed(B, &[])),
+            &[(A, waiting(1, 0, Some(H1)))],
+            true,
+        ));
+        assert!(got.is_empty(), "{got:?}");
+        // ...then the live one: the two A's list showed.
+        let got = n.observe(snap(
+            Some(followed(B, &[])),
+            &[(A, waiting(2, 0, Some(H1)))],
+            true,
+        ));
+        assert!(got.is_empty(), "{got:?}");
+        // A third, proposed now: news.
+        let got = n.observe(snap(
+            Some(followed(B, &[])),
+            &[(A, waiting(3, 0, Some(H1)))],
+            true,
+        ));
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].count, Some(3));
     }
 
     #[test]

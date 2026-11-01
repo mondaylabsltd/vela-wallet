@@ -642,6 +642,16 @@ impl MultisigHost {
             &self.machines.proposals_view,
             live,
         );
+        if self.notifier.is_fresh() {
+            // r11-10: what is watched — every multisig on this device, the
+            // shown one by its list, the others by their presence.
+            crate::diag::vlog!(
+                "multisig-notify",
+                "watching {} multisig(s): the shown one's list at its pace, the others every {} s",
+                snapshot.multisigs.len(),
+                RECORD_EVERY.as_secs()
+            );
+        }
         let notices = self.notifier.observe(snapshot);
         super::notify::deliver::post(notices, cx);
     }

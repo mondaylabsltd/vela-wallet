@@ -88,6 +88,22 @@ pub fn set_wanted(on: bool) {
     if let Ok(mut cached) = WANTED.lock() {
         *cached = Some(on);
     }
+    // r11-10: the switch says what it did — the log, and (on) where the
+    // notices will show: the platform's center, or the window's line.
+    crate::diag::vlog!(
+        "multisig-notify",
+        "turned {}{}",
+        if on { "on" } else { "off" },
+        if on {
+            if system_can_show() {
+                " (the notification center)"
+            } else {
+                " (the window's line: the notification center can't be used)"
+            }
+        } else {
+            ""
+        }
+    );
     if on {
         prepare();
     }
@@ -177,11 +193,14 @@ fn kind_tag(kind: Kind) -> String {
 }
 
 /// The notification's tag: one per (multisig, transaction, kind), so a
-/// platform that replaces by tag never replaces another's.
+/// platform that replaces by tag never replaces another's — and (r11-10)
+/// per count, so "3 need your approval" is posted, not swallowed as a
+/// replacement of "2 need your approval".
 #[must_use]
 pub fn tag_of(notice: &Notice) -> String {
+    let count = notice.count.map(|n| format!("x{n}")).unwrap_or_default();
     format!(
-        "{TAG}|{}|{}|{}|{}",
+        "{TAG}|{}|{}|{}|{}{count}",
         notice.multisig.to_ascii_lowercase(),
         notice.chain_id,
         notice.safe_tx_hash.to_ascii_lowercase(),
@@ -247,7 +266,17 @@ pub fn word(
         .name
         .clone()
         .unwrap_or_else(|| words::short(&notice.multisig));
-    let kind = kind_words(loc, notice.kind);
+    // r11-10: a count said for a multisig not shown ("2 need your
+    // approval"), in the words its switcher row and home use.
+    let kind = match (notice.kind, notice.count) {
+        (Kind::ApprovalNeeded, Some(n)) => {
+            words::tc(loc, "presence.needsYou", usize::try_from(n).unwrap_or(usize::MAX))
+        }
+        (Kind::ReadyToExecute, Some(n)) => {
+            words::tc(loc, "presence.ready", usize::try_from(n).unwrap_or(usize::MAX))
+        }
+        (kind, _) => kind_words(loc, kind),
+    };
     let body = match &notice.what {
         Some(what) => {
             let chain_id = notice.chain_id;
@@ -452,6 +481,7 @@ pub fn sample_at_launch(cx: &mut App) {
                 }),
                 nonce: 4,
             }),
+            count: None,
         };
         let loc = Loc::from_env();
         let worded = word(&loc, &notice, &|a: &str| words::short(a), &|_, _| {
@@ -483,7 +513,27 @@ mod tests {
             chain_id: 100,
             safe_tx_hash: "0xABCD".to_owned(),
             what,
+            count: None,
         }
+    }
+
+    /// r11-10: a count is said in the switcher's words, and its tag differs
+    /// per count (a platform that replaces by tag posts the new one) while
+    /// still leading to the first transaction.
+    #[test]
+    fn a_count_is_said_and_tagged_apart() {
+        let loc = Loc::for_tag("en");
+        let mut n = notice(Kind::ApprovalNeeded, None, Some("R11 Team"));
+        let one = tag_of(&n);
+        n.count = Some(2);
+        let w = word(&loc, &n, &|a: &str| words::short(a), &coin);
+        assert_eq!(w.title, "R11 Team");
+        assert_eq!(w.body, "2 need your approval");
+        assert_ne!(w.tag, one);
+        assert_eq!(
+            target_of(&w.tag).map(|t| t.safe_tx_hash),
+            Some("0xabcd".to_owned())
+        );
     }
 
     fn coin(_: u64, _: Option<&str>) -> words::TokenInfo {
