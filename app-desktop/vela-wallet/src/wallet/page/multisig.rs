@@ -3419,6 +3419,57 @@ fn ms_execution_words(loc: &Loc, execution: &Value) -> Option<String> {
 mod tests {
     use super::*;
 
+    /// r9-9: a delegatecall to a contract Vela does not sign for is refused
+    /// for ITS reason — the core's key, in words in every language — never
+    /// "would change who controls the multisig", and nothing about the
+    /// state is said beside it (`withheld`).
+    #[test]
+    fn a_delegatecall_is_refused_for_its_own_reason() {
+        use vela_core::multisig_review::{ReadsInput, ReviewInput, StateVerdict, multisig_review};
+        let tx = serde_json::from_value(serde_json::json!({
+            "to": "0x5555555555555555555555555555555555555555",
+            "value": "0",
+            "data": "0xa9059cbb00000000000000000000000044444444444444444444444444444444444444440000000000000000000000000000000000000000000000000000000000000001",
+            "operation": 1,
+            "safeTxGas": "0", "baseGas": "0", "gasPrice": "0",
+            "gasToken": "0x0000000000000000000000000000000000000000",
+            "refundReceiver": "0x0000000000000000000000000000000000000000",
+            "nonce": "0x7"
+        }))
+        .unwrap();
+        let review = multisig_review(&ReviewInput {
+            reads: ReadsInput {
+                chain_id: 100,
+                safe: "0x0e96ddc491878645dB7E3a47d2a6Ccbc94f17f32".into(),
+                tx: Some(tx),
+                owners: vec![
+                    "0xD400866e00B055B20752a826CD5C89b811de130b".into(),
+                    "0x031d7D57c99CAF891e1C250554691Fd12D84772b".into(),
+                ],
+                threshold: 1,
+                deployed: true,
+                ..ReadsInput::default()
+            },
+            sim_reply: Some(r#"{"error":{"code":-32601,"message":"method not supported"}}"#.into()),
+            ..ReviewInput::default()
+        })
+        .unwrap();
+        let draw = ReviewDraw::of(&serde_json::to_value(&review).unwrap()).unwrap();
+        assert!(!draw.sign.allowed, "nothing is signed");
+        let refused = draw.refused.as_ref().expect("its reason");
+        assert_eq!(refused.key, "home.multisig.review.refusedWhy.delegatecall");
+        for tag in ["en", "zh"] {
+            let loc = Loc::for_tag(tag);
+            let said = loc.t(&refused.key).to_string();
+            assert!(!said.starts_with("home.multisig"), "{tag}: {said}");
+            assert_ne!(said, words::t(&loc, "review.blocked"), "{tag}: not the state guard's words");
+        }
+        assert!(
+            draw.state.as_ref().is_none_or(|s| !matches!(s.verdict, StateVerdict::Unchanged | StateVerdict::Declared)),
+            "no reassurance beside a refusal"
+        );
+    }
+
     /// r9-2: Arc's USDC moved as the coin and as its ERC-20 interface is ONE
     /// balance line — the core drops the interface's (`one_line_per_balance`)
     /// — and the sheet words that one line in the coin's units: "−0.01 USDC",
