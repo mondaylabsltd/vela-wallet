@@ -34,7 +34,9 @@ final class MultisigHub {
     let accounts: MultisigMachine
     let members: MultisigMachine
     let proposals: MultisigMachine
-    @ObservationIgnored let live: MultisigLive
+    /// The shell the machines run on: the app's `MultisigLive` (a test's
+    /// simulated world, through the same verbs).
+    @ObservationIgnored let ports: MultisigPorts
 
     /// The typed views, refreshed on every view the machines commit.
     private(set) var accountsView = MsAccountsView()
@@ -93,7 +95,9 @@ final class MultisigHub {
     @ObservationIgnored private var appActive = true
     @ObservationIgnored private var watching = 0
 
-    init(
+    /// The app's hub: the machines on its pipelines, whose notices and
+    /// high-risk questions come back here.
+    convenience init(
         live: MultisigLive,
         loc: Loc,
         shelf: VelaStore,
@@ -101,17 +105,28 @@ final class MultisigHub {
         cores: (accounts: MultisigCore, members: MultisigCore, proposals: MultisigCore)? = nil,
         facts: @escaping @MainActor () async -> Facts
     ) {
-        self.live = live
+        self.init(ports: live, loc: loc, shelf: shelf, tokens: tokens, cores: cores, facts: facts)
+        live.onNotice = { [weak self] notice in await self?.route(notice) }
+        live.onAskRisk = { [weak self] op in await self?.askRisk(op) ?? false }
+    }
+
+    init(
+        ports: MultisigPorts,
+        loc: Loc,
+        shelf: VelaStore,
+        tokens: TokenMetadata?,
+        cores: (accounts: MultisigCore, members: MultisigCore, proposals: MultisigCore)? = nil,
+        facts: @escaping @MainActor () async -> Facts
+    ) {
+        self.ports = ports
         self.loc = loc
         self.shelf = shelf
         self.tokens = tokens
         self.facts = facts
         let made = cores ?? (MultisigAccountsCore(), MultisigMembersCore(), MultisigProposalsCore())
-        accounts = MultisigMachine(core: made.accounts, ports: live, name: "accounts")
-        members = MultisigMachine(core: made.members, ports: live, name: "members")
-        proposals = MultisigMachine(core: made.proposals, ports: live, name: "proposals")
-        live.onNotice = { [weak self] notice in await self?.route(notice) }
-        live.onAskRisk = { [weak self] op in await self?.askRisk(op) ?? false }
+        accounts = MultisigMachine(core: made.accounts, ports: ports, name: "accounts")
+        members = MultisigMachine(core: made.members, ports: ports, name: "members")
+        proposals = MultisigMachine(core: made.proposals, ports: ports, name: "proposals")
         _ = accounts.listen { [weak self] _ in self?.accountsMoved() }
         _ = proposals.listen { [weak self] _ in self?.proposalsMoved() }
         _ = members.listen { [weak self] view in self?.membersView = MsJSON(any: view) }
@@ -388,11 +403,12 @@ final class MultisigHub {
 
     /// Propose `proposal` on `chainId` for the multisig shown: drawn with its
     /// review first (`draft`); the person confirms it on the review sheet
-    /// (`confirmDraft`). Answers once the machine settled it (`done`: its
-    /// safeTxHash) or why not.
+    /// (`confirmDraft`) — every proposal, a cancellation too (§3.6, r9-13):
+    /// nothing is signed before its review. `member`: the member the review
+    /// offers first (the one the person was acting as). Answers once the
+    /// machine settled it (`done`: its safeTxHash) or why not.
     func propose(
-        chainId: Int, proposal: [String: Any], address: String? = nil,
-        review: Bool = true, as member: String? = nil
+        chainId: Int, proposal: [String: Any], address: String? = nil, as member: String? = nil
     ) async -> MsTagged? {
         if let address, address.lowercased() != followed?.lowercased(), let record = record(address) {
             proposals.dispatch(["type": "follow", "account": record])
@@ -410,11 +426,15 @@ final class MultisigHub {
             return tagged
         }
         guard drafted?.kind == MsTagged.drawn.kind else { return drafted }
-        if review {
+        do {
             drafting = chainId
+            reviewAs = member
             reviewReturn = sheet
             sheet = .review(chainId: chainId)
-            defer { if drafting == chainId { drafting = nil } }
+            defer {
+                if drafting == chainId { drafting = nil }
+                reviewAs = nil
+            }
             // The person's word on its review: confirmed (working), or withdrawn.
             let asked: MsTagged? = await proposals.until { view in
                 if state(view)?.kind == "working" || !(view["draft"] is [String: Any]) {
@@ -425,9 +445,6 @@ final class MultisigHub {
             if sheet == .review(chainId: chainId) { sheet = reviewReturn }
             reviewReturn = nil
             guard asked?.kind == "working" || asked?.kind == "done" else { return asked }
-        } else {
-            // A cancellation asked from its sheet: signed at once, as `member`.
-            confirmDraft(as: member)
         }
         // No member here: an outside member's wallet proposes it — its answer
         // settles it.
@@ -445,8 +462,51 @@ final class MultisigHub {
 
     /// The chain a proposal is drawn on for the person's review, while it is.
     private(set) var drafting: Int?
+    /// The member the review offers first, while it is up (`propose`'s `as`).
+    private(set) var reviewAs: String?
     /// The sheet the review covered, shown again once it is answered.
     @ObservationIgnored private var reviewReturn: MultisigSheet?
+
+    /// Reject a transaction from its sheet (r9-13): a cancellation at its
+    /// number, a proposal like any other — drawn with its review first, the
+    /// member who rejects offered there, signed only on the person's word
+    /// there. Withdrawn on its review, nothing is signed and nothing is said;
+    /// any other way it did not go is kept for the transaction's sheet
+    /// (`rejectFailure`), which the review stood in for meanwhile.
+    @discardableResult
+    func reject(chainId: Int, safeTxHash: String, nonce: String, as member: String?) async -> MsTagged? {
+        let key = Self.rejectKey(chainId, safeTxHash)
+        rejectFailures[key] = nil
+        let settled = await propose(
+            chainId: chainId, proposal: ["kind": "cancel", "nonce": nonce],
+            address: accountsView.active, as: member
+        )
+        if let settled, Self.rejectSaysWhy(settled) { rejectFailures[key] = settled }
+        return settled
+    }
+
+    /// Why the last Reject of this transaction did not go, when there is
+    /// something to say (never the person's own withdrawal).
+    func rejectFailure(chainId: Int, safeTxHash: String) -> MsTagged? {
+        rejectFailures[Self.rejectKey(chainId, safeTxHash)]
+    }
+
+    /// The reject's answer is said on the transaction's sheet: not done, and
+    /// not the person's own word (withdrawn on the review, the high-risk
+    /// question declined, the passkey closed).
+    static func rejectSaysWhy(_ settled: MsTagged) -> Bool {
+        switch settled.kind {
+        case "done", "working", "cancelled", "riskDeclined", "outsideAsked": return false
+        case "failed":
+            let failure = MultisigShellFailure.read(settled["detail"]?.string)
+            return !(failure?["kind"] as? String == "passkey" && failure?["failure"] as? String == "cancelled"
+                && failure?["timedOut"] as? Bool != true)
+        default: return true
+        }
+    }
+
+    private static func rejectKey(_ chainId: Int, _ hash: String) -> String { "\(chainId):\(hash.lowercased())" }
+    private var rejectFailures: [String: MsTagged] = [:]
 
     /// The send machine's `propose_safe_tx` (a multisig's confirm): the
     /// reviewed transfers, proposed — answered `proposed` / `propose_failed`.
@@ -643,7 +703,7 @@ final class MultisigHub {
     /// An outside member's wallet signs it (M4): a session of its own; its
     /// answer back to the proposals machine.
     private func openOutside(_ request: [String: Any]) {
-        let model = MultisigOutsideSessionModel(request: request, ports: live, relay: shelf.readString(DevRelayKey.relay))
+        let model = MultisigOutsideSessionModel(request: request, ports: ports, relay: shelf.readString(DevRelayKey.relay))
         model.onOutcome = { [weak self] outcome in
             self?.proposals.dispatch([
                 "type": "outside_answered",
