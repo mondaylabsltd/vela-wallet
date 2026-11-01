@@ -59,6 +59,20 @@ fn bybit_slot_zero_write_is_refused_on_both_sources() {
             json!({ "allowed": false, "anyway": false }),
             "{name}"
         );
+        // A delegatecall: refused as one, and nothing said about what moves
+        // — never "No asset changes" under the refusal.
+        assert_eq!(got["refused"]["why"], json!("delegatecall"), "{name}");
+        assert_eq!(got["simulation"], expect["simulation"], "{name}");
+        assert_eq!(got["simulation"]["kind"], json!("withheld"), "{name}");
+        assert!(got["simulation"]["no_change_key"].is_null(), "{name}");
+        assert!(
+            !got["concerns"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|c| c["kind"] == "unsimulated"),
+            "{name}"
+        );
     }
 }
 

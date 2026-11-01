@@ -330,7 +330,9 @@ fn is_zero(delta: &str) -> bool {
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub struct SimVerdict {
     /// `deltas | reverts | not_offered | unreachable`. Only `deltas` means
-    /// the node checked the transaction.
+    /// the node checked the transaction. A multisig review adds `withheld`
+    /// (`multisig_review::sim_withheld`): refused, so nothing is said about
+    /// what moves — every other field empty.
     pub kind: String,
     /// The person's signed per-asset moves (the input `token_trust` takes).
     /// Empty for every kind but `deltas` — and empty WITH `deltas` is

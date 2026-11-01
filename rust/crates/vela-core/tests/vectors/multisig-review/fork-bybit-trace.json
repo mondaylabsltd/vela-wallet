@@ -79,6 +79,15 @@
    "allowed": false,
    "anyway": false
   },
-  "simulationSource": "probe"
+  "simulationSource": "probe",
+  "simulation": {
+   "kind": "withheld",
+   "deltas": [],
+   "revert_reason": null,
+   "notice_risk": null,
+   "notice_key": null,
+   "no_change_key": null,
+   "recheck": false
+  }
  }
 }
