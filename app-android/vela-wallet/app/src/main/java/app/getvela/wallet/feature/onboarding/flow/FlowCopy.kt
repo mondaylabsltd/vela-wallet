@@ -157,7 +157,9 @@ fun promptCopy(kind: PromptKind, strings: VelaStrings): PromptCopy = keyUnavaila
     "create_failed" -> PromptCopy(
         title = strings.t(I18nKeys.Create.ALERT_ERROR_TITLE),
         // Issue #446: the link to the other device failed — the core says which.
-        message = if (kind.phoneLink) strings.t(I18nKeys.Flow.PHONE_LINK_FAILED) else kind.detail.orEmpty(),
+        // Real device S3: the core's sentence for the platform error (`words_key`),
+        // never the system's English; the raw detail is the bug report's.
+        message = if (kind.phoneLink) strings.t(I18nKeys.Flow.PHONE_LINK_FAILED) else kind.wordsKey?.let { strings.t(it) } ?: kind.detail.orEmpty(),
     )
     "recover_offer" -> PromptCopy(
         title = strings.t(I18nKeys.Login.RECOVER_OFFER_TITLE),
@@ -183,10 +185,10 @@ fun promptCopy(kind: PromptKind, strings: VelaStrings): PromptCopy = keyUnavaila
     "sign_in_failed" -> PromptCopy(
         title = strings.t(I18nKeys.Login.SIGN_IN_FAILED_TITLE),
         // Issue #446: not "set up Face ID" when it was the phone link.
-        message = if (kind.phoneLink) {
-            strings.t(I18nKeys.Flow.PHONE_LINK_FAILED)
-        } else {
-            signInFailedBody(kind.detail, strings)
+        message = when {
+            kind.phoneLink -> strings.t(I18nKeys.Flow.PHONE_LINK_FAILED)
+            kind.wordsKey != null -> strings.t(kind.wordsKey)
+            else -> signInFailedBody(kind.detail, strings)
         },
     )
     // Cannot happen while the core and this file agree; if a variant was added

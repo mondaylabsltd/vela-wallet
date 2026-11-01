@@ -747,6 +747,18 @@ class OnboardingExecutor(
                         else -> failure.message ?: JSONObject.NULL
                     },
                 )
+                // Real device S3 (core §9.7): the platform error's facts — the
+                // core names the failure sheet's sentence from them
+                // (`words_key`), never the system's English in a Chinese UI;
+                // the raw message stays the bug report's detail.
+                put(
+                    "error",
+                    JSONObject()
+                        .put("platform", "android")
+                        .put("domain", failure.domain ?: error::class.simpleName.orEmpty())
+                        .put("code", failure.code ?: JSONObject.NULL)
+                        .put("message", error.message.orEmpty()),
+                )
             }
         }
 

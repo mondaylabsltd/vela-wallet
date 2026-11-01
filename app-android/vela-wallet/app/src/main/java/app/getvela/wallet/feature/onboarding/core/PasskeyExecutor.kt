@@ -902,7 +902,19 @@ enum class FailureKind(val wire: String) {
  * narrow: everything unrecognised becomes `other` carrying the platform's own
  * words, which the core forwards verbatim into the bug report.
  */
-open class PasskeyFailure(val kind: FailureKind, message: String) : Exception(message)
+open class PasskeyFailure(
+    val kind: FailureKind,
+    message: String,
+    /**
+     * Real device S3 (core §9.7): the platform error's identity — the
+     * Credential Manager type, or a DOM error's type — and its Play Services
+     * status code when there is one, for the core's `passkey_error_words`
+     * (a corpus sentence, never the system's English). Stable across R8: a
+     * `type` string, never a class name.
+     */
+    val domain: String? = null,
+    val code: Int? = null,
+) : Exception(message)
 
 /**
  * The system's passkey sheet never appeared (see `awaitingSelector`). To the
@@ -934,7 +946,9 @@ data class Assertion(
 // Classification
 // ---------------------------------------------------------------------------
 
-internal fun classifyCreate(error: CreateCredentialException): PasskeyFailure = when (error) {
+internal fun classifyCreate(error: CreateCredentialException): PasskeyFailure = classifyCreateKind(error).withFacts(createDomain(error))
+
+private fun classifyCreateKind(error: CreateCredentialException): PasskeyFailure = when (error) {
     is CreateCredentialCancellationException ->
         PasskeyFailure(FailureKind.Cancelled, "User cancelled the operation")
 
@@ -984,7 +998,9 @@ internal fun isSystemRouteUnavailable(error: GetCredentialException): Boolean =
     error is GetCredentialProviderConfigurationException ||
         error is GetCredentialUnsupportedException
 
-internal fun classifyGet(error: GetCredentialException): PasskeyFailure = when (error) {
+internal fun classifyGet(error: GetCredentialException): PasskeyFailure = classifyGetKind(error).withFacts(getDomain(error))
+
+private fun classifyGetKind(error: GetCredentialException): PasskeyFailure = when (error) {
     is GetCredentialCancellationException ->
         PasskeyFailure(FailureKind.Cancelled, "User cancelled the operation")
 
@@ -1017,6 +1033,16 @@ internal fun classifyGet(error: GetCredentialException): PasskeyFailure = when (
  * would quietly turn every refusal into "other".
  */
 private fun domType(domError: androidx.credentials.exceptions.domerrors.DomError): String = domError.type
+
+/** The error's facts for the core's words: a DOM error's type, else the exception's own `type` (both stable under R8). */
+private fun createDomain(error: CreateCredentialException): String =
+    (error as? CreatePublicKeyCredentialDomException)?.domError?.type ?: error.type
+
+private fun getDomain(error: GetCredentialException): String =
+    (error as? GetPublicKeyCredentialDomException)?.domError?.type ?: error.type
+
+/** [this] classification, carrying the platform error's facts (`domain`; a Play Services `[code]` in the message is the core's to read). */
+private fun PasskeyFailure.withFacts(domain: String): PasskeyFailure = PasskeyFailure(kind, message.orEmpty(), domain = domain, code = code)
 
 private const val DOM_INVALID_STATE = "androidx.credentials.TYPE_INVALID_STATE_ERROR"
 private const val DOM_NOT_SUPPORTED = "androidx.credentials.TYPE_NOT_SUPPORTED_ERROR"
