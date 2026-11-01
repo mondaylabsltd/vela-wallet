@@ -666,6 +666,7 @@ fun VelaNavHost(
             }
 
             composable(VelaDestinations.WALLET) {
+
                 val strings = LocalVelaStrings.current
                 // Native multisig: the multisig shown, when one is — the wallet
                 // wears its identity (its address's balance and activity; its
@@ -1120,7 +1121,16 @@ fun VelaNavHost(
                 // aftercare keeps its header once the core has closed it.
                 val trackView by application.container.wallet.tracker.collectAsStateWithLifecycle()
                 val aftercare by application.container.signingAftercare.collectAsStateWithLifecycle()
-                var lastSigning by remember { mutableStateOf<Pair<app.getvela.wallet.feature.signing.SigningScreenModel, app.getvela.wallet.feature.signing.SigningLive.Context>?>(null) }
+                // The last sheet drawn, for the ending's header. A plain holder,
+                // NOT state (perf, real device: signing sheet open 10.7-13.8% janky):
+                // as state, the SideEffect below wrote a new pair after every
+                // composition — the model and its context are rebuilt each time
+                // and never equal — and the write recomposed this whole route,
+                // which wrote again: the wallet route recomposed on EVERY frame
+                // (5-10 ms each on the Redmi) for as long as a sheet was up. It is
+                // read only once the controller is gone, a change that recomposes
+                // this route by itself.
+                val lastSigning = remember { LastSigning() }
                 val explorerContext = LocalContext.current
                 fun openExplorer(chainId: Int, txHash: String?) {
                     val base = networks.networks.firstOrNull { it.chain_id.toInt() == chainId }?.explorer_url?.trimEnd('/')
@@ -1214,7 +1224,7 @@ fun VelaNavHost(
                                     app.getvela.wallet.feature.signing.SigningLive.confirmState(signJson, guardJson, clearJson, feeJson, signSpeed.tier)
                                 },
                             )
-                            SideEffect { lastSigning = signingModel to signCtx }
+                            SideEffect { lastSigning.value = signingModel to signCtx }
                             app.getvela.wallet.feature.signing.SigningSheet(
                                 model = signingModel,
                                 // The ✕ (spec 079: the ONLY close): a reject before the
@@ -1247,7 +1257,7 @@ fun VelaNavHost(
                 // the ending stays on screen — a tick that leaves by itself, or
                 // "not landed yet" until closed or seen landing.
                 val ending = aftercare
-                val endingHeader = lastSigning
+                val endingHeader = lastSigning.value
                 if (ending != null && endingHeader != null && signingController == null) {
                     val (headerModel, headerCtx) = endingHeader
                     // Spec 082 RA8: the tracker's entry for the operation this
@@ -3681,4 +3691,9 @@ internal fun launchFlowEntry(flow: app.getvela.wallet.core.platform.LaunchEntry.
     app.getvela.wallet.core.platform.LaunchEntry.Flow.Send -> WalletFlowEntry.Send
     app.getvela.wallet.core.platform.LaunchEntry.Flow.Receive -> WalletFlowEntry.Receive
     app.getvela.wallet.core.platform.LaunchEntry.Flow.Scan -> WalletFlowEntry.Scan
+}
+
+/** The last signing sheet drawn and its context, kept for the ending's header — not observed. */
+private class LastSigning {
+    var value: Pair<app.getvela.wallet.feature.signing.SigningScreenModel, app.getvela.wallet.feature.signing.SigningLive.Context>? = null
 }
