@@ -113,7 +113,11 @@ class R10ShellFixesTest {
         )
         val shown = shownConcerns(withRevert).map { it.kind }
         assertFalse("no 'expected to fail' under 'Vela won't sign this': $shown", "reverts" in shown)
-        assertFalse("the refusal's reason is said once, by the refusal line: $shown", "unreadableBatch" in shown)
+        // r10 follow-up (core §10.2): the review leaves the deep batch's own
+        // concern out at the source (`multisig_review`); the sheet no longer
+        // filters it, it draws what the review says. (This review is built
+        // from the READING's concerns, which still carry it.)
+        assertTrue("the sheet draws what it is handed: $shown", "unreadableBatch" in shown)
         assertTrue("what else it says stays: $shown", "nestedBatch" in shown)
         // An open (not refused) review keeps its revert.
         val open = JsonObject(mapOf("concerns" to json("""[{"kind":"reverts"}]"""), "simulation" to json("""{"kind":"deltas","deltas":[]}""")))
