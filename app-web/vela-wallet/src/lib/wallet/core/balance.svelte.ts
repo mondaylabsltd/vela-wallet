@@ -191,6 +191,16 @@ class Balance {
 		if (changed) await this.#restoreRows();
 	}
 
+	/**
+	 * r10-1: the networks `address` lives on though it may hold nothing there
+	 * (a multisig's networks) — with what it holds, the networks the core's
+	 * "Updated …" speaks for. Sent before the account, so its first round counts.
+	 */
+	async livesOn(address: string, chainIds: readonly number[]): Promise<void> {
+		await this.boot();
+		dispatchBalance({ type: 'lives_on', address, chain_ids: [...chainIds] });
+	}
+
 	refresh(force = false, pull = false): void {
 		if (!this.#booted) return;
 		dispatchBalance({ type: 'refresh_requested', force, pull });

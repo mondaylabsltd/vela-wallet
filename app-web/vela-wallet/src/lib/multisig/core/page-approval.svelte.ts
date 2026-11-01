@@ -65,6 +65,13 @@ export interface PageApprovalInput {
 	multisigName?: string | null;
 	/** r9-10: the one review asks for "… anyway" (`PasskeyPurpose.anyway`). */
 	anyway?: boolean;
+	/**
+	 * r10 page: the multisig's members and the approvals it needs now
+	 * (`PasskeyPurpose.owners` / `.threshold`) — a member change reads
+	 * before → after on the page, the "before" marked as the app's word.
+	 */
+	owners?: string[];
+	threshold?: number | null;
 	tx: SafeTx;
 	/** The safeTxHash the core computed: what the approval is FOR. */
 	safeTxHash: string;
@@ -124,7 +131,9 @@ function handOffApproval(
 		memberName: input.member.name,
 		credentialIdsHex: input.keys.map((k) => k.credentialId),
 		keyRoute: input.keyRoute,
-		anyway: input.anyway === true
+		anyway: input.anyway === true,
+		owners: input.owners ?? [],
+		threshold: input.threshold ?? null
 	});
 	return handOff<PasskeyApproval>(
 		{

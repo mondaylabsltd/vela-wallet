@@ -140,6 +140,11 @@ pub struct Call {
     /// transaction's one call, `[2]` the second leg, `[2, 1]` the first leg
     /// of the batch that leg is.
     pub path: Vec<u32>,
+    /// The leg's number as every shell says it (r10-10): the path joined by
+    /// `.` (`"2.1"`), `None` for the transaction's one call (`path` empty) —
+    /// then no number at all, never `review.callNumber` with an empty `n`.
+    #[serde(default)]
+    pub leg: Option<String>,
     /// The contract (or account) called.
     pub to: String,
     /// The coin sent along with it (a `send` of the coin says it there).
@@ -291,6 +296,7 @@ impl<'a> Reader<'a> {
         self.count += 1;
         let intent = self.intent(&path, to, value, data, depth);
         Call {
+            leg: leg_number(&path),
             path,
             to: checksum(to),
             value: self.coin(value),
@@ -476,6 +482,7 @@ impl<'a> Reader<'a> {
                 // reads what it would run.
                 self.count += 1;
                 out.push(Call {
+                    leg: leg_number(&at),
                     path: at,
                     to: checksum(to),
                     value: self.coin(value),
@@ -488,6 +495,17 @@ impl<'a> Reader<'a> {
         }
         (!out.is_empty()).then_some(out)
     }
+}
+
+/// A leg's number as said (r10-10): `[2, 1]` → `"2.1"`; the transaction's
+/// one call (`[]`) has none.
+pub fn leg_number(path: &[u32]) -> Option<String> {
+    (!path.is_empty()).then(|| {
+        path.iter()
+            .map(u32::to_string)
+            .collect::<Vec<_>>()
+            .join(".")
+    })
 }
 
 /// The calls of `tx`, as `review` read it, with the token facts read.
@@ -515,12 +533,14 @@ pub fn read(
                     | Action::RemoveOwner { .. }
                     | Action::SwapOwner { .. }
                     | Action::ChangeThreshold { .. }) => Some(Call {
+                        leg: leg_number(&path),
                         path,
                         to: c.to.clone(),
                         value: r.coin(U256::ZERO),
                         intent: Intent::Members { action: a.clone() },
                     }),
                     Action::Rename { name } => Some(Call {
+                        leg: leg_number(&path),
                         path,
                         to: c.to.clone(),
                         value: r.coin(U256::ZERO),

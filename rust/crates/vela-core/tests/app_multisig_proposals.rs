@@ -780,6 +780,7 @@ fn a_page_executor_signs_one_operation_and_its_page_is_told_what_runs() {
         name,
         threshold,
         tx,
+        owners,
     })) = world.purposes.first().cloned()
     else {
         panic!("{:?}", world.purposes);
@@ -787,6 +788,13 @@ fn a_page_executor_signs_one_operation_and_its_page_is_told_what_runs() {
     assert_eq!(multisig, account.address);
     assert_eq!(name.as_deref(), Some("Quiet Harbor"));
     assert_eq!(threshold, 2);
+    // r10 page: its members now, for a member change's before → after.
+    assert!(
+        owners
+            .iter()
+            .any(|o| o.eq_ignore_ascii_case(&fixture(0).address)),
+        "{owners:?}"
+    );
     let item = sut
         .view()
         .items
@@ -2007,4 +2015,64 @@ fn the_rule_chip_and_the_waiting_line_are_the_machines() {
             rule: MemberRule::of(3, 4)
         })
     );
+}
+
+// -- r10-1: whose outage it is ------------------------------------------------------------
+
+/// r10-1: the chain is dead and the service answered — "Can't reach <network>",
+/// never "The multisig service can't be reached".
+#[test]
+fn a_dead_chain_is_never_said_as_the_service() {
+    let (mut world, mut sut, _) = setup(&[0]);
+    world.silent.insert(100);
+    run(&mut sut, &mut world, Event::Refresh { fresh: true });
+    let view = sut.view();
+    assert_eq!(view.unreadable, vec![100]);
+    assert!(!view.unreachable, "the service answered");
+}
+
+/// r10-1: the service is away AND the chain this device reads it on is dead —
+/// the service reads that chain too, so its silence there is the chain's:
+/// the network is named, not the service.
+#[test]
+fn a_service_silent_on_a_dead_chain_is_that_chain() {
+    let (mut world, mut sut, _) = setup(&[0]);
+    world.silent.insert(100);
+    world.service_down = true;
+    run(&mut sut, &mut world, Event::Refresh { fresh: true });
+    let view = sut.view();
+    assert_eq!(view.unreadable, vec![100]);
+    assert!(!view.unreachable);
+}
+
+/// The service really away, the chain fine: said as the service.
+#[test]
+fn a_service_away_on_a_live_chain_is_the_service() {
+    let (mut world, mut sut, _) = setup(&[0]);
+    world.service_down = true;
+    run(&mut sut, &mut world, Event::Refresh { fresh: true });
+    let view = sut.view();
+    assert!(view.unreadable.is_empty());
+    assert!(view.unreachable, "the service's own read missed");
+}
+
+/// r9-14: the rule as the chain says (a member added: 2 of 4) is told to the
+/// accounts machine with the members, so its row says it unfollowed too.
+#[test]
+fn the_rule_the_chain_says_is_told() {
+    use vela_core::app::multisig_members::{MemberRule, RuleChip};
+    let (mut world, mut sut, account) = setup(&[0]);
+    let mut owners: Vec<String> = (0..3).map(|i| fixture(i).address).collect();
+    owners.push(B.to_owned());
+    let refs: Vec<&str> = owners.iter().map(String::as_str).collect();
+    world.deploy(100, &account.address, world::DeployedSafe::clean(&refs, 2));
+    run(&mut sut, &mut world, Event::Refresh { fresh: true });
+    assert!(world.notices.contains(&Notice::Account {
+        address: account.address.clone(),
+        update: AccountUpdate::RuleNow {
+            chip: RuleChip::Needs {
+                rule: MemberRule::of(2, 4)
+            }
+        },
+    }));
 }

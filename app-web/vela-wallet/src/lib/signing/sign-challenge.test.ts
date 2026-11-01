@@ -686,7 +686,7 @@ describe('the page, everywhere: the hand-off and the answer the core accepts', (
 				credentials: [],
 				request: {
 					method: 'vela_multisigExecute',
-					params: { tx, multisig, name: 'R7 Team', threshold: 2 },
+					params: { tx, multisig, name: 'R7 Team', threshold: 2, owners: [ADDRESS, multisig] },
 					origin: '',
 					chainId: CHAIN
 				}
@@ -703,6 +703,8 @@ describe('the page, everywhere: the hand-off and the answer the core accepts', (
 			address: multisig,
 			name: 'R7 Team',
 			threshold: 2,
+			// r10 page: its members now, for a member change's before → after.
+			owners: [ADDRESS, multisig],
 			nonce: '0x3',
 			safeTxHash: safeTxHash(CHAIN, multisig, tx)
 		});

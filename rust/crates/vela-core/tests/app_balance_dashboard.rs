@@ -57,6 +57,7 @@ fn settled(address: &str, tokens: Vec<BalanceToken>, failed: Vec<u32>, limited: 
         registry_chain_ids: vec![],
         own_node_chain_ids: vec![],
         fallback_chain_ids: vec![],
+        read_at_ms: None,
         now_ms: NOW,
     }
 }
@@ -74,6 +75,7 @@ fn settled_read(tokens: Vec<BalanceToken>, failed: Vec<u32>, read: Vec<u32>) -> 
         registry_chain_ids: vec![],
         own_node_chain_ids: vec![],
         fallback_chain_ids: vec![],
+        read_at_ms: None,
         now_ms: NOW,
     }
 }
@@ -814,8 +816,9 @@ fn stale_account_results_are_dropped_by_construction() {
     assert!(sut.view().tokens.is_empty());
 }
 
-/// The account-change reset — and its two verbatim non-resets
-/// (`rateLimitedChainIds`, `lastRefreshedAt` survive the switch).
+/// The account-change reset — and its one verbatim non-reset
+/// (`rateLimitedChainIds` survives the switch). r10-1: the stamp does not —
+/// it speaks for the account on screen.
 #[test]
 fn account_switch_resets_balance_state_but_keeps_the_ported_quirks() {
     let mut sut = booted(
@@ -840,9 +843,10 @@ fn account_switch_resets_balance_state_but_keeps_the_ported_quirks() {
     assert!(view.failed_chain_ids.is_empty());
     assert_eq!(view.cached_total_usd, None);
     assert!(view.balance_unknown);
-    // Ported verbatim: the reset never touches these two.
+    // Ported verbatim: the reset never touches this one.
     assert_eq!(view.rate_limited_chain_ids, vec![10]);
-    assert_eq!(view.last_refreshed_at_ms, Some(NOW));
+    // r10-1: B was never read — A's "Updated now" is not B's.
+    assert_eq!(view.last_refreshed_at_ms, None);
 }
 
 // ===========================================================================
@@ -1291,6 +1295,7 @@ fn manual_pull_forces_past_the_ttl_and_drives_the_spinner() {
         registry_chain_ids: vec![],
         own_node_chain_ids: vec![],
         fallback_chain_ids: vec![],
+        read_at_ms: None,
         now_ms: NOW + 1.0,
     });
     assert!(!sut.view().refreshing);
@@ -1338,6 +1343,7 @@ fn the_refresh_control_spins_until_its_own_round_ends() {
         registry_chain_ids: vec![],
         own_node_chain_ids: vec![],
         fallback_chain_ids: vec![],
+        read_at_ms: None,
         now_ms: NOW + 1.0,
     });
     assert!(sut.view().refreshing, "the person's own round is still out");
@@ -1381,6 +1387,7 @@ fn a_round_no_network_answered_never_moves_updated() {
             registry_chain_ids: vec![],
             own_node_chain_ids: vec![],
             fallback_chain_ids: vec![],
+            read_at_ms: None,
             now_ms,
         });
     };
@@ -1840,6 +1847,7 @@ fn an_account_switch_forgets_the_last_reads() {
         registry_chain_ids: vec![],
         own_node_chain_ids: vec![],
         fallback_chain_ids: vec![],
+        read_at_ms: None,
         now_ms: NOW,
     });
     assert_eq!(unreachable_rows(&sut.view()), vec![(56, NOT_READ_YET)]);
@@ -2463,6 +2471,7 @@ fn an_internal_fault_is_not_a_network_out_of_reach() {
         registry_chain_ids: vec![],
         own_node_chain_ids: vec![],
         fallback_chain_ids: vec![],
+        read_at_ms: None,
         now_ms: NOW,
     };
     // Every failure is internal: no "Can't reach Ethereum".
@@ -2515,6 +2524,7 @@ fn an_unloaded_token_list_is_not_a_network_out_of_reach() {
         registry_chain_ids: registry,
         own_node_chain_ids: vec![],
         fallback_chain_ids: vec![],
+        read_at_ms: None,
         now_ms: NOW,
     };
 
@@ -2621,6 +2631,7 @@ fn a_round_where_every_chain_failed_is_no_zero() {
         registry_chain_ids: vec![],
         own_node_chain_ids: vec![],
         fallback_chain_ids: vec![],
+        read_at_ms: None,
         now_ms: NOW,
     };
     let view = booted(ADDR_A, None, all_failed).view();
@@ -2979,6 +2990,7 @@ fn the_breakdown_status_names_what_is_unavailable() {
             registry_chain_ids: vec![TEMPO],
             own_node_chain_ids: vec![],
             fallback_chain_ids: vec![],
+            read_at_ms: None,
             now_ms: NOW,
         },
     )
@@ -3464,6 +3476,7 @@ fn an_own_node_out_of_reach_is_said_as_theirs_and_a_fallback_is_listed() {
         registry_chain_ids: vec![],
         own_node_chain_ids: own,
         fallback_chain_ids: fallback,
+        read_at_ms: None,
         now_ms: NOW,
     };
 
@@ -3671,4 +3684,72 @@ fn another_account_changed_after_a_note_is_the_full_reset() {
             },
         ]
     );
+}
+
+// ===========================================================================
+// r10-1 — the stamp speaks for the networks the shown account lives on
+// ===========================================================================
+
+/// The shared vectors every shell replays (`tests/vectors/balance-stamp.json`).
+#[test]
+fn the_balance_stamp_vectors_hold() {
+    let path = format!(
+        "{}/tests/vectors/balance-stamp.json",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let v: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let cases = v["cases"].as_array().unwrap();
+    assert!(cases.len() >= 8);
+    for case in cases {
+        let name = case["name"].as_str().unwrap();
+        let address = case["address"].as_str().unwrap();
+        let mut sut = boot(address);
+        for (i, step) in case["steps"].as_array().unwrap().iter().enumerate() {
+            if let Some(event) = step.get("event") {
+                let event: Event = serde_json::from_value(event.clone()).unwrap();
+                sut.dispatch(event);
+            } else {
+                let answer: Res = serde_json::from_value(step["answer"].clone()).unwrap();
+                let fetch = matches!(answer, Res::FetchSettled { .. });
+                sut.resolve_matching(
+                    |op| {
+                        if fetch {
+                            matches!(op, Op::FetchTokens { .. })
+                        } else {
+                            matches!(op, Op::ReadBalanceCache { .. })
+                        }
+                    },
+                    answer,
+                );
+            }
+            if let Some(stamp) = step.get("stamp") {
+                assert_eq!(
+                    sut.view().last_refreshed_at_ms,
+                    stamp.as_f64(),
+                    "{name}, step {i}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn the_stamp_rule_counts_only_the_home_networks() {
+    use std::collections::BTreeSet;
+    use vela_core::app::balance_dashboard::stamp_moves;
+    let arc: BTreeSet<u32> = [5_042_002].into_iter().collect();
+    let none = BTreeSet::new();
+    // Arc lives, Arc failed, Sepolia answered: stays.
+    assert!(!stamp_moves(&arc, &[5_042_002, 11_155_111], &[5_042_002]));
+    // Arc answered, Sepolia failed: moves — Sepolia is not its network.
+    assert!(stamp_moves(&arc, &[5_042_002, 11_155_111], &[11_155_111]));
+    // Lives nowhere: any answer.
+    assert!(stamp_moves(&none, &[5_042_002, 11_155_111], &[5_042_002]));
+    assert!(!stamp_moves(&none, &[1, 2], &[1, 2]));
+    // Its network is not in this space: the space's read is what is shown.
+    assert!(stamp_moves(&arc, &[1, 10], &[10]));
+    // A shell that does not say what it asked: the failed ones it knows.
+    assert!(!stamp_moves(&arc, &[], &[5_042_002]));
+    assert!(stamp_moves(&arc, &[], &[]));
 }

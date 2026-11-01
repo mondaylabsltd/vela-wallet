@@ -44,4 +44,13 @@ spent_by_operation: boolean,
  * there is no fee to weigh. `#[serde(default)]`: a reader that predates
  * it reads `None`.
  */
-short: FeeShortfall | null, };
+short: FeeShortfall | null, 
+/**
+ * r10-3: this coin's balance covers the fee alone, and not once the
+ * operation has taken what it moves of the same balance — a dApp's
+ * 0.1 USDC out of 0.4 with a 0.35 USDC fee. The fee line then says
+ * "to cover amount + gas fees" (`send.warnInsufficientForGas`), not that
+ * the coin cannot pay a fee at all. Set only with [`Self::short`].
+ * `#[serde(default)]`: a reader that predates it reads `false`.
+ */
+short_with_amount: boolean, };

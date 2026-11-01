@@ -332,6 +332,7 @@ pub fn internal_view() -> vela_core::app::balance_dashboard::BalanceView {
                 registry_chain_ids: Vec::new(),
                 own_node_chain_ids: vec![],
                 fallback_chain_ids: vec![],
+                read_at_ms: None,
                 now_ms: 1.0,
             },
             // The cache write and the retry timer: nothing to show.
@@ -384,6 +385,7 @@ pub fn token_list_view() -> vela_core::app::balance_dashboard::BalanceView {
                 registry_chain_ids: vec![TEMPO],
                 own_node_chain_ids: vec![],
                 fallback_chain_ids: vec![],
+                read_at_ms: None,
                 now_ms: 1.0,
             },
             // The cache write and the retry timer: nothing to show.
@@ -438,6 +440,7 @@ pub fn held_view() -> vela_core::app::balance_dashboard::BalanceView {
                 registry_chain_ids: Vec::new(),
                 own_node_chain_ids: vec![],
                 fallback_chain_ids: vec![],
+                read_at_ms: None,
                 now_ms: 1.0,
             },
             // The cache write and the retry timer: nothing to show.
@@ -587,6 +590,7 @@ pub fn first_read_view(stage: FirstRead) -> vela_core::app::balance_dashboard::B
                 registry_chain_ids: Vec::new(),
                 own_node_chain_ids: vec![],
                 fallback_chain_ids: vec![],
+                read_at_ms: None,
                 now_ms: 1.0,
             },
             // The cache write and the retry timer: nothing to show.
@@ -1244,6 +1248,7 @@ pub fn breakdown_view() -> vela_core::app::balance_dashboard::BalanceView {
                 registry_chain_ids: Vec::new(),
                 own_node_chain_ids: vec![],
                 fallback_chain_ids: vec![],
+                read_at_ms: None,
                 now_ms: 1.0,
             },
             // The cache write and the retry timer: nothing to show.
@@ -1300,6 +1305,7 @@ pub fn breakdown_statuses_view() -> vela_core::app::balance_dashboard::BalanceVi
                 registry_chain_ids: vec![TEMPO],
                 own_node_chain_ids: vec![],
                 fallback_chain_ids: vec![],
+                read_at_ms: None,
                 now_ms: 1.0,
             },
             // The cache write and the retry timer: nothing to show.

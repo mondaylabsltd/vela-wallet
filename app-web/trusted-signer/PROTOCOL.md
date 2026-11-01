@@ -660,6 +660,8 @@ EntryPoint / 4337 模块地址若不是 Vela 的那两个，会挂一条 danger 
 | 多签批准（第 12 节）：safeTxHash、域哈希、消息哈希 | 本页从**原始 SafeTx 字段** + chainId + 多签地址本地算出（EIP-712）；App 给的 safeTxHash 只用来比对，不一致就拒签并把两个哈希都写出来 | 否 |
 | 多签批准：读法（转账、成员变更、批量的每一腿、拒绝、改名） | 本页按 vela-core `review` 的同一套规则从 SafeTx 读出（`lib/multisig.js`）；对外部合约的调用走交易的同一条阶梯（描述 / 4byte / 只看形状 / 盲签） | 否 |
 | 多签批准：多签的名字 | App（`context.multisig.name`）| 是，且标「App 提供」；看不见的字符显示成码位 |
+| 多签批准 / 执行：成员变更的「之前」（成员数、门槛） | App（`context.multisig.owners` / `.threshold`，第十轮）；「之后」从 SafeTx 读出。本次操作部署了多签时以核实过的 setup 为准 | 是，且标「App 的说法」；对不上变更就不写数字、给一条提示 |
+| 多签批准 / 执行：「谁的钱」 | 本页：多签的交易里授权、转账、随调用转出的原生币都写「多签的」（第十轮）；`selfTag` 只由本页设置 | 否 |
 | 多签批准：被签的字节 | 本页推导：`SafeMessage(safeTxHash)` 在**成员**自己的域下 | 否 |
 
 ---
@@ -778,10 +780,16 @@ postMessage:  {vela:"result", id, registration|assertion, origin}
     "chainId": 5042002, "chainName": "Arc Testnet", "nativeSymbol": "USDC",
     "account": "0x…成员", "signer": { "name": "Bob", "letter": "B" },
     "allowCredentials": ["…"], "keyRoute": { … },
-    "multisig": { "name": "Arc Team" }
+    "multisig": { "name": "Arc Team", "owners": ["0x…", "0x…", "0x…", "0x…"], "threshold": 2 }
   }
 }
 ```
+
+`owners` / `threshold`（第十轮）：多签**现在**的成员与门槛，钱包取自提案所对的链上成员（vela-core
+`PasskeyPurpose::Approve` 的 `owners` / `threshold` → `ApprovalInput`）。本页连不出去、核实不了，只用来把成员变更
+写成前后（「成员 4 → 5 · 所需批准数 2 / 4 → 1 / 5」），标「App 的说法」；地址不合法、重复、门槛超出人数 = 没给；
+与变更对不上（加已有成员、删不在的成员、变更后门槛超出人数）= 不写数字、挂 `warn.msMembersClaimOff`。没给就照旧只写门槛。
+执行（12.7）的 `context.multisig` 同样带 `owners`；本次部署了多签时以 setup 为准，是事实。
 
 由 vela-core `trusted_signer::approval::request` 生成（网页钱包经 wasm 的
 `trustedSignerApprovalRequest`）。字段名与 vela-core 的 `SafeTx` 相同；数量是 `0x` 十六进制或十进制字符串。

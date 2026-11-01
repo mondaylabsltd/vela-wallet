@@ -414,6 +414,7 @@ fn a_cancelled_ceremony_is_silent() {
     let next = sut.resolve(ShellResult::PasskeyFailed {
         kind: FailureKind::Cancelled,
         message: None,
+        error: None,
     });
 
     assert!(next.is_empty(), "no prompt, no error state");
@@ -447,6 +448,7 @@ fn a_cancelled_phone_ceremony_is_silent_too() {
     let next = sut.resolve(ShellResult::PasskeyFailed {
         kind: FailureKind::Cancelled,
         message: Some("The code was dismissed".to_owned()),
+        error: None,
     });
     assert!(
         next.is_empty(),
@@ -511,6 +513,7 @@ fn a_cancelled_phone_recovery_signature_is_silent() {
     let next = sut.resolve(ShellResult::PasskeyFailed {
         kind: FailureKind::Cancelled,
         message: None,
+        error: None,
     });
     assert!(next.is_empty(), "no RecoverFailed, no phone_link: {next:?}");
     assert!(!sut.view().busy);
@@ -529,6 +532,7 @@ fn a_failed_link_to_the_phone_is_not_blamed_on_biometrics() {
         let next = sut.resolve(ShellResult::PasskeyFailed {
             kind: FailureKind::Other,
             message: Some(message.to_owned()),
+            error: None,
         });
         match next.as_slice() {
             [ShellOperation::Prompt { kind, .. }] => kind.clone(),
@@ -577,6 +581,70 @@ fn a_failed_link_to_the_phone_is_not_blamed_on_biometrics() {
 }
 
 /// The flag is additive: a prompt from a core that predates it still reads.
+/// Round 10 (real-device S3): Android drew "[50152] RP ID cannot be
+/// validated" inside a Chinese sheet. With the error's facts the core names
+/// the sentence (`words_key`), and the raw words stay the detail for the
+/// report; without them the sheet is the old one, and the wire omits the key.
+#[test]
+fn a_failed_sign_in_with_the_platform_facts_names_its_sentence() {
+    use vela_core::app::passkey_error::PasskeyErrorFacts;
+    let prompt_after = |error: Option<PasskeyErrorFacts>| {
+        let mut sut = mounted();
+        sut.dispatch(Event::SignIn {
+            method: KeyMethod::Platform,
+            page: None,
+        });
+        sut.resolve(ShellResult::PasskeySupport { supported: true });
+        let next = sut.resolve(ShellResult::PasskeyFailed {
+            kind: FailureKind::Other,
+            message: Some("[50152] RP ID cannot be validated.".to_owned()),
+            error,
+        });
+        match next.as_slice() {
+            [ShellOperation::Prompt { kind, .. }] => kind.clone(),
+            other => panic!("expected one prompt, got {other:?}"),
+        }
+    };
+    let said = prompt_after(Some(PasskeyErrorFacts {
+        platform: "android".to_owned(),
+        domain: "androidx.credentials.exceptions.GetCredentialUnknownException".to_owned(),
+        code: None,
+        message: "[50152] RP ID cannot be validated.".to_owned(),
+    }));
+    assert_eq!(
+        said,
+        PromptKind::SignInFailed {
+            detail: "[50152] RP ID cannot be validated.".to_owned(),
+            phone_link: false,
+            words_key: Some("onboarding.common.passkeyError.appNotAssociated".to_owned()),
+        }
+    );
+    let old = prompt_after(None);
+    assert!(
+        matches!(
+            old,
+            PromptKind::SignInFailed {
+                words_key: None,
+                ..
+            }
+        ),
+        "{old:?}"
+    );
+    let wire = serde_json::to_value(&old).expect("serializes");
+    assert!(
+        wire.get("words_key").is_none(),
+        "omitted when absent: {wire}"
+    );
+    // A shell that predates the field sends no `error` and still decodes.
+    let result: ShellResult =
+        serde_json::from_str(r#"{"type":"passkey_failed","kind":"other","message":"x"}"#)
+            .expect("decodes");
+    assert!(matches!(
+        result,
+        ShellResult::PasskeyFailed { error: None, .. }
+    ));
+}
+
 #[test]
 fn a_sign_in_failure_without_the_flag_still_decodes() {
     let kind: PromptKind =
@@ -1636,6 +1704,7 @@ fn a_security_key_that_cannot_run_is_not_blamed_on_biometrics() {
         let next = sut.resolve(ShellResult::PasskeyFailed {
             kind: FailureKind::NotSupported,
             message: Some("Smart-card access is unavailable".to_owned()),
+            error: None,
         });
         match next.as_slice() {
             [ShellOperation::Prompt { kind, .. }] => kind.clone(),

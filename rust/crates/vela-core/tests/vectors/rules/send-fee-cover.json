@@ -1,0 +1,264 @@
+{
+  "about": "r10-3: amount + fee against ONE balance. Replayed by tests/app_send_fee_cover.rs; shells that drive the same core machines replay the same cases. On Arc (5042002) the native coin USDC (token_address null, 18 places) and its ERC-20 interface 0x3600…0000 (6 places) are one balance (manage_tokens::native_alias_token): a fee quoted in either face is drawn from the money sent in either face.",
+  "alias": "0x3600000000000000000000000000000000000000",
+  "send": {
+    "about": "The send machine. Each case: boot with `tokens` (chain_id, address null = native, decimals, balance as a decimal string), select `token` (its index in `tokens`), type `amount`, Continue to the confirm with a zero native fee, then the fee in `fee` lands ON THE CONFIRM PAGE (Event::FeeUpdated) — the path r10-3 took. `fee.asset` native carries total_wei; erc20 carries token/decimals/amount (base units). Expected: SendView.can_confirm, SendView.same_asset_fee_issue (null, or its fee_amount/total/max_transfer_amount in the SENT token's base units) and SendView.amount_warning.type (null or the snake_case variant).",
+    "cases": [
+      {
+        "name": "native fee, native sent, amount + fee over the balance",
+        "tokens": [{ "chain_id": 5042002, "address": null, "decimals": 18, "symbol": "USDC", "balance": "0.4" }],
+        "token": 0,
+        "amount": "0.001",
+        "fee": { "asset": "native", "total_wei": "488060000000000000" },
+        "expect": {
+          "can_confirm": false,
+          "issue": { "fee_amount": "488060000000000000", "total": "489060000000000000", "max_transfer_amount": "0" },
+          "warning": "insufficient_for_gas"
+        }
+      },
+      {
+        "name": "native fee, native sent, exactly the balance",
+        "tokens": [{ "chain_id": 5042002, "address": null, "decimals": 18, "symbol": "USDC", "balance": "0.5" }],
+        "token": 0,
+        "amount": "0.01194",
+        "fee": { "asset": "native", "total_wei": "488060000000000000" },
+        "expect": { "can_confirm": true, "issue": null, "warning": null }
+      },
+      {
+        "name": "native fee, native sent, one wei over",
+        "tokens": [{ "chain_id": 5042002, "address": null, "decimals": 18, "symbol": "USDC", "balance": "0.5" }],
+        "token": 0,
+        "amount": "0.011940000000000001",
+        "fee": { "asset": "native", "total_wei": "488060000000000000" },
+        "expect": {
+          "can_confirm": false,
+          "issue": { "fee_amount": "488060000000000000", "total": "500000000000000001", "max_transfer_amount": "11940000000000000" },
+          "warning": "insufficient_for_gas"
+        }
+      },
+      {
+        "name": "alias: native USDC sent, fee quoted in the 0x3600 interface (r10-3)",
+        "tokens": [{ "chain_id": 5042002, "address": null, "decimals": 18, "symbol": "USDC", "balance": "0.4" }],
+        "token": 0,
+        "amount": "0.001",
+        "fee": { "asset": "erc20", "token": "0x3600000000000000000000000000000000000000", "decimals": 6, "amount": "488060", "symbol": "USDC" },
+        "expect": {
+          "can_confirm": false,
+          "issue": { "fee_amount": "488060000000000000", "total": "489060000000000000", "max_transfer_amount": "0" },
+          "warning": "insufficient_for_gas"
+        }
+      },
+      {
+        "name": "alias: native USDC sent, interface fee, exactly the balance",
+        "tokens": [{ "chain_id": 5042002, "address": null, "decimals": 18, "symbol": "USDC", "balance": "0.5" }],
+        "token": 0,
+        "amount": "0.01194",
+        "fee": { "asset": "erc20", "token": "0x3600000000000000000000000000000000000000", "decimals": 6, "amount": "488060", "symbol": "USDC" },
+        "expect": { "can_confirm": true, "issue": null, "warning": null }
+      },
+      {
+        "name": "alias: 6-place fee against 18 places rounds against the sender",
+        "tokens": [{ "chain_id": 5042002, "address": null, "decimals": 18, "symbol": "USDC", "balance": "0.000001" }],
+        "token": 0,
+        "amount": "0.000000000000000001",
+        "fee": { "asset": "erc20", "token": "0x3600000000000000000000000000000000000000", "decimals": 6, "amount": "1", "symbol": "USDC" },
+        "expect": {
+          "can_confirm": false,
+          "issue": { "fee_amount": "1000000000000", "total": "1000000000001", "max_transfer_amount": "0" },
+          "warning": "insufficient_for_gas"
+        }
+      },
+      {
+        "name": "alias: the 0x3600 interface sent, fee in the native coin",
+        "tokens": [{ "chain_id": 5042002, "address": "0x3600000000000000000000000000000000000000", "decimals": 6, "symbol": "USDC", "balance": "0.4" }],
+        "token": 0,
+        "amount": "0.001",
+        "fee": { "asset": "native", "total_wei": "488060000000000001" },
+        "expect": {
+          "can_confirm": false,
+          "issue": { "fee_amount": "488061", "total": "489061", "max_transfer_amount": "0" },
+          "warning": "insufficient_for_gas"
+        }
+      },
+      {
+        "name": "alias: interface sent, native fee covered",
+        "tokens": [{ "chain_id": 5042002, "address": "0x3600000000000000000000000000000000000000", "decimals": 6, "symbol": "USDC", "balance": "2" }],
+        "token": 0,
+        "amount": "1",
+        "fee": { "asset": "native", "total_wei": "488060000000000000" },
+        "expect": { "can_confirm": true, "issue": null, "warning": null }
+      },
+      {
+        "name": "in-band: the fee token itself sent, amount + fee over",
+        "tokens": [{ "chain_id": 1, "address": "0x2222222222222222222222222222222222222222", "decimals": 6, "symbol": "USDC", "balance": "5" }],
+        "token": 0,
+        "amount": "4",
+        "fee": { "asset": "erc20", "token": "0x2222222222222222222222222222222222222222", "decimals": 6, "amount": "1000001", "symbol": "USDC" },
+        "expect": {
+          "can_confirm": false,
+          "issue": { "fee_amount": "1000001", "total": "5000001", "max_transfer_amount": "3999999" },
+          "warning": "insufficient_for_gas"
+        }
+      },
+      {
+        "name": "in-band: the fee token itself sent, exactly the balance",
+        "tokens": [{ "chain_id": 1, "address": "0x2222222222222222222222222222222222222222", "decimals": 6, "symbol": "USDC", "balance": "5" }],
+        "token": 0,
+        "amount": "4",
+        "fee": { "asset": "erc20", "token": "0x2222222222222222222222222222222222222222", "decimals": 6, "amount": "1000000", "symbol": "USDC" },
+        "expect": { "can_confirm": true, "issue": null, "warning": null }
+      },
+      {
+        "name": "another balance pays: a stablecoin fee never claims the ETH sent",
+        "tokens": [
+          { "chain_id": 1, "address": null, "decimals": 18, "symbol": "ETH", "balance": "1" },
+          { "chain_id": 1, "address": "0x2222222222222222222222222222222222222222", "decimals": 6, "symbol": "USDC", "balance": "5" }
+        ],
+        "token": 0,
+        "amount": "1",
+        "fee": { "asset": "erc20", "token": "0x2222222222222222222222222222222222222222", "decimals": 6, "amount": "1000000", "symbol": "USDC" },
+        "expect": { "can_confirm": true, "issue": null, "warning": null }
+      },
+      {
+        "name": "the alias address on another chain is an ordinary token: no shared balance",
+        "tokens": [
+          { "chain_id": 1, "address": null, "decimals": 18, "symbol": "ETH", "balance": "1" },
+          { "chain_id": 1, "address": "0x3600000000000000000000000000000000000000", "decimals": 6, "symbol": "XYZ", "balance": "5" }
+        ],
+        "token": 0,
+        "amount": "1",
+        "fee": { "asset": "erc20", "token": "0x3600000000000000000000000000000000000000", "decimals": 6, "amount": "1000000", "symbol": "XYZ" },
+        "expect": { "can_confirm": true, "issue": null, "warning": null }
+      }
+    ]
+  },
+  "max": {
+    "about": "Max on the form: the fee lands (Event::FeeUpdated), then Event::TapMax. `max_units` is the exact fill (SendView.token_amount) in the token's base units; `warning` as above. An ERC-20 fee reserves 1.5× its quote, a native fee its total_wei — converted to the sent face's places, rounded up.",
+    "cases": [
+      {
+        "name": "native sent, native fee",
+        "tokens": [{ "chain_id": 5042002, "address": null, "decimals": 18, "symbol": "USDC", "balance": "1" }],
+        "token": 0,
+        "fee": { "asset": "native", "total_wei": "488060000000000000" },
+        "expect": { "max_units": "511940000000000000", "warning": null }
+      },
+      {
+        "name": "alias: native sent, interface fee reserves 1.5x in 18 places (r10-3)",
+        "tokens": [{ "chain_id": 5042002, "address": null, "decimals": 18, "symbol": "USDC", "balance": "1" }],
+        "token": 0,
+        "fee": { "asset": "erc20", "token": "0x3600000000000000000000000000000000000000", "decimals": 6, "amount": "488060", "symbol": "USDC" },
+        "expect": { "max_units": "267910000000000000", "warning": null }
+      },
+      {
+        "name": "alias: native sent, interface fee over the balance fills nothing and says why",
+        "tokens": [{ "chain_id": 5042002, "address": null, "decimals": 18, "symbol": "USDC", "balance": "0.4" }],
+        "token": 0,
+        "fee": { "asset": "erc20", "token": "0x3600000000000000000000000000000000000000", "decimals": 6, "amount": "488060", "symbol": "USDC" },
+        "expect": { "max_units": "0", "warning": "insufficient_gas" }
+      },
+      {
+        "name": "alias: interface sent, native fee in 6 places rounded up",
+        "tokens": [{ "chain_id": 5042002, "address": "0x3600000000000000000000000000000000000000", "decimals": 6, "symbol": "USDC", "balance": "1" }],
+        "token": 0,
+        "fee": { "asset": "native", "total_wei": "488060000000000001" },
+        "expect": { "max_units": "511939", "warning": null }
+      },
+      {
+        "name": "in-band: the fee token itself",
+        "tokens": [{ "chain_id": 1, "address": "0x2222222222222222222222222222222222222222", "decimals": 6, "symbol": "USDC", "balance": "5" }],
+        "token": 0,
+        "fee": { "asset": "erc20", "token": "0x2222222222222222222222222222222222222222", "decimals": 6, "amount": "1000000", "symbol": "USDC" },
+        "expect": { "max_units": "3500000", "warning": null }
+      },
+      {
+        "name": "another balance pays: the whole balance",
+        "tokens": [
+          { "chain_id": 1, "address": null, "decimals": 18, "symbol": "ETH", "balance": "1" },
+          { "chain_id": 1, "address": "0x2222222222222222222222222222222222222222", "decimals": 6, "symbol": "USDC", "balance": "5" }
+        ],
+        "token": 0,
+        "fee": { "asset": "erc20", "token": "0x2222222222222222222222222222222222222222", "decimals": 6, "amount": "1000000", "symbol": "USDC" },
+        "expect": { "max_units": "1000000000000000000", "warning": null }
+      }
+    ]
+  },
+  "fee_machine": {
+    "about": "The fee machine a dApp request's sheet runs (fee_policy; its confirm gate is sign_confirm::confirm_state — FeeView.confirm_fee_ready false with a fee in hand is ConfirmBlock::FeeShort). Each case asks a quote on `chain_id` for `calls` (value in base units; `erc20_transfer` encodes transfer(to, amount) on `token`) with the fee coin `fee_token` (null = native) as the person's pick. The relay's rows are built from the machine's OWN fee figure: the row that pays holds fee + what the calls state they move of that balance (in its places, rounded up) + `delta`; a `twin` row (the other face of one balance) holds the same money in its own places. `measured`, when present, is the simulation's balance changes (Event::BalanceChangesMeasured) and replaces the stated outflow. Expected: FeeView.confirm_fee_ready.",
+    "cases": [
+      {
+        "name": "native value, native fee, one wei short of value + fee (no simulation)",
+        "chain_id": 5042002,
+        "calls": [{ "to": "0xd9c79cc5c3de9858e8767bb702db5ffe51a20432", "value": "1000000000000000" }],
+        "fee_token": null,
+        "twin": false,
+        "delta": "-1",
+        "expect": { "confirm_fee_ready": false, "short_with_amount": true }
+      },
+      {
+        "name": "r10-3's numbers: the fee alone is over the balance (0.001 asked, fee over all of it)",
+        "chain_id": 5042002,
+        "calls": [{ "to": "0xd9c79cc5c3de9858e8767bb702db5ffe51a20432", "value": "1000000000000000" }],
+        "fee_token": null,
+        "twin": false,
+        "delta": "-1000000000000001",
+        "expect": { "confirm_fee_ready": false, "short_with_amount": false }
+      },
+      {
+        "name": "native value, native fee, exactly value + fee",
+        "chain_id": 5042002,
+        "calls": [{ "to": "0xd9c79cc5c3de9858e8767bb702db5ffe51a20432", "value": "1000000000000000" }],
+        "fee_token": null,
+        "twin": false,
+        "delta": "0",
+        "expect": { "confirm_fee_ready": true, "short_with_amount": false }
+      },
+      {
+        "name": "alias: native value, fee in the 0x3600 interface, one unit short (r10-3)",
+        "chain_id": 5042002,
+        "calls": [{ "to": "0xd9c79cc5c3de9858e8767bb702db5ffe51a20432", "value": "1000000000000000" }],
+        "fee_token": "0x3600000000000000000000000000000000000000",
+        "twin": true,
+        "delta": "-1",
+        "expect": { "confirm_fee_ready": false, "short_with_amount": true }
+      },
+      {
+        "name": "alias: native value, interface fee, exactly covered",
+        "chain_id": 5042002,
+        "calls": [{ "to": "0xd9c79cc5c3de9858e8767bb702db5ffe51a20432", "value": "1000000000000000" }],
+        "fee_token": "0x3600000000000000000000000000000000000000",
+        "twin": true,
+        "delta": "0",
+        "expect": { "confirm_fee_ready": true, "short_with_amount": false }
+      },
+      {
+        "name": "alias: an interface transfer, native fee, one wei short",
+        "chain_id": 5042002,
+        "calls": [{ "erc20_transfer": { "token": "0x3600000000000000000000000000000000000000", "to": "0xd9c79cc5c3de9858e8767bb702db5ffe51a20432", "amount": "1000" } }],
+        "fee_token": null,
+        "twin": true,
+        "delta": "-1",
+        "expect": { "confirm_fee_ready": false, "short_with_amount": true }
+      },
+      {
+        "name": "alias: measured — the simulation names only the interface's move, native fee short",
+        "chain_id": 5042002,
+        "calls": [{ "to": "0xd9c79cc5c3de9858e8767bb702db5ffe51a20432", "value": "1000000000000000" }],
+        "fee_token": null,
+        "twin": false,
+        "measured": [{ "token": "0x3600000000000000000000000000000000000000", "delta": "-1000" }],
+        "delta": "-1",
+        "expect": { "confirm_fee_ready": false, "short_with_amount": true }
+      },
+      {
+        "name": "alias: measured — interface move, native fee exactly covered",
+        "chain_id": 5042002,
+        "calls": [{ "to": "0xd9c79cc5c3de9858e8767bb702db5ffe51a20432", "value": "1000000000000000" }],
+        "fee_token": null,
+        "twin": false,
+        "measured": [{ "token": "0x3600000000000000000000000000000000000000", "delta": "-1000" }],
+        "delta": "0",
+        "expect": { "confirm_fee_ready": true, "short_with_amount": false }
+      }
+    ]
+  }
+}

@@ -66,3 +66,11 @@ export function connectLink(
 ): string {
 	return linkCall<string>('connectLink', { page, invite, members, tx });
 }
+
+/**
+ * ms-22 / r10: whether `hash` is meant as a multisig link but does not read
+ * (cut short, damaged on the way) — the core's codec (`brokenLink`).
+ */
+export function linkBroken(hash: string): boolean {
+	return linkCall<string | null>('brokenLink', { hash }) !== null;
+}

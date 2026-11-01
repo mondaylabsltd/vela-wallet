@@ -63,7 +63,7 @@ import { resolveChainId } from './chain-id';
  *
  * One passkey founds any number of wallets: a single-key one and a multi-key
  * one share the same credential id (on-chain: units 10 and 12 of the golden
- * key; in the parallel space: Parallel One and Parallel Multi). Looking the
+ * key; in the parallel space: Parallel One and Interleave). Looking the
  * record up by credential picked whichever came first, and its key set then
  * built the OTHER wallet's initCode — the bundler refused it with
  * `AA14 initCode must return sender` the first time a multi-key Safe was

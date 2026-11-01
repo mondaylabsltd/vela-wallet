@@ -5,6 +5,7 @@
  * one thing a multisig adds to the home, so it is drawn with what is already
  * there rather than as a panel of its own.
  */
+import { listOf } from '$lib/i18n/list';
 import { fillTemplate } from '$lib/i18n/fill';
 import { formatTime } from '$lib/services/locale-format';
 import { chainLogoURL } from '$lib/flows/marks';
@@ -407,7 +408,7 @@ function noteText(m: MultisigMessages, note: MultisigWaitingNote): string {
 			return m.service.unreachableNote;
 		case 'chainUnreachable':
 			return fillTemplate(m.service.chainUnreachable, {
-				network: note.chain_ids.map((id) => chainName(id)).join(', ')
+				network: listOf(note.chain_ids.map((id) => chainName(id)))
 			});
 		case 'lastKnown':
 			return fillTemplate(m.panel.lastKnown, { time: clockTime(note.at) });
@@ -415,7 +416,7 @@ function noteText(m: MultisigMessages, note: MultisigWaitingNote): string {
 			return m.panel.stale;
 		case 'historyUnreadable':
 			return fillTemplate(m.panel.historyUnreadable, {
-				network: note.chain_ids.map((id) => chainName(id)).join(', ')
+				network: listOf(note.chain_ids.map((id) => chainName(id)))
 			});
 		case 'checking':
 			return m.panel.checking;

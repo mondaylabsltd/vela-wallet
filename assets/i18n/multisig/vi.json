@@ -286,6 +286,7 @@
     "waitingPayer_one": "{{count}} giao dịch chờ một thành viên trả được phí",
     "waitingPayer_other": "{{count}} giao dịch chờ một thành viên trả được phí",
     "ruleDiffers": "Quy tắc khác nhau theo mạng",
+    "ruleLastKnown": "Lần đọc gần nhất — sẽ đọc lại khi bạn mở",
     "othersWaiting": "Một tài khoản khác có giao dịch đang chờ"
    },
    "add": {

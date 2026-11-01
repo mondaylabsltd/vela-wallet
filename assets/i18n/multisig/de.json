@@ -286,6 +286,7 @@
     "waitingPayer_one": "{{count}} wartet auf ein Mitglied, das zahlen kann",
     "waitingPayer_other": "{{count}} warten auf ein Mitglied, das zahlen kann",
     "ruleDiffers": "Regel je nach Netzwerk verschieden",
+    "ruleLastKnown": "Zuletzt bekannt – wird beim Öffnen neu gelesen",
     "othersWaiting": "Ein anderes Konto hat wartende Transaktionen"
    },
    "add": {

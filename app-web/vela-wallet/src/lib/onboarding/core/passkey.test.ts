@@ -107,3 +107,34 @@ describe('a signing prompt that ran out of time', () => {
 		expect(other.timedOut).toBe(false);
 	});
 });
+
+/**
+ * Round 10 (real-device S3): a failure the browser describes in its own
+ * language carries its facts to the core, which names the sentence; the
+ * message stays the detail for the report.
+ */
+describe("a browser's passkey error", () => {
+	it('carries its DOMException name and message as facts', () => {
+		const out = classifySign(
+			Object.assign(new Error('The relying party ID is not a registrable domain suffix'), {
+				name: 'SecurityError'
+			}),
+			0,
+			3_000
+		);
+		expect(out.kind).toBe('other');
+		expect(out.facts).toEqual({
+			platform: 'web',
+			domain: 'SecurityError',
+			code: null,
+			message: 'The relying party ID is not a registrable domain suffix'
+		});
+		const dup = classifySign(Object.assign(new Error('dup'), { name: 'InvalidStateError' }), 0, 0);
+		expect(dup.facts?.domain).toBe('InvalidStateError');
+	});
+
+	it('a refusal carries none: it is said as a cancel, not an error', () => {
+		const out = classifySign(Object.assign(new Error('x'), { name: 'NotAllowedError' }), 0, 0);
+		expect(out.facts).toBeUndefined();
+	});
+});

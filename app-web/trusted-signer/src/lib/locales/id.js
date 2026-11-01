@@ -386,4 +386,15 @@ window.VelaCS.i18n.register('id', {
   'sentence.msAddOwnerOne': "{owner} menjadi anggota, dan {threshold} persetujuan akan dibutuhkan.",
   'sentence.msRemoveOwnerOne': "{owner} tidak lagi menjadi anggota, dan {threshold} persetujuan akan dibutuhkan.",
   'sentence.msThresholdOne': "Mulai sekarang {threshold} persetujuan dibutuhkan.",
+  // r10: a multisig's coins are the multisig's, not the signer's; a member
+  // change reads before → after against the members the app says it has now.
+  'sentence.approveMs': "Ini mengizinkan {spender} membelanjakan hingga {amount} milik multisig.",
+  'sentence.approveUnlimitedMs': "Ini mengizinkan {spender} membelanjakan seluruh {symbol} milik multisig — tanpa batas.",
+  'warn.unlimitedMs': "Tanpa batas — kontrak ini dapat membelanjakan seluruh {symbol} yang dimiliki multisig.",
+  'warn.approveAllMs': "Semua NFT milik multisig di koleksi ini, sekarang maupun nanti, bisa diambil kapan saja.",
+  'warn.nativeValueMs': "Panggilan ini juga mengirim {amount} dari multisig ke kontrak yang dipanggil, di luar semua yang ditampilkan di sini.",
+  'field.msMembers': "Anggota",
+  'value.msCountChange': "{before} → {after}",
+  'value.msApprovalsChange': "{before} dari {beforeOf} → {after} dari {afterOf}",
+  'warn.msMembersClaimOff': "Perubahan ini tidak cocok dengan anggota multisig saat ini menurut aplikasi — bisa gagal saat dijalankan. Periksa daftar anggota bersama anggota lain sebelum menyetujui.",
 });

@@ -96,7 +96,9 @@ export function fixtureStoredAccounts(): Account[] {
 	const primary = fixtureAccount();
 	const multi: Account = {
 		id: primary.id,
-		name: 'Parallel Multi',
+		// r9-12: the name the passkey index publishes for it (vela-core
+		// `dev_fixtures::MULTI_NAME`), never a key's — distinct from Parallel One.
+		name: 'Interleave',
 		address: fixtureMultiAddress(),
 		public_key_hex: primary.publicKeyHex,
 		created_at_iso: FIXTURE_CREATED_AT,

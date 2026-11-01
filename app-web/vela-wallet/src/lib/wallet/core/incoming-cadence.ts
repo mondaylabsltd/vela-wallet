@@ -1,44 +1,39 @@
 /**
- * How often the account-wide incoming-funds check runs (the feed's
- * `live_tick`: the receipt scan and the native balance watch). The core says
- * the cadence is the shell's — which page is visible, and whether anyone is
- * at it, is render-domain state it never sees (`app/activity_feed.rs`).
+ * The page's half of the account-wide incoming-funds check's cadence.
  *
- * Owner decision (round 5, 2026-10-30), by best practice:
- *
- * - **10 s** while the page is visible and the person interacted with it in
- *   the last {@link ACTIVE_WINDOW_MS} — someone waiting for a payment is
- *   looking at the screen and touching it;
- * - **30 s** while it is visible but idle — a home left open on a desk;
- * - **60 s** while it is hidden — a background tab still hears of money
- *   within a minute, without the steady drain;
- * - **at once** when the page is shown again or the browser comes back
- *   online — the moments a stale list would be seen or could be fixed — and
- *   the cadence starts over from there.
- *
- * One check at a time is the feed executor's (`scanOnce`); this only says
- * when to ask.
+ * r9-17: WHEN to scan is the core's (`incoming_scan::next_scan_ms`, driven by
+ * `activity_feed`): 10 s while the person is at the page, 30 s while it sits
+ * idle, 60 s hidden, at once when it is shown again or the browser comes back
+ * online — the owner's round-5 numbers, which used to be decided here and in
+ * each app on its own. This module only reports the page's facts (shown or
+ * not, when it was last touched) and runs the one timer the core asks for:
+ * the feed's `next_scan` is armed whenever its `seq` changes, and answered
+ * with `scan_due` and the page as it stands then. One check at a time is the
+ * core's too.
  */
+import type { FeedNextScan } from '$lib/core/generated/FeedNextScan';
+import type { FeedPresence } from '$lib/core/generated/FeedPresence';
+import type { FeedPresenceChange } from '$lib/core/generated/FeedPresenceChange';
 
-/** While the person is at the page. */
-export const ACTIVE_MS = 10_000;
-/** Visible, nobody at it. */
-export const IDLE_MS = 30_000;
-/** Hidden. */
-export const HIDDEN_MS = 60_000;
-/** An interaction this recent counts as "at the page". */
-export const ACTIVE_WINDOW_MS = 120_000;
-
-export type CadenceReason = 'interval' | 'visible' | 'online';
-
-/** The wait before the next check, for the page as it stands. */
-export function incomingCadenceMs(state: { visible: boolean; sinceInteractionMs: number }): number {
-	if (!state.visible) return HIDDEN_MS;
-	return state.sinceInteractionMs < ACTIVE_WINDOW_MS ? ACTIVE_MS : IDLE_MS;
-}
+/**
+ * A touch is reported at most this often: a scroll fires dozens of events a
+ * second, and the core only needs to hear that someone is at the page — its
+ * own window for that is two minutes. Transport, not a decision.
+ */
+export const INTERACTION_REPORT_MS = 1_000;
 
 /** What the person does that counts as being at the page. */
 const INTERACTIONS = ['pointerdown', 'keydown', 'wheel', 'touchstart'] as const;
+
+/** The feed, as the cadence talks to it (`feed.svelte.ts`'s port). */
+export interface CadencePort {
+	/** The page's presence moved (`presence_changed`). */
+	report(change: FeedPresenceChange, presence: FeedPresence): void;
+	/** The timer for `next_scan.seq` ran out (`scan_due`). */
+	due(seq: number, presence: FeedPresence): void;
+	/** Follow the core's `next_scan`; returns the unsubscribe. */
+	follow(listener: (next: FeedNextScan | null) => void): () => void;
+}
 
 export interface CadenceHost {
 	now: () => number;
@@ -65,74 +60,71 @@ function browserHost(): CadenceHost {
 }
 
 /**
- * Run `check` on the cadence above until the returned stop is called. The
- * first check is the caller's (the account hand-off already scans); this
- * schedules the ones after it.
+ * Report the page to the core and run the timer it asks for, until the
+ * returned stop is called. The first check is the account hand-off's; this
+ * reports `started`, and the core arms the next.
  */
 export function followIncomingCadence(
-	check: (reason: CadenceReason) => void,
+	port: CadencePort,
 	host: CadenceHost = browserHost()
 ): () => void {
 	let lastInteraction = host.now();
-	/** The last check: the caller's first one is taken as now. */
-	let lastCheck = host.now();
+	let lastReport = -Infinity;
 	let timer: unknown = null;
-	let dueAt = 0;
+	let armedSeq: number | null = null;
 	let stopped = false;
 
-	const wait = () =>
-		incomingCadenceMs({
-			visible: host.visible(),
-			sinceInteractionMs: host.now() - lastInteraction
-		});
+	const presence = (): FeedPresence => ({
+		visible: host.visible(),
+		since_interaction_ms: host.now() - lastInteraction,
+		now_ms: host.now()
+	});
+	const report = (change: FeedPresenceChange) => {
+		if (!stopped) port.report(change, presence());
+	};
 
-	const schedule = (ms: number) => {
+	const disarm = () => {
 		if (timer !== null) host.clearTimeout(timer);
-		dueAt = host.now() + ms;
+		timer = null;
+	};
+	const unfollow = port.follow((next) => {
+		if (stopped || next?.seq === armedSeq) return;
+		disarm();
+		armedSeq = next?.seq ?? null;
+		if (!next) return;
+		const seq = next.seq;
 		timer = host.setTimeout(() => {
 			timer = null;
-			if (stopped) return;
-			lastCheck = host.now();
-			check('interval');
-			schedule(wait());
-		}, ms);
-	};
-
-	const now = (reason: CadenceReason) => {
-		if (stopped) return;
-		lastCheck = host.now();
-		check(reason);
-		schedule(wait());
-	};
+			if (!stopped) port.due(seq, presence());
+		}, next.after_ms);
+	});
 
 	const offs = [
 		host.on('document', 'visibilitychange', () => {
 			if (host.visible()) {
 				// Coming back counts as being at the page.
 				lastInteraction = host.now();
-				now('visible');
+				report('shown');
 			} else {
-				// Hidden: the hidden pace, counted from the last check.
-				schedule(Math.max(0, lastCheck + HIDDEN_MS - host.now()));
+				report('hidden');
 			}
 		}),
-		host.on('window', 'online', () => now('online')),
+		host.on('window', 'online', () => report('online')),
 		...INTERACTIONS.map((type) =>
 			host.on('document', type, () => {
-				const wasIdle = host.now() - lastInteraction >= ACTIVE_WINDOW_MS;
 				lastInteraction = host.now();
-				// Back from idle: the next check within the active pace, not
-				// the rest of an idle wait.
-				if (wasIdle && host.visible() && dueAt - host.now() > ACTIVE_MS) schedule(ACTIVE_MS);
+				if (lastInteraction - lastReport < INTERACTION_REPORT_MS) return;
+				lastReport = lastInteraction;
+				report('interacted');
 			})
 		)
 	];
 
-	schedule(wait());
+	report('started');
 	return () => {
 		stopped = true;
-		if (timer !== null) host.clearTimeout(timer);
-		timer = null;
+		disarm();
+		unfollow();
 		for (const off of offs) off();
 	};
 }

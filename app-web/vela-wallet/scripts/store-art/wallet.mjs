@@ -35,7 +35,7 @@ await page.waitForURL(/wallet\.html$/, { timeout: 30_000 });
 await page.evaluate(() => {
 	localStorage.setItem('vela.activeAccountIndex', '3');
 	const accounts = JSON.parse(localStorage.getItem('vela.accounts') ?? '[]');
-	for (const a of accounts) if (a.name === 'Parallel Multi') a.name = 'Everyday';
+	for (const a of accounts) if (a.name === 'Interleave') a.name = 'Everyday';
 	localStorage.setItem('vela.accounts', JSON.stringify(accounts));
 });
 await page.goto(`chrome-extension://${id}/en/wallet.html`);

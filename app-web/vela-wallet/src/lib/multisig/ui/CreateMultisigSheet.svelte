@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { listOf } from '$lib/i18n/list';
 	/**
 	 * Creating a multisig, in three steps: its name and who its members are
 	 * (in order — the order is part of the address; the name is a label
@@ -760,7 +761,7 @@
 				<p class="hint flush">
 					{fillTemplate(m.create.otherSpace, {
 						space: networkSpace.testnet ? spaceWords.mainnet : spaceWords.testnet,
-						networks: otherSpace.join(', ')
+						networks: listOf(otherSpace, locale)
 					})}
 				</p>
 				<button type="button" class="text-button" onclick={() => networkSpace.openSwitcher()}

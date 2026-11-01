@@ -1921,7 +1921,7 @@ fn handle_request(model: &mut Model, tab_id: &str, request: PageRequest, out: &m
                 );
                 return;
             };
-            if model.chains.contains(&wanted) {
+            if super::network_space::site_may_switch_to(&model.chains, wanted) {
                 set_site_chain(model, &origin, wanted, out);
                 deliver_result(tab_id, &doc, &id, Value::Null, out);
             } else if route == Route::AddChain {

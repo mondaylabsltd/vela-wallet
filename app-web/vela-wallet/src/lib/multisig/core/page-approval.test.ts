@@ -198,6 +198,8 @@ describe('an approval on the page', () => {
 				chainId: CHAIN,
 				multisig: MULTISIG,
 				multisigName: 'Team fund',
+				owners: [account.address, MULTISIG],
+				threshold: 2,
 				tx: TX,
 				safeTxHash: hash,
 				keys
@@ -219,7 +221,10 @@ describe('an approval on the page', () => {
 			vela: string;
 			id: string;
 			intent: { method: string; params: { safeTxHash: string; safeTx: SafeTx; member: string }[] };
-			context: { multisig: { name: string }; account: string };
+			context: {
+				multisig: { name: string; owners: string[]; threshold: number };
+				account: string;
+			};
 		};
 		expect(b.sent[0].origin).toBe('https://sign.getvela.app');
 		expect(intent.vela).toBe('intent');
@@ -227,6 +232,10 @@ describe('an approval on the page', () => {
 		expect(intent.intent.params[0].safeTxHash).toBe(hash);
 		expect(intent.intent.params[0].safeTx).toEqual(TX);
 		expect(intent.context.multisig.name).toBe('Team fund');
+		// r10 page: the members and approvals now, for a member change's
+		// before → after (the page marks them as the app's word).
+		expect(intent.context.multisig.owners).toEqual([account.address, MULTISIG]);
+		expect(intent.context.multisig.threshold).toBe(2);
 		b.from({
 			vela: 'result',
 			id: intent.id,

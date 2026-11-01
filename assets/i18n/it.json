@@ -819,7 +819,8 @@
      "description": "La maggior parte delle reti accetta stablecoin per le commissioni — senza dover prima procurarti la moneta nativa."
     }
    },
-   "linkWaiting": "C'è un link multisig in attesa. Crea un wallet o accedi e si aprirà."
+   "linkWaiting": "C'è un link multisig in attesa. Crea un wallet o accedi e si aprirà.",
+   "linkBroken": "Questo link multisig non è arrivato intero. Chiedilo di nuovo."
   },
   "settings": {
    "title": "Impostazioni",
@@ -890,7 +891,17 @@
    "safariPasskeyBody": "Safari non consente alle pagine di un'estensione di usare una passkey, quindi Vela lo fa nella sua pagina di firma. Riprova.",
    "phoneLinkFailed": "L'altro dispositivo non si è collegato, oppure la connessione si è interrotta prima del termine. Tieni entrambi i dispositivi online e vicini, poi scansiona di nuovo il codice.",
    "keyUnavailableTitle": "Chiave di sicurezza non disponibile",
-   "keyUnavailableBody": "Questo dispositivo non è riuscito a usare la chiave di sicurezza. Prova con un'altra chiave di sicurezza FIDO2 oppure scegli un altro modo per continuare."
+   "keyUnavailableBody": "Questo dispositivo non è riuscito a usare la chiave di sicurezza. Prova con un'altra chiave di sicurezza FIDO2 oppure scegli un altro modo per continuare.",
+   "passkeyError": {
+    "cancelled": "La finestra della passkey è stata chiusa prima della fine. Riprova quando vuoi.",
+    "notSupported": "Questo dispositivo non può usare una passkey qui. Prova un altro dispositivo o una chiave di sicurezza.",
+    "noCredential": "Nessuna passkey di Vela trovata su questo dispositivo. Usa un dispositivo o una chiave di sicurezza che ne contenga una.",
+    "appNotAssociated": "Questo dispositivo non ha potuto confermare che Vela può usare le sue passkey. Controlla la connessione e riprova — se continua a succedere, aggiorna Vela.",
+    "noNetwork": "La passkey ha bisogno di una connessione di rete. Controlla la connessione e riprova.",
+    "alreadyRegistered": "Questo autenticatore contiene già una delle chiavi di questo wallet. Usane un altro.",
+    "timedOut": "La finestra della passkey è scaduta. Riprova.",
+    "other": "Non è stato possibile usare la passkey. Riprova."
+   }
   },
   "create": {
    "accountNameHint": "Questo nome viene memorizzato on-chain insieme alla tua chiave pubblica per l'accesso da più dispositivi.",

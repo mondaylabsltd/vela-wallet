@@ -17,13 +17,15 @@ import {
 	DEFAULT_NETWORKS,
 	ensureShownNetworks,
 	explorerBaseURL,
+	getAllNetworksSync,
+	isHiddenNetwork,
 	networkConfigSync,
 	spaceNetworksSync,
 	nativeSymbol
 } from '$lib/services/networks';
 import { getBuiltinBundlerUrl } from '$lib/services/rpc-pool-endpoints';
 import { networkSpace } from '$lib/network-space/network-space.svelte';
-import { CHAINS_KEY } from '../keys';
+import { ACCOUNT_CHAINS_KEY, CHAINS_KEY } from '../keys';
 
 /** One chain, as the worker needs it. */
 export interface ExtChainEntry {
@@ -39,36 +41,29 @@ export interface ExtChainEntry {
 
 export interface ExtChainCatalog {
 	version: 1;
+	/**
+	 * Every network the worker can serve, BOTH spaces (r10: a wallet in the
+	 * mainnet space refused a dApp's switch to Arc Testnet — "Chain 5042002 is
+	 * not in Vela's networks" — because only the space in front was here).
+	 * A network the person hid stays out: adding it shows it again (spec 100).
+	 */
 	chains: Record<string, ExtChainEntry>;
 	/**
-	 * dapp-17: the space these chains are (spec 105) and their ids in the
-	 * wallet's list order — where a new site starts
-	 * (`network_space::site_start_chain`, the worker's `startChainOf`).
+	 * dapp-17: the space in front (spec 105) and ITS networks in the wallet's
+	 * list order — where a new site starts (`network_space::site_start_chain_for`,
+	 * the worker's `startChainOf`).
 	 */
 	space: 'mainnet' | 'testnet';
 	order: number[];
-	/**
-	 * r9: the networks of `order` the active account holds something on or
-	 * used, most telling first — a new site starts on the first of them
-	 * (`network_space::site_start_chain_for`) before the space's first.
-	 */
-	accountChains: number[];
 	updatedAtMs: number;
 }
 
-/** r9: where the active account holds something or used, most telling first. */
-let accountChains: number[] = [];
-
 /**
- * r9: the active account's networks changed (its holdings were read, it
- * switched): the catalog says them, so a new site starts where it lives.
+ * Where each account lives (`vela.ext.accountChains`): `{ [address, lower
+ * case]: chain ids }`, most telling first — a new site starts on the first
+ * the space offers (`network_space::site_start_chain_for`).
  */
-export function setExtAccountChains(ids: number[]): void {
-	const next = [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))];
-	if (next.join(',') === accountChains.join(',')) return;
-	accountChains = next;
-	void publishExtChains();
-}
+export type ExtAccountChains = Record<string, number[]>;
 
 /**
  * The curated public nodes behind each built-in chain's default — a COPY of
@@ -139,9 +134,9 @@ export function buildExtChainCatalog(nowMs = Date.now()): ExtChainCatalog {
 	// using. A custom network keeps its own bundler, which is the one the
 	// person typed when they added it.
 	const builtinChainIds = new Set(DEFAULT_NETWORKS.map((n) => n.chainId));
-	const order: number[] = [];
-	for (const network of spaceNetworksSync()) {
-		order.push(network.chainId);
+	const order = spaceNetworksSync().map((network) => network.chainId);
+	for (const network of getAllNetworksSync()) {
+		if (isHiddenNetwork(network.chainId)) continue;
 		// dapp-5: the person's RPC override, as the wallet's own pool reads it.
 		const { rpc } = workerRpcList(network, networkConfigSync(network.chainId));
 		chains[String(network.chainId)] = {
@@ -162,12 +157,12 @@ export function buildExtChainCatalog(nowMs = Date.now()): ExtChainCatalog {
 		chains,
 		space: networkSpace.testnet ? 'testnet' : 'mainnet',
 		order,
-		accountChains: accountChains.filter((id) => order.includes(id)),
 		updatedAtMs: nowMs
 	};
 }
 
 interface StorageAreaLike {
+	get(keys: string): Promise<Record<string, unknown>>;
 	set(items: Record<string, unknown>): Promise<void>;
 }
 
@@ -210,8 +205,51 @@ export async function publishExtChains(): Promise<ExtChainCatalog | null> {
 	}
 }
 
+/** What this document last stored per account, so the same list is not stored twice. */
+const lastLives = new Map<string, string>();
+
+/**
+ * r9/r10: where `address` lives — the networks it holds something on or
+ * used, most telling first — stored for the worker under that account
+ * (`vela.ext.accountChains`), so a new site starts there.
+ *
+ * Only a page that READ the account's holdings calls this (the wallet page).
+ * r10: the list rode in the catalog before, which every extension page
+ * publishes; the request window — which never reads holdings — published it
+ * again as it opened for a connect, saying the account lived nowhere, and an
+ * account holding only Arc USDC was asked to connect on Sepolia. Kept apart
+ * and per account, it outlives the page that wrote it, and a page that does
+ * not know an account's holdings has no way to say them.
+ */
+export async function setExtAccountChains(address: string, ids: number[]): Promise<void> {
+	const store = area();
+	if (!store || !address) return;
+	const key = address.toLowerCase();
+	const lives = [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))];
+	if (lastLives.get(key) === lives.join(',')) return;
+	lastLives.set(key, lives.join(','));
+	try {
+		const all = await store.get(ACCOUNT_CHAINS_KEY);
+		const stored = all[ACCOUNT_CHAINS_KEY];
+		const before: ExtAccountChains =
+			stored && typeof stored === 'object' ? (stored as ExtAccountChains) : {};
+		// The holdings are the space in front's; where the account lives in
+		// the OTHER space stays as an earlier read said it.
+		const here = new Set(spaceNetworksSync().map((network) => network.chainId));
+		const elsewhere = (Array.isArray(before[key]) ? before[key] : []).filter(
+			(id) => !here.has(id) && !lives.includes(id)
+		);
+		const next = [...lives, ...elsewhere];
+		if ((before[key] ?? []).join(',') === next.join(',')) return;
+		await store.set({ [ACCOUNT_CHAINS_KEY]: { ...before, [key]: next } });
+	} catch {
+		// Best-effort, like the catalog; the next change tries again.
+		lastLives.delete(key);
+	}
+}
+
 /** Test seam: forget what was published, so the next publish is observable. */
 export function resetExtChainsForTests(): void {
 	lastPublished = null;
-	accountChains = [];
+	lastLives.clear();
 }

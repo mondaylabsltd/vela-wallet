@@ -26,6 +26,7 @@ import {
 	recordOnChain,
 	rpc,
 	safeTx,
+	seedNetwork,
 	servedGenesis,
 	setBalance,
 	signSafeTx,
@@ -426,7 +427,10 @@ test('an outside owner signs with their own wallet, through the connect page', a
 	// Vela link first, "Approve with another wallet" beside it, and the
 	// outside member's own link (r4C-13). The outside owner signs from that
 	// link, on the connect page alone.
-	const thrownB = await signFromOutsideLink(browser, page, EOA_ONE, 'e3-outside-link');
+	// Real-device S2: the undeployed multisig's first transaction is not said
+	// to fail (the simulation includes its deployment), and the page counts
+	// the outside member's own approval at once (2/2, not 1/2).
+	const thrownB = await signFromOutsideLink(browser, page, EOA_ONE, 'e3-outside-link', '2/2');
 	await expect(page.getByText('2/2 approved').first()).toBeVisible({ timeout: 90_000 });
 	await shot(page, 'e5-approved');
 
@@ -455,7 +459,8 @@ async function signFromOutsideLink(
 	browser: import('@playwright/test').Browser,
 	vela: Page,
 	owner: string,
-	name: string
+	name: string,
+	countedAfter?: string
 ): Promise<string[]> {
 	const outsideLink = vela.getByTestId('outside-link');
 	await expect(outsideLink).toBeVisible({ timeout: 30_000 });
@@ -469,10 +474,26 @@ async function signFromOutsideLink(
 	await withInjectedWallet(ctx, owner);
 	const page = await ctx.newPage();
 	const thrown = errors(page);
+	// The page reads the chain the multisig lives on — the fork here, as an
+	// outside owner's browser reads the real chain (without this it read the
+	// public Gnosis, where the fork's funding is not: "expected to fail").
+	await page.goto(new URL('/robots.txt', link).href);
+	await seedNetwork(page);
 	await page.goto(link);
-	// r4C-7: reviewed on the page first; the wallet is asked on the tap.
-	await page.getByRole('button', { name: /^Sign with / }).click({ timeout: 60_000 });
+	// r4C-7: reviewed on the page first; the wallet is asked on the tap. The
+	// last approval a wallet that can pay gives is offered as one press with
+	// the execution ("Execute with …") beside "Approve only": approve only.
+	await page
+		.getByRole('button', { name: /^Sign with |^Approve only/ })
+		.first()
+		.click({ timeout: 60_000 });
 	await expect(page.getByTestId('outside-approved')).toBeVisible({ timeout: 60_000 });
+	await expect(page.getByText(/expected to fail/i)).toHaveCount(0);
+	if (countedAfter) {
+		await expect(page.getByTestId('outside-approvals')).toContainText(countedAfter, {
+			timeout: 30_000
+		});
+	}
 	await shot(page, name);
 	await ctx.close();
 	return thrown;

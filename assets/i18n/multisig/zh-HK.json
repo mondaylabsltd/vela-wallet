@@ -286,6 +286,7 @@
     "waitingPayer_one": "{{count}} 筆在等能付網絡費的成員",
     "waitingPayer_other": "{{count}} 筆在等能付網絡費的成員",
     "ruleDiffers": "各網絡規則不同",
+    "ruleLastKnown": "上次讀取的規則，打開後會重新讀取",
     "othersWaiting": "另一個帳戶有待處理的交易"
    },
    "add": {

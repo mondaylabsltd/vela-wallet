@@ -950,7 +950,8 @@
 				<Button variant="secondary" shape="rounded" onclick={() => act({ type: 'refresh' })}
 					>{m.retry}</Button
 				>
-			{:else if gate.kind === 'blocked' && tx.item.status !== 'done'}
+			{:else if gate.kind === 'blocked' && tx.item.status !== 'done' && linkShown?.title.kind !== 'unsupported'}
+				<!-- r10-5: an unsupported transaction's reason is said once, in the review above. -->
 				<!-- §3.6: the core does not sign what it reads as taking the multisig over. -->
 				<p class="error" role="alert" data-testid="outside-blocked">
 					{refusedLine(all, (tx.review as MultisigReviewOut | null)?.refused?.key) ??

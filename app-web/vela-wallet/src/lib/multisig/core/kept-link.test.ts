@@ -11,7 +11,14 @@
 import '$lib/i18n/wasm-init.server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as wasm from '../../../../../../rust/pkg-web/vela_core.js';
-import { KEPT_LINK_KEY, carriedLinkHash, isMultisigLink, keepLink } from './kept-link';
+import {
+	KEPT_LINK_KEY,
+	carriedLinkHash,
+	forgetKeptLink,
+	isMultisigLink,
+	keepLink,
+	linkWaiting
+} from './kept-link';
 
 const store = new Map<string, string>();
 vi.stubGlobal('localStorage', {
@@ -72,5 +79,28 @@ describe('links as chat apps and mail clients carry them (r4b-17)', () => {
 			) as boolean;
 			expect(isMultisigLink(hash), hash).toBe(core);
 		}
+	});
+});
+
+describe('a damaged invite on a device with no account (r10)', () => {
+	it('is read by the core as broken, dropped, and never said to wait', () => {
+		const damaged = '#msa=5042002:0x0cb9aEF9713c';
+		expect(keepLink(damaged, 1_000)).toBe(true);
+		const broken = JSON.parse(
+			wasm.multisigLinkCall('brokenLink', JSON.stringify({ hash: damaged }))
+		) as string | null;
+		expect(broken).not.toBeNull();
+		forgetKeptLink(damaged);
+		expect(store.has(KEPT_LINK_KEY)).toBe(false);
+		expect(linkWaiting(2_000)).toBe(false);
+	});
+
+	it('a whole invite reads, and is kept', () => {
+		expect(
+			JSON.parse(wasm.multisigLinkCall('brokenLink', JSON.stringify({ hash: INVITE })))
+		).toBeNull();
+		keepLink(INVITE, 1_000);
+		forgetKeptLink('#msa=other');
+		expect(linkWaiting(2_000)).toBe(true);
 	});
 });

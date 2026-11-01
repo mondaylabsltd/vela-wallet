@@ -346,6 +346,16 @@ for (const [label, kind, elapsed] of [
   ['unknown_kind', 'shrug', 130000],
 ]) add(`passkey_ceremony_end/${label}`, 'passkey_ceremony_end', { kind, elapsed_ms: elapsed });
 add('passkey_sign_timeout_ms', 'passkey_sign_timeout_ms', {});
+// A passkey failure, said in the person's language (round 10, real-device S3):
+// every case of the core's own corpus, through the shipped wasm.
+for (const c of JSON.parse(readFileSync(join(RUST, 'crates/vela-core/tests/vectors/rules/passkey-errors.json'), 'utf8')).cases) {
+  add(`passkey_error_words/${c.name}`, 'passkey_error_words', {
+    platform: c.platform,
+    domain: c.domain,
+    code: c.code,
+    message: c.message,
+  });
+}
 // Where a chain's reads stand in the pool's view (own node, fallback).
 const poolView = {
   failed_chains: [1],

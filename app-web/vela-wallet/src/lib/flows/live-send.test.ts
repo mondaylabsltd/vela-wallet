@@ -697,6 +697,48 @@ describe('one figure for one balance (spec 078)', () => {
 		);
 	});
 
+	// r10-3: on Arc the native USDC (18 places) and its `0x3600…` interface (6)
+	// are one balance; the core now counts a fee quoted in either face against
+	// the money sent in the other, in the sent coin's places, and shuts the
+	// confirm (`can_confirm` false). The page that signs says why — the same
+	// ceiling sentence, never an 18-digit remainder.
+	it('r10-3: a fee in the interface of the coin sent is said on the confirm', () => {
+		const ARC_USDC: SendToken = {
+			...ETH,
+			chain_id: 5042002,
+			network: 'arc-testnet',
+			symbol: 'USDC',
+			balance: '0.4',
+			price_usd: 1
+		};
+		const confirm = liveSendConfirm(
+			confirmModel(),
+			inputs({
+				selected_token: ARC_USDC,
+				confirm_amount: '0.001',
+				recipient: '0x' + 'ab'.repeat(20),
+				can_confirm: false,
+				same_asset_fee_issue: {
+					symbol: 'USDC',
+					transfer_amount: '1000000000000000',
+					balance: '400000000000000000',
+					fee_amount: '488060000000000000',
+					total: '489060000000000000',
+					max_transfer_amount: '0'
+				}
+			})
+		);
+		expect(confirm.alert).toBe(
+			`${fill(m['send.sameFeeTokenBody'], {
+				amount: '0.001',
+				fee: '0.48806',
+				total: '0.48906',
+				symbol: 'USDC',
+				balance: '0.4'
+			})} ${fill(m['send.sameFeeTokenMax'], { amount: '0', symbol: 'USDC' })}`
+		);
+	});
+
 	it('the confirm and the receipt read the exact Max as the field did', () => {
 		const confirm = liveSendConfirm(
 			confirmModel(),
@@ -1849,6 +1891,7 @@ describe('the fee row names the coin that is paying', () => {
 							insufficient: false,
 							selected: true,
 							spent_by_operation: false,
+							short_with_amount: false,
 							short: null
 						}
 					]
@@ -1895,6 +1938,7 @@ describe('the fee row says what the fee costs', () => {
 							insufficient: false,
 							selected: true,
 							spent_by_operation: false,
+							short_with_amount: false,
 							short: null
 						}
 					]
@@ -1995,6 +2039,7 @@ describe('the fee-coin sheet', () => {
 							insufficient: false,
 							selected: true,
 							spent_by_operation: false,
+							short_with_amount: false,
 							short: null
 						},
 						{
@@ -2009,6 +2054,7 @@ describe('the fee-coin sheet', () => {
 							insufficient: true,
 							selected: false,
 							spent_by_operation: false,
+							short_with_amount: false,
 							short: null
 						}
 					]
@@ -2052,6 +2098,7 @@ describe('the fee-coin sheet', () => {
 							insufficient: false,
 							selected: true,
 							spent_by_operation: false,
+							short_with_amount: false,
 							short: null
 						}
 					]
@@ -2703,6 +2750,7 @@ describe('the folded speed control (spec 068)', () => {
 			insufficient: false,
 			selected: true,
 			spent_by_operation: false,
+			short_with_amount: false,
 			short: null
 		};
 		const usdcMark = tokenMarkFor(1, 'USDC', usdc);

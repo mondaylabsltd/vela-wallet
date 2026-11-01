@@ -17,7 +17,14 @@
  * authored — never a decision the worker makes.
  */
 import { siteStartChainFor } from '$lib/core/kernels';
-import { CHAIN_PREFIX, CHAINS_KEY, LAST_CHAIN_KEY, PERM_PREFIX } from './keys';
+import {
+	ACCOUNT_CHAINS_KEY,
+	CHAIN_PREFIX,
+	CHAINS_KEY,
+	EXT_CACHE_KEY,
+	LAST_CHAIN_KEY,
+	PERM_PREFIX
+} from './keys';
 
 /** The stored grant. `grantedAt` is kept even though no rule reads it — a wire
  *  shape that drops what is persisted is a wire shape that lies. */
@@ -94,13 +101,19 @@ export async function getOriginChain(origin: string, fallback: number): Promise<
 			CHAIN_PREFIX + origin,
 			grantKey(origin),
 			CHAINS_KEY,
-			LAST_CHAIN_KEY
+			LAST_CHAIN_KEY,
+			ACCOUNT_CHAINS_KEY,
+			EXT_CACHE_KEY
 		]);
 		const picked = all[CHAIN_PREFIX + origin];
 		if (typeof picked === 'number' && Number.isFinite(picked) && picked > 0) return picked;
 		const grant = all[grantKey(origin)];
 		if (isGrant(grant) && grant.chainId > 0) return grant.chainId;
-		const start = startChain(all[CHAINS_KEY], all[LAST_CHAIN_KEY]);
+		const start = startChain(
+			all[CHAINS_KEY],
+			all[LAST_CHAIN_KEY],
+			accountChainsOf(all[ACCOUNT_CHAINS_KEY], all[EXT_CACHE_KEY])
+		);
 		if (start > 0) return start;
 	} catch {
 		/* unreadable → the default */
@@ -108,14 +121,25 @@ export async function getOriginChain(origin: string, fallback: number): Promise<
 	return fallback;
 }
 
+/**
+ * Where the signed-in account lives (r10): its list under
+ * `ACCOUNT_CHAINS_KEY`, for the address the snapshot says is signed in — the
+ * worker's `accountChainsOf`, so the window asks on the chain the site is on.
+ */
+function accountChainsOf(byAccount: unknown, snapshot: unknown): number[] {
+	const address =
+		snapshot && typeof snapshot === 'object'
+			? (snapshot as { address?: unknown }).address
+			: undefined;
+	if (typeof address !== 'string' || !byAccount || typeof byAccount !== 'object') return [];
+	const ids = (byAccount as Record<string, unknown>)[address.toLowerCase()];
+	return Array.isArray(ids) ? ids.filter((id): id is number => Number.isInteger(id) && id > 0) : [];
+}
+
 /** Where a new site starts, from the published catalog; `0` for a catalog that does not say. */
-function startChain(catalog: unknown, lastBySpace: unknown): number {
+function startChain(catalog: unknown, lastBySpace: unknown, held: number[]): number {
 	if (!catalog || typeof catalog !== 'object') return 0;
-	const { order, space, accountChains } = catalog as {
-		order?: unknown;
-		space?: unknown;
-		accountChains?: unknown;
-	};
+	const { order, space } = catalog as { order?: unknown; space?: unknown };
 	if (!Array.isArray(order)) return 0;
 	const ids = order.filter((id): id is number => Number.isInteger(id) && id > 0);
 	if (ids.length === 0) return 0;
@@ -124,9 +148,6 @@ function startChain(catalog: unknown, lastBySpace: unknown): number {
 			? (lastBySpace as Record<string, unknown>)[space]
 			: undefined;
 	// r9: where the account holds something or used, before the space's first.
-	const held = Array.isArray(accountChains)
-		? accountChains.filter((id): id is number => Number.isInteger(id) && id > 0)
-		: [];
 	return siteStartChainFor(ids, typeof last === 'number' && last > 0 ? last : null, held);
 }
 

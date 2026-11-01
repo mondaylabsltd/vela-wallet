@@ -1,6 +1,6 @@
 # Multisig machines — the API the shells drive
 
-2026-10-31 · W9. For the native lanes (desktop, Android, iOS) and the web.
+2026-10-31 · W9 (§9: round 10, 2026-11-01). For the native lanes (desktop, Android, iOS) and the web.
 
 **The rule (owner, binding):** one core for the multisig's business rules and
 logic on every platform. A shell keeps only its UI and its I/O: it dispatches
@@ -364,7 +364,7 @@ All additive (new events, operations and fields with defaults) except
   (`MULTISIG_CALLS_STATUS_METHOD`, never a bundler's method) on the batch's
   chain, `params: [batch]` — no new operation, so a shell that has not
   adopted it answers nothing new. Ask the proposals machine `calls_status
-  {id, chain_id, calls_id: batch}`, answer `read_answered` with its
+{id, chain_id, calls_id: batch}`, answer `read_answered` with its
   `calls_status[id]` as `body_json` (a `DappAnswer` is a JSON-RPC body:
   `{result}` or `{error}`, delivered as it is, `data` kept), then send it
   `calls_status_taken {id}`. (The desktop still answers with
@@ -430,32 +430,32 @@ tokenFacts?}` → `{reading, concerns, anyway, refused}`. `review.token
 
 ### 7.2 Elsewhere
 
-| Was | Now |
-| --- | --- |
-| `rpc_error {code, message}` | + `data?` — pass the node's `error.data`: the state probe's answer is a revert's payload (r8-4; Arc has no `debug_traceCall`). |
-| titles worded with a shell's own token read (18 decimals on a failure) | proposals view `tokens` per `chainId:token` (registry, else the contract; once read never unsaid) (r8-2). |
-| `OutboxEntry {why, retry_at}` | + `sending` (`why: "sending"`): on its way — say `proposal.outboxSending`, never "Not sent yet", no Send again (r8-16). |
-| `OutsideExecutionFee {wei, count, partial}` | + `max_wei` (the most it can take); say `external.executeFeeMax` and, with `count > 1`, `external.executeConfirms` before the first prompt (r8-15). |
-| `AccountRow.local_members` = founding members here | its members as the chains last said (`AccountUpdate::MembersNow` from proposals → accounts `apply`; stored `vela.multisigMembersNow`) (r8-7). |
-| an execution found later dated when found | dated by its block's time (r8-17). |
-| a dApp site's default chain 1 everywhere | Ethereum only when the space has it, else the space's first network (r8-21). |
+| Was                                                                    | Now                                                                                                                                                 |
+| ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rpc_error {code, message}`                                            | + `data?` — pass the node's `error.data`: the state probe's answer is a revert's payload (r8-4; Arc has no `debug_traceCall`).                      |
+| titles worded with a shell's own token read (18 decimals on a failure) | proposals view `tokens` per `chainId:token` (registry, else the contract; once read never unsaid) (r8-2).                                           |
+| `OutboxEntry {why, retry_at}`                                          | + `sending` (`why: "sending"`): on its way — say `proposal.outboxSending`, never "Not sent yet", no Send again (r8-16).                             |
+| `OutsideExecutionFee {wei, count, partial}`                            | + `max_wei` (the most it can take); say `external.executeFeeMax` and, with `count > 1`, `external.executeConfirms` before the first prompt (r8-15). |
+| `AccountRow.local_members` = founding members here                     | its members as the chains last said (`AccountUpdate::MembersNow` from proposals → accounts `apply`; stored `vela.multisigMembersNow`) (r8-7).       |
+| an execution found later dated when found                              | dated by its block's time (r8-17).                                                                                                                  |
+| a dApp site's default chain 1 everywhere                               | Ethereum only when the space has it, else the space's first network (r8-21).                                                                        |
 
 ## 8. Round 9 — one name, one reason, one balance
 
 All additive (new fields with defaults, a new enum variant, new functions).
 
-| Was the shell's                                                                                      | Now                                                                                                                                                                                                                                                                                                                                                                       |
-| ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| a refusal said as `review.blocked` ("would change who controls…") whatever the reason (r9-9)         | `MultisigReview.refused` `{why: delegatecall / tooDeep / refund / stateChange / other, key}` — draw the corpus key `key` as the ONE refusal line (`home.multisig.review.refusedWhy.*`, or `review.blocked` for the state guard's own refusal), never `proposal.refused` with the core's English `refusal`.                                                             |
-| "Checked… changes nothing about who controls" beside "Vela won't sign this" (r9-9)                   | `state.verdict.kind = withheld` (`StateVerdict::Withheld`): refused for another reason, nothing is said in the guard's place (nor its could-not-check).                                                                                                                                                                                                                  |
-| "No asset changes" under "Vela won't sign this" for a delegatecall or a batch too deep                | `simulation.kind = withheld` (`multisig_review::sim_withheld`): refused for a reason other than `stateChange`, no deltas, no notice, no `no_change_key`, and no `unsimulated` concern — draw NOTHING in the simulation's place (a shell's no-change fallback must not fire). The signing sheet's `SimVerdict` never has this kind.                                      |
-| "Only members can approve, and none is signed in on this device" whenever `can_approve` is empty     | `ProposalItem.members_here` (every member of it on this device, whatever the transaction): say `proposal.notMember` only when it is empty.                                                                                                                                                                                                                                |
-| each shell picking a member's name (r9-12, r8-25, r4D-5)                                             | accounts view `member_labels` `{lowercase address: label}` — every member of every multisig here and this device's accounts, by `names::label` (kept, passkey index, own name, short address). `index_wanted`: the addresses to look up in the passkey index (this device's own too); answer with event `index_names {answers: {address: {vela, name}}}` (`MultisigIndexAnswer`). |
-| an invite built from the shell's own known-map (Android's carried no labels)                         | `AccountRow.invite_members` (`InvitedMember[]`: founding members, then members now; a name only where one is known, and the kind): link door `addLink {origin, locale, multisig, extra: {chainIds, members}}`.                                                                                                                                                          |
-| "Require 1 approvals", "it needs 1 approvals too"                                                    | plural families `home.multisig.action.changeThreshold_*` and `home.multisig.proposal.rejectHint_*` (`{{count}}`); the plain keys stay for a shell not moved yet.                                                                                                                                                                                                        |
-| Arc USDC said twice in Balance changes (the coin and its ERC-20 interface) (r9-2)                     | the review's `simulation` drops the interface's line when the coin's says it (`sim_outcome::one_line_per_balance`, `native_alias_token`): nothing for a shell to do.                                                                                                                                                                                                       |
-| a link to a used number: "executed or cancelled" (r8-24)                                             | `OutsideTxView.done` (`OutsideDone`: `executed {txHash}` / `cancelled`; `null` while open or unread) — words `home.multisig.external.{doneExecuted, doneCancelled}`.                                                                                                                                                                                                      |
-| a new site on the space's first network although the account lives elsewhere (extension)            | `network_space::site_start_chain_for(space, last_used, account_chains)` (wasm `siteStartChainFor`, uniffi `site_start_chain_for`): after the network last used, the first network the account holds something on or used. The extension catalog carries `accountChains`.                                                                                                |
+| Was the shell's                                                                                  | Now                                                                                                                                                                                                                                                                                                                                                                               |
+| ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| a refusal said as `review.blocked` ("would change who controls…") whatever the reason (r9-9)     | `MultisigReview.refused` `{why: delegatecall / tooDeep / refund / stateChange / other, key}` — draw the corpus key `key` as the ONE refusal line (`home.multisig.review.refusedWhy.*`, or `review.blocked` for the state guard's own refusal), never `proposal.refused` with the core's English `refusal`.                                                                        |
+| "Checked… changes nothing about who controls" beside "Vela won't sign this" (r9-9)               | `state.verdict.kind = withheld` (`StateVerdict::Withheld`): refused for another reason, nothing is said in the guard's place (nor its could-not-check).                                                                                                                                                                                                                           |
+| "No asset changes" under "Vela won't sign this" for a delegatecall or a batch too deep           | `simulation.kind = withheld` (`multisig_review::sim_withheld`): refused for a reason other than `stateChange`, no deltas, no notice, no `no_change_key`, and no `unsimulated` concern — draw NOTHING in the simulation's place (a shell's no-change fallback must not fire). The signing sheet's `SimVerdict` never has this kind.                                                |
+| "Only members can approve, and none is signed in on this device" whenever `can_approve` is empty | `ProposalItem.members_here` (every member of it on this device, whatever the transaction): say `proposal.notMember` only when it is empty.                                                                                                                                                                                                                                        |
+| each shell picking a member's name (r9-12, r8-25, r4D-5)                                         | accounts view `member_labels` `{lowercase address: label}` — every member of every multisig here and this device's accounts, by `names::label` (kept, passkey index, own name, short address). `index_wanted`: the addresses to look up in the passkey index (this device's own too); answer with event `index_names {answers: {address: {vela, name}}}` (`MultisigIndexAnswer`). |
+| an invite built from the shell's own known-map (Android's carried no labels)                     | `AccountRow.invite_members` (`InvitedMember[]`: founding members, then members now; a name only where one is known, and the kind): link door `addLink {origin, locale, multisig, extra: {chainIds, members}}`.                                                                                                                                                                    |
+| "Require 1 approvals", "it needs 1 approvals too"                                                | plural families `home.multisig.action.changeThreshold_*` and `home.multisig.proposal.rejectHint_*` (`{{count}}`); the plain keys stay for a shell not moved yet.                                                                                                                                                                                                                  |
+| Arc USDC said twice in Balance changes (the coin and its ERC-20 interface) (r9-2)                | the review's `simulation` drops the interface's line when the coin's says it (`sim_outcome::one_line_per_balance`, `native_alias_token`): nothing for a shell to do.                                                                                                                                                                                                              |
+| a link to a used number: "executed or cancelled" (r8-24)                                         | `OutsideTxView.done` (`OutsideDone`: `executed {txHash}` / `cancelled`; `null` while open or unread) — words `home.multisig.external.{doneExecuted, doneCancelled}`.                                                                                                                                                                                                              |
+| a new site on the space's first network although the account lives elsewhere (extension)         | `network_space::site_start_chain_for(space, last_used, account_chains)` (wasm `siteStartChainFor`, uniffi `site_start_chain_for`): after the network last used, the first network the account holds something on or used. The extension catalog carries `accountChains`.                                                                                                          |
 
 Names are hints, never authority (r9-12 (c), decided by best practice and
 the core principle): a name travels as the member's own passkey-index name
@@ -468,3 +468,138 @@ never a trust premise. The gap it would close — a Vela account the index
 cannot find by address because it is deployed only off the index's chains —
 is the index lookup's to close (hop 1 from the member's verified passkey
 approval's `ownerGenesis`), a follow-up.
+
+## 9. Round 10 — the rules no shell can drift from
+
+All additive (new events, operations, fields with serde defaults, new
+functions) except `names::label`'s order and the Rust struct literals of
+`MultisigOperation::Simulate`, `BalanceShellResult::FetchSettled`,
+`PasskeyPurpose::Approve` and `SendPurpose::Execute` (one more field each).
+Each rule has a shared vector the native shells replay.
+
+### 9.1 Names (r9-12, r8-25, r4D-5) — one name per address, everywhere
+
+| Was                                                                                                 | Now                                                                                                                                                                                                                                                                                                                                                                              |
+| --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| sheets drew `member_labels`, headers / Activity / Settings drew this device's own name              | EVERY place an address is named — header, switcher, Activity, Settings, sheets, invites — draws accounts view `member_labels[lowercase address]`, this device's own accounts included; the local name is only the fallback while the machine has none. Answer `index_wanted` (it names this device's own accounts too) with `index_names`.                                       |
+| `names.label`: kept → index → own → short                                                           | index (the account's own published name, the same answer on every device) → kept (a multisig's label: an invite's, or typed when the member was added) → own (local) → short. Decided by best practice + the core principle: only the published name can be the same on a device that never took the invite. Vectors: `tests/vectors/multisig/names.json` through the link door. |
+| login named an account after the signing key's user handle                                          | the published `key_names[0]` first (`login::reconstruct_account`).                                                                                                                                                                                                                                                                                                               |
+| fixtures: the multi-key wallet 0x88cC… named "Parallel One" (Android, iOS) / "Parallel Multi" (web) | "Interleave" — what the passkey index publishes for it — `dev_fixtures::MULTI_NAME`, uniffi `fixture_multi_name()`. Each key keeps its own name (Parallel One/Two/Three); two addresses never share one.                                                                                                                                                                         |
+
+There is no rename of a Vela account on any shell today (the name is set
+and published at creation); a rename, when one is added, publishes through
+the registry (`RegistryPublish` metadata `key_names`) — never local only.
+
+### 9.2 The rule chip (r9-14)
+
+Proposals tells accounts `AccountUpdate::RuleNow {chip: MultisigRuleChip}`
+with `MembersNow` (the rule in force per network, `current_rules`); accounts
+keeps it per multisig (`vela.multisigRulesNow`) and serves
+`AccountRow.rule` (`MultisigRowRule {chip, from_chain, last_known}`). Draw
+`rule.chip` in the switcher, the header and Settings for a multisig NOT
+followed (the followed one keeps proposals `rule_chip`); with `from_chain &&
+last_known` add `home.multisig.presence.ruleLastKnown`. Route `rule_now` to
+accounts `apply` like `members_now`.
+
+### 9.3 The balance stamp (r10-1, r9-3)
+
+`BalanceView.last_refreshed_at_ms` moves only when every network the shown
+account lives on that the round asked answered (`balance_dashboard::
+stamp_moves`): the networks it holds something on (read or
+`holdings_restored`) plus NEW event `lives_on {address, chain_ids}` (a
+multisig's networks; send it before or with `account_changed`). An account
+living on none of the asked networks is stamped by any answer; nothing
+answering never stamps. An account or space switch clears the stamp; it
+never moves back. NEW `FetchSettled.read_at_ms` (optional): a token-cache
+hit says when its rows were read — never "now". Shells pass `read_chain_ids`
+(every chain asked) and draw the field as it is (`null`: no "Updated").
+Vectors: `tests/vectors/balance-stamp.json` (machine steps).
+
+`ProposalsView.unreachable` ("The multisig service can't be reached") is
+true only when the service itself missed a mailbox read on a network whose
+chain this device could read; a dead chain is `chainUnreachable`.
+
+### 9.4 Incoming funds (r9-17, r8-13) — `incoming_scan`
+
+The scan's networks, window, backfill and cadence are the core's. Shells
+run `ScanIncomingTransfers` through token_trust `scan_requested {address,
+facts: {held_chain_ids, account_networks: [{chain_id, deploy_block}],
+space_chain_ids, added_chain_ids}, cursors}` (push `registry_tokens_snapshot`
+for every chain of `incoming_scan_plan(facts).scan_chain_ids` first), keep
+`TrustView.cursors` under `vela.scanCursors.<address>`, and drive the
+cadence with activity_feed `presence_changed` / `scan_due {seq}` (one timer
+per `FeedView.next_scan.seq`). Backfill below the live 100 blocks: up to a
+week, at most 400,000 blocks, 10,000-block reads, 4 per poll, never below a
+known deploy block. uniffi `incoming_scan_plan`, `incoming_scan_windows`,
+`incoming_next_scan_ms` (wasm `incomingScanPlan`, …). Vectors:
+`tests/vectors/incoming-scan.json`.
+
+### 9.5 The review and the outside page
+
+| Was                                                                                       | Now                                                                                                                                                                                                                         |
+| ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| a lone batch read as `review.callNumber` with `n` = `""` ("第 笔调用") (r10-10)           | `reading::Call.leg` (`"2.1"`, `null` for the lone call: draw NO number). Never join `path`. Lists inside a sentence use the platform's locale list formatter.                                                               |
+| deep4 / delegatecall refused, yet "expected to fail" (r10-6)                              | a review refused for what it is withholds a revert too (`StateVerdict::Withheld`, no `Concern::Reverts`), and proposals never looks at it (no preview, no `blocked: fails`).                                                |
+| an undeployed multisig simulated from a bare address: "expected to fail" (real-device S2) | `MultisigOperation::Simulate.state_overrides` (optional JSON): put it as it is into `eth_simulateV1`'s `blockStateCalls[0].stateOverrides` — the multisig placed as its deployment leaves it (`Reads.sim_state_overrides`). |
+| "Couldn't read its members" until a reload                                                | the members machine reads an unread network again itself (`MEMBERS_REREAD_MS`, `wait` operations).                                                                                                                          |
+| /connect: the core's English `refusal` beside the translated reason (r10-5)               | draw `review.refused.key`'s words once.                                                                                                                                                                                     |
+| the signing page could not say a member change before → after                             | `PasskeyPurpose::Approve {.., owners, threshold}`, `SendPurpose::Execute {.., owners}`; pass them to `TrustedSignerApprovalInput` (optional). Page 797489e6 (first in `BUILD_ALLOWED`; `LAUNCH` unchanged).                 |
+
+### 9.6 The web and the extension (no native change)
+
+- The extension's start chain: `vela.ext.accountChains` (per signed-in
+  account, written by the wallet page only, never emptied by a page that has
+  not read holdings); the catalog's `chains` hold both spaces' networks,
+  `order` the space in front's. Spec 105's line, kept (coordinator): a new
+  site starts only on a network of the space in front (the network last used
+  there, else one the account holds or used there, else the space's default),
+  and a page's switch reaches only that space's networks
+  (`network_space::site_may_switch_to`, the worker's `switchRefusal`): a
+  network of the other space is 4902 naming that space, one Vela lacks
+  "not in Vela's networks". Moving between spaces is the person's own choice
+  in Vela. Vectors `tests/vectors/site-start-chain.json` (`cases`,
+  `switches`; Rust and the worker's JS twin).
+- Welcome reads a multisig link with the core before it says it waits
+  (`onboarding.welcomeWeb.linkBroken`).
+
+### 9.7 Outside the multisig machines (every shell drives the same core)
+
+- **Amount + fee (r10-3).** The send rules weigh amount + fee against ONE
+  balance on every confirm path — native fee, in-band fee, Arc's USDC whose
+  coin and ERC-20 interface are one balance (`manage_tokens::same_balance`,
+  `rescale_units`; `fee_policy::fee_in_units_of`), Max's reserve — and the
+  dApp sheet's fee check subtracts the request's own amount. New
+  `FeeOptionView.short_with_amount` (words `send.warnInsufficientForGas`).
+  Vectors `tests/vectors/rules/send-fee-cover.json`. The r10 revert itself
+  came from the harness relay reporting a fixed balance; the fee machine
+  still takes the relay's balance figure (a follow-up: cross-check with the
+  wallet's own read).
+- **Passkey errors (real-device S3).** `app::passkey_error::words(platform,
+domain, code, message) -> {kind, key, failure}` (uniffi
+  `passkey_error_words`, wasm `passkeyErrorWords`): a corpus key
+  (`onboarding.common.passkeyError.*`, `phoneLinkFailed`) for the platform's
+  error facts, never the system's English. Onboarding's `passkey_failed`
+  takes optional `error {platform, domain, code, message}`; the core fills
+  `PromptKind::{CreateFailed, SignInFailed}.words_key`. Vectors
+  `tests/vectors/rules/passkey-errors.json`.
+
+### 9.8 Shell notes from the native fixers (round 10)
+
+- **Android** (branch of the Android r10 fixer, merged by the coordinator):
+  the sheet title from `review.reading` (r10-8); an executed sheet draws its
+  frozen facts and asks the timeline once more when done (r10-7);
+  `waiting_note` drawn as it is; the "Updated" stamp hidden while
+  `checking_key` is set; lists through `ListFormatter`
+  (`MultisigWords.list`); `recipient_facts.first_time = false` for this
+  device's own accounts and multisigs; the notification ask marked on its
+  answer; WorkManager rounds on an INTERNET (not VALIDATED) network request,
+  plus an expedited round on leaving. r10-6: the shell also drops
+  `reverts` / `unsimulated` beside a withheld simulation and
+  `unreadableBatch` beside `refused.why = tooDeep` (one red box) — the core
+  no longer emits them (§9.5), both are compatible. Its new on-demand keys
+  (`home.multisig.notify.*`, `home.multisig.create.close*`) move the
+  multisig pin; this branch's own +1 (`presence.ruleLastKnown`, 665) is to
+  be added on merge.
+- **Desktop**: the deep-batch refusal said once (`reading::
+concern_blocks_beside`); `SendPick.loading`; network status beside the
+  stamp; `TokensPartial` only with a held balance.

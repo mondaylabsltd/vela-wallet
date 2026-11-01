@@ -357,6 +357,10 @@ pub struct RpcRequest {
 pub struct Reads {
     pub need_code: Vec<String>,
     pub sim_calls: Vec<SimCall>,
+    /// Real-device S2: the state override that puts an undeployed multisig
+    /// in place (its deployment's code and storage) for `eth_simulateV1` —
+    /// the simulation includes the deploy, as the execution will.
+    pub sim_state_overrides: Option<Value>,
     pub trace: Option<RpcRequest>,
     pub probe: Option<RpcRequest>,
     pub unavailable: Option<String>,
@@ -609,6 +613,14 @@ pub fn review_reads(input: &ReadsInput) -> Result<Reads, CoreError> {
             return Ok(reads);
         }
     };
+    if placed.code.is_some() {
+        let mut overrides = Map::new();
+        overrides.insert(
+            checksum(safe),
+            override_of(placed.code.as_deref(), &placed.storage),
+        );
+        reads.sim_state_overrides = Some(Value::Object(overrides));
+    }
     let (_, _, named, _) = declared(review.action.as_ref(), &placed.owners, placed.threshold);
     let watch = watched(tx, &placed.owners, &named);
     let inner = inner_of(tx)?;
@@ -1853,7 +1865,10 @@ pub fn multisig_review(input: &ReviewInput) -> Result<MultisigReview, CoreError>
     if withheld
         && matches!(
             state.verdict,
-            StateVerdict::Unchanged | StateVerdict::Declared | StateVerdict::Unavailable { .. }
+            StateVerdict::Unchanged
+                | StateVerdict::Declared
+                | StateVerdict::Unavailable { .. }
+                | StateVerdict::Reverts
         )
     {
         state.verdict = StateVerdict::Withheld;
@@ -1863,13 +1878,11 @@ pub fn multisig_review(input: &ReviewInput) -> Result<MultisigReview, CoreError>
     // as the multisig, a batch too deep is not read in full — "No asset
     // changes" (or its could-not-check, or a revert only the simulation
     // said) beside "Vela won't sign this" is a reassurance nobody can give.
+    // r10-6: nor "expected to fail" — the probe of a transaction Vela does
+    // not read in full says nothing it can stand behind; the refusal is the
+    // one line (deep4 still showed it on desktop and Android).
     let simulation = if withheld {
-        let state_reverts = state.verdict == StateVerdict::Reverts;
-        concerns.retain(|c| match c {
-            Concern::Unsimulated => false,
-            Concern::Reverts => state_reverts,
-            _ => true,
-        });
+        concerns.retain(|c| !matches!(c, Concern::Unsimulated | Concern::Reverts));
         sim_withheld()
     } else {
         simulation

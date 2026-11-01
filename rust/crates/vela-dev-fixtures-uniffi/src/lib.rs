@@ -80,6 +80,14 @@ pub fn fixture_multi_address() -> Result<String, FixtureError> {
     Ok(fixtures::multi_address()?)
 }
 
+/// r9-12: the multi-key fixture wallet's name, as the passkey index publishes
+/// it — name the parallel space's multi-key account with this, never with a
+/// key's name.
+#[uniffi::export]
+pub fn fixture_multi_name() -> String {
+    fixtures::MULTI_NAME.to_owned()
+}
+
 /// Sign `challenge` as a fixture key would: the signer is resolved the way
 /// an authenticator resolves an allow-list (`allow_credential_ids`, empty =
 /// any), with `preferred` picking among several the way the web's

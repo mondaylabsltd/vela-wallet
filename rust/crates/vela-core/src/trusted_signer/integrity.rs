@@ -61,6 +61,15 @@
 /// Every entry is a page published at `sign.getvela.app/b/<hash>/sign.html`.
 /// An empty set would open nothing were it enforced — see [`ENFORCE`].
 pub const BUILD_ALLOWED: &[&str] = &[
+    // 344aacd2's page, round 10: a multisig's coins are the multisig's ("all
+    // of the multisig's USDC", never "all of your USDC"; "The multisig sends
+    // …"); a member change reads before → after against the members and
+    // threshold the wallet says it has now (`context.multisig.owners` /
+    // `.threshold`, drawn "per the app"; a setup in the same operation says
+    // them as facts): "Members 4 → 5 · Approvals needed 2 of 4 → 1 of 5";
+    // an executor's card lists a nested batch's legs and a lone batch call's
+    // ("1", "1.1"), refused past the core's depth. Not LAUNCH.
+    "797489e69d6f45b15147ac4c8c5b33116cede1a21ae922445cedc758d2c9057e",
     // 344aacd2's page, round 9 (r9-10): "Approve anyway" in the danger fill
     // exactly where the app's one review asks for it (`context.multisig.
     // anyway`, a run that fails, said as the app's word) or the page's own

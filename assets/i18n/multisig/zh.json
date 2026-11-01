@@ -286,6 +286,7 @@
     "waitingPayer_one": "{{count}} 笔在等能付网络费的成员",
     "waitingPayer_other": "{{count}} 笔在等能付网络费的成员",
     "ruleDiffers": "各网络规则不同",
+    "ruleLastKnown": "上次读取的规则，打开后会重新读取",
     "othersWaiting": "另一个账户有待处理的交易"
    },
    "add": {

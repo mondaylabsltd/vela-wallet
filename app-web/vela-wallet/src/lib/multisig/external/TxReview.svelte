@@ -21,6 +21,7 @@
 	import type { SigningMessages } from '$lib/signing/messages';
 	import type { MultisigMessages } from '../messages';
 	import { readingTitle } from '../core/reading-blocks';
+	import { refusedLine } from '../core/approvals-words';
 	import { nativeSymbol } from '$lib/services/networks';
 	import { chainName, shortenAddress } from '../core/display';
 	import type { MultisigReviewOut, SafeTx, SafeTxHashes } from '../core/kernel';
@@ -151,7 +152,8 @@
 	{#if shown.title.kind === 'unsupported'}
 		<p class="warn" role="alert">
 			<Icon icon={UTILITY_ICONS['triangle-alert']} size="sm" />
-			{fillTemplate(w.refusedKind, { reason: shown.title.refusal ?? '' })}
+			<!-- r10-5: the core's reason in the person's words — never its English `refusal`. -->
+			{refusedLine(m, review?.refused?.key) ?? m.review.refusedWhy.other}
 		</p>
 	{/if}
 	{#if lines.length > 0 && !reading}

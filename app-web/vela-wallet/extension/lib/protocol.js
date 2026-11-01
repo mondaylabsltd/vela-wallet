@@ -271,6 +271,20 @@ export const CHAINS_KEY = 'vela.ext.chains';
  */
 export const LAST_CHAIN_KEY = 'vela.ext.lastChain';
 /**
+ * Where each account lives — `vela.ext.accountChains` → `{ [address, lower
+ * case]: number[] }`: the networks the account holds something on or used,
+ * most telling first. Written ONLY by the wallet page, once it has read that
+ * account's holdings; read for where a new site starts (`startChainOf`).
+ *
+ * r10 (r9 S4 unfixed): these rode in the catalog, which every extension page
+ * publishes — and the request window, which never reads holdings, published
+ * it again the moment a connect opened it, saying the account lived nowhere.
+ * A new site then started on the space's first network (Sepolia) for an
+ * account that held only Arc USDC. Kept per account, apart from the catalog,
+ * no page that does not know the holdings can say them.
+ */
+export const ACCOUNT_CHAINS_KEY = 'vela.ext.accountChains';
+/**
  * Where a request is answered — `vela.ext.surface`: `'panel'` (the default:
  * the asking tab's side panel, falling back to a window when there is no user
  * gesture to open one on) or `'window'` (always the dedicated window). A
@@ -711,14 +725,15 @@ export function chainEndpoints(catalog, chainId, bundler) {
 	return Array.isArray(entry.rpc) ? entry.rpc.filter((u) => typeof u === 'string' && u) : [];
 }
 
-/** Does the wallet's catalog know this chain at all? */
 /**
  * A TWIN of the core's `network_space::site_start_chain_for` (dapp-17, r9),
- * pinned to it through the wasm by `protocol.test.ts`: the chain a site with
- * no chain of its own starts on — `lastUsed` while it is one of the space's
- * networks (`order`, the wallet's list order), else the first of
- * `accountChains` (where the account holds something, or used) the space
- * offers, else the space's first, else Ethereum.
+ * held to it by the shared vectors (`rust/crates/vela-core/tests/vectors/
+ * site-start-chain.json`, replayed by vela-core and by `protocol.test.ts`)
+ * and through the wasm: the chain a site with no chain of its own starts on
+ * — `lastUsed` while it is one of the space's networks (`order`, the
+ * wallet's list order), else the first of `accountChains` (where the account
+ * holds something, or used) the space offers, else the space's first, else
+ * Ethereum.
  */
 export function siteStartChain(order, lastUsed, accountChains = []) {
 	if (typeof lastUsed === 'number' && order.includes(lastUsed)) return lastUsed;
@@ -728,12 +743,23 @@ export function siteStartChain(order, lastUsed, accountChains = []) {
 }
 
 /**
- * Where a new site starts, from what the wallet published: its catalog's
- * space and list order, and the chain last used in that space (`lastBySpace`,
- * `LAST_CHAIN_KEY`'s value). `0` when the catalog says neither — one written
- * before dapp-17 — and the caller keeps its old default.
+ * The networks `address` lives on, from `ACCOUNT_CHAINS_KEY`'s value — `[]`
+ * for an account the wallet has not read yet, or no account.
  */
-export function startChainOf(catalog, lastBySpace) {
+export function accountChainsOf(byAccount, address) {
+	if (!byAccount || typeof byAccount !== 'object' || typeof address !== 'string') return [];
+	const ids = byAccount[address.toLowerCase()];
+	return Array.isArray(ids) ? ids.map((id) => parseChainId(id)).filter((id) => id > 0) : [];
+}
+
+/**
+ * Where a new site starts, from what the wallet published: its catalog's
+ * space and list order, the chain last used in that space (`lastBySpace`,
+ * `LAST_CHAIN_KEY`'s value), and where the signed-in account lives
+ * (`accountChains`, `accountChainsOf`). `0` when the catalog says neither —
+ * one written before dapp-17 — and the caller keeps its old default.
+ */
+export function startChainOf(catalog, lastBySpace, accountChains = []) {
 	if (!catalog || typeof catalog !== 'object') return 0;
 	const order = Array.isArray(catalog.order)
 		? catalog.order.map((id) => parseChainId(id)).filter((id) => id > 0)
@@ -742,24 +768,64 @@ export function startChainOf(catalog, lastBySpace) {
 	const space = typeof catalog.space === 'string' ? catalog.space : '';
 	const last =
 		space && lastBySpace && typeof lastBySpace === 'object' ? parseChainId(lastBySpace[space]) : 0;
-	// r9: the networks the account holds something on or used, as published.
-	const held = Array.isArray(catalog.accountChains)
-		? catalog.accountChains.map((id) => parseChainId(id)).filter((id) => id > 0)
+	const held = Array.isArray(accountChains)
+		? accountChains.map((id) => parseChainId(id)).filter((id) => id > 0)
 		: [];
 	return siteStartChain(order, last > 0 ? last : null, held);
 }
 
-/** `LAST_CHAIN_KEY`'s value once `chainId` was used in the catalog's space; `null`: nothing to write. */
+/**
+ * `LAST_CHAIN_KEY`'s value once `chainId` was used in the catalog's space;
+ * `null`: nothing to write. A chain of the OTHER space (the catalog serves
+ * both, r10) is no network of this one: it never replaces the last one used
+ * here.
+ */
 export function withLastChain(catalog, lastBySpace, chainId) {
 	const space = catalog && typeof catalog.space === 'string' ? catalog.space : '';
 	if (!space || !(chainId > 0)) return null;
+	const order = Array.isArray(catalog.order) ? catalog.order.map((id) => parseChainId(id)) : [];
+	if (order.length > 0 && !order.includes(chainId)) return null;
 	const before = lastBySpace && typeof lastBySpace === 'object' ? lastBySpace : {};
 	return before[space] === chainId ? null : { ...before, [space]: chainId };
 }
 
+/**
+ * Does the wallet have this chain at all? The catalog's `chains` are every
+ * network Vela serves, BOTH spaces (r10: a wallet in the mainnet space
+ * refused a switch to Arc Testnet as "not in Vela's networks"); `order` alone
+ * is the space in front. So 4902 is said only of a chain Vela does not have.
+ */
 export function chainKnown(catalog, chainId) {
 	const chains = catalog && typeof catalog === 'object' ? catalog.chains : null;
 	return !!(chains && typeof chains === 'object' && chains[String(chainId)]);
+}
+
+/**
+ * Why a site may not move to `chainId` (`wallet_switchEthereumChain`, an add
+ * of a chain Vela has), or `null`: it may. Spec 105's line, kept (coordinator,
+ * r10): a site is only ever on a network of the space in front — test value
+ * is never mistaken for real money, so a site in the mainnet space never lands
+ * on a testnet because a page asked; moving between spaces is the person's own
+ * choice in Vela. The in-app browser refuses the same (4902, `dapp_browser`).
+ * The catalog still serves both spaces, so the refusal names the space the
+ * network is in rather than saying Vela lacks it (Safari's r10 report); a
+ * chain Vela does not have at all is "not in Vela's networks".
+ */
+export function switchRefusal(catalog, chainId) {
+	if (!chainKnown(catalog, chainId)) {
+		return { code: ERR.CHAIN_NOT_ADDED, message: `Chain ${chainId} is not in Vela's networks` };
+	}
+	const order = Array.isArray(catalog.order)
+		? catalog.order.map((id) => parseChainId(id)).filter((id) => id > 0)
+		: [];
+	// A catalog from before dapp-17 says no space: nothing to hold the site to.
+	if (order.length === 0 || order.includes(chainId)) return null;
+	const front = catalog.space === 'testnet' ? 'testnet' : 'mainnet';
+	const other = front === 'testnet' ? 'mainnet' : 'testnet';
+	return {
+		code: ERR.CHAIN_NOT_ADDED,
+		message: `Chain ${chainId} is one of Vela's ${other} networks; Vela is showing its ${front} networks. Switch to the ${other} space in Vela to use it.`
+	};
 }
 
 // ---- param / value helpers --------------------------------------------------

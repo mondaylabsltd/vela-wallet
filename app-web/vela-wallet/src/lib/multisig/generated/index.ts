@@ -77,6 +77,7 @@ export * from './MultisigRecovery';
 export * from './MultisigRenameBlocked';
 export * from './MultisigRenamePlan';
 export * from './MultisigReplacePreview';
+export * from './MultisigRowRule';
 export * from './MultisigRuleChip';
 export * from './MultisigSendPurpose';
 export * from './MultisigShellResult';

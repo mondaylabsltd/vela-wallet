@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { accountName } from '$lib/multisig/core/account-name';
 	/**
 	 * The signing sheet, wherever a request can arrive (spec 027 T340).
 	 *
@@ -390,7 +391,7 @@
 	const identity = $derived(
 		view.has_wallet
 			? {
-					name: view.accounts[view.active_index]?.account.name ?? '',
+					name: accountName(view.address, view.accounts[view.active_index]?.account.name ?? ''),
 					address: view.address,
 					identiconSvg: identiconSvgForClient(view.address)
 				}

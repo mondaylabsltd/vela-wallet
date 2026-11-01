@@ -94,6 +94,19 @@ pub struct More {
     indexed: Vec<String>,
 }
 
+/// r10-6: the one review of this transaction refuses it for what it is (a
+/// delegatecall, a batch too deep, a refund…), not for the state guard's
+/// finding: nothing about whether it would run is said beside the refusal —
+/// no look at it, no "expected to fail" (`StateVerdict::Withheld`).
+pub(crate) fn refused_withheld(s: &State, chain_id: u64, hash: &str) -> bool {
+    s.reviews
+        .get(&item_key(chain_id, hash))
+        .and_then(|r| r.get("refused"))
+        .and_then(|r| r.get("why"))
+        .and_then(Value::as_str)
+        .is_some_and(|why| why != "stateChange")
+}
+
 fn item_key(chain_id: u64, hash: &str) -> String {
     format!("{chain_id}:{}", hash.to_ascii_lowercase())
 }
@@ -166,7 +179,9 @@ pub struct MoreView {
 /// Why a ready `item` of the followed multisig cannot run here, from the
 /// looks at each executor here (`readyBlock`): `None` while one is out.
 fn ready_block(s: &State, item: &ProposalItem) -> Option<ReadyBlock> {
-    if item.can_execute.is_empty() {
+    // r10-6: a review refused for what it is says only its refusal — no
+    // "can't run now, expected to fail" from a look at it.
+    if item.can_execute.is_empty() || refused_withheld(s, item.chain_id, &item.safe_tx_hash) {
         return None;
     }
     let looks: Vec<Option<Look>> = item
@@ -330,7 +345,7 @@ pub fn view_more(s: &mut State) -> MoreView {
     let note = waiting_note(&ListFacts {
         offline: s.offline,
         read_at: s.read_at,
-        unreachable: s.stale && down,
+        unreachable: service_unreachable(s, down),
         unreadable: s.unreadable.clone(),
         cached_at: s.cached_at,
         stale: s.stale,
