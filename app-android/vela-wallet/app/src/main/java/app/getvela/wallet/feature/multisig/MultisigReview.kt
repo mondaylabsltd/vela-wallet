@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -33,6 +34,7 @@ import app.getvela.wallet.core.designsystem.tokens.VelaIconSize
 import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.feature.multisig.core.MsDraft
 import app.getvela.wallet.feature.multisig.core.MsRules
+import app.getvela.wallet.feature.multisig.core.MsSignDoor
 import app.getvela.wallet.feature.multisig.core.MultisigHub
 import app.getvela.wallet.feature.multisig.core.ev
 import app.getvela.wallet.feature.multisig.core.MultisigRiskAsk
@@ -94,6 +96,51 @@ fun MultisigReviewBody(
         Technical(review, words)
     }
 }
+
+/**
+ * §12: the review's place on a sheet, as the core's sign door says it
+ * (`review.door`): the review itself once it is read; while it is read, a
+ * calm "Reading the transaction…" placeholder; when it could not be read,
+ * the reason, "Nothing can be signed until it's read." and "Try again"
+ * ([onTryAgain] sends the machine's `review_again`). The button under it is
+ * the door's ([MsSignDoor.enabled]) — never pressed on a review not drawn.
+ */
+@Composable
+fun MsReviewDoor(
+    door: MsSignDoor,
+    words: MultisigWords,
+    tag: String,
+    onTryAgain: () -> Unit,
+    review: @Composable () -> Unit,
+) {
+    val colors = VelaTheme.colors
+    when {
+        door.showsReview -> review()
+        door.failed -> Column(Modifier.fillMaxWidth().testTag("$tag.reviewFailed"), verticalArrangement = Arrangement.spacedBy(VelaSpacing.sm)) {
+            MsNote(reviewFailedReason(door, words), tone = MsTone.Warning, tag = "$tag.reviewFailedReason")
+            MsNote(words.t("review.state.blocked"), tag = "$tag.reviewBlocked")
+            if (door.retry) MsTextButton(words.t("review.state.tryAgain"), tag = "$tag.reviewTryAgain") { onTryAgain() }
+        }
+        else -> Row(
+            Modifier.fillMaxWidth().testTag("$tag.reviewLoading"),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md),
+        ) {
+            CircularProgressIndicator(Modifier.padding(VelaSpacing.xs), color = colors.fgMuted, strokeWidth = VelaSpacing.xs)
+            MsText(words.t("review.state.loading"), MsType.Sub, color = colors.fgMuted)
+        }
+    }
+}
+
+/** §12: a failed review's reason, in the core's words (`reason_key`, a full corpus key). */
+internal fun reviewFailedReason(door: MsSignDoor, words: MultisigWords): String =
+    words.raw(door.reasonKey?.takeIf { it.isNotBlank() } ?: "home.multisig.review.state.unreadable")
+
+/** §12: the draft's sign door — its review's state and sign rule, asked of the core. */
+internal fun draftDoor(draft: MsDraft): MsSignDoor = MsRules.reviewDoor(draft.reviewState, draft.review)
+
+/** §12: the event the draft's "Try again" sends — its review, read again. */
+internal fun draftReviewAgain(): kotlinx.serialization.json.JsonObject = ev("review_again")
 
 /**
  * r8-14: the review's concerns this sheet draws as their own lines — each
@@ -568,13 +615,16 @@ fun MultisigDraftReviewSheet(
         MsText(words.actionTitle(item.chainId, item.action, item.nonce), MsType.Title, Modifier.testTag("multisig.draft.title"))
         MsText("${words.network(item.chainId)} · ${words.t("action.numberValue", "nonce" to item.nonce)}", MsType.Sub, color = VelaTheme.colors.fgSubtle)
         item.refusal?.takeIf { it.isNotEmpty() }?.let { MsNote(words.t("proposal.refused", "reason" to it), tone = MsTone.Danger) }
-        draft.review?.takeUnless { it.isNullish }?.let { MultisigReviewBody(it, item.chainId, words, tokenInfo) }
+        // §12: the core's sign door over the review's state and its sign rule
+        // (r8-1): enabled only once it is read (`ready`) and the rule allows
+        // it; `anyway` signs only through the "… anyway" friction — never a
+        // plain accent press. Loading or failed: nothing is proposed.
+        val door = remember(draft.reviewState, draft.review) { draftDoor(draft) }
+        MsReviewDoor(door, words, "multisig.draft", onTryAgain = { hub.sendProposal(draftReviewAgain()) }) {
+            draft.review?.takeUnless { it.isNullish }?.let { MultisigReviewBody(it, item.chainId, words, tokenInfo) }
+        }
         words.actionFailure(state, item.chainId)?.let { MsNote(it, tone = MsTone.Danger, tag = "multisig.draft.failed") }
-        // The core's sign rule (r8-1): `allowed` false signs nothing; `anyway`
-        // signs only through the "… anyway" friction — never a plain accent press.
-        val reviewed = draft.review != null && !draft.review.isNullish
-        val allowed = reviewed && (draft.review["sign"]["allowed"].bool ?: true)
-        val anyway = draft.review["sign"]["anyway"].bool ?: false
+        val anyway = door.anyway
         if (draft.membersHere.size > 1) {
             MemberPicker(words, words.t("proposal.as"), draft.membersHere, member ?: draft.defaultMember ?: draft.membersHere.first(), tag = "multisig.draft.as") { member = it }
         }
@@ -599,7 +649,7 @@ fun MultisigDraftReviewSheet(
                 if (executeNow) hub.sendProposal(ev("propose_execute", "as_member" to by)) else hub.confirmDraft(by)
             },
             modifier = Modifier.fillMaxWidth().testTag("multisig.draft.propose"),
-            enabled = allowed && !working,
+            enabled = door.enabled && !working,
             loading = working,
         )
         if (executeNow) MsNote(words.t("proposal.feeNote"))

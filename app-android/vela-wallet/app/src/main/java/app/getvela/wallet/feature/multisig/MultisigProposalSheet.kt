@@ -15,7 +15,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -113,19 +112,22 @@ fun MultisigProposalSheet(
     // request, right after proposing) waited on "Checking again…" for ever
     // (r8-19). Asked again whenever what it is of changes, every
     // REVIEW_FRESH_MS while it waits, and every REVIEW_RETRY_MS while the
-    // last could not reach the chain (the web's rule); a finished one's once.
+    // last read could not reach the chain (the web's rule); a finished one's
+    // once. §12: one the core says `failed` is not asked again behind the
+    // person's back — it stays said, with "Try again" (`review_again`).
     val reviewKey = item?.let { "${it.safeTxHash}:${it.status == "done"}:${view.chain(chainId)?.members?.owners?.joinToString(",")}:${view.chain(chainId)?.members?.threshold}" }
-    var reviewAskedAt by remember(chainId, safeTxHash) { mutableStateOf(0L) }
     LaunchedEffect(reviewKey) {
         val current = item ?: return@LaunchedEffect
         var lastFresh = 0L
         while (true) {
             val now = System.currentTimeMillis()
-            val shown = hub.proposalsView.value.item(chainId, current.safeTxHash)?.let { hub.proposalsView.value.review(it) }
-            if (lastFresh == 0L || now - lastFresh >= REVIEW_FRESH_MS || reviewUnread(shown)) {
+            val v = hub.proposalsView.value
+            val listed = v.item(chainId, current.safeTxHash)
+            val shown = listed?.let { v.review(it) }
+            val failed = listed?.let { v.reviewState(it) }.kind == "failed"
+            if (lastFresh == 0L || (!failed && (now - lastFresh >= REVIEW_FRESH_MS || reviewUnread(shown)))) {
                 hub.sendProposal(ev("review", "chain_id" to chainId, "safe_tx_hash" to current.safeTxHash, "blind" to false))
                 lastFresh = now
-                reviewAskedAt = now
             }
             if (current.status == "done") break
             delay(REVIEW_RETRY_MS)
@@ -206,32 +208,12 @@ fun MultisigProposalSheet(
                 }
             }
         }
-        val review = model.review
-        // r8-19: "Checking again…" is bounded — a review not back within
-        // REVIEW_CAP_MS (or one the machine could not gather) is said as
-        // unread, with Retry, never a spinner for ever.
-        val now by produceState(System.currentTimeMillis(), model.reviewReady) {
-            while (!model.reviewReady) {
-                value = System.currentTimeMillis()
-                delay(1_000)
-            }
-        }
-        when (reviewStand(review, reviewAskedAt, now)) {
-            ReviewStand.Shown -> MultisigReviewBody(review!!, chainId, words, tokenInfo, executed = model.isDone)
-            ReviewStand.Checking -> Row(Modifier.testTag("multisig.proposal.reviewChecking"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
-                CircularProgressIndicator(Modifier.padding(VelaSpacing.xs), color = colors.fgMuted, strokeWidth = VelaSpacing.xs)
-                MsText(words.raw("componentsUi.signing.simRechecking"), MsType.Sub, color = colors.fgMuted)
-            }
-            ReviewStand.Unread -> Row(verticalAlignment = Alignment.Top) {
-                MsNote(
-                    words.t(if (model.isDone) "proposal.cantCheckUsed" else "proposal.cantCheck", "network" to words.network(chainId)),
-                    Modifier.weight(1f), tone = MsTone.Warning, tag = "multisig.proposal.reviewUnread",
-                )
-                MsTextButton(words.t("service.retry"), tag = "multisig.proposal.reviewRetry") {
-                    reviewAskedAt = System.currentTimeMillis()
-                    hub.sendProposal(ev("review", "chain_id" to chainId, "safe_tx_hash" to item.safeTxHash, "blind" to false))
-                }
-            }
+        // §12: the review's place, as the core's sign door says it — read
+        // (the review), being read ("Reading the transaction…", bounded by
+        // the core), or not read (its reason and "Try again"). Approve,
+        // Approve and execute and Execute below are the same door's.
+        MsReviewDoor(model.door, words, "multisig.proposal", onTryAgain = { hub.sendProposal(model.reviewAgain) }) {
+            model.review?.takeUnless { it is JsonNull }?.let { MultisigReviewBody(it, chainId, words, tokenInfo, executed = model.isDone) }
         }
 
         // Approvals.
@@ -401,13 +383,13 @@ fun MultisigProposalSheet(
                         confirmButton = {
                             TextButton(onClick = {
                                 confirming = false
-                                val owner = member ?: model.defaultMember ?: model.canExecute.firstOrNull()
                                 // r9-13: the cancellation is a proposal like any other —
                                 // drawn with its review first (the draft sheet, its member
-                                // picked there), signed only on the person's word there.
+                                // picked there), signed only on the person's word there,
+                                // through the core's sign door (§12).
                                 // On the hub's scope: this sheet steps aside for the review.
                                 hub.scope.launch {
-                                    val settled = hub.propose(chainId, mapOf("kind" to "cancel", "nonce" to item.nonce), address = accounts.active, review = true, asMember = owner)
+                                    val settled = hub.propose(chainId, mapOf("kind" to "cancel", "nonce" to item.nonce), address = accounts.active)
                                     VelaLog.event("multisig.reject", "settled", "kind" to (settled.kind ?: "none"))
                                 }
                             }, modifier = Modifier.testTag("multisig.proposal.rejectConfirm")) { Text(rejectWord, color = colors.errorBase) }
@@ -437,6 +419,8 @@ fun MultisigProposalSheet(
                         text = words.t("external.signWithWallet"),
                         onClick = { hub.sendProposal(ev("approve_outside", "chain_id" to chainId, "safe_tx_hash" to item.safeTxHash)) },
                         modifier = Modifier.fillMaxWidth().testTag("multisig.proposal.outside"),
+                        // §12: an approval asked of another wallet is still an approval — the same door.
+                        enabled = model.canSign,
                     )
                 }
             }
@@ -527,25 +511,13 @@ internal const val REVIEW_FRESH_MS = 30_000L
 /** How soon a review that could not read the chain is asked again (the web's `REVIEW_RETRY_MS`). */
 internal const val REVIEW_RETRY_MS = 5_000L
 
-/** r8-19: how long "Checking again…" may stand before the review is said as unread, with Retry (the core's `PREVIEW_CAP_MS`). */
-internal const val REVIEW_CAP_MS = 15_000L
-
-/** The last review could not read the chain (its state or its simulation), or could not be gathered at all: asked again soon. */
-internal fun reviewUnread(review: JsonElement?): Boolean =
-    review is JsonNull || (review != null && (review["state"]["verdict"]["kind"].str == "unavailable" || review["simulation"]["kind"].str == "unreachable"))
-
-/** Where a sheet's review stands (r8-19). */
-enum class ReviewStand { Shown, Checking, Unread }
-
 /**
- * Shown once the machine has it; "Checking again…" while it is gathered —
- * for at most [REVIEW_CAP_MS] after it was last asked; then, or when the
- * machine could not gather it (`null` in `reviews`), unread with Retry.
- * Never a spinner for ever.
+ * A review that was read, but whose chain reads did not all come back (its
+ * state or its simulation): asked again soon. One that could not be read at
+ * all is the core's `failed` state (§12) — said with "Try again", and how
+ * long "Reading the transaction…" may stand is the core's bound, not this
+ * sheet's.
  */
-internal fun reviewStand(review: JsonElement?, askedAtMs: Long, nowMs: Long): ReviewStand = when {
-    review != null && review !is JsonNull -> ReviewStand.Shown
-    askedAtMs > 0 && nowMs - askedAtMs < (if (review is JsonNull) 1_500L else REVIEW_CAP_MS) -> ReviewStand.Checking
-    askedAtMs == 0L && review == null -> ReviewStand.Checking
-    else -> ReviewStand.Unread
-}
+internal fun reviewUnread(review: JsonElement?): Boolean =
+    review != null && review !is JsonNull &&
+        (review["state"]["verdict"]["kind"].str == "unavailable" || review["simulation"]["kind"].str == "unreachable")

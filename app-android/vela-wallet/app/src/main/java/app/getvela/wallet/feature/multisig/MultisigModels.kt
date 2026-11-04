@@ -4,6 +4,7 @@ import app.getvela.wallet.feature.multisig.core.MsAccount
 import app.getvela.wallet.feature.multisig.core.MsProposalItem
 import app.getvela.wallet.feature.multisig.core.MsProposalsView
 import app.getvela.wallet.feature.multisig.core.MsRules
+import app.getvela.wallet.feature.multisig.core.MsSignDoor
 import app.getvela.wallet.feature.multisig.core.MsSigners
 import app.getvela.wallet.feature.multisig.core.MsWaiting
 import app.getvela.wallet.feature.multisig.core.arr
@@ -12,9 +13,10 @@ import app.getvela.wallet.feature.multisig.core.get
 import app.getvela.wallet.feature.multisig.core.int
 import app.getvela.wallet.feature.multisig.core.kind
 import app.getvela.wallet.feature.multisig.core.long
+import app.getvela.wallet.feature.multisig.core.ev
 import app.getvela.wallet.feature.multisig.core.str
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
 
 /** One line a sheet says, with how it reads and a stable tag. */
 data class MsLine(val text: String, val tone: MsTone, val id: String)
@@ -78,25 +80,35 @@ class MsProposalModel(
     val defaultMember: String?
         get() = view.lastActor?.let { last -> canApprove.firstOrNull { it.equals(last, ignoreCase = true) } } ?: canApprove.firstOrNull()
 
-    /**
-     * The core's sign rule (`SignRule`): `allowed` false — nothing is signed,
-     * no override; `anyway` — allowed, but only through the signing sheet's
-     * own friction: a danger-styled "… anyway" and a second, explicit
-     * confirmation (r8-1).
-     */
-    val signAllowed: Boolean get() = review["sign"]["allowed"].bool ?: true
-    val signAnyway: Boolean get() = review["sign"]["anyway"].bool ?: false
+    /** §12: where its review stands (`MultisigReviewState`; `null`: not asked yet). */
+    val reviewState: JsonElement? get() = view.reviewState(item)
 
     /**
-     * r8-1: the one review every signer signs from is on screen. Before it
-     * is, no action may sign — a tap on a sheet still filling in (its review
-     * landing pushes the buttons down under the finger) approved a request
-     * nobody had read.
+     * §12, the core's sign door (`review.door`) over the review's state and
+     * its sign rule (`SignRule`) — one answer for Approve, Approve and
+     * execute, Execute and "Approve with another wallet": enabled only when
+     * the review is `ready` and its rule allows it; `anyway` — allowed, but
+     * only through the signing sheet's own friction (a danger-styled
+     * "… anyway" and a second, explicit confirmation, r8-1). A missing
+     * review, a missing state or a missing sign rule is never "allowed".
      */
-    val reviewReady: Boolean get() = review.let { it != null && it !is JsonNull }
+    val door: MsSignDoor by lazy { MsRules.reviewDoor(reviewState, review) }
 
-    /** A press may sign: the review is read and its rule allows it. */
-    val canSign: Boolean get() = reviewReady && signAllowed
+    val signAnyway: Boolean get() = door.anyway
+
+    /**
+     * r8-1: the one review every signer signs from is on screen (the door
+     * shows it). Before it is, no action may sign — a tap on a sheet still
+     * filling in (its review landing pushes the buttons down under the
+     * finger) approved a request nobody had read.
+     */
+    val reviewReady: Boolean get() = door.showsReview
+
+    /** A press may sign: the core's door is open. */
+    val canSign: Boolean get() = door.enabled
+
+    /** §12: the event "Try again" sends — this proposal's review, read again. */
+    val reviewAgain: JsonObject get() = ev("review_again", "chain_id" to chainId, "safe_tx_hash" to hash)
 
     /**
      * r8-18 (the web's `approveFirst`): Approve is offered only while

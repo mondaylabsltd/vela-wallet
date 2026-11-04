@@ -12,12 +12,9 @@ import app.getvela.wallet.feature.flows.FlowFixtures
 import app.getvela.wallet.feature.flows.FlowState
 import app.getvela.wallet.feature.multisig.MsProposalModel
 import app.getvela.wallet.feature.multisig.MultisigWords
-import app.getvela.wallet.feature.multisig.REVIEW_CAP_MS
-import app.getvela.wallet.feature.multisig.ReviewStand
 import app.getvela.wallet.feature.multisig.anywayLines
 import app.getvela.wallet.feature.multisig.core.MsAccountsView
 import app.getvela.wallet.feature.multisig.core.MsProposalsView
-import app.getvela.wallet.feature.multisig.reviewStand
 import app.getvela.wallet.feature.multisig.reviewUnread
 import app.getvela.wallet.feature.multisig.shownConcerns
 import app.getvela.wallet.feature.multisig.waitingConnectLink
@@ -78,7 +75,14 @@ class R8ShellFixesTest {
 
     /** One transaction, the review and signers given (raw JSON parts). */
     private fun proposals(approved: Int, canApprove: String, review: String?, signers: String? = null): MsProposalsView {
-        val reviews = review?.let { """"reviews":{"100:$hash":$it},""" }.orEmpty()
+        // §12: the core says where the review stands beside it — read, or not
+        // readable (`null`); nothing asked yet has no entry (loading).
+        val state = when (review) {
+            null -> null
+            "null" -> """{"kind":"failed","reason_key":"home.multisig.review.state.unreadable"}"""
+            else -> """{"kind":"ready"}"""
+        }
+        val reviews = review?.let { """"reviews":{"100:$hash":$it},"review_states":{"100:$hash":$state},""" }.orEmpty()
         val split = signers?.let { """"signers":{"100:$hash":$it},""" }.orEmpty()
         return MsProposalsView.of(
             json(
@@ -231,12 +235,16 @@ class R8ShellFixesTest {
 
     @Test
     fun the_review_spinner_ends() {
-        val asked = 1_000_000L
-        assertEquals(ReviewStand.Checking, reviewStand(null, asked, asked + 1_000))
-        assertEquals(ReviewStand.Unread, reviewStand(null, asked, asked + REVIEW_CAP_MS))
-        assertEquals("could not be gathered: unread, with Retry", ReviewStand.Unread, reviewStand(JsonNull, asked, asked + 5_000))
-        assertEquals(ReviewStand.Shown, reviewStand(json(plainReview), asked, asked + 60_000))
-        assertTrue(reviewUnread(JsonNull))
+        // §12: the spinner's bound is the core's (`failed {timedOut}`); the
+        // sheet draws the door: not asked yet — loading; not readable — failed,
+        // with Try again; read — the review.
+        assertTrue(model(proposals(approved = 1, canApprove = """["$alice"]""", review = null)).door.loading)
+        val failed = model(proposals(approved = 1, canApprove = """["$alice"]""", review = "null")).door
+        assertTrue("could not be gathered: failed, with Try again", failed.failed && failed.retry)
+        assertTrue(model(proposals(approved = 1, canApprove = """["$alice"]""", review = plainReview)).door.showsReview)
+        // Read, but a chain read did not come back: asked again soon. Failed is
+        // never asked again behind the person's back (it waits for Try again).
+        assertFalse(reviewUnread(JsonNull))
         assertTrue(reviewUnread(json("""{"state":{"verdict":{"kind":"unavailable"}},"simulation":{"kind":"deltas"}}""")))
         assertFalse(reviewUnread(null))
         assertFalse(reviewUnread(json(plainReview)))

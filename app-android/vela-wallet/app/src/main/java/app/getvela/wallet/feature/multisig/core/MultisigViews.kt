@@ -430,6 +430,13 @@ data class MsDraft(
     val defaultMember: String?,
     /** core-ms-2: the proposer's own approval makes it ready (a site's transaction): proposed and executed in one press (`propose_execute`). */
     val executeNow: Boolean = false,
+    /**
+     * §12: where [review] stands (`MultisigReviewState`: `loading`, `ready`,
+     * `failed {reason_key}`), kept whole for the core's sign door
+     * ([MsRules.reviewDoor]). `null` (not asked yet) is `loading` there —
+     * never "allowed".
+     */
+    val reviewState: JsonElement? = null,
 ) {
     companion object {
         fun of(e: JsonElement?) = MsDraft(
@@ -438,6 +445,7 @@ data class MsDraft(
             membersHere = e["membersHere"].strings(),
             defaultMember = e["defaultMember"].str,
             executeNow = e["executeNow"].bool ?: false,
+            reviewState = e["reviewState"] ?: e["review_state"],
         )
     }
 }
@@ -532,6 +540,12 @@ data class MsProposalsView(
     val draft: MsDraft? = null,
     val actions: Map<String, JsonElement> = emptyMap(),
     val reviews: Map<String, JsonElement> = emptyMap(),
+    /**
+     * §12: where each proposal's review stands, per `<chainId>:<safeTxHash>`
+     * (`MultisigReviewState`), beside [reviews]. A missing entry is not
+     * asked yet: `loading` at the core's sign door.
+     */
+    val reviewStates: Map<String, JsonElement> = emptyMap(),
     val previews: Map<String, JsonElement> = emptyMap(),
     val executions: Map<String, JsonElement> = emptyMap(),
     val lastActor: String? = null,
@@ -579,6 +593,8 @@ data class MsProposalsView(
     }
 
     fun review(item: MsProposalItem): JsonElement? = lookup(reviews, item.chainId, item.safeTxHash)
+    /** §12: where [item]'s review stands (`null`: not asked yet — `loading` at the core's door). */
+    fun reviewState(item: MsProposalItem): JsonElement? = lookup(reviewStates, item.chainId, item.safeTxHash)?.takeUnless { it.isNullish }
     fun standing(item: MsProposalItem): JsonElement? = lookup(standings, item.chainId, item.safeTxHash)
     fun timeline(item: MsProposalItem): List<JsonElement> = lookup(timelines, item.chainId, item.safeTxHash) ?: emptyList()
     fun signers(item: MsProposalItem): MsSigners? = lookup(signers, item.chainId, item.safeTxHash)
@@ -610,6 +626,7 @@ data class MsProposalsView(
             draft = e["draft"]?.let(MsDraft::of),
             actions = e["actions"].obj,
             reviews = e["reviews"].obj,
+            reviewStates = e["review_states"].obj,
             previews = e["previews"].obj,
             executions = e["executions"].obj,
             lastActor = e["last_actor"].str,
