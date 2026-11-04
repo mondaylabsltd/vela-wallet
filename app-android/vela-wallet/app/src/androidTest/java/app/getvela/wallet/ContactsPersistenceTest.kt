@@ -16,8 +16,10 @@ import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.junit.runners.MethodSorters
 
 /**
  * SC-004 on a device, across two real process deaths.
@@ -28,18 +30,24 @@ import org.junit.runner.RunWith
  * ```bash
  * P=app.getvela.wallet.test/androidx.test.runner.AndroidJUnitRunner
  * T=app.getvela.wallet.ContactsPersistenceTest
- * adb shell am instrument -w -e class "$T#threeContactsAreSaved" "$P"
+ * adb shell am instrument -w -e class "$T#step1_threeContactsAreSaved" "$P"
  * adb shell am force-stop app.getvela.wallet
- * adb shell am instrument -w -e class "$T#theMiddleOneIsDeleted" "$P"
+ * adb shell am instrument -w -e class "$T#step2_theMiddleOneIsDeleted" "$P"
  * adb shell am force-stop app.getvela.wallet
- * adb shell am instrument -w -e class "$T#onlyTheOtherTwoRemain" "$P"
+ * adb shell am instrument -w -e class "$T#step3_onlyTheOtherTwoRemain" "$P"
  * ```
  *
  * The middle one is the target because it is the only position where an
  * off-by-one still fails the assertion. Deleting the first or the last passes
  * under several wrong implementations.
+ *
+ * In one invocation (`connectedDebugAndroidTest`, the nightly job) the three
+ * still run, in step order, and prove less: the same process reads back.
+ * Without the fixed order JUnit's default ran them last-first, and the suite
+ * failed two of them on every run.
  */
 @RunWith(AndroidJUnit4::class)
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 class ContactsPersistenceTest {
 
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
@@ -62,7 +70,7 @@ class ContactsPersistenceTest {
     }
 
     @Test
-    fun threeContactsAreSaved() = runBlocking {
+    fun step1_threeContactsAreSaved() = runBlocking {
         VelaStore(context).remove(KeyValueStore.Keys.CONTACTS)
 
         val contacts = controller()
@@ -80,7 +88,7 @@ class ContactsPersistenceTest {
     }
 
     @Test
-    fun theMiddleOneIsDeleted() = runBlocking {
+    fun step2_theMiddleOneIsDeleted() = runBlocking {
         val contacts = controller()
         contacts.open(ME)
         // A fresh process: this must read three back before deleting anything,
@@ -99,7 +107,7 @@ class ContactsPersistenceTest {
     }
 
     @Test
-    fun onlyTheOtherTwoRemain() = runBlocking {
+    fun step3_onlyTheOtherTwoRemain() = runBlocking {
         val contacts = controller()
         contacts.open(ME)
         val view = withTimeout(TIMEOUT_MS) { contacts.view.first { it.loaded } }

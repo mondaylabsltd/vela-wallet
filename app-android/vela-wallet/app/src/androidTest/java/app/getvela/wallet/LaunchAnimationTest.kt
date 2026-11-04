@@ -13,11 +13,16 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.click
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import app.getvela.wallet.core.designsystem.components.VelaLaunchAnimation
 import app.getvela.wallet.core.designsystem.tokens.VelaLaunch
+import com.airbnb.lottie.LottieCompositionFactory
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -33,6 +38,28 @@ class LaunchAnimationTest {
 
     @get:Rule
     val compose = createComposeRule()
+
+    /**
+     * Time starts when the test says so. The tests drive a VIRTUAL clock in
+     * jumps, measured from the overlay's first frame — but `setContent` with
+     * the clock on auto-advance waits for idle, and a playing Lottie is never
+     * idle, so it played the whole animation through before the test took the
+     * clock. A 2.15 s jump from there landed after the dissolve, and the fade
+     * test saw only 0 then 1. So the clock stops before anything is composed,
+     * and the asset is parsed first: Lottie's cache then answers
+     * `rememberLottieComposition` within the first composition (as on any
+     * launch after the first), instead of in real time on its own thread while
+     * the virtual clock races past FR-014's 400 ms first-frame budget.
+     */
+    @Before
+    fun stopTheClockAndParseTheAsset() {
+        compose.mainClock.autoAdvance = false
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val screen = context.resources.configuration
+        val large = VelaLaunch.isLargeScreen(screen.screenWidthDp.dp, screen.screenHeightDp.dp)
+        val name = VelaLaunch.assetName(large, darkTheme = true)
+        assertNotNull("the bundled asset $name", LottieCompositionFactory.fromAssetSync(context, name).value)
+    }
 
     /** Host harness mirroring `MainActivity`: page underneath, overlay on top. */
     private fun setContent(
@@ -120,10 +147,19 @@ class LaunchAnimationTest {
     fun the_page_fades_in_progressively_rather_than_snapping() {
         val pageAlpha = setContent()
         compose.mainClock.autoAdvance = false
-        compose.mainClock.advanceTimeBy(VelaLaunch.durationMs.toLong() + VelaLaunch.holdMs + 50)
-        compose.waitForIdle()
+        // Up to the dissolve's first frame, wherever the play ends. With the
+        // system's animator scale at 0 (an emulator set up for tests, CI's,
+        // or a person who turned animations off) Lottie shows its last frame
+        // at once, so the dissolve begins after the hold alone — a fixed
+        // 1.7 s + hold jump landed after it, and the test saw only 0 then 1.
+        var waited = 0L
+        while (pageAlpha() == 0f && waited < VelaLaunch.hardCeilingMs) {
+            compose.mainClock.advanceTimeByFrame()
+            compose.waitForIdle()
+            waited += 16
+        }
 
-        var sawPartial = false
+        var sawPartial = pageAlpha() > 0.05f && pageAlpha() < 0.95f
         repeat(8) {
             compose.mainClock.advanceTimeBy(VelaLaunch.exitCrossfadeMs / 8L)
             compose.waitForIdle()

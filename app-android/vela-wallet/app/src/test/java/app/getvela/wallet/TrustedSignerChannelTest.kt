@@ -136,6 +136,22 @@ class TrustedSignerChannelTest {
     }
 
     @Test
+    fun `ending a flow that never opened a page brings nothing back`() {
+        // Leaving Welcome with Back ends onboarding's flow (onCleared), and every
+        // sign-in ends the last flow first. With no page open there is nothing
+        // to come back from: bringing the wallet back there restarted it over
+        // the home screen the person had just gone to.
+        val channel = channel { visit -> visit.answer(answer(signer)) }
+        channel.endFlow()
+        channel.endFlow()
+        assertEquals(TrustedSignerChannel.State.Idle, channel.state.value)
+        assertEquals("nothing was open, so nothing is brought back", 0, broughtBack.get())
+        // …and a flow that did open a page still brings the wallet back once it ends.
+        onThisDevice { channel.sign(request, digest, keys, official) }
+        assertTrue("an open flow's end brings the wallet back", broughtBack.get() > 0)
+    }
+
+    @Test
     fun `the request rides in the fragment, where no server sees it`() {
         // The whole point of the transport: the page is fetched from a server
         // that must not learn what is being signed. A query would be in that

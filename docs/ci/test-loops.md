@@ -65,8 +65,39 @@ it runs only by hand.
 | `trusted-signer` | ubuntu-24.04 | `scripts/ci/trusted-signer-suites.sh`: the 22 suites in `app-web/trusted-signer/HANDOVER.md`, run in Chrome for Testing (`@puppeteer/browsers`) with bun 1.4.2. `$SB` is generated per run by `scripts/ci/trusted-signer-sb.sh` (see below). | a log per suite, `summary.md` |
 | `multisig-fork` | ubuntu-24.04 | Starts `scripts/onchain/multisig-fork/up.sh` (two anvil forks, the genesis service, the PeerConnect relay, the bundler relay). Then runs vela-core's `multisig_fork` test (`--ignored`), then `playwright test -c playwright.onchain.config.ts` against `pnpm dev`. | harness logs, Playwright results and screenshots |
 | `android-macrobench` | ubuntu-24.04 + KVM | The core for x86_64 only (`scripts/ci/android-core-emulator.sh`) and the two `benchmarkRelease` APKs. Then, on an API 34 `google_apis` emulator: `run-macrobenchmarks.sh`, `summarize-macrobenchmarks.py` and PSS. | benchmark JSON, Perfetto traces, summary |
+| `android-instrumented` | ubuntu-24.04 + KVM | The core and the parallel space's fixtures for x86_64 only (`android-core-emulator.sh x86_64 --dev-fixtures`), then `:app:connectedDebugAndroidTest` on the same API 34 emulator, animations off. The run summary lists every failed test. | JUnit XML and the HTML report (`androidTest-results`, `reports/androidTests`) |
 | `ios-perf` | macos-15 | `app-ios/scripts/perf/run-perf.sh` with the **release** core (what ships), then `report-perf.mjs --json`. | `perf.json`, the report, the zipped xcresult |
 | `desktop-perf` | macos-15 | `cargo build --release --features dev-fixtures`, then `scripts/perf-run.sh --runs 5`. | logs, `summary.txt` |
+
+### The Android instrumented suite
+
+`app/src/androidTest` (169 tests on 2026-11-05) ran nowhere until
+`android-instrumented`. When it was first run on an emulator, 52 tests failed.
+The same 52 failed at `8a71f5f46`, the start of the native-parity rounds. None
+of them was a regression from those rounds:
+
+| Cluster | Tests | What it was | Kind |
+|---|---|---|---|
+| Chrome's first-run screen, and then the wallet restarting itself | 45 signing-sheet, rescue-sheet, site-lock and settings tests, and the Custom Tab probe | The probe's first tab on a fresh emulator opened Chrome's first-run screen, which then covered every later test. The probe now starts Chrome with `--disable-fre` and closes it afterwards (`DeviceBrowser`). Under that sat a product bug: `TrustedSignerChannel.endFlow()` brought the wallet back even when no flow had been open, so pressing Back on Welcome restarted the app (fixed). | environmental, plus a product bug |
+| Persistence phases | 3 (contacts, currency) | They ran last phase first in one invocation. They now run in a fixed step order. | test |
+| Launch-animation fade | 1 | `setContent` played the whole Lottie animation before the test took control of the clock. With animations off, Lottie also jumps straight to its last frame. The clock now stops first, the asset is parsed first, and the test steps to the dissolve frame by frame. | test |
+| Status-line cut | 1 | A fixed 85 % + 3 % ratio was wrong. The line is now measured against its own floor. | test |
+| Screenshot ✕ after a scroll | 1 | The fling carried the ✕ out of the window, so the tap missed. The test now scrolls it back first. | test, device-dependent |
+| Escape probe (P2b) | 1, about half the runs | The WebView was destroyed while the page's icon fetch was still in flight, so the fetch escaped the interceptor. The page is now kept alive while the test listens. | flaky |
+| Multisig reject flow | 1, now and then | A recomposition ran on the hub's IO thread under the unconfined test dispatcher. It now uses `StandardTestDispatcher`. | flaky |
+| Explore tab, TalkBack (found while getting to green) | 1, now and then | The node was read before Compose had passed the change to the accessibility layer. The read now waits for the state it expects. | flaky |
+
+A red night here means a regression, or a flake to make deterministic. Never
+rerun it to get green, and never `@Ignore` a test to get green.
+
+Locally, on an emulator (never a phone: the suite clears the app's data):
+
+```sh
+cd app-android/vela-wallet
+ANDROID_SERIAL=emulator-5554 ./gradlew :app:connectedDebugAndroidTest -PvelaSkipRustBuild
+```
+
+The suite passes with animations on and with them off.
 
 The perf numbers are **reported, never enforced**. Shared runners are noisy:
 the figures compare nights on one runner class, not devices. Each perf job
@@ -174,6 +205,8 @@ The candidates, in order:
 2. `web-e2e` firefox and webkit (small);
 3. `web-e2e` chromium;
 4. `multisig-fork`, once its service pin is stable.
+5. `android-instrumented` (9–22 minutes for build and suite on a local emulator). It is
+   heavy for every PR, so `main`-only would be its first step.
 
 The perf jobs stay nightly. They report numbers; they don't decide anything.
 
