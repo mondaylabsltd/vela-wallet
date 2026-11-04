@@ -13,8 +13,10 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
+import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.junit.runners.MethodSorters
 
 /**
  * SC-001, on a real device and across a real process boundary.
@@ -27,16 +29,19 @@ import org.junit.runner.RunWith
  * ```bash
  * P=app.getvela.wallet/androidx.test.runner.AndroidJUnitRunner
  * T=app.getvela.wallet.CurrencyPersistenceTest
- * adb shell am instrument -w -e class "$T#aChoiceIsMade" "$P"
+ * adb shell am instrument -w -e class "$T#step1_aChoiceIsMade" "$P"
  * adb shell am force-stop app.getvela.wallet
- * adb shell am instrument -w -e class "$T#theChoiceSurvivedTheProcess" "$P"
+ * adb shell am instrument -w -e class "$T#step2_theChoiceSurvivedTheProcess" "$P"
  * ```
  *
  * Run together in one invocation they still pass, and prove less: the second
  * half would then be reading a DataStore the first half left in memory. The
- * force-stop between them is the assertion.
+ * force-stop between them is the assertion. Together they run in step order:
+ * JUnit's default ran the second half first, which failed it on every
+ * `connectedDebugAndroidTest`.
  */
 @RunWith(AndroidJUnit4::class)
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 class CurrencyPersistenceTest {
 
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
@@ -47,7 +52,7 @@ class CurrencyPersistenceTest {
     )
 
     @Test
-    fun aChoiceIsMade() = runBlocking {
+    fun step1_aChoiceIsMade() = runBlocking {
         val store = VelaStore(context)
         store.remove(KeyValueStore.Keys.DISPLAY_CURRENCY)
 
@@ -85,7 +90,7 @@ class CurrencyPersistenceTest {
     }
 
     @Test
-    fun theChoiceSurvivedTheProcess() = runBlocking {
+    fun step2_theChoiceSurvivedTheProcess() = runBlocking {
         val settings = controller()
         // A fresh machine in a fresh process, told only to look.
         settings.refreshCurrency()
