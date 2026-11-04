@@ -5,11 +5,13 @@
 //! `can_execute`), each executor's look (`previews`), who one press
 //! approves and executes for (`approve_execute`), how the remaining members
 //! sign (`signers`) and whether a signature may be given at all (the
-//! review's `sign`) are the core's. This file only picks what to draw of
-//! them, as the web does.
+//! review's state and its `sign`, through the core's one door —
+//! `multisig_review_state::door`) are the core's. This file only picks what
+//! to draw of them, as the web does.
 
 use serde_json::Value;
-use vela_core::app::multisig_proposals::{ItemSigners, ProposalStatus};
+use vela_core::app::multisig_proposals::{self as ms_proposals, ItemSigners, ProposalStatus};
+use vela_core::app::multisig_review_state::{self as review_state, ReviewState, SignDoor};
 use vela_core::multisig_review::SignRule;
 
 fn same(a: &str, b: &str) -> bool {
@@ -247,18 +249,86 @@ pub fn approve_label(sign: SignRule) -> &'static str {
     }
 }
 
-/// Whether the execute press can be pressed: the review is here and lets a
-/// signature be given, the look is in, and a press that approves first is
-/// one the machine offers (`approve_execute`).
+/// Whether the execute press can be pressed: the review's door is open
+/// (read, and its rule lets a signature be given), the look is in, and a
+/// press that approves first is one the machine offers (`approve_execute`).
 #[must_use]
 pub fn execute_enabled(
-    reviewed: bool,
-    sign: SignRule,
+    door: &SignDoor,
     look: Option<&Look>,
     approve_first: bool,
     one_tap: bool,
 ) -> bool {
-    reviewed && sign.allowed && look.is_some() && !(approve_first && !one_tap)
+    door.enabled && look.is_some() && !(approve_first && !one_tap)
+}
+
+/// §12: where the review of `<chainId>:<hash>` stands, as the machine holds
+/// it (`review_states`; `None`: not asked yet — the door draws it loading).
+#[must_use]
+pub fn state_of<'a>(
+    states: &'a std::collections::BTreeMap<String, ReviewState>,
+    chain_id: u64,
+    hash: &str,
+) -> Option<&'a ReviewState> {
+    let key = press_key(chain_id, hash);
+    states
+        .iter()
+        .find(|(k, _)| k.eq_ignore_ascii_case(&key))
+        .map(|(_, v)| v)
+}
+
+/// The review the machine holds for `<chainId>:<hash>` (`reviews`).
+#[must_use]
+pub fn review_of<'a>(
+    reviews: &'a std::collections::BTreeMap<String, Value>,
+    chain_id: u64,
+    hash: &str,
+) -> Option<&'a Value> {
+    let key = press_key(chain_id, hash);
+    reviews
+        .iter()
+        .find(|(k, _)| k.eq_ignore_ascii_case(&key))
+        .map(|(_, v)| v)
+}
+
+/// The sign door every sign, propose, approve and execute press follows:
+/// the core's one rule (`multisig_review_state::door`) over the review's
+/// state and the review. `drawable`: this sheet could draw that review — one
+/// it cannot draw is not one the person read, so it is passed as no review
+/// at all (a `ready` without a review is shut and said unreadable).
+#[must_use]
+pub fn sign_door(state: Option<&ReviewState>, review: Option<&Value>, drawable: bool) -> SignDoor {
+    review_state::door(state, review.filter(|_| drawable))
+}
+
+/// The press's words and fill, as the door says them: "… anyway" only
+/// through an open door that asks for it (`door.anyway`).
+#[must_use]
+pub fn press_rule(door: &SignDoor) -> SignRule {
+    SignRule {
+        allowed: door.enabled,
+        anyway: door.anyway,
+    }
+}
+
+/// "Try again" under a failed review: the machine's `review_again` — for a
+/// proposal (`Some((chain_id, hash))`) its review, else the draft's.
+#[must_use]
+pub fn review_again(proposal: Option<(u64, &str)>) -> ms_proposals::Event {
+    ms_proposals::Event::ReviewAgain {
+        chain_id: proposal.map(|(c, _)| c),
+        safe_tx_hash: proposal.map(|(_, h)| h.to_owned()),
+    }
+}
+
+/// Whether an open sheet asks the machine for its review again on its own
+/// timer: only one already read, or one never asked. While it is read
+/// (`loading`) the machine is at it; once it `failed`, asking again is the
+/// person's "Try again" — never a quiet loop that turns a failure said on
+/// screen back into "Reading…".
+#[must_use]
+pub fn asks_review_again(state: Option<&ReviewState>) -> bool {
+    matches!(state, None | Some(ReviewState::Ready))
 }
 
 /// A member still to approve, as its row in the approvals list says how it
@@ -428,19 +498,15 @@ mod tests {
                 balance: Some("400000000000000000".into())
             })
         );
-        let allowed = SignRule {
-            allowed: true,
-            anyway: false,
-        };
+        let open = ready_door(json!({"sign": {"allowed": true, "anyway": false}}));
         assert!(execute_enabled(
-            true,
-            allowed,
+            &open,
             look.as_ref(),
             approve_first,
             one_tap
         ));
         assert_eq!(
-            execute_label(approve_first, allowed),
+            execute_label(approve_first, press_rule(&open)),
             "proposal.approveAndExecute"
         );
     }
@@ -449,45 +515,129 @@ mod tests {
     /// waits (never "Approve and execute" from a guess).
     #[test]
     fn no_one_press_before_the_look_or_the_offer() {
-        let allowed = SignRule {
-            allowed: true,
-            anyway: false,
-        };
-        assert!(!execute_enabled(true, allowed, None, false, false));
+        let allowed = ready_door(json!({"sign": {"allowed": true, "anyway": false}}));
+        assert!(!execute_enabled(&allowed, None, false, false));
         assert!(!execute_enabled(
-            true,
-            allowed,
+            &allowed,
             Some(&Look::Unchecked),
             true,
             false
         ));
         assert!(execute_enabled(
-            true,
-            allowed,
+            &allowed,
             Some(&Look::Unchecked),
             true,
             true
         ));
         // The review refuses: nothing at all.
-        let refused = SignRule {
-            allowed: false,
-            anyway: false,
-        };
+        let refused = ready_door(json!({"sign": {"allowed": false, "anyway": false}}));
         assert!(!execute_enabled(
-            true,
-            refused,
+            &refused,
             Some(&Look::Unchecked),
             false,
             false
         ));
         // No review yet.
+        let unread = sign_door(None, None, true);
         assert!(!execute_enabled(
-            false,
-            allowed,
+            &unread,
             Some(&Look::Unchecked),
             false,
             false
         ));
+    }
+
+    fn ready_door(review: Value) -> SignDoor {
+        sign_door(Some(&ReviewState::Ready), Some(&review), true)
+    }
+
+    /// §12: the shared door vectors (`tests/vectors/multisig/review-state.json`)
+    /// through the door this sheet's presses follow — the core's one rule —
+    /// and through the core's link door (`review.door`).
+    #[test]
+    fn the_shared_door_vectors_open_the_sheets_presses() {
+        let file: Value = serde_json::from_str(include_str!(
+            "../../../../rust/crates/vela-core/tests/vectors/multisig/review-state.json"
+        ))
+        .expect("the vectors");
+        let cases = file["door"].as_array().expect("door cases");
+        assert!(cases.len() >= 10, "{}", cases.len());
+        for case in cases {
+            let name = case["name"].as_str().unwrap_or_default();
+            let args = &case["args"];
+            let state: Option<ReviewState> = args
+                .get("state")
+                .filter(|s| !s.is_null())
+                .map(|s| serde_json::from_value(s.clone()).expect("a state"));
+            let review = args.get("review").filter(|r| !r.is_null());
+            let door = sign_door(state.as_ref(), review, true);
+            assert_eq!(
+                serde_json::to_value(&door).expect("a door"),
+                case["expect"],
+                "{name}"
+            );
+            // The press follows the door, and nothing else.
+            assert_eq!(
+                execute_enabled(&door, Some(&Look::Unchecked), false, false),
+                door.enabled,
+                "{name}"
+            );
+            assert_eq!(press_rule(&door).anyway, door.anyway, "{name}");
+            let out = review_state::door_json(args).expect("review.door");
+            assert_eq!(out, case["expect"], "{name}: the link door");
+        }
+    }
+
+    /// A review this sheet cannot draw is never signed on: a `ready` with a
+    /// review that would allow it, undrawable, is shut and said unreadable.
+    #[test]
+    fn a_review_the_sheet_cannot_draw_opens_nothing() {
+        let review = json!({"sign": {"allowed": true, "anyway": false}});
+        let door = sign_door(Some(&ReviewState::Ready), Some(&review), false);
+        assert!(!door.enabled && door.retry);
+        assert_eq!(
+            door.reason_key.as_deref(),
+            Some(review_state::REASON_UNREADABLE)
+        );
+        assert!(sign_door(Some(&ReviewState::Ready), Some(&review), true).enabled);
+    }
+
+    /// Loading: shut. Failed: shut, with "Try again" — the machine's
+    /// `review_again` for that proposal (or the draft). Ready after it:
+    /// open. Only a read (or never asked) review is asked again on the
+    /// sheet's own timer.
+    #[test]
+    fn loading_and_failed_are_shut_and_try_again_reads_it_again() {
+        let review = json!({"sign": {"allowed": true, "anyway": false}});
+        let loading = sign_door(Some(&ReviewState::Loading), Some(&review), true);
+        assert!(!loading.enabled && !loading.retry);
+        let failed = ReviewState::failed(review_state::REASON_TIMED_OUT);
+        let shut = sign_door(Some(&failed), Some(&review), true);
+        assert!(!shut.enabled && shut.retry);
+        assert!(!asks_review_again(Some(&failed)));
+        assert!(!asks_review_again(Some(&ReviewState::Loading)));
+        assert!(asks_review_again(Some(&ReviewState::Ready)));
+        assert!(asks_review_again(None));
+        assert!(matches!(
+            review_again(Some((100, HASH))),
+            ms_proposals::Event::ReviewAgain {
+                chain_id: Some(100),
+                safe_tx_hash: Some(ref h),
+            } if h == HASH
+        ));
+        assert!(matches!(
+            review_again(None),
+            ms_proposals::Event::ReviewAgain {
+                chain_id: None,
+                safe_tx_hash: None
+            }
+        ));
+        assert!(sign_door(Some(&ReviewState::Ready), Some(&review), true).enabled);
+        // The machine's keys, whatever the hash's case.
+        let mut states = BTreeMap::new();
+        states.insert(format!("100:{}", HASH.to_ascii_lowercase()), failed.clone());
+        assert_eq!(state_of(&states, 100, HASH), Some(&failed));
+        assert_eq!(state_of(&states, 8453, HASH), None);
     }
 
     /// r8-1 (the shell's half): the review's `anyway` is the press's words.

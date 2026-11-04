@@ -18,6 +18,9 @@ use serde_json::Value;
 use vela_core::app::multisig_accounts as ms_accounts;
 use vela_core::app::multisig_presence::{ReadyBlock, Standing, TimelineStep, WaitingNote};
 use vela_core::app::multisig_proposals::{self as ms_proposals, ActionState, ProposalItem};
+use vela_core::app::multisig_review_state::{
+    self as review_state, ReviewShows, ReviewState, SignDoor,
+};
 use vela_core::app::multisig_shell::MultisigAccount;
 use vela_core::app::sim_outcome::SimVerdict;
 use vela_core::multisig::SafeTxHashes;
@@ -200,6 +203,21 @@ impl ReviewDraw {
         draw.reading = crate::multisig::reading::ReadingDraw::of(value);
         Some(draw)
     }
+}
+
+/// §12: the review as drawn and the one door every sign, propose, approve
+/// and execute press follows — the core's `door` over the machine's state
+/// and review (`sheet::sign_door`). The review is drawn only through an
+/// open-to-view door (`shows: review`); one this sheet cannot read is drawn
+/// as unreadable and shuts the door, never signed on unseen.
+pub(crate) fn review_door(
+    state: Option<&ReviewState>,
+    raw: Option<&Value>,
+) -> (Option<ReviewDraw>, SignDoor) {
+    let draw = raw.filter(|r| !r.is_null()).and_then(ReviewDraw::of);
+    let door = crate::multisig::sheet::sign_door(state, raw, draw.is_some());
+    let draw = draw.filter(|_| door.shows == ReviewShows::Review);
+    (draw, door)
 }
 
 /// `<chainId>:<safeTxHash>` — the views' key for one transaction.
@@ -577,6 +595,10 @@ impl WalletPage {
             return true;
         }
         if self.ms_dapp_escape(cx) {
+            return true;
+        }
+        if self.ms_loose_draft(cx) {
+            host.update(cx, |host, cx| host.withdraw_draft(cx));
             return true;
         }
         if self.multisig.link_sheet.is_some() {
@@ -1666,7 +1688,11 @@ impl WalletPage {
         // running it WOULD do any more (the web's `past`).
         let past = item.status == ms_proposals::ProposalStatus::Done;
 
-        let review = view.reviews.get(&key).and_then(ReviewDraw::of);
+        // §12: the review, and the one door every press below follows.
+        let (review, door) = review_door(
+            crate::multisig::sheet::state_of(&view.review_states, chain_id, &hash),
+            crate::multisig::sheet::review_of(&view.reviews, chain_id, &hash),
+        );
         let mut body = div().flex().flex_col().gap(px(16.)).pb(px(16.));
 
         // What it is: the review's own reading heads it (r8-1, the web's
@@ -1762,27 +1788,19 @@ impl WalletPage {
             ));
         }
 
-        // The one review (§3.6), or that it is being read: no Approve until
-        // it is here (the Bybit rule).
-        match &review {
-            Some(review) => {
-                body = body.child(self.ms_review_body(
-                    theme,
-                    review,
-                    chain_id,
-                    past,
-                    account.as_ref(),
-                    cx,
-                ))
-            }
-            None => {
-                body = body.child(ms_note(
-                    theme,
-                    &words::t(&loc, "proposal.feeChecking"),
-                    Tone::Neutral,
-                ));
-            }
-        }
+        // The one review (§3.6), or that it is being read, or why it could
+        // not be with its "Try again" (§12): no Approve until it is read
+        // (the Bybit rule).
+        body = body.child(self.ms_review_place(
+            theme,
+            review.as_ref(),
+            &door,
+            chain_id,
+            Some(item.safe_tx_hash.as_str()),
+            past,
+            account.as_ref(),
+            cx,
+        ));
 
         // Approvals: who has, and how each one still to approve signs (r7-8).
         let signers = view.signers.get(&key).cloned();
@@ -1858,7 +1876,15 @@ impl WalletPage {
         // contract account (said). Only while approvals are missing.
         // The foot first: the link it offers as its main press is not
         // offered again in the section (r10 S4).
-        let foot = self.ms_actions(theme, &view, &item, review.as_ref(), account.as_ref(), cx);
+        let foot = self.ms_actions(
+            theme,
+            &view,
+            &item,
+            review.as_ref(),
+            &door,
+            account.as_ref(),
+            cx,
+        );
         if let Some(account) = &account {
             body = body.children(self.ms_invite_links(theme, &item, signers.as_ref(), account, cx));
         }
@@ -1945,9 +1971,14 @@ impl WalletPage {
                 });
             }
         }
-        // The review: read once for one done; again while it waits.
-        if item.status != ms_proposals::ProposalStatus::Done {
-            let review = view.reviews.get(&item_key(chain_id, &hash));
+        // The review: read once for one done; again while it waits — once
+        // read (§12: one being read is the machine's; one that failed is the
+        // person's "Try again", never asked again quietly here).
+        let state = crate::multisig::sheet::state_of(&view.review_states, chain_id, &hash);
+        if item.status != ms_proposals::ProposalStatus::Done
+            && crate::multisig::sheet::asks_review_again(state)
+        {
+            let review = crate::multisig::sheet::review_of(&view.reviews, chain_id, &hash);
             let unread = review.is_none_or(|r| {
                 r.is_null()
                     || r.pointer("/state/verdict/kind").and_then(Value::as_str)
@@ -2165,6 +2196,7 @@ impl WalletPage {
         view: &ms_proposals::ProposalsView,
         item: &ProposalItem,
         review: Option<&ReviewDraw>,
+        door: &SignDoor,
         account: Option<&MultisigAccount>,
         cx: &mut Context<Self>,
     ) -> Option<Div> {
@@ -2188,13 +2220,11 @@ impl WalletPage {
                 )),
                 Some(ActionState::Working)
             );
-        // The review decides whether a signature may be given at all, and
-        // with what friction ("… anyway", r8-1): its rule, as it is.
-        let sign = review.map(|r| r.sign).unwrap_or(SignRule {
-            allowed: false,
-            anyway: false,
-        });
-        let reviewed = review.is_some();
+        // The review's door decides whether a signature may be given at all,
+        // and with what friction ("… anyway", r8-1): the core's one rule
+        // over the review's state and its sign rule (§12) — shut while it is
+        // read, shut when it failed, never open by default.
+        let sign = crate::multisig::sheet::press_rule(door);
         let mut foot = div().flex().flex_col().gap(px(8.));
 
         // Whose hand does the work (the web's actor): the person's pick,
@@ -2250,7 +2280,7 @@ impl WalletPage {
                     actor,
                     value_variant(sign),
                     rule::approve_label(sign),
-                    reviewed && sign.allowed && !executing,
+                    door.enabled && !executing,
                     approving,
                     cx,
                 ));
@@ -2287,7 +2317,7 @@ impl WalletPage {
                                 actor.clone(),
                                 value_variant(sign),
                                 rule::approve_label(sign),
-                                reviewed && sign.allowed && !executing,
+                                door.enabled && !executing,
                                 approving,
                                 cx,
                             ),
@@ -2305,7 +2335,7 @@ impl WalletPage {
                                     actor.clone(),
                                     crate::ui::ButtonVariant::Secondary,
                                     rule::approve_label(sign),
-                                    reviewed && sign.allowed && !executing,
+                                    door.enabled && !executing,
                                     approving,
                                     cx,
                                 )
@@ -2313,13 +2343,9 @@ impl WalletPage {
                             ),
                         );
                     }
-                    let enabled = rule::execute_enabled(
-                        reviewed,
-                        sign,
-                        look.as_ref(),
-                        *approve_first,
-                        *one_tap,
-                    ) && !approving;
+                    let enabled =
+                        rule::execute_enabled(door, look.as_ref(), *approve_first, *one_tap)
+                            && !approving;
                     let state = if executing {
                         crate::ui::ButtonState::Busy
                     } else {
@@ -2385,9 +2411,10 @@ impl WalletPage {
             _ => {}
         }
         // r9-9: the refusal is said once, by the review's own line above; a
-        // review that names no reason still says nothing is signed.
-        if reviewed
-            && !sign.allowed
+        // review that names no reason still says nothing is signed. (One
+        // being read, or that failed, says so in the review's place.)
+        if door.shows == ReviewShows::Review
+            && !door.enabled
             && review.is_some_and(|r| r.refused.is_none())
             && !matches!(plan.kind, FootKind::Nothing)
         {
@@ -2739,6 +2766,72 @@ impl WalletPage {
     }
 
     // -- the review ---------------------------------------------------------
+
+    /// §12: what stands in the review's place, as its door says — the review
+    /// itself; the calm "Reading the transaction…" while it is read; or why
+    /// it could not be read, "Nothing can be signed until it's read" and
+    /// "Try again" (the machine's `review_again`: `proposal` names the
+    /// proposal's hash, `None` the draft's). Never a sign press here: the
+    /// presses follow the same door, shut in the last two.
+    #[allow(clippy::too_many_arguments, reason = "the sheet's facts")]
+    fn ms_review_place(
+        &mut self,
+        theme: &Theme,
+        review: Option<&ReviewDraw>,
+        door: &SignDoor,
+        chain_id: u64,
+        proposal: Option<&str>,
+        past: bool,
+        account: Option<&MultisigAccount>,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let loc = self.ms_loc();
+        if door.shows == ReviewShows::Review
+            && let Some(review) = review
+        {
+            return self.ms_review_body(theme, review, chain_id, past, account, cx);
+        }
+        if door.shows == ReviewShows::Loading {
+            return div().child(ms_note(
+                theme,
+                &loc.t(review_state::LOADING_KEY),
+                Tone::Neutral,
+            ));
+        }
+        // Failed (or a review said read that is not here to draw: never
+        // signed on, said unreadable).
+        let reason = door
+            .reason_key
+            .as_deref()
+            .unwrap_or(review_state::REASON_UNREADABLE);
+        let again = crate::multisig::sheet::review_again(proposal.map(|h| (chain_id, h)));
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(8.))
+            .child(ms_note(theme, &loc.t(reason), Tone::Caution))
+            .child(ms_note(
+                theme,
+                &loc.t(review_state::BLOCKED_KEY),
+                Tone::Caution,
+            ))
+            .child(
+                div().flex().child(
+                    crate::ui::vela_button(
+                        "ms-review-again",
+                        crate::ui::ButtonVariant::Secondary,
+                        loc.t(review_state::TRY_AGAIN_KEY).to_string().into(),
+                        theme,
+                        cx.listener(move |this, _, _, cx| {
+                            let host = this.ms_host(cx);
+                            let event = again.clone();
+                            host.update(cx, |host, cx| host.proposals(event, cx));
+                        }),
+                    )
+                    .w_auto(),
+                ),
+            )
+    }
 
     /// The one review every signer signs from (§3.6): what it says, who it
     /// reaches, what moves, the state-diff guard, a member change's rule,
@@ -3732,6 +3825,11 @@ impl WalletPage {
         if let Some(layer) = self.ms_dapp_layer(theme, window, cx) {
             return Some(layer);
         }
+        // A draft no flow above draws — a rejection's cancellation, drafted
+        // from the sheet's "Reject" — on the same review-first dialog.
+        if self.ms_loose_draft(cx) {
+            return self.ms_draft_dialog(theme, window, None, cx);
+        }
         // A link's own sheet.
         if self.multisig.link_sheet.is_some() {
             return self.ms_link_dialog(theme, window, cx);
@@ -3883,6 +3981,20 @@ impl WalletPage {
             || self.multisig.invite.is_some()
             || self.multisig.link_sheet.is_some()
             || !self.multisig.dapp.is_empty()
+            || self.ms_loose_draft(cx)
+    }
+
+    /// The machine holds a draft that neither the send flow (its own
+    /// proposing, `send_proposing`) nor a site's request draws: the sheet's
+    /// rejection — its review is drawn all the same, before any passkey.
+    fn ms_loose_draft(&self, cx: &App) -> bool {
+        let Some(host) = ms_host::booted(cx) else {
+            return false;
+        };
+        let host = host.read(cx);
+        host.machines().proposals_view.draft.is_some()
+            && !host.send_proposing()
+            && self.multisig.dapp.is_empty()
     }
 
     fn ms_risk_dialog(
@@ -3974,7 +4086,8 @@ impl WalletPage {
         let loc = self.ms_loc();
         let account = self.shown_multisig(cx).map(|r| r.account);
         let item = draft.item.clone();
-        let review = draft.review.as_ref().and_then(ReviewDraw::of);
+        // §12: the draft's review, and the one door "Propose" follows.
+        let (review, door) = review_door(Some(&draft.review_state), draft.review.as_ref());
         let mut body = div().flex().flex_col().gap(px(14.));
         if let Some((_, host)) = &site {
             body = body.child(
@@ -4006,25 +4119,16 @@ impl WalletPage {
                     &[("nonce", &item.nonce.to_string())],
                 ),
             ));
-        match &review {
-            Some(review) => {
-                body = body.child(self.ms_review_body(
-                    theme,
-                    review,
-                    item.chain_id,
-                    false,
-                    account.as_ref(),
-                    cx,
-                ))
-            }
-            None => {
-                body = body.child(ms_note(
-                    theme,
-                    &words::t(&loc, "proposal.feeChecking"),
-                    Tone::Neutral,
-                ))
-            }
-        }
+        body = body.child(self.ms_review_place(
+            theme,
+            review.as_ref(),
+            &door,
+            item.chain_id,
+            None,
+            false,
+            account.as_ref(),
+            cx,
+        ));
         let as_member = self
             .multisig
             .approve_as
@@ -4047,8 +4151,10 @@ impl WalletPage {
             &words::t(&loc, "proposal.feeNote"),
             Tone::Neutral,
         ));
-        // A site's proposal stays on its review when it did not go: why.
-        if site.is_some()
+        // A site's proposal (or a rejection, which no flow follows) stays on
+        // its review when it did not go: why.
+        let loose = site.is_none() && !host.read(cx).send_proposing();
+        if (site.is_some() || loose)
             && let Some(text) = view
                 .actions
                 .get("propose")
@@ -4056,7 +4162,8 @@ impl WalletPage {
         {
             body = body.child(ms_note(theme, &text, Tone::Caution));
         }
-        let sign = review.as_ref().map(|r| r.sign).unwrap_or_default();
+        // Its words and fill as the door says them; pressable only through it.
+        let sign = crate::multisig::sheet::press_rule(&door);
         let working = matches!(view.actions.get("propose"), Some(ActionState::Working));
         let leave = site.as_ref().map(|(rid, _)| rid.clone());
         // core-ms-2: a site's transaction its proposer's own approval makes
@@ -4075,7 +4182,7 @@ impl WalletPage {
         let state = if working {
             crate::ui::ButtonState::Busy
         } else {
-            crate::ui::ButtonState::from_enabled(review.is_some() && sign.allowed)
+            crate::ui::ButtonState::from_enabled(door.enabled)
         };
         // r4D-19: the answers stay in view under a long review.
         let foot = div().pt(px(12.)).child(

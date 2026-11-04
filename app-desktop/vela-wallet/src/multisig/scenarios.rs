@@ -308,6 +308,9 @@ struct Sim {
     risks: usize,
     /// Leave the long waits (a dApp request's limit) to the test's clock.
     long_waits_parked: bool,
+    /// Operations this shell does not answer (yet): kept, never performed —
+    /// a simulation nobody answers, so a review's bound runs out.
+    held: Option<fn(&Op) -> bool>,
 }
 
 impl Sim {
@@ -325,7 +328,12 @@ impl Sim {
             screen: Vec::new(),
             risks: 0,
             long_waits_parked: false,
+            held: None,
         }
+    }
+
+    fn held(&self, op: &Op) -> bool {
+        self.held.is_some_and(|held| held(op))
     }
 
     fn world(&self) -> std::sync::MutexGuard<'_, World> {
@@ -357,11 +365,14 @@ impl Sim {
         while answered < 20_000 {
             let pick = queue
                 .iter()
-                .position(|j| !matches!(j.op, Op::Wait { .. }) && self.ready(&j.op))
+                .position(|j| {
+                    !matches!(j.op, Op::Wait { .. }) && self.ready(&j.op) && !self.held(&j.op)
+                })
                 .or_else(|| {
-                    queue
-                        .iter()
-                        .position(|j| matches!(j.op, Op::Wait { ms } if !(parked && ms >= 100_000)))
+                    queue.iter().position(|j| {
+                        matches!(j.op, Op::Wait { ms } if !(parked && ms >= 100_000))
+                            && !self.held(&j.op)
+                    })
                 });
             let Some(at) = pick else { break };
             let Some(Job { which, id, op }) = queue.remove(at) else {
@@ -1542,4 +1553,170 @@ fn a_sites_request_declined_or_a_message_is_answered_honestly() {
         panic!("{steps:?}");
     };
     assert_eq!(answer.error.as_ref().map(|e| e.code), Some(4200));
+}
+
+// -- §12: every review has a state; nothing is signed until it is read ---------------
+
+fn simulation(op: &Op) -> bool {
+    matches!(op, Op::Simulate { .. })
+}
+
+/// A simulation nobody answers, and the review's own bound not run out yet.
+fn simulation_and_bound(op: &Op) -> bool {
+    simulation(op)
+        || matches!(op, Op::Wait { ms } if *ms == vela_core::app::multisig_review_state::REVIEW_TIMEOUT_MS)
+}
+
+/// The shell answers again what it held: the bound first (as its clock
+/// would), then — `answers` — the simulation for a fresh read.
+fn release(sim: &mut Sim, answers: bool) {
+    if answers {
+        sim.held = None;
+        sim.parked.retain(|j| !simulation(&j.op));
+    } else {
+        sim.held = Some(simulation);
+    }
+    sim.run(Vec::new());
+}
+
+fn draft_door(sim: &Sim) -> vela_core::app::multisig_review_state::SignDoor {
+    let draft = sim.machines.proposals_view.draft.clone().expect("a draft");
+    crate::wallet::page::multisig::review_door(Some(&draft.review_state), draft.review.as_ref()).1
+}
+
+fn proposal_door(sim: &Sim, hash: &str) -> vela_core::app::multisig_review_state::SignDoor {
+    let view = &sim.machines.proposals_view;
+    crate::wallet::page::multisig::review_door(
+        super::sheet::state_of(&view.review_states, 100, hash),
+        super::sheet::review_of(&view.reviews, 100, hash),
+    )
+    .1
+}
+
+/// §12 (the draft): "Propose" is shut while the review is read ("Reading
+/// the transaction…"), shut when it does not come back in time (its reason,
+/// "Nothing can be signed until it's read" and "Try again") — pressed
+/// anyway, the core signs nothing — and opens once "Try again" has read it.
+#[test]
+fn a_drafts_propose_is_shut_while_read_and_when_it_fails_and_opens_after_try_again() {
+    use vela_core::app::multisig_review_state::{REASON_TIMED_OUT, ReviewShows, ReviewState};
+
+    let mut sim = booted(&[0, 1]);
+    created(&mut sim);
+    let passkeys = sim.world().passkeys.len();
+    sim.held = Some(simulation_and_bound);
+    sim.proposals(ProposalsEvent::Draft {
+        chain_id: 100,
+        proposal: transfer("1"),
+    });
+    let draft = sim
+        .machines
+        .proposals_view
+        .draft
+        .clone()
+        .expect("drawn first");
+    assert_eq!(draft.review_state, ReviewState::Loading);
+    let loading = draft_door(&sim);
+    assert_eq!(loading.shows, ReviewShows::Loading);
+    assert!(!loading.enabled, "nothing is signed while it is read");
+
+    // The bound runs out: failed, said, shut, with "Try again".
+    release(&mut sim, false);
+    let draft = sim
+        .machines
+        .proposals_view
+        .draft
+        .clone()
+        .expect("still drawn");
+    assert_eq!(draft.review_state, ReviewState::failed(REASON_TIMED_OUT));
+    let failed = draft_door(&sim);
+    assert_eq!(failed.shows, ReviewShows::Failed);
+    assert!(!failed.enabled && failed.retry);
+    assert_eq!(failed.reason_key.as_deref(), Some(REASON_TIMED_OUT));
+    // Pressed anyway (a shell that let it through): the core refuses.
+    sim.proposals(ProposalsEvent::ConfirmDraft { as_member: None });
+    assert_eq!(
+        sim.machines.proposals_view.actions.get("propose"),
+        Some(&ActionState::SigningUnchecked)
+    );
+    assert_eq!(sim.world().passkeys.len(), passkeys, "nothing signed");
+
+    // "Try again": read again, ready, open — and then signed once.
+    release(&mut sim, true);
+    sim.proposals(super::sheet::review_again(None));
+    let draft = sim
+        .machines
+        .proposals_view
+        .draft
+        .clone()
+        .expect("still drawn");
+    assert_eq!(draft.review_state, ReviewState::Ready);
+    let open = draft_door(&sim);
+    assert_eq!(open.shows, ReviewShows::Review);
+    assert!(open.enabled, "read, and its rule allows it");
+    sim.proposals(ProposalsEvent::ConfirmDraft { as_member: None });
+    assert!(matches!(
+        sim.machines.proposals_view.actions.get("propose"),
+        Some(ActionState::Done { .. })
+    ));
+    assert_eq!(sim.world().passkeys.len(), passkeys + 1, "signed once");
+}
+
+/// §12 (a proposal's sheet): Approve is shut while its review is read and
+/// when it failed — pressed anyway, the core signs nothing — and "Try
+/// again" (`review_again` for that proposal) reads it, opens it, and the
+/// approval is given.
+#[test]
+fn a_proposals_approve_is_shut_until_its_review_is_read_and_opens_after_try_again() {
+    use vela_core::app::multisig_review_state::{REASON_TIMED_OUT, ReviewShows, ReviewState};
+    let mut sim = booted(&[0, 1]);
+    created(&mut sim);
+    let hash = propose(&mut sim, transfer("1"));
+    let passkeys = sim.world().passkeys.len();
+    assert!(
+        proposal_door(&sim, &hash).enabled,
+        "read when it was proposed"
+    );
+
+    sim.held = Some(simulation_and_bound);
+    sim.proposals(super::sheet::review_again(Some((100, &hash))));
+    let loading = proposal_door(&sim, &hash);
+    assert_eq!(loading.shows, ReviewShows::Loading);
+    assert!(!loading.enabled, "nothing is approved while it is read");
+
+    release(&mut sim, false);
+    let view = &sim.machines.proposals_view;
+    assert_eq!(
+        super::sheet::state_of(&view.review_states, 100, &hash),
+        Some(&ReviewState::failed(REASON_TIMED_OUT))
+    );
+    let failed = proposal_door(&sim, &hash);
+    assert_eq!(failed.shows, ReviewShows::Failed);
+    assert!(!failed.enabled && failed.retry);
+    // The sheet does not quietly ask again: "Try again" is the person's.
+    assert!(!super::sheet::asks_review_again(super::sheet::state_of(
+        &view.review_states,
+        100,
+        &hash
+    )));
+    sim.proposals(ProposalsEvent::Approve {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        owner: fixture(1).address,
+    });
+    assert_eq!(sim.world().passkeys.len(), passkeys, "nothing signed");
+    assert_eq!(listed(&sim, &hash).approved, 1);
+
+    release(&mut sim, true);
+    sim.proposals(super::sheet::review_again(Some((100, &hash))));
+    let open = proposal_door(&sim, &hash);
+    assert_eq!(open.shows, ReviewShows::Review);
+    assert!(open.enabled);
+    sim.proposals(ProposalsEvent::Approve {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        owner: fixture(1).address,
+    });
+    assert_eq!(sim.world().passkeys.len(), passkeys + 1, "approved once");
+    assert_eq!(listed(&sim, &hash).approved, 2);
 }
