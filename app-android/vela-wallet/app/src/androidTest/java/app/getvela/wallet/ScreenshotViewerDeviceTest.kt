@@ -25,6 +25,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pinch
 import androidx.compose.ui.test.swipeDown
@@ -103,6 +104,19 @@ class ScreenshotViewerDeviceTest {
         var opened: Long? = null
         val removed = mutableListOf<Long>()
         var scrolled = 0
+        var scroll: androidx.compose.foundation.ScrollState? = null
+    }
+
+    /**
+     * Until the column has stopped. A swipe leaves it flinging, and how far a
+     * fling carries depends on the screen: 500 px of swipe on the Xiaomi left
+     * the ✕ on screen, on a Pixel-6-sized emulator the column flung 711 px
+     * and took the ✕ out of the window — so a tap at its centre landed
+     * nowhere, and the test failed "a real tap still removes" on every run.
+     */
+    private fun atRest(harness: TileHarness) {
+        compose.waitUntil(5_000) { harness.scroll?.isScrollInProgress == false }
+        compose.waitForIdle()
     }
 
     /** The section inside a column that scrolls like the sheet does, with room below to scroll into. */
@@ -113,6 +127,7 @@ class ScreenshotViewerDeviceTest {
             VelaTheme(darkTheme = false) {
                 val scroll = rememberScrollState()
                 harness.scrolled = scroll.value
+                harness.scroll = scroll
                 Column(modifier = Modifier.fillMaxSize().verticalScroll(scroll).padding(16.dp)) {
                     Spacer(modifier = Modifier.height(200.dp))
                     FeedbackScreenshotsSection(
@@ -174,9 +189,12 @@ class ScreenshotViewerDeviceTest {
         compose.onNodeWithContentDescription("Remove screenshot 1").performTouchInput {
             swipeUp(startY = centerY, endY = centerY - 500f, durationMillis = 300)
         }
-        compose.mainClock.advanceTimeBy(500)
-        compose.waitForIdle()
+        atRest(harness)
+        assertTrue("the column scrolled — it really was a scroll", harness.scrolled > 0)
         assertTrue(harness.removed.isEmpty())
+        // Back where a finger can reach the ✕, wherever the fling left it.
+        compose.onNodeWithContentDescription("Remove screenshot 1").performScrollTo()
+        compose.waitForIdle()
         compose.onNodeWithContentDescription("Remove screenshot 1").performTouchInput {
             down(Offset(width * 0.3f, height * 0.5f))
             moveBy(Offset(width * 0.5f, 0f))
