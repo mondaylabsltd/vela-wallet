@@ -76,6 +76,11 @@ pub fn call(method: &str, args: &Value) -> Result<String, CoreError> {
                 &BTreeMap::new(),
             ))
         }
+        // §12: the one rule a sign button follows — `{state?, review?}` →
+        // `{shows, enabled, anyway, reason_key, retry}`.
+        "door" => to_json(
+            &crate::app::multisig_review_state::door_json(args).map_err(CoreError::Multisig)?,
+        ),
         other => Err(CoreError::Multisig(format!("review.{other}: no such rule"))),
     }
 }

@@ -35,6 +35,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     vela_core::app::multisig_outside::page::OutsidePageView::export_all(&config)?;
     vela_core::app::multisig_outside::session::Event::export_all(&config)?;
     vela_core::app::multisig_outside::session::OutsideSessionView::export_all(&config)?;
+    // §12: the sign door (`review.door` through the link door).
+    vela_core::app::multisig_review_state::SignDoor::export_all(&config)?;
     println!("multisig bindings written to {}", out_dir.display());
     Ok(())
 }

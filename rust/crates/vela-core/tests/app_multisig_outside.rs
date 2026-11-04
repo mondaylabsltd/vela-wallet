@@ -169,12 +169,22 @@ fn opened(w: &mut World, link: TxLink) -> Page {
     sut
 }
 
-/// A world whose injected wallet holds these seeds' keys.
+/// A world whose wallet holds `seeds`, and whose multisig (SAFE) is read on
+/// chain — a 2-of-n of A and the wallet's accounts at nonce 3 — so what Vela
+/// asks is reviewed (§12: nothing goes to the wallet unreviewed). A test
+/// that needs other members deploys its own over it.
 fn with_wallet(seeds: &[u8]) -> World {
-    World {
+    let mut w = World {
         wallet: Some(WalletSim::holding(seeds, CHAIN)),
         ..World::default()
-    }
+    };
+    let mut owners = vec![addr(SEED_A)];
+    owners.extend(seeds.iter().map(|s| addr(*s)));
+    let refs: Vec<&str> = owners.iter().map(String::as_str).collect();
+    let mut safe = DeployedSafe::clean(&refs, 2);
+    safe.nonce = 3;
+    w.deploy(CHAIN, SAFE, safe);
+    w
 }
 
 fn wallet(w: &mut World) -> &mut WalletSim {
@@ -303,6 +313,26 @@ fn approvals_meeting_the_threshold_leave_only_executing() {
     assert!(v.can_execute(&addr(SEED_B)));
 }
 
+/// As [`run`], with the review's bound (§12) left unrun and dropped: the
+/// clock moves only as far as the reads took, as a person's "soon after".
+fn run_quick(sut: &mut Page, w: &mut World, event: page::Event) {
+    let bound = |op: &Op| matches!(op, Op::Wait { ms } if *ms == vela_core::app::multisig_review_state::REVIEW_TIMEOUT_MS);
+    sut.dispatch(event);
+    for _ in 0..20_000 {
+        let outstanding = sut.outstanding();
+        let Some(op) = outstanding
+            .iter()
+            .find(|op| w.ready(op) && !bound(op))
+            .cloned()
+        else {
+            break;
+        };
+        let res = w.answer(&op);
+        sut.resolve_matching(|o| *o == op, res);
+    }
+    sut.drop_matching(bound);
+}
+
 /// r4C-16: an owner that approved on chain (`approveHash`) counts — read
 /// from the chain, never the mailbox; a yes is kept, a no asked again later.
 #[test]
@@ -326,7 +356,22 @@ fn approvals_on_chain_count_a_yes_kept_a_no_asked_again_later() {
             })
             .count()
     };
-    let mut sut = opened(&mut w, link_to(SAFE, &t));
+    let mut sut = Page::new();
+    run_quick(
+        &mut sut,
+        &mut w,
+        page::Event::Start {
+            service_url: SERVICE.to_owned(),
+            wallet_name: "Rabby".to_owned(),
+        },
+    );
+    run_quick(
+        &mut sut,
+        &mut w,
+        page::Event::Link {
+            link: link_to(SAFE, &t),
+        },
+    );
     let v = sut.view().tx.unwrap();
     assert_eq!(v.item.approved, 1);
     assert!(matches!(
@@ -334,7 +379,7 @@ fn approvals_on_chain_count_a_yes_kept_a_no_asked_again_later() {
         multisig::Approval::OnChain(_)
     ));
     assert_eq!(asked(&w), 2, "A and B asked once");
-    run(&mut sut, &mut w, page::Event::Refresh);
+    run_quick(&mut sut, &mut w, page::Event::Refresh);
     assert_eq!(asked(&w), 2, "soon after: nothing asked");
     w.now += outside::RECHECK_MS + 1.0;
     run(&mut sut, &mut w, page::Event::Refresh);
@@ -3388,4 +3433,109 @@ fn an_exec_transaction_is_matched_to_the_safe_tx_it_runs() {
         "its bytes are matched too"
     );
     assert_eq!(executed_nonce(SAFE, "0xa9059cbb", &known), None);
+}
+
+// ---------------------------------------------------------------------------
+// §12: the review's state — nothing goes to the wallet unreviewed
+// ---------------------------------------------------------------------------
+
+/// Vela's request whose review cannot be read (its multisig is not on chain
+/// here) is `failed`: a tap hands nothing to the wallet. Read again once the
+/// chain says (`review_again`), it is `ready`, and only then is it signed.
+#[test]
+fn a_request_whose_review_failed_is_never_handed_to_the_wallet_until_read_again() {
+    use vela_core::app::multisig_review_state::{self as rs, ReviewState};
+    let member = addr(MEMBER_SEED);
+    let mut w = World {
+        wallet: Some(WalletSim::holding(&[MEMBER_SEED], CHAIN)),
+        ..World::default()
+    };
+    let (mut sut, room, session) = joined(&mut w, vec![member.clone()]);
+    let t = tx("0x3");
+    w.peer.deliver(&room, typed_request("r1", &member, &t));
+    settle_ready(&mut sut, &mut w, 20_000);
+    let shown = sut.view().request_review.expect("its title and hashes");
+    assert_eq!(
+        shown.review_state,
+        ReviewState::failed(rs::REASON_UNREADABLE)
+    );
+    let door = rs::door(Some(&shown.review_state), shown.review.as_ref());
+    assert!(!door.enabled && door.retry);
+    let go = page::Event::AnswerRequest {
+        session: session.clone(),
+        id: "r1".into(),
+        go: true,
+    };
+    run(&mut sut, &mut w, go.clone());
+    assert_eq!(
+        wallet(&mut w).calls_of("eth_signTypedData_v4"),
+        0,
+        "never blind"
+    );
+    assert!(sut.view().request.is_some(), "still asked");
+    // The chain answers now; Try again reads it.
+    let mut safe = DeployedSafe::clean(&[&addr(SEED_A), &member], 2);
+    safe.nonce = 3;
+    w.deploy(CHAIN, SAFE, safe);
+    sut.dispatch(page::Event::ReviewAgain);
+    assert_eq!(
+        sut.view().request_review.unwrap().review_state,
+        ReviewState::Loading,
+        "loading at once"
+    );
+    settle_ready(&mut sut, &mut w, 20_000);
+    let shown = sut.view().request_review.unwrap();
+    assert_eq!(shown.review_state, ReviewState::Ready);
+    assert!(rs::door(Some(&shown.review_state), shown.review.as_ref()).enabled);
+    run(&mut sut, &mut w, go);
+    assert_eq!(wallet(&mut w).calls_of("eth_signTypedData_v4"), 1);
+}
+
+/// A link's transaction whose review did not come back in time: `failed`
+/// with "couldn't read it in time", and the page offers nothing to sign.
+#[test]
+fn a_link_review_that_times_out_offers_nothing_to_sign() {
+    use vela_core::app::multisig_review_state::{self as rs, ReviewState};
+    let mut w = deployed_world();
+    let t = tx("0x3");
+    let mut sut = Page::new();
+    let simulate = |op: &Op| matches!(op, Op::Simulate { .. });
+    for event in [
+        page::Event::Start {
+            service_url: SERVICE.to_owned(),
+            wallet_name: "Rabby".to_owned(),
+        },
+        page::Event::Link {
+            link: link_to(SAFE, &t),
+        },
+    ] {
+        sut.dispatch(event);
+        for _ in 0..20_000 {
+            let outstanding = sut.outstanding();
+            let open: Vec<&Op> = outstanding
+                .iter()
+                .filter(|op| w.ready(op) && !simulate(op))
+                .collect();
+            let Some(op) = open
+                .iter()
+                .find(|op| !matches!(op, Op::Wait { .. }))
+                .or_else(|| open.first())
+                .map(|op| (*op).clone())
+            else {
+                break;
+            };
+            let res = w.answer(&op);
+            sut.resolve_matching(|o| *o == op, res);
+        }
+    }
+    let v = sut.view().tx.expect("read, its review not");
+    assert_eq!(v.review_state, ReviewState::failed(rs::REASON_TIMED_OUT));
+    assert!(!v.can_approve(&addr(SEED_B)));
+    assert!(!v.can_execute(&addr(SEED_B)));
+    assert!(!v.can_reject(&addr(SEED_B)));
+    sut.drop_matching(simulate);
+    run(&mut sut, &mut w, page::Event::ReviewAgain);
+    let v = sut.view().tx.unwrap();
+    assert_eq!(v.review_state, ReviewState::Ready);
+    assert!(v.can_approve(&addr(SEED_B)));
 }

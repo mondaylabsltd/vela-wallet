@@ -1061,7 +1061,8 @@ impl World {
 }
 
 /// As [`settle`], answering the oldest operation the world can answer now
-/// and leaving the waiting ones (open rooms, a wallet that holds) outstanding.
+/// (a wait only when nothing else can be) and leaving the waiting ones (open
+/// rooms, a wallet that holds) outstanding.
 pub fn settle_ready<A>(sut: &mut DomainDriver<A>, world: &mut World, limit: usize) -> usize
 where
     A: crux_core::App + Default,
@@ -1071,7 +1072,13 @@ where
     let mut answered = 0;
     while answered < limit {
         let outstanding = sut.outstanding();
-        let Some(op) = outstanding.iter().find(|op| world.ready(op)).cloned() else {
+        // A shell's clock: a wait runs out after the reads it bounds.
+        let Some(op) = outstanding
+            .iter()
+            .find(|op| world.ready(op) && !matches!(op, Op::Wait { .. }))
+            .or_else(|| outstanding.iter().find(|op| world.ready(op)))
+            .cloned()
+        else {
             break;
         };
         let res = world.answer(&op);

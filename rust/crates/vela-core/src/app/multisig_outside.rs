@@ -53,6 +53,7 @@ use serde_json::{json, Value};
 use ts_rs::TS;
 
 use super::multisig_gather;
+use super::multisig_review_state::{self as review_state, ReviewState};
 use super::multisig_shell::{
     self as shell, lock, same_address, ChainMembers, Io, MultisigEffect, MultisigOperation,
     MultisigShellResult, Proposal, Service, ServiceFail, Shared,
@@ -1306,6 +1307,24 @@ pub async fn review_now<Ev: Send + 'static>(
     multisig_gather::review_of(&multisig_gather::gather_review(io, &subject).await)
 }
 
+/// §12: [`review_now`], bounded by `REVIEW_TIMEOUT_MS` — the review and
+/// where it stands: `ready`, or `failed` (timed out, not readable). A
+/// review never waits for ever, and none is "allowed" by default.
+pub async fn review_read<Ev: Send + 'static>(
+    io: &Io<Ev>,
+    chain_id: u64,
+    safe: &str,
+    tx: &SafeTx,
+    members: &ChainMembers,
+    genesis: Option<&Genesis>,
+) -> (Option<crate::multisig_review::MultisigReview>, ReviewState) {
+    match review_state::bounded(io, review_now(io, chain_id, safe, tx, members, genesis)).await {
+        Ok(Some(review)) => (Some(review), ReviewState::Ready),
+        Ok(None) => (None, ReviewState::failed(review_state::REASON_UNREADABLE)),
+        Err(failed) => (None, failed),
+    }
+}
+
 /// The registry's genesis for `safe`, only if the core derives that address
 /// from it (`verifiedGenesis`).
 pub async fn verified_genesis<Ev: Send + 'static>(
@@ -1340,6 +1359,7 @@ pub mod reading {
     use ts_rs::TS;
 
     use super::shell::{self, Io};
+    use crate::app::multisig_review_state::ReviewState;
     use crate::app::token_registry::registry_token;
     use crate::multisig::{self, Action, SafeTx};
 
@@ -1853,6 +1873,10 @@ pub mod reading {
         /// The one review (§3.6); `None`: it could not be gathered now.
         #[cfg_attr(feature = "bindings", ts(type = "unknown"))]
         pub review: Option<serde_json::Value>,
+        /// §12: where `review` stands — the request is handed to the wallet
+        /// only when `ready` and its sign rule allows it.
+        #[serde(default)]
+        pub review_state: ReviewState,
         /// The next number of the chain, decimal, when read.
         pub chain_nonce: Option<String>,
         /// r11 S4: every number it waits behind, once the chain's is read
@@ -1917,6 +1941,10 @@ pub mod page {
         SendAgain,
         /// Stop waiting on the wallet (its own prompt stays until dismissed there).
         Cancel,
+        /// §12: the person's "Try again" on a review that failed — the
+        /// link's transaction's and any request's: `loading` at once, read
+        /// again (bounded), then `ready` or `failed`.
+        ReviewAgain,
         /// Reconnect every saved live session.
         ResumeAll,
         /// Join the room of a scanned invite, for `members` (the link's).
@@ -2170,6 +2198,10 @@ pub mod page {
         /// The one review (§3.6), as `multisig_review` gives it.
         #[cfg_attr(feature = "bindings", ts(type = "unknown"))]
         pub review: Option<Value>,
+        /// §12: where `review` stands. Nothing is approved, executed or
+        /// rejected here unless `ready` (`actions` already says so).
+        #[serde(default)]
+        pub review_state: ReviewState,
         /// What it does, in the facts its title is said with.
         pub title: reading::TxTitle,
         /// The name its record carries, when the core displays it.
@@ -2215,6 +2247,7 @@ pub mod page {
         /// acted on here (§3.5).
         pub fn open(&self) -> bool {
             self.item.status != ItemStatus::Done
+                && self.review_state.is_ready()
                 && self.item.review.action.is_some()
                 && matches!(self.gate, PageGate::Open | PageGate::Risk { .. })
         }
@@ -2570,6 +2603,9 @@ pub mod page {
     #[derive(Clone, Debug)]
     struct Loaded {
         view: OutsideTxView,
+        /// §12: the person asked for its review again (`review_again`):
+        /// the next read's answer stands, failed or not.
+        again: bool,
     }
 
     #[derive(Default)]
@@ -2940,6 +2976,23 @@ pub mod page {
                     flow(model, |io, st| async move { refresh(&io, &st).await })
                 }
                 Event::Refresh => flow(model, |io, st| async move { refresh(&io, &st).await }),
+                Event::ReviewAgain => {
+                    {
+                        let mut s = lock(&model.state);
+                        if let Some(l) = s.loaded.as_mut() {
+                            if !l.view.review_state.is_ready() {
+                                l.view.review_state = ReviewState::Loading;
+                                l.again = true;
+                            }
+                        }
+                        for r in s.request_reads.values_mut() {
+                            if let Some(x) = r.shown.as_mut().filter(|x| x.review.is_none()) {
+                                x.review_state = ReviewState::Loading;
+                            }
+                        }
+                    }
+                    flow(model, |io, st| async move { refresh(&io, &st).await })
+                }
                 Event::Cancel => {
                     let mut s = lock(&model.state);
                     s.run += 1;
@@ -3263,9 +3316,23 @@ pub mod page {
                     s.load = load;
                     return;
                 }
-                Ok(view) => {
+                Ok(mut view) => {
                     let used = view.item.status == ItemStatus::Done;
-                    s.loaded = Some(Loaded { view });
+                    // §12: a review read earlier of this very transaction is
+                    // not unsaid by a read that failed now (the gate reads
+                    // the chain again before any signature) — unless the
+                    // person asked for it again.
+                    if let Some(old) = s.loaded.as_ref().filter(|l| {
+                        !l.again
+                            && l.view.review_state.is_ready()
+                            && !view.review_state.is_ready()
+                            && l.view.hashes == view.hashes
+                    }) {
+                        view.review = old.view.review.clone();
+                        view.review_state = ReviewState::Ready;
+                        view.gate = old.view.gate.clone();
+                    }
+                    s.loaded = Some(Loaded { view, again: false });
                     s.load = OutsideLoad::Ready;
                     used
                 }
@@ -3384,7 +3451,7 @@ pub mod page {
             members.deployed,
         )
         .await;
-        let review = review_now(
+        let (review, review_state) = review_read(
             io,
             link.chain_id,
             &link.safe,
@@ -3424,6 +3491,7 @@ pub mod page {
             findings,
             gate,
             review: review.and_then(|r| serde_json::to_value(r).ok()),
+            review_state,
         })
     }
 
@@ -3500,7 +3568,7 @@ pub mod page {
             Some(r) => reading::read_tokens(io, chain_id, r.action.as_ref()).await,
             None => BTreeMap::new(),
         };
-        let shown = |review: Option<Value>, chain_nonce: Option<String>| {
+        let shown = |review: Option<Value>, state: ReviewState, chain_nonce: Option<String>| {
             let r = read.as_ref()?;
             Some(reading::TxShown {
                 chain_id,
@@ -3510,6 +3578,7 @@ pub mod page {
                 name: reading::shown_name(genesis.as_ref()),
                 title: reading::title_of(chain_id, r, &tokens),
                 review,
+                review_state: state,
                 waits_for: match (
                     chain_nonce.as_deref().and_then(|n| n.parse::<u128>().ok()),
                     reading::decimal(&r.nonce).parse::<u128>().ok(),
@@ -3528,7 +3597,7 @@ pub mod page {
             RequestRead {
                 genesis: genesis.clone(),
                 tx: None,
-                shown: shown(None, None),
+                shown: shown(None, ReviewState::Loading, None),
                 tokens: tokens.clone(),
                 request: Some(request.clone()),
                 reading: true,
@@ -3540,25 +3609,30 @@ pub mod page {
             safe_tx_hash: hash.clone(),
             for_members: Vec::new(),
         };
-        let (view, review, chain_nonce) = match read_link(io, &service, &seen, &done, &link).await {
-            Ok(view) => {
-                let review = view.review.clone();
-                let nonce = view.members.nonce.to_string();
-                (Some(view), review, Some(nonce))
-            }
-            // Not in the mailbox yet (Vela asks before it proposes), or not
-            // readable there: what Vela asks is reviewed from the chain alone.
-            Err(_) => match read_members(io, chain_id, &safe, genesis.as_ref()).await {
-                Ok(members) => {
-                    let review = review_now(io, chain_id, &safe, &tx, &members, genesis.as_ref())
-                        .await
-                        .and_then(|r| serde_json::to_value(r).ok());
-                    (None, review, Some(members.nonce.to_string()))
+        let (view, (review, state), chain_nonce) =
+            match read_link(io, &service, &seen, &done, &link).await {
+                Ok(view) => {
+                    let review = (view.review.clone(), view.review_state.clone());
+                    let nonce = view.members.nonce.to_string();
+                    (Some(view), review, Some(nonce))
                 }
-                Err(_) => (None, None, None),
-            },
-        };
-        let shown = shown(review, chain_nonce);
+                // Not in the mailbox yet (Vela asks before it proposes), or not
+                // readable there: what Vela asks is reviewed from the chain alone.
+                Err(_) => match read_members(io, chain_id, &safe, genesis.as_ref()).await {
+                    Ok(members) => {
+                        let (review, state) =
+                            review_read(io, chain_id, &safe, &tx, &members, genesis.as_ref()).await;
+                        let review = review.and_then(|r| serde_json::to_value(r).ok());
+                        (None, (review, state), Some(members.nonce.to_string()))
+                    }
+                    Err(_) => (
+                        None,
+                        (None, ReviewState::failed(review_state::REASON_UNREADABLE)),
+                        None,
+                    ),
+                },
+            };
+        let shown = shown(review, state, chain_nonce);
         lock(st).request_reads.insert(
             hash,
             RequestRead {
@@ -3768,7 +3842,8 @@ pub mod page {
         let findings = shell::judge_on(io, v.chain_id, &v.safe, v.genesis.as_ref(), deployed).await;
         let mut members = v.members.clone();
         members.deployed = deployed;
-        let review = review_now(io, v.chain_id, &v.safe, tx, &members, v.genesis.as_ref()).await;
+        let (review, _) =
+            review_read(io, v.chain_id, &v.safe, tx, &members, v.genesis.as_ref()).await;
         if !current(st, run) {
             return Err(Stop::Quiet);
         }
@@ -5129,6 +5204,12 @@ pub mod page {
     fn answer_request(s: &mut PageState, session: &str, id: &str, go: bool) -> Vec<Out> {
         let at = s.queue.iter().position(|(x, y)| x == session && y == id);
         let Some(at) = at else { return Vec::new() };
+        // §12: a multisig transaction is handed to the wallet only once its
+        // review is read and its sign rule allows it — never blind. A tap
+        // before that changes nothing (the request stays asked).
+        if go && !request_signable(s, session, id) {
+            return Vec::new();
+        }
         s.queue.remove(at);
         let clock = s.clock;
         let Some(entry) = s.entry_mut(session, id) else {
@@ -5162,6 +5243,26 @@ pub mod page {
             }
         };
         vec![Out::Persist, next]
+    }
+
+    /// §12: a request that is not a multisig transaction, or one whose
+    /// review is `ready` and allows it ([`review_state::door`]).
+    fn request_signable(s: &PageState, session: &str, id: &str) -> bool {
+        let Some(entry) = s
+            .activity
+            .iter()
+            .find(|a| a.session == session && a.id == id)
+        else {
+            return false;
+        };
+        let Some(t) = entry.safe_tx.as_ref() else {
+            return true;
+        };
+        multisig::safe_tx_hash(t.chain_id, &t.safe, &t.tx)
+            .ok()
+            .and_then(|h| s.request_reads.get(&h.to_ascii_lowercase()))
+            .and_then(|r| r.shown.as_ref())
+            .is_some_and(|x| review_state::door(Some(&x.review_state), x.review.as_ref()).enabled)
     }
 
     /// What a request needs to be performed.
