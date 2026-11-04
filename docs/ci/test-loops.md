@@ -80,7 +80,7 @@ of them was a regression from those rounds:
 |---|---|---|---|
 | Chrome's first-run screen, and then the wallet restarting itself | 45 signing-sheet, rescue-sheet, site-lock and settings tests, and the Custom Tab probe | The probe's first tab on a fresh emulator opened Chrome's first-run screen, which then covered every later test. The probe now starts Chrome with `--disable-fre` and closes it afterwards (`DeviceBrowser`). Under that sat a product bug: `TrustedSignerChannel.endFlow()` brought the wallet back even when no flow had been open, so pressing Back on Welcome restarted the app (fixed). | environmental, plus a product bug |
 | Persistence phases | 3 (contacts, currency) | They ran last phase first in one invocation. They now run in a fixed step order. | test |
-| Launch-animation fade | 1 | `setContent` played the whole Lottie animation before the test took control of the clock. The clock now stops first, and the asset is parsed first. | test |
+| Launch-animation fade | 1 | `setContent` played the whole Lottie animation before the test took control of the clock. With animations off, Lottie also jumps straight to its last frame. The clock now stops first, the asset is parsed first, and the test steps to the dissolve frame by frame. | test |
 | Status-line cut | 1 | A fixed 85 % + 3 % ratio was wrong. The line is now measured against its own floor. | test |
 | Screenshot ✕ after a scroll | 1 | The fling carried the ✕ out of the window, so the tap missed. The test now scrolls it back first. | test, device-dependent |
 | Escape probe (P2b) | 1, about half the runs | The WebView was destroyed while the page's icon fetch was still in flight, so the fetch escaped the interceptor. The page is now kept alive while the test listens. | flaky |
