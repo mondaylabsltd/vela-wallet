@@ -47,13 +47,17 @@ struct MultisigDraftReviewSheet: View {
                 Text(verbatim: "\(words.network(item.chainId)) · \(words.t("action.numberValue", ["nonce": item.nonce]))")
                     .typeRole(Typography.rowSub.scaled(textScale))
                     .foregroundStyle(theme.fgSubtle)
+                // §12: the review once read; until then (or when it could
+                // not be), the core's door says what stands in its place.
                 // r9-9: why it is not signed is the review's one line (its
-                // body below), never the core's English reason.
-                if let refusal = item.refusal, !refusal.isEmpty, draft.review.isNull {
-                    MsNote(text: words.refusalLine(nil), tone: .danger)
-                }
-                if !draft.review.isNull {
+                // body), never the core's English reason.
+                let door = Self.door(draft)
+                if door.shows == .review, !draft.review.isNull {
                     MsReviewBody(review: draft.review, chainId: item.chainId, words: words)
+                } else {
+                    MsReviewPending(door: door, words: words) {
+                        hub.sendProposal(["type": "review_again"])
+                    }
                 }
                 if let failure = words.actionFailure(state, chainId: item.chainId) {
                     MsNote(text: failure, tone: .danger, identifier: "multisig.draft.failed")
@@ -67,9 +71,15 @@ struct MultisigDraftReviewSheet: View {
         .msAnywayStep($anyway, cancel: words.t("proposal.rejectCancel"))
     }
 
+    /// §12: the core's sign door over the draft's review — "Propose and
+    /// approve" (and "Approve and execute") opens only on its `enabled`.
+    static func door(_ draft: MsDraft) -> MsSignDoor {
+        MsRules.reviewDoor(state: draft.reviewState, review: draft.review)
+    }
+
     @ViewBuilder private func actions(_ draft: MsDraft) -> some View {
-        let rule = MsSignRule(review: draft.review)
-        let allowed = rule.allowed
+        let rule = Self.door(draft)
+        let allowed = rule.enabled
         let anyway = rule.anyway
         let working = state?.kind == "working"
         VStack(alignment: .leading, spacing: Tokens.Space.s12) {
@@ -145,32 +155,22 @@ struct MultisigDraftReviewSheet: View {
 
     /// At once, or — when the core's rule asks for "… anyway" — after the
     /// person confirms past the review's reasons (r8-1).
-    private func signing(_ rule: MsSignRule, title: String, draft: MsDraft, _ run: @escaping () -> Void) {
-        guard rule.allowed else { return }
+    private func signing(_ rule: MsSignDoor, title: String, draft: MsDraft, _ run: @escaping () -> Void) {
+        guard rule.enabled else { return }
         if rule.anyway {
-            anyway = MsAnywayStep(title: title, reasons: rule.reasons(draft.review, words: words), run: run)
+            anyway = MsAnywayStep(title: title, reasons: MsReviewBody.reasons(draft.review, words: words), run: run)
         } else {
             run()
         }
     }
 }
 
-/// The core's sign rule over a review (`MultisigReview.sign`): `allowed`
-/// false — nothing is signed, no override; `anyway` — signed only past a
-/// danger-styled "… anyway" step that names the review's reasons.
-struct MsSignRule: Equatable {
-    let allowed: Bool
-    let anyway: Bool
-
-    init(review: MsJSON?) {
-        allowed = review?["sign"]?["allowed"]?.bool ?? true
-        anyway = review?["sign"]?["anyway"]?.bool ?? false
-    }
-
-    /// The review's concerns, each in its words.
+extension MsReviewBody {
+    /// What an "… anyway" step names before it signs: the review's
+    /// concerns, each in its words.
     @MainActor
-    func reasons(_ review: MsJSON?, words: MsWords) -> [String] {
-        (review?["concerns"]?.array ?? []).compactMap { MsReviewBody.concernText($0, review: review, words: words) }
+    static func reasons(_ review: MsJSON?, words: MsWords) -> [String] {
+        (review?["concerns"]?.array ?? []).compactMap { concernText($0, review: review, words: words) }
     }
 }
 

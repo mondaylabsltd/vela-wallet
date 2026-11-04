@@ -524,6 +524,11 @@ struct MsTagged: Decodable, Equatable {
 struct MsDraft: Decodable, Equatable {
     var item: MsProposalItem
     var review: MsJSON
+    /// §12: where `review` stands (`MultisigReviewState`: `loading`,
+    /// `ready`, `failed {reason_key}`) — kept as the core wrote it for the
+    /// link door's `review.door`; `nil` from a core without it (the door
+    /// reads that as `loading`: nothing is signed).
+    var reviewState: MsJSON?
     var membersHere: [String]
     var defaultMember: String?
     /// core-ms-2: ready on its proposer's approval — propose and execute.
@@ -534,6 +539,7 @@ struct MsDraft: Decodable, Equatable {
         executeNow = c.soft(MsKey("executeNow"), false)
         item = try c.decode(MsProposalItem.self, forKey: MsKey("item"))
         review = c.soft(MsKey("review"), .null)
+        reviewState = c.soft(MsKey("reviewState"))
         membersHere = c.soft(MsKey("membersHere"), [])
         defaultMember = c.soft(MsKey("defaultMember"))
     }
@@ -631,6 +637,9 @@ struct MsProposalsView: Decodable, Equatable {
     var draft: MsDraft?
     var actions: [String: MsTagged] = [:]
     var reviews: [String: MsJSON] = [:]
+    /// §12: where each review stands, per `<chainId>:<safeTxHash>` (the
+    /// keys of `reviews`); missing — not asked yet — is `loading`.
+    var reviewStates: [String: MsJSON] = [:]
     var previews: [String: MsJSON] = [:]
     var executions: [String: MsJSON] = [:]
     /// An executed transaction's facts as they were when it ran
@@ -681,6 +690,7 @@ struct MsProposalsView: Decodable, Equatable {
         draft = c.soft(MsKey("draft"))
         actions = c.soft(MsKey("actions"), [:])
         reviews = c.soft(MsKey("reviews"), [:])
+        reviewStates = c.soft(MsKey("review_states"), [:])
         previews = c.soft(MsKey("previews"), [:])
         executions = c.soft(MsKey("executions"), [:])
         frozen = c.soft(MsKey("frozen"), [:])
@@ -723,6 +733,11 @@ struct MsProposalsView: Decodable, Equatable {
     }
 
     func review(_ item: MsProposalItem) -> MsJSON? { lookup(reviews, chainId: item.chainId, hash: item.safeTxHash) }
+    /// §12: where `item`'s review stands, as the core wrote it (`nil`: not
+    /// asked yet).
+    func reviewState(_ item: MsProposalItem) -> MsJSON? {
+        lookup(reviewStates, chainId: item.chainId, hash: item.safeTxHash)
+    }
     func standing(_ item: MsProposalItem) -> MsTagged? { lookup(standings, chainId: item.chainId, hash: item.safeTxHash) }
     func timeline(_ item: MsProposalItem) -> [MsTagged] { lookup(timelines, chainId: item.chainId, hash: item.safeTxHash) ?? [] }
     func signers(_ item: MsProposalItem) -> MsSigners? { lookup(signers, chainId: item.chainId, hash: item.safeTxHash) }

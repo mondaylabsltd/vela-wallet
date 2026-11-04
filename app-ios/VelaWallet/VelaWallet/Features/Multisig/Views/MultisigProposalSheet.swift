@@ -28,7 +28,20 @@ struct MsProposalModel {
     /// r9-13: how the last Reject of it ended, when there is something to
     /// say (`MultisigHub.rejectFailure`) — its review stood in for this
     /// sheet while it was up.
-    var rejectState: MsTagged? = nil
+    var rejectState: MsTagged?
+    /// §12: the core's sign door over this transaction's review — asked
+    /// once per model (every signing control below reads it).
+    let door: MsSignDoor
+
+    init(item: MsProposalItem, view: MsProposalsView, words: MsWords, account: MsAccount?, rejectState: MsTagged? = nil) {
+        self.item = item
+        self.view = view
+        self.words = words
+        self.account = account
+        self.rejectState = rejectState
+        let review = view.review(item)
+        door = MsRules.reviewDoor(state: view.reviewState(item), review: review.flatMap { $0.isNull ? nil : $0 })
+    }
 
     var chainId: Int { item.chainId }
     var hash: String { item.safeTxHash }
@@ -44,18 +57,23 @@ struct MsProposalModel {
 
     // MARK: - The one review (§3.6)
 
-    /// Where the machine's review stands: not in yet (`holding` — every
-    /// signing control waits, as the signing sheet's confirm waits for its
-    /// reading), could not be gathered (`failed`: said, with Retry), or in.
+    /// Where the machine's review stands, as the core's door says (§12):
+    /// being read (`loading` — every signing control waits), not read
+    /// (`failed`: its reason, with "Try again"), or read.
     enum ReviewState: Equatable {
-        case holding
+        case loading
         case failed
         case ready(MsJSON)
     }
 
     var reviewState: ReviewState {
-        guard let review = view.review(item) else { return .holding }
-        return review.isNull ? .failed : .ready(review)
+        switch door.shows {
+        case .loading: return .loading
+        case .failed: return .failed
+        case .review:
+            guard let review = view.review(item), !review.isNull else { return .failed }
+            return .ready(review)
+        }
     }
 
     /// The review, once in.
@@ -66,14 +84,15 @@ struct MsProposalModel {
 
     /// No signature is offered before the review says what is signed: the
     /// web's `reviewHolding` (no blind signing).
-    var reviewHolding: Bool { reviewState == .holding }
+    var reviewHolding: Bool { reviewState == .loading }
 
-    /// The last review could not read the chain (its state, its simulation,
-    /// or the whole review): asked again soon (the web's `machineUnread`).
+    /// The review drawn could not read part of the chain (its state, its
+    /// simulation): asked again soon (the web's `machineUnread`) — the
+    /// review stays drawn meanwhile. One not read at all is the person's
+    /// "Try again" (`review_again`), never asked behind their back.
     var reviewUnread: Bool {
         switch reviewState {
-        case .holding: return false
-        case .failed: return true
+        case .loading, .failed: return false
         case .ready(let review):
             return review["state"]?["verdict"]?.kind == "unavailable"
                 || review["simulation"]?["kind"]?.string == "unreachable"
@@ -125,16 +144,13 @@ struct MsProposalModel {
         return canApprove.first
     }
 
-    /// The core's sign rule, once the review is in: may this be signed at
-    /// all (`allowed` false: nothing signed, no override), and only with the
-    /// "… anyway" friction (`anyway`).
-    var signAllowed: Bool { review?["sign"]?["allowed"]?.bool ?? true }
-    var signAnyway: Bool { review.map { $0["sign"]?["anyway"]?.bool ?? false } ?? false }
-
-    /// A signing control may be pressed: the review is in (or could not be
-    /// gathered — the machine's gate reads it once more before the passkey)
-    /// and its rule does not refuse it.
-    var signable: Bool { !reviewHolding && signAllowed }
+    /// A signing control may be pressed: the core's door is open (§12 —
+    /// the review is read and its sign rule allows it). Nothing else opens
+    /// it: not a review still being read, not one that failed, not a
+    /// review without a sign rule.
+    var signable: Bool { door.enabled }
+    /// Only with the "… anyway" friction (the door's `anyway`).
+    var signAnyway: Bool { door.anyway }
 
     /// The label a signing control wears: "… anyway" when the core asks
     /// for that friction (the web's `anywayLabel`).
@@ -146,7 +162,7 @@ struct MsProposalModel {
     /// concerns, in its words — said again where the person confirms.
     var anywayReasons: [String] {
         guard let review else { return [] }
-        return (review["concerns"]?.array ?? []).compactMap { MsReviewBody.concernText($0, review: review, words: words) }
+        return MsReviewBody.reasons(review, words: words)
     }
 
     // MARK: - An executed one (r8-17): as it was when it ran
@@ -220,10 +236,8 @@ struct MsProposalModel {
     var notes: [(text: String, tone: MsNote.Tone, id: String)] {
         var out: [(String, MsNote.Tone, String)] = []
         // r9-9: a refusal is said once, by the review's body in the core's
-        // words; with no review to draw, the plain line.
-        if let refusal = item.refusal, !refusal.isEmpty, review == nil, !reviewHolding {
-            out.append((words.refusalLine(nil), .danger, "refused"))
-        }
+        // words; with no review to draw, the review's place says why (§12,
+        // `MsReviewPending`) and nothing is signed.
         if item.cancelledBy != nil, item.action?.kind != "cancel" {
             out.append((words.t("proposal.cancelPending"), .warning, "cancelPending"))
         }
@@ -618,14 +632,9 @@ struct MultisigProposalSheet: View {
     @State private var confirmingReject = false
     /// The "… anyway" step the core asked for, while it is up (r8-1).
     @State private var anyway: MsAnywayStep?
-    /// r8-19: the review has been out longer than the machine's own cap on
-    /// a look: the sheet says it couldn't check, with Retry, not a spinner.
-    @State private var reviewWaitedOut = false
 
-    /// How long a review may be out before the sheet stops saying
-    /// "Checking…" — the machine's `PREVIEW_CAP_MS` (a look past it is
-    /// `unchecked`), so the sheet never outwaits the core.
-    static let reviewWaitCap: Duration = .seconds(15)
+    // §12: how long a review is read before it is `failed {timedOut}` is
+    // the core's bound (`REVIEW_TIMEOUT_MS`), never this sheet's.
     /// How often an open sheet asks for its review again (the web's
     /// `REVIEW_FRESH_MS`), and while the last could not read the chain
     /// (`REVIEW_RETRY_MS`).
@@ -697,14 +706,12 @@ struct MultisigProposalSheet: View {
     /// its review once (its hashes and fields; nothing is re-checked).
     private func keepAsking() async {
         guard let item else { return }
-        reviewWaitedOut = false
         askReview()
         hub.sendProposal(["type": "read_signers", "chain_id": chainId, "safe_tx_hash": item.safeTxHash])
         if item.status == "done" {
             hub.sendProposal(["type": "timeline", "chain_id": chainId, "safe_tx_hash": item.safeTxHash])
             return
         }
-        let started = ContinuousClock.now
         var lastAsk = ContinuousClock.now
         var lastSignersAsk = ContinuousClock.now
         var signersAsked = 0
@@ -720,11 +727,12 @@ struct MultisigProposalSheet: View {
                 lastSignersAsk = ContinuousClock.now
                 signersAsked += 1
             }
-            if model.reviewHolding, ContinuousClock.now - started >= Self.reviewWaitCap {
-                reviewWaitedOut = true
-            }
+            // §12: a review being read is the core's to bound, and one that
+            // failed waits for the person's "Try again" — asked again here
+            // only once read (fresh, or sooner while part of it is unread).
+            guard case .ready = model.reviewState else { continue }
             let since = ContinuousClock.now - lastAsk
-            let due = model.reviewUnread || model.reviewHolding ? Self.reviewRetrySeconds : Self.reviewFreshSeconds
+            let due = model.reviewUnread ? Self.reviewRetrySeconds : Self.reviewFreshSeconds
             if since >= .seconds(due) {
                 askReview()
                 lastAsk = ContinuousClock.now
@@ -735,6 +743,12 @@ struct MultisigProposalSheet: View {
     private func askReview() {
         guard let item else { return }
         hub.sendProposal(["type": "review", "chain_id": chainId, "safe_tx_hash": item.safeTxHash, "blind": false])
+    }
+
+    /// §12: the person's "Try again" on a review that was not read.
+    private func reviewAgain() {
+        guard let item else { return }
+        hub.sendProposal(["type": "review_again", "chain_id": chainId, "safe_tx_hash": item.safeTxHash])
     }
 
     private func anywayTitle(_ kind: SignKind) -> String {
@@ -833,36 +847,18 @@ struct MultisigProposalSheet: View {
 
     // MARK: - The review (§3.6)
 
-    /// The one review, in its states: a finished one draws only what was
-    /// signed (nothing is re-checked); one not in yet says so for at most
-    /// `reviewWaitCap` and then that it couldn't be checked, with Retry
-    /// (r8-19 — never a spinner without end); one that could not be
-    /// gathered says so, with Retry.
+    /// The one review, in its states (§12, the core's door): a finished
+    /// one draws only what was signed (nothing is re-checked); one being
+    /// read says so calmly — bounded by the core, which says `failed` past
+    /// it (r8-19: never a spinner without end); one not read says why, that
+    /// nothing can be signed, and "Try again".
     @ViewBuilder private func reviewPart(_ model: MsProposalModel) -> some View {
         switch model.reviewState {
         case .ready(let review):
             MsReviewBody(review: review, chainId: chainId, words: words, past: model.past)
-        case .holding where model.past:
-            EmptyView()
-        case .holding where !reviewWaitedOut:
-            HStack(spacing: Tokens.Space.s8) {
-                ProgressView()
-                Text(verbatim: words.loc.t("componentsUi.funding.checking"))
-                    .typeRole(Typography.flowCaption.scaled(textScale))
-                    .foregroundStyle(theme.fgMuted)
-            }
-            .accessibilityElement(children: .combine)
-            .accessibilityIdentifier("multisig.review.checking")
-        case .holding, .failed:
+        case .loading, .failed:
             if !model.past {
-                HStack(alignment: .top, spacing: Tokens.Space.s8) {
-                    MsNote(text: words.t("proposal.cantCheck", ["network": words.network(chainId)]),
-                           tone: .warning, identifier: "multisig.review.unread")
-                    Button(words.t("service.retry")) { askReview() }
-                        .font(Typography.actionLabel.scaled(textScale).font)
-                        .foregroundStyle(theme.fgBase)
-                        .accessibilityIdentifier("multisig.review.retry")
-                }
+                MsReviewPending(door: model.door, words: words, tryAgain: reviewAgain)
             }
         }
     }
