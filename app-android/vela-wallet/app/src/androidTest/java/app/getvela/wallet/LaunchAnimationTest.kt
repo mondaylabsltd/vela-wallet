@@ -147,10 +147,19 @@ class LaunchAnimationTest {
     fun the_page_fades_in_progressively_rather_than_snapping() {
         val pageAlpha = setContent()
         compose.mainClock.autoAdvance = false
-        compose.mainClock.advanceTimeBy(VelaLaunch.durationMs.toLong() + VelaLaunch.holdMs + 50)
-        compose.waitForIdle()
+        // Up to the dissolve's first frame, wherever the play ends. With the
+        // system's animator scale at 0 (an emulator set up for tests, CI's,
+        // or a person who turned animations off) Lottie shows its last frame
+        // at once, so the dissolve begins after the hold alone — a fixed
+        // 1.7 s + hold jump landed after it, and the test saw only 0 then 1.
+        var waited = 0L
+        while (pageAlpha() == 0f && waited < VelaLaunch.hardCeilingMs) {
+            compose.mainClock.advanceTimeByFrame()
+            compose.waitForIdle()
+            waited += 16
+        }
 
-        var sawPartial = false
+        var sawPartial = pageAlpha() > 0.05f && pageAlpha() < 0.95f
         repeat(8) {
             compose.mainClock.advanceTimeBy(VelaLaunch.exitCrossfadeMs / 8L)
             compose.waitForIdle()
