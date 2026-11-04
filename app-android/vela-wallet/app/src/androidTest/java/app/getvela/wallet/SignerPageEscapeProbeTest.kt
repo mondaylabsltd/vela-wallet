@@ -224,10 +224,20 @@ class SignerPageEscapeProbeTest {
         }
 
         assertTrue("the page never reported", answered.await(60, TimeUnit.SECONDS))
-        instrumentation.runOnMainSync { view?.destroy() }
+        // The page stays loaded, and blocked, for the whole listening window;
+        // only then do the servers close and the WebView go. Destroying it
+        // first — as this probe did — raced the page's own `<link rel=icon>`
+        // fetch: with the escape hatches gone the page reports at once, the
+        // icon request was still to be made, and a request a WebView makes
+        // while it is being torn down is not offered to `shouldInterceptRequest`.
+        // It reached the server in about half the runs and failed P2b on no
+        // change at all. What a page gets out WHILE it is being checked is the
+        // question here; a verifier that ever ships must blank the page before
+        // destroying it, for the same reason.
         Thread.sleep(2000)
         caught.tcp.close()
         caught.datagram.close()
+        instrumentation.runOnMainSync { view?.destroy() }
         return Result(said.get(), caught.http.toList(), caught.udp.toList(), intercepted.toList())
     }
 
