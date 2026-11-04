@@ -423,6 +423,53 @@ scenarios:
         - { file: app-web/trusted-signer/samples/provenance-test.mjs, test: 'Looks like a 1inch swap — shape only, not checked', ci: nightly }
         - { file: app-web/trusted-signer/samples/unlimited-line-test.mjs, test: 'approve(MaxUint256) — what Uniswap sends to Permit2 — is unlimited', ci: nightly }
 
+  - id: adversarial-review-not-read
+    title: "Adversarial clear-signing: no signature on a review not read — a draft drawn before its review, a review that times out or cannot be read, a proposal opened before its review (§12: loading | ready | failed, the door, Try again)"
+    covers:
+      core:
+        - { file: rust/crates/vela-core/tests/app_multisig_review_state.rs, test: a_draft_is_loading_until_its_review_is_read_and_only_then_signable, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_review_state.rs, test: a_draft_review_that_times_out_fails_blocks_signing_and_recovers_on_try_again, ci: required, note: 'a shell that never answers the simulation: failed {timedOut} at REVIEW_TIMEOUT_MS; confirm_draft signs nothing (SigningUnchecked, no passkey); review_again → ready → one passkey' }
+        - { file: rust/crates/vela-core/tests/app_multisig_review_state.rs, test: every_kind_of_draft_carries_its_review_state, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_review_state.rs, test: a_proposal_is_approved_only_once_its_review_is_ready, ci: required, note: 'approve before any review: SigningUnchecked, no passkey' }
+        - { file: rust/crates/vela-core/tests/app_multisig_review_state.rs, test: a_proposal_review_is_bounded_kept_once_read_and_gone_when_unlisted, ci: required, note: 'one read at a time (the bound never pushed back); a quiet re-read that fails keeps a read review; an unlisted hash is failed {gone}' }
+        - { file: rust/crates/vela-core/tests/app_multisig_review_state.rs, test: a_proposed_draft_keeps_its_ready_review, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_review_state.rs, test: the_door_vectors_hold_through_the_link_door, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_outside.rs, test: a_request_whose_review_failed_is_never_handed_to_the_wallet_until_read_again, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_outside.rs, test: a_link_review_that_times_out_offers_nothing_to_sign, ci: required }
+      web-unit:
+        - { file: app-web/vela-wallet/src/lib/multisig/ui/ProposalSheet.svelte.test.ts, test: 'a draft whose review is still read: "Reading the transaction…", Propose and approve shut', ci: required }
+        - { file: app-web/vela-wallet/src/lib/multisig/ui/ProposalSheet.svelte.test.ts, test: 'a draft whose review failed: why, nothing signable, and Try again reads it again', ci: required }
+        - { file: app-web/vela-wallet/src/lib/multisig/ui/ProposalSheet.svelte.test.ts, test: 'a proposal: Approve shut while its review is read, blocked when it failed, open after Try again', ci: required }
+        - { file: 'app-web/vela-wallet/src/routes/[locale]/connect/page.svelte.test.ts', test: '§12: a request whose review is read is signed only then — shut while read, blocked when it failed, Try again', ci: required }
+        - { file: app-web/vela-wallet/src/lib/multisig/core/review-door.test.ts, test: 'a state the core cannot read is a shut door, never an open one', ci: required }
+      web-e2e: { gap: 'the multisig e2e worlds answer every review read; no spec holds one back (the unit and core tests do)' }
+      android-jvm:
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/MultisigReviewStateTest.kt, test: a_drafts_propose_is_shut_while_its_review_is_read, ci: required }
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/MultisigReviewStateTest.kt, test: a_drafts_failed_review_blocks_and_offers_try_again, ci: required }
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/MultisigReviewStateTest.kt, test: a_drafts_propose_opens_after_try_again_reads_it, ci: required }
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/MultisigReviewStateTest.kt, test: a_draft_review_without_a_sign_rule_is_never_allowed, ci: required }
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/MultisigReviewStateTest.kt, test: a_proposals_approve_and_execute_are_shut_while_its_review_is_read, ci: required }
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/MultisigReviewStateTest.kt, test: a_proposals_failed_review_blocks_and_its_try_again_names_it, ci: required }
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/MultisigReviewStateTest.kt, test: a_proposals_approve_opens_after_try_again_reads_it, ci: required }
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/MultisigReviewStateTest.kt, test: the_real_machine_opens_the_drafts_door_only_once_read_and_again_after_try_again, ci: required, note: 'the real proposals machine over MultisigWorld' }
+      android-instrumented: { gap: 'no device test holds a review back' }
+      ios-unit:
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigReviewStateTests.swift, test: proposeIsShutWhileTheDraftsReviewIsLoading, ci: required, note: 'the iOS lane''s find: an empty review read as allowed (?? true)' }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigReviewStateTests.swift, test: proposeIsBlockedWhenTheDraftsReviewFailed, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigReviewStateTests.swift, test: proposeOpensOnceTheDraftsReviewIsReadyAndItsRuleAllows, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigReviewStateTests.swift, test: approveAndExecuteAreShutWhileAProposalsReviewIsLoading, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigReviewStateTests.swift, test: approveAndExecuteAreBlockedWhenAProposalsReviewFailed, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigReviewStateTests.swift, test: approveAndExecuteOpenOnceAProposalsReviewIsReady, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigFlowTests.swift, test: proposeIsShutWhileTheDraftsReviewIsReadAndOpensOnceReady, ci: required, note: 'against the real core: pressed anyway, signingUnchecked and nothing signed' }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigFlowTests.swift, test: approveIsShutWhileAProposalsReviewIsReadAndAFailedOneOffersTryAgain, ci: required }
+      ios-ui: { gap: 'the UI suites wait for Propose to be enabled; none holds a review back' }
+      desktop:
+        - { file: app-desktop/vela-wallet/src/multisig/sheet.rs, test: loading_and_failed_are_shut_and_try_again_reads_it_again, ci: required }
+        - { file: app-desktop/vela-wallet/src/multisig/sheet.rs, test: a_review_the_sheet_cannot_draw_opens_nothing, ci: required }
+        - { file: app-desktop/vela-wallet/src/multisig/scenarios.rs, test: a_drafts_propose_is_shut_while_read_and_when_it_fails_and_opens_after_try_again, ci: required, note: 'dev-fixtures: a held simulation times out to failed; a forced confirm signs nothing' }
+        - { file: app-desktop/vela-wallet/src/multisig/scenarios.rs, test: a_proposals_approve_is_shut_until_its_review_is_read_and_opens_after_try_again, ci: required }
+      trusted-signer: { gap: 'the page signs what the wallet hands it; the review state is the wallet''s' }
+
   - id: send-then-activity
     title: Send, then the transfer shows in Activity (pending → landed)
     covers:
@@ -470,6 +517,7 @@ vector_replays:
     - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/RelativeTimeTest.kt }
     - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/AppLinksTest.kt }
     - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/LaunchGateTest.kt }
+    - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/MultisigReviewStateTest.kt, note: 'review-state.json (§12)' }
   ios:
     - { file: app-ios/VelaWallet/VelaWalletTests/CoreWireDriftTests.swift, note: 'not a vector file: the wire drift gate, required to run' }
     - { file: app-ios/VelaWallet/VelaWalletTests/MultisigR8FixTests.swift }
@@ -480,6 +528,7 @@ vector_replays:
     - { file: app-ios/VelaWallet/VelaWalletTests/TrustedSignerRouteTests.swift, suite: TrustedSignerSessionTests }
     - { file: app-ios/VelaWallet/VelaWalletTests/RelativeTimeTests.swift }
     - { file: app-ios/VelaWallet/VelaWalletTests/MarksTests.swift }
+    - { file: app-ios/VelaWallet/VelaWalletTests/MultisigReviewStateTests.swift, note: 'review-state.json (§12)' }
   web:
     - { file: app-web/vela-wallet/src/lib/signing/surface-route.test.ts }
     - { file: app-web/vela-wallet/src/lib/launch/constants.test.ts }
@@ -490,6 +539,7 @@ vector_replays:
     - { file: app-web/vela-wallet/src/lib/flows/marks.test.ts }
     - { file: app-web/vela-wallet/src/lib/flows/core/fee-plain-send-parity.test.ts }
     - { file: app-web/vela-wallet/src/lib/services/wallet-keys.test.ts }
+    - { file: app-web/vela-wallet/src/lib/multisig/core/review-door.test.ts, note: 'review-state.json (§12)' }
   # cargo test has no machine-readable report on stable: checked for
   # existence only. None of these is #[ignore]d (the only ignored vela-core
   # tests are the fork test and three that WRITE or PRINT vectors).
@@ -499,3 +549,4 @@ vector_replays:
     - { file: app-desktop/vela-wallet/src/multisig/reading.rs }
     - { file: app-desktop/vela-wallet/src/wallet/page/multisig.rs }
     - { file: app-desktop/vela-wallet/src/executor/balance_dashboard.rs }
+    - { file: app-desktop/vela-wallet/src/multisig/sheet.rs, note: 'review-state.json (§12)' }
