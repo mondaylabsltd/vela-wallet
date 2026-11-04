@@ -778,6 +778,14 @@
           "decimalsLine": "{{token}} tidak menyebut jumlah desimalnya, jadi jumlahnya ditampilkan dalam unit dasar.",
           "ownTokenLine": "Ini mengirim token ke kontrak token itu sendiri ({{token}}). Token itu akan hilang.",
           "blindLine": "Vela tidak bisa membaca apa yang dilakukan panggilan ini. Setujui hanya jika kamu tahu persis apa itu."
+        },
+        "state": {
+          "loading": "Membaca transaksi…",
+          "blocked": "Tidak ada yang bisa ditandatangani sebelum transaksi terbaca.",
+          "timedOut": "Tidak bisa dibaca tepat waktu.",
+          "unreadable": "Transaksi ini tidak bisa dibaca.",
+          "gone": "Transaksi ini sudah tidak ada di daftar.",
+          "tryAgain": "Coba lagi"
         }
       },
       "notify": {

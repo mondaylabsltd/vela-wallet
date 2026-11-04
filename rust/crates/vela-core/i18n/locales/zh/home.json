@@ -778,6 +778,14 @@
           "decimalsLine": "{{token}} 没有给出小数位数，金额按最小单位显示。",
           "ownTokenLine": "这会把代币发送到代币自己的合约（{{token}}），代币将会丢失。",
           "blindLine": "Vela 读不出这笔调用做什么。只有在你确切知道它是什么时才批准。"
+        },
+        "state": {
+          "loading": "正在读取交易…",
+          "blocked": "读取完成前无法签署。",
+          "timedOut": "未能及时读取。",
+          "unreadable": "无法读取此交易。",
+          "gone": "此交易已不在列表中。",
+          "tryAgain": "重试"
         }
       },
       "notify": {

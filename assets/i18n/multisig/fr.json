@@ -710,6 +710,14 @@
      "decimalsLine": "{{token}} n'a pas indiqué son nombre de décimales : ses montants sont affichés en unités de base.",
      "ownTokenLine": "Ceci envoie des jetons au contrat du jeton lui-même ({{token}}). Ils seraient perdus.",
      "blindLine": "Vela ne peut pas lire ce que fait cet appel. Ne l'approuvez que si vous savez exactement ce que c'est."
+    },
+    "state": {
+     "loading": "Lecture de la transaction…",
+     "blocked": "Rien ne peut être signé avant qu'elle soit lue.",
+     "timedOut": "Impossible de la lire à temps.",
+     "unreadable": "Impossible de lire cette transaction.",
+     "gone": "Cette transaction n'est plus dans la liste.",
+     "tryAgain": "Réessayer"
     }
    },
    "notify": {

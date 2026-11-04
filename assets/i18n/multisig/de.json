@@ -704,6 +704,14 @@
      "decimalsLine": "{{token}} hat seine Dezimalstellen nicht angegeben, daher werden Beträge in Basiseinheiten gezeigt.",
      "ownTokenLine": "Das sendet Token an den eigenen Vertrag des Tokens ({{token}}). Sie wären verloren.",
      "blindLine": "Vela kann nicht lesen, was dieser Aufruf tut. Genehmige ihn nur, wenn du genau weißt, was er ist."
+    },
+    "state": {
+     "loading": "Transaktion wird gelesen…",
+     "blocked": "Nichts kann signiert werden, bevor sie gelesen ist.",
+     "timedOut": "Sie konnte nicht rechtzeitig gelesen werden.",
+     "unreadable": "Diese Transaktion konnte nicht gelesen werden.",
+     "gone": "Diese Transaktion ist nicht mehr in der Liste.",
+     "tryAgain": "Erneut versuchen"
     }
    },
    "notify": {
