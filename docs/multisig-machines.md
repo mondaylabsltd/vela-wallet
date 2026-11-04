@@ -1,6 +1,6 @@
 # Multisig machines — the API the shells drive
 
-2026-10-31 · W9 (§9: round 10, 2026-11-01). For the native lanes (desktop, Android, iOS) and the web.
+2026-10-31 · W9 (§9: round 10, 2026-11-01; §12: the review state, 2026-11-05). For the native lanes (desktop, Android, iOS) and the web.
 
 **The rule (owner, binding):** one core for the multisig's business rules and
 logic on every platform. A shell keeps only its UI and its I/O: it dispatches
@@ -766,3 +766,86 @@ notifier keys by count the same way and can adopt it.
 - Safari Web Extension: the development package hands signatures to the
   `dev-seed.html` `page=` origin (loopback with a port only); the release
   package always names `https://sign.getvela.app`.
+
+## 12. The review's state — nothing signed on a review not read
+
+The core drew a draft first and filled its review in a moment later; until
+it came, iOS read the empty review as "allowed" (`?? true`), so "Propose and
+approve" could be pressed before anyone saw a review. On an error the review
+stayed empty too: no shell could tell "still loading" from "failed". The
+owner's rule decides it (decided by the coordinator): no blind signing — a
+review that was not read is a blind signature.
+
+All additive (new view fields with serde defaults, new events, a new
+module) except the Rust struct literals of `DraftView`, `OutsideTxView` and
+`TxShown` (one more field each).
+
+### 12.1 The state (`multisig_review_state`)
+
+```text
+ReviewState (tag kind): loading | ready | failed {reason_key}
+```
+
+| Where                                                            | Field                                                                         |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| every draft — send, member change, rename, reject's cancellation, a site's request | proposals `draft.reviewState`                               |
+| every proposal a member approves or executes                     | proposals `review_states["<chainId>:<safeTxHash>"]` (beside `reviews`; missing = not asked yet = `loading`) |
+| the outside page's link transaction / Vela's request             | `tx.reviewState` / `requestReview.reviewState`                               |
+
+- `loading` is set the moment a review is asked (`draft`, `review`, a link
+  opened) and is **bounded by the core**: `REVIEW_TIMEOUT_MS` = 40 s (above
+  the reads' own bounds — three code rounds and the state reads at
+  `REVIEW_READ_MS` each — so only a read a shell never answers is cut). Past
+  it: `failed {home.multisig.review.state.timedOut}`. It can never spin for
+  ever, and it never becomes "allowed" by default.
+- `failed` reasons: `timedOut`, `unreadable` (the core could not read the
+  transaction or gather its review), `gone` (the proposal is no longer in
+  the list it was opened from).
+- One read at a time per review: a shell asking `review` again while one is
+  read never pushes the bound back. A quiet re-read (`review` on a `ready`
+  one) keeps the review drawn and does not unsay it if it fails — the gate
+  reads the chain again before any passkey anyway.
+- A draft proposed from a `ready` review hands that review to its proposal
+  (`review_states[...] = ready`): its execution signs from it.
+
+### 12.2 Events
+
+- proposals `review_again {chain_id?, safe_tx_hash?}` — both: that
+  proposal's review; neither: the draft's. `loading` at once, then `ready`
+  or `failed`; it supersedes a read under way.
+- outside page `review_again` — the link's transaction's review (when not
+  `ready`) and every request whose review is missing, read again.
+
+### 12.3 The door — the only thing that enables a button that signs
+
+`multisig_review_state::door(state, review) -> SignDoor {shows: loading /
+review / failed, enabled, anyway, reason_key, retry}` (link door `review.door
+{state?, review?}`; uniffi `multisig_link_call`, wasm `multisigLinkCall`).
+`enabled` only when the state is `ready`, a review is there, and its
+`sign.allowed` is true; `anyway` → the existing "… anyway" step. A missing
+state, a missing review, a missing sign rule: shut.
+
+Shells: every sign / propose / approve / approve-and-execute / execute /
+"sign in wallet" button is enabled only by `door.enabled`; `loading` draws
+`home.multisig.review.state.loading` ("Reading the transaction…") where the
+review goes, the button disabled; `failed` draws the reason's words,
+`.blocked` ("Nothing can be signed until it's read.") and `.tryAgain`,
+which sends `review_again`. A failed review is not retried behind the
+person's back. No shell may treat an absent review as allowed.
+
+### 12.4 The core's own backstop
+
+Whatever a shell lets the person press: `confirm_draft` / `propose_execute`
+on a draft not `ready`, and `approve` / `execute` / `approve_execute` on a
+proposal not `ready`, sign nothing (`ActionState::SigningUnchecked`, no
+passkey asked). The outside page offers no approve / execute / reject
+(`OutsideTxView::open` requires `ready`) and hands no SafeTx request to the
+wallet (`answer_request` with `go` is ignored) unless the door is open.
+
+Words: `home.multisig.review.state.{loading, blocked, timedOut, unreadable,
+gone, tryAgain}` (on-demand multisig namespace, all 15 locales; pin 682).
+Vectors: `tests/vectors/multisig/review-state.json` (`door` cases, the
+timeout, the keys) — replayed by Rust (`app_multisig_review_state.rs`), the
+web (`core/review-door.test.ts`), the desktop, Android and iOS. Machine
+tests: `tests/app_multisig_review_state.rs`, and the outside page's in
+`tests/app_multisig_outside.rs`.
