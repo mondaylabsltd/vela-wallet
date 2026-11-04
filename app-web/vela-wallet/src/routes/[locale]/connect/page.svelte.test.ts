@@ -187,6 +187,12 @@ function words(): MultisigMessages {
 		out[group] = {};
 		for (const key of Object.keys(keys)) out[group][key] = `${group}.${key}`;
 	}
+	// §12 and r8-1: the review's nested words, each its own key.
+	for (const nested of ['state', 'reading'] as const) {
+		out.review[nested] = Object.fromEntries(
+			Object.keys(MULTISIG_SHAPE.review[nested]).map((k) => [k, `review.${nested}.${k}`])
+		);
+	}
 	out.external.connectingAs = 'as {{account}}';
 	out.external.expectedMember = 'for {{accounts}}';
 	out.external.notExpectedMember = '{{account}} is not {{accounts}}';
@@ -339,7 +345,16 @@ function shownOf(tx: SafeTx, over: Partial<OutsideTxShown> = {}): OutsideTxShown
 		hashes: safeTxHashes(5042002, SAFE, tx),
 		name: null,
 		title: SEND,
-		review: null,
+		// §12: read — the core's own review, as the page machine gathers it.
+		review: multisigReview({
+			chainId: 5042002,
+			safe: SAFE,
+			tx,
+			owners: [MEMBER, STRANGER, ALSO],
+			threshold: 2,
+			deployed: true
+		}),
+		reviewState: { kind: 'ready' },
 		chainNonce: '3',
 		waitsFor: [],
 		...over
@@ -393,14 +408,52 @@ describe('the connect page says where it stands (r4)', () => {
 		expect(testid('review-safe')?.textContent).toBe(SAFE);
 		expect(testid('review-network')?.textContent).toContain('Arc');
 		expect(testid('review-recipient')?.textContent).toBe(TX.to);
-		await vi.waitFor(() => expect(testid('review-title')?.textContent).toContain('Send 0.01'));
+		// §12: the core's own review is read — its reading heads it.
+		await vi.waitFor(() => expect(testid('review-title')?.textContent).toContain('0.01'));
 		expect(testid('review-nonce')?.textContent).toContain('3');
-		expect(testid('hash-safe-tx')?.textContent).toBe(hashes.safeTxHash);
-		expect(testid('hash-domain')?.textContent).toBe(hashes.domainHash);
-		expect(testid('hash-message')?.textContent).toBe(hashes.messageHash);
+		// The review's own hashes (§12: read before the wallet is asked).
+		const drawn = testid('review-hashes')?.textContent ?? '';
+		expect(drawn).toContain(hashes.safeTxHash);
+		expect(drawn).toContain(hashes.domainHash);
+		expect(drawn).toContain(hashes.messageHash);
 		// The wallet is asked on the tap, not before.
 		expect(answers()).toHaveLength(0);
 		button('Sign with MetaMask')!.click();
+		expect(answers()).toEqual([{ type: 'answer_request', session: 's', id: 'r1', go: true }]);
+		await screen.unmount();
+	});
+
+	it('§12: a request whose review is read is signed only then — shut while read, blocked when it failed, Try again', async () => {
+		const screen = await open([MEMBER], `#${encodeURIComponent(INVITE)}&for=${MEMBER}`);
+		pair();
+		const entry = asked({ id: 'r1' });
+		const sign = () => button('Sign with MetaMask') as HTMLButtonElement | null;
+		host().set({
+			activity: [entry],
+			request: entry,
+			requestReview: shownOf(TX, { review: null, reviewState: { kind: 'loading' } })
+		});
+		await vi.waitFor(() => expect(testid('review-loading')).not.toBeNull());
+		expect(testid('review-loading')?.textContent).toContain('review.state.loading');
+		expect(sign()?.disabled).toBe(true);
+		host().set({
+			requestReview: shownOf(TX, {
+				review: null,
+				reviewState: { kind: 'failed', reason_key: 'home.multisig.review.state.timedOut' }
+			})
+		});
+		await vi.waitFor(() => expect(testid('review-failed')).not.toBeNull());
+		expect(testid('review-failed')?.textContent).toContain('review.state.timedOut');
+		expect(testid('review-failed')?.textContent).toContain('review.state.blocked');
+		expect(sign()?.disabled).toBe(true);
+		sign()?.click();
+		expect(answers()).toHaveLength(0);
+		button('review.state.tryAgain')!.click();
+		expect(host().events.filter((e) => e.type === 'review_again')).toHaveLength(1);
+		host().set({ requestReview: shownOf(TX) });
+		await vi.waitFor(() => expect(testid('review-failed')).toBeNull());
+		expect(sign()?.disabled).toBe(false);
+		sign()!.click();
 		expect(answers()).toEqual([{ type: 'answer_request', session: 's', id: 'r1', go: true }]);
 		await screen.unmount();
 	});
@@ -527,7 +580,16 @@ function readyView(
 		done: null,
 		findings,
 		gate: gateOf(findings),
-		review: null,
+		// §12: read — the core's own review, as the page machine gathers it.
+		review: multisigReview({
+			chainId: 5042002,
+			safe: SAFE,
+			tx: TX,
+			owners,
+			threshold: 2,
+			deployed: true
+		}),
+		reviewState: { kind: 'ready' },
 		title: SEND,
 		name: null,
 		members: { deployed: true, owners, threshold: 2, nonce: '3' },

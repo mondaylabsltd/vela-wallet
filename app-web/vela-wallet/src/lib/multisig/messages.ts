@@ -805,6 +805,23 @@ export interface ReviewMessages {
 	 * (`MultisigReview.reading`) and for the concerns it raises.
 	 */
 	reading: ReadingMessages;
+	/**
+	 * §12: where the review stands (`review_state`): read, being read (the
+	 * button shut), or not read — why, and Try again (`review_again`).
+	 */
+	state: ReviewStateMessages;
+}
+
+/** `home.multisig.review.state` (§12). */
+export interface ReviewStateMessages {
+	/** "Reading the transaction…" */
+	loading: string;
+	/** "Nothing can be signed until it's read." */
+	blocked: string;
+	timedOut: string;
+	unreadable: string;
+	gone: string;
+	tryAgain: string;
 }
 
 /** `home.multisig.review.reading` (r8-1, r8-2, r8-5). */
@@ -1584,6 +1601,14 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		proposeAnyway: '',
 		blocked: '',
 		refusedWhy: { delegatecall: '', tooDeep: '', refund: '', other: '' },
+		state: {
+			loading: '',
+			blocked: '',
+			timedOut: '',
+			unreadable: '',
+			gone: '',
+			tryAgain: ''
+		},
 		reading: {
 			send: '',
 			sendFrom: '',

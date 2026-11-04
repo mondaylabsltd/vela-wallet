@@ -155,7 +155,14 @@ vi.mock('../core/proposals.svelte', async () => {
 				? { ...machineSeam.executions, [key]: fake.verdict }
 				: machineSeam.executions,
 			outbox,
-			reviews: { [key]: reviewSeam.review ?? REVIEW },
+			reviews: {
+				[key]:
+					reviewSeam.state?.kind === 'ready' || !reviewSeam.state
+						? (reviewSeam.review ?? REVIEW)
+						: null
+			},
+			// §12: where the review stands, as the machine says (read, unless a test says otherwise).
+			review_states: { [key]: reviewSeam.state ?? { kind: 'ready' } },
 			previews,
 			// The machine's partition of them (app_multisig_proposals.rs
 			// `each_remaining_member_signs_as_the_one_rule_says`).
@@ -172,7 +179,16 @@ vi.mock('../core/proposals.svelte', async () => {
 			timelines,
 			frozen: fake.frozen ? { [key]: fake.frozen } : {},
 			history_unreadable: fake.executed === undefined ? [100] : [],
-			draft: fake.machineDraft,
+			// §12: a draft's review is read once the machine has it (a test may say otherwise).
+			draft: fake.machineDraft
+				? {
+						reviewState:
+							fake.machineDraft.review !== null && fake.machineDraft.review !== undefined
+								? { kind: 'ready' }
+								: { kind: 'loading' },
+						...fake.machineDraft
+					}
+				: null,
 			last_actor: null,
 			// core-ms-2: who here one press approves and executes it, as the
 			// machine rules (app_multisig_proposals.rs
@@ -326,6 +342,18 @@ vi.mock('../shell/proposals-host.svelte', async () => {
 					}
 					return;
 				}
+				case 'review_again':
+					// §12: the machine reads it again — here, read at once.
+					reviewSeam.state = { kind: 'ready' };
+					if (fake.machineDraft && fake.machineDraft.review === null) {
+						fake.machineDraft = {
+							...fake.machineDraft,
+							review: REVIEW,
+							reviewState: { kind: 'ready' }
+						};
+					}
+					machineSeam.reads += 1;
+					return;
 				case 'send_again':
 					fake.sentAgain += 1;
 					fake.kept = null;
@@ -481,7 +509,7 @@ const REVIEW = vi.hoisted(() => ({
 	review: null,
 	memberChanges: null
 }));
-const reviewSeam = vi.hoisted(() => ({ review: null as any, refreshed: 0 }));
+const reviewSeam = vi.hoisted(() => ({ review: null as any, refreshed: 0, state: null as any }));
 vi.mock('../core/proposal-review.svelte', () => ({
 	REVIEW_FRESH_MS: 60_000,
 	REVIEW_RETRY_MS: 60_000,
@@ -725,6 +753,7 @@ beforeEach(() => {
 	resetMachineSeam();
 	reviewSeam.review = null;
 	reviewSeam.refreshed = 0;
+	reviewSeam.state = null;
 });
 
 describe('one review, every signer, every action (§3.6)', () => {
@@ -921,6 +950,93 @@ function held(over: Record<string, unknown> = {}) {
 function dappSheet(over: Record<string, unknown> = {}, claim = async () => true) {
 	return { rid: 'r1', held: held(over), claim, retry: () => {} };
 }
+
+describe('§12: nothing is signed on a review that was not read', () => {
+	const button = (label: string) =>
+		[...document.body.querySelectorAll('button')].find((b) => b.textContent?.trim() === label) as
+			HTMLButtonElement | undefined;
+
+	it('a draft whose review is still read: "Reading the transaction…", Propose and approve shut', async () => {
+		// The machine drew the draft first; its review comes a moment later.
+		fake.machineDraft = {
+			...draftOf(item(), [ME]),
+			review: null,
+			reviewState: { kind: 'loading' }
+		};
+		fake.confirmed = { kind: 'done', safe_tx_hash: HASH, kept: false };
+		const screen = show({ dapp: dappSheet({}, async () => true), safeTxHash: '' });
+		await settle();
+		expect(document.querySelector('[data-testid="review-loading"]')?.textContent).toContain(
+			'review.state.loading'
+		);
+		expect(button('send.propose')?.disabled).toBe(true);
+		press('send.propose');
+		await settle();
+		expect(fake.calls).toEqual([]);
+		await screen.unmount();
+	});
+
+	it('a draft whose review failed: why, nothing signable, and Try again reads it again', async () => {
+		fake.machineDraft = {
+			...draftOf(item(), [ME]),
+			review: null,
+			reviewState: { kind: 'failed', reason_key: 'home.multisig.review.state.timedOut' }
+		};
+		fake.confirmed = { kind: 'done', safe_tx_hash: HASH, kept: false };
+		const screen = show({ dapp: dappSheet({}, async () => true), safeTxHash: '' });
+		await settle();
+		const failed = document.querySelector('[data-testid="review-failed"]')?.textContent ?? '';
+		expect(failed).toContain('review.state.timedOut');
+		expect(failed).toContain('review.state.blocked');
+		expect(button('send.propose')?.disabled).toBe(true);
+		press('review.state.tryAgain');
+		await settle();
+		expect(machineSent('review_again')).toEqual([
+			{ type: 'review_again', chain_id: null, safe_tx_hash: null }
+		]);
+		await screen.unmount();
+		// Read now: the same draft can be proposed.
+		const again = show({ dapp: dappSheet({}, async () => true), safeTxHash: '' });
+		await settle();
+		expect(document.querySelector('[data-testid="review-failed"]')).toBeNull();
+		expect(button('send.propose')?.disabled).toBe(false);
+		press('send.propose');
+		await settle();
+		expect(fake.calls).toEqual([`confirm:${ME}`]);
+		await again.unmount();
+	});
+
+	it('a proposal: Approve shut while its review is read, blocked when it failed, open after Try again', async () => {
+		reviewSeam.state = { kind: 'loading' };
+		let screen = show();
+		await settle();
+		expect(document.querySelector('[data-testid="review-loading"]')).not.toBeNull();
+		expect(button('proposal.approve')?.disabled).toBe(true);
+		await screen.unmount();
+
+		reviewSeam.state = { kind: 'failed', reason_key: 'home.multisig.review.state.unreadable' };
+		screen = show();
+		await settle();
+		expect(document.querySelector('[data-testid="review-failed"]')?.textContent).toContain(
+			'review.state.unreadable'
+		);
+		expect(button('proposal.approve')?.disabled).toBe(true);
+		press('proposal.approve');
+		await settle();
+		expect(fake.calls).not.toContain('approve');
+		press('review.state.tryAgain');
+		await settle();
+		expect(machineSent('review_again')).toEqual([
+			{ type: 'review_again', chain_id: 100, safe_tx_hash: HASH }
+		]);
+		expect(document.querySelector('[data-testid="review-failed"]')).toBeNull();
+		expect(button('proposal.approve')?.disabled).toBe(false);
+		press('proposal.approve');
+		await settle();
+		expect(fake.calls).toContain('approve');
+		await screen.unmount();
+	});
+});
 
 describe("a dApp's transaction from a multisig (dapp-1)", () => {
 	it('is reviewed first: what the site asks, and nothing signed until Propose and approve', async () => {

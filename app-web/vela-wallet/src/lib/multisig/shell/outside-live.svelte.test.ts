@@ -4,7 +4,9 @@
  * (`MultisigOutsidePageCore`) — over an in-memory PeerConnect: Vela asks,
  * the page shows the request, the owner taps, the injected wallet signs, and
  * Vela verifies the answer and ends the ask with the approval. What the
- * onchain suite does in two browsers, here in one, with no relay or chain.
+ * onchain suite does in two browsers, here in one, with no relay. §12: the
+ * page's chain holds the multisig (the owner its member), so what Vela asks
+ * is reviewed before the wallet is asked — never handed over unread.
  */
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { secp256k1 } from '@noble/curves/secp256k1';
@@ -18,6 +20,7 @@ import type { OutsideSessionView } from '../generated/OutsideSessionView';
 import type { PeerTransport } from './handler';
 import { MultisigMachine } from './machine.svelte';
 import { pageDeps } from './outside-page.svelte';
+import { membersRpc, type MembersWorld } from './members.testing';
 
 /** Hardhat's second dev account. */
 const KEY = '59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d';
@@ -133,11 +136,19 @@ describe('a live session, both sides the core', () => {
 			'outside session'
 		);
 		const owner = wallet(hash);
+		// The page's chain: the multisig deployed there, the owner its member.
+		const chain: MembersWorld = {
+			safe: SAFE,
+			chains: { 100: { deployed: true, owners: [OWNER], threshold: 1, nonce: 3 } },
+			signers: {},
+			asked: []
+		};
 		const page = new MultisigMachine<OutsidePageView, OutsidePageEvent>(
 			new wasm.MultisigOutsidePageCore(),
 			{
 				...pageDeps({ peer: side('page'), wallet: () => owner, askRisk: async () => false }),
-				...offline
+				...offline,
+				rpc: membersRpc(chain)
 			},
 			'connect'
 		);
@@ -164,6 +175,10 @@ describe('a live session, both sides the core', () => {
 		});
 		await vi.waitFor(() => expect(page.view.request).not.toBeNull(), { timeout: 5_000 });
 		expect(vela.view.phase).toBe('confirming');
+		// §12: the request's review is read before the owner can hand it over.
+		await vi.waitFor(() => expect(page.view.requestReview?.reviewState.kind).toBe('ready'), {
+			timeout: 10_000
+		});
 		const asked = page.view.request!;
 		page.dispatch({ type: 'answer_request', session: asked.session, id: asked.id, go: true });
 		await vi.waitFor(() => expect(vela.view.outcome?.kind).toBe('approved'), { timeout: 5_000 });

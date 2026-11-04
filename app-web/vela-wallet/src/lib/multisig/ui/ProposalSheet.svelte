@@ -137,6 +137,8 @@
 	import type { DraftAsk } from '../shell/proposals-host.svelte';
 	import type { ProposalSource } from '../core/proposals.svelte';
 	import CallReview from './CallReview.svelte';
+	import ReviewStateNote from './ReviewStateNote.svelte';
+	import { reviewDoor, stateFor } from '../core/review-door';
 	import Sheet from './Sheet.svelte';
 
 	interface Props {
@@ -361,13 +363,40 @@
 		if (!found) return undefined;
 		return (found[1] as MultisigReviewOut | null) ?? null;
 	});
-	/** The last review could not read the chain (its state or its simulation): asked again soon. */
+	/**
+	 * The last review was read but could not reach the chain (its state or its
+	 * simulation): asked again soon. §12: one not read at all (`failed`) waits
+	 * for the person's Try again — it is said, never retried behind their back.
+	 */
 	const machineUnread = $derived(
-		machineReview === null ||
-			(!!machineReview &&
-				(machineReview.state.verdict.kind === 'unavailable' ||
-					machineReview.simulation.kind === 'unreachable'))
+		!!machineReview &&
+			(machineReview.state.verdict.kind === 'unavailable' ||
+				machineReview.simulation.kind === 'unreachable')
 	);
+	/** §12: where the review stands, as the machine says (missing: not asked yet). */
+	const reviewState = $derived(
+		drafting
+			? (machine?.draft?.reviewState ?? null)
+			: stateFor(machine?.review_states, chainId, item?.safeTxHash ?? safeTxHash)
+	);
+	/**
+	 * §12: the core's door (`review.door`) — the ONLY thing that enables a
+	 * button that signs, proposes, approves or executes: a review read, and
+	 * its sign rule allowing it. Loading, failed, or not asked keeps it shut.
+	 */
+	const door = $derived(reviewDoor(reviewState, machineReview ?? null));
+	/** §12: Try again — the machine reads the review again from scratch. */
+	function retryReview(): void {
+		proposalsHost.send(
+			drafting
+				? { type: 'review_again', chain_id: null, safe_tx_hash: null }
+				: {
+						type: 'review_again',
+						chain_id: chainId,
+						safe_tx_hash: item?.safeTxHash ?? safeTxHash
+					}
+		);
+	}
 	/** The simulation as the signing sheet draws it, judged by the token rules for the Safe. */
 	let machineSim = $state.raw<SimEnded | null>(null);
 	$effect(() => {
@@ -404,8 +433,6 @@
 	);
 	/** Its simulation, as the signing sheet draws it. */
 	const reviewSim = $derived(machineSim);
-	/** The review could not be gathered at all. */
-	const reviewFailed = $derived(machineReview === null);
 	/** Read the review again now (the gate found it changed who controls the multisig). */
 	function reviewAgain(): void {
 		if (drafting || !item) return;
@@ -438,9 +465,12 @@
 	/** The review's rule: nothing signed (no override), "… anyway", or plain. */
 	const signRule = $derived(fullReview?.sign ?? null);
 	const signBlocked = $derived(signRule?.allowed === false);
-	const anyway = $derived(signRule?.anyway === true);
-	/** The signing sheet holds its confirm while its simulation is out; so does this. */
-	const reviewHolding = $derived(!fullReview && !reviewFailed);
+	/** The "… anyway" step: the core's door says it (§12), as the review's rule does. */
+	const anyway = $derived(door.anyway);
+	/** §12: the review is being read (or not asked yet): said, and nothing is signed. */
+	const reviewHolding = $derived(door.shows === 'loading');
+	/** §12: every button that signs is shut unless the core's door is open. */
+	const signShut = $derived(!door.enabled);
 	/**
 	 * r11-4: the core refuses it (`review.refused`: a batch nested too deep,
 	 * a delegatecall, a refund, a state change) — or it is no kind Vela signs
@@ -1538,6 +1568,8 @@
 					{/each}
 				</ul>
 			{/if}
+			<!-- §12: being read, or not read — said where the review goes, with Try again. -->
+			<ReviewStateNote m={m.review.state} {door} onRetry={retryReview} />
 			<!-- §3.6: the state-diff guard, who each leg reaches, what moves — the signing sheet's blocks. -->
 			<div class="review-checks" data-testid="review-checks">
 				<BlockList blocks={checks} />
@@ -1953,7 +1985,7 @@
 						variant={valueVariant}
 						shape="rounded"
 						loading={busy && phase.kind === 'busy' && phase.what === 'propose'}
-						disabled={busy || reviewHolding}
+						disabled={busy || signShut}
 						onclick={onPropose}
 						>{executeNow
 							? anywayLabel('approveExecute', m.proposal.approveAndExecute, fullReview, m)
@@ -2059,7 +2091,7 @@
 								variant={valueVariant}
 								shape="rounded"
 								loading={busy && phase.kind === 'busy' && phase.what === 'approve'}
-								disabled={busy || reviewHolding}
+								disabled={busy || signShut}
 								onclick={onApprove}
 							>
 								{anywayLabel('approve', m.proposal.approve, fullReview, m)}
@@ -2073,7 +2105,7 @@
 									variant="secondary"
 									shape="rounded"
 									loading={busy && phase.kind === 'busy' && phase.what === 'approve'}
-									disabled={busy || reviewHolding}
+									disabled={busy || signShut}
 									onclick={onApprove}
 								>
 									{m.proposal.approve}
@@ -2084,7 +2116,7 @@
 								shape="rounded"
 								loading={busy && phase.kind === 'busy' && phase.what === 'execute'}
 								disabled={busy ||
-									reviewHolding ||
+									signShut ||
 									actorPreview === null ||
 									(approveFirst && !oneTapOffered)}
 								onclick={onExecute}
@@ -2140,7 +2172,7 @@
 						variant={valueVariant}
 						shape="rounded"
 						loading={busy && phase.kind === 'busy' && phase.what === 'approve'}
-						disabled={busy || reviewHolding}
+						disabled={busy || signShut}
 						onclick={onApprove}
 					>
 						{anywayLabel('approve', m.proposal.approve, fullReview, m)}
