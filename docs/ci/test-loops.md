@@ -85,6 +85,7 @@ of them was a regression from those rounds:
 | Screenshot ✕ after a scroll | 1 | The fling carried the ✕ out of the window, so the tap missed. The test now scrolls it back first. | test, device-dependent |
 | Escape probe (P2b) | 1, about half the runs | The WebView was destroyed while the page's icon fetch was still in flight, so the fetch escaped the interceptor. The page is now kept alive while the test listens. | flaky |
 | Multisig reject flow | 1, now and then | A recomposition ran on the hub's IO thread under the unconfined test dispatcher. It now uses `StandardTestDispatcher`. | flaky |
+| Explore tab, TalkBack (found while getting to green) | 1, now and then | The node was read before Compose had passed the change to the accessibility layer. The read now waits for the state it expects. | flaky |
 
 A red night here means a regression, or a flake to make deterministic. Never
 rerun it to get green, and never `@Ignore` a test to get green.
