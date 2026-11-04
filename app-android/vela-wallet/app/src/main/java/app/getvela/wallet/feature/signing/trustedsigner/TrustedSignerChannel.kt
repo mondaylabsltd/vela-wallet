@@ -202,7 +202,17 @@ class TrustedSignerChannel(
     /**
      * The flow is over — a create finished or failed, a sign-in settled, the
      * person left the screen. Says `bye`, lets the page go and brings the app
-     * back. Safe to call when no flow is open.
+     * back. Safe to call when no flow is open: then there is no page to come
+     * back from, and nothing is brought back.
+     *
+     * Only for a visit that was open. The callers end flows that never opened
+     * a page as a matter of course — every sign-in begins by ending the last,
+     * and leaving onboarding ends one (`OnboardingViewModel.onCleared`, which
+     * runs when the person presses Back on Welcome to leave the app). Bringing
+     * the app back there started the wallet again over the home screen the
+     * person had just gone to: the app could not be left with Back, and in the
+     * instrumented suite it climbed over every test after the one that opened
+     * the wallet.
      */
     fun endFlow() {
         val live = wire
@@ -211,7 +221,7 @@ class TrustedSignerChannel(
         gate = null
         live?.end()
         _state.value = State.Idle
-        bringBack()
+        if (live != null) bringBack()
     }
 
     // -- the two things a caller can ask for ----------------------------------

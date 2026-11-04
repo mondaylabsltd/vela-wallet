@@ -61,6 +61,9 @@ class TrustedSignerTab(activity: Activity) {
      */
     fun bringBack() {
         val host = activity.get() ?: return
+        // A wallet that is closing, or closed, is not one to bring back: the
+        // start below would build a new one over whatever the person went to.
+        if (host.isFinishing || host.isDestroyed) return
         host.runOnUiThread {
             host.startActivity(
                 Intent(host, host.javaClass).addFlags(
