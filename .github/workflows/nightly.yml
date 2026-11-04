@@ -32,7 +32,7 @@ on:
   workflow_dispatch:
     inputs:
       only:
-        description: 'Comma-separated jobs to run (empty = all): web-e2e, trusted-signer, multisig-fork, android-macrobench, ios-perf, desktop-perf'
+        description: 'Comma-separated jobs to run (empty = all): web-e2e, trusted-signer, multisig-fork, android-macrobench, android-instrumented, ios-perf, desktop-perf'
         required: false
         default: ''
       genesis_ref:
@@ -345,6 +345,96 @@ jobs:
           path: ${{ runner.temp }}/macrobenchmark
           if-no-files-found: ignore
           retention-days: 30
+
+  # ---------------------------------------------------------------------------
+  # Android's instrumented suite (app/src/androidTest, ~170 tests: the sheets'
+  # geometry, the signing sheet holding still, persistence across a process,
+  # the launch animation, the multisig through its real sheets, the Custom Tab
+  # callback) on an API 34 x86_64 emulator — the same image as the
+  # macrobenchmarks, animations off as the runner sets them. Nothing ran it
+  # before this job: 52 of its tests had been failing unseen, none of them a
+  # product regression (docs/ci/test-loops.md). A red night here is a
+  # regression or a flake to fix, never one to rerun away.
+  android-instrumented:
+    if: ${{ !inputs.only || contains(format(',{0},', inputs.only), ',android-instrumented,') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Let the emulator use KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.97.1
+          targets: x86_64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+          shared-key: android-emulator
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+      - name: Generate the Kotlin bindings
+        working-directory: rust
+        run: bash scripts/build-kotlin-bindings.sh
+      # The debug APK carries the parallel space's keyset (spec 043): its
+      # bindings here, its x86_64 library with the core below.
+      - name: Generate the debug-only fixtures bindings
+        working-directory: rust
+        run: bash scripts/build-dev-fixtures.sh --host
+      - name: The core and the fixtures for the emulator's ABI only
+        run: scripts/ci/android-core-emulator.sh x86_64 --dev-fixtures
+      - name: Assemble the app and its test APK
+        working-directory: app-android/vela-wallet
+        run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest -PvelaSkipRustBuild --console=plain
+      - name: Run the instrumented suite on the emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_7
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
+          working-directory: app-android/vela-wallet
+          script: ./gradlew :app:connectedDebugAndroidTest -PvelaSkipRustBuild --console=plain
+      - name: Summary
+        if: always()
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import glob, xml.etree.ElementTree as ET
+          ran = failed = skipped = 0
+          names = []
+          for f in glob.glob("app-android/vela-wallet/app/build/outputs/androidTest-results/connected/**/*.xml", recursive=True):
+              for case in ET.parse(f).getroot().iter("testcase"):
+                  ran += 1
+                  if case.find("failure") is not None or case.find("error") is not None:
+                      failed += 1
+                      names.append(case.get("classname").rsplit(".", 1)[-1] + "#" + case.get("name"))
+                  elif case.find("skipped") is not None:
+                      skipped += 1
+          print("### Android instrumented suite (emulator, API 34)")
+          print(f"{ran} ran, {failed} failed, {skipped} skipped" if ran else "No results: the suite did not run (see the log).")
+          for name in names:
+              print(f"- {name}")
+          PY
+      - name: Keep the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-instrumented
+          path: |
+            app-android/vela-wallet/app/build/outputs/androidTest-results
+            app-android/vela-wallet/app/build/reports/androidTests
+          if-no-files-found: ignore
+          retention-days: 14
 
   # ---------------------------------------------------------------------------
   # iOS PerfTests (app-ios/scripts/perf/run-perf.sh): a Debug launch seeds the
