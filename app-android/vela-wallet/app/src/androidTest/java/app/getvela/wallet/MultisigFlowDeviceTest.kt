@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.test.ComposeUiTestFlags
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.hasTestTag
@@ -51,6 +52,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonElement
 import org.junit.After
@@ -84,8 +86,24 @@ import uniffi.vela_core_uniffi.ActivityFeedCore
 @RunWith(AndroidJUnit4::class)
 class MultisigFlowDeviceTest {
 
+    /**
+     * The sheets compose on the main thread, as they do in the app. The hub
+     * works on `Dispatchers.IO` (the app's too) and the sheets collect its
+     * flows in their composition's effect context. In the app that context is
+     * the main thread's. Under the default test rule it is an UNCONFINED test
+     * dispatcher: the collector resumed on the IO thread that set the flow,
+     * and now and then the recomposition ran right there with it. A
+     * `ModalBottomSheet` built off the main thread fails with "Can't create
+     * handler inside thread … that has not called Looper.prepare()" (the reject
+     * flow, once in three suite runs). A standard test dispatcher only queues
+     * the resumption; the clock runs it on the main thread.
+     */
+    init {
+        ComposeUiTestFlags.isStandardTestDispatcherSupportEnabled = true
+    }
+
     @get:Rule
-    val compose = createComposeRule()
+    val compose = createComposeRule(effectContext = StandardTestDispatcher())
 
     /** On a failure: where the world and the machines stood (logcat, tag ms-device). */
     @get:Rule
