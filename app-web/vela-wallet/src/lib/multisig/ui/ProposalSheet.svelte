@@ -1698,7 +1698,7 @@
 						<Identicon svg={identiconSvgForClient(owner)} size="compact" address={owner} />
 						<span class="who"
 							>{names.label(owner)}{#if mine}<span class="here">
-									· {m.panel.thisDevice}</span
+									{' · '}{m.panel.thisDevice}</span
 								>{/if}</span
 						>
 						<span class="state">
@@ -1890,7 +1890,7 @@
 							{@const hash = b.hash}
 							<button
 								type="button"
-								class="text-button"
+								class="text-button link-ink"
 								data-tap
 								onclick={() => multisigUi.open({ kind: 'proposal', chainId, safeTxHash: hash })}
 								>{fillTemplate(m.proposal.openNumber, { nonce: b.nonce.toString() })}</button
@@ -2151,14 +2151,14 @@
 						     approving goes ahead, and Execute looks again first. -->
 						<p class="fine" role="status" data-testid="execute-unchecked">
 							{m.proposal.feeUnchecked}
-							<button type="button" class="text-button" onclick={recheck}
+							<button type="button" class="text-button link-ink" onclick={recheck}
 								>{m.proposal.feeRetry}</button
 							>
 						</p>
 					{:else if actorPreview?.kind === 'unpriced'}
 						<p class="fine" data-testid="execute-unpriced">
 							{m.proposal.feeUnpriced}
-							<button type="button" class="text-button" onclick={recheck}
+							<button type="button" class="text-button link-ink" onclick={recheck}
 								>{m.proposal.feeRetry}</button
 							>
 						</p>
@@ -2788,5 +2788,12 @@
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-error-base);
 		cursor: pointer;
+	}
+
+	/* r12 S4: a link that opens or looks again is neutral link ink — the
+	   danger red is Reject's alone. */
+	.text-button.link-ink {
+		color: var(--color-fg-base);
+		text-decoration: underline;
 	}
 </style>

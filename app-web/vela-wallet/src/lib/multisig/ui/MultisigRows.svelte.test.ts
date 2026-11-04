@@ -154,6 +154,9 @@ describe('a multisig row in the switcher (r11-5)', () => {
 		expect(document.querySelector('[data-testid="row-rule"]')?.getAttribute('title')).toBe(
 			'2 of 4 members approve'
 		);
+		// r12 S4: a space before the "·" — never "e56405· Needs 2 of 4".
+		const line = document.querySelector('[data-testid="row-rule"]')?.parentElement?.textContent;
+		expect(line).toMatch(/[0-9a-fA-F] · Needs 2 of 4$/);
 		await screen.unmount();
 	});
 
