@@ -65,8 +65,8 @@ const noDanger = (view) => view.risk !== 'danger' && view.risk !== 'hard-danger'
   check('DX-G14: 0.001 xDAI with no data is a send', isSend(view) && noDanger(view));
   check('DX-G14: the hero reads 0.001 xDAI', heroText(sheet) === '0.001' && view.hero.amount.symbol === 'xDAI',
     heroText(sheet) + ' ' + view.hero.amount.symbol);
-  check('DX-G14: the recipient row names 0x7687…D141',
-    sheet.find('.identity-address').some((n) => n.textContent === '0x7687…D141'));
+  check('DX-G14: the recipient row names 0x76875e…C0D141',
+    sheet.find('.identity-address').some((n) => n.textContent === '0x76875e…C0D141'));
   check('DX-G14: the tech panel keeps "−0.001 xDAI · nothing else changes"',
     sheet.find('.tech-sim').map((n) => n.textContent).join() === t('ui.simNoOther', { delta: '-0.001 xDAI' }));
 }
@@ -468,7 +468,7 @@ for (const data of ['0x12', '0x00', '0xdeadbeef']) {
   const has = (label) => leg.fields.find((f) => f.label === label);
   check('blind leg: the contract it calls is a row (address and identicon)',
     !!has('ui.contract') && has('ui.contract').identity.address === target &&
-    !!card && card.find('identity-address').some((n) => n.textContent === '0x1111…1111'));
+    !!card && card.find('identity-address').some((n) => n.textContent === '0x111111…111111'));
   check('blind leg: the selector is a row', !!has('ui.function') && has('ui.function').value === '0xdeadbeef' &&
     card.textContent.includes('0xdeadbeef'));
   check('blind leg: its value is a row, 0 said as 0', !!has('field.nativeAttached') &&

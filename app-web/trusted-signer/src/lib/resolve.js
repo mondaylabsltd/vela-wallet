@@ -97,8 +97,29 @@ window.VelaCS = window.VelaCS || {};
     return out.text;
   }
 
+  /**
+   * THE short form of an address (vela-core `multisig_rules::names::
+   * short_address`, r12-7): EIP-55 casing, `0x` + 6, `…`, 6 — the same on
+   * this page as in every Vela shell. Six and six because a 4+4 look-alike
+   * is a 2^32 search for an address-poisoning sender and 6+6 is 2^48.
+   */
+  function eip55(address) {
+    var raw = String(address == null ? '' : address);
+    if (!/^0x[0-9a-fA-F]{40}$/.test(raw)) return raw;
+    var body = raw.slice(2).toLowerCase();
+    var hash = ns.keccak.hex(new TextEncoder().encode(body)).slice(2);
+    var out = '0x';
+    for (var i = 0; i < body.length; i++) {
+      out += parseInt(hash[i], 16) >= 8 ? body[i].toUpperCase() : body[i];
+    }
+    return out;
+  }
+
   function shortAddress(address) {
-    return address.slice(0, 6) + '…' + address.slice(-4);
+    var full = eip55(address);
+    var chars = Array.from(full);
+    if (chars.length <= 14) return full;
+    return chars.slice(0, 8).join('') + '…' + chars.slice(-6).join('');
   }
 
   function formatDate(seconds) {
