@@ -165,6 +165,9 @@ final class R9FixLiveUITests: XCTestCase {
         XCTAssertTrue(propose.waitForExistence(timeout: 60), "no propose on the confirm")
         propose.tap()
         XCTAssertTrue(element(app, "multisig.draft.propose").waitForExistence(timeout: 60), "no review before the passkey")
+        // §12: shut until its review is read (the core's `review.door`).
+        expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: element(app, "multisig.draft.propose"))
+        waitForExpectations(timeout: 60)
         sleep(2)
         tap(app, "multisig.draft.propose")
     }

@@ -117,10 +117,75 @@ enum MsRules {
     /// Whether `hash` (a URL fragment, with or without `#`) is a multisig link.
     static func isMultisigLink(_ hash: String) -> Bool { call("isMultisigLink", ["hash": hash]) as? Bool ?? false }
 
+    // MARK: - The sign door (§12)
+
+    /// The one rule every sign / propose / approve / execute / reject button
+    /// follows (`review.door`): a review's state (`nil`: not asked yet) and
+    /// the review (`nil` or `null`: none) in, what the sheet draws and
+    /// whether the button may be pressed out.
+    static func reviewDoor(state: MsJSON?, review: MsJSON?) -> MsSignDoor {
+        let answer = call("review.door", [
+            "state": state.map(\.any) ?? NSNull(),
+            "review": review.map(\.any) ?? NSNull(),
+        ])
+        return MsSignDoor(answer: answer)
+    }
+
     // MARK: - Names and networks (`multisig_rules`)
 
     /// The order networks are offered in for a new multisig, the default first.
     static func likelyNetworks(_ args: [String: Any]) -> [Int] {
         (call("networks.likely", args) as? [Any] ?? []).compactMap { ($0 as? NSNumber)?.intValue }
     }
+}
+
+/// §12: the core's sign door over one review (`MultisigSignDoor`). Nothing
+/// here decides: `enabled` is the core's, and only `true` opens a button.
+struct MsSignDoor: Equatable {
+    /// What the sheet draws in the review's place.
+    enum Shows: String, Equatable {
+        /// "Reading the transaction…".
+        case loading
+        /// The review itself.
+        case review
+        /// The reason, "Nothing can be signed until it's read." and "Try again".
+        case failed
+    }
+
+    let shows: Shows
+    /// The button may be pressed.
+    let enabled: Bool
+    /// Pressed, it goes through the review's "… anyway" step first.
+    let anyway: Bool
+    /// `failed`: the reason's corpus key.
+    let reasonKey: String?
+    /// `failed`: offer "Try again" (`review_again`).
+    let retry: Bool
+
+    init(shows: Shows, enabled: Bool, anyway: Bool, reasonKey: String?, retry: Bool) {
+        self.shows = shows
+        self.enabled = enabled
+        self.anyway = anyway
+        self.reasonKey = reasonKey
+        self.retry = retry
+    }
+
+    /// The door's answer as the core wrote it. One the core did not give (it
+    /// refused the question) opens nothing: shut, with "Try again".
+    init(answer: Any?) {
+        guard let object = answer as? [String: Any],
+              let shows = (object["shows"] as? String).flatMap(Shows.init(rawValue:))
+        else {
+            self = .unanswered
+            return
+        }
+        self.shows = shows
+        enabled = object["enabled"] as? Bool == true
+        anyway = object["anyway"] as? Bool == true
+        reasonKey = object["reason_key"] as? String
+        retry = object["retry"] as? Bool == true
+    }
+
+    /// No answer from the door: nothing is signed, and the person can ask again.
+    static let unanswered = MsSignDoor(shows: .failed, enabled: false, anyway: false, reasonKey: nil, retry: true)
 }

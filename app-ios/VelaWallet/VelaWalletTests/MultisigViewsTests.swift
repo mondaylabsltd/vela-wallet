@@ -62,7 +62,7 @@ struct MultisigViewsTests {
         {"followed":"\(safe)","chains":[{"chainId":100,"members":{"deployed":true,"owners":["\(one)","\(two)","\(three)"],"threshold":2,"nonce":"0"},"items":[],"mailbox":true}],
          "items":[\(item)],"open_count":1,"waiting_on_me":0,"missing":[],"cached_at":null,"unreadable":[],"history_unreadable":[],
          "offline":false,"read_at":1,"loading":false,"stale":false,"unreachable":false,"pace_ms":12000,"outbox":{},"draft":null,
-         "actions":{},"reviews":{},"previews":{},"executions":{},"frozen":{},"last_actor":null,
+         "actions":{},"reviews":{},"review_states":{},"previews":{},"executions":{},"frozen":{},"last_actor":null,
          "presence":{"\(safe.lowercased())":{"needs_you":0,"ready":\(ready),"waiting_payer":0,"first":{"chain_id":100,"safe_tx_hash":"\(hash)"}}},
          "others_waiting":false,"members_anywhere":[],"standings":{"100:\(hash)":\(standing)},"waiting_note":null,
          "timelines":{"100:\(hash)":[{"kind":"created","who":"\(one)","at_ms":1},{"kind":"approved","who":"\(two)","at_ms":2,"counted":true,"by_executing":false,"unsent":false,"on_chain":false}]},

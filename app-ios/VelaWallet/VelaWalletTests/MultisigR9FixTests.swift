@@ -49,6 +49,12 @@ struct MultisigR9FixTests {
     private func view(item: String, standing: String = #"{"kind":"progress","approved":1,"threshold":2}"#,
                       replacing: [String: String] = [:], extra: String = "") throws -> MsProposalsView {
         var json = MultisigViewsTests.proposalsJson(item: item, standing: standing, extra: extra)
+        var replacing = replacing
+        // §12: a review the test hands in was read (`ready`), unless the
+        // test says where it stands.
+        if replacing["reviews"] != nil, replacing["review_states"] == nil {
+            replacing["review_states"] = #"{"100:\#(Self.hash)":{"kind":"ready"}}"#
+        }
         for (key, value) in replacing {
             json = json.replacingOccurrences(of: "\"\(key)\":{}", with: "\"\(key)\":\(value)")
         }

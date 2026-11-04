@@ -141,6 +141,9 @@ final class R8FixLiveUITests: XCTestCase {
         shot(app, "r8-9-confirm")
         propose.tap()
         XCTAssertTrue(element(app, "multisig.draft.propose").waitForExistence(timeout: 60), "no review before the passkey")
+        // §12: shut until its review is read (the core's `review.door`).
+        expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: element(app, "multisig.draft.propose"))
+        waitForExpectations(timeout: 60)
         sleep(3)
         shot(app, "r8-1-draft-review")
         tap(app, "multisig.draft.propose")
@@ -164,7 +167,7 @@ final class R8FixLiveUITests: XCTestCase {
                       "no Vela link for the Vela member")
         shot(app, "r8-8-proposal-bottom")
         // r8-19: the review is in — no endless "Checking…".
-        XCTAssertFalse(element(app, "multisig.review.checking").exists, "the review never came")
+        XCTAssertFalse(element(app, "multisig.review.loading").exists, "the review never came")
     }
 
     // MARK: - r8-17 and r8-19: the outside owner approves by executing
@@ -205,7 +208,7 @@ final class R8FixLiveUITests: XCTestCase {
             XCTAssertFalse(member.label.contains("Waiting"), "an owner that executed is still Waiting: \(member.label)")
         }
         XCTAssertTrue(members.contains { $0.label.contains("Executed") }, "the executing owner is not said to have executed")
-        XCTAssertFalse(element(app, "multisig.review.checking").exists, "r8-19: a spinner on an executed sheet")
+        XCTAssertFalse(element(app, "multisig.review.loading").exists, "r8-19: a spinner on an executed sheet")
         shot(app, "r8-17-executed-sheet")
         app.swipeUp()
         sleep(1)

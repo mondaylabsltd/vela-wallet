@@ -285,6 +285,9 @@ final class MultisigLiveUITests: XCTestCase {
         // Held by the proposals machine: its review first.
         XCTAssertTrue(app.descendants(matching: .any)["multisig.draft.site"].waitForExistence(timeout: 60), "no held request")
         XCTAssertTrue(app.descendants(matching: .any)["multisig.draft.propose"].waitForExistence(timeout: 60))
+        // §12: shut until its review is read (the core's `review.door`).
+        expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: app.descendants(matching: .any)["multisig.draft.propose"])
+        waitForExpectations(timeout: 60)
         sleep(3)
         shot(app, "dapp-review")
         tap(app, "multisig.draft.propose")
@@ -338,6 +341,9 @@ final class MultisigLiveUITests: XCTestCase {
         propose.tap()
         // The review first (§3.6), then one passkey.
         XCTAssertTrue(app.descendants(matching: .any)["multisig.draft.propose"].waitForExistence(timeout: 60), "no review before the passkey")
+        // §12: shut until its review is read (the core's `review.door`).
+        expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: app.descendants(matching: .any)["multisig.draft.propose"])
+        waitForExpectations(timeout: 60)
         sleep(3)
         shot(app, "draft-review")
         tap(app, "multisig.draft.propose")
@@ -371,6 +377,9 @@ final class MultisigLiveUITests: XCTestCase {
         shot(app, "members-plan")
         tap(app, "multisig.members.propose")
         XCTAssertTrue(app.descendants(matching: .any)["multisig.draft.propose"].waitForExistence(timeout: 60), "no review before the passkey")
+        // §12: shut until its review is read (the core's `review.door`).
+        expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: app.descendants(matching: .any)["multisig.draft.propose"])
+        waitForExpectations(timeout: 60)
         sleep(3)
         shot(app, "members-review")
         XCTAssertTrue(app.descendants(matching: .any)["multisig.review.rule"].exists, "the rule the change leaves is not shown")

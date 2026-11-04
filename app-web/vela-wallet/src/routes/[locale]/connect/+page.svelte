@@ -60,6 +60,8 @@
 	import type { OutsideRefusalKind } from '$lib/multisig/generated/OutsideRefusalKind';
 	import type { RelayStatus } from '$lib/multisig/generated/RelayStatus';
 	import TxReview from '$lib/multisig/external/TxReview.svelte';
+	import ReviewStateNote from '$lib/multisig/ui/ReviewStateNote.svelte';
+	import { reviewDoor } from '$lib/multisig/core/review-door';
 	import AuthorityNotice from '$lib/multisig/ui/AuthorityNotice.svelte';
 	import { findingLines } from '$lib/multisig/ui/findings';
 	import type { Finding } from '$lib/multisig/core/refusal';
@@ -483,6 +485,16 @@
 	 * title and hashes at once, the review once gathered.
 	 */
 	const requestReview = $derived(view?.requestReview ?? null);
+	/**
+	 * §12: the core's door over each review this page draws — the link's
+	 * transaction and Vela's request. Nothing is handed to the wallet, and no
+	 * approve / execute / reject is offered, unless it is open: a review not
+	 * read yet (or not read at all) is a blind signature.
+	 */
+	const requestDoor = $derived(
+		reviewDoor(requestReview?.reviewState ?? null, requestReview?.review ?? null)
+	);
+	const linkDoor = $derived(reviewDoor(tx?.reviewState ?? null, tx?.review ?? null));
 	/** The link's transaction as the review draws it: the core reading of it. */
 	const linkShown = $derived<OutsideTxShown | null>(
 		tx
@@ -494,6 +506,7 @@
 					name: tx.name,
 					title: tx.title,
 					review: tx.review,
+					reviewState: tx.reviewState,
 					chainNonce: tx.members.nonce,
 					// r11 S4: the core's numbers it waits behind (`OutsideItem.waits_for`).
 					waitsFor: tx.item.waitsFor ?? []
@@ -693,6 +706,11 @@
 						shown={requestReview}
 						tx={entry.safeTx.tx as SafeTx}
 					/>
+					<ReviewStateNote
+						m={all.review.state}
+						door={requestDoor}
+						onRetry={() => act({ type: 'review_again' })}
+					/>
 				{:else if entry.safeTx && hashes}
 					<!-- The core reads it in a moment: never a reading of the page's own meanwhile. -->
 					<p class="waiting" aria-busy="true" data-testid="connect-request-reading">
@@ -723,10 +741,12 @@
 						>{m.decline}</Button
 					>
 					{#if !requestEnough && (entry.method !== 'eth_signTypedData_v4' || (entry.safeTx && hashes))}
+						<!-- §12: a multisig transaction goes to the wallet only once its review is read. -->
 						<Button
 							variant="value"
 							shape="rounded"
-							disabled={wrongAccount}
+							disabled={wrongAccount || (!!entry.safeTx && !requestDoor.enabled)}
+							testid="connect-request-sign"
 							onclick={() =>
 								act({ type: 'answer_request', session: entry.session, id: entry.id, go: true })}
 							>{entry.stage === 'fallback'
@@ -935,6 +955,14 @@
 			{#if linkShown}
 				<TxReview m={all} signing={data.signingMessages} shown={linkShown} tx={tx.tx as SafeTx} />
 			{/if}
+			{#if tx.item.status !== 'done'}
+				<!-- §12: its review being read, or not read — said, with Try again; nothing offered. -->
+				<ReviewStateNote
+					m={all.review.state}
+					door={linkDoor}
+					onRetry={() => act({ type: 'review_again' })}
+				/>
+			{/if}
 			<!-- §3.5: who can act for it on this network, as Vela judges it. -->
 			{#if gate.kind === 'refused'}
 				<AuthorityNotice
@@ -945,7 +973,7 @@
 				/>
 			{:else if gate.kind === 'risk'}
 				<AuthorityNotice m={all} kind="risk" findings={gate.findings as Finding[]} />
-			{:else if gate.kind === 'unchecked' && tx.item.status !== 'done'}
+			{:else if gate.kind === 'unchecked' && tx.item.status !== 'done' && tx.reviewState.kind === 'ready'}
 				<p class="error" role="alert" data-testid="outside-unchecked">
 					{fillTemplate(all.authority.signUnchecked, { network: chainName(tx.chainId) })}
 				</p>

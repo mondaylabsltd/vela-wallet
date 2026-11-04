@@ -429,6 +429,8 @@ fn follow_for(s: &mut State, account: MultisigAccount) {
         s.read_at = None;
         s.draft = None;
         s.reviews.clear();
+        s.review_states.clear();
+        s.review_blind.clear();
         s.previews.clear();
     }
     s.account = Some(account);
@@ -1270,15 +1272,25 @@ async fn read_linked(io: &Io<Event>, st: &Shared<State>) {
         return;
     };
     let key = format!("{chain_id}:{}", item.safe_tx_hash);
-    if lock(st).reviews.contains_key(&key) {
-        return;
-    }
-    let input = gather_review(io, st, &account, chain_id, &item.tx, &members, None).await;
-    let out = multisig_review::multisig_review(&input)
-        .ok()
-        .and_then(|r| serde_json::to_value(r).ok())
-        .unwrap_or(Value::Null);
-    lock(st).reviews.insert(key, out);
+    // §12: `loading` until read, bounded; read once (a sheet's `review` and
+    // `review_again` read it again).
+    let run = {
+        let mut s = lock(st);
+        if s.reviews.contains_key(&key) || s.reviewing.contains_key(&key) {
+            return;
+        }
+        s.review_states.insert(key.clone(), ReviewState::Loading);
+        start_review_run(&mut s, &key)
+    };
+    io.emit(Event::Changed);
+    let gathered = review_state::bounded(io, async {
+        let input = gather_review(io, st, &account, chain_id, &item.tx, &members, None).await;
+        multisig_review::multisig_review(&input)
+            .ok()
+            .and_then(|r| serde_json::to_value(r).ok())
+    })
+    .await;
+    keep_review(&mut lock(st), &key, run, gathered);
 }
 
 // ---------------------------------------------------------------------------

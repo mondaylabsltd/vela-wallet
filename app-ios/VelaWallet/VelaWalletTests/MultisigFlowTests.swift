@@ -361,8 +361,20 @@ final class MsSimWorld: MultisigPorts {
     func quoteCalls(_ op: [String: Any]) async -> [String: Any] {
         ["type": "quoted", "quote": ["kind": "quoted", "fee": ["token": NSNull(), "amount": "0x1"], "totalGas": "0x1", "executorDeployed": true]]
     }
-    func simulate(_ op: [String: Any]) async -> String? { nil }
-    func recipientFacts(_ op: [String: Any]) async -> (isContract: Bool?, firstTime: Bool?) { (false, false) }
+    /// §12: while set, a review's simulation and its recipients' facts are
+    /// not answered — the review stays `loading`, as on a slow network.
+    var holdReviews = false
+    private func held() async {
+        while holdReviews, !Task.isCancelled { try? await Task.sleep(nanoseconds: 5_000_000) }
+    }
+    func simulate(_ op: [String: Any]) async -> String? {
+        await held()
+        return nil
+    }
+    func recipientFacts(_ op: [String: Any]) async -> (isContract: Bool?, firstTime: Bool?) {
+        await held()
+        return (false, false)
+    }
     func userOpStatus(_ op: [String: Any]) async -> (status: String?, txHash: String?)? { ("pending", nil) }
     func wallet(method: String, params: Any) async throws -> Any {
         throw MultisigWalletRefusal(code: 4200, message: "no wallet in this world")
@@ -448,9 +460,22 @@ struct MultisigFlowTests {
         await Wait.until({ machine.proposalsView.draft != nil || (state().map { $0.kind != "working" } ?? false) },
                          orIdle: { machine.isIdle })
         guard machine.proposalsView.draft != nil else { return state() }
+        await reviewRead { machine.proposalsView }
         machine.dispatch(["type": "confirm_draft", "as_member": member])
         await Wait.until({ state().map { $0.kind != "working" } ?? false }, orIdle: { machine.isIdle })
         return state()
+    }
+
+    /// §12: the person presses "Propose and approve" only once the draft's
+    /// review is read — the sheet's door is shut until then (and the core
+    /// refuses `signing_unchecked` before it) — so a test waits for it as
+    /// they do: until it is `ready` or `failed` (the core bounds it).
+    static func reviewRead(_ view: () -> MsProposalsView) async {
+        await Wait.until {
+            guard let draft = view().draft else { return true }
+            guard let kind = draft.reviewState?.kind else { return false }
+            return kind != "loading"
+        }
     }
 
     private static func lower(_ value: Any?) -> String { (value as? String ?? "").lowercased() }
@@ -682,6 +707,7 @@ struct MultisigFlowTests {
         #expect(hub.proposalsView.action("propose")?.kind != "working", "waiting on the person, not working")
 
         // Proposed on its review, as that member: one passkey, the cancellation sent.
+        await Self.reviewRead { hub.proposalsView }
         hub.confirmDraft(as: first)
         let settled = await pressed.value
         #expect(settled?.kind == "done", "rejecting ended \(String(describing: settled?.raw))")
@@ -747,6 +773,7 @@ struct MultisigFlowTests {
         // Closed.
         world.passkeyAnswers = [["type": "passkey_cancelled"]]
         var pressed = await Self.pressReject(hub, transfer, as: owners[1])
+        await Self.reviewRead { hub.proposalsView }
         hub.confirmDraft(as: owners[1])
         var settled = await pressed.value
         #expect(settled?.kind != "done")
@@ -762,6 +789,7 @@ struct MultisigFlowTests {
         ]]
         pressed = await Self.pressReject(hub, transfer, as: owners[1])
         #expect(hub.rejectFailure(chainId: 100, safeTxHash: transfer.safeTxHash) == nil, "a new press starts clean")
+        await Self.reviewRead { hub.proposalsView }
         hub.confirmDraft(as: owners[1])
         settled = await pressed.value
         #expect(settled?.kind == "failed", "\(String(describing: settled?.raw))")
@@ -770,6 +798,117 @@ struct MultisigFlowTests {
         #expect(said?.tone == .danger)
         #expect(said?.text == words.t("proposal.reason.passkeyTimedOut"), "said: \(said?.text ?? "nothing")")
         #expect(hub.sheet == .proposal(chainId: 100, safeTxHash: transfer.safeTxHash))
+    }
+
+    // MARK: §12 — every review has a state; nothing is signed before it is read
+
+    /// The iOS lane's bug: the core draws the draft first and its review a
+    /// moment later, and "Propose and approve" was pressable in between
+    /// (`?? true`). Now: while it is read the sheet's door (the core's
+    /// `review.door`) is shut and says "Reading the transaction…"; pressed
+    /// anyway, the core's own backstop signs nothing (`signing_unchecked`);
+    /// read, it opens; "Try again" reads it again (shut meanwhile); then
+    /// proposed, with one passkey.
+    @Test func proposeIsShutWhileTheDraftsReviewIsReadAndOpensOnceReady() async throws {
+        let world = try MsSimWorld()
+        let (hub, _, _, owners) = try await Self.hubFollowing(world, salt: "0x61")
+        defer { hub.proposals.dispose(); hub.accounts.dispose(); hub.members.dispose() }
+        let words = MsWords(loc: hub.loc, hub: nil)
+
+        world.holdReviews = true
+        hub.proposals.dispatch(["type": "draft", "chain_id": 100, "proposal": [
+            "kind": "transfers", "transfers": [["token": NSNull(), "to": Self.bo, "amount": "1"]],
+        ]])
+        await Wait.until { hub.proposalsView.draft != nil }
+        let loading = try #require(hub.proposalsView.draft)
+        #expect(loading.reviewState?.kind == "loading", "drawn before its review: \(String(describing: loading.reviewState))")
+        let shut = MultisigDraftReviewSheet.door(loading)
+        #expect(shut.shows == .loading)
+        #expect(!shut.enabled, "Propose and approve before its review is blind signing")
+        #expect(words.t("review.state.loading") == "Reading the transaction…")
+
+        // A shell that let it be pressed: the core signs nothing.
+        hub.confirmDraft(as: owners[0])
+        await Wait.until({ hub.proposalsView.action("propose").map { $0.kind != "working" } ?? false },
+                         orIdle: { hub.proposals.isIdle })
+        #expect(hub.proposalsView.action("propose")?.kind == "signingUnchecked",
+                "\(String(describing: hub.proposalsView.action("propose")?.raw))")
+        #expect(world.passkeys.isEmpty && world.submits.isEmpty, "nothing signed, nothing sent")
+        #expect(hub.proposalsView.draft != nil, "the draft is still there to review")
+
+        // Read: the door opens on the review's own rule.
+        world.holdReviews = false
+        await Self.reviewRead { hub.proposalsView }
+        let ready = try #require(hub.proposalsView.draft)
+        #expect(ready.reviewState?.kind == "ready")
+        #expect(!ready.review.isNull)
+        #expect(MultisigDraftReviewSheet.door(ready).enabled)
+
+        // "Try again" (`review_again`, no fields: the draft's): read again, shut meanwhile.
+        world.holdReviews = true
+        hub.sendProposal(["type": "review_again"])
+        await Wait.until { hub.proposalsView.draft?.reviewState?.kind == "loading" }
+        let again = try #require(hub.proposalsView.draft)
+        #expect(!MultisigDraftReviewSheet.door(again).enabled, "shut while it is read again")
+        world.holdReviews = false
+        await Self.reviewRead { hub.proposalsView }
+        let reread = try #require(hub.proposalsView.draft)
+        #expect(reread.reviewState?.kind == "ready")
+        #expect(MultisigDraftReviewSheet.door(reread).enabled)
+
+        hub.confirmDraft(as: owners[0])
+        await Wait.until({ hub.proposalsView.action("propose").map { $0.kind != "working" } ?? false },
+                         orIdle: { hub.proposals.isIdle })
+        #expect(hub.proposalsView.action("propose")?.kind == "done",
+                "\(String(describing: hub.proposalsView.action("propose")?.raw))")
+        #expect(world.passkeys.count == 1, "one passkey, after its review")
+    }
+
+    /// A proposal's review: one not in the list is `failed {gone}` — said,
+    /// shut, with "Try again"; one read again (`review_again` with its chain
+    /// and hash) is `loading` — Approve shut — until it is `ready` again.
+    @Test func approveIsShutWhileAProposalsReviewIsReadAndAFailedOneOffersTryAgain() async throws {
+        let world = try MsSimWorld()
+        let (hub, _, owners, transfer) = try await Self.rejecting(world, salt: "0x62")
+        defer { hub.proposals.dispose(); hub.accounts.dispose(); hub.members.dispose() }
+        let words = MsWords(loc: hub.loc, hub: nil)
+        func model() throws -> MsProposalModel {
+            let item = try #require(hub.proposalsView.items.first { $0.safeTxHash == transfer.safeTxHash })
+            return MsProposalModel(item: item, view: hub.proposalsView, words: words, account: nil)
+        }
+        func kind() -> String? {
+            hub.proposalsView.lookup(hub.proposalsView.reviewStates, chainId: 100, hash: transfer.safeTxHash)?.kind
+        }
+
+        // Proposed from its review: that review is its own, read.
+        hub.sendProposal(["type": "review", "chain_id": 100, "safe_tx_hash": transfer.safeTxHash, "blind": false])
+        await Wait.until({ kind() == "ready" }, orIdle: { hub.proposals.isIdle })
+        #expect(try model().signable, "owners[1] may approve it once it is read")
+        #expect(try model().canApprove.contains { $0.caseInsensitiveCompare(owners[1]) == .orderedSame })
+
+        // "Try again" on it: loading at once, Approve shut, then ready again.
+        world.holdReviews = true
+        hub.sendProposal(["type": "review_again", "chain_id": 100, "safe_tx_hash": transfer.safeTxHash])
+        await Wait.until { kind() == "loading" }
+        #expect(try model().reviewState == .loading)
+        #expect(try !model().signable, "Approve while its review is read again is blind")
+        #expect(try model().door.shows == .loading)
+        world.holdReviews = false
+        await Wait.until { kind() == "ready" }
+        #expect(try model().signable)
+
+        // One no longer in the list: failed, with its reason and Try again.
+        let gone = "0x" + String(repeating: "de", count: 32)
+        hub.sendProposal(["type": "review", "chain_id": 100, "safe_tx_hash": gone, "blind": false])
+        await Wait.until {
+            hub.proposalsView.lookup(hub.proposalsView.reviewStates, chainId: 100, hash: gone)?.kind == "failed"
+        }
+        let state = hub.proposalsView.lookup(hub.proposalsView.reviewStates, chainId: 100, hash: gone)
+        #expect(state?["reason_key"]?.string == "home.multisig.review.state.gone")
+        let door = MsRules.reviewDoor(state: state, review: nil)
+        #expect(door.shows == .failed && !door.enabled && door.retry)
+        #expect(MsReviewPending.failedLine(door, words: words)
+                == "\(words.t("review.state.gone")) \(words.t("review.state.blocked"))")
     }
 
     // MARK: a review swiped away — withdrawn at once
@@ -816,6 +955,7 @@ struct MultisigFlowTests {
         // Again, and proposed on its review this time.
         sending = await send()
         #expect(hub.sheet == .review(chainId: 100), "its review is up again")
+        await Self.reviewRead { hub.proposalsView }
         hub.confirmDraft(as: owners[0])
         let proposed = await sending.value
         #expect(proposed["type"] as? String == "proposed", "\(proposed)")

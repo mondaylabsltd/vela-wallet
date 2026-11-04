@@ -778,6 +778,14 @@
           "decimalsLine": "{{token}} didn't say how many decimals it has, so its amounts are shown in base units.",
           "ownTokenLine": "This sends tokens to the token's own contract ({{token}}). They'd be lost.",
           "blindLine": "Vela can't read what this call does. Approve it only if you know exactly what it is."
+        },
+        "state": {
+          "loading": "Reading the transaction…",
+          "blocked": "Nothing can be signed until it's read.",
+          "timedOut": "Couldn't read it in time.",
+          "unreadable": "Couldn't read this transaction.",
+          "gone": "This transaction is no longer in the list.",
+          "tryAgain": "Try again"
         }
       },
       "notify": {

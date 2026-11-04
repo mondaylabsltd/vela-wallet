@@ -710,6 +710,14 @@
      "decimalsLine": "{{token}} no indicó cuántos decimales tiene, así que sus montos se muestran en unidades base.",
      "ownTokenLine": "Esto envía tokens al propio contrato del token ({{token}}). Se perderían.",
      "blindLine": "Vela no puede leer qué hace esta llamada. Apruébala solo si sabes exactamente qué es."
+    },
+    "state": {
+     "loading": "Leyendo la transacción…",
+     "blocked": "No se puede firmar nada hasta leerla.",
+     "timedOut": "No se pudo leer a tiempo.",
+     "unreadable": "No se pudo leer esta transacción.",
+     "gone": "Esta transacción ya no está en la lista.",
+     "tryAgain": "Intentar de nuevo"
     }
    },
    "notify": {

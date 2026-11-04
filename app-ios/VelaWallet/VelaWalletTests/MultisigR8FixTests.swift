@@ -48,6 +48,12 @@ struct MultisigR8FixTests {
     private func view(item: String, standing: String = #"{"kind":"progress","approved":1,"threshold":2}"#,
                       replacing: [String: String] = [:], extra: String = "") throws -> MsProposalsView {
         var json = MultisigViewsTests.proposalsJson(item: item, standing: standing, extra: extra)
+        var replacing = replacing
+        // §12: a review the test hands in was read (`ready`), unless the
+        // test says where it stands.
+        if replacing["reviews"] != nil, replacing["review_states"] == nil {
+            replacing["review_states"] = #"{"100:\#(Self.hash)":{"kind":"ready"}}"#
+        }
         for (key, value) in replacing {
             json = json.replacingOccurrences(of: "\"\(key)\":{}", with: "\"\(key)\":\(value)")
         }
@@ -72,7 +78,7 @@ struct MultisigR8FixTests {
 
     @Test func nothingIsSignableWhileTheReviewIsOut() throws {
         let model = try model(view(item: MultisigViewsTests.item(approved: 1, status: "pending", canApprove: [Self.one])))
-        #expect(model.reviewState == .holding)
+        #expect(model.reviewState == .loading)
         #expect(model.reviewHolding)
         #expect(!model.signable, "an approval before the review says what is signed is blind")
         #expect(!model.signAnyway)
@@ -93,8 +99,7 @@ struct MultisigR8FixTests {
             loc.t("componentsUi.signing.simUnavailableWarning"),
             words.t("review.reading.blindLine"),
         ])
-        #expect(MsSignRule(review: model.review) == MsSignRule(review: model.review))
-        #expect(MsSignRule(review: model.review).anyway)
+        #expect(model.door.enabled && model.door.anyway, "the core's door says anyway")
     }
 
     @Test func aReviewThatRefusesOffersNoSignatureAndNoOverride() throws {
@@ -102,9 +107,9 @@ struct MultisigR8FixTests {
             item: MultisigViewsTests.item(approved: 1, status: "pending", canApprove: [Self.one]),
             replacing: ["reviews": Self.review(allowed: false, anyway: false, concerns: #"[{"kind":"stateChange"}]"#)]
         ))
-        #expect(!model.signAllowed)
         #expect(!model.signable)
-        #expect(!MsSignRule(review: model.review).allowed)
+        #expect(model.door.shows == .review, "drawn, shut, no override")
+        #expect(!model.door.anyway)
     }
 
     @Test func aPlainReviewSignsPlainly() throws {
@@ -302,12 +307,17 @@ struct MultisigR8FixTests {
         #expect(unread.reviewUnread)
         let failed = try model(view(
             item: MultisigViewsTests.item(approved: 1, status: "pending", canApprove: [Self.one]),
-            replacing: ["reviews": #"{"100:\#(Self.hash)":null}"#]
+            replacing: [
+                "reviews": #"{"100:\#(Self.hash)":null}"#,
+                "review_states": #"{"100:\#(Self.hash)":{"kind":"failed","reason_key":"home.multisig.review.state.timedOut"}}"#,
+            ]
         ))
+        // §12: one not read at all is the core's `failed` (bounded by the
+        // core, not the sheet): said, shut, and asked again only on the
+        // person's "Try again" — never flipped back to loading behind them.
         #expect(failed.reviewState == .failed)
-        #expect(failed.reviewUnread)
-        // Bounded by the machine's own cap on a look (`PREVIEW_CAP_MS`).
-        #expect(MultisigProposalSheet.reviewWaitCap == .seconds(15))
+        #expect(!failed.reviewUnread)
+        #expect(!failed.signable)
         #expect(MultisigProposalSheet.reviewRetrySeconds < MultisigProposalSheet.reviewFreshSeconds)
     }
 

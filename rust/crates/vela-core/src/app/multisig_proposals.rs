@@ -53,6 +53,7 @@ use ts_rs::TS;
 
 use super::multisig_gather;
 use super::multisig_outside::reading::TokenFacts;
+use super::multisig_review_state::{self as review_state, ReviewState};
 use super::multisig_shell::{
     self as shell, keys, local_owners, lock, same_address, AccountUpdate, ApprovalRoute, Chain,
     ChainMembers, Io, LocalAccount, MultisigAccount, MultisigEffect, MultisigOperation,
@@ -569,6 +570,16 @@ pub enum Event {
         #[serde(default)]
         blind: bool,
     },
+    /// §12: the person's "Try again" on a review that failed (or any review
+    /// read again from scratch): `loading` at once, then `ready` or
+    /// `failed`. Both fields: that proposal's review; neither: the draft's.
+    ReviewAgain {
+        #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(type = "number | null"))]
+        chain_id: Option<u64>,
+        #[serde(default)]
+        safe_tx_hash: Option<String>,
+    },
     /// Draw a new proposal at the next free nonce, with its review — no
     /// passkey yet (`reviewFirst`).
     Draft {
@@ -859,6 +870,10 @@ pub struct DraftView {
     /// The one review (`multisig_review`), when gathered.
     #[cfg_attr(feature = "bindings", ts(type = "unknown"))]
     pub review: Option<Value>,
+    /// §12: where `review` stands — "Propose and approve" (and every other
+    /// button that signs) is enabled only when `ready` and the review's sign
+    /// rule allows it (`review.door`).
+    pub review_state: ReviewState,
     /// The members here that could propose it.
     pub members_here: Vec<String>,
     /// The one offered first (picked last time, else the first).
@@ -903,6 +918,10 @@ pub struct ProposalsView {
     /// The one review per `<chainId>:<safeTxHash>`.
     #[cfg_attr(feature = "bindings", ts(type = "Record<string, unknown>"))]
     pub reviews: BTreeMap<String, Value>,
+    /// §12: where each review stands, per `<chainId>:<safeTxHash>` (the keys
+    /// of `reviews`). Missing: not asked yet — drawn as `loading`. Approve
+    /// and execute are enabled only when `ready` (`review.door`).
+    pub review_states: BTreeMap<String, ReviewState>,
     /// The execution preview per executor (`preflight`'s one look per
     /// execution and executor), keyed
     /// `<chainId>:<safeTxHash lowercase>:<executor lowercase>`.
@@ -1019,6 +1038,12 @@ struct Draft {
     tx: SafeTx,
     item: ProposalItem,
     review: Option<Value>,
+    /// §12: where `review` stands.
+    review_state: ReviewState,
+    /// The site that asked (a dApp's calls), for the review read again.
+    origin: Option<String>,
+    /// The review's read under way (`review_again` starts another).
+    review_run: u64,
 }
 
 #[derive(Default)]
@@ -1064,6 +1089,15 @@ pub struct State {
     draft_round: u64,
     actions: BTreeMap<String, ActionState>,
     reviews: BTreeMap<String, Value>,
+    /// §12: where each review stands (the keys of `reviews`).
+    review_states: BTreeMap<String, ReviewState>,
+    /// The `blind` each review was last asked with (read again the same way).
+    review_blind: BTreeMap<String, bool>,
+    /// The reviews being read, and which read each is: one at a time per
+    /// review (a shell asking again never pushes the bound back), and only
+    /// the latest (`review_again`) is kept.
+    reviewing: BTreeMap<String, u64>,
+    review_seq: u64,
     previews: BTreeMap<String, Value>,
     /// Each executor's last look ([`preview_key`]): when it was taken, what it said.
     preview_plans: BTreeMap<String, (f64, Preview)>,
@@ -1308,6 +1342,8 @@ impl App for MultisigProposals {
                         s.read_at = None;
                         s.draft = None;
                         s.reviews.clear();
+                        s.review_states.clear();
+                        s.review_blind.clear();
                         s.previews.clear();
                         s.signers_asked.clear();
                         s.signer_reads.clear();
@@ -1402,24 +1438,63 @@ impl App for MultisigProposals {
                 chain_id,
                 safe_tx_hash,
                 blind,
-            } => flow(model, move |io, st| async move {
-                // The followed list's proposal, or a link's read-only one.
-                let found = flows::find_item(&lock(&st), chain_id, &safe_tx_hash);
-                let Some((item, chain, account)) = found else {
-                    return;
+            } => {
+                // §12: `loading` at once (a review already read stays drawn
+                // while it is read again); one read at a time per review, so
+                // a shell asking again never pushes its bound back.
+                let run = {
+                    let mut s = lock(&model.state);
+                    let key = review_key_of(&s, chain_id, &safe_tx_hash);
+                    s.review_blind.insert(key.clone(), blind);
+                    if s.reviewing.contains_key(&key) {
+                        None
+                    } else {
+                        if !s.review_states.get(&key).is_some_and(ReviewState::is_ready) {
+                            s.review_states.insert(key.clone(), ReviewState::Loading);
+                        }
+                        Some(start_review_run(&mut s, &key))
+                    }
                 };
-                let mut input =
-                    gather_review(&io, &st, &account, chain_id, &item.tx, &chain.members, None)
-                        .await;
-                input.blind = blind;
-                let out = multisig_review::multisig_review(&input)
-                    .ok()
-                    .and_then(|r| serde_json::to_value(r).ok())
-                    .unwrap_or(Value::Null);
-                lock(&st)
-                    .reviews
-                    .insert(format!("{chain_id}:{}", item.safe_tx_hash), out);
-            }),
+                let Some(run) = run else {
+                    return render();
+                };
+                flow(model, move |io, st| async move {
+                    review_proposal(&io, &st, chain_id, &safe_tx_hash, blind, run).await;
+                })
+            }
+            Event::ReviewAgain {
+                chain_id: Some(chain_id),
+                safe_tx_hash: Some(safe_tx_hash),
+            } => {
+                let (run, blind) = {
+                    let mut s = lock(&model.state);
+                    let key = review_key_of(&s, chain_id, &safe_tx_hash);
+                    s.review_states.insert(key.clone(), ReviewState::Loading);
+                    let blind = s.review_blind.get(&key).copied().unwrap_or(false);
+                    (start_review_run(&mut s, &key), blind)
+                };
+                flow(model, move |io, st| async move {
+                    review_proposal(&io, &st, chain_id, &safe_tx_hash, blind, run).await;
+                })
+            }
+            Event::ReviewAgain { .. } => {
+                let again = {
+                    let mut s = lock(&model.state);
+                    let round = s.draft_round;
+                    s.draft.as_mut().map(|d| {
+                        d.review = None;
+                        d.review_state = ReviewState::Loading;
+                        d.review_run += 1;
+                        (round, d.review_run)
+                    })
+                };
+                let Some((round, run)) = again else {
+                    return render();
+                };
+                flow(model, move |io, st| async move {
+                    review_draft(&io, &st, round, run).await;
+                })
+            }
             Event::ReadSigners {
                 chain_id,
                 safe_tx_hash,
@@ -1641,12 +1716,14 @@ impl App for MultisigProposals {
                     execute_now: !d.item.can_execute.is_empty() && flows::reviewing_request(&s),
                     item: d.item.clone(),
                     review: d.review.clone(),
+                    review_state: d.review_state.clone(),
                     members_here: here.into_iter().map(|o| o.address).collect(),
                     default_member,
                 }
             }),
             actions: s.actions.clone(),
             reviews: s.reviews.clone(),
+            review_states: s.review_states.clone(),
             previews: s.previews.clone(),
             executions: s.verdicts.clone(),
             frozen: more.frozen,
@@ -2996,20 +3073,141 @@ async fn draft(io: &Io<Event>, st: &Shared<State>, chain_id: u64, kind: Proposal
             tx: tx.clone(),
             item,
             review: None,
+            review_state: ReviewState::Loading,
+            origin,
+            review_run: 0,
         });
         s.actions.remove("propose");
     }
     io.emit(Event::Changed);
-    let input = gather_review(io, st, &account, chain_id, &tx, &read.state.members, origin).await;
-    let out = multisig_review::multisig_review(&input)
-        .ok()
-        .and_then(|r| serde_json::to_value(r).ok());
+    review_draft(io, st, round, 0).await;
+}
+
+/// §12: the draft's one review, bounded ([`review_state::bounded`]): kept
+/// only for the draft and the read it was asked for.
+async fn review_draft(io: &Io<Event>, st: &Shared<State>, round: u64, run: u64) {
+    let asked = {
+        let s = lock(st);
+        s.draft
+            .as_ref()
+            .filter(|d| s.draft_round == round && d.review_run == run)
+            .zip(s.account.clone())
+            .map(|(d, account)| (account, d.chain.clone(), d.tx.clone(), d.origin.clone()))
+    };
+    let Some((account, chain, tx, origin)) = asked else {
+        return;
+    };
+    let chain_id = chain.chain_id;
+    let gathered = review_state::bounded(io, async {
+        let input = gather_review(io, st, &account, chain_id, &tx, &chain.members, origin).await;
+        multisig_review::multisig_review(&input)
+            .ok()
+            .and_then(|r| serde_json::to_value(r).ok())
+    })
+    .await;
     let mut s = lock(st);
-    if s.draft_round == round {
-        if let Some(d) = s.draft.as_mut() {
-            d.review = out;
+    if s.draft_round != round {
+        return;
+    }
+    if let Some(d) = s.draft.as_mut().filter(|d| d.review_run == run) {
+        match gathered {
+            Ok(review) => {
+                d.review_state = ReviewState::of(review.as_ref());
+                d.review = review;
+            }
+            Err(failed) => {
+                d.review = None;
+                d.review_state = failed;
+            }
         }
     }
+}
+
+/// The key a proposal's review is kept under (`<chainId>:<safeTxHash>`, the
+/// item's own spelling), also for one no longer listed.
+fn review_key_of(s: &State, chain_id: u64, hash: &str) -> String {
+    flows::find_item(s, chain_id, hash).map_or_else(
+        || format!("{chain_id}:{}", hash.to_ascii_lowercase()),
+        |(item, _, _)| format!("{chain_id}:{}", item.safe_tx_hash),
+    )
+}
+
+/// A new read of the review under `key`: the one kept from now on.
+pub(crate) fn start_review_run(s: &mut State, key: &str) -> u64 {
+    s.review_seq += 1;
+    let run = s.review_seq;
+    s.reviewing.insert(key.to_owned(), run);
+    run
+}
+
+/// §12: a proposal's one review (its sheet), bounded. `ready` with the
+/// review; else `failed` with why — unless a review read earlier is still
+/// drawn, which a read that failed now does not unsay (the gate reads the
+/// chain again before any passkey).
+async fn review_proposal(
+    io: &Io<Event>,
+    st: &Shared<State>,
+    chain_id: u64,
+    hash: &str,
+    blind: bool,
+    run: u64,
+) {
+    // The followed list's proposal, or a link's read-only one.
+    let found = flows::find_item(&lock(st), chain_id, hash);
+    let (key, gathered) = match found {
+        None => (
+            format!("{chain_id}:{}", hash.to_ascii_lowercase()),
+            Err(ReviewState::failed(review_state::REASON_GONE)),
+        ),
+        Some((item, chain, account)) => {
+            let gathered = review_state::bounded(io, async {
+                let mut input =
+                    gather_review(io, st, &account, chain_id, &item.tx, &chain.members, None).await;
+                input.blind = blind;
+                multisig_review::multisig_review(&input)
+                    .ok()
+                    .and_then(|r| serde_json::to_value(r).ok())
+            })
+            .await;
+            (format!("{chain_id}:{}", item.safe_tx_hash), gathered)
+        }
+    };
+    keep_review(&mut lock(st), &key, run, gathered);
+}
+
+/// A review's read landed: kept when it is the latest one asked.
+pub(crate) fn keep_review(
+    s: &mut State,
+    key: &str,
+    run: u64,
+    gathered: Result<Option<Value>, ReviewState>,
+) {
+    if s.reviewing.get(key) != Some(&run) {
+        return;
+    }
+    s.reviewing.remove(key);
+    let failed = match gathered {
+        Ok(Some(review)) => {
+            s.reviews.insert(key.to_owned(), review);
+            s.review_states.insert(key.to_owned(), ReviewState::Ready);
+            return;
+        }
+        Ok(None) => ReviewState::failed(review_state::REASON_UNREADABLE),
+        Err(failed) => failed,
+    };
+    if s.review_states.get(key).is_some_and(ReviewState::is_ready) {
+        return;
+    }
+    s.reviews.insert(key.to_owned(), Value::Null);
+    s.review_states.insert(key.to_owned(), failed);
+}
+
+/// §12, the core's own backstop: a review of `hash` that is not `ready`
+/// signs nothing — whatever a shell let the person press.
+fn review_ready(s: &State, chain_id: u64, hash: &str) -> bool {
+    s.review_states
+        .get(&review_key_of(s, chain_id, hash))
+        .is_some_and(ReviewState::is_ready)
 }
 
 async fn confirm_draft(
@@ -3025,6 +3223,11 @@ async fn confirm_draft(
                 detail: "no draft".to_owned(),
             };
         };
+        // §12: never proposed (nor signed) on a review the person was not
+        // shown — still read, or not read at all.
+        if !d.review_state.is_ready() {
+            return ActionState::SigningUnchecked;
+        }
         let Some(account) = s.account.clone() else {
             return ActionState::Failed {
                 detail: "no multisig shown".to_owned(),
@@ -3118,6 +3321,10 @@ async fn approve(
             detail: "nothing to approve".to_owned(),
         };
     };
+    // §12: never signed on a review the person was not shown.
+    if !review_ready(&lock(st), chain_id, hash) {
+        return ActionState::SigningUnchecked;
+    }
     let anyway = match authorize_signing(io, st, &account, chain_id, &item.tx).await {
         Ok(anyway) => anyway,
         Err(Stop::State(s)) => return s,
@@ -3696,7 +3903,15 @@ fn propose_draft(model: &Model, as_member: Option<String>, then_execute: bool) -
             let mut s = lock(&st);
             if s.draft_round == round {
                 if matches!(outcome, ActionState::Done { .. }) {
-                    s.draft = None;
+                    // §12: the review it was proposed from is its review now
+                    // (read, `ready`): its execution signs from it.
+                    if let Some(d) = s.draft.take() {
+                        if let (ReviewState::Ready, Some(review)) = (&d.review_state, d.review) {
+                            let key = format!("{}:{}", d.chain.chain_id, d.item.safe_tx_hash);
+                            s.reviews.insert(key.clone(), review);
+                            s.review_states.insert(key, ReviewState::Ready);
+                        }
+                    }
                 }
                 s.actions.insert("propose".to_owned(), outcome.clone());
             }
@@ -3857,6 +4072,10 @@ async fn execute(
             detail: "nothing to execute".to_owned(),
         };
     };
+    // §12: never signed on a review the person was not shown.
+    if !review_ready(&lock(st), chain_id, hash) {
+        return ActionState::SigningUnchecked;
+    }
     if input
         .item
         .can_execute

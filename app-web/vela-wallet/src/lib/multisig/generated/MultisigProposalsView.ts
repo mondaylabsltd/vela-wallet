@@ -10,6 +10,7 @@ import type { MultisigLinkedView } from "./MultisigLinkedView";
 import type { MultisigMissingChain } from "./MultisigMissingChain";
 import type { MultisigOutboxEntry } from "./MultisigOutboxEntry";
 import type { MultisigProposalItem } from "./MultisigProposalItem";
+import type { MultisigReviewState } from "./MultisigReviewState";
 import type { MultisigRuleChip } from "./MultisigRuleChip";
 import type { MultisigStanding } from "./MultisigStanding";
 import type { MultisigTimelineStep } from "./MultisigTimelineStep";
@@ -49,6 +50,12 @@ actions: { [key in string]: MultisigActionState },
  * The one review per `<chainId>:<safeTxHash>`.
  */
 reviews: Record<string, unknown>, 
+/**
+ * §12: where each review stands, per `<chainId>:<safeTxHash>` (the keys
+ * of `reviews`). Missing: not asked yet — drawn as `loading`. Approve
+ * and execute are enabled only when `ready` (`review.door`).
+ */
+review_states: { [key in string]: MultisigReviewState }, 
 /**
  * The execution preview per executor (`preflight`'s one look per
  * execution and executor), keyed

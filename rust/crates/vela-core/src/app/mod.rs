@@ -83,6 +83,8 @@ pub mod multisig_outside;
 /// What waits per multisig, and a proposal's story (presence, timeline).
 pub mod multisig_presence;
 pub mod multisig_proposals;
+/// Where a reviewed thing's one review stands: loading, ready, failed (§12).
+pub mod multisig_review_state;
 /// The multisig machines (F0.4): one shell vocabulary, four machines.
 pub mod multisig_shell;
 /// What a multisig member is and how it signs: one rule over facts, for every machine.

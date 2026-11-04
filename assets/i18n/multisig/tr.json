@@ -704,6 +704,14 @@
      "decimalsLine": "{{token}} kaç ondalığı olduğunu söylemedi; tutarları temel birimle gösteriliyor.",
      "ownTokenLine": "Bu, tokenleri tokenin kendi sözleşmesine ({{token}}) gönderir. Kaybolurlar.",
      "blindLine": "Vela bu çağrının ne yaptığını okuyamıyor. Yalnızca ne olduğunu tam olarak biliyorsan onayla."
+    },
+    "state": {
+     "loading": "İşlem okunuyor…",
+     "blocked": "Okunana kadar hiçbir şey imzalanamaz.",
+     "timedOut": "Zamanında okunamadı.",
+     "unreadable": "Bu işlem okunamadı.",
+     "gone": "Bu işlem artık listede değil.",
+     "tryAgain": "Tekrar dene"
     }
    },
    "notify": {

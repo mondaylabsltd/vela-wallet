@@ -8,6 +8,42 @@ import uniffi.vela_core_uniffi.multisigCall
 import uniffi.vela_core_uniffi.multisigLinkCall
 
 /**
+ * §12: the core's sign door over one review (`MultisigSignDoor`): what the
+ * sheet draws in the review's place ([shows]: `loading`, `review`,
+ * `failed`), whether the button may be pressed ([enabled]), whether it goes
+ * through the "… anyway" step ([anyway]), and, failed, the reason's corpus
+ * key and a "Try again" ([retry], `review_again`). Read, never re-derived.
+ */
+data class MsSignDoor(
+    val shows: String,
+    val enabled: Boolean,
+    val anyway: Boolean,
+    val reasonKey: String?,
+    val retry: Boolean,
+) {
+    val loading: Boolean get() = shows != SHOWS_REVIEW && shows != SHOWS_FAILED
+    val failed: Boolean get() = shows == SHOWS_FAILED
+    val showsReview: Boolean get() = shows == SHOWS_REVIEW
+
+    companion object {
+        const val SHOWS_LOADING = "loading"
+        const val SHOWS_REVIEW = "review"
+        const val SHOWS_FAILED = "failed"
+
+        /** Nothing read yet, or no answer from the core: the placeholder, the button shut. */
+        val Shut = MsSignDoor(SHOWS_LOADING, enabled = false, anyway = false, reasonKey = null, retry = false)
+
+        fun of(e: JsonElement?): MsSignDoor = if (e == null) Shut else MsSignDoor(
+            shows = e["shows"].str ?: SHOWS_LOADING,
+            enabled = e["enabled"].bool == true,
+            anyway = e["anyway"].bool == true,
+            reasonKey = e["reason_key"].str,
+            retry = e["retry"].bool == true,
+        )
+    }
+}
+
+/**
  * The multisig's pure rules, asked one at a time — through the link door
  * (`multisigLinkCall`, the web's `multisigLinkCall`: the link codec, row
  * ids, amounts in base units, member labels and kinds, the order networks
@@ -116,6 +152,18 @@ object MsRules {
 
     /** Whether [hash] (a URL fragment, with or without `#`) is a multisig link. */
     fun isMultisigLink(hash: String): Boolean = call("isMultisigLink", mapOf("hash" to hash)).bool ?: false
+
+    // -- the sign door (§12) ---------------------------------------------------
+
+    /**
+     * The one rule a sign / propose / approve / execute button follows
+     * (`review.door {state?, review?}`): enabled only when the review's
+     * state is `ready` and its own sign rule allows it. [state] `null` is
+     * not asked yet (`loading`). A question the core could not answer is a
+     * shut door ([MsSignDoor.Shut]) — never "allowed" by default.
+     */
+    fun reviewDoor(state: JsonElement?, review: JsonElement?): MsSignDoor =
+        MsSignDoor.of(call("review.door", mapOf("state" to state, "review" to review)))
 
     // -- names and networks (`multisig_rules`) --------------------------------
 

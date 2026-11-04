@@ -20,13 +20,14 @@ use vela_core::app::multisig_outside::session::SessionOutcome;
 use vela_core::app::multisig_proposals::{ActionState, Event, MultisigProposals, ProposalKind};
 use vela_core::app::multisig_shell::{MultisigAccount, Notice};
 use vela_core::multisig::{self, EcdsaApproval, Transfer};
-use world::{eoa, eoa_sign, fixture, genesis, settle, World, SERVICE};
+use world::{eoa, eoa_sign, fixture, genesis, settle_reads_first, World, SERVICE};
 
 type Sut = DomainDriver<MultisigProposals>;
 
 fn run(sut: &mut Sut, world: &mut World, event: Event) {
     sut.dispatch(event);
-    let answered = settle(sut, world, 20_000);
+    // A shell's clock: a bound (the review's) runs out after the reads it bounds.
+    let answered = settle_reads_first(sut, world, 20_000);
     assert!(answered < 20_000, "the machine never settled");
 }
 

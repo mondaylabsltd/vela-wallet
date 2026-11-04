@@ -381,13 +381,15 @@ class MultisigHub(
      * drawn with its review first (`draft`); the person confirms it on the
      * review sheet (`confirm_draft`). Answers once the machine settled it
      * (`done`: its safeTxHash) or why not — the action state, `kind` tagged.
+     *
+     * §12: there is no path that confirms a draft without its review sheet —
+     * the sheet's button is the core's sign door (`review.door`), and the
+     * core refuses (`signingUnchecked`) a draft whose review is not `ready`.
      */
     suspend fun propose(
         chainId: Int,
         proposal: Map<String, Any?>,
         address: String? = null,
-        review: Boolean = true,
-        asMember: String? = null,
     ): JsonElement? {
         if (address != null && !address.equals(followed, ignoreCase = true)) {
             record(address)?.let { rec ->
@@ -405,26 +407,20 @@ class MultisigHub(
             if (tagged.kind == "working") null else tagged
         }
         if (drafted.kind != DRAWN) return drafted
-        if (review) {
-            drafting.value = chainId
-            reviewReturn = sheet.value
-            sheet.value = MultisigSheet.Review(chainId)
-            try {
-                // The person's word on its review: confirmed (working), or withdrawn.
-                val asked: JsonElement? = proposals.until { view ->
-                    val tagged = state(view)
-                    if (tagged.kind == "working" || view["draft"] !is JsonObject) tagged ?: cancelled else null
-                }
-                if (sheet.value == MultisigSheet.Review(chainId)) sheet.value = reviewReturn
-                reviewReturn = null
-                if (asked.kind != "working" && asked.kind != "done") return asked
-            } finally {
-                if (drafting.value == chainId) drafting.value = null
+        drafting.value = chainId
+        reviewReturn = sheet.value
+        sheet.value = MultisigSheet.Review(chainId)
+        try {
+            // The person's word on its review: confirmed (working), or withdrawn.
+            val asked: JsonElement? = proposals.until { view ->
+                val tagged = state(view)
+                if (tagged.kind == "working" || view["draft"] !is JsonObject) tagged ?: cancelled else null
             }
-        } else {
-            // A cancellation asked from its sheet: signed at once, as [asMember] —
-            // the waits below read only views from after it.
-            proposals.request(ev("confirm_draft", "as_member" to asMember), 30_000) { true }
+            if (sheet.value == MultisigSheet.Review(chainId)) sheet.value = reviewReturn
+            reviewReturn = null
+            if (asked.kind != "working" && asked.kind != "done") return asked
+        } finally {
+            if (drafting.value == chainId) drafting.value = null
         }
         // No member here: an outside member's wallet proposes it — its answer settles it.
         val done: JsonElement? = proposals.until { view ->

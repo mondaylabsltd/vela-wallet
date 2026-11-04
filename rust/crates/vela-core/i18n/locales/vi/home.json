@@ -778,6 +778,14 @@
           "decimalsLine": "{{token}} không cho biết số chữ số thập phân, nên số tiền hiển thị theo đơn vị cơ sở.",
           "ownTokenLine": "Lệnh này gửi token vào chính hợp đồng của token ({{token}}). Số token đó sẽ mất.",
           "blindLine": "Vela không đọc được lệnh gọi này làm gì. Chỉ phê duyệt nếu bạn biết chính xác nó là gì."
+        },
+        "state": {
+          "loading": "Đang đọc giao dịch…",
+          "blocked": "Không thể ký gì cho đến khi đọc xong.",
+          "timedOut": "Không đọc kịp thời.",
+          "unreadable": "Không đọc được giao dịch này.",
+          "gone": "Giao dịch này không còn trong danh sách.",
+          "tryAgain": "Thử lại"
         }
       },
       "notify": {

@@ -203,6 +203,9 @@ final class MultisigHermeticUITests: XCTestCase {
         propose.tap()
         // The review first (§3.6), then one passkey.
         XCTAssertTrue(element(app, "multisig.draft.propose").waitForExistence(timeout: 60), "no review before the passkey")
+        // §12: shut until its review is read (the core's `review.door`).
+        expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: element(app, "multisig.draft.propose"))
+        waitForExpectations(timeout: 60)
         XCTAssertTrue(world.mailbox.isEmpty, "something reached the mailbox before the review was confirmed")
         shot(app, "hermetic-draft-review")
         tap(app, "multisig.draft.propose")
@@ -262,6 +265,9 @@ final class MultisigHermeticUITests: XCTestCase {
         // Proposed again, on its review this time: it goes.
         again.tap()
         XCTAssertTrue(element(app, "multisig.draft.propose").waitForExistence(timeout: 60), "no review the second time")
+        // §12: shut until its review is read (the core's `review.door`).
+        expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: element(app, "multisig.draft.propose"))
+        waitForExpectations(timeout: 60)
         XCTAssertTrue(world.mailbox.isEmpty)
         tap(app, "multisig.draft.propose")
         XCTAssertTrue(element(app, "multisig.proposal.title").waitForExistence(timeout: 90), "the proposal sheet never opened")

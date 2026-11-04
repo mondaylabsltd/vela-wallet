@@ -398,3 +398,50 @@ struct MsReviewBody: View {
         .tint(theme.fgMuted)
     }
 }
+
+/// §12: a review that is not drawn — still being read, or not read — in its
+/// place, as the core's sign door says (`review.door`). Loading is a calm
+/// line; failed is its reason, that nothing can be signed until it is read,
+/// and "Try again" (the machine's `review_again`). The button it stands
+/// above stays shut either way: that is the door's `enabled`, not this.
+struct MsReviewPending: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.walletTextScale) private var textScale
+    let door: MsSignDoor
+    let words: MsWords
+    let tryAgain: () -> Void
+
+    var body: some View {
+        switch door.shows {
+        case .review:
+            EmptyView()
+        case .loading:
+            HStack(spacing: Tokens.Space.s8) {
+                ProgressView()
+                Text(verbatim: words.t("review.state.loading"))
+                    .typeRole(Typography.flowCaption.scaled(textScale))
+                    .foregroundStyle(theme.fgMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("multisig.review.loading")
+        case .failed:
+            VStack(alignment: .leading, spacing: Tokens.Space.s8) {
+                MsNote(text: Self.failedLine(door, words: words), tone: .warning, identifier: "multisig.review.failed")
+                if door.retry {
+                    VelaButton(title: words.t("review.state.tryAgain"), kind: .secondary, action: tryAgain)
+                        .accessibilityIdentifier("multisig.review.tryAgain")
+                }
+            }
+        }
+    }
+
+    /// The reason (the core's key) and what it means: nothing is signed.
+    @MainActor
+    static func failedLine(_ door: MsSignDoor, words: MsWords) -> String {
+        let blocked = words.t("review.state.blocked")
+        guard let key = door.reasonKey else { return blocked }
+        return "\(words.loc.t(key)) \(blocked)"
+    }
+}

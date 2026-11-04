@@ -1,0 +1,64 @@
+{
+  "about": "§12 (docs/multisig-machines.md): the sign door over a review's state. A sign / propose / approve / execute button is enabled ONLY when the state is ready and the review's sign rule allows it; a missing state is loading. Replayed through the link door `review.door {state?, review?}` by Rust, the web, the desktop, Android and iOS.",
+  "timeout_ms": 40000,
+  "keys": [
+    "home.multisig.review.state.loading",
+    "home.multisig.review.state.blocked",
+    "home.multisig.review.state.timedOut",
+    "home.multisig.review.state.unreadable",
+    "home.multisig.review.state.gone",
+    "home.multisig.review.state.tryAgain"
+  ],
+  "door": [
+    {
+      "name": "not asked yet: loading, shut",
+      "args": { "state": null, "review": { "sign": { "allowed": true, "anyway": false } } },
+      "expect": { "shows": "loading", "enabled": false, "anyway": false, "reason_key": null, "retry": false }
+    },
+    {
+      "name": "loading: shut, even with a review from before",
+      "args": { "state": { "kind": "loading" }, "review": { "sign": { "allowed": true, "anyway": false } } },
+      "expect": { "shows": "loading", "enabled": false, "anyway": false, "reason_key": null, "retry": false }
+    },
+    {
+      "name": "timed out: the reason and Try again, shut",
+      "args": { "state": { "kind": "failed", "reason_key": "home.multisig.review.state.timedOut" }, "review": null },
+      "expect": { "shows": "failed", "enabled": false, "anyway": false, "reason_key": "home.multisig.review.state.timedOut", "retry": true }
+    },
+    {
+      "name": "unreadable: the reason and Try again, shut",
+      "args": { "state": { "kind": "failed", "reason_key": "home.multisig.review.state.unreadable" } },
+      "expect": { "shows": "failed", "enabled": false, "anyway": false, "reason_key": "home.multisig.review.state.unreadable", "retry": true }
+    },
+    {
+      "name": "gone: the reason and Try again, shut",
+      "args": { "state": { "kind": "failed", "reason_key": "home.multisig.review.state.gone" } },
+      "expect": { "shows": "failed", "enabled": false, "anyway": false, "reason_key": "home.multisig.review.state.gone", "retry": true }
+    },
+    {
+      "name": "ready and allowed: open",
+      "args": { "state": { "kind": "ready" }, "review": { "sign": { "allowed": true, "anyway": false } } },
+      "expect": { "shows": "review", "enabled": true, "anyway": false, "reason_key": null, "retry": false }
+    },
+    {
+      "name": "ready, allowed anyway: open through the anyway step",
+      "args": { "state": { "kind": "ready" }, "review": { "sign": { "allowed": true, "anyway": true } } },
+      "expect": { "shows": "review", "enabled": true, "anyway": true, "reason_key": null, "retry": false }
+    },
+    {
+      "name": "ready, refused: shown, shut, no override",
+      "args": { "state": { "kind": "ready" }, "review": { "sign": { "allowed": false, "anyway": false } } },
+      "expect": { "shows": "review", "enabled": false, "anyway": false, "reason_key": null, "retry": false }
+    },
+    {
+      "name": "ready without a sign rule: never allowed by default",
+      "args": { "state": { "kind": "ready" }, "review": {} },
+      "expect": { "shows": "review", "enabled": false, "anyway": false, "reason_key": null, "retry": false }
+    },
+    {
+      "name": "ready without a review: a contradiction, shut and said unreadable",
+      "args": { "state": { "kind": "ready" }, "review": null },
+      "expect": { "shows": "failed", "enabled": false, "anyway": false, "reason_key": "home.multisig.review.state.unreadable", "retry": true }
+    }
+  ]
+}

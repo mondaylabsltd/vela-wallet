@@ -778,6 +778,14 @@
           "decimalsLine": "{{token}} 沒有提供小數位數，金額以最小單位顯示。",
           "ownTokenLine": "這會把代幣傳送到代幣自己的合約（{{token}}），代幣將會遺失。",
           "blindLine": "Vela 讀不出這筆呼叫做甚麼。只有在你確切知道它是甚麼時才批准。"
+        },
+        "state": {
+          "loading": "正在讀取交易…",
+          "blocked": "讀取完成前無法簽署。",
+          "timedOut": "未能及時讀取。",
+          "unreadable": "無法讀取此交易。",
+          "gone": "此交易已不在列表中。",
+          "tryAgain": "重試"
         }
       },
       "notify": {

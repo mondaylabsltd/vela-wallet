@@ -1476,7 +1476,12 @@ if (branchSet.size !== 119) fail(`expected 119 branch paths, got ${branchSet.siz
   //   back, with the way to its settings) and `home.multisig.create.
   //   {closeTitle, closeBody, closeKeep, closeConfirm}` (Back on a filled
   //   form asks first, and says the form is kept). 665 + 11 = 676.
-  const pins = { multisig: 676 };
+  // 682 (§12 review state, 2026-11-05): + `home.multisig.review.state.
+  //   {loading, blocked, timedOut, unreadable, gone, tryAgain}` (a review is
+  //   loading, ready or failed — "Reading the transaction…" with the button
+  //   shut; a failure says why, that nothing can be signed until it is read,
+  //   and offers Try again; never "allowed" by default). 676 + 6 = 682.
+  const pins = { multisig: 682 };
   for (const [name, docs] of Object.entries(onDemand)) {
     const leaves = new Set();
     for (const lng of LOCALES) walk(docs[lng], '', leaves, new Set());

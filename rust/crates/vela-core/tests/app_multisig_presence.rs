@@ -23,7 +23,7 @@ use vela_core::app::multisig_proposals::{
 };
 use vela_core::app::multisig_shell::MultisigAccount;
 use vela_core::multisig::{self, Approval, EcdsaApproval, Transfer};
-use world::{fixture, genesis, settle, DeployedSafe, Landing, World, SERVICE};
+use world::{fixture, genesis, settle_reads_first, DeployedSafe, Landing, World, SERVICE};
 
 type Sut = DomainDriver<MultisigProposals>;
 
@@ -462,7 +462,8 @@ fn an_open_story_says_what_is_kept_and_what_waits() {
 
 fn run(sut: &mut Sut, world: &mut World, event: Event) {
     sut.dispatch(event);
-    let answered = settle(sut, world, 20_000);
+    // A shell's clock: a bound (the review's) runs out after the reads it bounds.
+    let answered = settle_reads_first(sut, world, 20_000);
     assert!(answered < 20_000, "the machine never settled");
 }
 

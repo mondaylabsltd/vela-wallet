@@ -22,7 +22,7 @@ use vela_core::app::multisig_dapp::{
 use vela_core::app::multisig_proposals::{ActionState, Event, MultisigProposals, ProposalStatus};
 use vela_core::app::multisig_shell::{MultisigAccount, MultisigOperation as Op};
 use vela_core::multisig;
-use world::{fixture, genesis, settle, DeployedSafe, Landing, World, SERVICE};
+use world::{fixture, genesis, settle, settle_reads_first, DeployedSafe, Landing, World, SERVICE};
 
 type Sut = DomainDriver<MultisigProposals>;
 
@@ -32,7 +32,8 @@ const LIMIT_MS: f64 = 300_000.0;
 
 fn run(sut: &mut Sut, world: &mut World, event: Event) {
     sut.dispatch(event);
-    let answered = settle(sut, world, 20_000);
+    // A shell's clock: a bound (the review's) runs out after the reads it bounds.
+    let answered = settle_reads_first(sut, world, 20_000);
     assert!(answered < 20_000, "the machine never settled");
 }
 
@@ -43,7 +44,12 @@ fn run_short(sut: &mut Sut, world: &mut World, event: Event) {
         let outstanding = sut.outstanding();
         let Some(op) = outstanding
             .iter()
-            .find(|op| !matches!(op, Op::Wait { ms } if *ms >= 100_000))
+            .find(|op| !matches!(op, Op::Wait { .. }))
+            .or_else(|| {
+                outstanding
+                    .iter()
+                    .find(|op| !matches!(op, Op::Wait { ms } if *ms >= 100_000))
+            })
             .cloned()
         else {
             return;
