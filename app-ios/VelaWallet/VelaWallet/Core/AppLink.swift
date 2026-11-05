@@ -83,6 +83,23 @@ enum AppLink: Equatable {
         case connect
     }
 
+    /// r9-4 (Android's `ScannedLink`): a SCANNED text that is one of the
+    /// multisig links — an invite, a transaction to approve, either damaged,
+    /// or the outside owner's connect page — as the URL to open through the
+    /// one link door, or `nil` for anything else (a payment link, an address,
+    /// `ethereum:…`), which Send reads. A scanned invite used to land in
+    /// Send's "To" as text (real-device pass 2).
+    static func scannedMultisig(
+        _ text: String,
+        call: (String, String) throws -> String = { try multisigLinkCall(method: $0, argsJson: $1) }
+    ) -> URL? {
+        guard let url = URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)) else { return nil }
+        switch read(url, call: call) {
+        case .proposal, .invite, .connect, .broken: return url
+        case .entry, .pay, nil: return nil
+        }
+    }
+
     /// The hosts the wallet's links live on: the web wallet's own, and the
     /// site's (whose `/pay` forwards to it).
     static let hosts: Set<String> = ["wallet.getvela.app", "getvela.app"]

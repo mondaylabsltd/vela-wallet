@@ -1999,6 +1999,10 @@ struct RootView: View {
     /// A payment code scanned in 探索: 发送, through the same door a contact
     /// and the home scanner use — the core's `scan_resolved`.
     private func sendFromScan(_ payload: String) {
+        if let link = AppLink.scannedMultisig(payload) {
+            openLink(link)
+            return
+        }
         if scannedPayLink(payload) { return }
         section = .wallet
         enterSend(handingIn: true)
@@ -3744,6 +3748,13 @@ struct RootView: View {
     /// decoder. The CORE decides what it means.
     private func scannedCode(_ text: String) {
         camera.stop()
+        // r9-4: a multisig link (an invite, a transaction to approve) goes
+        // where the same link opened from outside goes — never into "To".
+        if let link = AppLink.scannedMultisig(text) {
+            flows.back()
+            openLink(link)
+            return
+        }
         // A Vela payment link: the scanner goes, and the core's verdict on
         // the link opens Send — or says why it cannot.
         if PayLink.parse(text).map({ if case .pay = $0 { true } else { false } }) == true {
