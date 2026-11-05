@@ -359,7 +359,9 @@ struct MultisigSwitcherSection: View {
                     Text(verbatim: words.name(of: row.account, rowName: row.name))
                         .typeRole(Typography.fieldLabel.scaled(textScale))
                         .fontWeight(.semibold)
-                        .foregroundStyle(selected ? theme.accentBase : theme.fgBase)
+                        // vis-6: the accent is for what moves value or signs;
+                        // a selection is neutral ink (the check says it).
+                        .foregroundStyle(theme.fgBase)
                     Text(verbatim: tags.joined(separator: " · "))
                         .typeRole(Typography.rowSub.scaled(textScale))
                         .foregroundStyle(theme.fgSubtle)
@@ -378,7 +380,7 @@ struct MultisigSwitcherSection: View {
                         .accessibilityLabel(words.t("presence.needsYou", count: count, ["count": String(count)]))
                 }
                 if selected {
-                    LucideIcon(.check, size: LucideIconSize.action).foregroundStyle(theme.accentBase)
+                    LucideIcon(.check, size: LucideIconSize.action).foregroundStyle(theme.fgBase)
                 }
             }
             .padding(.vertical, Tokens.Space.s12)
