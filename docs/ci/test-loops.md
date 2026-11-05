@@ -15,13 +15,33 @@ gate nothing until each has a proven-stable record on a runner.
 | `app` | The tooling gates: corpus oracles, generated artefacts, the i18n lint (`lint-i18n-corpus`) and verify (`verify-i18n-parity`), the identicon parity, Lottie, reachability, events, dead controls, Expo residue. Also the **scenario manifest check** (`scripts/ci/check-scenarios.mjs`, with its matrix in the job summary). |
 | `rust` | `cargo fmt --check`. Clippy `-D warnings` and `cargo test --workspace`, both with `vela-core/i18n-all,dev-fixtures,crux`. The wasm canary. **`build-web.mjs --check`** (wasm freshness) and `verify-web.mjs`. Onboarding types. The Swift bindings. The corpus through the Kotlin bindings. |
 | `rust-macos` | The corpus through the Swift bindings. |
-| `web` | `sync:wasm`, then `pnpm check` and `pnpm lint`. `pnpm build`, `build:extension` and `build:extension:safari`. **vitest server + client** (Chromium). Then an assertion that the vector-replay files ran with nothing skipped. |
+| `web` | `sync:wasm`, then `pnpm check` and `pnpm lint`. `pnpm build`, `build:extension` and `build:extension:safari`. **vitest server + client** (Chromium). Then an assertion that the vector-replay files ran with nothing skipped. Then **one Playwright spec, `e2e/extension-site-start.e2e.ts`** (below). |
 | `desktop` (Linux) | `cargo fmt --check` and **`cargo check --all-targets --locked`**. Clippy and `cargo test`, each run without and with `dev-fixtures`. |
 | `desktop-windows` | `cargo check --all-targets --locked` on Windows. |
 | `android` | **`check-native-wire --strict`**. Assemble the debug build and run the JVM suite (this includes **CoreWireDriftTest**). Then an assertion that CoreWireDriftTest and every vector-replay class ran with nothing skipped. |
 | `ios (unit)` | **`check-ios-wire-parity --strict`** (with its self-test). The unit suite on a simulator (macos-15). An assertion that the vector-replay suites and the manifest's required tests ran with nothing skipped. **`check-ios17-function-metadata`** (with its self-test). |
 | `ios (ui)` | The XCUITest leg. It runs on a push to `main`, and on a PR only when the PR carries the `ios-ui` label. |
 | `site` | getvela.app's `bun run check`. |
+
+### The one e2e that gates every pull request
+
+`e2e/extension-site-start.e2e.ts` is the only Playwright spec in `ci.yml`
+(job `web`, after vitest). It guards where the Chrome extension starts a new
+site — on a network the account lives on, never the space's first — which
+regressed three rounds running (r9, r10, r12). Its second test is round 12's
+pass: an account funded on Arc Testnet after the wallet last read it, a slow
+node, the real side panel; without the fix it fails exactly as the round did
+("Network Sepolia"). It runs headless (`--headless=new`, no display) on the
+extension built earlier in the job; the preview it needs is started from the
+bundle `pnpm build` made, never built a second time. It was added straight to
+`ci.yml` (coordinator, round 12) without the nightly streak below: a
+regression this often is a merge blocker, and the spec is hermetic (stub
+nodes, a local dApp, no outside network).
+
+```sh
+cd app-web/vela-wallet
+pnpm exec playwright test --project=chromium e2e/extension-site-start.e2e.ts
+```
 
 ### The shared core vectors are never silently skipped
 

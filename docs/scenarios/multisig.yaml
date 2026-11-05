@@ -355,6 +355,8 @@ scenarios:
         - { file: app-web/vela-wallet/src/lib/dev/parallel-space.test.ts, test: 'inside, a site connected to a space account that leaves the space is cut off, as anywhere', ci: required }
       web-e2e:
         - { file: app-web/vela-wallet/e2e/extension-space-switch.e2e.ts, test: 'a site on a testnet moves to the mainnet space’s network, hears it, and its next request says so', ci: nightly }
+        - { file: app-web/vela-wallet/e2e/extension-site-start.e2e.ts, test: 'starts on Arc Testnet — before, during and after the connect', ci: required, note: 'ci.yml web job (r12): the one e2e on every PR' }
+        - { file: app-web/vela-wallet/e2e/extension-site-start.e2e.ts, test: 'money that arrived after the wallet last read it: the side panel asks on Arc Testnet, and the grant keeps it', ci: required, note: 'r12: the side panel reads the holdings before it says a network; fails as the round did without it' }
         - { file: app-web/vela-wallet/e2e/tx-detail-account-switch.e2e.ts, test: 'switching accounts under an open detail shows no drawn transaction', ci: nightly }
         - { file: app-web/vela-wallet/e2e/parallel-entry.e2e.ts, test: 'the space survives a reload, and the multi-key golden Safe is one of its wallets', ci: nightly }
       android-jvm:

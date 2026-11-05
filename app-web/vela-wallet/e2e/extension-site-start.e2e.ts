@@ -12,13 +12,28 @@
  *
  * Here that account, on the real extension: the testnet space, every node a
  * stub that says the account holds the Arc coin and nothing anywhere else.
+ *
+ * r12 (the third time): the stored list was right, and late. The account was
+ * funded on Arc nine seconds before the connect; no page had read its
+ * holdings since the money came, the side panel booted at the click and its
+ * sheet said the network before its own holdings round ended — Sepolia — and
+ * the grant kept Sepolia for good. The second test is that pass: money
+ * arriving after the wallet's first read, a slow node, the real side panel,
+ * and nothing in the test waiting for the stored list.
  */
 import { createServer, type Server } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test, type BrowserContext, type Page, type Route } from '@playwright/test';
 import { CHAINS } from '../src/lib/services/chains';
-import { extensionBuilt, extensionId, loadExtension, requestWindow } from './extension-helpers';
+import {
+	extensionBuilt,
+	extensionId,
+	inSidePanel,
+	loadExtension,
+	requestWindow,
+	sidePanelView
+} from './extension-helpers';
 import { seedNetworkOverrides } from './stub-chain';
 import { answerAggregate3, isAggregate3, MULTICALL_SEL as SEL, word } from './stub-multicall';
 
@@ -29,6 +44,14 @@ const ARC = 5042002;
 const ARC_HEX = '0x4cef52';
 /** 0.4 of Arc's coin (USDC, 18 decimals as the native coin). */
 const HELD = 400_000_000_000_000_000n;
+
+/**
+ * What the stub nodes say. `funded`: the account holds Arc's coin (false: it
+ * holds nothing anywhere yet). `arcDelayMs`: Arc's node takes this long to
+ * answer a balance read — a node that is slow, never one that fails.
+ */
+const net = { funded: true, arcDelayMs: 0 };
+const isBalanceRead = (method: string) => method === 'eth_getBalance' || method === 'eth_call';
 
 interface AskResult {
 	ok: boolean;
@@ -62,7 +85,7 @@ function answer(chainId: number, method: string, params: unknown[]): unknown {
 		case 'eth_getBlockByNumber':
 			return { number: '0x10', timestamp: '0x66000000', baseFeePerGas: '0x3b9aca00' };
 		case 'eth_getBalance':
-			return chainId === ARC ? '0x' + HELD.toString(16) : '0x0';
+			return chainId === ARC && net.funded ? '0x' + HELD.toString(16) : '0x0';
 		case 'eth_getLogs':
 			return [];
 		case 'eth_call': {
@@ -70,7 +93,7 @@ function answer(chainId: number, method: string, params: unknown[]): unknown {
 			if (!call?.data || !isAggregate3(call.data)) return '0x' + word(0);
 			return answerAggregate3(call.data, (inner) => {
 				if (inner.selector === SEL.getEthBalance)
-					return { success: true, data: '0x' + word(chainId === ARC ? HELD : 0n) };
+					return { success: true, data: '0x' + word(chainId === ARC && net.funded ? HELD : 0n) };
 				if (inner.selector === SEL.balanceOf) return { success: true, data: '0x' + word(0) };
 				return undefined;
 			});
@@ -97,6 +120,9 @@ async function hermeticNet(context: BrowserContext): Promise<void> {
 			method?: string;
 			params?: unknown[];
 		};
+		if (chainId === ARC && net.arcDelayMs > 0 && isBalanceRead(body.method ?? '')) {
+			await new Promise((resolve) => setTimeout(resolve, net.arcDelayMs));
+		}
 		const result = answer(chainId, body.method ?? '', body.params ?? []);
 		return route.fulfill({
 			contentType: 'application/json',
@@ -163,6 +189,11 @@ test.describe('a new site, for an account that holds only Arc USDC', () => {
 	test.afterAll(async () => {
 		server.closeAllConnections();
 		await new Promise((resolve) => server.close(() => resolve(null)));
+	});
+
+	test.beforeEach(() => {
+		net.funded = true;
+		net.arcDelayMs = 0;
 	});
 
 	test('starts on Arc Testnet — before, during and after the connect', async () => {
@@ -238,6 +269,53 @@ test.describe('a new site, for an account that holds only Arc USDC', () => {
 		)) as AskResult;
 		expect(toArc).toMatchObject({ ok: false, code: 4902 });
 		expect(await chainOf(third)).toBe(start);
+
+		await context.close();
+	});
+
+	test('money that arrived after the wallet last read it: the side panel asks on Arc Testnet, and the grant keeps it', async () => {
+		net.funded = false;
+		const context = await loadExtension({ surface: 'panel' });
+		await hermeticNet(context);
+		const id = extensionId();
+		const wallet = await context.newPage();
+		await wallet.addInitScript(() => {
+			localStorage.setItem('vela.intro.seen', String(Date.now()));
+			localStorage.setItem('vela.dev.console', '1');
+			localStorage.setItem('vela.networkSpace', 'testnet');
+		});
+		await wallet.goto(`chrome-extension://${id}/en/parallel.html`);
+		await wallet.getByRole('button', { name: 'Enter (seed fixture wallet)' }).click();
+		await wallet.waitForURL(/wallet\.html$/, { timeout: 30_000 });
+		await seedNetworkOverrides(
+			wallet,
+			CHAINS.map((c) => ({ chainId: c.chainId, rpcURL: `${STUB}/${c.chainId}` }))
+		);
+		await wallet.reload();
+		// The wallet's first read ended, and the account held nothing then.
+		await expect(wallet.getByText('Deposit your first asset')).toBeVisible({ timeout: 60_000 });
+
+		// The money comes; Arc's node is slow to say so. Nothing here waits for
+		// a page to have stored where the account now lives.
+		net.funded = true;
+		net.arcDelayMs = 2_500;
+
+		const site = await context.newPage();
+		await site.goto(`http://localhost:${PORT}/`);
+		const asked = site.evaluate(() => window.__ask('eth_requestAccounts')) as Promise<AskResult>;
+		const panel = await sidePanelView(wallet, 30_000);
+		const sheet = () =>
+			inSidePanel<string>(
+				wallet,
+				"return panel.document.querySelector('[role=\"dialog\"]')?.textContent ?? '';"
+			);
+		await expect.poll(sheet, { timeout: 30_000 }).toContain('Arc Testnet');
+		expect(await sheet()).not.toContain('Sepolia');
+		await panel.click('Connect');
+		expect((await asked).ok).toBe(true);
+		const chainOf = async (page: Page) =>
+			((await page.evaluate(() => window.__ask('eth_chainId'))) as AskResult).result;
+		expect(await chainOf(site)).toBe(ARC_HEX);
 
 		await context.close();
 	});
