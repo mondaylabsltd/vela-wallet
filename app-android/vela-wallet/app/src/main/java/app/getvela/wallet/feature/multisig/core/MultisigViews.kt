@@ -250,6 +250,9 @@ data class MsLinkStand(
     val safeTxHash: String? get() = link["safeTxHash"].str
     val chainIds: List<Int> get() = link["chainIds"].ints()
 
+    /** §18 (c), round 14: a failed lookup that did not come back — the core offers Try again (`retry_link`). */
+    val retry: Boolean get() = raw["retry"].bool ?: false
+
     companion object {
         fun of(e: JsonElement?) = MsLinkStand(
             kind = e["kind"].str.orEmpty(),

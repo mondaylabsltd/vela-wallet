@@ -362,12 +362,15 @@ class MultisigWords(
     fun stoppedLine(preview: JsonElement?, chainId: Int): String = when (preview.kind) {
         "unpriced" -> t("proposal.feeUnpriced")
         "unchecked" -> t("proposal.feeUnchecked")
+        // r14-4: a setup not checked is said as that, never as a finding.
+        "unverified" -> t("authority.deployUnverified", "network" to network(chainId))
+        "refused" -> deployRefused(preview["authority"], chainId)
         else -> t("proposal.wouldFail", "reason" to whyFails(preview["why"] ?: preview?.takeIf { it.kind == "short" || it.kind == "reverts" }, chainId))
     }
 
     /** r11-9: a look that only could not price or check it is a warning, never a failure. */
     fun actionFailureTone(state: JsonElement?): MsTone =
-        if (state.kind == "stopped" && state["preview"].kind in setOf("unpriced", "unchecked")) MsTone.Warning else MsTone.Danger
+        if (state.kind == "stopped" && state["preview"].kind in setOf("unpriced", "unchecked", "unverified")) MsTone.Warning else MsTone.Danger
 
     /** The core's sentence for a passkey error's own words; `null` when it names nothing more than "it failed". */
     private fun passkeyWords(message: String?): String? {
@@ -408,6 +411,24 @@ class MultisigWords(
     }
 
     // -- authority findings (§3.5) -----------------------------------------------------
+
+    /**
+     * r14-4: a deploy the core read and refused on [chainId] (the look's `refused`, its
+     * `authority {kind: refused, reasons}`): "Vela won't deploy this multisig on X:" and each
+     * reason once.
+     */
+    fun deployRefused(authority: JsonElement?, chainId: Int): String {
+        val lines = mutableListOf(t("authority.deployRefused", "network" to network(chainId)))
+        for (reason in authority["reasons"].arr) {
+            val line = finding(
+                kotlinx.serialization.json.JsonObject(
+                    mapOf("chainId" to kotlinx.serialization.json.JsonPrimitive(chainId), "reason" to reason),
+                ),
+            )
+            if (line !in lines) lines += line
+        }
+        return lines.joinToString(" ")
+    }
 
     /** One finding (`{from: 'genesis', chainId, reason}` or `{from: 'chain', chainId, risk}`), in words. */
     fun finding(finding: JsonElement): String {

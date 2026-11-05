@@ -614,6 +614,8 @@ fun MultisigAddSheet(
             "refused" -> refused = outcome["findings"].arr
             "highRisk" -> risky = outcome["findings"].arr
             "unverified" -> failure = words.t("authority.unverified", "network" to words.network(outcome["chain_id"].int ?: 0))
+            // r14-5 (core): its network's nodes only said "slow down" — named, never "unavailable".
+            "busy" -> failure = words.t("add.busy", "network" to words.network(outcome["chain_id"].int ?: 0))
             "notFound", "unavailable", "unsupported", "notMultisig", "unchecked" -> failure = words.t("add.${outcome.kind}")
             else -> failure = words.t("add.unavailable")
         }
@@ -796,9 +798,14 @@ fun MultisigLinkStandSheet(hub: MultisigHub, words: MultisigWords, onClose: () -
                 val line = when (reason.kind) {
                     null, "notFound" -> words.t("proposal.notFound")
                     "unavailable" -> words.t("add.unavailable")
+                    "busy" -> words.t("add.busy", "network" to words.network(reason["chain_id"].int ?: 0))
                     else -> words.t("add.${reason.kind}")
                 }
                 MsNote(line, tone = MsTone.Warning, tag = "multisig.link.failed")
+                // §18 (c), round 14: a lookup that did not come back — the core offers Try again.
+                if (stand.retry) {
+                    MsTextButton(words.t("review.state.tryAgain"), tag = "multisig.link.retry") { hub.send(ev("retry_link")) }
+                }
             }
             "kept" -> MsNote(words.t("proposal.previewNote"), tag = "multisig.link.kept")
             else -> Row(Modifier.testTag("multisig.link.opening"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {

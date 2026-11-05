@@ -282,7 +282,10 @@ class MsProposalModel(
             // D8: "you can still approve" only where Approve can be pressed —
             // never under one shut while the review is read (or not read).
             "unchecked" -> words.t(if (door.enabled) "proposal.feeUnchecked" else "proposal.feeUncheckedHeld") to MsTone.Warning
-            "refused" -> words.t("authority.deployUnverified", "network" to words.network(chainId)) to MsTone.Danger
+            // r14-4: a setup the core could not check (`unverified`) is never
+            // said as one it read and refused (`refused`).
+            "unverified" -> words.t("authority.deployUnverified", "network" to words.network(chainId)) to MsTone.Warning
+            "refused" -> words.deployRefused(preview["authority"], chainId) to MsTone.Danger
             "spent" -> words.t("proposal.doneNote") to MsTone.Neutral
             else -> null
         }
@@ -320,7 +323,7 @@ class MsProposalModel(
     /** The preview stops it (would fail, nobody can pay): Execute waits. */
     fun executeHeld(executor: String): Boolean {
         val preview = preview(executor) ?: return false
-        if (preview.kind in setOf("fails", "refused", "spent")) return true
+        if (preview.kind in setOf("fails", "refused", "unverified", "spent")) return true
         return preview.kind == "priced" && preview["canPay"].bool == false
     }
 
