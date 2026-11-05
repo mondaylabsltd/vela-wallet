@@ -497,6 +497,25 @@ pub enum ImportOutcome {
         #[cfg_attr(feature = "bindings", ts(type = "number"))]
         chain_id: u64,
     },
+    /// r14 leftovers (§21): `chain_id`'s nodes answered the reads the
+    /// import needs only with "slow down", still so after one pause —
+    /// [`AddOutcome::Busy`]'s rule, for an import.
+    Busy {
+        #[cfg_attr(feature = "bindings", ts(type = "number"))]
+        chain_id: u64,
+    },
+}
+
+impl ImportOutcome {
+    /// r14 leftovers: a read that did not come back, so asking again can
+    /// change it — the add sheet's rule ([`AddOutcome::offers_retry`]); the
+    /// shells offer Try again for it (`ImportView::retry`).
+    pub fn offers_retry(&self) -> bool {
+        matches!(
+            self,
+            Self::Busy { .. } | Self::Unavailable | Self::Unverified { .. }
+        )
+    }
 }
 
 /// An ENS name, read on Ethereum (`EnsAnswer`).
@@ -685,6 +704,12 @@ pub struct ImportView {
     pub error: Option<String>,
     pub busy: Option<String>,
     pub outcomes: BTreeMap<String, ImportOutcome>,
+    /// r14 leftovers: the Safes (lowercase addresses, ascending) whose
+    /// outcome is a read that did not come back
+    /// ([`ImportOutcome::offers_retry`]): each row offers Try again, which
+    /// is the same `import` asked again.
+    #[serde(default)]
+    pub retry: Vec<String>,
 }
 
 /// Where a rename of the record runs (`MultisigSettings`): the index chain
@@ -1863,7 +1888,7 @@ impl App for MultisigAccounts {
                 };
                 flow(model, move |io, st| async move {
                     let outcome = match &safe {
-                        Some(safe) => import_exported(&io, &st, safe, accept_risks).await,
+                        Some(safe) => import_patiently(&io, &st, safe, accept_risks).await,
                         None => ImportOutcome::NotFound,
                     };
                     // r7: what each member was declared as (or Vela found),
@@ -1890,9 +1915,13 @@ impl App for MultisigAccounts {
                     }
                     let mut s = lock(&st);
                     s.import.busy = None;
-                    s.import
-                        .outcomes
-                        .insert(address.to_ascii_lowercase(), outcome);
+                    let key = address.to_ascii_lowercase();
+                    s.import.retry.retain(|a| *a != key);
+                    if outcome.offers_retry() {
+                        s.import.retry.push(key.clone());
+                        s.import.retry.sort();
+                    }
+                    s.import.outcomes.insert(key, outcome);
                 })
             }
             Event::ShareAgain { address, owner } => {
@@ -3579,6 +3608,41 @@ fn decimal_to_hex(s: &str) -> Option<String> {
     alloy_primitives::U256::from_str_radix(s, 10)
         .ok()
         .map(|v| format!("0x{v:x}"))
+}
+
+/// [`import_exported`], with a read the network would not answer because it
+/// was rate-limiting named busy (r14 leftovers, [`busy_or`]'s rule), and
+/// asked once more after [`RATE_LIMIT_PAUSE_MS`] first — as an add is
+/// ([`find_patiently`]).
+async fn import_patiently(
+    io: &Io<Event>,
+    st: &Shared<State>,
+    safe: &ExportedSafe,
+    accept_risks: bool,
+) -> ImportOutcome {
+    let named = || async {
+        io.forget_rate_limits();
+        let chain_ids: Vec<u64> = safe.chains.iter().map(|c| c.chain_id).collect();
+        let outcome = import_exported(io, st, safe, accept_risks).await;
+        let limited = io.rate_limited();
+        let busy = |chains: &[u64]| {
+            chains
+                .iter()
+                .find(|id| limited.contains(id))
+                .map(|&chain_id| ImportOutcome::Busy { chain_id })
+        };
+        match outcome {
+            ImportOutcome::Unverified { chain_id } => busy(&[chain_id]).unwrap_or(outcome),
+            ImportOutcome::Unavailable => busy(&chain_ids).unwrap_or(outcome),
+            other => other,
+        }
+    };
+    let first = named().await;
+    if !matches!(first, ImportOutcome::Busy { .. }) {
+        return first;
+    }
+    io.wait(RATE_LIMIT_PAUSE_MS).await;
+    named().await
 }
 
 async fn import_exported(

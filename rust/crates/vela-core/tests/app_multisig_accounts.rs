@@ -945,6 +945,72 @@ fn a_safe_on_no_readable_network_is_unverified() {
     assert!(world.stored_accounts().is_empty());
 }
 
+/// r14 leftovers (§21): an import whose network answered only "slow down"
+/// is waited out once, then said as busy — the network named, Try again
+/// offered (`import.retry`) — never "unavailable", and nothing is kept.
+#[test]
+fn a_rate_limited_import_is_named_busy_with_try_again() {
+    let g = genesis(&[A], 1, "0x24");
+    let mut world = World::default();
+    world.record(&g.address, &g.genesis, false);
+    world.deploy(100, &g.address, DeployedSafe::clean(&[A], 1));
+    let mut sut = started(&mut world, vec![100]);
+    run(
+        &mut sut,
+        &mut world,
+        Event::ParseExport {
+            json: export_of(&g.address, 100, true, None),
+        },
+    );
+    world.rpc_hooks.push(rate_limited(100));
+    let before = world.now;
+    let key = g.address.to_ascii_lowercase();
+    let import = Event::Import {
+        address: g.address.clone(),
+        accept_risks: false,
+    };
+    run(&mut sut, &mut world, import.clone());
+    let view = sut.view();
+    assert_eq!(
+        view.import.outcomes[&key],
+        ImportOutcome::Busy { chain_id: 100 }
+    );
+    assert_eq!(view.import.retry, vec![key.clone()], "Try again is offered");
+    assert!(view.import.busy.is_none());
+    assert!(world.stored_accounts().is_empty(), "nothing imported");
+    assert!(
+        world.now - before >= vela_core::app::multisig_accounts::RATE_LIMIT_PAUSE_MS as f64,
+        "asked once more after the pause"
+    );
+
+    // The limit lifts: Try again (the same `import`) imports it.
+    world.rpc_hooks.clear();
+    run(&mut sut, &mut world, import);
+    let view = sut.view();
+    assert_eq!(view.import.outcomes[&key], ImportOutcome::Imported);
+    assert!(view.import.retry.is_empty(), "nothing left to try again");
+    assert_eq!(world.stored_accounts().len(), 1);
+}
+
+/// r14 leftovers: what an import comes to offers Try again exactly when a
+/// read did not come back — the add sheet's rule, for every shell.
+#[test]
+fn an_import_offers_try_again_only_for_a_read_that_did_not_come_back() {
+    for (outcome, retry) in [
+        (ImportOutcome::Busy { chain_id: 1 }, true),
+        (ImportOutcome::Unavailable, true),
+        (ImportOutcome::Unverified { chain_id: 1 }, true),
+        (ImportOutcome::Imported, false),
+        (ImportOutcome::NotFound, false),
+        (ImportOutcome::Unsupported, false),
+        (ImportOutcome::NotDeployed, false),
+        (ImportOutcome::Refused { findings: vec![] }, false),
+        (ImportOutcome::HighRisk { findings: vec![] }, false),
+    ] {
+        assert_eq!(outcome.offers_retry(), retry, "{outcome:?}");
+    }
+}
+
 // -- the rest ---------------------------------------------------------------------------
 
 /// Another machine's change is applied and written; removing drops it.
