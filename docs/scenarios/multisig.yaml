@@ -229,6 +229,9 @@ scenarios:
     title: An outside owner (own wallet) approves through the connect page / PeerConnect
     covers:
       core:
+        - { file: rust/crates/vela-core/tests/app_multisig_outside.rs, test: a_request_for_a_multisig_nobody_records_is_reviewed_from_the_genesis_vela_sends, ci: required, note: 'r12: an undeployed multisig no service records is reviewed from the genesis Vela sends, once its address derives' }
+        - { file: rust/crates/vela-core/tests/app_multisig_outside.rs, test: a_genesis_that_is_not_the_multisigs_is_not_believed, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_outside.rs, test: a_request_for_the_links_own_transaction_takes_the_links_ready_review, ci: required }
         - { file: rust/crates/vela-core/tests/app_multisig_outside.rs, test: end_to_end_vela_asks_the_page_shows_it_the_owner_taps_vela_verifies, ci: required }
         - { file: rust/crates/vela-core/tests/app_multisig_outside_propose.rs, test: no_member_here_proposes_through_an_outside_wallet, ci: required }
         - { file: rust/crates/vela-core/tests/app_multisig_review_parity.rs, test: a_vela_member_and_an_outside_owner_get_the_same_review_and_the_same_gate, ci: required }
