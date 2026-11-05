@@ -158,8 +158,8 @@ interface StorageChangedLike {
  * first network said with confidence. A no-op off the extension.
  */
 export function watchStartChain(onChange: () => void): () => void {
-	const changed = (globalThis as { chrome?: { storage?: { onChanged?: unknown } } }).chrome
-		?.storage?.onChanged as StorageChangedLike | undefined;
+	const changed = (globalThis as { chrome?: { storage?: { onChanged?: unknown } } }).chrome?.storage
+		?.onChanged as StorageChangedLike | undefined;
 	if (!changed) return () => {};
 	const listener = (changes: Record<string, unknown>, areaName: string) => {
 		if (areaName !== 'local') return;

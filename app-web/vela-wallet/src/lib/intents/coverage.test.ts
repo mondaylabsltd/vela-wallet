@@ -166,6 +166,10 @@ const DISPATCHED: Record<string, Place> = {
 const FUNCTIONS: Record<string, Place> = {
 	'dapp/host.hostLabel': { view: 'what the sheet draws' },
 	'dapp/grants.getOriginChain': { machine: 'a read' },
+	'dapp/grants.originHasOwnChain': { machine: 'a read' },
+	'dapp/grants.watchStartChain': {
+		machine: 'a read: the new site’s network follows the stored inputs until Connect (r12)'
+	},
 	'dapp/request.approve': { none: DAPP },
 	'dapp/request.evaluate': { machine: 'a read' },
 	'dapp/transport.answerRequest': { machine: 'the answer, sent to the page that asked' },
