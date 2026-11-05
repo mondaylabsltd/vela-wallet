@@ -103,6 +103,7 @@ class I18nRuntime(
         next.changeLanguage(active)
         engine = next
         plain = emptyMap()
+        filled = Filled()
         publish()
         snapshot()
     }
@@ -128,6 +129,7 @@ class I18nRuntime(
         // The old language's words go at once; until the new snapshot is in,
         // every word is the core's, asked per label as before.
         plain = emptyMap()
+        filled = Filled()
     }
 
     /**
@@ -177,10 +179,33 @@ class I18nRuntime(
     }
 
     override fun t(key: String, vars: Map<String, String>): String =
-        engine.t(key, options(vars.map { (name, value) -> TVar(name, value) }))
+        filled.answer("$key\u0000$vars") { engine.t(key, options(vars.map { (name, value) -> TVar(name, value) })) }
 
     override fun t(key: String, count: Int): String =
-        engine.t(key, options(emptyList(), count = count.toDouble()))
+        filled.answer("$key\u0000#$count") { engine.t(key, options(emptyList(), count = count.toDouble())) }
+
+    /**
+     * r13 (the ANR typing in Send): a word with values, as the core filled it
+     * in the active language — kept for the next recomposition that asks the
+     * same (a form says dozens on every keystroke, each an FFI crossing).
+     * Replaced, never edited, with [plain]: a language or catalog change
+     * starts it empty. Bounded: the oldest answers go first.
+     */
+    @Volatile
+    private var filled = Filled()
+
+    private class Filled {
+        private val answers = object : LinkedHashMap<String, String>(256, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?): Boolean = size > MAX_FILLED
+        }
+
+        fun answer(key: String, ask: () -> String): String {
+            synchronized(answers) { answers[key] }?.let { return it }
+            val said = ask()
+            synchronized(answers) { answers[key] = said }
+            return said
+        }
+    }
 
     override fun relativeTime(tsSeconds: Long, nowMs: Long, utcOffsetMinutes: Int, dateFormat: String): String =
         engine.formatRelativeTime(tsSeconds, nowMs, utcOffsetMinutes, dateFormat)
@@ -198,5 +223,8 @@ class I18nRuntime(
 
     companion object {
         const val FALLBACK: String = "en"
+
+        /** How many filled words [filled] keeps. */
+        private const val MAX_FILLED = 1024
     }
 }

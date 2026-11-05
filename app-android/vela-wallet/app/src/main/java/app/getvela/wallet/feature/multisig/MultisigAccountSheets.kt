@@ -657,8 +657,11 @@ fun MultisigAddSheet(
                 if (linkChains.isNotEmpty()) {
                     MsNote(words.t("add.usedOn", "networks" to words.list(linkChains.map(words::network))))
                 } else if (linkLacks != null) {
-                    val title = words.missingTitle(linkLacks, kept?.get("missing_name").str)
-                    MsNote(words.t("add.networkMissing", "network" to title), tone = MsTone.Warning, tag = "multisig.add.networkMissing")
+                    // r13-6: ONE corpus sentence, its `{{network}}` the network's
+                    // name — never another sentence ("It's used on On Arc Testnet
+                    // (chain 5042002) — a network this device doesn't have, which
+                    // this device doesn't have yet").
+                    MsNote(words.t("add.networkMissing", "network" to words.missingName(linkLacks, kept?.get("missing_name").str)), tone = MsTone.Warning, tag = "multisig.add.networkMissing")
                     onAddNetwork?.let { addNetwork -> VelaSecondaryButton(words.t("proposal.addNetwork"), { addNetwork(linkLacks) }, Modifier.fillMaxWidth()) }
                 }
                 val members = invite.link["members"].arr

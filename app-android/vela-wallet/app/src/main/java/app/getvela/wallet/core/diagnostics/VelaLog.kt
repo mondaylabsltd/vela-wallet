@@ -162,7 +162,20 @@ object VelaLog {
             }
         }
         logcat(line)
-        appendToFile(line)
+        // r13 (the ANR typing in Send): a line said on the main thread is
+        // written to the file off it, in order — a file append (and now and
+        // then a rotation) per keystroke was the UI thread's to wait for. A
+        // failure is written where it is said: the line must be on disk
+        // before whatever comes after it.
+        if (error == null && onMainThread()) fileWriter.execute { appendToFile(line) } else appendToFile(line)
+    }
+
+    private fun onMainThread(): Boolean =
+        runCatching { android.os.Looper.myLooper() == android.os.Looper.getMainLooper() }.getOrDefault(false)
+
+    /** One thread, so the file keeps the order the lines were said in. */
+    private val fileWriter: java.util.concurrent.ExecutorService by lazy {
+        java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "vela-log").apply { isDaemon = true } }
     }
 
     /**

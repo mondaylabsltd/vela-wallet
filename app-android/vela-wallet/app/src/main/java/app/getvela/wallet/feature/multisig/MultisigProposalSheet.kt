@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -26,6 +27,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.getvela.wallet.core.designsystem.components.VelaPrimaryButton
 import app.getvela.wallet.core.designsystem.components.VelaSecondaryButton
@@ -145,23 +147,40 @@ fun MultisigProposalSheet(
         if (signersKey == null) return@LaunchedEffect
         hub.sendProposal(ev("read_signers", "chain_id" to chainId, "safe_tx_hash" to current.safeTxHash))
     }
-    // The machine decides whether the last look is stale; the sheet only
-    // asks every few seconds (docs/multisig-machines.md §1.4).
-    LaunchedEffect(chainId, safeTxHash, item?.status) {
+    // Each executor's look (would it run, the fee, can it pay), asked as the
+    // sheet opens and again when what it is of moves (its status, its
+    // approvals), when the app comes back to the front, and on "Check again"
+    // (r13 S4: an open sheet re-quoted the fee every 20 s for as long as it
+    // stood). The timer asks only while a look has not priced it — none yet,
+    // unpriced, unchecked — and at most LookAsk.AUTO_LIMIT times. A priced
+    // look stands: Execute takes a new one itself when it is older than the
+    // machine's PREVIEW_FRESH_MS, before any passkey.
+    var lookRound by remember { mutableIntStateOf(0) }
+    LifecycleResumeEffect(chainId, safeTxHash) {
+        lookRound += 1
+        onPauseOrDispose { }
+    }
+    LaunchedEffect(chainId, safeTxHash, item?.status, item?.approved, lookRound) {
+        var asked = false
+        var auto = 0
         while (true) {
-            // Each executor's look, before any tap — a ready one's, and one a
-            // member's approval would complete (the machine's `approve_execute`
-            // reads that look).
-            val current = hub.proposalsView.value.item(chainId, safeTxHash)
+            // A ready one's executors, and a member whose approval would
+            // complete it (the machine's `approve_execute` reads that look).
+            val v = hub.proposalsView.value
+            val current = v.item(chainId, safeTxHash)
             if (current != null && current.status != "done") {
                 // S4: a member whose approval would complete it is offered
                 // "Approve and execute" with its fee said first — its look asked too.
                 val oneShort = if (current.approved + 1 >= current.threshold) current.canApprove else emptyList()
-                for (e in (current.canExecute + oneShort).distinctBy { it.lowercase() }) {
+                val executors = (current.canExecute + oneShort).distinctBy { it.lowercase() }
+                val now = executors.filter { e -> !asked || LookAsk.timerAsks(v.preview(current, e).kind, auto) }
+                for (e in now) {
                     hub.sendProposal(ev("preview", "chain_id" to chainId, "safe_tx_hash" to current.safeTxHash, "executor" to e))
                 }
+                if (asked && now.isNotEmpty()) auto += 1
+                asked = true
             }
-            delay(4_000)
+            delay(LookAsk.ASK_EVERY_MS)
         }
     }
 
@@ -341,11 +360,14 @@ fun MultisigProposalSheet(
                 ActionFailure(listOfNotNull(model.executeFailure), words) {
                     hub.sendProposal(ev("refresh", "fresh" to true))
                     hub.sendProposal(ev("preview", "chain_id" to chainId, "safe_tx_hash" to item.safeTxHash, "executor" to chosen))
+                    lookRound += 1
                 }
                 val look = model.preview(chosen).kind
                 if (look == "unpriced" || look == "unchecked") {
                     MsTextButton(words.t("proposal.feeRetry"), tag = "multisig.proposal.feeRetry") {
                         hub.sendProposal(ev("preview", "chain_id" to chainId, "safe_tx_hash" to item.safeTxHash, "executor" to chosen))
+                        // "Check again": the timer's few asks are the person's again.
+                        lookRound += 1
                     }
                 }
             } else if (!model.isReady && !oneTapOffered) {
@@ -511,6 +533,23 @@ fun ShareRow(words: MultisigWords, link: String, tagPrefix: String) {
 
 /** How often an open sheet reads its review again (the web's and the core's `REVIEW_FRESH_MS`). */
 internal const val REVIEW_FRESH_MS = 30_000L
+
+/**
+ * r13 S4: when an open sheet's timer asks the machine for an executor's
+ * look again. Only a look that has not priced it (none yet, `unpriced`,
+ * `unchecked`) is asked again by the timer, at most [AUTO_LIMIT] times
+ * (the fee policy's `AUTO_REQUOTE_LIMIT`) — then "Check again", the app
+ * coming back to the front, or the transaction moving asks. A priced look,
+ * or one that says it cannot run, stands: Execute looks again itself before
+ * its passkey when the look is older than the machine's freshness window.
+ */
+internal object LookAsk {
+    const val ASK_EVERY_MS = 4_000L
+    const val AUTO_LIMIT = 4
+
+    fun timerAsks(kind: String?, autoAsked: Int): Boolean =
+        autoAsked < AUTO_LIMIT && (kind == null || kind == "unpriced" || kind == "unchecked")
+}
 
 /** How soon a review that could not read the chain is asked again (the web's `REVIEW_RETRY_MS`). */
 internal const val REVIEW_RETRY_MS = 5_000L

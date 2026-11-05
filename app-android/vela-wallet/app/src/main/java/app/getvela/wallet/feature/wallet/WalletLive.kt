@@ -961,7 +961,13 @@ object WalletLive {
              * and wrote the owner's balance 「CN¥188.44」 under a Settings row
              * that said 「CNY · ¥」, beside an iPhone that wrote 「¥34.03」.
              */
-            fun fiatSign(code: String, language: String = AppLanguage.tag): String = fiatSymbol(code, language)
+            fun fiatSign(code: String, language: String = AppLanguage.tag): String =
+                // r13 (the ANR typing in Send): the core's answer for a code in
+                // a language never changes — kept, not asked across the FFI on
+                // every recomposition of every screen that draws money.
+                fiatSigns.getOrPut("$code|$language") { fiatSymbol(code, language) }
+
+            private val fiatSigns = java.util.concurrent.ConcurrentHashMap<String, String>()
 
             /**
              * [fiatSign] as it stands before the digits: a symbol that ends

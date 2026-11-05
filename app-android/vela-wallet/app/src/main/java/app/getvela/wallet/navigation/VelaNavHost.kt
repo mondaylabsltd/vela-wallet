@@ -1579,13 +1579,23 @@ fun VelaNavHost(
                             application.container.i18nRuntime.include(app.getvela.wallet.core.i18n.I18nCatalogs.MULTISIG)
                         }
                     }
-                    val flowModel = remember(liveState, sendView, feeView, speedView, batchView, importReplaces, contactsBook, strings, currency, chainNames, explorers, shownAddress, sweepPicking, chainFilter, classFilter, Formats.current, sendRelaySentAt, nativeSymbols, multisigProposals, i18nNamespaces) {
-                        val drawn = FlowFixtures.build(liveState, strings)
+                    // r13 (the ANR typing in Send): what does not move with a
+                    // keystroke is not built again for one — the flow's frame
+                    // (its fixture words, dozens of translations) and the money
+                    // (the core's currency symbol) are built when THEIR inputs
+                    // move; a keystroke rebuilds only the live form over them.
+                    val drawnFrame = remember(liveState, strings, i18nNamespaces) { FlowFixtures.build(liveState, strings) }
+                    val sendMoney = remember(currency, strings.language) { WalletLive.Money.of(currency, strings.language) }
+                    LaunchedEffect(liveState, drawnFrame.base::class) {
+                        VelaLog.event("send.base", drawnFrame.base::class.simpleName ?: "?", "state" to liveState.name, "top" to flowState.name)
+                    }
+                    val flowModel = remember(liveState, sendView, feeView, speedView, batchView, importReplaces, contactsBook, strings, currency, chainNames, explorers, shownAddress, sweepPicking, chainFilter, classFilter, Formats.current, sendRelaySentAt, nativeSymbols, multisigProposals, i18nNamespaces, drawnFrame, sendMoney) {
+                        val drawn = drawnFrame
                         val ctx = SendLive.Context(
                             strings = strings,
                             chainNames = chainNames,
                             explorers = explorers,
-                            money = WalletLive.Money.of(currency, strings.language),
+                            money = sendMoney,
                             fromName = shownName,
                             fromAddress = shownAddress,
                             relaySentAtMs = sendRelaySentAt,
@@ -1597,7 +1607,6 @@ fun VelaNavHost(
                                     ?.chain(chainId)?.members?.let { it.threshold to it.owners.size }
                             },
                         )
-                        VelaLog.event("send.base", drawn.base::class.simpleName ?: "?", "state" to liveState.name, "top" to flowState.name)
                         val base = when (val base = drawn.base) {
                             is FlowBase.SendPick -> FlowBase.SendPick(SendLive.pick(base.model, sendView, ctx, sweepPicking, sendView.multi_chain_id ?: chainFilter, classFilter))
                             is FlowBase.SendForm -> FlowBase.SendForm(

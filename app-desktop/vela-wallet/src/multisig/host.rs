@@ -614,8 +614,17 @@ impl MultisigHost {
                 // — the first load no longer misses an executed send until
                 // the window is focused again.
                 Screen::ActivityRows(rows) => {
-                    write_rows(rows);
-                    self.screen.push(Screen::ActivityRows(Vec::new()));
+                    let written = cx
+                        .background_executor()
+                        .spawn(async move { write_rows(rows) });
+                    cx.spawn(async move |this, cx| {
+                        written.await;
+                        let _ = this.update(cx, |host, cx| {
+                            host.screen.push(Screen::ActivityRows(Vec::new()));
+                            cx.notify();
+                        });
+                    })
+                    .detach();
                 }
                 other => self.screen.push(other),
             }
@@ -875,10 +884,9 @@ fn reword_member_rows() {
 
 /// An executed multisig transaction's rows, worded and kept in Activity
 /// (the web's `executionRows`): which rows is the core's plan; a token's
-/// symbol and decimals are read here. On a thread: the reads are the
-/// chain's.
-/// r13-7: written before the page's feed is told to read its store again
-/// (`Screen::ActivityRows`) — a handful of rows, once per execution found.
+/// symbol and decimals are read here. Called off the main thread (the reads
+/// are the chain's); r13-7: the page's feed is told to read its store again
+/// once they are written (`Screen::ActivityRows`).
 fn write_rows(rows: Vec<Value>) {
     let worded = super::activity::worded_rows(&rows);
     if worded.is_empty() {
@@ -892,4 +900,10 @@ fn write_rows(rows: Vec<Value>) {
         }
         true
     });
+    // r13 S4 (the Android finding, here too): an execution landed — this
+    // device's or another member's — so the multisig's holdings moved; read
+    // now, as the tracker's `HoldingsMoved` does for a Vela account's own op,
+    // never at the next ten-minute pass (Assets kept 7.5 xDAI beside a chain
+    // that said 7.49).
+    crate::executor::balance_dashboard::invalidate();
 }
