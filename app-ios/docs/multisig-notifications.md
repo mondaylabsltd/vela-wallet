@@ -84,3 +84,26 @@ lands.
 `VelaWalletUITests/R9FixLiveUITests` (`test1…` asks on create, `test4…` and
 `test6…` — the latter with the service answering 5 s late) runs the same
 steps against the multisig fork harness; see the file's header.
+
+## On a phone: the real background refresh
+
+A phone runs the real `BGAppRefreshTask`, and lldb can ask iOS to run it now
+(real-device pass 2, iPhone 11 on iOS 26.5): send the app away, wait past its
+background time (about 30 s; the trigger above stops then), have another
+member propose, and run
+
+```sh
+cat > /tmp/bgtask.lldb <<'LLDB'
+device select <device identifier from `xcrun devicectl list devices`>
+device process attach --name VelaWallet
+script import time; time.sleep(25)
+e -l objc -- (void)[[BGTaskScheduler sharedScheduler] _simulateLaunchForTaskWithIdentifier:@"app.getvela.VelaWallet.multisig"]
+process detach
+quit
+LLDB
+xcrun lldb -s /tmp/bgtask.lldb
+```
+
+The attach over CoreDevice returns before the process has stopped; an
+expression sent at once is refused ("the process is attaching"), hence the
+wait. The notification lands within a few seconds of the detach.
