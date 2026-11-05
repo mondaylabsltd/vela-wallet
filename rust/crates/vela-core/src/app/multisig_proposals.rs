@@ -4229,11 +4229,10 @@ async fn execute(
             preview: preview.to_value(),
         };
     }
-    if let Err(Stop::State(s)) =
-        authorize_signing(io, st, &input.account, chain_id, &input.item.tx).await
-    {
-        return s;
-    }
+    let anyway = match authorize_signing(io, st, &input.account, chain_id, &input.item.tx).await {
+        Ok(anyway) => anyway,
+        Err(Stop::State(s)) => return s,
+    };
     // r7-3: one signature, the executor's own operation — on its page when
     // it signs on one (the shell hands the page the operation and
     // `SendPurpose::Execute`). It counts as its approval as `msg.sender`
@@ -4260,6 +4259,7 @@ async fn execute(
                 threshold: input.members.threshold,
                 tx: Box::new(input.item.tx.clone()),
                 owners: input.members.owners.clone(),
+                anyway,
             }),
         })
         .await;

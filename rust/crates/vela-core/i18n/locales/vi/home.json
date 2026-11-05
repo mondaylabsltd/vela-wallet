@@ -231,6 +231,7 @@
         "feeChecking": "Đang kiểm tra giao dịch có chạy được không, và phí mạng…",
         "feeUnpriced": "Hiện không tính được phí mạng.",
         "feeUnchecked": "Không kiểm tra được giao dịch có chạy được không — bạn vẫn có thể duyệt; Thực thi sẽ kiểm tra lại.",
+        "feeUncheckedHeld": "Không kiểm tra được giao dịch có chạy được không — Thực thi sẽ kiểm tra lại.",
         "feeRetry": "Kiểm tra lại",
         "feeSetup": "Bao gồm thiết lập một lần trên {{network}} ≈ {{amount}}:",
         "feeSetupPlain": "Bao gồm thiết lập một lần trên {{network}}:",
@@ -786,7 +787,8 @@
           "timedOut": "Không đọc kịp thời.",
           "unreadable": "Không đọc được giao dịch này.",
           "gone": "Giao dịch này không còn trong danh sách.",
-          "tryAgain": "Thử lại"
+          "tryAgain": "Thử lại",
+          "unchecked": "Vela không kiểm tra được giao dịch này thay đổi những gì."
         }
       },
       "notify": {

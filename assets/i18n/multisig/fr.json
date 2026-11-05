@@ -159,6 +159,7 @@
     "feeChecking": "Vérification de l’exécution et des frais de réseau…",
     "feeUnpriced": "Impossible de calculer les frais de réseau pour l’instant.",
     "feeUnchecked": "Impossible de vérifier si elle passerait — vous pouvez quand même approuver ; Exécuter vérifie à nouveau.",
+    "feeUncheckedHeld": "Impossible de vérifier si elle passerait — Exécuter vérifie à nouveau.",
     "feeRetry": "Vérifier à nouveau",
     "feeSetup": "Comprend une mise en place unique sur {{network}} ≈ {{amount}} :",
     "feeSetupPlain": "Comprend une mise en place unique sur {{network}} :",
@@ -718,7 +719,8 @@
      "timedOut": "Impossible de la lire à temps.",
      "unreadable": "Impossible de lire cette transaction.",
      "gone": "Cette transaction n'est plus dans la liste.",
-     "tryAgain": "Réessayer"
+     "tryAgain": "Réessayer",
+     "unchecked": "Vela n'a pas pu vérifier ce que cette transaction modifie."
     }
    },
    "notify": {

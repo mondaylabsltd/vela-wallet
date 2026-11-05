@@ -19,7 +19,9 @@ use vela_core::app::multisig_proposals::{ActionState, Event, MultisigProposals, 
 use vela_core::app::multisig_review_state::{
     self as review_state, ReviewShows, ReviewState, REVIEW_TIMEOUT_MS,
 };
-use vela_core::app::multisig_shell::{MultisigAccount, MultisigOperation as Op};
+use vela_core::app::multisig_shell::{
+    MultisigAccount, MultisigOperation as Op, PasskeyPurpose, SendPurpose,
+};
 use vela_core::multisig::Transfer;
 use world::{fixture, genesis, settle_reads_first, World, SERVICE};
 
@@ -422,6 +424,238 @@ fn a_proposed_draft_keeps_its_ready_review() {
     let key = format!("100:{safe_tx_hash}");
     assert_eq!(sut.view().review_states[&key], ReviewState::Ready);
     assert!(sut.view().reviews[&key].is_object());
+}
+
+// -- D1: neither safety check read (real-device pass 2) -----------------------------------
+
+/// A slow network: every read the state guard makes (`debug_traceCall`, the
+/// Safe's `simulateAndRevert` probe) gives up, and so does the simulation.
+fn checks_unread(world: &mut World) {
+    let probe = format!(
+        "0x{}",
+        alloy_primitives::hex::encode(
+            &alloy_primitives::keccak256(b"simulateAndRevert(address,bytes)")[..4]
+        )
+    );
+    world.rpc_hooks.push(Box::new(move |_, method, params| {
+        let probing = method == "eth_call"
+            && params[0]["data"]
+                .as_str()
+                .is_some_and(|d| d.to_ascii_lowercase().starts_with(&probe));
+        (method == "debug_traceCall" || probing).then(|| {
+            vela_core::app::multisig_shell::MultisigShellResult::RpcUnanswered {
+                detail: "timed out".to_owned(),
+            }
+        })
+    }));
+    world.sim_reply = Some(r#"{"unreachable":true}"#.to_owned());
+}
+
+/// As [`run`], keeping what each passkey was asked for (the page's words).
+fn run_purposes(sut: &mut Sut, world: &mut World, event: Event) -> Vec<PasskeyPurpose> {
+    sut.dispatch(event);
+    let mut purposes = Vec::new();
+    for _ in 0..20_000 {
+        let outstanding = sut.outstanding();
+        let Some(op) = outstanding
+            .iter()
+            .find(|op| !matches!(op, Op::Wait { .. }))
+            .or_else(|| outstanding.first())
+            .cloned()
+        else {
+            return purposes;
+        };
+        if let Op::Passkey { purpose, .. } = &op {
+            purposes.push(purpose.clone());
+        }
+        let res = world.answer(&op);
+        sut.resolve_matching(|o| *o == op, res);
+    }
+    panic!("the machine never settled");
+}
+
+fn approve_anyway(purposes: &[PasskeyPurpose]) -> bool {
+    !purposes.is_empty()
+        && purposes
+            .iter()
+            .all(|p| matches!(p, PasskeyPurpose::Approve { anyway: true, .. }))
+}
+
+/// Real-device pass 2, D1: each read of a review gives up at its bound on a
+/// slow network, so at ~36 s the review came back with neither the state
+/// guard nor the simulation read — "ready", and signed in one tap (the test
+/// hand approved and executed so). It stays readable, but the core's sign
+/// rule asks for "… anyway": the door says it (danger line, Try again), and
+/// every passkey — "Propose and approve", "Approve", and the one press of
+/// "Approve and execute" — is asked as "… anyway", the words the trusted
+/// page draws.
+#[test]
+fn a_review_neither_check_read_is_ready_but_every_press_signs_only_anyway() {
+    let (mut world, mut sut, account) = setup(&[0]);
+    checks_unread(&mut world);
+    run(&mut sut, &mut world, transfer());
+    let draft = sut.view().draft.expect("a draft");
+    assert_eq!(
+        draft.review_state,
+        ReviewState::Ready,
+        "readable, not failed"
+    );
+    let door = review_state::door(Some(&draft.review_state), draft.review.as_ref());
+    assert!(door.enabled && door.anyway && door.retry);
+    assert_eq!(
+        door.reason_key.as_deref(),
+        Some(review_state::UNCHECKED_KEY)
+    );
+    // Propose and approve: "… anyway".
+    let purposes = run_purposes(
+        &mut sut,
+        &mut world,
+        Event::ConfirmDraft { as_member: None },
+    );
+    assert!(approve_anyway(&purposes), "{purposes:?}");
+    let ActionState::Done { safe_tx_hash, .. } = sut.view().actions["propose"].clone() else {
+        panic!("proposed: {:?}", sut.view().actions["propose"]);
+    };
+    // Another member's device: its review is unchecked too; its Try again
+    // reads it again (loading at once), and it stays "… anyway".
+    world.locals = vec![fixture(1)];
+    world.passkeys.clear();
+    let mut other = follow(&mut world, &account);
+    let key = format!("100:{safe_tx_hash}");
+    run(
+        &mut other,
+        &mut world,
+        Event::Review {
+            chain_id: 100,
+            safe_tx_hash: safe_tx_hash.clone(),
+            blind: false,
+        },
+    );
+    let view = other.view();
+    assert_eq!(view.review_states[&key], ReviewState::Ready);
+    let door = review_state::door(view.review_states.get(&key), view.reviews.get(&key));
+    assert!(door.enabled && door.anyway && door.retry);
+    dispatch_only(
+        &mut other,
+        Event::ReviewAgain {
+            chain_id: Some(100),
+            safe_tx_hash: Some(safe_tx_hash.clone()),
+        },
+    );
+    assert_eq!(other.view().review_states[&key], ReviewState::Loading);
+    settle_reads_first(&mut other, &mut world, 20_000);
+    assert_eq!(other.view().review_states[&key], ReviewState::Ready);
+    // r13-2: ready again right after Try again, the checks still unread —
+    // never one plain tap in that window either.
+    let view = other.view();
+    let door = review_state::door(view.review_states.get(&key), view.reviews.get(&key));
+    assert!(door.enabled && door.anyway && door.retry);
+    // The one press: approve and execute — the executor's own operation
+    // (its approval as `msg.sender`) is asked "… anyway" too: its page says
+    // "Execute anyway".
+    world.purposes.clear();
+    run(
+        &mut other,
+        &mut world,
+        Event::ApproveExecute {
+            chain_id: 100,
+            safe_tx_hash: safe_tx_hash.clone(),
+            executor: fixture(1).address,
+        },
+    );
+    assert!(matches!(
+        other.view().actions[&format!("execute:{safe_tx_hash}")],
+        ActionState::Done { .. }
+    ));
+    assert!(
+        matches!(
+            world.purposes.as_slice(),
+            [Some(SendPurpose::Execute { anyway: true, .. })]
+        ),
+        "{:?}",
+        world.purposes
+    );
+}
+
+/// Round 13 (r13-2): a node that REFUSES (not hangs) answers every read at
+/// once with an error, and the review was `ready` in 2–4 s with both checks
+/// unread and a plain Approve (MS-B #9, a change of threshold). Whatever left
+/// both unread — a hang, a refusal, the reads right after Try again — the
+/// sign rule asks for "… anyway".
+#[test]
+fn a_refused_node_reads_neither_check_and_signs_only_anyway() {
+    let (mut world, mut sut, _) = setup(&[0]);
+    let probe = format!(
+        "0x{}",
+        alloy_primitives::hex::encode(
+            &alloy_primitives::keccak256(b"simulateAndRevert(address,bytes)")[..4]
+        )
+    );
+    world.rpc_hooks.push(Box::new(move |_, method, params| {
+        let probing = method == "eth_call"
+            && params[0]["data"]
+                .as_str()
+                .is_some_and(|d| d.to_ascii_lowercase().starts_with(&probe));
+        (method == "debug_traceCall" || probing).then(|| {
+            vela_core::app::multisig_shell::MultisigShellResult::RpcError {
+                code: Some(-32603),
+                message: "connect ECONNREFUSED 127.0.0.1:8545".to_owned(),
+                data: None,
+            }
+        })
+    }));
+    world.sim_reply = Some(
+        r#"{"error":{"code":-32603,"message":"connect ECONNREFUSED 127.0.0.1:8545"}}"#.to_owned(),
+    );
+    run(&mut sut, &mut world, transfer());
+    let draft = sut.view().draft.expect("a draft");
+    assert_eq!(
+        draft.review_state,
+        ReviewState::Ready,
+        "ready at once, not failed"
+    );
+    let door = review_state::door(Some(&draft.review_state), draft.review.as_ref());
+    assert!(door.enabled && door.anyway && door.retry, "{door:?}");
+    assert_eq!(
+        door.reason_key.as_deref(),
+        Some(review_state::UNCHECKED_KEY)
+    );
+    let purposes = run_purposes(
+        &mut sut,
+        &mut world,
+        Event::ConfirmDraft { as_member: None },
+    );
+    assert!(approve_anyway(&purposes), "{purposes:?}");
+}
+
+/// D1: one of the two checks read keeps today's caution — readable, one
+/// plain press, no danger line, a plain passkey.
+#[test]
+fn one_check_unread_alone_signs_plainly() {
+    let (mut world, mut sut, _) = setup(&[0]);
+    // This world's state guard cannot read the Safe's state; the simulation
+    // answers: one check of two.
+    world.sim_reply = Some(r#"{"result":[{"calls":[{"status":"0x1","logs":[]}]}]}"#.to_owned());
+    run(&mut sut, &mut world, transfer());
+    let draft = sut.view().draft.expect("a draft");
+    assert_eq!(draft.review_state, ReviewState::Ready);
+    let review = draft.review.clone().expect("a review");
+    assert_eq!(review["state"]["verdict"]["kind"], "unavailable");
+    assert_eq!(review["simulation"]["kind"], "deltas");
+    let door = review_state::door(Some(&draft.review_state), draft.review.as_ref());
+    assert!(door.enabled && !door.retry && door.reason_key.is_none());
+    let purposes = run_purposes(
+        &mut sut,
+        &mut world,
+        Event::ConfirmDraft { as_member: None },
+    );
+    assert!(!purposes.is_empty());
+    assert!(
+        purposes
+            .iter()
+            .all(|p| matches!(p, PasskeyPurpose::Approve { anyway: false, .. })),
+        "{purposes:?}"
+    );
 }
 
 // -- the shared vectors ------------------------------------------------------------------

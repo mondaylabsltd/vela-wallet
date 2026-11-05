@@ -997,8 +997,16 @@ fn no_source_says_so_and_decoding_stands() {
         reason: "notOffered".into()
     }));
     assert!(r.concerns.contains(&Concern::Unsimulated));
-    assert_eq!(r.tone, Tone::Caution);
-    assert!(r.sign.allowed);
+    // D1: neither check read — a danger, signed only "… anyway".
+    assert!(r.concerns.contains(&Concern::Unchecked));
+    assert_eq!(r.tone, Tone::Danger);
+    assert_eq!(
+        r.sign,
+        SignRule {
+            allowed: true,
+            anyway: true
+        }
+    );
     let t = tx("0x4444444444444444444444444444444444444444", "0x1", "0x", 0);
     let r = review_with(
         t,
@@ -1011,6 +1019,171 @@ fn no_source_says_so_and_decoding_stands() {
             reason: "unreachable".into()
         }
     );
+}
+
+// -- D1: neither safety check read (real-device pass 2) --------------------------
+
+const SIM_OK: &str = r#"{"result":[{"calls":[{"status":"0x1","logs":[]}]}]}"#;
+const SIM_UNREACHABLE: &str = r#"{"unreachable":true}"#;
+
+fn checks(trace: Value, probe: Value, sim: &str) -> MultisigReview {
+    let t = tx("0x4444444444444444444444444444444444444444", "0x1", "0x", 0);
+    multisig_review(&ReviewInput {
+        reads: reads(t),
+        trace: Some(trace),
+        probe: Some(probe),
+        sim_reply: Some(sim.into()),
+        ..ReviewInput::default()
+    })
+    .unwrap()
+}
+
+fn ready_door(r: &MultisigReview) -> crate::app::multisig_review_state::SignDoor {
+    crate::app::multisig_review_state::door(
+        Some(&crate::app::multisig_review_state::ReviewState::Ready),
+        Some(&serde_json::to_value(r).unwrap()),
+    )
+}
+
+#[test]
+fn a_slow_network_that_reads_neither_check_signs_only_anyway() {
+    // Each read gave up at its bound (8 s): the guard and the simulation
+    // both unread. Was "ready" and one tap (the test hand executed it).
+    let r = checks(
+        json!({"unreachable": true}),
+        json!({"unreachable": true}),
+        SIM_UNREACHABLE,
+    );
+    assert!(matches!(r.state.verdict, StateVerdict::Unavailable { .. }));
+    assert!(r.concerns.contains(&Concern::Unchecked));
+    assert_eq!(r.tone, Tone::Danger);
+    assert_eq!(
+        r.sign,
+        SignRule {
+            allowed: true,
+            anyway: true
+        }
+    );
+    assert!(r.refused.is_none());
+    // The door over it: drawn, the danger line, Try again, "… anyway".
+    let door = ready_door(&r);
+    assert!(door.enabled && door.anyway && door.retry);
+    assert_eq!(
+        door.reason_key.as_deref(),
+        Some(crate::app::multisig_review_state::UNCHECKED_KEY)
+    );
+}
+
+#[test]
+fn one_check_unread_alone_stays_a_caution() {
+    // The guard unread, the simulation read: caution, one plain tap.
+    let guard_unread = checks(
+        json!({"unreachable": true}),
+        json!({"unreachable": true}),
+        SIM_OK,
+    );
+    assert!(guard_unread
+        .concerns
+        .iter()
+        .any(|c| matches!(c, Concern::StateUnread { .. })));
+    // The guard read, the simulation unread: caution, one plain tap.
+    let sim_unread = checks(
+        diff(&[], &[(n(5), n(1))]),
+        json!({"unreachable": true}),
+        SIM_UNREACHABLE,
+    );
+    assert_eq!(sim_unread.state.verdict, StateVerdict::Unchanged);
+    assert!(sim_unread.concerns.contains(&Concern::Unsimulated));
+    for r in [guard_unread, sim_unread] {
+        assert!(!r.concerns.contains(&Concern::Unchecked));
+        assert_eq!(r.tone, Tone::Caution);
+        assert_eq!(
+            r.sign,
+            SignRule {
+                allowed: true,
+                anyway: false
+            }
+        );
+        let door = ready_door(&r);
+        assert!(door.enabled && !door.anyway && !door.retry && door.reason_key.is_none());
+    }
+}
+
+/// `review-state.json` `checks`: the review's own rule, state guard ×
+/// simulation, each read or not (the shells replay its `door` cases).
+#[test]
+fn the_check_vectors_hold() {
+    let file: Value =
+        serde_json::from_str(include_str!("../tests/vectors/multisig/review-state.json")).unwrap();
+    let cases = file["checks"].as_array().unwrap();
+    assert!(cases.len() >= 7, "the four combinations and r13-2's causes");
+    for c in cases {
+        let name = c["name"].as_str().unwrap();
+        // The answers the review is gathered from: the case's own (a refused
+        // node, r13-2), else an unreachable read — or, for a check the case
+        // says was read, the fixture's own answer.
+        let trace = c.get("trace").cloned().unwrap_or_else(|| {
+            if c["guard"] == "read" {
+                diff(&[], &[(n(5), n(1))])
+            } else {
+                json!({"unreachable": true})
+            }
+        });
+        let probe = c
+            .get("probe")
+            .cloned()
+            .unwrap_or_else(|| json!({"unreachable": true}));
+        let sim = c.get("sim").and_then(Value::as_str).map_or_else(
+            || {
+                if c["simulation"] == "read" {
+                    SIM_OK.to_owned()
+                } else {
+                    SIM_UNREACHABLE.to_owned()
+                }
+            },
+            str::to_owned,
+        );
+        let r = checks(trace, probe, &sim);
+        // The case's premise holds: each check is read, or not.
+        assert_eq!(
+            matches!(r.state.verdict, StateVerdict::Unavailable { .. }),
+            c["guard"] == "unread",
+            "{name}: guard {:?}",
+            r.state.verdict
+        );
+        assert_eq!(
+            r.concerns.contains(&Concern::Unsimulated),
+            c["simulation"] == "unread",
+            "{name}: simulation {}",
+            r.simulation.kind
+        );
+        let e = &c["expect"];
+        assert_eq!(
+            r.concerns.contains(&Concern::Unchecked),
+            e["unchecked"].as_bool().unwrap(),
+            "{name}"
+        );
+        assert_eq!(serde_json::to_value(r.tone).unwrap(), e["tone"], "{name}");
+        assert_eq!(r.sign.anyway, e["anyway"].as_bool().unwrap(), "{name}");
+        assert!(r.sign.allowed, "{name}");
+    }
+}
+
+#[test]
+fn a_refusal_is_never_unchecked() {
+    // A delegatecall is refused for what it is: no "anyway", no unchecked line.
+    let t = tx("0x4444444444444444444444444444444444444444", "0x0", "0x", 1);
+    let r = multisig_review(&ReviewInput {
+        reads: reads(t),
+        trace: Some(json!({"unreachable": true})),
+        probe: Some(json!({"unreachable": true})),
+        sim_reply: Some(SIM_UNREACHABLE.into()),
+        ..ReviewInput::default()
+    })
+    .unwrap();
+    assert!(!r.sign.allowed);
+    assert!(!r.concerns.contains(&Concern::Unchecked));
+    assert!(!ready_door(&r).retry);
 }
 
 // -- the blocks ------------------------------------------------------------------

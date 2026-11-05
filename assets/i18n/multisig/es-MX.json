@@ -159,6 +159,7 @@
     "feeChecking": "Comprobando que se ejecutaría, y la comisión de red…",
     "feeUnpriced": "No se pudo calcular la comisión de red en este momento.",
     "feeUnchecked": "No se pudo comprobar si se ejecutaría — aún puedes aprobar; Ejecutar lo vuelve a comprobar.",
+    "feeUncheckedHeld": "No se pudo comprobar si se ejecutaría — Ejecutar lo vuelve a comprobar.",
     "feeRetry": "Comprobar de nuevo",
     "feeSetup": "Incluye una configuración única en {{network}} ≈ {{amount}}:",
     "feeSetupPlain": "Incluye una configuración única en {{network}}:",
@@ -718,7 +719,8 @@
      "timedOut": "No se pudo leer a tiempo.",
      "unreadable": "No se pudo leer esta transacción.",
      "gone": "Esta transacción ya no está en la lista.",
-     "tryAgain": "Intentar de nuevo"
+     "tryAgain": "Intentar de nuevo",
+     "unchecked": "Vela no pudo verificar qué cambia esta transacción."
     }
    },
    "notify": {

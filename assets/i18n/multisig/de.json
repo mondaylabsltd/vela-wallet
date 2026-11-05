@@ -157,6 +157,7 @@
     "feeChecking": "Prüfe, ob es laufen würde, und die Netzwerkgebühr…",
     "feeUnpriced": "Die Netzwerkgebühr ließ sich gerade nicht ermitteln.",
     "feeUnchecked": "Ob sie durchläuft, ließ sich nicht prüfen — genehmigen kannst du trotzdem; Ausführen prüft erneut.",
+    "feeUncheckedHeld": "Ob sie durchläuft, ließ sich nicht prüfen — Ausführen prüft erneut.",
     "feeRetry": "Erneut prüfen",
     "feeSetup": "Enthält die einmalige Einrichtung auf {{network}} ≈ {{amount}}:",
     "feeSetupPlain": "Enthält die einmalige Einrichtung auf {{network}}:",
@@ -712,7 +713,8 @@
      "timedOut": "Sie konnte nicht rechtzeitig gelesen werden.",
      "unreadable": "Diese Transaktion konnte nicht gelesen werden.",
      "gone": "Diese Transaktion ist nicht mehr in der Liste.",
-     "tryAgain": "Erneut versuchen"
+     "tryAgain": "Erneut versuchen",
+     "unchecked": "Vela konnte nicht prüfen, was diese Transaktion ändert."
     }
    },
    "notify": {

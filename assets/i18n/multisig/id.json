@@ -157,6 +157,7 @@
     "feeChecking": "Memeriksa bahwa ini akan berjalan, dan biaya jaringannya…",
     "feeUnpriced": "Biaya jaringan tidak dapat dihitung saat ini.",
     "feeUnchecked": "Tidak bisa memeriksa apakah transaksi akan berjalan — Anda tetap bisa menyetujui; Eksekusi akan memeriksa lagi.",
+    "feeUncheckedHeld": "Tidak bisa memeriksa apakah transaksi akan berjalan — Eksekusi akan memeriksa lagi.",
     "feeRetry": "Periksa lagi",
     "feeSetup": "Termasuk penyiapan satu kali di {{network}} ≈ {{amount}}:",
     "feeSetupPlain": "Termasuk penyiapan satu kali di {{network}}:",
@@ -712,7 +713,8 @@
      "timedOut": "Tidak bisa dibaca tepat waktu.",
      "unreadable": "Transaksi ini tidak bisa dibaca.",
      "gone": "Transaksi ini sudah tidak ada di daftar.",
-     "tryAgain": "Coba lagi"
+     "tryAgain": "Coba lagi",
+     "unchecked": "Vela tidak bisa memeriksa apa yang diubah transaksi ini."
     }
    },
    "notify": {

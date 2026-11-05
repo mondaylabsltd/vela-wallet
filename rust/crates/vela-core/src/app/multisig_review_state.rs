@@ -12,6 +12,11 @@
 //! [`REASON_TIMED_OUT`] — it never spins for ever and never becomes "allowed"
 //! by default. `failed` is said with its reason and a "Try again" that sends
 //! the machine's `review_again`.
+//!
+//! D1 (real-device pass 2): a `ready` review whose state-change check AND
+//! simulation could not be read (its `unchecked` concern) is drawn, but its
+//! door asks for "… anyway" and carries a danger line ([`UNCHECKED_KEY`],
+//! `reason_key`) and a Try again (`retry`) — never one plain tap.
 
 use std::future::Future;
 
@@ -44,6 +49,22 @@ pub const REASON_TIMED_OUT: &str = "home.multisig.review.state.timedOut";
 pub const REASON_UNREADABLE: &str = "home.multisig.review.state.unreadable";
 /// The transaction is no longer in the list it was opened from.
 pub const REASON_GONE: &str = "home.multisig.review.state.gone";
+/// D1 (real-device pass 2): a review drawn, but neither safety check read —
+/// not the state-diff guard, not the simulation. A danger line over the
+/// review, with Try again; the button signs only "… anyway".
+pub const UNCHECKED_KEY: &str = "home.multisig.review.state.unchecked";
+
+/// Whether `review` (the core's `MultisigReview`) says neither safety check
+/// was read (its `unchecked` concern, D1).
+pub fn unchecked(review: Option<&Value>) -> bool {
+    review
+        .and_then(|r| r.get("concerns"))
+        .and_then(Value::as_array)
+        .is_some_and(|cs| {
+            cs.iter()
+                .any(|c| c.get("kind").and_then(Value::as_str) == Some("unchecked"))
+        })
+}
 
 /// Where a review stands. Wire: `{"kind": "loading"}`, `{"kind": "ready"}`,
 /// `{"kind": "failed", "reason_key": "home.multisig.review.state.timedOut"}`.
@@ -103,9 +124,12 @@ pub struct SignDoor {
     pub enabled: bool,
     /// Pressed, it goes through the review's "… anyway" step first.
     pub anyway: bool,
-    /// `failed`: the reason's corpus key.
+    /// `failed`: the reason's corpus key. `review` (D1): when set
+    /// ([`UNCHECKED_KEY`]), a danger line drawn ABOVE the review — neither
+    /// safety check was read.
     pub reason_key: Option<String>,
-    /// `failed`: offer "Try again" (`review_again`).
+    /// `failed`: offer "Try again" (`review_again`). `review` (D1): the
+    /// unchecked line's Try again.
     pub retry: bool,
 }
 
@@ -132,12 +156,16 @@ pub fn door(state: Option<&ReviewState>, review: Option<&Value>) -> SignDoor {
                 return closed(ReviewShows::Failed, Some(REASON_UNREADABLE.to_owned()));
             };
             let allowed = sign["allowed"].as_bool() == Some(true);
+            // D1: neither safety check read — drawn, said in danger with
+            // Try again, and signed only "… anyway" (whatever the sign rule
+            // handed says: the door never lets it be one plain tap).
+            let unchecked = unchecked(review);
             SignDoor {
                 shows: ReviewShows::Review,
                 enabled: allowed,
-                anyway: allowed && sign["anyway"].as_bool() == Some(true),
-                reason_key: None,
-                retry: false,
+                anyway: allowed && (sign["anyway"].as_bool() == Some(true) || unchecked),
+                reason_key: unchecked.then(|| UNCHECKED_KEY.to_owned()),
+                retry: unchecked,
             }
         }
     }
@@ -202,5 +230,25 @@ mod tests {
         // A review without a sign rule, or no review at all, is never "allowed".
         assert!(!door(Some(&ReviewState::Ready), Some(&json!({}))).enabled);
         assert!(!door(Some(&ReviewState::Ready), None).enabled);
+    }
+
+    #[test]
+    fn a_review_neither_check_read_signs_only_anyway_with_try_again() {
+        // Even a sign rule handed without its "anyway" cannot make it one tap.
+        let unchecked = json!({
+            "sign": {"allowed": true, "anyway": false},
+            "concerns": [{"kind": "stateUnread", "reason": "unreachable"}, {"kind": "unsimulated"}, {"kind": "unchecked"}]
+        });
+        let d = door(Some(&ReviewState::Ready), Some(&unchecked));
+        assert_eq!(d.shows, ReviewShows::Review);
+        assert!(d.enabled && d.anyway && d.retry);
+        assert_eq!(d.reason_key.as_deref(), Some(UNCHECKED_KEY));
+        // One check unread alone: today's caution — plain, no line.
+        let one = json!({
+            "sign": {"allowed": true, "anyway": false},
+            "concerns": [{"kind": "stateUnread", "reason": "unreachable"}]
+        });
+        let d = door(Some(&ReviewState::Ready), Some(&one));
+        assert!(d.enabled && !d.anyway && !d.retry && d.reason_key.is_none());
     }
 }

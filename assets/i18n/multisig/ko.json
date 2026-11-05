@@ -157,6 +157,7 @@
     "feeChecking": "실행 가능 여부와 네트워크 수수료를 확인하는 중…",
     "feeUnpriced": "지금은 네트워크 수수료를 계산할 수 없습니다.",
     "feeUnchecked": "실행될지 확인하지 못했습니다. 승인은 할 수 있으며, 실행할 때 다시 확인합니다.",
+    "feeUncheckedHeld": "실행될지 확인하지 못했습니다. 실행할 때 다시 확인합니다.",
     "feeRetry": "다시 확인",
     "feeSetup": "{{network}}에서의 1회성 설정 포함 ≈ {{amount}}:",
     "feeSetupPlain": "{{network}}에서의 1회성 설정 포함:",
@@ -712,7 +713,8 @@
      "timedOut": "제시간에 읽지 못했습니다.",
      "unreadable": "이 거래를 읽지 못했습니다.",
      "gone": "이 거래는 더 이상 목록에 없습니다.",
-     "tryAgain": "다시 시도"
+     "tryAgain": "다시 시도",
+     "unchecked": "Vela가 이 거래로 무엇이 바뀌는지 확인하지 못했습니다."
     }
    },
    "notify": {

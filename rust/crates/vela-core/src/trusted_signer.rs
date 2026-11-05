@@ -526,6 +526,18 @@ pub fn request(input: &RequestInput<'_>) -> Value {
         operation.insert("module".into(), json!(crate::safe::SAFE_4337_MODULE));
         context.insert("operation".into(), Value::Object(operation));
     }
+    // A multisig executor's operation (`vela_multisigExecute`, as the native
+    // shells and the desktop name it): what its bytes do not carry — the
+    // number, the safeTxHash there, the name, the threshold, the members, and
+    // whether its review asks for "… anyway" (D1) — for the page to check
+    // and draw as the app's ([`approval::execution_context`], the web's own).
+    // Params that do not read add nothing: the page then says the number is
+    // not known, as it did.
+    if input.method == crate::signing_venue::MULTISIG_EXECUTE_METHOD {
+        if let Ok(Some(about)) = approval::execution_of_params(input.chain_id, &input.params) {
+            context.insert("multisig".into(), about);
+        }
+    }
     let (method, params) = if input.method.is_empty() {
         (
             "wallet_sendCalls",

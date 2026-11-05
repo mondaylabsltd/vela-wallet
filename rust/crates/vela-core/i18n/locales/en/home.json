@@ -231,6 +231,7 @@
         "feeChecking": "Checking that it would run, and the network fee…",
         "feeUnpriced": "Couldn’t work out the network fee right now.",
         "feeUnchecked": "Couldn’t check whether it would run — you can still approve; Execute checks again.",
+        "feeUncheckedHeld": "Couldn’t check whether it would run — Execute checks again.",
         "feeRetry": "Check again",
         "feeSetup": "Includes one-time setup on {{network}} ≈ {{amount}}:",
         "feeSetupPlain": "Includes one-time setup on {{network}}:",
@@ -786,7 +787,8 @@
           "timedOut": "Couldn't read it in time.",
           "unreadable": "Couldn't read this transaction.",
           "gone": "This transaction is no longer in the list.",
-          "tryAgain": "Try again"
+          "tryAgain": "Try again",
+          "unchecked": "Vela couldn't check what this transaction changes."
         }
       },
       "notify": {

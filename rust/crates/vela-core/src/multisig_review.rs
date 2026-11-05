@@ -1351,6 +1351,14 @@ pub enum Concern {
     Reverts,
     /// Nothing could be simulated.
     Unsimulated,
+    /// Real-device pass 2 (D1): NEITHER safety check could be read — the
+    /// state-diff guard is unavailable AND nothing could be simulated — so
+    /// Vela could not check what the transaction changes. A danger: it is
+    /// signed only through "… anyway", under the review door's line
+    /// (`home.multisig.review.state.unchecked`) and its Try again. One of
+    /// the two unread alone stays a caution ([`Concern::StateUnread`] or
+    /// [`Concern::Unsimulated`]).
+    Unchecked,
     Lookalike {
         address: String,
         of: String,
@@ -1394,6 +1402,7 @@ impl Concern {
                 Tone::Refused
             }
             Concern::Reverts
+            | Concern::Unchecked
             | Concern::Lookalike { .. }
             | Concern::UnlimitedApproval { .. }
             | Concern::NestedBatch
@@ -1490,6 +1499,16 @@ fn refused_of(concerns: &[Concern]) -> Option<RefusedWhy> {
                 .contains(&Concern::StateChange)
                 .then_some(RefusedWhy::StateChange)
         })
+}
+
+/// D1: whether neither safety check was read — the state-diff guard is
+/// unavailable ([`Concern::StateUnread`]) AND nothing could be simulated
+/// ([`Concern::Unsimulated`]). One of them alone is not it.
+fn unchecked_of(concerns: &[Concern]) -> bool {
+    concerns
+        .iter()
+        .any(|c| matches!(c, Concern::StateUnread { .. }))
+        && concerns.contains(&Concern::Unsimulated)
 }
 
 /// Why Vela refuses `tx` for WHAT IT IS — a delegatecall, a refund, a batch
@@ -1918,6 +1937,14 @@ pub fn multisig_review(input: &ReviewInput) -> Result<MultisigReview, CoreError>
     } else {
         simulation
     };
+    // D1 (real-device pass 2): neither check read — not the guard, not the
+    // simulation (a slow network gives each read up at its bound) — is not
+    // a caution any more: Vela could not check what it changes at all. It
+    // is said (the door's danger line, with Try again) and signed only
+    // "… anyway". Either one read keeps today's caution.
+    if unchecked_of(&concerns) {
+        concerns.push(Concern::Unchecked);
+    }
     let tone = concerns.iter().map(Concern::tone).max().unwrap_or(Tone::Ok);
     let sign = SignRule {
         allowed: tone != Tone::Refused,
