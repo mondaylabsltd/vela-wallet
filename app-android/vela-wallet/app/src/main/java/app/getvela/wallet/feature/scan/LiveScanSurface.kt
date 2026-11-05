@@ -38,6 +38,8 @@ class ScanCallbacks(
     /** Words for the states this surface can be in. */
     val permissionText: String,
     val grantLabel: String,
+    /** r14-10: the same button's words once it opens this app's Settings page (a refusal for good). */
+    val settingsLabel: String,
     val noQrFound: String,
     val cameraUnavailable: String,
     val decodeFailed: String,
@@ -69,6 +71,10 @@ fun LiveScanSurface(
         mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
     }
     var asked by remember { mutableStateOf(false) }
+    // r14-10: bumped after each answer and each return to the front, so what
+    // the button does (and says) is read again — the rationale flag moves
+    // with every refusal and with a visit to Settings.
+    var refusedFor by remember { mutableStateOf(0) }
     var torch by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
     var cameraDead by remember { mutableStateOf(false) }
@@ -83,6 +89,7 @@ fun LiveScanSurface(
         if (!fixture && !granted && !asked) {
             asked = true
             granted = callbacks.requestPermission()
+            refusedFor += 1
         }
     }
     // Back from Settings (or anywhere the person may have turned the camera
@@ -90,6 +97,7 @@ fun LiveScanSurface(
     LifecycleResumeEffect(Unit) {
         if (!fixture && !granted) {
             granted = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+            refusedFor += 1
         }
         onPauseOrDispose {}
     }
@@ -99,6 +107,10 @@ fun LiveScanSurface(
             ?: true
     }
     val openSettings: () -> Unit = callbacks.openSettings ?: { AppSettings.open(context) }
+    // r14-10: what the button does now — and so what it says.
+    val grantAction = remember(asked, granted, refusedFor) {
+        CameraRefusal.grantAction(askedBefore = asked, showRationale = showRationale())
+    }
     ScanSurface(
         model = model,
         modifier = modifier,
@@ -125,7 +137,7 @@ fun LiveScanSurface(
             cameraDead -> callbacks.cameraUnavailable
             else -> message ?: status
         },
-        statusAction = if (!granted && !fixture) callbacks.grantLabel else null,
+        statusAction = if (!granted && !fixture) CameraRefusal.label(grantAction, callbacks.grantLabel, callbacks.settingsLabel) else null,
         // A camera refused for good cannot be asked for again — the system
         // shows no dialog — so the same button opens this app's Settings
         // page, as iOS's does (NATIVE-LAUNCH-CHECKLIST C).
@@ -134,6 +146,7 @@ fun LiveScanSurface(
                 GrantAction.Ask -> scope.launch {
                     asked = true
                     granted = callbacks.requestPermission()
+                    refusedFor += 1
                 }
                 GrantAction.OpenSettings -> openSettings()
             }

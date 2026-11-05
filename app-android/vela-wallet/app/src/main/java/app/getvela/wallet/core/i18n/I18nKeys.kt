@@ -559,6 +559,8 @@ object I18nKeys {
         const val SCAN_FLIP = "componentsUi.scanner.flipCamera"
         const val SCAN_PERMISSION_TEXT = "componentsUi.scanner.permissionText"
         const val SCAN_GRANT = "componentsUi.scanner.grantPermission"
+        /** r14-10: the same button once it opens this app's Settings page (iOS's, the onboarding's words). */
+        const val SCAN_OPEN_SETTINGS = "onboarding.create.openSettings"
         const val SCAN_NO_QR = "componentsUi.scanner.noQrFoundMsg"
         const val SCAN_CAMERA_UNAVAILABLE = "componentsUi.scanner.cameraUnavailable"
         const val SCAN_ERROR_IMAGE = "componentsUi.scanner.errorImage"

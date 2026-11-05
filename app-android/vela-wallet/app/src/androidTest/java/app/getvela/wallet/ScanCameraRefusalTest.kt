@@ -66,6 +66,7 @@ class ScanCameraRefusalTest {
             pickImage = { null },
             permissionText = "permission",
             grantLabel = "grant",
+            settingsLabel = "settings",
             noQrFound = "none",
             cameraUnavailable = "unavailable",
             decodeFailed = "failed",
@@ -88,7 +89,9 @@ class ScanCameraRefusalTest {
         val asked = AtomicInteger(0)
         val opened = AtomicInteger(0)
         scanner(showRationale = false, asked = asked, opened = opened)
-        compose.onNodeWithText("grant").performClick()
+        // r14-10: the button says what it does — never "Grant Permission" over Settings.
+        compose.onNodeWithText("grant").assertDoesNotExist()
+        compose.onNodeWithText("settings").performClick()
         compose.waitForIdle()
         assertEquals("Settings opened", 1, opened.get())
         assertEquals("and the dead dialog was not asked for", 1, asked.get())
@@ -99,10 +102,17 @@ class ScanCameraRefusalTest {
         val asked = AtomicInteger(0)
         val opened = AtomicInteger(0)
         scanner(showRationale = true, asked = asked, opened = opened)
+        compose.onNodeWithText("settings").assertDoesNotExist()
         compose.onNodeWithText("grant").performClick()
         compose.waitForIdle()
         assertEquals(2, asked.get())
         assertEquals(0, opened.get())
+    }
+
+    /** r14-10: the label is the corpus's translated "Open Settings", as iOS's scanner would say it. */
+    @Test
+    fun theSettingsLabelIsTheTranslatedOpenSettings() {
+        assertEquals("Open Settings", strings.t(app.getvela.wallet.core.i18n.I18nKeys.Flows.SCAN_OPEN_SETTINGS))
     }
 
     @Test

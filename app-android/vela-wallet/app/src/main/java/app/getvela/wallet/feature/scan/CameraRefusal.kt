@@ -22,4 +22,16 @@ enum class GrantAction {
 object CameraRefusal {
     fun grantAction(askedBefore: Boolean, showRationale: Boolean): GrantAction =
         if (askedBefore && !showRationale) GrantAction.OpenSettings else GrantAction.Ask
+
+    /**
+     * r14-10: the button says what it does. While the system would still ask,
+     * "Grant Permission"; once it opens this app's page in Settings (a refusal
+     * for good), "Open Settings" — the corpus's own words (the onboarding's
+     * `onboarding.create.openSettings`), never a promise of a dialog that
+     * will not come.
+     */
+    fun label(action: GrantAction, grant: String, openSettings: String): String = when (action) {
+        GrantAction.Ask -> grant
+        GrantAction.OpenSettings -> openSettings
+    }
 }
