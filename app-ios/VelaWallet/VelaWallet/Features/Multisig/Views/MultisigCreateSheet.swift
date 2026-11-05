@@ -157,7 +157,7 @@ struct MultisigCreateSheet: View {
 
     private var membersStep: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s16) {
-            Text(verbatim: words.t("create.intro"))
+            Text(prose: words.t("create.intro"))
                 .typeRole(Typography.body.scaled(textScale))
                 .foregroundStyle(theme.fgMuted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -188,7 +188,7 @@ struct MultisigCreateSheet: View {
                         set: { _ in toggle(account.address) }
                     )) {
                         VStack(alignment: .leading, spacing: Tokens.Space.s2) {
-                            Text(verbatim: account.name).typeRole(Typography.fieldLabel.scaled(textScale))
+                            Text(prose: account.name).typeRole(Typography.fieldLabel.scaled(textScale))
                             AddressTextView(MsWords.short(account.address), role: Typography.monoSmall.scaled(textScale))
                                 .foregroundStyle(theme.fgSubtle)
                         }
@@ -241,7 +241,7 @@ struct MultisigCreateSheet: View {
         return HStack(alignment: .top, spacing: Tokens.Space.s12) {
             IdenticonAvatar(seed: owner, size: 28, tappable: false)
             VStack(alignment: .leading, spacing: Tokens.Space.s4) {
-                Text(verbatim: label(owner)).typeRole(Typography.fieldLabel.scaled(textScale)).foregroundStyle(theme.fgBase)
+                Text(prose: label(owner)).typeRole(Typography.fieldLabel.scaled(textScale)).foregroundStyle(theme.fgBase)
                 AddressTextView(MsRules.eip55(owner), role: Typography.monoSmall.scaled(textScale))
                     .foregroundStyle(theme.fgSubtle)
                 MultisigKindChoiceView(hub: hub, words: words, address: owner, choice: kind)
@@ -350,21 +350,21 @@ struct MultisigCreateSheet: View {
             MsSection(title: words.t("create.threshold")) {
                 let view = machineThreshold
                 HStack {
-                    Text(verbatim: words.ruleText(m: view?["value"]?.int ?? threshold, n: view?["members"]?.int ?? owners.count))
+                    Text(prose: words.ruleText(m: view?["value"]?.int ?? threshold, n: view?["members"]?.int ?? owners.count))
                         .typeRole(Typography.rowTitle.scaled(textScale))
                         .foregroundStyle(theme.fgBase)
                         .accessibilityIdentifier("multisig.create.thresholdValue")
                     Spacer()
                     // The machine's stepper (`step_threshold`), its bounds the core's.
                     Button { hub.send(["type": "step_threshold", "up": false]) } label: {
-                        Text(verbatim: "−").font(Typography.rowTitle.scaled(textScale).font)
+                        Text(prose: "−").font(Typography.rowTitle.scaled(textScale).font)
                             .frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
                     }
                     .disabled(view?["can_lower"]?.bool != true)
                     .accessibilityLabel(words.t("create.fewer"))
                     .accessibilityIdentifier("multisig.create.fewer")
                     Button { hub.send(["type": "step_threshold", "up": true]) } label: {
-                        Text(verbatim: "+").font(Typography.rowTitle.scaled(textScale).font)
+                        Text(prose: "+").font(Typography.rowTitle.scaled(textScale).font)
                             .frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
                     }
                     .disabled(view?["can_raise"]?.bool != true)
@@ -385,8 +385,8 @@ struct MultisigCreateSheet: View {
                         get: { chainId ?? -1 },
                         set: { chainId = $0; chose = true }
                     )) {
-                        if chainId == nil { Text(verbatim: words.t("create.networkNeeded")).tag(-1) }
-                        ForEach(networks, id: \.self) { id in Text(verbatim: words.network(id)).tag(id) }
+                        if chainId == nil { Text(prose: words.t("create.networkNeeded")).tag(-1) }
+                        ForEach(networks, id: \.self) { id in Text(prose: words.network(id)).tag(id) }
                     }
                     .pickerStyle(.menu)
                     .tint(theme.fgBase)
@@ -479,7 +479,7 @@ struct MultisigCreateSheet: View {
             }
             if creators.count > 1 {
                 Picker(words.t("create.creator"), selection: Binding(get: { chosenCreator }, set: { creator = $0 })) {
-                    ForEach(creators, id: \.self) { c in Text(verbatim: label(c)).tag(Optional(c)) }
+                    ForEach(creators, id: \.self) { c in Text(prose: label(c)).tag(Optional(c)) }
                 }
                 .pickerStyle(.menu)
                 .tint(theme.fgBase)
@@ -539,7 +539,7 @@ struct MultisigCreateSheet: View {
             return sheet.phase == .working ? words.t("create.savedSharing") : words.t("create.savedLater")
         }()
         return VStack(alignment: .leading, spacing: Tokens.Space.s16) {
-            Text(verbatim: words.t("create.created"))
+            Text(prose: words.t("create.created"))
                 .typeRole(Typography.title.scaled(textScale))
                 .foregroundStyle(theme.fgBase)
                 .accessibilityIdentifier("multisig.create.created")
@@ -586,15 +586,15 @@ struct MultisigKindChoiceView: View {
                         get: { choice.kind ?? "" },
                         set: { hub.send(["type": "pick_kind", "address": address, "kind": $0.isEmpty ? NSNull() : $0]) }
                     )) {
-                        Text(verbatim: "—").tag("")
-                        Text(verbatim: words.t("members.kindVela")).tag("vela")
-                        Text(verbatim: words.t("members.kindWallet")).tag("wallet")
+                        Text(prose: "—").tag("")
+                        Text(prose: words.t("members.kindVela")).tag("vela")
+                        Text(prose: words.t("members.kindWallet")).tag("wallet")
                     }
                     .pickerStyle(.segmented)
                     .accessibilityIdentifier("multisig.kind")
                 }
                 if let note = noteText(choice.note) {
-                    Text(verbatim: note)
+                    Text(prose: note)
                         .typeRole(Typography.rowSub.scaled(textScale))
                         .foregroundStyle(theme.fgSubtle)
                         .fixedSize(horizontal: false, vertical: true)

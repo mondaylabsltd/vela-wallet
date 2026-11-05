@@ -1630,7 +1630,7 @@ impl WalletPage {
             match view.create.phase {
                 Phase::Failed => {
                     let detail = view.create.error.clone().unwrap_or_default();
-                    let text = self.ms_failure_words(&detail, chain_id.unwrap_or_default());
+                    let text = self.ms_failure_words(&detail, chain_id.unwrap_or_default(), cx);
                     body = body.child(ms_note(theme, &text, MsTone::Danger));
                 }
                 Phase::Cancelled => {

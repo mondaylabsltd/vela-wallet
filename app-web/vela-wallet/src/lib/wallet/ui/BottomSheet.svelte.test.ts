@@ -23,11 +23,15 @@ async function drawn(
 		dismissible?: boolean | 'explicit';
 		html?: string;
 		closeLabel?: string;
+		height?: 'half' | 'tall';
+		/** The positioned box the sheet is placed within (a 390 × 844 phone frame). */
+		hostCss?: string;
 	} = {}
 ) {
 	const onclose = vi.fn();
 	const host = document.createElement('div');
-	host.style.cssText = 'position: relative; width: 390px; height: 844px; overflow: hidden;';
+	host.style.cssText =
+		props.hostCss ?? 'position: relative; width: 390px; height: 844px; overflow: hidden;';
 	document.body.appendChild(host);
 	const opener = document.createElement('button');
 	opener.textContent = 'open';
@@ -39,6 +43,7 @@ async function drawn(
 			title: 'Test sheet',
 			closeLabel: props.closeLabel ?? 'Close',
 			variant: props.variant ?? 'wallet',
+			height: props.height,
 			dismissible: props.dismissible ?? true,
 			onclose,
 			children: body(
@@ -153,6 +158,57 @@ describe('BottomSheet — the title row stands on the content’s column (r7)', 
 			});
 		}
 	}
+});
+
+/**
+ * r14 leftovers (§19.10): on Safari iOS 26 the tall Create multisig sheet
+ * opened with its Next under the floating bottom toolbar until the page was
+ * scrolled once. A sheet the page did not frame (the multisig host, the
+ * account switcher) is placed in the initial containing block, which iOS
+ * Safari sizes to the LARGE viewport — the one with the toolbar collapsed —
+ * so the sheet's foot stood under the toolbar while it was expanded. Here a
+ * containing block taller than what is visible stands in for it: the sheet
+ * keeps to the visible (dynamic) viewport, its last control in sight.
+ */
+describe('BottomSheet — its foot is on screen, whatever frames it (§19.10)', () => {
+	afterEach(() => page.viewport(414, 896));
+	const tallerThanSeen =
+		'position: absolute; top: 0; left: 0; width: 100%; height: calc(100dvh + 96px); overflow: visible;';
+	const lastControl =
+		'<div><p>Body</p><button type="button" class="last" style="display:block;width:100%;min-height:48px">Next</button></div>';
+
+	for (const variant of ['wallet', 'menu'] as const) {
+		for (const height of ['half', 'tall'] as const) {
+			if (variant === 'menu' && height === 'half') continue;
+			it(`${variant}${variant === 'wallet' ? ` (${height})` : ''}: opens with its last control within the visible viewport`, async () => {
+				await page.viewport(402, 874);
+				const view = await drawn({ variant, height, hostCss: tallerThanSeen, html: lastControl });
+				const seen = window.visualViewport?.height ?? window.innerHeight;
+				const next = view.sheet.querySelector<HTMLElement>('.last')!.getBoundingClientRect();
+				expect(view.sheet.getBoundingClientRect().bottom).toBeLessThanOrEqual(seen + 0.5);
+				expect(next.top).toBeGreaterThanOrEqual(0);
+				expect(next.bottom).toBeLessThanOrEqual(seen + 0.5);
+				// The scrim covers what is seen, no more is needed.
+				expect(view.scrim.getBoundingClientRect().bottom).toBeLessThanOrEqual(seen + 0.5);
+				expect(view.scrim.getBoundingClientRect().top).toBeLessThanOrEqual(0);
+				await view.screen.unmount();
+				view.host.remove();
+			});
+		}
+	}
+
+	it('in a phone frame shorter than the window, it still stands on the frame’s foot', async () => {
+		await page.viewport(414, 896);
+		const view = await drawn({ height: 'tall', html: lastControl });
+		expect(
+			Math.abs(view.sheet.getBoundingClientRect().bottom - view.host.getBoundingClientRect().bottom)
+		).toBeLessThan(0.5);
+		expect(
+			Math.abs(view.scrim.getBoundingClientRect().height - view.host.getBoundingClientRect().height)
+		).toBeLessThan(0.5);
+		await view.screen.unmount();
+		view.host.remove();
+	});
 });
 
 describe('BottomSheet — the drag', () => {

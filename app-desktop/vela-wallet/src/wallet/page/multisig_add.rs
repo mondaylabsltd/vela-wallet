@@ -93,6 +93,9 @@ pub(crate) struct AddForm {
     pub queue: VecDeque<(String, bool)>,
     /// The import out now, and whether its event went.
     pub current: Option<(String, bool)>,
+    /// The Safes (lowercase) last imported with their risks accepted: Try
+    /// again sends the same `import` (`queue_import_again`).
+    pub risked: Vec<String>,
     /// An import was started (the kinds are not asked again).
     pub started: bool,
 }
@@ -115,6 +118,7 @@ impl AddForm {
             file_failure: None,
             queue: VecDeque::new(),
             current: None,
+            risked: Vec::new(),
             started: false,
         }
     }
@@ -212,8 +216,80 @@ fn import_words(loc: &Loc, outcome: &ImportOutcome) -> Option<String> {
             "authority.unverified",
             &[("network", &network(*chain_id))],
         ),
+        // r14 leftovers: the network's nodes were rate-limiting — named as
+        // the add names it, never "couldn't reach the service".
+        ImportOutcome::Busy { chain_id } => {
+            words::tv(loc, "add.busy", &[("network", &network(*chain_id))])
+        }
         ImportOutcome::Refused { .. } | ImportOutcome::HighRisk { .. } => return None,
     })
+}
+
+/// Whether a row offers Try again: the core lists its Safe in
+/// `import.retry` (`ImportOutcome::offers_retry`, the core's rule), and it
+/// is not already asked again (`waiting`: queued or out now).
+pub(crate) fn import_offers_retry(
+    import: &ms_accounts::ImportView,
+    address: &str,
+    waiting: bool,
+) -> bool {
+    !waiting && import.retry.iter().any(|a| same(a, address))
+}
+
+/// Try again on a row: the same `import` for that Safe, queued as it was
+/// first sent — its risks accepted again only if they were (`risked`,
+/// lowercase). Nothing while another import runs (one at a time).
+pub(crate) fn queue_import_again(
+    queue: &mut VecDeque<(String, bool)>,
+    risked: &[String],
+    importing: bool,
+    address: &str,
+) -> bool {
+    if importing {
+        return false;
+    }
+    let accept_risks = risked.iter().any(|a| same(a, address));
+    queue.push_back((address.to_owned(), accept_risks));
+    true
+}
+
+/// The line under an exported Safe's name: its short address, its rule, its
+/// networks (drawn by `ui::prose`, the short form never broken).
+fn import_row_sub(loc: &Loc, safe: &ExportedSafe) -> String {
+    let rule = safe
+        .chains
+        .first()
+        .map(|c| {
+            words::tv(
+                loc,
+                "create.thresholdValue",
+                &[
+                    ("m", &c.threshold.to_string()),
+                    ("n", &c.owners.len().to_string()),
+                ],
+            )
+        })
+        .unwrap_or_default();
+    let chains = safe
+        .chains
+        .iter()
+        .map(|c| {
+            if c.deployed {
+                network(c.chain_id)
+            } else {
+                format!(
+                    "{} ({})",
+                    network(c.chain_id),
+                    words::t(loc, "import.undeployed")
+                )
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        "{} · {rule} · {chains}",
+        crate::wallet::live::shorten_address(&safe.address)
+    )
 }
 
 impl WalletPage {
@@ -1048,6 +1124,11 @@ impl WalletPage {
         let Some((address, accept_risks)) = form.queue.pop_front() else {
             return;
         };
+        let key = address.to_ascii_lowercase();
+        form.risked.retain(|a| *a != key);
+        if accept_risks {
+            form.risked.push(key);
+        }
         form.current = Some((address.clone(), false));
         let host = self.ms_host(cx);
         let page = cx.entity();
@@ -1111,36 +1192,8 @@ impl WalletPage {
                 && !waiting;
             let on = picked.iter().any(|p| same(p, &address));
             let done = matches!(result, Some(ImportOutcome::Imported));
-            let rule = safe
-                .chains
-                .first()
-                .map(|c| {
-                    words::tv(
-                        &loc,
-                        "create.thresholdValue",
-                        &[
-                            ("m", &c.threshold.to_string()),
-                            ("n", &c.owners.len().to_string()),
-                        ],
-                    )
-                })
-                .unwrap_or_default();
-            let chains = safe
-                .chains
-                .iter()
-                .map(|c| {
-                    if c.deployed {
-                        network(c.chain_id)
-                    } else {
-                        format!(
-                            "{} ({})",
-                            network(c.chain_id),
-                            words::t(&loc, "import.undeployed")
-                        )
-                    }
-                })
-                .collect::<Vec<_>>()
-                .join(", ");
+            let sub = import_row_sub(&loc, safe);
+            let retry = import_offers_retry(&view.import, &address, waiting);
             let name = safe.name.clone().unwrap_or_else(|| words::short(&address));
             let state: Option<(String, bool)> = if here {
                 Some((words::t(&loc, "import.already"), false))
@@ -1202,10 +1255,9 @@ impl WalletPage {
                             div()
                                 .text_size(theme::text_label())
                                 .text_color(theme.fg_subtle)
-                                .child(format!(
-                                    "{} · {rule} · {chains}",
-                                    crate::wallet::live::shorten_address(&address)
-                                )),
+                                // r14-11a: the short form is one run, never
+                                // broken after its "…".
+                                .child(crate::ui::prose(sub)),
                         ),
                 )
                 .children(state.map(|(text, bad)| {
@@ -1235,6 +1287,32 @@ impl WalletPage {
                     }));
             }
             body = body.child(row);
+            // A read that did not come back (busy, unavailable, unverified —
+            // the core's list): the same import, asked again.
+            if retry {
+                let again = address.clone();
+                body = body.child(
+                    div().flex().justify_end().child(
+                        text_action(
+                            ElementId::from(("ms-import-retry", i)),
+                            theme,
+                            &mut self.icons,
+                            None,
+                            words::t(&loc, "review.state.tryAgain").into(),
+                        )
+                        .flex_none()
+                        .when(importing, |el| el.opacity(0.5).cursor_default())
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            if let Some(form) = this.multisig.add_form.as_mut() {
+                                let importing = form.importing();
+                                let risked = form.risked.clone();
+                                queue_import_again(&mut form.queue, &risked, importing, &again);
+                            }
+                            cx.notify();
+                        })),
+                    ),
+                );
+            }
             match result {
                 Some(ImportOutcome::Refused { findings }) if !waiting => {
                     body = body.child(self.ms_authority(theme, findings, true));
@@ -1538,6 +1616,85 @@ mod tests {
             refused.offers_retry(),
             outcome_said(&loc, &refused).as_ref()
         ));
+    }
+
+    /// r14 leftovers: a network rate-limiting an import is named busy, in the
+    /// add's own words, and every row the core lists in `import.retry`
+    /// offers Try again — the same `import` for that Safe, sent again as it
+    /// was first sent.
+    #[test]
+    fn a_rate_limited_import_is_said_busy_and_its_row_offers_try_again() {
+        let loc = Loc::for_tag("en");
+        let busy = ImportOutcome::Busy {
+            chain_id: 5_042_002,
+        };
+        let line = import_words(&loc, &busy).expect("a line");
+        assert_eq!(
+            line,
+            words::tv(&loc, "add.busy", &[("network", &network(5_042_002))])
+        );
+        assert!(line.contains("Arc Testnet"), "the network is named: {line}");
+        assert!(line.contains("busy"), "the cause is named: {line}");
+        assert!(!line.contains("{{network}}"), "{line}");
+        // The core's list, not the shell's reading of the outcome.
+        let other = "0x00000000000000000000000000000000000000cc";
+        let import = ms_accounts::ImportView {
+            retry: vec![SAFE.to_ascii_lowercase()],
+            ..ms_accounts::ImportView::default()
+        };
+        assert!(import_offers_retry(&import, SAFE, false));
+        assert!(!import_offers_retry(&import, other, false));
+        // Already asked again (waiting its turn, or out now): no second offer.
+        assert!(!import_offers_retry(&import, SAFE, true));
+        // Try again queues the same import (its risks as first accepted).
+        let mut queue = VecDeque::new();
+        assert!(queue_import_again(&mut queue, &[], false, SAFE));
+        assert_eq!(queue, VecDeque::from([(SAFE.to_owned(), false)]));
+        let mut queue = VecDeque::new();
+        assert!(queue_import_again(
+            &mut queue,
+            &[SAFE.to_ascii_lowercase()],
+            false,
+            SAFE
+        ));
+        assert_eq!(queue, VecDeque::from([(SAFE.to_owned(), true)]));
+        // Nothing while another import runs.
+        let mut queue = VecDeque::new();
+        assert!(!queue_import_again(&mut queue, &[], true, SAFE));
+        assert!(queue.is_empty());
+    }
+
+    /// r14-11a: the import row's line under its name (`short · rule ·
+    /// networks`) keeps its short form whole — one run that never breaks
+    /// after its "…".
+    #[test]
+    fn the_import_rows_short_form_is_never_broken() {
+        let loc = Loc::for_tag("en");
+        let safe = ExportedSafe {
+            address: SAFE.to_owned(),
+            name: Some("Treasury".into()),
+            chains: vec![vela_core::multisig::ExportedChain {
+                chain_id: 100,
+                deployed: true,
+                owners: vec![SAFE.to_owned(), SAFE.to_owned(), SAFE.to_owned()],
+                threshold: 2,
+                props: None,
+                version: None,
+            }],
+        };
+        let sub = import_row_sub(&loc, &safe);
+        let short = crate::wallet::live::shorten_address(SAFE);
+        assert!(sub.starts_with(&short), "{sub}");
+        // The line's one short form is found whole…
+        assert_eq!(crate::ui::short_form_spans(&sub), vec![0..short.len()]);
+        // …and the rule the row is drawn by (`ui::prose`) breaks nowhere
+        // inside it, but may after it.
+        assert!(crate::ui::prose::needs_care(&sub), "{sub}");
+        for at in (1..short.len()).filter(|&at| sub.is_char_boundary(at)) {
+            assert!(crate::ui::prose::forbidden_break(&sub, at), "{at}: {sub}");
+        }
+        let rest = short.len() + " ".len();
+        assert!(!crate::ui::prose::forbidden_break(&sub, rest), "{sub}");
     }
 
     fn view(phase: Phase, address: &str, outcome: Option<AddOutcome>) -> ms_accounts::AddView {

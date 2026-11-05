@@ -54,7 +54,7 @@ struct MultisigAddSheet: View {
 
     var body: some View {
         MsSheet(title: words.t("add.title"), closeLabel: words.loc.t("common.done"), tall: true, onClose: onClose) {
-            Text(verbatim: words.t("add.intro"))
+            Text(prose: words.t("add.intro"))
                 .typeRole(Typography.body.scaled(textScale))
                 .foregroundStyle(theme.fgMuted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -118,7 +118,7 @@ struct MultisigAddSheet: View {
             }
             let members = invite.link?["members"]?.array ?? []
             if !members.isEmpty {
-                Text(verbatim: words.t("add.invitedMembers"))
+                Text(prose: words.t("add.invitedMembers"))
                     .typeRole(Typography.label.scaled(textScale))
                     .foregroundStyle(theme.fgSubtle)
                 ForEach(Array(members.enumerated()), id: \.offset) { _, member in
@@ -128,7 +128,7 @@ struct MultisigAddSheet: View {
                     let line = [member["name"]?.string, kind, you].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
                     VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                         if !line.isEmpty {
-                            Text(verbatim: line).typeRole(Typography.rowSub.scaled(textScale)).foregroundStyle(theme.fgBase)
+                            Text(prose: line).typeRole(Typography.rowSub.scaled(textScale)).foregroundStyle(theme.fgBase)
                         }
                         if let address {
                             AddressTextView(MsRules.eip55(address), role: Typography.monoSmall.scaled(textScale))
@@ -158,8 +158,8 @@ struct MultisigAddSheet: View {
         return VStack(alignment: .leading, spacing: Tokens.Space.s8) {
             MsNote(text: words.t("add.chooseNetwork"), tone: .warning)
             Picker(words.t("create.network"), selection: Binding(get: { chosen ?? -1 }, set: { chosen = $0 })) {
-                if chosen == nil { Text(verbatim: words.t("create.networkNeeded")).tag(-1) }
-                ForEach(offered, id: \.self) { id in Text(verbatim: words.network(id)).tag(id) }
+                if chosen == nil { Text(prose: words.t("create.networkNeeded")).tag(-1) }
+                ForEach(offered, id: \.self) { id in Text(prose: words.network(id)).tag(id) }
             }
             .pickerStyle(.menu)
             .tint(theme.fgBase)
@@ -234,7 +234,7 @@ struct MultisigAddSheet: View {
             }
             let safes = view.importing.safes
             if !safes.isEmpty {
-                Text(verbatim: words.t("import.pick"))
+                Text(prose: words.t("import.pick"))
                     .typeRole(Typography.label.scaled(textScale))
                     .foregroundStyle(theme.fgSubtle)
                 ForEach(Array(safes.enumerated()), id: \.offset) { _, safe in
@@ -254,30 +254,59 @@ struct MultisigAddSheet: View {
         let already = view.row(address) != nil
         let outcome = view.importing.outcomes[address.lowercased()] ?? view.importing.outcomes[address]
         let deployed = (safe["chains"]?.array ?? []).contains { $0["deployed"]?.bool == true }
-        let status: String? = already ? words.t("import.already") : outcome.map { o -> String in
+        let status = Self.importStatus(outcome, already: already, words: words)
+        // A read that did not come back (the core's `import.retry`): said in
+        // full under the row, with Try again — the same `import` asked again.
+        let retry = !already && view.importing.offersRetry(address)
+        let flags = [MsWords.short(address)] + (deployed ? [] : [words.t("import.undeployed")]) + (retry ? [] : [status].compactMap { $0 })
+        return VStack(alignment: .leading, spacing: Tokens.Space.s8) {
+            Toggle(isOn: Binding(
+                get: { picked.contains(address) },
+                set: { on in if on { picked.insert(address) } else { picked.remove(address) } }
+            )) {
+                VStack(alignment: .leading, spacing: Tokens.Space.s2) {
+                    Text(prose: safe["name"]?.string ?? MsWords.short(address))
+                        .typeRole(Typography.fieldLabel.scaled(textScale))
+                    Text(prose: flags.joined(separator: " · "))
+                        .typeRole(Typography.rowSub.scaled(textScale))
+                        .foregroundStyle(theme.fgSubtle)
+                }
+            }
+            .disabled(already)
+            .tint(theme.fgBase)
+            .accessibilityIdentifier("multisig.import.safe")
+            if retry, let status {
+                MsNote(text: status, tone: .warning, identifier: "multisig.import.failed")
+                VelaButton(title: words.t("review.state.tryAgain"), kind: .secondary, loading: view.importing.busy?.caseInsensitiveCompare(address) == .orderedSame) {
+                    hub.send(Self.importEvent(address))
+                }
+                .accessibilityIdentifier("multisig.import.retry")
+            }
+        }
+    }
+
+    /// What a Safe's row says it came to — the add's words for the same
+    /// outcomes (`said`): a rate-limited import is busy with its network
+    /// named, an unchecked contract names its network, never "unavailable".
+    static func importStatus(_ outcome: MsJSON?, already: Bool, words: MsWords) -> String? {
+        already ? words.t("import.already") : outcome.map { o -> String in
+            let network = words.network(o["chain_id"]?.int ?? 0)
             switch o.kind {
             case "imported": return words.t("import.imported")
             case "notDeployed": return words.t("import.notDeployed")
             case "refused": return words.t("authority.refusedFlag")
             case "highRisk": return words.t("authority.riskFlag")
-            default: return words.t("add.\(o.kind ?? "unavailable")")
+            case "busy": return words.t("add.busy", ["network": network])
+            case "unverified": return words.t("authority.unverified", ["network": network])
+            case "notFound", "unavailable", "unsupported": return words.t("add.\(o.kind ?? "unavailable")")
+            default: return words.t("add.unavailable")
             }
         }
-        return Toggle(isOn: Binding(
-            get: { picked.contains(address) },
-            set: { on in if on { picked.insert(address) } else { picked.remove(address) } }
-        )) {
-            VStack(alignment: .leading, spacing: Tokens.Space.s2) {
-                Text(verbatim: safe["name"]?.string ?? MsWords.short(address))
-                    .typeRole(Typography.fieldLabel.scaled(textScale))
-                Text(verbatim: ([MsWords.short(address)] + (deployed ? [] : [words.t("import.undeployed")]) + [status].compactMap { $0 }).joined(separator: " · "))
-                    .typeRole(Typography.rowSub.scaled(textScale))
-                    .foregroundStyle(theme.fgSubtle)
-            }
-        }
-        .disabled(already)
-        .tint(theme.fgBase)
-        .accessibilityIdentifier("multisig.import.safe")
+    }
+
+    /// Importing one exported Safe.
+    static func importEvent(_ address: String) -> [String: Any] {
+        ["type": "import", "address": address, "accept_risks": false]
     }
 
     private func readExport(_ result: Result<URL, Error>) {
@@ -291,7 +320,7 @@ struct MultisigAddSheet: View {
 
     private func importPicked() {
         for address in picked where view.row(address) == nil {
-            hub.send(["type": "import", "address": address, "accept_risks": false])
+            hub.send(Self.importEvent(address))
         }
     }
 }
@@ -337,7 +366,7 @@ struct MultisigLinkStandSheet: View {
             default:
                 HStack(spacing: Tokens.Space.s8) {
                     ProgressView()
-                    Text(verbatim: words.t("proposal.opening"))
+                    Text(prose: words.t("proposal.opening"))
                         .typeRole(Typography.body.scaled(textScale))
                         .foregroundStyle(theme.fgMuted)
                 }

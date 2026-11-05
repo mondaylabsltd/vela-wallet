@@ -77,3 +77,19 @@ struct AddressTextView: View {
         }
     }
 }
+
+extension Text {
+    /// Words that may hold a short address among them — a row's subtitle, a
+    /// note, a proposal's title (r14-11a): each short form is drawn whole
+    /// (`AddressText.bound`), never wrapped after its "…". Only what is drawn
+    /// is bound: VoiceOver and a UI test read the plain words, and nothing
+    /// copied, shared or stored carries the joiners.
+    init(prose text: String) {
+        let bound = AddressText.bound(text)
+        if bound == text {
+            self.init(verbatim: text)
+        } else {
+            self = Text(verbatim: bound).accessibilityLabel(Text(verbatim: text))
+        }
+    }
+}

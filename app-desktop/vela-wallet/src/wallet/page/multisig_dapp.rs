@@ -345,7 +345,7 @@ impl WalletPage {
             // Proposed: its sheet is on the way.
             Some(ActionState::Done { .. } | ActionState::OutsideAsked { .. }) => return None,
             Some(state) => Some(
-                self.ms_action_words(state, held.chain_id)
+                self.ms_action_words(state, held.chain_id, cx)
                     .unwrap_or_else(|| words::t(&self.ms_loc(), "proposal.reason.unknown")),
             ),
         };

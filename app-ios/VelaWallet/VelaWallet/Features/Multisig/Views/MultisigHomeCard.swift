@@ -57,7 +57,7 @@ struct MultisigHomeCard: View {
                     }
                 } label: {
                     HStack {
-                        Text(verbatim: line)
+                        Text(prose: line)
                             .typeRole(Typography.bodyStrong.scaled(textScale))
                             .foregroundStyle(theme.fgBase)
                         Spacer()
@@ -201,17 +201,17 @@ struct MultisigHomeCard: View {
         Button { onOpen(.proposal(chainId: item.chainId, safeTxHash: item.safeTxHash)) } label: {
             HStack(spacing: Tokens.Space.s12) {
                 VStack(alignment: .leading, spacing: Tokens.Space.s2) {
-                    Text(verbatim: words.title(item))
+                    Text(prose: words.title(item))
                         .typeRole(Typography.fieldLabel.scaled(textScale))
                         .foregroundStyle(theme.fgBase)
                         .lineLimit(2)
-                    Text(verbatim: "\(words.standing(view.standing(item), item: item)) · \(words.network(item.chainId))")
+                    Text(prose: "\(words.standing(view.standing(item), item: item)) · \(words.network(item.chainId))")
                         .typeRole(Typography.rowSub.scaled(textScale))
                         .foregroundStyle(view.standing(item)?.kind == "yourTurn" ? theme.fgBase : theme.fgSubtle)
                         .lineLimit(2)
                 }
                 Spacer(minLength: Tokens.Space.s8)
-                Text(verbatim: "\(item.approved)/\(item.threshold)")
+                Text(prose: "\(item.approved)/\(item.threshold)")
                     .typeRole(Typography.label.scaled(textScale))
                     .foregroundStyle(theme.fgMuted)
                 LucideIcon(.chevronRight, size: LucideIconSize.smallChevron).foregroundStyle(theme.fgSubtle)
@@ -272,7 +272,7 @@ struct MultisigHomeCard: View {
         let network = account.chainIds.first
         let solo = account.owners.count == 1
         return VStack(alignment: .leading, spacing: Tokens.Space.s8) {
-            Text(verbatim: words.t("create.firstRunTitle"))
+            Text(prose: words.t("create.firstRunTitle"))
                 .typeRole(Typography.rowTitle.scaled(textScale))
                 .foregroundStyle(theme.fgBase)
                 .accessibilityAddTraits(.isHeader)
@@ -307,11 +307,11 @@ struct MultisigHomeCard: View {
                 LucideIcon(done ? .check : icon, size: LucideIconSize.action)
                     .foregroundStyle(done ? theme.successBase : theme.fgBase)
                 VStack(alignment: .leading, spacing: Tokens.Space.s2) {
-                    Text(verbatim: title)
+                    Text(prose: title)
                         .typeRole(Typography.fieldLabel.scaled(textScale))
                         .foregroundStyle(theme.fgBase)
                     if let note {
-                        Text(verbatim: note)
+                        Text(prose: note)
                             .typeRole(Typography.rowSub.scaled(textScale))
                             .foregroundStyle(theme.fgSubtle)
                             .fixedSize(horizontal: false, vertical: true)
@@ -324,7 +324,7 @@ struct MultisigHomeCard: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .accessibilityValue(done ? Text(verbatim: "✓") : Text(verbatim: ""))
+        .accessibilityValue(done ? Text(prose: "✓") : Text(prose: ""))
         .accessibilityIdentifier(id)
     }
 }
@@ -342,7 +342,7 @@ struct MultisigSwitcherSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s8) {
-            Text(verbatim: words.t("switcher.section"))
+            Text(prose: words.t("switcher.section"))
                 .typeRole(Typography.label.scaled(textScale))
                 .foregroundStyle(theme.fgSubtle)
                 .padding(.top, Tokens.Space.s16)
@@ -372,16 +372,16 @@ struct MultisigSwitcherSection: View {
             HStack(spacing: Tokens.Space.s12) {
                 IdenticonAvatar(seed: row.account.address, size: 40, tappable: false)
                 VStack(alignment: .leading, spacing: Tokens.Space.s2) {
-                    Text(verbatim: words.name(of: row.account, rowName: row.name))
+                    Text(prose: words.name(of: row.account, rowName: row.name))
                         .typeRole(Typography.fieldLabel.scaled(textScale))
                         .fontWeight(.semibold)
                         // vis-6: the accent is for what moves value or signs;
                         // a selection is neutral ink (the check says it).
                         .foregroundStyle(theme.fgBase)
-                    Text(verbatim: tags.joined(separator: " · "))
+                    Text(prose: tags.joined(separator: " · "))
                         .typeRole(Typography.rowSub.scaled(textScale))
                         .foregroundStyle(theme.fgSubtle)
-                    Text(verbatim: MsWords.short(row.account.address))
+                    Text(prose: MsWords.short(row.account.address))
                         .typeRole(Typography.monoSmall.scaled(textScale))
                         .foregroundStyle(theme.fgSubtle)
                         // r14-11a: a short address is one line, never broken after its "…".
@@ -389,7 +389,7 @@ struct MultisigSwitcherSection: View {
                 }
                 Spacer(minLength: Tokens.Space.s8)
                 if count > 0 {
-                    Text(verbatim: String(count))
+                    Text(prose: String(count))
                         .typeRole(Typography.tabCount.scaled(textScale))
                         .foregroundStyle(theme.fgInverse)
                         .padding(.horizontal, Tokens.Space.s8)

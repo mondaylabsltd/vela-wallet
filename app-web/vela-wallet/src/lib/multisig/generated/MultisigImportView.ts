@@ -4,4 +4,11 @@ import type { MultisigImportOutcome } from "./MultisigImportOutcome";
 /**
  * The import sheet.
  */
-export type MultisigImportView = { safes: unknown[], error: string | null, busy: string | null, outcomes: { [key in string]: MultisigImportOutcome }, };
+export type MultisigImportView = { safes: unknown[], error: string | null, busy: string | null, outcomes: { [key in string]: MultisigImportOutcome }, 
+/**
+ * r14 leftovers: the Safes (lowercase addresses, ascending) whose
+ * outcome is a read that did not come back
+ * ([`ImportOutcome::offers_retry`]): each row offers Try again, which
+ * is the same `import` asked again.
+ */
+retry: Array<string>, };

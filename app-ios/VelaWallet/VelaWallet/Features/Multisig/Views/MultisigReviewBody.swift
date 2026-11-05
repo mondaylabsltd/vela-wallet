@@ -145,7 +145,7 @@ struct MsReviewBody: View {
                                          ?? "componentsUi.signing.balanceChangesTitle")) {
                 ForEach(Array(deltas.enumerated()), id: \.offset) { _, delta in
                     if let said = deltaText(delta) {
-                        Text(verbatim: said.text)
+                        Text(prose: said.text)
                             .typeRole(Typography.bodyStrong.scaled(textScale))
                             .foregroundStyle(said.negative ? theme.fgBase : theme.successBase)
                             .accessibilityIdentifier("multisig.review.delta")
@@ -251,11 +251,11 @@ struct MsReviewBody: View {
         let whose: String? = r["known"]?["kind"]?.string == "own" ? words.t("review.knownOwn")
             : (r["known"]?["kind"]?.string == "member" && r["role"]?.string != "member" ? words.t("review.knownMember") : nil)
         return VStack(alignment: .leading, spacing: Tokens.Space.s4) {
-            Text(verbatim: label)
+            Text(prose: label)
                 .typeRole(Typography.label.scaled(textScale))
                 .foregroundStyle(theme.fgSubtle)
             if let name, name.lowercased() != address.lowercased() {
-                Text(verbatim: name)
+                Text(prose: name)
                     .typeRole(Typography.fieldLabel.scaled(textScale))
                     .foregroundStyle(theme.fgBase)
             }
@@ -279,13 +279,13 @@ struct MsReviewBody: View {
             VStack(alignment: .leading, spacing: Tokens.Space.s8) {
                 ForEach(Array((changes["changes"]?.array ?? []).enumerated()), id: \.offset) { _, change in
                     let text = changeText(change)
-                    Text(verbatim: change["call"]?.int.map { "#\($0) · \(text)" } ?? text)
+                    Text(prose: change["call"]?.int.map { "#\($0) · \(text)" } ?? text)
                         .typeRole(Typography.bodyStrong.scaled(textScale))
                         .foregroundStyle(theme.fgBase)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 let before = changes["before"], after = changes["after"]
-                Text(verbatim: words.t("change.rule", [
+                Text(prose: words.t("change.rule", [
                     "before": words.ruleText(m: before?["threshold"]?.int ?? 0, n: before?["owners"]?.int ?? 0),
                     "after": words.ruleText(m: after?["threshold"]?.int ?? 0, n: after?["owners"]?.int ?? 0),
                 ]))
@@ -321,12 +321,12 @@ struct MsReviewBody: View {
         switch verdict?.kind {
         case "undeclared":
             VStack(alignment: .leading, spacing: Tokens.Space.s8) {
-                Text(verbatim: words.t("review.stateTitle"))
+                Text(prose: words.t("review.stateTitle"))
                     .typeRole(Typography.rowTitle.scaled(textScale))
                     .foregroundStyle(theme.errorBase)
                 MsNote(text: words.t("review.stateBody", ["network": network]), tone: .danger)
                 ForEach(Array(writeLines(verdict?["writes"]?.array ?? []).enumerated()), id: \.offset) { _, line in
-                    Text(verbatim: line)
+                    Text(prose: line)
                         .typeRole(Typography.monoSmall.scaled(textScale))
                         .foregroundStyle(theme.errorBase)
                         .fixedSize(horizontal: false, vertical: true)
@@ -385,7 +385,7 @@ struct MsReviewBody: View {
                 ForEach(Array((review["fields"]?.array ?? []).enumerated()), id: \.offset) { _, field in
                     MsRow(label: field["name"]?.string ?? "", value: field["value"]?.string ?? "", mono: true)
                 }
-                Text(verbatim: words.t("review.hashesTitle"))
+                Text(prose: words.t("review.hashesTitle"))
                     .typeRole(Typography.label.scaled(textScale))
                     .foregroundStyle(theme.fgSubtle)
                     .padding(.top, Tokens.Space.s8)
@@ -396,7 +396,7 @@ struct MsReviewBody: View {
             }
             .accessibilityIdentifier("multisig.review.tech")
         } label: {
-            Text(verbatim: words.t("review.techTitle"))
+            Text(prose: words.t("review.techTitle"))
                 .font(Typography.actionLabel.scaled(textScale).font)
                 .foregroundStyle(theme.fgMuted)
         }
@@ -437,7 +437,7 @@ struct MsReviewPending: View {
         case .loading:
             HStack(spacing: Tokens.Space.s8) {
                 ProgressView()
-                Text(verbatim: words.t("review.state.loading"))
+                Text(prose: words.t("review.state.loading"))
                     .typeRole(Typography.flowCaption.scaled(textScale))
                     .foregroundStyle(theme.fgMuted)
                     .fixedSize(horizontal: false, vertical: true)

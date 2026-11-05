@@ -239,10 +239,14 @@
 	let exported = $state<ExportedSafe[] | null>(null);
 	let picked = $state<string[]>([]);
 	let fileFailure = $state<string | null>(null);
+	/**
+	 * Each picked Safe's import: `importing` while it is in flight (this
+	 * sheet's own marker), then the core's outcome (`ok` for `imported`).
+	 */
 	let results = $state<
 		Record<
 			string,
-			| 'busy'
+			| 'importing'
 			| 'ok'
 			| 'notFound'
 			| 'unavailable'
@@ -251,13 +255,20 @@
 			| 'refused'
 			| 'highRisk'
 			| 'unverified'
+			| 'busy'
 		>
 	>({});
 	/** What the core found for a Safe it refused, or one only its person's tap imports. */
 	let found = $state<Record<string, Finding[]>>({});
-	/** Where a Safe could not be checked. */
+	/** Where a Safe could not be checked, or whose network was busy: the network named. */
 	let unchecked = $state<Record<string, number>>({});
-	const importing = $derived(Object.values(results).some((r) => r === 'busy'));
+	/**
+	 * r14 leftovers: the Safes whose outcome is a read that did not come back
+	 * (the core's `ImportOutcome::offers_retry`, `view.import.retry`): their
+	 * rows say Try again, which is the same `import` asked again.
+	 */
+	let again = $state<Record<string, boolean>>({});
+	const importing = $derived(Object.values(results).some((r) => r === 'importing'));
 	const finished = $derived(
 		exported !== null &&
 			Object.keys(results).length > 0 &&
@@ -355,7 +366,8 @@
 	}
 
 	async function importOne(safe: ExportedSafe, acceptRisks = false) {
-		results = { ...results, [safe.address]: 'busy' };
+		results = { ...results, [safe.address]: 'importing' };
+		again = { ...again, [safe.address]: false };
 		const key = safe.address.toLowerCase();
 		const outcome: MultisigImportOutcome = await multisig.request(
 			{ type: 'import', address: safe.address, accept_risks: acceptRisks },
@@ -363,9 +375,13 @@
 		);
 		if (outcome.kind === 'refused' || outcome.kind === 'highRisk')
 			found = { ...found, [safe.address]: outcome.findings as Finding[] };
-		if (outcome.kind === 'unverified') {
+		if (outcome.kind === 'unverified' || outcome.kind === 'busy') {
 			unchecked = { ...unchecked, [safe.address]: outcome.chain_id };
 		}
+		again = {
+			...again,
+			[safe.address]: multisig.view?.import?.retry?.includes(key) ?? false
+		};
 		results = { ...results, [safe.address]: outcome.kind === 'imported' ? 'ok' : outcome.kind };
 	}
 
@@ -442,7 +458,7 @@
 						<span class="state">
 							{#if here}
 								{m.import.already}
-							{:else if result === 'busy'}
+							{:else if result === 'importing'}
 								{m.import.importing}
 							{:else if result === 'ok'}
 								<Icon icon={UTILITY_ICONS.check} size="sm" />{m.import.imported}
@@ -454,6 +470,13 @@
 										network: chainName(unchecked[safe.address] ?? 0)
 									})}</span
 								>
+							{:else if result === 'busy'}
+								<!-- r14 leftovers: the network's nodes were rate-limiting — named, as the add says it. -->
+								<span class="error"
+									>{fillTemplate(m.add.busy, {
+										network: chainName(unchecked[safe.address] ?? 0)
+									})}</span
+								>
 							{:else if result}
 								<span class="error"
 									>{result === 'notDeployed' ? m.import.notDeployed : m.add[result]}</span
@@ -461,6 +484,16 @@
 							{/if}
 						</span>
 					</label>
+					{#if again[safe.address] && result !== undefined && result !== 'importing'}
+						<div class="again">
+							<Button
+								variant="secondary"
+								shape="rounded"
+								disabled={importing}
+								onclick={() => void importOne(safe)}>{m.review.state.tryAgain}</Button
+							>
+						</div>
+					{/if}
 					{#if result === 'refused' || result === 'highRisk'}
 						<div class="found">
 							<AuthorityNotice
@@ -778,6 +811,11 @@
 		margin: 0;
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-error-base);
+	}
+
+	.again {
+		display: flex;
+		padding-block: var(--space-sm);
 	}
 
 	.found {

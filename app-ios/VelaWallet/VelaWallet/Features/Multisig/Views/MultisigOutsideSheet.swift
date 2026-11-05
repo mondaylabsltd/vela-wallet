@@ -82,7 +82,7 @@ struct MultisigOutsideSheet: View {
         if let text {
             HStack(spacing: Tokens.Space.s8) {
                 if outside.phase != "done" { ProgressView() }
-                Text(verbatim: text)
+                Text(prose: text)
                     .typeRole(Typography.body.scaled(textScale))
                     .foregroundStyle(theme.fgBase)
                     .fixedSize(horizontal: false, vertical: true)

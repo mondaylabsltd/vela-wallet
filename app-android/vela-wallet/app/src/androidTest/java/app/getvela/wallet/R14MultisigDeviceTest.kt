@@ -25,7 +25,6 @@ import app.getvela.wallet.feature.multisig.MultisigHostContext
 import app.getvela.wallet.feature.multisig.MultisigWords
 import app.getvela.wallet.feature.multisig.core.MultisigHub
 import app.getvela.wallet.feature.multisig.core.MultisigSheet
-import app.getvela.wallet.feature.multisig.core.ShownFee
 import app.getvela.wallet.feature.multisig.core.arr
 import app.getvela.wallet.feature.multisig.core.get
 import app.getvela.wallet.feature.multisig.core.jo
@@ -61,7 +60,8 @@ import org.junit.runner.RunWith
  * - r14-2: an activity recreated never acts on its starting link again;
  * - r14-6: a review read a while ago starts at "Reading" when its sheet
  *   opens again, every sign button shut, until the core says;
- * - r14-9: an execution is signed only at the fee on screen when pressed.
+ * - r14-9: an execution is signed only at the fee on screen when pressed —
+ *   the core's rule since §19.11 (`fee_moved`); the shell keeps no copy (§21).
  */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
@@ -82,7 +82,6 @@ class R14MultisigDeviceTest {
     fun stop() {
         hubs.forEach { it.dispose() }
         scopes.forEach { it.cancel() }
-        ShownFee.forget()
     }
 
     private val strings: I18nRuntime = instrumentation.targetContext.let { context ->

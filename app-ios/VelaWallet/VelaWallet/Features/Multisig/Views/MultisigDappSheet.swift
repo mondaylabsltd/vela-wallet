@@ -52,7 +52,7 @@ struct MultisigDappSheet: View {
                 } else {
                     HStack(spacing: Tokens.Space.s8) {
                         ProgressView()
-                        Text(verbatim: words.t("proposal.opening"))
+                        Text(prose: words.t("proposal.opening"))
                             .typeRole(Typography.body.scaled(textScale))
                             .foregroundStyle(theme.fgMuted)
                     }

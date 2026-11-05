@@ -3,4 +3,4 @@
 /**
  * What importing one exported Safe came to (`ImportOutcome`).
  */
-export type MultisigImportOutcome = { "kind": "imported" } | { "kind": "notFound" } | { "kind": "unavailable" } | { "kind": "unsupported" } | { "kind": "notDeployed" } | { "kind": "refused", findings: unknown[], } | { "kind": "highRisk", findings: unknown[], } | { "kind": "unverified", chain_id: number, };
+export type MultisigImportOutcome = { "kind": "imported" } | { "kind": "notFound" } | { "kind": "unavailable" } | { "kind": "unsupported" } | { "kind": "notDeployed" } | { "kind": "refused", findings: unknown[], } | { "kind": "highRisk", findings: unknown[], } | { "kind": "unverified", chain_id: number, } | { "kind": "busy", chain_id: number, };

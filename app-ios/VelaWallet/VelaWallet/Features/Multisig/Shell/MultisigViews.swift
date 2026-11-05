@@ -286,6 +286,10 @@ struct MsImportView: Decodable, Equatable {
     var error: String?
     var busy: String?
     var outcomes: [String: MsJSON] = [:]
+    /// r14 leftovers: the Safes (lowercase) whose outcome is a read that did
+    /// not come back (`ImportOutcome::offers_retry`: busy, unavailable,
+    /// unverified) — each row offers Try again, the same `import` again.
+    var retry: [String] = []
 
     init() {}
     init(from decoder: Decoder) throws {
@@ -294,7 +298,11 @@ struct MsImportView: Decodable, Equatable {
         error = c.soft(MsKey("error"))
         busy = c.soft(MsKey("busy"))
         outcomes = c.soft(MsKey("outcomes"), [:])
+        retry = c.soft(MsKey("retry"), [])
     }
+
+    /// Whether `address`'s row offers Try again (the core's `retry`).
+    func offersRetry(_ address: String) -> Bool { retry.contains(address.lowercased()) }
 }
 
 struct MsRenamePlan: Decodable, Equatable {

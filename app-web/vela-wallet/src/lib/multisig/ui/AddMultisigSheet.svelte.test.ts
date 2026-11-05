@@ -78,8 +78,23 @@ const machine = vi.hoisted(() => ({
 			return { safes: io.exported, error: null, busy: null, outcomes: {} };
 		}
 		if (event.type === 'import') {
-			io.imported.push(event.address as string);
-			return { kind: 'imported' };
+			const address = event.address as string;
+			io.imported.push(address);
+			// r14 leftovers: a Safe whose network rate-limits its reads (busy),
+			// or whose service is away (unavailable), the first time it is asked.
+			const first = io.imported.filter((a) => a === address).length === 1;
+			const kind =
+				first && address === '0x00000000000000000000000000000000000000b6'
+					? { kind: 'busy', chain_id: 5042002 }
+					: first && address === '0x00000000000000000000000000000000000000b7'
+						? { kind: 'unavailable' }
+						: { kind: 'imported' };
+			// The core's `ImportOutcome::offers_retry` (busy, unavailable,
+			// unverified) → `view.import.retry`, lowercase.
+			const key = address.toLowerCase();
+			io.retry = io.retry.filter((a) => a !== key);
+			if (['busy', 'unavailable', 'unverified'].includes(kind.kind)) io.retry.push(key);
+			return kind;
 		}
 		throw new Error(`not asked here: ${event.type}`);
 	}
@@ -117,6 +132,8 @@ const io = vi.hoisted(() => ({
 	/** The kinds the person picked (`pick_kind`). */
 	picked: [] as [string, string | null][],
 	imported: [] as string[],
+	/** r14 leftovers: the core's `view.import.retry` — the Safes whose rows offer Try again. */
+	retry: [] as string[],
 	/** core-ms-2: the invite the accounts machine keeps (`view.invite`). */
 	invite: null as null | {
 		link: { multisig: string; chainIds: number[]; members: unknown };
@@ -149,7 +166,12 @@ vi.mock('../core/store.svelte', async () => {
 			accounts: [],
 			find: () => undefined,
 			get view() {
-				return { member_kinds: Object.fromEntries(kinds), invite: io.invite, used_networks: [] };
+				return {
+					member_kinds: Object.fromEntries(kinds),
+					invite: io.invite,
+					used_networks: [],
+					import: { retry: io.retry }
+				};
 			},
 			send: (event: {
 				type: string;
@@ -703,6 +725,98 @@ describe('the Safe{Wallet} import asks each member’s kind (r7)', () => {
 		await settle();
 		expect(root().textContent).toContain('Choose the Safes to import');
 		expect(io.imported).toEqual([]);
+		await screen.unmount();
+	});
+});
+
+/**
+ * r14 leftovers: a rate-limited import is said in the core's busy words, the
+ * network named — never "unavailable", never left "Importing…" — and every
+ * row the core marks `view.import.retry` offers Try again, which sends the
+ * same `import` for that Safe again.
+ */
+describe('a Safe whose import did not come back', () => {
+	const BUSY_SAFE = '0x00000000000000000000000000000000000000b6';
+	const AWAY_SAFE = '0x00000000000000000000000000000000000000b7';
+	const DONE_SAFE = '0x00000000000000000000000000000000000000b8';
+	const safe = (address: string, name: string) => ({
+		address,
+		name,
+		chains: [
+			{
+				chainId: 5042002,
+				deployed: true,
+				owners: [CAROL],
+				threshold: 1,
+				props: null,
+				version: null
+			}
+		]
+	});
+
+	beforeEach(() => {
+		io.exported = [safe(BUSY_SAFE, 'Busy'), safe(AWAY_SAFE, 'Away'), safe(DONE_SAFE, 'Done')];
+		io.evidence = {};
+		io.asked = [];
+		io.picked = [];
+		io.imported = [];
+		io.retry = [];
+	});
+
+	const button = (label: string, within: HTMLElement = document.body) =>
+		[...within.querySelectorAll<HTMLButtonElement>('button')].filter(
+			(b) => b.textContent?.trim() === label
+		);
+	const row = (name: string) =>
+		[...document.body.querySelectorAll<HTMLElement>('.safes > li')].find((li) =>
+			li.querySelector('.name')?.textContent?.includes(name)
+		)!;
+
+	async function importAll() {
+		const screen = render(AddMultisigSheet, {
+			props: { m, wide: true, closeLabel: 'Close', onclose: () => {}, onadded: () => {} }
+		});
+		await tick();
+		const input = screen.container.querySelector<HTMLInputElement>('input[type=file]')!;
+		const files = new DataTransfer();
+		files.items.add(new File(['{}'], 'safes.json', { type: 'application/json' }));
+		input.files = files.files;
+		input.dispatchEvent(new Event('change', { bubbles: true }));
+		await settle();
+		// Carol is on this device: nothing to ask, the pick imports at once.
+		button('Import 3')[0]!.click();
+		await settle();
+		return screen;
+	}
+
+	it('is named busy in the core’s words, the network named — never unavailable, never still importing', async () => {
+		const screen = await importAll();
+		expect(io.imported).toEqual([BUSY_SAFE, AWAY_SAFE, DONE_SAFE]);
+		const busy = row('Busy');
+		expect(busy.querySelector('.error')?.textContent?.trim()).toBe('Chain 5042002 is busy');
+		expect(busy.textContent).not.toContain('Importing…');
+		expect(row('Away').querySelector('.error')?.textContent?.trim()).toBe('un');
+		expect(row('Done').textContent).toContain('Imported');
+		// Nothing is in flight: the sheet is not held as importing.
+		expect(root().textContent).not.toContain('Importing…');
+		await screen.unmount();
+	});
+
+	it('offers Try again on every row the core marks, and it imports that Safe again', async () => {
+		const screen = await importAll();
+		expect(button('Try again', row('Busy'))).toHaveLength(1);
+		expect(button('Try again', row('Away'))).toHaveLength(1);
+		expect(button('Try again', row('Done'))).toHaveLength(0);
+		button('Try again', row('Busy'))[0]!.click();
+		await settle();
+		expect(io.imported).toEqual([BUSY_SAFE, AWAY_SAFE, DONE_SAFE, BUSY_SAFE]);
+		expect(row('Busy').textContent).toContain('Imported');
+		expect(button('Try again', row('Busy'))).toHaveLength(0);
+		button('Try again', row('Away'))[0]!.click();
+		await settle();
+		expect(io.imported).toEqual([BUSY_SAFE, AWAY_SAFE, DONE_SAFE, BUSY_SAFE, AWAY_SAFE]);
+		expect(row('Away').textContent).toContain('Imported');
+		expect(button('Try again')).toHaveLength(0);
 		await screen.unmount();
 	});
 });

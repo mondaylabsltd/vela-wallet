@@ -114,8 +114,9 @@ class MultisigExecutor(private val ports: MultisigPorts) {
 
         is MultisigOperation.Passkey -> ports.passkey(op)
         is MultisigOperation.AskRisk -> MultisigShellResult.RiskAnswered(ports.askRisk(op))
-        // r14-9: an execution goes on only at the fee the person pressed on.
-        is MultisigOperation.SendCalls -> ShownFee.refusal(op) ?: ports.sendCalls(op)
+        // r14-9 / §19.11: the fee signed is the fee shown — the core's rule
+        // (`fee_moved`), which stops a moved fee before it ever asks this.
+        is MultisigOperation.SendCalls -> ports.sendCalls(op)
         is MultisigOperation.QuoteCalls -> ports.quoteCalls(op)
         is MultisigOperation.Simulate -> MultisigShellResult.Simulated(ports.simulate(op))
 

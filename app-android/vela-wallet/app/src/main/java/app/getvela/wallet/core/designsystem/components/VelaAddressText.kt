@@ -58,6 +58,23 @@ object AddressBreaks {
 
     /** Whether [text] is drawn by the address rule rather than as prose. */
     fun isAddressLike(text: String): Boolean = halves(text) != null || isShortForm(text)
+
+    /** A short form inside prose (`0x777E98…61875a`), bound already or not. */
+    private val shortInProse = Regex("(0[xX][0-9a-fA-F]{2,})⁠?…⁠?([0-9a-fA-F]{2,})")
+
+    /**
+     * [text] for DRAWING, every short form inside it bound whole: a word
+     * joiner (U+2060) either side of its ellipsis (r14 leftovers, §21).
+     * Unicode line breaking allows a break after "…" and a CJK line takes
+     * it, so a subtitle such as `0x777E98…61875a · Not shared` could end a
+     * line at `0x777E98…`. The joiner draws as nothing and takes no room
+     * (WalletKeysBlock's fingerprint does the same); prose ellipses, names
+     * and full addresses are left as they are. Never for a copied string or
+     * the core's own short form: a screen reader and a test read the plain
+     * text.
+     */
+    fun wholeShortForms(text: String): String =
+        if ('…' !in text) text else shortInProse.replace(text) { m -> "${m.groupValues[1]}⁠…⁠${m.groupValues[2]}" }
 }
 
 /**

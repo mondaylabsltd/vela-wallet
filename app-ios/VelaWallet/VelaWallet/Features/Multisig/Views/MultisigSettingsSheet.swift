@@ -59,7 +59,7 @@ struct MultisigSettingsSheet: View {
                         }
                         Button(words.loc.t("common.cancel"), role: .cancel) {}
                     } message: {
-                        Text(verbatim: words.t("switcher.removeBody"))
+                        Text(prose: words.t("switcher.removeBody"))
                     }
             }
         }
@@ -78,10 +78,10 @@ struct MultisigSettingsSheet: View {
                 IdenticonAvatar(seed: row.account.address, size: 40, tappable: false)
                 VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                     // r9-14: the rule as the chains said it (`AccountRow.rule`).
-                    Text(verbatim: words.rowRule(row).title)
+                    Text(prose: words.rowRule(row).title)
                         .typeRole(Typography.fieldLabel.scaled(textScale))
                         .foregroundStyle(theme.fgBase)
-                    Text(verbatim: words.loc.list(row.account.chainIds.map(words.network)))
+                    Text(prose: words.loc.list(row.account.chainIds.map(words.network)))
                         .typeRole(Typography.rowSub.scaled(textScale))
                         .foregroundStyle(theme.fgSubtle)
                 }
@@ -156,13 +156,13 @@ struct MultisigSettingsSheet: View {
         return HStack(spacing: Tokens.Space.s12) {
             IdenticonAvatar(seed: address, size: 28, tappable: false)
             VStack(alignment: .leading, spacing: Tokens.Space.s2) {
-                Text(verbatim: name ?? short)
+                Text(prose: name ?? short)
                     .typeRole((name == nil ? Typography.monoSmall : Typography.fieldLabel).scaled(textScale))
                     .foregroundStyle(removed ? theme.fgSubtle : theme.fgBase)
                     .strikethrough(removed)
                 let sub = (name == nil ? [] : [short]) + tags
                 if !sub.isEmpty {
-                    Text(verbatim: sub.joined(separator: " · "))
+                    Text(prose: sub.joined(separator: " · "))
                         .typeRole(Typography.rowSub.scaled(textScale))
                         .foregroundStyle(theme.fgSubtle)
                 }
@@ -319,9 +319,9 @@ struct MultisigMembersSheet: View {
                         "\(words.network($0["chain_id"]?.int ?? 0)) \($0["approved"]?.int ?? 0)/\($0["threshold"]?.int ?? 0)"
                     }.joined(separator: " · ")
                     VStack(alignment: .leading, spacing: Tokens.Space.s2) {
-                        Text(verbatim: words.actionTitleNow(chainId: 0, action: group["action"], nonce: ""))
+                        Text(prose: words.actionTitleNow(chainId: 0, action: group["action"], nonce: ""))
                             .typeRole(Typography.fieldLabel.scaled(textScale))
-                        Text(verbatim: parts).typeRole(Typography.rowSub.scaled(textScale)).foregroundStyle(theme.fgSubtle)
+                        Text(prose: parts).typeRole(Typography.rowSub.scaled(textScale)).foregroundStyle(theme.fgSubtle)
                     }
                     .accessibilityElement(children: .combine)
                 }
@@ -343,10 +343,10 @@ struct MultisigMembersSheet: View {
                     HStack {
                         VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                             // An unnamed member is its address — once.
-                            Text(verbatim: name)
+                            Text(prose: name)
                                 .typeRole((name == short ? Typography.monoSmall : Typography.fieldLabel).scaled(textScale))
                             if name != short {
-                                Text(verbatim: short).typeRole(Typography.monoSmall.scaled(textScale)).foregroundStyle(theme.fgSubtle)
+                                Text(prose: short).typeRole(Typography.monoSmall.scaled(textScale)).foregroundStyle(theme.fgSubtle)
                             }
                         }
                         Spacer()
@@ -391,16 +391,16 @@ struct MultisigMembersSheet: View {
             if kind == "add" || kind == "replace" { entryField }
             if let stepper = view["stepper"], !stepper.isNull {
                 HStack {
-                    Text(verbatim: kind == "threshold" ? words.t("members.thresholdTitle") : words.t("members.thresholdAfter"))
+                    Text(prose: kind == "threshold" ? words.t("members.thresholdTitle") : words.t("members.thresholdAfter"))
                         .typeRole(Typography.fieldLabel.scaled(textScale))
                     Spacer()
-                    Button { hub.sendMembers(["type": "step", "by": -1]) } label: { Text(verbatim: "−") }
+                    Button { hub.sendMembers(["type": "step", "by": -1]) } label: { Text(prose: "−") }
                         .disabled(stepper["can_fewer"]?.bool != true)
                         .accessibilityLabel(words.t("create.fewer"))
-                    Text(verbatim: words.t("members.ruleValue", ["m": stepper["value"]?.string ?? "", "n": stepper["n"]?.string ?? ""]))
+                    Text(prose: words.t("members.ruleValue", ["m": stepper["value"]?.string ?? "", "n": stepper["n"]?.string ?? ""]))
                         .typeRole(Typography.rowTitle.scaled(textScale))
                         .accessibilityIdentifier("multisig.members.rule")
-                    Button { hub.sendMembers(["type": "step", "by": 1]) } label: { Text(verbatim: "+") }
+                    Button { hub.sendMembers(["type": "step", "by": 1]) } label: { Text(prose: "+") }
                         .disabled(stepper["can_more"]?.bool != true)
                         .accessibilityLabel(words.t("create.more"))
                 }
@@ -436,7 +436,7 @@ struct MultisigMembersSheet: View {
                     entry = address
                     hub.sendMembers(["type": "pick", "address": address])
                 } label: {
-                    Text(verbatim: "\(suggestion["name"]?.string ?? MsWords.short(address)) · \(MsWords.short(address))")
+                    Text(prose: "\(suggestion["name"]?.string ?? MsWords.short(address)) · \(MsWords.short(address))")
                         .typeRole(Typography.rowSub.scaled(textScale))
                         .foregroundStyle(theme.fgBase)
                 }

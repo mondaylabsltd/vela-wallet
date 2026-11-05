@@ -40,7 +40,6 @@ import app.getvela.wallet.core.platform.VelaHaptic
 import app.getvela.wallet.core.platform.rememberVelaHaptic
 import app.getvela.wallet.feature.flows.components.QrCard
 import app.getvela.wallet.feature.multisig.core.MultisigHub
-import app.getvela.wallet.feature.multisig.core.ShownFee
 import app.getvela.wallet.feature.multisig.core.get
 import app.getvela.wallet.feature.multisig.core.str
 import app.getvela.wallet.feature.multisig.core.ev
@@ -313,8 +312,6 @@ fun MultisigProposalSheet(
                     onConfirm = {
                         val owner = chosen ?: return@MsSignButton
                         haptic(VelaHaptic.Press)
-                        // r14-9: the fee on screen as it was pressed — the one signed, or nothing is.
-                        if (oneTap) ShownFee.pressed(chainId, owner, pricedFee(model.preview(owner)))
                         scope.launch {
                             fun settledOf(v: JsonObject, what: String): JsonElement? {
                                 val s = (v["actions"] as? JsonObject)?.entries?.firstOrNull { it.key.equals("$what:${item.safeTxHash}", ignoreCase = true) }?.value
@@ -384,8 +381,6 @@ fun MultisigProposalSheet(
                     words = words,
                     onConfirm = {
                         haptic(VelaHaptic.Press)
-                        // r14-9: the fee on screen as it was pressed — the one signed, or nothing is.
-                        ShownFee.pressed(chainId, chosen, pricedFee(model.preview(chosen)))
                         hub.sendProposal(ev("execute", "chain_id" to chainId, "safe_tx_hash" to item.safeTxHash, "executor" to chosen))
                     },
                     modifier = Modifier.fillMaxWidth().testTag("multisig.proposal.execute"),
@@ -627,10 +622,6 @@ internal object LookAsk {
     /** r14-6: a fee line that could not be worked out or checked offers "Check again" — beside Execute and beside the one press. */
     fun offersCheckAgain(kind: String?): Boolean = kind == "unpriced" || kind == "unchecked"
 }
-
-/** r14-9: the fee a priced look says (`fee.amount`), as the machine wrote it; `null` for a look that said none. */
-internal fun pricedFee(preview: JsonElement?): String? =
-    preview?.takeIf { it.kind == "priced" }?.get("fee")?.get("amount")?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
 
 /** How soon a review that could not read the chain is asked again (the web's `REVIEW_RETRY_MS`). */
 internal const val REVIEW_RETRY_MS = 5_000L
