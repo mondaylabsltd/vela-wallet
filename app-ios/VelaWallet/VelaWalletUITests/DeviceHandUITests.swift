@@ -94,6 +94,13 @@ final class Hand: @unchecked Sendable {
 
     struct Failure: Error, CustomStringConvertible { let description: String }
 
+    /// Whether `e` (or a field inside it) holds the keyboard — read from the
+    /// element's snapshot, which does not fail the test when it is false.
+    static func hasFocus(_ e: XCUIElement) -> Bool {
+        (e.value(forKey: "hasKeyboardFocus") as? Bool) == true
+            || e.descendants(matching: .any).matching(NSPredicate(format: "hasKeyboardFocus == true")).firstMatch.exists
+    }
+
     /// The app a command acts on: the app under test, or another by bundle id.
     private func target(_ c: [String: Any]) -> XCUIApplication {
         if let bundle = c["bundle"] as? String { return XCUIApplication(bundleIdentifier: bundle) }
@@ -173,6 +180,13 @@ final class Hand: @unchecked Sendable {
             // An element behind another (a sheet over a page) is not
             // hittable, and `tap()` on it fails the test: tap where it is.
             let hittable = e.isHittable
+            // Off the screen, "where it is" is a point the system clamps to
+            // the screen's edge — and taps whatever stands there (real-device
+            // pass 2: an offscreen "Approve" became the "Approve and execute"
+            // above it). Say so; the caller scrolls first.
+            if !hittable, !t.frame.contains(CGPoint(x: e.frame.midX, y: e.frame.midY)) {
+                throw Failure(description: "offscreen \(frame): scroll it into view first")
+            }
             let at = hittable ? e.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
                 : t.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: e.frame.midX, dy: e.frame.midY))
             if c["long"] as? Bool == true { at.press(forDuration: 1.0) } else { at.tap() }
@@ -187,7 +201,21 @@ final class Hand: @unchecked Sendable {
             let t = target(c)
             if c["id"] != nil || c["label"] != nil || c["contains"] != nil {
                 guard let e = element(c, in: t) else { throw Failure(description: "not found") }
-                e.tap()
+                // `typeText` on a field without keyboard focus FAILS the test,
+                // and that closes the hand (real-device pass 2: a field the
+                // keyboard had just moved). Tap until it has focus, a few
+                // times, and answer "no focus" rather than type into nothing.
+                var focused = false
+                for _ in 0..<4 where !focused {
+                    e.tap()
+                    let until = Date().addingTimeInterval(1.5)
+                    while Date() < until {
+                        focused = Self.hasFocus(e)
+                        if focused { break }
+                        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
+                    }
+                }
+                guard focused else { throw Failure(description: "no keyboard focus") }
                 e.typeText(c["text"] as? String ?? "")
             } else {
                 t.typeText(c["text"] as? String ?? "")
