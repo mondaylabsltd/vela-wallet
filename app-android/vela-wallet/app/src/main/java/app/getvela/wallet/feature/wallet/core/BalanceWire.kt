@@ -287,6 +287,16 @@ sealed class BalanceEvent {
     @SerialName("unreachable_list_closed")
     data object UnreachableListClosed : BalanceEvent()
 
+    /**
+     * r12-3 (core §13.2): the networks the RPC pool finds out of reach now —
+     * its view's `out_of_reach_chains` — sent whenever that set changes. A
+     * network newly in it that the shown account is read on, and that the
+     * home does not say yet, is read again at once, forced past any cache.
+     */
+    @Serializable
+    @SerialName("pool_unreached")
+    data class PoolUnreached(val chain_ids: List<Int> = emptyList()) : BalanceEvent()
+
     @Serializable
     @SerialName("switcher_opened")
     data class SwitcherOpened(val addresses: List<String> = emptyList()) : BalanceEvent()

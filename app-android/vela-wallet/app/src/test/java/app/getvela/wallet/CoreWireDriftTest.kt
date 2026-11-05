@@ -1158,6 +1158,9 @@ class CoreWireDriftTest {
         assertTrue((failed as RpcCallVerdict.Failed).maybe_delivered)
         val view = roundTrip<RpcPoolView>("""{"failed_chains":[],"rate_limited_chains":[],"banned":[],"unreached_chains":[100]}""")
         assertEquals(listOf(100), view.unreached_chains)
+        // r12-3: the chain notice's own set, handed to the balance machine as `pool_unreached`.
+        val outOfReach = roundTrip<RpcPoolView>("""{"failed_chains":[1],"rate_limited_chains":[],"banned":[],"unreached_chains":[100],"out_of_reach_chains":[1,100]}""")
+        assertEquals(listOf(1, 100), outOfReach.out_of_reach_chains)
     }
 
     @Test

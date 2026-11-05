@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.json.JSONArray
@@ -174,6 +175,26 @@ class RpcPoolMachineTest {
             "a banned endpoint must not be tried again after a restart",
             !transport.asked.contains(DEAD),
         )
+    }
+
+    /**
+     * r12-3 (docs/multisig-machines.md §13.2): the pool's networks out of
+     * reach — what `WalletController` hands the balance machine as
+     * `pool_unreached` — decoded from the core's own view: a network nobody
+     * answered is in it, a merely busy one (429) is not.
+     */
+    @Test
+    fun aNetworkNobodyAnswersIsOutOfReachAndABusyOneIsNot() = runBlocking {
+        val (pool, _) = pool(FakeStore(), listOf(DEAD)) { _, _ -> FakeRpcTransport.network() }
+        pool.start()
+        withTimeout(TIMEOUT) { pool.call(CHAIN, "eth_blockNumber") }
+        assertEquals(listOf(CHAIN), withTimeout(TIMEOUT) { pool.view.first { it.out_of_reach_chains.isNotEmpty() } }.out_of_reach_chains)
+
+        val (busy, _) = pool(FakeStore(), listOf(GOOD)) { _, _ -> FakeRpcTransport.httpError(429) }
+        busy.start()
+        withTimeout(TIMEOUT) { busy.call(CHAIN, "eth_blockNumber") }
+        val view = withTimeout(TIMEOUT) { busy.view.first { CHAIN in it.rate_limited_chains } }
+        assertEquals("rate-limited is busy, not out of reach", emptyList<Int>(), view.out_of_reach_chains)
     }
 
     private companion object {

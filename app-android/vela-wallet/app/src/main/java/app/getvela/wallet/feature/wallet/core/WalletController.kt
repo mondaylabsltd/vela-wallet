@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.dropWhile
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -786,6 +787,25 @@ class WalletController(
                 if (chains != null) feedHost.dispatch(FeedEvent.SpaceChainsChanged(chains.toList()), FeedEvent.serializer())
             }
         }
+        // r12-3 (core §13.2): the pool's networks out of reach, told to the
+        // balance machine on every change — the incoming scan, a balance
+        // watch or a send may be the read that lost one, and the home must not
+        // stay "Live" over it. The leading empty set is the machine's own
+        // starting word, so it is not said.
+        scope.launch {
+            pool.view.map { it.out_of_reach_chains }.distinctUntilChanged().dropWhile { it.isEmpty() }.collect(::poolUnreached)
+        }
+    }
+
+    /**
+     * r12-3 (core §13.2, `pool_unreached`): the networks the RPC pool finds
+     * out of reach now. The core reads again at once, forced, a network the
+     * shown account is read on that the home does not say yet — or owes it
+     * to the round already out, or to the next focus.
+     */
+    fun poolUnreached(chainIds: List<Int>) {
+        VelaLog.event("balance", "pool unreached", "chains" to chainIds)
+        balanceHost.dispatch(BalanceEvent.PoolUnreached(chainIds), BalanceEvent.serializer())
     }
 
     /**
