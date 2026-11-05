@@ -110,13 +110,13 @@ object MultisigWiring {
             live = live,
             facts = { facts(container, store, accountPort) },
             writeRows = { rows -> container.wallet.feedExecutor.writeRecords(rows) },
-            tokenInfo = { chainId, token -> tokenInfo(container, chainId, token) },
+            tokenInfo = { chainId, token -> tokenInfo(container, chainId, token, hubRef) },
             scope = scope,
         )
         hub.titleOf = { chainId, action, nonce ->
             val token = action?.let { a -> (a as? kotlinx.serialization.json.JsonObject)?.get("token") }
                 ?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
-            val info = if (token != null) tokenInfo(container, chainId, token) else null
+            val info = if (token != null) tokenInfo(container, chainId, token, hubRef) else null
             words(container).actionTitle(chainId, action, nonce, info)
         }
         hub.onRecorded = { container.wallet.feedReconciled(1) }
@@ -308,11 +308,24 @@ object MultisigWiring {
 
     /** A token's symbol and decimals: the chain's coin from this device's list, an ERC-20's from the chain. */
     /** A token's symbol and decimals, for a screen that words an amount. */
-    suspend fun tokenInfoOf(container: AppContainer, chainId: Int, token: String?): Pair<String, Int> = tokenInfo(container, chainId, token)
+    suspend fun tokenInfoOf(container: AppContainer, chainId: Int, token: String?, hub: MultisigHub? = null): Pair<String, Int?> =
+        tokenInfo(container, chainId, token, hub)
 
-    private suspend fun tokenInfo(container: AppContainer, chainId: Int, token: String?): Pair<String, Int> {
+    /**
+     * r12-1: a token's symbol and decimals — the core's facts first (the
+     * registry, else the contract's own answer, `tokens` in the proposals
+     * view), else the contract's `symbol()` / `decimals()` asked here; `null`
+     * decimals when nobody said them, never 18 assumed. The network's coin
+     * is counted in wei ([MsRules.COIN_DECIMALS]).
+     */
+    private suspend fun tokenInfo(container: AppContainer, chainId: Int, token: String?, hub: MultisigHub? = null): Pair<String, Int?> {
         val native = container.settings.networks.value.networks.firstOrNull { it.chain_id.toInt() == chainId }?.native_symbol ?: "ETH"
-        if (token.isNullOrBlank()) return native to 18
+        if (token.isNullOrBlank()) return native to app.getvela.wallet.feature.multisig.core.MsRules.COIN_DECIMALS
+        hub?.proposalsView?.value?.tokens?.get("$chainId:${token.lowercase()}")?.let { facts ->
+            val decimals = (facts as? kotlinx.serialization.json.JsonObject)?.get("decimals")?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull() }
+            val symbol = (facts as? kotlinx.serialization.json.JsonObject)?.get("symbol")?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { p -> p.isString }?.content }?.takeIf { it.isNotBlank() }
+            if (decimals != null) return (symbol ?: MultisigWords.short(token)) to decimals
+        }
         return runCatching {
             val pool = container.pool
             val symbol = (pool.call(chainId, "eth_call", listOf(JSONObject().put("to", token).put("data", Abi.encodeSymbol()), "latest")) as? RpcResult.Body)
@@ -321,6 +334,6 @@ object MultisigWiring {
                 ?.json?.optString("result")?.takeIf { it.startsWith("0x") }?.let(Abi::decodeUint8)
             if (symbol != null && decimals != null) symbol to decimals else null
         }.onFailure { VelaLog.failure("multisig", "token metadata", it) }.getOrNull()
-            ?: (app.getvela.wallet.feature.multisig.MultisigWords.short(token) to 18)
+            ?: (app.getvela.wallet.feature.multisig.MultisigWords.short(token) to null)
     }
 }

@@ -535,8 +535,7 @@ object ExploreLive {
         )
     }
 
-    fun shortAddress(address: String): String =
-        if (address.length > 12) "${address.take(6)}…${address.takeLast(4)}" else address
+    fun shortAddress(address: String): String = app.getvela.wallet.core.format.ShortAddress.of(address)
 
     /**
      * A recent row shows the title over the host it actually is — the core's

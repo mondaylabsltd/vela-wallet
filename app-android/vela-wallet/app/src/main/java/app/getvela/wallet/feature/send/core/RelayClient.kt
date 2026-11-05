@@ -914,7 +914,9 @@ class PoolRelayPort(
             .relayRpcHeader(xRpcUrl)
             .build()
         runCatching {
-            http.newCall(request).execute().use { response ->
+            // r12-6: a pooled connection the relay had closed is asked again on
+            // a new one, never read as the relay away (`VelaHttp.execute`).
+            VelaHttp.execute(http, request).use { response ->
                 if (!response.isSuccessful) return@use RestAnswer.Status(response.code)
                 val text = response.body?.string().orEmpty()
                 runCatching { RestAnswer.Ok(JSONObject(text)) }.getOrDefault(RestAnswer.Failed)

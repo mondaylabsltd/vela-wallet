@@ -414,7 +414,7 @@ private fun AgentWalletsSection(agent: AgentStore, allowed: List<String>) {
             val on = allowed.any { it.equals(address, ignoreCase = true) }
             VelaSwitchRow(
                 title = row.name,
-                body = if (address.length > 12) "${address.take(6)}…${address.takeLast(4)}" else address,
+                body = app.getvela.wallet.core.format.ShortAddress.of(address),
                 checked = on,
                 onCheckedChange = { want ->
                     val next = allowed.filterNot { it.equals(address, ignoreCase = true) } + listOfNotNull(address.takeIf { want })

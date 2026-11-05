@@ -3569,8 +3569,7 @@ private fun NavHostController.popUnlessRoot() {
  * `0x14fB1f…D1eA5c` — the phone's short form, matching the wallet header's own
  * truncation so one account never reads as two.
  */
-private fun shortenAddress(address: String): String =
-    if (address.length <= 14) address else "${address.take(6)}…${address.takeLast(4)}"
+private fun shortenAddress(address: String): String = app.getvela.wallet.core.format.ShortAddress.of(address)
 
 private fun android.content.Context.openUrl(url: String) {
     runCatching {

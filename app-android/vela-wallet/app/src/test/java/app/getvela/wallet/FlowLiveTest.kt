@@ -262,8 +262,8 @@ class FlowLiveTest {
         assertEquals(listOf("ETH", "POL"), live.rows.map { it.code })
         // One address across every network — the thing the subtitle claims.
         assertEquals(1, live.rows.map { it.addressDisplay }.distinct().size)
-        assertTrue(live.rows[0].addressDisplay.startsWith("0x7687"))
-        assertTrue(live.rows[0].addressDisplay.endsWith("D141"))
+        assertTrue(live.rows[0].addressDisplay.startsWith("0x7687", ignoreCase = true))
+        assertTrue(live.rows[0].addressDisplay.endsWith("D141", ignoreCase = true))
     }
 
     /**
@@ -530,7 +530,7 @@ class FlowLiveTest {
             detail.facts.map { it.label },
         )
         assertEquals("Gnosis", detail.facts[1].value)
-        assertTrue("the counterparty is the item's, shortened", detail.facts[0].value.startsWith("0x9F3c"))
+        assertTrue("the counterparty is the item's, shortened", detail.facts[0].value.startsWith("0x9F3c", ignoreCase = true))
         assertTrue(detail.facts[2].value.startsWith(strings.t(I18nKeys.Flows.DAY_TODAY)))
         assertFalse(detail.facts.any { it.copyValue == "sent" || it.value.startsWith("sent") })
     }

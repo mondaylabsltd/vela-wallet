@@ -74,7 +74,7 @@ class ContactsLiveTest {
     @Test
     fun anUnnamedAddressIntroducesItselfShort() {
         // Not as a blank row, and not as forty characters that wrap.
-        assertEquals("0xaaaa…aaaa", ContactsLive.displayName(contact(ALICE)))
+        assertEquals("0xaAaAaA…aAaaAa", ContactsLive.displayName(contact(ALICE)))
     }
 
     // -- sectioning -----------------------------------------------------------

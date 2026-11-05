@@ -97,7 +97,7 @@ class HomeSyncAndNodesTest {
         val owed = listOf(SessionUnsynced(name = "Daily", address = ME, retrying = true), SessionUnsynced(name = " ", address = OTHER, retrying = false))
         val sheet = SettingsLive.withEraseUnsynced(base, owed, strings).eraseSheet
         assertTrue(sheet.warning!!.contains("Daily"))
-        assertTrue("an unnamed wallet by its short address", sheet.warning!!.contains("0x2222…2222"))
+        assertTrue("an unnamed wallet by its short address", sheet.warning!!.contains("0x222222…222222"))
         assertEquals(strings.t(I18nKeys.SettingsUi.ERASE_UNSYNCED_ACK), sheet.ack)
         assertEquals(base.eraseSheet.title, sheet.title)
     }

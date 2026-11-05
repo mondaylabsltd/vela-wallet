@@ -11,6 +11,7 @@ import app.getvela.wallet.feature.multisig.core.arr
 import app.getvela.wallet.feature.multisig.core.bool
 import app.getvela.wallet.feature.multisig.core.get
 import app.getvela.wallet.feature.multisig.core.int
+import app.getvela.wallet.feature.multisig.core.isNullish
 import app.getvela.wallet.feature.multisig.core.kind
 import app.getvela.wallet.feature.multisig.core.long
 import app.getvela.wallet.feature.multisig.core.ev
@@ -64,6 +65,16 @@ class MsProposalModel(
 
     /** r10-7: the execution's own line is said once — the notes' line, else the chain's word for it. */
     val executedSaidInNotes: Boolean get() = executionLine?.id == "executed"
+
+    /**
+     * r12 S4: the notes the sheet draws under its heading — never the chip's
+     * own word again (an executed one's chip says "Executed"; the green
+     * "Executed" box under it said it a second time).
+     */
+    val sheetNotes: List<MsLine> get() = notes.filterNot { isDone && it.text == statusLine }
+
+    /** r12 S4: the sheet's own "Executed" line, for an execution neither the chip nor the notes say. */
+    val saysExecuted: Boolean get() = !executedSaidInNotes && statusLine != words.t("proposal.executed")
 
     /** Who approved, by address (lowercased). */
     val approvedBy: Set<String> get() = item.approvers.map { it.lowercase() }.toSet()
@@ -141,7 +152,7 @@ class MsProposalModel(
             }
             if (item.status == "queued") out += MsLine(queuedNote(), MsTone.Neutral, "queued")
             if (item.renameUndeployed) out += MsLine(words.t("proposal.renameUndeployed", "network" to words.network(chainId)), MsTone.Warning, "renameUndeployed")
-            if (standing.kind == "blocked") out += MsLine(words.t("status.cannotRun", "reason" to words.blockReason(standing["block"])), MsTone.Warning, "blocked")
+            if (standing.kind == "blocked") out += MsLine(words.t("status.cannotRun", "reason" to words.blockReason(standing["block"], chainId)), MsTone.Warning, "blocked")
             if (item.unsent) {
                 view.outbox.entries.firstOrNull { it.key.lowercase().endsWith(hash.lowercase()) }?.value?.let {
                     out += MsLine(outboxLine(it), MsTone.Warning, "outbox")
@@ -255,18 +266,18 @@ class MsProposalModel(
         val symbol = words.symbol(chainId)
         return when (preview.kind) {
             "priced" -> {
-                val fee = "${MsRules.formatUnits(preview["fee"]["amount"].str ?: "0", 18)} $symbol"
+                val fee = "${MsRules.formatUnits(preview["fee"]["amount"].str ?: "0", MsRules.COIN_DECIMALS)} $symbol"
                 if (preview["canPay"].bool == false) {
                     words.t(
                         "proposal.cannotPay",
                         "name" to words.label(executor), "symbol" to symbol, "fee" to fee,
-                        "balance" to "${MsRules.formatUnits(preview["balance"].str ?: "0", 18)} $symbol",
+                        "balance" to "${MsRules.formatUnits(preview["balance"].str ?: "0", MsRules.COIN_DECIMALS)} $symbol",
                     ) to MsTone.Warning
                 } else {
                     words.t("proposal.feeLine", "fee" to fee, "name" to words.label(executor)) to MsTone.Neutral
                 }
             }
-            "fails" -> words.t("proposal.wouldFail", "reason" to words.whyFails(preview["why"])) to MsTone.Danger
+            "fails" -> words.t("proposal.wouldFail", "reason" to words.whyFails(preview["why"], chainId)) to MsTone.Danger
             "unpriced" -> words.t("proposal.feeUnpriced") to MsTone.Warning
             "unchecked" -> words.t("proposal.feeUnchecked") to MsTone.Warning
             "refused" -> words.t("authority.deployUnverified", "network" to words.network(chainId)) to MsTone.Danger
@@ -286,7 +297,7 @@ class MsProposalModel(
         if (setup["executor"].bool == true) lines += words.t("proposal.setupExecutor", "name" to words.label(executor))
         if (lines.isEmpty()) return emptyList()
         val head = setup["amount"].str?.let {
-            words.t("proposal.feeSetup", "network" to words.network(chainId), "amount" to "${MsRules.formatUnits(it, 18)} ${words.symbol(chainId)}")
+            words.t("proposal.feeSetup", "network" to words.network(chainId), "amount" to "${MsRules.formatUnits(it, MsRules.COIN_DECIMALS)} ${words.symbol(chainId)}")
         } ?: words.t("proposal.feeSetupPlain", "network" to words.network(chainId))
         return listOf(head) + lines
     }
@@ -314,6 +325,29 @@ class MsProposalModel(
     // -- asking the others (`signers`) -------------------------------------------------
 
     val stillNeeded: List<String> get() = members.filter { it.lowercase() !in approvedBy }
+
+    /**
+     * r11-4, r12-4 (the web's `nobodySigns`): the core refuses it — the one
+     * review's `refused` (a batch nested too deep, a delegatecall, a refund, a
+     * state change), its sign rule shut, or no kind Vela signs at all. Every
+     * member's Vela runs the same review, so nobody signs it: nobody is asked
+     * to. Read from the full review (`reviews[…]`); the item's own review is
+     * the thin one (action, refusal) and never carries `refused`.
+     */
+    val nobodySigns: Boolean
+        get() = item.action.isNullish ||
+            !review["refused"].isNullish ||
+            review["sign"]["allowed"].bool == false ||
+            // The core left nobody here who can act, and said why.
+            (canApprove.isEmpty() && canExecute.isEmpty() && !item.refusal.isNullOrEmpty())
+
+    /**
+     * r12-4: the members still to approve are asked — "Ask members to
+     * approve", Send link, Copy link, the outside-wallet link and "Approve
+     * with another wallet" — only for an open one somebody can sign.
+     */
+    val asksMembers: Boolean
+        get() = !isDone && !nobodySigns && stillNeeded.isNotEmpty() && item.approved < item.threshold
 
     // -- the approvals section (r10-7; the web's r4a-8) ---------------------------------
 

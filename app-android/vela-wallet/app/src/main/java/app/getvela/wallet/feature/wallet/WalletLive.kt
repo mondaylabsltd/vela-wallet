@@ -367,8 +367,7 @@ object WalletLive {
     }
 
     /** `0x1234…abcd`. */
-    fun shortenAddress(address: String): String =
-        if (address.length <= 12) address else address.take(6) + "…" + address.takeLast(4)
+    fun shortenAddress(address: String): String = app.getvela.wallet.core.format.ShortAddress.of(address)
 
     /**
      * The amount, signed.

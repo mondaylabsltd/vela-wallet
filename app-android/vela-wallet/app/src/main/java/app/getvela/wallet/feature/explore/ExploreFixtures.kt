@@ -322,5 +322,4 @@ fun ExploreScreenModel.withIdentity(name: String, address: String): ExploreScree
 )
 
 /** `0x14fB1f…D1eA5c` — this client's short form (spec 015). */
-private fun shortenAddress(address: String): String =
-    if (address.length <= 14) address else "${address.take(6)}…${address.takeLast(4)}"
+private fun shortenAddress(address: String): String = app.getvela.wallet.core.format.ShortAddress.of(address)

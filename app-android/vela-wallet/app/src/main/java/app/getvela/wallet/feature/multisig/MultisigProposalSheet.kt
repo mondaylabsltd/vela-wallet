@@ -70,7 +70,7 @@ fun MultisigProposalSheet(
     words: MultisigWords,
     origin: String,
     locale: String,
-    tokenInfo: suspend (Int, String) -> Pair<String, Int>,
+    tokenInfo: suspend (Int, String) -> Pair<String, Int?>,
     explorerTx: (Int, String) -> String?,
     onClose: () -> Unit,
     onAddNetwork: ((Int) -> Unit)? = null,
@@ -198,9 +198,9 @@ fun MultisigProposalSheet(
                 MsText("${words.network(chainId)} · ${words.t("action.numberValue", "nonce" to item.nonce)}", MsType.Sub, color = colors.fgSubtle)
             }
         }
-        for (note in model.notes) MsNote(note.text, tone = note.tone, tag = "multisig.proposal.note.${note.id}")
+        for (note in model.sheetNotes) MsNote(note.text, tone = note.tone, tag = "multisig.proposal.note.${note.id}")
         model.executedTx?.let { tx ->
-            if (!model.executedSaidInNotes) MsNote(words.t("proposal.executed"), tone = MsTone.Positive, tag = "multisig.proposal.executed")
+            if (model.saysExecuted) MsNote(words.t("proposal.executed"), tone = MsTone.Positive, tag = "multisig.proposal.executed")
             explorerTx(chainId, tx)?.let { url ->
                 val context = LocalContext.current
                 MsTextButton(words.t("proposal.explorer"), tag = "multisig.proposal.explorer") {
@@ -408,8 +408,10 @@ fun MultisigProposalSheet(
         // that wallet) for an outside or either one — as the web and desktop.
         // r11 S4: a transaction Vela refuses for what it is asks nobody to
         // approve it (the core leaves it nobody who can, and names why).
-        val refusedForWhatItIs = item.canApprove.isEmpty() && item.review["refused"] != null && item.review["refused"] !is kotlinx.serialization.json.JsonNull
-        if (!model.isDone && !refusedForWhatItIs && model.stillNeeded.isNotEmpty() && item.approved < item.threshold) {
+        // r12-4: the refusal is the ONE review's (`reviews[…].refused`), never
+        // the item's thin review — which has no such field, so the section
+        // stayed for deep4 and a delegatecall.
+        if (model.asksMembers) {
             MsSection(words.t("proposal.invite")) {
                 MsNote(words.t("proposal.stillNeeded", "missing" to words.list(model.stillNeeded.map(words::label))))
                 for (line in model.signerLines) MsNote(line.text, tag = "multisig.proposal.signers.${line.id}")

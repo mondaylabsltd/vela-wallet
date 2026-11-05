@@ -182,7 +182,7 @@ fun MultisigAppLayer(
         ),
         origin = app.getvela.wallet.feature.multisig.core.MsRules.shareOrigin(),
         locale = MultisigWiring.pageLocale(container),
-        tokenInfo = { chainId, token -> MultisigWiring.tokenInfoOf(container, chainId, token) },
+        tokenInfo = { chainId, token -> MultisigWiring.tokenInfoOf(container, chainId, token, hub) },
         explorerTx = { chainId, tx ->
             networks.networks.firstOrNull { it.chain_id.toInt() == chainId }?.explorer_url?.trimEnd('/')?.takeIf { it.isNotBlank() }?.let { "$it/tx/$tx" }
         },

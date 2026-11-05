@@ -583,7 +583,7 @@ class SendLiveTest {
 
     /**
      * vis-24 on the receipt (the web's `liveSendReceipt`): the payee the
-     * confirm named stays named once the money left — "Landlord (0x7687…D141)",
+     * confirm named stays named once the money left — "Landlord (0x76875e…C0D141)",
      * found on the device (fork send, P2.2) where Android said hex alone.
      */
     @Test
@@ -598,10 +598,10 @@ class SendLiveTest {
             receipt = SendReceiptView(status = SendReceiptStatus.Confirmed, amount = "0.001", usd_value = 0.0),
         )
         val named = SendLive.receipt(model, confirmed, ctx())
-        assertTrue(named.captions.first(), named.captions.first().contains("Landlord (0x7687…D141)"))
+        assertTrue(named.captions.first(), named.captions.first().contains("Landlord (0x76875e…C0D141)"))
         // Nobody named them: the short address alone, as before.
         val bare = SendLive.receipt(model, confirmed.copy(payees = listOf(app.getvela.wallet.feature.send.core.SendPayee(address = recipient))), ctx())
-        assertTrue(bare.captions.first(), bare.captions.first().contains("0x7687…D141") && !bare.captions.first().contains("("))
+        assertTrue(bare.captions.first(), bare.captions.first().contains("0x76875e…C0D141") && !bare.captions.first().contains("("))
     }
 
     /**
@@ -849,7 +849,7 @@ class SendLiveTest {
         assertEquals("Send XDAI", d.header.title)
         assertEquals("Sent 0.0035 XDAI", d.title)
         assertEquals(
-            listOf("2 recipients · Gnosis", "Founder · 0.001 XDAI", "0x14fB…eA5c · 0.0025 XDAI"),
+            listOf("2 recipients · Gnosis", "Founder · 0.001 XDAI", "0x14fB1f…D1eA5c · 0.0025 XDAI"),
             d.captions,
         )
     }
@@ -1055,18 +1055,18 @@ class SendLiveTest {
 
         val registry = to(view)
         assertEquals("Wallet", registry.value)
-        assertEquals("Vela User · 0x14fB…eA5c", registry.detail)
+        assertEquals("Vela User · 0x14fB1f…D1eA5c", registry.detail)
         assertEquals(FactLead.Identicon(wallet), registry.lead)
         assertFalse(registry.mono)
 
         // The person's own name: no tag, the address still under it.
         val own = to(view.copy(payees = listOf(SendPayee(wallet, "Savings", SendNameSource.Own))))
         assertEquals("Savings", own.value)
-        assertEquals("0x14fB…eA5c", own.detail)
+        assertEquals("0x14fB1f…D1eA5c", own.detail)
 
         // Nobody named them: the short address alone, in mono.
         val bare = to(view.copy(payees = listOf(SendPayee(wallet))))
-        assertEquals("0x14fB…eA5c", bare.value)
+        assertEquals("0x14fB1f…D1eA5c", bare.value)
         assertTrue(bare.mono)
         assertNull(bare.detail)
 
@@ -1099,7 +1099,7 @@ class SendLiveTest {
             val row = to(SendPayee(wallet, "Wallet", source))
             assertEquals("the name is the first line", "Wallet", row.value)
             assertNotEquals(kind, row.value)
-            assertEquals("the kind and the short address are the line under it", "$kind · 0x14fB…eA5c", row.detail)
+            assertEquals("the kind and the short address are the line under it", "$kind · 0x14fB1f…D1eA5c", row.detail)
             assertEquals("the avatar is the From row's — beside the name", FactLead.Identicon(wallet), row.lead)
             assertFalse("a name is not drawn in mono", row.mono)
         }
@@ -1465,7 +1465,7 @@ class SendLiveTest {
         assertEquals("rcpt_1", live.recipients[0].id)
         assertEquals("0.001", live.recipients[0].amountValue)
         assertEquals("0.001 XDAI", live.recipients[0].amount)
-        assertEquals("0x88cC…6894", live.recipients[1].name)
+        assertEquals("0x88cCA0…266894", live.recipients[1].name)
         assertEquals("", live.recipients[2].name)
         assertEquals("0x0000000000000000000000000000000000000000", live.recipients[2].identiconSeed)
         assertEquals(listOf(RecipientAction.Add, RecipientAction.Contacts, RecipientAction.Import), live.recipientActions.map { it.id })
@@ -1584,17 +1584,17 @@ class SendLiveTest {
         assertEquals(2, live.breakdown.size)
         assertEquals("Founder", live.breakdown[0].label)
         // Spec 097 F: a name never stands in for the address it pays.
-        assertEquals("0x7687…D141", live.breakdown[0].detail)
+        assertEquals("0x76875e…C0D141", live.breakdown[0].detail)
         assertFalse(live.breakdown[0].mono)
         assertEquals("0.001 XDAI", live.breakdown[0].value)
         assertEquals(recipient, live.breakdown[0].identiconSeed)
-        assertEquals("0x88cC…6894", live.breakdown[1].label)
+        assertEquals("0x88cCA0…266894", live.breakdown[1].label)
         assertTrue(live.breakdown[1].mono)
         assertNull(live.breakdown[1].detail)
         // A row's name is the core's payee, tag and all.
         val tagged = SendLive.confirm(drawn.model, view.copy(payees = listOf(SendPayee(recipient, "bob.eth", SendNameSource.Service("ENS")), SendPayee(me))), ctx())
         assertEquals("bob.eth", tagged.breakdown[0].label)
-        assertEquals("ENS · 0x7687…D141", tagged.breakdown[0].detail)
+        assertEquals("ENS · 0x76875e…C0D141", tagged.breakdown[0].detail)
     }
 
     /**

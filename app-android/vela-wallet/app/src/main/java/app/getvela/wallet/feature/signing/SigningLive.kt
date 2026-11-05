@@ -1670,7 +1670,7 @@ object SigningLive {
             // ticker, never the native figure — and what it costs in money.
             // One formatter, because two surfaces pricing one operation must
             // not give two answers.
-            estimate != null -> "~" + feeLine(estimate, fee, ctx)
+            estimate != null -> app.getvela.wallet.feature.send.core.ConfirmFeeRow.prefix() + feeLine(estimate, fee, ctx)
             else -> ctx.strings.t("componentsUi.gas.estimating")
         }
         val choosable = fee.options.size > 1

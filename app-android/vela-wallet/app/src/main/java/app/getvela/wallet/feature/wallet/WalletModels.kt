@@ -334,15 +334,7 @@ data class WalletHomeModel(
 }
 
 /** `0x1234…cdef` — the house short form, matching the other three clients. */
-private fun shortenAddress(address: String): String =
-    if (address.length <= SHORT_ADDRESS_KEEP_HEAD + SHORT_ADDRESS_KEEP_TAIL) {
-        address
-    } else {
-        address.take(SHORT_ADDRESS_KEEP_HEAD) + "\u2026" + address.takeLast(SHORT_ADDRESS_KEEP_TAIL)
-    }
-
-private const val SHORT_ADDRESS_KEEP_HEAD = 6
-private const val SHORT_ADDRESS_KEEP_TAIL = 4
+private fun shortenAddress(address: String): String = app.getvela.wallet.core.format.ShortAddress.of(address)
 
 /**
  * A title that names a place — `history.dappRowTitle`, 「在 {{place}}

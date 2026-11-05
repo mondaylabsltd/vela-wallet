@@ -1435,7 +1435,7 @@ object SendLive {
                     // the figure the session dropped.
                     value = when {
                         rowFailure != null -> FeeFailureRow.figure(rowFailure, s)
-                        view.fee != null -> "~$feeLine"
+                        view.fee != null -> app.getvela.wallet.feature.send.core.ConfirmFeeRow.prefix() + feeLine
                         else -> s.t(I18nKeys.Flows.FEE_ESTIMATING)
                     },
                     note = rowFailure?.reason_key?.let { s.t(it, mapOf("chain" to chain)) },
@@ -2036,8 +2036,7 @@ object SendLive {
 
     private fun amount(human: String): Double = human.toDoubleOrNull() ?: 0.0
 
-    fun shortAddress(address: String): String =
-        if (address.length > 12) "${address.take(6)}…${address.takeLast(4)}" else address
+    fun shortAddress(address: String): String = app.getvela.wallet.core.format.ShortAddress.of(address)
 
     private fun shortHash(hash: String): String =
         if (hash.length > 16) "${hash.take(10)}…${hash.takeLast(6)}" else hash

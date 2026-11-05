@@ -151,11 +151,18 @@ class MultisigLive(
                 method(method.uppercase(), payload ?: if (method.equals("POST", true) || method.equals("PUT", true)) ByteArray(0).toRequestBody() else null)
                 header("cache-control", "no-store")
             }.build()
-            val call = VelaHttp.client.newBuilder().callTimeout(timeoutMs.coerceAtLeast(1_000), TimeUnit.MILLISECONDS).build().newCall(request)
+            val client = VelaHttp.client.newBuilder().callTimeout(timeoutMs.coerceAtLeast(1_000), TimeUnit.MILLISECONDS).build()
             suspendCancellableCoroutine { cont ->
-                cont.invokeOnCancellation { call.cancel() }
+                val call = java.util.concurrent.atomic.AtomicReference<okhttp3.Call?>(null)
+                cont.invokeOnCancellation { call.get()?.cancel() }
                 try {
-                    call.execute().use { response ->
+                    // r12-5: a mailbox read that met a pooled connection the
+                    // service (or a proxy, a tunnel) had closed is asked again
+                    // on a new one — never answered `http_unreachable`, which
+                    // the core counts as the service away ("Multisig service
+                    // unreachable" while every read it got was a 200). A write
+                    // goes on a connection of its own (`VelaHttp.execute`).
+                    VelaHttp.execute(client, request) { call.set(it); if (!cont.isActive) it.cancel() }.use { response ->
                         cont.resumeWith(Result.success(HttpAnswer(response.code, response.header("retry-after"), response.body?.string().orEmpty())))
                     }
                 } catch (error: Throwable) {
@@ -393,7 +400,14 @@ class MultisigLive(
             feeToken = null,
         )
         val view = (quoted as? SpeedControl.Quoted.Settled)?.view
-            ?: return MultisigShellResult.Quoted(jo("kind" to "failed"))
+        // r12-6: each look's quote, as it ended — what tells "the fee machine
+        // priced it" from "the look said it could not".
+        VelaLog.event(
+            "multisig.quote", if (view == null) "timed out" else if (view.fee != null && view.failed == null) "priced" else "failed",
+            "chain" to op.chain_id, "failed" to view?.failed?.let { it::class.simpleName }, "failure" to view?.failure?.failure?.wire,
+            "retrying" to view?.failure?.retrying,
+        )
+        view ?: return MultisigShellResult.Quoted(jo("kind" to "failed"))
         val estimate = view.fee
         val recipient = estimate?.fee_recipient
         if (estimate != null && view.failed == null && recipient != null) {

@@ -377,10 +377,10 @@ class FiatWithheldTest {
     @Test
     fun signing_sheet() {
         val wait = SigningFixtures.build(SigningScreenState.CS59, strings).fee as FeeModel.OnChain
-        assertEquals("the fee in its coin, no worth beside it", "~0.000123 ETH", wait.value)
+        assertEquals("the fee in its coin, no worth beside it", "0.000123 ETH", wait.value)
         assertNoFiat("signing_sheet", listOf(wait.value, wait.warning, wait.speed?.value) + wait.options.map { it.toString() }, "2.24", "0.31")
         val landed = SigningFixtures.build(SigningScreenState.CS60, strings).fee as FeeModel.OnChain
-        assertEquals("~0.000123 ETH · ≈CN¥2.24", landed.value)
+        assertEquals("0.000123 ETH · ≈CN¥2.24", landed.value)
         // The one formatter every fee line shares: the send's, the sheet's, the hand-off card's.
         val parts = SendLive.FeeParts(coin = "0.000123 ETH", mark = WalletLive.mark(1, "ETH", null), units = 0.000123, contract = null)
         assertEquals("0.000123 ETH", SendLive.feeLine(parts, 2560.0, WalletLive.Money.of(waiting)))
