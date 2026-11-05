@@ -360,10 +360,26 @@ let skipped = 0;
 const failures = [];
 const seenSuites = [];
 
+// Vector files at the top level that are NOT suites of this runner: each is a
+// rule's table replayed by its own runners (core conformance, the native vector
+// tests, the extension twin). Named one by one, so a new file without a `suite`
+// fails here instead of being skipped unseen.
+const OTHER_RUNNERS = new Map([
+  ['balance-pool-unreached.json', 'app_balance_dashboard.rs, PoolUnreachedVectorsTest.kt'],
+  ['balance-stamp.json', 'app_balance_dashboard.rs, R10CoreVectorsTest.kt, R10CoreAdoptionTests.swift'],
+  ['incoming-scan.json', 'app_incoming_scan.rs, R10CoreVectorsTest.kt, R10CoreAdoptionTests.swift'],
+  ['site-start-chain.json', 'site_start_chain_vectors.rs, dapp/protocol.test.ts'],
+]);
+const otherRunnerFiles = [];
+
 for (const file of readdirSync(VECTORS_DIR).sort()) {
   if (!file.endsWith('.json')) continue;
   const suite = JSON.parse(readFileSync(join(VECTORS_DIR, file), 'utf8'));
-  seenSuites.push(suite.suite);
+  if (suite.suite === undefined && OTHER_RUNNERS.has(file)) {
+    otherRunnerFiles.push(file);
+    continue;
+  }
+  seenSuites.push(suite.suite ?? `<${file}: no suite>`);
 
   // The exhaustive i18n suite is COLUMNAR: {locales, keys, values}. Without this
   // branch it would register its name, contribute zero cases through
@@ -580,3 +596,7 @@ console.log(
 );
 console.log(`verify-web: ${2 + 3} boundary regressions green (FR-023 borrow safety, FR-024 non-finite vars)`);
 console.log(`verify-web: ${parityTotal} native-parity cases green (the uniffi exports' recorded answers)`);
+console.log(
+  `verify-web: ${otherRunnerFiles.length} rule tables left to their own runners: ` +
+    otherRunnerFiles.map((f) => `${f} (${OTHER_RUNNERS.get(f)})`).join('; '),
+);
