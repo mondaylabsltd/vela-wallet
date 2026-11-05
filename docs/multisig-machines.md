@@ -932,7 +932,7 @@ rule. Vector `tests/vectors/multisig/member-titles.json` (Rust
 
 | Was | Now |
 | --- | --- |
-| proposal #0: "expected to fail" (the review's `Concern::Reverts`) beside "This would fail if executed now: …" (the look's `fails`) | `ProposalsView.reviews` drops the review's `reverts` concern for a proposal whose look (`previews`, or `actions` `stopped`) says `fails`: the look's line, with its reason, is the one note (`multisig_proposals::one_note_per_failure`). The review's simulation is left as read. Nothing for a shell to do. |
+| proposal #0: "expected to fail" (the review's `Concern::Reverts`) beside "This would fail if executed now: …" (the look's `fails`) | `ProposalsView.reviews` drops the review's `reverts` concern for a proposal whose look (`previews`, or `actions` `stopped`) says `fails`, and serves a reverting `simulation` withheld (`kind: "withheld"`, no `notice_key`, `movesTitleKey` null — the shape every shell already draws as nothing, r9-9): the look's line, with its reason, is the one note (`multisig_proposals::one_note_per_failure`). Nothing for a shell to do; a shell guard that hid the simulation's notice beside a failing look can go. |
 | confirm fee "~0.12" (Android, iOS) vs "0.12" (web, desktop) | `fee.row {quoted}` (link door; `fee_policy::confirm_fee_row`) → `{label_key, amount_prefix}`: the amount is the fee signed and charged (r11-8), drawn bare after `amount_prefix` (empty — never "~"); `label_key` `send.estFeeLabel`, or `send.feeTokenEstimate` when `quoted` is false. Vector `tests/vectors/fee/confirm-row.json`. |
 
 ### 13.5 The web, the extension, the page (no native change)

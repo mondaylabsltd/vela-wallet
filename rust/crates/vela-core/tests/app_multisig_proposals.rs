@@ -2081,3 +2081,39 @@ fn the_rule_the_chain_says_is_told() {
         },
     }));
 }
+
+/// r12 S4: one note for one fact — a proposal whose look says it would fail
+/// is not also "expected to fail" by its review: the reverts concern goes,
+/// a reverting simulation is served withheld. Another proposal is untouched.
+#[test]
+fn a_failure_the_look_says_is_not_said_again_by_the_review() {
+    use std::collections::BTreeMap;
+    use vela_core::app::multisig_proposals::{one_note_per_failure, ActionState};
+    let review = serde_json::json!({
+        "concerns": [{"kind": "reverts"}, {"kind": "firstTime", "address": "0x01"}],
+        "simulation": {"kind": "reverts", "deltas": [], "revert_reason": null, "notice_risk": "danger",
+            "notice_key": "componentsUi.signing.simWillFail", "no_change_key": null, "recheck": false},
+        "movesTitleKey": "componentsUi.signing.balanceChangesTitle"
+    });
+    let reviews = BTreeMap::from([
+        ("100:0xAB".to_owned(), review.clone()),
+        ("100:0xcd".to_owned(), review.clone()),
+    ]);
+    let previews = BTreeMap::from([(
+        "100:0xab:0xexecutor".to_owned(),
+        serde_json::json!({"kind": "fails", "why": {"kind": "reverts", "reason": null}}),
+    )]);
+    let out = one_note_per_failure(&reviews, &previews, &BTreeMap::<String, ActionState>::new());
+    let failing = &out["100:0xAB"];
+    assert_eq!(
+        failing["concerns"],
+        serde_json::json!([{"kind": "firstTime", "address": "0x01"}])
+    );
+    assert_eq!(failing["simulation"]["kind"], "withheld");
+    assert!(failing["simulation"]["notice_key"].is_null());
+    assert!(failing["movesTitleKey"].is_null());
+    assert_eq!(
+        out["100:0xcd"], review,
+        "a proposal no look says fails keeps its review"
+    );
+}
