@@ -13,4 +13,10 @@ owners: Array<string>,
 /**
  * Send this transaction instead of signing (`None`: an approval).
  */
-send: OutsideSendTx | null, };
+send: OutsideSendTx | null, 
+/**
+ * r12: the multisig's genesis, sent beside the signing request so
+ * the page can review a multisig no service records and no chain
+ * holds yet (it checks the address derives from it).
+ */
+genesis?: unknown, };

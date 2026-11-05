@@ -1410,6 +1410,7 @@ async fn ask_outside(
             safe_tx_hash: hash.clone(),
             owners: owners.clone(),
             send: None,
+            genesis: Some(account.genesis.clone()),
         }),
     })
     .await;

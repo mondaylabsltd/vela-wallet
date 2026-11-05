@@ -133,6 +133,9 @@ fn no_member_here_proposes_through_an_outside_wallet() {
     assert_eq!(request.safe_tx_hash, hash);
     assert_eq!(request.safe, account.address);
     assert!(request.send.is_none());
+    // r12: its genesis goes with it — an outside page can review a multisig
+    // no service records and no chain holds yet (it derives the address).
+    assert_eq!(request.genesis.as_ref(), Some(&account.genesis));
     assert!(sut.view().draft.is_some(), "the draft stays while asked");
     assert!(world.submits.is_empty());
 

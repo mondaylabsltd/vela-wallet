@@ -225,7 +225,9 @@
 				tx: request.tx,
 				safeTxHash: request.safeTxHash,
 				owners: request.owners,
-				send: request.send ?? null
+				send: request.send ?? null,
+				// r12: the core's genesis, so the page can review a multisig deployed nowhere.
+				...(request.genesis ? { genesis: request.genesis } : {})
 			},
 			connectPage(locale)
 		);
