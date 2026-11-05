@@ -1165,6 +1165,68 @@ describe("a dApp's eth_sendTransaction its proposer alone makes ready (round 3, 
 	});
 });
 
+describe('D1: a review neither of whose safety checks could be read', () => {
+	// Each read gave up at its bound on a slow network: the state guard and
+	// the simulation both unread. The core keeps it readable (`ready`) but
+	// its sign rule asks for "… anyway" and the door draws the danger line.
+	const unchecked = () => ({
+		...REVIEW,
+		state: { source: 'none', verdict: { kind: 'unavailable', reason: 'unreachable' } },
+		simulation: { kind: 'unreachable', deltas: [] },
+		concerns: [
+			{ kind: 'stateUnread', reason: 'unreachable' },
+			{ kind: 'unsimulated' },
+			{ kind: 'unchecked' }
+		],
+		tone: 'danger',
+		sign: { allowed: true, anyway: true }
+	});
+
+	it('says so in danger, offers Try again, and every press is "… anyway" — Approve and execute too', async () => {
+		reviewSeam.review = unchecked();
+		reviewSeam.state = { kind: 'ready' };
+		fake.chain.items = [item({ approved: 1, canExecute: [local] })];
+		const screen = show();
+		await settle();
+		const line = document.querySelector('[data-testid="review-unchecked"]');
+		expect(line?.textContent).toContain('review.state.unchecked');
+		expect(buttons()).toContain('review.approveAnyway');
+		expect(buttons()).toContain('review.approveExecuteAnyway');
+		expect(buttons()).not.toContain('proposal.approve');
+		expect(buttons()).not.toContain('proposal.approveAndExecute');
+		for (const label of ['review.approveAnyway', 'review.approveExecuteAnyway']) {
+			const b = [...document.querySelectorAll('button')].find(
+				(x) => x.textContent?.trim() === label
+			);
+			expect(b?.className).toContain('danger');
+			expect((b as HTMLButtonElement).disabled).toBe(false);
+		}
+		press('review.state.tryAgain');
+		await settle();
+		expect(machineSent('review_again')).toEqual([
+			{ type: 'review_again', chain_id: 100, safe_tx_hash: HASH }
+		]);
+		await screen.unmount();
+	});
+
+	it('one check unread alone stays a caution: no danger line, a plain press', async () => {
+		reviewSeam.review = {
+			...REVIEW,
+			state: { source: 'none', verdict: { kind: 'unavailable', reason: 'unreachable' } },
+			simulation: { kind: 'deltas', deltas: [] },
+			concerns: [{ kind: 'stateUnread', reason: 'unreachable' }],
+			tone: 'caution',
+			sign: { allowed: true, anyway: false }
+		};
+		reviewSeam.state = { kind: 'ready' };
+		const screen = show();
+		await settle();
+		expect(document.querySelector('[data-testid="review-unchecked"]')).toBeNull();
+		expect(buttons()).toContain('proposal.approve');
+		await screen.unmount();
+	});
+});
+
 describe('a member who would execute it (ms-5)', () => {
 	it('can approve without executing, beside Approve and execute', async () => {
 		fake.chain.items = [item({ approved: 1, canExecute: [local] })];

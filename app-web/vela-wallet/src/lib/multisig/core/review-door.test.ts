@@ -35,7 +35,8 @@ describe('review state door (§12, shared vectors)', () => {
 			timedOut: 't',
 			unreadable: 'u',
 			gone: 'g',
-			tryAgain: 'r'
+			tryAgain: 'r',
+			unchecked: 'c'
 		};
 		expect(reasonWords(m, 'home.multisig.review.state.timedOut')).toBe('t');
 		expect(reasonWords(m, 'home.multisig.review.state.gone')).toBe('g');

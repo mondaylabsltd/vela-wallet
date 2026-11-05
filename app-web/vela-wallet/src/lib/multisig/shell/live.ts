@@ -208,7 +208,9 @@ export function executeRequest(purpose: Op<'send_calls'>['purpose']): {
 			name: purpose.name ?? null,
 			threshold: purpose.threshold,
 			// r10 page: its members now, for a member change's before → after.
-			owners: purpose.owners
+			owners: purpose.owners,
+			// D1: the one review asks for "… anyway" — the page says "Execute anyway".
+			anyway: purpose.anyway === true
 		}
 	};
 }

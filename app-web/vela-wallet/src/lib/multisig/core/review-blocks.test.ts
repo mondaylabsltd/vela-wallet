@@ -324,7 +324,9 @@ const reviewOf = (c: (typeof READING.cases)[number]) =>
 		owners: ['0x1111111111111111111111111111111111111111'],
 		threshold: 1,
 		deployed: true,
-		simReply: '{"unreachable":true}',
+		// A simulation that reads: the "… anyway" pinned here is the
+		// reading's own (D1: nothing checked at all is "anyway" too).
+		simReply: '{"result":[{"calls":[{"status":"0x1","logs":[]}]}]}',
 		tokenFacts: c.args.tokenFacts ?? []
 	} as never);
 const text = (blocks: Block[]) => JSON.stringify(blocks);

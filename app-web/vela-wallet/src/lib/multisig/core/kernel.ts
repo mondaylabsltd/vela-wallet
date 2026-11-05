@@ -678,6 +678,8 @@ export type ReviewConcern =
 	| { kind: 'stateUnread'; reason: string }
 	| { kind: 'reverts' }
 	| { kind: 'unsimulated' }
+	/** D1: neither the state guard nor the simulation read — danger, "… anyway". */
+	| { kind: 'unchecked' }
 	| { kind: 'lookalike'; address: string; of: string; label: string }
 	| { kind: 'firstTime'; address: string }
 	| { kind: 'toContract'; address: string }

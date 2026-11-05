@@ -356,12 +356,16 @@ impl Live {
                 threshold,
                 tx,
                 owners,
+                anyway,
             }) => json!({
                 "tx": tx,
                 "multisig": multisig,
                 "name": name,
                 "threshold": threshold,
                 "owners": owners,
+                // D1: the one review asks for "… anyway" — the page says
+                // "Execute anyway".
+                "anyway": anyway,
             }),
             _ => json!({}),
         };

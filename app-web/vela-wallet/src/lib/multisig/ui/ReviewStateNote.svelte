@@ -4,7 +4,11 @@
 	 * core's door (`review.door`). Being read: a calm "Reading the
 	 * transaction…", the sign button shut. Not read: why, that nothing can be
 	 * signed until it is, and Try again (the machine's `review_again`). A
-	 * review that is read draws nothing here: the review itself is drawn.
+	 * review that is read draws nothing here: the review itself is drawn —
+	 * unless the door says (D1) that neither its state-change check nor its
+	 * simulation could be read: then a danger line ("Vela couldn't check what
+	 * this transaction changes") with Try again, and the button signs only
+	 * "… anyway" (`door.anyway`).
 	 */
 	import Button from '$lib/ui/Button.svelte';
 	import type { ReviewStateMessages } from '../messages';
@@ -36,6 +40,15 @@
 			>
 		{/if}
 	</div>
+{:else if door.reason_key}
+	<div class="unchecked" role="alert" data-testid="review-unchecked">
+		<p class="why">{m.unchecked}</p>
+		{#if door.retry}
+			<Button variant="secondary" shape="rounded" onclick={onRetry} testid="review-retry"
+				>{m.tryAgain}</Button
+			>
+		{/if}
+	</div>
 {/if}
 
 <style>
@@ -46,7 +59,8 @@
 		color: var(--color-fg-muted);
 	}
 
-	.failed {
+	.failed,
+	.unchecked {
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-sm);
@@ -54,13 +68,23 @@
 		margin: var(--space-lg) 0 0;
 		padding: var(--space-md);
 		border-radius: var(--radius-lg);
-		background: var(--color-warning-soft);
-		border: var(--border-hairline) solid var(--color-warning-border);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-fg-base);
 	}
 
-	.failed p {
+	.failed {
+		background: var(--color-warning-soft);
+		border: var(--border-hairline) solid var(--color-warning-border);
+	}
+
+	/* D1: a danger — the button under it signs only "… anyway". */
+	.unchecked {
+		background: var(--color-error-soft);
+		border: var(--border-hairline) solid var(--color-error-base);
+	}
+
+	.failed p,
+	.unchecked p {
 		margin: 0;
 		overflow-wrap: anywhere;
 	}

@@ -279,7 +279,9 @@ class MsProposalModel(
             }
             "fails" -> words.t("proposal.wouldFail", "reason" to words.whyFails(preview["why"], chainId)) to MsTone.Danger
             "unpriced" -> words.t("proposal.feeUnpriced") to MsTone.Warning
-            "unchecked" -> words.t("proposal.feeUnchecked") to MsTone.Warning
+            // D8: "you can still approve" only where Approve can be pressed —
+            // never under one shut while the review is read (or not read).
+            "unchecked" -> words.t(if (door.enabled) "proposal.feeUnchecked" else "proposal.feeUncheckedHeld") to MsTone.Warning
             "refused" -> words.t("authority.deployUnverified", "network" to words.network(chainId)) to MsTone.Danger
             "spent" -> words.t("proposal.doneNote") to MsTone.Neutral
             else -> null

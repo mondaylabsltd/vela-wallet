@@ -14,10 +14,13 @@ enabled: boolean,
  */
 anyway: boolean, 
 /**
- * `failed`: the reason's corpus key.
+ * `failed`: the reason's corpus key. `review` (D1): when set
+ * ([`UNCHECKED_KEY`]), a danger line drawn ABOVE the review — neither
+ * safety check was read.
  */
 reason_key: string | null, 
 /**
- * `failed`: offer "Try again" (`review_again`).
+ * `failed`: offer "Try again" (`review_again`). `review` (D1): the
+ * unchecked line's Try again.
  */
 retry: boolean, };
