@@ -956,9 +956,27 @@
 	/* --- layers ------------------------------------------------------------ */
 
 	/* `wallet` and `menu` sit within the nearest positioned ancestor (the
-	   phone frame, the page); the root adds no box of its own. */
-	.root {
-		display: contents;
+	   phone frame, the page) — never taller than the window shows (§19.10).
+	   A sheet nothing frames (the multisig host, the account switcher) is
+	   placed in the initial containing block, which iOS Safari sizes to the
+	   LARGE viewport, the one with its toolbar collapsed: the sheet's foot —
+	   the Create multisig sheet's Next — stood under Safari 26's floating
+	   toolbar until a scroll collapsed it. The dynamic viewport (`dvh`) is
+	   what is seen now, toolbar and all; in a frame shorter than the window
+	   the cap never binds. The box takes no taps: the scrim and the sheet do. */
+	.root.wallet,
+	.root.menu {
+		position: absolute;
+		inset-inline: 0;
+		top: 0;
+		height: 100%;
+		max-height: 100dvh;
+		pointer-events: none;
+	}
+
+	.root.wallet > *,
+	.root.menu > * {
+		pointer-events: auto;
 	}
 
 	/* `signing` and `prompt` are above the page wherever they are mounted:

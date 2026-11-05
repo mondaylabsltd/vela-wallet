@@ -790,6 +790,57 @@ describe('round 6: the create sheet at a phone’s width, and a multisig of one'
 });
 
 /**
+ * r14 leftovers (§19.10): on Safari iOS 26 the tall Create sheet opened with
+ * Next under the floating bottom toolbar until it was scrolled once — the
+ * sheet stood in a containing block sized to the large viewport (toolbar
+ * collapsed). A block taller than the window stands in for it here, at the
+ * tester's iPhone 17 Pro size: on open, without a scroll, Next is on screen
+ * and is what a tap at its centre lands on.
+ */
+describe('§19.10: the create sheet at an iPhone’s size, its Next in sight on open', () => {
+	afterEach(async () => {
+		await page.viewport(414, 896);
+	});
+
+	it('Next lies within the visible viewport, unscrolled and uncovered', async () => {
+		await page.viewport(402, 874);
+		const host = document.createElement('div');
+		host.style.cssText =
+			'position: absolute; top: 0; left: 0; width: 100%; height: calc(100dvh + 96px);';
+		document.body.appendChild(host);
+		const screen = render(CreateMultisigSheet, {
+			target: host,
+			props: {
+				m: words(),
+				locale: 'en',
+				current: ME,
+				wide: false,
+				closeLabel: 'Close',
+				onclose: () => {},
+				oncreated: () => {}
+			}
+		});
+		await settle();
+		// Past the entry animation.
+		await new Promise((r) => setTimeout(r, 300));
+		const next = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+			(b) => b.textContent?.trim() === 'create.next'
+		)!;
+		expect(next).toBeTruthy();
+		const scroller = host.querySelector<HTMLElement>('[role="dialog"] .content')!;
+		expect(scroller.scrollTop).toBe(0);
+		const seen = window.visualViewport?.height ?? window.innerHeight;
+		const box = next.getBoundingClientRect();
+		expect(box.top).toBeGreaterThanOrEqual(0);
+		expect(box.bottom).toBeLessThanOrEqual(seen + 0.5);
+		const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+		expect(hit && next.contains(hit)).toBe(true);
+		await screen.unmount();
+		host.remove();
+	});
+});
+
+/**
  * r7-9: leaving the sheet loses nothing — what was entered is the accounts
  * machine's draft (`keep_draft`, kept until created or discarded), and the
  * sheet opens on it; the other space's networks are said, with the way there.
