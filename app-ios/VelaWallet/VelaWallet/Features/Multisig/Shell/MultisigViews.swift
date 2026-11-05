@@ -263,6 +263,9 @@ struct MsAddView: Decodable, Equatable {
     var phase: MsPhase = .idle
     var address: String?
     var outcome: MsJSON?
+    /// r14-5: the outcome is a read that did not come back (the core's
+    /// `AddOutcome::offers_retry`): Add says Try again.
+    var retry = false
     var found: MsJSON?
     var ens: MsJSON?
 
@@ -272,6 +275,7 @@ struct MsAddView: Decodable, Equatable {
         phase = c.soft(MsKey("phase"), .idle)
         address = c.soft(MsKey("address"))
         outcome = c.soft(MsKey("outcome"))
+        retry = c.soft(MsKey("retry"), false)
         found = c.soft(MsKey("found"))
         ens = c.soft(MsKey("ens"))
     }

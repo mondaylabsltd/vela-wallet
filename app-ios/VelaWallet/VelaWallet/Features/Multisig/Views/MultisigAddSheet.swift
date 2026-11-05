@@ -32,6 +32,8 @@ struct MultisigAddSheet: View {
 
     @State private var address = ""
     @State private var failure: String?
+    /// r14-5: what is said is a read that did not come back — Add says Try again.
+    @State private var retry = false
     @State private var choosing = false
     @State private var chosen: Int?
     @State private var refused: [MsJSON]?
@@ -79,7 +81,7 @@ struct MultisigAddSheet: View {
                 }
             }
             VelaButton(
-                title: words.t("add.add"), kind: .ink,
+                title: retry && failure != nil ? words.t("review.state.tryAgain") : words.t("add.add"), kind: .ink,
                 enabled: !address.trimmingCharacters(in: .whitespaces).isEmpty && !(choosing && chosen == nil),
                 loading: busy
             ) { add(acceptRisks: false) }
@@ -169,6 +171,7 @@ struct MultisigAddSheet: View {
 
     private func add(acceptRisks: Bool) {
         let typed = address.trimmingCharacters(in: .whitespaces)
+        retry = false
         switch addressEntry(address: typed) {
         case "valid": break
         case "checksum": failure = words.t("send.invalidChecksum"); return
@@ -192,6 +195,7 @@ struct MultisigAddSheet: View {
             }
             busy = false
             said(outcome ?? .null)
+            retry = failure != nil && hub.accountsView.add.retry
         }
     }
 
@@ -206,6 +210,9 @@ struct MultisigAddSheet: View {
         case "highRisk": risky = outcome["findings"]?.array ?? []
         case "unverified":
             failure = words.t("authority.unverified", ["network": words.network(outcome["chain_id"]?.int ?? 0)])
+        case "busy":
+            // r14-5: the network's nodes were rate-limiting — named, with Try again.
+            failure = words.t("add.busy", ["network": words.network(outcome["chain_id"]?.int ?? 0)])
         case "notFound", "unavailable", "unsupported", "notMultisig", "unchecked":
             failure = words.t("add.\(outcome.kind ?? "unavailable")")
         default:
@@ -342,6 +349,7 @@ struct MultisigLinkStandSheet: View {
         switch reason.kind {
         case "notFound": return words.t("proposal.notFound")
         case "unavailable": return words.t("add.unavailable")
+        case "busy": return words.t("add.busy", ["network": words.network(reason["chain_id"]?.int ?? 0)])
         default: return words.t("add.\(reason.kind ?? "unavailable")")
         }
     }
