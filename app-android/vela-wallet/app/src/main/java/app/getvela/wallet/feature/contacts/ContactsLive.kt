@@ -47,8 +47,7 @@ object ContactsLive {
         contact.name ?: contact.resolved_name ?: shortenAddress(contact.address)
 
     /** `0x1234…cdef` — the same shape the address block and rows already show. */
-    fun shortenAddress(address: String): String =
-        if (address.length <= 12) address else "${address.take(6)}…${address.takeLast(4)}"
+    fun shortenAddress(address: String): String = app.getvela.wallet.core.format.ShortAddress.of(address)
 
     private fun sectionLetter(name: String): String {
         val first = name.trim().firstOrNull()?.uppercaseChar() ?: '#'

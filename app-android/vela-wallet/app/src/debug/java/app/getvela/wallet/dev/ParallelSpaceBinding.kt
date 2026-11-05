@@ -2,6 +2,7 @@ package app.getvela.wallet.dev
 
 import android.app.Application
 import android.content.Context
+import app.getvela.wallet.core.format.ShortAddress
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -179,7 +180,10 @@ private class DebugParallelSpace(private val app: Application) : ParallelSpacePr
             contentAlignment = if (cutoutEnd == null) Alignment.Center else Alignment.CenterStart,
         ) {
             Text(
-                text = "平行 #${fixture.index} · ${fixture.address.take(6)}…${fixture.address.takeLast(4)}",
+                // r12 S4: a developer's marker, in the dev tools' one language (the
+                // web's /parallel page says "Parallel space") — it read Chinese over
+                // an English UI — and the address in the core's one short form.
+                text = "Parallel #${fixture.index} · ${ShortAddress.of(fixture.address)}",
                 color = Color.Black,
                 fontSize = 9.sp,
                 maxLines = 1,

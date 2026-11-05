@@ -2036,8 +2036,7 @@ object SendLive {
 
     private fun amount(human: String): Double = human.toDoubleOrNull() ?: 0.0
 
-    fun shortAddress(address: String): String =
-        if (address.length > 12) "${address.take(6)}…${address.takeLast(4)}" else address
+    fun shortAddress(address: String): String = app.getvela.wallet.core.format.ShortAddress.of(address)
 
     private fun shortHash(hash: String): String =
         if (hash.length > 16) "${hash.take(10)}…${hash.takeLast(6)}" else hash

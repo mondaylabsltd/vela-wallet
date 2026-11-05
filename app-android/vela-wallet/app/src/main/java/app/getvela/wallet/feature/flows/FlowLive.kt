@@ -192,8 +192,7 @@ object FlowLive {
     }
 
     /** `0x1234…abcd` — a row has no space for forty-two characters. */
-    internal fun shortAddress(address: String): String =
-        if (address.length <= 12) address else address.take(6) + "…" + address.takeLast(4)
+    internal fun shortAddress(address: String): String = app.getvela.wallet.core.format.ShortAddress.of(address)
 
 
     // -- the read screens behind "全部" ---------------------------------------
