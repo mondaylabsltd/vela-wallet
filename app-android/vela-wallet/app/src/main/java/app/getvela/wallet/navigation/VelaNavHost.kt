@@ -936,6 +936,15 @@ fun VelaNavHost(
                 LaunchedEffect(online) {
                     if (!online) {
                         wasOffline = true
+                        // r14-3: "Offline" is said only while it is true. Only an
+                        // answered call says the way back, so while the home says
+                        // it, a read goes out every so often — never "Offline"
+                        // standing over a device whose network came back until
+                        // someone pulls to refresh.
+                        while (true) {
+                            kotlinx.coroutines.delay(app.getvela.wallet.core.net.NetHealth.OFFLINE_PROBE_MS)
+                            wallet.refresh()
+                        }
                     } else if (wasOffline) {
                         wasOffline = false
                         wallet.refresh()
