@@ -144,9 +144,11 @@ pub fn banner_of(w: &Waiting) -> Option<WaitingBanner> {
 #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "MultisigReadyBlock"))]
 pub enum ReadyBlock {
     /// A look says it would fail (the transaction's own fault). `why` is that
-    /// look's own detail, as the preview says it — `{kind: "short", symbol,
-    /// decimals, have, need}` or `{kind: "reverts", reason}` — the words
-    /// after "Can't run now".
+    /// look's own detail, as the preview says it — `{kind: "short", token,
+    /// have, need}` (r12-1: `have` / `need` are
+    /// [`crate::multisig_rules::amount::Amount`]s — draw their `said`, never
+    /// scale anything) or `{kind: "reverts", reason}` — the words after
+    /// "Can't run now".
     Fails {
         #[cfg_attr(feature = "bindings", ts(type = "unknown"))]
         why: serde_json::Value,

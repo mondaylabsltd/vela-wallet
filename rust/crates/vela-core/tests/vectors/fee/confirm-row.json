@@ -1,0 +1,8 @@
+{
+ "about": "r12 S4 — the confirm's fee row is one rule on every shell: the link door's `fee.row {quoted}` (wasm `multisigLinkCall`, uniffi `multisig_link_call`) → `{label_key, amount_prefix}`. The amount is the fee signed and charged (r11-8), drawn bare after `amount_prefix` (empty: never \"~0.12\"); the label says whether it is the relay's quote or an estimate. `quoted` is `FeeEstimateView.quoted`; absent reads as true.",
+ "cases": [
+  { "name": "a quoted fee: \"Est. Fee 0.12 USDC\", no ~", "args": { "quoted": true }, "expect": { "label_key": "send.estFeeLabel", "amount_prefix": "" } },
+  { "name": "a fee the chain's gas price may still move: \"Estimated fee\", still no ~", "args": { "quoted": false }, "expect": { "label_key": "send.feeTokenEstimate", "amount_prefix": "" } },
+  { "name": "a shell that does not say: the quote's label", "args": {}, "expect": { "label_key": "send.estFeeLabel", "amount_prefix": "" } }
+ ]
+}

@@ -1,0 +1,40 @@
+{
+ "about": "r12-8 — ONE title rule for a member change, used by Activity rows and sheets alike: the link door's `names.change {action, labels}` → `{key, params, count?}` or null. `action` is the core's Action JSON (`addOwner`, `removeOwner`, `swapOwner`, `changeThreshold`; anything else is null). Each member is named by `names.who` with `labels[lowercase address]` — the accounts machine's `member_labels` (on a sheet, the name typed for the member there, else that). The shell fills the key in the page's language when it DRAWS the row — never a title frozen when it was written (\"Add 0xD40086…de130b\" on a zh Activity beside \"Add Dana Local (…)\" on the sheet). `count`: say the key's plural form for it (`_one` / `_other`). Replay each case through the door and compare the whole answer.",
+ "cases": [
+  {
+   "name": "r12-8: an added member with a kept name — the sheet's words, on Activity too",
+   "args": { "action": { "kind": "addOwner", "owner": "0xD400866e0F1aD3A05dD5e9c1a2A0E0bfb2De130B", "threshold": "2" }, "labels": { "0xd400866e0f1ad3a05dd5e9c1a2a0e0bfb2de130b": "Dana Local" } },
+   "expect": { "key": "home.multisig.change.add", "params": { "member": "Dana Local (0xD40086…de130B)" } }
+  },
+  {
+   "name": "a label keyed in any case is the member's",
+   "args": { "action": { "kind": "addOwner", "owner": "0xd400866e0f1ad3a05dd5e9c1a2a0e0bfb2de130b", "threshold": "2" }, "labels": { "0xD400866E0F1AD3A05DD5E9C1A2A0E0BFB2DE130B": "Dana Local" } },
+   "expect": { "key": "home.multisig.change.add", "params": { "member": "Dana Local (0xD40086…de130B)" } }
+  },
+  {
+   "name": "no name known: the short form alone",
+   "args": { "action": { "kind": "removeOwner", "owner": "0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc", "threshold": "1" }, "labels": {} },
+   "expect": { "key": "home.multisig.change.remove", "params": { "member": "0x3C44Cd…4293BC" } }
+  },
+  {
+   "name": "a label that is the short form itself is no name",
+   "args": { "action": { "kind": "removeOwner", "owner": "0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc", "threshold": "1" }, "labels": { "0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc": "0x3C44Cd…4293BC" } },
+   "expect": { "key": "home.multisig.change.remove", "params": { "member": "0x3C44Cd…4293BC" } }
+  },
+  {
+   "name": "a replacement names both",
+   "args": { "action": { "kind": "swapOwner", "oldOwner": "0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc", "newOwner": "0x88cca0eedbf2c4426110bbfc998f048689266894" }, "labels": { "0x88cca0eedbf2c4426110bbfc998f048689266894": "Interleave" } },
+   "expect": { "key": "home.multisig.change.replace", "params": { "old": "0x3C44Cd…4293BC", "new": "Interleave (0x88cCA0…266894)" } }
+  },
+  {
+   "name": "a threshold: its plural family and the count",
+   "args": { "action": { "kind": "changeThreshold", "threshold": "1" }, "labels": {} },
+   "expect": { "key": "home.multisig.action.changeThreshold", "params": { "count": "1" }, "count": "1" }
+  },
+  {
+   "name": "not a member change: no title from this rule",
+   "args": { "action": { "kind": "rename", "name": "Team" }, "labels": {} },
+   "expect": null
+  }
+ ]
+}

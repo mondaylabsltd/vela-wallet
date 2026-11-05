@@ -1485,8 +1485,13 @@ fn a_ready_one_that_would_fail_says_why_on_the_home() {
         panic!("{standing:?}");
     };
     assert_eq!(why["kind"], "short", "{why}");
-    assert_eq!(why["have"], "5");
-    assert_eq!(why["need"], "1000");
+    // r12-1: each amount carries how it is said — Gnosis's coin, 18
+    // decimals, "xDAI" — never base units a shell scales by a guess.
+    assert_eq!(why["have"]["base_units"], "5");
+    assert_eq!(why["need"]["base_units"], "1000");
+    assert_eq!(why["need"]["said"]["kind"], "known", "{why}");
+    assert_eq!(why["need"]["said"]["decimals"], 18);
+    assert_eq!(why["need"]["said"]["symbol"], "xDAI");
     // r7: funded, it is noticed on a poll a sheet's pace later — not after
     // the home's minute.
     world
