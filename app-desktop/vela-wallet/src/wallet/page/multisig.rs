@@ -3039,23 +3039,10 @@ impl WalletPage {
         col = col.child(parties);
 
         if !past {
-            // r12 S4: an executor's look here says it would fail — its line
-            // (with the reason) is the one note; the simulation's "expected
-            // to fail" would say the same fact twice.
-            let look_fails = self.multisig.sheet.as_ref().is_some_and(|(chain, hash)| {
-                let host = self.ms_host(cx);
-                look_fails(
-                    &host.read(cx).machines().proposals_view.previews,
-                    *chain,
-                    hash,
-                )
-            });
             // What moves (the simulation, or the probe's balances) — nothing
             // when the core withholds it beside a refusal.
             if let Some(sim) = ms_moves(review) {
-                if let Some((key, tone)) =
-                    ms_moves_line(sim).filter(|_| !(look_fails && sim.kind == "reverts"))
-                {
+                if let Some((key, tone)) = ms_moves_line(sim) {
                     let text = self
                         .loc
                         .t_texts(
@@ -4469,20 +4456,6 @@ pub(crate) fn ms_moves(review: &ReviewDraw) -> Option<&SimVerdict> {
 /// The one line in the verdict's place: the notice (a revert in danger, a
 /// could-not-check in caution) or the core's no-change line; `None` when
 /// the deltas speak for themselves.
-/// r12 S4: whether any executor's look at `chain:hash` says it would fail
-/// (`MultisigProposalsView.previews`, keyed `chainId:hash:executor`).
-pub(crate) fn look_fails(
-    previews: &std::collections::BTreeMap<String, Value>,
-    chain_id: u64,
-    hash: &str,
-) -> bool {
-    let prefix = format!("{chain_id}:{}:", hash.to_ascii_lowercase());
-    previews.iter().any(|(key, look)| {
-        key.to_ascii_lowercase().starts_with(&prefix)
-            && look.get("kind").and_then(Value::as_str) == Some("fails")
-    })
-}
-
 pub(crate) fn ms_moves_line(sim: &SimVerdict) -> Option<(&str, Tone)> {
     let key = sim.notice_key.as_deref().or(sim.no_change_key.as_deref())?;
     let tone = if sim.kind == "reverts" {
@@ -4725,29 +4698,6 @@ pub(crate) fn no_item_lines(
 
 #[cfg(test)]
 mod tests {
-    /// r12 S4: one note per failure — a look that says it fails, for any
-    /// executor of that transaction, is found whatever the key's case.
-    #[test]
-    fn a_failing_look_is_found_for_its_transaction() {
-        let looks = std::collections::BTreeMap::from([
-            (
-                "100:0xAB:0xExec".to_owned(),
-                serde_json::json!({"kind": "fails", "why": {"kind": "reverts"}}),
-            ),
-            (
-                "100:0xcd:0xExec".to_owned(),
-                serde_json::json!({"kind": "priced"}),
-            ),
-        ]);
-        assert!(super::look_fails(&looks, 100, "0xab"));
-        assert!(!super::look_fails(&looks, 100, "0xcd"));
-        assert!(!super::look_fails(&looks, 8453, "0xab"));
-    }
-
-    /// R12 S4: a sheet whose transaction is not among the multisig's says
-    /// what is true — a multisig not shown here, its mailbox read without
-    /// it, its network unreadable, a link's own stand — never "it hasn't
-    /// been shared with the members" for one this device was never shown.
     #[test]
     fn a_sheet_with_no_transaction_says_what_is_true() {
         use vela_core::app::multisig_proposals::flows::{LinkedStand, LinkedView};
