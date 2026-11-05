@@ -1334,6 +1334,23 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
                 error,
             },
         ) => match kind {
+            // Real-device pass 2 (D5): the prompt ran out of the core's
+            // passkey deadline (Google unreachable, its sheet spinning) — a
+            // refusal to every rule, but never the person's "cancelled": the
+            // sheet says it timed out and why to try again.
+            FailureKind::Cancelled
+                if error.as_ref().is_some_and(|facts| {
+                    super::passkey_error::words_of(facts).kind
+                        == super::passkey_error::PasskeyErrorKind::TimedOut
+                }) =>
+            {
+                let method = model.registering_method;
+                fail_registration(
+                    model,
+                    PromptKind::create_failed_via(message.unwrap_or_default(), method)
+                        .with_error_words(error.as_ref()),
+                )
+            }
             FailureKind::Cancelled => {
                 // Back to the key list with the existing drafts intact — for
                 // the first key that list is empty, and returning THERE rather
