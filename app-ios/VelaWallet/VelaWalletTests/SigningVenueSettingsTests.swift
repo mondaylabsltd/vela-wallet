@@ -301,7 +301,8 @@ struct SigningVenueSettingsTests {
             Issue.record("the sheet lost its fee row in the hand-off: \(String(describing: model.fee))")
             return
         }
-        #expect(value.hasPrefix("~"), "\(value)")
+        // r12 S4: the quoted fee, bare (the core's `fee.row`).
+        #expect(!value.hasPrefix("~"), "\(value)")
         #expect(value.contains("USDC"), "\(value)")
     }
 

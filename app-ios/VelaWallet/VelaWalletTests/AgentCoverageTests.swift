@@ -77,6 +77,8 @@ private let CALLS: [String: Place] = [
     "activity.refreshed": .step("refresh_balances"),
     "activity.scrolling": .machine("a list moving under a finger: the incoming scan's quiet period"),
     "activity.sent": .machine(TRACKER),
+    // R12 S4: whether the account's first incoming scan is back (loading vs empty).
+    "activity.settled": .machine("a read"),
     "activity.open": .machine(ACCOUNT),
     "activity.privacyChanged": .step("set_balance_privacy"),
     "activity.spaceChains": .step("set_network_space"),
