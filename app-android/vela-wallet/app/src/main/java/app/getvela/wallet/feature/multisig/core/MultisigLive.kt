@@ -400,7 +400,14 @@ class MultisigLive(
             feeToken = null,
         )
         val view = (quoted as? SpeedControl.Quoted.Settled)?.view
-            ?: return MultisigShellResult.Quoted(jo("kind" to "failed"))
+        // r12-6: each look's quote, as it ended — what tells "the fee machine
+        // priced it" from "the look said it could not".
+        VelaLog.event(
+            "multisig.quote", if (view == null) "timed out" else if (view.fee != null && view.failed == null) "priced" else "failed",
+            "chain" to op.chain_id, "failed" to view?.failed?.let { it::class.simpleName }, "failure" to view?.failure?.failure?.wire,
+            "retrying" to view?.failure?.retrying,
+        )
+        view ?: return MultisigShellResult.Quoted(jo("kind" to "failed"))
         val estimate = view.fee
         val recipient = estimate?.fee_recipient
         if (estimate != null && view.failed == null && recipient != null) {
