@@ -98,6 +98,12 @@ final class ActivityExecutor {
     /// believe two batches landed and celebrate a backlog it already spent.
     private var scanning: Set<String> = []
 
+    /// The accounts (lowercased) a whole scan has looked at (R12 S4): one
+    /// that ran — not one dropped because another was out — and started
+    /// with the account's holdings read, so the networks it asked were the
+    /// account's. Before that, an empty feed is no "No activity yet".
+    private(set) var looked: Set<String> = []
+
     init(
         store: VelaStore,
         accounts: AccountStore,
@@ -233,6 +239,8 @@ final class ActivityExecutor {
         guard !address.isEmpty, !scanning.contains(address.lowercased()) else { return 0 }
         scanning.insert(address.lowercased())
         defer { scanning.remove(address.lowercased()) }
+        let knowsItsNetworks = held.recorded(address: address)
+        defer { if knowsItsNetworks { looked.insert(address.lowercased()) } }
 
         // r9-17: the facts; the networks, windows and backfill are the core's.
         let facts = Self.scanFacts(
@@ -282,8 +290,11 @@ final class ActivityExecutor {
         guard let symbol = transfer.symbol ?? (transfer.isNative ? meta?.nativeSymbol : nil),
               !symbol.isEmpty
         else { return nil }
-        let decimals = transfer.decimals ?? 18
-        guard let amount = TokenReads.scaled(decimal: transfer.value, decimals: decimals)
+        // r12-1: the core's decimals, or the network's coin's — a token
+        // whose decimals nobody read is dropped like one with no symbol,
+        // never recorded in 18 assumed.
+        guard let decimals = transfer.decimals ?? (transfer.isNative ? ChainCatalog.coinDecimals : nil),
+              let amount = TokenReads.scaled(decimal: transfer.value, decimals: decimals)
         else { return nil }
 
         var stored: [String: Any] = [

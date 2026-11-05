@@ -34,7 +34,8 @@ final class HeldTokens {
 
     struct Holding {
         let symbol: String
-        let decimals: Int
+        /// `nil`: the read did not say (r12-1 — never 18 assumed).
+        let decimals: Int?
         let priceUsd: Double?
     }
 
@@ -60,7 +61,7 @@ final class HeldTokens {
             }
             let holding = Holding(
                 symbol: token["symbol"] as? String ?? "",
-                decimals: (token["decimals"] as? NSNumber)?.intValue ?? 18,
+                decimals: (token["decimals"] as? NSNumber)?.intValue,
                 priceUsd: (token["price_usd"] as? NSNumber)?.doubleValue
             )
             byChain[chainId, default: [:]][Self.key(token["token_address"] as? String)] = holding
@@ -94,5 +95,12 @@ final class HeldTokens {
 
     func holding(address: String, chainId: Int, token: String?) -> Holding? {
         byAccount[address.lowercased()]?[chainId]?[Self.key(token)]
+    }
+
+    /// Whether a balance read of this account has completed at all (R12
+    /// S4): until one has, what it holds — the networks a scan looks at —
+    /// is not known yet, even when it is nothing.
+    func recorded(address: String) -> Bool {
+        byAccount[address.lowercased()] != nil
     }
 }
