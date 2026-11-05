@@ -1,5 +1,12 @@
 # 交接：可信签名器页面
 
+> **§16（2026-11-05）：多签的成员证明有了自己的卡。** 新版本 **64363925**（`BUILD_ALLOWED` 第一位，LAUNCH 不变）。
+> 建多签（或再次共享记录）时成员签的赞助挑战码（`vela_multisigCreate`）现在交到本页：App 交来的是多签的 **genesis**，
+> 本页按 vela-core `trusted_signer::owner_proof::read` 逐条读出地址（CREATE2 推出，App 给的只比对）、成员与门槛（setup 必须正好是
+> Vela 建的那一个）、本人的位置和挑战码；网络与名字是 App 的说法。卡：多签（6+6）、网络、每位成员（本人标「本账户」）、
+> 「需 3 位中的 2 位」、按钮「证明成员身份」。Safari 扩展因此能建多签（它的页面不能用 passkey）。PROTOCOL.md 第 14 节；
+> 十五种语言都有新键（`locales-test` 84/84）；`multisig-test.mjs` 453/453（含 66 个共享向量与 wasm 对拍）。部署顺序同上：`dist/` 先上线。
+
 > **真机第二轮（2026-11-05，D1）：执行者也说「仍然执行」。** 新版本 **954b9013**（`BUILD_ALLOWED` 第一位，LAUNCH 不变）。
 > 钱包那一份审查要求「… anyway」时（危险，或状态变化检查与模拟**都**没读到），执行者的操作卡（`resolveExecution`）
 > 按 `context.multisig.anyway` 把按钮写成「仍然执行」（`button.msExecuteAnyway`，危险填充），并挂一条

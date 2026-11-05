@@ -425,5 +425,16 @@ window.VelaCS.i18n.register('en', {
   'field.msMembers': "Members",
   'value.msCountChange': "{before} → {after}",
   'value.msApprovalsChange': "{before} of {beforeOf} → {after} of {afterOf}",
+  // §16: a member’s owner proof (vela_multisigCreate).
+  'intent.msOwnerProof': "Prove multisig membership",
+  'sentence.msOwnerProof': "You prove you are member {place} of {count} of this multisig, so Vela’s service can record it where its members find it. Nothing is sent and no transaction is approved.",
+  'field.msNetworks': "Networks",
+  'field.msMemberAt': "Member {n}",
+  'value.msNeeds': "Needs {m} of {n}",
+  'button.msOwnerProof': "Prove membership",
+  'refuse.msOwnerShape': "This membership proof is not in a shape this page reads exactly, so what is shown could differ from what would be signed. Not signing.",
+  'refuse.msOwnerGenesis': "This multisig is not set up the way Vela creates one (its contracts or its setup differ), so this page cannot vouch for its members or its rule. Not signing.",
+  'refuse.msOwnerAddress': "The app names one multisig address, but the members and setup it hands over make another. What you would prove is not what the app describes. Not signing.",
+  'refuse.msOwnerNotMember': "The signing account is not one of this multisig’s members. Not signing.",
   'warn.msMembersClaimOff': "This change doesn’t fit the members the app says the multisig has now — it may fail when it runs. Check the members with the others before you approve.",
 });

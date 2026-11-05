@@ -181,6 +181,23 @@ window.VelaCS = window.VelaCS || {};
         describes: 'SafeMessage(safeTxHash)',
       };
     }
+    // A member's owner proof (§16): the sponsor challenge for the address the
+    // GENESIS makes (lib/multisig.js `ownerProof`), by the member it names —
+    // who must be the account whose keys are asked for. The address the app
+    // names is only compared; a request handing over a challenge is refused
+    // before this (resolve.js).
+    if (ns.multisig && intent.method === ns.multisig.OWNER_PROOF) {
+      var proof = ns.multisig.ownerProof(intent.params);
+      if (proof.refusal) return { refuse: proof.refusal };
+      if (typeof context.account !== 'string' ||
+        context.account.toLowerCase() !== proof.reading.member.toLowerCase()) {
+        return { refuse: 'refuse.msMemberMismatch' };
+      }
+      return {
+        hash: ns.multisig.ownerProofChallenge(proof.reading),
+        describes: 'keccak256("safe-genesis-registry/sponsor/v1" ‖ multisig)',
+      };
+    }
     if (intent.method === 'eth_sign') {
       // The payload IS the digest. Signing it is exactly the blind signature the
       // sheet warns about, so this page will not produce one.

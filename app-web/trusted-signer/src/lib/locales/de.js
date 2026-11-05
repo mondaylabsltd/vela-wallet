@@ -400,5 +400,16 @@ window.VelaCS.i18n.register('de', {
   'field.msMembers': "Mitglieder",
   'value.msCountChange': "{before} → {after}",
   'value.msApprovalsChange': "{before} von {beforeOf} → {after} von {afterOf}",
+  // §16: a member’s owner proof (vela_multisigCreate).
+  'intent.msOwnerProof': "Multisig-Mitgliedschaft nachweisen",
+  'sentence.msOwnerProof': "Sie weisen nach, dass Sie Mitglied {place} von {count} dieses Multisigs sind, damit der Dienst von Vela es dort verzeichnet, wo seine Mitglieder es finden. Es wird nichts gesendet und keine Transaktion freigegeben.",
+  'field.msNetworks': "Netzwerke",
+  'field.msMemberAt': "Mitglied {n}",
+  'value.msNeeds': "{m} von {n} nötig",
+  'button.msOwnerProof': "Mitgliedschaft nachweisen",
+  'refuse.msOwnerShape': "Dieser Mitgliedschaftsnachweis hat keine Form, die diese Seite exakt lesen kann – das Angezeigte könnte vom Signierten abweichen. Keine Signatur.",
+  'refuse.msOwnerGenesis': "Dieses Multisig ist nicht so eingerichtet, wie Vela eines erstellt (Verträge oder Einrichtung weichen ab), daher kann diese Seite nicht für seine Mitglieder und seine Regel bürgen. Keine Signatur.",
+  'refuse.msOwnerAddress': "Die App nennt eine Multisig-Adresse, aber die übergebenen Mitglieder und die Einrichtung ergeben eine andere. Was Sie nachweisen würden, ist nicht das, was die App beschreibt. Keine Signatur.",
+  'refuse.msOwnerNotMember': "Das signierende Konto ist kein Mitglied dieses Multisigs. Keine Signatur.",
   'warn.msMembersClaimOff': "Diese Änderung passt nicht zu den Mitgliedern, die das Multisig laut App jetzt hat — sie kann bei der Ausführung fehlschlagen. Prüfen Sie die Mitglieder mit den anderen, bevor Sie freigeben.",
 });

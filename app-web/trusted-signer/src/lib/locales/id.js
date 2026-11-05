@@ -398,5 +398,16 @@ window.VelaCS.i18n.register('id', {
   'field.msMembers': "Anggota",
   'value.msCountChange': "{before} → {after}",
   'value.msApprovalsChange': "{before} dari {beforeOf} → {after} dari {afterOf}",
+  // §16: a member’s owner proof (vela_multisigCreate).
+  'intent.msOwnerProof': "Buktikan keanggotaan multisig",
+  'sentence.msOwnerProof': "Anda membuktikan bahwa Anda anggota ke-{place} dari {count} anggota multisig ini, agar layanan Vela dapat mencatatnya di tempat para anggotanya menemukannya. Tidak ada yang dikirim dan tidak ada transaksi yang disetujui.",
+  'field.msNetworks': "Jaringan",
+  'field.msMemberAt': "Anggota {n}",
+  'value.msNeeds': "Perlu {m} dari {n}",
+  'button.msOwnerProof': "Buktikan keanggotaan",
+  'refuse.msOwnerShape': "Bukti keanggotaan ini tidak dalam bentuk yang dapat dibaca halaman ini dengan tepat, jadi yang ditampilkan bisa berbeda dari yang akan ditandatangani. Tidak menandatangani.",
+  'refuse.msOwnerGenesis': "Multisig ini tidak diatur seperti cara Vela membuatnya (kontrak atau pengaturan awalnya berbeda), jadi halaman ini tidak dapat menjamin anggota dan aturannya. Tidak menandatangani.",
+  'refuse.msOwnerAddress': "Aplikasi menyebut satu alamat multisig, tetapi anggota dan pengaturan yang diberikannya menghasilkan alamat lain. Yang akan Anda buktikan bukan yang dijelaskan aplikasi. Tidak menandatangani.",
+  'refuse.msOwnerNotMember': "Akun yang menandatangani bukan anggota multisig ini. Tidak menandatangani.",
   'warn.msMembersClaimOff': "Perubahan ini tidak cocok dengan anggota multisig saat ini menurut aplikasi — bisa gagal saat dijalankan. Periksa daftar anggota bersama anggota lain sebelum menyetujui.",
 });
