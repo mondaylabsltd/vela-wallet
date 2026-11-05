@@ -3585,10 +3585,10 @@ fn an_answer_between_silent_endpoints_starts_the_count_again() {
     assert!(sut.view().unreached_chains.is_empty());
 }
 
-/// r13-4: while a chain is out of reach, one read at a time probes it, on at
-/// most [`OUTAGE_PROBE_ENDPOINTS`] endpoints and one pass; every other read
-/// of it fails at once without a request. Hung nodes are not hammered, and a
-/// read during the outage is bounded (two endpoints, not 3 × all).
+/// r13-4: while a chain is out of reach, each hung node is asked once (one
+/// pass, never three); once every node is silent, one read at a time probes
+/// the best [`OUTAGE_PROBE_ENDPOINTS`]; every other read of it fails at once
+/// without a request. Hung nodes are not hammered.
 #[test]
 fn an_unreached_chain_is_probed_by_one_read_on_two_endpoints() {
     let urls = many(10);
@@ -3597,15 +3597,19 @@ fn an_unreached_chain_is_probed_by_one_read_on_two_endpoints() {
     let (mut ops, mut now) = hang_three(&mut sut, "c1", ops, T0 + 1_000.0);
     assert_eq!(sut.view().out_of_reach_chains, vec![CHAIN]);
 
-    // The call that found it sweeps no further: its pass ends as a probe —
-    // at most OUTAGE_PROBE_ENDPOINTS more endpoints, and no second pass.
-    let mut posts = 0;
+    // The call that found it ends its one pass over the nodes not yet
+    // silent — each asked once — and makes no second pass.
+    let mut asked = std::collections::BTreeSet::new();
     while let Some(url) = posted_url(&ops, "c1") {
-        posts += 1;
-        assert!(posts <= OUTAGE_PROBE_ENDPOINTS, "c1 kept sweeping");
+        assert!(asked.insert(url.clone()), "{url} asked twice");
         now += 8_000.0;
         ops = sut.resolve(outcome("c1", &url, Out::Timeout, 8_000.0, now));
     }
+    assert_eq!(
+        asked.len(),
+        10 - UNREACHED_AFTER_ENDPOINTS,
+        "one pass, no more"
+    );
     assert!(
         ops.iter().any(|op| matches!(
             op,
@@ -3618,9 +3622,10 @@ fn an_unreached_chain_is_probed_by_one_read_on_two_endpoints() {
     );
     sut.resolve(Res::Concluded);
 
-    // A new read probes, alone: two endpoints at most.
+    // Every node silent now: a new read probes, alone — two at most.
     let ops = sut.dispatch(rpc_call("c2", "eth_call", now + 1_000.0));
     let probe_url = posted_url(&ops, "c2").expect("c2 probes");
+    assert!(OUTAGE_PROBE_ENDPOINTS <= 2);
     // A read meanwhile fails at once, with nothing on the wire.
     let ops = sut.dispatch(rpc_call("c3", "eth_getBalance", now + 1_100.0));
     assert_eq!(posted_url(&ops, "c3"), None, "{ops:?}");
@@ -3640,6 +3645,36 @@ fn an_unreached_chain_is_probed_by_one_read_on_two_endpoints() {
     assert!(sut.view().out_of_reach_chains.is_empty());
     let ops = sut.dispatch(rpc_call("c4", "eth_call", now + 2_000.0));
     assert!(posted_url(&ops, "c4").is_some());
+}
+
+/// r13-4: during an outage a node not silent yet is still asked — a chain
+/// whose first nodes refuse and whose later one answers is read (a 401
+/// primary, refused public nodes, one that works: `pool-resilience.e2e`).
+#[test]
+fn a_node_not_silent_yet_is_still_asked_during_an_outage() {
+    let urls = many(6);
+    let mut sut = loaded_many(&urls, T0);
+    let mut ops = sut.dispatch(rpc_call("c1", "eth_call", T0 + 1_000.0));
+    let mut now = T0 + 1_000.0;
+    let mut answered = None;
+    for _ in 0..urls.len() {
+        let Some(url) = posted_url(&ops, "c1") else {
+            break;
+        };
+        now += 5.0;
+        let out = if url == urls[5] {
+            ok()
+        } else {
+            Out::NotConnected
+        };
+        ops = sut.resolve(outcome("c1", &url, out, 5.0, now));
+        if url == urls[5] {
+            answered = Some(url);
+            break;
+        }
+    }
+    assert_eq!(answered.as_deref(), Some(urls[5].as_str()), "{ops:?}");
+    assert!(sut.view().out_of_reach_chains.is_empty());
 }
 
 /// r13-4: a write is never refused unsent on the pool's word — it still

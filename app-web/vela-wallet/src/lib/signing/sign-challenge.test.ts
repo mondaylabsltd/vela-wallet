@@ -1020,12 +1020,15 @@ describe('the page a hand-off goes to, by package (r11: the Safari dev page)', (
 	}
 
 	it('the development package checks and opens the dev page named by dev-seed', async () => {
+		// D9 (round 13): named as 127.0.0.1, it is the one loopback origin,
+		// localhost — a passkey's relying party is never an IP address.
 		packagedAs(DEV, `${LOCAL}/`);
+		const PAGE = 'http://localhost:9694';
 		const { host, fetched, opened } = await handedTo();
-		expect(host).toBe('127.0.0.1:9694');
-		expect(fetched[0]).toBe(`${LOCAL}/index.json`);
-		expect(fetched.every((url) => url.startsWith(`${LOCAL}/`))).toBe(true);
-		expect(opened.startsWith(`${LOCAL}/b/${VERSION}/sign`)).toBe(true);
+		expect(host).toBe('localhost:9694');
+		expect(fetched[0]).toBe(`${PAGE}/index.json`);
+		expect(fetched.every((url) => url.startsWith(`${PAGE}/`))).toBe(true);
+		expect(opened.startsWith(`${PAGE}/b/${VERSION}/sign`)).toBe(true);
 	});
 
 	it('the development package refuses a dev page that is not loopback: production', async () => {

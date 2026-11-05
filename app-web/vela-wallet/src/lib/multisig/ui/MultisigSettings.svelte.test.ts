@@ -42,6 +42,7 @@ const seams = vi.hoisted(() => ({
 vi.mock('../core/proposals.svelte', () => ({
 	proposals: { items: [] },
 	MailboxUnreadableError: class extends Error {},
+	ProposalUnreadError: class extends Error {},
 	proposeMemberChange: async () => ({ safeTxHash: '0xabc' }),
 	proposeRename: async (address: string, chainId: number, name: string) => {
 		seams.renamed.push([address, chainId, name]);
