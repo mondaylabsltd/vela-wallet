@@ -122,6 +122,16 @@ class MultisigWords(
         else t("proposal.missingNetwork", "chainId" to "$chainId")
     }
 
+    /**
+     * r13-6: a network this device lacks, NAMED — for a sentence that says
+     * the rest itself (`add.networkMissing`'s `{{network}}`): the name given,
+     * else the core's catalog's, else the device's index, else "Chain N" in
+     * the page's words (`assets.chainFallback`).
+     */
+    fun missingName(chainId: Int, name: String? = null): String =
+        name?.takeIf { it.isNotBlank() } ?: MsRules.networkName(chainId) ?: networkName(chainId)
+            ?: raw("assets.chainFallback", "chainId" to "$chainId")
+
     /** The header's rule chip as the machine says it (`MultisigRuleChip`). */
     fun ruleChip(chip: kotlinx.serialization.json.JsonElement?): String? = when (chip.kind) {
         "needs" -> chip["rule"].let { r -> if (r["solo"].bool == true) t("panel.chipSolo") else t("panel.chip", "m" to (r["m"].str ?: ""), "n" to (r["n"].str ?: "")) }

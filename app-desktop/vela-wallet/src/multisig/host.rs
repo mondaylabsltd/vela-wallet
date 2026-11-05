@@ -887,5 +887,11 @@ fn write_rows(rows: Vec<Value>) {
                 }
                 true
             });
+            // r13 S4 (the Android finding, here too): an execution landed —
+            // this device's or another member's — so the multisig's
+            // holdings moved; read now, as the tracker's `HoldingsMoved` does
+            // for a Vela account's own op, never at the next ten-minute pass
+            // (Assets kept 7.5 xDAI beside a chain that said 7.49).
+            crate::executor::balance_dashboard::invalidate();
         });
 }

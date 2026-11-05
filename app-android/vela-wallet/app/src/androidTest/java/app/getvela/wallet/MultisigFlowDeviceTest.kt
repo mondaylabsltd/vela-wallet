@@ -20,6 +20,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.getvela.wallet.core.crux.CoreHost
+import app.getvela.wallet.core.crux.Wire
 import app.getvela.wallet.core.crux.JsonShell
 import app.getvela.wallet.core.crux.asBridge
 import app.getvela.wallet.core.data.KeyValueStore
@@ -490,6 +491,141 @@ class MultisigFlowDeviceTest {
             assertTrue(p["safeTx"]["to"].str.equals(safe, ignoreCase = true))
         }
         assertEquals("one passkey per network", 2, world.passkeys.size)
+    }
+
+    /**
+     * r13-5 (r12-8): an executed member change's Activity row is said in the
+     * language in front when it is DRAWN — the language switched after the
+     * row exists, the row follows (zh Activity said "Add 0x78e6AE…44f0E3").
+     */
+    @Test
+    fun anExecutedMemberChangesActivityRowFollowsALanguageSwitchedAfterIt() {
+        val world = world()
+        world.locals += listOf(0, 1)
+        val (safe, owners) = twoOfThree(world, deployed = true)
+        world.quoteRefusedFor += owners[1].lowercase()
+        val store = MemoryStore()
+        val feed = FeedExecutor(store = store, ownAccounts = { emptyList() })
+        val feedHost = CoreHost(
+            bridge = ActivityFeedCore().asBridge(),
+            scope = scope(),
+            initial = FeedView(),
+            serializer = FeedView.serializer(),
+            perform = JsonShell.perform(FeedOperation.serializer(), FeedShellResult.serializer(), feed::perform),
+            escapedFailure = JsonShell.escapedFailure(FeedOperation.serializer(), FeedShellResult.serializer(), fallback = FeedShellResult.HapticPlayed, answer = feed::neutralAnswer),
+        ).also { it.start() }
+        val hub = hub(world, writeRows = { rows -> feed.writeRecords(rows) })
+        hub.onRecorded = { feedHost.dispatch(FeedEvent.ReconcileCompleted(resolved_count = 1), FeedEvent.serializer()) }
+        booted(hub, safe)
+        feedHost.dispatch(FeedEvent.AccountSwitched(safe), FeedEvent.serializer())
+        show(hub, world) {
+            val view by feedHost.view.collectAsState()
+            Column {
+                for (group in WalletLive.activity(view, strings)) for (row in group.rows) ActivityRow(row)
+            }
+        }
+        // What the app does whenever the language or the names move (MultisigWiring).
+        val reword: () -> Int = {
+            val w = MultisigWords(strings, hub.accountsView.value, world.locals.associate { world.fixtures[it].address.lowercase() to world.fixtures[it].name })
+            runBlocking { feed.rewordRecords { row -> app.getvela.wallet.feature.multisig.MemberRowTitles.reword(row) { w.memberChangeTitle(it) } } }
+                .also { if (it > 0) feedHost.dispatch(FeedEvent.ReconcileCompleted(resolved_count = it), FeedEvent.serializer()) }
+        }
+
+        // Remove member 2: proposed, approved by member 1, executed by member 0.
+        hub.sheet.value = MultisigSheet.Members(safe)
+        compose.waitUntil(30_000) { compose.onAllNodesWithTag("multisig.members.menu").fetchSemanticsNodes().size == 3 }
+        val carol = owners[2]
+        compose.onAllNodes(hasTestTag("multisig.members.menu") and hasText(MultisigWords.short(carol), substring = true))[0]
+            .also { runCatching { it.performScrollTo() } }.performClick()
+        tap("multisig.members.remove")
+        tap("multisig.members.propose")
+        waitFor("multisig.draft.title", 60_000)
+        tap("multisig.draft.propose")
+        val hash = eventually("proposed", 60_000) { world.mailbox.singleOrNull()?.get("safeTxHash")?.str }
+        hub.sheet.value = MultisigSheet.Proposal(100, hash)
+        waitFor("multisig.proposal.title")
+        tap("multisig.proposal.approve", 60_000)
+        eventually("approved") { world.mailbox.single()["approvals"].arr.size.takeIf { it == 2 } }
+        world.onSend = MultisigWorld.Landing(
+            chain = 100, safe = safe, after = MultisigWorld.Safe(owners.take(2), 2, nonce = 1),
+            safeTxHash = hash, txHash = "0x" + "ce".repeat(32), userOpHash = "0x" + "ac".repeat(32),
+        )
+        tap("multisig.proposal.execute", 90_000)
+        val stored = eventually("the member change's row, with its action", 90_000) {
+            runBlocking { store.read(KeyValueStore.Keys.TRANSACTIONS) }
+                ?.let { org.json.JSONArray(it) }?.takeIf { it.length() == 1 }?.getJSONObject(0)?.takeIf { it.has("multisigChange") }
+        }
+        assertEquals("removeOwner", stored.getJSONObject("multisigChange").getString("kind"))
+        hub.sheet.value = null
+
+        // Worded in English, and drawn so.
+        reword()
+        val action = Wire.json.parseToJsonElement(stored.getJSONObject("multisigChange").toString())
+        val en = MultisigWords(strings, hub.accountsView.value, world.locals.associate { world.fixtures[it].address.lowercase() to world.fixtures[it].name }).memberChangeTitle(action)!!
+        assertTrue(en, en.startsWith("Remove "))
+        compose.waitUntil(30_000) { compose.onAllNodes(hasText(en), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+
+        // The language switches AFTER the row exists: the row is drawn in it.
+        strings.setLocale("zh")
+        try {
+            assertEquals(1, reword())
+            val zh = MultisigWords(strings, hub.accountsView.value, world.locals.associate { world.fixtures[it].address.lowercase() to world.fixtures[it].name }).memberChangeTitle(action)!!
+            assertTrue(zh, zh.startsWith("移除 "))
+            compose.waitUntil(30_000) { compose.onAllNodes(hasText(zh), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+            assertTrue("no English title left", compose.onAllNodes(hasText(en), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+            Log.i(TAG, "r13-5: '$en' -> '$zh'")
+        } finally {
+            strings.setLocale("en")
+        }
+    }
+
+    /**
+     * r13-6: a proposal link handed over while the boot still waits for the
+     * app's networks is read with them once it is done — never "a network
+     * this device doesn't have", and the multisig is listed.
+     */
+    @Test
+    fun aLinkDeliveredBeforeTheBootCompletesIsReadWithTheNetworks() {
+        val world = world()
+        world.locals += listOf(0, 1)
+        val (safe, _) = twoOfThree(world, deployed = true)
+        val networksRead = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val hub = MultisigHub(
+            live = world,
+            facts = {
+                networksRead.await()
+                MultisigHub.Facts(MultisigWorld.SERVICE, world.localAccounts(), NETWORKS, NETWORKS, emptyList())
+            },
+            tokenInfo = { _, _ -> "XDAI" to 18 },
+            scope = scope(),
+        ).also { hubs += it }
+        val boot = scope().launch { hub.boot() }
+        show(hub, world)
+        // The link, as MultisigAppLayer hands it over: boot, open, the sheet.
+        val link = scope().launch {
+            hub.boot()
+            hub.openLink("#ms=100.$safe.0x" + "ef".repeat(32))
+            hub.sheet.value = MultisigSheet.Link
+        }
+        Thread.sleep(800)
+        assertTrue("the link waits for the boot", !link.isCompleted)
+        networksRead.complete(Unit)
+        runBlocking { withTimeout(30_000) { boot.join(); link.join() } }
+        // A member here: its transaction opens (the router's `open_proposal`);
+        // else the link's own sheet says where it stands.
+        compose.waitUntil(30_000) {
+            listOf("multisig.link", "multisig.proposal").any {
+                compose.onAllNodesWithTag(it, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+            }
+        }
+        Thread.sleep(2_000)
+        compose.waitForIdle()
+        assertTrue(
+            "never 'a network this device doesn't have'",
+            compose.onAllNodesWithTag("multisig.link.missingNetwork", useUnmergedTree = true).fetchSemanticsNodes().isEmpty(),
+        )
+        assertTrue("the link's stand: ${hub.accountsView.value.link?.kind}", hub.accountsView.value.link?.kind != "missingNetwork")
+        assertEquals(safe.lowercase(), hub.accountsView.value.accounts.single().account.address.lowercase())
     }
 
     // -- an outside member ----------------------------------------------------------------------

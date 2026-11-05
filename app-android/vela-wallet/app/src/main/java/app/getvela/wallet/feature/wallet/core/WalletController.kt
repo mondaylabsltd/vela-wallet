@@ -1024,6 +1024,25 @@ class WalletController(
     fun unreachableListClosed() =
         balanceHost.dispatch(BalanceEvent.UnreachableListClosed, BalanceEvent.serializer())
 
+    /**
+     * r13 S4: a multisig execution landed (its Activity rows are written).
+     * The multisig's holdings moved: read them now, past the background gate
+     * — what the tracker's `holdingsMoved` does for an op of a Vela account's
+     * (Assets kept 0.5 USDC ~2.5 min while the chain said 0.49). And the
+     * feed hears `sent` (core §9.4): the scan looks for what came back.
+     * Read once more a few seconds on: an endpoint a block behind the one
+     * that gave the receipt answers the old figure, and nothing else would
+     * read it again before the next poll.
+     */
+    fun multisigExecuted() {
+        refresh(force = true)
+        if (followingCadence) presence(FeedPresenceChange.Sent)
+        scope.launch {
+            kotlinx.coroutines.delay(LANDED_REREAD_MS)
+            refresh(force = true)
+        }
+    }
+
     fun refresh(force: Boolean = false, pull: Boolean = false) =
         balanceHost.dispatch(
             BalanceEvent.RefreshRequested(force = force, pull = pull),
@@ -1093,6 +1112,8 @@ class WalletController(
     private companion object {
         /** An interaction is said to the core at most this often (the cadence's active window is two minutes). */
         const val INTERACTION_SAID_MS = 5_000L
+        /** r13 S4: a landed multisig execution's balances are read again this long after the first read. */
+        const val LANDED_REREAD_MS = 6_000L
         /**
          * How long a receipt scan waits for the balance read that tells it
          * which chains to watch. Long enough for a dozen chains on a phone

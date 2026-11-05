@@ -487,6 +487,27 @@ class FeedExecutor(
     }
 
     /**
+     * r13-5 (r12-8): the stored rows said again — the multisig's executed
+     * member changes, titled from the action each kept (`multisigChange`) in
+     * the language and with the names that stand now. [reword] edits a row in
+     * place and answers whether it changed it. One write, under the store's
+     * lock, only when a row moved; answers how many moved.
+     */
+    suspend fun rewordRecords(reword: (JSONObject) -> Boolean): Int = writeLock.withLock {
+        val raw = store.read(KeyValueStore.Keys.TRANSACTIONS) ?: return@withLock 0
+        val array = runCatching { JSONArray(raw) }.getOrNull() ?: return@withLock 0
+        var moved = 0
+        for (index in 0 until array.length()) {
+            val row = array.optJSONObject(index) ?: continue
+            if (runCatching { reword(row) }.getOrDefault(false)) moved += 1
+        }
+        if (moved == 0) return@withLock 0
+        val ok = store.write(KeyValueStore.Keys.TRANSACTIONS, array.toString())
+        VelaLog.event("feed.reword", if (ok) "stored" else "refused", "rows" to moved)
+        if (ok) moved else 0
+    }
+
+    /**
      * The tracker's verdict onto the rows it followed: `status` becomes
      * `confirmed` or `failed`, `txHash` fills in when the relay named one.
      * Rows not named are untouched; a patch for an id nobody stored is a

@@ -2947,7 +2947,7 @@ impl WalletPage {
                                 .font_family(theme::font_mono())
                                 .text_size(theme::text_label())
                                 .text_color(theme.fg_muted)
-                                .child(a)
+                                .child(crate::ui::address_text(a))
                         })),
                 );
             }
@@ -4600,7 +4600,9 @@ fn ms_party_row(
                 .font_family(theme::font_mono())
                 .text_size(theme::text_label())
                 .text_color(theme.fg_subtle)
-                .child(vela_core::multisig_link::eip55(address)),
+                .child(crate::ui::address_text(vela_core::multisig_link::eip55(
+                    address,
+                ))),
         )
 }
 
@@ -4646,7 +4648,7 @@ fn ms_mono_kv(theme: &Theme, key: &str, value: &str) -> Div {
             div()
                 .font_family(theme::font_mono())
                 .text_color(theme.fg_base)
-                .child(value.to_owned()),
+                .child(crate::ui::address_text(value.to_owned())),
         )
 }
 

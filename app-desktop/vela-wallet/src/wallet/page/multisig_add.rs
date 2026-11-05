@@ -538,7 +538,7 @@ impl WalletPage {
                             .text_size(theme::text_row_title())
                             .font_weight(gpui::FontWeight::SEMIBOLD)
                             .text_color(theme.fg_base)
-                            .child(address.clone()),
+                            .child(crate::ui::address_text(address.clone())),
                     )
                     .child(
                         crate::ui::vela_button(

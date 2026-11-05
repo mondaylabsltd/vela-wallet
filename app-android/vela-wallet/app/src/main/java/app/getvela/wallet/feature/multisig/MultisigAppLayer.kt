@@ -53,8 +53,12 @@ fun MultisigAppLayer(
         hub.boot()
         hub.refreshLocal()
     }
-    LaunchedEffect(networks.networks.size, space.networks.size) {
-        if (hub.loaded) hub.networksChanged()
+    // r13-6: keyed on the ids (a space switch can keep the count), and said
+    // only once booted — a change while the boot waits is said by the boot.
+    val networkIds = networks.networks.map { it.chain_id }
+    val spaceIds = space.networks.map { it.chain_id }
+    LaunchedEffect(networkIds, spaceIds) {
+        hub.networksChanged()
     }
     // The app's coming and going: the machines' timers follow it (§1.4).
     LifecycleResumeEffect(hub) {

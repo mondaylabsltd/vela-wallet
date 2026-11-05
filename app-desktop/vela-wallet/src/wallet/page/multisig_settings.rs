@@ -411,7 +411,9 @@ impl WalletPage {
                                 .font_family(theme::font_mono())
                                 .text_size(theme::text_label())
                                 .text_color(theme.fg_subtle)
-                                .child(vela_core::multisig_link::eip55(&account.address)),
+                                .child(crate::ui::address_text(vela_core::multisig_link::eip55(
+                                    &account.address,
+                                ))),
                         ),
                 )
                 .child(
@@ -611,7 +613,7 @@ impl WalletPage {
                         .text_size(theme::text_label())
                         .text_color(theme.fg_subtle)
                         .when(gone, |el| el.line_through())
-                        .child(short),
+                        .child(crate::ui::address_text(short)),
                 );
             }
             let mut line = div()
@@ -944,7 +946,9 @@ impl WalletPage {
                                             .font_family(theme::font_mono())
                                             .text_size(theme::text_label())
                                             .text_color(theme.fg_subtle)
-                                            .child(words::short(&r.address)),
+                                            .child(crate::ui::address_text(words::short(
+                                                &r.address,
+                                            ))),
                                     )
                                 }),
                         )
@@ -1316,7 +1320,7 @@ impl WalletPage {
                                         .font_family(theme::font_mono())
                                         .text_size(theme::text_label())
                                         .text_color(theme.fg_subtle)
-                                        .child(short),
+                                        .child(crate::ui::address_text(short)),
                                 ),
                         )
                         .on_click(cx.listener(move |this, _, _, cx| {
@@ -1374,7 +1378,9 @@ impl WalletPage {
                                 .font_family(theme::font_mono())
                                 .text_size(theme::text_label())
                                 .text_color(theme.fg_base)
-                                .child(vela_core::multisig_link::eip55(&resolved.address)),
+                                .child(crate::ui::address_text(vela_core::multisig_link::eip55(
+                                    &resolved.address,
+                                ))),
                         ),
                 ),
         );

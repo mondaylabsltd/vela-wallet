@@ -182,50 +182,72 @@ pub fn wallet_header(
             .active(|el| el.opacity(0.85))
             .on_click(on_identicon);
     }
-    let mut account = div()
-        .id("wallet-header-account")
+    // r13 S4: the 6+6 broke over two lines ("0x777E98 / …61875a") beside
+    // the space label, and kept on one line it ran under it: the column was
+    // narrower than the address. The space label now sits on the NAME's
+    // line (the name shrinks, then ellipsizes, before it), so the address
+    // line has the column's whole width and is never broken.
+    let on_account = on_account.map(std::rc::Rc::new);
+    let target = |id: &'static str, el: Div| {
+        let el = el.id(id);
+        match on_account.clone() {
+            Some(on) => el.cursor_pointer().on_click(move |e, w, cx| on(e, w, cx)),
+            None => el,
+        }
+    };
+    let name_target = target(
+        "wallet-header-account",
+        div()
+            .flex()
+            .items_center()
+            .gap(px(4.))
+            .min_w(px(0.))
+            .child(
+                // Two lines, then the ellipsis (078 H-11): one line cut
+                // "xiaoxiao · Key 1" and "… Key 2" to the same "xiaoxiao ·
+                // K…", and the END of a name is what tells two apart.
+                div()
+                    .min_w(px(0.))
+                    .text_size(theme::text_section())
+                    .font_weight(gpui::FontWeight::BOLD)
+                    .text_color(theme.fg_base)
+                    .line_height(gpui::relative(1.2))
+                    .line_clamp(2)
+                    .text_ellipsis()
+                    .child(name),
+            )
+            .child(div().flex_none().child(icon_img(
+                icons,
+                Icon::ChevronDown,
+                false,
+                theme.fg_base,
+                14.,
+            ))),
+    );
+    let address_target = target(
+        "wallet-header-address",
+        crate::ui::address_text(address)
+            .font_family(theme::font_mono())
+            .text_size(theme::text_label())
+            .text_color(theme.fg_subtle),
+    );
+    let name_row = div()
+        .flex()
+        .items_center()
+        .gap(px(8.))
+        .min_w(px(0.))
+        .child(name_target)
+        .when_some(space, |row, (label, testnet, on_space)| {
+            row.child(space_label(theme, label, testnet).on_click(on_space))
+        });
+    let account = div()
         .flex()
         .flex_col()
+        .flex_1()
         .gap(px(2.))
         .min_w(px(0.))
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .gap(px(4.))
-                .min_w(px(0.))
-                .child(
-                    // Two lines, then the ellipsis (078 H-11): one line cut
-                    // "xiaoxiao · Key 1" and "… Key 2" to the same "xiaoxiao ·
-                    // K…", and the END of a name is what tells two apart.
-                    div()
-                        .min_w(px(0.))
-                        .text_size(theme::text_section())
-                        .font_weight(gpui::FontWeight::BOLD)
-                        .text_color(theme.fg_base)
-                        .line_height(gpui::relative(1.2))
-                        .line_clamp(2)
-                        .text_ellipsis()
-                        .child(name),
-                )
-                .child(div().flex_none().child(icon_img(
-                    icons,
-                    Icon::ChevronDown,
-                    false,
-                    theme.fg_base,
-                    14.,
-                ))),
-        )
-        .child(
-            div()
-                .font_family(theme::font_mono())
-                .text_size(theme::text_label())
-                .text_color(theme.fg_subtle)
-                .child(address),
-        );
-    if let Some(on_account) = on_account {
-        account = account.cursor_pointer().on_click(on_account);
-    }
+        .child(name_row)
+        .child(address_target);
     div()
         .flex()
         .items_center()
@@ -233,9 +255,6 @@ pub fn wallet_header(
         .min_w(px(0.))
         .child(avatar)
         .child(account)
-        .when_some(space, |header, (label, testnet, on_space)| {
-            header.child(space_label(theme, label, testnet).on_click(on_space))
-        })
 }
 
 /// The header's network-space label (spec 105): a pill at the row's end, its

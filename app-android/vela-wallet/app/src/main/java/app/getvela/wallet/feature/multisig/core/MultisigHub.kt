@@ -159,24 +159,49 @@ class MultisigHub(
 
     // -- boot -------------------------------------------------------------------
 
-    /** Idempotent: the machines start from the app's facts; the accounts machine reads its store and says `loaded`. */
+    /**
+     * Idempotent: the machines start from the app's facts; the accounts
+     * machine reads its store and says `loaded`. Every caller returns only
+     * once that boot is done (r13-6): a link handed over while the first
+     * caller still waited for the app's networks used to go to the machine
+     * before its `start` — read against no networks ("a network this device
+     * doesn't have") and with nothing listed, and nothing ever read it again.
+     */
     suspend fun boot() {
-        bootLock.withLock {
-            if (booted) return
-            booted = true
+        val first = bootLock.withLock {
+            if (booted) false else true.also { booted = true }
         }
-        val f = facts()
-        accounts.dispatch(ev("start", "service_url" to f.serviceUrl, "accounts" to f.accounts, "networks" to f.networks))
-        accounts.dispatch(ev("space", "chain_ids" to f.space))
-        proposals.dispatch(
-            ev("start", "service_url" to f.serviceUrl, "accounts" to f.accounts, "networks" to f.networks, "known" to f.known),
-        )
-        accounts.until(30_000) { if (it["loaded"].bool == true) true else null }
-        loaded = true
-        accountsMoved(accounts.view.value)
-        followRecords()
-        followOthers()
+        if (!first) {
+            bootDone.await()
+            return
+        }
+        try {
+            val f = facts()
+            sentNetworks = f.networks to f.space
+            accounts.dispatch(ev("start", "service_url" to f.serviceUrl, "accounts" to f.accounts, "networks" to f.networks))
+            accounts.dispatch(ev("space", "chain_ids" to f.space))
+            proposals.dispatch(
+                ev("start", "service_url" to f.serviceUrl, "accounts" to f.accounts, "networks" to f.networks, "known" to f.known),
+            )
+            accounts.until(30_000) { if (it["loaded"].bool == true) true else null }
+            loaded = true
+            accountsMoved(accounts.view.value)
+            followRecords()
+            followOthers()
+            // r13-6: what moved while the boot waited (the network list read,
+            // the space read from its store) is said now — a change said
+            // before `loaded` had nowhere to go.
+            networksChanged()
+        } finally {
+            bootDone.complete(Unit)
+        }
     }
+
+    /** Done once the first [boot] is (loaded, or given up on). */
+    private val bootDone = CompletableDeferred<Unit>()
+
+    /** The networks and the space the machines were last told (r13-6). */
+    @Volatile private var sentNetworks: Pair<List<Int>, List<Int>>? = null
 
     /** This device's Vela accounts, read again (one was added or signed in). */
     suspend fun refreshLocal() {
@@ -187,9 +212,17 @@ class MultisigHub(
         proposals.dispatch(ev("known", "known" to f.known))
     }
 
-    /** The device's networks moved (one added, the space switched). */
+    /**
+     * The device's networks moved (one added, the space switched). Said once
+     * the machines have started (before that, [boot] says what stands when
+     * it is done), and only when they moved from what the machines were told.
+     */
     suspend fun networksChanged() {
+        if (!loaded) return
         val f = facts()
+        val now = f.networks to f.space
+        if (now == sentNetworks) return
+        sentNetworks = now
         accounts.dispatch(ev("networks", "networks" to f.networks))
         accounts.dispatch(ev("space", "chain_ids" to f.space))
         proposals.dispatch(ev("networks", "networks" to f.networks))
@@ -696,6 +729,11 @@ class MultisigHub(
                             "dappSummary",
                             org.json.JSONObject().put("action", "call").put("calls", row["calls"].int ?: 1).put("contract", row["contract"].str.orEmpty()),
                         )
+                    // r13-5 (r12-8): a member change keeps its action, so its
+                    // row is titled again in the language and with the names
+                    // that stand when it is drawn (`MemberRowTitles`), never
+                    // frozen in the words of the moment it was written.
+                    if (isMemberChange(e["action"])) base.put("multisigChange", org.json.JSONObject(e["action"].toString()))
                 }
                 out += base
             }
@@ -732,18 +770,22 @@ class MultisigHub(
         scope.launch { proposals.view.collect { proposalsMoved(it) } }
     }
 
-    private companion object {
+    companion object {
+        /** r12-8: the actions whose title is the core's `names.change`. */
+        fun isMemberChange(action: JsonElement?): Boolean =
+            action.kind in setOf("addOwner", "removeOwner", "swapOwner", "changeThreshold")
+
         /** A marker: the draft is drawn. */
-        const val DRAWN = "__drawn"
+        private const val DRAWN = "__drawn"
 
         /** r11-1: how long a background round waits for its reads (the worker gives it 60 s). */
-        const val ROUND_WAIT_MS = 40_000L
+        private const val ROUND_WAIT_MS = 40_000L
 
         /** r11-1: how often a round looks whether its reads are in. */
-        const val ROUND_POLL_MS = 500L
+        private const val ROUND_POLL_MS = 500L
 
         /** r11-1: a tick still not the round's after this is asked again. */
-        const val ROUND_ASK_AGAIN_MS = 5_000L
+        private const val ROUND_ASK_AGAIN_MS = 5_000L
     }
 
     /**
