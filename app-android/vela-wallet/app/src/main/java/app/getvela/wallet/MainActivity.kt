@@ -405,11 +405,21 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-        receiptRequested()?.let { container.pendingReceipt.value = it }
-        multisigTapped(intent)?.let { container.pendingMultisigOpen.value = it }
-        debugOpenUrl(intent)?.let { container.browser.open(it, fromOutside = true) }
-        routeDeepLink(intent, container)
-        routeLaunch(intent, container)
+        // r14-2: the intent that started this activity is acted on once. An
+        // activity recreated — a configuration change, or the process killed
+        // and the task brought back (a link opened then: the system restores
+        // the task's FIRST intent here and hands the new one to onNewIntent) —
+        // or reopened from Recents carries an intent already acted on: acted
+        // on again, a cold start on link #3 re-opened #2's sheet over it.
+        if (app.getvela.wallet.core.platform.LaunchIntent.firstDelivery(savedInstanceState == null, intent?.flags ?: 0)) {
+            receiptRequested()?.let { container.pendingReceipt.value = it }
+            multisigTapped(intent)?.let { container.pendingMultisigOpen.value = it }
+            debugOpenUrl(intent)?.let { container.browser.open(it, fromOutside = true) }
+            routeDeepLink(intent, container)
+            routeLaunch(intent, container)
+        } else {
+            app.getvela.wallet.core.diagnostics.VelaLog.event("launch", "intent already acted on", "restored" to (savedInstanceState != null))
+        }
         // Spec 078 round 3: a stand-in report endpoint for the device pass, so
         // checking 发送 never files a real issue — debug builds only (and the
         // debug network config lets cleartext reach 127.0.0.1 alone).

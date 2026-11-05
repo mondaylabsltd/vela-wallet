@@ -121,6 +121,23 @@ class MultisigHub(
     /** An outside member's wallet asked to sign (M4), while it is open. */
     val outsideSession = MutableStateFlow<MultisigOutsideSessionModel?>(null)
 
+    /**
+     * r14-2: the transaction the person asked for last — a link that reached
+     * the app, a notification tapped. The newest wins: an older link's
+     * transaction the core opens later (its reads were slower) never takes
+     * the sheet from it.
+     */
+    @Volatile var latestAsked: Pair<Int, String>? = null
+        private set
+
+    /**
+     * r14-2 / r14-6: a network answered again (the pool let it go), or the
+     * device is back online — what a sheet could not read is asked again at
+     * once (a sheet keys its fee look on it); never a person left to find a
+     * stale "Couldn't check" on their own.
+     */
+    val reachedAgain = MutableStateFlow(0)
+
     /** The chain a proposal is drawn on for the person's review, while it is. */
     val drafting = MutableStateFlow<Int?>(null)
 
@@ -274,6 +291,7 @@ class MultisigHub(
 
     private fun proposalsMoved(view: JsonObject) {
         val typed = MsProposalsView.of(view)
+        noteReviews(typed)
         _proposalsView.value = typed
         if (dappAnswers.isNotEmpty()) settleDapps(typed)
         if (loaded) onProposalsMoved?.invoke(_accountsView.value, typed)
@@ -381,6 +399,94 @@ class MultisigHub(
 
     fun openLink(hash: String, takeKept: Boolean = false) =
         accounts.dispatch(ev("open_link", "hash" to hash, "take_kept" to takeKept))
+
+    /**
+     * r14-2: a link that reached the app, with a wallet in front. The newest
+     * wins: it is the one asked for ([latestAsked]), its sheet comes up at
+     * once — over whatever sheet was open — and only THEN does the accounts
+     * machine open it, so the core's `open_proposal` (which can come back
+     * within a frame for a multisig kept here) always lands after it, never
+     * under it.
+     */
+    fun takeLink(hash: String) {
+        latestAsked = proposalOf(hash)
+        sheet.value = MultisigSheet.Link
+        openLink(hash, takeKept = false)
+        VelaLog.event("multisig.link", "opened", "newest" to (latestAsked?.second?.take(10) ?: "not a transaction"))
+    }
+
+    /** r14-2: a tapped notification's transaction — asked for, so the newest too. */
+    fun showProposal(chainId: Int, safeTxHash: String) {
+        latestAsked = chainId to safeTxHash
+        sheet.value = MultisigSheet.Proposal(chainId, safeTxHash)
+    }
+
+    /** The transaction a proposal link names (the core's reading), or `null` for an invite or a damaged link. */
+    private fun proposalOf(hash: String): Pair<Int, String>? {
+        val tx = runCatching { MsRules.call("parseProposalLink", mapOf("hash" to hash)) }.getOrNull() ?: return null
+        val chainId = tx["chainId"].int ?: return null
+        val safeTxHash = tx["safeTxHash"].str ?: return null
+        return chainId to safeTxHash
+    }
+
+    /**
+     * r14-2 / r14-6: [chainIds] answer again (empty: the device came back).
+     * The shown multisig's list is read again, a link that could not be read
+     * there is asked again (its Try again, which the person would press), and
+     * the sheets' looks go again ([reachedAgain]).
+     */
+    fun networkBack(chainIds: Set<Int>) {
+        if (!loaded) return
+        val linked = _proposalsView.value.linked
+        VelaLog.event("multisig", "network back", "chains" to chainIds.joinToString(","), "linkRetry" to (linked?.retry == true))
+        proposals.dispatch(ev("refresh", "fresh" to true))
+        if (linked != null && linked.retry && (chainIds.isEmpty() || linked.chainId in chainIds)) {
+            proposals.dispatch(ev("retry"))
+        }
+        reachedAgain.value += 1
+    }
+
+    // -- a reopened review (r14-6) --------------------------------------------------
+
+    /** The clock a review's age is read on (tests move it). */
+    @Volatile internal var clock: () -> Long = { System.currentTimeMillis() }
+
+    /** When each review (`<chainId>:<hash>`) was last read `ready`, as this shell saw it land. */
+    private val readySince = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    @Volatile private var lastReviews: Map<String, JsonElement> = emptyMap()
+
+    private fun noteReviews(view: MsProposalsView) {
+        val now = clock()
+        val reviews = view.reviews.mapKeys { it.key.lowercase() }
+        val ready = mutableSetOf<String>()
+        for ((k, state) in view.reviewStates) {
+            val key = k.lowercase()
+            if (state.kind != "ready") continue
+            ready += key
+            if (!readySince.containsKey(key) || lastReviews[key] != reviews[key]) readySince[key] = now
+        }
+        readySince.keys.retainAll(ready)
+        lastReviews = reviews
+    }
+
+    /**
+     * r14-6: a transaction's sheet opens. A review read before — another
+     * sheet's, a minute ago, before the network went — is not drawn as if
+     * read now: it is read again from the start (`review_again`: `loading`,
+     * every sign button shut, until the core says `ready` again or not).
+     * One that landed within the core's own `REVIEW_FRESH_MS` (just proposed
+     * from its draft's review, just read) stands. `true` when read again.
+     */
+    fun reviewOnOpen(chainId: Int, safeTxHash: String): Boolean {
+        val key = "$chainId:${safeTxHash.lowercase()}"
+        val state = _proposalsView.value.reviewStates.entries.firstOrNull { it.key.lowercase() == key }?.value
+        if (state.kind != "ready") return false
+        val since = readySince[key] ?: 0L
+        if (clock() - since < REOPEN_FRESH_MS) return false
+        VelaLog.event("multisig.review", "reopened: read again", "chain" to chainId, "hash" to safeTxHash.take(10))
+        proposals.dispatch(ev("review_again", "chain_id" to chainId, "safe_tx_hash" to safeTxHash))
+        return true
+    }
 
     /** Whether [address] is a multisig on this device (a site granted it). */
     fun isMultisig(address: String): Boolean = _accountsView.value.row(address) != null
@@ -671,6 +777,13 @@ class MultisigHub(
             "open_proposal" -> {
                 val chainId = notice["chain_id"].int ?: 0
                 val hash = notice["safe_tx_hash"].str.orEmpty()
+                // r14-2: the newest link wins — an older one's transaction,
+                // opened late, does not take the sheet from it.
+                val asked = latestAsked
+                if (asked != null && !(asked.first == chainId && asked.second.equals(hash, ignoreCase = true))) {
+                    VelaLog.event("multisig.link", "an older link's transaction, not shown over the newest", "hash" to hash.take(10))
+                    return
+                }
                 proposals.dispatch(ev("open_linked", "chain_id" to chainId, "safe_tx_hash" to hash, "preview" to (notice["preview"] ?: JsonNull)))
                 sheet.value = MultisigSheet.Proposal(chainId, hash)
             }
@@ -796,6 +909,13 @@ class MultisigHub(
 
         /** A marker: the draft is drawn. */
         private const val DRAWN = "__drawn"
+
+        /**
+         * r14-6: a review that landed this recently stands when its sheet
+         * opens — the core's own `REVIEW_FRESH_MS` (a review this fresh is
+         * what a signature is made from); an older one is read again.
+         */
+        const val REOPEN_FRESH_MS = 30_000L
 
         /** r11-1: how long a background round waits for its reads (the worker gives it 60 s). */
         private const val ROUND_WAIT_MS = 40_000L

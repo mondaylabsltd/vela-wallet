@@ -84,7 +84,7 @@ class RpcPoolExecutor(
                     timeoutMs = operation.timeout_ms,
                 )
                 result.body?.let { registry.keepBody(operation.call_id, operation.url, it) }
-                health(result.outcome, payload.chainId)
+                health(result, payload.chainId)
                 // Debug trace (spec 043 phase 4, device-found): which host,
                 // which method, what came back. The pool's verdicts are the
                 // core's; this is the only place the raw outcome is visible.
@@ -119,7 +119,7 @@ class RpcPoolExecutor(
                 xRpcUrl = null,
                 timeoutMs = operation.timeout_ms,
             )
-            health(result.outcome, operation.chain_id)
+            health(result, operation.chain_id)
             RpcShellResult.ChainIdProbed(
                 chain_id = operation.chain_id,
                 url = operation.url,
@@ -172,14 +172,14 @@ class RpcPoolExecutor(
      * What one POST says about the network, per source (spec 082 RJ14): an
      * answer of any kind reached a server; a transport failure did not; a
      * timeout says nothing either way (a slow server is not a missing
-     * network). The chain is the source — one chain whose nodes are all down
-     * is that chain's notice, never "offline" (G53).
+     * network) — [NetHealthFeed]. The chain is the source — one chain whose
+     * nodes are all down is that chain's notice, never "offline" (G53).
      */
-    private fun health(outcome: RpcTransportOutcome, chainId: Int?) {
-        when (outcome) {
-            is RpcTransportOutcome.Response, is RpcTransportOutcome.HttpError, RpcTransportOutcome.NonJson -> NetHealth.reached(chainId)
-            RpcTransportOutcome.Timeout -> Unit
-            else -> NetHealth.unreached(chainId)
+    private fun health(result: RpcPostResult, chainId: Int?) {
+        when (NetHealthFeed.of(result.outcome, result.failure)) {
+            true -> NetHealth.reached(chainId)
+            false -> NetHealth.unreached(chainId)
+            null -> Unit
         }
     }
 
@@ -266,7 +266,44 @@ interface RpcTransport {
     ): RpcPostResult
 }
 
-data class RpcPostResult(val outcome: RpcTransportOutcome, val body: JSONObject? = null)
+data class RpcPostResult(
+    val outcome: RpcTransportOutcome,
+    val body: JSONObject? = null,
+    /**
+     * r14-3: how the POST failed, as the transport classed it (the core's
+     * `TransportFailure` wire: `dns`, `connect_refused`, `connect_timeout`,
+     * `read_timeout`, …); `null` for an answer, or a transport that does not say.
+     */
+    val failure: String? = null,
+)
+
+/**
+ * r14-3: what one POST tells [NetHealth] (`true` reached, `false` did not,
+ * `null` nothing), under the core's rule (`net_health`: "that one request
+ * timing out is not fed — a slow server is not a missing network").
+ *
+ * The delivery verdict and this are different questions. A connect that
+ * TIMED OUT is `not_connected` for delivery (nothing left the device), but it
+ * says nothing about the device's network: a node that takes the connection
+ * and never answers — or a proxy whose tunnel never opens — times the connect
+ * out on a phone that is perfectly online. Fed as a miss, every hung node of
+ * one network (and of a second, slow one) became "Offline" for a device whose
+ * other networks answered, flipping with "Can't reach Arc Testnet" every
+ * 8–16 s (r14-3). Only a failure that shows the way out is closed counts: the
+ * name did not resolve, the connection was refused or unroutable, the
+ * handshake or the socket broke.
+ */
+object NetHealthFeed {
+    /** The transport's failure classes that are timeouts: they say nothing either way. */
+    val TIMEOUTS = setOf("connect_timeout", "read_timeout", "timeout")
+
+    fun of(outcome: RpcTransportOutcome, failure: String?): Boolean? = when {
+        outcome is RpcTransportOutcome.Response || outcome is RpcTransportOutcome.HttpError || outcome == RpcTransportOutcome.NonJson -> true
+        outcome == RpcTransportOutcome.Timeout -> null
+        failure in TIMEOUTS -> null
+        else -> false
+    }
+}
 
 /**
  * The shipping transport.
@@ -325,10 +362,10 @@ class OkHttpTransport : RpcTransport {
             VelaLog.event("rpc.transport", "stale connection: asked again on a new one", "host" to request.url.host, "method" to method)
             when (val again = attempt(request, method, timeoutMs, fresh = true)) {
                 is Attempt.Answered -> return@withContext again.result
-                is Attempt.Failed -> return@withContext RpcPostResult(outcomeOfClass(again.kind))
+                is Attempt.Failed -> return@withContext RpcPostResult(outcomeOfClass(again.kind), failure = again.kind)
             }
         }
-        RpcPostResult(outcomeOfClass(first.kind))
+        RpcPostResult(outcomeOfClass(first.kind), failure = first.kind)
     }
 
     private sealed interface Attempt {

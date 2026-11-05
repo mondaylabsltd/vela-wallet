@@ -85,9 +85,9 @@ fun MultisigAppLayer(
             }
             SessionRoute.Wallet -> {
                 hub.boot()
-                hub.openLink(hash, takeKept = false)
-                hub.sheet.value = MultisigSheet.Link
-                VelaLog.event("multisig.link", "opened")
+                // r14-2: the newest link wins — its sheet over any sheet open,
+                // then the accounts machine's one link flow.
+                hub.takeLink(hash)
             }
         }
         container.pendingMultisigLink.compareAndSet(hash, null)
@@ -108,8 +108,23 @@ fun MultisigAppLayer(
         if (route != SessionRoute.Wallet) return@LaunchedEffect
         hub.boot()
         if (!address.isNullOrEmpty() && hub.isMultisig(address)) hub.activate(address)
-        hub.sheet.value = MultisigSheet.Proposal(chainId, hash)
+        hub.showProposal(chainId, hash)
         container.pendingMultisigOpen.value = null
+    }
+    // r14-2 / r14-6: a network the pool had out of reach answers again, or the
+    // device comes back online — what could not be read is asked again now
+    // (a link's transaction, the sheet's fee look), as iOS and the web recover
+    // on their own; never a stale "can't check" left until someone presses.
+    val pool by container.pool.view.collectAsStateWithLifecycle()
+    val online by app.getvela.wallet.core.net.NetHealth.online.collectAsStateWithLifecycle()
+    val unreachable = remember(pool) { (pool.out_of_reach_chains + pool.silent_chains).toSet() }
+    var wasUnreachable by remember { androidx.compose.runtime.mutableStateOf(emptySet<Int>()) }
+    var wasOnline by remember { androidx.compose.runtime.mutableStateOf(true) }
+    LaunchedEffect(unreachable, online) {
+        val back = MultisigReach.back(wasUnreachable, unreachable, wasOnline, online)
+        wasUnreachable = unreachable
+        wasOnline = online
+        if (back != null && route == SessionRoute.Wallet) hub.networkBack(back)
     }
     // M6: the notification permission, asked when there is first something to
     // say (a multisig created or added, the first proposal) — once per install.
@@ -198,6 +213,19 @@ fun MultisigAppLayer(
 }
 
 private val ADDRESS = Regex("^0x[0-9a-fA-F]{40}$")
+
+/** r14-2 / r14-6: when what could not be read is worth asking again. Pure. */
+object MultisigReach {
+    /**
+     * The networks that answer again since the last look — those the pool
+     * let go of — or the empty set when the device itself came back online
+     * (every network); `null`: nothing came back.
+     */
+    fun back(before: Set<Int>, now: Set<Int>, wasOnline: Boolean, online: Boolean): Set<Int>? = when {
+        online && !wasOnline -> emptySet()
+        else -> (before - now).takeIf { it.isNotEmpty() && online }
+    }
+}
 
 /**
  * r8-8: the connect page for a transaction link opened where there is no

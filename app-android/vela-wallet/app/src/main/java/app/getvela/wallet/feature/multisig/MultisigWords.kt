@@ -405,6 +405,13 @@ class MultisigWords(
             }
             "not_sent" -> t("proposal.notSent")
             "cannot_pay" -> t("proposal.failed", "reason" to t("status.nobodyPays"))
+            // r14-9: nothing signed — the fee moved since the press; said with the
+            // new figure (its own fee line's words), so the next press is on it.
+            "fee_moved" -> {
+                val chain = failure["chainId"].int ?: 0
+                val fee = "${MsRules.formatUnits(failure["amount"].str ?: "0", MsRules.COIN_DECIMALS)} ${symbol(chain)}"
+                t("proposal.failed", "reason" to t("proposal.feeLine", "fee" to fee, "name" to label(failure["executor"].str.orEmpty())))
+            }
             else -> failure["message"].str?.takeIf { it.isNotEmpty() }?.let { t("proposal.failed", "reason" to it) }
                 ?: t("proposal.reason.unknown")
         }

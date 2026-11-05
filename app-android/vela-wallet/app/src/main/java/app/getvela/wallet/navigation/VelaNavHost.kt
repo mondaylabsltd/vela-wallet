@@ -936,6 +936,15 @@ fun VelaNavHost(
                 LaunchedEffect(online) {
                     if (!online) {
                         wasOffline = true
+                        // r14-3: "Offline" is said only while it is true. Only an
+                        // answered call says the way back, so while the home says
+                        // it, a read goes out every so often — never "Offline"
+                        // standing over a device whose network came back until
+                        // someone pulls to refresh.
+                        while (true) {
+                            kotlinx.coroutines.delay(app.getvela.wallet.core.net.NetHealth.OFFLINE_PROBE_MS)
+                            wallet.refresh()
+                        }
                     } else if (wasOffline) {
                         wasOffline = false
                         wallet.refresh()
@@ -1771,6 +1780,7 @@ fun VelaNavHost(
                                 pickImage = { application.container.documents?.pick(listOf("image/*"))?.bytes },
                                 permissionText = strings.t(I18nKeys.Flows.SCAN_PERMISSION_TEXT),
                                 grantLabel = strings.t(I18nKeys.Flows.SCAN_GRANT),
+                                settingsLabel = strings.t(I18nKeys.Flows.SCAN_OPEN_SETTINGS),
                                 noQrFound = strings.t(I18nKeys.Flows.SCAN_NO_QR),
                                 cameraUnavailable = strings.t(I18nKeys.Flows.SCAN_CAMERA_UNAVAILABLE),
                                 decodeFailed = strings.t(I18nKeys.Flows.SCAN_ERROR_IMAGE),
@@ -2291,6 +2301,7 @@ fun VelaNavHost(
                                         pickImage = { application.container.documents?.pick(listOf("image/*"))?.bytes },
                                         permissionText = strings.t(I18nKeys.Flows.SCAN_PERMISSION_TEXT),
                                         grantLabel = strings.t(I18nKeys.Flows.SCAN_GRANT),
+                                        settingsLabel = strings.t(I18nKeys.Flows.SCAN_OPEN_SETTINGS),
                                         noQrFound = strings.t(I18nKeys.Flows.SCAN_NO_QR),
                                         cameraUnavailable = strings.t(I18nKeys.Flows.SCAN_CAMERA_UNAVAILABLE),
                                         decodeFailed = strings.t(I18nKeys.Flows.SCAN_ERROR_IMAGE),

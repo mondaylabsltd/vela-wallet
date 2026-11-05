@@ -1604,3 +1604,44 @@ Tests: `app_send_fee_cover.rs`
 `live-send-ceiling.test.ts`. Open: a typed amount that still fits stays as
 typed when the fee drops (Max is the way to send everything); the
 multi-token sweep's 2× reserve is a separate rule, unchanged.
+
+## 20. Round 14 Android fixes
+
+Round 14's Android findings (r14-2, r14-3, r14-6, r14-9, r14-10), fixed in
+the Android shell. Each was decided by best practice and the owner's rules:
+the core owns the rules and the shell draws what it says; states are honest
+and recoverable; parity with the web and iOS. No core change was needed.
+§12's review state, §14.1's "… anyway" and §15's bounds are the core's and
+are followed as they are; the full-hang outcome (failed or unchecked) is the
+core lane's, and the shell draws whichever the core says.
+
+| Item | Cause | Decision |
+| --- | --- | --- |
+| **r14-2 (a) A link over an open sheet** | The layer opened the link, then set the Link sheet: for a multisig kept here the core's `open_proposal` could land first and be covered. Every sheet's close was "close whatever is open", so a dismissal landing after a newer sheet took its place (Back or a swipe just before a link, on a loaded device) closed the NEW sheet and sent `close_linked` for its link. An older link whose reads were slower could also open its transaction after a newer one. | The newest link wins. `MultisigHub.takeLink` records the transaction asked for (`latestAsked`), puts the Link sheet up, and only then opens the link; `showProposal` does the same for a tapped notification. The router drops an `open_proposal` that is not the newest ask. Every sheet closes only itself (`closeOf(s)`: `compareAndSet(s, null)`; the proposal, link and invite sheets send `close_linked` / `close_link` / `drop_link` only while they are still the sheet open). |
+| **r14-2 (b) A cold start on link #3 restored #2** | Android hands a recreated activity its STARTING intent again: a configuration change, a killed process whose task comes back (the new link then arrives through `onNewIntent`), or a launch from Recents. `onCreate` acted on it every time, so the task's old link or notification re-opened #2 over #3. | `LaunchIntent.firstDelivery`: the starting intent's link, notification, shortcut, shared text and receipt are acted on only on a first creation (no saved state, not `FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY`). A review never resurrects as "Checked" (r14-6 below); a fresh process starts at Reading because the core's review state is not stored. |
+| **r14-2 (c) A link during an outage** | The tested build predates §18 item 1: its `unreadable` stand drew `proposal.cantCheck` with no Try again. Nothing asked again when the network returned. | Try again is §18's (every stand the core marks `retry`). It also recovers by itself: when the pool lets a network go (it leaves `out_of_reach_chains` ∪ `silent_chains`) or the device comes back online (`MultisigReach.back`), `MultisigHub.networkBack` refreshes the shown multisig, sends the link's `retry` when its stand offers one on that network, and bumps `reachedAgain`, which re-asks an open sheet's looks. This is the person's own Try again, sent for them when the cause is gone. A failed review (§12) is still never retried behind their back. |
+| **r14-3 "Offline" flicker** | The shell mapping, not a connectivity signal. The executor fed `NetHealth` the delivery verdict: a connect that timed out is `not_connected` for delivery, so each hung Arc node (the proxy's tunnel never opened) and a slow Optimism Sepolia node counted as misses from two sources. With nothing else read for 10 s, that made the device "Offline". The next answer from any chain put it back, so it alternated with "Can't reach Arc Testnet" every 8–16 s. | `NetHealthFeed.of(outcome, failure)`: the transport now reports its failure class (`RpcPostResult.failure`). A timeout of the connect, of the answer, or of the call says nothing either way, which is the core's `net_health` rule ("that one request timing out is not fed"). A refused or unroutable connect, a failed name lookup, a broken handshake or socket still count. So "Offline" means the device has no network; a hung network is that network's notice ("Can't reach Arc Testnet", stable), as on iOS and the web. Found on the way: only an answered call ends "Offline", and nothing read for minutes once the device was back, so the home now reads again every `NetHealth.OFFLINE_PROBE_MS` (10 s) while it says "Offline". |
+| **r14-6 (a) A stale review on reopen** | `review` on a review already `ready` is the core's quiet re-read (§12.1): the old review stays drawn, with its buttons enabled, until the read lands. A sheet opened a minute later drew the old "Checked" for as long as the network hung. | `MultisigHub.reviewOnOpen`: when a sheet opens on a review that landed longer ago than the core's `REVIEW_FRESH_MS` (30 s; the hub notes when each review landed), it sends `review_again`. The review starts at Reading, every sign button is shut, and it waits for the core's `ready` or `failed`. A review that just landed (just proposed from its draft, just read) stands. |
+| **r14-6 (b) The fee never re-quoted** | The r13 S4 timer asked an unpriced or unchecked look at most four times (16 s), then never again; "Check again" was drawn only under Execute, not beside the one-press "Approve and execute". | An unpriced or unchecked look is asked again every `LookAsk.SLOW_EVERY_MS` (20 s) after the first four, and at once on `reachedAgain`. A priced look still stands (r13 S4 holds). "Check again" (`proposal.feeRetry`) sits beside every fee line that could not be worked out or checked (`LookAsk.offersCheckAgain`), as on the web. |
+| **r14-9 Fee mismatch** | A re-quote at confirm. The fee line is the machine's look, and a priced look stands (r13 S4). When the person pressed after its 15 s (`PREVIEW_FRESH_MS`), Execute took a new look before the passkey and signed that quote (0.0972), not the one on screen (≈0.098172). | The fee signed is the fee shown. At the press the sheet records the figure on screen (`ShownFee.pressed`). Before anything is signed, the executor compares it with the operation's `send_calls.fee` (`ShownFee.refusal`). If they are equal, it goes on. If they differ, nothing is signed: the machine hears `CallsFailed {fee_moved, maybe_sent: false}`, the sheet says "That didn't go through: Network fee ≈ {new}, paid by {name}" in existing words, and the fee line shows the new look. The next press, inside the window, signs exactly it. This is a shell guard at the one place a fee becomes a signature; it needs no new words and no core change. |
+| **r14-10 Camera label** | The label was fixed while the action changed. | `CameraRefusal.label`: once the button opens this app's Settings page (a refusal for good), it says `onboarding.create.openSettings` ("Open Settings"). The scanner has no key of its own. The label is read again after each answer and each return to the front. iOS's scanner opens Settings but still says `componentsUi.scanner.grantPermission`, so iOS has the same gap (left open below). |
+
+Tests:
+
+- **JVM:** `OfflineIsTheDevicesTest` (r14-3); `R14AndroidFixesTest` (the slow look pace and Check again, `pricedFee`, `ShownFee`, the `fee_moved` words, `LaunchIntent`, `MultisigReach`); `CameraRefusalTest` (r14-10).
+- **Device:**
+  - `R14MultisigDeviceTest`:
+    - `aLinkOverAnOpenSheetIsShownAndAnOlderOneOpenedLateNeverTakesItBack`
+    - `aRecreatedActivityNeverOpensItsStartingLinkAgain`
+    - `aReviewReadAWhileAgoStartsAtReadingWhenItsSheetOpensAgain`
+    - `anExecutionIsSignedOnlyAtTheFeeOnScreenWhenPressed`
+  - `ScanCameraRefusalTest`: the Settings label.
+  - `MultisigWorld` gains `hang`, `skewMs`, `quoteAmount` and `sentFees`.
+  - With the four fixes switched off, all four `R14MultisigDeviceTest` cases fail; with them on, they pass.
+- **Live (own emulator behind a fault proxy):** Arc's node was hung in a warm testnet session while OP Sepolia's node timed out by itself. This is the tester's pair of networks. Nine connect timeouts were logged. The home said "Can't reach 2 networks right now" at 18 s and held it for 150 s, with no "Offline" and no `net offline`. With the device's Wi-Fi and data off, it said "Offline". When they came back, the line was gone within 5 s with no touch.
+
+Left open:
+
+- **Core (for the core lane):** the accounts machine runs link opens side by side. An older open's late `say(Member …)` can overwrite the newer link's stand, and its `activate` can switch the account shown. The shell's newest-wins guard covers the sheet, not the account behind it. Superseding the open in flight would be the core's rule.
+- **Core:** Execute's silent re-quote is still the core's behaviour. A core rule ("a new look whose fee differs from the one shown stops with it") would give every shell what Android now does in its executor.
+- **iOS:** r14-10's label (`grantPermission` over a button that opens Settings).
