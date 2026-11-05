@@ -189,7 +189,7 @@ struct MultisigCreateSheet: View {
                     )) {
                         VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                             Text(verbatim: account.name).typeRole(Typography.fieldLabel.scaled(textScale))
-                            Text(verbatim: MsWords.short(account.address))
+                            AddressTextView(MsWords.short(account.address))
                                 .typeRole(Typography.monoSmall.scaled(textScale))
                                 .foregroundStyle(theme.fgSubtle)
                         }
@@ -243,10 +243,9 @@ struct MultisigCreateSheet: View {
             IdenticonAvatar(seed: owner, size: 28, tappable: false)
             VStack(alignment: .leading, spacing: Tokens.Space.s4) {
                 Text(verbatim: label(owner)).typeRole(Typography.fieldLabel.scaled(textScale)).foregroundStyle(theme.fgBase)
-                Text(verbatim: MsRules.eip55(owner))
+                AddressTextView(MsRules.eip55(owner))
                     .typeRole(Typography.monoSmall.scaled(textScale))
                     .foregroundStyle(theme.fgSubtle)
-                    .fixedSize(horizontal: false, vertical: true)
                 MultisigKindChoiceView(hub: hub, words: words, address: owner, choice: kind)
             }
             Spacer(minLength: 0)

@@ -251,6 +251,8 @@ private fun MemberLine(words: MultisigWords, member: JsonElement, added: Boolean
                 color = if (removed) colors.fgSubtle else colors.fgBase,
                 fontFamily = VelaFontFamily, fontWeight = VelaFontWeight.medium, fontSize = VelaTextSize.lg,
                 textDecoration = if (removed) TextDecoration.LineThrough else null,
+                // A short form is one line, never broken at its ellipsis.
+                softWrap = name != null,
             )
             MsText((listOf(MultisigWords.short(address)) + tags).joinToString(" · "), MsType.Sub, color = colors.fgSubtle)
         }

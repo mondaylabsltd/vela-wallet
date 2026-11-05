@@ -2034,6 +2034,8 @@ internal fun AccountsSheetBody(
                     color = colors.fgSubtle,
                     fontFamily = VelaMonoFontFamily,
                     fontSize = VelaTextSize.sm,
+                    softWrap = false,
+                    maxLines = 1,
                 )
                 // ob-2 (P2.4): this wallet's registration has not landed yet.
                 row.note?.let { note ->

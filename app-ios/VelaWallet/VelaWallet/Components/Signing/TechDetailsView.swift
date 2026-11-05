@@ -65,10 +65,9 @@ struct TechDetailsView: View {
                                 Text(verbatim: "\(identity.role) · \(identity.name)")
                                     .typeRole(Typography.rowSub.scaled(textScale))
                                     .foregroundStyle(theme.fgSubtle)
-                                Text(verbatim: identity.address)
+                                AddressTextView(identity.address)
                                     .typeRole(Typography.monoSmall.scaled(textScale))
                                     .foregroundStyle(theme.fgBase)
-                                    .lineLimit(2)
                             }
                             Spacer(minLength: Tokens.Space.s8)
                             LucideIcon(.copy, size: LucideIconSize.rowGlyph)

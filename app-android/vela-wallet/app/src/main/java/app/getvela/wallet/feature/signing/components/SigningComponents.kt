@@ -42,6 +42,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import app.getvela.wallet.core.designsystem.components.VelaAddressText
 import app.getvela.wallet.core.designsystem.components.VelaIcons
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaBorder
@@ -377,15 +378,25 @@ fun SigningRows(rows: List<SigningRow>, modifier: Modifier = Modifier) {
                     fontSize = VelaTextSize.base,
                 )
                 Spacer(Modifier.width(VelaSpacing.lg))
-                Text(
-                    text = row.value,
-                    color = row.valueTone.color(colors),
-                    fontFamily = if (row.mono) FontFamily.Monospace else VelaFontFamily,
-                    fontWeight = if (row.mono) VelaFontWeight.regular else VelaFontWeight.semibold,
-                    fontSize = VelaTextSize.base,
-                    textAlign = TextAlign.End,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
+                if (row.mono) {
+                    VelaAddressText(
+                        text = row.value,
+                        color = row.valueTone.color(colors),
+                        fontSize = VelaTextSize.base,
+                        textAlign = TextAlign.End,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                } else {
+                    Text(
+                        text = row.value,
+                        color = row.valueTone.color(colors),
+                        fontFamily = VelaFontFamily,
+                        fontWeight = VelaFontWeight.semibold,
+                        fontSize = VelaTextSize.base,
+                        textAlign = TextAlign.End,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                }
             }
         }
     }
@@ -425,10 +436,9 @@ fun SigningParty(
                     fontSize = VelaTextSize.xl,
                 )
                 address?.let {
-                    Text(
+                    VelaAddressText(
                         text = it,
                         color = colors.fgMuted,
-                        fontFamily = FontFamily.Monospace,
                         fontSize = VelaTextSize.base,
                     )
                 }
@@ -1033,10 +1043,9 @@ fun TechDetails(
                                 fontFamily = VelaFontFamily,
                                 fontSize = VelaTextSize.sm,
                             )
-                            Text(
+                            VelaAddressText(
                                 text = identity.address,
                                 color = colors.fgBase,
-                                fontFamily = FontFamily.Monospace,
                                 fontSize = VelaTextSize.base,
                             )
                         }

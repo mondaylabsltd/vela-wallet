@@ -67,6 +67,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.times
+import app.getvela.wallet.core.designsystem.components.VelaAddressText
 import app.getvela.wallet.core.designsystem.components.VelaIcons
 import app.getvela.wallet.core.designsystem.components.VelaPrimaryButton
 import app.getvela.wallet.core.designsystem.components.VelaSecondaryButton
@@ -143,10 +144,9 @@ private fun FundAddress(model: FundAddressModel, modifier: Modifier = Modifier) 
         )
         Spacer(modifier = Modifier.height(VelaSpacing.xs))
         SelectionContainer {
-            Text(
+            VelaAddressText(
                 text = model.address,
                 color = colors.fgBase,
-                fontFamily = VelaMonoFontFamily,
                 fontSize = VelaTextSize.sm,
             )
         }

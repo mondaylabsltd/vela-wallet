@@ -92,10 +92,10 @@ struct MsRow: View {
                 Text(verbatim: label)
                     .typeRole(Typography.label.scaled(textScale))
                     .foregroundStyle(theme.fgSubtle)
-                Text(verbatim: value)
+                // An address or hash breaks only between its halves (r13).
+                AddressTextView(value)
                     .typeRole((mono ? Typography.monoSmall : Typography.body).scaled(textScale))
                     .foregroundStyle(theme.fgBase)
-                    .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
             }
             Spacer(minLength: 0)
