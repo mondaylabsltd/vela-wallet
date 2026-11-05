@@ -64,3 +64,24 @@ export function reasonWords(m: ReviewStateMessages, key: string | null): string 
 			return m.unreadable;
 	}
 }
+
+const UNREAD = 'home.multisig.proposal.unread.';
+const SERVICE_KEY = 'home.multisig.proposal.mailboxDown';
+
+/**
+ * r13-3: the step before a review — a draft not built, a link's transaction
+ * not opened — said as the core named the read that failed (`ActionState`
+ * `unread.reason_key`, `MultisigLinkedView.reason_key`), `{{network}}` its
+ * network's name. An unknown key says the network's line: the core names
+ * the service with its own key.
+ */
+export function unreadWords(
+	proposal: { mailboxDown: string; unread: Record<string, string> },
+	key: string | null | undefined,
+	network: string
+): string {
+	if (key === SERVICE_KEY) return proposal.mailboxDown;
+	const leaf = key?.startsWith(UNREAD) ? key.slice(UNREAD.length) : '';
+	const text = proposal.unread[leaf] || proposal.unread.chain;
+	return text.replaceAll('{{network}}', network);
+}

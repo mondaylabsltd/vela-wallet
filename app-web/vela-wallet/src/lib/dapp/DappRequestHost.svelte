@@ -242,6 +242,35 @@
 			busy = false;
 			panelSurface.shown(incoming.rid);
 
+			// Safari (r13): nobody is signed in here — said at once, with create
+			// and sign in, before any read that needs a wallet (the wasm core,
+			// the network lists, the grant). The request waits for the sign-in
+			// (`awaitingSignIn`) and is read then, the reads after this line
+			// with it. A network to add needs no wallet: it goes on as before.
+			if (mode === 'window' && signedOut() && incoming.method !== 'wallet_addEthereumChain') {
+				awaitingSignIn = true;
+				stage = {
+					kind: 'consent',
+					origin: incoming.origin,
+					method: incoming.method,
+					address: null
+				};
+				return;
+			}
+			await prepareAndProceed(incoming);
+		} finally {
+			taking = false;
+		}
+	}
+
+	/**
+	 * What a taken request is read with before its sheet — the snapshot the
+	 * worker answers from, the network lists, the start chain — then the
+	 * request itself. Also what a request that waited for a sign-in runs
+	 * once somebody has signed in.
+	 */
+	async function prepareAndProceed(incoming: ExtensionRequest): Promise<void> {
+		{
 			// Publish what the worker will need to answer this origin instantly
 			// next time. The core authors it; this only stores it.
 			// r11-2: a read before the sheet that throws leaves no request owed
@@ -295,8 +324,6 @@
 				return;
 			}
 			await proceed(incoming);
-		} finally {
-			taking = false;
 		}
 	}
 
@@ -885,7 +912,9 @@
 			if (awaitingSignIn && request && owing === request.rid) {
 				awaitingSignIn = false;
 				const waiting = request;
-				void proceed(waiting);
+				// Read now what waited for a wallet (the snapshot, the
+				// networks, the start chain), then the request.
+				void prepareAndProceed(waiting);
 			}
 		}
 	});
@@ -1062,8 +1091,12 @@
 			<div class="stack">
 				<Button variant="primary" shape="rounded" onclick={closeMultisigNo}>{m.gotIt}</Button>
 			</div>
-		{:else if stage.kind === 'consent' && request && needsWallet}
-			<h1>{awaitingSignIn ? m.signInTitle : cardTitle}</h1>
+		{:else if needsWallet && (stage.kind === 'consent' || stage.kind === 'loading')}
+			<!-- Nobody is signed in: said from the moment the session knows it
+			     (Safari r13: "Preparing wallet…" for 70 s), the request read or not. -->
+			<h1 data-testid="request-no-wallet">
+				{!request || isSigningMethod(request.method) ? m.signInTitle : cardTitle}
+			</h1>
 			<p class="body">{m.noWallet}</p>
 			<div class="stack">
 				<Button variant="primary" shape="rounded" onclick={() => openOnboarding(true)}>

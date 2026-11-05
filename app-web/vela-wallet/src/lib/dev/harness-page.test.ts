@@ -29,12 +29,14 @@ const RELEASE_MANIFEST = safariManifest(SOURCE, { development: false });
 
 describe('a loopback page: the only page a dev setting may name', () => {
 	it.each([
-		['http://127.0.0.1:9694/', 'http://127.0.0.1:9694/'],
-		['http://127.0.0.1:9694', 'http://127.0.0.1:9694/'],
+		// D9 (round 13): one loopback origin, `localhost` — a passkey's
+		// relying party is never an IP address.
+		['http://127.0.0.1:9694/', 'http://localhost:9694/'],
+		['http://127.0.0.1:9694', 'http://localhost:9694/'],
 		['http://localhost:5173/', 'http://localhost:5173/'],
 		['https://localhost:8443', 'https://localhost:8443/'],
-		['http://[::1]:9694/', 'http://[::1]:9694/'],
-		['https://[::1]:8443/', 'https://[::1]:8443/']
+		['http://[::1]:9694/', 'http://localhost:9694/'],
+		['https://[::1]:8443/', 'https://localhost:8443/']
 	])('%s is accepted, as %s', (given, page) => {
 		expect(loopbackPage(given)).toBe(page);
 	});
@@ -70,7 +72,7 @@ describe('the package: development honours the setting, release never does', () 
 	});
 
 	it('development + loopback: that page', () => {
-		expect(chooseHarnessPage('http://127.0.0.1:9694/', true)).toBe('http://127.0.0.1:9694/');
+		expect(chooseHarnessPage('http://127.0.0.1:9694/', true)).toBe('http://localhost:9694/');
 	});
 
 	it('development + a page that is not loopback: none — production stays', () => {

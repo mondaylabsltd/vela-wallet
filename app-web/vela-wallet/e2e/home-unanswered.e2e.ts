@@ -112,3 +112,52 @@ test('r12-3: a network that stops answering in a warm session is named without a
 	});
 	await expect(page.getByText(en('home.liveIndicator'), { exact: true })).toHaveCount(0);
 });
+
+/**
+ * r13-4: a warm outage where EVERY node of a network hangs (the round's
+ * Soneium, Unichain and Celo: ~25 endpoints, thirdweb's among them, all
+ * taking the connection and saying nothing — none refusing). The pool used
+ * to sweep each call's whole list at 8 s a node before the network was out
+ * of reach, and the home named it 187 s and ~100 hung requests after the
+ * first. Now three silent nodes put it out of reach, the home names it at
+ * once, and the reads after it probe two nodes at a time.
+ */
+test('r13-4: a network whose every node hangs in a warm session is named in time, not hammered', async ({
+	page
+}) => {
+	test.setTimeout(150_000);
+	let down = false;
+	let firstHung = 0;
+	let hung = 0;
+	// Ethereum's own stub, and every off-origin JSON-RPC node (only
+	// Ethereum's are asked: every other network answers from its stub).
+	await page.route(
+		(url) =>
+			/stub-rpc\.test\/rpc\/1$/.test(url.href) ||
+			!/stub-rpc\.test|localhost|127\.0\.0\.1/.test(url.href),
+		(route: Route) => {
+			const request = route.request();
+			const rpc = request.method() === 'POST' && (request.postData() ?? '').includes('jsonrpc');
+			if (!down || !rpc) return route.fallback();
+			hung += 1;
+			if (firstHung === 0) firstHung = Date.now();
+			return new Promise<void>(() => {});
+		}
+	);
+	await openHome(page);
+	await expect(page.getByText(en('home.liveIndicator'), { exact: true })).toBeVisible({
+		timeout: 30_000
+	});
+
+	down = true;
+	await expect(page.getByText("Can't reach Ethereum right now", { exact: true })).toBeVisible({
+		timeout: 120_000
+	});
+	const named = Date.now();
+	expect(firstHung).toBeGreaterThan(0);
+	// About as fast as cold (≤ ~25 s from the first hung read; slack for CI).
+	expect(named - firstHung).toBeLessThan(35_000);
+	// Not hammered: a handful of nodes asked, not every node three times over.
+	expect(hung).toBeLessThan(25);
+	await expect(page.getByText(en('home.liveIndicator'), { exact: true })).toHaveCount(0);
+});

@@ -158,6 +158,16 @@ pub fn signer_url(input: &str) -> Result<String, SignerUrlError> {
         return Err(SignerUrlError::Invalid);
     }
     let (host, port) = host_and_port(authority).ok_or(SignerUrlError::Invalid)?;
+    // D9 (round 13): a passkey's relying party is a domain, never an IP
+    // address — a page on `127.0.0.1` or `[::1]` cannot make or use one (the
+    // browser's raw "SecurityError"), and it is a different origin from the
+    // `localhost` page the passkeys were made on. One loopback origin:
+    // `localhost`, the same port.
+    let host = if host.starts_with("127.") || host == "[::1]" {
+        "localhost".to_owned()
+    } else {
+        host
+    };
     match scheme.as_str() {
         "https" => {}
         "http" if is_loopback(&host) => {}

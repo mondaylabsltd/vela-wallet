@@ -5,6 +5,7 @@ import type { MultisigDappAnswer } from "./MultisigDappAnswer";
 import type { MultisigDraft } from "./MultisigDraft";
 import type { MultisigFrozenFacts } from "./MultisigFrozenFacts";
 import type { MultisigHeldRequest } from "./MultisigHeldRequest";
+import type { MultisigHistoryStand } from "./MultisigHistoryStand";
 import type { MultisigItemSigners } from "./MultisigItemSigners";
 import type { MultisigLinkedView } from "./MultisigLinkedView";
 import type { MultisigMissingChain } from "./MultisigMissingChain";
@@ -33,7 +34,15 @@ waiting_on_me: number, missing: Array<MultisigMissingChain>,
 /**
  * What is shown is the list an earlier page kept (when it was read).
  */
-cached_at: number | null, unreadable: number[], history_unreadable: number[], offline: boolean, read_at: number | null, loading: boolean, stale: boolean, 
+cached_at: number | null, unreadable: number[], history_unreadable: number[], 
+/**
+ * r13-7: where the followed multisig's history (what it executed)
+ * stands on this page: `reading` until its first read ends — the
+ * home's Activity says it is being read, never "No activity yet" —
+ * then `read`, or `unread` (it could not be read; `history_unreadable`
+ * says where, with Retry). A history once read stays `read`.
+ */
+history: MultisigHistoryStand, offline: boolean, read_at: number | null, loading: boolean, stale: boolean, 
 /**
  * Stale because the service is away (said with a Retry).
  */

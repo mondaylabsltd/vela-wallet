@@ -198,6 +198,17 @@ export interface MultisigMessages {
 		outboxNotSent: string;
 		/** r8-16: an approval on its way to the mailbox (never "not sent"). */
 		outboxSending: string;
+		/**
+		 * r13-3: the step before a draft or a link's transaction exists did
+		 * not get a read back — named as the core names it (`{{network}}`).
+		 */
+		unread: {
+			chain: string;
+			both: string;
+			linkChain: string;
+			linkService: string;
+			linkBoth: string;
+		};
 		/** The full hash's copy button. */
 		copy: string;
 		/** An executed transaction's sender (`{{name}}`). */
@@ -1102,6 +1113,13 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		outboxAway: '',
 		outboxNotSent: '',
 		outboxSending: '',
+		unread: {
+			chain: '',
+			both: '',
+			linkChain: '',
+			linkService: '',
+			linkBoth: ''
+		},
 		outboxSendAgain: '',
 		copy: '',
 		executedBy: '',

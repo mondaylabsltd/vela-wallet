@@ -115,6 +115,7 @@
 		membersAnywhere,
 		proposals as multisigProposals
 	} from '$lib/multisig/core/proposals.svelte';
+	import { livesElsewhere } from '$lib/multisig/core/elsewhere';
 	import { multisigKnownName, ownOrMember } from '$lib/multisig/core/known';
 	import { readMembers } from '$lib/multisig/core/chain';
 	import { localOwners } from '$lib/multisig/core/owners';
@@ -2000,6 +2001,38 @@
 		void intents.invoke('person', { type: 'set_balance_privacy', hidden: !balance.view.hidden });
 	}
 
+	/**
+	 * r13-1: the shown multisig lives in the other space — the core's word
+	 * (`lives_elsewhere`), as the native homes say it. Read again when the
+	 * networks or the space change, and once the core is in (the balance
+	 * view's first frame comes from it).
+	 */
+	const elsewhere = $derived.by(() => {
+		void networksVersion;
+		void balance.view.address;
+		const active = multisig.active;
+		return active ? livesElsewhere(active.chainIds, networkSpace.current) : null;
+	});
+	/** r13-1: the switch there, through the intents (spec 103). */
+	function switchSpace(space: 'mainnet' | 'testnet'): void {
+		void intents.invoke('person', { type: 'set_network_space', space });
+	}
+	/** r13-7: the shown multisig's history (`ProposalsView.history`), for Activity. */
+	const multisigHistory = $derived.by(() => {
+		const active = multisig.active;
+		const view = multisigProposals.view;
+		if (!active || !view || view.followed?.toLowerCase() !== active.address.toLowerCase()) {
+			return undefined;
+		}
+		const chainId = view.history_unreadable[0] ?? active.chainIds[0];
+		return {
+			stand: view.history,
+			unreadText: fill(data.multisigMessages.panel.historyUnreadable, {
+				network: chainId === undefined ? '' : chainName(chainId)
+			})
+		};
+	});
+
 	/** Fixture base → identity overlay → live balance/holdings (research D10). */
 	const liveInputs = $derived({
 		// send-19: while a send is open, only the networks that matter to it
@@ -2019,7 +2052,18 @@
 				: balance.view.tokens.find((t) => balanceTokenId(t) === selectedAssetId),
 		refresh: { now: refreshClock, held: refreshHold.held, language: data.locale ?? 'en' },
 		// Spec 105: the testnet space has no total and no worth on a row.
-		noValue: networkSpace.testnet ? (networkSpace.words?.noValue ?? undefined) : undefined
+		noValue: networkSpace.testnet ? (networkSpace.words?.noValue ?? undefined) : undefined,
+		// r13-1: an account of the other space claims nothing of this one.
+		elsewhere:
+			elsewhere && networkSpace.words
+				? {
+						heading:
+							elsewhere.space === 'testnet'
+								? networkSpace.words.headingTestnet
+								: networkSpace.words.headingMainnet
+					}
+				: undefined,
+		multisigHistory
 	});
 	// A multisig's transactions waiting for approval come first in Activity,
 	// drawn as its pending rows; a tap opens the transaction.
@@ -2915,7 +2959,13 @@
      (`$lib/app-prompt/config.ts`), and never again once closed. -->
 {#snippet appPrompt()}
 	<!-- r4D-7, r4D-8: the multisig's own lines — what waits here, its first steps. -->
-	<MultisigHomeCard m={data.multisigMessages} onfund={() => flowTo('receive')} />
+	<MultisigHomeCard
+		m={data.multisigMessages}
+		onfund={() => flowTo('receive')}
+		{elsewhere}
+		onswitch={switchSpace}
+		locale={data.locale ?? 'en'}
+	/>
 	<AppPrompt placement="home" messages={data.appPrompt} />
 {/snippet}
 

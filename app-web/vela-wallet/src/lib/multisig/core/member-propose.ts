@@ -23,6 +23,8 @@ export type ProposeOutcome =
 			refusal?: MemberRefusal;
 			/** The mailbox could not be read: no free number to propose at. */
 			mailboxDown?: true;
+			/** r13-3: the read the core named (`ActionState.unread.reason_key`). */
+			unreadKey?: string;
 			/** Anything else, in the error's own words. */
 			message?: string;
 	  };
@@ -51,6 +53,8 @@ export async function proposeChange(
 				return { ok: false, declined: true };
 			case 'mailboxUnreadable':
 				return { ok: false, mailboxDown: true };
+			case 'unread':
+				return { ok: false, unreadKey: state.reason_key };
 			case 'refused': {
 				const refusal = memberRefusal(state.reason);
 				return refusal

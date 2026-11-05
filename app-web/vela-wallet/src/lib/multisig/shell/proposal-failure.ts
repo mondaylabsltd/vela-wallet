@@ -39,6 +39,7 @@ import { PasskeyCheckError } from '../core/owners';
 import {
 	MailboxRefusedError,
 	MailboxUnreadableError,
+	ProposalUnreadError,
 	NoOutsideSignerError
 } from '../core/proposal-errors';
 import type { MultisigActionState } from '../generated/MultisigActionState';
@@ -229,6 +230,8 @@ export function actionError(
 			return riskDeclinedError();
 		case 'mailboxUnreadable':
 			return new MailboxUnreadableError();
+		case 'unread':
+			return new ProposalUnreadError(state.reason_key);
 		case 'noOutsideSigner':
 		case 'noMemberHere':
 			return new NoOutsideSignerError();

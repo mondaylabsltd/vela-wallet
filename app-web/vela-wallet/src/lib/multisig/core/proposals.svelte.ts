@@ -21,6 +21,7 @@ import { multisig, type MultisigAccount } from './store.svelte';
 import {
 	MailboxRefusedError,
 	MailboxUnreadableError,
+	ProposalUnreadError,
 	NoOutsideSignerError
 } from './proposal-errors';
 import { proposalsHost, ProposeFailedError } from '../shell/proposals-host.svelte';
@@ -31,7 +32,7 @@ import type { MultisigChainState } from '../generated/MultisigChainState';
 import type { MultisigLinkedView } from '../generated/MultisigLinkedView';
 import type { MultisigProposalKind } from '../generated/MultisigProposalKind';
 
-export { MailboxRefusedError, MailboxUnreadableError, NoOutsideSignerError };
+export { MailboxRefusedError, MailboxUnreadableError, NoOutsideSignerError, ProposalUnreadError };
 
 export type ProposalStatus =
 	/** Enough approvals, and its nonce is next: it can be executed now. */

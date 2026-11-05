@@ -615,9 +615,14 @@ fn a_signer_address_is_https_or_this_devices_own_loopback() {
         signer_url("http://localhost:8140").as_deref(),
         Ok("http://localhost:8140/")
     );
+    // D9: one loopback origin — a passkey cannot live on an IP address.
     assert_eq!(
         signer_url("http://127.0.0.1:8140/sign.html").as_deref(),
-        Ok("http://127.0.0.1:8140/sign.html")
+        Ok("http://localhost:8140/sign.html")
+    );
+    assert_eq!(
+        signer_url("http://[::1]:8140/").as_deref(),
+        Ok("http://localhost:8140/")
     );
     assert_eq!(
         signer_url("http://192.168.1.4:8140/"),
