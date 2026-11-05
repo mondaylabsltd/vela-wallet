@@ -1299,8 +1299,9 @@ struct SigningLiveTests {
         #expect(control?.label == loc.t("send.feeSpeedLabel"))
         #expect(control?.value == loc.t("send.gasTier.fast"))
         #expect(control?.options.map(\.id) == ["fast", "standard", "slow"])
-        // Each option in the words its row would use, minus the row's "~".
-        #expect(feeValue(open) == "~" + (control?.options.first?.value ?? ""))
+        // Each option in the words its row would use (r12 S4: the row's
+        // figure bare, the core's `fee.row`).
+        #expect(feeValue(open) == control?.options.first?.value)
         #expect(control?.options[1].value == "…")
         #expect(control?.options.first?.gasPrice == "1 ~ 2 gwei")
 
@@ -1312,7 +1313,8 @@ struct SigningLiveTests {
             feeToken: nil, options: [], confirmFeeReady: true
         )
         let landed = model(feeAtSlow, speed("slow", picked: true, options: []))
-        #expect(feeValue(landed)?.hasPrefix("~") == true)
+        #expect(feeValue(landed)?.hasPrefix("~") == false)
+        #expect(feeValue(landed) != loc.t("componentsUi.gas.estimating"))
     }
 
     // -- Issue #262: the coin that pays -------------------------------------

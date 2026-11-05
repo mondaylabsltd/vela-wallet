@@ -1670,7 +1670,7 @@ enum SigningLive {
             // in-band ERC-20 fee is its own amount under its own ticker, never
             // the native figure — and what it costs. The design sheet is
             // explicit that these two surfaces must not drift.
-            value = "~" + SendLive.feeLine(estimate, view: nil, fee: fee, display: context.display,
+            value = SendLive.feeRowPrefix + SendLive.feeLine(estimate, view: nil, fee: fee, display: context.display,
                                            networks: context.networks)
         } else if let failure = fee?.failure {
             // The core's one state for the row and the footer (PR 2 note 1):

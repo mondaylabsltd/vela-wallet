@@ -1037,6 +1037,14 @@ enum SendLive {
     ///
     /// Each shell used to answer this itself while no estimate was in hand,
     /// and a failed quote on BNB Chain with USDT chosen was drawn three ways.
+    /// r12 S4: what goes before the confirm's fee figure — the core's one
+    /// rule (`fee.row`): nothing. The confirm said "~0.12" here and "0.12"
+    /// on the web and the desktop for the same quoted fee; the figure is the
+    /// quote, said bare.
+    static var feeRowPrefix: String {
+        (MsRules.call("fee.row", ["quoted": true]) as? [String: Any])?["amount_prefix"] as? String ?? ""
+    }
+
     static func feeCoinMark(_ view: SendViewWire) -> TokenMarkModel? {
         guard let coin = view.feeCoin else { return nil }
         return TokenMarkModel.of(chainId: coin.chainId, symbol: coin.symbol,
@@ -1172,7 +1180,7 @@ enum SendLive {
                 // core's re-ask — never "Estimating…" and back.
                 value: failure?.figure(loc)
                     ?? (frozen ? view.fee ?? fee?.fee : view.fee ?? fee?.fee).map {
-                        "~\(feeLine($0, view: view, fee: fee, display: display, networks: networks))"
+                        feeRowPrefix + feeLine($0, view: view, fee: fee, display: display, networks: networks)
                     }
                     ?? (view.estimatingGas || view.feeBusy || (fee?.busy ?? false)
                         ? loc.t("send.estimatingFee") : "—"),
