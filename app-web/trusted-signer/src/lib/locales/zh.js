@@ -421,5 +421,16 @@ window.VelaCS.i18n.register('zh', {
   'field.msMembers': "成员",
   'value.msCountChange': "{before} → {after}",
   'value.msApprovalsChange': "{before} / {beforeOf} → {after} / {afterOf}",
+  // §16: a member’s owner proof (vela_multisigCreate).
+  'intent.msOwnerProof': "证明多签成员身份",
+  'sentence.msOwnerProof': "你证明自己是这个多签 {count} 位成员中的第 {place} 位，以便 Vela 的服务把它记录在成员们都能找到的地方。不转出任何资产，也不批准任何交易。",
+  'field.msNetworks': "网络",
+  'field.msMemberAt': "成员 {n}",
+  'value.msNeeds': "需 {n} 位中的 {m} 位",
+  'button.msOwnerProof': "证明成员身份",
+  'refuse.msOwnerShape': "这份成员证明的格式本页无法准确读取，显示的内容可能与将要签名的不同。不签。",
+  'refuse.msOwnerGenesis': "这个多签不是按 Vela 创建多签的方式设置的（合约或初始设置不同），本页无法为它的成员和规则作保。不签。",
+  'refuse.msOwnerAddress': "App 说的是一个多签地址，但它交来的成员和设置算出的是另一个。你要证明的不是 App 所描述的。不签。",
+  'refuse.msOwnerNotMember': "签名的账户不是这个多签的成员。不签。",
   'warn.msMembersClaimOff': "这项变更与 App 所说的多签现有成员对不上 —— 执行时可能会失败。批准前，和其他成员核对成员名单。",
 });

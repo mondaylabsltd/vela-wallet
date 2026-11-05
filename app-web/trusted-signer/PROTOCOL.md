@@ -663,6 +663,9 @@ EntryPoint / 4337 模块地址若不是 Vela 的那两个，会挂一条 danger 
 | 多签批准 / 执行：成员变更的「之前」（成员数、门槛） | App（`context.multisig.owners` / `.threshold`，第十轮）；「之后」从 SafeTx 读出。本次操作部署了多签时以核实过的 setup 为准 | 是，且标「App 的说法」；对不上变更就不写数字、给一条提示 |
 | 多签批准 / 执行：「谁的钱」 | 本页：多签的交易里授权、转账、随调用转出的原生币都写「多签的」（第十轮）；`selfTag` 只由本页设置 | 否 |
 | 多签批准：被签的字节 | 本页推导：`SafeMessage(safeTxHash)` 在**成员**自己的域下 | 否 |
+| 成员证明（第 14 节）：多签地址、成员、门槛、本人的位置 | 本页从 App 交来的 **genesis** 读出：地址由 CREATE2 推出，成员与门槛从 setup 读出（setup 必须正好是 Vela 建多签的那一个）；App 给的地址只用来比对 | 否 |
+| 成员证明：网络、多签名字 | App（`params[0].chainIds`、`genesis.name`）——挑战码只覆盖地址 | 是，且标「App 的说法」/「App 提供」 |
+| 成员证明：被签的字节 | 本页推导：`keccak256("safe-genesis-registry/sponsor/v1" ‖ 推出的地址)` | 否 |
 
 ---
 
@@ -996,3 +999,56 @@ Safari Web Extension 目标装进 Safari。iOS 26.2 模拟器上实测的三件�
 扮演内容脚本：没有 opener 时 `ready` 交给窗口里的扩展；证明过的扩展签了、答复经中继回来且是账户钥匙对本页摘要的签名；
 没证明 → 不出卡；别的扩展的意图 → 听不见；`eth_sign` 的拒签经中继回来）；钱包一侧 `src/lib/extension/safari-signer.test.ts`；
 iOS 模拟器上真机 Safari：`app-ios/VelaWallet/VelaWalletUITests/SafariExtensionDeviceTests.swift` 第 9、10 步。
+
+## 14. 多签的成员证明（`vela_multisigCreate`，§16，2026-11-05）
+
+建多签（或再次共享它的记录）时，一位成员的 passkey 签 genesis 服务的赞助挑战码：服务记录这个多签、它的成员和规则之前要的证明，
+成员们靠这条记录找到它。不动钱、不批准任何交易，但它是一个签名，所以按签名来读。以前本页没有这张卡，只能在 Vela 里签 ——
+Safari 扩展的页面不能用 passkey（13.5），Safari 钱包于是建不了多签。
+
+### 14.1 请求
+
+```json
+{
+  "intent": {
+    "method": "vela_multisigCreate", "origin": "",
+    "params": [{
+      "multisig": "0x…", "member": "0x…",
+      "genesis": { "factory": "0x…", "singleton": "0x…", "saltNonce": "0x…", "initializer": "0x…", "name": "Team fund" },
+      "chainIds": [8453]
+    }]
+  },
+  "context": { "chainId": 8453, "account": "<member>", "allowCredentials": ["…"], "keyRoute": { "…": "…" } }
+}
+```
+
+参数由核心造（`trusted_signer::owner_proof::params`，多签机器的 `PasskeyPurpose::Record.params`），各端原样转交；请求照常由
+`trusted_signer::request` 造。**没有挑战码**：请求方塞进来的任何挑战码都拒（`refuse.suppliedChallenge`）。
+
+### 14.2 本页做什么（`lib/multisig.js` `ownerProof`，照 vela-core `owner_proof::read` 逐条）
+
+1. 形状：一个参数；`multisig`、`member` 是地址；`chainIds` 1–32 个不重复的整数；genesis 的四个字段读得准（salt 不带空格，
+   initializer 是 `0x` 整字节、≤ 2048 字节），名字缺省或是字符串 → 否则 `refuse.msOwnerShape`。
+2. **正好是 Vela 建的多签**：Safe v1.4.1 工厂、L2 单例，setup 由读出的成员与门槛重新编码后逐字节相同（CompatibilityFallbackHandler、
+   没有 setup 钩子、没有模块、没有付款、成员 1–20 个且不重复、不是零地址或哨兵、门槛在 1 到人数之间）→ 否则 `refuse.msOwnerGenesis`。
+3. CREATE2 推出的地址就是 App 说的那个 → 否则最响地拒（`refuse.msOwnerAddress`，hard-danger）。
+4. `member` 是成员之一 → 否则 `refuse.msOwnerNotMember`；`context.account` 就是 `member` → 否则 `refuse.msMemberMismatch`。
+
+卡上：标题「证明多签成员身份」、一句话（你是 N 位成员中的第 K 位；不动钱、不批准交易）、多签（推出的地址 6+6、identicon，名字标
+「App 提供」）、网络（本页的链名，整行标「App 的说法」）、每位成员（地址 + identicon，本人标「本账户」）、「需 3 位中的 2 位」、
+签名账户；技术细节里有 salt、initializer、工厂与单例、挑战码。按钮「证明成员身份」。被签的字节：
+`keccak256("safe-genesis-registry/sponsor/v1" ‖ 推出的地址)`（`lib/digest.js`）。
+
+### 14.3 通道与答复
+
+postMessage 答复规则（R7）照旧：只答网页钱包、已发布的 Chrome 扩展、在本页窗口里证明过的 Safari 扩展；URL 通道只答
+`velawallet://sign-result`。钱包按 `trusted_signer::accept_signature` 接受：核心从**它自己造的请求**按同一条规则读出地址、
+算出挑战码，这串字节必须就是钱包要交给 genesis 服务的那串（机器的 `challenge`），再要求成员钥匙的 user-verified 签名。
+
+### 14.4 测试
+
+`node samples/multisig-test.mjs` 第 3 段：`tests/vectors/multisig/owner-proof.json` 的 66 个案例与发布的 wasm（`multisigCall
+ownerProofRead`）逐个对拍（含 r4-e 的六个敌意 genesis）；管线（卡上每一行、6+6 地址、本人的位置、「需 3 位中的 2 位」、
+中文、被签字节 = 核心的 `sponsorChallenge`）；敌意（地址不符、换账户、不是成员、带钩子的 setup、自带挑战码、看不见字符的名字）；
+答复规则（网站拒、证明过的 Safari 扩展答、没证明的拒、Chrome 扩展答、App 的 URL 通道答）。核心：`owner_proof.rs` 的测试
+（向量、`accept_signature` 对挑战码的要求）、`tests/app_multisig_accounts.rs`（创建与再次共享的 passkey 带着本页读得出的参数）。

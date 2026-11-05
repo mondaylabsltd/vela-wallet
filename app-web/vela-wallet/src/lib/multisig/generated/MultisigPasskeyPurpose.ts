@@ -19,4 +19,13 @@ anyway: boolean,
  * "before" as the app's word; it cannot read the chain itself.
  * Empty / 0 from a shell that says nothing.
  */
-owners: Array<string>, threshold: number, } | { "kind": "record", multisig: string, };
+owners: Array<string>, threshold: number, } | { "kind": "record", multisig: string, 
+/**
+ * §16: the request's params for a trusted page
+ * (`trusted_signer::owner_proof::params`, method
+ * `vela_multisigCreate`) — the multisig, the member, its genesis and
+ * networks — which the page reads itself: it derives the address,
+ * the members, the rule and the challenge from the genesis. A shell
+ * hands it over verbatim; `null` from an older machine.
+ */
+params: unknown, };

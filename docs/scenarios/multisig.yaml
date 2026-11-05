@@ -49,10 +49,12 @@ scenarios:
       core:
         - { file: rust/crates/vela-core/tests/app_multisig_accounts.rs, test: created_and_recorded_on_the_index_chain, ci: required }
         - { file: rust/crates/vela-core/tests/app_multisig_accounts.rs, test: a_one_of_one_draft_has_an_address, ci: required }
+        - { file: rust/crates/vela-core/src/trusted_signer/owner_proof.rs, test: an_answer_is_held_to_the_challenge_the_genesis_makes, ci: required, note: '§16: a page''s owner proof accepted only over the challenge the genesis makes' }
         - { file: rust/crates/vela-core/tests/multisig_fork.rs, test: create_two_of_three_propose_approve_twice_execute, ci: nightly, note: 'against the fork harness; #[ignore] without VELA_MULTISIG_FORK' }
       web-unit:
         - { file: app-web/vela-wallet/src/lib/multisig/ui/CreateMultisigSheet.svelte.test.ts, test: 'one member is a 1 of 1 multisig, said what it means', ci: required }
         - { file: app-web/vela-wallet/src/lib/multisig/ui/CreateMultisigSheet.svelte.test.ts, test: 'hands every change to the machine to keep', ci: required }
+        - { file: app-web/vela-wallet/src/lib/signing/sign-challenge.test.ts, test: 'a multisig member’s owner proof (§16): the genesis goes to the page, and only the sponsor challenge for the address it makes comes back', ci: required, note: 'the web, the Chrome extension and the Safari package hand the proof to the page' }
       web-e2e:
         - { file: app-web/vela-wallet/e2e/onchain/multisig.onchain.ts, test: 'a 2-of-3 multisig on one device: create, fund, propose, approve and execute', ci: nightly }
       android-jvm:
@@ -68,7 +70,10 @@ scenarios:
       desktop:
         - { file: app-desktop/vela-wallet/src/multisig/scenarios.rs, test: a_created_multisig_is_shown_and_followed, ci: required }
         - { file: app-desktop/vela-wallet/src/wallet/page/multisig_create.rs, test: the_threshold_starts_sensible_and_steps_within_the_members, ci: required }
-      trusted-signer: { gap: 'creation is not a signing-page ceremony' }
+      trusted-signer:
+        - { file: app-web/trusted-signer/samples/multisig-test.mjs, test: 'the page reads it as vela-core (vector and wasm)', ci: nightly, note: '§16 owner proof: the 66 shared vectors against the page and the published wasm' }
+        - { file: app-web/trusted-signer/samples/multisig-test.mjs, test: 'sponsor challenge for the DERIVED address', ci: nightly }
+        - { file: app-web/trusted-signer/samples/answer-test.mjs, test: 'owner proof over the Safari relay', ci: nightly, note: 'the published bytes: how the Safari wallet creates a multisig' }
 
   - id: invite
     title: Invite a member; the invite link/code opens the add sheet

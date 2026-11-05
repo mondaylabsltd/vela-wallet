@@ -57,6 +57,9 @@ pub mod integrity;
 /// Spec 102 R6: the one rule for which page is opened and checked, and the
 /// only way to build a launch URL.
 pub mod launch;
+/// A multisig member's owner proof on the page (§16): the genesis handed
+/// over, the members, rule and address read from it, the challenge derived.
+pub mod owner_proof;
 pub mod ws;
 
 /// The official signing page (spec 071 [D]) — the host PROTOCOL.md names. It
@@ -736,7 +739,11 @@ pub fn verify(
 /// - `personal_sign` and typed data: the request's own hash (EIP-191 /
 ///   EIP-712, [`crate::sign_message::original_hash`]) wrapped in the account's
 ///   `SafeMessage` under its own domain
-///   ([`crate::user_op::compute_safe_message_hash`]) — what EIP-1271 verifies.
+///   ([`crate::user_op::compute_safe_message_hash`]) — what EIP-1271 verifies;
+/// - a multisig member's owner proof (`vela_multisigCreate`, §16): the sponsor
+///   challenge for the address the request's genesis makes
+///   ([`owner_proof::read`]), by the member the request names, who must be
+///   `context.account`.
 ///
 /// # Errors
 ///
@@ -779,6 +786,23 @@ pub fn digest_of(request: &Value) -> Result<Vec<u8>, TrustedSignerError> {
             let original = crate::sign_message::original_hash(method, &params.to_string())
                 .ok_or_else(|| malformed("nothing to sign"))?;
             crate::user_op::compute_safe_message_hash(&original, chain_id, account)
+                .map_err(|error| TrustedSignerError::Malformed(error.to_string()))
+        }
+        // §16: a member's owner proof — the sponsor challenge for the address
+        // the GENESIS makes, read by the page's own rule; and the member who
+        // proves is the account whose keys answer.
+        Some(SignatureKind::KeyCeremony) if method == owner_proof::METHOD => {
+            let params = intent.get("params").cloned().unwrap_or(Value::Null);
+            let reading = owner_proof::read(&params)
+                .map_err(|refusal| TrustedSignerError::Malformed(refusal.key().to_owned()))?;
+            let account = context
+                .get("account")
+                .and_then(Value::as_str)
+                .ok_or_else(|| malformed("no account"))?;
+            if !account.eq_ignore_ascii_case(&reading.member) {
+                return Err(malformed("the account is not the member who proves"));
+            }
+            crate::primitives::from_hex(&reading.challenge)
                 .map_err(|error| TrustedSignerError::Malformed(error.to_string()))
         }
         _ => Err(TrustedSignerError::Refused(format!("method {method}"))),

@@ -398,5 +398,16 @@ window.VelaCS.i18n.register('ko', {
   'field.msMembers': "멤버",
   'value.msCountChange': "{before} → {after}",
   'value.msApprovalsChange': "{beforeOf}개 중 {before}개 → {afterOf}개 중 {after}개",
+  // §16: a member’s owner proof (vela_multisigCreate).
+  'intent.msOwnerProof': "멀티시그 멤버 증명",
+  'sentence.msOwnerProof': "이 멀티시그의 멤버 {count}명 중 {place}번째 멤버임을 증명하여, Vela 서비스가 멤버들이 찾을 수 있는 곳에 이 멀티시그를 기록할 수 있게 합니다. 아무것도 보내지 않으며 어떤 거래도 승인하지 않습니다.",
+  'field.msNetworks': "네트워크",
+  'field.msMemberAt': "멤버 {n}",
+  'value.msNeeds': "{n}명 중 {m}명 필요",
+  'button.msOwnerProof': "멤버임을 증명",
+  'refuse.msOwnerShape': "이 멤버 증명은 이 페이지가 정확히 읽을 수 있는 형태가 아니어서, 보이는 내용과 서명될 내용이 다를 수 있습니다. 서명하지 않습니다.",
+  'refuse.msOwnerGenesis': "이 멀티시그는 Vela가 만드는 방식으로 설정되지 않았습니다(컨트랙트나 초기 설정이 다름). 이 페이지는 멤버와 규칙을 보증할 수 없습니다. 서명하지 않습니다.",
+  'refuse.msOwnerAddress': "앱은 한 멀티시그 주소를 말하지만, 건넨 멤버와 설정으로는 다른 주소가 나옵니다. 증명하려는 것이 앱의 설명과 다릅니다. 서명하지 않습니다.",
+  'refuse.msOwnerNotMember': "서명하는 계정은 이 멀티시그의 멤버가 아닙니다. 서명하지 않습니다.",
   'warn.msMembersClaimOff': "이 변경은 앱이 말하는 멀티시그의 현재 멤버와 맞지 않습니다 — 실행될 때 실패할 수 있습니다. 승인하기 전에 다른 멤버와 멤버 구성을 확인하세요.",
 });

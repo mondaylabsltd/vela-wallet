@@ -857,8 +857,123 @@ window.VelaCS = window.VelaCS || {};
     return out;
   }
 
+  // --- a member's owner proof (vela_multisigCreate, §16) -------------------
+  //
+  // When a multisig is created — or its record shared again — one member's
+  // passkey signs the genesis service's sponsor challenge for the multisig's
+  // address: the proof the service asks before it records the multisig, its
+  // members and its rule, where every member finds it. Nothing moves and
+  // nothing is approved, but it is a signature, so it is read here like one.
+  //
+  // The app hands over the multisig's GENESIS, never a challenge. Everything
+  // the card shows is read from it: the address DERIVED (CREATE2 on Safe's
+  // factory, `proxyAddress`), the members and the rule read from a setup that
+  // must be exactly a multisig as Vela creates one (`readMultisigDeploy`,
+  // byte for byte), the member's place among them, and the challenge derived
+  // from the address. The address the app names is only compared. The
+  // networks and the name are the app's word: the challenge covers the
+  // address alone.
+  //
+  // Transcribed from vela-core `trusted_signer::owner_proof::read`, in its
+  // order, and cross-checked against the wasm and the shared vectors
+  // (`tests/vectors/multisig/owner-proof.json`) in samples/multisig-test.mjs.
+
+  var OWNER_PROOF = 'vela_multisigCreate';
+  /** vela-core `owner_proof::MAX_CHAINS`. */
+  var MAX_CHAINS = 32;
+  /** vela-core `owner_proof::MAX_INITIALIZER_BYTES`. */
+  var MAX_INITIALIZER_BYTES = 2048;
+  /** vela-core `multisig::sponsor_challenge`'s prefix. */
+  var SPONSOR = 'safe-genesis-registry/sponsor/v1';
+  var SALT = /^(?:0x[0-9a-fA-F]*|[0-9]+)$/;
+
+  function plainObject(value) {
+    return !!value && typeof value === 'object' && !Array.isArray(value);
+  }
+
+  /** `keccak256("safe-genesis-registry/sponsor/v1" ‖ multisig)` — what the member's passkey signs. */
+  function sponsorChallenge(multisig) {
+    return keccak.hash(concat([utf8(SPONSOR), fromHex(multisig)]));
+  }
+
+  /** The networks: one to MAX_CHAINS whole chain ids, distinct, in order; or null. */
+  function chainIdsOf(list) {
+    if (!Array.isArray(list) || !list.length || list.length > MAX_CHAINS) return null;
+    for (var i = 0; i < list.length; i++) {
+      var id = list[i];
+      if (typeof id !== 'number' || !Number.isSafeInteger(id) || id < 1) return null;
+      if (list.indexOf(id) !== i) return null;
+    }
+    return list.slice();
+  }
+
+  /** The genesis, every field one this page reads exactly; or null. */
+  function genesisOf(g) {
+    if (!plainObject(g)) return null;
+    if (!ADDRESS.test(g.factory) || !ADDRESS.test(g.singleton)) return null;
+    if (typeof g.saltNonce !== 'string' || !SALT.test(g.saltNonce)) return null;
+    var salt = g.saltNonce.length === 2 && g.saltNonce === '0x' ? 0n : BigInt(g.saltNonce);
+    if (salt > MAX_UINT256) return null;
+    if (typeof g.initializer !== 'string' || !HEX_BYTES.test(g.initializer) ||
+      (g.initializer.length - 2) / 2 > MAX_INITIALIZER_BYTES) return null;
+    if (g.name !== undefined && g.name !== null && typeof g.name !== 'string') return null;
+    return {
+      factory: g.factory,
+      singleton: g.singleton,
+      saltNonce: salt,
+      initializer: fromHex(g.initializer),
+      name: typeof g.name === 'string' ? g.name : null,
+    };
+  }
+
+  /**
+   * An owner proof's params, read: `{reading}` — `{multisig, member, owners,
+   * threshold, place, name, chainIds, challenge}`, the core's `Reading` —
+   * or `{refusal}` (an i18n key). `challenge` is hex; `ownerProofChallenge`
+   * gives its bytes.
+   */
+  function ownerProof(params) {
+    var shape = { refusal: 'refuse.msOwnerShape' };
+    if (!Array.isArray(params) || params.length !== 1 || !plainObject(params[0])) return shape;
+    var p = params[0];
+    if (!ADDRESS.test(p.multisig) || !ADDRESS.test(p.member)) return shape;
+    var chainIds = chainIdsOf(p.chainIds);
+    if (!chainIds) return shape;
+    var g = genesisOf(p.genesis);
+    if (!g) return shape;
+    var made = same(g.factory, SAFE_PROXY_FACTORY)
+      ? readMultisigDeploy({ singleton: g.singleton, initializer: g.initializer, saltNonce: g.saltNonce })
+      : null;
+    if (!made) return { refusal: 'refuse.msOwnerGenesis' };
+    if (!same(made.address, p.multisig)) return { refusal: 'refuse.msOwnerAddress' };
+    var place = -1;
+    for (var i = 0; i < made.owners.length; i++) if (same(made.owners[i], p.member)) place = i;
+    if (place < 0) return { refusal: 'refuse.msOwnerNotMember' };
+    return {
+      reading: {
+        multisig: made.address,
+        member: made.owners[place],
+        owners: made.owners.slice(),
+        threshold: Number(made.threshold),
+        place: place + 1,
+        name: g.name !== null && validName(g.name) ? g.name : null,
+        chainIds: chainIds,
+        challenge: toHex(sponsorChallenge(made.address)),
+      },
+    };
+  }
+
+  /** The bytes an owner proof's passkey signs, for a reading `ownerProof` made. */
+  function ownerProofChallenge(reading) {
+    return sponsorChallenge(reading.multisig);
+  }
+
   ns.multisig = {
     METHOD: 'vela_multisigApprove',
+    OWNER_PROOF: OWNER_PROOF,
+    ownerProof: ownerProof,
+    ownerProofChallenge: ownerProofChallenge,
+    sponsorChallenge: sponsorChallenge,
     MULTI_SEND_CALL_ONLY: MULTI_SEND_CALL_ONLY,
     GENESIS_REGISTRY: GENESIS_REGISTRY,
     MAX_DATA_BYTES: MAX_DATA_BYTES,

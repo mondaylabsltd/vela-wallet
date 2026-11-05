@@ -48,11 +48,13 @@ import { spawn } from 'node:child_process';
 import { createServer as createHttpServer } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
 import { createHash, generateKeyPairSync, webcrypto } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { extname, join, normalize } from 'node:path';
 import { Page, b64url, loadPageLibs, makeChecks, root, sleep } from './test-kit.mjs';
 import { build } from './build-single.mjs';
+// vela-core, as compiled for the web: §16's owner proof is built by it.
+import * as coreModule from '../../../rust/pkg-web/vela_core.js';
 
 // Overridable, so two runs on one machine (two agents, two worktrees) do not
 // fight over a port: ANSWER_PORT_BASE=9900 → CDP 9900, TLS 9901, loopback 9902.
@@ -112,6 +114,31 @@ const context = { chainId: 1, account: SAFE, allowCredentials: [credentialId], o
 const spoof = { channel: 'url', callback: WALLET_CALLBACK, originVerified: true, requester: 'https://getvela.app' };
 const fragment = (request, callback, token) =>
   `#i=${b64url(JSON.stringify(request))}` + (callback ? `&cb=${b64url(callback)}` : '') + `&t=${token}`;
+
+/**
+ * §16: a member's owner proof, as vela-core builds it (the shipped wasm's
+ * `genesis` and `ownerProofParams`): the test account is the second of two
+ * members, one approval needed. `challenge` is base64url of the core's
+ * sponsor challenge for the derived address; `lying` names another address.
+ */
+function ownerProofRequest() {
+  const repo = join(root, '..', '..');
+  const wasmDir = join(repo, 'assets/wasm');
+  const wasmFile = readdirSync(wasmDir).find((name) => /^vela_core_bg\..*\.wasm$/.test(name));
+  ownerProofRequest.core ??= (() => { const c = coreModule; c.initSync({ module: readFileSync(join(wasmDir, wasmFile)) }); return c; })();
+  const ms = (method, args) => JSON.parse(ownerProofRequest.core.multisigCall(method, JSON.stringify(args)));
+  const made = ms('genesis', { owners: [ATTACKER, SAFE], threshold: 1, name: 'Team fund', saltNonce: '0x9' });
+  const params = ms('ownerProofParams', { multisig: made.address, member: SAFE, genesis: made.genesis, chainIds: [8453] });
+  const context = { chainId: 8453, account: SAFE, allowCredentials: [credentialId] };
+  const lyingParams = JSON.parse(JSON.stringify(params));
+  lyingParams[0].multisig = ATTACKER;
+  return {
+    request: { intent: { method: 'vela_multisigCreate', params, origin: '' }, context },
+    lying: { intent: { method: 'vela_multisigCreate', params: lyingParams, origin: '' }, context },
+    challenge: Buffer.from(ms('sponsorChallenge', { multisig: made.address }).slice(2), 'hex').toString('base64url'),
+    short: lib.format.short(made.address),
+  };
+}
 
 /** Does this callback's `result=` carry a valid signature by the account's key? */
 async function usable(resultParam) {
@@ -721,6 +748,21 @@ try {
       !sub.slid && sub.used === 0 && sub.answers.length === 1 && sub.answers[0].code === 'refused',
       JSON.stringify(sub.answers).slice(0, 160));
 
+    // §16: a member's owner proof (creating a multisig), asked by the web
+    // wallet — and by evil.example, which is refused before any passkey.
+    const proof = ownerProofRequest();
+    const proved = await askOver('wallet.getvela.app', proof.request);
+    const proofAnswer = proved.answers.find((a) => a.vela === 'result');
+    const proofSig = proofAnswer ? await usable(Buffer.from(JSON.stringify(proofAnswer.result)).toString('base64url')) : { valid: false };
+    check('G. §16 owner proof asked by the web wallet: the card, then the member\'s signature over the core\'s sponsor challenge',
+      proved.slid && proved.used === 1 && proofSig.valid && proofSig.challenge === proof.challenge &&
+        proved.text.includes('Needs 1 of 2') && proved.text.includes(proof.short),
+      `${JSON.stringify(proved.answers).slice(0, 120)} ${proved.text.slice(0, 160)}`);
+    const proofStranger = await askOver('evil.example', proof.request);
+    check('G. §16 the same asked by evil.example: no button, no passkey, "refused"',
+      !proofStranger.slid && proofStranger.used === 0 && proofStranger.answers.length === 1 &&
+        proofStranger.answers[0].code === 'refused', JSON.stringify(proofStranger.answers).slice(0, 160));
+
     // Round 7 (r7-5): the wallet gives up on the request while the page shows
     // it — the page stops offering to sign, and says why.
     {
@@ -927,6 +969,28 @@ try {
       !ethSignRelay.slid && ethSignRelay.used === 0 &&
         ethSignRelay.relayed.some((m) => m.vela === 'error' && m.code === 'refused'),
       JSON.stringify(ethSignRelay.relayed).slice(0, 160));
+
+    // §16: a member's owner proof — how the Safari wallet creates a multisig
+    // (its pages have no passkey). The request is vela-core's own
+    // (`ownerProofParams`); the page reads the genesis, and the answer is
+    // the member's signature over the sponsor challenge for the address the
+    // genesis makes.
+    const proof = ownerProofRequest();
+    const created = await viaSafariRelay({ attest: SAFARI, from: SAFARI, request: proof.request });
+    check('S. §16 owner proof over the Safari relay: the card says the multisig, the networks, the members, the rule',
+      ['Prove multisig membership', 'Networks', 'Base', 'Member 1', 'Member 2', 'this account', 'Needs 1 of 2',
+        'Prove membership', proof.short].every((s) => created.text.includes(s)), created.text.slice(0, 300));
+    check('S. §16 owner proof: answered to the attested extension, by the member\'s key, over the core\'s sponsor challenge',
+      created.slid && created.used === 1 && created.sig.valid && created.sig.challenge === proof.challenge,
+      `${created.phase} ${created.sig.challenge} vs ${proof.challenge}`);
+    const forgedProof = await viaSafariRelay({ attest: SAFARI, from: SAFARI, request: proof.lying });
+    check('S. §16 owner proof naming an address its genesis does not make: refused, no passkey',
+      !forgedProof.slid && forgedProof.used === 0 && forgedProof.relayed.some((m) => m.vela === 'error' && m.code === 'refused') &&
+        forgedProof.text.includes('make another'), forgedProof.text.slice(0, 200));
+    const strangerProof = await viaSafariRelay({ attest: SAFARI, from: OTHER_SAFARI, request: proof.request });
+    check('S. §16 owner proof from an extension that did not attest: not heard, nothing signed',
+      !strangerProof.slid && strangerProof.used === 0 && !strangerProof.relayed.some((m) => m.vela === 'result'),
+      `${strangerProof.phase}`);
   }
 } catch (error) {
   console.log('FAILED: ' + (error.stack || error.message));

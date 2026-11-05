@@ -400,5 +400,16 @@ window.VelaCS.i18n.register('zh-TW', {
   'field.msMembers': "成員",
   'value.msCountChange': "{before} → {after}",
   'value.msApprovalsChange': "{before} / {beforeOf} → {after} / {afterOf}",
+  // §16: a member’s owner proof (vela_multisigCreate).
+  'intent.msOwnerProof': "證明多簽成員身分",
+  'sentence.msOwnerProof': "你證明自己是這個多簽 {count} 位成員中的第 {place} 位，讓 Vela 的服務把它記錄在成員們都找得到的地方。不轉出任何資產，也不核准任何交易。",
+  'field.msNetworks': "網路",
+  'field.msMemberAt': "成員 {n}",
+  'value.msNeeds': "需 {n} 位中的 {m} 位",
+  'button.msOwnerProof': "證明成員身分",
+  'refuse.msOwnerShape': "這份成員證明的格式本頁無法精確讀取，顯示的內容可能與將要簽署的不同。不簽。",
+  'refuse.msOwnerGenesis': "這個多簽不是依 Vela 建立多簽的方式設定的（合約或初始設定不同），本頁無法為它的成員與規則擔保。不簽。",
+  'refuse.msOwnerAddress': "App 說的是一個多簽地址，但它交來的成員與設定算出的是另一個。你要證明的不是 App 所描述的。不簽。",
+  'refuse.msOwnerNotMember': "簽署的帳戶不是這個多簽的成員。不簽。",
   'warn.msMembersClaimOff': "這項變更與 App 所說的多簽現有成員對不上——執行時可能會失敗。核准前，和其他成員核對成員名單。",
 });

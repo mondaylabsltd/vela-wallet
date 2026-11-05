@@ -956,6 +956,120 @@ const aliceSigned = [passkeyApproval(ALICE.address, ALICE.genesis)];
     JSON.stringify(agree));
 }
 
+// --- 3. a member's owner proof (vela_multisigCreate, §16) ----------------------
+//
+// Creating a multisig asks one member's passkey for the genesis service's
+// sponsor challenge. The app hands this page the GENESIS: the address, the
+// members, the rule and the challenge are read from it (lib/multisig.js
+// `ownerProof`, transcribed from vela-core `trusted_signer::owner_proof`).
+// Checked against the shared vectors AND the shipped wasm, case by case, then
+// through the page's pipeline (resolve → digest → render) on the hostile cases.
+
+{
+  const vectors = JSON.parse(readFileSync(join(repo, 'rust/crates/vela-core/tests/vectors/multisig/owner-proof.json'), 'utf8'));
+  check(`owner proof: the shared vectors are there (${vectors.cases.length})`, vectors.cases.length >= 30);
+  for (const c of vectors.cases) {
+    const ours = ns.multisig.ownerProof(c.params);
+    const core = ms('ownerProofRead', { params: c.params });
+    check(`owner proof — ${c.name}: the page reads it as vela-core (vector and wasm)`,
+      canonical(ours) === canonical(c.expect) && canonical(core) === canonical(c.expect),
+      `page ${JSON.stringify(ours)} · vector ${JSON.stringify(c.expect)} · wasm ${JSON.stringify(core)}`);
+  }
+
+  const BASE = 8453;
+  const made = ms('genesis', { owners: [OTHER, THIRD, MEMBER], threshold: 2, name: 'Team fund', saltNonce: '0x75bcd15' });
+  const me = ms('genesisMembers', { genesis: made.genesis }).owners[2];
+  const proofParams = (extra = {}) => ms('ownerProofParams', {
+    multisig: made.address, member: me, genesis: made.genesis, chainIds: [CHAIN, BASE], ...extra,
+  });
+  const proofIntent = (params = proofParams()) => ({ method: 'vela_multisigCreate', origin: '', params });
+  const proofView = (intent = proofIntent(), ctx = {}) => ns.resolve(intent, {
+    chainId: CHAIN, account: me, ...WALLET_CTX, method: intent.method, ...ctx,
+  });
+
+  const v = proofView();
+  check('owner proof: read, not refused, its own title and button', !v.refuse && v.intentKey === 'intent.msOwnerProof' &&
+    v.confirmKey === 'button.msOwnerProof' && v.badge === 'tag.multisig', JSON.stringify([v.refuse, v.warnings]));
+  const row = v.fields.find((f) => f.label === 'field.multisig');
+  check('owner proof: …the multisig derived from the genesis, its name the app\'s', row &&
+    row.identity.address === made.address && row.identity.short === ns.format.short(made.address) &&
+    row.identity.contractName === 'Team fund' && row.identity.tag === 'tag.nameByApp');
+  check('owner proof: …6+6 EIP-55, as vela-core names::short_address writes it',
+    /^0x[0-9a-fA-F]{6}…[0-9a-fA-F]{6}$/.test(row.identity.short) && row.identity.short.slice(2, 8) === made.address.slice(2, 8));
+  const networks = v.fields.find((f) => f.label === 'field.msNetworks');
+  check('owner proof: …its networks, by this page\'s names, as the app\'s word', networks &&
+    networks.value === 'Arc Testnet, Base' && networks.tagKey === 'tag.byApp', JSON.stringify(networks));
+  check('owner proof: …no single network row (the networks row says them all)', v.chain === null && v.chainId === null);
+  const memberRows = v.fields.filter((f) => f.label === 'field.msMemberAt');
+  check('owner proof: …every member, in the setup\'s order, numbered', memberRows.length === 3 &&
+    memberRows.map((f) => f.labelParams.n).join(',') === '1,2,3' &&
+    memberRows.map((f) => f.identity.address.toLowerCase()).join() === [OTHER, THIRD, MEMBER].map((a) => a.toLowerCase()).join());
+  check('owner proof: …this signer\'s place marked "this account", and only its', memberRows[2].identity.tag === 'tag.self' &&
+    !memberRows[0].identity.tag && !memberRows[1].identity.tag);
+  const rule = v.fields.find((f) => f.label === 'field.threshold');
+  check('owner proof: …the rule, "Needs 2 of 3"', rule && rule.value.key === 'value.msNeeds' &&
+    rule.value.params.m === 2 && rule.value.params.n === 3 && ns.i18n.t(rule.value) === 'Needs 2 of 3');
+  check('owner proof: …the sentence names its place', v.sentence.key === 'sentence.msOwnerProof' &&
+    v.sentence.params.place === 3 && v.sentence.params.count === 3);
+  check('owner proof: …the account signing is the member', v.account === me);
+  check('owner proof: …read by this page from what is signed', v.provenance && v.provenance.kind === 'readMessage');
+
+  const digest = ns.digest.of(proofIntent(), { account: me, chainId: CHAIN });
+  check('owner proof: the passkey signs exactly vela-core\'s sponsor challenge for the DERIVED address',
+    digest.hash && hex(digest.hash) === ms('sponsorChallenge', { multisig: made.address }));
+
+  // What the person reads, drawn.
+  const sheet = ns.render(v, {});
+  const text = sheet.textContent;
+  check('owner proof: the card says the multisig, the networks, the members, the rule, the button',
+    ['Prove multisig membership', 'Arc Testnet, Base', 'Member 1', 'Member 3', 'Needs 2 of 3', 'Prove membership',
+      row.identity.short].every((s) => text.includes(s)), text.slice(0, 600));
+  ns.i18n.setLocale('zh');
+  const zh = ns.render(proofView(), {}).textContent;
+  check('owner proof: …in Chinese, from the page\'s own catalogue', ['证明多签成员身份', '需 3 位中的 2 位', '成员 1', '网络'].every((s) => zh.includes(s)),
+    zh.slice(0, 400));
+  ns.i18n.setLocale('en');
+
+  // The hostile cases.
+  const lying = proofView(proofIntent(proofParams({ multisig: OTHER })));
+  check('owner proof: an address the genesis does not make — refused, loudly', lying.refuse && lying.risk === 'hard-danger' &&
+    warned(lying, 'refuse.msOwnerAddress'));
+  check('owner proof: …and nothing to sign', ns.digest.of(proofIntent(proofParams({ multisig: OTHER })), { account: me }).refuse === 'refuse.msOwnerAddress');
+  const stranger = proofView(proofIntent(), { account: OTHER });
+  check('owner proof: another account to sign with than the member — refused', stranger.refuse &&
+    warned(stranger, 'refuse.msMemberMismatch'));
+  check('owner proof: …and the digest refuses too', ns.digest.of(proofIntent(), { account: OTHER }).refuse === 'refuse.msMemberMismatch');
+  const notMember = proofView(proofIntent(proofParams({ member: SAFE })), { account: SAFE });
+  check('owner proof: a member the multisig does not have — refused', notMember.refuse && warned(notMember, 'refuse.msOwnerNotMember'));
+  const hostile = JSON.parse(readFileSync(join(repo, 'rust/crates/vela-core/tests/vectors/multisig/hostile-geneses.json'), 'utf8'));
+  const hooked = hostile.geneses.find((g) => g.name === 'HOOK_MODULE');
+  const hookedGenesis = { factory: hostile.factory, singleton: hostile.singleton, saltNonce: hooked.saltNonce, initializer: hooked.initializer };
+  const hookedOwner = ms('genesisMembers', { genesis: hookedGenesis }).owners[0];
+  const hook = proofView(proofIntent([{ multisig: ms('genesisAddress', { genesis: hookedGenesis }), member: hookedOwner,
+    genesis: hookedGenesis, chainIds: [CHAIN] }]), { account: hookedOwner });
+  check('owner proof: a setup with a hook that enables an attacker\'s module — refused', hook.refuse &&
+    warned(hook, 'refuse.msOwnerGenesis'));
+  const supplied = proofView(proofIntent(), { challenge: '0x' + '11'.repeat(32) });
+  check('owner proof: a requester that supplies a challenge — refused', supplied.refuse && warned(supplied, 'refuse.suppliedChallenge'));
+  const named = proofView(proofIntent(proofParams({ genesis: { ...made.genesis, name: 'Team‮dnuf' } })));
+  check('owner proof: a name a multisig cannot have is not drawn', !named.refuse &&
+    named.fields.find((f) => f.label === 'field.multisig').identity.contractName === null);
+
+  // The answer rule (102 R7): only a Vela wallet hears it.
+  const site = proofView(proofIntent(), { requester: 'https://evil.example' });
+  check('owner proof: opened by a site, over postMessage — refused, where the answer would go said', site.refuse &&
+    site.warnings.some((w) => w.key === 'refuse.answerElsewhere'));
+  const safari = 'safari-web-extension://0A1B2C3D-4E5F-4A6B-8C7D-9E0F1A2B3C4D';
+  const fromSafari = proofView(proofIntent(), { requester: safari, attestedExtensions: [safari] });
+  check('owner proof: the Safari extension, attested in this window — answered', !fromSafari.refuse, JSON.stringify(fromSafari.warnings));
+  const unattested = proofView(proofIntent(), { requester: safari, attestedExtensions: [] });
+  check('owner proof: …a Safari extension origin nobody attested — refused', unattested.refuse);
+  const chrome = proofView(proofIntent(), { requester: ns.resolve.EXTENSIONS[0] });
+  check('owner proof: the Chrome extension — answered', !chrome.refuse);
+  const app = proofView(proofIntent(), { channel: 'url', callback: 'velawallet://sign-result', originVerified: false, requester: null });
+  check('owner proof: an app, over the URL channel to velawallet:// — answered', !app.refuse, JSON.stringify(app.warnings));
+}
+
 function hasClass(node, name) {
   if (!node) return false;
   if (String(node.className || '').split(/\s+/).includes(name)) return true;
@@ -977,7 +1091,10 @@ const sample = ['intent.msApprove', 'refuse.msHashMismatch', 'refuse.msDelegateC
   'sentence.approveMs', 'sentence.approveUnlimitedMs', 'warn.unlimitedMs', 'warn.approveAllMs', 'warn.nativeValueMs',
   'field.msMembers', 'value.msApprovalsChange', 'warn.msMembersClaimOff',
   // D1: the executor's "… anyway"
-  'button.msExecuteAnyway', 'warn.msAppAnywayExec'];
+  'button.msExecuteAnyway', 'warn.msAppAnywayExec',
+  // §16: a member's owner proof
+  'intent.msOwnerProof', 'sentence.msOwnerProof', 'field.msNetworks', 'button.msOwnerProof',
+  'refuse.msOwnerShape', 'refuse.msOwnerGenesis', 'refuse.msOwnerAddress', 'refuse.msOwnerNotMember'];
 for (const key of sample) english[key] = ns.i18n.t(key, { claimed: 'A', computed: 'B', nonce: '7', fn: 'f' });
 for (const locale of LOCALES) {
   ns.i18n.setLocale(locale);

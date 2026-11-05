@@ -35,7 +35,9 @@
  * A multisig member's approval goes to its page through
  * `multisig/core/page-approval.svelte.ts` (the page needs the raw SafeTx, not
  * a digest); one that reaches here routed to a page is refused, never signed
- * in Vela behind the person's choice.
+ * in Vela behind the person's choice. A member's owner proof
+ * (`vela_multisigCreate`, §16) is a signature like the others here: the page
+ * is handed the multisig's genesis, never the challenge.
  */
 
 import {
@@ -245,11 +247,13 @@ async function signOnPage(
 	// An approval is the multisig's to hand over (it carries the SafeTx); an
 	// operation the page cannot see is not signed behind it.
 	if (method === 'vela_multisigApprove') throw new PageSignFailedError('unsupported', method);
-	// A multisig's owner proof is a key ceremony (R3) the page has no card
-	// for yet: on a surface that sends every ceremony to the page (the Safari
-	// package, R8) it is refused, said as that — never signed in Vela behind
-	// the rule, which is where WebKit would refuse it anyway.
-	if (method === 'vela_multisigCreate') throw new PageSignFailedError('unsupported', method);
+	// A multisig's owner proof (§16) goes like any signature: its params are
+	// the core's (`PasskeyPurpose::Record.params` — the genesis, the member,
+	// the networks), the page reads the address, the members and the rule
+	// from the genesis itself, and the core accepts only an answer over the
+	// sponsor challenge for the address that genesis makes — which must be
+	// `challenge`. The Safari package, which has no passkeys of its own (R8),
+	// creates a multisig this way.
 	if (OPERATION_METHODS.has(method) && operation === undefined) {
 		throw new PageSignFailedError('unsupported', 'no operation');
 	}

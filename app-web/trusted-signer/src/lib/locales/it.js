@@ -398,5 +398,16 @@ window.VelaCS.i18n.register('it', {
   'field.msMembers': "Membri",
   'value.msCountChange': "{before} → {after}",
   'value.msApprovalsChange': "{before} su {beforeOf} → {after} su {afterOf}",
+  // §16: a member’s owner proof (vela_multisigCreate).
+  'intent.msOwnerProof': "Dimostra di far parte del multisig",
+  'sentence.msOwnerProof': "Dimostri di essere il membro {place} di {count} di questo multisig, così il servizio di Vela lo registra dove i suoi membri lo trovano. Non viene inviato nulla e nessuna transazione viene approvata.",
+  'field.msNetworks': "Reti",
+  'field.msMemberAt': "Membro {n}",
+  'value.msNeeds': "Servono {m} su {n}",
+  'button.msOwnerProof': "Dimostra di farne parte",
+  'refuse.msOwnerShape': "Questa prova di appartenenza non ha una forma che questa pagina legge con esattezza, quindi ciò che vedi potrebbe differire da ciò che verrebbe firmato. Non firmo.",
+  'refuse.msOwnerGenesis': "Questo multisig non è configurato come Vela ne crea uno (i contratti o la configurazione differiscono), quindi questa pagina non può garantire i suoi membri né la sua regola. Non firmo.",
+  'refuse.msOwnerAddress': "L’app indica un indirizzo multisig, ma i membri e la configurazione che fornisce ne danno un altro. Ciò che dimostreresti non è ciò che l’app descrive. Non firmo.",
+  'refuse.msOwnerNotMember': "L’account che firma non è membro di questo multisig. Non firmo.",
   'warn.msMembersClaimOff': "Questa modifica non torna con i membri che, secondo l’app, il multisig ha ora — potrebbe fallire quando viene eseguita. Verifica i membri con gli altri prima di approvare.",
 });

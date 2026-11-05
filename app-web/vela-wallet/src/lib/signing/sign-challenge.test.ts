@@ -30,7 +30,7 @@ import { hashTypedData, keccak256 } from '$lib/core/kernels';
 import { computeSafeMessageHash } from '$lib/services/safe-transaction';
 import { AskerGoneError } from '$lib/signing/core/sign-types';
 import { CHECK_MS, pageHandoff, type PageHandoffDeps } from './page-handoff.svelte';
-import { safeTxHash } from '$lib/multisig/core/kernel';
+import { multisigGenesis, safeTxHash } from '$lib/multisig/core/kernel';
 import { bytesToHex } from '$lib/onboarding/core/passkey';
 import { saveAccount } from '$lib/onboarding/core/storage';
 import type { Account } from '$lib/onboarding/generated/Account';
@@ -401,8 +401,11 @@ const CHAIN = 5042002;
 const hexOf = (bytes: Uint8Array | ArrayBuffer) =>
 	Buffer.from(new Uint8Array(bytes)).toString('hex');
 
-/** An account with a real P-256 key whose venue is the official page. */
-async function pageAccount() {
+/**
+ * An account with a real P-256 key whose venue is the official page — or,
+ * given `own`, a custom-domain account whose venue is its own page.
+ */
+async function pageAccount(own?: { domain: string; url: string }) {
 	const pair = await webcrypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, [
 		'sign',
 		'verify'
@@ -424,8 +427,8 @@ async function pageAccount() {
 			}
 		],
 		sign_in_key: { credential_id: credentialId, method: 'platform', transports: 'internal' },
-		signing_domain: 'getvela.app',
-		signing_venue: { type: 'page', url: 'https://sign.getvela.app/' }
+		signing_domain: own?.domain ?? 'getvela.app',
+		signing_venue: { type: 'page', url: own?.url ?? 'https://sign.getvela.app/' }
 	} as unknown as Account);
 	const keys = [{ credentialId, publicKeyHex: hexOf(raw) }];
 	/** What the page would answer: a `webauthn.get` over `challenge`, by `key`. */
@@ -712,6 +715,87 @@ describe('the page, everywhere: the hand-off and the answer the core accepts', (
 		});
 		from({ vela: 'result', id: handed?.id, result: await answer(challenge) });
 		expect((await pending).credentialId).toBe(keys[0].credentialId);
+	});
+
+	it('a multisig member’s owner proof (§16): the genesis goes to the page, and only the sponsor challenge for the address it makes comes back', async () => {
+		// A key ceremony (R3): on this (standard) surface a getvela.app account
+		// proves in Vela; a custom-domain account proves on its own page — and the
+		// Safari package sends every one to a page (R8, `surface-route.test.ts`).
+		const OWN = { domain: 'sign.example.com', url: 'https://sign.example.com/' };
+		const { keys, answer } = await pageAccount(OWN);
+		const at = 'https://sign.example.com';
+		const made = multisigGenesis(
+			['0x6813Eb9362372EEF6200f3b1dbC3f819671cBA69', ADDRESS],
+			2,
+			'Team fund',
+			'0x75bcd15'
+		);
+		// The core's params (`owner_proof::params`), as the passkey purpose carries them.
+		const params = [
+			{ multisig: made.address, member: ADDRESS, genesis: made.genesis, chainIds: [CHAIN, 8453] }
+		];
+		const sponsor = (address: string) =>
+			keccak256(
+				new Uint8Array([
+					...new TextEncoder().encode('safe-genesis-registry/sponsor/v1'),
+					...Buffer.from(address.slice(2), 'hex')
+				])
+			);
+		const request = { method: 'vela_multisigCreate', params, origin: '', chainId: CHAIN };
+
+		// The page is handed the genesis — never a challenge — and signs.
+		{
+			const { deps, from, intent } = browser();
+			setPageHandoffDeps(deps);
+			const challenge = sponsor(made.address);
+			const pending = signChallenge(challenge, {
+				account: ADDRESS,
+				keys,
+				credentials: [],
+				request
+			});
+			await until(() => pageHandoff.current?.phase === 'ready');
+			pageHandoff.current?.open();
+			from({ vela: 'ready', v: 1 }, at);
+			const handed = intent();
+			expect(handed?.intent.method).toBe('vela_multisigCreate');
+			expect(handed?.intent.params).toEqual(params);
+			expect(handed?.context.account).toBe(ADDRESS);
+			expect(JSON.stringify(handed)).not.toContain(bytesToHex(challenge).replace(/^0x/, ''));
+			from({ vela: 'result', id: handed?.id, result: await answer(challenge) }, at);
+			expect((await pending).credentialId).toBe(keys[0].credentialId);
+		}
+		// An answer over another address's challenge: refused, nothing signed.
+		{
+			const { deps, from, intent } = browser();
+			setPageHandoffDeps(deps);
+			const challenge = sponsor(made.address);
+			const pending = signChallenge(challenge, {
+				account: ADDRESS,
+				keys,
+				credentials: [],
+				request
+			});
+			await until(() => pageHandoff.current?.phase === 'ready');
+			pageHandoff.current?.open();
+			from({ vela: 'ready', v: 1 }, at);
+			const other = sponsor('0x6813Eb9362372EEF6200f3b1dbC3f819671cBA69');
+			from({ vela: 'result', id: intent()?.id, result: await answer(other) }, at);
+			await expect(pending).rejects.toBeInstanceOf(PageSignFailedError);
+		}
+		// The shell about to hand the service another challenge than the
+		// genesis makes: refused before the answer is read.
+		{
+			const { deps, from, intent } = browser();
+			setPageHandoffDeps(deps);
+			const wrong = sponsor('0x6813Eb9362372EEF6200f3b1dbC3f819671cBA69');
+			const pending = signChallenge(wrong, { account: ADDRESS, keys, credentials: [], request });
+			await until(() => pageHandoff.current?.phase === 'ready');
+			pageHandoff.current?.open();
+			from({ vela: 'ready', v: 1 }, at);
+			from({ vela: 'result', id: intent()?.id, result: await answer(wrong) }, at);
+			await expect(pending).rejects.toBeInstanceOf(PageSignFailedError);
+		}
 	});
 
 	it('a page whose check never finishes is bounded: not answering, said so, nothing opened (r7-2)', async () => {

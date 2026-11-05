@@ -61,6 +61,14 @@
 /// Every entry is a page published at `sign.getvela.app/b/<hash>/sign.html`.
 /// An empty set would open nothing were it enforced — see [`ENFORCE`].
 pub const BUILD_ALLOWED: &[&str] = &[
+    // 954b9013's page, §16: a multisig member's owner proof
+    // (`vela_multisigCreate`) has its card — the genesis handed over, the
+    // address derived from it, its members (this signer's place marked), its
+    // rule ("Needs 2 of 3") and the sponsor challenge read here
+    // (`trusted_signer::owner_proof`, case for case); the networks and the
+    // name the app's word. The Safari extension can create a multisig on the
+    // page. Not LAUNCH.
+    "643639250cf4a69354f7e80fb81617103901c81cecf06338a6e95e52a9b09d85",
     // 987ccbcc's page, real-device pass 2 (D1): an executor's card says
     // "Execute anyway" in the danger fill, with why, exactly where the app's
     // one review asks for it (`context.multisig.anyway` — a danger, or

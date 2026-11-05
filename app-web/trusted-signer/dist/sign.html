@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-sF/jn/n5XCBY9srWSBEiPF+sIwY8hzTRtGxG3z1xMX0='; style-src 'sha256-IvjEd3Od02b8rk0e1KtXxPCSfUrwsnqsHIkMkYUW80A='; img-src data:; font-src data:; base-uri 'none'; form-action 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-9fPDY5DxFI2yjfxqrw/vWHpgNJwTLCoUohJu8CzCqmM='; style-src 'sha256-IvjEd3Od02b8rk0e1KtXxPCSfUrwsnqsHIkMkYUW80A='; img-src data:; font-src data:; base-uri 'none'; form-action 'none'" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Vela</title>
     <style>
@@ -1758,6 +1758,17 @@ window.VelaCS.i18n.register('en', {
   'field.msMembers': "Members",
   'value.msCountChange': "{before} → {after}",
   'value.msApprovalsChange': "{before} of {beforeOf} → {after} of {afterOf}",
+  // §16: a member’s owner proof (vela_multisigCreate).
+  'intent.msOwnerProof': "Prove multisig membership",
+  'sentence.msOwnerProof': "You prove you are member {place} of {count} of this multisig, so Vela’s service can record it where its members find it. Nothing is sent and no transaction is approved.",
+  'field.msNetworks': "Networks",
+  'field.msMemberAt': "Member {n}",
+  'value.msNeeds': "Needs {m} of {n}",
+  'button.msOwnerProof': "Prove membership",
+  'refuse.msOwnerShape': "This membership proof is not in a shape this page reads exactly, so what is shown could differ from what would be signed. Not signing.",
+  'refuse.msOwnerGenesis': "This multisig is not set up the way Vela creates one (its contracts or its setup differ), so this page cannot vouch for its members or its rule. Not signing.",
+  'refuse.msOwnerAddress': "The app names one multisig address, but the members and setup it hands over make another. What you would prove is not what the app describes. Not signing.",
+  'refuse.msOwnerNotMember': "The signing account is not one of this multisig’s members. Not signing.",
   'warn.msMembersClaimOff': "This change doesn’t fit the members the app says the multisig has now — it may fail when it runs. Check the members with the others before you approve.",
 });
 
@@ -2184,6 +2195,17 @@ window.VelaCS.i18n.register('zh', {
   'field.msMembers': "成员",
   'value.msCountChange': "{before} → {after}",
   'value.msApprovalsChange': "{before} / {beforeOf} → {after} / {afterOf}",
+  // §16: a member’s owner proof (vela_multisigCreate).
+  'intent.msOwnerProof': "证明多签成员身份",
+  'sentence.msOwnerProof': "你证明自己是这个多签 {count} 位成员中的第 {place} 位，以便 Vela 的服务把它记录在成员们都能找到的地方。不转出任何资产，也不批准任何交易。",
+  'field.msNetworks': "网络",
+  'field.msMemberAt': "成员 {n}",
+  'value.msNeeds': "需 {n} 位中的 {m} 位",
+  'button.msOwnerProof': "证明成员身份",
+  'refuse.msOwnerShape': "这份成员证明的格式本页无法准确读取，显示的内容可能与将要签名的不同。不签。",
+  'refuse.msOwnerGenesis': "这个多签不是按 Vela 创建多签的方式设置的（合约或初始设置不同），本页无法为它的成员和规则作保。不签。",
+  'refuse.msOwnerAddress': "App 说的是一个多签地址，但它交来的成员和设置算出的是另一个。你要证明的不是 App 所描述的。不签。",
+  'refuse.msOwnerNotMember': "签名的账户不是这个多签的成员。不签。",
   'warn.msMembersClaimOff': "这项变更与 App 所说的多签现有成员对不上 —— 执行时可能会失败。批准前，和其他成员核对成员名单。",
 });
 
@@ -2589,6 +2611,17 @@ window.VelaCS.i18n.register('zh-TW', {
   'field.msMembers': "成員",
   'value.msCountChange': "{before} → {after}",
   'value.msApprovalsChange': "{before} / {beforeOf} → {after} / {afterOf}",
+  // §16: a member’s owner proof (vela_multisigCreate).
+  'intent.msOwnerProof': "證明多簽成員身分",
+  'sentence.msOwnerProof': "你證明自己是這個多簽 {count} 位成員中的第 {place} 位，讓 Vela 的服務把它記錄在成員們都找得到的地方。不轉出任何資產，也不核准任何交易。",
+  'field.msNetworks': "網路",
+  'field.msMemberAt': "成員 {n}",
+  'value.msNeeds': "需 {n} 位中的 {m} 位",
+  'button.msOwnerProof': "證明成員身分",
+  'refuse.msOwnerShape': "這份成員證明的格式本頁無法精確讀取，顯示的內容可能與將要簽署的不同。不簽。",
+  'refuse.msOwnerGenesis': "這個多簽不是依 Vela 建立多簽的方式設定的（合約或初始設定不同），本頁無法為它的成員與規則擔保。不簽。",
+  'refuse.msOwnerAddress': "App 說的是一個多簽地址，但它交來的成員與設定算出的是另一個。你要證明的不是 App 所描述的。不簽。",
+  'refuse.msOwnerNotMember': "簽署的帳戶不是這個多簽的成員。不簽。",
   'warn.msMembersClaimOff': "這項變更與 App 所說的多簽現有成員對不上——執行時可能會失敗。核准前，和其他成員核對成員名單。",
 });
 
@@ -2994,6 +3027,17 @@ window.VelaCS.i18n.register('zh-HK', {
   'field.msMembers': "成員",
   'value.msCountChange': "{before} → {after}",
   'value.msApprovalsChange': "{before} / {beforeOf} → {after} / {afterOf}",
+  // §16: a member’s owner proof (vela_multisigCreate).
+  'intent.msOwnerProof': "證明多簽成員身分",
+  'sentence.msOwnerProof': "你證明自己係呢個多簽 {count} 位成員之中嘅第 {place} 位，等 Vela 嘅服務將佢記錄喺成員都搵得到嘅地方。唔會轉出任何資產，亦唔會批准任何交易。",
+  'field.msNetworks': "網絡",
+  'field.msMemberAt': "成員 {n}",
+  'value.msNeeds': "需 {n} 位中的 {m} 位",
+  'button.msOwnerProof': "證明成員身分",
+  'refuse.msOwnerShape': "呢份成員證明嘅格式本頁無法準確讀取，顯示嘅內容可能同將會簽署嘅唔同。唔簽。",
+  'refuse.msOwnerGenesis': "呢個多簽唔係按 Vela 建立多簽嘅方式設定（合約或初始設定唔同），本頁無法為佢嘅成員同規則作保。唔簽。",
+  'refuse.msOwnerAddress': "App 講嘅係一個多簽地址，但佢交嚟嘅成員同設定計出嚟嘅係另一個。你要證明嘅唔係 App 所講嘅。唔簽。",
+  'refuse.msOwnerNotMember': "簽署嘅帳戶唔係呢個多簽嘅成員。唔簽。",
   'warn.msMembersClaimOff': "呢項變更同 App 所講嘅多簽現有成員對唔上——執行時可能會失敗。批准之前，同其他成員核對成員名單。",
 });
 
@@ -3397,6 +3441,17 @@ window.VelaCS.i18n.register('ja', {
   'field.msMembers': "メンバー",
   'value.msCountChange': "{before} → {after}",
   'value.msApprovalsChange': "{beforeOf} 件中 {before} 件 → {afterOf} 件中 {after} 件",
+  // §16: a member’s owner proof (vela_multisigCreate).
+  'intent.msOwnerProof': "マルチシグのメンバー証明",
+  'sentence.msOwnerProof': "このマルチシグの {count} 人中 {place} 人目のメンバーであることを証明し、Vela のサービスがメンバー全員の見つけられる場所にこのマルチシグを記録できるようにします。何も送金されず、どの取引も承認されません。",
+  'field.msNetworks': "ネットワーク",
+  'field.msMemberAt': "メンバー {n}",
+  'value.msNeeds': "{n} 人中 {m} 人が必要",
+  'button.msOwnerProof': "メンバーであることを証明",
+  'refuse.msOwnerShape': "このメンバー証明は、このページが正確に読める形式ではないため、表示内容と署名される内容が異なる可能性があります。署名しません。",
+  'refuse.msOwnerGenesis': "このマルチシグは Vela が作成する方法で設定されていません（コントラクトまたは初期設定が異なります）。このページはメンバーとルールを保証できません。署名しません。",
+  'refuse.msOwnerAddress': "アプリはあるマルチシグのアドレスを示していますが、渡されたメンバーと設定からは別のアドレスになります。証明する内容がアプリの説明と一致しません。署名しません。",
+  'refuse.msOwnerNotMember': "署名するアカウントはこのマルチシグのメンバーではありません。署名しません。",
   'warn.msMembersClaimOff': "この変更は、アプリが示すマルチシグの現在のメンバーと合いません — 実行時に失敗する可能性があります。承認する前に、ほかのメンバーとメンバー構成を確認してください。",
 });
 
@@ -3800,6 +3855,17 @@ window.VelaCS.i18n.register('ko', {
   'field.msMembers': "멤버",
   'value.msCountChange': "{before} → {after}",
   'value.msApprovalsChange': "{beforeOf}개 중 {before}개 → {afterOf}개 중 {after}개",
+  // §16: a member’s owner proof (vela_multisigCreate).
+  'intent.msOwnerProof': "멀티시그 멤버 증명",
+  'sentence.msOwnerProof': "이 멀티시그의 멤버 {count}명 중 {place}번째 멤버임을 증명하여, Vela 서비스가 멤버들이 찾을 수 있는 곳에 이 멀티시그를 기록할 수 있게 합니다. 아무것도 보내지 않으며 어떤 거래도 승인하지 않습니다.",
+  'field.msNetworks': "네트워크",
+  'field.msMemberAt': "멤버 {n}",
+  'value.msNeeds': "{n}명 중 {m}명 필요",
+  'button.msOwnerProof': "멤버임을 증명",
+  'refuse.msOwnerShape': "이 멤버 증명은 이 페이지가 정확히 읽을 수 있는 형태가 아니어서, 보이는 내용과 서명될 내용이 다를 수 있습니다. 서명하지 않습니다.",
+  'refuse.msOwnerGenesis': "이 멀티시그는 Vela가 만드는 방식으로 설정되지 않았습니다(컨트랙트나 초기 설정이 다름). 이 페이지는 멤버와 규칙을 보증할 수 없습니다. 서명하지 않습니다.",
+  'refuse.msOwnerAddress': "앱은 한 멀티시그 주소를 말하지만, 건넨 멤버와 설정으로는 다른 주소가 나옵니다. 증명하려는 것이 앱의 설명과 다릅니다. 서명하지 않습니다.",
+  'refuse.msOwnerNotMember': "서명하는 계정은 이 멀티시그의 멤버가 아닙니다. 서명하지 않습니다.",
   'warn.msMembersClaimOff': "이 변경은 앱이 말하는 멀티시그의 현재 멤버와 맞지 않습니다 — 실행될 때 실패할 수 있습니다. 승인하기 전에 다른 멤버와 멤버 구성을 확인하세요.",
 });
 
@@ -4203,6 +4269,17 @@ window.VelaCS.i18n.register('vi', {
   'field.msMembers': "Thành viên",
   'value.msCountChange': "{before} → {after}",
   'value.msApprovalsChange': "{before} trên {beforeOf} → {after} trên {afterOf}",
+  // §16: a member’s owner proof (vela_multisigCreate).
+  'intent.msOwnerProof': "Chứng minh là thành viên ví đa chữ ký",
+  'sentence.msOwnerProof': "Bạn chứng minh mình là thành viên thứ {place} trong {count} thành viên của ví đa chữ ký này, để dịch vụ của Vela ghi lại nó ở nơi các thành viên tìm thấy. Không gửi gì và không phê duyệt giao dịch nào.",
+  'field.msNetworks': "Mạng",
+  'field.msMemberAt': "Thành viên {n}",
+  'value.msNeeds': "Cần {m} trong {n}",
+  'button.msOwnerProof': "Chứng minh là thành viên",
+  'refuse.msOwnerShape': "Bằng chứng thành viên này không ở dạng trang này đọc được chính xác, nên điều hiển thị có thể khác điều sẽ được ký. Không ký.",
+  'refuse.msOwnerGenesis': "Ví đa chữ ký này không được thiết lập theo cách Vela tạo (hợp đồng hoặc thiết lập ban đầu khác), nên trang này không thể bảo đảm cho các thành viên và quy tắc của nó. Không ký.",
+  'refuse.msOwnerAddress': "Ứng dụng nêu một địa chỉ ví đa chữ ký, nhưng các thành viên và thiết lập nó đưa lại tạo ra địa chỉ khác. Điều bạn chứng minh không phải điều ứng dụng mô tả. Không ký.",
+  'refuse.msOwnerNotMember': "Tài khoản ký không phải thành viên của ví đa chữ ký này. Không ký.",
   'warn.msMembersClaimOff': "Thay đổi này không khớp với các thành viên hiện tại mà ứng dụng nói ví đa chữ ký đang có — có thể thất bại khi chạy. Hãy đối chiếu danh sách thành viên với những người khác trước khi phê duyệt.",
 });
 
@@ -4606,6 +4683,17 @@ window.VelaCS.i18n.register('id', {
   'field.msMembers': "Anggota",
   'value.msCountChange': "{before} → {after}",
   'value.msApprovalsChange': "{before} dari {beforeOf} → {after} dari {afterOf}",
+  // §16: a member’s owner proof (vela_multisigCreate).
+  'intent.msOwnerProof': "Buktikan keanggotaan multisig",
+  'sentence.msOwnerProof': "Anda membuktikan bahwa Anda anggota ke-{place} dari {count} anggota multisig ini, agar layanan Vela dapat mencatatnya di tempat para anggotanya menemukannya. Tidak ada yang dikirim dan tidak ada transaksi yang disetujui.",
+  'field.msNetworks': "Jaringan",
+  'field.msMemberAt': "Anggota {n}",
+  'value.msNeeds': "Perlu {m} dari {n}",
+  'button.msOwnerProof': "Buktikan keanggotaan",
+  'refuse.msOwnerShape': "Bukti keanggotaan ini tidak dalam bentuk yang dapat dibaca halaman ini dengan tepat, jadi yang ditampilkan bisa berbeda dari yang akan ditandatangani. Tidak menandatangani.",
+  'refuse.msOwnerGenesis': "Multisig ini tidak diatur seperti cara Vela membuatnya (kontrak atau pengaturan awalnya berbeda), jadi halaman ini tidak dapat menjamin anggota dan aturannya. Tidak menandatangani.",
+  'refuse.msOwnerAddress': "Aplikasi menyebut satu alamat multisig, tetapi anggota dan pengaturan yang diberikannya menghasilkan alamat lain. Yang akan Anda buktikan bukan yang dijelaskan aplikasi. Tidak menandatangani.",
+  'refuse.msOwnerNotMember': "Akun yang menandatangani bukan anggota multisig ini. Tidak menandatangani.",
   'warn.msMembersClaimOff': "Perubahan ini tidak cocok dengan anggota multisig saat ini menurut aplikasi — bisa gagal saat dijalankan. Periksa daftar anggota bersama anggota lain sebelum menyetujui.",
 });
 
@@ -5009,6 +5097,17 @@ window.VelaCS.i18n.register('tr', {
   'field.msMembers': "Üyeler",
   'value.msCountChange': "{before} → {after}",
   'value.msApprovalsChange': "{beforeOf} onaydan {before} → {afterOf} onaydan {after}",
+  // §16: a member’s owner proof (vela_multisigCreate).
+  'intent.msOwnerProof': "Çoklu imza üyeliğini kanıtla",
+  'sentence.msOwnerProof': "Bu çoklu imzanın {count} üyesinden {place}. üye olduğunuzu kanıtlıyorsunuz; böylece Vela’nın hizmeti onu üyelerinin bulabileceği yere kaydedebilir. Hiçbir şey gönderilmez ve hiçbir işlem onaylanmaz.",
+  'field.msNetworks': "Ağlar",
+  'field.msMemberAt': "Üye {n}",
+  'value.msNeeds': "{n} üyeden {m} onay",
+  'button.msOwnerProof': "Üyeliği kanıtla",
+  'refuse.msOwnerShape': "Bu üyelik kanıtı bu sayfanın tam olarak okuyabileceği biçimde değil; gösterilen, imzalanacak olandan farklı olabilir. İmzalanmıyor.",
+  'refuse.msOwnerGenesis': "Bu çoklu imza Vela’nın oluşturduğu şekilde kurulmamış (sözleşmeleri veya kurulumu farklı); bu sayfa üyelerine ve kuralına kefil olamaz. İmzalanmıyor.",
+  'refuse.msOwnerAddress': "Uygulama bir çoklu imza adresi söylüyor, ama verdiği üyeler ve kurulum başka bir adres oluşturuyor. Kanıtlayacağınız şey uygulamanın anlattığı değil. İmzalanmıyor.",
+  'refuse.msOwnerNotMember': "İmzalayan hesap bu çoklu imzanın üyesi değil. İmzalanmıyor.",
   'warn.msMembersClaimOff': "Bu değişiklik, uygulamanın söylediği mevcut çoklu imza üyeleriyle uyuşmuyor — çalıştığında başarısız olabilir. Onaylamadan önce üyeleri diğerleriyle kontrol edin.",
 });
 
@@ -5412,6 +5511,17 @@ window.VelaCS.i18n.register('es-MX', {
   'field.msMembers': "Miembros",
   'value.msCountChange': "{before} → {after}",
   'value.msApprovalsChange': "{before} de {beforeOf} → {after} de {afterOf}",
+  // §16: a member’s owner proof (vela_multisigCreate).
+  'intent.msOwnerProof': "Comprobar membresía multifirma",
+  'sentence.msOwnerProof': "Compruebas que eres el miembro {place} de {count} de esta multifirma, para que el servicio de Vela la registre donde sus miembros la encuentran. No se envía nada y no se aprueba ninguna transacción.",
+  'field.msNetworks': "Redes",
+  'field.msMemberAt': "Miembro {n}",
+  'value.msNeeds': "Requiere {m} de {n}",
+  'button.msOwnerProof': "Comprobar membresía",
+  'refuse.msOwnerShape': "Esta prueba de membresía no tiene una forma que esta página lea con exactitud, así que lo que se muestra podría diferir de lo que se firmaría. No se firma.",
+  'refuse.msOwnerGenesis': "Esta multifirma no está configurada como Vela crea una (sus contratos o su configuración difieren), así que esta página no puede responder por sus miembros ni por su regla. No se firma.",
+  'refuse.msOwnerAddress': "La app nombra una dirección multifirma, pero los miembros y la configuración que entrega dan otra. Lo que comprobarías no es lo que describe la app. No se firma.",
+  'refuse.msOwnerNotMember': "La cuenta que firma no es miembro de esta multifirma. No se firma.",
   'warn.msMembersClaimOff': "Este cambio no cuadra con los miembros que, según la app, tiene ahora la multifirma — podría fallar al ejecutarse. Revisa los miembros con los demás antes de aprobar.",
 });
 
@@ -5815,6 +5925,17 @@ window.VelaCS.i18n.register('pt-BR', {
   'field.msMembers': "Membros",
   'value.msCountChange': "{before} → {after}",
   'value.msApprovalsChange': "{before} de {beforeOf} → {after} de {afterOf}",
+  // §16: a member’s owner proof (vela_multisigCreate).
+  'intent.msOwnerProof': "Provar que é membro do multisig",
+  'sentence.msOwnerProof': "Você prova que é o membro {place} de {count} deste multisig, para que o serviço da Vela o registre onde seus membros o encontram. Nada é enviado e nenhuma transação é aprovada.",
+  'field.msNetworks': "Redes",
+  'field.msMemberAt': "Membro {n}",
+  'value.msNeeds': "Requer {m} de {n}",
+  'button.msOwnerProof': "Provar que é membro",
+  'refuse.msOwnerShape': "Esta prova de membro não está em um formato que esta página lê com exatidão, então o que aparece pode diferir do que seria assinado. Não vou assinar.",
+  'refuse.msOwnerGenesis': "Este multisig não está configurado como a Vela cria um (os contratos ou a configuração diferem), então esta página não pode garantir seus membros nem sua regra. Não vou assinar.",
+  'refuse.msOwnerAddress': "O app cita um endereço de multisig, mas os membros e a configuração que ele entrega formam outro. O que você provaria não é o que o app descreve. Não vou assinar.",
+  'refuse.msOwnerNotMember': "A conta que assina não é membro deste multisig. Não vou assinar.",
   'warn.msMembersClaimOff': "Esta mudança não bate com os membros que, segundo o app, o multisig tem agora — pode falhar ao ser executada. Confira os membros com os outros antes de aprovar.",
 });
 
@@ -6220,6 +6341,17 @@ window.VelaCS.i18n.register('fr', {
   'field.msMembers': "Membres",
   'value.msCountChange': "{before} → {after}",
   'value.msApprovalsChange': "{before} sur {beforeOf} → {after} sur {afterOf}",
+  // §16: a member’s owner proof (vela_multisigCreate).
+  'intent.msOwnerProof': "Prouver son appartenance au multisig",
+  'sentence.msOwnerProof': "Vous prouvez que vous êtes le membre {place} sur {count} de ce multisig, pour que le service de Vela l’enregistre là où ses membres le trouvent. Rien n’est envoyé et aucune transaction n’est approuvée.",
+  'field.msNetworks': "Réseaux",
+  'field.msMemberAt': "Membre {n}",
+  'value.msNeeds': "{m} sur {n} requis",
+  'button.msOwnerProof': "Prouver l’appartenance",
+  'refuse.msOwnerShape': "Cette preuve d’appartenance n’a pas une forme que cette page lit exactement : ce qui s’affiche pourrait différer de ce qui serait signé. Pas de signature.",
+  'refuse.msOwnerGenesis': "Ce multisig n’est pas configuré comme Vela en crée un (ses contrats ou sa configuration diffèrent) : cette page ne peut pas se porter garante de ses membres ni de sa règle. Pas de signature.",
+  'refuse.msOwnerAddress': "L’app nomme une adresse de multisig, mais les membres et la configuration qu’elle fournit en donnent une autre. Ce que vous prouveriez n’est pas ce que l’app décrit. Pas de signature.",
+  'refuse.msOwnerNotMember': "Le compte qui signe n’est pas membre de ce multisig. Pas de signature.",
   'warn.msMembersClaimOff': "Ce changement ne correspond pas aux membres que l’app attribue au multisig aujourd’hui — il pourrait échouer à l’exécution. Vérifiez les membres avec les autres avant d’approuver.",
 });
 
@@ -6625,6 +6757,17 @@ window.VelaCS.i18n.register('de', {
   'field.msMembers': "Mitglieder",
   'value.msCountChange': "{before} → {after}",
   'value.msApprovalsChange': "{before} von {beforeOf} → {after} von {afterOf}",
+  // §16: a member’s owner proof (vela_multisigCreate).
+  'intent.msOwnerProof': "Multisig-Mitgliedschaft nachweisen",
+  'sentence.msOwnerProof': "Sie weisen nach, dass Sie Mitglied {place} von {count} dieses Multisigs sind, damit der Dienst von Vela es dort verzeichnet, wo seine Mitglieder es finden. Es wird nichts gesendet und keine Transaktion freigegeben.",
+  'field.msNetworks': "Netzwerke",
+  'field.msMemberAt': "Mitglied {n}",
+  'value.msNeeds': "{m} von {n} nötig",
+  'button.msOwnerProof': "Mitgliedschaft nachweisen",
+  'refuse.msOwnerShape': "Dieser Mitgliedschaftsnachweis hat keine Form, die diese Seite exakt lesen kann – das Angezeigte könnte vom Signierten abweichen. Keine Signatur.",
+  'refuse.msOwnerGenesis': "Dieses Multisig ist nicht so eingerichtet, wie Vela eines erstellt (Verträge oder Einrichtung weichen ab), daher kann diese Seite nicht für seine Mitglieder und seine Regel bürgen. Keine Signatur.",
+  'refuse.msOwnerAddress': "Die App nennt eine Multisig-Adresse, aber die übergebenen Mitglieder und die Einrichtung ergeben eine andere. Was Sie nachweisen würden, ist nicht das, was die App beschreibt. Keine Signatur.",
+  'refuse.msOwnerNotMember': "Das signierende Konto ist kein Mitglied dieses Multisigs. Keine Signatur.",
   'warn.msMembersClaimOff': "Diese Änderung passt nicht zu den Mitgliedern, die das Multisig laut App jetzt hat — sie kann bei der Ausführung fehlschlagen. Prüfen Sie die Mitglieder mit den anderen, bevor Sie freigeben.",
 });
 
@@ -7030,6 +7173,17 @@ window.VelaCS.i18n.register('ru', {
   'field.msMembers': "Участники",
   'value.msCountChange': "{before} → {after}",
   'value.msApprovalsChange': "{before} из {beforeOf} → {after} из {afterOf}",
+  // §16: a member’s owner proof (vela_multisigCreate).
+  'intent.msOwnerProof': "Подтвердить участие в мультиподписи",
+  'sentence.msOwnerProof': "Вы подтверждаете, что являетесь участником {place} из {count} этой мультиподписи, чтобы сервис Vela записал её там, где её находят участники. Ничего не отправляется, и никакая транзакция не одобряется.",
+  'field.msNetworks': "Сети",
+  'field.msMemberAt': "Участник {n}",
+  'value.msNeeds': "Нужно {m} из {n}",
+  'button.msOwnerProof': "Подтвердить участие",
+  'refuse.msOwnerShape': "Это подтверждение участия не в той форме, которую эта страница читает точно, поэтому показанное может отличаться от того, что будет подписано. Не подписываю.",
+  'refuse.msOwnerGenesis': "Эта мультиподпись настроена не так, как её создаёт Vela (контракты или начальная настройка отличаются), поэтому эта страница не может ручаться за её участников и правило. Не подписываю.",
+  'refuse.msOwnerAddress': "Приложение называет один адрес мультиподписи, но переданные участники и настройка дают другой. То, что вы подтвердили бы, — не то, что описывает приложение. Не подписываю.",
+  'refuse.msOwnerNotMember': "Подписывающий аккаунт не является участником этой мультиподписи. Не подписываю.",
   'warn.msMembersClaimOff': "Это изменение не сходится с участниками, которые, по словам приложения, сейчас есть у мультиподписи, — при выполнении оно может не пройти. Сверьте состав с другими участниками, прежде чем одобрять.",
 });
 
@@ -7433,6 +7587,17 @@ window.VelaCS.i18n.register('it', {
   'field.msMembers': "Membri",
   'value.msCountChange': "{before} → {after}",
   'value.msApprovalsChange': "{before} su {beforeOf} → {after} su {afterOf}",
+  // §16: a member’s owner proof (vela_multisigCreate).
+  'intent.msOwnerProof': "Dimostra di far parte del multisig",
+  'sentence.msOwnerProof': "Dimostri di essere il membro {place} di {count} di questo multisig, così il servizio di Vela lo registra dove i suoi membri lo trovano. Non viene inviato nulla e nessuna transazione viene approvata.",
+  'field.msNetworks': "Reti",
+  'field.msMemberAt': "Membro {n}",
+  'value.msNeeds': "Servono {m} su {n}",
+  'button.msOwnerProof': "Dimostra di farne parte",
+  'refuse.msOwnerShape': "Questa prova di appartenenza non ha una forma che questa pagina legge con esattezza, quindi ciò che vedi potrebbe differire da ciò che verrebbe firmato. Non firmo.",
+  'refuse.msOwnerGenesis': "Questo multisig non è configurato come Vela ne crea uno (i contratti o la configurazione differiscono), quindi questa pagina non può garantire i suoi membri né la sua regola. Non firmo.",
+  'refuse.msOwnerAddress': "L’app indica un indirizzo multisig, ma i membri e la configurazione che fornisce ne danno un altro. Ciò che dimostreresti non è ciò che l’app descrive. Non firmo.",
+  'refuse.msOwnerNotMember': "L’account che firma non è membro di questo multisig. Non firmo.",
   'warn.msMembersClaimOff': "Questa modifica non torna con i membri che, secondo l’app, il multisig ha ora — potrebbe fallire quando viene eseguita. Verifica i membri con gli altri prima di approvare.",
 });
 
@@ -10539,6 +10704,9 @@ window.VelaCS = window.VelaCS || {};
     'eth_signTypedData_v3',
     'eth_signTypedData',
     MULTISIG_APPROVE,
+    // §16: a member's owner proof when a multisig is created — the Safari
+    // extension's only way to make one (WebKit gives its pages no passkey).
+    'vela_multisigCreate',
   ];
 
   /**
@@ -11336,6 +11504,101 @@ window.VelaCS = window.VelaCS || {};
     return finished;
   }
 
+  // --- a member's owner proof (vela_multisigCreate, §16) -------------------
+  //
+  // Creating a multisig (or sharing its record again) asks one member's
+  // passkey for the genesis service's sponsor challenge: the proof the
+  // service needs before it records the multisig where its members find it.
+  // The app hands over the GENESIS; lib/multisig.js `ownerProof` reads the
+  // address, the members, the rule and the challenge from it by the core's
+  // rule, and refuses anything it cannot vouch for. The card says what the
+  // person proves — which multisig, whose members, which rule, their own
+  // place — every fact read here; the networks and the name are the app's.
+
+  /** The networks, by this page's own names where it has them, else their ids. */
+  function networkNames(chainIds) {
+    return chainIds.map(function (id) {
+      return reg.chainName(id) || ns.i18n.t('value.chainId', { id: id });
+    }).join(', ');
+  }
+
+  function resolveOwnerProof(intent, ctx) {
+    var proof = ns.multisig.ownerProof(intent && intent.params);
+    var reading = proof.reading || null;
+    // Ours: the member whose keys sign is "you", and no site is asking.
+    ctx.siteRelayed = false;
+    ctx.selfAccount = reading ? reading.member : null;
+    ctx.selfTag = null;
+    ctx.membersNow = null;
+    if (reading) ctx.chainId = reading.chainIds[0];
+    ctx.coin = coinOf(ctx);
+    var view = baseView(intent, ctx);
+    view.method = intent && intent.method;
+    view.intentKey = 'intent.msOwnerProof';
+    view.badge = 'tag.multisig';
+    view.hero = null;
+    // The networks are a row of their own below (the app's word): the one
+    // network row a signature carries would name only the first.
+    view.chain = null;
+    view.chainId = null;
+
+    if (proof.refusal) {
+      refuseWith(view, proof.refusal);
+      if (proof.refusal === 'refuse.msOwnerAddress') view.risk = 'hard-danger';
+      view.account = typeof ctx.account === 'string' && ADDRESS.test(ctx.account) ? ctx.account : null;
+      view.tech = techFor('vela_multisigCreate', null, null, {});
+      return finishSigning(view, ctx);
+    }
+    view.account = reading.member;
+    // The member who proves is in the challenge's request (its keys answer):
+    // the context's account — whose keys the browser is asked for — must be it.
+    if (typeof ctx.account === 'string' && ctx.account.toLowerCase() !== reading.member.toLowerCase()) {
+      refuseWith(view, 'refuse.msMemberMismatch');
+    }
+    if (suppliedChallenge(intent, ctx)) {
+      refuseWith(view, 'refuse.suppliedChallenge');
+    }
+
+    var name = reading.name !== null ? visible(reading.name, view) : null;
+    var safeIdentity = identify(reading.multisig, ctx, {});
+    safeIdentity.contractName = name;
+    safeIdentity.tag = name ? 'tag.nameByApp' : null;
+    view.fields.push({ label: 'field.multisig', identity: safeIdentity });
+    view.fields.push({ label: 'field.msNetworks', value: networkNames(reading.chainIds), tagKey: 'tag.byApp' });
+    reading.owners.forEach(function (owner, i) {
+      view.fields.push({
+        label: 'field.msMemberAt', labelParams: { n: i + 1 },
+        identity: memberIdentity(owner, ctx),
+      });
+    });
+    view.fields.push({
+      label: 'field.threshold',
+      value: text('value.msNeeds', { m: reading.threshold, n: reading.owners.length }),
+      emphasis: true,
+    });
+    view.sentence = text('sentence.msOwnerProof', {
+      place: reading.place, count: reading.owners.length,
+    });
+    // Not a transaction: read from what is signed — the genesis it derives.
+    provenance(view, 'readMessage');
+    view.tech = techFor('keccak256("safe-genesis-registry/sponsor/v1" ‖ multisig)', null, null, {
+      params: [
+        { name: 'multisig', value: reading.multisig },
+        { name: 'saltNonce', value: String(intent.params[0].genesis.saltNonce) },
+        { name: 'initializer', value: String(intent.params[0].genesis.initializer) },
+        { name: 'challenge', value: reading.challenge },
+      ],
+      addresses: [
+        { roleKey: 'ui.contract', name: 'SafeProxyFactory v1.4.1', address: intent.params[0].genesis.factory },
+        { roleKey: 'ui.contract', name: 'SafeL2 v1.4.1', address: intent.params[0].genesis.singleton },
+      ],
+    });
+
+    var finished = finishSigning(view, ctx);
+    if (!finished.refuse) finished.confirmKey = 'button.msOwnerProof';
+    return finished;
+  }
+
   // --- an executor's operation (round 7, r7-1) ------------------------------
   //
   // The wallet's own operation that executes a multisig transaction: read
@@ -11568,6 +11831,7 @@ window.VelaCS = window.VelaCS || {};
     // requester's word for it, the intent's own method.
     ctx.method = requested && typeof requested.method === 'string' ? requested.method : '';
     if (ns.multisig && ctx.method === ns.multisig.METHOD) return resolveMultisig(requested, ctx);
+    if (ns.multisig && ctx.method === ns.multisig.OWNER_PROOF) return resolveOwnerProof(requested, ctx);
     ctx.siteRelayed = relayedSite(requested, ctx);
     ctx.selfAccount = selfAccountOf(requested, ctx);
     // Ours too (r10): "this multisig", and the multisig's coins in the words,
@@ -13570,8 +13834,123 @@ window.VelaCS = window.VelaCS || {};
     return out;
   }
 
+  // --- a member's owner proof (vela_multisigCreate, §16) -------------------
+  //
+  // When a multisig is created — or its record shared again — one member's
+  // passkey signs the genesis service's sponsor challenge for the multisig's
+  // address: the proof the service asks before it records the multisig, its
+  // members and its rule, where every member finds it. Nothing moves and
+  // nothing is approved, but it is a signature, so it is read here like one.
+  //
+  // The app hands over the multisig's GENESIS, never a challenge. Everything
+  // the card shows is read from it: the address DERIVED (CREATE2 on Safe's
+  // factory, `proxyAddress`), the members and the rule read from a setup that
+  // must be exactly a multisig as Vela creates one (`readMultisigDeploy`,
+  // byte for byte), the member's place among them, and the challenge derived
+  // from the address. The address the app names is only compared. The
+  // networks and the name are the app's word: the challenge covers the
+  // address alone.
+  //
+  // Transcribed from vela-core `trusted_signer::owner_proof::read`, in its
+  // order, and cross-checked against the wasm and the shared vectors
+  // (`tests/vectors/multisig/owner-proof.json`) in samples/multisig-test.mjs.
+
+  var OWNER_PROOF = 'vela_multisigCreate';
+  /** vela-core `owner_proof::MAX_CHAINS`. */
+  var MAX_CHAINS = 32;
+  /** vela-core `owner_proof::MAX_INITIALIZER_BYTES`. */
+  var MAX_INITIALIZER_BYTES = 2048;
+  /** vela-core `multisig::sponsor_challenge`'s prefix. */
+  var SPONSOR = 'safe-genesis-registry/sponsor/v1';
+  var SALT = /^(?:0x[0-9a-fA-F]*|[0-9]+)$/;
+
+  function plainObject(value) {
+    return !!value && typeof value === 'object' && !Array.isArray(value);
+  }
+
+  /** `keccak256("safe-genesis-registry/sponsor/v1" ‖ multisig)` — what the member's passkey signs. */
+  function sponsorChallenge(multisig) {
+    return keccak.hash(concat([utf8(SPONSOR), fromHex(multisig)]));
+  }
+
+  /** The networks: one to MAX_CHAINS whole chain ids, distinct, in order; or null. */
+  function chainIdsOf(list) {
+    if (!Array.isArray(list) || !list.length || list.length > MAX_CHAINS) return null;
+    for (var i = 0; i < list.length; i++) {
+      var id = list[i];
+      if (typeof id !== 'number' || !Number.isSafeInteger(id) || id < 1) return null;
+      if (list.indexOf(id) !== i) return null;
+    }
+    return list.slice();
+  }
+
+  /** The genesis, every field one this page reads exactly; or null. */
+  function genesisOf(g) {
+    if (!plainObject(g)) return null;
+    if (!ADDRESS.test(g.factory) || !ADDRESS.test(g.singleton)) return null;
+    if (typeof g.saltNonce !== 'string' || !SALT.test(g.saltNonce)) return null;
+    var salt = g.saltNonce.length === 2 && g.saltNonce === '0x' ? 0n : BigInt(g.saltNonce);
+    if (salt > MAX_UINT256) return null;
+    if (typeof g.initializer !== 'string' || !HEX_BYTES.test(g.initializer) ||
+      (g.initializer.length - 2) / 2 > MAX_INITIALIZER_BYTES) return null;
+    if (g.name !== undefined && g.name !== null && typeof g.name !== 'string') return null;
+    return {
+      factory: g.factory,
+      singleton: g.singleton,
+      saltNonce: salt,
+      initializer: fromHex(g.initializer),
+      name: typeof g.name === 'string' ? g.name : null,
+    };
+  }
+
+  /**
+   * An owner proof's params, read: `{reading}` — `{multisig, member, owners,
+   * threshold, place, name, chainIds, challenge}`, the core's `Reading` —
+   * or `{refusal}` (an i18n key). `challenge` is hex; `ownerProofChallenge`
+   * gives its bytes.
+   */
+  function ownerProof(params) {
+    var shape = { refusal: 'refuse.msOwnerShape' };
+    if (!Array.isArray(params) || params.length !== 1 || !plainObject(params[0])) return shape;
+    var p = params[0];
+    if (!ADDRESS.test(p.multisig) || !ADDRESS.test(p.member)) return shape;
+    var chainIds = chainIdsOf(p.chainIds);
+    if (!chainIds) return shape;
+    var g = genesisOf(p.genesis);
+    if (!g) return shape;
+    var made = same(g.factory, SAFE_PROXY_FACTORY)
+      ? readMultisigDeploy({ singleton: g.singleton, initializer: g.initializer, saltNonce: g.saltNonce })
+      : null;
+    if (!made) return { refusal: 'refuse.msOwnerGenesis' };
+    if (!same(made.address, p.multisig)) return { refusal: 'refuse.msOwnerAddress' };
+    var place = -1;
+    for (var i = 0; i < made.owners.length; i++) if (same(made.owners[i], p.member)) place = i;
+    if (place < 0) return { refusal: 'refuse.msOwnerNotMember' };
+    return {
+      reading: {
+        multisig: made.address,
+        member: made.owners[place],
+        owners: made.owners.slice(),
+        threshold: Number(made.threshold),
+        place: place + 1,
+        name: g.name !== null && validName(g.name) ? g.name : null,
+        chainIds: chainIds,
+        challenge: toHex(sponsorChallenge(made.address)),
+      },
+    };
+  }
+
+  /** The bytes an owner proof's passkey signs, for a reading `ownerProof` made. */
+  function ownerProofChallenge(reading) {
+    return sponsorChallenge(reading.multisig);
+  }
+
   ns.multisig = {
     METHOD: 'vela_multisigApprove',
+    OWNER_PROOF: OWNER_PROOF,
+    ownerProof: ownerProof,
+    ownerProofChallenge: ownerProofChallenge,
+    sponsorChallenge: sponsorChallenge,
     MULTI_SEND_CALL_ONLY: MULTI_SEND_CALL_ONLY,
     GENESIS_REGISTRY: GENESIS_REGISTRY,
     MAX_DATA_BYTES: MAX_DATA_BYTES,
@@ -13770,6 +14149,23 @@ window.VelaCS = window.VelaCS || {};
       return {
         hash: ns.multisig.approvalChallenge(request.chainId, request.member, computed),
         describes: 'SafeMessage(safeTxHash)',
+      };
+    }
+    // A member's owner proof (§16): the sponsor challenge for the address the
+    // GENESIS makes (lib/multisig.js `ownerProof`), by the member it names —
+    // who must be the account whose keys are asked for. The address the app
+    // names is only compared; a request handing over a challenge is refused
+    // before this (resolve.js).
+    if (ns.multisig && intent.method === ns.multisig.OWNER_PROOF) {
+      var proof = ns.multisig.ownerProof(intent.params);
+      if (proof.refusal) return { refuse: proof.refusal };
+      if (typeof context.account !== 'string' ||
+        context.account.toLowerCase() !== proof.reading.member.toLowerCase()) {
+        return { refuse: 'refuse.msMemberMismatch' };
+      }
+      return {
+        hash: ns.multisig.ownerProofChallenge(proof.reading),
+        describes: 'keccak256("safe-genesis-registry/sponsor/v1" ‖ multisig)',
       };
     }
     if (intent.method === 'eth_sign') {

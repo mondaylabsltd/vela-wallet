@@ -1075,3 +1075,84 @@ Send's figures, a relaunch); Android `BalanceMachineTest`.
   waits for the multisig machine to name it, and drawing before that is
   exactly the member's figure under the multisig's name (S3, D3). The gate
   stays.
+
+## 16. Page: multisig owner proof
+
+Creating a multisig (or sharing its record again) asks one member's passkey
+for the genesis service's sponsor challenge,
+`keccak256("safe-genesis-registry/sponsor/v1" ‖ multisig)`: the proof the
+service needs before it records the multisig where every member finds it. Until
+now the trusted page had no card for it (`vela_multisigCreate`), so every
+caller that routes it to the page refused it. That covered the Safari Web
+Extension, whose pages cannot use a `getvela.app` passkey (R8), so the Safari
+wallet could not create a multisig at all.
+
+**Decision.** The owner proof is a page signature like any other, read the way
+a Vela account's signature is read. The page is never handed a challenge. It is
+handed the multisig's **genesis** and reads everything it shows from it:
+
+- **The request** (`trusted_signer::owner_proof::params`). The core builds it
+  into the passkey purpose: `PasskeyPurpose::Record { multisig, params }`, with
+  `params = [{multisig, member, genesis, chainIds}]`. Every shell forwards it
+  as-is to the core's generic request (`trusted_signer::request`, method
+  `vela_multisigCreate`). No shell builds or reads it.
+- **The reading** (`owner_proof::read`, mirrored by the page's
+  `lib/multisig.js` `ownerProof`, in the same order).
+  1. The shape is checked.
+  2. The genesis must be exactly a multisig as Vela creates one
+     (`multisig::vela_multisig_of`): Safe's v1.4.1 factory, the L2 singleton,
+     and a setup written again from the members and threshold it names, byte
+     for byte. That rules out a hook, a module, a payment, and members a
+     multisig cannot have.
+  3. The address is derived by CREATE2. The address the app names is only
+     compared with it (hard-danger refusal on a mismatch).
+  4. The member must be one of the members, and must be the signing account.
+  5. The challenge is derived from the derived address.
+- **What the card shows.** The multisig (6+6 EIP-55 with its identicon; the
+  name tagged as the app's), its networks (the page's own chain names, tagged
+  "per the app": the challenge covers only the address), every member in setup
+  order with this signer tagged "this account", "Needs N of M", and the
+  signing account. The salt, setup, factory, singleton and challenge are in the
+  details. The button is "Prove membership". The copy is in the page's own
+  fifteen-locale catalogue, zh included.
+- **Acceptance.** `trusted_signer::digest_of` handles the method through the
+  same `read`, so `accept_signature` accepts only a user-verified answer, by the
+  member's key, over the sponsor challenge for the address the genesis makes.
+  That value must also be the challenge the machine is about to give the
+  service.
+
+**Why the page does not load the wasm.** The page is a zero-dependency,
+content-addressed single file. Its `default-src 'none'` CSP is inside the
+hashed bytes. It mirrors the core's rules in plain JS (as it already does for
+`safeTxHash`, `review` and the executor's deploys), and those rules are
+cross-checked case by case against the shipped wasm and the shared vectors
+(`tests/vectors/multisig/owner-proof.json`: 66 cases, including r4-e's six
+hostile geneses). The core is still the one source: the vectors are generated
+from it, and `owner_proof.rs` asserts them.
+
+**Every caller, the same way.** The core's route
+(`signing_route_on(plan, KeyCeremony, surface)`) decides where the proof goes.
+A `getvela.app` account proves in Vela on a standard surface; a custom-domain
+account proves on its own page; on the Safari extension every proof goes to a
+page.
+
+| Caller | Before | Now |
+| --- | --- | --- |
+| Web wallet, Chrome extension, Safari package (`sign-challenge.ts`) | refused (`unsupported`) | `params` to the page through the shared handoff |
+| iOS (`MultisigLive.passkey` → `UserOpSpine.signOwnerProof`) | refused (`not_opened`) | the spine's one `ceremony` (in Vela, or the page through `trustedSignerSignatureAccept`) |
+| Android (`MultisigLive.passkey` → `UserOpSpine.signOwnerProof`) | refused (`not_opened`) | the same |
+| Desktop (`multisig/live.rs` `prove_on_page`) | signed in Vela even when the keys live on a page | routed: blocked / its page (`trusted_signer::sign`) / in Vela |
+
+Page **64363925** is first in `BUILD_ALLOWED`; `LAUNCH` is unchanged. It reaches
+users only once `dist/` is deployed.
+
+Tests:
+
+- Core: `owner_proof.rs` (the vectors, `accept_signature` held to the challenge
+  the genesis makes) and `tests/app_multisig_accounts.rs` (creating and sharing
+  again carry params the page reads as this multisig and this challenge).
+- Page: `multisig-test.mjs` §3 (vectors against the page and the wasm, the
+  pipeline, the hostile cases, the answer rule) and `answer-test.mjs` G and S
+  (the published bytes: the web wallet, the Safari relay, evil.example, a lying
+  address).
+- Web: `sign-challenge.test.ts` and `handler.test.ts`.

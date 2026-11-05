@@ -398,5 +398,16 @@ window.VelaCS.i18n.register('ja', {
   'field.msMembers': "メンバー",
   'value.msCountChange': "{before} → {after}",
   'value.msApprovalsChange': "{beforeOf} 件中 {before} 件 → {afterOf} 件中 {after} 件",
+  // §16: a member’s owner proof (vela_multisigCreate).
+  'intent.msOwnerProof': "マルチシグのメンバー証明",
+  'sentence.msOwnerProof': "このマルチシグの {count} 人中 {place} 人目のメンバーであることを証明し、Vela のサービスがメンバー全員の見つけられる場所にこのマルチシグを記録できるようにします。何も送金されず、どの取引も承認されません。",
+  'field.msNetworks': "ネットワーク",
+  'field.msMemberAt': "メンバー {n}",
+  'value.msNeeds': "{n} 人中 {m} 人が必要",
+  'button.msOwnerProof': "メンバーであることを証明",
+  'refuse.msOwnerShape': "このメンバー証明は、このページが正確に読める形式ではないため、表示内容と署名される内容が異なる可能性があります。署名しません。",
+  'refuse.msOwnerGenesis': "このマルチシグは Vela が作成する方法で設定されていません（コントラクトまたは初期設定が異なります）。このページはメンバーとルールを保証できません。署名しません。",
+  'refuse.msOwnerAddress': "アプリはあるマルチシグのアドレスを示していますが、渡されたメンバーと設定からは別のアドレスになります。証明する内容がアプリの説明と一致しません。署名しません。",
+  'refuse.msOwnerNotMember': "署名するアカウントはこのマルチシグのメンバーではありません。署名しません。",
   'warn.msMembersClaimOff': "この変更は、アプリが示すマルチシグの現在のメンバーと合いません — 実行時に失敗する可能性があります。承認する前に、ほかのメンバーとメンバー構成を確認してください。",
 });

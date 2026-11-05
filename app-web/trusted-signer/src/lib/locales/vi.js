@@ -398,5 +398,16 @@ window.VelaCS.i18n.register('vi', {
   'field.msMembers': "Thành viên",
   'value.msCountChange': "{before} → {after}",
   'value.msApprovalsChange': "{before} trên {beforeOf} → {after} trên {afterOf}",
+  // §16: a member’s owner proof (vela_multisigCreate).
+  'intent.msOwnerProof': "Chứng minh là thành viên ví đa chữ ký",
+  'sentence.msOwnerProof': "Bạn chứng minh mình là thành viên thứ {place} trong {count} thành viên của ví đa chữ ký này, để dịch vụ của Vela ghi lại nó ở nơi các thành viên tìm thấy. Không gửi gì và không phê duyệt giao dịch nào.",
+  'field.msNetworks': "Mạng",
+  'field.msMemberAt': "Thành viên {n}",
+  'value.msNeeds': "Cần {m} trong {n}",
+  'button.msOwnerProof': "Chứng minh là thành viên",
+  'refuse.msOwnerShape': "Bằng chứng thành viên này không ở dạng trang này đọc được chính xác, nên điều hiển thị có thể khác điều sẽ được ký. Không ký.",
+  'refuse.msOwnerGenesis': "Ví đa chữ ký này không được thiết lập theo cách Vela tạo (hợp đồng hoặc thiết lập ban đầu khác), nên trang này không thể bảo đảm cho các thành viên và quy tắc của nó. Không ký.",
+  'refuse.msOwnerAddress': "Ứng dụng nêu một địa chỉ ví đa chữ ký, nhưng các thành viên và thiết lập nó đưa lại tạo ra địa chỉ khác. Điều bạn chứng minh không phải điều ứng dụng mô tả. Không ký.",
+  'refuse.msOwnerNotMember': "Tài khoản ký không phải thành viên của ví đa chữ ký này. Không ký.",
   'warn.msMembersClaimOff': "Thay đổi này không khớp với các thành viên hiện tại mà ứng dụng nói ví đa chữ ký đang có — có thể thất bại khi chạy. Hãy đối chiếu danh sách thành viên với những người khác trước khi phê duyệt.",
 });

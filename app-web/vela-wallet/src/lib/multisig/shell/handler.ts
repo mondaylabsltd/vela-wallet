@@ -195,7 +195,12 @@ export function operationFailure(op: MultisigOperation, error: unknown): Multisi
 	}
 }
 
-/** What a passkey is for, as the request a trusted page and the extension are shown. */
+/**
+ * What a passkey is for, as the request a trusted page and the extension are
+ * shown. An owner proof's params are the core's (§16: the genesis, the
+ * member, the networks — `trusted_signer::owner_proof::params`), handed over
+ * verbatim; the page reads everything it shows from them.
+ */
 export function passkeyRequest(purpose: MultisigPasskeyPurpose): {
 	method: string;
 	params: unknown;
@@ -204,7 +209,7 @@ export function passkeyRequest(purpose: MultisigPasskeyPurpose): {
 		case 'approve':
 			return { method: 'vela_multisigApprove', params: { safeTxHash: purpose.safe_tx_hash } };
 		case 'record':
-			return { method: 'vela_multisigCreate', params: { multisig: purpose.multisig } };
+			return { method: 'vela_multisigCreate', params: purpose.params ?? null };
 	}
 }
 

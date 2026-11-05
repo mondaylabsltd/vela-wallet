@@ -398,5 +398,16 @@ window.VelaCS.i18n.register('es-MX', {
   'field.msMembers': "Miembros",
   'value.msCountChange': "{before} → {after}",
   'value.msApprovalsChange': "{before} de {beforeOf} → {after} de {afterOf}",
+  // §16: a member’s owner proof (vela_multisigCreate).
+  'intent.msOwnerProof': "Comprobar membresía multifirma",
+  'sentence.msOwnerProof': "Compruebas que eres el miembro {place} de {count} de esta multifirma, para que el servicio de Vela la registre donde sus miembros la encuentran. No se envía nada y no se aprueba ninguna transacción.",
+  'field.msNetworks': "Redes",
+  'field.msMemberAt': "Miembro {n}",
+  'value.msNeeds': "Requiere {m} de {n}",
+  'button.msOwnerProof': "Comprobar membresía",
+  'refuse.msOwnerShape': "Esta prueba de membresía no tiene una forma que esta página lea con exactitud, así que lo que se muestra podría diferir de lo que se firmaría. No se firma.",
+  'refuse.msOwnerGenesis': "Esta multifirma no está configurada como Vela crea una (sus contratos o su configuración difieren), así que esta página no puede responder por sus miembros ni por su regla. No se firma.",
+  'refuse.msOwnerAddress': "La app nombra una dirección multifirma, pero los miembros y la configuración que entrega dan otra. Lo que comprobarías no es lo que describe la app. No se firma.",
+  'refuse.msOwnerNotMember': "La cuenta que firma no es miembro de esta multifirma. No se firma.",
   'warn.msMembersClaimOff': "Este cambio no cuadra con los miembros que, según la app, tiene ahora la multifirma — podría fallar al ejecutarse. Revisa los miembros con los demás antes de aprobar.",
 });

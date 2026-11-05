@@ -1694,6 +1694,9 @@ window.VelaCS = window.VelaCS || {};
     'eth_signTypedData_v3',
     'eth_signTypedData',
     MULTISIG_APPROVE,
+    // §16: a member's owner proof when a multisig is created — the Safari
+    // extension's only way to make one (WebKit gives its pages no passkey).
+    'vela_multisigCreate',
   ];
 
   /**
@@ -2491,6 +2494,101 @@ window.VelaCS = window.VelaCS || {};
     return finished;
   }
 
+  // --- a member's owner proof (vela_multisigCreate, §16) -------------------
+  //
+  // Creating a multisig (or sharing its record again) asks one member's
+  // passkey for the genesis service's sponsor challenge: the proof the
+  // service needs before it records the multisig where its members find it.
+  // The app hands over the GENESIS; lib/multisig.js `ownerProof` reads the
+  // address, the members, the rule and the challenge from it by the core's
+  // rule, and refuses anything it cannot vouch for. The card says what the
+  // person proves — which multisig, whose members, which rule, their own
+  // place — every fact read here; the networks and the name are the app's.
+
+  /** The networks, by this page's own names where it has them, else their ids. */
+  function networkNames(chainIds) {
+    return chainIds.map(function (id) {
+      return reg.chainName(id) || ns.i18n.t('value.chainId', { id: id });
+    }).join(', ');
+  }
+
+  function resolveOwnerProof(intent, ctx) {
+    var proof = ns.multisig.ownerProof(intent && intent.params);
+    var reading = proof.reading || null;
+    // Ours: the member whose keys sign is "you", and no site is asking.
+    ctx.siteRelayed = false;
+    ctx.selfAccount = reading ? reading.member : null;
+    ctx.selfTag = null;
+    ctx.membersNow = null;
+    if (reading) ctx.chainId = reading.chainIds[0];
+    ctx.coin = coinOf(ctx);
+    var view = baseView(intent, ctx);
+    view.method = intent && intent.method;
+    view.intentKey = 'intent.msOwnerProof';
+    view.badge = 'tag.multisig';
+    view.hero = null;
+    // The networks are a row of their own below (the app's word): the one
+    // network row a signature carries would name only the first.
+    view.chain = null;
+    view.chainId = null;
+
+    if (proof.refusal) {
+      refuseWith(view, proof.refusal);
+      if (proof.refusal === 'refuse.msOwnerAddress') view.risk = 'hard-danger';
+      view.account = typeof ctx.account === 'string' && ADDRESS.test(ctx.account) ? ctx.account : null;
+      view.tech = techFor('vela_multisigCreate', null, null, {});
+      return finishSigning(view, ctx);
+    }
+    view.account = reading.member;
+    // The member who proves is in the challenge's request (its keys answer):
+    // the context's account — whose keys the browser is asked for — must be it.
+    if (typeof ctx.account === 'string' && ctx.account.toLowerCase() !== reading.member.toLowerCase()) {
+      refuseWith(view, 'refuse.msMemberMismatch');
+    }
+    if (suppliedChallenge(intent, ctx)) {
+      refuseWith(view, 'refuse.suppliedChallenge');
+    }
+
+    var name = reading.name !== null ? visible(reading.name, view) : null;
+    var safeIdentity = identify(reading.multisig, ctx, {});
+    safeIdentity.contractName = name;
+    safeIdentity.tag = name ? 'tag.nameByApp' : null;
+    view.fields.push({ label: 'field.multisig', identity: safeIdentity });
+    view.fields.push({ label: 'field.msNetworks', value: networkNames(reading.chainIds), tagKey: 'tag.byApp' });
+    reading.owners.forEach(function (owner, i) {
+      view.fields.push({
+        label: 'field.msMemberAt', labelParams: { n: i + 1 },
+        identity: memberIdentity(owner, ctx),
+      });
+    });
+    view.fields.push({
+      label: 'field.threshold',
+      value: text('value.msNeeds', { m: reading.threshold, n: reading.owners.length }),
+      emphasis: true,
+    });
+    view.sentence = text('sentence.msOwnerProof', {
+      place: reading.place, count: reading.owners.length,
+    });
+    // Not a transaction: read from what is signed — the genesis it derives.
+    provenance(view, 'readMessage');
+    view.tech = techFor('keccak256("safe-genesis-registry/sponsor/v1" ‖ multisig)', null, null, {
+      params: [
+        { name: 'multisig', value: reading.multisig },
+        { name: 'saltNonce', value: String(intent.params[0].genesis.saltNonce) },
+        { name: 'initializer', value: String(intent.params[0].genesis.initializer) },
+        { name: 'challenge', value: reading.challenge },
+      ],
+      addresses: [
+        { roleKey: 'ui.contract', name: 'SafeProxyFactory v1.4.1', address: intent.params[0].genesis.factory },
+        { roleKey: 'ui.contract', name: 'SafeL2 v1.4.1', address: intent.params[0].genesis.singleton },
+      ],
+    });
+
+    var finished = finishSigning(view, ctx);
+    if (!finished.refuse) finished.confirmKey = 'button.msOwnerProof';
+    return finished;
+  }
+
   // --- an executor's operation (round 7, r7-1) ------------------------------
   //
   // The wallet's own operation that executes a multisig transaction: read
@@ -2723,6 +2821,7 @@ window.VelaCS = window.VelaCS || {};
     // requester's word for it, the intent's own method.
     ctx.method = requested && typeof requested.method === 'string' ? requested.method : '';
     if (ns.multisig && ctx.method === ns.multisig.METHOD) return resolveMultisig(requested, ctx);
+    if (ns.multisig && ctx.method === ns.multisig.OWNER_PROOF) return resolveOwnerProof(requested, ctx);
     ctx.siteRelayed = relayedSite(requested, ctx);
     ctx.selfAccount = selfAccountOf(requested, ctx);
     // Ours too (r10): "this multisig", and the multisig's coins in the words,

@@ -398,5 +398,16 @@ window.VelaCS.i18n.register('tr', {
   'field.msMembers': "Üyeler",
   'value.msCountChange': "{before} → {after}",
   'value.msApprovalsChange': "{beforeOf} onaydan {before} → {afterOf} onaydan {after}",
+  // §16: a member’s owner proof (vela_multisigCreate).
+  'intent.msOwnerProof': "Çoklu imza üyeliğini kanıtla",
+  'sentence.msOwnerProof': "Bu çoklu imzanın {count} üyesinden {place}. üye olduğunuzu kanıtlıyorsunuz; böylece Vela’nın hizmeti onu üyelerinin bulabileceği yere kaydedebilir. Hiçbir şey gönderilmez ve hiçbir işlem onaylanmaz.",
+  'field.msNetworks': "Ağlar",
+  'field.msMemberAt': "Üye {n}",
+  'value.msNeeds': "{n} üyeden {m} onay",
+  'button.msOwnerProof': "Üyeliği kanıtla",
+  'refuse.msOwnerShape': "Bu üyelik kanıtı bu sayfanın tam olarak okuyabileceği biçimde değil; gösterilen, imzalanacak olandan farklı olabilir. İmzalanmıyor.",
+  'refuse.msOwnerGenesis': "Bu çoklu imza Vela’nın oluşturduğu şekilde kurulmamış (sözleşmeleri veya kurulumu farklı); bu sayfa üyelerine ve kuralına kefil olamaz. İmzalanmıyor.",
+  'refuse.msOwnerAddress': "Uygulama bir çoklu imza adresi söylüyor, ama verdiği üyeler ve kurulum başka bir adres oluşturuyor. Kanıtlayacağınız şey uygulamanın anlattığı değil. İmzalanmıyor.",
+  'refuse.msOwnerNotMember': "İmzalayan hesap bu çoklu imzanın üyesi değil. İmzalanmıyor.",
   'warn.msMembersClaimOff': "Bu değişiklik, uygulamanın söylediği mevcut çoklu imza üyeleriyle uyuşmuyor — çalıştığında başarısız olabilir. Onaylamadan önce üyeleri diğerleriyle kontrol edin.",
 });
