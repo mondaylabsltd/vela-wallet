@@ -276,7 +276,14 @@
         "executedBy": "Exécutée par {{name}}",
         "countedThen": "{{approved}} approbations sur {{threshold}} comptaient à son exécution",
         "approvalsSigned": "Ces membres l’ont approuvée. Quelles approbations comptaient à son exécution n’est pas enregistré sur cet appareil.",
-        "outboxSending": "Envoi de votre approbation aux autres membres…"
+        "outboxSending": "Envoi de votre approbation aux autres membres…",
+        "unread": {
+          "chain": "{{network}} est injoignable : impossible de lire ce multisig, rien n'a été proposé. Réessayez dans un instant.",
+          "both": "Ni {{network}} ni le service multisig ne répondent : rien n'a été proposé. Vérifiez votre connexion et réessayez.",
+          "linkChain": "{{network}} est injoignable : impossible d'ouvrir cette transaction.",
+          "linkService": "Le service multisig est injoignable : impossible de trouver cette transaction.",
+          "linkBoth": "Ni {{network}} ni le service multisig ne répondent : impossible d'ouvrir cette transaction. Vérifiez votre connexion."
+        }
       },
       "send": {
         "propose": "Proposer et approuver",

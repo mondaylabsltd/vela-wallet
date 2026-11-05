@@ -195,6 +195,19 @@ pub const RPC_READ_TIMEOUT_MS: u32 = 8_000;
 /// [`RpcPoolView::pending_urls`]). Without it a black-holed node holds every
 /// read for the whole [`RPC_READ_TIMEOUT_MS`] before the next node is asked.
 pub const HEDGE_AFTER_MS: u32 = 1_500;
+/// r13-4: how many DIFFERENT endpoints of a chain have to fail on transport
+/// (no socket, no answer in time), with no answer of any kind from the chain
+/// between them, before the chain is out of reach (`unreached_chains`) — from
+/// any calls, not one call's whole pass. A pool smaller than this needs all
+/// of its endpoints. With hedged reads three hung endpoints take about
+/// 8 + 1.5 + 8 s, so a hung network is named in about 18 s from its first
+/// hung read, warm or cold — not after a pass of 25 endpoints × 8 s.
+pub const UNREACHED_AFTER_ENDPOINTS: usize = 3;
+/// r13-4: while a chain is out of reach, ONE read at a time probes it, on at
+/// most this many endpoints and a single pass (the circuit breaker's
+/// half-open probe); any other read of it meanwhile fails at once with
+/// nothing on the wire. Writes are never refused this way.
+pub const OUTAGE_PROBE_ENDPOINTS: usize = 2;
 /// Bundler JSON-RPC timeout — `NET_TIMEOUTS.bundlerRpc` (`net.ts:27`).
 pub const BUNDLER_RPC_TIMEOUT_MS: u32 = 15_000;
 /// Per-endpoint `eth_chainId` ping timeout — `NET_TIMEOUTS.rpcPing` (`net.ts:29`).
@@ -1150,6 +1163,12 @@ pub struct Model {
     /// answer. The browser's chain notice reads `failed ∪ unreached`; the home
     /// banner keeps `failed_chains` alone.
     unreached_chains: BTreeSet<u32>,
+    /// r13-4: per chain, the endpoints that failed on transport since the
+    /// chain last answered anything ([`UNREACHED_AFTER_ENDPOINTS`]).
+    silent: BTreeMap<u32, BTreeSet<String>>,
+    /// r13-4: per chain out of reach, the one read probing it now
+    /// ([`OUTAGE_PROBE_ENDPOINTS`]).
+    probing: BTreeMap<u32, String>,
     /// Chains whose person's own endpoint is not answering while another node
     /// is (owner decision 2026-10-28): the last usable RPC answer came from an
     /// endpoint that is not [`RpcSource::User`] although the pool holds one.
@@ -1928,8 +1947,26 @@ fn start_pass(model: &mut Model, call_id: &str, now_ms: f64) -> Command<RpcEffec
     };
     let (chain_id, kind) = (session.chain_id, session.kind);
 
+    // r13-4: a read of a chain out of reach while another read probes it
+    // fails at once — nothing on the wire, the chain's set unchanged.
+    let outage_read = outage_read(model, call_id);
+    if outage_read && probing_other(model, chain_id, call_id) {
+        if let Some(session) = model.calls.get_mut(call_id) {
+            session.saw_unreached = true;
+        }
+        return conclude_failed(model, call_id);
+    }
+
     let pruned = prune_expired_bans(model, now_ms);
-    let urls = select_with_rescue(model, chain_id, kind, now_ms);
+    let mut urls = select_with_rescue(model, chain_id, kind, now_ms);
+    if outage_read {
+        // The half-open probe: the best few endpoints, one pass, alone.
+        urls.truncate(OUTAGE_PROBE_ENDPOINTS);
+        model.probing.insert(chain_id, call_id.to_owned());
+        if let Some(session) = model.calls.get_mut(call_id) {
+            session.pass = max_passes(kind).saturating_sub(1);
+        }
+    }
 
     if let Some(session) = model.calls.get_mut(call_id) {
         session.queue = urls.into_iter().collect();
@@ -2129,6 +2166,7 @@ fn conclude_failed(model: &mut Model, call_id: &str) -> Command<RpcEffect, Event
     let Some(session) = model.calls.remove(call_id) else {
         return Command::done();
     };
+    model.probing.retain(|_, probe| probe != call_id);
     let throttled = session.saw_rate_limit && !session.saw_unreached;
     let rate_limited = match session.kind {
         // Spec 082 RG7: a method a node may simply not offer never says
@@ -2414,6 +2452,8 @@ fn handle_outcome(
         }
     }
 
+    note_silence(model, chain_id, kind, &method, url, &outcome);
+
     let route = route_of(kind, &method, &outcome);
     let maybe_delivered = model
         .calls
@@ -2509,12 +2549,72 @@ fn handle_outcome(
     }
 }
 
+/// r13-4: a read that a chain out of reach would hold — through the RPC
+/// pool, a read ([`is_hedged_read`]: nothing it sends changes anything), on
+/// a chain in `unreached_chains`.
+fn outage_read(model: &Model, call_id: &str) -> bool {
+    model.calls.get(call_id).is_some_and(|session| {
+        is_hedged_read(session.kind, &session.method)
+            && model.unreached_chains.contains(&session.chain_id)
+    })
+}
+
+/// Another read is probing `chain_id` now.
+fn probing_other(model: &Model, chain_id: u32, call_id: &str) -> bool {
+    model.probing.get(&chain_id).is_some_and(|probe| {
+        probe != call_id
+            && model
+                .calls
+                .get(probe)
+                .is_some_and(|session| session.chain_id == chain_id)
+    })
+}
+
+/// r13-4: what one endpoint's outcome says of its chain. A transport failure
+/// (nothing answered: a hang, a refusal) joins the chain's silent endpoints;
+/// anything that answered — a result, an error, a 429 — empties them. When
+/// [`UNREACHED_AFTER_ENDPOINTS`] different endpoints (or every endpoint of
+/// a smaller pool) are silent, the chain is out of reach at once, and every
+/// read of it still sweeping stops after a probe's worth of endpoints.
+fn note_silence(
+    model: &mut Model,
+    chain_id: u32,
+    kind: RpcKind,
+    method: &str,
+    url: &str,
+    outcome: &RpcTransportOutcome,
+) {
+    if kind != RpcKind::Rpc || is_optional_method(method) {
+        return;
+    }
+    if !is_transport_failure(outcome) {
+        model.silent.remove(&chain_id);
+        return;
+    }
+    let silent = model.silent.entry(chain_id).or_default();
+    silent.insert(url.to_owned());
+    let count = silent.len();
+    let pool_size = model.pools.get(&chain_id).map_or(0, |pool| pool.rpc.len());
+    let needed = UNREACHED_AFTER_ENDPOINTS.min(pool_size.max(1));
+    if count < needed || !model.unreached_chains.insert(chain_id) {
+        return;
+    }
+    let max_pass = max_passes(RpcKind::Rpc).saturating_sub(1);
+    for session in model.calls.values_mut() {
+        if session.chain_id == chain_id && is_hedged_read(session.kind, &session.method) {
+            session.queue.truncate(OUTAGE_PROBE_ENDPOINTS);
+            session.pass = max_pass;
+        }
+    }
+}
+
 fn conclude(
     model: &mut Model,
     call_id: &str,
     verdict: RpcCallVerdict,
 ) -> Command<RpcEffect, Event> {
     model.calls.remove(call_id);
+    model.probing.retain(|_, probe| probe != call_id);
     Command::all([
         request(
             model,
@@ -2534,6 +2634,7 @@ fn clear_chain_failure(model: &mut Model, chain_id: u32, kind: RpcKind) {
         model.failed_chains.remove(&chain_id);
         model.rate_limited_chains.remove(&chain_id);
         model.unreached_chains.remove(&chain_id);
+        model.silent.remove(&chain_id);
     }
 }
 

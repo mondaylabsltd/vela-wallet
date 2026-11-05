@@ -60,6 +60,11 @@ struct Linked {
     loading: bool,
     stale: bool,
     unreadable: bool,
+    /// r13-3: which link this is (a deadline speaks only for its own).
+    opened: u64,
+    /// r13-3: its transaction was not read within `OPEN_TIMEOUT_MS`: the
+    /// key that names the read still out.
+    failed: Option<String>,
 }
 
 struct OutsidePending {
@@ -90,6 +95,8 @@ pub struct More {
     /// The ids of `calls_status`, oldest first (its bound).
     calls_order: std::collections::VecDeque<String>,
     linked: Option<Linked>,
+    /// r13-3: links opened so far (each link's `opened`).
+    linked_opened: u64,
     outside: BTreeMap<String, OutsidePending>,
     indexed: Vec<String>,
 }
@@ -140,6 +147,10 @@ pub enum LinkedStand {
     NotFound,
     /// The network did not answer (r4b-3): what was read stays.
     Unreadable,
+    /// r13-3: not read within `OPEN_TIMEOUT_MS` — said with the read still
+    /// out (`reason_key`) and Try again (`retry`), never an endless
+    /// "Opening the transaction…".
+    Failed,
 }
 
 /// The proposal a link opened (`LinkedProposals`, the sheet's source).
@@ -160,6 +171,15 @@ pub struct LinkedView {
     pub members: Option<ChainMembers>,
     /// The last read failed: what is shown may be stale.
     pub stale: bool,
+    /// r13-3: what to say when it is not shown — `failed` (the read still
+    /// out when the bound ran out), `unreadable` (the network did not
+    /// answer) or `notFound` (the service did not): the corpus key
+    /// (`home.multisig.proposal.unread.link*`, `{{network}}`: the network's
+    /// name). Null while reading, found, or `notInMailbox`.
+    pub reason_key: Option<String>,
+    /// r13-3: offer "Try again" (the proposals machine's `retry`): every
+    /// stand with a `reason_key`.
+    pub retry: bool,
 }
 
 /// What these rules add to [`ProposalsView`].
@@ -281,11 +301,21 @@ fn linked_view(s: &State) -> Option<LinkedView> {
     } else if unreadable {
         LinkedStand::Unreadable
     } else if loading || chain.is_none() {
-        LinkedStand::Reading
+        if l.failed.is_some() {
+            LinkedStand::Failed
+        } else {
+            LinkedStand::Reading
+        }
     } else if chain.as_ref().is_some_and(|c| c.mailbox) {
         LinkedStand::NotInMailbox
     } else {
         LinkedStand::NotFound
+    };
+    let reason_key = match stand {
+        LinkedStand::Failed => l.failed.clone(),
+        LinkedStand::Unreadable => Some(review_state::UnreadRead::Chain.link_key().to_owned()),
+        LinkedStand::NotFound => Some(review_state::UnreadRead::Service.link_key().to_owned()),
+        _ => None,
     };
     Some(LinkedView {
         safe: l.safe.clone(),
@@ -296,7 +326,74 @@ fn linked_view(s: &State) -> Option<LinkedView> {
         item,
         members: chain.map(|c| c.members),
         stale,
+        retry: reason_key.is_some(),
+        reason_key,
     })
+}
+
+/// r13-3: "Try again" on a link's transaction (the proposals `retry`): its
+/// bound starts again; a preview's transaction is read again here (`true`),
+/// the followed multisig's by the refresh the retry runs anyway.
+pub(super) async fn retry_linked(io: &Io<Event>, st: &Shared<State>) -> bool {
+    let preview = {
+        let mut s = lock(st);
+        let next = s.more.linked_opened + 1;
+        let Some(l) = s.more.linked.as_mut() else {
+            return false;
+        };
+        l.failed = None;
+        l.opened = next;
+        l.loading = true;
+        l.unreadable = false;
+        let preview = l.preview.is_some();
+        s.more.linked_opened = next;
+        preview
+    };
+    io.emit(Event::Changed);
+    link_deadline(io, st);
+    if preview {
+        read_linked(io, st).await;
+    }
+    preview
+}
+
+/// r13-3: a link's transaction still not read when its bound ran out says
+/// which read is still out — the reads go on, and it opens when they come.
+fn link_deadline(io: &Io<Event>, st: &Shared<State>) {
+    let Some(opened) = lock(st).more.linked.as_ref().map(|l| l.opened) else {
+        return;
+    };
+    let st = st.clone();
+    io.spawn(move |io| async move {
+        io.wait(u64::from(review_state::OPEN_TIMEOUT_MS)).await;
+        {
+            let mut s = lock(&st);
+            let reading = linked_view(&s).is_some_and(|v| v.stand == LinkedStand::Reading);
+            let Some(chain_id) = s
+                .more
+                .linked
+                .as_ref()
+                .filter(|l| l.opened == opened)
+                .map(|l| l.chain_id)
+            else {
+                return;
+            };
+            if !reading {
+                return;
+            }
+            let unread = s.unread_now(chain_id).unwrap_or_else(|| {
+                if s.mailbox_missed.contains(&chain_id) {
+                    review_state::UnreadRead::Service
+                } else {
+                    review_state::UnreadRead::Chain
+                }
+            });
+            if let Some(l) = s.more.linked.as_mut() {
+                l.failed = Some(unread.link_key().to_owned());
+            }
+        }
+        io.emit(Event::Changed);
+    });
 }
 
 /// The view's later fields.
@@ -558,9 +655,13 @@ pub(super) fn update(event: Event, model: &mut Model) -> Cmd {
                     loading: true,
                     stale: false,
                     unreadable: false,
+                    opened: s.more.linked_opened + 1,
+                    failed: None,
                 });
+                s.more.linked_opened += 1;
             }
             flow(model, move |io, st| async move {
+                link_deadline(&io, &st);
                 if preview.is_some() {
                     read_linked(&io, &st).await;
                 } else {

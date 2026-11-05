@@ -201,7 +201,14 @@
     "executedBy": "Eseguita da {{name}}",
     "countedThen": "{{approved}} approvazioni su {{threshold}} contavano all’esecuzione",
     "approvalsSigned": "Questi membri l’hanno approvata. Quali approvazioni contavano all’esecuzione non è registrato su questo dispositivo.",
-    "outboxSending": "Invio della tua approvazione agli altri membri…"
+    "outboxSending": "Invio della tua approvazione agli altri membri…",
+    "unread": {
+     "chain": "Non si raggiunge {{network}} per leggere questo multisig, quindi non è stato proposto nulla. Riprova tra poco.",
+     "both": "Non si raggiungono né {{network}} né il servizio multisig, quindi non è stato proposto nulla. Controlla la connessione e riprova.",
+     "linkChain": "Non si raggiunge {{network}} per aprire questa transazione.",
+     "linkService": "Non si raggiunge il servizio multisig per trovare questa transazione.",
+     "linkBoth": "Non si raggiungono né {{network}} né il servizio multisig per aprire questa transazione. Controlla la connessione."
+    }
    },
    "send": {
     "propose": "Proponi e approva",

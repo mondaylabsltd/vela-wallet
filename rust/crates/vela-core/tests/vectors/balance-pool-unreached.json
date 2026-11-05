@@ -71,6 +71,76 @@
    ]
   },
   {
+   "name": "r13-4: a network the pool finds out of reach is named at once, on the pool's word, while its forced read is out — and unsaid when that read answers",
+   "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "steps": [
+    {
+     "answer": {
+      "type": "cached_total_loaded",
+      "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "usd": null
+     }
+    },
+    {
+     "answer": {
+      "type": "fetch_settled",
+      "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "pull": false,
+      "tokens": [],
+      "failed_chain_ids": [],
+      "rate_limited_chain_ids": [],
+      "read_chain_ids": [
+       5042002,
+       11155111
+      ],
+      "now_ms": 1700000000000
+     },
+     "expect": {
+      "live": true,
+      "unreachable": [],
+      "fetch": null
+     }
+    },
+    {
+     "event": {
+      "type": "pool_unreached",
+      "chain_ids": [
+       5042002
+      ]
+     },
+     "expect": {
+      "fetch": {
+       "force": true
+      },
+      "unreachable": [
+       5042002
+      ],
+      "live": false
+     }
+    },
+    {
+     "answer": {
+      "type": "fetch_settled",
+      "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "pull": false,
+      "tokens": [],
+      "failed_chain_ids": [],
+      "rate_limited_chain_ids": [],
+      "read_chain_ids": [
+       5042002,
+       11155111
+      ],
+      "now_ms": 1700000009000
+     },
+     "expect": {
+      "live": true,
+      "unreachable": [],
+      "fetch": null
+     }
+    }
+   ]
+  },
+  {
    "name": "a cache hit never clears a network known not to answer (no Live over it)",
    "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
    "steps": [

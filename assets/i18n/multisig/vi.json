@@ -199,7 +199,14 @@
     "executedBy": "Do {{name}} thực thi",
     "countedThen": "{{approved}} trong {{threshold}} lượt duyệt được tính khi thực thi",
     "approvalsSigned": "Các thành viên này đã duyệt. Lượt duyệt nào được tính khi thực thi không được lưu trên thiết bị này.",
-    "outboxSending": "Đang gửi phê duyệt của bạn tới các thành viên khác…"
+    "outboxSending": "Đang gửi phê duyệt của bạn tới các thành viên khác…",
+    "unread": {
+     "chain": "Không kết nối được {{network}} để đọc multisig này nên chưa có gì được đề xuất. Hãy thử lại sau giây lát.",
+     "both": "Không kết nối được {{network}} lẫn dịch vụ multisig nên chưa có gì được đề xuất. Hãy kiểm tra kết nối rồi thử lại.",
+     "linkChain": "Không kết nối được {{network}} để mở giao dịch này.",
+     "linkService": "Không kết nối được dịch vụ multisig để tìm giao dịch này.",
+     "linkBoth": "Không kết nối được {{network}} lẫn dịch vụ multisig để mở giao dịch này. Hãy kiểm tra kết nối."
+    }
    },
    "send": {
     "propose": "Đề xuất và duyệt",

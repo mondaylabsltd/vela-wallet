@@ -1113,6 +1113,16 @@ pub fn network_space_chain_ids(space: &str, rows_json: &str) -> String {
     vela_core::app::network_space::space_chain_ids_json(space, rows_json)
 }
 
+/// r13-1: where an account lives when none of its networks is in the space
+/// in front (`network_space::lives_elsewhere`): `{chain_ids, here, other,
+/// front}` → an `Elsewhere` (its other-space networks, that space, the
+/// note's and the switch's keys), or `null`.
+#[wasm_bindgen(js_name = networkLivesElsewhere)]
+#[must_use]
+pub fn network_lives_elsewhere(args_json: &str) -> String {
+    vela_core::app::network_space::lives_elsewhere_json(args_json)
+}
+
 /// The chain a site with no chain of its own starts on (dapp-17):
 /// `network_space::site_start_chain` — the space's chain ids in the list's
 /// order, and the chain the person last put a site on there (`undefined`:

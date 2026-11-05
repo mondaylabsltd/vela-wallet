@@ -199,7 +199,14 @@
     "executedBy": "Dieksekusi oleh {{name}}",
     "countedThen": "{{approved}} dari {{threshold}} persetujuan dihitung saat dieksekusi",
     "approvalsSigned": "Anggota ini menyetujuinya. Persetujuan mana yang dihitung saat dieksekusi tidak tercatat di perangkat ini.",
-    "outboxSending": "Mengirim persetujuanmu ke anggota lain…"
+    "outboxSending": "Mengirim persetujuanmu ke anggota lain…",
+    "unread": {
+     "chain": "Tidak dapat menjangkau {{network}} untuk membaca multisig ini, jadi tidak ada yang diusulkan. Coba lagi sebentar lagi.",
+     "both": "Tidak dapat menjangkau {{network}} maupun layanan multisig, jadi tidak ada yang diusulkan. Periksa koneksi Anda lalu coba lagi.",
+     "linkChain": "Tidak dapat menjangkau {{network}} untuk membuka transaksi ini.",
+     "linkService": "Tidak dapat menjangkau layanan multisig untuk menemukan transaksi ini.",
+     "linkBoth": "Tidak dapat menjangkau {{network}} maupun layanan multisig untuk membuka transaksi ini. Periksa koneksi Anda."
+    }
    },
    "send": {
     "propose": "Usulkan dan setujui",

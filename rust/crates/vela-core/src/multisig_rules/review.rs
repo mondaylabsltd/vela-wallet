@@ -81,6 +81,12 @@ pub fn call(method: &str, args: &Value) -> Result<String, CoreError> {
         "door" => to_json(
             &crate::app::multisig_review_state::door_json(args).map_err(CoreError::Multisig)?,
         ),
+        // r13-3: the step before a review — `{chain, service, link?}` (which
+        // read failed or was still out) → the key that names it, or null.
+        "opening" => to_json(
+            &crate::app::multisig_review_state::opening_reason_json(args)
+                .map_err(CoreError::Multisig)?,
+        ),
         other => Err(CoreError::Multisig(format!("review.{other}: no such rule"))),
     }
 }

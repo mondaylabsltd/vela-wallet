@@ -273,7 +273,14 @@
         "executedBy": "Executed by {{name}}",
         "countedThen": "{{approved}} of {{threshold}} approvals counted when it was executed",
         "approvalsSigned": "These members approved it. Which approvals counted when it was executed isn’t recorded on this device.",
-        "outboxSending": "Sending your approval to the other members…"
+        "outboxSending": "Sending your approval to the other members…",
+        "unread": {
+          "chain": "Couldn't reach {{network}} to read this multisig, so nothing was proposed. Try again in a moment.",
+          "both": "Couldn't reach {{network}} or the multisig service, so nothing was proposed. Check your connection and try again.",
+          "linkChain": "Couldn't reach {{network}} to open this transaction.",
+          "linkService": "Couldn't reach the multisig service to find this transaction.",
+          "linkBoth": "Couldn't reach {{network}} or the multisig service to open this transaction. Check your connection."
+        }
       },
       "send": {
         "propose": "Propose and approve",
