@@ -134,9 +134,17 @@ final class R12FixLiveUITests: XCTestCase {
         field.typeText(value)
     }
 
-    /// Every label on screen, one per line (for the log and the evidence).
+    /// Every label on screen, one per line (for the log and the evidence) —
+    /// read from one snapshot of the tree, so a row that moves while it is
+    /// read cannot fail the capture.
     private func labels(_ app: XCUIApplication) -> [String] {
-        app.descendants(matching: .any).allElementsBoundByIndex.prefix(400).map(\.label).filter { !$0.isEmpty }
+        app.debugDescription.split(separator: "\n").compactMap { line -> String? in
+            guard let start = line.range(of: "label: '") else { return nil }
+            let rest = line[start.upperBound...]
+            guard let end = rest.range(of: "'", options: .backwards) else { return nil }
+            let label = String(rest[..<end.lowerBound])
+            return label.isEmpty ? nil : label
+        }
     }
 
     private func dump(_ app: XCUIApplication, _ name: String) {
@@ -326,31 +334,40 @@ final class R12FixLiveUITests: XCTestCase {
             if done.exists { done.tap() } else { app.swipeDown(velocity: .fast) }
             sleep(2)
         }
-        // Activity: the tab bar's second… the home's "All" opens History.
         app.swipeUp()
         sleep(1)
         shot(app, "i-\(tag)-3-home-lower")
         dump(app, "i-\(tag)-3-home-lower")
-        let tabs = app.tabBars.buttons
-        if tabs.count >= 4 {
-            tabs.element(boundBy: 3).tap()
+        // Activity: the home's section header opens History.
+        let activity = app.buttons["home.section.activity"].firstMatch
+        if activity.waitForExistence(timeout: 10) {
+            if !activity.isHittable { app.swipeDown() }
+            activity.tap()
             sleep(3)
-            shot(app, "i-\(tag)-4-settings")
-            dump(app, "i-\(tag)-4-settings")
-            app.swipeUp()
-            sleep(1)
-            shot(app, "i-\(tag)-5-settings-more")
-            dump(app, "i-\(tag)-5-settings-more")
-            tabs.element(boundBy: 0).tap()
+            shot(app, "i-\(tag)-4-activity")
+            dump(app, "i-\(tag)-4-activity")
+            let back = app.navigationBars.buttons.firstMatch
+            if back.exists { back.tap() } else { app.coordinate(withNormalizedOffset: CGVector(dx: 0.085, dy: 0.125)).tap() }
             sleep(2)
         }
+        // Settings: the bottom bar's last place (its icons carry no words).
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.875, dy: 0.93)).tap()
+        sleep(3)
+        shot(app, "i-\(tag)-5-settings")
+        dump(app, "i-\(tag)-5-settings")
+        app.swipeUp()
+        sleep(1)
+        shot(app, "i-\(tag)-6-settings-more")
+        dump(app, "i-\(tag)-6-settings-more")
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.125, dy: 0.93)).tap()
+        sleep(2)
         let settings = element(app, "multisig.home.settings")
         if settings.waitForExistence(timeout: 10) {
             if !settings.isHittable { app.swipeUp() }
             settings.tap()
             sleep(4)
-            shot(app, "i-\(tag)-6-multisig-settings")
-            dump(app, "i-\(tag)-6-multisig-settings")
+            shot(app, "i-\(tag)-7-multisig-settings")
+            dump(app, "i-\(tag)-7-multisig-settings")
         }
     }
 }
