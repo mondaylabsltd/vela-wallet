@@ -208,10 +208,25 @@ class WaitingRows {
 	 * last transactions it gave — never "No activity yet" over ones it has
 	 * not answered for. Reads only.
 	 */
-	group(m: MultisigMessages, toName?: string): ActivityGroupModel | null {
+	group(
+		m: MultisigMessages,
+		toName?: string,
+		/**
+		 * §18 item 3: Activity's empty state says the history could not be
+		 * read, with Try again (`activitySaysHistory`) — so a group with no
+		 * row of its own does not say it again: one control per failure.
+		 */
+		historySaid = false
+	): ActivityGroupModel | null {
 		const open = proposals.open;
 		const missing = proposals.missing;
-		const said = !!proposals.view?.waiting_note;
+		const waitingNote = proposals.view?.waiting_note ?? null;
+		const noteSaidElsewhere =
+			historySaid &&
+			waitingNote?.kind === 'historyUnreadable' &&
+			open.length === 0 &&
+			missing.length === 0;
+		const said = !!waitingNote && !noteSaidElsewhere;
 		if (open.length === 0 && missing.length === 0 && !said) return null;
 		const rows: ActivityRowModel[] = open.map((item) => {
 			const drawn = this.#drawn[proposalRowId(item)];

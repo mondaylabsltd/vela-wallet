@@ -356,6 +356,11 @@ export interface AccountsSheetModel {
 	removeNamed?: string;
 	removeBody?: string;
 	removeCancel?: string;
+	/**
+	 * §18 item 2: a stored account record this browser cannot read, said under
+	 * the list — never left out of it in silence. Absent: none.
+	 */
+	unreadable?: string;
 }
 
 /** ST3/ST13b/ST16 all share this shape; only the tone and the callout differ. */
@@ -1275,6 +1280,8 @@ export interface SettingsDesktopModel {
 		removeNamed?: string;
 		removeBody?: string;
 		removeCancel?: string;
+		/** §18 item 2: a stored record this browser cannot read, said under the list. */
+		unreadable?: string;
 		signOutLabel: string;
 		signOutNote: string;
 		erase: { title: string; subtitle: string; action: string };

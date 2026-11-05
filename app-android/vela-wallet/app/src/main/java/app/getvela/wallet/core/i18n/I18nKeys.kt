@@ -6,6 +6,15 @@ package app.getvela.wallet.core.i18n
  * Centralised so feature code never scatters key literals.
  */
 object I18nKeys {
+    /**
+     * §18 item 2: stored accounts this device cannot read — device-neutral
+     * words (the web's pair says "this browser"), the desktop's DESKTOP-1 pair.
+     */
+    object Storage {
+        const val DEVICE_UNREADABLE_TITLE = "onboarding.storage.deviceUnreadableTitle"
+        const val DEVICE_UNREADABLE_BODY = "onboarding.storage.deviceUnreadableBody"
+    }
+
     object Welcome {
         const val TAGLINE = "onboarding.welcome.desktopTagline"
         const val HERO_TITLE = "onboarding.welcome.heroTitle"

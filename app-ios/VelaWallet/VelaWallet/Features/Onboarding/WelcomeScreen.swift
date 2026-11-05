@@ -25,6 +25,11 @@ struct WelcomeScreen: View {
     /// place of its label; a control that dimmed instead would read as the app
     /// having gone unavailable rather than gone to work.
     var signingIn: Bool = false
+    /// §18 item 2 (the desktop's DESKTOP-1): stored accounts this device
+    /// cannot read are said here, never "looks signed out" — kept as stored,
+    /// and the way back is the sign-in button below: the passkey writes the
+    /// account again.
+    var accountsUnreadable: Bool = false
 
     private var heroRole: TypeRole { model.content.heroTitleFit.role }
 
@@ -52,6 +57,21 @@ struct WelcomeScreen: View {
                         .typeRole(Typography.body)
                         .foregroundStyle(theme.fgMuted)
                         .fixedSize(horizontal: false, vertical: true)
+
+                    if accountsUnreadable {
+                        VStack(alignment: .leading, spacing: Tokens.Space.s4) {
+                            Text(loc.t(I18nKeys.Storage.deviceUnreadableTitle))
+                                .typeRole(Typography.body)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(theme.warningBase)
+                            Text(loc.t(I18nKeys.Storage.deviceUnreadableBody))
+                                .typeRole(Typography.body)
+                                .foregroundStyle(theme.fgMuted)
+                        }
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier("onboarding.accountsUnreadable")
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

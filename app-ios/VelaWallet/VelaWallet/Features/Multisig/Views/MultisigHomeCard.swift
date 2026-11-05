@@ -32,6 +32,9 @@ struct MultisigHomeCard: View {
     var elsewhere: WalletLive.Elsewhere? = nil
     /// The person's switch to the space its money is in.
     var onSwitchSpace: ((NetworkSpaceKind) -> Void)? = nil
+    /// §18 item 3: Activity's empty state says the history was not read,
+    /// with Try again (`WalletLive.historySaidInActivity`).
+    var historySaidInActivity = false
 
     private var view: MsProposalsView { hub.proposalsView }
     private var account: MsAccount { row.account }
@@ -221,9 +224,18 @@ struct MultisigHomeCard: View {
         .accessibilityIdentifier("multisig.home.proposal")
     }
 
+    /// §18 item 3: the card's note, beside Activity. While Activity's empty
+    /// state says the history could not be read — with Try again (r13-7) —
+    /// the card does not say it again: one sentence and one control per
+    /// failure. Every other note, and this one over rows, stays. Pure.
+    static func cardNote(_ note: MsTagged?, historySaidInActivity: Bool) -> MsTagged? {
+        historySaidInActivity && note?.kind == "historyUnreadable" ? nil : note
+    }
+
     /// The group's one note (`waiting_note`), and whether Retry goes with it.
     private var waitingNote: (text: String, retry: Bool)? {
-        guard following, let note = view.waitingNote else { return nil }
+        guard following, let note = Self.cardNote(view.waitingNote, historySaidInActivity: historySaidInActivity)
+        else { return nil }
         let networks = { words.loc.list((note["chain_ids"]?.array ?? []).compactMap(\.int).map(words.network)) }
         switch note.kind {
         case "offline":

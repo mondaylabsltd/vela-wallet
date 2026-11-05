@@ -28,6 +28,7 @@ import kotlinx.serialization.json.JsonObject
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -207,6 +208,31 @@ class MultisigViewsTest {
             w.t("proposal.unread.linkChain", "network" to w.network(100)),
             w.unreadText(failed.reasonKey, failed.chainId),
         )
+    }
+
+    /**
+     * §18 item 1: a link whose network (`unreadable`) or multisig service
+     * (`notFound`) did not answer is a read that failed, not an answer — the
+     * core's words for it and Try again whenever the core's `retry` says so;
+     * a link read and not in the mailbox (`notInMailbox`) offers none.
+     */
+    @Test
+    fun every_link_the_core_says_retryable_offers_try_again() {
+        val w = words()
+        for ((stand, leaf) in listOf("failed" to "linkChain", "unreadable" to "linkChain", "notFound" to "linkService")) {
+            val linked = app.getvela.wallet.feature.multisig.core.MsLinkedView.of(
+                json("""{"safe":"0x1","chain_id":100,"safe_tx_hash":"0x2","preview":false,"stand":"$stand","reason_key":"home.multisig.proposal.unread.$leaf","retry":true}"""),
+            )
+            assertTrue(stand, app.getvela.wallet.feature.multisig.LinkedStands.offersTryAgain(linked))
+            val said = app.getvela.wallet.feature.multisig.LinkedStands.failure(linked, w)
+            assertEquals(stand, w.t("proposal.unread.$leaf", "network" to w.network(100)), said)
+            assertNotEquals(stand, w.t("proposal.notFound"), said)
+        }
+        val answered = app.getvela.wallet.feature.multisig.core.MsLinkedView.of(
+            json("""{"safe":"0x1","chain_id":100,"safe_tx_hash":"0x2","preview":false,"stand":"notInMailbox","reason_key":null,"retry":false}"""),
+        )
+        assertFalse(app.getvela.wallet.feature.multisig.LinkedStands.offersTryAgain(answered))
+        assertNull(app.getvela.wallet.feature.multisig.LinkedStands.failure(answered, w))
     }
 
     @Test

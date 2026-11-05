@@ -197,7 +197,9 @@ export function createOnboardingExecutor(deps: ExecutorDeps) {
 			}
 
 			case 'load_accounts':
-				return { type: 'accounts_loaded', accounts: Storage.loadAccounts() };
+				// §18 item 2: the records the core reads, as stored; one it cannot
+				// read is kept, never a reason sign-in fails.
+				return { type: 'accounts_loaded', accounts: Storage.readStoredAccounts() };
 
 			case 'save_account':
 				Storage.saveAccount(operation.account);

@@ -2075,6 +2075,17 @@ internal fun AccountsSheetBody(
             }
         }
     }
+    // §18 item 2 (the desktop's DESKTOP-1): a stored account this device cannot
+    // read is said under the list, never left out of it in silence.
+    sheet.unreadable?.let { line ->
+        Text(
+            text = line,
+            color = colors.warningBase,
+            fontFamily = VelaFontFamily,
+            fontSize = VelaTextSize.base,
+            modifier = Modifier.padding(top = VelaSpacing.lg).testTag("accounts.unreadable"),
+        )
+    }
     // Asked before it happens, because the row it takes is the one under a
     // finger that was aiming to switch.
     removing?.let { index ->

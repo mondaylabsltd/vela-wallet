@@ -208,6 +208,25 @@ describe('no fiat figure before the display currency commits — every surface t
 		expect(sheet.summary).toContain(MONEY_PENDING);
 	});
 
+	/**
+	 * §18 item 2 (the desktop's DESKTOP-1): a stored record this browser
+	 * cannot read is said under the switcher's list, on every surface of it.
+	 */
+	it('account_switcher: a stored record this browser cannot read is said under the list', () => {
+		const said = { ...accounts(ON_ITS_WAY), unreadable: 1 };
+		expect(sm.accounts.unreadable).not.toMatch(/^onboarding\./);
+		expect(liveAccountsSheet(said, sm.accounts).unreadable).toBe(sm.accounts.unreadable);
+		expect(liveAccountsSheet(accounts(ON_ITS_WAY), sm.accounts).unreadable).toBeUndefined();
+		const phone = withLiveAccounts(buildSettingsMobileState('st2', sm, identicon), said, sm);
+		expect(phone.accountsSheet.unreadable).toBe(sm.accounts.unreadable);
+		const wide = withLiveAccountsDesktop(
+			buildSettingsDesktopState('dst1', sm, identicon),
+			said,
+			sm
+		);
+		expect(wide.account.unreadable).toBe(sm.accounts.unreadable);
+	});
+
 	it('settings_total: Settings’ own accounts page, phone and wide', () => {
 		expectWithheld('settings_total', (currency) => {
 			const phone = withLiveAccounts(

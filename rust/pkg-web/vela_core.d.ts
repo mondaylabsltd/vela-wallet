@@ -2113,6 +2113,27 @@ export function storageItems(): string;
  */
 export function storageRecordsIn(value: string): number | undefined;
 
+/**
+ * §18 item 2: the stored account list (`vela.accounts`) as this build reads
+ * it (`stored_accounts::read`): `raw` as stored (`undefined`: nothing) →
+ * `{accounts, unreadable, unreadable_at}` — the records the core reads,
+ * exactly as stored, and how many it cannot (kept, and said).
+ */
+export function storedAccountsRead(raw?: string | null): string;
+
+/**
+ * §18 item 2: drop the record `by_json` names (`{"id": …}` or `{"address":
+ * …}`), every other kept as it was; `null` for anything else.
+ */
+export function storedAccountsRemove(raw: string | null | undefined, by_json: string): string;
+
+/**
+ * §18 item 2: upsert a stored account record by `id`, every record this
+ * build cannot read kept as it was: `{stored, before, after, replaced,
+ * unreadable_kept}`, or `null` (a record with no `id`).
+ */
+export function storedAccountsUpsert(raw: string | null | undefined, account_json: string): string;
+
 export function toBase64Url(data: Uint8Array): string;
 
 export function toHex(data: Uint8Array, prefixed: boolean): string;
@@ -2812,6 +2833,9 @@ export interface InitOutput {
     readonly storageItemOfKey: (a: number, b: number) => [number, number];
     readonly storageItems: () => [number, number];
     readonly storageRecordsIn: (a: number, b: number) => number;
+    readonly storedAccountsRead: (a: number, b: number) => [number, number];
+    readonly storedAccountsRemove: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly storedAccountsUpsert: (a: number, b: number, c: number, d: number) => [number, number];
     readonly toBase64Url: (a: number, b: number) => [number, number];
     readonly toHex: (a: number, b: number, c: number) => [number, number];
     readonly toQuantity: (a: number, b: number) => [number, number, number, number];

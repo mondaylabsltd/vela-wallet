@@ -190,6 +190,8 @@ export class MultisigWorld {
 	readonly executions: { chainId: number; safe: string; hash: string; tx: string }[] = [];
 	/** Every JSON-RPC method asked, `chainId method`. */
 	readonly rpcAsked: string[] = [];
+	/** The chain refuses a search for `ExecutionSuccess`: a history that cannot be read. */
+	refuseHistory = false;
 
 	/** `address`'s native balance on `chainId` here (none unless set). */
 	balance(chainId: number, address: string): bigint {
@@ -447,6 +449,8 @@ export class MultisigWorld {
 			case 'eth_getLogs': {
 				const filter = params[0] as { address?: string; topics?: (string | null)[] };
 				const hash = String(filter.topics?.[1] ?? '').toLowerCase();
+				if (this.refuseHistory && filter.topics?.[0] === EXECUTION_SUCCESS)
+					return { error: { code: -32000, message: 'history refused' } };
 				return {
 					result: this.executions
 						.filter(

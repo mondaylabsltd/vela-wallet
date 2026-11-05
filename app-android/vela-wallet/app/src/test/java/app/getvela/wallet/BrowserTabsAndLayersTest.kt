@@ -504,7 +504,7 @@ class BrowserTabsAndLayersTest {
         val store = FakeStore()
         val accounts = AccountStore(store)
         accounts.saveAccount(
-            JSONObject().put("id", credential).put("address", safe).put("public_key_hex", publicKey).put(
+            JSONObject().put("id", credential).put("address", safe).put("public_key_hex", publicKey).put("created_at_iso", "2026-01-01T00:00:00Z").put(
                 "keys",
                 JSONArray().put(JSONObject().put("credential_id", credential).put("public_key_hex", publicKey).put("name", "Key 1").put("transports", "internal")),
             ),

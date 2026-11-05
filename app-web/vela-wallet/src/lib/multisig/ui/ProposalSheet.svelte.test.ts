@@ -85,7 +85,9 @@ const fake = vi.hoisted(() => ({
 	/** Told when a dApp's draft is confirmed: the host's sheet then shows the proposal. */
 	onConfirm: null as null | (() => Promise<void>),
 	/** ms-21: a link's transaction read only, as the machine's `linked` reads (`linkedSource`). */
-	linkedSource: null as any
+	linkedSource: null as any,
+	/** The proposals machine's `linked` (`MultisigLinkedView`): a link's stand. */
+	machineLinked: null as any
 }));
 
 /**
@@ -190,6 +192,7 @@ vi.mock('../core/proposals.svelte', async () => {
 					}
 				: null,
 			last_actor: null,
+			linked: fake.machineLinked,
 			// core-ms-2: who here one press approves and executes it, as the
 			// machine rules (app_multisig_proposals.rs
 			// `approve_and_execute_is_offered_and_runs_in_one_press`): short of
@@ -750,6 +753,7 @@ beforeEach(() => {
 	fake.confirmed = null;
 	fake.onConfirm = null;
 	fake.linkedSource = null;
+	fake.machineLinked = null;
 	resetMachineSeam();
 	reviewSeam.review = null;
 	reviewSeam.refreshed = 0;
@@ -1493,6 +1497,56 @@ describe('an owner whose wallet is elsewhere (ms-11, ms-23)', () => {
 		screen = show();
 		await settle();
 		expect(buttons()).not.toContain('external.signWithWallet');
+		await screen.unmount();
+	});
+});
+
+describe('a link whose read did not come back (§18 item 1)', () => {
+	const linkedAs = (stand: string, reason_key: string | null, retry: boolean) => ({
+		safe: SAFE,
+		chain_id: 100,
+		safe_tx_hash: HASH,
+		preview: false,
+		stand,
+		item: null,
+		members: null,
+		stale: false,
+		reason_key,
+		retry
+	});
+
+	for (const [stand, key, leaf] of [
+		['failed', 'home.multisig.proposal.unread.linkChain', 'linkChain'],
+		['unreadable', 'home.multisig.proposal.unread.linkChain', 'linkChain'],
+		['notFound', 'home.multisig.proposal.unread.linkService', 'linkService']
+	] as const) {
+		it(`${stand}: the core's words for the read that failed, and Try again (the machine's retry)`, async () => {
+			// The multisig's list was read (or not) without the link's transaction.
+			fake.chain = { chainId: 100, members, items: [], mailbox: stand !== 'notFound' };
+			fake.machineLinked = linkedAs(stand, key, true);
+			const screen = show();
+			await settle();
+			const note = document.querySelector('[data-testid="proposal-open-failed"]');
+			expect(note?.textContent).toContain(`proposal.unread.${leaf}`);
+			// Never "it hasn't been shared": a read that failed is not an answer.
+			expect(document.body.textContent).not.toContain('proposal.notFound');
+			expect(document.querySelector('[data-testid="proposal-open-retry"]')).not.toBeNull();
+			press('review.state.tryAgain');
+			await settle();
+			expect(fake.retried).toBe(1);
+			// One control for the one failure.
+			expect(buttons().filter((b) => b === 'service.retry')).toEqual([]);
+			await screen.unmount();
+		});
+	}
+
+	it('notInMailbox: an answer — said as that, and no Try again', async () => {
+		fake.chain = { chainId: 100, members, items: [], mailbox: true };
+		fake.machineLinked = linkedAs('notInMailbox', null, false);
+		const screen = show();
+		await settle();
+		expect(document.body.textContent).toContain('proposal.notInMailbox');
+		expect(document.querySelector('[data-testid="proposal-open-retry"]')).toBeNull();
 		await screen.unmount();
 	});
 });

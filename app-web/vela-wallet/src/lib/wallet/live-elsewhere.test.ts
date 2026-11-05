@@ -16,7 +16,7 @@ import type { CurrencyView } from '$lib/core/generated/CurrencyView';
 import type { FeedView } from '$lib/core/generated/FeedView';
 import { resolveWalletMessages } from '$lib/i18n/engine.server';
 import { buildDesktopState, buildMobileState } from './fixtures';
-import { withLiveWallet, withLiveWalletDesktop } from './live';
+import { activitySaysHistory, withLiveWallet, withLiveWalletDesktop } from './live';
 
 const m = resolveWalletMessages('en');
 const IDENTICON = (seed: string) => `<svg data-seed="${seed}"></svg>`;
@@ -121,5 +121,29 @@ describe('r13-7: a new multisig’s first history read', () => {
 		});
 		expect(model.activitySection.mode).toBe('empty');
 		expect(model.activitySection.empty?.title).toBe('Couldn’t read this multisig’s history');
+	});
+
+	/**
+	 * §18 item 3: the natives' place — Try again on Activity's empty state
+	 * itself (the proposals machine's `retry`, through the page's group
+	 * action), and the waiting group then says nothing of it (one control).
+	 */
+	it('not read: Try again on the empty state, and Activity is where it is said', () => {
+		const retry = { id: 'multisig-retry', label: 'Try again' };
+		const history = { stand: 'unread' as const, unreadText: 'Couldn’t read it', retry };
+		const model = home({ multisigHistory: history });
+		expect(model.activitySection.empty?.action).toEqual(retry);
+		expect(activitySaysHistory({ feed: EMPTY_FEED as never, multisigHistory: history })).toBe(true);
+		// Read, or over rows: Activity does not say it (the group's note does).
+		expect(
+			activitySaysHistory({
+				feed: EMPTY_FEED as never,
+				multisigHistory: { ...history, stand: 'read' }
+			})
+		).toBe(false);
+		expect(activitySaysHistory({ feed: null, multisigHistory: history })).toBe(false);
+		expect(
+			home({ multisigHistory: { ...history, stand: 'read' } }).activitySection.empty?.action
+		).toBe(undefined);
 	});
 });

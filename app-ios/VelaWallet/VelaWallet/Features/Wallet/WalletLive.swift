@@ -310,6 +310,13 @@ enum WalletLive {
         return copy
     }
 
+    /// §18 item 3: Activity's empty state says the shown multisig's history
+    /// could not be read, with Try again (`withMultisigHistory`) — so the
+    /// card does not say it again (`MultisigHomeCard.cardNote`). Pure.
+    static func historySaidInActivity(_ model: WalletHomeModel) -> Bool {
+        model.activitySection.mode == .empty && model.activitySection.empty?.retry != nil
+    }
+
     /// r11-3: the home of a multisig whose money lives in the other space —
     /// never a false "CN¥0.00", "Updated now", "No activity yet" or "Deposit
     /// your first asset" for networks it never lived on. The figure's place

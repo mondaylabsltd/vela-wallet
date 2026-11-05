@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Button from '$lib/ui/Button.svelte';
 	import type { IconDef } from '../icons';
 	import Icon from './Icon.svelte';
 
@@ -6,15 +7,26 @@
 		icon: IconDef;
 		title: string;
 		caption: string;
+		/** §18 item 3: Try again under a read that failed; `onaction` gets its id. */
+		action?: { id: string; label: string };
+		onaction?: (id: string) => void;
 	}
 
-	let { icon, title, caption }: Props = $props();
+	let { icon, title, caption, action, onaction }: Props = $props();
 </script>
 
 <div class="empty">
 	<span class="circle"><Icon {icon} size="lg" /></span>
 	<p class="title">{title}</p>
-	<p class="caption">{caption}</p>
+	{#if caption}<p class="caption">{caption}</p>{/if}
+	{#if action}
+		<Button
+			variant="secondary"
+			shape="rounded"
+			testid="activity-empty-retry"
+			onclick={() => onaction?.(action.id)}>{action.label}</Button
+		>
+	{/if}
 </div>
 
 <style>

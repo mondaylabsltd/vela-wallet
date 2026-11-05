@@ -1407,7 +1407,9 @@ struct RootView: View {
                                         // space prompt answers with — to the space the
                                         // core says it lives in.
                                         agent.person(["type": "set_network_space", "space": target.rawValue])
-                                    }
+                                    },
+                                    // §18 item 3: said there, with Try again — not twice.
+                                    historySaidInActivity: WalletLive.historySaidInActivity(walletModel)
                                 ))
                             },
                             // r10 follow-up: no scan in the home's way while
@@ -1750,7 +1752,14 @@ struct RootView: View {
                 }
             }
         } else {
-            WelcomeScreen(loc: loc, model: model, signingIn: onboarding.loginView.busy)
+            WelcomeScreen(
+                loc: loc, model: model, signingIn: onboarding.loginView.busy,
+                // §18 item 2: stored accounts this device cannot read, said.
+                accountsUnreadable: StoredAccountsNotice.shown(
+                    sessionUnreadable: session.view.accountsUnreadable ?? false,
+                    storedUnreadable: StoredAccountsWatch.shared.unreadable
+                )
+            )
         }
     }
 
@@ -4266,7 +4275,9 @@ struct RootView: View {
             hidden: wallet.balance?.switcher.hidden ?? false,
             display: WalletLive.Display.live(settings.currency, language: loc.resolvedLanguage),
             on: model,
-            loc: loc
+            loc: loc,
+            // §18 item 2: stored records this device cannot read, said under the list.
+            unreadable: StoredAccountsWatch.shared.unreadable
         )
         // Asked of the chain for THIS wallet, or still being asked (spec 062).
         let backedUp = backupCheck.flatMap {

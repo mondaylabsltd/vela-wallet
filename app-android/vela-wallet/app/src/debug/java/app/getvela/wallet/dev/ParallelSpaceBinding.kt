@@ -2,6 +2,7 @@ package app.getvela.wallet.dev
 
 import android.app.Application
 import android.content.Context
+import app.getvela.wallet.feature.onboarding.core.AccountStore
 import app.getvela.wallet.core.format.ShortAddress
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -128,7 +129,11 @@ private class DebugParallelSpace(private val app: Application) : ParallelSpacePr
         // records than the store holds: an upsert over a list the session
         // cannot see is how a transient read failure becomes a permanent loss.
         scope.launch {
+            // §18 item 2: a stored record this device cannot read refuses it
+            // too (the desktop's seed refuses the same) — it is kept, and
+            // the space would hide the notice that says so.
             val stored = runCatching { container.accountStore.loadAccounts().length() }.getOrElse { -1 }
+                .takeIf { AccountStore.unreadable.value == 0 } ?: -1
             val settled = container.session.view.first { !it.loading }
             if (stored < 0 || settled.accounts.size < stored) {
                 prefs.edit().putBoolean(KEY_ACTIVE, false).apply()

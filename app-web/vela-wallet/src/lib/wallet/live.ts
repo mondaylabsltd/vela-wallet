@@ -98,7 +98,30 @@ export interface WalletLiveInputs {
 	 * its first read is out, Activity is being read, never "No activity yet";
 	 * if it could not be read, Activity says that (`unreadText`).
 	 */
-	multisigHistory?: { stand: 'reading' | 'read' | 'unread'; unreadText: string };
+	multisigHistory?: {
+		stand: 'reading' | 'read' | 'unread';
+		unreadText: string;
+		/**
+		 * §18 item 3: Try again under the unread line — the proposals machine's
+		 * `retry` (`MULTISIG_RETRY`), as the natives draw it on the empty state.
+		 */
+		retry?: { id: string; label: string };
+	};
+}
+
+/**
+ * §18 item 3: Activity says the shown multisig's history could not be read —
+ * its empty state, with Try again (the natives' place) — so the waiting
+ * group does not say it again: one sentence and one control per failure.
+ * Over rows (the chain filter's too), Activity shows the rows and the group's
+ * note says it, with its Retry.
+ */
+export function activitySaysHistory(
+	inputs: Pick<WalletLiveInputs, 'feed' | 'chainFilter' | 'multisigHistory'>
+): boolean {
+	const filter = inputs.chainFilter ?? null;
+	const feed = inputs.feed ? narrowedFeed(inputs.feed, filter) : inputs.feed;
+	return !!feed && feed.rows.length === 0 && inputs.multisigHistory?.stand === 'unread';
 }
 
 /** A held token's key — chain, contract (or `native`), symbol — for a tap to name. */
@@ -1399,7 +1422,7 @@ function liveSections(inputs: WalletLiveInputs) {
 	const history = inputs.multisigHistory;
 	const historyMode =
 		feed && feed.rows.length === 0 && history?.stand === 'reading' ? ('loading' as const) : null;
-	const historyUnread = !!feed && feed.rows.length === 0 && history?.stand === 'unread';
+	const historyUnread = activitySaysHistory(inputs);
 	return {
 		balance: liveBalance(view, currency, m, inputs.refresh, inputs.noValue),
 		// The filter's own case, not the core's empty wallet (`empty_key` is
@@ -1427,7 +1450,11 @@ function liveSections(inputs: WalletLiveInputs) {
 		// never "No activity yet".
 		activityEmpty:
 			historyUnread && history
-				? { title: history.unreadText, caption: '' }
+				? {
+						title: history.unreadText,
+						caption: '',
+						...(history.retry ? { action: history.retry } : {})
+					}
 				: {
 						title:
 							inputs.feed?.home_empty_key === 'home.emptyNoActivityNetwork'

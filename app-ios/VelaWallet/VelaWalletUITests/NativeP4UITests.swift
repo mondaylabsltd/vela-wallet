@@ -52,7 +52,7 @@ final class NativeP4UITests: XCTestCase {
         let native = app.descendants(matching: .any).matching(NSPredicate(
             format: "identifier IN %@",
             ["multisig.link.opening", "multisig.link.failed", "multisig.link.broken", "multisig.link.missingNetwork",
-             "multisig.proposal.opening", "multisig.proposal.notFound", "multisig.proposal.notInMailbox", "multisig.proposal.title"]
+             "multisig.proposal.opening", "multisig.proposal.openFailed", "multisig.proposal.notInMailbox", "multisig.proposal.title"]
         )).firstMatch
         XCTAssertTrue(native.waitForExistence(timeout: 90), "the link's native sheet never opened")
         XCTAssertFalse(app.staticTexts["applink.onWeb"].exists, "the sheet still sends multisig to the web wallet")

@@ -315,6 +315,91 @@ fn a_link_read_in_time_says_no_reason() {
     assert!(linked.reason_key.is_none() && !linked.retry);
 }
 
+/// Follow-ups after Round 13 (§18, item 1): a link whose multisig service
+/// did not answer (`notFound`) or whose network did not (`unreadable`) is a
+/// read that failed, not an answer — it names the read and offers Try again
+/// (`retry`), like `failed`; Try again, the read back, opens it. Only
+/// `notInMailbox` (read, and not there) is an answer, and offers none.
+#[test]
+fn a_link_whose_service_or_network_did_not_answer_offers_try_again() {
+    let account = account();
+    let tx = multisig::cancel_tx(&account.address, "0x0").unwrap();
+    let hash = multisig::safe_tx_hash(100, &account.address, &tx).unwrap();
+    for (down, stand, key) in [
+        (
+            "service",
+            LinkedStand::NotFound,
+            review_state::LINK_UNREAD_SERVICE_KEY,
+        ),
+        (
+            "network",
+            LinkedStand::Unreadable,
+            review_state::LINK_UNREAD_CHAIN_KEY,
+        ),
+    ] {
+        let mut world = World {
+            locals: vec![fixture(0)],
+            ..World::default()
+        };
+        world.mailbox.push(stored_proposal(&account, &tx));
+        let mut sut = Sut::new();
+        let ev = start(&world);
+        run(&mut sut, &mut world, ev);
+        if down == "service" {
+            world.service_down = true;
+        } else {
+            world.silent.insert(100);
+        }
+        run(
+            &mut sut,
+            &mut world,
+            Event::Follow {
+                account: Some(account.clone()),
+            },
+        );
+        run(
+            &mut sut,
+            &mut world,
+            Event::OpenLinked {
+                chain_id: 100,
+                safe_tx_hash: hash.clone(),
+                preview: None,
+            },
+        );
+        let linked = sut.view().linked.expect("the link");
+        assert_eq!(linked.stand, stand, "{down}: {linked:?}");
+        assert_eq!(linked.reason_key.as_deref(), Some(key), "{down}");
+        assert!(linked.retry, "{down}: a failed read offers Try again");
+
+        // Try again — the read answers now.
+        world.service_down = false;
+        world.silent.clear();
+        run(&mut sut, &mut world, Event::Retry);
+        let linked = sut.view().linked.expect("the link");
+        assert_eq!(linked.stand, LinkedStand::Found, "{down}: {linked:?}");
+        assert!(linked.reason_key.is_none() && !linked.retry, "{down}");
+    }
+}
+
+/// §18 item 1: a link read and not in the mailbox is an answer — said as
+/// that, no Try again (it is read again on every tick).
+#[test]
+fn a_link_not_in_the_mailbox_offers_no_try_again() {
+    let (mut world, mut sut, _account) = setup();
+    run(
+        &mut sut,
+        &mut world,
+        Event::OpenLinked {
+            chain_id: 100,
+            safe_tx_hash: format!("0x{}", "cd".repeat(32)),
+            preview: None,
+        },
+    );
+    let linked = sut.view().linked.expect("the link");
+    assert_eq!(linked.stand, LinkedStand::NotInMailbox, "{linked:?}");
+    assert!(linked.reason_key.is_none() && !linked.retry);
+}
+
 // -- r13-7: a new multisig's first history read ---------------------------------
 
 const RAN_TX: &str = "0xefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef";

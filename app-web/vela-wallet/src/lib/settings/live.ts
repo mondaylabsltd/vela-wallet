@@ -1336,6 +1336,16 @@ export interface LiveAccountsInput {
 	loading?: boolean;
 	/** ob-2: the session's wallets saved here and not synced yet (`SessionView.unsynced`). */
 	unsynced?: readonly { address: string }[];
+	/** §18 item 2: stored account records this browser cannot read (`storedUnreadable()`). */
+	unreadable?: number;
+}
+
+/** §18 item 2: the line under the list, while a stored record cannot be read. */
+function unreadableLine(
+	input: LiveAccountsInput,
+	m: SettingsMessages['accounts']
+): { unreadable?: string } {
+	return (input.unreadable ?? 0) > 0 ? { unreadable: m.unreadable } : {};
 }
 
 /** One account's total as its row draws it: the mask, the figure, or nothing yet. */
@@ -1443,7 +1453,8 @@ export function liveAccountsSheet(
 		remove: m.remove,
 		removeNamed: m.removeNamed,
 		removeBody: m.removeBody,
-		removeCancel: m.cancel
+		removeCancel: m.cancel,
+		...unreadableLine(input, m)
 	};
 }
 
@@ -1469,7 +1480,8 @@ export function withLiveAccounts(
 			remove: m.accounts.remove,
 			removeNamed: m.accounts.removeNamed,
 			removeBody: m.accounts.removeBody,
-			removeCancel: m.accounts.cancel
+			removeCancel: m.accounts.cancel,
+			...unreadableLine(input, m.accounts)
 		}
 	};
 }
@@ -1489,7 +1501,8 @@ export function withLiveAccountsDesktop(
 			remove: m.accounts.remove,
 			removeNamed: m.accounts.removeNamed,
 			removeBody: m.accounts.removeBody,
-			removeCancel: m.accounts.cancel
+			removeCancel: m.accounts.cancel,
+			...unreadableLine(input, m.accounts)
 		}
 	};
 }

@@ -258,6 +258,8 @@ fun VelaNavHost(
     val context = LocalContext.current
     val application = context.applicationContext as VelaWalletApplication
     val session by application.container.session.view.collectAsStateWithLifecycle()
+    // §18 item 2: stored account records this device cannot read (kept as stored).
+    val storedUnreadable by app.getvela.wallet.feature.onboarding.core.AccountStore.unreadable.collectAsStateWithLifecycle()
     // r9-12 (core §9.1): every place an address is named draws the accounts
     // machine's `member_labels` — this device's own accounts included (the
     // name the account published, the same on every device); the local name
@@ -620,6 +622,10 @@ fun VelaNavHost(
                 WelcomeScreen(
                     darkTheme = darkTheme,
                     signingIn = onboarding.loginView.busy,
+                    accountsUnreadable = app.getvela.wallet.feature.onboarding.StoredAccountsNotice.shown(
+                        session.accountsUnreadable,
+                        storedUnreadable,
+                    ),
                     onIntent = { intent ->
                         when (intent) {
                             // PUSHED, not swapped: `navigateSingleTop` clears the
@@ -1082,6 +1088,7 @@ fun VelaNavHost(
                             currency,
                             strings,
                             unsynced = session.unsynced,
+                            unreadable = storedUnreadable,
                         ),
                         onDismiss = { switcherOpen = false; wallet.switcherClosed() },
                         onSelect = { index ->
@@ -2394,6 +2401,8 @@ fun VelaNavHost(
                                         time = { ms -> timeFormat.format(java.util.Date(ms)) },
                                         onOpen = { multisigHub.sheet.value = it },
                                         onFund = { flows.enter(WalletFlowEntry.Receive) },
+                                        // §18 item 3: said there, with Try again — not twice.
+                                        historySaidInActivity = WalletLive.historySaidInActivity(homeModel),
                                     )
                                 }
                             },
@@ -3008,7 +3017,7 @@ fun VelaNavHost(
                     m = SettingsLive.withAccounts(m, sessionView.accounts.map { it.name to it.address }, sessionView.activeIndex,
                         // Spec 105: no account is worth anything in the testnet space.
                         if (space.testnet) balanceView.switcher.copy(balances = emptyList()) else balanceView.switcher, currency, strings,
-                        unsynced = sessionView.unsynced)
+                        unsynced = sessionView.unsynced, unreadable = storedUnreadable)
                     // Spec 048: the network detail is THIS network's, not the fixture's.
                     openNetworkId?.let { id ->
                         networks.networks.firstOrNull { it.id == id }?.let { row ->

@@ -470,6 +470,16 @@ private struct AccountsSheetBody: View {
             .buttonStyle(.plain)
             .disabled(onSelect == nil)
         }
+        // §18 item 2: a stored account this device cannot read is said under
+        // the list, kept as stored.
+        if let unreadable = sheet.unreadable {
+            Text(unreadable)
+                .typeRole(Typography.fieldLabel)
+                .foregroundStyle(theme.warningBase)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, Tokens.Space.s12)
+                .accessibilityIdentifier("accounts.unreadable")
+        }
         if let multisigSection { multisigSection }
         // Both closures were EMPTY: 创建新账户 and 登录已有账户 drew, took the
         // tap, and did nothing (founder, 2026-09-16). They are the only two

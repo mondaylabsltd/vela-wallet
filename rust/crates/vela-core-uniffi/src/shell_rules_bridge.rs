@@ -81,9 +81,69 @@ pub fn network_lives_elsewhere(args_json: String) -> String {
     vela_core::app::network_space::lives_elsewhere_json(&args_json)
 }
 
+/// §18 item 2: the stored account list (`vela.accounts`) as this build reads
+/// it — `stored_accounts::read`: `raw` as stored (`None`: nothing) → `{accounts,
+/// unreadable, unreadable_at}`, the records the core reads exactly as stored
+/// and how many it cannot (kept, and said). The wasm twin is
+/// `storedAccountsRead`.
+#[uniffi::export]
+#[must_use]
+#[allow(clippy::needless_pass_by_value)]
+pub fn stored_accounts_read(raw: Option<String>) -> String {
+    vela_core::app::stored_accounts::read_json(raw.as_deref())
+}
+
+/// §18 item 2: upsert a stored account record by `id`, every record this
+/// build cannot read kept as it was — `{stored, before, after, replaced,
+/// unreadable_kept}` (store `stored`, log the counts), or `null`: a record
+/// with no `id`, nothing to write.
+#[uniffi::export]
+#[must_use]
+#[allow(clippy::needless_pass_by_value)]
+pub fn stored_accounts_upsert(raw: Option<String>, account_json: String) -> String {
+    vela_core::app::stored_accounts::upsert_json(raw.as_deref(), &account_json)
+}
+
+/// §18 item 2: drop the record `by_json` names (`{"id": …}` or `{"address":
+/// …}`), every other kept as it was — the same answer as the upsert's.
+#[uniffi::export]
+#[must_use]
+#[allow(clippy::needless_pass_by_value)]
+pub fn stored_accounts_remove(raw: Option<String>, by_json: String) -> String {
+    vela_core::app::stored_accounts::remove_json(raw.as_deref(), &by_json)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// §18 item 2: the phones' account store is the core's rule, through
+    /// these exports — a record they cannot read is counted and kept.
+    #[test]
+    fn the_stored_accounts_exports_keep_what_they_cannot_read() {
+        let bad = r#"{"id":"x","keys":[{"credential_id":7}]}"#;
+        let read: serde_json::Value =
+            serde_json::from_str(&stored_accounts_read(Some(format!("[{bad}]")))).unwrap();
+        assert_eq!(read["unreadable"], 1);
+        assert_eq!(read["accounts"], serde_json::json!([]));
+        let good = r#"{"id":"c","name":"","address":"0x0e96ddc491878645dB7E3a47d2a6Ccbc94f17f32","public_key_hex":"04ab","created_at_iso":"","keys":[]}"#;
+        let write: serde_json::Value = serde_json::from_str(&stored_accounts_upsert(
+            Some(format!("[{bad}]")),
+            good.to_owned(),
+        ))
+        .unwrap();
+        assert_eq!(write["stored"], format!("[{bad},{good}]"));
+        let gone: serde_json::Value = serde_json::from_str(&stored_accounts_remove(
+            write["stored"].as_str().map(str::to_owned),
+            r#"{"id":"c"}"#.to_owned(),
+        ))
+        .unwrap();
+        assert_eq!(gone["stored"], format!("[{bad}]"));
+        assert_eq!(
+            stored_accounts_read(None),
+            r#"{"accounts":[],"unreadable":0,"unreadable_at":[]}"#
+        );
+    }
 
     /// r13-1: the natives' other-space rule is the core's, through this
     /// export — every case of the shared vector, as Android and iOS replay it.

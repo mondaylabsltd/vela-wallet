@@ -6,6 +6,7 @@
  * a read, never a passkey — before the record may go. These pin what this
  * shell answers; the rules are the core's (`app_session_landing_409.rs`).
  */
+import '$lib/i18n/wasm-init.server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { STORAGE_KEYS } from '$lib/onboarding/core/storage';
 import type { PendingPublish } from '../generated/PendingPublish';

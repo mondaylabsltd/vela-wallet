@@ -1358,6 +1358,8 @@ impl WalletPage {
     pub(crate) fn multisig_waiting_group(
         &mut self,
         theme: &Theme,
+        // §18 item 3: Activity's empty state says the history was not read.
+        history_said: bool,
         cx: &mut Context<Self>,
     ) -> Option<Div> {
         let row = self.shown_multisig(cx)?;
@@ -1377,7 +1379,8 @@ impl WalletPage {
             .filter(|i| i.status != ms_proposals::ProposalStatus::Done)
             .cloned()
             .collect();
-        if open.is_empty() && view.missing.is_empty() && view.waiting_note.is_none() {
+        let note = card_note(view.waiting_note.as_ref(), history_said);
+        if open.is_empty() && view.missing.is_empty() && note.is_none() {
             return None;
         }
         let mut group = div().flex().flex_col().pb(px(16.)).child(
@@ -1388,7 +1391,7 @@ impl WalletPage {
                 .text_color(theme.fg_base)
                 .child(words::t(&loc, "panel.pending")),
         );
-        if let Some(note) = &view.waiting_note {
+        if let Some(note) = note {
             let (text, retry) = self.ms_note_words(note);
             let mut line = div()
                 .flex()
@@ -4784,10 +4787,21 @@ fn ms_execution_words(loc: &Loc, execution: &Value) -> Option<String> {
 /// multisig): it belongs to a multisig not shown here; its mailbox read and
 /// the transaction not in it: said as that; its network unreadable: said
 /// as that.
-/// r13-3: a link's transaction not read in time (`LinkedStand::Failed`)
-/// offers Try again — as iOS and the web draw it. Pure.
+/// §18 item 3: the waiting group's note, beside Activity. While Activity's
+/// empty state says the history could not be read — with Try again (r13-7)
+/// — the group does not say it again: one sentence and one control per
+/// failure. Every other note, and this one when Activity shows rows, stays.
+/// Pure.
+pub(crate) fn card_note(note: Option<&WaitingNote>, history_said: bool) -> Option<&WaitingNote> {
+    note.filter(|n| !(history_said && matches!(n, WaitingNote::HistoryUnreadable { .. })))
+}
+
+/// r13-3 / §18 item 1: a link's transaction whose read failed — not read in
+/// time (`Failed`), its network silent (`Unreadable`), the multisig service
+/// silent (`NotFound`) — offers Try again whenever the core says so
+/// (`LinkedView.retry`), on every shell alike. Pure.
 pub(crate) fn link_offers_try_again(linked: Option<&ms_proposals::flows::LinkedView>) -> bool {
-    linked.is_some_and(|l| l.stand == ms_proposals::flows::LinkedStand::Failed)
+    linked.is_some_and(|l| l.retry)
 }
 
 pub(crate) fn no_item_lines(
@@ -4801,19 +4815,26 @@ pub(crate) fn no_item_lines(
     let network = || crate::flows::live::chain_name(u32::try_from(chain_id).unwrap_or(u32::MAX));
     let cant_check = || words::tv(loc, "proposal.cantCheck", &[("network", &network())]);
     if let Some(linked) = linked {
-        let mut lines = vec![match linked.stand {
-            LinkedStand::NotInMailbox => words::t(loc, "proposal.notInMailbox"),
-            LinkedStand::NotFound => words::t(loc, "proposal.notFound"),
-            LinkedStand::Unreadable => cant_check(),
-            // r13-3: not read in time — the read still out, named.
-            LinkedStand::Failed => linked.reason_key.as_deref().map_or_else(cant_check, |key| {
+        // r13-3 / §18 item 1: a read that failed (`Failed`, `Unreadable`,
+        // `NotFound`) is said in the core's words for the read
+        // (`reason_key`) — never "it hasn't been shared with the members".
+        let failure = linked
+            .reason_key
+            .as_deref()
+            .filter(|_| linked.retry)
+            .map(|key| {
                 words::tv(
                     loc,
                     key.strip_prefix("home.multisig.").unwrap_or(key),
                     &[("network", &network())],
                 )
-            }),
-            LinkedStand::Reading | LinkedStand::Found => words::t(loc, "proposal.opening"),
+            });
+        let mut lines = vec![match (failure, linked.stand) {
+            (Some(said), _) => said,
+            (None, LinkedStand::NotInMailbox) => words::t(loc, "proposal.notInMailbox"),
+            (None, LinkedStand::Unreadable | LinkedStand::Failed) => cant_check(),
+            (None, LinkedStand::NotFound) => words::t(loc, "proposal.mailboxDown"),
+            (None, LinkedStand::Reading | LinkedStand::Found) => words::t(loc, "proposal.opening"),
         }];
         if linked.preview {
             lines.push(words::t(loc, "proposal.previewNote"));
@@ -4910,16 +4931,38 @@ mod tests {
             reason_key: None,
             retry: false,
         };
-        // r13-3 (§17): a link not read in time offers Try again; one still
-        // being read, or answered, does not.
-        assert!(super::link_offers_try_again(Some(&linked(
-            LinkedStand::Failed,
-            false
-        ))));
+        // §18 item 1: a link whose read failed — not in time (`Failed`), its
+        // network silent (`Unreadable`), the multisig service silent
+        // (`NotFound`) — offers Try again as the core says (`retry`), in the
+        // core's words for the read; one still being read, or answered, does
+        // not.
+        let failed = |stand, key: &str| LinkedView {
+            reason_key: Some(key.to_owned()),
+            retry: true,
+            ..linked(stand, false)
+        };
+        for (stand, leaf) in [
+            (LinkedStand::Failed, "linkChain"),
+            (LinkedStand::Unreadable, "linkChain"),
+            (LinkedStand::NotFound, "linkService"),
+        ] {
+            let link = failed(stand, &format!("home.multisig.proposal.unread.{leaf}"));
+            assert!(super::link_offers_try_again(Some(&link)), "{stand:?}");
+            let said = super::no_item_lines(&loc, &view, Some(&link), true, 100);
+            assert_eq!(
+                said,
+                vec![super::words::tv(
+                    &loc,
+                    &format!("proposal.unread.{leaf}"),
+                    &[("network", &crate::flows::live::chain_name(100))]
+                )],
+                "{stand:?}"
+            );
+            assert_ne!(said[0], t("proposal.notFound"), "{stand:?}");
+        }
         for stand in [
             LinkedStand::Reading,
             LinkedStand::Found,
-            LinkedStand::NotFound,
             LinkedStand::NotInMailbox,
         ] {
             assert!(!super::link_offers_try_again(Some(&linked(stand, false))));
@@ -4956,6 +4999,23 @@ mod tests {
     }
 
     use super::*;
+
+    /// §18 item 3: an unread history said on Activity's empty state (with
+    /// Try again) is not said again by the waiting group; every other note —
+    /// and this one when Activity shows rows — stays the group's.
+    #[test]
+    fn an_unread_history_is_said_once() {
+        let unread = WaitingNote::HistoryUnreadable {
+            chain_ids: vec![5_042_002],
+        };
+        assert_eq!(card_note(Some(&unread), true), None);
+        assert_eq!(card_note(Some(&unread), false), Some(&unread));
+        assert_eq!(
+            card_note(Some(&WaitingNote::Unreachable), true),
+            Some(&WaitingNote::Unreachable)
+        );
+        assert_eq!(card_note(None, true), None);
+    }
 
     /// r9-9: a delegatecall to a contract Vela does not sign for is refused
     /// for ITS reason — the core's key, in words in every language — never

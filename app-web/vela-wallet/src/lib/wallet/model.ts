@@ -206,7 +206,16 @@ export interface SectionModel {
 	action: string;
 	/** 'rows' renders content; 'empty' the empty state; 'loading' skeletons. */
 	mode: 'rows' | 'empty' | 'loading';
-	empty?: { title: string; caption: string };
+	empty?: {
+		title: string;
+		caption: string;
+		/**
+		 * §18 item 3: a control under the line when what is empty is a read
+		 * that failed (a multisig's history not read): Try again, answered by
+		 * the page's group action (`id`).
+		 */
+		action?: { id: string; label: string };
+	};
 }
 
 export interface ChainRowModel {

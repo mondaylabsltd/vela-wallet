@@ -777,20 +777,17 @@ struct MultisigProposalSheet: View {
 
     @ViewBuilder private var linkedState: some View {
         let linked = view.linked
-        switch linked?.stand {
-        case "notInMailbox": MsNote(text: words.t("proposal.notInMailbox"), tone: .warning, identifier: "multisig.proposal.notInMailbox")
-        case "notFound": MsNote(text: words.t("proposal.notFound"), tone: .warning, identifier: "multisig.proposal.notFound")
-        case "unreadable": MsNote(text: words.t("proposal.cantCheck", ["network": words.network(chainId)]), tone: .warning)
-        case "failed":
-            // r13-3: not read in time — the read still out, named, and Try
-            // again; never "Opening the transaction…" for ever.
-            MsNote(
-                text: words.unreadText(linked?.reasonKey, chainId: chainId),
-                tone: .warning, identifier: "multisig.proposal.openFailed"
-            )
+        if let failure = linked?.failure(words) {
+            // r13-3 / §18 item 1: a read that failed (`failed`, `unreadable`,
+            // `notFound`) — the read named, and Try again (said only when the
+            // core offers it); never "Opening the transaction…" for ever,
+            // never "it hasn't been shared".
+            MsNote(text: failure, tone: .warning, identifier: "multisig.proposal.openFailed")
             VelaButton(title: words.t("review.state.tryAgain"), kind: .secondary) { hub.retryLinked() }
                 .accessibilityIdentifier("multisig.proposal.openRetry")
-        default:
+        } else if linked?.stand == "notInMailbox" {
+            MsNote(text: words.t("proposal.notInMailbox"), tone: .warning, identifier: "multisig.proposal.notInMailbox")
+        } else {
             HStack(spacing: Tokens.Space.s8) {
                 ProgressView()
                 Text(verbatim: words.t("proposal.opening"))
@@ -1219,5 +1216,20 @@ struct MultisigProposalSheet: View {
     private func close() {
         if view.linked != nil { hub.sendProposal(["type": "close_linked"]) }
         onClose()
+    }
+}
+
+// MARK: - A link's read that failed (§18 item 1)
+
+extension MsLinkedView {
+    /// The core offers Try again (`retry`): every stand whose read failed —
+    /// `failed`, `unreadable`, `notFound` — on every shell alike.
+    var offersTryAgain: Bool { retry }
+
+    /// The core's words for the read that failed (`reason_key`), or `nil`
+    /// when the core offers no Try again (reading, found, `notInMailbox`).
+    func failure(_ words: MsWords) -> String? {
+        guard retry, let reasonKey else { return nil }
+        return words.unreadText(reasonKey, chainId: chainId)
     }
 }

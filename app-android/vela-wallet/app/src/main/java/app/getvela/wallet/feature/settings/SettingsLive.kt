@@ -1442,8 +1442,12 @@ object SettingsLive {
         strings: VelaStrings,
         /** ob-2 (P2.4): the wallets saved here not synced yet. */
         unsynced: List<app.getvela.wallet.feature.onboarding.core.SessionUnsynced> = emptyList(),
+        /** §18 item 2: stored records this device cannot read. */
+        unreadable: Int = 0,
     ): SettingsScreenModel = model.copy(
-        accountsSheet = app.getvela.wallet.feature.wallet.WalletLive.accountSwitcher(accounts, activeIndex, switcher, currency, strings, unsynced),
+        accountsSheet = app.getvela.wallet.feature.wallet.WalletLive.accountSwitcher(
+            accounts, activeIndex, switcher, currency, strings, unsynced, unreadable,
+        ),
     )
 
     /**

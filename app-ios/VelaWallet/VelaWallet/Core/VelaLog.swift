@@ -41,7 +41,7 @@ nonisolated enum VelaLog {
 
     /// One category per area a failure row names (contract §15).
     enum Scope: String, CaseIterable {
-        case browser, sign, relay, rpc, fee, tracker, balance, net, multisig
+        case browser, sign, relay, rpc, fee, tracker, balance, net, multisig, accounts
     }
 
     /// How many failures the report's line keeps.

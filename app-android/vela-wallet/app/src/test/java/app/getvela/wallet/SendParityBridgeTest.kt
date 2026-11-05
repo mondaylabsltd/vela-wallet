@@ -223,7 +223,7 @@ class SendParityBridgeTest {
     @Test
     fun `a failed fee says why on the form, and continue's alert names its cause`() {
         // The account on this device: Continue reaches the fee, not "account unavailable".
-        val record = org.json.JSONObject().put("id", "cred").put("name", "Me").put("address", safe).put("public_key_hex", "04" + "ab".repeat(64))
+        val record = org.json.JSONObject().put("id", "cred").put("name", "Me").put("address", safe).put("public_key_hex", "04" + "ab".repeat(64)).put("created_at_iso", "2026-01-01T00:00:00Z")
         val send = controller(listOf(xdai(1.0)), accounts = FakeStore(mapOf("vela.accounts" to "[$record]", "vela.activeAccountIndex" to "0")))
         send.pickOnly(SendDisplayContext(code = "USD", rate = 1.0, fiat_decimals = 2))
         send.setRecipient("0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141")

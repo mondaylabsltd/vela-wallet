@@ -2045,6 +2045,14 @@ mod tests {
                 HomeActivity::Rows
             );
         }
+        // §18 item 3: Activity says an unread history (with Try again) — so
+        // the waiting group does not say it again; over rows, or from the
+        // other space, it is not Activity's to say.
+        let unread = with_multisig_history(empty.clone(), Some(&history(HistoryStand::Unread)));
+        assert!(history_said_in_activity(&unread, false));
+        assert!(!history_said_in_activity(&unread, true));
+        assert!(!history_said_in_activity(&HomeActivity::Rows, false));
+        assert!(!history_said_in_activity(&empty, false));
     }
 
     /// Spec 082 RD10 / RG5 (T073): the home's Activity — rows, skeletons
@@ -4618,6 +4626,15 @@ pub fn with_multisig_history(
         },
         (state, _) => state,
     }
+}
+
+/// §18 item 3: Activity says the shown multisig's history could not be read
+/// — its empty state, with Try again ([`with_multisig_history`]) — unless
+/// the home claims nothing of this space (`elsewhere`). Then the waiting
+/// group does not say it again (`card_note`): one control per failure.
+#[must_use]
+pub fn history_said_in_activity(state: &HomeActivity, elsewhere: bool) -> bool {
+    !elsewhere && matches!(state, HomeActivity::Unread { .. })
 }
 
 /// The home Activity's state. Which empty line is the core's

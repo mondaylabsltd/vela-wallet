@@ -199,6 +199,29 @@ describe('the waiting group while the multisig service is away', () => {
 		expect(waitingRows.group(m)?.note).toBe('service away');
 	});
 
+	/**
+	 * §18 item 3: an unread history is said where the natives say it —
+	 * Activity's empty state, with Try again — so a group with no row of its
+	 * own does not say it again (one control per failure). Over rows the
+	 * group keeps its note and Retry: Activity shows the rows, not the line.
+	 */
+	it('an unread history Activity already says is not said twice', () => {
+		seams.missing = [];
+		seams.open = [];
+		seams.note = { kind: 'historyUnreadable', chain_ids: [100] };
+		expect(waitingRows.group(m)?.action).toEqual({ id: MULTISIG_RETRY, label: 'Retry' });
+		expect(waitingRows.group(m, undefined, true)).toBeNull();
+		seams.open = [call('0xdeadbeef')];
+		const group = waitingRows.group(m, undefined, true)!;
+		expect(group.note).toBe('history unread on Gnosis');
+		expect(group.action).toEqual({ id: MULTISIG_RETRY, label: 'Retry' });
+		// Another note is never Activity's to say.
+		seams.open = [];
+		seams.note = { kind: 'unreachable' };
+		expect(waitingRows.group(m, undefined, true)?.note).toBe('service away');
+		seams.note = null;
+	});
+
 	it('a list that is only stale says that, with no Retry of its own', () => {
 		seams.open = [call('0xdeadbeef')];
 		seams.note = { kind: 'stale' };

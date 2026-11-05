@@ -109,6 +109,7 @@ pub mod sign_confirm;
 pub mod sign_request;
 pub mod signing_pages;
 pub mod sim_outcome;
+pub mod stored_accounts;
 pub mod token_provenance;
 pub mod token_registry;
 pub mod token_trust;
