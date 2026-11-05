@@ -295,6 +295,8 @@
     "storage": {
       "unreadableTitle": "This browser's wallet data can't be read",
       "unreadableBody": "The stored wallet list is in a form this version cannot read. Sign in again to rebuild it from your passkey, or reset this browser's copy. The wallet itself is untouched: it lives on the chain, behind your passkey.",
+      "deviceUnreadableTitle": "Wallet data on this device can't be read",
+      "deviceUnreadableBody": "The stored wallet list is in a form this version cannot read. Sign in again to rebuild it from your passkey. The wallet itself is untouched: it lives on the chain, behind your passkey.",
       "signInAgain": "Sign in again",
       "resetCopy": "Reset this browser's copy"
     }

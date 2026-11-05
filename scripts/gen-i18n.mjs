@@ -1390,8 +1390,13 @@ for (let i = 1; i < PATHS.length; i++) {
 //   (`SendView.tokens_failed_key`), where a one-word "Failed to load tokens."
 //   dialog had popped up over whatever the person had gone to since. 2284 + 1
 //   = 2285 paths, 2166 leaves, 119 branches.
-if (PATHS.length !== 2285) fail(`expected 2285 paths (2166 leaf + 119 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2166) fail(`expected 2166 leaf paths, got ${leafSet.size}`);
+// 2287 (r13 native adoption, 2026-11-05): + `onboarding.storage.
+//   deviceUnreadable{Title,Body}` — the stored-accounts notice in words that
+//   fit any device (the desktop said "this browser's wallet data", DESKTOP-1;
+//   the body names no browser copy to reset). 2285 + 2 = 2287 paths,
+//   2168 leaves, 119 branches.
+if (PATHS.length !== 2287) fail(`expected 2287 paths (2168 leaf + 119 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2168) fail(`expected 2168 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 119) fail(`expected 119 branch paths, got ${branchSet.size}`);
 // The on-demand catalogs, pinned the same way (leaves of every locale's union):
 // a key dropped from one namespace and not landed in the other fails here.

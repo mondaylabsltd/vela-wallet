@@ -1052,6 +1052,8 @@
   "storage": {
    "unreadableTitle": "Os dados da carteira neste navegador não podem ser lidos",
    "unreadableBody": "A lista de carteiras salva está em um formato que esta versão não consegue ler. Entre de novo para reconstruí-la a partir da sua passkey, ou redefina a cópia deste navegador. A carteira em si está intacta: ela vive na chain, atrás da sua passkey.",
+   "deviceUnreadableTitle": "Os dados da carteira neste dispositivo não podem ser lidos",
+   "deviceUnreadableBody": "A lista de carteiras salva está em um formato que esta versão não consegue ler. Entre de novo para reconstruí-la a partir da sua passkey. A carteira em si está intacta: ela vive na chain, atrás da sua passkey.",
    "signInAgain": "Entrar de novo",
    "resetCopy": "Redefinir a cópia deste navegador"
   }

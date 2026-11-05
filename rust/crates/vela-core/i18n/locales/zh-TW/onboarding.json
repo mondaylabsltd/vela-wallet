@@ -295,6 +295,8 @@
     "storage": {
       "unreadableTitle": "此瀏覽器裡的錢包資料無法讀取",
       "unreadableBody": "儲存的錢包清單格式是這個版本讀不懂的。重新登入可以用你的 passkey 重建它，或者重設此瀏覽器裡的副本。錢包本身不受影響：它在鏈上，由你的 passkey 保護。",
+      "deviceUnreadableTitle": "這台裝置上的錢包資料無法讀取",
+      "deviceUnreadableBody": "儲存的錢包清單格式是這個版本讀不懂的。重新登入可以用你的 passkey 重建它。錢包本身不受影響：它在鏈上，由你的 passkey 保護。",
       "signInAgain": "重新登入",
       "resetCopy": "重設此瀏覽器裡的副本"
     }
