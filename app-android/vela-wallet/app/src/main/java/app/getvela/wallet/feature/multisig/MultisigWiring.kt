@@ -117,10 +117,31 @@ object MultisigWiring {
             val token = action?.let { a -> (a as? kotlinx.serialization.json.JsonObject)?.get("token") }
                 ?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
             val info = if (token != null) tokenInfo(container, chainId, token, hubRef) else null
-            words(container).actionTitle(chainId, action, nonce, info)
+            // The members named as the accounts machine names them (r12-8).
+            words(container, hubRef).actionTitle(chainId, action, nonce, info)
         }
-        hub.onRecorded = { container.wallet.feedReconciled(1) }
+        hub.onRecorded = {
+            container.wallet.feedReconciled(1)
+            // r13 S4: an execution landed (this app's own, or a member's) — the multisig's
+            // balances moved, read now (never left to the next poll), and the
+            // scan looks for what came back (the feed's `sent`).
+            container.wallet.multisigExecuted()
+        }
         hubRef = hub
+        // r13-5 (r12-8): the executed member changes in Activity are worded in
+        // the language and with the names that stand — again whenever either
+        // moves (the web's and iOS's `rewordMemberRows`).
+        scope.launch {
+            kotlinx.coroutines.flow.combine(
+                container.i18nRuntime.state.map { it.ready to it.language },
+                hub.accountsView.map { it.loaded to it.memberLabels },
+            ) { language, labels -> language to labels }
+                .distinctUntilChanged()
+                .collect { (language, labels) ->
+                    if (!language.first || !labels.first) return@collect
+                    rewordMemberRows(container, hub)
+                }
+        }
         // r9-12 (core §8): the passkey index's word on each member the accounts
         // machine asks about (`index_wanted`, this device's own accounts too) —
         // the name that account registered, the same on every device. The
@@ -208,6 +229,21 @@ object MultisigWiring {
         }
     }
 
+    /**
+     * r13-5: every executed member change in Activity worded again in the
+     * language in front and with the names as they stand ([MemberRowTitles]);
+     * the feed re-reads when any row moved. Answers how many moved.
+     */
+    suspend fun rewordMemberRows(container: AppContainer, hub: MultisigHub): Int {
+        val words = words(container, hub)
+        val moved = container.wallet.feedExecutor.rewordRecords { row -> MemberRowTitles.reword(row) { words.memberChangeTitle(it) } }
+        if (moved > 0) {
+            VelaLog.event("multisig.activity", "member rows worded again", "rows" to moved, "language" to container.i18nRuntime.language)
+            container.wallet.feedReconciled(moved)
+        }
+        return moved
+    }
+
     /** The multisig's words, with this device's account names and networks. */
     fun words(container: AppContainer, hub: MultisigHub? = null): MultisigWords {
         container.i18nRuntime.include(I18nCatalogs.MULTISIG)
@@ -267,6 +303,15 @@ object MultisigWiring {
             container.settings.startNetworks()
             withTimeoutOrNull(10_000) { container.settings.networks.first { it.loaded } }
         }
+        // r13-6: the space as its store says it (read at launch, async), and
+        // its networks from the list just read — not the derived flow, which
+        // follows them a dispatch later and said "no networks" to a boot that
+        // raced it.
+        withTimeoutOrNull(5_000) { container.networkSpace.ready() }
+        val space = app.getvela.wallet.feature.settings.core.NetworkSpaces.chainIds(
+            container.networkSpace.space.value,
+            container.settings.networks.value.networks,
+        )
         val session = container.session.view.value
         val local = session.accounts.map { row ->
             val accountJson = port.accountJson(row.address)
@@ -284,7 +329,7 @@ object MultisigWiring {
             serviceUrl = serviceUrl(container, store),
             accounts = local,
             networks = container.settings.networks.value.networks.map { it.chain_id.toInt() },
-            space = container.spaceNetworks.value.networks.map { it.chain_id.toInt() },
+            space = space,
             known = known,
             contacts = contacts.filter { ADDRESS.matches(it.address) }.map {
                 mapOf("address" to it.address, "name" to it.name, "resolved_name" to it.resolved_name, "kind" to null)
