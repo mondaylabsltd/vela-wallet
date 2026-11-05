@@ -509,6 +509,8 @@ data class MsLinkedView(
     val item: MsProposalItem?,
     val members: MsChainMembers?,
     val stale: Boolean,
+    /** r13-3: what a `failed` / `unreadable` / `notFound` stand says (the core's key). */
+    val reasonKey: String? = null,
 ) {
     companion object {
         fun of(e: JsonElement?) = MsLinkedView(
@@ -520,6 +522,7 @@ data class MsLinkedView(
             item = e["item"]?.let(MsProposalItem::of),
             members = e["members"]?.let(MsChainMembers::of),
             stale = e["stale"].bool ?: false,
+            reasonKey = e["reason_key"].str,
         )
     }
 }

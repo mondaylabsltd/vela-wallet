@@ -175,7 +175,7 @@ fun MultisigProposalSheet(
     MsSheet(words.t("proposal.title"), words.raw("common.done"), onClose = close, dismissible = !approving && !executingNow, tag = "multisig.proposal") {
         siteNote?.let { MsNote(it, tag = "multisig.proposal.site") }
         if (item == null) {
-            LinkedState(view.linked?.stand, view.linked?.preview == true, chainId, words)
+            LinkedState(view.linked?.stand, view.linked?.preview == true, chainId, words, view.linked?.reasonKey)
             // ms-21: no member here — the person may follow it on this device (kept, not shown).
             val linked = view.linked
             if (linked?.preview == true && !accounts.accounts.any { it.account.address.equals(linked.safe, ignoreCase = true) }) {
@@ -474,8 +474,10 @@ private fun ActionFailure(lines: List<MsLine>, words: MultisigWords, onRetry: ()
 
 /** Where a linked transaction stands before its item reads. */
 @Composable
-private fun LinkedState(stand: String?, preview: Boolean, chainId: Int, words: MultisigWords) {
+private fun LinkedState(stand: String?, preview: Boolean, chainId: Int, words: MultisigWords, reasonKey: String? = null) {
     when (stand) {
+        // r13-3: not read in time — the read still out, named, never "Opening…" for ever.
+        "failed" -> MsNote(words.unreadText(reasonKey ?: "proposal.unread.linkChain", chainId), tone = MsTone.Warning, tag = "multisig.proposal.openFailed")
         "notInMailbox" -> MsNote(words.t("proposal.notInMailbox"), tone = MsTone.Warning, tag = "multisig.proposal.notInMailbox")
         "notFound" -> MsNote(words.t("proposal.notFound"), tone = MsTone.Warning, tag = "multisig.proposal.notFound")
         "unreadable" -> MsNote(words.t("proposal.cantCheck", "network" to words.network(chainId)), tone = MsTone.Warning)
