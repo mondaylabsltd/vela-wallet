@@ -57,6 +57,15 @@ pub enum ShellFailure {
         need: String,
         have: String,
     },
+    /// r14-9 (the core's rule, `multisig_proposals::fee_moved_detail`): the
+    /// execution was quoted again at the press and its fee is not the one
+    /// shown — nothing was signed. `amount`: the new fee (decimal).
+    FeeMoved {
+        amount: String,
+        #[serde(rename = "chainId")]
+        chain_id: u64,
+        executor: String,
+    },
     Unknown {
         message: String,
     },
@@ -106,6 +115,20 @@ pub fn relay_url() -> Option<String> {
         .and_then(|v| v.as_str().map(str::to_owned))
         .map(|url| url.trim().to_owned())
         .filter(|url| !url.is_empty())
+}
+
+/// Why the pool gave no answer, as the core reads it (r14-5): every node
+/// answering only "slow down" leads with the core's
+/// [`vela_core::app::multisig_shell::RATE_LIMITED_DETAIL`], so an add names
+/// the network busy rather than out of reach.
+fn unanswered_detail(chain: u32, error: &pool::PoolError) -> String {
+    match error {
+        pool::PoolError::Failed { rate_limited: true } => format!(
+            "{}: every node of chain {chain} answered only with a rate limit (HTTP 429)",
+            vela_core::app::multisig_shell::RATE_LIMITED_DETAIL
+        ),
+        other => format!("{other:?}"),
+    }
 }
 
 /// `0x` + hex, from hex with or without it.
@@ -648,7 +671,7 @@ impl Deps for Live {
             Some(budget) => pool::call_within(chain, method, params, budget),
             None => pool::call(chain, method, params),
         }
-        .map_err(|error| format!("{error:?}"))?;
+        .map_err(|error| unanswered_detail(chain, &error))?;
         if let Some(error) = envelope.get("error").filter(|e| !e.is_null()) {
             return Ok(RpcReply::Error {
                 code: error.get("code").and_then(Value::as_i64),
@@ -890,6 +913,26 @@ impl Deps for Live {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
+
+    /// r14-5: the pool's rate-limited verdict reaches the core as one.
+    #[test]
+    fn a_rate_limited_pool_is_said_to_the_core_as_rate_limited() {
+        use vela_core::app::multisig_shell::{RpcFail, rate_limited_detail};
+        let limited = unanswered_detail(5_042_002, &pool::PoolError::Failed { rate_limited: true });
+        assert!(rate_limited_detail(&limited));
+        assert!(RpcFail::Unanswered(limited).rate_limited());
+        let down = unanswered_detail(
+            5_042_002,
+            &pool::PoolError::Failed {
+                rate_limited: false,
+            },
+        );
+        assert!(!rate_limited_detail(&down), "{down}");
+        assert!(!rate_limited_detail(&unanswered_detail(
+            1,
+            &pool::PoolError::Unavailable
+        )));
+    }
 
     #[test]
     fn a_failure_is_carried_as_the_webs_json() {

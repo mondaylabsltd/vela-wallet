@@ -17,10 +17,13 @@
 	let {
 		m,
 		door,
+		network = '',
 		onRetry
 	}: {
 		m: ReviewStateMessages;
 		door: MultisigSignDoor;
+		/** The review's network, by name (r14-13: "Couldn't reach {{network}}…"). */
+		network?: string;
 		/** Sends `review_again`. */
 		onRetry: () => void;
 	} = $props();
@@ -32,7 +35,7 @@
 	</p>
 {:else if door.shows === 'failed'}
 	<div class="failed" role="alert" data-testid="review-failed">
-		<p class="why">{reasonWords(m, door.reason_key)}</p>
+		<p class="why">{reasonWords(m, door.reason_key, network)}</p>
 		<p class="blocked">{m.blocked}</p>
 		{#if door.retry}
 			<Button variant="secondary" shape="rounded" onclick={onRetry} testid="review-retry"

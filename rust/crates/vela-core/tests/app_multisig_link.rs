@@ -138,6 +138,97 @@ fn an_invite_opens_the_add_sheet_and_adds_nothing() {
     assert!(world.stored_accounts().is_empty());
 }
 
+/// Answers every operation but what `held` names, until none is left open.
+fn answer_all_but(
+    sut: &mut Sut,
+    world: &mut World,
+    held: impl Fn(&vela_core::app::multisig_shell::MultisigOperation) -> bool,
+) {
+    for _ in 0..20_000 {
+        let outstanding = sut.outstanding();
+        let open: Vec<_> = outstanding.iter().filter(|op| !held(op)).collect();
+        let Some(op) = open
+            .iter()
+            .find(|op| {
+                !matches!(
+                    op,
+                    vela_core::app::multisig_shell::MultisigOperation::Wait { .. }
+                )
+            })
+            .map(|op| (*op).clone())
+        else {
+            return;
+        };
+        let res = world.answer(&op);
+        sut.resolve_matching(|o| *o == op, res);
+    }
+    panic!("never settled");
+}
+
+/// Round 14 (r14-2, §20 left open): links open side by side, so an older
+/// link whose lookup was slower landed AFTER a newer one — it switched the
+/// multisig shown behind the newer link's sheet and took its stand. The
+/// newest link open supersedes any open still in flight: the older one,
+/// whenever it lands, switches nothing, opens nothing, says nothing.
+#[test]
+fn the_newest_link_supersedes_an_open_still_in_flight() {
+    let me = fixture(0).address;
+    let older = genesis(&[&me], 1, "0x5b");
+    let newer = genesis(&[&me, OUTSIDE], 2, "0x5c");
+    let mut world = World {
+        locals: vec![fixture(0)],
+        ..World::default()
+    };
+    // The older link's multisig is not on this device: it is looked up (a
+    // slow service); the newer one's is, with its member here.
+    world.record(&older.address, &older.genesis, false);
+    world.store.insert(
+        keys::ACCOUNTS.to_owned(),
+        json!([stored_row(&newer, &[100], true)]).to_string(),
+    );
+    let mut sut = started(&mut world, vec![100]);
+    world.notices.clear();
+    let http = |op: &vela_core::app::multisig_shell::MultisigOperation| {
+        matches!(
+            op,
+            vela_core::app::multisig_shell::MultisigOperation::Http { .. }
+        )
+    };
+    sut.dispatch(open(&link(100, &older.address, HASH)));
+    answer_all_but(&mut sut, &mut world, http);
+    assert!(matches!(sut.view().link, Some(LinkStand::Opening { .. })));
+    // The newer link, while the older one's lookup is still out.
+    sut.dispatch(open(&link(100, &newer.address, HASH)));
+    answer_all_but(&mut sut, &mut world, http);
+    assert!(matches!(sut.view().link, Some(LinkStand::Member { .. })));
+    assert!(sut
+        .view()
+        .active
+        .as_deref()
+        .is_some_and(|a| a.eq_ignore_ascii_case(&newer.address)));
+    // The older lookup lands now: nothing it does is seen.
+    let answered = settle_reads_first(&mut sut, &mut world, 20_000);
+    assert!(answered < 20_000);
+    match sut.view().link {
+        Some(LinkStand::Member { address, .. }) => {
+            assert!(address.eq_ignore_ascii_case(&newer.address), "{address}");
+        }
+        other => panic!("{other:?}"),
+    }
+    assert!(
+        sut.view()
+            .active
+            .as_deref()
+            .is_some_and(|a| a.eq_ignore_ascii_case(&newer.address)),
+        "the account shown is the newest link's"
+    );
+    let opened = opened(&world);
+    assert_eq!(opened.len(), 1, "{opened:?}");
+    assert!(
+        matches!(&opened[0], Notice::OpenProposal { address, .. } if address.eq_ignore_ascii_case(&newer.address))
+    );
+}
+
 /// A member is here (its founding members say so): shown, its proposal
 /// opened — no lookup, no chain read waited for.
 #[test]
@@ -253,6 +344,40 @@ fn not_found_is_said_and_keeps_nothing() {
     }
     assert!(world.stored_accounts().is_empty());
     assert!(opened(&world).is_empty());
+}
+
+/// §18 (c), round 14: a link whose lookup did not come back (the multisig
+/// service silent) is failed AND retryable, by the core's per-cause rule
+/// (`AddOutcome::offers_retry`, the add sheet's own); Try again
+/// (`retry_link`) opens the same link again — and a lookup that answered
+/// "refused" or "high risk" is not retried (it is the add sheet's to say).
+#[test]
+fn a_link_whose_lookup_did_not_come_back_is_retryable_and_opens_on_try_again() {
+    let me = fixture(0).address;
+    let g = genesis(&[&me], 1, "0x5a");
+    let mut world = World {
+        locals: vec![fixture(0)],
+        ..World::default()
+    };
+    world.record(&g.address, &g.genesis, false);
+    world.service_down = true;
+    let mut sut = started(&mut world, vec![100]);
+    run(&mut sut, &mut world, open(&link(100, &g.address, HASH)));
+    match sut.view().link {
+        Some(LinkStand::Failed { reason, retry, .. }) => {
+            assert!(reason.offers_retry(), "{reason:?}");
+            assert!(retry, "a read that did not come back offers Try again");
+        }
+        other => panic!("{other:?}"),
+    }
+    world.service_down = false;
+    run(&mut sut, &mut world, Event::RetryLink);
+    assert!(
+        matches!(sut.view().link, Some(LinkStand::Member { .. })),
+        "{:?}",
+        sut.view().link
+    );
+    assert_eq!(opened(&world).len(), 1);
 }
 
 /// §3.5: more than its members act for it — nothing read or kept; added

@@ -71,6 +71,9 @@ pub(crate) struct AddForm {
     /// The invite it was opened from: its networks, its members' labels.
     pub link: Option<AddLink>,
     pub said: Option<AddSaid>,
+    /// r14-5: what is said is a read that did not come back
+    /// (`AddOutcome::offers_retry`, the core's rule): Add says Try again.
+    pub retry: bool,
     /// The address an `add` was sent for: its outcome is awaited.
     pub asked: Option<String>,
     /// Nothing says which network: the person picks one, then Add.
@@ -100,6 +103,7 @@ impl AddForm {
             focus: cx.focus_handle(),
             link: None,
             said: None,
+            retry: false,
             asked: None,
             choosing: false,
             chosen: None,
@@ -136,7 +140,62 @@ pub(crate) fn outcome_said(loc: &Loc, outcome: &AddOutcome) -> Option<AddSaid> {
         AddOutcome::Unsupported => AddSaid::Line(words::t(loc, "add.unsupported")),
         AddOutcome::NotMultisig => AddSaid::Line(words::t(loc, "add.notMultisig")),
         AddOutcome::Unchecked => AddSaid::Line(words::t(loc, "add.unchecked")),
+        // r14-5: the network's nodes were rate-limiting — named, never
+        // "couldn't reach the service".
+        AddOutcome::Busy { chain_id } => AddSaid::Line(words::tv(
+            loc,
+            "add.busy",
+            &[("network", &network(*chain_id))],
+        )),
     })
+}
+
+/// r14-5: Add reads Try again while the line under the field is a read
+/// that did not come back.
+pub(crate) fn add_says_try_again(retry: bool, said: Option<&AddSaid>) -> bool {
+    retry && matches!(said, Some(AddSaid::Line(_)))
+}
+
+/// Where the add the sheet sent stands, read from the machine (r14-5).
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum AddAwait {
+    /// Nothing is awaited.
+    Idle,
+    /// The machine is still adding (Add spins).
+    Waiting,
+    /// The machine finished: its outcome (`None` only from an older core).
+    Answered(Option<AddOutcome>),
+}
+
+/// What the sheet waits on: the add it sent (`asked`), or — on a sheet
+/// opened afresh, whose own note of it is gone (the page built again, or an
+/// invite's sheet opened again by its network arriving) — the add the
+/// machine is still running for the address in the field. Its outcome is
+/// then said there, never dropped: the press that "spun and went back to
+/// Add with no message" (r14-5) was an add whose sheet had been opened again
+/// under it. A finished add from before is not said on a fresh sheet.
+pub(crate) fn add_await(asked: Option<&str>, typed: &str, view: &ms_accounts::AddView) -> AddAwait {
+    let running = view.phase == Phase::Working;
+    let for_typed = view
+        .address
+        .as_deref()
+        .is_some_and(|a| same(a, typed.trim()));
+    let Some(asked) = asked.or((running && for_typed).then_some(typed)) else {
+        return AddAwait::Idle;
+    };
+    if running
+        || !view
+            .address
+            .as_deref()
+            .is_some_and(|a| same(a, asked.trim()))
+    {
+        return AddAwait::Waiting;
+    }
+    if view.phase == Phase::Done {
+        AddAwait::Answered(view.outcome.clone())
+    } else {
+        AddAwait::Waiting
+    }
 }
 
 /// One exported Safe's import, in words (`None`: nothing to say, or said in
@@ -193,6 +252,7 @@ impl WalletPage {
         let Some(form) = self.multisig.add_form.as_mut() else {
             return;
         };
+        form.retry = false;
         let address = match read_field(&text) {
             AddField::Empty => return,
             AddField::Link(hash) => {
@@ -283,20 +343,32 @@ impl WalletPage {
     ) {
         let loc = self.ms_loc();
         let networks = self.ms_device_networks(cx);
+        let typed = self.multisig.add.clone().unwrap_or_default();
         let Some(form) = self.multisig.add_form.as_mut() else {
             return;
         };
-        let Some(asked) = form.asked.clone() else {
-            return;
+        let outcome = match add_await(form.asked.as_deref(), &typed, &view.add) {
+            AddAwait::Idle => return,
+            AddAwait::Waiting => {
+                // r14-5: a sheet opened afresh over an add still running
+                // waits for it (and carries it, as a press does).
+                if form.asked.is_none() {
+                    let address = typed.trim().to_owned();
+                    form.asked = Some(address.clone());
+                    let link = form.link.clone();
+                    super::multisig_links::Carry::set_add(address, link, cx);
+                    cx.notify();
+                }
+                return;
+            }
+            AddAwait::Answered(outcome) => outcome,
         };
-        if view.add.phase != Phase::Done
-            || !view.add.address.as_deref().is_some_and(|a| same(a, &asked))
-        {
-            return;
-        }
         form.asked = None;
         super::multisig_links::Carry::take_add(cx);
-        let Some(outcome) = view.add.outcome.clone() else {
+        let Some(outcome) = outcome else {
+            // An older core's finished add with nothing to say: Add again,
+            // never a spinner for ever.
+            cx.notify();
             return;
         };
         match &outcome {
@@ -356,6 +428,7 @@ impl WalletPage {
             }
             other => {
                 form.said = outcome_said(&loc, other);
+                form.retry = other.offers_retry();
                 cx.notify();
             }
         }
@@ -425,6 +498,7 @@ impl WalletPage {
         };
         let focus = form.focus.clone();
         let said = form.said.clone();
+        let retry = add_says_try_again(form.retry, said.as_ref());
         let asked = form.asked.is_some();
         let choosing = form.choosing;
         let chosen = form.chosen;
@@ -742,7 +816,11 @@ impl WalletPage {
                     crate::ui::vela_button_state(
                         "ms-add-add",
                         crate::ui::ButtonVariant::Secondary,
-                        words::t(&loc, "add.add").into(),
+                        if retry {
+                            loc.t("common.tryAgain").to_string().into()
+                        } else {
+                            words::t(&loc, "add.add").into()
+                        },
                         state,
                         theme,
                         cx.listener(|this, _, _, cx| this.ms_add_press(false, cx)),
@@ -1434,5 +1512,81 @@ mod tests {
             panic!("a line");
         };
         assert!(!line.contains("{{network}}"), "{line}");
+    }
+
+    /// r14-5: a network rate-limiting the add is named busy, in the corpus
+    /// words, and Add reads Try again under it.
+    #[test]
+    fn a_rate_limited_add_is_said_busy_with_try_again() {
+        let loc = Loc::for_tag("en");
+        let busy = AddOutcome::Busy {
+            chain_id: 5_042_002,
+        };
+        let said = outcome_said(&loc, &busy);
+        let Some(AddSaid::Line(line)) = &said else {
+            panic!("a line: {said:?}");
+        };
+        assert!(!line.contains("home.multisig"), "{line}");
+        assert!(!line.contains("{{network}}"), "{line}");
+        assert!(line.contains("Arc Testnet"), "the network is named: {line}");
+        assert!(line.contains("busy"), "the cause is named: {line}");
+        assert!(busy.offers_retry());
+        assert!(add_says_try_again(busy.offers_retry(), said.as_ref()));
+        // A refusal is no read to try again.
+        let refused = AddOutcome::Refused { findings: vec![] };
+        assert!(!add_says_try_again(
+            refused.offers_retry(),
+            outcome_said(&loc, &refused).as_ref()
+        ));
+    }
+
+    fn view(phase: Phase, address: &str, outcome: Option<AddOutcome>) -> ms_accounts::AddView {
+        ms_accounts::AddView {
+            phase,
+            address: Some(address.to_owned()),
+            outcome,
+            ..ms_accounts::AddView::default()
+        }
+    }
+
+    /// r14-5: the sheet follows the machine. An add still running is awaited
+    /// even by a sheet opened afresh under it (an invite's sheet opened again
+    /// when its network arrived, the page built again) — so its outcome is
+    /// said, never dropped with Add back and no message.
+    #[test]
+    fn an_add_still_running_is_awaited_by_a_sheet_opened_again() {
+        let busy = AddOutcome::Busy {
+            chain_id: 5_042_002,
+        };
+        // A fresh sheet (nothing asked) over the machine still adding it.
+        assert_eq!(
+            add_await(None, SAFE, &view(Phase::Working, SAFE, None)),
+            AddAwait::Waiting
+        );
+        // Its outcome lands there, though this sheet never pressed Add.
+        assert_eq!(
+            add_await(
+                Some(SAFE),
+                SAFE,
+                &view(Phase::Done, SAFE, Some(busy.clone()))
+            ),
+            AddAwait::Answered(Some(busy.clone()))
+        );
+        // A finished add from before is not said on a fresh sheet.
+        assert_eq!(
+            add_await(None, SAFE, &view(Phase::Done, SAFE, Some(busy.clone()))),
+            AddAwait::Idle
+        );
+        // Another address's add is not this sheet's.
+        let other = "0x00000000000000000000000000000000000000cc";
+        assert_eq!(
+            add_await(None, SAFE, &view(Phase::Working, other, None)),
+            AddAwait::Idle
+        );
+        // The press's own add, still running.
+        assert_eq!(
+            add_await(Some(SAFE), SAFE, &view(Phase::Working, SAFE, None)),
+            AddAwait::Waiting
+        );
     }
 }

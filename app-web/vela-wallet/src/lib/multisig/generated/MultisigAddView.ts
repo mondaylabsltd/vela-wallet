@@ -8,6 +8,11 @@ import type { MultisigPhase } from "./MultisigPhase";
  */
 export type MultisigAddView = { phase: MultisigPhase, address: string | null, outcome: MultisigAddOutcome | null, 
 /**
+ * r14-5: the outcome is a read that did not come back
+ * ([`AddOutcome::offers_retry`]): the sheet's Add says Try again.
+ */
+retry: boolean, 
+/**
  * What [`Event::Find`] read, not kept.
  */
 found: unknown, ens: MultisigEnsAnswer | null, };

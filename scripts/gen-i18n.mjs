@@ -1504,7 +1504,13 @@ if (branchSet.size !== 119) fail(`expected 119 branch paths, got ${branchSet.siz
   //   draft or a link's transaction exists is bounded and names the read
   //   that failed — the network, the multisig service, or both — never a
   //   hung network said as the service's waiting transactions). 685 + 5 = 690.
-  const pins = { multisig: 690 };
+  // 691 (round 14, r14-13, 2026-11-06): + `home.multisig.review.state.
+  //   chainUnread` (a review whose network answered none of its reads is
+  //   failed with Try again — never drawn "… anyway"). 690 + 1 = 691.
+  // 692 (round 14, r14-5, 2026-11-06): + `home.multisig.add.busy` (adding
+  //   a multisig while its network rate-limits says so, with Try again —
+  //   never a silent return to "Add"). 691 + 1 = 692.
+  const pins = { multisig: 692 };
   for (const [name, docs] of Object.entries(onDemand)) {
     const leaves = new Set();
     for (const lng of LOCALES) walk(docs[lng], '', leaves, new Set());

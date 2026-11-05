@@ -32,6 +32,14 @@ use crate::multisig_review::{
 /// How long one read of a review is waited for (`REVIEW_READ_MS`,
 /// `bounded.ts`): past it, that read said nothing.
 pub const REVIEW_READ_MS: u32 = 8_000;
+/// r14-13: how long the core waits for any one question of a review — a
+/// read whose bound ([`REVIEW_READ_MS`]) a shell did not keep, the shell's
+/// simulation, a recipient's facts — before it takes it as unanswered. Above
+/// the read's own bound (a pool's answer at 8 s and a hedge are not cut);
+/// the same on every shell, so a review lands the same way at the same time
+/// everywhere, whichever shell left a question open (Android's simulation
+/// once held the review to its 40 s bound while the web's ended at 26 s).
+pub const REVIEW_ASK_MS: u32 = REVIEW_READ_MS + 2_000;
 /// `review_reads` asks for code at most this many rounds (a call naming a
 /// contract that names another).
 const CODE_ROUNDS: usize = 3;
@@ -86,10 +94,36 @@ async fn bounded<Ev: Send + 'static>(
     method: &str,
     params: Value,
 ) -> Value {
-    envelope(
-        io.rpc_within(chain_id, method, params, Some(REVIEW_READ_MS))
-            .await,
+    within(
+        io,
+        io.rpc_within(chain_id, method, params, Some(REVIEW_READ_MS)),
     )
+    .await
+    .map_or_else(|| json!({ "unreachable": true }), envelope)
+}
+
+/// `fut`, or `None` once [`REVIEW_ASK_MS`] has passed without its answer.
+async fn within<Ev: Send + 'static, T>(
+    io: &Io<Ev>,
+    fut: impl std::future::Future<Output = T>,
+) -> Option<T> {
+    let answer = Box::pin(fut);
+    let cap = Box::pin(io.wait(u64::from(REVIEW_ASK_MS)));
+    match future::select(answer, cap).await {
+        future::Either::Left((out, _)) => Some(out),
+        future::Either::Right(_) => None,
+    }
+}
+
+/// What a review's reads gathered: the review's input, and the answer of
+/// each read the core made of the network ([`envelope`]s: the multisig's
+/// own code, the code rounds, the state trace and probe) — what
+/// [`ReviewState::settled`](super::multisig_review_state::ReviewState::settled)
+/// lands the review by (r14-13).
+#[derive(Clone, Debug)]
+pub struct Gathered {
+    pub input: ReviewInput,
+    pub answers: Vec<Value>,
 }
 
 /// The members as the review knows them: labelled with this device's name
@@ -110,13 +144,14 @@ pub fn members_known(owners: &[String], names: &BTreeMap<String, String>) -> Vec
 
 /// Every read the one review of `subject` needs, made now: the code
 /// `review_reads` names (each bounded, asked again for what that names),
-/// then together the state-diff trace and probe, the signing sheet's
-/// simulation of its calls from the Safe, and each recipient's facts.
-pub async fn gather_review<Ev: Send + 'static>(
-    io: &Io<Ev>,
-    subject: &ReviewSubject,
-) -> ReviewInput {
+/// then together the multisig's own code (r14-13: the network's state the
+/// review is read against — whatever the checks do, it says whether the
+/// network answered at all), the state-diff trace and probe, the signing
+/// sheet's simulation of its calls from the Safe, and each recipient's
+/// facts. Every question is bounded ([`REVIEW_ASK_MS`]).
+pub async fn gather_review<Ev: Send + 'static>(io: &Io<Ev>, subject: &ReviewSubject) -> Gathered {
     let chain_id = subject.chain_id;
+    let mut answers: Vec<Value> = Vec::new();
     let mut base = ReadsInput {
         chain_id,
         safe: subject.safe.clone(),
@@ -140,32 +175,38 @@ pub async fn gather_review<Ev: Send + 'static>(
         }
         let codes = future::join_all(missing.iter().map(|a| async move {
             let e = bounded(io, chain_id, "eth_getCode", json!([a, "latest"])).await;
-            (
-                a.clone(),
-                e.get("result").and_then(Value::as_str).map(str::to_owned),
-            )
+            let code = e.get("result").and_then(Value::as_str).map(str::to_owned);
+            (a.clone(), code, e)
         }))
         .await;
-        base.codes.extend(codes);
+        for (a, code, e) in codes {
+            base.codes.insert(a, code);
+            answers.push(e);
+        }
         reads = mr::review_reads(&base).unwrap_or_default();
     }
     let simulate = async {
         if reads.sim_calls.is_empty() {
             return None;
         }
-        match io
-            .ask(MultisigOperation::Simulate {
+        match within(
+            io,
+            io.ask(MultisigOperation::Simulate {
                 chain_id,
                 from: subject.safe.clone(),
                 calls: reads.sim_calls.clone(),
                 state_overrides: reads.sim_state_overrides.clone(),
-            })
-            .await
+            }),
+        )
+        .await
         {
-            MultisigShellResult::Simulated { reply } => reply,
+            Some(MultisigShellResult::Simulated { reply }) => reply,
             _ => None,
         }
     };
+    // r14-13: the multisig's own code — the network's state this review is
+    // read against, asked beside the checks (no time added).
+    let anchor = bounded(io, chain_id, "eth_getCode", json!([subject.safe, "latest"]));
     let ask = |r: Option<mr::RpcRequest>| async move {
         match r {
             Some(r) => Some(bounded(io, chain_id, &r.method, r.params).await),
@@ -174,17 +215,19 @@ pub async fn gather_review<Ev: Send + 'static>(
     };
     let state = async { futures::join!(ask(reads.trace.clone()), ask(reads.probe.clone())) };
     let facts = future::join_all(reads.recipients.iter().map(|address| async move {
-        match io
-            .ask(MultisigOperation::RecipientRisk {
+        match within(
+            io,
+            io.ask(MultisigOperation::RecipientRisk {
                 chain_id,
                 address: address.clone(),
-            })
-            .await
+            }),
+        )
+        .await
         {
-            MultisigShellResult::RecipientFacts {
+            Some(MultisigShellResult::RecipientFacts {
                 is_contract,
                 first_time,
-            } => RecipientFacts {
+            }) => RecipientFacts {
                 address: address.clone(),
                 is_contract,
                 first_time,
@@ -215,23 +258,28 @@ pub async fn gather_review<Ev: Send + 'static>(
         }
         read
     };
-    let ((trace, probe), sim_reply, recipient_facts, tokens) =
-        futures::join!(state, simulate, facts, tokens);
+    let (anchor, (trace, probe), sim_reply, recipient_facts, tokens) =
+        futures::join!(anchor, state, simulate, facts, tokens);
+    answers.push(anchor);
+    answers.extend(trace.iter().chain(probe.iter()).cloned());
     let mut known = subject.known.clone();
     known.extend(members_known(
         &subject.members.owners,
         &subject.member_names,
     ));
-    ReviewInput {
-        reads: base,
-        sim_reply,
-        trace,
-        probe,
-        recipient_facts,
-        known,
-        blind: false,
-        token_facts: tokens.into_values().collect(),
-        origin: subject.origin.clone(),
+    Gathered {
+        input: ReviewInput {
+            reads: base,
+            sim_reply,
+            trace,
+            probe,
+            recipient_facts,
+            known,
+            blind: false,
+            token_facts: tokens.into_values().collect(),
+            origin: subject.origin.clone(),
+        },
+        answers,
     }
 }
 

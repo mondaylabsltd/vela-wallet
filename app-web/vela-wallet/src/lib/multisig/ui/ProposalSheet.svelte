@@ -86,6 +86,7 @@
 	import ProvenanceNoteView from '$lib/flows/ui/ProvenanceNote.svelte';
 	import ProposalTimeline from './ProposalTimeline.svelte';
 	import {
+		ExecutionFeeMovedError,
 		ExecutionSpentError,
 		ExecutionUncheckedError,
 		ExecutionUnpricedError,
@@ -134,7 +135,13 @@
 	import type { ProposalSource } from '../core/proposals.svelte';
 	import CallReview from './CallReview.svelte';
 	import ReviewStateNote from './ReviewStateNote.svelte';
-	import { reviewDoor, stateFor, unreadWords } from '../core/review-door';
+	import {
+		missingSaid,
+		missingWords,
+		reviewDoor,
+		stateFor,
+		unreadWords
+	} from '../core/review-door';
 	import Sheet from './Sheet.svelte';
 
 	interface Props {
@@ -743,6 +750,16 @@
 		if (error instanceof ExecutionWouldFailError) {
 			return fillTemplate(m.proposal.wouldFail, { reason: whyText(m, error.why) });
 		}
+		// r14-9: the fee moved since the press — nothing signed; said with the
+		// new figure (its fee line's own words), so the next press is on it.
+		if (error instanceof ExecutionFeeMovedError) {
+			return fillTemplate(m.proposal.failed, {
+				reason: fillTemplate(m.proposal.feeLine, {
+					fee: feeCoin(error.amount, nativeSymbol(chainId)),
+					name: names.label(error.executor)
+				})
+			});
+		}
 		if (error instanceof ExecutionUnpricedError) return m.proposal.unpricedReason;
 		if (error instanceof ExecutionUncheckedError) return m.proposal.uncheckedReason;
 		if (error instanceof MailboxUnreadableError) {
@@ -834,6 +851,7 @@
 		return (
 			error instanceof ExecutorCannotPayError ||
 			error instanceof ExecutionWouldFailError ||
+			error instanceof ExecutionFeeMovedError ||
 			error instanceof NoOutsideSignerError ||
 			error instanceof SigningRefusedError ||
 			error instanceof SigningBlockedError ||
@@ -1457,6 +1475,15 @@
 
 	/** r4b-3: the network did not answer the last read (or the device is offline). */
 	const chainDown = $derived(store.unreadable.includes(chainId));
+	/**
+	 * §18 (b), round 14: a sheet opened without a link whose transaction is
+	 * not in the list — the core's rule (`review.missing`): a multisig service
+	 * that did not answer is said as that, with Try again; never "it hasn't
+	 * been shared with the members yet".
+	 */
+	const missing = $derived(
+		missingSaid(store.loading, chainDown, store.chain(chainId)?.mailbox ?? null)
+	);
 	let retrying = $state(false);
 	/** Withdraw the person's own proposal on its review (§3.6), or decline a site's request. */
 	function decline() {
@@ -1513,14 +1540,22 @@
 			<Button variant="secondary" shape="rounded" disabled={retrying} onclick={retryRead}
 				>{m.service.retry}</Button
 			>
+		{:else if missing.retry}
+			<!-- §18 (b): its read did not come back — which, and Try again. -->
+			<p class="warn" role="alert" data-testid="proposal-missing-unread">
+				{missingWords(m.proposal, missing.key, chainName(chainId))}
+			</p>
+			<Button
+				variant="secondary"
+				shape="rounded"
+				disabled={retrying}
+				onclick={retryRead}
+				testid="proposal-missing-retry">{m.review.state.tryAgain}</Button
+			>
 		{:else}
-			<!-- Read from the mailbox and still not there: said as that (ms-22). -->
-			<p class="quiet" aria-busy={!store.chain(chainId)?.mailbox}>
-				{store.loading
-					? m.proposal.opening
-					: store.chain(chainId)?.mailbox
-						? m.proposal.notInMailbox
-						: m.proposal.notFound}
+			<!-- Being read, or read from the mailbox and still not there (ms-22). -->
+			<p class="quiet" aria-busy={store.loading}>
+				{missingWords(m.proposal, missing.key, chainName(chainId))}
 			</p>
 		{/if}
 	{:else}
@@ -1592,7 +1627,12 @@
 				</ul>
 			{/if}
 			<!-- §12: being read, or not read — said where the review goes, with Try again. -->
-			<ReviewStateNote m={m.review.state} {door} onRetry={retryReview} />
+			<ReviewStateNote
+				m={m.review.state}
+				{door}
+				network={chainName(chainId)}
+				onRetry={retryReview}
+			/>
 			<!-- §3.6: the state-diff guard, who each leg reaches, what moves — the signing sheet's blocks. -->
 			<div class="review-checks" data-testid="review-checks">
 				<BlockList blocks={checks} />

@@ -111,6 +111,8 @@ export type FoundOutcome =
 	  }
 	| { ok: false; reason: 'refused'; findings: Finding[] }
 	| { ok: false; reason: 'unverified'; chainId: number }
+	/** r14-5: `chainId`'s nodes were rate-limiting the lookup's reads. */
+	| { ok: false; reason: 'busy'; chainId: number }
 	| { ok: false; reason: 'highRisk'; findings: Finding[]; account: MultisigAccount | null };
 
 export function foundOutcome(
@@ -127,6 +129,8 @@ export function foundOutcome(
 			return { ok: false, reason: 'highRisk', findings: outcome.findings as Finding[], account };
 		case 'unverified':
 			return { ok: false, reason: 'unverified', chainId: outcome.chain_id };
+		case 'busy':
+			return { ok: false, reason: 'busy', chainId: outcome.chain_id };
 		default:
 			return { ok: false, reason: outcome.kind };
 	}

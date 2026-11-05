@@ -17,6 +17,7 @@
 	 * each network's now, which are on this device — the members machine's
 	 * (`machines.members`): this draws their views.
 	 */
+	import AddressText from '$lib/ui/AddressText.svelte';
 	import { onMount } from 'svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import { fillTemplate } from '$lib/i18n/fill';
@@ -263,7 +264,7 @@
 					<span class="name">{names.label(owner)}</span>
 					<!-- A member with no name reads its address once, not twice (ms-26). -->
 					{#if names.label(owner) !== shortenAddress(owner)}
-						<span class="address">{shortenAddress(owner)}</span>
+						<span class="address"><AddressText text={shortenAddress(owner)} /></span>
 					{/if}
 				</span>
 				{#if isNew}<span class="tag" data-testid="member-added">{m.settings.added}</span>{/if}
@@ -276,7 +277,7 @@
 				<span class="text">
 					<span class="name">{names.label(owner)}</span>
 					{#if names.label(owner) !== shortenAddress(owner)}
-						<span class="address">{shortenAddress(owner)}</span>
+						<span class="address"><AddressText text={shortenAddress(owner)} /></span>
 					{/if}
 				</span>
 				<span class="tag" data-testid="member-removed">{m.settings.removed}</span>

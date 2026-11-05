@@ -313,6 +313,7 @@
     "notMultisig": "Địa chỉ này không phải đa chữ ký mà Vela đọc được.",
     "chooseNetwork": "Chưa rõ multisig này được dùng trên mạng nào. Hãy chọn mạng, rồi nhấn Thêm.",
     "unchecked": "Chưa có bản ghi cho địa chỉ này và một số mạng không phản hồi kịp — nên Vela chưa thể biết đây có phải ví đa chữ ký không. Hãy thử lại.",
+    "busy": "Các nút của {{network}} đang bận — chúng đang giới hạn số lần Vela được hỏi — nên Vela chưa kiểm tra được ví đa chữ ký này. Chưa có gì được thêm. Hãy thử lại sau giây lát.",
     "badInvite": "Liên kết mời này bị hỏng — thiếu một phần hoặc đã bị thay đổi trên đường. Hãy xin lại liên kết hoặc nhập địa chỉ multisig.",
     "badChecksum": "Địa chỉ trong lời mời này không khớp với mã kiểm tra của nó — hãy xin liên kết mới.",
     "usedOn": "Dùng trên {{networks}}",
@@ -721,7 +722,8 @@
      "unreadable": "Không đọc được giao dịch này.",
      "gone": "Giao dịch này không còn trong danh sách.",
      "tryAgain": "Thử lại",
-     "unchecked": "Vela không kiểm tra được giao dịch này thay đổi những gì."
+     "unchecked": "Vela không kiểm tra được giao dịch này thay đổi những gì.",
+     "chainUnread": "Không kết nối được {{network}} để đọc giao dịch này."
     }
    },
    "notify": {

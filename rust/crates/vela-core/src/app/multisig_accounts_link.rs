@@ -71,6 +71,13 @@ pub enum LinkStand {
     Failed {
         link: ProposalLink,
         reason: AddOutcome,
+        /// §18 (c), round 14: a lookup that did not come back (the service
+        /// or the network silent, rate-limited, the Safe contracts unread —
+        /// [`AddOutcome::offers_retry`], the add sheet's own rule): offer Try
+        /// again (`retry_link`). A lookup that answered (not found, refused,
+        /// high risk) is not retried behind the person's words.
+        #[serde(default)]
+        retry: bool,
     },
     /// r4b-9: kept until the wallet is there.
     Kept,
@@ -86,6 +93,23 @@ pub struct LinkState {
     /// core-ms-2: the invite the add sheet shows, until its multisig is
     /// added, another link is opened, or its sheet is closed.
     invite: Option<Invite>,
+    /// r14-2 (§20 left open): the newest link open's number. Opens run side
+    /// by side; one whose number is no longer this one was superseded and
+    /// does nothing more — no stand, no account switched, nothing opened.
+    seq: u64,
+}
+
+/// r14-2: a new link open — the newest from now on; every open still in
+/// flight is superseded.
+fn newest(st: &Shared<State>) -> u64 {
+    let mut s = lock(st);
+    s.link.seq += 1;
+    s.link.seq
+}
+
+/// r14-2: a newer link open has started since `ticket`'s.
+fn superseded(st: &Shared<State>, ticket: u64) -> bool {
+    lock(st).link.seq != ticket
 }
 
 /// core-ms-2: an invite opened here.
@@ -196,8 +220,17 @@ pub fn invite_ready(s: &mut State) -> bool {
 /// one naming only networks this device lacks waits for them, kept in the
 /// store as a proposal link is: a reload (the Add network wizard) loses
 /// nothing, and the network added opens its add sheet again.
-async fn open_invite(io: &Io<Event>, st: &Shared<State>, invite: AddLink, hash: String) {
+async fn open_invite(
+    io: &Io<Event>,
+    st: &Shared<State>,
+    invite: AddLink,
+    hash: String,
+    ticket: u64,
+) {
     forget(io, st).await;
+    if superseded(st, ticket) {
+        return;
+    }
     let lacks = {
         let s = lock(st);
         !invite.chain_ids.is_empty() && on_device(&s, &invite).is_empty()
@@ -369,6 +402,7 @@ pub async fn keep(io: &Io<Event>, st: &Shared<State>, hash: &str) {
 /// here: a link in the address is the one answered, and a different one
 /// kept on the way is kept for later.
 pub async fn open(io: &Io<Event>, st: &Shared<State>, hash: String, take_kept: bool) {
+    let ticket = newest(st);
     let mut hash = hash;
     if take_kept {
         let now = io.now().await;
@@ -394,6 +428,9 @@ pub async fn open(io: &Io<Event>, st: &Shared<State>, hash: String, take_kept: b
             }
         }
     }
+    if superseded(st, ticket) {
+        return;
+    }
     if let Some(broken) = link::broken_link(&hash) {
         let fault = (broken == BrokenLink::Add)
             .then(|| link::add_link_fault(&hash).unwrap_or(AddLinkFault::Damaged));
@@ -407,22 +444,34 @@ pub async fn open(io: &Io<Event>, st: &Shared<State>, hash: String, take_kept: b
         );
     }
     if let Some(invite) = link::parse_add_link(&hash) {
-        return open_invite(io, st, invite, hash).await;
+        return open_invite(io, st, invite, hash, ticket).await;
     }
     if let Some(proposal) = link::parse_proposal_link(&hash) {
         // core-ms-2: a proposal link is in front now; the invite before it goes.
         lock(st).link.invite = None;
-        open_proposal(io, st, proposal).await;
+        open_proposal_as(io, st, proposal, ticket).await;
     }
 }
 
-/// A proposal link's transaction (`openProposal` + `openProposalLink`).
+/// A proposal link's transaction (`openProposal` + `openProposalLink`) —
+/// the newest link open from now on.
 pub async fn open_proposal(io: &Io<Event>, st: &Shared<State>, l: ProposalLink) {
+    let ticket = newest(st);
+    open_proposal_as(io, st, l, ticket).await;
+}
+
+/// [`open_proposal`] as the open `ticket`: after every wait, a newer open
+/// supersedes it (r14-2) — it then says nothing, keeps nothing, switches
+/// nothing and opens nothing.
+async fn open_proposal_as(io: &Io<Event>, st: &Shared<State>, l: ProposalLink, ticket: u64) {
     if !lock(st).has_network(l.chain_id) {
         return hold(io, st, &l).await;
     }
     // One link waits at a time: this one is in front now.
     forget(io, st).await;
+    if superseded(st, ticket) {
+        return;
+    }
     say(st, LinkStand::Opening { link: l.clone() });
     io.emit(Event::Changed);
     let (stored, locals) = {
@@ -451,6 +500,9 @@ pub async fn open_proposal(io: &Io<Event>, st: &Shared<State>, l: ProposalLink) 
                 futures::future::Either::Left((found, _)) => found,
                 futures::future::Either::Right(_) => Found::No(AddOutcome::Unchecked),
             };
+            if superseded(st, ticket) {
+                return;
+            }
             match found {
                 Found::Account(account, findings) if findings.is_empty() => {
                     lock(st).found = Some(((*account).clone(), Vec::new()));
@@ -478,12 +530,18 @@ pub async fn open_proposal(io: &Io<Event>, st: &Shared<State>, l: ProposalLink) 
         futures::future::Either::Left((Ok(members), _)) => members.owners,
         _ => account.owners.clone(),
     };
+    if superseded(st, ticket) {
+        return;
+    }
     if !local_owners(&locals, &owners).is_empty() {
         let kept = if stored.is_some() {
             Some(account.clone())
         } else {
             keep_multisig(io, st, &account, Vec::new()).await
         };
+        if superseded(st, ticket) {
+            return;
+        }
         let Some(kept) = kept else {
             return fail(st, l, AddOutcome::NotFound);
         };
@@ -509,7 +567,26 @@ fn fail(st: &Shared<State>, l: ProposalLink, reason: AddOutcome) {
     let mut s = lock(st);
     s.add.address = Some(l.multisig.clone());
     s.link.pending = Some(l.clone());
-    s.link.stand = Some(LinkStand::Failed { link: l, reason });
+    let retry = reason.offers_retry();
+    s.link.stand = Some(LinkStand::Failed {
+        link: l,
+        reason,
+        retry,
+    });
+}
+
+/// §18 (c): Try again on a failed link the core marked retryable — the same
+/// link, opened again (said `Opening` at once).
+pub async fn retry(io: &Io<Event>, st: &Shared<State>) {
+    let failed = match &lock(st).link.stand {
+        Some(LinkStand::Failed {
+            link, retry: true, ..
+        }) => Some(link.clone()),
+        _ => None,
+    };
+    if let Some(l) = failed {
+        open_proposal(io, st, l).await;
+    }
 }
 
 /// The link's transaction, on its multisig (on this device now): shown,

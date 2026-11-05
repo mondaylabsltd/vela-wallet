@@ -1,4 +1,5 @@
 <script lang="ts">
+	import AddressText from '$lib/ui/AddressText.svelte';
 	import { listOf } from '$lib/i18n/list';
 	/**
 	 * Creating a multisig, in three steps: its name and who its members are
@@ -518,7 +519,7 @@
 						<Identicon svg={identiconSvgForClient(a.address)} size="row" />
 						<span class="text"
 							><span class="name">{a.name || shortenAddress(a.address)}</span><span class="address"
-								>{shortenAddress(a.address)}</span
+								><AddressText text={shortenAddress(a.address)} /></span
 							></span
 						>
 						<span class="box" aria-hidden="true"
@@ -608,7 +609,9 @@
 								<Identicon svg={identiconSvgForClient(c.address)} size="row" />
 								<span class="text"
 									><span class="name">{c.name ?? c.resolved_name ?? shortenAddress(c.address)}</span
-									><span class="address">{shortenAddress(checksumAddress(c.address))}</span></span
+									><span class="address"
+										><AddressText text={shortenAddress(checksumAddress(c.address))} /></span
+									></span
 								>
 								<Icon icon={UTILITY_ICONS.plus} size="sm" />
 							</button>
@@ -627,7 +630,7 @@
 						<Identicon svg={identiconSvgForClient(o)} size="row" address={o} />
 						<span class="text"
 							><span class="name">{label(o)}</span>{#if label(o) !== shortenAddress(o)}<span
-									class="address">{shortenAddress(o)}</span
+									class="address"><AddressText text={shortenAddress(o)} /></span
 								>{/if}</span
 						>
 						<!-- vis-16: named for what it does, with whom (it read "Close"). -->

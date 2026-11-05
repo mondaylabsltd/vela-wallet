@@ -60,7 +60,11 @@ pub enum Look {
         balance: Option<String>,
     },
     Fails(Value),
+    /// The setup was read and refused here: the look's JSON.
     Refused(Value),
+    /// r14-4: the setup could not be checked here (its Safe contracts went
+    /// unread): the look's JSON. Execute waits; never said as a finding.
+    Unverified(Value),
     Spent,
     Unpriced,
     Unchecked,
@@ -93,7 +97,8 @@ impl Look {
                 }
             }
             "fails" => Self::Fails(value.get("why").cloned().unwrap_or(Value::Null)),
-            "refused" => Self::Refused(value.get("authority").cloned().unwrap_or(Value::Null)),
+            "refused" => Self::Refused(value.clone()),
+            "unverified" => Self::Unverified(value.clone()),
             "spent" => Self::Spent,
             "unpriced" => Self::Unpriced,
             "unchecked" => Self::Unchecked,
@@ -107,7 +112,11 @@ impl Look {
     pub fn blocks(&self) -> bool {
         matches!(
             self,
-            Self::Fails(_) | Self::Refused(_) | Self::Spent | Self::Priced { can_pay: false, .. }
+            Self::Fails(_)
+                | Self::Refused(_)
+                | Self::Unverified(_)
+                | Self::Spent
+                | Self::Priced { can_pay: false, .. }
         )
     }
 }
@@ -321,6 +330,14 @@ pub fn unchecked(door: &SignDoor) -> bool {
     door.shows == ReviewShows::Review && door.reason_key.is_some()
 }
 
+/// A failed review's reason in the person's words: the core's key, its
+/// network named where the words do (r14-13: "Couldn't reach {{network}} to
+/// read this transaction." — never "… anyway").
+#[must_use]
+pub fn failed_reason_words(loc: &crate::loc::Loc, reason_key: &str, network: &str) -> String {
+    loc.t_texts(reason_key, &[("network", network)]).to_string()
+}
+
 /// "Try again" under a failed review: the machine's `review_again` — for a
 /// proposal (`Some((chain_id, hash))`) its review, else the draft's.
 #[must_use]
@@ -423,6 +440,27 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    /// Round 14 (r14-13): a review whose network answered none of its reads
+    /// is failed, said with the network's name — never a raw key, never a
+    /// placeholder.
+    #[test]
+    fn a_review_its_network_never_answered_names_the_network() {
+        let loc = crate::loc::Loc::for_tag("en");
+        let line = failed_reason_words(
+            &loc,
+            vela_core::app::multisig_review_state::REASON_CHAIN_UNREAD,
+            "Arc Testnet",
+        );
+        assert_eq!(line, "Couldn't reach Arc Testnet to read this transaction.");
+        let door = review_state::door(
+            Some(&ReviewState::failed(
+                vela_core::app::multisig_review_state::REASON_CHAIN_UNREAD,
+            )),
+            None,
+        );
+        assert!(!door.enabled && !door.anyway && door.retry);
+    }
 
     const HASH: &str = "0xABCDEF";
     const DANA: &str = "0x306b000000000000000000000000000000009ad8";

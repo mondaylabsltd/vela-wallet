@@ -62,7 +62,7 @@ struct MultisigDraftReviewSheet: View {
                     }
                     MsReviewBody(review: draft.review, chainId: item.chainId, words: words)
                 } else {
-                    MsReviewPending(door: door, words: words) {
+                    MsReviewPending(door: door, words: words, network: words.network(item.chainId)) {
                         hub.sendProposal(["type": "review_again"])
                     }
                 }

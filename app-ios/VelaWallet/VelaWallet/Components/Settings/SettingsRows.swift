@@ -172,6 +172,8 @@ struct SettingsAccountRow: View {
                     Text(account.addressDisplay)
                         .typeRole(Typography.monoSmall)
                         .foregroundStyle(theme.fgSubtle)
+                        // r14-11a: a short address is one line, never broken after its "…".
+                        .lineLimit(1)
                 }
                 Spacer(minLength: Tokens.Space.s8)
                 Text(account.action)

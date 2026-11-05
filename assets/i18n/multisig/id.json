@@ -313,6 +313,7 @@
     "notMultisig": "Alamat ini bukan multisig yang bisa dibaca Vela.",
     "chooseNetwork": "Belum ada yang menunjukkan jaringan multisig ini. Pilih jaringannya, lalu ketuk Tambah.",
     "unchecked": "Belum ada catatan untuk alamat ini, dan beberapa jaringan tidak menjawab tepat waktu — jadi Vela belum bisa memastikan apakah ini multisig. Coba lagi.",
+    "busy": "Node {{network}} sedang sibuk — mereka membatasi seberapa sering Vela boleh bertanya — jadi Vela belum bisa memeriksa multisig ini. Belum ada yang ditambahkan. Coba lagi sebentar lagi.",
     "badInvite": "Tautan undangan ini rusak — sebagian hilang atau berubah di perjalanan. Minta tautannya lagi, atau masukkan alamat multisig.",
     "badChecksum": "Alamat di undangan ini tidak cocok dengan checksum-nya — minta tautan baru.",
     "usedOn": "Digunakan di {{networks}}",
@@ -721,7 +722,8 @@
      "unreadable": "Transaksi ini tidak bisa dibaca.",
      "gone": "Transaksi ini sudah tidak ada di daftar.",
      "tryAgain": "Coba lagi",
-     "unchecked": "Vela tidak bisa memeriksa apa yang diubah transaksi ini."
+     "unchecked": "Vela tidak bisa memeriksa apa yang diubah transaksi ini.",
+     "chainUnread": "Tidak dapat menjangkau {{network}} untuk membaca transaksi ini."
     }
    },
    "notify": {

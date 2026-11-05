@@ -101,7 +101,10 @@ pub(crate) fn take_stand(stand: &LinkStand) -> (LinkTake, bool) {
             false,
         ),
         LinkStand::Preview { link, .. } => (LinkTake::Preview(link.multisig.clone()), true),
-        LinkStand::Failed { link, reason } => (
+        // §18 (c): a lookup that did not come back is retryable by the
+        // core's rule (`LinkStand::Failed.retry`, `AddOutcome::offers_retry`):
+        // the add sheet's Add says Try again for it.
+        LinkStand::Failed { link, reason, .. } => (
             LinkTake::Add {
                 text: link.multisig.clone(),
                 link: None,
@@ -220,13 +223,10 @@ impl WalletPage {
                 self.multisig.create = false;
                 self.multisig.create_form = None;
                 self.ms_add_opened(Some(text), link, said, cx);
-                if let Some(form) = self
-                    .multisig
-                    .add_form
-                    .as_mut()
-                    .filter(|_| matches!(outcome, Some(AddOutcome::ChooseNetwork)))
-                {
-                    form.choosing = true;
+                if let Some(form) = self.multisig.add_form.as_mut() {
+                    form.choosing = matches!(outcome, Some(AddOutcome::ChooseNetwork));
+                    // r14-5: a lookup that did not come back offers Try again.
+                    form.retry = outcome.as_ref().is_some_and(AddOutcome::offers_retry);
                 }
             }
             LinkTake::Preview(address) => self.multisig.preview_of = Some(address),
@@ -524,6 +524,7 @@ mod tests {
         let (take, _) = take_stand(&LinkStand::Failed {
             link: proposal(),
             reason: AddOutcome::NotFound,
+            retry: false,
         });
         assert!(matches!(
             take,

@@ -15,6 +15,7 @@
 	 * shows — each one copyable, to match. The same review for Vela request
 	 * on a paired page and for a link transaction (r5reg-23).
 	 */
+	import AddressText from '$lib/ui/AddressText.svelte';
 	import { fillTemplate } from '$lib/i18n/fill';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
@@ -171,7 +172,11 @@
 	{#if lines.length > 0 && !reading}
 		<ul class="lines">
 			{#each lines as line, i (i)}
-				<li><span>{line.label}</span><span class="mono">{shortenAddress(line.to)}</span></li>
+				<li>
+					<span>{line.label}</span><span class="mono"
+						><AddressText text={shortenAddress(line.to)} /></span
+					>
+				</li>
 			{/each}
 		</ul>
 	{/if}

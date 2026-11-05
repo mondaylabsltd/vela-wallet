@@ -1308,7 +1308,9 @@ async fn wallet_chain<Ev: Send + 'static>(io: &Io<Ev>) -> Result<u64, (Option<i6
 /// core's reading, the three hashes, the state-diff guard (trace and
 /// probe), the signing sheet's simulation and each recipient's facts. What
 /// the page draws and the sign rule its gate uses. `None`: the core cannot
-/// read the transaction at all.
+/// read the transaction at all. With it, where it stands
+/// ([`ReviewState::settled`], r14-13: `failed {chainUnread}` when the
+/// network answered none of its reads).
 pub async fn review_now<Ev: Send + 'static>(
     io: &Io<Ev>,
     chain_id: u64,
@@ -1316,7 +1318,7 @@ pub async fn review_now<Ev: Send + 'static>(
     tx: &SafeTx,
     members: &ChainMembers,
     genesis: Option<&Genesis>,
-) -> Option<crate::multisig_review::MultisigReview> {
+) -> (Option<crate::multisig_review::MultisigReview>, ReviewState) {
     let subject = multisig_gather::ReviewSubject {
         chain_id,
         safe: safe.to_owned(),
@@ -1329,7 +1331,18 @@ pub async fn review_now<Ev: Send + 'static>(
         origin: None,
         tokens: BTreeMap::new(),
     };
-    multisig_gather::review_of(&multisig_gather::gather_review(io, &subject).await)
+    let gathered = multisig_gather::gather_review(io, &subject).await;
+    let review = multisig_gather::review_of(&gathered.input);
+    let state = ReviewState::settled(
+        review
+            .as_ref()
+            .and_then(|r| serde_json::to_value(r).ok())
+            .as_ref(),
+        &gathered.answers,
+    );
+    // Only a review that stands is drawn: one not read against its network
+    // is said as that, never shown beside "… anyway".
+    (review.filter(|_| state.is_ready()), state)
 }
 
 /// §12: [`review_now`], bounded by `REVIEW_TIMEOUT_MS` — the review and
@@ -1343,11 +1356,9 @@ pub async fn review_read<Ev: Send + 'static>(
     members: &ChainMembers,
     genesis: Option<&Genesis>,
 ) -> (Option<crate::multisig_review::MultisigReview>, ReviewState) {
-    match review_state::bounded(io, review_now(io, chain_id, safe, tx, members, genesis)).await {
-        Ok(Some(review)) => (Some(review), ReviewState::Ready),
-        Ok(None) => (None, ReviewState::failed(review_state::REASON_UNREADABLE)),
-        Err(failed) => (None, failed),
-    }
+    review_state::bounded(io, review_now(io, chain_id, safe, tx, members, genesis))
+        .await
+        .unwrap_or_else(|failed| (None, failed))
 }
 
 /// The registry's genesis for `safe`, only if the core derives that address

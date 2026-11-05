@@ -131,6 +131,22 @@ enum MsRules {
         return MsSignDoor(answer: answer)
     }
 
+    /// §18 (b), round 14: what a proposal sheet opened WITHOUT a link says
+    /// while its transaction is not in the list (`review.missing`): the
+    /// corpus key under `home.multisig.` and whether to offer Try again — a
+    /// multisig service that did not answer is said as that, never as "it
+    /// hasn't been shared yet". A core that cannot be asked: still opening.
+    static func missingSaid(loading: Bool, unreadable: Bool, mailbox: Bool?) -> (key: String, retry: Bool) {
+        let answer = call("review.missing", [
+            "loading": loading,
+            "unreadable": unreadable,
+            "mailbox": mailbox.map { $0 as Any } ?? NSNull(),
+        ]) as? [String: Any]
+        let key = (answer?["key"] as? String) ?? "home.multisig.proposal.opening"
+        let leaf = key.hasPrefix("home.multisig.") ? String(key.dropFirst("home.multisig.".count)) : key
+        return (leaf, answer?["retry"] as? Bool ?? false)
+    }
+
     // MARK: - Names and networks (`multisig_rules`)
 
     /// The order networks are offered in for a new multisig, the default first.

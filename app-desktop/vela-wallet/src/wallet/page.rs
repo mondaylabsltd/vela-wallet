@@ -10488,6 +10488,9 @@ impl WalletPage {
                                 .font_family(theme::font_mono())
                                 .text_size(theme::text_label())
                                 .text_color(theme.fg_subtle)
+                                // r14-11a: a short address is one line, never
+                                // broken after its "…".
+                                .whitespace_nowrap()
                                 .child(gpui::SharedString::from(display)),
                         ),
                 )

@@ -485,6 +485,9 @@ struct MsWords {
             switch state["preview"]?["kind"]?.string {
             case "unpriced": return t("proposal.feeUnpriced")
             case "unchecked": return t("proposal.feeUnchecked")
+            // r14-4: a setup not checked is said as that, never as a finding.
+            case "unverified": return t("authority.deployUnverified", ["network": network(chainId)])
+            case "refused": return deployRefused(state["preview"]?["authority"], chainId: chainId)
             default:
                 return t("proposal.wouldFail", ["reason": whyFails(state["preview"]?["why"] ?? state["preview"], chainId: chainId)])
             }
@@ -543,6 +546,15 @@ struct MsWords {
         case "not_sent": return t("proposal.notSent")
         case "cannot_pay":
             return t("proposal.failed", ["reason": t("status.nobodyPays")])
+        // r14-9 (the core's rule): the fee moved since the press — nothing
+        // signed; said with the new figure (its fee line's own words), so the
+        // next press is on it.
+        case "fee_moved":
+            let chain = (object["chainId"] as? NSNumber)?.intValue ?? 0
+            let fee = "\(MsRules.formatUnits(object["amount"] as? String ?? "0", decimals: Self.coinDecimals)) \(symbol(chain))"
+            return t("proposal.failed", ["reason": t("proposal.feeLine", [
+                "fee": fee, "name": label(object["executor"] as? String ?? ""),
+            ])])
         default:
             let message = (object["message"] as? String) ?? ""
             return message.isEmpty ? t("proposal.reason.unknown") : t("proposal.failed", ["reason": message])
@@ -550,6 +562,18 @@ struct MsWords {
     }
 
     // MARK: - Authority findings (§3.5)
+
+    /// r14-4: a deploy the core read and refused on `chainId` (the look's
+    /// `refused`, its `authority {kind: refused, reasons}`): "Vela won't
+    /// deploy this multisig on X:" and each reason once.
+    func deployRefused(_ authority: MsJSON?, chainId: Int) -> String {
+        var lines = [t("authority.deployRefused", ["network": network(chainId)])]
+        for reason in authority?["reasons"]?.array ?? [] {
+            let line = finding(.object(["chainId": .number(Double(chainId)), "reason": reason]))
+            if !lines.contains(line) { lines.append(line) }
+        }
+        return lines.joined(separator: " ")
+    }
 
     /// One finding (`{from: 'genesis', chainId, reason}` or `{from: 'chain',
     /// chainId, risk}`), in words.

@@ -709,6 +709,7 @@
 					<ReviewStateNote
 						m={all.review.state}
 						door={requestDoor}
+						network={chainName(entry.safeTx.chainId)}
 						onRetry={() => act({ type: 'review_again' })}
 					/>
 				{:else if entry.safeTx && hashes}
@@ -960,6 +961,7 @@
 				<ReviewStateNote
 					m={all.review.state}
 					door={linkDoor}
+					network={chainName(tx.chainId)}
 					onRetry={() => act({ type: 'review_again' })}
 				/>
 			{/if}

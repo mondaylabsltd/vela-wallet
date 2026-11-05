@@ -77,6 +77,13 @@
 		onethereumbackup?: () => void;
 		/** More rows in the account list: the multisigs on this device. */
 		accountMore?: import('svelte').Snippet;
+		/**
+		 * r14-1: under the account list's own buttons, more ways to add one —
+		 * Create multisig and Add multisig, as the desktop's `accountExtra`
+		 * and every native switch-account surface offer them. Its argument
+		 * closes this sheet: the flow it opens is a sheet of its own.
+		 */
+		accountExtra?: import('svelte').Snippet<[close: () => void]>;
 		/** In place of the keys block: a multisig's own settings, while one is shown. */
 		accountKeys?: import('svelte').Snippet;
 		/** The network surfaces' live wiring (spec 024). Absent = gallery. */
@@ -153,6 +160,7 @@
 		onopencontacts,
 		onethereumbackup,
 		accountMore,
+		accountExtra,
 		accountKeys,
 		onnetevent,
 		oncurrencyselect,
@@ -644,6 +652,7 @@
 								}}
 						more={accountMore}
 					/>
+					{#if accountExtra}{@render accountExtra(close)}{/if}
 				{:else if overlay === 'sign-out'}
 					<ConfirmSheet sheet={model.signOutSheet} onconfirm={onsignout} oncancel={close} />
 				{:else if overlay === 'language'}

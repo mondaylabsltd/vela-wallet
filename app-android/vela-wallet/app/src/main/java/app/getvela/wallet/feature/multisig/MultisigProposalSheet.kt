@@ -254,7 +254,7 @@ fun MultisigProposalSheet(
         // (the review), being read ("Reading the transaction…", bounded by
         // the core), or not read (its reason and "Try again"). Approve,
         // Approve and execute and Execute below are the same door's.
-        MsReviewDoor(model.door, words, "multisig.proposal", onTryAgain = { hub.sendProposal(model.reviewAgain) }) {
+        MsReviewDoor(model.door, words, "multisig.proposal", onTryAgain = { hub.sendProposal(model.reviewAgain) }, network = words.network(chainId)) {
             model.review?.takeUnless { it is JsonNull }?.let { MultisigReviewBody(it, chainId, words, tokenInfo, executed = model.isDone) }
         }
 

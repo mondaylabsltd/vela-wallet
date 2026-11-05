@@ -114,6 +114,8 @@ fun MsReviewDoor(
     words: MultisigWords,
     tag: String,
     onTryAgain: () -> Unit,
+    /** The review's network, by name (r14-13: "Couldn't reach {{network}} to read this transaction."). */
+    network: String = "",
     review: @Composable () -> Unit,
 ) {
     val colors = VelaTheme.colors
@@ -130,7 +132,7 @@ fun MsReviewDoor(
         }
         door.showsReview -> review()
         door.failed -> Column(Modifier.fillMaxWidth().testTag("$tag.reviewFailed"), verticalArrangement = Arrangement.spacedBy(VelaSpacing.sm)) {
-            MsNote(reviewFailedReason(door, words), tone = MsTone.Warning, tag = "$tag.reviewFailedReason")
+            MsNote(reviewFailedReason(door, words, network), tone = MsTone.Warning, tag = "$tag.reviewFailedReason")
             MsNote(words.t("review.state.blocked"), tag = "$tag.reviewBlocked")
             if (door.retry) MsTextButton(words.t("review.state.tryAgain"), tag = "$tag.reviewTryAgain") { onTryAgain() }
         }
@@ -150,8 +152,8 @@ internal fun reviewUncheckedLine(door: MsSignDoor, words: MultisigWords): String
     words.raw(door.reasonKey?.takeIf { it.isNotBlank() } ?: "home.multisig.review.state.unchecked")
 
 /** §12: a failed review's reason, in the core's words (`reason_key`, a full corpus key). */
-internal fun reviewFailedReason(door: MsSignDoor, words: MultisigWords): String =
-    words.raw(door.reasonKey?.takeIf { it.isNotBlank() } ?: "home.multisig.review.state.unreadable")
+internal fun reviewFailedReason(door: MsSignDoor, words: MultisigWords, network: String = ""): String =
+    words.raw(door.reasonKey?.takeIf { it.isNotBlank() } ?: "home.multisig.review.state.unreadable", "network" to network)
 
 /** §12: the draft's sign door — its review's state and sign rule, asked of the core. */
 internal fun draftDoor(draft: MsDraft): MsSignDoor = MsRules.reviewDoor(draft.reviewState, draft.review)
@@ -673,7 +675,7 @@ fun MultisigDraftReviewSheet(
         // it; `anyway` signs only through the "… anyway" friction — never a
         // plain accent press. Loading or failed: nothing is proposed.
         val door = remember(draft.reviewState, draft.review) { draftDoor(draft) }
-        MsReviewDoor(door, words, "multisig.draft", onTryAgain = { hub.sendProposal(draftReviewAgain()) }) {
+        MsReviewDoor(door, words, "multisig.draft", onTryAgain = { hub.sendProposal(draftReviewAgain()) }, network = words.network(item.chainId)) {
             draft.review?.takeUnless { it.isNullish }?.let { MultisigReviewBody(it, item.chainId, words, tokenInfo) }
         }
         words.actionFailure(state, item.chainId)?.let { MsNote(it, tone = MsTone.Danger, tag = "multisig.draft.failed") }

@@ -380,7 +380,11 @@ struct MsProposalModel {
         // Approve can be pressed — never under one shut while the review is
         // read (or not read).
         case "unchecked": return (words.t(door.enabled ? "proposal.feeUnchecked" : "proposal.feeUncheckedHeld"), .warning)
-        case "refused": return (words.t("authority.deployUnverified", ["network": words.network(chainId)]), .danger)
+        // r14-4: the core tells a setup it could not check (`unverified`:
+        // "won't deploy it there yet") from one it read and refused
+        // (`refused`: "won't deploy it", and why) — never one for the other.
+        case "unverified": return (words.t("authority.deployUnverified", ["network": words.network(chainId)]), .warning)
+        case "refused": return (words.deployRefused(preview["authority"], chainId: chainId), .danger)
         case "spent": return (words.t("proposal.doneNote"), .neutral)
         default: return nil
         }
@@ -423,7 +427,7 @@ struct MsProposalModel {
                 return (words.t("proposal.cantPayOther", ["name": words.label(approver), "other": words.label(other)]), .warning)
             }
             return feeLine(for: approver)
-        case "fails", "refused":
+        case "fails", "refused", "unverified":
             return feeLine(for: approver)
         default:
             return nil
@@ -449,7 +453,7 @@ struct MsProposalModel {
     /// The preview stops it (would fail, nobody can pay): Execute waits.
     func executeHeld(by executor: String) -> Bool {
         guard let preview = preview(for: executor) else { return false }
-        if preview.kind == "fails" || preview.kind == "refused" || preview.kind == "spent" { return true }
+        if ["fails", "refused", "unverified", "spent"].contains(preview.kind ?? "") { return true }
         return preview.kind == "priced" && preview["canPay"]?.bool == false
     }
 
@@ -775,6 +779,17 @@ struct MultisigProposalSheet: View {
 
     // MARK: - States before the item reads
 
+    /// §18 (b): the core's words for a sheet opened without a link whose
+    /// transaction is not in the list (`nil` while the multisig is not one
+    /// this sheet's network is read for yet and nothing is loading).
+    private var missingSaid: (key: String, retry: Bool)? {
+        MsRules.missingSaid(
+            loading: view.loading,
+            unreadable: view.unreadable.contains(chainId),
+            mailbox: view.chains.first(where: { $0.chainId == chainId })?.mailbox
+        )
+    }
+
     @ViewBuilder private var linkedState: some View {
         let linked = view.linked
         if let failure = linked?.failure(words) {
@@ -787,6 +802,18 @@ struct MultisigProposalSheet: View {
                 .accessibilityIdentifier("multisig.proposal.openRetry")
         } else if linked?.stand == "notInMailbox" {
             MsNote(text: words.t("proposal.notInMailbox"), tone: .warning, identifier: "multisig.proposal.notInMailbox")
+        } else if linked == nil, let missing = missingSaid, missing.key != "proposal.opening" {
+            // §18 (b), round 14: opened without a link and not in the list —
+            // the core's words for why (a silent service is said as that,
+            // with Try again), never an endless "Opening the transaction…".
+            MsNote(
+                text: words.t(missing.key, ["network": words.network(chainId)]),
+                tone: .warning, identifier: "multisig.proposal.missing"
+            )
+            if missing.retry {
+                VelaButton(title: words.t("review.state.tryAgain"), kind: .secondary) { hub.retryLinked() }
+                    .accessibilityIdentifier("multisig.proposal.missingRetry")
+            }
         } else {
             HStack(spacing: Tokens.Space.s8) {
                 ProgressView()
@@ -867,12 +894,12 @@ struct MultisigProposalSheet: View {
             // D1: neither safety check read — the door's danger line and
             // Try again, above the review it still draws.
             if !model.past, model.door.unchecked {
-                MsReviewPending(door: model.door, words: words, tryAgain: reviewAgain)
+                MsReviewPending(door: model.door, words: words, network: words.network(chainId), tryAgain: reviewAgain)
             }
             MsReviewBody(review: review, chainId: chainId, words: words, past: model.past)
         case .loading, .failed:
             if !model.past {
-                MsReviewPending(door: model.door, words: words, tryAgain: reviewAgain)
+                MsReviewPending(door: model.door, words: words, network: words.network(chainId), tryAgain: reviewAgain)
             }
         }
     }
@@ -1008,7 +1035,7 @@ struct MultisigProposalSheet: View {
                         signing(model, .execute) { execute(model, executor: chosen) }
                     }
                     .accessibilityIdentifier("multisig.proposal.execute")
-                    if model.preview(for: chosen)?.kind == "unpriced" || model.preview(for: chosen)?.kind == "unchecked" {
+                    if ["unpriced", "unchecked", "unverified"].contains(model.preview(for: chosen)?.kind ?? "") {
                         Button(words.t("proposal.feeRetry")) { askPreviews(force: true) }
                             .font(Typography.actionLabel.scaled(textScale).font)
                             .foregroundStyle(theme.fgBase)

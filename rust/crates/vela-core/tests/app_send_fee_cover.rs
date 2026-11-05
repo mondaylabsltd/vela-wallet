@@ -335,6 +335,221 @@ fn max_reserves_the_fee_from_the_balance_it_comes_out_of() {
 }
 
 // ===========================================================================
+// r14-8: one ceiling, from the confirm's own quote
+// ===========================================================================
+
+fn units(view: &SendView, token: &SendToken) -> u128 {
+    to_base_units(&view.token_amount, token.decimals).expect("the figure parses")
+}
+
+fn ceiling(value: &Value) -> u128 {
+    text(value).parse().expect("a ceiling in base units")
+}
+
+/// The fee the view draws (the confirm's), in the sent token's base units —
+/// rounded up, as every "the fee comes out of this balance" rule rounds it.
+fn drawn_fee_units(view: &SendView, token: &SendToken) -> u128 {
+    let fee = view.fee.as_ref().expect("a fee is drawn");
+    let (amount, places) = match &fee.fee_asset {
+        FeeAssetView::Erc20 {
+            amount, decimals, ..
+        } => (amount.parse::<u128>().expect("amount"), *decimals),
+        FeeAssetView::Native => (fee.total_wei.parse::<u128>().expect("wei"), 18),
+    };
+    if places >= token.decimals {
+        amount.div_ceil(10u128.pow(places - token.decimals))
+    } else {
+        amount * 10u128.pow(token.decimals - places)
+    }
+}
+
+/// The hint ("You can send up to …") is said against the fee drawn beside
+/// it, and it is the very figure Max fills: one ceiling, one rule, one quote.
+#[test]
+fn the_hint_is_the_ceiling_max_fills_against_the_same_quote() {
+    let root = vectors();
+    for case in cases(&root, "ceiling") {
+        let name = text(&case["name"]);
+        let quotes = case["quotes"].as_array().expect("quotes");
+        let ceilings = case["ceilings"].as_array().expect("ceilings");
+        let (mut sut, token) = picked(case);
+        sut.dispatch(Event::SetRecipient {
+            recipient: RECIPIENT.to_owned(),
+        });
+        settle(&mut sut, None);
+        sut.dispatch(Event::FeeUpdated {
+            estimate: fee_view(token.chain_id, &quotes[0]),
+        });
+        settle(&mut sut, None);
+        sut.dispatch(Event::SetAmount {
+            amount: text(&case["over"]),
+        });
+        settle(&mut sut, None);
+        let view = sut.view();
+        let issue = view
+            .same_asset_fee_issue
+            .clone()
+            .unwrap_or_else(|| panic!("{name}: the hint is said"));
+        assert_eq!(
+            issue.max_transfer_amount,
+            text(&ceilings[0]),
+            "{name}: the hint's ceiling"
+        );
+        assert_eq!(
+            issue.fee_amount.parse::<u128>().expect("fee"),
+            drawn_fee_units(&view, &token),
+            "{name}: the hint's fee is the fee drawn beside it"
+        );
+        sut.dispatch(Event::TapMax);
+        settle(&mut sut, None);
+        assert_eq!(
+            units(&sut.view(), &token),
+            ceiling(&ceilings[0]),
+            "{name}: Max fills the hint's figure"
+        );
+        assert!(
+            sut.view().same_asset_fee_issue.is_none(),
+            "{name}: and the hint has nothing left to say"
+        );
+    }
+}
+
+/// A Max is the most the CONFIRM's quote allows: re-derived from the
+/// pre-check's quote and from every re-quote on the confirm, said each time it
+/// moves, frozen once the slide is made — and drawn again from the newest
+/// quote when that signature is called off. Nothing is left behind and
+/// nothing is over-spent: amount + the fee drawn == the balance, every time.
+#[test]
+fn a_max_follows_the_confirms_quote_until_it_is_signed() {
+    let root = vectors();
+    for case in cases(&root, "ceiling") {
+        let name = text(&case["name"]);
+        let quotes = case["quotes"].as_array().expect("quotes");
+        let ceilings = case["ceilings"].as_array().expect("ceilings");
+        let (mut sut, token) = picked(case);
+        let held = to_base_units(&token.balance, token.decimals).expect("balance");
+        sut.dispatch(Event::SetRecipient {
+            recipient: RECIPIENT.to_owned(),
+        });
+        settle(&mut sut, None);
+        sut.dispatch(Event::FeeUpdated {
+            estimate: fee_view(token.chain_id, &quotes[0]),
+        });
+        settle(&mut sut, None);
+        sut.dispatch(Event::TapMax);
+        settle(&mut sut, None);
+        assert_eq!(
+            units(&sut.view(), &token),
+            ceiling(&ceilings[0]),
+            "{name}: Max on the form"
+        );
+
+        // Continue: the pre-check prices again, and the confirm opens on ITS
+        // quote — the Max with it.
+        sut.dispatch(Event::Continue);
+        settle(&mut sut, Some(&fee_view(token.chain_id, &quotes[1])));
+        let view = sut.view();
+        assert_eq!(view.stage, SendStage::Confirm, "{name}: on the confirm");
+        assert_eq!(
+            units(&view, &token),
+            ceiling(&ceilings[1]),
+            "{name}: Max at the confirm"
+        );
+        assert_eq!(
+            to_base_units(&view.confirm_amount, token.decimals).expect("confirm figure"),
+            ceiling(&ceilings[1]),
+            "{name}: the confirm's figure"
+        );
+        assert_eq!(
+            units(&view, &token) + drawn_fee_units(&view, &token),
+            held,
+            "{name}: nothing stranded at the confirm"
+        );
+        assert!(view.max_moved.is_some(), "{name}: the move is said");
+        assert!(view.can_confirm, "{name}: and it confirms");
+
+        // The fee card's next quote, on the confirm.
+        sut.dispatch(Event::FeeUpdated {
+            estimate: fee_view(token.chain_id, &quotes[2]),
+        });
+        settle(&mut sut, None);
+        let view = sut.view();
+        assert_eq!(
+            units(&view, &token),
+            ceiling(&ceilings[2]),
+            "{name}: Max after a re-quote"
+        );
+        assert_eq!(
+            units(&view, &token) + drawn_fee_units(&view, &token),
+            held,
+            "{name}: nothing stranded after a re-quote"
+        );
+        assert!(view.same_asset_fee_issue.is_none(), "{name}: no breach");
+        assert!(view.can_confirm, "{name}: still confirms");
+
+        // Slid: what is being signed does not move under it.
+        sut.dispatch(Event::SlideConfirm {
+            review: view.review_digest.clone(),
+        });
+        for _ in 0..16 {
+            let Some(op) = sut.outstanding().into_iter().find(|op| {
+                matches!(
+                    op,
+                    Op::ProbeTreasury { .. } | Op::LoadAccountCredential { .. }
+                )
+            }) else {
+                break;
+            };
+            let answer = match &op {
+                Op::ProbeTreasury { .. } => Res::TreasuryProbed {
+                    probe: SendTreasuryProbe::Covered,
+                },
+                _ => Res::AccountCredential {
+                    public_key_hex: Some("04deadbeef".to_owned()),
+                },
+            };
+            let wanted = op.clone();
+            sut.resolve_matching(|pending| *pending == wanted, answer);
+        }
+        assert!(
+            sut.outstanding()
+                .iter()
+                .any(|op| matches!(op, Op::SubmitUserOp { .. })),
+            "{name}: the submit is out: {:?}",
+            sut.outstanding()
+        );
+        sut.dispatch(Event::FeeUpdated {
+            estimate: fee_view(token.chain_id, &quotes[3]),
+        });
+        assert_eq!(
+            units(&sut.view(), &token),
+            ceiling(&ceilings[2]),
+            "{name}: frozen while it is signed"
+        );
+
+        // Called off: nothing was signed, so the newest quote is drawn again
+        // and the Max with it.
+        sut.resolve_matching(
+            |op| matches!(op, Op::SubmitUserOp { .. }),
+            Res::SubmitFailed {
+                failure: vela_core::app::send::SendSubmitFailure::PasskeyCancelled,
+            },
+        );
+        let view = sut.view();
+        assert_eq!(
+            units(&view, &token),
+            ceiling(&ceilings[3]),
+            "{name}: Max after a cancel"
+        );
+        assert_eq!(
+            units(&view, &token) + drawn_fee_units(&view, &token),
+            held,
+            "{name}: nothing stranded after a cancel"
+        );
+    }
+}
+
+// ===========================================================================
 // The fee machine (a dApp request's sheet)
 // ===========================================================================
 

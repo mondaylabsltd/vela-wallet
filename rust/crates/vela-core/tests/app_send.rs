@@ -2015,7 +2015,7 @@ fn max_native_is_string_exact_against_the_reserve() {
 }
 
 #[test]
-fn max_of_the_fee_token_reserves_one_and_a_half_times_the_quote() {
+fn max_of_the_fee_token_reserves_exactly_its_quote() {
     let mut sut = boot(vec![usdc("5")]);
     sut.dispatch(Event::SelectToken {
         token_id: usdc("5").id(),
@@ -2025,8 +2025,9 @@ fn max_of_the_fee_token_reserves_one_and_a_half_times_the_quote() {
         estimate: usdc_fee(1, 1_000_000),
     });
     sut.dispatch(Event::TapMax);
-    // 5 − 1.5×1 = 3.5 USDC.
-    assert_eq!(sut.view().amount, "3.5");
+    // r14-8: 5 − 1 = 4 USDC — the fee itself, the ceiling the confirm accepts
+    // and the one "You can send up to" says (no 1.5× drift reserve).
+    assert_eq!(sut.view().amount, "4");
 }
 
 /// Issue #210: 0.00005 BNB against a 0.000332 BNB fee. `Max` is right to fill
@@ -2075,17 +2076,17 @@ fn max_one_wei_above_the_reserve_is_silent() {
     assert_eq!(view.amount_warning, None);
 }
 
-/// The fee token sent as itself: the 1.5× reserve is the line, and a balance
-/// under it gets the same sentence in the fee asset's own symbol.
+/// The fee token sent as itself: the fee is the line (r14-8), and a balance
+/// at or under it gets the same sentence in the fee asset's own symbol.
 #[test]
 fn max_of_the_fee_token_below_its_reserve_fills_zero_and_says_why() {
-    let mut sut = boot(vec![usdc("1.4")]);
+    let mut sut = boot(vec![usdc("0.9")]);
     sut.dispatch(Event::SelectToken {
-        token_id: usdc("1.4").id(),
+        token_id: usdc("0.9").id(),
     });
     sut.resolve(credential(Some(PK)));
     sut.dispatch(Event::FeeUpdated {
-        estimate: usdc_fee(1, 1_000_000), // reserve = 1.5 USDC
+        estimate: usdc_fee(1, 1_000_000), // reserve = 1 USDC
     });
     sut.dispatch(Event::TapMax);
     let view = sut.view();
@@ -2302,7 +2303,7 @@ fn max_while_the_warm_quote_is_in_flight_waits_for_it() {
         },
     );
     let view = sut.view();
-    assert_eq!(view.amount, "3.5", "5 − 1.5 × the quote");
+    assert_eq!(view.amount, "4", "5 − the quote (r14-8)");
     assert!(
         view.fee.is_some(),
         "the quote Max used is the fee on screen"
@@ -2333,7 +2334,7 @@ fn max_with_nothing_in_flight_estimates_the_token_transfer_it_fills() {
             },
         },
     );
-    assert_eq!(sut.view().amount, "3.5");
+    assert_eq!(sut.view().amount, "4");
 }
 
 /// 078 M-03: after the person picks another fee coin, the quote in hand is

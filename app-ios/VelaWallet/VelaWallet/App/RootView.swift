@@ -3749,11 +3749,8 @@ struct RootView: View {
         if camera.refusal == nil, camera.running, camera.usesDataScanner {
             inputs.dataScanner = { text in camera.deliver(text) }
         }
-        if camera.refusal == .denied {
-            inputs.refusalAction = (
-                label: loc.t("componentsUi.scanner.grantPermission"),
-                act: openSettings
-            )
+        if let key = camera.refusal?.actionLabelKey {
+            inputs.refusalAction = (label: loc.t(key), act: openSettings)
         }
         return inputs
     }
@@ -4096,6 +4093,27 @@ struct RootView: View {
             onAccountCreate: { router.path.append(.create) },
             onAccountSignIn: { onboarding.showSignInMethods = true },
             onRemoveAccount: { index in removeWallet(at: index) },
+            // r14-1: Settings → Switch account offers the multisigs and the
+            // two ways to one — the header switcher's own section, each
+            // action closing the sheet first.
+            multisigSection: { close in
+                AnyView(MultisigSwitcherSection(
+                    hub: multisig, words: multisigWords,
+                    onSelect: { address in
+                        VelaHaptic.select.play()
+                        multisig.activate(address)
+                        close()
+                    },
+                    onCreate: {
+                        close()
+                        multisig.sheet = .create
+                    },
+                    onAdd: {
+                        close()
+                        multisig.sheet = .add(prefill: nil)
+                    }
+                ))
+            },
             // The rows' ids ARE the core's field and provider names (the
             // pages are built from its view), so each maps back one to one.
             endpointActions: SettingsEndpointActions(

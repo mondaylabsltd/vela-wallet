@@ -1390,6 +1390,288 @@ Left open:
 - The desktop keeps its DESKTOP-1 copy of the item 2 rule over the JSON values in `wallet.json`. It is the same rule, but it does not yet call `stored_accounts`.
 - A sheet opened without a link whose multisig's mailbox was not read still says `proposal.notFound` on the web and the desktop. Only links were in scope here.
 
+## 19. Round 14 fixes (core, web, Safari, desktop, iOS)
+
+Decided under the owner's rules (one core, full parity, honest and
+recoverable states, Vela-account-grade clear signing, no blind signing).
+Each item was written test first.
+
+### 19.1 r14-13 + parity — a review its network answered nothing of is failed, never "… anyway"
+
+**Found.** With every Arc node hung, the web's review ended at 26 s in the
+D1 state (`ready`, `unchecked`, "… anyway") while Android went Reading →
+"Couldn't read it in time" (~50 s) → Try again. Two causes: the core had no
+rule telling "the transaction was not read against its chain at all" from
+"only the two safety checks are unread", and the core waited for the
+shell's simulation and recipient facts without a bound of its own (the web's
+pool ended them at 8 s; Android's simulation held the whole review to the
+40 s `REVIEW_TIMEOUT_MS`).
+
+| Was | Now |
+| --- | --- |
+| `gather_review` asked the code rounds, trace, probe, simulation, facts and tokens; nothing said whether the network answered any of it | it also reads the multisig's own code (`eth_getCode(safe)`, beside the checks: no time added) and hands back every read's envelope (`Gathered {input, answers}`: the anchor, the code rounds, the trace, the probe) |
+| `ReviewState::of(review)`: any review gathered is `ready` | `ReviewState::settled(review, answers)`: `ready` only when the network answered at least one read (`{result}` or `{error}` — a node saying "method not found" answered); none answered → `failed {home.multisig.review.state.chainUnread}` ("Couldn't reach {{network}} to read this transaction.") — never signable, not even "… anyway", Try again (`review_again`). Only when the chain answered and the trace / probe / simulation alone are unread is the review `unchecked` (D1, unchanged). |
+| the shell's `Simulate` and `RecipientRisk` (and a read whose `bound_ms` a shell ignores) were waited for until the review's 40 s bound | every question of a review is ended by the core at `REVIEW_ASK_MS` = `REVIEW_READ_MS` + 2 s = 10 s (`multisig_gather::within`): the same answer at the same time on every shell — a full hang lands `failed {chainUnread}` in ~10–18 s everywhere |
+| the outside page drew whatever was gathered | `review_now` returns `(review, state)` through the same `settled`; a review that is not `ready` is not drawn |
+
+Why the anchor read: a change of threshold names no recipient and no token,
+so with the checks refused the only reads were the checks themselves — the
+rule could not tell "Arc is down" from "Arc refuses `debug_traceCall`". The
+multisig's own code is the network state the review is read against, and it
+is cheap. Shell facts (recipient facts, the simulation) are not counted as
+the chain's answer: a shell may answer them from a cache.
+
+Words: `home.multisig.review.state.chainUnread` (15 locales; on-demand pin
+691). Every shell fills `{{network}}` (web `reasonWords(m, key, network)`,
+`ReviewStateNote network`; desktop `sheet::failed_reason_words`; iOS
+`MsReviewPending.network`; Android `MsReviewDoor(network =)`, minimally — the
+Android lane adopts the rest). Vectors: `review-state.json` `settle` (six
+cases: hung or refused end to end, the anchor answered with both checks
+unread, "method not found", every read answered, no review, nothing asked),
+replayed through the link door `review.settle {review?, answers}` by Rust and
+the web; `keys` + `chainUnread`. Machine tests (`app_multisig_review_state.rs`):
+`a_review_its_network_answered_nothing_of_fails_never_anyway`,
+`a_hung_network_fails_the_review_by_the_cores_own_bound_on_every_question`,
+`only_the_two_checks_unread_stays_unchecked_anyway`,
+`a_simulation_a_shell_never_ends_is_ended_by_the_core`.
+
+### 19.2 r14-4 — a setup that could not be checked is never said as a finding
+
+**Found.** With Arc refused, the desktop said "Vela won't use this multisig
+Its setup could give control of its funds to someone other than its members…"
+of a multisig Vela created, under an enabled "Approve anyway". The deploy
+gate's read failed (`Authority::Unknown`), and the execution look handed every
+non-verified authority on as `refused`; the desktop drew every `refused` as
+the refusal title and body (a period missing between them). iOS and Android
+drew every `refused` as "couldn't check" — honest for this case, untrue for
+a setup read and refused.
+
+Now the core tells them apart: `Preview::Unverified` (`{"kind":
+"unverified", "authority": {"kind": "unknown", …}}`) for a setup whose Safe
+contracts went unread — looked at again at the unpriced pace, Execute waits,
+"Check again" — and `Preview::Refused` only for a setup read and refused. The
+execute gate stops with the same distinction. Every shell: `unverified` →
+`authority.deployUnverified` (caution); `refused` → `authority.deployRefused`
+and each reason once (danger): web `previewOf`, desktop
+`findings::deploy_words` (fee line and the stopped line), iOS
+`MsWords.deployRefused`, Android `MultisigWords.deployRefused` (minimal
+adoption of the new kind). Approving stays possible: it deploys nothing.
+Tests: `a_deploy_whose_safe_contracts_went_unread_is_unverified_never_refused`
+(core), `an_unread_setup_is_never_said_as_a_finding` (desktop), the web's
+`execution-words.test.ts`.
+
+### 19.3 r14-7 — a read that failed is as unread as one still out
+
+**Found (core).** A site's draft classifies what it could not read at
+`OPEN_TIMEOUT_MS` by what is still OUT. The network's read had already come
+back failed (its nodes found silent) while the service still hung, so the
+draft said only the service's line. The flags now mean "unread": still out
+or come back failed. Test:
+`a_site_draft_whose_network_failed_first_and_service_hangs_names_both` (both
+orders). No shell change: every shell already says `unread.both`.
+
+### 19.4 §18 leftovers (b) and (c)
+
+- **(b) A sheet opened without a link** whose transaction is not in the list
+  now says what the core decides from the machine's facts
+  (`multisig_review_state::missing_said(loading, unreadable, mailbox)`, link
+  door `review.missing`): the service not read → `proposal.unread.linkService`
+  with Try again (the proposals machine's `retry`); the network unread →
+  `proposal.cantCheck` with Try again; read and absent → `notInMailbox`;
+  still loading → `opening`; another network → `notHere`. Never
+  `proposal.notFound` ("hasn't been shared yet") for a read that did not come
+  back. This device being offline stays the web's to say first (a device fact,
+  not a rule). Web `missingSaid` / `missingWords` in `ProposalSheet`, desktop
+  `no_item_lines` + `missing_offers_try_again`, iOS `MsRules.missingSaid` in
+  the sheet's no-item state (it spun on "Opening…" before). Vectors:
+  `review-state.json` `missing` (Rust, web, iOS test).
+- **(c) Failing invite links.** `LinkStand::Failed` carries `retry`, decided
+  by the add sheet's own per-cause rule (`AddOutcome::offers_retry`: busy,
+  service unavailable, a network not answering, the Safe contracts unread →
+  retry; not found, not a multisig, refused, high risk → no retry — an answer
+  that came back is not asked again behind the person's words). New event
+  `retry_link` opens the same link again. Web: the add sheet opened from the
+  link says Try again (`prefillRetry`); desktop: the add form's Try again
+  (`offers_retry`); iOS and Android: Try again on the link's failed sheet.
+  Test: `a_link_whose_lookup_did_not_come_back_is_retryable_and_opens_on_try_again`.
+
+### 19.5 r14-1 (S2) — the Safari wallet tab, at phone width
+
+- **Root cause of the "429 pt page in a 402 pt viewport".** Not a layout
+  overflow: 429/402 = 934/874 = 16/15, the zoom iOS applies when a field
+  with 15 px text takes focus, and keeps after blur. Plain web (WebKit,
+  Chromium, iOS Safari) never overflowed at 320–430. **Decision:** the
+  pre-paint script in `app.html` adds `maximum-scale=1` on iOS / iPadOS only
+  (iPadOS: MacIntel with touch points) rather than a 16 px floor on every
+  input — a global floor fights per-component sizes (the amount field), and
+  iOS keeps pinch-zoom despite `maximum-scale` while Android would lose it.
+  The extension pages share `app.html`. Tests: `viewport-zoom.test.ts`,
+  e2e `narrow-layout.e2e.ts` (home with a Vela account and with a long-named
+  multisig, the switcher, Settings and Switch account at 320/375/402/430 —
+  no horizontal overflow; the iPhone cap; no cap elsewhere).
+- **The header switcher is a real button.** WebKit turns a
+  `<button aria-haspopup>` into a pop-up button, which iOS exposes without
+  the button trait (the tester's "group"). **Decision:** a plain `<button>`
+  named by the account, the name and chevron inside it; neither
+  `aria-haspopup` nor `aria-expanded` (the switcher is a modal that makes
+  the trigger inert; the WAI-ARIA dialog pattern needs neither).
+  Test: `WalletHeader.svelte.test.ts` (`getByRole('button')`, both the name
+  and the chevron open it).
+- **Create / Add multisig from Switch account.** **Decision:** the phone
+  Settings sheet's Switch account reuses the wide settings' Create multisig
+  and Add multisig buttons (r4D-19), each closing the sheet first — the same
+  flows, one sheet at a time. iOS Settings → Switch account now carries
+  `MultisigSwitcherSection` too. Every surface: web / Chrome / Safari —
+  header and Switch account; iOS — header and Settings; desktop — header,
+  settings and the browser's switcher; Android — header and the browser's
+  switcher, Settings → Switch account left to the Android lane (recipe:
+  thread a `multisigSection` slot through `SettingsActions` →
+  `SettingsScreen` → `AccountsSheetBody`).
+
+### 19.6 Display
+
+- **r14-11a — a short form never breaks.** Unicode line breaking allows a
+  break after "…" (U+2026), and a CJK line takes it. **Decision:** shell
+  no-wrap runs around each short form (web `address-runs.ts` /
+  `AddressText.svelte` in activity rows, member changes, settings, create,
+  the review; iOS `lineLimit(1)` on account rows; desktop
+  `whitespace_nowrap` on the switcher and create rows), not word joiners in
+  the core's `short_address` — that would change every golden test, text
+  match and copied string. Test: `ActivityRow.svelte.test.ts` lays zh and en
+  rows at 220–360 px.
+- **r14-11b — the desktop header's name.** The network-space pill sat on the
+  name's line and squeezed it. As on the web, the name line holds the name
+  and chevron only; the pill follows the address. The two-line clamp stays
+  (parity with the web's `WalletHeader`, 078 H-11: a name's end tells two
+  accounts apart).
+- **r14-12 — iOS "Create New Account"** is the neutral ink (`.ink`), not the
+  accent (`MultisigR10FixTests.theAccountsSheetsCreateIsNeutralInk`).
+
+### 19.7 r14-5 — a rate-limited add is said, with Try again
+
+- **Root cause (desktop):** the sheet's own note of the add it sent was lost
+  when the sheet was opened again while the core was still adding (the core
+  reopens an invite's sheet when its network arrives; the page rebuilds) —
+  the outcome landed on nothing. The sheet now waits for any add the core
+  runs for the address in its field (`add_await`).
+- **Core:** the accounts machine records networks that answered only "slow
+  down"; it pauses once (`RATE_LIMIT_PAUSE_MS` = 3 s), asks again, then
+  answers `AddOutcome::Busy {chain_id}` (`add.busy`, the network named).
+  `AddView.retry` (`AddOutcome::offers_retry`: busy, unavailable, unchecked,
+  unverified) → Add reads Try again on every shell.
+- **Decisions:** the rate limit reaches the core as a detail marker
+  (`RATE_LIMITED_DETAIL`, "rate-limited"; the core also reads "rate limit",
+  "too many requests", "http 429"), not a new field (≈20 pattern sites);
+  `Retry-After` is not honoured in the pool this round (its 429 outcome does
+  not carry it; the pool already backs off over three passes and fails over
+  between endpoints) — the add makes one bounded pause and then names it.
+
+### 19.8 §18 (a) — the desktop's stored accounts
+
+The desktop reads, upserts and removes its account list through the core's
+`app::stored_accounts` over the stored value's text; its DESKTOP-1 copy is
+deleted. Unreadable records are still counted, logged by position and size,
+and kept through every write; the welcome notice and switcher line are
+unchanged. Test: `the_account_list_is_read_and_written_by_the_cores_rule`.
+
+### 19.9 r14-8 — the max-send hint is the confirm's own fee
+
+**Root cause.** Two rules: the hint kept back the fee once, Max kept back
+1.5× it (on the tester's 0.1196 USDC Max filled 0, so the hint's 0.008792
+was typed by hand); Continue then re-quoted at 0.0984 and nothing kept the
+typed figure current, stranding 0.012408.
+
+- **One ceiling, the fee once** (`app/send.rs` `max_fee_reserve`): the
+  hint's `max_transfer_amount`, the Max fill and the confirm's gate are one
+  figure. The 1.5× was a drift allowance left from the TypeScript send code;
+  the signature charges exactly the quoted fee (r11-8).
+- **The hint and Max read the fee on screen** (`shown_fee`), the quote the
+  confirm draws and signs, never another estimate.
+- **A Max follows every quote on the confirm until the slide**
+  (`hold_max_to_quote`: Continue's re-quote, the fee card's re-quotes, a
+  signature called off), said by the existing `max_moved`; frozen from the
+  slide (the review digest stops a moved figure being signed unseen). A
+  hand-typed figure stays the person's; it is re-checked against the
+  confirm's quote, and the hint states the new ceiling if it no longer fits.
+- The natives already draw the core's `same_asset_fee_issue` and
+  `max_moved` and fill Max through `TapMax`: no shell does its own max
+  maths, so the rebuilt core fixes them too.
+
+Tests: `app_send_fee_cover.rs`
+(`the_hint_is_the_ceiling_max_fills_against_the_same_quote`,
+`a_max_follows_the_confirms_quote_until_it_is_signed`, vector section
+`ceiling` in `send-fee-cover.json` with the tester's figures), web
+`live-send-ceiling.test.ts`. Open: a typed amount that still fits stays as
+typed when the fee drops (Max is the way to send everything); the
+multi-token sweep's 2× reserve is a separate rule, unchanged.
+
+### 19.10 §16 end to end on Safari (r14-1's proof)
+
+Proven on an iOS 26.2 simulator (iPhone 17 Pro, its own Face ID) against
+local services only: the fork harness (Gnosis fork, the genesis service
+from `sgr-mailbox`, the local relay) and the local signing page (dist,
+64363925, front of `BUILD_ALLOWED`). `SafariRouteDeviceTests`
+`test07_createMultisigFromTheHeader` (header switcher → Add account →
+Create multisig) and `test08_createMultisigFromSettings` (Settings → Switch
+account → Create multisig) each create a 1-of-1 multisig from the Safari
+extension's wallet tab: the hand-off card, the page's "Prove multisig
+membership" card (name, address, "this account", "Needs 1 of 1"), the
+simulator passkey, "Multisig created" / "Shared", and the multisig in front
+on the home and listed in the switcher; the genesis records reached the
+local service and its registry on the fork. A clean run (erased simulator,
+tests 01, 02, 07, 08) passed. Runner: `app-ios/scripts/safari-route-e2e.sh`
+(loopback only; links are never opened with `simctl openurl` on an https
+URL). Not covered: zh, the deployed page, a 1-of-2, anything on chain beyond
+the counterfactual record. Found (minor, open): on Safari iOS 26 the tall
+Create sheet opens with "Next" under Safari's floating bottom bar until the
+sheet is scrolled once.
+
+### 19.11 The Android lane's three hand-offs (§20 "left open")
+
+- **The newest link open supersedes one in flight (core).** Link opens run
+  side by side in the accounts machine, so an older open whose lookup was
+  slower could land after a newer one, take its stand and switch the
+  multisig shown behind its sheet. **Decision:** every open takes a number
+  (`LinkState.seq`, bumped by `open`, `open_proposal`, Try again and a
+  network added); after each wait an open that is no longer the newest stops
+  — it says nothing, keeps nothing, switches nothing, opens nothing. Test:
+  `the_newest_link_supersedes_an_open_still_in_flight`. Android's sheet guard
+  stays as a shell detail; the account behind the sheet is now the core's
+  on every shell.
+- **The fee signed is the fee shown (core).** Execute re-quoted a look older
+  than `PREVIEW_FRESH_MS` at the press and signed that quote (r14-9's 0.0972
+  under "≈0.098172"). **Decision:** a new quote whose fee differs from the
+  look on screen signs nothing: `ActionState::Failed {fee_moved_detail}`
+  (`{kind: "fee_moved", amount, chainId, executor}` — the shape Android's
+  `ShownFee` already wrote, so its words read the core's answer unchanged),
+  the new look is kept, and the next press inside the window signs exactly
+  it. A stop rather than a confirm step: the sheet already draws the new
+  look, and one more press on what is shown is the honest confirm. Every
+  shell says "That didn't go through: Network fee ≈ {new}, paid by {name}"
+  with existing words (web `ExecutionFeeMovedError`, desktop
+  `ShellFailure::FeeMoved`, iOS `failureText`, Android as before); the
+  trusted page executes through the same core path. Test:
+  `an_execution_never_signs_a_fee_other_than_the_one_shown`. Android's shell
+  guard may now be retired by its lane; it agrees with the core.
+- **iOS r14-10.** `CameraScanner.Refusal.actionLabelKey`: a camera refused
+  for good says `onboarding.create.openSettings` on the button that opens
+  Settings (the scan sheet and Explore's scanner), as Android does.
+
+### 19.12 Left open
+
+- Android Settings → Switch account still offers only Create / Sign in
+  (recipe in 19.5); Android's add sheet relabels Add as Try again only once
+  its lane reads `view.add.retry`.
+- iOS composite subtitles that hold an address with other text
+  (`MultisigSettingsSheet`, `MultisigAddSheet`, the home card's proposal
+  title) and desktop `multisig_add.rs`' row: short forms there can still be
+  wrapped after their "…". Android rows: reported to its lane.
+- `ImportOutcome` has no busy mapping yet (a rate-limited import says
+  "unavailable").
+- The Safari Create sheet's "Next" under the floating bar (19.10).
+- Desktop's fee-moved line names the executor by its short address (the
+  failure words have no view of the member labels there).
+
 ## 20. Round 14 Android fixes
 
 Round 14's Android findings (r14-2, r14-3, r14-6, r14-9, r14-10), fixed in

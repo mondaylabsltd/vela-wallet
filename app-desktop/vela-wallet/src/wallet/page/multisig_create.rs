@@ -892,6 +892,9 @@ impl WalletPage {
                             div()
                                 .text_size(theme::text_label())
                                 .text_color(theme.fg_subtle)
+                                // r14-11a: a short address is one line, never
+                                // broken after its "…".
+                                .whitespace_nowrap()
                                 .child(crate::wallet::live::shorten_address(address)),
                         ),
                 )

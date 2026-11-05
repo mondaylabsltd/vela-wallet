@@ -20,6 +20,9 @@ const MODULE = '0x9813461E88aDD60D0eC0943B74A83368CA2E36D1';
 const calls = vi.hoisted(() => [] as (number | undefined)[]);
 const accepted = vi.hoisted(() => [] as boolean[]);
 const SAFE = '0x013124f0f8b38d42a2e192bcc26337ee9d7ffbf1';
+/** r14-5: a multisig whose network is rate-limiting the add's reads, once. */
+const BUSY = '0x00000000000000000000000000000000000000b5';
+const busyAsks = vi.hoisted(() => ({ n: 0 }));
 const used = vi.hoisted(() => [] as number[]);
 /**
  * The core's accounts machine, as the sheet asks it (`multisig.request`):
@@ -41,6 +44,10 @@ const machine = vi.hoisted(() => ({
 						}
 					]
 				};
+			}
+			if (address === '0x00000000000000000000000000000000000000b5') {
+				busyAsks.n += 1;
+				return busyAsks.n === 1 ? { kind: 'busy', chain_id: 5042002 } : { kind: 'added', address };
 			}
 			if (address === '0x0cb9aef9713c4a2ea2995fca68d7355ce5e27d83') {
 				accepted.push(!!event.accept_risks);
@@ -185,6 +192,7 @@ const m = {
 		unavailable: 'un',
 		unsupported: 'us',
 		notMultisig: 'nm',
+		busy: '{{network}} is busy',
 		chooseNetwork: 'Choose its network:',
 		badInvite: 'This invite link is damaged',
 		badChecksum: "This invite's address doesn't match its checksum",
@@ -198,6 +206,7 @@ const m = {
 		labelsNote: 'labels'
 	},
 	action: { network: 'Network' },
+	review: { state: { tryAgain: 'Try again' } },
 	proposal: { addNetwork: 'Add network' },
 	send: { invalidAddress: 'bad', invalidChecksum: 'checksum' },
 	service: { customNote: '({{host}})' },
@@ -484,6 +493,41 @@ describe('who can act for the multisig (§3.5)', () => {
 		await settle();
 		expect(accepted).toEqual([false, true]);
 		expect(added).toEqual([RISKY]);
+	});
+});
+
+/** r14-5: never a silent return to Add. */
+describe('a network rate-limiting the add', () => {
+	it('is named busy, and Add says Try again — which asks again', async () => {
+		busyAsks.n = 0;
+		const added: string[] = [];
+		const screen = render(AddMultisigSheet, {
+			props: {
+				m,
+				wide: true,
+				closeLabel: 'Close',
+				onclose: () => {},
+				onadded: (a: string) => added.push(a)
+			}
+		});
+		await tick();
+		const input = screen.container.querySelector<HTMLInputElement>('input.mono')!;
+		input.value = BUSY;
+		input.dispatchEvent(new Event('input', { bubbles: true }));
+		const button = (label: string) =>
+			[...document.body.querySelectorAll<HTMLButtonElement>('button')].find(
+				(b) => b.textContent?.trim() === label
+			);
+		button('Add')!.click();
+		await settle();
+		expect(screen.container.querySelector('[role="alert"]')?.textContent).toBe(
+			'Chain 5042002 is busy'
+		);
+		expect(button('Add')).toBeUndefined();
+		button('Try again')!.click();
+		await settle();
+		expect(busyAsks.n).toBe(2);
+		expect(added).toEqual([BUSY]);
 	});
 });
 

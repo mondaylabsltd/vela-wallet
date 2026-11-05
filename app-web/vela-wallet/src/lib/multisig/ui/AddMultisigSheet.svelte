@@ -68,6 +68,11 @@
 		 * once; the address is not looked up again until the person taps Add.
 		 */
 		prefillFailure?: string | null;
+		/**
+		 * §18 (c), round 14: that lookup did not come back (the core's
+		 * `LinkStand::Failed.retry`): Add says Try again from the start.
+		 */
+		prefillRetry?: boolean;
 		/** The invite it was opened from: its networks, its members' labels. */
 		link?: AddLink;
 		/**
@@ -87,6 +92,7 @@
 		m,
 		prefill = '',
 		prefillFailure = null,
+		prefillRetry = false,
 		link,
 		broken = false,
 		locale = 'en',
@@ -106,6 +112,9 @@
 			broken === 'checksum' ? m.add.badChecksum : broken ? m.add.badInvite : prefillFailure
 		)
 	);
+	// r14-5: what is said is a read that did not come back (the core's
+	// `AddOutcome::offers_retry`, `view.add.retry`): Add says Try again.
+	let retry = $state(untrack(() => prefillRetry && !!prefillFailure));
 	// The core's one address rule (send-2), checksum included.
 	const entry = $derived(addressEntry(address.trim()));
 	const valid = $derived(entry === 'valid');
@@ -160,6 +169,7 @@
 	);
 
 	async function add(acceptRisks = false) {
+		retry = false;
 		if (!valid) {
 			failure = entry === 'checksum' ? m.send.invalidChecksum : m.send.invalidAddress;
 			return;
@@ -201,9 +211,16 @@
 				return;
 			case 'unverified':
 				failure = fillTemplate(m.authority.unverified, { network: chainName(outcome.chain_id) });
+				retry = true;
+				return;
+			case 'busy':
+				// r14-5: the network's nodes were rate-limiting — named, with Try again.
+				failure = fillTemplate(m.add.busy, { network: chainName(outcome.chain_id) });
+				retry = true;
 				return;
 			default:
 				failure = m.add[outcome.kind];
+				retry = multisig.view?.add?.retry ?? false;
 		}
 	}
 
@@ -498,6 +515,7 @@
 				bind:value={address}
 				oninput={() => {
 					failure = null;
+					retry = false;
 					refused = null;
 					risky = null;
 					choosing = false;
@@ -583,7 +601,8 @@
 					shape="rounded"
 					loading={busy}
 					disabled={busy || refused !== null || (choosing && chosen === null)}
-					onclick={() => void add()}>{m.add.add}</Button
+					onclick={() => void add()}
+					>{retry && failure ? m.review.state.tryAgain : m.add.add}</Button
 				>
 			{/if}
 		</form>

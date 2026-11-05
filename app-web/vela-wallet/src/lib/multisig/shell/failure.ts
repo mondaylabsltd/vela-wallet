@@ -13,6 +13,8 @@ export type ShellFailure = (
 	| { kind: 'passkey_check'; detail: string }
 	| { kind: 'not_sent' }
 	| { kind: 'cannot_pay'; need: string; have: string }
+	/** r14-9 (the core's): the fee moved since the press — nothing was signed. */
+	| { kind: 'fee_moved'; amount: string; chainId: number; executor: string }
 	| { kind: 'unknown'; message: string }
 ) & {
 	/** What the error itself said, for a sheet that says it as it was (`error.message`). */

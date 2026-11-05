@@ -22,7 +22,8 @@
 //!   a record that cannot be read — and nothing they had is lost on the way.
 //!
 //! The desktop keeps its list as a JSON value inside `wallet.json`
-//! (`executor::storage`) and holds the same rule over values.
+//! (`executor::storage`) and reads and writes it through these same
+//! functions, over that value's text (r14, §19).
 
 use serde::de::IgnoredAny;
 use serde::Serialize;

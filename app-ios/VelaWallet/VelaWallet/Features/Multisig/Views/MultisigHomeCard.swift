@@ -384,6 +384,8 @@ struct MultisigSwitcherSection: View {
                     Text(verbatim: MsWords.short(row.account.address))
                         .typeRole(Typography.monoSmall.scaled(textScale))
                         .foregroundStyle(theme.fgSubtle)
+                        // r14-11a: a short address is one line, never broken after its "…".
+                        .lineLimit(1)
                 }
                 Spacer(minLength: Tokens.Space.s8)
                 if count > 0 {

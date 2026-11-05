@@ -52,10 +52,15 @@ export function stateFor(
 
 const PREFIX = 'home.multisig.review.state.';
 
-/** A failed review's reason, in its words (an unknown key: "couldn't read"). */
-export function reasonWords(m: ReviewStateMessages, key: string | null): string {
+/**
+ * A failed review's reason, in its words (an unknown key: "couldn't read");
+ * `network` names the review's network where the words do (r14-13).
+ */
+export function reasonWords(m: ReviewStateMessages, key: string | null, network = ''): string {
 	const leaf = key?.startsWith(PREFIX) ? key.slice(PREFIX.length) : '';
 	switch (leaf) {
+		case 'chainUnread':
+			return m.chainUnread.replaceAll('{{network}}', network);
 		case 'timedOut':
 			return m.timedOut;
 		case 'gone':
@@ -83,5 +88,60 @@ export function unreadWords(
 	if (key === SERVICE_KEY) return proposal.mailboxDown;
 	const leaf = key?.startsWith(UNREAD) ? key.slice(UNREAD.length) : '';
 	const text = proposal.unread[leaf] || proposal.unread.chain;
+	return text.replaceAll('{{network}}', network);
+}
+
+/** §18 (b): what a sheet opened without a link says (`review.missing`). */
+export interface MissingSaid {
+	key: string;
+	retry: boolean;
+}
+
+/**
+ * §18 (b), round 14: a proposal sheet opened WITHOUT a link whose
+ * transaction is not in the list — the core's rule over the machine's facts
+ * (`loading`, the network `unreadable`, the service's list read: `mailbox`,
+ * null where the multisig is not read on this network). A core that could
+ * not be asked says it is still opening, with nothing to press.
+ */
+export function missingSaid(
+	loading: boolean,
+	unreadable: boolean,
+	mailbox: boolean | null
+): MissingSaid {
+	try {
+		return JSON.parse(
+			wasm.multisigLinkCall('review.missing', JSON.stringify({ loading, unreadable, mailbox }))
+		) as MissingSaid;
+	} catch {
+		return { key: 'home.multisig.proposal.opening', retry: false };
+	}
+}
+
+const PROPOSAL = 'home.multisig.proposal.';
+
+/** {@link MissingSaid}'s key in the sheet's words, `{{network}}` its network's name. */
+export function missingWords(
+	proposal: {
+		opening: string;
+		cantCheck: string;
+		notInMailbox: string;
+		notHere: string;
+		unread: Record<string, string>;
+	},
+	key: string,
+	network: string
+): string {
+	const leaf = key.startsWith(PROPOSAL) ? key.slice(PROPOSAL.length) : '';
+	const text =
+		leaf === 'cantCheck'
+			? proposal.cantCheck
+			: leaf === 'notInMailbox'
+				? proposal.notInMailbox
+				: leaf === 'notHere'
+					? proposal.notHere
+					: leaf.startsWith('unread.')
+						? proposal.unread[leaf.slice('unread.'.length)] || proposal.opening
+						: proposal.opening;
 	return text.replaceAll('{{network}}', network);
 }

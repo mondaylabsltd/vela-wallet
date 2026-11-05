@@ -7,6 +7,8 @@
 import { tick } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { userEvent } from 'vitest/browser';
+import '$lib/tokens/tokens.css';
 import { identiconViewer } from '../identicon-viewer.svelte';
 import WalletHeader from './WalletHeader.svelte';
 
@@ -47,6 +49,33 @@ describe('WalletHeader', () => {
 		address.click();
 		await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith(ADDRESS));
 		expect(onclick).toHaveBeenCalledOnce();
+	});
+
+	/*
+	 * r14-1: on the iPhone (the Safari extension's wallet tab) the switcher
+	 * never opened, and WebKit showed the header as a group, not a button.
+	 * WebKit maps a `<button aria-haspopup>` to a pop-up button, which iOS
+	 * exposes with no button trait — VoiceOver and automation saw "SafariE2E,
+	 * group". It is a plain button, named by the account, and a press anywhere
+	 * on it — the name, the chevron — opens the switcher.
+	 */
+	it('is a plain button named by the account, and the name and the chevron both open the switcher', async () => {
+		const onclick = vi.fn();
+		const screen = render(WalletHeader, {
+			props: { header: { ...HEADER, name: 'A rather long account name, kept' }, onclick }
+		});
+		const button = screen.getByRole('button', { name: 'A rather long account name, kept' });
+		const element = button.element() as HTMLButtonElement;
+		expect(element.tagName).toBe('BUTTON');
+		expect(element.type).toBe('button');
+		expect(element.getAttribute('role')).toBeNull();
+		expect(element.getAttribute('aria-haspopup')).toBeNull();
+
+		// A real press on each part, at the part's own centre.
+		await userEvent.click(element.querySelector('.name') as HTMLElement);
+		expect(onclick).toHaveBeenCalledTimes(1);
+		await userEvent.click(element.querySelector('.chevron') as HTMLElement);
+		expect(onclick).toHaveBeenCalledTimes(2);
 	});
 
 	it('says "Copied" once the address is on the clipboard, then goes back', async () => {

@@ -26,6 +26,7 @@ import {
 	SigningUncheckedError
 } from '../core/gate.svelte';
 import {
+	ExecutionFeeMovedError,
 	ExecutionSpentError,
 	ExecutionUncheckedError,
 	ExecutionUnpricedError,
@@ -93,6 +94,10 @@ export function previewOf(value: unknown, chainId: number): ExecutionPreview | n
 	const v = value as Record<string, unknown> | null | undefined;
 	if (!v || typeof v.kind !== 'string') return null;
 	switch (v.kind) {
+		// r14-4: the core tells a setup it could not check (`unverified`, its
+		// authority `unknown`: "won't deploy it there yet") from one it read and
+		// refused (`refused`); the error words each by its authority's kind.
+		case 'unverified':
 		case 'refused':
 			return {
 				kind: 'refused',
@@ -186,6 +191,8 @@ export function detailError(detail: string): Error {
 			return Object.assign(new Error('the relay never took it'), { name: 'UserOpNotSentError' });
 		case 'cannot_pay':
 			return new ExecutorCannotPayError(big(shell.need), big(shell.have));
+		case 'fee_moved':
+			return new ExecutionFeeMovedError(big(shell.amount), shell.executor);
 		case 'unknown':
 			return new Error(shell.message);
 	}

@@ -1385,12 +1385,12 @@ async fn read_linked(io: &Io<Event>, st: &Shared<State>) {
     };
     io.emit(Event::Changed);
     let gathered = review_state::bounded(io, async {
-        let input = gather_review(io, st, &account, chain_id, &item.tx, &members, None).await;
-        multisig_review::multisig_review(&input)
-            .ok()
-            .and_then(|r| serde_json::to_value(r).ok())
+        let gathered = gather_review(io, st, &account, chain_id, &item.tx, &members, None).await;
+        super::settle(&gathered, false)
     })
-    .await;
+    .await
+    .and_then(|landed| landed)
+    .map(Some);
     keep_review(&mut lock(st), &key, run, gathered);
 }
 

@@ -1557,8 +1557,12 @@ fn a_sites_request_declined_or_a_message_is_answered_honestly() {
 
 // -- §12: every review has a state; nothing is signed until it is read ---------------
 
+/// A simulation nobody answers — and (r14-13) the core's own bound on that
+/// one question not run out either, so what is left to end the review is
+/// its `REVIEW_TIMEOUT_MS`.
 fn simulation(op: &Op) -> bool {
     matches!(op, Op::Simulate { .. })
+        || matches!(op, Op::Wait { ms } if *ms == vela_core::app::multisig_gather::REVIEW_ASK_MS)
 }
 
 /// A simulation nobody answers, and the review's own bound not run out yet.

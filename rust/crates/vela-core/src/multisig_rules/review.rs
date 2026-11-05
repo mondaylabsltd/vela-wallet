@@ -87,6 +87,18 @@ pub fn call(method: &str, args: &Value) -> Result<String, CoreError> {
             &crate::app::multisig_review_state::opening_reason_json(args)
                 .map_err(CoreError::Multisig)?,
         ),
+        // r14-13: where a gathered review lands — `{review?, answers}` (each
+        // read's envelope) → `ready`, or `failed {chainUnread}` when the
+        // network answered none of them.
+        "settle" => to_json(
+            &crate::app::multisig_review_state::settle_json(args).map_err(CoreError::Multisig)?,
+        ),
+        // §18 (b): a proposal sheet opened without a link, its transaction
+        // not in the list — `{loading, unreadable, mailbox?}` →
+        // `{key, retry}`: a service that did not answer is said as that.
+        "missing" => to_json(
+            &crate::app::multisig_review_state::missing_json(args).map_err(CoreError::Multisig)?,
+        ),
         other => Err(CoreError::Multisig(format!("review.{other}: no such rule"))),
     }
 }

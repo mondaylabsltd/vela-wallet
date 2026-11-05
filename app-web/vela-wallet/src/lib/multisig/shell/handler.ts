@@ -95,8 +95,16 @@ function retryAfter(response: Response): string | null {
 }
 
 function errorText(error: unknown): string {
-	if (error instanceof Error) return `${error.name}: ${error.message}`;
-	return String(error);
+	const text = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+	// r14-5: a pool that gave up because its nodes answered only "slow down"
+	// (`PoolFailedError.rateLimited`) says so first, in the core's word
+	// (`multisig_shell::RATE_LIMITED_DETAIL`): the core then names the
+	// network busy, not out of reach.
+	const limited =
+		typeof error === 'object' &&
+		error !== null &&
+		(error as { rateLimited?: unknown }).rateLimited === true;
+	return limited ? `rate-limited: ${text}` : text;
 }
 
 /** The wallet's refusal as EIP-1193 gives it: `{ code, message }`. */

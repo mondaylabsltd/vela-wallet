@@ -414,6 +414,9 @@ struct MsReviewPending: View {
     @Environment(\.walletTextScale) private var textScale
     let door: MsSignDoor
     let words: MsWords
+    /// The review's network, by name (r14-13: "Couldn't reach {{network}} to
+    /// read this transaction.").
+    var network: String = ""
     let tryAgain: () -> Void
 
     var body: some View {
@@ -444,7 +447,7 @@ struct MsReviewPending: View {
             .accessibilityIdentifier("multisig.review.loading")
         case .failed:
             VStack(alignment: .leading, spacing: Tokens.Space.s8) {
-                MsNote(text: Self.failedLine(door, words: words), tone: .warning, identifier: "multisig.review.failed")
+                MsNote(text: Self.failedLine(door, words: words, network: network), tone: .warning, identifier: "multisig.review.failed")
                 if door.retry {
                     VelaButton(title: words.t("review.state.tryAgain"), kind: .secondary, action: tryAgain)
                         .accessibilityIdentifier("multisig.review.tryAgain")
@@ -462,9 +465,9 @@ struct MsReviewPending: View {
 
     /// The reason (the core's key) and what it means: nothing is signed.
     @MainActor
-    static func failedLine(_ door: MsSignDoor, words: MsWords) -> String {
+    static func failedLine(_ door: MsSignDoor, words: MsWords, network: String = "") -> String {
         let blocked = words.t("review.state.blocked")
         guard let key = door.reasonKey else { return blocked }
-        return "\(words.loc.t(key)) \(blocked)"
+        return "\(words.loc.t(key, vars: ["network": network])) \(blocked)"
     }
 }

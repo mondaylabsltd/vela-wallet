@@ -2944,6 +2944,12 @@ impl App for Send {
         // Whatever the event, a relay stop never outlives the chain it is
         // about (issue #422).
         drop_foreign_relay_stops(model);
+        // Whatever the event, a Max on the confirm is the confirm's quote's
+        // (r14-8): a re-quote, a pre-check's answer, a signature called off.
+        // The sim follows the figure it now sends, and the page is drawn.
+        if hold_max_to_quote(model) {
+            return Command::all([cmd, reprobe_after_fee(model), render()]);
+        }
         cmd
     }
 
@@ -4888,10 +4894,11 @@ fn quote_is_for_fee_coin(model: &Model, fee: &FeeEstimate) -> bool {
     }
 }
 
-/// The quote `Max` and its sentence may reserve against: on this chain, AND
-/// for this fee coin.
+/// The quote `Max` and its sentence may reserve against: the one the confirm
+/// draws ([`shown_fee`] — r14-8: one quote for the ceiling, the fee row and
+/// the signature), on this chain, AND for this fee coin.
 fn max_quote(model: &Model) -> Option<&FeeEstimate> {
-    selected_fee(model).filter(|fee| quote_is_for_fee_coin(model, fee))
+    shown_fee(model).filter(|fee| quote_is_for_fee_coin(model, fee))
 }
 
 fn full_balance(token: &SendToken) -> String {
@@ -4906,20 +4913,74 @@ fn full_balance(token: &SendToken) -> String {
 /// sent. `None` — gas is paid in a separate asset, so the whole balance is
 /// sendable.
 ///
-/// One rule, two readers: the fill ([`max_with_fee`]) and the sentence
-/// that explains a fill of nothing ([`fee_over_balance`]). Written twice they
-/// would eventually disagree, and the shape of that disagreement is a screen
-/// showing `0` while insisting the balance covers the fee.
+/// One rule, three readers: the fill ([`max_with_fee`]), the sentence that
+/// explains a fill of nothing ([`fee_over_balance`]) and the ceiling the
+/// confirm's gate says out loud ([`derive_same_asset_issue`], "You can send
+/// up to …"). Written apart they disagreed, and the shape of that
+/// disagreement is a screen showing one most-you-can-send in the sentence and
+/// another under the Max button.
+///
+/// r14-8: the fee itself, exactly — what the confirm's gate weighs and what
+/// the signature charges (r11-8: priced = charged). The 1.5× this used to
+/// hold back for an ERC-20 fee (the TS port's "+50% for send-time re-quote
+/// drift") left half a fee behind on every such Max, and on Arc it made Max
+/// fill `0` where the sentence beside it offered 0.008792: the person typed
+/// the sentence's figure by hand, a figure nothing kept current, and the
+/// confirm's own quote stranded the difference. Drift is now absorbed where
+/// it happens — a Max follows every quote up to the slide
+/// ([`hold_max_to_quote`]).
 fn max_fee_reserve(token: &SendToken, fee: &FeeEstimate) -> Option<u128> {
     // The same BALANCE, not the same identity (r10-3): on Arc a Max of the
     // native USDC with the fee quoted in its `0x3600…` interface held nothing
     // back, filled the whole balance, and the fee leg had nothing to pay from.
-    let owed = fee_in_units_of(fee, token.token_address.as_deref(), token.decimals, true)?;
-    match &fee.fee_asset {
-        // Reserve 1.5× the quoted fee (+50% for send-time re-quote drift).
-        FeeAsset::Erc20 { .. } => Some(owed.saturating_mul(3) / 2),
-        FeeAsset::Native => Some(owed),
+    // `same_balance_fee_limit` — the confirm's own ceiling — asks the same
+    // `fee_in_units_of`, rounded the same way.
+    fee_in_units_of(fee, token.token_address.as_deref(), token.decimals, true)
+}
+
+/// r14-8: a Max in force on the confirm page is the most the CONFIRM's quote
+/// lets through — the quote drawn beside it and signed with it — never a
+/// figure from a quote that has since been replaced.
+///
+/// The pre-check prices again on Continue, and the fee card re-quotes once a
+/// block; a Max filled on the form from an earlier quote would otherwise be
+/// signed against a later one: over the balance (the gate then shuts with
+/// "You can send up to …") or under it, with the difference stranded in the
+/// account. So whenever a quote has landed and nothing is being signed, the
+/// Max is re-derived from it, and [`SendView::max_moved`] says that it moved.
+/// Never while a signature is under way: what was slid is what is signed
+/// (`confirmed_review`), and the review digest the confirm hands back keeps a
+/// moved figure from being signed unseen. Fills only from a quote in hand —
+/// it never asks for one.
+///
+/// `true` when the figure moved.
+fn hold_max_to_quote(model: &mut Model) -> bool {
+    if model.step != SendStep::Confirm
+        || model.lock.busy()
+        || !matches!(model.tx, SendTxStatus::Idle | SendTxStatus::Error)
+        || !matches!(model.pipeline, Pipeline::Idle | Pipeline::LateFee { .. })
+    {
+        return false;
     }
+    let Some(MaxFill::Exact(now)) = &model.max_fill else {
+        return false;
+    };
+    let Some(token) = model.selected_token.as_ref() else {
+        return false;
+    };
+    let exact = if proposing(model).is_some() {
+        full_balance(token)
+    } else {
+        match max_quote(model) {
+            Some(fee) => max_with_fee(token, fee),
+            None => return false,
+        }
+    };
+    if *now == exact {
+        return false;
+    }
+    set_max(model, exact);
+    true
 }
 
 /// The exact Max given a fee (`useSendController.ts:801-848`).
@@ -6004,7 +6065,10 @@ fn derive_same_asset_issue(model: &Model) -> Option<SendFeeIssueView> {
     if model.multi_select_mode {
         return None;
     }
-    let fee = selected_fee(model)?;
+    // r14-8: the quote the confirm draws and signs ([`shown_fee`]), the same
+    // one `Max` fills against — so "You can send up to X" is X under the Max
+    // button too, and the fee in the sentence is the fee on the row.
+    let fee = shown_fee(model)?;
     let transfer_amount = if model.split_mode {
         sum_split_base_units(&model.recipients, token.decimals)?
     } else {
@@ -6336,6 +6400,9 @@ fn precheck_settle(model: &mut Model) -> Cmd {
         TreasuryAnswer::Serves => clear_relay_stops(model),
     }
     model.step = SendStep::Confirm;
+    // r14-8: a Max opens the confirm on the pre-check's quote — the one drawn
+    // and signed there — before the probes read the figure it sends.
+    hold_max_to_quote(model);
     Command::all([confirm_probes(model), render()])
 }
 

@@ -2,6 +2,7 @@
 	import type { ActivityRowModel } from '../model';
 	import { UTILITY_ICONS } from '../icons';
 	import Icon from './Icon.svelte';
+	import AddressText from '$lib/ui/AddressText.svelte';
 	import RemoteLogo from './RemoteLogo.svelte';
 
 	interface Props {
@@ -70,12 +71,14 @@
 				</span>
 			</span>
 		{:else}
-			<span class="title">{row.title}</span>
+			<!-- r14-11a: a short address in a title or a line under it moves to
+			     the next line whole, never broken after its "…". -->
+			<span class="title"><AddressText text={row.title} /></span>
 		{/if}
-		<span class="subtitle">{row.subtitle}</span>
+		<span class="subtitle"><AddressText text={row.subtitle} /></span>
 		{#if row.caution}
 			<!-- r4a-1 / r4a-2: what must be read before anything else. -->
-			<span class="caution" data-testid="activity-caution">{row.caution}</span>
+			<span class="caution" data-testid="activity-caution"><AddressText text={row.caution} /></span>
 		{/if}
 	</span>
 	<!-- 087 F11: a dApp call that moved no coin of ours has no figure, and
