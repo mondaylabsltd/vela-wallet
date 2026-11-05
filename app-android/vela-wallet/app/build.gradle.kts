@@ -130,6 +130,11 @@ android {
     defaultConfig {
         applicationId = "app.getvela.wallet"
         if (velaDeviceTest) applicationIdSuffix = ".devicetest"
+        // Real-device pass 2 (D10): the device-test build is labelled "Vela
+        // Test" on the launcher, the widget and the tile — never "Vela
+        // Wallet" beside the owner's own app (iOS's device-test build is
+        // named the same). The store and debug builds keep `app_name`.
+        manifestPlaceholders["velaAppLabel"] = if (velaDeviceTest) "Vela Test" else "@string/app_name"
         // 29 (Android 10) is the lowest level we can regression-test on real
         // hardware; every library floor is ≤23 and passkeys need only 28+, but
         // shipping below what we can reproduce bugs on is a support trap.

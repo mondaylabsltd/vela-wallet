@@ -36,6 +36,10 @@ import uniffi.vela_core_uniffi.fromBase64url
 import uniffi.vela_core_uniffi.fromHex
 import uniffi.vela_core_uniffi.toBase64url
 import uniffi.vela_core_uniffi.toHex
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Every WebAuthn ceremony this app performs, and nothing else.
@@ -245,17 +249,28 @@ class PasskeyExecutor(
             // focus; this window keeping it for SELECTOR_WATCHDOG_MS unbroken
             // means none is up, and the wait ends, said. A sheet that IS up
             // gets the core's own passkey deadline, never longer.
+            //
+            // Real-device pass 2 (D5): with Google unreachable the sheet spun
+            // 241 s and the person was put back at the key list with no
+            // reason. The wait is raced against the deadline
+            // ([withinPasskeyDeadline]) — it ends there even when the provider
+            // never answers its cancellation — and the end is said as the
+            // deadline's (`TYPE_TIMEOUT_ERROR`: the core's "The passkey prompt
+            // timed out. Try again."), never as the person's cancel.
             awaitingSelector("passkey.register") {
-                kotlinx.coroutines.withTimeout(uniffi.vela_core_uniffi.passkeySignTimeoutMs().toLong()) {
+                withinPasskeyDeadline(uniffi.vela_core_uniffi.passkeySignTimeoutMs().toLong()) {
                     credentialManager.createCredential(
                         context = context,
                         request = CreatePublicKeyCredentialRequest(request.toString()),
                     )
                 }
             }
+        } catch (deadline: PasskeyDeadlinePassed) {
+            VelaLog.event("passkey.register", "deadline passed")
+            throw deadline
         } catch (deadline: kotlinx.coroutines.TimeoutCancellationException) {
             VelaLog.event("passkey.register", "deadline passed")
-            throw PasskeyFailure(FailureKind.Cancelled, "the passkey prompt timed out")
+            throw PasskeyDeadlinePassed()
         } catch (error: CreateCredentialException) {
             val failure = classifyCreate(error)
             VelaLog.failure(
@@ -915,6 +930,41 @@ open class PasskeyFailure(
     val domain: String? = null,
     val code: Int? = null,
 ) : Exception(message)
+
+/**
+ * Real-device pass 2 (D5): the prompt ran out of the core's passkey deadline
+ * (`passkeySignTimeoutMs`). A refusal to every rule (`cancelled`), but said
+ * as the deadline's: its facts (`TYPE_TIMEOUT_ERROR`) name the core's
+ * "The passkey prompt timed out. Try again." — never the person's cancel.
+ */
+class PasskeyDeadlinePassed : PasskeyFailure(
+    FailureKind.Cancelled,
+    "the passkey prompt timed out",
+    domain = "TYPE_TIMEOUT_ERROR",
+)
+
+/**
+ * [call] raced against the core's passkey deadline ([deadlineMs]): its answer,
+ * or [PasskeyDeadlinePassed] AT the deadline — even when the platform call
+ * does not end on its cancellation (a provider waiting on a network it cannot
+ * reach). The call runs detached, so a call that ignores its cancellation
+ * cannot hold the wait open; it is cancelled at the deadline all the same.
+ */
+internal suspend fun <T> withinPasskeyDeadline(deadlineMs: Long, call: suspend () -> T): T {
+    val parent = kotlin.coroutines.coroutineContext
+    val detached = CoroutineScope(parent.minusKey(Job) + SupervisorJob())
+    val ceremony = detached.async { call() }
+    try {
+        return withTimeoutOrNull(deadlineMs) { ceremony.await() } ?: run {
+            ceremony.cancel()
+            throw PasskeyDeadlinePassed()
+        }
+    } catch (cancelled: CancellationException) {
+        // The person (or the selector watchdog) gave up first: so does the call.
+        ceremony.cancel()
+        throw cancelled
+    }
+}
 
 /**
  * The system's passkey sheet never appeared (see `awaitingSelector`). To the
