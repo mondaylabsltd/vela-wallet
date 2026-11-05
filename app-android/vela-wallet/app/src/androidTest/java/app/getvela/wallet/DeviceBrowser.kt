@@ -49,9 +49,18 @@ object DeviceBrowser {
         val (read, write) = automation.executeShellCommandRw("tee $COMMAND_LINE")
         ParcelFileDescriptor.AutoCloseOutputStream(write).use { it.write(switches.toByteArray()) }
         ParcelFileDescriptor.AutoCloseInputStream(read).use { it.readBytes() }
-        // A release Chrome reads that file only as the debug app (a userdebug
-        // image's does anyway). Not persistent: a reboot forgets it.
-        shell("am set-debug-app $CHROME")
+        // Chrome runs as its own user: the shell's file must be readable by it.
+        shell("chmod 644 $COMMAND_LINE")
+        // A release Chrome on a `user` image (the Play images every AVD here
+        // runs) reads that file only when it is the debug app — and it asks
+        // `Settings.Global.DEBUG_APP`, which `am set-debug-app` writes only
+        // with `--persistent`. Without it the switches were never read, Chrome
+        // opened its first-run screen over the tab, and the probe failed on
+        // every fresh emulator ("the tab never fetched the page"). [putAway]
+        // clears it again.
+        shell("am set-debug-app --persistent $CHROME")
+        // A first run that already began (an earlier test, a person) is
+        // abandoned with the process: its next start reads the switches.
         shell("am force-stop $CHROME")
     }
 
