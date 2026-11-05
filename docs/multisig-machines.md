@@ -958,3 +958,13 @@ rule. Vector `tests/vectors/multisig/member-titles.json` (Rust
   of a tag: "R12 Alice· On this device", "e56405· Needs 2 of 4"); the outside
   page no longer prints a changed member's full address twice (the party
   list skips the members `MemberChangeRule` draws).
+
+### 13.6 Two onchain regressions, fixed (coordinator, round 12)
+
+| Was | Now |
+| --- | --- |
+| /connect: Vela's request for a multisig deployed nowhere and recorded with no service (imported from a Safe{Wallet} export) sat on "Reading the transaction…", then "Couldn't read this transaction" — the review-state merge rightly shut "Sign with …" until the review is read, and the page could never learn the members (before it, it was signed on no review) | NEW `OutsideSessionRequest.genesis` (optional): Vela sends the multisig's genesis beside the signing request (the WalletPair request object's `genesis` member). The page keeps it only when the core derives the address from it (`multisig_outside::genesis_for`; `OutsideSafeTxRequest.genesis`) and reviews from it. A forged one is not believed. A shell that rebuilds the session request field by field must carry `genesis` (the web's external sheet did not). |
+| a request for the link's own transaction was read a second time | it takes the link's ready review at once; a request's whole read is bounded by `REVIEW_TIMEOUT_MS` (ready, or failed with its reason) |
+| "Approve and execute" stuck on "Executing…" in the onchain suite | the harness, not the wallet: the core fork test gives the fixture accounts a nonce (`anvil_impersonateAccount`), after which their counterfactual accounts cannot be created on that fork (AA13). Each suite now gets a harness of its own (`nightly.yml`, the harness README). |
+
+Tests: `tests/app_multisig_outside.rs` (`a_request_for_a_multisig_nobody_records_is_reviewed_from_the_genesis_vela_sends`, `a_genesis_that_is_not_the_multisigs_is_not_believed`, `the_session_sends_the_genesis_beside_its_request`, `a_request_for_the_links_own_transaction_takes_the_links_ready_review`), `tests/app_multisig_outside_propose.rs`; the 14 onchain tests on a fresh harness.
