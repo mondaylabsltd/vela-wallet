@@ -58,7 +58,7 @@
     "to": "收款方",
     "network": "网络",
     "number": "交易序号",
-    "numberValue": "{{nonce}}",
+    "numberValue": "第 {{nonce}} 号",
     "call": "合约调用",
     "callWithValue": "合约调用，附带 {{amount}} {{symbol}}",
     "batchCalls": "一笔交易中的 {{total}} 个调用",

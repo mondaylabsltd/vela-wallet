@@ -58,7 +58,7 @@
     "to": "받는 사람",
     "network": "네트워크",
     "number": "거래 번호",
-    "numberValue": "{{nonce}}",
+    "numberValue": "#{{nonce}}",
     "call": "컨트랙트 호출",
     "callWithValue": "{{amount}} {{symbol}}을(를) 보내는 컨트랙트 호출",
     "batchCalls": "한 거래에 {{total}}개의 호출",

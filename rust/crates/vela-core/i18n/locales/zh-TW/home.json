@@ -132,7 +132,7 @@
         "to": "收款方",
         "network": "網路",
         "number": "交易序號",
-        "numberValue": "{{nonce}}",
+        "numberValue": "第 {{nonce}} 號",
         "call": "合約呼叫",
         "callWithValue": "合約呼叫，附帶 {{amount}} {{symbol}}",
         "batchCalls": "一筆交易中的 {{total}} 個呼叫",

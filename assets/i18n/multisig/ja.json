@@ -58,7 +58,7 @@
     "to": "送金先",
     "network": "ネットワーク",
     "number": "取引番号",
-    "numberValue": "{{nonce}}",
+    "numberValue": "#{{nonce}}",
     "call": "コントラクトの呼び出し",
     "callWithValue": "{{amount}} {{symbol}} を付けたコントラクトの呼び出し",
     "batchCalls": "1 件の取引に {{total}} 件の呼び出し",
