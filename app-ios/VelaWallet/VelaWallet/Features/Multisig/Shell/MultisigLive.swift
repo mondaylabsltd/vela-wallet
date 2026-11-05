@@ -171,7 +171,7 @@ final class MultisigLive: MultisigPorts {
     // MARK: - Passkey
 
     /// `owner` signs `challenge`: in Vela, or on its trusted page for an
-    /// approval routed there (the web's `passkey`).
+    /// approval or an owner proof (§16) routed there (the web's `passkey`).
     func passkey(_ op: [String: Any]) async -> [String: Any] {
         let owner = op["owner"] as? String ?? ""
         let chainId = MultisigExecutor.int(op["chain_id"]) ?? 0
@@ -194,14 +194,35 @@ final class MultisigLive: MultisigPorts {
             case .inVela, nil:
                 break
             }
-        } else if case .page = SigningRouteWire.of(accountJson: accountJson, method: "vela_multisigCreate") {
-            // A wallet on its own domain proves membership on its page — a
-            // ceremony this app runs only for onboarding today. Said, never
-            // signed behind its back.
-            return Self.passkeyFailed(.pageSignFailed(page: "not_opened", message: nil))
         }
         guard let challenge = Self.bytes(op["challenge"] as? String) else {
             return Self.passkeyFailed(.unknown("the challenge does not read"))
+        }
+        if purpose["kind"] as? String == "record" {
+            // §16: a member's owner proof goes where the core routes
+            // `vela_multisigCreate` — in Vela, or the account's page, handed
+            // the core's params (the genesis), never the challenge; a page's
+            // answer is the core's to accept, over exactly this challenge.
+            let params = purpose["params"].flatMap { $0 is NSNull ? nil : $0 }
+            let paramsJson = params
+                .flatMap { try? JSONSerialization.data(withJSONObject: $0) }
+                .map { String(decoding: $0, as: UTF8.self) } ?? "null"
+            do {
+                let signed = try await deps.spine.signOwnerProof(
+                    account: owner, chainId: chainId, challenge: challenge, paramsJson: paramsJson
+                )
+                return [
+                    "type": "asserted",
+                    "credential_id": signed.credentialIdHex,
+                    "authenticator_data": Self.hex0x(Self.hexOf(signed.assertion.authenticatorData)),
+                    "client_data_json": Self.hex0x(Self.hexOf(signed.assertion.clientDataJson)),
+                    "signature": Self.hex0x(Self.hexOf(signed.assertion.signatureDer)),
+                ]
+            } catch let refused as UserOpSpine.Refused {
+                return Self.passkeyAnswer(refused.failure)
+            } catch {
+                return Self.passkeyFailed(Self.passkeyError(error))
+            }
         }
         do {
             let assertion = try await deps.spine.assertInVela(account: owner, challenge: challenge)
@@ -533,6 +554,9 @@ final class MultisigLive: MultisigPorts {
     }
 
     static func hex0x(_ text: String) -> String { text.hasPrefix("0x") ? text : "0x" + text }
+
+    /// Bytes as lowercase hex, no prefix.
+    static func hexOf(_ data: Data) -> String { data.map { String(format: "%02x", $0) }.joined() }
 
     /// `0x…` or decimal → decimal text, as a call's value travels.
     static func decimal(_ value: Any?) -> String {

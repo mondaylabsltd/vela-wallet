@@ -292,6 +292,53 @@ impl Live {
         }
     }
 
+    /// §16: a member's owner proof on its trusted page. The page is handed the
+    /// core's params (`PasskeyPurpose::Record.params`: the genesis, the
+    /// member, the networks) — never the challenge — and reads the address,
+    /// the members and the rule from them; its answer is accepted only as
+    /// `trusted_signer::accept_signature` accepts it, over exactly
+    /// `challenge`, which the core derives again from the genesis.
+    fn prove_on_page(
+        &self,
+        account: &Account,
+        page: &str,
+        chain_id: u64,
+        challenge: &[u8],
+        params: &Value,
+    ) -> Res {
+        let keys = user_op::key_set_of(account);
+        let plan = account.signing_plan();
+        let ask = trusted_signer::Ask {
+            method: vela_core::signing_venue::MULTISIG_CREATE_METHOD.to_owned(),
+            params: params.clone(),
+            origin: String::new(),
+            account_name: (!account.name.is_empty()).then(|| account.name.clone()),
+        };
+        let chain = u32::try_from(chain_id).unwrap_or_default();
+        let request = ask.request(chain, &account.address, &keys, plan.key.as_ref(), None);
+        self.trusted.choose(Some(page.to_owned()));
+        let answered = trusted_signer::sign(&request, page, challenge, &keys, &self.trusted);
+        self.trusted.choose(None);
+        match answered {
+            Ok(assertion) => Res::Asserted {
+                credential_id: assertion.credential_id,
+                authenticator_data: hex0x(&assertion.authenticator_data_hex),
+                client_data_json: hex0x(&assertion.client_data_json_hex),
+                signature: hex0x(&assertion.signature_der_hex),
+            },
+            Err(trusted_signer::PageEnd::Passkey(failure)) => passkey_result(&failure),
+            Err(trusted_signer::PageEnd::Declined) => Res::PasskeyFailed {
+                detail: ShellFailure::PageDeclined.detail(),
+            },
+            Err(trusted_signer::PageEnd::Failed(failure)) => Res::PasskeyFailed {
+                detail: ShellFailure::PageApproval {
+                    failure: format!("{failure:?}"),
+                }
+                .detail(),
+            },
+        }
+    }
+
     /// The coin is checked before the passkey (the web's `beforeSign`): an
     /// executor that cannot pay the fee in the chain's coin is told so, and
     /// nothing is signed.
@@ -709,6 +756,26 @@ impl Deps for Live {
                 .detail(),
             };
         };
+        // §16: a member's owner proof goes where the core routes a key
+        // ceremony for this account (`vela_multisigCreate`): in Vela, or the
+        // account's own page, handed the core's params (the genesis) — never
+        // signed in Vela behind a page that holds the keys.
+        if let PasskeyPurpose::Record { params, .. } = purpose {
+            match signing_route(&account.signing_plan(), SignatureKind::KeyCeremony) {
+                SigningRoute::Blocked { block } => {
+                    return Res::PasskeyFailed {
+                        detail: ShellFailure::VenueBlocked {
+                            block: serde_json::to_value(block).unwrap_or(Value::Null),
+                        }
+                        .detail(),
+                    };
+                }
+                SigningRoute::Page { url } => {
+                    return self.prove_on_page(&account, &url, chain_id, &challenge, params);
+                }
+                SigningRoute::InVela => {}
+            }
+        }
         let ctx = crate::executor::send::SendContext::new(&account, self.ceremony.clone());
         let method: KeyMethod = ctx.key_method;
         match passkey::assert(

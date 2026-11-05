@@ -309,9 +309,13 @@ describe('the multisig shell', () => {
 				threshold: 0
 			})
 		).toEqual({ method: 'vela_multisigApprove', params: { safeTxHash: '0xh' } });
-		expect(passkeyRequest({ kind: 'record', multisig: '0xm' })).toEqual({
+		// §16: the owner proof's params are the core's, handed over verbatim.
+		const params = [
+			{ multisig: '0xm', member: '0xo', genesis: { factory: '0xf' }, chainIds: [8453] }
+		];
+		expect(passkeyRequest({ kind: 'record', multisig: '0xm', params })).toEqual({
 			method: 'vela_multisigCreate',
-			params: { multisig: '0xm' }
+			params
 		});
 	});
 

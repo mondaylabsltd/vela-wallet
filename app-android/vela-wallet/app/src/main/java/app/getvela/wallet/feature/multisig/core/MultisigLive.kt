@@ -230,18 +230,18 @@ class MultisigLive(
                     return approveOnPage(op, accountJson, page)
                 }
             }
-        } else {
-            // A wallet on its own domain proves membership on its page — a
-            // ceremony this app runs only for onboarding today. Said, never
-            // signed behind its back.
-            val venue = app.getvela.wallet.feature.signing.trustedsigner.SigningRoute.of(accountJson, "vela_multisigCreate")
-            if (venue is app.getvela.wallet.feature.signing.trustedsigner.SigningRoute.Page) {
-                return failed(MultisigShellFailure.PageSignFailed("not_opened"))
-            }
         }
         val challenge = unhex(op.challenge) ?: return failed(MultisigShellFailure.Unknown("the challenge does not read"))
         return try {
-            val assertion = spine.assertInVela(op.owner, challenge)
+            // §16: a member's owner proof goes where the core routes
+            // `vela_multisigCreate` — in Vela, or the account's page, handed the
+            // core's params (the genesis), never the challenge; a page's answer
+            // is the core's to accept, over exactly this challenge.
+            val assertion = if (purpose.kind == "record") {
+                spine.signOwnerProof(op.owner, op.chain_id.toInt(), challenge, (purpose["params"] ?: JsonNull).toString())
+            } else {
+                spine.assertInVela(op.owner, challenge)
+            }
             MultisigShellResult.Asserted(
                 credential_id = assertion.credentialIdHex,
                 authenticator_data = hex0x(assertion.authenticatorDataHex),

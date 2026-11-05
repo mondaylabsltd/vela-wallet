@@ -735,6 +735,41 @@ final class UserOpSpine {
         return try await assert(account: account, pinned: pinned, key: plan?.key, challenge: challenge)
     }
 
+    /// A multisig member's owner proof (§16): `challenge` — the genesis
+    /// service's sponsor challenge — signed where the core routes
+    /// `vela_multisigCreate` for this account: in Vela, or on its trusted
+    /// page, handed `paramsJson` (the core's `PasskeyPurpose::Record.params`:
+    /// the genesis, the member, the networks), from which the page reads the
+    /// address, the members and the rule itself. A page's answer is accepted
+    /// only over `challenge` (`trustedSignerSignatureAccept`, whose bytes the
+    /// core derives from the genesis). Nothing is signed behind a page the
+    /// person chose.
+    func signOwnerProof(
+        account: String,
+        chainId: Int,
+        challenge: Data,
+        paramsJson: String
+    ) async throws -> (assertion: WebAuthnAssertion, credentialIdHex: String) {
+        let keys = await accounts.keys(of: account)
+        guard let pinned = keys.first else {
+            throw other("No passkey credential for this account")
+        }
+        let asked = Asked(method: "vela_multisigCreate", paramsJson: paramsJson, origin: "")
+        return try await ceremony(
+            account: account, pinned: pinned, keys: keys, challenge: challenge,
+            method: asked.method,
+            buildRequest: { accountName, offered, keyRoute in
+                try trustedSignerRequest(
+                    input: Self.trustedSignerInput(
+                        asked: asked, chainId: chainId, account: account,
+                        accountName: accountName, keys: offered, keyRouteJson: keyRoute, calls: []
+                    ),
+                    draft: nil
+                )
+            }
+        )
+    }
+
     /// Where this account's signatures go — the core's plan, the one
     /// `ceremony` follows. The signing sheet reads it too, so the sheet that
     /// says "review on your trusted page" and the ceremony that opens it

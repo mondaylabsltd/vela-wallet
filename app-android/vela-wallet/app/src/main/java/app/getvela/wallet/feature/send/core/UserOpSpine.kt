@@ -281,6 +281,34 @@ class UserOpSpine(
         }
     }
 
+    /**
+     * A multisig member's owner proof (§16): [challenge] — the genesis
+     * service's sponsor challenge — signed where the core routes
+     * `vela_multisigCreate` for this account: in Vela, or on its trusted page,
+     * handed [paramsJson] (the core's `PasskeyPurpose::Record.params`: the
+     * genesis, the member, the networks), from which the page reads the
+     * address, the members and the rule itself. A page's answer is accepted
+     * only over [challenge] (`trustedSignerSignatureAccept`, whose bytes the
+     * core derives from the genesis). Nothing is signed behind a page the
+     * person chose.
+     */
+    suspend fun signOwnerProof(account: String, chainId: Int, challenge: ByteArray, paramsJson: String): Assertion {
+        val keys = accounts.keysOf(account)
+        val pinned = keys.firstOrNull() ?: other("No passkey credential for this account")
+        return ceremony(challenge, chainId, account, pinned, keys, OWNER_PROOF_METHOD) { labels, allowed, keyRoute ->
+            trustedSignerRequest(
+                TrustedSignerInput(
+                    method = OWNER_PROOF_METHOD, paramsJson = paramsJson, origin = "",
+                    originSeenByBrowser = false,
+                    chainId = chainId.toUInt(), chainName = labels.chainName, nativeSymbol = labels.nativeSymbol,
+                    account = account, accountName = labels.accountName,
+                    credentialIdsHex = allowed.map { it.credentialId }, keyRouteJson = keyRoute, calls = emptyList(),
+                ),
+                null,
+            )
+        }
+    }
+
     /** The displayed fee, signed verbatim. */
     data class Quoted(val amount: String, val recipient: String, val tier: FeeTier? = null)
 
@@ -397,6 +425,9 @@ class UserOpSpine(
         /** The corpus lines a page that cannot be reached, or will not sign, is told in. */
         const val SIGNER_DOWN = "componentsUi.signing.signerDown"
         const val SIGNER_REFUSED = "componentsUi.signing.trustedSignerRefused"
+
+        /** §16: a multisig member's owner proof (vela-core `MULTISIG_CREATE_METHOD`). */
+        const val OWNER_PROOF_METHOD = "vela_multisigCreate"
 
         /** How long the POST waits for a head read still out; past it the head is unknown. */
         const val HEAD_WAIT_MS = 1_500L
