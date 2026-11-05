@@ -204,6 +204,14 @@ pub fn view(cx: &App) -> SessionView {
         .map_or_else(|| SessionState::new().view, |state| state.view.clone())
 }
 
+/// Stored accounts this computer holds and cannot read (DESKTOP-1): the
+/// whole list (the core's `accounts_unreadable`), or records inside it that
+/// the read counted and kept. Either way the wallet must say so rather than
+/// look signed out — or look as if those accounts were never there.
+pub fn accounts_unreadable(cx: &App) -> bool {
+    view(cx).accounts_unreadable || executor::storage::unreadable_accounts() > 0
+}
+
 /// The onboarding hand-off. Both machines exit through `CompleteOnboarding`,
 /// and this is what receives it.
 ///

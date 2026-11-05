@@ -10604,6 +10604,18 @@ impl WalletPage {
             }
         }
 
+        // DESKTOP-1: a stored account this computer cannot read is said under
+        // the list, never left out of it in silence. It is kept as stored.
+        let unreadable = (crate::executor::storage::unreadable_accounts() > 0).then(|| {
+            div()
+                .pt(px(12.))
+                .text_size(theme::text_label())
+                .text_color(theme.warning_base)
+                .child(crate::ui::prose(
+                    self.loc.t("onboarding.storage.unreadableTitle"),
+                ))
+        });
+
         div()
             .flex()
             .flex_col()
@@ -10615,6 +10627,7 @@ impl WalletPage {
                     .child(crate::ui::prose(summary)),
             )
             .child(list)
+            .children(unreadable)
             // AUDIT M1: the multisigs on this device, and the two ways to
             // add one (the web switcher's "Multisig accounts").
             .child(self.multisig_switcher_section(theme, in_dialog, cx))
