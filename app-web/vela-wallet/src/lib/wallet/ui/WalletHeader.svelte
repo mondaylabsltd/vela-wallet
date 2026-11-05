@@ -65,8 +65,13 @@
 		{/if}
 	</span>
 	<div class="text">
-		<!-- The name has the whole column: nothing beside it squeezes it. -->
-		<button type="button" class="name-row" aria-haspopup="dialog" {onclick}>
+		<!-- The name has the whole column: nothing beside it squeezes it.
+		     r14-1: a PLAIN button — no `aria-haspopup`. WebKit makes a button
+		     that has one a pop-up button, and iOS exposes that with no button
+		     trait: on the iPhone, VoiceOver and automation found "a group",
+		     and the switcher behind it was out of reach. The name and the
+		     chevron are both inside it: a press on either opens the switcher. -->
+		<button type="button" class="name-row" {onclick}>
 			<!-- The full name on hover: the clamp below is the only place a long
 			     name is ever cut, and the switcher this opens prints it whole. -->
 			<span class="name" title={header.name}>{header.name}</span>

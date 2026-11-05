@@ -18,6 +18,35 @@
 		<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
 		<script>
 			/*
+			 * r14-1: on iOS and iPadOS a field never zooms the page. Safari zooms
+			 * in on a field whose text is under 16 px when it takes focus (ours is
+			 * `--text-lg`, 15) and never zooms back out: every screen after the
+			 * first field typed into stood 16/15 too big, its right edge cut off
+			 * (the Safari extension's wallet tab, 429 pt of page in a 402 pt
+			 * screen). Capping the scale stops that zoom; Safari there keeps
+			 * pinch-zoom whatever a page says, so nothing else is taken. Android
+			 * would honour the cap against pinch-zoom too — so iOS alone.
+			 * iPadOS asks for the desktop site and says "Macintosh": its touch
+			 * points tell it from a Mac. `viewport-zoom.test.ts` runs this block.
+			 */
+			/* ios-zoom:begin */
+			try {
+				var ios =
+					/iP(hone|ad|od)/.test(navigator.userAgent) ||
+					(navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+				var viewport = ios && document.querySelector('meta[name="viewport"]');
+				if (viewport) {
+					var content = viewport.getAttribute('content') || '';
+					if (content.indexOf('maximum-scale') === -1) {
+						viewport.setAttribute('content', content + ', maximum-scale=1');
+					}
+				}
+			} catch (e) {
+				/* No navigator to read: the plain viewport. */
+			}
+			/* ios-zoom:end */
+
+			/*
 			 * Spec 028: the chosen palette, applied BEFORE first paint — the same
 			 * argument the block below makes for the launch animation. A theme
 			 * applied in `onMount` means the page paints in the OS palette and then
