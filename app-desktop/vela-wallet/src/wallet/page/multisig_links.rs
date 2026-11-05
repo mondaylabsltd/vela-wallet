@@ -220,13 +220,10 @@ impl WalletPage {
                 self.multisig.create = false;
                 self.multisig.create_form = None;
                 self.ms_add_opened(Some(text), link, said, cx);
-                if let Some(form) = self
-                    .multisig
-                    .add_form
-                    .as_mut()
-                    .filter(|_| matches!(outcome, Some(AddOutcome::ChooseNetwork)))
-                {
-                    form.choosing = true;
+                if let Some(form) = self.multisig.add_form.as_mut() {
+                    form.choosing = matches!(outcome, Some(AddOutcome::ChooseNetwork));
+                    // r14-5: a lookup that did not come back offers Try again.
+                    form.retry = outcome.as_ref().is_some_and(AddOutcome::offers_retry);
                 }
             }
             LinkTake::Preview(address) => self.multisig.preview_of = Some(address),
