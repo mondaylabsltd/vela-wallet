@@ -254,6 +254,10 @@ class MultisigWords(
             "short" -> {
                 val (symbol, decimals) = shortfallUnit(why["token"], chainId)
                 fun amount(key: String): String {
+                    // r12-1 (core §13): the core's own amount (`MultisigAmount`
+                    // `{base_units, token, said}`) — drawn as it says it: the
+                    // figure with its unit, or the base units, "decimals unknown".
+                    said(why[key]["said"])?.let { return it }
                     val raw = why[key].str ?: "0"
                     val figure = if (decimals == null) t("review.reading.decimalsUnknown", "raw" to raw) else MsRules.formatUnits(raw, decimals)
                     return "$figure $symbol".trim()
@@ -264,6 +268,17 @@ class MultisigWords(
                 ?: t("proposal.whyRevertsPlain")
             else -> t("proposal.uncheckedReason")
         }
+    }
+
+    /**
+     * r12-1 (core §13): an amount as the core said it (`MultisigAmountSaid`):
+     * `known` → its `text` ("0.01 USDC"); `decimals_unknown` → its key with the
+     * base units. `null` for anything else (a core before it).
+     */
+    internal fun said(said: JsonElement?): String? = when (said.kind) {
+        "known" -> said["text"].str?.takeIf { it.isNotBlank() }
+        "decimals_unknown" -> said["raw"].str?.let { raw -> raw(said["key"].str ?: "home.multisig.review.reading.decimalsUnknown", "raw" to raw) }
+        else -> null
     }
 
     /**
