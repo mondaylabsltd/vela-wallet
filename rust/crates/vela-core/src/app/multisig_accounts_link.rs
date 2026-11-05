@@ -71,6 +71,13 @@ pub enum LinkStand {
     Failed {
         link: ProposalLink,
         reason: AddOutcome,
+        /// §18 (c), round 14: a lookup that did not come back (the service
+        /// or the network silent, rate-limited, the Safe contracts unread —
+        /// [`AddOutcome::offers_retry`], the add sheet's own rule): offer Try
+        /// again (`retry_link`). A lookup that answered (not found, refused,
+        /// high risk) is not retried behind the person's words.
+        #[serde(default)]
+        retry: bool,
     },
     /// r4b-9: kept until the wallet is there.
     Kept,
@@ -509,7 +516,26 @@ fn fail(st: &Shared<State>, l: ProposalLink, reason: AddOutcome) {
     let mut s = lock(st);
     s.add.address = Some(l.multisig.clone());
     s.link.pending = Some(l.clone());
-    s.link.stand = Some(LinkStand::Failed { link: l, reason });
+    let retry = reason.offers_retry();
+    s.link.stand = Some(LinkStand::Failed {
+        link: l,
+        reason,
+        retry,
+    });
+}
+
+/// §18 (c): Try again on a failed link the core marked retryable — the same
+/// link, opened again (said `Opening` at once).
+pub async fn retry(io: &Io<Event>, st: &Shared<State>) {
+    let failed = match &lock(st).link.stand {
+        Some(LinkStand::Failed {
+            link, retry: true, ..
+        }) => Some(link.clone()),
+        _ => None,
+    };
+    if let Some(l) = failed {
+        open_proposal(io, st, l).await;
+    }
 }
 
 /// The link's transaction, on its multisig (on this device now): shown,

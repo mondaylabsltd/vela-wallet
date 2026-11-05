@@ -15,6 +15,7 @@ mod world;
 
 use serde_json::Value;
 use support::DomainDriver;
+use vela_core::app::multisig_gather::REVIEW_ASK_MS;
 use vela_core::app::multisig_proposals::{ActionState, Event, MultisigProposals, ProposalKind};
 use vela_core::app::multisig_review_state::{
     self as review_state, ReviewShows, ReviewState, REVIEW_TIMEOUT_MS,
@@ -63,8 +64,15 @@ fn dispatch_only(sut: &mut Sut, event: Event) {
     sut.dispatch(event);
 }
 
-fn simulate(op: &Op) -> bool {
+fn is_simulate(op: &Op) -> bool {
     matches!(op, Op::Simulate { .. })
+}
+
+/// A simulation never answered, and the core's own bound on that one
+/// question (`REVIEW_ASK_MS`, r14-13) never run out either: what is left to
+/// end the review is its `REVIEW_TIMEOUT_MS`.
+fn simulate(op: &Op) -> bool {
+    is_simulate(op) || matches!(op, Op::Wait { ms } if *ms == REVIEW_ASK_MS)
 }
 
 /// A 2-of-3 of the three fixture accounts, used on 100; `here`: which of
@@ -658,6 +666,183 @@ fn one_check_unread_alone_signs_plainly() {
     );
 }
 
+// -- r14-13: a network that answered nothing is never "… anyway" ---------------------------
+
+/// A proposal of `setup`'s multisig, proposed while everything answered,
+/// and member 1's own device following it: (world, that device, key, hash).
+fn proposed_on_another_device() -> (World, Sut, String, String) {
+    let (mut world, mut sut, account) = setup(&[0]);
+    run(&mut sut, &mut world, transfer());
+    run(
+        &mut sut,
+        &mut world,
+        Event::ConfirmDraft { as_member: None },
+    );
+    let ActionState::Done { safe_tx_hash, .. } = sut.view().actions["propose"].clone() else {
+        panic!("proposed");
+    };
+    world.locals = vec![fixture(1)];
+    world.passkeys.clear();
+    let other = follow(&mut world, &account);
+    let key = format!("100:{safe_tx_hash}");
+    (world, other, key, safe_tx_hash)
+}
+
+fn review(hash: &str) -> Event {
+    Event::Review {
+        chain_id: 100,
+        safe_tx_hash: hash.to_owned(),
+        blind: false,
+    }
+}
+
+fn door_at(sut: &Sut, key: &str) -> review_state::SignDoor {
+    let view = sut.view();
+    review_state::door(view.review_states.get(key), view.reviews.get(key))
+}
+
+/// A read of the multisig's network (any method).
+fn chain_read(op: &Op) -> bool {
+    matches!(op, Op::Rpc { chain_id: 100, .. })
+}
+
+/// Round 14 (r14-13): with every node of the network refusing, the review's
+/// reads all came back unanswered — not the multisig's own state, not a
+/// check — and the web drew it `ready` with "… anyway" while Android said it
+/// could not be read. One rule now: a review its network answered nothing
+/// of is `failed {chainUnread}` — never signable, not even "… anyway" —
+/// with Try again, which reads it again once the network answers.
+#[test]
+fn a_review_its_network_answered_nothing_of_fails_never_anyway() {
+    let (mut world, mut other, key, hash) = proposed_on_another_device();
+    world.silent.insert(100);
+    world.sim_reply = Some(r#"{"unreachable":true}"#.to_owned());
+    world.recipients.insert(B.to_owned(), (None, None));
+    run(&mut other, &mut world, review(&hash));
+    assert_eq!(
+        other.view().review_states[&key],
+        ReviewState::failed(review_state::REASON_CHAIN_UNREAD)
+    );
+    let door = door_at(&other, &key);
+    assert_eq!(door.shows, ReviewShows::Failed);
+    assert!(!door.enabled && !door.anyway && door.retry, "{door:?}");
+    assert_eq!(
+        door.reason_key.as_deref(),
+        Some("home.multisig.review.state.chainUnread")
+    );
+    // Pressed anyway (a shell that let it through): nothing is signed.
+    run(
+        &mut other,
+        &mut world,
+        Event::Approve {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+            owner: fixture(1).address,
+        },
+    );
+    assert!(world.passkeys.is_empty(), "no passkey on a review not read");
+    // The network answers again (its simulation too): Try again reads it,
+    // plain.
+    world.silent.clear();
+    world.sim_reply = Some(r#"{"result":[{"calls":[{"status":"0x1","logs":[]}]}]}"#.to_owned());
+    world.recipients.clear();
+    run(
+        &mut other,
+        &mut world,
+        Event::ReviewAgain {
+            chain_id: Some(100),
+            safe_tx_hash: Some(hash.clone()),
+        },
+    );
+    assert_eq!(other.view().review_states[&key], ReviewState::Ready);
+    let door = door_at(&other, &key);
+    assert!(door.enabled && !door.anyway && door.reason_key.is_none());
+}
+
+/// r14-13, a HUNG network (no answer at all, on any shell): every read —
+/// and a simulation the shell never ends — is ended by the core at
+/// `REVIEW_ASK_MS`, so the review lands `failed {chainUnread}` well before
+/// the review's own 40 s bound: the same answer, at the same time, on every
+/// shell (Android's simulation held its review to "couldn't read it in
+/// time" at ~50 s while the web's said "… anyway" at 26 s).
+#[test]
+fn a_hung_network_fails_the_review_by_the_cores_own_bound_on_every_question() {
+    let (mut world, mut other, key, hash) = proposed_on_another_device();
+    run_holding(&mut other, &mut world, review(&hash), |op| {
+        chain_read(op)
+            || is_simulate(op)
+            || matches!(op, Op::RecipientRisk { .. })
+            || matches!(op, Op::Wait { ms } if *ms == REVIEW_TIMEOUT_MS)
+    });
+    assert_eq!(
+        other.view().review_states[&key],
+        ReviewState::failed(review_state::REASON_CHAIN_UNREAD),
+        "not timed out: every question was bounded"
+    );
+    assert!(!door_at(&other, &key).enabled);
+}
+
+/// r14-13: the network answered (the multisig's own state), and only the
+/// two safety checks are unread — refused at once, a change of threshold
+/// that names no recipient (MS-B #0): still drawn, "… anyway" (D1).
+#[test]
+fn only_the_two_checks_unread_stays_unchecked_anyway() {
+    let (mut world, mut sut, _) = setup(&[0]);
+    let probe = format!(
+        "0x{}",
+        alloy_primitives::hex::encode(
+            &alloy_primitives::keccak256(b"simulateAndRevert(address,bytes)")[..4]
+        )
+    );
+    world.rpc_hooks.push(Box::new(move |_, method, params| {
+        let probing = method == "eth_call"
+            && params[0]["data"]
+                .as_str()
+                .is_some_and(|d| d.to_ascii_lowercase().starts_with(&probe));
+        (method == "debug_traceCall" || probing).then(|| {
+            vela_core::app::multisig_shell::MultisigShellResult::RpcUnanswered {
+                detail: "connection refused".to_owned(),
+            }
+        })
+    }));
+    world.sim_reply = Some(r#"{"unreachable":true}"#.to_owned());
+    run(
+        &mut sut,
+        &mut world,
+        Event::Draft {
+            chain_id: 100,
+            proposal: ProposalKind::MemberChange {
+                change: vela_core::multisig::MemberChange::Threshold { threshold: 1 },
+            },
+        },
+    );
+    let draft = sut.view().draft.expect("a draft");
+    assert_eq!(
+        draft.review_state,
+        ReviewState::Ready,
+        "the network answered"
+    );
+    let door = review_state::door(Some(&draft.review_state), draft.review.as_ref());
+    assert!(door.enabled && door.anyway && door.retry, "{door:?}");
+    assert_eq!(
+        door.reason_key.as_deref(),
+        Some(review_state::UNCHECKED_KEY)
+    );
+}
+
+/// r14-13: a simulation the shell never answers does not hold the review
+/// to its 40 s bound: the core ends that one question, and the review lands
+/// on what the network did answer (one check read: plain).
+#[test]
+fn a_simulation_a_shell_never_ends_is_ended_by_the_core() {
+    let (mut world, mut sut, _) = setup(&[0]);
+    run_holding(&mut sut, &mut world, transfer(), |op| {
+        is_simulate(op) || matches!(op, Op::Wait { ms } if *ms == REVIEW_TIMEOUT_MS)
+    });
+    assert_eq!(draft_state(&sut), ReviewState::Ready, "not timed out");
+    assert!(door_of_draft(&sut).enabled);
+}
+
 // -- the shared vectors ------------------------------------------------------------------
 
 /// `tests/vectors/multisig/review-state.json`: the door, replayed through
@@ -682,6 +867,24 @@ fn the_door_vectors_hold_through_the_link_door() {
         vectors["timeout_ms"].as_u64(),
         Some(u64::from(REVIEW_TIMEOUT_MS))
     );
+    // §18 (b): a sheet opened without a link, its transaction not listed.
+    let missing = vectors["missing"].as_array().unwrap();
+    assert!(missing.len() >= 5);
+    for case in missing {
+        let got = vela_core::multisig_link::call_json("review.missing", &case["args"].to_string())
+            .unwrap_or_else(|e| panic!("{}: {e:?}", case["name"]));
+        let got: Value = serde_json::from_str(&got).unwrap();
+        assert_eq!(got, case["expect"], "{}", case["name"]);
+    }
+    // r14-13: where a gathered review lands, through the same door.
+    let settle = vectors["settle"].as_array().unwrap();
+    assert!(settle.len() >= 5);
+    for case in settle {
+        let got = vela_core::multisig_link::call_json("review.settle", &case["args"].to_string())
+            .unwrap_or_else(|e| panic!("{}: {e:?}", case["name"]));
+        let got: Value = serde_json::from_str(&got).unwrap();
+        assert_eq!(got, case["expect"], "{}", case["name"]);
+    }
     for key in vectors["keys"].as_array().unwrap() {
         assert!(key
             .as_str()

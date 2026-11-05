@@ -489,9 +489,12 @@ fn a_busy_mailbox_keeps_the_approval_and_sends_it_again() {
         let Some(op) = sut.outstanding().first().cloned() else {
             break;
         };
+        // The outbox's wait (not the core's bound on a review's question,
+        // r14-13, which this order of answers can reach first).
         if matches!(
             op,
-            vela_core::app::multisig_shell::MultisigOperation::Wait { .. }
+            vela_core::app::multisig_shell::MultisigOperation::Wait { ms }
+                if ms != vela_core::app::multisig_gather::REVIEW_ASK_MS
         ) {
             world.submit_status = None;
         }
@@ -649,6 +652,69 @@ fn a_second_approval_makes_it_ready() {
     assert_eq!(item.status, ProposalStatus::Ready);
     assert!(item.can_approve.is_empty());
     assert_eq!(item.can_execute.len(), 2, "either member here");
+}
+
+/// Round 14 (r14-4): with the network refusing, the desktop said "Vela won't
+/// use this multisig — its setup could give control of its funds to someone
+/// other than its members" of a multisig Vela created: the deploy gate's
+/// read failed (`Authority::Unknown`), and the look handed it on as
+/// `refused`. A setup that could not be checked is its own look —
+/// `unverified`, never a finding — and a setup checked and refused stays
+/// `refused`.
+#[test]
+fn a_deploy_whose_safe_contracts_went_unread_is_unverified_never_refused() {
+    let (mut world, mut sut, _) = setup(&[0, 1]);
+    let hash = hash_of(&propose(&mut sut, &mut world, transfer("1"), None));
+    run(
+        &mut sut,
+        &mut world,
+        Event::Approve {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+            owner: fixture(1).address,
+        },
+    );
+    world.rpc_hooks.push(Box::new(|_, method, _| {
+        (method == "eth_getCode").then(|| {
+            vela_core::app::multisig_shell::MultisigShellResult::RpcUnanswered {
+                detail: "connection refused".to_owned(),
+            }
+        })
+    }));
+    run(
+        &mut sut,
+        &mut world,
+        Event::Preview {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+            executor: fixture(0).address,
+        },
+    );
+    let preview = sut.view().previews[&look_key(&hash, &fixture(0).address)].clone();
+    assert_eq!(preview["kind"], "unverified", "{preview}");
+    assert_eq!(preview["authority"]["kind"], "unknown", "{preview}");
+    // Read again (the code answers wrong now): checked, and refused.
+    world.rpc_hooks.clear();
+    world.rpc_hooks.push(Box::new(|_, method, _| {
+        (method == "eth_getCode").then(|| {
+            vela_core::app::multisig_shell::MultisigShellResult::RpcResult {
+                result: json!("0x"),
+            }
+        })
+    }));
+    world.now += 120_000.0;
+    run(
+        &mut sut,
+        &mut world,
+        Event::Preview {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+            executor: fixture(0).address,
+        },
+    );
+    let preview = sut.view().previews[&look_key(&hash, &fixture(0).address)].clone();
+    assert_eq!(preview["kind"], "refused", "{preview}");
+    assert_eq!(preview["authority"]["kind"], "refused", "{preview}");
 }
 
 /// Executing an undeployed multisig: priced, the deploy gate read again,

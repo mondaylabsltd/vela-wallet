@@ -255,6 +255,40 @@ fn not_found_is_said_and_keeps_nothing() {
     assert!(opened(&world).is_empty());
 }
 
+/// §18 (c), round 14: a link whose lookup did not come back (the multisig
+/// service silent) is failed AND retryable, by the core's per-cause rule
+/// (`AddOutcome::offers_retry`, the add sheet's own); Try again
+/// (`retry_link`) opens the same link again — and a lookup that answered
+/// "refused" or "high risk" is not retried (it is the add sheet's to say).
+#[test]
+fn a_link_whose_lookup_did_not_come_back_is_retryable_and_opens_on_try_again() {
+    let me = fixture(0).address;
+    let g = genesis(&[&me], 1, "0x5a");
+    let mut world = World {
+        locals: vec![fixture(0)],
+        ..World::default()
+    };
+    world.record(&g.address, &g.genesis, false);
+    world.service_down = true;
+    let mut sut = started(&mut world, vec![100]);
+    run(&mut sut, &mut world, open(&link(100, &g.address, HASH)));
+    match sut.view().link {
+        Some(LinkStand::Failed { reason, retry, .. }) => {
+            assert!(reason.offers_retry(), "{reason:?}");
+            assert!(retry, "a read that did not come back offers Try again");
+        }
+        other => panic!("{other:?}"),
+    }
+    world.service_down = false;
+    run(&mut sut, &mut world, Event::RetryLink);
+    assert!(
+        matches!(sut.view().link, Some(LinkStand::Member { .. })),
+        "{:?}",
+        sut.view().link
+    );
+    assert_eq!(opened(&world).len(), 1);
+}
+
 /// §3.5: more than its members act for it — nothing read or kept; added
 /// on the person's tap, its transaction opens then (ms-22).
 #[test]

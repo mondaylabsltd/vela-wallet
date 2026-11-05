@@ -187,6 +187,40 @@ fn a_draft_whose_network_and_service_hang_names_both() {
     );
 }
 
+/// Round 14 (r14-7, the extension's side panel): the network gave up first
+/// (its nodes found silent: the read FAILED, it was no longer out) while the
+/// service still hung at the bound — and the site's draft said only the
+/// service's line. A read that failed is as unread as one still out: both
+/// are named.
+#[test]
+fn a_site_draft_whose_network_failed_first_and_service_hangs_names_both() {
+    let (mut world, mut sut, account) = setup();
+    world.silent.insert(100);
+    let request = Event::DappRequest {
+        id: "r1".to_owned(),
+        account: Box::new(account.clone()),
+        method: "eth_sendTransaction".to_owned(),
+        params: json!([{ "from": account.address, "to": B, "value": "0x1" }]),
+        origin: "https://app.example".to_owned(),
+        chain_id: 100,
+        limit_ms: Some(300_000.0),
+    };
+    let waits = run_holding(&mut sut, &mut world, request, service);
+    assert!(waits.contains(&OPEN_TIMEOUT_MS), "bounded: {waits:?}");
+    assert_eq!(
+        sut.view().actions["propose"],
+        unread(review_state::UNREAD_BOTH_KEY)
+    );
+    // And the other way round: the service refused first, the network hung.
+    let (mut world, mut sut, _) = setup();
+    world.service_down = true;
+    run_holding(&mut sut, &mut world, transfer(), chain_100);
+    assert_eq!(
+        sut.view().actions["propose"],
+        unread(review_state::UNREAD_BOTH_KEY)
+    );
+}
+
 /// r13-3: Try again (propose again) once the network answers: the draft is
 /// built and its review read.
 #[test]

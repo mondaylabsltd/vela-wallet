@@ -313,6 +313,10 @@ pub enum Event {
     },
     /// The link's sheet closed.
     CloseLink,
+    /// §18 (c), round 14: Try again on a link whose lookup did not come back
+    /// (`LinkStand::Failed {retry: true}`): the same link, opened again.
+    /// Nothing for any other stand.
+    RetryLink,
     /// The person closed the missing network's sheet: the link waiting for
     /// that network is let go (it is opened again by hand).
     DropLink,
@@ -1556,6 +1560,9 @@ impl App for MultisigAccounts {
                 lock(&model.state).link.stand = None;
                 render()
             }
+            Event::RetryLink => flow(model, |io, st| async move {
+                link::retry(&io, &st).await;
+            }),
             Event::DropLink => flow(model, |io, st| async move {
                 link::drop_pending(&io, &st).await;
             }),

@@ -316,7 +316,12 @@ fn approvals_meeting_the_threshold_leave_only_executing() {
 /// As [`run`], with the review's bound (§12) left unrun and dropped: the
 /// clock moves only as far as the reads took, as a person's "soon after".
 fn run_quick(sut: &mut Page, w: &mut World, event: page::Event) {
-    let bound = |op: &Op| matches!(op, Op::Wait { ms } if *ms == vela_core::app::multisig_review_state::REVIEW_TIMEOUT_MS);
+    // The review's bound, and (r14-13) the core's bound on each of its
+    // questions: a timer whose question was answered is never a tick here.
+    let bound = |op: &Op| {
+        matches!(op, Op::Wait { ms } if *ms == vela_core::app::multisig_review_state::REVIEW_TIMEOUT_MS
+            || *ms == vela_core::app::multisig_gather::REVIEW_ASK_MS)
+    };
     sut.dispatch(event);
     for _ in 0..20_000 {
         let outstanding = sut.outstanding();
@@ -3500,7 +3505,13 @@ fn a_link_review_that_times_out_offers_nothing_to_sign() {
     let mut w = deployed_world();
     let t = tx("0x3");
     let mut sut = Page::new();
-    let simulate = |op: &Op| matches!(op, Op::Simulate { .. });
+    // A simulation the shell never answers, and (r14-13) the core's own
+    // bound on that question never running out either: the review's bound
+    // is what is left.
+    let simulate = |op: &Op| {
+        matches!(op, Op::Simulate { .. })
+            || matches!(op, Op::Wait { ms } if *ms == vela_core::app::multisig_gather::REVIEW_ASK_MS)
+    };
     for event in [
         page::Event::Start {
             service_url: SERVICE.to_owned(),

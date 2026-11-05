@@ -2636,7 +2636,7 @@ async fn gather_review(
     tx: &SafeTx,
     members: &ChainMembers,
     origin: Option<String>,
-) -> ReviewInput {
+) -> multisig_gather::Gathered {
     // One lock, read before: a guard held in the literal would be held to
     // its end, and a second `lock` there would wait for ever.
     let (known, tokens) = {
@@ -2668,15 +2668,35 @@ async fn gather_review(
         origin: origin.clone(),
         tokens,
     };
-    let input = multisig_gather::gather_review(io, &subject).await;
+    let gathered = multisig_gather::gather_review(io, &subject).await;
     let key = subject_key(chain_id, &account.address, tx, members, origin.as_deref());
     let now = io.now().await;
     let mut s = lock(st);
     s.recent.retain(|(k, _, _)| *k != key);
-    s.recent.push((key, now, input.clone()));
+    s.recent.push((key, now, gathered.input.clone()));
     let skip = s.recent.len().saturating_sub(RECENT_CAP);
     s.recent.drain(..skip);
-    input
+    gathered
+}
+
+/// r14-13: a gathered review, landed by the one rule
+/// ([`ReviewState::settled`]): the review when it stands, else why not —
+/// `chainUnread` when its network answered none of its reads.
+pub(crate) fn settle(
+    gathered: &multisig_gather::Gathered,
+    blind: bool,
+) -> Result<Value, ReviewState> {
+    let mut input = gathered.input.clone();
+    input.blind = blind;
+    let review = multisig_review::multisig_review(&input)
+        .ok()
+        .and_then(|r| serde_json::to_value(r).ok());
+    match ReviewState::settled(review.as_ref(), &gathered.answers) {
+        ReviewState::Ready => {
+            review.ok_or_else(|| ReviewState::failed(review_state::REASON_UNREADABLE))
+        }
+        failed => Err(failed),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2715,7 +2735,11 @@ async fn authorize_signing(
             .map(|(_, _, i)| i.clone());
         let input = match recent {
             Some(i) => i,
-            None => gather_review(io, st, account, chain_id, tx, &members, None).await,
+            None => {
+                gather_review(io, st, account, chain_id, tx, &members, None)
+                    .await
+                    .input
+            }
         };
         Some(multisig_gather::review_of(&input))
     };
@@ -3119,6 +3143,10 @@ async fn pre_draft_read(
         let s = lock(st);
         (s.service.clone(), s.chain.clone())
     };
+    // Whether each read is still unread at the bound: still out, OR come
+    // back failed (r14-7: a network whose read had already failed was
+    // forgotten when the service was still out at the bound, and the
+    // site's draft said only the service's line).
     let chain_out = AtomicBool::new(true);
     let service_out = AtomicBool::new(true);
     let body = async {
@@ -3127,7 +3155,7 @@ async fn pre_draft_read(
             let read = chain
                 .read_members(io, chain_id, &account.address, &account.genesis)
                 .await;
-            chain_out.store(false, Ordering::SeqCst);
+            chain_out.store(read.is_err(), Ordering::SeqCst);
             read
         };
         let list = async {
@@ -3135,7 +3163,7 @@ async fn pre_draft_read(
             let read = service
                 .fetch_proposals(io, chain_id, &account.address, false)
                 .await;
-            service_out.store(false, Ordering::SeqCst);
+            service_out.store(read.is_err(), Ordering::SeqCst);
             read
         };
         let (members, list) = futures::join!(members, list);
@@ -3309,12 +3337,11 @@ async fn review_draft(io: &Io<Event>, st: &Shared<State>, round: u64, run: u64) 
     };
     let chain_id = chain.chain_id;
     let gathered = review_state::bounded(io, async {
-        let input = gather_review(io, st, &account, chain_id, &tx, &chain.members, origin).await;
-        multisig_review::multisig_review(&input)
-            .ok()
-            .and_then(|r| serde_json::to_value(r).ok())
+        let gathered = gather_review(io, st, &account, chain_id, &tx, &chain.members, origin).await;
+        settle(&gathered, false)
     })
-    .await;
+    .await
+    .and_then(|landed| landed);
     let mut s = lock(st);
     if s.draft_round != round {
         return;
@@ -3322,8 +3349,8 @@ async fn review_draft(io: &Io<Event>, st: &Shared<State>, round: u64, run: u64) 
     if let Some(d) = s.draft.as_mut().filter(|d| d.review_run == run) {
         match gathered {
             Ok(review) => {
-                d.review_state = ReviewState::of(review.as_ref());
-                d.review = review;
+                d.review_state = ReviewState::Ready;
+                d.review = Some(review);
             }
             Err(failed) => {
                 d.review = None;
@@ -3371,14 +3398,13 @@ async fn review_proposal(
         ),
         Some((item, chain, account)) => {
             let gathered = review_state::bounded(io, async {
-                let mut input =
+                let gathered =
                     gather_review(io, st, &account, chain_id, &item.tx, &chain.members, None).await;
-                input.blind = blind;
-                multisig_review::multisig_review(&input)
-                    .ok()
-                    .and_then(|r| serde_json::to_value(r).ok())
+                settle(&gathered, blind)
             })
-            .await;
+            .await
+            .and_then(|landed| landed)
+            .map(Some);
             (format!("{chain_id}:{}", item.safe_tx_hash), gathered)
         }
     };
@@ -3678,7 +3704,12 @@ pub fn setup_share(
 }
 
 enum PlanFail {
+    /// Its setup was read, and Vela won't deploy it (`Authority::Refused`).
     Refused(Value),
+    /// r14-4: its setup could not be checked — the network did not answer
+    /// for the Safe contracts (`Authority::Unknown`). Never said as a
+    /// finding: nothing wrong was found, nothing was read.
+    Unverified(Value),
     Other,
 }
 
@@ -3756,8 +3787,11 @@ async fn verified_deploy_facts(
     match multisig::counterfactual_authority(&input.account.genesis, &input.account.address, &facts)
     {
         Ok(multisig::Authority::Verified { .. }) => Ok(facts),
-        Ok(other) => Err(PlanFail::Refused(
-            serde_json::to_value(other).unwrap_or(Value::Null),
+        Ok(unread @ multisig::Authority::Unknown { .. }) => Err(PlanFail::Unverified(
+            serde_json::to_value(unread).unwrap_or(Value::Null),
+        )),
+        Ok(refused) => Err(PlanFail::Refused(
+            serde_json::to_value(refused).unwrap_or(Value::Null),
         )),
         Err(_) => Err(PlanFail::Other),
     }
@@ -3766,7 +3800,14 @@ async fn verified_deploy_facts(
 /// What the preview says (`ExecutionPreview`).
 #[derive(Clone, Debug, PartialEq)]
 pub enum Preview {
+    /// Its setup was read and refused (`authority.kind == "refused"`): Vela
+    /// won't deploy it — `authority.deployRefused` and each reason.
     Refused(Value),
+    /// r14-4: its setup could not be checked on this network (the Safe
+    /// contracts were not read, `authority.kind == "unknown"`): Vela won't
+    /// deploy it YET — `authority.deployUnverified`, never "won't use this
+    /// multisig". Looked at again at the unpriced pace.
+    Unverified(Value),
     Fails(Value),
     Unpriced,
     Unchecked,
@@ -3786,6 +3827,7 @@ impl Preview {
     pub fn to_value(&self) -> Value {
         match self {
             Self::Refused(a) => json!({"kind": "refused", "authority": a}),
+            Self::Unverified(a) => json!({"kind": "unverified", "authority": a}),
             Self::Fails(why) => json!({"kind": "fails", "why": why}),
             Self::Unpriced => json!({"kind": "unpriced"}),
             Self::Unchecked => json!({"kind": "unchecked"}),
@@ -4098,6 +4140,7 @@ async fn look(io: &Io<Event>, input: &ExecutionInput) -> Preview {
     let planned = match plan_execution(io, input).await {
         Ok(p) => p,
         Err(PlanFail::Refused(a)) => return Preview::Refused(a),
+        Err(PlanFail::Unverified(a)) => return Preview::Unverified(a),
         Err(PlanFail::Other) => return Preview::Unpriced,
     };
     let executor = input.executor.address.clone();
@@ -4450,10 +4493,18 @@ async fn execute(
     // would be a second trip to the page for nothing the chain needs.
     // The deploy gate, right before the deployment's calls are sent.
     if !input.members.deployed {
-        if let Err(PlanFail::Refused(a)) = verified_deploy_facts(io, &input).await {
-            return ActionState::Stopped {
-                preview: Preview::Refused(a).to_value(),
-            };
+        match verified_deploy_facts(io, &input).await {
+            Err(PlanFail::Refused(a)) => {
+                return ActionState::Stopped {
+                    preview: Preview::Refused(a).to_value(),
+                };
+            }
+            Err(PlanFail::Unverified(a)) => {
+                return ActionState::Stopped {
+                    preview: Preview::Unverified(a).to_value(),
+                };
+            }
+            _ => {}
         }
     }
     let now = io.now().await;
@@ -4571,7 +4622,9 @@ pub(crate) async fn look_if_stale(
             // asked again at the sheet's pace even on the home — an
             // executor funded is noticed on the next poll, not a minute on.
             let fresh = match p {
-                Preview::Unpriced | Preview::Unchecked => fresh_ms.min(UNPRICED_FRESH_MS),
+                Preview::Unpriced | Preview::Unchecked | Preview::Unverified(_) => {
+                    fresh_ms.min(UNPRICED_FRESH_MS)
+                }
                 Preview::Fails(_) | Preview::Priced { can_pay: false, .. } => {
                     fresh_ms.min(PREVIEW_FRESH_MS)
                 }

@@ -49,6 +49,11 @@ pub const REASON_TIMED_OUT: &str = "home.multisig.review.state.timedOut";
 pub const REASON_UNREADABLE: &str = "home.multisig.review.state.unreadable";
 /// The transaction is no longer in the list it was opened from.
 pub const REASON_GONE: &str = "home.multisig.review.state.gone";
+/// r14-13: the review's reads came back, but its network answered none of
+/// them — not the multisig's own state, not a code, not a check: the
+/// transaction could not be read against the chain at all. `{{network}}`:
+/// the network's name. Never signable (not "… anyway"): Try again.
+pub const REASON_CHAIN_UNREAD: &str = "home.multisig.review.state.chainUnread";
 /// D1 (real-device pass 2): a review drawn, but neither safety check read —
 /// not the state-diff guard, not the simulation. A danger line over the
 /// review, with Try again; the button signs only "… anyway".
@@ -100,6 +105,33 @@ impl ReviewState {
             _ => Self::failed(REASON_UNREADABLE),
         }
     }
+
+    /// r14-13, the one rule every shell's review lands by: a gathered review
+    /// is `ready` only when its network answered at least one of the reads
+    /// it made (`answers`: each read's envelope, `{result}` / `{error}` /
+    /// `{unreachable}`; [`chain_answered`]). Nothing answered — a network
+    /// hung or refused end to end — is `failed {chainUnread}`: the
+    /// transaction was not read against the chain, so nothing is signed, not
+    /// even "… anyway", and Try again reads it again. Only when the chain
+    /// answered and the two safety checks alone are unread is the review
+    /// drawn `unchecked` (D1: "… anyway").
+    pub fn settled(review: Option<&Value>, answers: &[Value]) -> Self {
+        match Self::of(review) {
+            Self::Ready if !chain_answered(answers) => Self::failed(REASON_CHAIN_UNREAD),
+            other => other,
+        }
+    }
+}
+
+/// Whether the network answered any of a review's reads (r14-13): a result
+/// or an error (a node that says "method not found" answered); only
+/// `{unreachable}` — a hang, a refused connection, a read cut at its bound —
+/// is silence. No read made at all needs no answer.
+pub fn chain_answered(answers: &[Value]) -> bool {
+    answers.is_empty()
+        || answers
+            .iter()
+            .any(|a| a.get("result").is_some() || a.get("error").is_some())
 }
 
 /// What a sheet draws in the review's place.
@@ -271,6 +303,74 @@ pub fn opening_reason_json(args: &Value) -> Result<Value, String> {
             Value::String(if link { r.link_key() } else { r.draft_key() }.to_owned())
         }),
     )
+}
+
+/// §18 leftover (b), round 14: what a proposal sheet opened WITHOUT a link
+/// says while its transaction is not in the list — read from the machine's
+/// facts, so a service that did not answer is never said as "it hasn't been
+/// shared with the members yet". `key` is a corpus key (`{{network}}`: the
+/// sheet's network); `retry`: offer Try again (the proposals machine's
+/// `retry`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MissingSaid {
+    pub key: String,
+    pub retry: bool,
+}
+
+/// The sheet's transaction is still being looked for.
+pub const MISSING_OPENING_KEY: &str = "home.multisig.proposal.opening";
+/// The network did not answer: who can act, and what is waiting, unread.
+pub const MISSING_CHAIN_KEY: &str = "home.multisig.proposal.cantCheck";
+/// The multisig service did not answer: the transaction was not looked for.
+pub const MISSING_SERVICE_KEY: &str = LINK_UNREAD_SERVICE_KEY;
+/// The service answered, and it is not among the multisig's transactions.
+pub const MISSING_NOT_LISTED_KEY: &str = "home.multisig.proposal.notInMailbox";
+/// The sheet's network is not one the multisig shown is read on.
+pub const MISSING_NOT_HERE_KEY: &str = "home.multisig.proposal.notHere";
+
+/// [`MissingSaid`] from the facts: `loading` (the list's first read is
+/// out), `unreadable` (the network did not answer), `mailbox` (`None`: the
+/// multisig is not read on this network; `Some(read)`: whether the service's
+/// list was read). Only a read that came back and lacks it is final; every
+/// unread one offers Try again. (This device being offline is the shell's
+/// to say first, as it always has.)
+pub fn missing_said(loading: bool, unreadable: bool, mailbox: Option<bool>) -> MissingSaid {
+    let said = |key: &str, retry: bool| MissingSaid {
+        key: key.to_owned(),
+        retry,
+    };
+    if loading {
+        return said(MISSING_OPENING_KEY, false);
+    }
+    if unreadable {
+        return said(MISSING_CHAIN_KEY, true);
+    }
+    match mailbox {
+        Some(true) => said(MISSING_NOT_LISTED_KEY, false),
+        Some(false) => said(MISSING_SERVICE_KEY, true),
+        None => said(MISSING_NOT_HERE_KEY, false),
+    }
+}
+
+/// `review.missing {loading, unreadable, mailbox?}` through the link door:
+/// [`missing_said`].
+pub fn missing_json(args: &Value) -> Result<Value, String> {
+    let flag = |k: &str| args.get(k).and_then(Value::as_bool).unwrap_or(false);
+    let mailbox = args.get("mailbox").and_then(Value::as_bool);
+    serde_json::to_value(missing_said(flag("loading"), flag("unreadable"), mailbox))
+        .map_err(|e| e.to_string())
+}
+
+/// `review.settle {review?, answers}` through the link door: the state a
+/// gathered review lands in ([`ReviewState::settled`]).
+pub fn settle_json(args: &Value) -> Result<Value, String> {
+    let review = args.get("review").filter(|r| !r.is_null());
+    let answers = match args.get("answers") {
+        None | Some(Value::Null) => Vec::new(),
+        Some(Value::Array(a)) => a.clone(),
+        Some(_) => return Err("answers: not a list".to_owned()),
+    };
+    serde_json::to_value(ReviewState::settled(review, &answers)).map_err(|e| e.to_string())
 }
 
 /// `review.door {state?, review?}` through the link door: the [`door`].

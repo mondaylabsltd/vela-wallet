@@ -1,5 +1,5 @@
 {
-  "about": "§12 (docs/multisig-machines.md): the sign door over a review's state. A sign / propose / approve / execute button is enabled ONLY when the state is ready and the review's sign rule allows it; a missing state is loading. Replayed through the link door `review.door {state?, review?}` by Rust, the web, the desktop, Android and iOS. D1 (real-device pass 2): a ready review whose state-change check AND simulation both could not be read (its `unchecked` concern) is drawn, but the door asks for \"… anyway\" whatever its sign rule says and carries the danger line (`reason_key` home.multisig.review.state.unchecked) with Try again (`retry`); one check unread alone stays a plain caution. `checks` (replayed by Rust through `multisig_review`): the review's own rule, state guard × simulation — whatever left both unread: a hang (each read gave up at its bound), a refused connection (r13-2: ready in 2–4 s), or the reads right after Try again. A case's `trace` / `probe` / `sim` are the answers the review is gathered from (absent: an unreachable read, or for a read check the fixture's own).",
+  "about": "§12 (docs/multisig-machines.md): the sign door over a review's state. A sign / propose / approve / execute button is enabled ONLY when the state is ready and the review's sign rule allows it; a missing state is loading. Replayed through the link door `review.door {state?, review?}` by Rust, the web, the desktop, Android and iOS. D1 (real-device pass 2): a ready review whose state-change check AND simulation both could not be read (its `unchecked` concern) is drawn, but the door asks for \"… anyway\" whatever its sign rule says and carries the danger line (`reason_key` home.multisig.review.state.unchecked) with Try again (`retry`); one check unread alone stays a plain caution. `checks` (replayed by Rust through `multisig_review`): the review's own rule, state guard × simulation — whatever left both unread: a hang (each read gave up at its bound), a refused connection (r13-2: ready in 2–4 s), or the reads right after Try again. A case's `trace` / `probe` / `sim` are the answers the review is gathered from (absent: an unreachable read, or for a read check the fixture's own). r14-13 (`settle`): where a gathered review lands, replayed through `review.settle {review?, answers}` — `answers` are the envelopes of every read the core made of the network ({result} / {error} / {unreachable}): the multisig's own code, the code rounds, the state trace and probe. A review whose network answered NONE of them is `failed {chainUnread}` — never signable, not even \"… anyway\", with Try again; one whose network answered (a node that says \"method not found\" answered) is `ready`, and the door decides \"… anyway\" when the two safety checks alone are unread. §18 (b) (`missing`): a proposal sheet opened WITHOUT a link whose transaction is not in the list, replayed through `review.missing {loading, unreadable, mailbox?}` → `{key, retry}` — a multisig service that did not answer is said as that with Try again, never \"it hasn't been shared with the members yet\".",
   "timeout_ms": 40000,
   "keys": [
     "home.multisig.review.state.loading",
@@ -8,7 +8,8 @@
     "home.multisig.review.state.unreadable",
     "home.multisig.review.state.gone",
     "home.multisig.review.state.tryAgain",
-    "home.multisig.review.state.unchecked"
+    "home.multisig.review.state.unchecked",
+    "home.multisig.review.state.chainUnread"
   ],
   "door": [
     {
@@ -143,6 +144,65 @@
       "probe": { "error": { "code": -32603, "message": "connect ECONNREFUSED 127.0.0.1:8545" } },
       "sim": "{\"error\": {\"code\": -32603, \"message\": \"connect ECONNREFUSED 127.0.0.1:8545\"}}",
       "expect": { "unchecked": true, "tone": "danger", "anyway": true }
+    }
+  ],
+  "settle": [
+    {
+      "name": "a network that answered none of the reads (hung or refused end to end): failed chainUnread, never anyway",
+      "args": { "review": { "sign": { "allowed": true, "anyway": true }, "concerns": [{ "kind": "stateUnread", "reason": "unreachable" }, { "kind": "unsimulated" }, { "kind": "unchecked" }] }, "answers": [{ "unreachable": true }, { "unreachable": true }, { "unreachable": true }] },
+      "expect": { "kind": "failed", "reason_key": "home.multisig.review.state.chainUnread" }
+    },
+    {
+      "name": "the multisig's own state answered, both checks unread: ready (its door asks for … anyway)",
+      "args": { "review": { "sign": { "allowed": true, "anyway": true }, "concerns": [{ "kind": "stateUnread", "reason": "unreachable" }, { "kind": "unsimulated" }, { "kind": "unchecked" }] }, "answers": [{ "result": "0x6080" }, { "unreachable": true }, { "unreachable": true }] },
+      "expect": { "kind": "ready" }
+    },
+    {
+      "name": "a node that says method not found to the checks answered: ready",
+      "args": { "review": { "sign": { "allowed": true, "anyway": true }, "concerns": [{ "kind": "stateUnread", "reason": "unreachable" }, { "kind": "unsimulated" }, { "kind": "unchecked" }] }, "answers": [{ "unreachable": true }, { "error": { "code": -32601, "message": "the method debug_traceCall does not exist" } }, { "unreachable": true }] },
+      "expect": { "kind": "ready" }
+    },
+    {
+      "name": "every read answered: ready",
+      "args": { "review": { "sign": { "allowed": true, "anyway": false }, "concerns": [] }, "answers": [{ "result": "0x6080" }, { "result": { "post": {}, "pre": {} } }, { "error": { "code": 3, "message": "execution reverted", "data": "0x00" } }] },
+      "expect": { "kind": "ready" }
+    },
+    {
+      "name": "no review gathered at all: unreadable, whatever answered",
+      "args": { "review": null, "answers": [{ "result": "0x6080" }] },
+      "expect": { "kind": "failed", "reason_key": "home.multisig.review.state.unreadable" }
+    },
+    {
+      "name": "no read needed asking: ready",
+      "args": { "review": { "sign": { "allowed": true, "anyway": false }, "concerns": [] }, "answers": [] },
+      "expect": { "kind": "ready" }
+    }
+  ],
+  "missing": [
+    {
+      "name": "the service did not answer: said as the service, with Try again — never 'hasn't been shared'",
+      "args": { "loading": false, "unreadable": false, "mailbox": false },
+      "expect": { "key": "home.multisig.proposal.unread.linkService", "retry": true }
+    },
+    {
+      "name": "the service answered and it is not there: not in the mailbox, final",
+      "args": { "loading": false, "unreadable": false, "mailbox": true },
+      "expect": { "key": "home.multisig.proposal.notInMailbox", "retry": false }
+    },
+    {
+      "name": "the network did not answer: can't check, with Try again",
+      "args": { "loading": false, "unreadable": true, "mailbox": false },
+      "expect": { "key": "home.multisig.proposal.cantCheck", "retry": true }
+    },
+    {
+      "name": "still being read: opening",
+      "args": { "loading": true, "unreadable": false, "mailbox": null },
+      "expect": { "key": "home.multisig.proposal.opening", "retry": false }
+    },
+    {
+      "name": "not a network the multisig is read on: not here",
+      "args": { "loading": false, "unreadable": false, "mailbox": null },
+      "expect": { "key": "home.multisig.proposal.notHere", "retry": false }
     }
   ]
 }
