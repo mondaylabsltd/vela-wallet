@@ -3625,7 +3625,7 @@ fn an_unreached_chain_is_probed_by_one_read_on_two_endpoints() {
     // Every node silent now: a new read probes, alone — two at most.
     let ops = sut.dispatch(rpc_call("c2", "eth_call", now + 1_000.0));
     let probe_url = posted_url(&ops, "c2").expect("c2 probes");
-    assert!(OUTAGE_PROBE_ENDPOINTS <= 2);
+    const { assert!(OUTAGE_PROBE_ENDPOINTS <= 2) };
     // A read meanwhile fails at once, with nothing on the wire.
     let ops = sut.dispatch(rpc_call("c3", "eth_getBalance", now + 1_100.0));
     assert_eq!(posted_url(&ops, "c3"), None, "{ops:?}");

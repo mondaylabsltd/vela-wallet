@@ -120,7 +120,7 @@ test('r12-3: a network that stops answering in a warm session is named without a
  * to sweep each call's whole list at 8 s a node before the network was out
  * of reach, and the home named it 187 s and ~100 hung requests after the
  * first. Now three silent nodes put it out of reach, the home names it at
- * once, and the reads after it probe two nodes at a time.
+ * once, and no hung node is asked again until the network answers.
  */
 test('r13-4: a network whose every node hangs in a warm session is named in time, not hammered', async ({
 	page
@@ -128,7 +128,7 @@ test('r13-4: a network whose every node hangs in a warm session is named in time
 	test.setTimeout(150_000);
 	let down = false;
 	let firstHung = 0;
-	let hung = 0;
+	const asked = new Map<string, number>();
 	// Ethereum's own stub, and every off-origin JSON-RPC node (only
 	// Ethereum's are asked: every other network answers from its stub).
 	await page.route(
@@ -139,7 +139,7 @@ test('r13-4: a network whose every node hangs in a warm session is named in time
 			const request = route.request();
 			const rpc = request.method() === 'POST' && (request.postData() ?? '').includes('jsonrpc');
 			if (!down || !rpc) return route.fallback();
-			hung += 1;
+			asked.set(request.url(), (asked.get(request.url()) ?? 0) + 1);
 			if (firstHung === 0) firstHung = Date.now();
 			return new Promise<void>(() => {});
 		}
@@ -157,7 +157,8 @@ test('r13-4: a network whose every node hangs in a warm session is named in time
 	expect(firstHung).toBeGreaterThan(0);
 	// About as fast as cold (≤ ~25 s from the first hung read; slack for CI).
 	expect(named - firstHung).toBeLessThan(35_000);
-	// Not hammered: a handful of nodes asked, not every node three times over.
-	expect(hung).toBeLessThan(25);
+	// Not hammered: each hung node asked a time or two (the reads already out
+	// when it went quiet, the probe), never three passes of every node per read.
+	expect(Math.max(...asked.values())).toBeLessThanOrEqual(3);
 	await expect(page.getByText(en('home.liveIndicator'), { exact: true })).toHaveCount(0);
 });
