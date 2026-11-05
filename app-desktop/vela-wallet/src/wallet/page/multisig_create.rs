@@ -1045,7 +1045,7 @@ impl WalletPage {
                             .text_size(theme::text_row_title())
                             .font_weight(gpui::FontWeight::SEMIBOLD)
                             .text_color(theme.fg_base)
-                            .child(address.clone()),
+                            .child(crate::ui::address_text(address.clone())),
                     )
                     .child(
                         crate::ui::vela_button(
@@ -1429,7 +1429,9 @@ impl WalletPage {
                             .font_family(theme::font_mono())
                             .text_size(theme::text_label())
                             .text_color(theme.fg_base)
-                            .child(vela_core::multisig_link::eip55(address)),
+                            .child(crate::ui::address_text(vela_core::multisig_link::eip55(
+                                address,
+                            ))),
                     )
                     .child(
                         div()
@@ -1483,7 +1485,7 @@ impl WalletPage {
                                         .font_family(theme::font_mono())
                                         .text_size(theme::text_label())
                                         .text_color(theme.fg_subtle)
-                                        .child(sub.clone()),
+                                        .child(crate::ui::address_text(sub.clone())),
                                 )
                             }),
                     ),
@@ -1821,7 +1823,9 @@ impl WalletPage {
                             .font_family(theme::font_mono())
                             .text_size(theme::text_label())
                             .text_color(theme.fg_base)
-                            .child(vela_core::multisig_link::eip55(&address)),
+                            .child(crate::ui::address_text(vela_core::multisig_link::eip55(
+                                &address,
+                            ))),
                     ),
             )
             .child(ms_note(

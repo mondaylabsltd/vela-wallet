@@ -3,6 +3,7 @@
 
 pub mod a11y;
 mod ack_row;
+mod address;
 mod button;
 pub mod dialog;
 pub mod editor;
@@ -22,6 +23,7 @@ mod windowed;
 
 pub use a11y::Accessible;
 pub use ack_row::ack_row;
+pub use address::address_text;
 pub use button::{
     ButtonState, ButtonVariant, vela_button, vela_button_opts, vela_button_state, welcome_cta,
     welcome_cta_state,
