@@ -141,6 +141,8 @@
 				icon={UTILITY_ICONS.inbox}
 				title={model.activitySection.empty.title}
 				caption={model.activitySection.empty.caption}
+				action={model.activitySection.empty.action}
+				onaction={ongroupaction}
 			/>
 		{:else}
 			{#each model.activityGroups as group (group.label)}

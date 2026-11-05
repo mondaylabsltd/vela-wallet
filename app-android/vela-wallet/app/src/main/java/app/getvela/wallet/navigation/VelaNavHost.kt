@@ -2401,6 +2401,8 @@ fun VelaNavHost(
                                         time = { ms -> timeFormat.format(java.util.Date(ms)) },
                                         onOpen = { multisigHub.sheet.value = it },
                                         onFund = { flows.enter(WalletFlowEntry.Receive) },
+                                        // §18 item 3: said there, with Try again — not twice.
+                                        historySaidInActivity = WalletLive.historySaidInActivity(homeModel),
                                     )
                                 }
                             },

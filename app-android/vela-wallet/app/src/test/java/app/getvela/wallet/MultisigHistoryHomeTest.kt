@@ -75,6 +75,25 @@ class MultisigHistoryHomeTest {
         assertEquals(emptyHome, WalletLive.withMultisigHistory(emptyHome, null))
     }
 
+    /**
+     * §18 item 3: one control per failure. While Activity's empty state says
+     * the history was not read (with Try again), the card does not say it
+     * again; over rows — or for any other note — the card's note stands.
+     */
+    @Test
+    fun an_unread_history_is_said_once_on_activitys_empty_state() {
+        val unread = WalletLive.withMultisigHistory(emptyHome, history("unread"))
+        val rows = WalletLive.withMultisigHistory(WalletFixtures.buildMobileState(WalletScreenState.H1, strings), history("unread"))
+        assertEquals(true, WalletLive.historySaidInActivity(unread))
+        assertEquals(false, WalletLive.historySaidInActivity(rows))
+        assertEquals(false, WalletLive.historySaidInActivity(WalletLive.withMultisigHistory(emptyHome, history("read"))))
+        val note = Wire.json.parseToJsonElement("""{"kind":"historyUnreadable","chain_ids":[5042002]}""")
+        assertNull(app.getvela.wallet.feature.multisig.cardNote(note, historySaidInActivity = true))
+        assertEquals(note, app.getvela.wallet.feature.multisig.cardNote(note, historySaidInActivity = false))
+        val away = Wire.json.parseToJsonElement("""{"kind":"unreachable"}""")
+        assertEquals(away, app.getvela.wallet.feature.multisig.cardNote(away, historySaidInActivity = true))
+    }
+
     /** The proposals view's `history`, as the core writes it; an older core's view without it reads as read. */
     @Test
     fun the_proposals_view_decodes_the_historys_stand() {

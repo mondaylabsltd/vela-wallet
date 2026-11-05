@@ -61,6 +61,8 @@ fun MultisigHomeCard(
     onOpen: (MultisigSheet) -> Unit,
     onFund: () -> Unit,
     modifier: Modifier = Modifier,
+    /** §18 item 3: Activity's empty state says the history was not read, with Try again. */
+    historySaidInActivity: Boolean = false,
 ) {
     val view by hub.proposalsView.collectAsStateWithLifecycle()
     val account = row.account
@@ -106,7 +108,7 @@ fun MultisigHomeCard(
             }
         }
         if (following) {
-            waitingNote(words, view.waitingNote, time)?.let { (text, retry) ->
+            waitingNote(words, cardNote(view.waitingNote, historySaidInActivity), time)?.let { (text, retry) ->
                 Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
                     MsNote(text, Modifier.weight(1f), tone = MsTone.Warning, tag = "multisig.home.note")
                     if (retry) MsTextButton(words.t("service.retry"), tag = "multisig.home.retry") { hub.sendProposal(ev("retry")) }

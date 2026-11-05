@@ -339,6 +339,49 @@ test('what waits: one line on the home, the other multisig in the switcher, a ne
 	await page.context().close();
 });
 
+/**
+ * §18 item 3: a multisig's history that cannot be read is said where the
+ * natives say it — Activity's empty state, with Try again — once: the
+ * waiting group says nothing of it. Try again, the chain answering, reads it.
+ */
+test('an unread history: said on Activity with Try again, once, and read again', async ({
+	browser
+}) => {
+	const world = new MultisigWorld();
+	const harbor = await multisigOf([FIXTURES.one, OUTSIDE.address], 2, 'Harbor fund', '0x3');
+	world.record(harbor);
+	// Transaction #0 ran on another member's device: the chain's number is 1,
+	// and the search for its execution is refused.
+	await world.proposeAsOutsideOwner(100, harbor.address, transferTx(RECIPIENT, 10n ** 17n, 0));
+	world.safes.set(`100:${harbor.address.toLowerCase()}`, {
+		owners: harbor.owners,
+		threshold: harbor.threshold,
+		nonce: 1
+	});
+	world.refuseHistory = true;
+	const page = await device(browser, world, [FIXTURES.one]);
+	await holdMultisig(page, harbor);
+	const thrown = thrownOn(page);
+	const unread = page.getByText(/Couldn't read this multisig's history on Gnosis/);
+	const tryAgain = page.getByTestId('activity-empty-retry');
+
+	await test.step('said once, with Try again on Activity', async () => {
+		await expect(unread).toHaveCount(1, { timeout: 60_000 });
+		await expect(tryAgain).toBeVisible();
+		await expect(page.getByTestId('multisig-waiting')).toHaveCount(0);
+		await expect(page.getByRole('button', { name: 'Retry' })).toHaveCount(0);
+	});
+
+	await test.step('Try again, the chain answering: read', async () => {
+		world.refuseHistory = false;
+		await tryAgain.click();
+		await expect(unread).toHaveCount(0, { timeout: 60_000 });
+		await expect(tryAgain).toHaveCount(0);
+	});
+	expect(thrown).toEqual([]);
+	await page.context().close();
+});
+
 /** Keep both multisigs here, `shown` in front. */
 async function holdTwo(page: Page, shown: Multisig, other: Multisig): Promise<void> {
 	await page.evaluate(

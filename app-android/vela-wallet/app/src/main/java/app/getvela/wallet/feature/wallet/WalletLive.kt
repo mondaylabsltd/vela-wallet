@@ -98,6 +98,14 @@ object WalletLive {
         }
     }
 
+    /**
+     * §18 item 3: Activity's empty state says the shown multisig's history
+     * could not be read, with Try again ([withMultisigHistory]) — so the card
+     * does not say it again (`cardNote`). Pure.
+     */
+    fun historySaidInActivity(model: WalletHomeModel): Boolean =
+        model.activitySection.mode == SectionMode.Empty && model.activitySection.empty?.retry != null
+
     // A masked amount written WITH its unit ("•••• xDAI") is the core's own
     // function — `maskedAmount(unit)`, the export of `privacy::masked_amount`
     // — called wherever a coin amount is drawn hidden: a holdings row (home

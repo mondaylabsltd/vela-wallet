@@ -12,6 +12,8 @@
 //  - item 2: a stored account record this device cannot read is said (the
 //    welcome's notice, the switcher's line) and kept byte for byte on every
 //    write — the core's `stored_accounts` rule; signing in is the way back.
+//  - item 3: an unread history is said once, on Activity's empty state with
+//    Try again; the card does not say it again.
 //
 
 import Foundation
@@ -119,5 +121,23 @@ struct R13FollowupsTests {
         }
         #expect(sheet(1).unreadable == title)
         #expect(sheet(0).unreadable == nil)
+    }
+
+    // MARK: - item 3: an unread history is said once, on Activity's empty state
+
+    @Test func anUnreadHistoryIsSaidOnceOnActivitysEmptyState() throws {
+        let history = { (stand: String) in
+            WalletLive.MultisigHistory(stand: stand, unreadText: "Couldn't read it", retryText: loc.t("common.tryAgain"))
+        }
+        let empty = WalletFixtures.buildMobileState(.h2, loc: loc)
+        let rows = WalletFixtures.buildMobileState(.h1, loc: loc)
+        #expect(WalletLive.historySaidInActivity(WalletLive.withMultisigHistory(empty, history("unread"))))
+        #expect(!WalletLive.historySaidInActivity(WalletLive.withMultisigHistory(rows, history("unread"))))
+        #expect(!WalletLive.historySaidInActivity(WalletLive.withMultisigHistory(empty, history("read"))))
+        let note = try JSONDecoder().decode(MsTagged.self, from: Data(#"{"kind":"historyUnreadable","chain_ids":[5042002]}"#.utf8))
+        #expect(MultisigHomeCard.cardNote(note, historySaidInActivity: true) == nil)
+        #expect(MultisigHomeCard.cardNote(note, historySaidInActivity: false) == note)
+        let away = try JSONDecoder().decode(MsTagged.self, from: Data(#"{"kind":"unreachable"}"#.utf8))
+        #expect(MultisigHomeCard.cardNote(away, historySaidInActivity: true) == away)
     }
 }

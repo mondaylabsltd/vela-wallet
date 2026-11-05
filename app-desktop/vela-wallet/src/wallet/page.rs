@@ -4548,6 +4548,9 @@ impl WalletPage {
         // Nothing to list (spec 082 RD10, G1): skeletons while the balance
         // core has not ruled, else the core's empty line — never a blank
         // strip, which reads as a list that failed to load.
+        // §18 item 3: Activity says the multisig's history was not read (with
+        // Try again) — the waiting group then does not say it again.
+        let mut history_said = false;
         if self.identity.is_some() {
             let state = wallet_live::home_activity(
                 !activity.is_empty(),
@@ -4566,6 +4569,7 @@ impl WalletPage {
             // over either.
             let history = self.multisig_history(cx);
             let state = wallet_live::with_multisig_history(state, history.as_ref());
+            history_said = wallet_live::history_said_in_activity(&state, elsewhere);
             match state {
                 wallet_live::HomeActivity::Rows => {}
                 wallet_live::HomeActivity::Loading => {
@@ -4748,7 +4752,7 @@ impl WalletPage {
                                 None
                             })
                             .children(if self.identity.is_some() {
-                                self.multisig_waiting_group(theme, cx)
+                                self.multisig_waiting_group(theme, history_said, cx)
                             } else {
                                 None
                             })

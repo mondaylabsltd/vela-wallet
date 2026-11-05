@@ -1358,6 +1358,8 @@ impl WalletPage {
     pub(crate) fn multisig_waiting_group(
         &mut self,
         theme: &Theme,
+        // §18 item 3: Activity's empty state says the history was not read.
+        history_said: bool,
         cx: &mut Context<Self>,
     ) -> Option<Div> {
         let row = self.shown_multisig(cx)?;
@@ -1377,7 +1379,8 @@ impl WalletPage {
             .filter(|i| i.status != ms_proposals::ProposalStatus::Done)
             .cloned()
             .collect();
-        if open.is_empty() && view.missing.is_empty() && view.waiting_note.is_none() {
+        let note = card_note(view.waiting_note.as_ref(), history_said);
+        if open.is_empty() && view.missing.is_empty() && note.is_none() {
             return None;
         }
         let mut group = div().flex().flex_col().pb(px(16.)).child(
@@ -1388,7 +1391,7 @@ impl WalletPage {
                 .text_color(theme.fg_base)
                 .child(words::t(&loc, "panel.pending")),
         );
-        if let Some(note) = &view.waiting_note {
+        if let Some(note) = note {
             let (text, retry) = self.ms_note_words(note);
             let mut line = div()
                 .flex()
@@ -4784,6 +4787,15 @@ fn ms_execution_words(loc: &Loc, execution: &Value) -> Option<String> {
 /// multisig): it belongs to a multisig not shown here; its mailbox read and
 /// the transaction not in it: said as that; its network unreadable: said
 /// as that.
+/// §18 item 3: the waiting group's note, beside Activity. While Activity's
+/// empty state says the history could not be read — with Try again (r13-7)
+/// — the group does not say it again: one sentence and one control per
+/// failure. Every other note, and this one when Activity shows rows, stays.
+/// Pure.
+pub(crate) fn card_note(note: Option<&WaitingNote>, history_said: bool) -> Option<&WaitingNote> {
+    note.filter(|n| !(history_said && matches!(n, WaitingNote::HistoryUnreadable { .. })))
+}
+
 /// r13-3 / §18 item 1: a link's transaction whose read failed — not read in
 /// time (`Failed`), its network silent (`Unreadable`), the multisig service
 /// silent (`NotFound`) — offers Try again whenever the core says so
@@ -4987,6 +4999,23 @@ mod tests {
     }
 
     use super::*;
+
+    /// §18 item 3: an unread history said on Activity's empty state (with
+    /// Try again) is not said again by the waiting group; every other note —
+    /// and this one when Activity shows rows — stays the group's.
+    #[test]
+    fn an_unread_history_is_said_once() {
+        let unread = WaitingNote::HistoryUnreadable {
+            chain_ids: vec![5_042_002],
+        };
+        assert_eq!(card_note(Some(&unread), true), None);
+        assert_eq!(card_note(Some(&unread), false), Some(&unread));
+        assert_eq!(
+            card_note(Some(&WaitingNote::Unreachable), true),
+            Some(&WaitingNote::Unreachable)
+        );
+        assert_eq!(card_note(None, true), None);
+    }
 
     /// r9-9: a delegatecall to a contract Vela does not sign for is refused
     /// for ITS reason — the core's key, in words in every language — never

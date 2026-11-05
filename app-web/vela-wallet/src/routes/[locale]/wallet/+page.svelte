@@ -141,7 +141,7 @@
 	import { loadCore } from '$lib/core/client';
 	import { currency } from '$lib/settings/core/currency.svelte';
 	import { feeTierPreference } from '$lib/settings/core/fee-tier.svelte';
-	import { withLiveWallet, withLiveWalletDesktop } from '$lib/wallet/live';
+	import { activitySaysHistory, withLiveWallet, withLiveWalletDesktop } from '$lib/wallet/live';
 	import type { ActivityGroupModel } from '$lib/wallet/model';
 	import {
 		addTokenChoice,
@@ -2029,7 +2029,10 @@
 			stand: view.history,
 			unreadText: fill(data.multisigMessages.panel.historyUnreadable, {
 				network: chainId === undefined ? '' : chainName(chainId)
-			})
+			}),
+			// §18 item 3: Try again on Activity's empty state, as the natives
+			// draw it — the proposals machine's `retry` (`groupAction`).
+			retry: { id: MULTISIG_RETRY, label: data.multisigMessages.review.state.tryAgain }
 		};
 	});
 
@@ -2073,7 +2076,12 @@
 	});
 	const waiting = $derived(
 		multisig.active
-			? waitingRows.group(data.multisigMessages, data.walletMessages.activity.toName)
+			? waitingRows.group(
+					data.multisigMessages,
+					data.walletMessages.activity.toName,
+					// §18 item 3: said on Activity's empty state, not twice.
+					activitySaysHistory(liveInputs)
+				)
 			: null
 	);
 	/**

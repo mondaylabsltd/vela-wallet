@@ -1407,7 +1407,9 @@ struct RootView: View {
                                         // space prompt answers with — to the space the
                                         // core says it lives in.
                                         agent.person(["type": "set_network_space", "space": target.rawValue])
-                                    }
+                                    },
+                                    // §18 item 3: said there, with Try again — not twice.
+                                    historySaidInActivity: WalletLive.historySaidInActivity(walletModel)
                                 ))
                             },
                             // r10 follow-up: no scan in the home's way while

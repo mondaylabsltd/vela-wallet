@@ -484,6 +484,15 @@ class MsProposalModel(
 }
 
 /**
+ * §18 item 3: the card's note, beside Activity. While Activity's empty state
+ * says the history could not be read — with Try again (r13-7) — the card does
+ * not say it again: one sentence and one control per failure. Every other
+ * note, and this one when Activity shows rows, stays the card's. Pure.
+ */
+fun cardNote(note: JsonElement?, historySaidInActivity: Boolean): JsonElement? =
+    if (historySaidInActivity && note.kind == "historyUnreadable") null else note
+
+/**
  * The group's one note (`waiting_note`), and whether Retry goes with it —
  * the core says which; this only words it. [time] words a moment (ms).
  */
