@@ -6133,6 +6133,29 @@ export function networkChainIsTestnet(chain_id, custom_json) {
 }
 
 /**
+ * r13-1: where an account lives when none of its networks is in the space
+ * in front (`network_space::lives_elsewhere`): `{chain_ids, here, other,
+ * front}` → an `Elsewhere` (its other-space networks, that space, the
+ * note's and the switch's keys), or `null`.
+ * @param {string} args_json
+ * @returns {string}
+ */
+export function networkLivesElsewhere(args_json) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(args_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.networkLivesElsewhere(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
  * The chain ids of `space`'s networks (spec 105), from `NetView.networks`
  * as JSON. A JSON array.
  * @param {string} space

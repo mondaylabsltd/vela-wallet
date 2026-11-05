@@ -1621,6 +1621,14 @@ export function multisigLinkCall(method: string, args_json: string): string;
 export function networkChainIsTestnet(chain_id: number, custom_json: string): boolean;
 
 /**
+ * r13-1: where an account lives when none of its networks is in the space
+ * in front (`network_space::lives_elsewhere`): `{chain_ids, here, other,
+ * front}` → an `Elsewhere` (its other-space networks, that space, the
+ * note's and the switch's keys), or `null`.
+ */
+export function networkLivesElsewhere(args_json: string): string;
+
+/**
  * The chain ids of `space`'s networks (spec 105), from `NetView.networks`
  * as JSON. A JSON array.
  */
@@ -2698,6 +2706,7 @@ export interface InitOutput {
     readonly multisigproposalscore_skip_unchanged_views: (a: number, b: number) => void;
     readonly multisigproposalscore_view: (a: number) => [number, number, number, number];
     readonly networkChainIsTestnet: (a: number, b: number, c: number) => number;
+    readonly networkLivesElsewhere: (a: number, b: number) => [number, number];
     readonly networkSpaceChainIds: (a: number, b: number, c: number, d: number) => [number, number];
     readonly networkSpaceRead: (a: number, b: number) => [number, number];
     readonly networkadmincore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
