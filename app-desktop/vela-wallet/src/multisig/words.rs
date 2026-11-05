@@ -44,6 +44,33 @@ pub fn amount_words(loc: &Loc, amount: &str, info: &TokenInfo) -> String {
     .to_owned()
 }
 
+/// A `MultisigAmount` (r12-1) as its `said` words: `known` its `text`; a
+/// token whose decimals nobody could read, the corpus `key` with `{{raw}}`.
+/// `None` for a value with no `said` (an older core's base units).
+#[must_use]
+pub fn said_amount(loc: &Loc, amount: &serde_json::Value) -> Option<String> {
+    let said = amount.get("said")?;
+    match said.get("kind").and_then(serde_json::Value::as_str)? {
+        "known" => said
+            .get("text")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned),
+        "decimals_unknown" => {
+            let key = said
+                .get("key")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("home.multisig.review.reading.decimalsUnknown");
+            let raw = said
+                .get("raw")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default();
+            let text = loc.t_texts(key, &[("raw", raw)]).to_string();
+            (text != key).then_some(text)
+        }
+        _ => None,
+    }
+}
+
 /// `home.multisig.<key>`.
 #[must_use]
 pub fn key(path: &str) -> String {

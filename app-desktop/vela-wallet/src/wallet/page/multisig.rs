@@ -1561,7 +1561,16 @@ impl WalletPage {
                 let token = why.get("token").and_then(Value::as_str);
                 let info = words::token_facts(&self.multisig.tokens, chain_id, token);
                 let amount = |k: &str| {
-                    let raw = why.get(k).and_then(Value::as_str).unwrap_or("0");
+                    let value = why.get(k);
+                    // r12-1: the core's amount (`MultisigAmount`): its `said`
+                    // is the words, decimals and symbol resolved by the core.
+                    if let Some(said) = value.and_then(|v| words::said_amount(loc, v)) {
+                        return said;
+                    }
+                    let raw = value
+                        .and_then(|v| v.get("base_units").or(Some(v)))
+                        .and_then(Value::as_str)
+                        .unwrap_or("0");
                     words::amount_words(loc, raw, &info)
                 };
                 words::tv(
@@ -1665,20 +1674,17 @@ impl WalletPage {
             .or_else(|| linked.as_ref().and_then(|l| l.item.clone()));
         let title: SharedString = words::t(&loc, "proposal.title").into();
         let Some(item) = item else {
-            let body = div().child(
-                div()
-                    .py(px(12.))
-                    .text_size(theme::text_row_sub())
-                    .text_color(theme.fg_subtle)
-                    .child(words::t(
-                        &loc,
-                        if view.loading || linked.is_some() {
-                            "proposal.opening"
-                        } else {
-                            "proposal.notFound"
-                        },
-                    )),
-            );
+            let lines = no_item_lines(&loc, &view, linked.as_ref(), account.is_some(), chain_id);
+            let mut body = div().flex().flex_col().gap(px(8.));
+            for line in lines {
+                body = body.child(
+                    div()
+                        .py(px(4.))
+                        .text_size(theme::text_row_sub())
+                        .text_color(theme.fg_subtle)
+                        .child(line),
+                );
+            }
             return Some((title, body, None));
         };
         // The sheet asks for each executor's look and the review now and
@@ -4643,8 +4649,158 @@ fn ms_execution_words(loc: &Loc, execution: &Value) -> Option<String> {
     Some(words::t(loc, key))
 }
 
+/// What a transaction sheet says while its transaction is not among the
+/// multisig's (R12 S4): what is true, never "it hasn't been shared with the
+/// members" for one this device was never shown. A link's proposal by the
+/// core's own stand (`LinkedView.stand`, the iPhone's `linkedState`); else
+/// the multisig shown's read — none shown (the account in front is not a
+/// multisig): it belongs to a multisig not shown here; its mailbox read and
+/// the transaction not in it: said as that; its network unreadable: said
+/// as that.
+pub(crate) fn no_item_lines(
+    loc: &crate::loc::Loc,
+    view: &ms_proposals::ProposalsView,
+    linked: Option<&ms_proposals::flows::LinkedView>,
+    multisig_shown: bool,
+    chain_id: u64,
+) -> Vec<String> {
+    use ms_proposals::flows::LinkedStand;
+    let network = || crate::flows::live::chain_name(u32::try_from(chain_id).unwrap_or(u32::MAX));
+    let cant_check = || words::tv(loc, "proposal.cantCheck", &[("network", &network())]);
+    if let Some(linked) = linked {
+        let mut lines = vec![match linked.stand {
+            LinkedStand::NotInMailbox => words::t(loc, "proposal.notInMailbox"),
+            LinkedStand::NotFound => words::t(loc, "proposal.notFound"),
+            LinkedStand::Unreadable => cant_check(),
+            LinkedStand::Reading | LinkedStand::Found => words::t(loc, "proposal.opening"),
+        }];
+        if linked.preview {
+            lines.push(words::t(loc, "proposal.previewNote"));
+        }
+        return lines;
+    }
+    if view.loading {
+        return vec![words::t(loc, "proposal.opening")];
+    }
+    if !multisig_shown {
+        return vec![words::t(loc, "proposal.notHere")];
+    }
+    if view.unreadable.contains(&chain_id) {
+        return vec![cant_check()];
+    }
+    match view.chains.iter().find(|c| c.chain_id == chain_id) {
+        Some(chain) if chain.mailbox => vec![words::t(loc, "proposal.notInMailbox")],
+        Some(_) => vec![words::t(loc, "proposal.notFound")],
+        // Its network is not one the multisig shown is read on.
+        None => vec![words::t(loc, "proposal.notHere")],
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    /// R12 S4: a sheet whose transaction is not among the multisig's says
+    /// what is true — a multisig not shown here, its mailbox read without
+    /// it, its network unreadable, a link's own stand — never "it hasn't
+    /// been shared with the members" for one this device was never shown.
+    #[test]
+    fn a_sheet_with_no_transaction_says_what_is_true() {
+        use vela_core::app::multisig_proposals::flows::{LinkedStand, LinkedView};
+        use vela_core::app::multisig_proposals::{ChainState, ProposalsView};
+        use vela_core::app::multisig_shell::ChainMembers;
+        let loc = crate::loc::Loc::for_tag("en");
+        let t = |k: &str| super::words::t(&loc, k);
+        let view = ProposalsView::default();
+        let not_here = t("proposal.notHere");
+        assert!(not_here.contains("isn't shown here"), "{not_here}");
+        assert_eq!(
+            super::no_item_lines(&loc, &view, None, false, 100),
+            vec![not_here.clone()]
+        );
+        let loading = ProposalsView {
+            loading: true,
+            ..ProposalsView::default()
+        };
+        assert_eq!(
+            super::no_item_lines(&loc, &loading, None, false, 100),
+            vec![t("proposal.opening")]
+        );
+        let chain = |mailbox| ChainState {
+            chain_id: 100,
+            members: ChainMembers {
+                deployed: true,
+                owners: vec![],
+                threshold: 1,
+                nonce: 0,
+            },
+            items: vec![],
+            mailbox,
+        };
+        let read = ProposalsView {
+            chains: vec![chain(true)],
+            ..ProposalsView::default()
+        };
+        assert_eq!(
+            super::no_item_lines(&loc, &read, None, true, 100),
+            vec![t("proposal.notInMailbox")]
+        );
+        // Another network than the shown multisig's: not its transaction.
+        assert_eq!(
+            super::no_item_lines(&loc, &read, None, true, 8453),
+            vec![not_here.clone()]
+        );
+        let unread = ProposalsView {
+            chains: vec![chain(false)],
+            ..ProposalsView::default()
+        };
+        assert_eq!(
+            super::no_item_lines(&loc, &unread, None, true, 100),
+            vec![t("proposal.notFound")]
+        );
+        let down = ProposalsView {
+            unreadable: vec![100],
+            ..ProposalsView::default()
+        };
+        assert!(super::no_item_lines(&loc, &down, None, true, 100)[0].starts_with("Can't reach"));
+        let linked = |stand, preview| LinkedView {
+            safe: "0x0e96ddc491878645dB7E3a47d2a6Ccbc94f17f32".into(),
+            chain_id: 100,
+            safe_tx_hash: "0xab".into(),
+            preview,
+            stand,
+            item: None,
+            members: None,
+            stale: false,
+        };
+        assert_eq!(
+            super::no_item_lines(
+                &loc,
+                &view,
+                Some(&linked(LinkedStand::Reading, true)),
+                false,
+                100
+            ),
+            vec![t("proposal.opening"), t("proposal.previewNote")]
+        );
+        assert_eq!(
+            super::no_item_lines(
+                &loc,
+                &view,
+                Some(&linked(LinkedStand::NotInMailbox, false)),
+                true,
+                100
+            ),
+            vec![t("proposal.notInMailbox")]
+        );
+        for tag in ["zh", "ja"] {
+            let loc = crate::loc::Loc::for_tag(tag);
+            let said = super::words::t(&loc, "proposal.notHere");
+            assert!(
+                !said.starts_with("home.multisig") && said != not_here,
+                "{tag}: {said}"
+            );
+        }
+    }
+
     use super::*;
 
     /// r9-9: a delegatecall to a contract Vela does not sign for is refused

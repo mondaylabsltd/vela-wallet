@@ -45,14 +45,26 @@ pub fn address(cx: &App) -> String {
 static LABELS: std::sync::Mutex<Option<std::collections::BTreeMap<String, String>>> =
     std::sync::Mutex::new(None);
 
-/// The machine's labels, as its view now says them.
-pub fn set_labels(labels: &std::collections::BTreeMap<String, String>) {
+/// The machine's labels, as its view now says them. `true` when they moved.
+pub fn set_labels(labels: &std::collections::BTreeMap<String, String>) -> bool {
     let mut guard = LABELS
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    if guard.as_ref() != Some(labels) {
-        *guard = Some(labels.clone());
+    if guard.as_ref() == Some(labels) {
+        return false;
     }
+    *guard = Some(labels.clone());
+    true
+}
+
+/// Every label as the machine last said it (lowercased addresses).
+#[must_use]
+pub fn labels() -> std::collections::BTreeMap<String, String> {
+    LABELS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone()
+        .unwrap_or_default()
 }
 
 /// The one name for `address` the core gives, if it gives one.
