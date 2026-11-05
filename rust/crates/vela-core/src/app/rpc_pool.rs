@@ -203,6 +203,12 @@ pub const HEDGE_AFTER_MS: u32 = 1_500;
 /// 8 + 1.5 + 8 s, so a hung network is named in about 18 s from its first
 /// hung read, warm or cold — not after a pass of 25 endpoints × 8 s.
 pub const UNREACHED_AFTER_ENDPOINTS: usize = 3;
+/// r13-4: …and the chain has been silent this long since the first of them.
+/// Refusals land in milliseconds: three refused public nodes before the one
+/// that answers are not an outage (it flickered "Can't reach Ethereum" for a
+/// frame while Ethereum answered). Hung nodes take 8 s each, so the bound
+/// costs a hang nothing; a whole pass refused is RF1's, at once.
+pub const UNREACHED_MIN_SILENCE_MS: f64 = 5_000.0;
 /// r13-4: while a chain is out of reach, ONE read at a time probes it (the
 /// circuit breaker's half-open probe), in a single pass: over the endpoints
 /// not yet silent in this outage — each hung node is asked once, never again
@@ -1171,6 +1177,9 @@ pub struct Model {
     /// r13-4: per chain, the endpoints that failed on transport since the
     /// chain last answered anything ([`UNREACHED_AFTER_ENDPOINTS`]).
     silent: BTreeMap<u32, BTreeSet<String>>,
+    /// r13-4: per chain, when its current silence began (its first silent
+    /// endpoint).
+    silent_since: BTreeMap<u32, f64>,
     /// r13-4: per chain out of reach, the one read probing it now
     /// ([`OUTAGE_PROBE_ENDPOINTS`]).
     probing: BTreeMap<u32, String>,
@@ -2474,7 +2483,7 @@ fn handle_outcome(
         }
     }
 
-    note_silence(model, chain_id, kind, &method, url, &outcome);
+    note_silence(model, chain_id, kind, &method, url, &outcome, now_ms);
 
     let route = route_of(kind, &method, &outcome);
     let maybe_delivered = model
@@ -2605,20 +2614,26 @@ fn note_silence(
     method: &str,
     url: &str,
     outcome: &RpcTransportOutcome,
+    now_ms: f64,
 ) {
     if kind != RpcKind::Rpc || is_optional_method(method) {
         return;
     }
     if !is_transport_failure(outcome) {
         model.silent.remove(&chain_id);
+        model.silent_since.remove(&chain_id);
         return;
     }
+    let since = *model.silent_since.entry(chain_id).or_insert(now_ms);
     let silent = model.silent.entry(chain_id).or_default();
     silent.insert(url.to_owned());
     let count = silent.len();
     let pool_size = model.pools.get(&chain_id).map_or(0, |pool| pool.rpc.len());
     let needed = UNREACHED_AFTER_ENDPOINTS.min(pool_size.max(1));
-    if count < needed || !model.unreached_chains.insert(chain_id) {
+    if count < needed
+        || now_ms - since < UNREACHED_MIN_SILENCE_MS
+        || !model.unreached_chains.insert(chain_id)
+    {
         return;
     }
     let max_pass = max_passes(RpcKind::Rpc).saturating_sub(1);
@@ -2704,6 +2719,7 @@ fn clear_chain_failure(model: &mut Model, chain_id: u32, kind: RpcKind) {
         model.rate_limited_chains.remove(&chain_id);
         model.unreached_chains.remove(&chain_id);
         model.silent.remove(&chain_id);
+        model.silent_since.remove(&chain_id);
     }
 }
 

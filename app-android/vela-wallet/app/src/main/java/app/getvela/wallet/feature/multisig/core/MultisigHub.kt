@@ -481,6 +481,8 @@ class MultisigHub(
         return when {
             settled == null || settled.kind == "cancelled" || settled.kind == "riskDeclined" -> ProposeOutcome.Failed(cancelled = true, reason = null)
             settled.kind == "mailboxUnreadable" -> ProposeOutcome.Failed(cancelled = false, reason = "mailbox_down")
+            // r13-3: the network did not answer the reads it is built from.
+            settled.kind == "unread" -> ProposeOutcome.Failed(cancelled = false, reason = "chain_down")
             settled.kind == "failed" && failure.kind == "passkey" && failure["failure"].str == "cancelled" ->
                 ProposeOutcome.Failed(cancelled = true, reason = null)
             else -> ProposeOutcome.Failed(cancelled = false, reason = if (_proposalsView.value.offline) "offline" else null)

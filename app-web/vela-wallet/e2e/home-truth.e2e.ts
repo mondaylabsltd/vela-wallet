@@ -255,7 +255,9 @@ test('every unreachable network is listed with what was last read there, and one
 	await page.route(/stub-rpc\.test\/rpc\/1$/, (route) =>
 		route.fulfill({ status: 500, body: 'no' })
 	);
-	await line.click();
+	// r13-4: the pool may name it before the list is opened (three silent
+	// nodes are enough) — the line then already says three.
+	await page.getByRole('button', { name: /Can't reach [23] networks right now/ }).click();
 	const sheet = page.getByRole('dialog');
 	const rows = sheet.getByTestId('unreachable-list').getByRole('listitem');
 	await expect(sheet.getByText("Can't reach 3 networks right now").first()).toBeVisible({

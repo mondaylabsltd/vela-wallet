@@ -3677,6 +3677,27 @@ fn a_node_not_silent_yet_is_still_asked_during_an_outage() {
     assert!(sut.view().out_of_reach_chains.is_empty());
 }
 
+/// r13-4: three nodes that REFUSE in a few milliseconds before the one that
+/// answers are not an outage — the chain is never said out of reach for a
+/// frame while it answers (the e2e saw "Can't reach Ethereum" flicker).
+#[test]
+fn instant_refusals_before_an_answer_never_flicker_an_outage() {
+    let urls = many(6);
+    let mut sut = loaded_many(&urls, T0);
+    let mut ops = sut.dispatch(rpc_call("c1", "eth_call", T0 + 1_000.0));
+    let mut now = T0 + 1_000.0;
+    for _ in 0..4 {
+        let url = posted_url(&ops, "c1").unwrap();
+        now += 3.0;
+        ops = sut.resolve(outcome("c1", &url, Out::NotConnected, 3.0, now));
+        assert!(
+            sut.view().out_of_reach_chains.is_empty(),
+            "named within {} ms",
+            now - T0 - 1_000.0
+        );
+    }
+}
+
 /// r13-4: a write is never refused unsent on the pool's word — it still
 /// goes to the network during an outage.
 #[test]
