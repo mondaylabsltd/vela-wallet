@@ -203,6 +203,19 @@ struct MultisigViewsTests {
         let failed = MultisigMachine.decode(MsTagged.self, from: ["kind": "failed", "detail": passkey])
         #expect(words.actionFailure(failed, chainId: 100) == words.t("proposal.reason.passkeyClosed"))
         #expect(words.failureText(MultisigShellFailure.notSent.detail) == words.t("proposal.notSent"))
+        // r14-9 (the core's rule): the fee moved since the press — nothing
+        // signed, said with the new figure in the fee line's own words.
+        let moved = #"{"kind":"fee_moved","amount":"97200000000000000","chainId":100,"executor":"0x00000000000000000000000000000000000000a1"}"#
+        let line = words.failureText(moved)
+        #expect(line.contains("0.0972"), "\(line)")
+        #expect(line != words.t("proposal.reason.unknown"))
+    }
+
+    /// r14-10: a camera refused for good opens Settings, and its button says so.
+    @Test func aRefusedCameraSaysOpenSettings() {
+        #expect(CameraScanner.Refusal.denied.actionLabelKey == "onboarding.create.openSettings")
+        #expect(CameraScanner.Refusal.noCamera.actionLabelKey == nil)
+        #expect(words.loc.t("onboarding.create.openSettings") == "Open Settings")
     }
 
     @Test func aRuleSaysOneMemberHonestly() {

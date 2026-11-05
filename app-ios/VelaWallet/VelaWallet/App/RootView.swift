@@ -3749,11 +3749,8 @@ struct RootView: View {
         if camera.refusal == nil, camera.running, camera.usesDataScanner {
             inputs.dataScanner = { text in camera.deliver(text) }
         }
-        if camera.refusal == .denied {
-            inputs.refusalAction = (
-                label: loc.t("componentsUi.scanner.grantPermission"),
-                act: openSettings
-            )
+        if let key = camera.refusal?.actionLabelKey {
+            inputs.refusalAction = (label: loc.t(key), act: openSettings)
         }
         return inputs
     }

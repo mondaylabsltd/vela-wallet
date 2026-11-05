@@ -1062,8 +1062,8 @@ struct ExploreScreen: View {
 
     /// 授予权限, when a refused permission is the thing standing in the way.
     private var grantAction: (label: String, act: () -> Void)? {
-        guard camera?.refusal == .denied else { return nil }
-        return (label: loc.t("componentsUi.scanner.grantPermission"), act: { openSettings() })
+        guard let key = camera?.refusal?.actionLabelKey else { return nil }
+        return (label: loc.t(key), act: { openSettings() })
     }
 
     /// What is said under the frame. A code that WAS read and cannot be used

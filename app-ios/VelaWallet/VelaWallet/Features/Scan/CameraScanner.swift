@@ -45,6 +45,15 @@ final class CameraScanner: NSObject {
         case restricted
         case noCamera
         case unavailable
+
+        /// r14-10: the words on the one way out, where there is one. iOS asks
+        /// for the camera once; refused, only this app's Settings page can
+        /// grant it — so the button that opens Settings says "Open Settings"
+        /// (`onboarding.create.openSettings`, as Android's), never "Grant
+        /// Permission" over a press that grants nothing.
+        var actionLabelKey: String? {
+            self == .denied ? "onboarding.create.openSettings" : nil
+        }
     }
 
     private(set) var refusal: Refusal?
