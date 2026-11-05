@@ -207,7 +207,14 @@ final class Hand: @unchecked Sendable {
                 // times, and answer "no focus" rather than type into nothing.
                 var focused = false
                 for _ in 0..<4 where !focused {
-                    e.tap()
+                    // A web page's field (Safari) reports itself not
+                    // hittable, and `tap()` on it fails the test: tap where it is.
+                    if e.isHittable {
+                        e.tap()
+                    } else {
+                        t.coordinate(withNormalizedOffset: .zero)
+                            .withOffset(CGVector(dx: e.frame.midX, dy: e.frame.midY)).tap()
+                    }
                     let until = Date().addingTimeInterval(1.5)
                     while Date() < until {
                         focused = Self.hasFocus(e)
