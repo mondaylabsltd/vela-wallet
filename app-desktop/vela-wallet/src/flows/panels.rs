@@ -22,10 +22,11 @@ use crate::wallet::components::{
 
 use super::components::{
     CopyButton, GhostPill, accent_button, address_card, destructive_text, disabled_accent_button,
-    fact_row, fee_line_spare, fee_refresh_icon, fee_row, fee_speed_note, fee_speed_option,
-    fee_speed_summary, fee_stale_line, filter_chips, flow_search, ghost_button, ghost_pill_row,
-    max_chip, mono_field, mono_field_ink, network_pill, network_row, qr_card, quiet_button,
-    recipient_card, search_empty, search_matches, segmented_toggle, status_chip, token_header_card,
+    disabled_ink_button, fact_row, fee_line_spare, fee_refresh_icon, fee_row, fee_speed_note,
+    fee_speed_option, fee_speed_summary, fee_stale_line, filter_chips, flow_search, ghost_button,
+    ghost_pill_row, ink_button, max_chip, mono_field, mono_field_ink, network_pill, network_row,
+    qr_card, quiet_button, recipient_card, search_empty, search_matches, segmented_toggle,
+    status_chip, token_header_card,
 };
 use super::fixtures::{
     AddToken, AddTokenResult, AssetsPanel, BatchImport, BreakdownRow, ContactPick, CtaState,
@@ -1717,12 +1718,12 @@ fn add_token(
     // Nothing new to add, and the button says so rather than taking a
     // press that does nothing (the web's `ctaDisabled`).
     if model.cta_disabled {
-        return col.child(disabled_accent_button(theme, model.cta.clone()));
+        return col.child(disabled_ink_button(theme, model.cta.clone()));
     }
     col.child(clickable(
         ElementId::from("add-token-cta"),
         add_to_wallet,
-        accent_button(theme, model.cta.clone()),
+        ink_button(theme, model.cta.clone()),
     ))
 }
 
@@ -1877,16 +1878,47 @@ pub(crate) fn cta_button(
     state: CtaState,
     action: Option<Click>,
 ) -> Div {
+    state_button(id, theme, label, state, action, true)
+}
+
+/// [`cta_button`] in the ink: the same three states for a main action that
+/// moves no money — the send form's Continue, a top-up's "check again" (the
+/// web's `primary`; the accent is only the value action's, vis-6).
+pub(crate) fn ink_cta_button(
+    id: &'static str,
+    theme: &Theme,
+    label: SharedString,
+    state: CtaState,
+    action: Option<Click>,
+) -> Div {
+    state_button(id, theme, label, state, action, false)
+}
+
+fn state_button(
+    id: &'static str,
+    theme: &Theme,
+    label: SharedString,
+    state: CtaState,
+    action: Option<Click>,
+    value: bool,
+) -> Div {
+    let fill = |label: SharedString| {
+        if value {
+            accent_button(theme, label)
+        } else {
+            ink_button(theme, label)
+        }
+    };
     // N-D1: the CTA is named by what it says, whatever its state.
     let name = label.clone();
     let face = match state {
-        CtaState::Enabled => accent_button(theme, label),
+        CtaState::Enabled => fill(label),
         // The web's `loading` (078 F-09): full emphasis, the words kept for
         // the width but not shown, a spinner where they were — busy is a
         // wait, not a refusal, and a faded button read as one.
         CtaState::Busy => div()
             .relative()
-            .child(accent_button(theme, label).text_color(gpui::transparent_black()))
+            .child(fill(label).text_color(gpui::transparent_black()))
             .child(
                 div()
                     .absolute()
@@ -1897,14 +1929,19 @@ pub(crate) fn cta_button(
                     .items_center()
                     .justify_center()
                     .child(crate::ui::spinner(
-                        gpui::Hsla::from(gpui::rgb(0xffffff)),
+                        if value {
+                            gpui::Hsla::from(gpui::rgb(0xffffff))
+                        } else {
+                            theme.fg_inverse
+                        },
                         px(20.),
                         px(1.5),
                     )),
             ),
         // The fill fades and the label stays white, as the web's button
         // fades as one layer (078 T066) — see `disabled_accent_button`.
-        CtaState::Disabled => disabled_accent_button(theme, label),
+        CtaState::Disabled if value => disabled_accent_button(theme, label),
+        CtaState::Disabled => disabled_ink_button(theme, label),
     };
     let control = div().id(id).a11y_button(name).child(face);
     let control = match action.filter(|_| state == CtaState::Enabled) {
@@ -2120,7 +2157,7 @@ fn send_pick(
         .child(model.cta.clone());
     let face = if model.cta_accent {
         face.rounded(px(12.))
-            .bg(theme.accent)
+            .bg(theme.fg_base)
             .text_color(theme.fg_inverse)
     } else {
         face.rounded_full()
@@ -2808,7 +2845,7 @@ fn send_form_parts(
     if stale_line {
         fee_block = fee_block.child(fee_line_spare(window, &model.fee));
     }
-    let foot = foot.child(div().pt(px(8.)).pb(px(16.)).child(cta_button(
+    let foot = foot.child(div().pt(px(8.)).pb(px(16.)).child(ink_cta_button(
         "flow-form-cta",
         theme,
         model.cta.clone(),
@@ -3168,7 +3205,13 @@ fn fee_token(
         // shift the figures under it — they lined up with nothing before.
         let mut tick = div().w(px(20.)).flex_none().flex().justify_center();
         if row.selected {
-            tick = tick.child(icon_img(icons, Icon::Check, false, theme.accent, 16.));
+            tick = tick.child(icon_img(
+                icons,
+                Icon::Check,
+                false,
+                theme.selected_ink(),
+                16.,
+            ));
         }
         entry = entry.child(tick);
         // A coin that cannot cover the fee is shown for context and answers
@@ -3448,10 +3491,10 @@ fn batch_import_parts(
         footer.child(clickable(
             "batch-apply",
             actions.advance.take(),
-            accent_button(theme, model.cta.clone()),
+            ink_button(theme, model.cta.clone()),
         ))
     } else {
-        footer.child(disabled_accent_button(theme, model.cta.clone()))
+        footer.child(disabled_ink_button(theme, model.cta.clone()))
     };
     (col, footer)
 }
@@ -3962,7 +4005,7 @@ fn send_receipt(
         "flow-receipt-cta",
         advance,
         if model.cta_accent {
-            accent_button(theme, model.cta.clone())
+            ink_button(theme, model.cta.clone())
         } else {
             ghost_button(theme, model.cta.clone())
         },
@@ -4013,7 +4056,7 @@ pub fn status_hero(
     use gpui::{Animation, AnimationExt as _, PathBuilder, Point, canvas};
 
     let (bg, fg) = match stage {
-        ReceiptStage::Submitting => (theme.bg_sunken, theme.accent),
+        ReceiptStage::Submitting => (theme.bg_sunken, theme.fg_base),
         // "Not sent yet" (PR 2 polish): the waiting disc with no ring —
         // nothing is on its way, and nothing went wrong.
         ReceiptStage::Submitted | ReceiptStage::NotSent => (theme.bg_sunken, theme.fg_muted),
@@ -4069,9 +4112,9 @@ pub fn status_hero(
 
     let track = theme.border_card;
     let (arc_color, ringed) = match stage {
-        ReceiptStage::Submitted => (theme.accent, true),
+        ReceiptStage::Submitted => (theme.fg_base, true),
         ReceiptStage::Confirmed => (theme.success_base, true),
-        _ => (theme.accent, false),
+        _ => (theme.fg_base, false),
     };
     let mut disc = div()
         .relative()
@@ -4357,7 +4400,7 @@ fn receive_gate(
         card = card.child(clickable(
             "receive-ack",
             act,
-            accent_button(theme, gate.confirm.clone()),
+            ink_button(theme, gate.confirm.clone()),
         ));
     }
     card

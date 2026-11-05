@@ -465,11 +465,7 @@ fn menu_of(
                 div()
                     .when(mono, |el| el.font_family(theme::font_mono()))
                     .text_size(theme::text_row_title())
-                    .text_color(if *selected {
-                        theme.accent
-                    } else {
-                        theme.fg_base
-                    })
+                    .text_color(theme.fg_base)
                     .when(*selected, |el| el.font_weight(gpui::FontWeight::SEMIBOLD))
                     .child(label.clone()),
             )
@@ -483,7 +479,13 @@ fn menu_of(
             );
         }
         if *selected {
-            row = row.child(icon_img(icons, Icon::Check, false, theme.accent, 18.));
+            row = row.child(icon_img(
+                icons,
+                Icon::Check,
+                false,
+                theme.selected_ink(),
+                18.,
+            ));
         }
         match on_pick.as_ref() {
             Some(pick) => {
@@ -549,11 +551,7 @@ pub fn dropdown_menu_details(
             .child(
                 div()
                     .text_size(theme::text_row_title())
-                    .text_color(if *selected {
-                        theme.accent
-                    } else {
-                        theme.fg_base
-                    })
+                    .text_color(theme.fg_base)
                     .when(*selected, |el| el.font_weight(gpui::FontWeight::SEMIBOLD))
                     .child(label.clone()),
             );
@@ -578,7 +576,13 @@ pub fn dropdown_menu_details(
             .on_click(move |_, window, cx| pick(i, window, cx))
             .child(text);
         if *selected {
-            row = row.child(icon_img(icons, Icon::Check, false, theme.accent, 18.));
+            row = row.child(icon_img(
+                icons,
+                Icon::Check,
+                false,
+                theme.selected_ink(),
+                18.,
+            ));
         }
         if i != last {
             row = row.border_b_1().border_color(theme.divider);
@@ -1538,12 +1542,14 @@ pub fn confirm_sheet(
     on_confirm: impl Fn(&gpui::ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
     on_cancel: impl Fn(&gpui::ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
 ) -> Div {
-    use crate::flows::components::{accent_button, danger_button};
+    use crate::flows::components::{danger_button, ink_button};
 
+    // The web's ConfirmSheet: `danger` or `primary` — never the accent, which
+    // is only the value action's (vis-6).
     let answer = if copy.danger {
         danger_button(theme, copy.confirm.clone())
     } else {
-        accent_button(theme, copy.confirm.clone())
+        ink_button(theme, copy.confirm.clone())
     };
     sheet_with(theme, copy, answer, on_confirm, on_cancel)
 }
@@ -1686,12 +1692,13 @@ pub fn rpc_banner(
             row = row.child(chip.pr(px(12.)));
             continue;
         };
-        // The only accent on this banner: the thing that fixes it.
+        // The thing that fixes it, in the ink and semibold (the web's
+        // `.action`): the accent is only the value action's.
         chip = chip.child(
             div()
                 .text_size(theme::text_row_sub())
                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(theme.accent)
+                .text_color(theme.fg_base)
                 .child(action),
         );
         row = row.child(match on_click {

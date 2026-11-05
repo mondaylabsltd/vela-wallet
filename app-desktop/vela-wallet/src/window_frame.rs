@@ -179,8 +179,11 @@ fn window_controls(theme: &Theme, window: &Window) -> Stateful<Div> {
         });
     let close = control("window-close", "×", WindowControlArea::Close)
         .text_size(px(22.))
-        .hover(|el| el.bg(theme.accent).text_color(theme.fg_inverse))
-        .active(|el| el.bg(theme.accent_active).text_color(theme.fg_inverse))
+        .hover(|el| el.bg(theme.error_fill).text_color(gpui::white()))
+        .active(|el| {
+            el.bg(theme.error_fill.opacity(0.85))
+                .text_color(gpui::white())
+        })
         .on_click(|_, window, cx| {
             cx.stop_propagation();
             window.remove_window();

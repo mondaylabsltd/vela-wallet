@@ -432,7 +432,13 @@ pub fn chain_row(
                 .child(row.name.clone()),
         );
     if row.selected {
-        el = el.child(icon_img(icons, Icon::Check, false, theme.accent, 14.));
+        el = el.child(icon_img(
+            icons,
+            Icon::Check,
+            false,
+            theme.selected_ink(),
+            14.,
+        ));
     }
     el.child(
         div()

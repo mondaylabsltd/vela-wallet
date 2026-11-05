@@ -144,7 +144,7 @@ pub fn render_intro(state: &mut IntroState, theme: &Theme, loc: &Loc, sink: Intr
     let total = SLIDES.len();
     let palette = Palette {
         line: theme.fg_subtle,
-        accent: theme.accent,
+        accent: theme.fg_base,
         paper: theme.bg_base,
     };
     let art_h = ART_W * VIEW_H / VIEW_W;

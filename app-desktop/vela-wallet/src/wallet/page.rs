@@ -24,8 +24,8 @@ use gpui::{
 use crate::contacts::ContactsStrings;
 use crate::contacts::components as contacts_components;
 use crate::contacts::components::{
-    RailState, accent_button, add_chip, address_block, contact_row, destructive_text_button,
-    empty_state_cta, ghost_add_row, group_chip, icon_button, menu_card, outline_button, rail_label,
+    RailState, add_chip, address_block, contact_row, destructive_text_button, empty_state_cta,
+    ghost_add_row, group_chip, icon_button, menu_card, outline_button, primary_button, rail_label,
     rail_row, row_divider, search_field, section_letter, text_action,
 };
 use crate::contacts::fixtures as contacts_fixtures;
@@ -2424,14 +2424,14 @@ impl WalletPage {
         on_save: impl Fn(&gpui::ClickEvent, &mut Window, &mut gpui::App) + 'static,
     ) -> gpui::AnyElement {
         if can_save {
-            crate::flows::components::accent_button(theme, label)
+            crate::flows::components::ink_button(theme, label)
                 .mt(px(8.))
                 .id(id)
                 .cursor_pointer()
                 .on_click(on_save)
                 .into_any_element()
         } else {
-            crate::flows::components::disabled_accent_button(theme, label)
+            crate::flows::components::disabled_ink_button(theme, label)
                 .mt(px(8.))
                 .into_any_element()
         }
@@ -2769,13 +2769,13 @@ impl WalletPage {
                     .items_center()
                     .justify_center();
                 tick = if on {
-                    tick.border_color(theme.accent)
-                        .bg(theme.accent)
+                    tick.border_color(theme.fg_base)
+                        .bg(theme.fg_base)
                         .child(icon_img(
                             &mut self.icons,
                             Icon::Check,
                             false,
-                            gpui::Hsla::from(gpui::rgb(0xffffff)),
+                            theme.fg_inverse,
                             14.,
                         ))
                 } else {
@@ -3151,7 +3151,7 @@ impl WalletPage {
         cx: &mut Context<Self>,
     ) -> Option<gpui::AnyElement> {
         let (title, body) = self.import_result.clone()?;
-        let done = crate::flows::components::accent_button(theme, self.flow_strings.done.clone())
+        let done = crate::flows::components::ink_button(theme, self.flow_strings.done.clone())
             .w_auto()
             .id("import-result-ok")
             .cursor_pointer()
@@ -3357,7 +3357,7 @@ impl WalletPage {
                     .flex_col()
                     .gap(px(12.))
                     .child(
-                        crate::flows::components::accent_button(theme, copy)
+                        crate::flows::components::ink_button(theme, copy)
                             .id("identicon-viewer-copy")
                             .cursor_pointer()
                             .on_click(cx.listener(|this, _, _, cx| {
@@ -7779,7 +7779,7 @@ impl WalletPage {
                 .items_center()
                 .justify_center()
                 .cursor_pointer()
-                .bg(theme.accent)
+                .bg(theme.fg_base)
                 .text_size(theme::text_row_title())
                 .text_color(theme.fg_inverse)
                 .child(self.flow_strings.got_it.clone())
@@ -9308,9 +9308,9 @@ impl WalletPage {
             .border_1()
             .child(label);
         if active {
-            chip.bg(theme.accent)
-                .border_color(theme.accent)
-                .text_color(theme.fg_inverse)
+            chip.bg(theme.fg_base)
+                .border_color(theme.fg_base)
+                .text_color(theme.bg_base)
         } else {
             chip.bg(theme.bg_raised)
                 .border_color(theme.border_card)
@@ -9748,7 +9748,7 @@ impl WalletPage {
         let buttons = div()
             .flex()
             .gap(px(12.))
-            .child(accent_button(
+            .child(primary_button(
                 "board-accent",
                 theme,
                 &mut self.icons,
@@ -10420,7 +10420,9 @@ impl WalletPage {
                     this.open_identicon_viewer(address.clone(), cx);
                 }));
 
-            let name_colour = if active { theme.accent } else { theme.fg_base };
+            // The ink, as every row's (the web's `.name.active`): the
+            // check marks the active one, never the accent.
+            let name_colour = theme.selected_ink();
             // A button's line, as the web's account rows (078 S-10).
             let mut pick = div()
                 .id(ElementId::from((row_id, index)))
@@ -10470,7 +10472,7 @@ impl WalletPage {
                     &mut self.icons,
                     Icon::Check,
                     false,
-                    theme.accent,
+                    theme.selected_ink(),
                     18.,
                 ));
             }
@@ -10699,7 +10701,7 @@ impl WalletPage {
                             div()
                                 .text_size(theme::text_row_title())
                                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                                .text_color(if active { theme.accent } else { theme.fg_base })
+                                .text_color(theme.fg_base)
                                 .child(name),
                         )
                         .child(
@@ -10721,7 +10723,7 @@ impl WalletPage {
                     &mut self.icons,
                     Icon::Check,
                     false,
-                    theme.accent,
+                    theme.selected_ink(),
                     18.,
                 ));
             }
@@ -10991,7 +10993,6 @@ impl WalletPage {
             .as_ref()
             .is_some_and(|answer| answer.state == BackupState::BackedUp);
         let actionable = call.is_some() || retry;
-        let accent = theme.accent;
         let mut row = div()
             .id("settings-ethereum-backup")
             .flex()
@@ -11029,12 +11030,10 @@ impl WalletPage {
                             .id("backup-row-title")
                             .text_size(theme::text_row_title())
                             .text_color(theme.fg_base)
-                            // The web: the title takes the accent while the
-                            // row is a button, and only then.
+                            // The web: the title is underlined while the row
+                            // is a button, and only then — never the accent.
                             .when(actionable, |title| {
-                                title.group_hover("backup-row", move |style| {
-                                    style.text_color(accent)
-                                })
+                                title.group_hover("backup-row", |style| style.underline())
                             })
                             .child(title),
                     )
@@ -11157,7 +11156,7 @@ impl WalletPage {
                 .rounded_full()
                 .border_2()
                 .border_color(if on {
-                    theme.accent
+                    theme.fg_base
                 } else {
                     theme.border_strong
                 })
@@ -11165,7 +11164,7 @@ impl WalletPage {
                 .items_center()
                 .justify_center()
                 .when(on, |el| {
-                    el.child(div().size(px(size * 0.45)).rounded_full().bg(theme.accent))
+                    el.child(div().size(px(size * 0.45)).rounded_full().bg(theme.fg_base))
                 })
         };
         // A choice the person can make now: reachable (R1), and not the one
@@ -11387,7 +11386,7 @@ impl WalletPage {
                 .rounded(px(12.))
                 .border_1()
                 .border_color(if choice.active {
-                    theme.accent
+                    theme.border_strong
                 } else {
                     theme.divider
                 })
@@ -12024,7 +12023,7 @@ impl WalletPage {
         // labels at padding 32 already fill the 472px a dialog leaves, and
         // a longer locale wraps inside its button rather than running out of
         // the card.
-        let create = crate::flows::components::accent_button(theme, s.account_create.clone())
+        let create = crate::flows::components::ink_button(theme, s.account_create.clone())
             .w_auto()
             .flex_initial()
             .min_w(px(0.))
@@ -13090,13 +13089,21 @@ impl WalletPage {
                 &mut self.icons,
                 Icon::RefreshCw,
                 false,
-                if live { theme.accent } else { theme.fg_muted },
+                if live {
+                    theme.fg_muted
+                } else {
+                    theme.fg_subtle
+                },
                 14.,
             ))
             .child(
                 div()
                     .text_size(theme::text_row_sub())
-                    .text_color(if live { theme.accent } else { theme.fg_muted })
+                    .text_color(if live {
+                        theme.fg_muted
+                    } else {
+                        theme.fg_subtle
+                    })
                     .child(self.settings.endpoints_reset.clone()),
             );
         col.child(
@@ -13374,7 +13381,7 @@ impl WalletPage {
                             },
                         )
                         .text_color(if editing {
-                            theme.accent
+                            theme.fg_base
                         } else {
                             theme.fg_muted
                         })
@@ -14125,7 +14132,7 @@ impl WalletPage {
         let custom_placeholder = s.custom_rpc_placeholder.clone();
         let relay_notice = s.network_relay_notice.clone();
         let checks_title = s.compatibility_check.clone();
-        let hover_accent = theme.accent_hover;
+        let hover_ink = theme.fg_base.opacity(0.9);
         let chain_id = wizard.chain_info.as_ref().map(|info| info.chain_id);
 
         // The verdict, in the web's words: what the candidate row says under
@@ -14369,8 +14376,8 @@ impl WalletPage {
                     .items_center()
                     .justify_center()
                     .cursor_pointer()
-                    .bg(theme.accent)
-                    .hover(move |el| el.bg(hover_accent))
+                    .bg(theme.fg_base)
+                    .hover(move |el| el.bg(hover_ink))
                     .text_size(theme::text_button())
                     .font_weight(gpui::FontWeight::SEMIBOLD)
                     .text_color(theme.fg_inverse)
@@ -14614,7 +14621,7 @@ impl WalletPage {
         let custom_title = s.custom_rpc_title.clone();
         let custom_placeholder = s.custom_rpc_placeholder.clone();
         let cta = s.add_network.clone();
-        let hover_accent = theme.accent_hover;
+        let hover_ink = theme.fg_base.opacity(0.9);
 
         // The verdict alone, 16 apart (078 T063): the web draws the search OR
         // the candidate — the live dialog already did — and this mock drew a
@@ -14672,8 +14679,8 @@ impl WalletPage {
                     .items_center()
                     .justify_center()
                     .cursor_pointer()
-                    .bg(theme.accent)
-                    .hover(move |el| el.bg(hover_accent))
+                    .bg(theme.fg_base)
+                    .hover(move |el| el.bg(hover_ink))
                     .text_size(theme::text_button())
                     .font_weight(gpui::FontWeight::SEMIBOLD)
                     .text_color(theme.fg_inverse)
@@ -14826,7 +14833,7 @@ impl WalletPage {
         let cta = s.rpc_fix_save.clone();
         let providers_hint = s.rpc_providers_hint.clone();
         let report = s.rpc_report.clone();
-        let hover_accent = theme.accent_hover;
+        let hover_ink = theme.fg_base.opacity(0.9);
 
         let mut chips = div().flex().flex_wrap().gap(px(8.));
         for (name, _) in settings_fixtures::RPC_PROVIDER_LINKS {
@@ -14912,8 +14919,8 @@ impl WalletPage {
                     .items_center()
                     .justify_center()
                     .cursor_pointer()
-                    .bg(theme.accent)
-                    .hover(move |el| el.bg(hover_accent))
+                    .bg(theme.fg_base)
+                    .hover(move |el| el.bg(hover_ink))
                     .text_size(theme::text_button())
                     .font_weight(gpui::FontWeight::SEMIBOLD)
                     .text_color(theme.fg_inverse)
@@ -15943,7 +15950,7 @@ impl WalletPage {
                         theme,
                         &mut self.icons,
                         Icon::Star,
-                        if pinned { theme.accent } else { theme.fg_base },
+                        theme.fg_base,
                         pinned,
                         true,
                     );
@@ -16418,7 +16425,7 @@ impl WalletPage {
             .id("browser-status-details")
             .flex_none()
             .text_size(theme::text_row_sub())
-            .text_color(theme.accent)
+            .text_color(theme.fg_muted)
             .cursor_pointer()
             .child(SharedString::from(
                 self.loc.t("componentsUi.browserStatus.title").to_string(),
@@ -16577,7 +16584,7 @@ impl WalletPage {
             .id("browser-status-copy")
             .pt(px(12.))
             .text_size(theme::text_row_sub())
-            .text_color(theme.accent)
+            .text_color(theme.fg_muted)
             .cursor_pointer()
             .child(SharedString::from(
                 self.loc.t("componentsUi.browserStatus.copy").to_string(),
@@ -16656,8 +16663,8 @@ impl WalletPage {
                     .items_center()
                     .gap(px(6.))
                     .text_size(theme::text_row_sub())
-                    .text_color(theme.accent)
-                    .children(busy.then(|| crate::ui::spinner(theme.accent, px(12.), px(1.5))))
+                    .text_color(theme.fg_base)
+                    .children(busy.then(|| crate::ui::spinner(theme.fg_base, px(12.), px(1.5))))
                     .child(self.explore.load_retry.clone());
                 if busy {
                     retry
@@ -18575,7 +18582,7 @@ impl WalletPage {
                     .gap(px(12.))
                     .child(explore_components::site_avatar(
                         letter,
-                        theme.accent,
+                        theme.fg_muted,
                         &explore_live::icons_of(&consent.origin, None),
                         40.,
                     ))
@@ -18703,7 +18710,7 @@ impl WalletPage {
                 .gap(px(12.))
                 .child(explore_components::site_avatar(
                     letter,
-                    theme.accent,
+                    theme.fg_muted,
                     &explore_live::icons_of(&sheet.origin, None),
                     40.,
                 ))
@@ -18781,7 +18788,7 @@ impl WalletPage {
                     .on_click(cx.listener(dispatch(NetEvent::DappAddApproved {
                         now_iso: crate::executor::now_iso(),
                     })))
-                    .child(crate::flows::components::accent_button(theme, label)),
+                    .child(crate::flows::components::ink_button(theme, label)),
             );
         }
         if let Some(label) = sheet.retry.clone() {
@@ -18790,7 +18797,7 @@ impl WalletPage {
                     .id("add-network-retry")
                     .cursor_pointer()
                     .on_click(cx.listener(dispatch(NetEvent::DappAddRetried)))
-                    .child(crate::flows::components::accent_button(theme, label)),
+                    .child(crate::flows::components::ink_button(theme, label)),
             );
         }
         // dapp-13: the check could not be made — the person may add the
@@ -18823,7 +18830,7 @@ impl WalletPage {
                                 });
                                 cx.notify();
                             }))
-                            .child(crate::flows::components::accent_button(theme, confirm)),
+                            .child(crate::flows::components::ink_button(theme, confirm)),
                     );
             } else {
                 col = col.child(
@@ -18910,7 +18917,7 @@ impl WalletPage {
                 (
                     host,
                     letter,
-                    theme.accent,
+                    theme.fg_muted,
                     tab.connected_address.is_some(),
                     // The core's mark for this site (PR 4 item 11) — never
                     // `secure`, which says the wallet may be used from the
@@ -19100,7 +19107,7 @@ impl WalletPage {
                     .id("connection-switch-account")
                     .cursor_pointer()
                     .text_size(theme::text_row_sub())
-                    .text_color(theme.accent)
+                    .text_color(theme.fg_muted)
                     .child(self.explore.switch_account.clone())
                     .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
                         this.open_account_switcher(cx);
@@ -21386,14 +21393,15 @@ impl WalletPage {
                     .id("dapp-receipt-explorer")
                     .cursor_pointer()
                     .text_size(theme::text_row_sub())
-                    .text_color(theme.accent)
+                    .text_color(theme.fg_base)
                     .child(self.signing.view_on_explorer.clone())
                     .on_click(move |_, _, cx| cx.open_url(&url)),
             );
         }
         let cta = if receipt.cta_accent {
-            // `<Button variant="primary">` — the default pill shape.
-            crate::flows::components::accent_button(theme, receipt.cta.clone()).rounded_full()
+            // `<Button variant="primary">` — the default pill shape, in the
+            // ink: a Done moves no value (vis-6).
+            crate::flows::components::ink_button(theme, receipt.cta.clone()).rounded_full()
         } else {
             crate::flows::components::ghost_button(theme, receipt.cta.clone())
         };
@@ -21402,7 +21410,7 @@ impl WalletPage {
             .cursor_pointer()
             .on_click(on_cta);
         // Spec 096 F8: a failure that sent nothing — Done answers the page,
-        // Try again (the accent) takes the request back to review.
+        // Try again (the ink) takes the request back to review.
         let row = match receipt.retry.clone() {
             Some(label) => div()
                 .flex()
@@ -21410,7 +21418,7 @@ impl WalletPage {
                 .child(div().flex_1().child(done))
                 .child(
                     div().flex_1().child(
-                        crate::flows::components::accent_button(theme, label)
+                        crate::flows::components::ink_button(theme, label)
                             .rounded_full()
                             .id("dapp-receipt-retry")
                             .cursor_pointer()
@@ -22394,7 +22402,7 @@ impl WalletPage {
                             .id("export-json")
                             .flex_1()
                             .cursor_pointer()
-                            .child(crate::flows::components::accent_button(
+                            .child(crate::flows::components::ink_button(
                                 theme,
                                 SharedString::from("JSON"),
                             ))

@@ -196,7 +196,7 @@ pub fn site_row(
         row = row.child(
             div()
                 .text_size(theme::text_row_sub())
-                .text_color(theme.accent)
+                .text_color(theme.fg_muted)
                 .child(crate::ui::prose(meta)),
         );
     }
@@ -869,7 +869,7 @@ pub fn lock_glyph(theme: &Theme, lock: OriginLock) -> (Icon, Hsla) {
     }
 }
 
-/// The load's hairline under the toolbar (spec 079 US3): an accent segment
+/// The load's hairline under the toolbar (spec 079 US3): an ink segment
 /// running across while a load is out — asked for and not yet finished. The
 /// row is always 2 px tall, so nothing moves when it starts or stops.
 pub fn load_hairline(theme: &Theme, busy: bool) -> Div {
@@ -889,7 +889,7 @@ pub fn load_hairline(theme: &Theme, busy: bool) -> Div {
             .top_0()
             .h_full()
             .w(gpui::relative(0.3))
-            .bg(theme.accent)
+            .bg(theme.fg_base)
             .with_animation(
                 "load-hairline",
                 Animation::new(std::time::Duration::from_millis(1200)).repeat(),

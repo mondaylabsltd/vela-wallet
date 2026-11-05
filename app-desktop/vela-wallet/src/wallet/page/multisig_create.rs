@@ -1694,7 +1694,9 @@ impl WalletPage {
                     .w_auto(),
                 )
                 .child(
-                    // One passkey: the creator's proof — the accent action.
+                    // One passkey: the creator's proof. The web's `primary`
+                    // (CreateMultisigSheet): creating moves no value, so the
+                    // ink, never the accent (vis-6).
                     crate::ui::vela_button_state(
                         "ms-create-create",
                         crate::ui::ButtonVariant::Primary,

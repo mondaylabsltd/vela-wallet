@@ -140,6 +140,15 @@ impl Theme {
         self.dark
     }
 
+    /// A selected state's ink — the check beside a chosen network, account,
+    /// multisig or setting, and the chosen row's name: the neutral `fg.base`,
+    /// never the accent. The web's `.checked` / `.selected` and Android's
+    /// checked tint; the accent is only the action that moves value (vis-6).
+    #[must_use]
+    pub fn selected_ink(&self) -> Hsla {
+        self.fg_base
+    }
+
     pub fn of(mode: ThemeMode) -> Self {
         match mode {
             ThemeMode::Light => Self::light(),
@@ -1065,6 +1074,16 @@ mod tests {
         let size: f32 = scaled(13.).into();
         assert_eq!(size, size.round());
         set_text_scale(TextScale::Standard);
+    }
+
+    /// A check or a chosen row is drawn in the ink, never the accent — in
+    /// both modes (the network filter's ✓ wore the orange; vis-6).
+    #[test]
+    fn a_selected_state_is_the_ink_not_the_accent() {
+        for theme in [Theme::light(), Theme::dark()] {
+            assert_eq!(theme.selected_ink(), theme.fg_base);
+            assert_ne!(theme.selected_ink(), theme.accent);
+        }
     }
 
     /// The accent is the brand constant and identical across modes (research D3).

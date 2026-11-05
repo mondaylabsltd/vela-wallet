@@ -165,7 +165,7 @@ pub fn ink(theme: &Theme, tone: Tone) -> gpui::Hsla {
     match tone {
         Tone::Success => theme.success_base,
         Tone::Neutral => theme.fg_muted,
-        Tone::Accent => theme.accent,
+        Tone::Accent => theme.fg_base,
         Tone::Caution => theme.warning_base,
         Tone::Danger => theme.error_base,
     }

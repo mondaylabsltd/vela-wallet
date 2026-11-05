@@ -36,9 +36,15 @@ impl ButtonState {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ButtonVariant {
-    /// Accent-filled, inverse label. Reserved for the screen's one primary
-    /// action that moves value or signs (the web's `value`).
+    /// The strong NEUTRAL button: the ink fill under the inverse label — the
+    /// screen's main action when it moves no money (Create, Continue, Next,
+    /// Retry, Done). The web's `primary`, Android's `VelaPrimaryButton`.
     Primary,
+    /// Accent-filled, inverse label. Reserved for the action that moves value
+    /// or signs (the web's `value`, Android's `VelaValueButton`): owner
+    /// decision vis-6 — a person learns the orange button is the one that
+    /// spends.
+    Value,
     /// The error fill under a white label: a signature the review asks for
     /// "anyway" (r9-19), a destructive confirm (the web's `danger`).
     Danger,
@@ -98,7 +104,7 @@ pub fn vela_button_state(
     on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
 ) -> Stateful<Div> {
     let height = match variant {
-        ButtonVariant::Primary | ButtonVariant::Danger => BTN_H_PRIMARY,
+        ButtonVariant::Primary | ButtonVariant::Value | ButtonVariant::Danger => BTN_H_PRIMARY,
         ButtonVariant::Secondary | ButtonVariant::Row => BTN_H_SECONDARY,
     };
     // The height is a MINIMUM: long-locale labels wrap inside a
@@ -197,7 +203,8 @@ fn finish(
 ) -> Stateful<Div> {
     if state == ButtonState::Disabled {
         let styled = match variant {
-            ButtonVariant::Primary => base.bg(theme.accent).text_color(theme.fg_inverse),
+            ButtonVariant::Primary => base.bg(theme.fg_base).text_color(theme.fg_inverse),
+            ButtonVariant::Value => base.bg(theme.accent).text_color(theme.fg_inverse),
             ButtonVariant::Danger => base.bg(theme.error_fill).text_color(white()),
             ButtonVariant::Secondary => base
                 .text_color(theme.fg_base)
@@ -213,6 +220,10 @@ fn finish(
     if state == ButtonState::Busy {
         let (styled, arc) = match variant {
             ButtonVariant::Primary => (
+                base.bg(theme.fg_base).text_color(theme.fg_inverse),
+                theme.fg_inverse,
+            ),
+            ButtonVariant::Value => (
                 base.bg(theme.accent).text_color(theme.fg_inverse),
                 theme.fg_inverse,
             ),
@@ -233,6 +244,13 @@ fn finish(
 
     let styled = match variant {
         ButtonVariant::Primary => {
+            let (hover, active) = (theme.fg_base.opacity(0.9), theme.fg_base.opacity(0.8));
+            base.bg(theme.fg_base)
+                .text_color(theme.fg_inverse)
+                .hover(move |s| s.bg(hover))
+                .active(move |s| s.bg(active))
+        }
+        ButtonVariant::Value => {
             let (hover, active) = (theme.accent_hover, theme.accent_active);
             base.bg(theme.accent)
                 .text_color(theme.fg_inverse)
@@ -292,4 +310,34 @@ fn busy_arc(color: gpui::Hsla) -> AnyElement {
 /// both modes, as the web's `--color-onAccent`.
 fn white() -> gpui::Hsla {
     gpui::Hsla::from(gpui::rgb(0xffffff))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// vis-6: the strong neutral button is the ink; only the value button
+    /// (the action that moves money or signs) wears the accent.
+    #[test]
+    fn only_the_value_button_wears_the_accent() {
+        for theme in [Theme::light(), Theme::dark()] {
+            let mut primary = vela_button(
+                "primary",
+                ButtonVariant::Primary,
+                "Create".into(),
+                &theme,
+                |_, _, _| {},
+            );
+            let mut value = vela_button(
+                "value",
+                ButtonVariant::Value,
+                "Send".into(),
+                &theme,
+                |_, _, _| {},
+            );
+            assert_eq!(primary.style().background, Some(theme.fg_base.into()));
+            assert_ne!(primary.style().background, Some(theme.accent.into()));
+            assert_eq!(value.style().background, Some(theme.accent.into()));
+        }
+    }
 }

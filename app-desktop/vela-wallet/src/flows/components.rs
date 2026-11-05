@@ -1730,8 +1730,9 @@ pub fn disabled_accent_button(theme: &Theme, label: SharedString) -> Div {
     accent_fill(button_face(label), theme).bg(theme.accent.opacity(theme::OPACITY_DISABLED))
 }
 
-/// `primary`, `rounded`: the accent CTA. In this product the accent means
-/// "this moves the money" — and "done", on a receipt that has landed.
+/// `value`, `rounded`: the accent CTA. In this product the accent means
+/// "this moves the money or signs" and nothing else (the web's vis-6, owner
+/// decision 2026-10): a Done, a Continue, a Create wears [`ink_button`].
 pub fn accent_button(theme: &Theme, label: SharedString) -> Div {
     accent_fill(button_base(label), theme)
 }
@@ -1743,13 +1744,23 @@ fn accent_fill(button: Div, theme: &Theme) -> Div {
         .text_color(gpui::Hsla::from(gpui::rgb(0xffffff)))
 }
 
-/// `primary` in ink: the base text colour's fill — the one answer of a
-/// question that moves no money (a switch of network space). The accent
-/// stays for what moves value (r8 S4).
+/// `primary` in ink: the base text colour's fill — the screen's main action
+/// when it moves no money (Continue, Done, Create, Save, a switch of network
+/// space). The accent stays for what moves value or signs (r8 S4, vis-6).
 pub fn ink_button(theme: &Theme, label: SharedString) -> Div {
     button_base(label)
         .rounded(px(12.))
         .bg(theme.fg_base)
+        .text_color(theme.fg_inverse)
+}
+
+/// [`ink_button`] that cannot act yet: the fill at `--opacity-disabled`, the
+/// label kept — the web fades the button as one layer (see
+/// [`disabled_accent_button`]).
+pub fn disabled_ink_button(theme: &Theme, label: SharedString) -> Div {
+    button_face(label)
+        .rounded(px(12.))
+        .bg(theme.fg_base.opacity(theme::OPACITY_DISABLED))
         .text_color(theme.fg_inverse)
 }
 
@@ -1801,6 +1812,8 @@ mod tests {
             let fill = ink.style().background.clone();
             assert_eq!(fill, Some(theme.fg_base.into()));
             assert_ne!(fill, Some(theme.accent.into()));
+            let mut shut = disabled_ink_button(&theme, "Continue".into());
+            assert_ne!(shut.style().background, Some(theme.accent.into()));
         }
     }
 
