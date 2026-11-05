@@ -70,13 +70,16 @@ the owner except the production steps at the end.
 ## Go-live checklist (production only)
 
 - [ ] **Deploy** `app-web/trusted-signer/dist/` to `sign.getvela.app`: the
-      Safari page build `879e715f…` is the front of vela-core
-      `trusted_signer::integrity::BUILD_ALLOWED` (the merge's rebuild of
-      `0d66b844…`), but the deployed `index.json` does not list it yet — until
+      newest page build, `64363925…` (§16: the multisig owner proof's card),
+      is the front of vela-core `trusted_signer::integrity::BUILD_ALLOWED`;
+      the Safari relay and attestation rule have been in every build since
+      `879e715f…`. The deployed `index.json` lists none of them yet — until
       it does, the deployed page refuses the Safari extension (no relay, no
       attestation rule), and since every Safari signature and ceremony goes to
-      the page (below), the Safari wallet can neither create nor sign.
-      Check: `curl -I https://sign.getvela.app/b/879e715f…/sign` is 200 +
+      the page (below), the Safari wallet can neither create nor sign. The
+      wallet opens the first `BUILD_ALLOWED` build the index lists, so deploy
+      `64363925…` for the Safari wallet to create multisigs.
+      Check: `curl -I https://sign.getvela.app/b/64363925…/sign` is 200 +
       immutable + `access-control-allow-origin: *`.
 - [x] **Core:** a Safari extension's signatures AND key ceremonies go to the
       page (spec 102 R8, `signing_venue::SigningSurface::SafariExtension`):
@@ -92,8 +95,14 @@ the owner except the production steps at the end.
       safariPasskeyBody`), never as "site access withheld". Proven on an iOS
       26 simulator with a real simulator passkey against a loopback page
       (`SafariRouteDeviceTests`); not yet against the deployed official page.
-- Not yet carried to the page: a multisig's owner proof
-  (`vela_multisigCreate`) — the page has no card for it, so the Safari wallet
-  refuses it, said as that.
+- [x] **Multisig creation on the page** (`docs/multisig-machines.md` §16): a
+      multisig's owner proof (`vela_multisigCreate`) has its card on page
+      `64363925…` — the multisig's genesis handed over, its address, members,
+      this signer's place, "Needs N of M" and the challenge read there by the
+      core's rule (`trusted_signer::owner_proof`) — so the Safari wallet
+      creates and shares multisigs through the page like every other
+      signature. Proven on the published bytes in Chrome through the Safari
+      relay (`answer-test.mjs` S); not yet on a simulator's Safari, nor
+      against the deployed official page.
 - [ ] Archive, sign and submit as usual; the store-binary gate runs on the
       archive.
