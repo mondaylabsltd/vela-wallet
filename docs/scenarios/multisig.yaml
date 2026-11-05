@@ -103,6 +103,7 @@ scenarios:
         - { file: rust/crates/vela-core/tests/app_multisig_proposals.rs, test: a_transfer_is_reviewed_first_then_proposed_with_one_passkey, ci: required }
         - { file: rust/crates/vela-core/tests/app_multisig_proposals.rs, test: a_second_approval_makes_it_ready, ci: required }
         - { file: rust/crates/vela-core/tests/app_multisig_proposals.rs, test: executed_and_followed_until_it_landed, ci: required }
+        - { file: rust/crates/vela-core/src/multisig_rules/amount.rs, test: the_amount_vectors_hold, ci: required, note: 'r12-1: an amount carries its decimals and symbol, or says decimals unknown' }
         - { file: rust/crates/vela-core/tests/multisig_fork.rs, test: create_two_of_three_propose_approve_twice_execute, ci: nightly }
       web-unit:
         - { file: app-web/vela-wallet/src/lib/multisig/ui/ProposalSheet.svelte.test.ts, test: 'can approve without executing, beside Approve and execute', ci: required }
@@ -198,9 +199,11 @@ scenarios:
         - { file: rust/crates/vela-core/tests/app_multisig_members.rs, test: removes_a_member_with_one_proposal_per_deployed_network_none_where_it_is_not, ci: required }
         - { file: rust/crates/vela-core/tests/app_multisig_members.rs, test: the_approvals_stepper_changes_the_rule_and_a_network_that_refuses_says_so, ci: required }
         - { file: rust/crates/vela-core/tests/multisig_review_vectors.rs, test: a_declared_add_owner_passes_on_both_sources, ci: required }
+        - { file: rust/crates/vela-core/src/multisig_rules/names.rs, test: the_member_title_vectors_hold, ci: required, note: 'r12-8: the one title rule (names.change) Activity and sheets share' }
       web-unit:
         - { file: app-web/vela-wallet/src/lib/multisig/ui/MemberChanges.svelte.test.ts, test: 'removes a member with one proposal per deployed network, none where it is not deployed', ci: required }
         - { file: app-web/vela-wallet/src/lib/multisig/ui/MemberChanges.svelte.test.ts, test: 'changes the approvals needed with the stepper, and says a network that refuses', ci: required }
+        - { file: app-web/vela-wallet/src/lib/multisig/core/records.test.ts, test: 'keeps the change on its row, and says it again in the page’s words with the names as they stand', ci: required, note: 'r12-8: an executed member change re-titled in the page language' }
       web-e2e:
         - { file: app-web/vela-wallet/e2e/onchain/multisig.onchain.ts, test: 'members changed from Settings: one proposal per deployed network, executed on each', ci: nightly }
         - { file: app-web/vela-wallet/e2e/onchain/multisig.onchain.ts, test: 'an owner added on one network: its approval is taken by the mailbox and counted there', ci: nightly }
@@ -320,11 +323,14 @@ scenarios:
         - { file: rust/crates/vela-core/tests/app_rpc_pool.rs, test: banned_endpoint_is_never_selected, ci: required }
         - { file: rust/crates/vela-core/tests/app_net_health.rs, test: misses_from_two_chains_go_offline_only_after_ten_quiet_seconds, ci: required }
         - { file: rust/crates/vela-core/tests/app_multisig_members.rs, test: a_network_that_does_not_answer_is_unreadable_never_the_same, ci: required }
+        - { file: rust/crates/vela-core/tests/app_balance_dashboard.rs, test: the_pool_unreached_vectors_hold, ci: required, note: 'r12-2/r12-3: the pool signal re-reads a lost network; a cache hit never clears one' }
       web-unit:
         - { file: app-web/vela-wallet/src/lib/wallet/core/rpc-pool-executor.test.ts, test: 'a thrown fetch is network; offline before the call is not_connected', ci: required }
       web-e2e:
         - { file: app-web/vela-wallet/e2e/pool-resilience.e2e.ts, test: 'a failing primary is routed around; its ban persists; no free retry after reload', ci: nightly }
         - { file: app-web/vela-wallet/e2e/relay-faults.e2e.ts, test: 'an unreachable relay is quiet, not alarming — the record stays as it was', ci: nightly }
+        - { file: app-web/vela-wallet/e2e/home-unanswered.e2e.ts, test: 'r12-2: three networks that never answer are said — never a Live zero', ci: nightly }
+        - { file: app-web/vela-wallet/e2e/home-unanswered.e2e.ts, test: 'r12-3: a network that stops answering in a warm session is named without a reload', ci: nightly, note: 'nodes that hang, never a 500; red without pool_unreached' }
       android-jvm:
         - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/MultisigShellTest.kt, test: an_rpc_past_its_bound_is_unanswered_never_held, ci: required }
         - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/RpcPoolMachineTest.kt, test: aDeadEndpointIsRoutedAround, ci: required }

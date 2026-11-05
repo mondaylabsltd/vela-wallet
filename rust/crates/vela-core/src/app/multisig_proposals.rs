@@ -3719,8 +3719,9 @@ async fn balance_of(
 /// would fail now (`previews` / `actions` `fails`: "This would fail if
 /// executed now: …", with its reason) is not also said "expected to fail" by
 /// its review (`Concern::Reverts`, `componentsUi.signing.simWillFail`): the
-/// review served drops that concern, and the look's line is the one note.
-/// The simulation itself (its balance changes, its kind) is left as read.
+/// review served drops that concern, and a reverting simulation is served
+/// withheld ([`multisig_review::sim_withheld`], no notice, no heading). The
+/// look's line, with its reason, is the one note.
 pub fn one_note_per_failure(
     reviews: &BTreeMap<String, Value>,
     previews: &BTreeMap<String, Value>,
@@ -3751,6 +3752,24 @@ pub fn one_note_per_failure(
             if said {
                 if let Some(concerns) = review.get_mut("concerns").and_then(Value::as_array_mut) {
                     concerns.retain(|c| c.get("kind").and_then(Value::as_str) != Some("reverts"));
+                }
+                // The simulation's own "expected to fail" notice is the same
+                // fact: a reverting simulation is served withheld (the shape
+                // every shell already draws as nothing, r9-9) — no notice,
+                // no heading — and the look's line is the one note.
+                let reverts = review
+                    .pointer("/simulation/kind")
+                    .and_then(Value::as_str)
+                    .is_some_and(|k| k == "reverts");
+                if reverts {
+                    if let Some(object) = review.as_object_mut() {
+                        object.insert(
+                            "simulation".to_owned(),
+                            serde_json::to_value(multisig_review::sim_withheld())
+                                .unwrap_or(Value::Null),
+                        );
+                        object.insert("movesTitleKey".to_owned(), Value::Null);
+                    }
                 }
             }
             (key.clone(), review)
