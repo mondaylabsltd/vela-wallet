@@ -47,7 +47,7 @@
       "ethSignBody": "Ceci signe un hash opaque. Un site malveillant peut y dissimuler un transfert ou une approbation de tokens. Ne continuez que si vous avez pleinement confiance en ce site et savez exactement ce que vous signez.",
       "ethSignWarning": "Demande invérifiable — la plupart des applications légitimes n'utilisent jamais eth_sign. Refusez, sauf si vous êtes certain.",
       "firstTimeTagNeutral": "Première utilisation de cette adresse",
-      "firstTimeTag": "Première fois",
+      "firstTimeTag": "Première fois depuis cet appareil",
       "contractTag": "Contrat",
       "holdToConfirm": "Maintenez pour confirmer",
       "advancedToggle": "Détails techniques",

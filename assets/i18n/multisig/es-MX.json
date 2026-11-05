@@ -114,6 +114,7 @@
     "failed": "No se completó: {{reason}}",
     "noExpiry": "Las aprobaciones no vencen: cuentan hasta que la transacción se ejecute o se cancele.",
     "notFound": "Esta transacción todavía no está en el buzón.",
+    "notHere": "Esta transacción pertenece a un multisig que no se muestra aquí. Abre su enlace para leerla.",
     "opening": "Abriendo la transacción…",
     "cannotPay": "{{name}} no tiene suficiente {{symbol}} para la comisión de red: se necesitan unos {{fee}} y hay {{balance}}. Agrega fondos o deja que otro miembro la ejecute.",
     "notLanded": "No ha llegado a la red después de tres minutos. Si no aparece como ejecutada pronto, inténtalo de nuevo.",

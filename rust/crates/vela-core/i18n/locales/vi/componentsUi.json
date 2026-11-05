@@ -47,7 +47,7 @@
       "ethSignBody": "Thao tác này ký một hash mờ. Một trang web độc hại có thể giấu một lệnh chuyển token hoặc cấp quyền phía sau nó. Chỉ tiếp tục nếu bạn hoàn toàn tin tưởng trang web này và biết chính xác mình đang ký gì.",
       "ethSignWarning": "Yêu cầu không thể xác minh — hầu hết các ứng dụng hợp pháp không bao giờ dùng eth_sign. Hãy từ chối trừ khi bạn chắc chắn.",
       "firstTimeTagNeutral": "Lần đầu dùng địa chỉ này",
-      "firstTimeTag": "Lần đầu",
+      "firstTimeTag": "Lần đầu gửi từ thiết bị này",
       "contractTag": "Hợp đồng",
       "holdToConfirm": "Giữ để xác nhận",
       "advancedToggle": "Chi tiết kỹ thuật",

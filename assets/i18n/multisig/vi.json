@@ -112,6 +112,7 @@
     "failed": "Chưa thực hiện được: {{reason}}",
     "noExpiry": "Lượt duyệt không hết hạn: vẫn có hiệu lực cho đến khi giao dịch được thực thi hoặc hủy.",
     "notFound": "Giao dịch này chưa có trong hộp thư.",
+    "notHere": "Giao dịch này thuộc một ví đa chữ ký không hiển thị ở đây. Mở liên kết của nó để xem.",
     "opening": "Đang mở giao dịch…",
     "cannotPay": "{{name}} không đủ {{symbol}} để trả phí mạng: cần khoảng {{fee}}, hiện có {{balance}}. Hãy nạp thêm hoặc để thành viên khác thực hiện.",
     "notLanded": "Sau ba phút giao dịch vẫn chưa lên mạng. Nếu chưa sớm hiện là đã thực hiện, hãy thử lại.",

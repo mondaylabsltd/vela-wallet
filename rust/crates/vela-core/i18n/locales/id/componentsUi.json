@@ -47,7 +47,7 @@
       "ethSignBody": "Ini menandatangani hash yang tidak transparan. Situs jahat bisa menyembunyikan transfer atau persetujuan token di baliknya. Lanjutkan hanya jika Anda sepenuhnya memercayai situs ini dan tahu persis apa yang Anda tanda tangani.",
       "ethSignWarning": "Permintaan tidak dapat diverifikasi — hampir semua aplikasi tepercaya tidak pernah memakai eth_sign. Tolak kecuali Anda benar-benar yakin.",
       "firstTimeTagNeutral": "Pertama kali menggunakan alamat ini",
-      "firstTimeTag": "Pertama kali kirim ke sini",
+      "firstTimeTag": "Pertama kali kirim ke sini dari perangkat ini",
       "contractTag": "Kontrak",
       "holdToConfirm": "Tahan untuk konfirmasi",
       "advancedToggle": "Detail teknis",

@@ -112,6 +112,7 @@
     "failed": "Das hat nicht geklappt: {{reason}}",
     "noExpiry": "Genehmigungen verfallen nicht: Sie gelten, bis die Transaktion ausgeführt oder storniert ist.",
     "notFound": "Diese Transaktion ist noch nicht im Postfach.",
+    "notHere": "Diese Transaktion gehört zu einem Multisig, das hier nicht angezeigt wird. Öffne ihren Link, um sie zu lesen.",
     "opening": "Transaktion wird geöffnet…",
     "cannotPay": "{{name}} hat nicht genug {{symbol}} für die Netzwerkgebühr: etwa {{fee}} werden gebraucht, {{balance}} sind vorhanden. Lade etwas auf oder lass ein anderes Mitglied ausführen.",
     "notLanded": "Nach drei Minuten ist sie noch nicht im Netzwerk angekommen. Wenn sie nicht bald als ausgeführt erscheint, versuche es erneut.",

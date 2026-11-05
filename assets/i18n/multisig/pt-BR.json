@@ -114,6 +114,7 @@
     "failed": "Não deu certo: {{reason}}",
     "noExpiry": "As aprovações não expiram: valem até a transação ser executada ou cancelada.",
     "notFound": "Esta transação ainda não está na caixa de mensagens.",
+    "notHere": "Esta transação pertence a um multisig que não aparece aqui. Abra o link dela para lê-la.",
     "opening": "Abrindo a transação…",
     "cannotPay": "{{name}} não tem {{symbol}} suficiente para a taxa de rede: são necessários cerca de {{fee}} e há {{balance}}. Adicione saldo ou deixe outro membro executar.",
     "notLanded": "Não chegou à rede depois de três minutos. Se não aparecer como executada em breve, tente de novo.",
