@@ -37,8 +37,12 @@ export const BALANCE_PRIVACY_KEY = 'vela.balanceHidden';
  * with its own sink).
  */
 export interface BalanceStreamSink {
-	/** One `onProgress` snapshot: the accumulated, USD-sorted tokens so far. */
-	chainAssetsArrived(address: string, tokens: BalanceToken[]): void;
+	/**
+	 * One `onProgress` snapshot: the accumulated, USD-sorted tokens so far —
+	 * labelled with the FETCH's own `address` and `generation` (echoed from
+	 * its `fetch_tokens`), never the account in front when it lands (D3).
+	 */
+	chainAssetsArrived(address: string, generation: number, tokens: BalanceToken[]): void;
 	/**
 	 * A `FetchTokens` round for `address` has ended — settled OR errored. Said
 	 * just before its answer goes back to the core, so a listener that wants

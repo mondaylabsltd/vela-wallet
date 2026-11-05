@@ -9,6 +9,7 @@ import app.getvela.wallet.feature.wallet.core.BalanceEvent
 import app.getvela.wallet.feature.wallet.core.BalanceExecutor
 import app.getvela.wallet.feature.wallet.core.BalanceOperation
 import app.getvela.wallet.feature.wallet.core.BalanceShellResult
+import app.getvela.wallet.feature.wallet.core.BalanceToken
 import app.getvela.wallet.feature.wallet.core.BalanceView
 import app.getvela.wallet.feature.wallet.core.ChainDex
 import app.getvela.wallet.feature.wallet.core.ChainDoc
@@ -159,6 +160,51 @@ class BalanceMachineTest {
         assertEquals(1, token.chain_id)
         // Native coin: no contract address.
         assertNull(token.token_address)
+    }
+
+    /**
+     * Real-device pass 2, D3 (iOS, kept here so no shell repeats it): a
+     * member's fetch still out when the multisig was switched to streamed its
+     * snapshots labelled with the account in FRONT, and the core drew the
+     * member's money as the multisig's. Each snapshot here is labelled with
+     * the fetch it came from — its own address and generation.
+     */
+    @Test
+    fun eachSnapshotCarriesItsOwnFetchsAddressAndGeneration() {
+        val h = harness(listOf(row(1, "ETH", "Ethereum"), row(100, "XDAI", "Gnosis"))) { _, _ ->
+            FakeRpcTransport.body("0x14d1120d7b160000")
+        }
+        val streamed = mutableListOf<BalanceEvent.ChainAssetsArrived>()
+        val executor = BalanceExecutor(
+            pool = RpcPool(FakeStore(), PerChainEndpoints(), CoroutineScope(SupervisorJob() + Dispatchers.Default).also { scopes += it }, h.transport),
+            networks = MutableStateFlow(NetView(loaded = true, networks = listOf(row(1, "ETH", "Ethereum"), row(100, "XDAI", "Gnosis")))),
+            store = FakeStore(),
+            mainnetPrices = { emptyMap() },
+        )
+        executor.stream = { event -> if (event is BalanceEvent.ChainAssetsArrived) synchronized(streamed) { streamed += event } }
+        runBlocking { executor.perform(BalanceOperation.FetchTokens(ADDRESS, force = false, pull = false, generation = 7)) }
+        assertTrue("a snapshot per chain that held something", streamed.isNotEmpty())
+        assertTrue(streamed.all { it.address == ADDRESS && it.generation == 7L })
+    }
+
+    /**
+     * D3 over the real core: the member is in front, then the multisig; the
+     * member's in-flight snapshot — labelled with the multisig's address, as
+     * the iOS shell did — never paints the multisig. Its own does.
+     */
+    @Test
+    fun anotherFetchsSnapshotNeverPaintsTheAccountInFront() {
+        // Every read held open: no round settles under the snapshots.
+        val h = harness(listOf(row(1, "ETH", "Ethereum")), stall = { true }) { _, _ -> FakeRpcTransport.network() }
+        val multisig = "0x5afe00000000000000000000000000000000cafe"
+        h.host.dispatch(BalanceEvent.AccountChanged(ADDRESS), BalanceEvent.serializer())
+        h.host.dispatch(BalanceEvent.AccountChanged(multisig), BalanceEvent.serializer())
+        val member = BalanceToken(chain_id = 1, symbol = "ETH", name = "Ether", balance = "999.98", decimals = 18, price_usd = 2400.0)
+        h.host.dispatch(BalanceEvent.ChainAssetsArrived(multisig, generation = 1, tokens = listOf(member)), BalanceEvent.serializer())
+        val own = BalanceToken(chain_id = 100, symbol = "xDAI", name = "xDAI", balance = "99.75", decimals = 18, price_usd = 1.0)
+        h.host.dispatch(BalanceEvent.ChainAssetsArrived(multisig, generation = 2, tokens = listOf(own)), BalanceEvent.serializer())
+        val view = h.host.settle { it.address == multisig && it.tokens.isNotEmpty() }
+        assertEquals(listOf("99.75"), view.tokens.map { it.balance })
     }
 
     @Test

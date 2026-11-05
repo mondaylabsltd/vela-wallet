@@ -545,17 +545,23 @@ struct ParityTests {
             "decimals": 18, "token_address": NSNull(), "price_usd": 1.0, "spam": false,
         ]
         let accepted = try CoreJSON.object(core.dispatch(eventJson: WalletStore.chainAssetsEvent(
-            address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894", tokens: [token]
+            address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894", generation: 0, tokens: [token]
         )))
         // A refused event comes back as a fault, not a view.
         #expect(accepted["view"] != nil)
 
-        // And the field really is required — which is what makes the fix a fix
-        // rather than a coincidence.
+        // And the fields really are required — which is what makes the fix a
+        // fix rather than a coincidence: the address (invariant ⑤) and the
+        // fetch's generation (D3).
         let refused = try? core.dispatch(eventJson: CoreJSON.string([
             "type": "chain_assets_arrived", "tokens": [token],
         ]))
         #expect(refused == nil)
+        let unnumbered = try? core.dispatch(eventJson: CoreJSON.string([
+            "type": "chain_assets_arrived", "address": "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+            "tokens": [token],
+        ]))
+        #expect(unnumbered == nil)
     }
 
     // MARK: - 语言

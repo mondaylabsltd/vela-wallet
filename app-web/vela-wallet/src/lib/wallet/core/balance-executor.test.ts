@@ -65,7 +65,8 @@ function sink(): BalanceStreamSink & { arrivals: unknown[] } {
 	const arrivals: unknown[] = [];
 	return {
 		arrivals,
-		chainAssetsArrived: (address, tokens) => arrivals.push({ address, tokens })
+		chainAssetsArrived: (address, generation, tokens) =>
+			arrivals.push({ address, generation, tokens })
 	};
 }
 
@@ -76,12 +77,14 @@ describe('fetch_tokens', () => {
 		const stream = sink();
 		const executor = createBalanceExecutor(stream);
 		const result = await executor.execute(
-			effect({ type: 'fetch_tokens', address: ADDR, force: true, pull: false }),
+			effect({ type: 'fetch_tokens', address: ADDR, force: true, pull: false, generation: 1 }),
 			new AbortController().signal
 		);
 		expect(stream.arrivals).toHaveLength(1);
 		expect(stream.arrivals[0]).toMatchObject({
+			// D3: labelled with the fetch's own address and generation.
 			address: ADDR,
+			generation: 1,
 			tokens: [{ chain_id: 1, symbol: 'ETH', balance: '1.5', price_usd: 3000 }]
 		});
 		expect(result).toMatchObject({
@@ -116,11 +119,11 @@ describe('fetch_tokens', () => {
 		const stream = { ...sink(), roundEnded: (address: string) => ended.push(address) };
 		const executor = createBalanceExecutor(stream);
 		await executor.execute(
-			effect({ type: 'fetch_tokens', address: ADDR, force: true, pull: false }),
+			effect({ type: 'fetch_tokens', address: ADDR, force: true, pull: false, generation: 1 }),
 			new AbortController().signal
 		);
 		executor.toFailure(
-			effect({ type: 'fetch_tokens', address: ADDR, force: false, pull: false }),
+			effect({ type: 'fetch_tokens', address: ADDR, force: false, pull: false, generation: 1 }),
 			new Error('net')
 		);
 		expect(ended).toEqual([ADDR, ADDR]);
@@ -171,14 +174,14 @@ describe('the failure twin', () => {
 		const executor = createBalanceExecutor(sink());
 		expect(
 			executor.toFailure(
-				effect({ type: 'fetch_tokens', address: ADDR, force: false, pull: true }),
+				effect({ type: 'fetch_tokens', address: ADDR, force: false, pull: true, generation: 1 }),
 				new Error('net')
 			)
 		).toEqual({ type: 'fetch_errored', address: ADDR, pull: true, internal: false });
 		// PR 2 note 11: a fetch that threw inside the app says so.
 		expect(
 			executor.toFailure(
-				effect({ type: 'fetch_tokens', address: ADDR, force: false, pull: true }),
+				effect({ type: 'fetch_tokens', address: ADDR, force: false, pull: true, generation: 1 }),
 				new Error('inside')
 			)
 		).toEqual({ type: 'fetch_errored', address: ADDR, pull: true, internal: true });

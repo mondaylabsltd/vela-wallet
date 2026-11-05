@@ -54,7 +54,13 @@ final class BalanceExecutor {
     /// core expects, because a twelve-chain sweep that says nothing until the
     /// slowest chain answers is a total that sits stale for as long as the
     /// worst endpoint takes.
-    var onChainAssets: ([[String: Any]]) -> Void = { _ in }
+    ///
+    /// D3 (real-device pass 2): each snapshot is labelled with the FETCH's
+    /// own address and generation (echoed from its `fetch_tokens`) — never
+    /// the account in front when it lands. Labelled with the account in
+    /// front, a member's in-flight snapshots were drawn (and kept) as the
+    /// multisig's that had just been switched to.
+    var onChainAssets: (_ address: String, _ generation: Int, _ tokens: [[String: Any]]) -> Void = { _, _, _ in }
 
     /// One chain's registry document — its stablecoins and wrapped coin —
     /// for the core's read plan (spec 082 RE9). No document (`absent`, or
@@ -98,7 +104,8 @@ final class BalanceExecutor {
 
         case "fetch_tokens":
             return await fetch(address: operation["address"] as? String ?? "",
-                               pull: operation["pull"] as? Bool ?? false)
+                               pull: operation["pull"] as? Bool ?? false,
+                               generation: (operation["generation"] as? NSNumber)?.intValue ?? -1)
 
         // The per-account read behind the switcher. Same fetch, but its failure
         // is `tokens: null` rather than a chain list, because a switcher row
@@ -191,7 +198,7 @@ final class BalanceExecutor {
     /// Parallel because twelve sequential round trips is twelve times the
     /// latency for no benefit — the pool is shared and its ban map is one piece
     /// of state, but the calls themselves are independent.
-    private func fetch(address: String, pull: Bool) async -> String {
+    private func fetch(address: String, pull: Bool, generation: Int) async -> String {
         guard !address.isEmpty else {
             // No account to read: the fetch failed inside the app before
             // anything left it (PR 2 note 11).
@@ -238,7 +245,7 @@ final class BalanceExecutor {
                 // drops to zero mid-refresh — which is the whole reason the
                 // core has this event.
                 let snapshot = collected.flatMap(\.tokens)
-                await MainActor.run { [snapshot] in onChainAssets(snapshot) }
+                await MainActor.run { [snapshot] in onChainAssets(address, generation, snapshot) }
             }
             return collected
         }
