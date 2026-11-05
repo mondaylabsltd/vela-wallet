@@ -1342,3 +1342,50 @@ Tests:
   - `link_offers_try_again` (in `a_sheet_with_no_transaction_says_what_is_true`)
   - `the_unreadable_notice_names_no_browser`
   - the other-space test, now holding the core's keys
+
+## 18. Follow-ups after Round 13
+
+Four loose ends from §17. Each was decided by best practice and the owner's
+rules (one core, full parity, honest and recoverable states) and adopted on
+every shell.
+
+| Item | Decision | Why |
+| --- | --- | --- |
+| **1. Link Try again** | The core's flag stands. `LinkedView.retry` is true for `failed`, `unreadable` and `notFound`, and every shell offers Try again (the proposals machine's `retry`) for every stand the core marks `retry`. Each shell says it in the core's words for the read (`reason_key`: `proposal.unread.linkChain` / `linkService`). | `notFound` is not a definitive answer: it is the multisig service's silence (`ChainState.mailbox` false, the mailbox not read). The definitive answer is `notInMailbox` (read, and not there), which carries no retry and is read again on every tick. So `notFound` is retryable. The old `proposal.notFound` line ("hasn't been shared with the members yet") was untrue for a read that failed, and no shell says it for a link any more. |
+| **2. Unreadable account list** | One rule in the core, `app::stored_accounts` (UniFFI `stored_accounts_read/upsert/remove`, wasm `storedAccountsRead/Upsert/Remove`). The read returns the records the core reads, as stored, and counts the rest (positions and sizes, never contents). A value that is not a list counts as one unreadable record. Writes keep every unreadable record where it was, byte for byte. A value that is not JSON at all is kept as one record holding its text as a JSON string, so every byte can be recovered. An upsert replaces by `id`, as the desktop does. Android, iOS and the web read and write only through it. Each says it: the welcome shows `onboarding.storage.deviceUnreadable{Title,Body}` (the web keeps its browser-worded prompt), and the switcher shows a line under the list. The parallel-space seed refuses. Signing in with the passkey is the way back: it writes the account beside what is kept. | The desktop's DESKTOP-1 behaviour, without a copy per shell. Android threw on a list it could not read, so one bad record hid all the others and "Sign in again" failed. iOS read it as empty and the next save wrote `[account]` over it. The web dropped such records on every save and in its respelling rewrite (removed: the core reads both spellings). The scan avoids serde_json's `raw_value` feature, which grew the wasm by 138 KB. |
+| **3. History Try again** | Try again for an unread multisig history lives on Activity's empty state on every shell. The web now draws it there too (`EmptyState` `action`, the page's `MULTISIG_RETRY`). One sentence and one control per failure: while Activity says the history could not be read, the waiting group or card does not say it again. Over rows, Activity does not say it, so the group's note and its Retry still do. Any other note is unaffected. | The natives drew the line and Try again on the empty state **and** the card's note with Retry, so the failure was said twice with two controls. The web hid its empty state behind the waiting group, whose note was the only control. Activity is where "No activity yet" would have stood, so the failure belongs there. |
+| **4. WEB-CLEAR-LOCALE-1** | Already fixed by spec 097 E (`14429c8ac`). The web and the extension (one sheet) hand the core `toClearLocale(resolvedFormatKeys())`, and the device's offset is sampled per request. iOS (`SigningController.defaultLocale`) and the desktop (`signing_host::clear_locale`) already used the person's presets and the device's offset. KNOWN-BUGS is marked fixed. | Nothing left to change. `sheet-locale.test.ts` covers it. |
+
+| Item | Web | Android | iOS | Desktop |
+| --- | --- | --- | --- | --- |
+| 1 | `ProposalSheet` `linkFailure` follows `linked.retry` | `LinkedStands.offersTryAgain` / `failure` | `MsLinkedView.offersTryAgain` / `failure(_:)` | `link_offers_try_again`, `no_item_lines` |
+| 2 | `storage.ts` `readStoredAccounts`, `saveAccount`, `removeAccount`, `storedUnreadable` → `AccountsSheetBody` line | `AccountStore` (core), `AccountStore.unreadable`, `WelcomeScreen` notice, `AccountsSheetModel.unreadable` | `AccountStore` (core), `StoredAccountsWatch`, `WelcomeScreen` notice, `AccountsSheetModel.unreadable` | unchanged (DESKTOP-1, the same rule over JSON values) |
+| 3 | `activitySaysHistory`, `waitingRows.group(…, historySaid)`, `EmptyState` action | `WalletLive.historySaidInActivity`, `cardNote` | `WalletLive.historySaidInActivity`, `MultisigHomeCard.cardNote` | `history_said_in_activity`, `card_note` |
+
+Tests:
+
+- **Core:**
+  - `a_link_whose_service_or_network_did_not_answer_offers_try_again`
+  - `a_link_not_in_the_mailbox_offers_no_try_again`
+  - `stored_accounts` unit tests
+  - the UniFFI `the_stored_accounts_exports_keep_what_they_cannot_read`
+- **Web:**
+  - vitest "a link whose read did not come back"
+  - `storage.test.ts` "a stored record this browser cannot read"
+  - the switcher line in `fiat-withheld.test.ts`
+  - `live-elsewhere.test.ts` and `activity.test.ts` (item 3)
+  - e2e `login-old-shape` (item 2) and `multisig-world` "an unread history"
+- **Android:**
+  - `MultisigViewsTest.every_link_the_core_says_retryable_offers_try_again`
+  - `StoredAccountsUnreadableTest`
+  - `MultisigHistoryHomeTest.an_unread_history_is_said_once_on_activitys_empty_state`
+- **iOS:** `R13FollowupsTests` (items 1–3)
+- **Desktop:**
+  - `a_sheet_with_no_transaction_says_what_is_true`
+  - `a_multisigs_history_decides_its_empty_activity`
+  - `an_unread_history_is_said_once`
+
+Left open:
+
+- The desktop keeps its DESKTOP-1 copy of the item 2 rule over the JSON values in `wallet.json`. It is the same rule, but it does not yet call `stored_accounts`.
+- A sheet opened without a link whose multisig's mailbox was not read still says `proposal.notFound` on the web and the desktop. Only links were in scope here.
