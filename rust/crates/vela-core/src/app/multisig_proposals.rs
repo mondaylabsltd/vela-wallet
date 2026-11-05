@@ -4450,19 +4450,43 @@ async fn execute(
     // so what it carried is what is remembered.
     let key = preview_key(chain_id, hash, &input.executor.address);
     let looked = io.now().await;
-    let shown = lock(st)
-        .preview_plans
-        .get(&key)
-        // Only a look that lets it run is signed from: one that says the executor
-        // cannot pay is asked again first — the funds may have arrived since.
-        .filter(|(at, p)| {
-            matches!(p, Preview::Priced { can_pay: true, .. }) && looked - at < PREVIEW_FRESH_MS
-        })
-        .map(|(_, p)| p.clone());
+    let (shown, said_fee) = {
+        let s = lock(st);
+        let plan = s.preview_plans.get(&key);
+        (
+            plan
+                // Only a look that lets it run is signed from: one that says the
+                // executor cannot pay is asked again first — the funds may have
+                // arrived since.
+                .filter(|(at, p)| {
+                    matches!(p, Preview::Priced { can_pay: true, .. })
+                        && looked - at < PREVIEW_FRESH_MS
+                })
+                .map(|(_, p)| p.clone()),
+            // r14-9: the fee the sheet says now (its executor's look), whatever
+            // its age — what the person pressed on.
+            plan.and_then(|(_, p)| match p {
+                Preview::Priced { fee, .. } => fee_amount(fee),
+                _ => None,
+            }),
+        )
+    };
+    let requoted = shown.is_none();
     let preview = match shown {
         Some(p) => p,
         None => look_now(io, st, &input).await,
     };
+    // r14-9 (§20 left open): the fee signed is the fee shown. A new quote
+    // whose fee is not the one on screen signs nothing: the execution fails
+    // with the new figure (`fee_moved`), the new look is the sheet's now, and
+    // the next press — inside the window — signs exactly it.
+    if let (true, Some(was), Preview::Priced { fee, .. }) = (requoted, said_fee, &preview) {
+        if let Some(now) = fee_amount(fee).filter(|now| *now != was) {
+            return ActionState::Failed {
+                detail: fee_moved_detail(chain_id, &input.executor.address, now),
+            };
+        }
+    }
     if preview == Preview::Spent {
         // r5reg-21: its number was used meanwhile — what ran is said.
         settle_spent(io, st, &input).await;
@@ -4567,6 +4591,29 @@ async fn execute(
         safe_tx_hash: input.item.safe_tx_hash.clone(),
         kept: false,
     }
+}
+
+/// A look's fee amount (`fee.amount`, decimal or `0x`).
+fn fee_amount(fee: &Value) -> Option<u128> {
+    match fee.get("amount")? {
+        Value::String(s) => shell::quantity(s),
+        Value::Number(n) => n.as_u64().map(u128::from),
+        _ => None,
+    }
+}
+
+/// r14-9: the failure an execution stopped with because its fee moved since
+/// the person pressed — `{kind: "fee_moved", amount, chainId, executor}`
+/// (`amount` decimal), the shells' failure words ("That didn't go through:
+/// Network fee ≈ {new}, paid by {name}").
+pub fn fee_moved_detail(chain_id: u64, executor: &str, amount: u128) -> String {
+    json!({
+        "kind": "fee_moved",
+        "amount": amount.to_string(),
+        "chainId": chain_id,
+        "executor": executor,
+    })
+    .to_string()
 }
 
 /// One look at `input`, kept for its executor (`preflight.check`'s `keep`):

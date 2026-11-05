@@ -138,6 +138,97 @@ fn an_invite_opens_the_add_sheet_and_adds_nothing() {
     assert!(world.stored_accounts().is_empty());
 }
 
+/// Answers every operation but what `held` names, until none is left open.
+fn answer_all_but(
+    sut: &mut Sut,
+    world: &mut World,
+    held: impl Fn(&vela_core::app::multisig_shell::MultisigOperation) -> bool,
+) {
+    for _ in 0..20_000 {
+        let outstanding = sut.outstanding();
+        let open: Vec<_> = outstanding.iter().filter(|op| !held(op)).collect();
+        let Some(op) = open
+            .iter()
+            .find(|op| {
+                !matches!(
+                    op,
+                    vela_core::app::multisig_shell::MultisigOperation::Wait { .. }
+                )
+            })
+            .map(|op| (*op).clone())
+        else {
+            return;
+        };
+        let res = world.answer(&op);
+        sut.resolve_matching(|o| *o == op, res);
+    }
+    panic!("never settled");
+}
+
+/// Round 14 (r14-2, §20 left open): links open side by side, so an older
+/// link whose lookup was slower landed AFTER a newer one — it switched the
+/// multisig shown behind the newer link's sheet and took its stand. The
+/// newest link open supersedes any open still in flight: the older one,
+/// whenever it lands, switches nothing, opens nothing, says nothing.
+#[test]
+fn the_newest_link_supersedes_an_open_still_in_flight() {
+    let me = fixture(0).address;
+    let older = genesis(&[&me], 1, "0x5b");
+    let newer = genesis(&[&me, OUTSIDE], 2, "0x5c");
+    let mut world = World {
+        locals: vec![fixture(0)],
+        ..World::default()
+    };
+    // The older link's multisig is not on this device: it is looked up (a
+    // slow service); the newer one's is, with its member here.
+    world.record(&older.address, &older.genesis, false);
+    world.store.insert(
+        keys::ACCOUNTS.to_owned(),
+        json!([stored_row(&newer, &[100], true)]).to_string(),
+    );
+    let mut sut = started(&mut world, vec![100]);
+    world.notices.clear();
+    let http = |op: &vela_core::app::multisig_shell::MultisigOperation| {
+        matches!(
+            op,
+            vela_core::app::multisig_shell::MultisigOperation::Http { .. }
+        )
+    };
+    sut.dispatch(open(&link(100, &older.address, HASH)));
+    answer_all_but(&mut sut, &mut world, http);
+    assert!(matches!(sut.view().link, Some(LinkStand::Opening { .. })));
+    // The newer link, while the older one's lookup is still out.
+    sut.dispatch(open(&link(100, &newer.address, HASH)));
+    answer_all_but(&mut sut, &mut world, http);
+    assert!(matches!(sut.view().link, Some(LinkStand::Member { .. })));
+    assert!(sut
+        .view()
+        .active
+        .as_deref()
+        .is_some_and(|a| a.eq_ignore_ascii_case(&newer.address)));
+    // The older lookup lands now: nothing it does is seen.
+    let answered = settle_reads_first(&mut sut, &mut world, 20_000);
+    assert!(answered < 20_000);
+    match sut.view().link {
+        Some(LinkStand::Member { address, .. }) => {
+            assert!(address.eq_ignore_ascii_case(&newer.address), "{address}");
+        }
+        other => panic!("{other:?}"),
+    }
+    assert!(
+        sut.view()
+            .active
+            .as_deref()
+            .is_some_and(|a| a.eq_ignore_ascii_case(&newer.address)),
+        "the account shown is the newest link's"
+    );
+    let opened = opened(&world);
+    assert_eq!(opened.len(), 1, "{opened:?}");
+    assert!(
+        matches!(&opened[0], Notice::OpenProposal { address, .. } if address.eq_ignore_ascii_case(&newer.address))
+    );
+}
+
 /// A member is here (its founding members say so): shown, its proposal
 /// opened — no lookup, no chain read waited for.
 #[test]

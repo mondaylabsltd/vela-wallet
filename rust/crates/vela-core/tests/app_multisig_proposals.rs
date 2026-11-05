@@ -654,6 +654,65 @@ fn a_second_approval_makes_it_ready() {
     assert_eq!(item.can_execute.len(), 2, "either member here");
 }
 
+/// Round 14 (r14-9, §20 left open): a look older than `PREVIEW_FRESH_MS`
+/// was quoted again by Execute and THAT quote signed — the fee line said
+/// ≈0.098172 and 0.0972 was charged. The fee signed is the fee shown: a new
+/// quote whose fee differs from the look on screen signs nothing; the
+/// execution fails with `fee_moved` (the new figure, its network and
+/// executor), the new look is kept for the sheet, and the next press, inside
+/// the window, signs exactly it.
+#[test]
+fn an_execution_never_signs_a_fee_other_than_the_one_shown() {
+    let (mut world, mut sut, _) = setup(&[0, 1]);
+    let hash = hash_of(&propose(&mut sut, &mut world, transfer("1"), None));
+    run(
+        &mut sut,
+        &mut world,
+        Event::Approve {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+            owner: fixture(1).address,
+        },
+    );
+    let preview = Event::Preview {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor: fixture(0).address,
+    };
+    run(&mut sut, &mut world, preview);
+    let shown = sut.view().previews[&look_key(&hash, &fixture(0).address)].clone();
+    assert_eq!(shown["kind"], "priced", "{shown}");
+    // The press comes after the window, and the network's price moved.
+    world.now += 20_000.0;
+    world.quote_answer = Some(
+        vela_core::app::multisig_shell::MultisigShellResult::Quoted {
+            quote: json!({"kind": "quoted", "fee": {"token": null, "amount": "0x2"}, "totalGas": "0x1", "executorDeployed": true}),
+        },
+    );
+    let passkeys = world.passkeys.len();
+    let execute = Event::Execute {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor: fixture(0).address,
+    };
+    run(&mut sut, &mut world, execute.clone());
+    let ActionState::Failed { detail } = sut.view().actions[&format!("execute:{hash}")].clone()
+    else {
+        panic!("{:?}", sut.view().actions);
+    };
+    let detail: Value = serde_json::from_str(&detail).expect("a failure the shells read");
+    assert_eq!(detail["kind"], "fee_moved");
+    assert_eq!(detail["amount"], "2");
+    assert_eq!(detail["chainId"], 100);
+    assert!(world.sent.is_empty(), "nothing signed or sent");
+    assert_eq!(world.passkeys.len(), passkeys);
+    // The sheet now shows the new look; the next press signs exactly it.
+    let now = sut.view().previews[&look_key(&hash, &fixture(0).address)].clone();
+    assert_ne!(now["fee"], shown["fee"], "{now}");
+    run(&mut sut, &mut world, execute);
+    assert_eq!(world.sent.len(), 1, "signed at the fee now shown");
+}
+
 /// Round 14 (r14-4): with the network refusing, the desktop said "Vela won't
 /// use this multisig — its setup could give control of its funds to someone
 /// other than its members" of a multisig Vela created: the deploy gate's
