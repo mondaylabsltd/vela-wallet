@@ -258,9 +258,9 @@ struct MsProposalModel {
         if item.renameUndeployed {
             out.append((words.t("proposal.renameUndeployed", ["network": words.network(chainId)]), .warning, "renameUndeployed"))
         }
-        if standing?.kind == "blocked" {
-            out.append((words.t("status.cannotRun", ["reason": words.blockReason(standing?["block"], chainId: chainId)]), .warning, "blocked"))
-        }
+        // r12 S4: "Can't run now — …" is the chip under the title
+        // (`statusLine`, the row's one word); a note beside it said the same
+        // fact twice, a third time with the fee line's "would fail".
         if let entry = outboxEntry {
             // r8-16: on its way now is no warning — nothing was refused.
             out.append((outboxLine(entry), entry["sending"]?.bool == true ? .neutral : .warning, "outbox"))
