@@ -1413,6 +1413,7 @@
 				onfeedbackdone={() => reportSend.done()}
 				onethereumbackup={startBackup}
 				accountMore={multisigRows}
+				accountExtra={multisigWays}
 				accountKeys={shownMultisig ? multisigKeys : undefined}
 			/>
 		</main>
@@ -1466,13 +1467,29 @@
 {/snippet}
 
 {#snippet multisigAdd()}
-	<!-- r4D-19: the two ways to a multisig, here too (the switcher had them alone). -->
+	{@render multisigWays(() => {})}
+{/snippet}
+
+{#snippet multisigWays(leave: () => void)}
+	<!-- r4D-19: the two ways to a multisig, here too (the switcher had them alone).
+	     r14-1: on the phone too, under Switch account — `leave` closes that
+	     sheet first; the flow is the switcher's own (`multisigUi`). -->
 	<div class="multisig-add">
-		<Button variant="secondary" shape="rounded" onclick={() => multisigUi.open({ kind: 'create' })}
-			>{data.multisigMessages.switcher.create}</Button
+		<Button
+			variant="secondary"
+			shape="rounded"
+			onclick={() => {
+				leave();
+				multisigUi.open({ kind: 'create' });
+			}}>{data.multisigMessages.switcher.create}</Button
 		>
-		<Button variant="secondary" shape="rounded" onclick={() => multisigUi.open({ kind: 'add' })}
-			>{data.multisigMessages.switcher.add}</Button
+		<Button
+			variant="secondary"
+			shape="rounded"
+			onclick={() => {
+				leave();
+				multisigUi.open({ kind: 'add' });
+			}}>{data.multisigMessages.switcher.add}</Button
 		>
 	</div>
 {/snippet}

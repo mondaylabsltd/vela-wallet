@@ -101,6 +101,40 @@ test('the two buttons leave for the create and sign-in journeys', async ({ page 
 });
 
 /**
+ * r14-1: Settings → Switch account offers the two ways to a multisig too.
+ * The phone's sheet had only Create New Account and Sign In, so a person who
+ * looked for a multisig there — the Safari extension's tester did, with the
+ * header out of reach — found none; iOS, the desktop and the wide web
+ * settings offer both. Each leaves the sheet and opens the multisig's own
+ * flow (the one the header's switcher opens), never a second copy of it.
+ */
+test('Switch account in settings offers Create multisig and Add multisig, each opening its flow', async ({
+	page
+}) => {
+	await page.goto('/en/settings');
+	await page
+		.getByRole('button', { name: /First Wallet/ })
+		.first()
+		.click();
+	let sheet = page.getByRole('dialog');
+	await expect(sheet.getByRole('button', { name: 'Create New Account' })).toBeVisible();
+	await sheet.getByRole('button', { name: 'Create multisig', exact: true }).click();
+	await expect(page.getByRole('dialog', { name: 'New multisig' })).toBeVisible();
+	// The switch-account sheet went first: one sheet at a time.
+	await expect(page.getByRole('dialog')).toHaveCount(1);
+
+	await page.goto('/en/settings');
+	await page
+		.getByRole('button', { name: /First Wallet/ })
+		.first()
+		.click();
+	sheet = page.getByRole('dialog');
+	await sheet.getByRole('button', { name: 'Add multisig', exact: true }).click();
+	await expect(page.getByRole('dialog', { name: 'Add a multisig' })).toBeVisible();
+	await expect(page.getByRole('dialog')).toHaveCount(1);
+});
+
+/**
  * The header's name opens the same switcher (founder call, 2026-09-05): the
  * chevron beside the name drew a disclosure that led nowhere, and the only
  * switcher was three taps away on the settings screen.

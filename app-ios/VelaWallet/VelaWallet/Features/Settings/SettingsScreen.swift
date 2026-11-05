@@ -60,6 +60,13 @@ struct SettingsScreen: View {
     var onAccountSignIn: (() -> Void)?
     /// Taking ONE wallet off this device (2026-09-23).
     var onRemoveAccount: ((Int) -> Void)?
+    /// r14-1: the account sheet's multisig section — every multisig here,
+    /// Create multisig and Add multisig — the header switcher's own
+    /// (`MultisigSwitcherSection`), so Settings → Switch account offers what
+    /// the header does. Built with the sheet's close, which each of its
+    /// actions takes first: the flow it opens is a sheet of its own. Absent:
+    /// a fixture board.
+    var multisigSection: ((_ close: @escaping () -> Void) -> AnyView)?
     /// The endpoints and providers pages' live half.
     var endpointActions: SettingsEndpointActions?
     /// The switcher was opened. The balance machine reads every account's
@@ -137,6 +144,7 @@ struct SettingsScreen: View {
         onAccountCreate: (() -> Void)? = nil,
         onAccountSignIn: (() -> Void)? = nil,
         onRemoveAccount: ((Int) -> Void)? = nil,
+        multisigSection: ((_ close: @escaping () -> Void) -> AnyView)? = nil,
         endpointActions: SettingsEndpointActions? = nil,
         onOpenAccounts: (() -> Void)? = nil,
         onEthereumBackup: (() -> Void)? = nil,
@@ -161,6 +169,7 @@ struct SettingsScreen: View {
         self.onAccountCreate = onAccountCreate
         self.onAccountSignIn = onAccountSignIn
         self.onRemoveAccount = onRemoveAccount
+        self.multisigSection = multisigSection
         self.endpointActions = endpointActions
         self.onOpenAccounts = onOpenAccounts
         self.onEthereumBackup = onEthereumBackup
@@ -309,6 +318,9 @@ struct SettingsScreen: View {
                             self.overlay = .none
                             remove(index)
                         }
+                    },
+                    multisigSection: multisigSection.map { section in
+                        section { self.overlay = .none }
                     },
                     onChooseVenue: signingActions.map { actions in
                         { venue in
