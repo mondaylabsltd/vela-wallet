@@ -1100,7 +1100,7 @@ The balance machine then read again (`pool_unreached`) and waited its own
 | Was | Now |
 | --- | --- |
 | `unreached_chains` after one call's first pass failed on transport at every endpoint | after `UNREACHED_AFTER_ENDPOINTS` = 3 DIFFERENT endpoints failed on transport (a hang, a refusal) with no answer of any kind from the chain between them — from any calls; a pool smaller than three needs all of them. An answer (a result, an error, a 429) empties the count. RF1 stays. |
-| every read of an out-of-reach chain swept every endpoint, three passes | the circuit breaker's half-open probe: ONE read at a time probes the chain, on at most `OUTAGE_PROBE_ENDPOINTS` = 2 endpoints (best score first; cooldowns rotate them) in a single pass; any other read of it meanwhile fails at once with nothing on the wire (`failed`, not delivered). The read that found the outage stops after a probe's worth. A usable answer clears the chain as before. Writes (anything not a hedged read) are never refused this way. |
+| every read of an out-of-reach chain swept every endpoint, three passes | the circuit breaker's half-open probe: ONE read at a time explores the chain, in a single pass, over the nodes not yet silent in this outage — each hung node is asked once, never again until the chain answers (a node that answers, later in the list, is still found: a 401 primary and refused public nodes before a working one); once every node is silent it probes `OUTAGE_PROBE_ENDPOINTS` = 2 of them: the most trusted source first (the person's own node — a cooldown's score must not keep the node that comes back from being asked), then the oldest failure, so successive probes go round them all. Any other read of it meanwhile fails at once with nothing on the wire (`failed`, not delivered). The read that found the outage makes no second pass. A usable answer clears the chain as before. Writes (anything not a hedged read) are never refused this way. |
 | `pool_unreached` read again, forced, and named the network when that read failed (+18 s) | it names it AT ONCE (the network joins `failed_chain_ids`: no "Live" over it) — the pool's word is a read's own: several nodes said nothing, nothing answered since — and the forced read owed confirms it or unsays it (`pool_said`; a cache's answer does neither). |
 
 Timeline now: a hung read at T; three silent endpoints by ~T + 17.5 s (8 + 1.5
@@ -1118,7 +1118,8 @@ Tests: `app_rpc_pool.rs` (`a_hung_chain_with_many_endpoints_is_unreached_after_t
 that found it ends there); vector `balance-pool-unreached.json` (+ "named at
 once, on the pool's word … unsaid when that read answers"); web e2e
 `home-unanswered.e2e.ts` r13-4 (every node of Ethereum hangs in a warm
-session — named < 35 s after the first hung request, < 25 hung requests).
+session — named < 35 s after the first hung request, < 25 hung requests);
+`a_node_not_silent_yet_is_still_asked_during_an_outage`.
 
 ### 15.2 r13-3 (S3) — the step before a review has the review's discipline
 
@@ -1172,7 +1173,7 @@ send until the window was focused again.
 | one unanswered window: unreadable | asked again twice (2 s, 4 s) first |
 | the module's own range parser | the pool's one reading (`rpc_pool::get_logs_range_cap`, ruling 8) |
 | (web) "No activity yet" whatever the history | Activity is `loading` while the history is `reading`; `unread`: its empty state says the panel's `historyUnreadable` line, never "No activity yet" |
-| (desktop) rows written in the background, feed not told | written, then `activity_feed::focus_tick` |
+| (desktop) rows written in the background, feed not told | written off the main thread, then the page's feed reads its store again (`activity_feed::focus_tick`) |
 
 Tests: `app_multisig_opening.rs` (`a_new_multisigs_history_is_reading_until_its_first_read_ends`,
 `a_window_unanswered_once_is_asked_again_before_the_history_is_unread`,
@@ -1211,6 +1212,13 @@ vector's cases); moving them onto a uniffi export is the next native round.
   (Create / I have a wallet / Cancel, `request-no-wallet`) — even before the
   request detail is read — and the request is read when somebody signs in.
   Chrome: the same window code (its side panel already went to Welcome).
+- **r13-6 parity (the invite's network note, from the coordinator).** The
+  web's invite preview said `add.networkMissing` with the proposal sheet's
+  whole "On Arc Testnet (chain 5042002) — a network this device doesn't
+  have" as its `{{network}}` — a doubled word and clause. Now the web (and
+  the extension: the same sheet) and the desktop hand it the network's NAME
+  (the invite's `missing_name`, else the chain's name), as Android now does
+  and iOS did: one sentence in the core's words.
 - **D9 (dev harness).** A passkey's relying party is a domain, never an IP
   address: the local trusted page on `127.0.0.1` showed the browser's raw
   `SecurityError`, and its passkeys would not be `localhost`'s. One loopback
