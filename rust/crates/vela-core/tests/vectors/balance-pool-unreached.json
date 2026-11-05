@@ -71,7 +71,7 @@
    ]
   },
   {
-   "name": "r13-4: a network the pool finds out of reach is named at once, on the pool's word, while its forced read is out — and unsaid when that read answers",
+   "name": "r13-4: a network the pool finds SILENT (several nodes said nothing for seconds) is named at once, while its forced read is out — and unsaid when that read answers",
    "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
    "steps": [
     {
@@ -106,6 +106,9 @@
       "type": "pool_unreached",
       "chain_ids": [
        5042002
+      ],
+      "silent": [
+       5042002
       ]
      },
      "expect": {
@@ -131,6 +134,74 @@
        11155111
       ],
       "now_ms": 1700000009000
+     },
+     "expect": {
+      "live": true,
+      "unreachable": [],
+      "fetch": null
+     }
+    }
+   ]
+  },
+  {
+   "name": "r13-4: a pool loss that is not silent (one method a node refuses can end a pass) is only read again — never a flicker of 'Can't reach'",
+   "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "steps": [
+    {
+     "answer": {
+      "type": "cached_total_loaded",
+      "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "usd": null
+     }
+    },
+    {
+     "answer": {
+      "type": "fetch_settled",
+      "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "pull": false,
+      "tokens": [],
+      "failed_chain_ids": [],
+      "rate_limited_chain_ids": [],
+      "read_chain_ids": [
+       5042002,
+       11155111
+      ],
+      "now_ms": 1700000000000
+     },
+     "expect": {
+      "live": true,
+      "unreachable": [],
+      "fetch": null
+     }
+    },
+    {
+     "event": {
+      "type": "pool_unreached",
+      "chain_ids": [
+       5042002
+      ],
+      "silent": []
+     },
+     "expect": {
+      "fetch": {
+       "force": true
+      },
+      "unreachable": []
+     }
+    },
+    {
+     "answer": {
+      "type": "fetch_settled",
+      "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "pull": false,
+      "tokens": [],
+      "failed_chain_ids": [],
+      "rate_limited_chain_ids": [],
+      "read_chain_ids": [
+       5042002,
+       11155111
+      ],
+      "now_ms": 1700000001000
      },
      "expect": {
       "live": true,

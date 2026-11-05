@@ -3559,6 +3559,8 @@ fn a_hung_chain_with_many_endpoints_is_unreached_after_three_silent_endpoints() 
     let view = sut.view();
     assert_eq!(view.unreached_chains, vec![CHAIN]);
     assert_eq!(view.out_of_reach_chains, vec![CHAIN]);
+    // Silent: what the balance machine names at once.
+    assert_eq!(view.silent_chains, vec![CHAIN]);
 }
 
 /// r13-4: an answer of any kind between the failures (a 429) means someone
@@ -3697,8 +3699,8 @@ fn instant_refusals_before_an_answer_never_flicker_an_outage() {
         now += 3.0;
         ops = sut.resolve(outcome("c1", &url, Out::NotConnected, 3.0, now));
         assert!(
-            sut.view().out_of_reach_chains.is_empty(),
-            "named within {} ms",
+            sut.view().silent_chains.is_empty(),
+            "said silent within {} ms",
             now - T0 - 1_000.0
         );
     }

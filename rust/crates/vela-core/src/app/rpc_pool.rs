@@ -1180,6 +1180,11 @@ pub struct Model {
     /// r13-4: per chain, when its current silence began (its first silent
     /// endpoint).
     silent_since: BTreeMap<u32, f64>,
+    /// r13-4: chains out of reach by the silence rule — several nodes said
+    /// nothing for [`UNREACHED_MIN_SILENCE_MS`]: a network's whole silence,
+    /// never one method's failure (RF1 can come from a node that refuses one
+    /// method only).
+    silent_chains: BTreeSet<u32>,
     /// Chains whose person's own endpoint is not answering while another node
     /// is (owner decision 2026-10-28): the last usable RPC answer came from an
     /// endpoint that is not [`RpcSource::User`] although the pool holds one.
@@ -1265,6 +1270,12 @@ pub struct RpcPoolView {
     /// read again and named, never left to age behind the shell's cache.
     #[serde(default)]
     pub out_of_reach_chains: Vec<u32>,
+    /// r13-4: the subset of `out_of_reach_chains` the pool found silent — at
+    /// least three of its nodes said nothing at all for 5 s, nothing answered
+    /// since — sorted ascending. Hand it beside them (`pool_unreached
+    /// {chain_ids, silent}`): the balance machine names these at once.
+    #[serde(default)]
+    pub silent_chains: Vec<u32>,
     /// Per routed call, the endpoints its current pass has still to try, in
     /// the order it will try them (the endpoint it is waiting on is already
     /// off the list). For a shell that asks the next endpoint early — the
@@ -1397,6 +1408,12 @@ impl App for RpcPool {
             out_of_reach_chains: model
                 .failed_chains
                 .union(&model.unreached_chains)
+                .filter(|chain| !model.rate_limited_chains.contains(chain))
+                .copied()
+                .collect(),
+            silent_chains: model
+                .silent_chains
+                .iter()
                 .filter(|chain| !model.rate_limited_chains.contains(chain))
                 .copied()
                 .collect(),
@@ -2606,10 +2623,11 @@ fn note_silence(
     let count = silent.len();
     let pool_size = model.pools.get(&chain_id).map_or(0, |pool| pool.rpc.len());
     let needed = UNREACHED_AFTER_ENDPOINTS.min(pool_size.max(1));
-    if count < needed
-        || now_ms - since < UNREACHED_MIN_SILENCE_MS
-        || !model.unreached_chains.insert(chain_id)
-    {
+    if count < needed || now_ms - since < UNREACHED_MIN_SILENCE_MS {
+        return;
+    }
+    model.silent_chains.insert(chain_id);
+    if !model.unreached_chains.insert(chain_id) {
         return;
     }
     let max_pass = max_passes(RpcKind::Rpc).saturating_sub(1);
@@ -2695,6 +2713,7 @@ fn clear_chain_failure(model: &mut Model, chain_id: u32, kind: RpcKind) {
         model.unreached_chains.remove(&chain_id);
         model.silent.remove(&chain_id);
         model.silent_since.remove(&chain_id);
+        model.silent_chains.remove(&chain_id);
     }
 }
 

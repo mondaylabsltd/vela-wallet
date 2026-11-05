@@ -119,25 +119,32 @@ export function getOwnNodeUnreachedChains(): readonly number[] {
  * `out_of_reach_chains`) each time that set changes — the balance machine,
  * which reads a lost network again at once (`pool_unreached`).
  */
-const outOfReachListeners = new Set<(chainIds: number[]) => void>();
+const outOfReachListeners = new Set<(chainIds: number[], silent: number[]) => void>();
 let lastOutOfReach = '';
 
-/** Listen for the pool's out-of-reach networks; told the current set at once. Returns the unsubscribe. */
-export function onPoolOutOfReach(listener: (chainIds: number[]) => void): () => void {
+/**
+ * Listen for the pool's out-of-reach networks, and of them the silent ones
+ * (r13-4: `silent_chains`, named at once); told the current sets at once.
+ * Returns the unsubscribe.
+ */
+export function onPoolOutOfReach(
+	listener: (chainIds: number[], silent: number[]) => void
+): () => void {
 	outOfReachListeners.add(listener);
 	const now = latestView?.out_of_reach_chains;
-	if (now && now.length > 0) listener([...now]);
+	if (now && now.length > 0) listener([...now], [...(latestView?.silent_chains ?? [])]);
 	return () => outOfReachListeners.delete(listener);
 }
 
 function noteOutOfReach(view: RpcPoolView): void {
 	const ids = view.out_of_reach_chains ?? [];
-	const key = ids.join(',');
+	const silent = view.silent_chains ?? [];
+	const key = `${ids.join(',')}|${silent.join(',')}`;
 	if (key === lastOutOfReach) return;
 	lastOutOfReach = key;
 	// Never from inside the pool core's own dispatch: the next task.
 	setTimeout(() => {
-		for (const listener of [...outOfReachListeners]) listener([...ids]);
+		for (const listener of [...outOfReachListeners]) listener([...ids], [...silent]);
 	}, 0);
 }
 

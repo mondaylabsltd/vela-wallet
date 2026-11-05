@@ -55,6 +55,13 @@ own_node_unreached_chains: Array<number>,
  */
 out_of_reach_chains: Array<number>, 
 /**
+ * r13-4: the subset of `out_of_reach_chains` the pool found silent — at
+ * least three of its nodes said nothing at all for 5 s, nothing answered
+ * since — sorted ascending. Hand it beside them (`pool_unreached
+ * {chain_ids, silent}`): the balance machine names these at once.
+ */
+silent_chains: Array<number>, 
+/**
  * Per routed call, the endpoints its current pass has still to try, in
  * the order it will try them (the endpoint it is waiting on is already
  * off the list). For a shell that asks the next endpoint early — the

@@ -195,8 +195,9 @@ export function ensureBalanceDashboard() {
 		session.start({ type: 'app_focused' });
 		// r12-3: the pool's lost networks, as the core says them — a warm
 		// outage is read again and named within a read's bound.
-		onPoolOutOfReach((chainIds) =>
-			session?.dispatch({ type: 'pool_unreached', chain_ids: chainIds })
+		// r13-4: the silent ones are named at once.
+		onPoolOutOfReach((chainIds, silent) =>
+			session?.dispatch({ type: 'pool_unreached', chain_ids: chainIds, silent })
 		);
 		// The boot-time privacy read, once per process. The core's first-write-wins
 		// rule makes a toggle that races this read win, so it is safe to be slow;

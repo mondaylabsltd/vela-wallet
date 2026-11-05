@@ -415,6 +415,7 @@ impl Default for OwnNodeChains {
                 own_only_chains: Vec::new(),
                 own_node_unreached_chains: Vec::new(),
                 out_of_reach_chains: Vec::new(),
+                silent_chains: Vec::new(),
                 pending_urls: Default::default(),
             },
         }
@@ -3018,6 +3019,7 @@ mod tests {
             fallback_chains: Vec::new(),
             own_node_unreached_chains: Vec::new(),
             out_of_reach_chains: Vec::new(),
+            silent_chains: Vec::new(),
             own_only_chains: Vec::new(),
             failed_chains: Vec::new(),
             rate_limited_chains: Vec::new(),
