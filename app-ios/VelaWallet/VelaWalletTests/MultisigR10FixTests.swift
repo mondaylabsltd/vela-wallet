@@ -181,6 +181,16 @@ struct MultisigR10FixTests {
         #expect(payable.approveOnlyReason(chosen: nil) == nil)
     }
 
+    /// Round 14 (r14-12): "Create New Account" in the Accounts sheet moves no
+    /// value and signs nothing — the neutral ink, never the orange accent.
+    @Test func theAccountsSheetsCreateIsNeutralInk() throws {
+        let source = try String(contentsOf: URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("VelaWallet/Features/Settings/SettingsSheet.swift"), encoding: .utf8)
+        #expect(source.contains("VelaButton(title: sheet.primary, kind: .ink) { onCreate?() }"))
+        #expect(!source.contains("VelaButton(title: sheet.primary, kind: .primary) { onCreate?() }"))
+    }
+
     /// Real-device S4: Continue moves nothing — the neutral ink, not the accent.
     @Test func theSendFormsContinueIsNeutralInk() throws {
         let source = try String(contentsOf: URL(fileURLWithPath: #filePath)

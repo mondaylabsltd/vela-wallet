@@ -486,7 +486,8 @@ private struct AccountsSheetBody: View {
         // Both closures were EMPTY: 创建新账户 and 登录已有账户 drew, took the
         // tap, and did nothing (founder, 2026-09-16). They are the only two
         // ways on from this sheet, so an empty closure is the sheet's dead end.
-        VelaButton(title: sheet.primary, kind: .primary) { onCreate?() }
+        // r14-12: creating an account moves no value: the neutral ink.
+        VelaButton(title: sheet.primary, kind: .ink) { onCreate?() }
             .padding(.top, Tokens.Space.s24)
             .padding(.bottom, Tokens.Space.s12)
         VelaButton(title: sheet.secondary, kind: .secondary) { onSignIn?() }
