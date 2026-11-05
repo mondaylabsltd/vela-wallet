@@ -899,8 +899,10 @@ fn an_address_is_a_real_scheme_an_ascii_host_and_a_port() {
             "https://sign.example.com:8443/x",
         ),
         ("http://localhost:80/", "http://localhost/"),
-        ("http://[::1]:8140", "http://[::1]:8140/"),
-        ("http://127.0.0.1:8140/s", "http://127.0.0.1:8140/s"),
+        // D9 (round 13): one loopback origin — a passkey's relying party is
+        // never an IP address.
+        ("http://[::1]:8140", "http://localhost:8140/"),
+        ("http://127.0.0.1:8140/s", "http://localhost:8140/s"),
         (
             "https://xn--fsqu00a.xn--fiqs8s/",
             "https://xn--fsqu00a.xn--fiqs8s/",

@@ -199,7 +199,14 @@
     "executedBy": "由 {{name}} 执行",
     "countedThen": "执行时计入的批准：{{threshold}} 位中的 {{approved}} 位",
     "approvalsSigned": "这些成员批准了它。执行时计入了哪些批准，这台设备上没有记录。",
-    "outboxSending": "正在把你的批准发给其他成员…"
+    "outboxSending": "正在把你的批准发给其他成员…",
+    "unread": {
+     "chain": "无法连接 {{network}} 读取这个多签，因此没有发起任何提案。请稍后重试。",
+     "both": "无法连接 {{network}} 和多签服务，因此没有发起任何提案。请检查网络连接后重试。",
+     "linkChain": "无法连接 {{network}}，打不开这笔交易。",
+     "linkService": "无法连接多签服务，找不到这笔交易。",
+     "linkBoth": "无法连接 {{network}} 和多签服务，打不开这笔交易。请检查网络连接。"
+    }
    },
    "send": {
     "propose": "发起并批准",

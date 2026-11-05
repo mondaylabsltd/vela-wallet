@@ -125,7 +125,8 @@
 	import {
 		MailboxRefusedError,
 		MailboxUnreadableError,
-		NoOutsideSignerError
+		NoOutsideSignerError,
+		ProposalUnreadError
 	} from '../core/proposal-errors';
 	import { typedName } from '../core/typed-name';
 	import type { DappRequestSheet } from '../core/ui.svelte';
@@ -133,7 +134,7 @@
 	import type { ProposalSource } from '../core/proposals.svelte';
 	import CallReview from './CallReview.svelte';
 	import ReviewStateNote from './ReviewStateNote.svelte';
-	import { reviewDoor, stateFor } from '../core/review-door';
+	import { reviewDoor, stateFor, unreadWords } from '../core/review-door';
 	import Sheet from './Sheet.svelte';
 
 	interface Props {
@@ -231,6 +232,26 @@
 		return error ? reasonText(error) : null;
 	});
 	const machineDraftItem = $derived(machineDraft ? itemOf(machineDraft.item) : null);
+	/**
+	 * r13-3: a link's transaction not read within the core's bound — the read
+	 * still out, named (the machine's `linked.reason_key`), with Try again.
+	 */
+	const linkFailure = $derived.by(() => {
+		const linked = machine?.linked;
+		if (!linked || drafting || linked.stand !== 'failed') return null;
+		if (linked.safe_tx_hash.toLowerCase() !== safeTxHash.toLowerCase()) return null;
+		return unreadWords(m.proposal, linked.reason_key, chainName(linked.chain_id));
+	});
+	let linkRetrying = $state(false);
+	/** r13-3: Try again — the machine's `retry`, which starts the link's bound again. */
+	async function retryLink() {
+		linkRetrying = true;
+		try {
+			await proposals.retry();
+		} finally {
+			linkRetrying = false;
+		}
+	}
 	/** Its key in the machine's maps (`<chainId>:<safeTxHash>`). */
 	const key = $derived(`${chainId}:${safeTxHash.toLowerCase()}`);
 
@@ -723,6 +744,11 @@
 		if (error instanceof ExecutionUncheckedError) return m.proposal.uncheckedReason;
 		if (error instanceof MailboxUnreadableError) {
 			return offline() ? m.proposal.reason.offline : m.proposal.mailboxDown;
+		}
+		// r13-3: the read the core names — the network, or both — never
+		// the service's waiting transactions for a network that hung.
+		if (error instanceof ProposalUnreadError) {
+			return unreadWords(m.proposal, error.reasonKey, chainName(chainId));
 		}
 		if (error instanceof NoOutsideSignerError) return m.proposal.noOutsideSigner;
 		if (error instanceof SigningRefusedError) {
@@ -1461,7 +1487,18 @@
 			<p class="quiet" aria-busy="true">{m.proposal.opening}</p>
 		{/if}
 	{:else if !item}
-		{#if !store.loading && (chainDown || offline())}
+		{#if linkFailure}
+			<!-- r13-3: not read in time — which read, and Try again; never an
+			     endless "Opening the transaction…". -->
+			<p class="warn" role="alert" data-testid="proposal-open-failed">{linkFailure}</p>
+			<Button
+				variant="secondary"
+				shape="rounded"
+				disabled={linkRetrying}
+				onclick={retryLink}
+				testid="proposal-open-retry">{m.review.state.tryAgain}</Button
+			>
+		{:else if !store.loading && (chainDown || offline())}
 			<!-- r4b-3: the network (or this device) is not answering: said as
 			     that, with Retry — never "it hasn't been shared". -->
 			<p class="warn" role="alert" data-testid="proposal-chain-down">

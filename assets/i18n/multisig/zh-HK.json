@@ -199,7 +199,14 @@
     "executedBy": "由 {{name}} 執行",
     "countedThen": "執行時計入的批准：{{threshold}} 位中的 {{approved}} 位",
     "approvalsSigned": "這些成員批准了它。執行時計入了哪些批准，這部裝置上沒有記錄。",
-    "outboxSending": "正在把你的批准傳給其他成員…"
+    "outboxSending": "正在把你的批准傳給其他成員…",
+    "unread": {
+     "chain": "無法連接 {{network}} 讀取這個多簽，因此沒有發起任何提案。請稍後重試。",
+     "both": "無法連接 {{network}} 和多簽服務，因此沒有發起任何提案。請檢查網絡連線後重試。",
+     "linkChain": "無法連接 {{network}}，打不開這筆交易。",
+     "linkService": "無法連接多簽服務，找不到這筆交易。",
+     "linkBoth": "無法連接 {{network}} 和多簽服務，打不開這筆交易。請檢查網絡連線。"
+    }
    },
    "send": {
     "propose": "發起並批准",

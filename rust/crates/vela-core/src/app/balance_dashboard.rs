@@ -976,6 +976,11 @@ pub enum Event {
     /// read's bound, never left to age "Updated 1m → 4m" until a reload.
     PoolUnreached {
         chain_ids: Vec<u32>,
+        /// r13-4: of them, the ones the pool found SILENT (its view's
+        /// `silent_chains`: several nodes said nothing at all for 5 s) — named
+        /// at once. The rest are read again, as before. Missing: none.
+        #[serde(default)]
+        silent: Vec<u32>,
     },
     /// Internal: an effect resolved. `attempt` is the account generation
     /// captured when the request was made; an older attempt belongs to a
@@ -1110,6 +1115,13 @@ pub struct Model {
     /// r12-3: a pool signal arrived while a round was out or the app was
     /// away; the next settle or focus reads again, forced.
     pool_reread_pending: bool,
+    /// r13-4: the pool's silent networks, as last said (`pool_unreached`'s
+    /// `silent`).
+    pool_silent: BTreeSet<u32>,
+    /// r13-4: networks said unreachable on the pool's word alone, not yet
+    /// read by a round of this machine's — the forced read owed confirms or
+    /// unsays them (a cache's answer does neither).
+    pool_said: BTreeSet<u32>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1473,7 +1485,7 @@ impl App for BalanceDashboard {
                 );
                 Command::done()
             }
-            Event::PoolUnreached { chain_ids } => pool_unreached(model, chain_ids),
+            Event::PoolUnreached { chain_ids, silent } => pool_unreached(model, chain_ids, silent),
             Event::SpaceChanged => {
                 let Some(address) = model.address.clone() else {
                     return Command::done();
@@ -1672,6 +1684,7 @@ fn reset_for(
     // asked, and a re-read owed for it, were the previous account's.
     model.asked_chain_ids.clear();
     model.pool_reread_pending = false;
+    model.pool_said.clear();
 
     // The fetch issued below is out from this moment (#188): the figure only
     // rises from the cached total (seeded into `last_settled_total` when it
@@ -1744,15 +1757,38 @@ fn holdings_restored(
 /// round already out, or an app away, owes it the read on its settle or
 /// focus. Before the account's first round settles nothing is owed: that
 /// round reads every network anyway.
-fn pool_unreached(model: &mut Model, chain_ids: Vec<u32>) -> Command<BalanceEffect, Event> {
+fn pool_unreached(
+    model: &mut Model,
+    chain_ids: Vec<u32>,
+    silent: Vec<u32>,
+) -> Command<BalanceEffect, Event> {
     let now: BTreeSet<u32> = chain_ids.into_iter().collect();
-    let fresh: Vec<u32> = now.difference(&model.pool_unreached).copied().collect();
+    let silent: BTreeSet<u32> = silent.into_iter().filter(|id| now.contains(id)).collect();
+    let mut fresh: BTreeSet<u32> = now.difference(&model.pool_unreached).copied().collect();
+    let fresh_silent: BTreeSet<u32> = silent.difference(&model.pool_silent).copied().collect();
+    fresh.extend(fresh_silent.iter().copied());
     model.pool_unreached = now;
+    model.pool_silent = silent;
     if model.address.is_none() || !model.bootstrapped || model.read_deferred {
         return Command::done();
     }
-    if !fresh.iter().any(|id| pool_loss_unsaid(model, *id)) {
+    let unsaid: Vec<u32> = fresh
+        .into_iter()
+        .filter(|id| pool_loss_unsaid(model, *id))
+        .collect();
+    if unsaid.is_empty() {
         return Command::done();
+    }
+    // r13-4: a SILENT network — several of its nodes said nothing at all
+    // for seconds, nothing of it answered since — is said at once (no
+    // "Live" over it); the forced read below confirms it, or unsays it when
+    // the network answers. Any other pool loss (one method a node refuses
+    // can end a pass) is only read again: never a flicker of "Can't reach".
+    for id in unsaid.iter().filter(|id| fresh_silent.contains(id)) {
+        if !model.failed_chain_ids.contains(id) {
+            model.failed_chain_ids.push(*id);
+        }
+        model.pool_said.insert(*id);
     }
     if model.fetch_in_flight || model.backgrounded {
         model.pool_reread_pending = true;
@@ -1940,6 +1976,9 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
             // payments" over a network that was not answering, the recovery
             // reads reset — until the cache aged out or a reload.
             let from_cache = read_at_ms.is_some();
+            if !from_cache {
+                model.pool_said.clear();
+            }
             let failed_chain_ids: Vec<u32> = if from_cache {
                 let mut known: Vec<u32> = model
                     .failed_chain_ids
@@ -2085,7 +2124,10 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
             // this round did not say it: read again, forced, once.
             if std::mem::take(&mut model.pool_reread_pending) && !model.backgrounded {
                 let owed: Vec<u32> = model.pool_unreached.iter().copied().collect();
-                if owed.iter().any(|id| pool_loss_unsaid(model, *id)) {
+                if owed
+                    .iter()
+                    .any(|id| pool_loss_unsaid(model, *id) || model.pool_said.contains(id))
+                {
                     let reread = begin_fetch(model, true, false);
                     return Command::all(vec![requests(model, operations), reread]);
                 }

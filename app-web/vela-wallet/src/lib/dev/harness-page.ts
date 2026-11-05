@@ -54,7 +54,10 @@ export function loopbackPage(value: unknown): string | null {
 	// `new URL` keeps a trailing `?`/`#` out of `search`/`hash`: the text must
 	// end at the origin, with at most its slash.
 	if (!/^[a-z]+:\/\/[^/?#]+\/?$/i.test(value)) return null;
-	return `${url.origin}/`;
+	// D9 (round 13): one loopback origin. A passkey's relying party is a
+	// domain, never an IP address: the page on `127.0.0.1` showed the
+	// browser's raw error, and its passkeys would not be `localhost`'s.
+	return `${url.protocol}//localhost:${url.port}/`;
 }
 
 /**

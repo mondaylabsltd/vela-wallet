@@ -186,6 +186,93 @@ where
     }
 }
 
+// ---------------------------------------------------------------------------
+// r13-3: the step BEFORE a review exists — a draft being built, a link's
+// transaction being opened — has the review's own discipline: bounded here,
+// and when it fails it says which read failed, with Try again.
+// ---------------------------------------------------------------------------
+
+/// How long the reads a draft is built from (the multisig's members and
+/// number on its network, its waiting transactions from the multisig
+/// service), or a link's transaction is found by, are waited for. Past it the
+/// step has failed, naming the read still out. Below [`REVIEW_TIMEOUT_MS`]
+/// (the review still has to be read after it) and above one hung node's
+/// bound plus a hedge (the RPC pool's 8 s + 1.5 s, r13-4): a slow read is
+/// not cut, a hung one is.
+pub const OPEN_TIMEOUT_MS: u32 = 25_000;
+
+/// The multisig's network did not answer (`{{network}}`: its name).
+pub const UNREAD_CHAIN_KEY: &str = "home.multisig.proposal.unread.chain";
+/// The multisig service did not answer: its waiting transactions are unread
+/// — the words `ActionState::MailboxUnreadable` always had.
+pub const UNREAD_SERVICE_KEY: &str = "home.multisig.proposal.mailboxDown";
+/// Neither answered — the network AND the service: most likely this
+/// device's connection (`{{network}}`: the network's name).
+pub const UNREAD_BOTH_KEY: &str = "home.multisig.proposal.unread.both";
+/// A link's transaction: the network did not answer in time.
+pub const LINK_UNREAD_CHAIN_KEY: &str = "home.multisig.proposal.unread.linkChain";
+/// A link's transaction: the multisig service did not answer in time.
+pub const LINK_UNREAD_SERVICE_KEY: &str = "home.multisig.proposal.unread.linkService";
+/// A link's transaction: neither answered in time.
+pub const LINK_UNREAD_BOTH_KEY: &str = "home.multisig.proposal.unread.linkBoth";
+
+/// Which read the step before a review could not get — said as itself,
+/// never as another (r13-3: a hung network was said as the service's).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UnreadRead {
+    /// The multisig's network (its members, its number).
+    Chain,
+    /// The multisig service (its waiting transactions).
+    Service,
+    /// Both: most likely this device's connection.
+    Both,
+}
+
+impl UnreadRead {
+    /// From what failed (or was still out at [`OPEN_TIMEOUT_MS`]); `None`
+    /// when both answered.
+    pub fn of(chain: bool, service: bool) -> Option<Self> {
+        match (chain, service) {
+            (true, true) => Some(Self::Both),
+            (true, false) => Some(Self::Chain),
+            (false, true) => Some(Self::Service),
+            (false, false) => None,
+        }
+    }
+
+    /// The words for a draft that was not built: nothing was proposed.
+    pub fn draft_key(self) -> &'static str {
+        match self {
+            Self::Chain => UNREAD_CHAIN_KEY,
+            Self::Service => UNREAD_SERVICE_KEY,
+            Self::Both => UNREAD_BOTH_KEY,
+        }
+    }
+
+    /// The words for a link's transaction that could not be opened.
+    pub fn link_key(self) -> &'static str {
+        match self {
+            Self::Chain => LINK_UNREAD_CHAIN_KEY,
+            Self::Service => LINK_UNREAD_SERVICE_KEY,
+            Self::Both => LINK_UNREAD_BOTH_KEY,
+        }
+    }
+}
+
+/// `review.opening {chain, service, link?}` through the link door: the key
+/// for what failed (`chain` / `service`: whether that read failed or was
+/// still out), or null when both answered.
+pub fn opening_reason_json(args: &Value) -> Result<Value, String> {
+    let flag = |k: &str| args.get(k).and_then(Value::as_bool).unwrap_or(false);
+    let link = flag("link");
+    Ok(
+        UnreadRead::of(flag("chain"), flag("service")).map_or(Value::Null, |r| {
+            Value::String(if link { r.link_key() } else { r.draft_key() }.to_owned())
+        }),
+    )
+}
+
 /// `review.door {state?, review?}` through the link door: the [`door`].
 pub fn door_json(args: &Value) -> Result<Value, String> {
     let state: Option<ReviewState> = match args.get("state") {
@@ -230,6 +317,30 @@ mod tests {
         // A review without a sign rule, or no review at all, is never "allowed".
         assert!(!door(Some(&ReviewState::Ready), Some(&json!({}))).enabled);
         assert!(!door(Some(&ReviewState::Ready), None).enabled);
+    }
+
+    #[test]
+    fn the_step_before_a_review_names_the_read_that_failed() {
+        assert_eq!(UnreadRead::of(false, false), None);
+        assert_eq!(
+            UnreadRead::of(true, false).map(UnreadRead::draft_key),
+            Some(UNREAD_CHAIN_KEY)
+        );
+        assert_eq!(
+            UnreadRead::of(false, true).map(UnreadRead::draft_key),
+            Some(UNREAD_SERVICE_KEY)
+        );
+        assert_eq!(
+            UnreadRead::of(true, true).map(UnreadRead::draft_key),
+            Some(UNREAD_BOTH_KEY)
+        );
+        assert_eq!(
+            opening_reason_json(&json!({"chain": true, "link": true})).unwrap(),
+            json!(LINK_UNREAD_CHAIN_KEY)
+        );
+        assert_eq!(opening_reason_json(&json!({})).unwrap(), Value::Null);
+        // Bounded below the review's own bound, above one hung node's.
+        const { assert!(OPEN_TIMEOUT_MS < REVIEW_TIMEOUT_MS && OPEN_TIMEOUT_MS > 9_500) };
     }
 
     #[test]

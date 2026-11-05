@@ -223,6 +223,7 @@ object MultisigWiring {
                 reason = when (outcome.reason) {
                     "mailbox_down" -> app.getvela.wallet.feature.send.core.SendProposeFailure.MailboxDown
                     "offline" -> app.getvela.wallet.feature.send.core.SendProposeFailure.Offline
+                    "chain_down" -> app.getvela.wallet.feature.send.core.SendProposeFailure.ChainDown
                     else -> null
                 },
             )

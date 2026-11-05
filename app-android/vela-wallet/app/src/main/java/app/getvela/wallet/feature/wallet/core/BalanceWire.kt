@@ -300,7 +300,11 @@ sealed class BalanceEvent {
      */
     @Serializable
     @SerialName("pool_unreached")
-    data class PoolUnreached(val chain_ids: List<Int> = emptyList()) : BalanceEvent()
+    data class PoolUnreached(
+        val chain_ids: List<Int> = emptyList(),
+        /** r13-4: of them, the pool's SILENT ones (`RpcPoolView.silent_chains`) — named at once. */
+        val silent: List<Int> = emptyList(),
+    ) : BalanceEvent()
 
     @Serializable
     @SerialName("switcher_opened")

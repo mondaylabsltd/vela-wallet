@@ -471,6 +471,7 @@ struct MsWords {
         switch state.kind {
         case "working", "done", "cancelled", "outsideAsked": return nil
         case "mailboxUnreadable": return t("proposal.mailboxDown")
+        case "unread": return unreadText(state["reason_key"]?.string, chainId: chainId)
         case "noMemberHere": return t("proposal.notMember")
         case "signingRefused": return t("authority.refusedOn", ["network": network(chainId)])
         case "signingBlocked": return t("review.blocked")
@@ -492,6 +493,14 @@ struct MsWords {
         case "failed": return failureText(state["detail"]?.string)
         default: return t("proposal.reason.unknown")
         }
+    }
+
+    /// r13-3: the read the core named (`home.multisig.proposal.unread.*`, or
+    /// the service's `mailboxDown`), `{{network}}` the network's name.
+    func unreadText(_ key: String?, chainId: Int) -> String {
+        let prefix = "home.multisig."
+        let leaf = key.map { $0.hasPrefix(prefix) ? String($0.dropFirst(prefix.count)) : $0 } ?? "proposal.unread.chain"
+        return t(leaf, ["network": network(chainId)])
     }
 
     /// A shell failure (`MultisigShellFailure`'s JSON), or the core's own

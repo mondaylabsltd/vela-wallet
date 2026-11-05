@@ -781,6 +781,15 @@ struct MultisigProposalSheet: View {
         case "notInMailbox": MsNote(text: words.t("proposal.notInMailbox"), tone: .warning, identifier: "multisig.proposal.notInMailbox")
         case "notFound": MsNote(text: words.t("proposal.notFound"), tone: .warning, identifier: "multisig.proposal.notFound")
         case "unreadable": MsNote(text: words.t("proposal.cantCheck", ["network": words.network(chainId)]), tone: .warning)
+        case "failed":
+            // r13-3: not read in time — the read still out, named, and Try
+            // again; never "Opening the transaction…" for ever.
+            MsNote(
+                text: words.unreadText(linked?.reasonKey, chainId: chainId),
+                tone: .warning, identifier: "multisig.proposal.openFailed"
+            )
+            VelaButton(title: words.t("review.state.tryAgain"), kind: .secondary) { hub.retryLinked() }
+                .accessibilityIdentifier("multisig.proposal.openRetry")
         default:
             HStack(spacing: Tokens.Space.s8) {
                 ProgressView()

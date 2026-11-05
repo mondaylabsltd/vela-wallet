@@ -9,6 +9,10 @@
 	 *   sets the multisig up on that network) — until the person dismisses
 	 *   them, or it is set up there.
 	 *
+	 * - r13-1: a multisig used only in the other space says where it lives —
+	 *   "Used on Arc Testnet · Testnet space" — with the switch there (the
+	 *   core's `lives_elsewhere`, as the native homes say it).
+	 *
 	 * While it is on screen, the multisigs not shown are read now and then
 	 * (`presence.follow`), for the switcher's counts and its button's dot.
 	 */
@@ -24,14 +28,37 @@
 	import { multisig } from '../core/store.svelte';
 	import { multisigUi } from '../core/ui.svelte';
 	import { balance } from '$lib/wallet/core/balance.svelte';
+	import { listOf } from '$lib/i18n/list';
+	import { networkSpace } from '$lib/network-space/network-space.svelte';
+	import type { NetworkSpaceMessages } from '$lib/network-space/messages';
+	import type { Elsewhere } from '../core/elsewhere';
 
 	interface Props {
 		m: MultisigMessages;
 		/** Add funds: the receive card, for the multisig shown. */
 		onfund?: () => void;
+		/** r13-1: the shown multisig lives in the other space (the core's word). */
+		elsewhere?: Elsewhere | null;
+		/** r13-1: the switch there (the `set_network_space` intent). */
+		onswitch?: (space: 'mainnet' | 'testnet') => void;
+		locale?: string;
 	}
 
-	let { m, onfund }: Props = $props();
+	let { m, onfund, elsewhere = null, onswitch, locale = 'en' }: Props = $props();
+
+	/** The space words by the core's key (`networkSpace.headingTestnet`, …). */
+	function spaceWord(key: string): string {
+		const words = networkSpace.words;
+		const leaf = key.startsWith('networkSpace.') ? key.slice('networkSpace.'.length) : key;
+		return (words?.[leaf as keyof NetworkSpaceMessages] as string | undefined) ?? '';
+	}
+	const elsewhereLine = $derived(
+		elsewhere
+			? `${fillTemplate(m.add.usedOn, {
+					networks: listOf(elsewhere.chain_ids.map(chainName), locale)
+				})} · ${spaceWord(elsewhere.heading_key)}`
+			: ''
+	);
 
 	onMount(() => presence.follow());
 
@@ -71,6 +98,20 @@
 		if (setUp && active?.firstRun) multisig.setFirstRun(active.address, false);
 	});
 </script>
+
+{#if active && elsewhere}
+	<!-- r13-1: where it lives, and the way there — never a confident zero here. -->
+	<div class="elsewhere" data-testid="multisig-other-space" role="status">
+		<p class="elsewhere-line">{elsewhereLine}</p>
+		<Button
+			variant="secondary"
+			shape="rounded"
+			testid="multisig-other-space-switch"
+			onclick={() => elsewhere && onswitch?.(elsewhere.space)}
+			>{spaceWord(elsewhere.switch_key)}</Button
+		>
+	</div>
+{/if}
 
 {#if active && words && banner}
 	{@const first = banner.first}
@@ -159,6 +200,23 @@
 {/if}
 
 <style>
+	.elsewhere {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: var(--space-sm);
+		margin: 0 0 var(--space-md);
+		padding: var(--space-md) var(--space-lg);
+		border: var(--border-hairline) solid var(--color-border-strong);
+		border-radius: var(--radius-lg);
+		background: var(--color-bg-raised);
+	}
+	.elsewhere-line {
+		margin: 0;
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
+		color: var(--color-fg-base);
+	}
 	.strip {
 		display: flex;
 		align-items: center;

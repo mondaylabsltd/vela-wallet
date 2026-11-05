@@ -42,15 +42,30 @@ struct MultisigDappSheet: View {
         } else {
             MsSheet(title: words.t("proposal.title"), closeLabel: words.loc.t("common.done"), onClose: leave) {
                 MsNote(text: words.t("proposal.siteAsks", ["host": host(held)]))
-                HStack(spacing: Tokens.Space.s8) {
-                    ProgressView()
-                    Text(verbatim: words.t("proposal.opening"))
-                        .typeRole(Typography.body.scaled(textScale))
-                        .foregroundStyle(theme.fgMuted)
+                // r13-3: the reads before its draft failed (bounded by the
+                // core) — why, Decline and Try again; never a spinner for ever.
+                if let failure = draftFailure(held) {
+                    MsNote(text: failure, tone: .warning, identifier: "multisig.dapp.failed")
+                    VelaButton(title: words.t("external.retry"), kind: .secondary) { hub.dappRetry(id) }
+                        .accessibilityIdentifier("multisig.dapp.retry")
+                    VelaButton(title: words.t("external.decline"), kind: .secondary) { leave() }
+                } else {
+                    HStack(spacing: Tokens.Space.s8) {
+                        ProgressView()
+                        Text(verbatim: words.t("proposal.opening"))
+                            .typeRole(Typography.body.scaled(textScale))
+                            .foregroundStyle(theme.fgMuted)
+                    }
+                    .accessibilityIdentifier("multisig.dapp.opening")
                 }
-                .accessibilityIdentifier("multisig.dapp.opening")
             }
         }
+    }
+
+    /// The draft's failure (the machine's `actions["propose"]`), worded.
+    private func draftFailure(_ held: MsJSON?) -> String? {
+        guard let state = hub.proposalsView.actions["propose"] else { return nil }
+        return words.actionFailure(state, chainId: held?["chain_id"]?.int ?? 0)
     }
 
     private func host(_ held: MsJSON?) -> String {

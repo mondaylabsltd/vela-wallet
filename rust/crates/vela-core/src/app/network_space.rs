@@ -107,6 +107,109 @@ pub fn space_chain_ids_json(space: &str, rows_json: &str) -> String {
         .unwrap_or_else(|_| "[]".to_owned())
 }
 
+/// r13-1 (r10-4, r11-3, now the core's): where an account used on
+/// `chain_ids` lives when it is not in the space in front — a multisig used
+/// only on Arc Testnet while Mainnet is in front. `here`: the front space's
+/// networks (the person's lists: [`space_chain_ids`] less the networks they
+/// took off); `other`: the other space's. `None` when it names no network or
+/// one of them is here — nothing to say. Otherwise its networks of the other
+/// space, in its order (never one the person took off their lists).
+///
+/// The home over such an account claims nothing of the space in front: no
+/// figure (the other space's heading in its place), no "Live", no "No
+/// activity yet", no "Deposit your first asset" — it says where the account
+/// lives and offers the switch ([`Elsewhere`]'s keys).
+#[must_use]
+pub fn lives_elsewhere(
+    chain_ids: &[u32],
+    here: &[u32],
+    other: &[u32],
+    front: NetworkSpace,
+) -> Option<Elsewhere> {
+    if chain_ids.is_empty() || chain_ids.iter().any(|id| here.contains(id)) {
+        return None;
+    }
+    let ids: Vec<u32> = chain_ids
+        .iter()
+        .copied()
+        .filter(|id| other.contains(id))
+        .collect();
+    if ids.is_empty() {
+        return None;
+    }
+    let to_testnet = front == NetworkSpace::Mainnet;
+    Some(Elsewhere {
+        chain_ids: ids,
+        space: if to_testnet {
+            NetworkSpace::Testnet
+        } else {
+            NetworkSpace::Mainnet
+        },
+        line_key: USED_ON_KEY.to_owned(),
+        heading_key: if to_testnet {
+            "networkSpace.headingTestnet"
+        } else {
+            "networkSpace.headingMainnet"
+        }
+        .to_owned(),
+        switch_key: if to_testnet {
+            "networkSpace.toTestnet"
+        } else {
+            "networkSpace.toMainnet"
+        }
+        .to_owned(),
+    })
+}
+
+/// "Used on {{networks}}" — the note's line, its networks an and-list.
+pub const USED_ON_KEY: &str = "home.multisig.add.usedOn";
+
+/// r13-1: an account that lives in the other space ([`lives_elsewhere`]).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct Elsewhere {
+    /// Its networks in the other space, in its order.
+    pub chain_ids: Vec<u32>,
+    /// The space it lives in (the switch's target).
+    pub space: NetworkSpace,
+    /// The line: [`USED_ON_KEY`] with `{{networks}}` — then " · " and
+    /// `heading_key`'s words.
+    pub line_key: String,
+    /// The other space's heading ("Testnet space"): after the line, and in
+    /// the figure's place.
+    pub heading_key: String,
+    /// The switch's words ("Switch to testnet").
+    pub switch_key: String,
+}
+
+/// [`lives_elsewhere`] for a JSON shell: `{chain_ids, here, other, front}`
+/// (`front` as stored: "mainnet" / "testnet") → an [`Elsewhere`], or null.
+#[must_use]
+pub fn lives_elsewhere_json(args_json: &str) -> String {
+    #[derive(Deserialize)]
+    struct Args {
+        #[serde(default)]
+        chain_ids: Vec<u32>,
+        #[serde(default)]
+        here: Vec<u32>,
+        #[serde(default)]
+        other: Vec<u32>,
+        #[serde(default)]
+        front: Option<String>,
+    }
+    let Ok(args) = serde_json::from_str::<Args>(args_json) else {
+        return "null".to_owned();
+    };
+    let front = NetworkSpace::parse(args.front.as_deref());
+    serde_json::to_string(&lives_elsewhere(
+        &args.chain_ids,
+        &args.here,
+        &args.other,
+        front,
+    ))
+    .unwrap_or_else(|_| "null".to_owned())
+}
+
 /// The chain a site with no chain of its own starts on (dapp-17) — no switch
 /// of its own and no grant: the network the person last put a site on in
 /// this space (`last_used`), while it is still one of the space's networks;

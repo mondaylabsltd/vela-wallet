@@ -1,0 +1,71 @@
+{
+  "about": "r13-1 (network_space::lives_elsewhere, link-free: wasm `networkLivesElsewhere`, uniffi `network_lives_elsewhere`): where an account used on `chain_ids` lives when none of them is in the space in front. `here` / `other`: the front space's and the other space's networks on the person's lists. `expect` null: nothing to say (no network named, or one of them is here). Otherwise its networks of the other space, that space, and the keys of the note's line (home.multisig.add.usedOn), the other space's heading and the switch. The home over such an account draws the note and the switch, the heading in the figure's place, and claims nothing of the space in front (no Live, no 'No activity yet', no 'Deposit your first asset').",
+  "cases": [
+    {
+      "name": "r13-1: an Arc-only multisig with Mainnet in front lives in the testnet space",
+      "chain_ids": [5042002],
+      "here": [1, 8453, 100, 1868, 130, 42220],
+      "other": [11155111, 84532, 5042002],
+      "front": "mainnet",
+      "expect": {
+        "chain_ids": [5042002],
+        "space": "testnet",
+        "line_key": "home.multisig.add.usedOn",
+        "heading_key": "networkSpace.headingTestnet",
+        "switch_key": "networkSpace.toTestnet"
+      }
+    },
+    {
+      "name": "a Base multisig with Testnet in front lives in the mainnet space",
+      "chain_ids": [8453],
+      "here": [11155111, 84532, 5042002],
+      "other": [1, 8453, 100],
+      "front": "testnet",
+      "expect": {
+        "chain_ids": [8453],
+        "space": "mainnet",
+        "line_key": "home.multisig.add.usedOn",
+        "heading_key": "networkSpace.headingMainnet",
+        "switch_key": "networkSpace.toMainnet"
+      }
+    },
+    {
+      "name": "one of its networks is here: nothing to say",
+      "chain_ids": [5042002, 8453],
+      "here": [1, 8453, 100],
+      "other": [11155111, 5042002],
+      "front": "mainnet",
+      "expect": null
+    },
+    {
+      "name": "it names no network: nothing to say",
+      "chain_ids": [],
+      "here": [1],
+      "other": [5042002],
+      "front": "mainnet",
+      "expect": null
+    },
+    {
+      "name": "a network the person took off their lists is in neither space: never named",
+      "chain_ids": [5042002, 84532],
+      "here": [1, 8453],
+      "other": [11155111, 5042002],
+      "front": "mainnet",
+      "expect": {
+        "chain_ids": [5042002],
+        "space": "testnet",
+        "line_key": "home.multisig.add.usedOn",
+        "heading_key": "networkSpace.headingTestnet",
+        "switch_key": "networkSpace.toTestnet"
+      }
+    },
+    {
+      "name": "its only network is off the lists: nothing to say",
+      "chain_ids": [84532],
+      "here": [1, 8453],
+      "other": [11155111, 5042002],
+      "front": "mainnet",
+      "expect": null
+    }
+  ]
+}

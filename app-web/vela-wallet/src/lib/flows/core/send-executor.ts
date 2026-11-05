@@ -39,7 +39,11 @@
  * converted into the result variant that operation answers with.
  */
 
-import { MailboxUnreadableError, proposeTransfers } from '$lib/multisig/core/proposals.svelte';
+import {
+	MailboxUnreadableError,
+	ProposalUnreadError,
+	proposeTransfers
+} from '$lib/multisig/core/proposals.svelte';
 import {
 	SigningBlockedError,
 	SigningRefusedError,
@@ -717,11 +721,15 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 							name === 'NotAllowedError' ||
 							name === 'AbortError' ||
 							(error instanceof PasskeyError && error.kind === 'cancelled'),
+						// r13-3: the read that failed, as the core named it — a
+						// network that did not answer is the network's.
 						reason: offline
 							? 'offline'
 							: error instanceof MailboxUnreadableError
 								? 'mailbox_down'
-								: null
+								: error instanceof ProposalUnreadError
+									? 'chain_down'
+									: null
 					};
 				} finally {
 					if (proposing === stop) proposing = null;

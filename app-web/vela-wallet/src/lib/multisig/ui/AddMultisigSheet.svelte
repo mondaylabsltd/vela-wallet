@@ -43,7 +43,7 @@
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import type { MultisigMessages } from '../messages';
 	import type { Finding } from '../core/refusal';
-	import { indexName, missingTitle } from '../core/activity.svelte';
+	import { indexName } from '../core/activity.svelte';
 	import { sameAddress, type ExportedSafe } from '../core/kernel';
 	import type { AddLink, InvitedMember } from '../core/link';
 	import { heldChains, likelyNetworks } from '../core/likely-networks';
@@ -526,8 +526,11 @@
 						</p>
 					{:else if linkLacks !== null}
 						<p class="line" role="status">
+							<!-- r13-6: one sentence — the network NAMED in the core's words
+							     (was "On Arc Testnet (chain 5042002) — a network this device
+							     doesn't have" inside "…which this device doesn't have yet"). -->
 							{fillTemplate(m.add.networkMissing, {
-								network: missingTitle(m, linkLacks, lackingName)
+								network: lackingName ?? chainName(linkLacks)
 							})}
 						</p>
 						<Button variant="secondary" shape="rounded" onclick={() => addNetwork(linkLacks)}

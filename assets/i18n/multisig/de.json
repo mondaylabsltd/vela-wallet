@@ -199,7 +199,14 @@
     "executedBy": "Ausgeführt von {{name}}",
     "countedThen": "{{approved}} von {{threshold}} Genehmigungen zählten bei der Ausführung",
     "approvalsSigned": "Diese Mitglieder haben genehmigt. Welche Genehmigungen bei der Ausführung zählten, ist auf diesem Gerät nicht festgehalten.",
-    "outboxSending": "Deine Genehmigung wird an die anderen Mitglieder gesendet …"
+    "outboxSending": "Deine Genehmigung wird an die anderen Mitglieder gesendet …",
+    "unread": {
+     "chain": "{{network}} ist nicht erreichbar, dieses Multisig ließ sich nicht lesen – deshalb wurde nichts vorgeschlagen. Versuche es gleich noch einmal.",
+     "both": "Weder {{network}} noch der Multisig-Dienst sind erreichbar, deshalb wurde nichts vorgeschlagen. Prüfe deine Verbindung und versuche es noch einmal.",
+     "linkChain": "{{network}} ist nicht erreichbar, diese Transaktion lässt sich nicht öffnen.",
+     "linkService": "Der Multisig-Dienst ist nicht erreichbar, diese Transaktion lässt sich nicht finden.",
+     "linkBoth": "Weder {{network}} noch der Multisig-Dienst sind erreichbar, diese Transaktion lässt sich nicht öffnen. Prüfe deine Verbindung."
+    }
    },
    "send": {
     "propose": "Vorschlagen und genehmigen",

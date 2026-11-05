@@ -1935,6 +1935,11 @@ pub enum SendProposeFailure {
     MailboxDown,
     /// The device is offline.
     Offline,
+    /// r13-3: the multisig's network did not answer the reads the proposal
+    /// is built from (its members, its number) — said as the network's
+    /// ([`SendTxErrorKey::ChainUnreachable`], with its name), never as the
+    /// multisig service's waiting transactions.
+    ChainDown,
     /// This shell cannot propose a multisig's transaction yet: nothing was
     /// signed or proposed. Said as that, never as a mailbox that could not
     /// be read — the honest answer for a shell whose `ProposeSafeTx` has no
@@ -6530,6 +6535,7 @@ fn accept_proposed(
             model.tx_error = Some(match reason {
                 Some(SendProposeFailure::MailboxDown) => SendTxErrorKey::ProposalMailboxDown,
                 Some(SendProposeFailure::Offline) => SendTxErrorKey::ProposalOffline,
+                Some(SendProposeFailure::ChainDown) => SendTxErrorKey::ChainUnreachable,
                 Some(SendProposeFailure::NotSupported) => SendTxErrorKey::ProposalNotSupported,
                 None => SendTxErrorKey::Generic,
             });

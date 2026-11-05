@@ -20,4 +20,17 @@ members: MultisigChainMembers | null,
 /**
  * The last read failed: what is shown may be stale.
  */
-stale: boolean, };
+stale: boolean, 
+/**
+ * r13-3: what to say when it is not shown — `failed` (the read still
+ * out when the bound ran out), `unreadable` (the network did not
+ * answer) or `notFound` (the service did not): the corpus key
+ * (`home.multisig.proposal.unread.link*`, `{{network}}`: the network's
+ * name). Null while reading, found, or `notInMailbox`.
+ */
+reason_key: string | null, 
+/**
+ * r13-3: offer "Try again" (the proposals machine's `retry`): every
+ * stand with a `reason_key`.
+ */
+retry: boolean, };

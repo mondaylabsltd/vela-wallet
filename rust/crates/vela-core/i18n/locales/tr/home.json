@@ -273,7 +273,14 @@
         "executedBy": "{{name}} yürüttü",
         "countedThen": "Yürütüldüğünde {{threshold}} onaydan {{approved}} tanesi sayıldı",
         "approvalsSigned": "Bu üyeler onayladı. Yürütüldüğünde hangi onayların sayıldığı bu cihazda kayıtlı değil.",
-        "outboxSending": "Onayın diğer üyelere gönderiliyor…"
+        "outboxSending": "Onayın diğer üyelere gönderiliyor…",
+        "unread": {
+          "chain": "Bu multisig'i okumak için {{network}} ağına ulaşılamadı, bu yüzden hiçbir şey önerilmedi. Biraz sonra yeniden deneyin.",
+          "both": "Ne {{network}} ağına ne de multisig hizmetine ulaşılabildi, bu yüzden hiçbir şey önerilmedi. Bağlantınızı kontrol edip yeniden deneyin.",
+          "linkChain": "Bu işlemi açmak için {{network}} ağına ulaşılamadı.",
+          "linkService": "Bu işlemi bulmak için multisig hizmetine ulaşılamadı.",
+          "linkBoth": "Bu işlemi açmak için ne {{network}} ağına ne de multisig hizmetine ulaşılabildi. Bağlantınızı kontrol edin."
+        }
       },
       "send": {
         "propose": "Öner ve onayla",

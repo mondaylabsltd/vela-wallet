@@ -500,6 +500,8 @@ data class SendRecipientRisk(
 enum class SendProposeFailure {
     @SerialName("mailbox_down") MailboxDown,
     @SerialName("offline") Offline,
+    /** r13-3: the multisig's network did not answer the reads the proposal is built from. */
+    @SerialName("chain_down") ChainDown,
     /** This shell cannot propose a multisig's transaction yet — said as that, never as the mailbox. */
     @SerialName("not_supported") NotSupported,
 }

@@ -29,7 +29,12 @@
 	import { sameAddress, validName } from '../core/kernel';
 	import { names } from '../core/names.svelte';
 	import { localOwners } from '../core/owners';
-	import { MailboxUnreadableError, proposeRename } from '../core/proposals.svelte';
+	import {
+		MailboxUnreadableError,
+		ProposalUnreadError,
+		proposeRename
+	} from '../core/proposals.svelte';
+	import { unreadWords } from '../core/review-door';
 	import {
 		SigningBlockedError,
 		SigningRefusedError,
@@ -190,15 +195,17 @@
 			renameFailure =
 				error instanceof MailboxUnreadableError
 					? m.proposal.mailboxDown
-					: error instanceof SigningRefusedError
-						? fillTemplate(m.authority.refusedOn, { network: chainName(error.chainId) })
-						: error instanceof SigningUncheckedError
-							? fillTemplate(m.authority.signUnchecked, { network: chainName(error.chainId) })
-							: error instanceof SigningBlockedError
-								? m.review.blocked
-								: fillTemplate(m.proposal.failed, {
-										reason: error instanceof Error ? error.message : String(error)
-									});
+					: error instanceof ProposalUnreadError
+						? unreadWords(m.proposal, error.reasonKey, chainName(chainId))
+						: error instanceof SigningRefusedError
+							? fillTemplate(m.authority.refusedOn, { network: chainName(error.chainId) })
+							: error instanceof SigningUncheckedError
+								? fillTemplate(m.authority.signUnchecked, { network: chainName(error.chainId) })
+								: error instanceof SigningBlockedError
+									? m.review.blocked
+									: fillTemplate(m.proposal.failed, {
+											reason: error instanceof Error ? error.message : String(error)
+										});
 		} finally {
 			renameBusy = false;
 		}

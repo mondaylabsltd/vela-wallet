@@ -34,6 +34,7 @@
 	import { chainName, shortenAddress } from '../core/display';
 	import { sameAddress, type Action, type MemberRefusal, type MemberVerdict } from '../core/kernel';
 	import { proposeChange } from '../core/member-propose';
+	import { unreadWords } from '../core/review-door';
 	import { names } from '../core/names.svelte';
 	import { multisig, type MultisigAccount } from '../core/store.svelte';
 	import { multisigUi } from '../core/ui.svelte';
@@ -198,7 +199,9 @@
 					? refusalText(outcome.refusal)
 					: outcome.mailboxDown
 						? m.proposal.mailboxDown
-						: (outcome.message ?? '')
+						: outcome.unreadKey
+							? unreadWords(m.proposal, outcome.unreadKey, chainName(chainId))
+							: (outcome.message ?? '')
 			});
 		}
 		if (made.length > 0 && made.length === ready.length) {

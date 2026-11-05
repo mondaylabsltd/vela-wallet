@@ -192,6 +192,11 @@ struct MultisigViewsTests {
         #expect(words.actionFailure(state(#"{"kind":"working"}"#), chainId: 100) == nil)
         #expect(words.actionFailure(state(#"{"kind":"cancelled"}"#), chainId: 100) == nil)
         #expect(words.actionFailure(state(#"{"kind":"mailboxUnreadable"}"#), chainId: 100) == words.t("proposal.mailboxDown"))
+        // r13-3: a network that did not answer is said as the network's, named — never the service's.
+        let unread = words.actionFailure(state(#"{"kind":"unread","reason_key":"home.multisig.proposal.unread.chain"}"#), chainId: 100)
+        #expect(unread == words.t("proposal.unread.chain", ["network": words.network(100)]))
+        #expect(unread != words.t("proposal.mailboxDown"))
+        #expect(words.unreadText("home.multisig.proposal.unread.linkBoth", chainId: 100) == words.t("proposal.unread.linkBoth", ["network": words.network(100)]))
         #expect(words.actionFailure(state(#"{"kind":"noMemberHere"}"#), chainId: 100) == words.t("proposal.notMember"))
         #expect(words.actionFailure(state(#"{"kind":"signingBlocked"}"#), chainId: 100) == words.t("review.blocked"))
         let passkey = MultisigShellFailure.passkey(failure: "cancelled", timedOut: false, message: nil).detail

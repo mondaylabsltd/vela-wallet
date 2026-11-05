@@ -33,6 +33,7 @@ export * from './MultisigFactsSource';
 export * from './MultisigFrozenFacts';
 export * from './MultisigHeldRequest';
 export * from './MultisigHeldStage';
+export * from './MultisigHistoryStand';
 export * from './MultisigImportOutcome';
 export * from './MultisigImportView';
 export * from './MultisigIndexAnswer';

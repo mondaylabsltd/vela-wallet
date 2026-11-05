@@ -1494,7 +1494,12 @@ if (branchSet.size !== 119) fail(`expected 119 branch paths, got ${branchSet.siz
   //   feeUncheckedHeld` (the fee line while Approve is shut — the review
   //   still read — says nothing of approving: "you can still approve"
   //   under a disabled Approve was untrue). 684 + 1 = 685.
-  const pins = { multisig: 685 };
+  // 690 (round 13, r13-3, 2026-11-05): + `home.multisig.proposal.unread.
+  //   {chain, both, linkChain, linkService, linkBoth}` (the step before a
+  //   draft or a link's transaction exists is bounded and names the read
+  //   that failed — the network, the multisig service, or both — never a
+  //   hung network said as the service's waiting transactions). 685 + 5 = 690.
+  const pins = { multisig: 690 };
   for (const [name, docs] of Object.entries(onDemand)) {
     const leaves = new Set();
     for (const lng of LOCALES) walk(docs[lng], '', leaves, new Set());

@@ -341,6 +341,30 @@ describe('an invite (r4D-4)', () => {
 		await screen.unmount();
 	});
 
+	it('a network this device lacks is said in ONE sentence, the network named (r13-6)', async () => {
+		const link = { multisig: SAFE, chainIds: [5042002], members: [] };
+		io.invite = { link, on_device: [], missing: 5042002, missing_name: 'Arc Testnet' };
+		const screen = render(AddMultisigSheet, {
+			props: {
+				m,
+				prefill: SAFE,
+				link,
+				wide: true,
+				closeLabel: 'Close',
+				onclose: () => {},
+				onadded: () => {}
+			}
+		});
+		await settle();
+		const summary = root().querySelector('[data-testid="invite-summary"]')?.textContent ?? '';
+		// The core's one sentence, the name inside it — never the proposal
+		// sheet's "On Arc Testnet (chain 5042002) — a network…" doubled into it.
+		expect(summary).toContain('Missing Arc Testnet');
+		expect(summary).not.toContain('5042002');
+		io.invite = null;
+		await screen.unmount();
+	});
+
 	it('says a damaged invite is damaged the moment it opens (r4b-13)', async () => {
 		const screen = render(AddMultisigSheet, {
 			props: {

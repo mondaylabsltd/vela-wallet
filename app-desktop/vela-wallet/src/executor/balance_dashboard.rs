@@ -651,7 +651,15 @@ pub fn start_ticks(cx: &mut App) {
                 crate::diag::vlog!("balances", "pool out of reach: {chain_ids:?}");
                 let balance = cx.update(resident::resident::<BalanceDashboard>);
                 balance.update(cx, |resident, cx| {
-                    resident.dispatch(Event::PoolUnreached { chain_ids }, cx);
+                    // r13-4: no `silent` yet here — a lost network is read
+                    // again (the web names a silent one at once).
+                    resident.dispatch(
+                        Event::PoolUnreached {
+                            chain_ids,
+                            silent: Vec::new(),
+                        },
+                        cx,
+                    );
                 });
             }
         }

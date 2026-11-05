@@ -195,6 +195,27 @@ pub const RPC_READ_TIMEOUT_MS: u32 = 8_000;
 /// [`RpcPoolView::pending_urls`]). Without it a black-holed node holds every
 /// read for the whole [`RPC_READ_TIMEOUT_MS`] before the next node is asked.
 pub const HEDGE_AFTER_MS: u32 = 1_500;
+/// r13-4: how many DIFFERENT endpoints of a chain have to fail on transport
+/// (no socket, no answer in time), with no answer of any kind from the chain
+/// between them, before the chain is out of reach (`unreached_chains`) — from
+/// any calls, not one call's whole pass. A pool smaller than this needs all
+/// of its endpoints. With hedged reads three hung endpoints take about
+/// 8 + 1.5 + 8 s, so a hung network is named in about 18 s from its first
+/// hung read, warm or cold — not after a pass of 25 endpoints × 8 s.
+pub const UNREACHED_AFTER_ENDPOINTS: usize = 3;
+/// r13-4: …and the chain has been silent this long since the first of them.
+/// Refusals land in milliseconds: three refused public nodes before the one
+/// that answers are not an outage (it flickered "Can't reach Ethereum" for a
+/// frame while Ethereum answered). Hung nodes take 8 s each, so the bound
+/// costs a hang nothing; a whole pass refused is RF1's, at once.
+pub const UNREACHED_MIN_SILENCE_MS: f64 = 5_000.0;
+/// r13-4: while a chain is out of reach, a read of it is the circuit
+/// breaker's half-open probe, in a single pass: over the endpoints not yet
+/// silent in this outage — each hung node is asked once, never again until
+/// the chain answers — and, once every one is silent, over this many of them
+/// (the most trusted first, then the oldest failure). A read is never failed
+/// without asking anyone; writes are not bound this way.
+pub const OUTAGE_PROBE_ENDPOINTS: usize = 2;
 /// Bundler JSON-RPC timeout — `NET_TIMEOUTS.bundlerRpc` (`net.ts:27`).
 pub const BUNDLER_RPC_TIMEOUT_MS: u32 = 15_000;
 /// Per-endpoint `eth_chainId` ping timeout — `NET_TIMEOUTS.rpcPing` (`net.ts:29`).
@@ -1106,6 +1127,9 @@ struct CallSession {
     /// `unreached_chains` without waiting for the later passes.
     first_pass_tried: u32,
     first_pass_all_transport: bool,
+    /// r13-4: this pass is the outage's probe of nodes already silent (none
+    /// was left untried): they are asked, at most [`OUTAGE_PROBE_ENDPOINTS`].
+    silent_probe: bool,
 }
 
 /// The fastest-RPC ping race (`pickFastestRpcUrl`), run at most once per
@@ -1150,6 +1174,17 @@ pub struct Model {
     /// answer. The browser's chain notice reads `failed ∪ unreached`; the home
     /// banner keeps `failed_chains` alone.
     unreached_chains: BTreeSet<u32>,
+    /// r13-4: per chain, the endpoints that failed on transport since the
+    /// chain last answered anything ([`UNREACHED_AFTER_ENDPOINTS`]).
+    silent: BTreeMap<u32, BTreeSet<String>>,
+    /// r13-4: per chain, when its current silence began (its first silent
+    /// endpoint).
+    silent_since: BTreeMap<u32, f64>,
+    /// r13-4: chains out of reach by the silence rule — several nodes said
+    /// nothing for [`UNREACHED_MIN_SILENCE_MS`]: a network's whole silence,
+    /// never one method's failure (RF1 can come from a node that refuses one
+    /// method only).
+    silent_chains: BTreeSet<u32>,
     /// Chains whose person's own endpoint is not answering while another node
     /// is (owner decision 2026-10-28): the last usable RPC answer came from an
     /// endpoint that is not [`RpcSource::User`] although the pool holds one.
@@ -1235,6 +1270,12 @@ pub struct RpcPoolView {
     /// read again and named, never left to age behind the shell's cache.
     #[serde(default)]
     pub out_of_reach_chains: Vec<u32>,
+    /// r13-4: the subset of `out_of_reach_chains` the pool found silent — at
+    /// least three of its nodes said nothing at all for 5 s, nothing answered
+    /// since — sorted ascending. Hand it beside them (`pool_unreached
+    /// {chain_ids, silent}`): the balance machine names these at once.
+    #[serde(default)]
+    pub silent_chains: Vec<u32>,
     /// Per routed call, the endpoints its current pass has still to try, in
     /// the order it will try them (the endpoint it is waiting on is already
     /// off the list). For a shell that asks the next endpoint early — the
@@ -1300,6 +1341,7 @@ impl App for RpcPool {
                         maybe_delivered: false,
                         first_pass_tried: 0,
                         first_pass_all_transport: true,
+                        silent_probe: false,
                     },
                 );
                 ensure_pool_then(model, chain_id, PendingWork::Call { call_id }, now_ms)
@@ -1366,6 +1408,12 @@ impl App for RpcPool {
             out_of_reach_chains: model
                 .failed_chains
                 .union(&model.unreached_chains)
+                .filter(|chain| !model.rate_limited_chains.contains(chain))
+                .copied()
+                .collect(),
+            silent_chains: model
+                .silent_chains
+                .iter()
                 .filter(|chain| !model.rate_limited_chains.contains(chain))
                 .copied()
                 .collect(),
@@ -1928,8 +1976,32 @@ fn start_pass(model: &mut Model, call_id: &str, now_ms: f64) -> Command<RpcEffec
     };
     let (chain_id, kind) = (session.chain_id, session.kind);
 
+    let outage_read = outage_read(model, call_id);
+
     let pruned = prune_expired_bans(model, now_ms);
-    let urls = select_with_rescue(model, chain_id, kind, now_ms);
+    let mut urls = select_with_rescue(model, chain_id, kind, now_ms);
+    if outage_read {
+        // r13-4, the half-open probe, one pass: the endpoints not silent yet
+        // in this outage (a node that answers may be among them); none left,
+        // a few of the silent ones.
+        let silent = model.silent.get(&chain_id).cloned().unwrap_or_default();
+        let fresh: Vec<String> = urls
+            .iter()
+            .filter(|u| !silent.contains(*u))
+            .cloned()
+            .collect();
+        let silent_probe = fresh.is_empty();
+        if silent_probe {
+            urls = probe_order(model, chain_id, urls);
+            urls.truncate(OUTAGE_PROBE_ENDPOINTS);
+        } else {
+            urls = fresh;
+        }
+        if let Some(session) = model.calls.get_mut(call_id) {
+            session.pass = max_passes(kind).saturating_sub(1);
+            session.silent_probe = silent_probe;
+        }
+    }
 
     if let Some(session) = model.calls.get_mut(call_id) {
         session.queue = urls.into_iter().collect();
@@ -2055,6 +2127,7 @@ fn revalidated_x_rpc_url(
 /// Try the next endpoint of the current pass, or close the pass: another
 /// jittered-backoff pass while attempts remain, else the chain-level verdict.
 fn next_endpoint(model: &mut Model, call_id: &str, now_ms: f64) -> Command<RpcEffect, Event> {
+    drop_silent(model, call_id);
     let Some(session) = model.calls.get_mut(call_id) else {
         return Command::done();
     };
@@ -2414,6 +2487,8 @@ fn handle_outcome(
         }
     }
 
+    note_silence(model, chain_id, kind, &method, url, &outcome, now_ms);
+
     let route = route_of(kind, &method, &outcome);
     let maybe_delivered = model
         .calls
@@ -2509,6 +2584,111 @@ fn handle_outcome(
     }
 }
 
+/// r13-4: a read that a chain out of reach would hold — through the RPC
+/// pool, a read ([`is_hedged_read`]: nothing it sends changes anything), on
+/// a chain found silent (`silent_chains`).
+fn outage_read(model: &Model, call_id: &str) -> bool {
+    // Only a SILENT chain (the silence rule): RF1 can come from one method a
+    // node refuses with a 500, and that node still answers every other
+    // read — a read that skipped it failed where it would have answered.
+    model.calls.get(call_id).is_some_and(|session| {
+        is_hedged_read(session.kind, &session.method)
+            && model.silent_chains.contains(&session.chain_id)
+    })
+}
+
+/// r13-4: what one endpoint's outcome says of its chain. A transport failure
+/// (nothing answered: a hang, a refusal) joins the chain's silent endpoints;
+/// anything that answered — a result, an error, a 429 — empties them. When
+/// [`UNREACHED_AFTER_ENDPOINTS`] different endpoints (or every endpoint of
+/// a smaller pool) are silent, the chain is out of reach at once, and every
+/// read of it still sweeping stops after a probe's worth of endpoints.
+fn note_silence(
+    model: &mut Model,
+    chain_id: u32,
+    kind: RpcKind,
+    method: &str,
+    url: &str,
+    outcome: &RpcTransportOutcome,
+    now_ms: f64,
+) {
+    if kind != RpcKind::Rpc || is_optional_method(method) {
+        return;
+    }
+    if !is_transport_failure(outcome) {
+        model.silent.remove(&chain_id);
+        model.silent_since.remove(&chain_id);
+        return;
+    }
+    let since = *model.silent_since.entry(chain_id).or_insert(now_ms);
+    let silent = model.silent.entry(chain_id).or_default();
+    silent.insert(url.to_owned());
+    let count = silent.len();
+    let pool_size = model.pools.get(&chain_id).map_or(0, |pool| pool.rpc.len());
+    let needed = UNREACHED_AFTER_ENDPOINTS.min(pool_size.max(1));
+    if count < needed || now_ms - since < UNREACHED_MIN_SILENCE_MS {
+        return;
+    }
+    model.silent_chains.insert(chain_id);
+    if !model.unreached_chains.insert(chain_id) {
+        return;
+    }
+    let max_pass = max_passes(RpcKind::Rpc).saturating_sub(1);
+    for session in model.calls.values_mut() {
+        if session.chain_id == chain_id && is_hedged_read(session.kind, &session.method) {
+            session.pass = max_pass;
+        }
+    }
+}
+
+/// r13-4: which silent nodes the outage's probe asks, in order: the most
+/// trusted source first (the person's own node — a cooldown's score must not
+/// keep the node that comes back from ever being asked), then the rest by
+/// the oldest last failure, so successive probes go round every node.
+fn probe_order(model: &Model, chain_id: u32, urls: Vec<String>) -> Vec<String> {
+    let Some(pool) = model.pools.get(&chain_id) else {
+        return urls;
+    };
+    let stats = |url: &str| pool.rpc.iter().find(|e| e.url == url);
+    let mut ranked: Vec<(f64, f64, String)> = urls
+        .into_iter()
+        .map(|url| {
+            let (priority, failed_at) = stats(&url).map_or((0.0, 0.0), |e| {
+                (source_priority(e.source), e.last_failure_at_ms)
+            });
+            (priority, failed_at, url)
+        })
+        .collect();
+    let Some(first) = ranked
+        .iter()
+        .enumerate()
+        .max_by(|(_, a), (_, b)| a.0.total_cmp(&b.0).then(b.1.total_cmp(&a.1)))
+        .map(|(i, _)| i)
+    else {
+        return Vec::new();
+    };
+    let head = ranked.remove(first);
+    ranked.sort_by(|a, b| a.1.total_cmp(&b.1));
+    std::iter::once(head.2)
+        .chain(ranked.into_iter().map(|(_, _, url)| url))
+        .collect()
+}
+
+/// r13-4: during an outage a read never asks a node already silent in it
+/// again (each hung node once, until the chain answers).
+fn drop_silent(model: &mut Model, call_id: &str) {
+    if !outage_read(model, call_id) {
+        return;
+    }
+    let Some(chain_id) = model.calls.get(call_id).map(|s| s.chain_id) else {
+        return;
+    };
+    let silent = model.silent.get(&chain_id).cloned().unwrap_or_default();
+    if let Some(session) = model.calls.get_mut(call_id).filter(|s| !s.silent_probe) {
+        session.queue.retain(|url| !silent.contains(url));
+    }
+}
+
 fn conclude(
     model: &mut Model,
     call_id: &str,
@@ -2534,6 +2714,9 @@ fn clear_chain_failure(model: &mut Model, chain_id: u32, kind: RpcKind) {
         model.failed_chains.remove(&chain_id);
         model.rate_limited_chains.remove(&chain_id);
         model.unreached_chains.remove(&chain_id);
+        model.silent.remove(&chain_id);
+        model.silent_since.remove(&chain_id);
+        model.silent_chains.remove(&chain_id);
     }
 }
 

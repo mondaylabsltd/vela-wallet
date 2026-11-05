@@ -23,7 +23,7 @@ use vela_core::multisig;
 use vela_core::multisig_link::{
     AddLinkFault, BrokenLink, KEPT_LINK_KEY, KEPT_LINK_MS, PENDING_LINK_KEY,
 };
-use world::{fixture, genesis, settle, stored_row, DeployedSafe, World, SERVICE};
+use world::{fixture, genesis, settle_reads_first, stored_row, DeployedSafe, World, SERVICE};
 
 type Sut = DomainDriver<MultisigAccounts>;
 type Props = DomainDriver<MultisigProposals>;
@@ -37,7 +37,9 @@ where
     A::Effect: vela_core::app::SplitEffect<Op = vela_core::app::multisig_shell::MultisigOperation>,
 {
     sut.dispatch(event);
-    let answered = settle(sut, world, 20_000);
+    // A shell's clock (r13-3): a link's bound runs out after the reads it
+    // bounds have answered.
+    let answered = settle_reads_first(sut, world, 20_000);
     assert!(answered < 20_000, "the machine never settled");
 }
 

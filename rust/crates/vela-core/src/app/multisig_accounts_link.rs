@@ -440,17 +440,18 @@ pub async fn open_proposal(io: &Io<Event>, st: &Shared<State>, l: ProposalLink) 
         None => {
             // The link names its network: that is where it is used. r4b-13:
             // one lookup, answered in a few seconds — asked once more at most.
-            match find_multisig(
-                io,
-                st,
-                &l.multisig,
-                &[l.chain_id],
-                Some(l.chain_id),
-                1,
-                2500,
-            )
-            .await
-            {
+            // r13-3: bounded — past it, "a network did not answer in time"
+            // (`Unchecked`), said on the add sheet with its Try again.
+            let networks = [l.chain_id];
+            let find = find_multisig(io, st, &l.multisig, &networks, Some(l.chain_id), 1, 2500);
+            let cap = io.wait(u64::from(
+                crate::app::multisig_review_state::OPEN_TIMEOUT_MS,
+            ));
+            let found = match futures::future::select(Box::pin(find), Box::pin(cap)).await {
+                futures::future::Either::Left((found, _)) => found,
+                futures::future::Either::Right(_) => Found::No(AddOutcome::Unchecked),
+            };
+            match found {
                 Found::Account(account, findings) if findings.is_empty() => {
                     lock(st).found = Some(((*account).clone(), Vec::new()));
                     *account
@@ -466,11 +467,17 @@ pub async fn open_proposal(io: &Io<Event>, st: &Shared<State>, l: ProposalLink) 
         }
     };
     // The members now are the chain's: one added since the genesis counts.
+    // r13-3: bounded — a network that does not answer leaves the founding
+    // members (as a read that failed always did), never "Opening…" for ever.
     let chain = lock(st).chain.clone();
-    let owners = chain
-        .read_members(io, l.chain_id, &account.address, &account.genesis)
-        .await
-        .map_or_else(|_| account.owners.clone(), |m| m.owners);
+    let read = chain.read_members(io, l.chain_id, &account.address, &account.genesis);
+    let cap = io.wait(u64::from(
+        crate::app::multisig_review_state::OPEN_TIMEOUT_MS,
+    ));
+    let owners = match futures::future::select(Box::pin(read), Box::pin(cap)).await {
+        futures::future::Either::Left((Ok(members), _)) => members.owners,
+        _ => account.owners.clone(),
+    };
     if !local_owners(&locals, &owners).is_empty() {
         let kept = if stored.is_some() {
             Some(account.clone())

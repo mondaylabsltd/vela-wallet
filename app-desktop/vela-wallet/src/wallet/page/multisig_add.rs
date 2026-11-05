@@ -596,11 +596,9 @@ impl WalletPage {
                             )),
                     );
                 } else if let Some(lacks) = link_lacks {
-                    let title = words::tv(
-                        &loc,
-                        "proposal.missingNetwork",
-                        &[("chainId", &lacks.to_string())],
-                    );
+                    // r13-6: one sentence — the network NAMED inside the
+                    // core's `add.networkMissing` (it says the rest itself).
+                    let title = network(lacks);
                     let hash = link::add_link(
                         link::SITE_ORIGIN,
                         self.loc.language(),

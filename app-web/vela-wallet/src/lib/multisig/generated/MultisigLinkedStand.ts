@@ -3,4 +3,4 @@
 /**
  * Where a link's proposal stands.
  */
-export type MultisigLinkedStand = "reading" | "found" | "notInMailbox" | "notFound" | "unreadable";
+export type MultisigLinkedStand = "reading" | "found" | "notInMailbox" | "notFound" | "unreadable" | "failed";

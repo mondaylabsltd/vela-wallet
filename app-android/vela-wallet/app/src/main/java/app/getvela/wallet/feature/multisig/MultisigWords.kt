@@ -330,12 +330,18 @@ class MultisigWords(
 
     // -- why an action did not go (`MultisigActionState`) ----------------------------
 
+    /** r13-3: a key the core named for a read that failed (`home.multisig.proposal.unread.*`), `{{network}}` its name. */
+    fun unreadText(key: String?, chainId: Int): String =
+        t((key ?: "proposal.unread.chain").removePrefix("home.multisig."), "network" to network(chainId))
+
     /** The action's failure in words; `null` for one that says nothing (working, done, the person's own cancel). */
     fun actionFailure(state: JsonElement?, chainId: Int): String? {
         state ?: return null
         return when (state.kind) {
             "working", "done", "cancelled", "outsideAsked", "riskDeclined" -> null
             "mailboxUnreadable" -> t("proposal.mailboxDown")
+            // r13-3: the read the core names (the network, or both).
+            "unread" -> unreadText(state["reason_key"].str, chainId)
             "noMemberHere" -> t("proposal.notMember")
             "signingRefused" -> t("authority.refusedOn", "network" to network(chainId))
             "signingBlocked" -> t("review.blocked")

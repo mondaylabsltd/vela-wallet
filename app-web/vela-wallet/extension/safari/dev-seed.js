@@ -58,7 +58,13 @@ async function seed() {
 	const peerconnect = loopback(params.get('peerconnect'));
 	const index = loopback(params.get('index'));
 	const asked = params.get('page');
-	const page = typeof asked === 'string' && LOOPBACK_PAGE.test(asked) ? asked : null;
+	// D9 (round 13): one loopback origin, `localhost` — a passkey's relying
+	// party is never an IP address (the page on 127.0.0.1 showed the
+	// browser's raw error). The app's `loopbackPage` says the same.
+	const page =
+		typeof asked === 'string' && LOOPBACK_PAGE.test(asked)
+			? asked.replace(/^(https?:\/\/)(?:127\.0\.0\.1|\[::1\])/, '$1localhost')
+			: null;
 	const create = params.get('next') === 'create';
 	const networks = params
 		.getAll('rpc')

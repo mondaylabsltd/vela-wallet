@@ -610,7 +610,22 @@ impl MultisigHost {
         let screen = self.machines.take_screen();
         for item in screen {
             match item {
-                Screen::ActivityRows(rows) => write_rows(rows),
+                // r13-7: written, then the page's feed reads its store again
+                // — the first load no longer misses an executed send until
+                // the window is focused again.
+                Screen::ActivityRows(rows) => {
+                    let written = cx
+                        .background_executor()
+                        .spawn(async move { write_rows(rows) });
+                    cx.spawn(async move |this, cx| {
+                        written.await;
+                        let _ = this.update(cx, |host, cx| {
+                            host.screen.push(Screen::ActivityRows(Vec::new()));
+                            cx.notify();
+                        });
+                    })
+                    .detach();
+                }
                 other => self.screen.push(other),
             }
         }
@@ -869,29 +884,26 @@ fn reword_member_rows() {
 
 /// An executed multisig transaction's rows, worded and kept in Activity
 /// (the web's `executionRows`): which rows is the core's plan; a token's
-/// symbol and decimals are read here. On a thread: the reads are the
-/// chain's.
+/// symbol and decimals are read here. Called off the main thread (the reads
+/// are the chain's); r13-7: the page's feed is told to read its store again
+/// once they are written (`Screen::ActivityRows`).
 fn write_rows(rows: Vec<Value>) {
-    let _ = std::thread::Builder::new()
-        .name("vela-multisig-rows".to_owned())
-        .spawn(move || {
-            let worded = super::activity::worded_rows(&rows);
-            if worded.is_empty() {
-                return;
-            }
-            let _ = storage::update_list(crate::executor::activity_feed::TX_KEY, |stored| {
-                for row in &worded {
-                    let id = row.get("id").cloned();
-                    stored.retain(|r| r.get("id") != id.as_ref());
-                    stored.push(row.clone());
-                }
-                true
-            });
-            // r13 S4 (the Android finding, here too): an execution landed —
-            // this device's or another member's — so the multisig's
-            // holdings moved; read now, as the tracker's `HoldingsMoved` does
-            // for a Vela account's own op, never at the next ten-minute pass
-            // (Assets kept 7.5 xDAI beside a chain that said 7.49).
-            crate::executor::balance_dashboard::invalidate();
-        });
+    let worded = super::activity::worded_rows(&rows);
+    if worded.is_empty() {
+        return;
+    }
+    let _ = storage::update_list(crate::executor::activity_feed::TX_KEY, |stored| {
+        for row in &worded {
+            let id = row.get("id").cloned();
+            stored.retain(|r| r.get("id") != id.as_ref());
+            stored.push(row.clone());
+        }
+        true
+    });
+    // r13 S4 (the Android finding, here too): an execution landed — this
+    // device's or another member's — so the multisig's holdings moved; read
+    // now, as the tracker's `HoldingsMoved` does for a Vela account's own op,
+    // never at the next ten-minute pass (Assets kept 7.5 xDAI beside a chain
+    // that said 7.49).
+    crate::executor::balance_dashboard::invalidate();
 }

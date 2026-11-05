@@ -787,6 +787,21 @@ pub struct ItemSigners {
 // The view
 // ---------------------------------------------------------------------------
 
+/// r13-7: where a multisig's history stands on this page
+/// ([`ProposalsView::history`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "MultisigHistoryStand"))]
+pub enum HistoryStand {
+    /// Its first read is out: say it is being read.
+    #[default]
+    Reading,
+    /// Read: what it holds is shown (nothing: "No activity yet").
+    Read,
+    /// Its first read failed: nothing can be said of what it holds.
+    Unread,
+}
+
 /// Where one action stands.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -801,6 +816,14 @@ pub enum ActionState {
     Cancelled,
     /// The mailbox's list could not be read: nothing was proposed.
     MailboxUnreadable,
+    /// r13-3: the reads the draft is built from did not come back — failed,
+    /// or still out at `OPEN_TIMEOUT_MS`: nothing was proposed. `reason_key`
+    /// names the read (`home.multisig.proposal.unread.chain` /
+    /// `.both`, with `{{network}}`); "Try again" proposes again. (A service
+    /// that alone did not answer stays [`ActionState::MailboxUnreadable`].)
+    Unread {
+        reason_key: String,
+    },
     /// No member of it is on this device (an outside wallet proposes it —
     /// the outside machine).
     NoMemberHere,
@@ -903,6 +926,12 @@ pub struct ProposalsView {
     pub unreadable: Vec<u64>,
     #[cfg_attr(feature = "bindings", ts(type = "number[]"))]
     pub history_unreadable: Vec<u64>,
+    /// r13-7: where the followed multisig's history (what it executed)
+    /// stands on this page: `reading` until its first read ends — the
+    /// home's Activity says it is being read, never "No activity yet" —
+    /// then `read`, or `unread` (it could not be read; `history_unreadable`
+    /// says where, with Retry). A history once read stays `read`.
+    pub history: HistoryStand,
     pub offline: bool,
     pub read_at: Option<f64>,
     pub loading: bool,
@@ -1066,6 +1095,14 @@ pub struct State {
     /// `unreadable` (`chainUnreachable`), never the service's outage.
     mailbox_missed: BTreeSet<u64>,
     history_unreadable: Vec<u64>,
+    /// r13-3: the reads out now — per network, its members' reads; and the
+    /// multisig service's. What a link's opening says when its bound runs
+    /// out is the read still out ([`ReadOut`]).
+    out_chains: BTreeMap<u64, u32>,
+    out_service: u32,
+    /// r13-7: per multisig (lowercase address), its history's stand on this
+    /// page; missing — `reading`.
+    history: BTreeMap<String, HistoryStand>,
     offline: bool,
     read_at: Option<f64>,
     loading: bool,
@@ -1122,7 +1159,57 @@ pub struct State {
     rules_told: BTreeMap<String, super::multisig_members::RuleChip>,
 }
 
+/// r13-3: one read out, counted while it is (dropped with its future when a
+/// bound cuts it, so the count never lies).
+struct ReadOut {
+    st: Shared<State>,
+    chain: Option<u64>,
+}
+
+impl ReadOut {
+    fn chain(st: &Shared<State>, chain_id: u64) -> Self {
+        *lock(st).out_chains.entry(chain_id).or_default() += 1;
+        Self {
+            st: st.clone(),
+            chain: Some(chain_id),
+        }
+    }
+
+    fn service(st: &Shared<State>) -> Self {
+        lock(st).out_service += 1;
+        Self {
+            st: st.clone(),
+            chain: None,
+        }
+    }
+}
+
+impl Drop for ReadOut {
+    fn drop(&mut self) {
+        let mut s = lock(&self.st);
+        match self.chain {
+            Some(id) => {
+                let gone = s.out_chains.get_mut(&id).is_some_and(|n| {
+                    *n = n.saturating_sub(1);
+                    *n == 0
+                });
+                if gone {
+                    s.out_chains.remove(&id);
+                }
+            }
+            None => s.out_service = s.out_service.saturating_sub(1),
+        }
+    }
+}
+
 impl State {
+    /// r13-3: which read a link's opening still waits for on `chain_id`.
+    pub(crate) fn unread_now(&self, chain_id: u64) -> Option<review_state::UnreadRead> {
+        review_state::UnreadRead::of(
+            self.out_chains.contains_key(&chain_id),
+            self.out_service > 0,
+        )
+    }
     /// How each member still to approve `hash` on `chain_id` signs, and who
     /// an outside wallet may sign for (`kindOf`, `plainAccounts`).
     fn item_signers(
@@ -1400,8 +1487,15 @@ impl App for MultisigProposals {
                     let s = lock(&st);
                     lock(&s.service.outage).reset();
                 }
-                lock(&st).history_unreadable.clear();
-                refresh(&io, &st, false, false).await;
+                {
+                    let mut s = lock(&st);
+                    s.history_unreadable.clear();
+                    // r13-7: an unread history is being read again.
+                    s.history.retain(|_, stand| *stand != HistoryStand::Unread);
+                }
+                if !flows::retry_linked(&io, &st).await {
+                    refresh(&io, &st, false, false).await;
+                }
             }),
             Event::Online { online } => {
                 lock(&model.state).offline = !online;
@@ -1690,6 +1784,11 @@ impl App for MultisigProposals {
             cached_at: s.cached_at,
             unreadable: s.unreadable.clone(),
             history_unreadable: s.history_unreadable.clone(),
+            history: s
+                .account
+                .as_ref()
+                .and_then(|a| s.history.get(&a.address.to_ascii_lowercase()).copied())
+                .unwrap_or_default(),
             offline: s.offline,
             read_at: s.read_at,
             loading: s.loading,
@@ -2056,6 +2155,7 @@ async fn read_chain(
         match known {
             Some(m) => Ok(m),
             None => {
+                let _out = ReadOut::chain(st, chain_id);
                 chain
                     .read_members(io, chain_id, &account.address, &account.genesis)
                     .await
@@ -2069,6 +2169,7 @@ async fn read_chain(
         if !ask_mailbox {
             return None;
         }
+        let _out = ReadOut::service(st);
         match service
             .fetch_proposals(io, chain_id, &account.address, background)
             .await
@@ -2197,6 +2298,7 @@ async fn refresh_once(io: &Io<Event>, st: &Shared<State>, tick: bool) {
     let started = io.now().await;
     io.emit(Event::Changed);
     let chain_ids = account.chain_ids.clone();
+    let service_out = ReadOut::service(st);
     let mut mailbox = service.available(io).await;
     let mut split = None;
     if mailbox {
@@ -2209,6 +2311,7 @@ async fn refresh_once(io: &Io<Event>, st: &Shared<State>, tick: bool) {
             Err(_) => mailbox = false,
         }
     }
+    drop(service_out);
     let mut reading = chain_ids.clone();
     if let Some((_, used, missing)) = &split {
         for id in used {
@@ -2369,7 +2472,23 @@ async fn refresh_once(io: &Io<Event>, st: &Shared<State>, tick: bool) {
     save_json(io, EXECUTING_KEY, &executing, true).await;
     tell_members(io, st, &account).await;
     read_tokens(io, st).await;
-    record_remote_executions(io, st, &account).await;
+    let history_read = record_remote_executions(io, st, &account).await;
+    // r13-7: the first read of its history ends here — read, or not (the
+    // list, or a network's history, could not be read). Once read, it stays.
+    let mut s = lock(st);
+    let stand = s
+        .history
+        .entry(account.address.to_ascii_lowercase())
+        .or_default();
+    if *stand != HistoryStand::Read {
+        *stand = if history_read && !failed {
+            HistoryStand::Read
+        } else {
+            HistoryStand::Unread
+        };
+    }
+    drop(s);
+    io.emit(Event::Changed);
 }
 
 /// r8-7: tell the accounts machine who the members are now — once every
@@ -2973,6 +3092,90 @@ fn build(kind: &ProposalKind, safe: &str, chain: &ChainState) -> Result<SafeTx, 
     }
 }
 
+/// r13-3: what a draft that was not built says — the service alone keeps
+/// its old state (every shell words it already).
+fn unread_action(unread: review_state::UnreadRead) -> ActionState {
+    match unread {
+        review_state::UnreadRead::Service => ActionState::MailboxUnreadable,
+        other => ActionState::Unread {
+            reason_key: other.draft_key().to_owned(),
+        },
+    }
+}
+
+/// r13-3: the reads a draft is built from — the multisig's members and
+/// number on its network, its waiting transactions from the service — read
+/// side by side and bounded by [`review_state::OPEN_TIMEOUT_MS`]. A read that
+/// failed, or was still out when the bound ran out, is named; nothing spins
+/// past the bound and a hung network is never said as the service.
+async fn pre_draft_read(
+    io: &Io<Event>,
+    st: &Shared<State>,
+    account: &MultisigAccount,
+    chain_id: u64,
+) -> Result<ChainRead, review_state::UnreadRead> {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    let (service, chain) = {
+        let s = lock(st);
+        (s.service.clone(), s.chain.clone())
+    };
+    let chain_out = AtomicBool::new(true);
+    let service_out = AtomicBool::new(true);
+    let body = async {
+        let members = async {
+            let _out = ReadOut::chain(st, chain_id);
+            let read = chain
+                .read_members(io, chain_id, &account.address, &account.genesis)
+                .await;
+            chain_out.store(false, Ordering::SeqCst);
+            read
+        };
+        let list = async {
+            let _out = ReadOut::service(st);
+            let read = service
+                .fetch_proposals(io, chain_id, &account.address, false)
+                .await;
+            service_out.store(false, Ordering::SeqCst);
+            read
+        };
+        let (members, list) = futures::join!(members, list);
+        if let Some(unread) = review_state::UnreadRead::of(members.is_err(), list.is_err()) {
+            return Err(unread);
+        }
+        let listed = list
+            .ok()
+            .flatten()
+            .map(|answer| answer.proposals)
+            .unwrap_or_default();
+        // What is left is the network's (who approved on chain).
+        chain_out.store(true, Ordering::SeqCst);
+        let read = read_chain(
+            io,
+            st,
+            account,
+            chain_id,
+            None,
+            false,
+            true,
+            Some(listed),
+            members.ok(),
+        )
+        .await;
+        chain_out.store(false, Ordering::SeqCst);
+        read.map_err(|_| review_state::UnreadRead::Chain)
+    };
+    let cap = io.wait(u64::from(review_state::OPEN_TIMEOUT_MS));
+    let out = match future::select(Box::pin(body), Box::pin(cap)).await {
+        future::Either::Left((read, _)) => read,
+        future::Either::Right(_) => Err(review_state::UnreadRead::of(
+            chain_out.load(Ordering::SeqCst),
+            service_out.load(Ordering::SeqCst),
+        )
+        .unwrap_or(review_state::UnreadRead::Chain)),
+    };
+    out
+}
+
 async fn draft(io: &Io<Event>, st: &Shared<State>, chain_id: u64, kind: ProposalKind) {
     let (account, round) = {
         let s = lock(st);
@@ -2992,15 +3195,11 @@ async fn draft(io: &Io<Event>, st: &Shared<State>, chain_id: u64, kind: Proposal
             },
         );
     };
-    // A delegatecall into nothing spends the nonce doing nothing: the batch
-    // contract must be on this chain.
-    let read = read_chain(io, st, &account, chain_id, None, false, true, None, None).await;
-    let Ok(read) = read else {
-        return set(st, ActionState::MailboxUnreadable);
+    // r13-3: bounded, and said as the read that failed.
+    let read = match pre_draft_read(io, st, &account, chain_id).await {
+        Ok(read) => read,
+        Err(unread) => return set(st, unread_action(unread)),
     };
-    if !read.state.mailbox {
-        return set(st, ActionState::MailboxUnreadable);
-    }
     let tx = match build(&kind, &account.address, &read.state) {
         Ok(tx) => tx,
         Err(reason) => return set(st, ActionState::Refused { reason }),
@@ -3024,13 +3223,24 @@ async fn draft(io: &Io<Event>, st: &Shared<State>, chain_id: u64, kind: Proposal
             },
         );
     }
-    if tx.operation == 1 && !Chain::has_code(io, chain_id, &tx.to).await.unwrap_or(false) {
-        return set(
-            st,
-            ActionState::Refused {
-                reason: format!("{} has no code on chain {chain_id}", tx.to),
-            },
-        );
+    // A delegatecall into nothing spends the nonce doing nothing: the batch
+    // contract must be on this chain. r13-3: a network that does not answer
+    // is said as that, never as "no code there".
+    if tx.operation == 1 {
+        match Chain::has_code_within(io, chain_id, &tx.to, Some(review_state::OPEN_TIMEOUT_MS))
+            .await
+        {
+            Ok(true) => {}
+            Ok(false) => {
+                return set(
+                    st,
+                    ActionState::Refused {
+                        reason: format!("{} has no code on chain {chain_id}", tx.to),
+                    },
+                )
+            }
+            Err(_) => return set(st, unread_action(review_state::UnreadRead::Chain)),
+        }
     }
     let now = io.now().await;
     let hash = multisig::safe_tx_hash(chain_id, &account.address, &tx).unwrap_or_default();
@@ -4937,30 +5147,25 @@ async fn remember_lookup(
 #[derive(Debug)]
 struct HistoryUnreadable;
 
-/// A node's "range too wide" error: the width it names, else `Some(0)` (halve).
+/// A node's "range too wide" error: the width it names, else `Some(0)`
+/// (halve); `None` — not a range error. r13-7: the pool's one reading of it
+/// (`rpc_pool::get_logs_range_cap`, ruling 8): this module's own read
+/// "limited to a 10,000 range" as 10 blocks — the smallest number in it —
+/// and a new multisig's first history read ran out of windows.
 fn range_cap(message: &str) -> Option<u64> {
-    let lower = message.to_ascii_lowercase();
-    let wide = [
-        "range",
-        "block",
-        "limit",
-        "too many",
-        "exceed",
-        "10000",
-        "query returned more",
-    ]
-    .iter()
-    .any(|w| lower.contains(w));
-    if !wide {
-        return None;
-    }
-    let digits: Vec<u64> = lower
-        .split(|c: char| !c.is_ascii_digit())
-        .filter_map(|d| d.parse().ok())
-        .filter(|n| *n >= 10)
-        .collect();
-    Some(digits.into_iter().min().unwrap_or(0))
+    let error = super::rpc_pool::RpcErrorInfo {
+        code: None,
+        message: Some(message.to_owned()),
+    };
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    super::rpc_pool::get_logs_range_cap(&error).map(|n| if n >= 1.0 { n as u64 } else { 0 })
 }
+
+/// r13-7: how many times one window of a history read is asked again after
+/// nothing answered, before the history is unread.
+const HISTORY_WINDOW_RETRIES: u32 = 2;
+/// r13-7: the wait before each of those asks.
+const HISTORY_RETRY_MS: u64 = 2_000;
 
 async fn block_of<Ev: Send + 'static>(
     io: &Io<Ev>,
@@ -5085,6 +5290,7 @@ async fn search_logs_with<Ev: Send + 'static>(
 ) -> Result<Option<(String, u64)>, HistoryUnreadable> {
     let mut hi = to;
     let mut windows = 0;
+    let mut retries = 0;
     loop {
         if hi < from {
             return Ok(None);
@@ -5120,7 +5326,16 @@ async fn search_logs_with<Ev: Send + 'static>(
                 };
                 windows -= 1;
             }
-            Err(shell::RpcFail::Unanswered(_)) => return Err(HistoryUnreadable),
+            // r13-7: a node that did not answer is asked again, a little
+            // later, before the history is unread (a freshly booted pool).
+            Err(shell::RpcFail::Unanswered(_)) => {
+                if retries >= HISTORY_WINDOW_RETRIES {
+                    return Err(HistoryUnreadable);
+                }
+                retries += 1;
+                windows -= 1;
+                io.wait(HISTORY_RETRY_MS * u64::from(retries)).await;
+            }
             Ok(Value::Array(logs)) => {
                 if let Some(last) = logs.last() {
                     let tx = last
@@ -5237,14 +5452,23 @@ async fn lookup_execution_at(
 
 /// Executions on another member's device: found by their `ExecutionSuccess`
 /// and handed to the activity once (`recordRemoteExecutions`).
-async fn record_remote_executions(io: &Io<Event>, st: &Shared<State>, account: &MultisigAccount) {
+/// `true` when every network's history was read (r13-7).
+async fn record_remote_executions(
+    io: &Io<Event>,
+    st: &Shared<State>,
+    account: &MultisigAccount,
+) -> bool {
     let done: Vec<ProposalItem> = lock(st)
         .items()
         .into_iter()
         .filter(|i| i.status == ProposalStatus::Done)
         .collect();
     if done.is_empty() {
-        return;
+        let mut s = lock(st);
+        if s.followed(&account.address) {
+            s.history_unreadable.clear();
+        }
+        return true;
     }
     let mut unreadable: Vec<u64> = Vec::new();
     let mut rows = Vec::new();
@@ -5291,6 +5515,7 @@ async fn record_remote_executions(io: &Io<Event>, st: &Shared<State>, account: &
             Err(_) => unreadable.push(item.chain_id),
         }
     }
+    let read = unreadable.is_empty();
     {
         let mut s = lock(st);
         if s.followed(&account.address) {
@@ -5300,6 +5525,7 @@ async fn record_remote_executions(io: &Io<Event>, st: &Shared<State>, account: &
     if !rows.is_empty() {
         io.notice(Notice::ActivityRows { rows }).await;
     }
+    read
 }
 
 #[cfg(test)]

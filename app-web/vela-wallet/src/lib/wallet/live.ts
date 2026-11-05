@@ -85,6 +85,20 @@ export interface WalletLiveInputs {
 	 * a row. Absent, the mainnet space.
 	 */
 	noValue?: string;
+	/**
+	 * r13-1: the account shown lives in the other space (the core's
+	 * `network_space::lives_elsewhere`): `heading` (that space's) stands in
+	 * the figure's place, and the home claims nothing of the space in front
+	 * — no status line ("Live · listening for payments"), no refresh, no
+	 * empty states ("No activity yet", "Deposit your first asset").
+	 */
+	elsewhere?: { heading: string };
+	/**
+	 * r13-7: the shown multisig's history (`ProposalsView.history`): while
+	 * its first read is out, Activity is being read, never "No activity yet";
+	 * if it could not be read, Activity says that (`unreadText`).
+	 */
+	multisigHistory?: { stand: 'reading' | 'read' | 'unread'; unreadText: string };
 }
 
 /** A held token's key — chain, contract (or `native`), symbol — for a tap to name. */
@@ -1362,6 +1376,30 @@ function liveSections(inputs: WalletLiveInputs) {
 	const feed = inputs.feed ? narrowedFeed(inputs.feed, filter) : inputs.feed;
 	// The networks the last read could not reach: their rows are last-known.
 	const quiet = new Set(view.unreachable_networks.map((row) => row.chain_id));
+	if (inputs.elsewhere) {
+		// r13-1: nothing here is this account's — no figure, no status, no
+		// empty state that would say "nothing" of a space it does not live in.
+		const hero: BalanceModel = {
+			label: m.balance.totalLabel,
+			a11yHide: m.balance.a11yHide,
+			a11yShow: m.balance.a11yShow,
+			state: 'no-value',
+			noValueText: inputs.elsewhere.heading
+		};
+		return {
+			balance: hero,
+			assetsMode: 'rows' as const,
+			assetsEmpty: undefined,
+			assetRows: tokens.map((t) => liveAssetRow(t, currency, m, view.hidden, true, false)),
+			activityMode: 'rows' as const,
+			activityGroups: feed ? liveActivityGroups(feed.home_rows, m, feed.hidden) : [],
+			activityEmpty: { title: m.activity.emptyTitle, caption: m.activity.emptyCaption }
+		};
+	}
+	const history = inputs.multisigHistory;
+	const historyMode =
+		feed && feed.rows.length === 0 && history?.stand === 'reading' ? ('loading' as const) : null;
+	const historyUnread = !!feed && feed.rows.length === 0 && history?.stand === 'unread';
 	return {
 		balance: liveBalance(view, currency, m, inputs.refresh, inputs.noValue),
 		// The filter's own case, not the core's empty wallet (`empty_key` is
@@ -1376,7 +1414,7 @@ function liveSections(inputs: WalletLiveInputs) {
 		assetRows: tokens.map((t) =>
 			liveAssetRow(t, currency, m, view.hidden, inputs.noValue !== undefined, quiet.has(t.chain_id))
 		),
-		activityMode: activityMode(view, feed),
+		activityMode: historyMode ?? activityMode(view, feed),
 		// The home's Activity is the newest three (issue 469): the core's
 		// `home_rows`, never `rows` — a long history pushed Assets off the
 		// screen. "All" opens History, which draws every row.
@@ -1385,13 +1423,18 @@ function liveSections(inputs: WalletLiveInputs) {
 		activityGroups: feed ? liveActivityGroups(feed.home_rows, m, feed.hidden) : [],
 		// Spec 082 RG5: which empty line the home says is the core's
 		// (`FeedView.home_empty_key`) — "no activity" or "none on this network".
-		activityEmpty: {
-			title:
-				inputs.feed?.home_empty_key === 'home.emptyNoActivityNetwork'
-					? m.activity.emptyTitleNetwork
-					: m.activity.emptyTitle,
-			caption: m.activity.emptyCaption
-		}
+		// r13-7: a multisig's history that could not be read is said as that,
+		// never "No activity yet".
+		activityEmpty:
+			historyUnread && history
+				? { title: history.unreadText, caption: '' }
+				: {
+						title:
+							inputs.feed?.home_empty_key === 'home.emptyNoActivityNetwork'
+								? m.activity.emptyTitleNetwork
+								: m.activity.emptyTitle,
+						caption: m.activity.emptyCaption
+					}
 	};
 }
 
