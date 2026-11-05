@@ -209,12 +209,12 @@ pub const UNREACHED_AFTER_ENDPOINTS: usize = 3;
 /// frame while Ethereum answered). Hung nodes take 8 s each, so the bound
 /// costs a hang nothing; a whole pass refused is RF1's, at once.
 pub const UNREACHED_MIN_SILENCE_MS: f64 = 5_000.0;
-/// r13-4: while a chain is out of reach, ONE read at a time probes it (the
-/// circuit breaker's half-open probe), in a single pass: over the endpoints
-/// not yet silent in this outage — each hung node is asked once, never again
-/// until the chain answers — and, once every one is silent, over the best
-/// this many. Any other read of it meanwhile fails at once with nothing on
-/// the wire. Writes are never refused this way.
+/// r13-4: while a chain is out of reach, a read of it is the circuit
+/// breaker's half-open probe, in a single pass: over the endpoints not yet
+/// silent in this outage — each hung node is asked once, never again until
+/// the chain answers — and, once every one is silent, over this many of them
+/// (the most trusted first, then the oldest failure). A read is never failed
+/// without asking anyone; writes are not bound this way.
 pub const OUTAGE_PROBE_ENDPOINTS: usize = 2;
 /// Bundler JSON-RPC timeout — `NET_TIMEOUTS.bundlerRpc` (`net.ts:27`).
 pub const BUNDLER_RPC_TIMEOUT_MS: u32 = 15_000;
@@ -1180,9 +1180,6 @@ pub struct Model {
     /// r13-4: per chain, when its current silence began (its first silent
     /// endpoint).
     silent_since: BTreeMap<u32, f64>,
-    /// r13-4: per chain out of reach, the one read probing it now
-    /// ([`OUTAGE_PROBE_ENDPOINTS`]).
-    probing: BTreeMap<u32, String>,
     /// Chains whose person's own endpoint is not answering while another node
     /// is (owner decision 2026-10-28): the last usable RPC answer came from an
     /// endpoint that is not [`RpcSource::User`] although the pool holds one.
@@ -1962,22 +1959,14 @@ fn start_pass(model: &mut Model, call_id: &str, now_ms: f64) -> Command<RpcEffec
     };
     let (chain_id, kind) = (session.chain_id, session.kind);
 
-    // r13-4: a read of a chain out of reach while another read probes it
-    // fails at once — nothing on the wire, the chain's set unchanged.
     let outage_read = outage_read(model, call_id);
-    if outage_read && probing_other(model, chain_id, call_id) {
-        if let Some(session) = model.calls.get_mut(call_id) {
-            session.saw_unreached = true;
-        }
-        return conclude_failed(model, call_id);
-    }
 
     let pruned = prune_expired_bans(model, now_ms);
     let mut urls = select_with_rescue(model, chain_id, kind, now_ms);
     if outage_read {
-        // The half-open probe, one pass, alone: the endpoints not silent yet
+        // r13-4, the half-open probe, one pass: the endpoints not silent yet
         // in this outage (a node that answers may be among them); none left,
-        // the best few.
+        // a few of the silent ones.
         let silent = model.silent.get(&chain_id).cloned().unwrap_or_default();
         let fresh: Vec<String> = urls
             .iter()
@@ -1991,7 +1980,6 @@ fn start_pass(model: &mut Model, call_id: &str, now_ms: f64) -> Command<RpcEffec
         } else {
             urls = fresh;
         }
-        model.probing.insert(chain_id, call_id.to_owned());
         if let Some(session) = model.calls.get_mut(call_id) {
             session.pass = max_passes(kind).saturating_sub(1);
             session.silent_probe = silent_probe;
@@ -2197,7 +2185,6 @@ fn conclude_failed(model: &mut Model, call_id: &str) -> Command<RpcEffect, Event
     let Some(session) = model.calls.remove(call_id) else {
         return Command::done();
     };
-    model.probing.retain(|_, probe| probe != call_id);
     let throttled = session.saw_rate_limit && !session.saw_unreached;
     let rate_limited = match session.kind {
         // Spec 082 RG7: a method a node may simply not offer never says
@@ -2590,17 +2577,6 @@ fn outage_read(model: &Model, call_id: &str) -> bool {
     })
 }
 
-/// Another read is probing `chain_id` now.
-fn probing_other(model: &Model, chain_id: u32, call_id: &str) -> bool {
-    model.probing.get(&chain_id).is_some_and(|probe| {
-        probe != call_id
-            && model
-                .calls
-                .get(probe)
-                .is_some_and(|session| session.chain_id == chain_id)
-    })
-}
-
 /// r13-4: what one endpoint's outcome says of its chain. A transport failure
 /// (nothing answered: a hang, a refusal) joins the chain's silent endpoints;
 /// anything that answered — a result, an error, a 429 — empties them. When
@@ -2698,7 +2674,6 @@ fn conclude(
     verdict: RpcCallVerdict,
 ) -> Command<RpcEffect, Event> {
     model.calls.remove(call_id);
-    model.probing.retain(|_, probe| probe != call_id);
     Command::all([
         request(
             model,

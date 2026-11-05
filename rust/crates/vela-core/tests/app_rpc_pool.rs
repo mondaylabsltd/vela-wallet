@@ -3586,9 +3586,9 @@ fn an_answer_between_silent_endpoints_starts_the_count_again() {
 }
 
 /// r13-4: while a chain is out of reach, each hung node is asked once (one
-/// pass, never three); once every node is silent, one read at a time probes
-/// the best [`OUTAGE_PROBE_ENDPOINTS`]; every other read of it fails at once
-/// without a request. Hung nodes are not hammered.
+/// pass, never three); once every node is silent, a read probes at most
+/// [`OUTAGE_PROBE_ENDPOINTS`] of them. Hung nodes are not hammered, and no
+/// read is failed without asking anyone.
 #[test]
 fn an_unreached_chain_is_probed_by_one_read_on_two_endpoints() {
     let urls = many(10);
@@ -3626,13 +3626,19 @@ fn an_unreached_chain_is_probed_by_one_read_on_two_endpoints() {
     let ops = sut.dispatch(rpc_call("c2", "eth_call", now + 1_000.0));
     let probe_url = posted_url(&ops, "c2").expect("c2 probes");
     const { assert!(OUTAGE_PROBE_ENDPOINTS <= 2) };
-    // A read meanwhile fails at once, with nothing on the wire.
-    let ops = sut.dispatch(rpc_call("c3", "eth_getBalance", now + 1_100.0));
-    assert_eq!(posted_url(&ops, "c3"), None, "{ops:?}");
-    assert!(ops.iter().any(|op| matches!(
-        op,
-        Op::Conclude { call_id, verdict: RpcCallVerdict::Failed { .. } } if call_id == "c3"
-    )));
+    // A read meanwhile probes too — never failed without asking anyone —
+    // and asks at most the probe's few, one pass.
+    let mut ops = sut.dispatch(rpc_call("c3", "eth_getBalance", now + 1_100.0));
+    let mut c3_posts = 0;
+    while let Some(url) = posted_url(&ops, "c3") {
+        c3_posts += 1;
+        assert!(c3_posts <= OUTAGE_PROBE_ENDPOINTS, "c3 swept");
+        ops = sut.resolve_matching(
+            |op| matches!(op, Op::JsonRpcPost { call_id, .. } if call_id == "c3"),
+            outcome("c3", &url, Out::Timeout, 8_000.0, now + 9_100.0),
+        );
+    }
+    assert!(c3_posts >= 1, "c3 asked someone");
     sut.resolve_matching(
         |op| matches!(op, Op::Conclude { call_id, .. } if call_id == "c3"),
         Res::Concluded,
