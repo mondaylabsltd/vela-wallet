@@ -111,16 +111,21 @@ fun WalletScreen(
      * the home as it is.
      */
     otherSpace: (@Composable () -> Unit)? = null,
+    /**
+     * r13-7: Activity's Try again — a multisig's history that could not be
+     * read, read again (the empty state's `retry`). `null`: none drawn.
+     */
+    onActivityRetry: (() -> Unit)? = null,
 ) {
     if (model.textScale != 1f) {
         val density = LocalDensity.current
         CompositionLocalProvider(
             LocalDensity provides Density(density.density, density.fontScale * model.textScale),
         ) {
-            WalletHomeContent(model, modifier, onSelectTab, onFlow, onSwitcher, onToggleVisibility, onStatusClick, onRefresh, onSpace, onSyncRetry, multisigCard, otherSpace)
+            WalletHomeContent(model, modifier, onSelectTab, onFlow, onSwitcher, onToggleVisibility, onStatusClick, onRefresh, onSpace, onSyncRetry, multisigCard, otherSpace, onActivityRetry)
         }
     } else {
-        WalletHomeContent(model, modifier, onSelectTab, onFlow, onSwitcher, onToggleVisibility, onStatusClick, onRefresh, onSpace, onSyncRetry, multisigCard, otherSpace)
+        WalletHomeContent(model, modifier, onSelectTab, onFlow, onSwitcher, onToggleVisibility, onStatusClick, onRefresh, onSpace, onSyncRetry, multisigCard, otherSpace, onActivityRetry)
     }
 
     model.sheet?.let { sheet ->
@@ -154,6 +159,7 @@ private fun WalletHomeContent(
     onSyncRetry: (() -> Unit)? = null,
     multisigCard: (@Composable () -> Unit)? = null,
     otherSpace: (@Composable () -> Unit)? = null,
+    onActivityRetry: (() -> Unit)? = null,
 ) {
     val colors = VelaTheme.colors
     val strings = LocalVelaStrings.current
@@ -272,8 +278,18 @@ private fun WalletHomeContent(
                                 }
                             }
                         }
-                        SectionMode.Empty -> model.activitySection.empty?.let {
-                            EmptyState(icon = VelaIcons.Inbox, model = it)
+                        SectionMode.Empty -> model.activitySection.empty?.let { empty ->
+                            val retry = empty.retry?.takeIf { onActivityRetry != null }
+                            if (retry == null) {
+                                EmptyState(icon = VelaIcons.Inbox, model = empty)
+                            } else {
+                                // r13-7: a history not read is said as that, with Try again.
+                                EmptyState(icon = VelaIcons.Inbox, model = empty) {
+                                    app.getvela.wallet.core.designsystem.components.VelaSecondaryButton(
+                                        retry, { onActivityRetry?.invoke() }, Modifier.testTag("home.activity.retry"),
+                                    )
+                                }
+                            }
                         }
                         SectionMode.Loading -> {
                             Spacer(modifier = Modifier.height(VelaSpacing.md))

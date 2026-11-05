@@ -244,7 +244,15 @@ data class AssetRowModel(
 enum class SectionMode { Rows, Empty, Loading }
 
 @Immutable
-data class EmptyStateModel(val title: String, val caption: String)
+data class EmptyStateModel(
+    val title: String,
+    val caption: String,
+    /**
+     * r13-7: a Try again under the line, when what is empty is a read that
+     * failed (a multisig's history not read) — its words; null: none.
+     */
+    val retry: String? = null,
+)
 
 @Immutable
 data class SectionModel(

@@ -511,6 +511,8 @@ data class MsLinkedView(
     val stale: Boolean,
     /** r13-3: what a `failed` / `unreadable` / `notFound` stand says (the core's key). */
     val reasonKey: String? = null,
+    /** r13-3: the core offers Try again (the proposals machine's `retry`, which starts the link's bound again). */
+    val retry: Boolean = false,
 ) {
     companion object {
         fun of(e: JsonElement?) = MsLinkedView(
@@ -523,6 +525,7 @@ data class MsLinkedView(
             members = e["members"]?.let(MsChainMembers::of),
             stale = e["stale"].bool ?: false,
             reasonKey = e["reason_key"].str,
+            retry = e["retry"].bool ?: false,
         )
     }
 }
@@ -534,6 +537,13 @@ data class MsProposalsView(
     val missing: List<JsonElement> = emptyList(),
     val unreadable: List<Int> = emptyList(),
     val historyUnreadable: List<Int> = emptyList(),
+    /**
+     * r13-7: where the followed multisig's history stands on this page —
+     * `reading` (its first read is out: the home's Activity is loading,
+     * never "No activity yet"), `read`, or `unread` (said, with Try again).
+     * A view from a core that does not say it reads as `read`.
+     */
+    val history: String = "read",
     val offline: Boolean = false,
     val loading: Boolean = false,
     val stale: Boolean = false,
@@ -620,6 +630,7 @@ data class MsProposalsView(
             missing = e["missing"].arr,
             unreadable = e["unreadable"].ints(),
             historyUnreadable = e["history_unreadable"].ints(),
+            history = e["history"].str ?: "read",
             offline = e["offline"].bool ?: false,
             loading = e["loading"].bool ?: false,
             stale = e["stale"].bool ?: false,

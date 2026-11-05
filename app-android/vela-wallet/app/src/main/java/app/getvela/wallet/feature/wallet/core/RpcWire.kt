@@ -184,6 +184,15 @@ data class RpcPoolView(
      */
     val out_of_reach_chains: List<Int> = emptyList(),
     /**
+     * r13-4 (docs/multisig-machines.md §15.1): of [out_of_reach_chains], the
+     * SILENT ones — three different nodes said nothing at all (a hang, a
+     * refusal) for 5 s, and nothing of the network answered since. Handed to
+     * the balance machine beside them (`pool_unreached {chain_ids, silent}`,
+     * [WalletController.poolUnreachedOf]): a silent network is named at
+     * once, as the web names it.
+     */
+    val silent_chains: List<Int> = emptyList(),
+    /**
      * Per routed call (by call id), the endpoints its current pass has still
      * to try, in the order the core will try them — the endpoint it waits on
      * already off the list. It is where a hedged read's early ask goes (the
