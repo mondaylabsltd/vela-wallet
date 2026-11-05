@@ -86,7 +86,26 @@ describe('a ready transaction on the home (r4-5)', () => {
 			kind: 'blocked',
 			block: {
 				kind: 'fails',
-				why: { kind: 'short', token: null, have: '280000000000000000', need: '500000000000000000' }
+				why: {
+					kind: 'short',
+					token: null,
+					have: {
+						base_units: '280000000000000000',
+						token: null,
+						said: {
+							kind: 'known',
+							text: '0.28 USDC',
+							number: '0.28',
+							symbol: 'USDC',
+							decimals: 18
+						}
+					},
+					need: {
+						base_units: '500000000000000000',
+						token: null,
+						said: { kind: 'known', text: '0.5 USDC', number: '0.5', symbol: 'USDC', decimals: 18 }
+					}
+				}
 			}
 		};
 		expect(subtitle()).toContain(

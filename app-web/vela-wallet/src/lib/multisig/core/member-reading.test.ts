@@ -19,6 +19,8 @@ const SENTINEL = '0x0000000000000000000000000000000000000001';
 const members = { owners: [A, B, C], threshold: 2 };
 const who = (address: string) =>
 	address === D ? `Dana (${shortenAddress(D)})` : shortenAddress(address);
+/** r12-8: the names a title gives (the core's `names.change` words them). */
+const label = (address: string) => (address === D ? 'Dana' : null);
 
 const word = (hex: string) => hex.replace(/^0x/, '').toLowerCase().padStart(64, '0');
 const num = (n: number) => n.toString(16).padStart(64, '0');
@@ -56,7 +58,7 @@ describe('a member change, alone', () => {
 		);
 		expect(lines.doesNotFit).toBeNull();
 		// The Home row's title names the member, never only "Add a member".
-		expect(await actionTitle(m, 5042002, action(ADD(D, 2)), 0n, who)).toBe(
+		expect(await actionTitle(m, 5042002, action(ADD(D, 2)), 0n, label)).toBe(
 			`Add Dana (${shortenAddress(D)})`
 		);
 	});
@@ -65,7 +67,7 @@ describe('a member change, alone', () => {
 		const lines = read(REMOVE(A, B, 1));
 		expect(lines.changes).toEqual([`Remove ${shortenAddress(B)}`]);
 		expect(lines.rule).toBe('Approvals: 2 of 3 → 1 of 2');
-		expect(await actionTitle(m, 5042002, action(REMOVE(A, B, 1)), 0n, who)).toBe(
+		expect(await actionTitle(m, 5042002, action(REMOVE(A, B, 1)), 0n, label)).toBe(
 			`Remove ${shortenAddress(B)}`
 		);
 	});
@@ -76,7 +78,7 @@ describe('a member change, alone', () => {
 			`Replace ${shortenAddress(A)} with Dana (${shortenAddress(D)})`
 		]);
 		expect(lines.rule).toBe('Approvals: 2 of 3 → 2 of 3');
-		expect(await actionTitle(m, 5042002, action(SWAP(SENTINEL, A, D)), 0n, who)).toBe(
+		expect(await actionTitle(m, 5042002, action(SWAP(SENTINEL, A, D)), 0n, label)).toBe(
 			`Replace ${shortenAddress(A)} with Dana (${shortenAddress(D)})`
 		);
 	});

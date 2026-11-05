@@ -69,28 +69,60 @@ export function memberWho(address: string, name: string | null = localName(addre
 	}
 }
 
+/** The core's member-change title (`names.change`, r12-8). */
+interface ChangeTitle {
+	key: string;
+	params: Record<string, string>;
+	count?: string;
+}
+
 /**
- * A member change's one line, at once ("Add Interleave (0x88cCA0…266894)"):
- * nothing in it waits on a chain read, so it is drawn with the names as they
- * stand NOW — Activity kept the first drawing, before the index answered
- * (r11-6: "Add 0x88cCA0…266894" on Activity beside "Add Interleave (…)" in
- * the sheet). `null` for any other action.
+ * A member change's one line, at once ("Add Interleave (0x88cCA0…266894)"),
+ * by the core's ONE rule for it (`names.change`, r12-8) — Activity rows and
+ * sheets alike — in this page's words, with the names as they stand NOW:
+ * `label` is the name to give an address (the sheet: the name typed there,
+ * else `names.label`; Activity: `names.label`). r11-6 / r12-8: Activity kept
+ * a title worded when the row was written ("Add 0xD40086…de130b", English
+ * on a zh page) beside "Add Dana Local (…)" in the sheet. `null` for any
+ * other action.
  */
 export function memberActionTitle(
 	m: MultisigMessages,
 	action: Action | null,
-	who: (address: string) => string
+	label: (address: string) => string | null = localName
 ): string | null {
-	switch (action?.kind) {
-		case 'addOwner':
-			return fillTemplate(m.change.add, { member: who(action.owner) });
-		case 'removeOwner':
-			return fillTemplate(m.change.remove, { member: who(action.owner) });
-		case 'swapOwner':
-			return fillTemplate(m.change.replace, {
-				old: who(action.oldOwner),
-				new: who(action.newOwner)
-			});
+	const members =
+		action?.kind === 'addOwner' || action?.kind === 'removeOwner'
+			? [action.owner]
+			: action?.kind === 'swapOwner'
+				? [action.oldOwner, action.newOwner]
+				: action?.kind === 'changeThreshold'
+					? []
+					: null;
+	if (!action || members === null) return null;
+	const labels: Record<string, string> = {};
+	for (const address of members) {
+		const name = label(address);
+		if (name) labels[address.toLowerCase()] = name;
+	}
+	let title: ChangeTitle | null;
+	try {
+		title = JSON.parse(
+			wasm.multisigLinkCall('names.change', JSON.stringify({ action, labels }))
+		) as ChangeTitle | null;
+	} catch {
+		return null;
+	}
+	if (!title) return null;
+	switch (title.key) {
+		case 'home.multisig.change.add':
+			return fillTemplate(m.change.add, title.params);
+		case 'home.multisig.change.remove':
+			return fillTemplate(m.change.remove, title.params);
+		case 'home.multisig.change.replace':
+			return fillTemplate(m.change.replace, title.params);
+		case 'home.multisig.action.changeThreshold':
+			return requireApprovals(m, title.count ?? title.params.count ?? '0');
 		default:
 			return null;
 	}
@@ -221,8 +253,11 @@ export async function actionTitle(
 	chainId: number,
 	action: Action | null,
 	nonce: bigint,
-	/** How a member is named (the sheet's: with the names this device knows). */
-	who: (address: string) => string = (a) => memberWho(a)
+	/**
+	 * The name to give a member (the sheet's: the name typed there, else
+	 * `names.label`); the title is the core's rule (`memberActionTitle`).
+	 */
+	label: (address: string) => string | null = localName
 ): Promise<string> {
 	if (action === null) return m.action.unsupported;
 	switch (action.kind) {
@@ -246,17 +281,12 @@ export async function actionTitle(
 		case 'cancel':
 			return fillTemplate(m.action.cancel, { nonce: nonce.toString() });
 		// r4a-1: who it adds, removes or replaces — never only "Add a member".
+		// r12-8: the core's one rule, as Activity says it too.
 		case 'addOwner':
-			return fillTemplate(m.change.add, { member: who(action.owner) });
 		case 'removeOwner':
-			return fillTemplate(m.change.remove, { member: who(action.owner) });
 		case 'swapOwner':
-			return fillTemplate(m.change.replace, {
-				old: who(action.oldOwner),
-				new: who(action.newOwner)
-			});
 		case 'changeThreshold':
-			return requireApprovals(m, action.threshold);
+			return memberActionTitle(m, action, label) ?? m.action.unsupported;
 		case 'rename':
 			return fillTemplate(m.action.rename, { name: action.name });
 		case 'call': {

@@ -2140,8 +2140,22 @@ describe('an execution looked at before its passkey (r4-5, r4-7)', () => {
 		fake.previews = {
 			[ME]: {
 				kind: 'fails',
-				// The machine's word: the token it is short of, and the amounts.
-				why: { kind: 'short', token: USDC, have: 28n, need: 50n }
+				// The machine's word: the token it is short of, and the amounts as
+				// the core says them (r12-1) — never scaled here.
+				why: {
+					kind: 'short',
+					token: USDC,
+					have: {
+						base_units: '28',
+						token: USDC,
+						said: { kind: 'known', text: '28 USDC', number: '28', symbol: 'USDC', decimals: 0 }
+					},
+					need: {
+						base_units: '50',
+						token: USDC,
+						said: { kind: 'known', text: '50 USDC', number: '50', symbol: 'USDC', decimals: 0 }
+					}
+				}
 			}
 		};
 		const m = words();

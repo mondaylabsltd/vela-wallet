@@ -5,6 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { MULTISIG_SHAPE, type MultisigMessages } from '../messages';
+import { blockOf } from '../shell/proposal-failure';
 
 const { feeCoin, feeWords, whyText } = await import('./execution-words');
 
@@ -59,16 +60,45 @@ const opts = {
 };
 
 describe('why it would fail, in words a person can act on', () => {
-	it('says what the multisig holds and what it needs', () => {
+	it('says what the multisig holds and what it needs, in the core’s words (r12-1)', () => {
+		const known = (base: bigint, text: string) => ({
+			base_units: base.toString(),
+			token: null,
+			said: { kind: 'known' as const, text, number: text, symbol: 'USDC', decimals: 18 }
+		});
 		expect(
 			whyText(words(), {
 				kind: 'short',
-				symbol: 'USDC',
-				decimals: 18,
-				have: (28n * USDC) / 100n,
-				need: USDC / 2n
+				have: known((28n * USDC) / 100n, '0.28 USDC'),
+				need: known(USDC / 2n, '0.5 USDC')
 			})
 		).toBe('the multisig holds 0.28 USDC, and this needs 0.5 USDC');
+	});
+
+	it('r12-1: a token nobody said the decimals of is said in base units — never scaled by 18', () => {
+		const raw = (base: string) => ({
+			base_units: base,
+			token: '0x00000000000000000000000000000000000000ab',
+			said: {
+				kind: 'decimals_unknown' as const,
+				key: 'home.multisig.review.reading.decimalsUnknown',
+				raw: base
+			}
+		});
+		const m = words();
+		m.review.reading.decimalsUnknown = '{{raw}} base units · decimals unknown';
+		expect(whyText(m, { kind: 'short', have: raw('0'), need: raw('10000') })).toBe(
+			'the multisig holds 0 base units · decimals unknown, and this needs 10000 base units · decimals unknown'
+		);
+	});
+
+	it('r12-1: a bare base-unit amount (an older core) is never scaled by a guess', () => {
+		const block = blockOf({ kind: 'short', token: null, have: '0', need: '10000' });
+		const m = words();
+		m.review.reading.decimalsUnknown = '{{raw}} base units · decimals unknown';
+		expect(whyText(m, block)).toBe(
+			'the multisig holds 0 base units · decimals unknown, and this needs 10000 base units · decimals unknown'
+		);
 	});
 
 	it('the network’s reason, or that it gave none', () => {

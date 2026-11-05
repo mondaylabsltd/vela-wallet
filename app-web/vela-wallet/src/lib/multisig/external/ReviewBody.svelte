@@ -74,16 +74,25 @@
 		// No names but the review own: an address is who it is.
 		nameOf: () => null
 	});
-	/** r5reg-15: the addresses the call reading names already: said once. */
-	const drawn = $derived(
-		partyAddresses(
+	/**
+	 * r5reg-15: the addresses the call reading names already: said once.
+	 * r12 S4: and every member a change adds or removes — `MemberChangeRule`
+	 * draws each whole, so the party list does not print it again (the
+	 * outside page wrote the new member's full address twice).
+	 */
+	const drawn = $derived([
+		...partyAddresses(
 			readingBlocks(review, {
 				r: m.review.reading,
 				callNumber: m.review.callNumber,
 				nativeSymbol: nativeSymbol(chainId)
 			})
-		)
-	);
+		),
+		...(changes?.changes ?? [])
+			.flatMap((c) => [c.added, c.removed])
+			.filter((a): a is string => typeof a === 'string')
+			.map((a) => a.toLowerCase())
+	]);
 	const checks = $derived(used ? [] : reviewBlocks(review, sim, ctx, drawn));
 	const badges = $derived(recipientBadges(review, ctx));
 	const names = $derived(recipientNames(review, ctx));

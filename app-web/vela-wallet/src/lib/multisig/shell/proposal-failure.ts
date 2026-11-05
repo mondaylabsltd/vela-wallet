@@ -43,13 +43,7 @@ import {
 } from '../core/proposal-errors';
 import type { MultisigActionState } from '../generated/MultisigActionState';
 import { readShellFailure } from './failure';
-
-/** A token's word for an amount (`tokenInfo`), when it is known. */
-export interface TokenWords {
-	symbol: string;
-	/** `null`: unknown (r8-2) — its amounts are said raw. */
-	decimals: number | null;
-}
+import type { MultisigAmount } from '../generated/MultisigAmount';
 
 const big = (v: unknown): bigint => {
 	try {
@@ -59,33 +53,42 @@ const big = (v: unknown): bigint => {
 	}
 };
 
+/**
+ * r12-1: one of a shortfall's amounts as the core said it. A core that sent
+ * bare base units (before r12) is said as base units with "decimals
+ * unknown" — never scaled by a guess.
+ */
+function amountOf(value: unknown, token: string | null): MultisigAmount {
+	const v = value as Partial<MultisigAmount> | null | undefined;
+	if (v && typeof v === 'object' && typeof v.base_units === 'string' && v.said) {
+		return v as MultisigAmount;
+	}
+	const raw = big(value).toString();
+	return {
+		base_units: raw,
+		token,
+		said: { kind: 'decimals_unknown', key: 'home.multisig.review.reading.decimalsUnknown', raw }
+	};
+}
+
 /** Why it would fail, as the sheet words it (`whyText`). */
-export function blockOf(why: unknown, token: TokenWords | null = null): ExecutionBlock {
-	const w = (why ?? {}) as { kind?: string; have?: unknown; need?: unknown; reason?: unknown };
+export function blockOf(why: unknown): ExecutionBlock {
+	const w = (why ?? {}) as {
+		kind?: string;
+		token?: string | null;
+		have?: unknown;
+		need?: unknown;
+		reason?: unknown;
+	};
 	if (w.kind === 'short') {
-		return {
-			kind: 'short',
-			symbol: token?.symbol ?? '',
-			decimals: token?.decimals ?? null,
-			have: big(w.have),
-			need: big(w.need)
-		};
+		const token = typeof w.token === 'string' ? w.token : null;
+		return { kind: 'short', have: amountOf(w.have, token), need: amountOf(w.need, token) };
 	}
 	return { kind: 'reverts', reason: typeof w.reason === 'string' ? w.reason : null };
 }
 
-/** The token a `short` look is about (`null`: the chain's coin), to word its amounts. */
-export function shortToken(value: unknown): string | null | undefined {
-	const v = value as { kind?: string; why?: { kind?: string; token?: string | null } } | null;
-	return v?.kind === 'fails' && v.why?.kind === 'short' ? (v.why.token ?? null) : undefined;
-}
-
 /** One executor's look (`previews[<chain>:<hash>:<executor>]`) as the sheet draws it. */
-export function previewOf(
-	value: unknown,
-	chainId: number,
-	token: TokenWords | null = null
-): ExecutionPreview | null {
+export function previewOf(value: unknown, chainId: number): ExecutionPreview | null {
 	const v = value as Record<string, unknown> | null | undefined;
 	if (!v || typeof v.kind !== 'string') return null;
 	switch (v.kind) {
@@ -95,7 +98,7 @@ export function previewOf(
 				error: new GenesisRefusedError(chainId, v.authority as never)
 			};
 		case 'fails':
-			return { kind: 'fails', why: blockOf(v.why, token) };
+			return { kind: 'fails', why: blockOf(v.why) };
 		case 'unpriced':
 			return { kind: 'unpriced' };
 		case 'unchecked':
@@ -212,8 +215,7 @@ export function memberRefusal(reason: string): { kind: string } | null {
  */
 export function actionError(
 	state: MultisigActionState | null | undefined,
-	chainId: number,
-	token: TokenWords | null = null
+	chainId: number
 ): unknown {
 	if (!state) return null;
 	switch (state.kind) {
@@ -241,7 +243,7 @@ export function actionError(
 		case 'mailboxRefused':
 			return new MailboxRefusedError(state.refusal);
 		case 'stopped': {
-			const preview = previewOf(state.preview, chainId, token);
+			const preview = previewOf(state.preview, chainId);
 			return (preview && stopError(preview)) ?? new ExecutionUnpricedError();
 		}
 		case 'failed':

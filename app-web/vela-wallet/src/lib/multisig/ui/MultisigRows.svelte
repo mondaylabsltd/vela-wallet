@@ -84,21 +84,21 @@
 						data-testid="row-rule"
 						title={rule.title}
 					>
-						{' · '}{rule.label}{rule.lastKnown ? ` · ${rule.lastKnown}` : ''}</span
+						&nbsp;· {rule.label}{rule.lastKnown ? ` · ${rule.lastKnown}` : ''}</span
 					>{#if row ? row.refused_on.length > 0 : account.findings?.some((f) => f.from === 'genesis')}<span
 							class="flag risk"
 							data-testid="flag-refused"
 						>
-							{' · '}{m.authority.refusedFlag}</span
+							&nbsp;· {m.authority.refusedFlag}</span
 						>{:else if row ? row.high_risk_on.length > 0 : account.findings?.length}<span
 							class="flag risk"
 							data-testid="flag-risk"
 						>
-							{' · '}{m.authority.riskFlag}</span
+							&nbsp;· {m.authority.riskFlag}</span
 						>{:else if row?.shared === false}<span class="flag">
-							{' · '}{m.switcher.notShared}</span
+							&nbsp;· {m.switcher.notShared}</span
 						>{:else if localOwners(membersAnywhere(account)).length === 0}<span class="flag">
-							{' · '}{m.switcher.readOnly}</span
+							&nbsp;· {m.switcher.readOnly}</span
 						>{/if}</span
 				>
 				{#if waitingLine(account.address)}

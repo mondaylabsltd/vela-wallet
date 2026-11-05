@@ -107,12 +107,7 @@
 	import { ChainUnavailableError } from '../core/chain';
 	import { progressLine } from '../core/progress';
 	import { proposalsHost, ProposeFailedError } from '../shell/proposals-host.svelte';
-	import {
-		actionError,
-		previewOf as previewFrom,
-		shortToken,
-		type TokenWords
-	} from '../shell/proposal-failure';
+	import { actionError, previewOf as previewFrom } from '../shell/proposal-failure';
 	import type { MultisigActionState } from '../generated/MultisigActionState';
 	import type { MultisigTimelineStep } from '../generated/MultisigTimelineStep';
 	import { multisigUi } from '../core/ui.svelte';
@@ -263,8 +258,9 @@
 	 * A member as a change names it: the name typed for them here (r5reg-16),
 	 * else the name this device knows, and the short address.
 	 */
-	const who = (address: string) =>
-		memberWho(address, typedName(account, address) ?? names.label(address));
+	const who = (address: string) => memberWho(address, memberName(address));
+	/** r12-8: the name a member is given here — the one typed for them, else the machine's. */
+	const memberName = (address: string) => typedName(account, address) ?? names.label(address);
 
 	let title = $state('');
 	let lines = $state<{ label: string; to: string; note: ProvenanceNote | null }[]>([]);
@@ -273,7 +269,7 @@
 	$effect(() => {
 		const current = item;
 		if (!current) return;
-		void actionTitle(m, chainId, current.review.action, current.nonce, who).then(
+		void actionTitle(m, chainId, current.review.action, current.nonce, memberName).then(
 			(t) => (title = t)
 		);
 		const action = current.review.action;
@@ -573,24 +569,10 @@
 		}, ASK_LOOK_EVERY_MS);
 		return () => clearInterval(timer);
 	});
-	/** The token a `short` look is about, worded (`tokenInfo`; the chain's coin by its symbol). */
-	let tokenWords = $state<Record<string, TokenWords>>({});
-	function wordsFor(value: unknown): TokenWords | null {
-		const token = shortToken(value);
-		if (token === undefined) return null;
-		if (token === null) return { symbol: nativeSymbol(chainId), decimals: 18 };
-		const known = tokenWords[token.toLowerCase()];
-		if (!known) {
-			void tokenInfo(chainId, token)
-				.catch(() => UNREAD_TOKEN)
-				.then((info) => (tokenWords = { ...tokenWords, [token.toLowerCase()]: info }));
-		}
-		return known ?? null;
-	}
 	function previewOf(owner: LocalOwner | null): ExecutionPreview | null {
 		if (!owner || !looked.some((e) => sameAddress(e, owner.address))) return null;
 		const value = lookOf(owner.address);
-		return value === undefined ? null : previewFrom(value, chainId, wordsFor(value));
+		return value === undefined ? null : previewFrom(value, chainId);
 	}
 	/** Someone here who can pay the fee — the one picked unless the person picks. */
 	const payer = $derived(
@@ -1698,7 +1680,7 @@
 						<Identicon svg={identiconSvgForClient(owner)} size="compact" address={owner} />
 						<span class="who"
 							>{names.label(owner)}{#if mine}<span class="here">
-									{' · '}{m.panel.thisDevice}</span
+									&nbsp;· {m.panel.thisDevice}</span
 								>{/if}</span
 						>
 						<span class="state">
