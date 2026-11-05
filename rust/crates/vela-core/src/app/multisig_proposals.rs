@@ -1722,7 +1722,7 @@ impl App for MultisigProposals {
                 }
             }),
             actions: s.actions.clone(),
-            reviews: s.reviews.clone(),
+            reviews: one_note_per_failure(&s.reviews, &s.previews, &s.actions),
             review_states: s.review_states.clone(),
             previews: s.previews.clone(),
             executions: s.verdicts.clone(),
@@ -3715,6 +3715,111 @@ async fn balance_of(
         .ok_or(Unread)
 }
 
+/// r12 S4: one note for one fact. A proposal whose execution look says it
+/// would fail now (`previews` / `actions` `fails`: "This would fail if
+/// executed now: …", with its reason) is not also said "expected to fail" by
+/// its review (`Concern::Reverts`, `componentsUi.signing.simWillFail`): the
+/// review served drops that concern, and a reverting simulation is served
+/// withheld ([`multisig_review::sim_withheld`], no notice, no heading). The
+/// look's line, with its reason, is the one note.
+pub fn one_note_per_failure(
+    reviews: &BTreeMap<String, Value>,
+    previews: &BTreeMap<String, Value>,
+    actions: &BTreeMap<String, ActionState>,
+) -> BTreeMap<String, Value> {
+    let fails = |v: &Value| v.get("kind").and_then(Value::as_str) == Some("fails");
+    let mut failing: BTreeSet<String> = previews
+        .iter()
+        .filter(|(_, v)| fails(v))
+        .filter_map(|(k, _)| {
+            k.rsplit_once(':')
+                .map(|(item, _)| item.to_ascii_lowercase())
+        })
+        .collect();
+    failing.extend(actions.iter().filter_map(|(k, a)| match a {
+        ActionState::Stopped { preview } if fails(preview) => {
+            k.split_once(':').map(|(_, hash)| hash.to_ascii_lowercase())
+        }
+        _ => None,
+    }));
+    reviews
+        .iter()
+        .map(|(key, review)| {
+            let lower = key.to_ascii_lowercase();
+            let hash = lower.split_once(':').map_or(lower.as_str(), |(_, h)| h);
+            let said = failing.contains(&lower) || failing.iter().any(|f| f == hash);
+            let mut review = review.clone();
+            if said {
+                if let Some(concerns) = review.get_mut("concerns").and_then(Value::as_array_mut) {
+                    concerns.retain(|c| c.get("kind").and_then(Value::as_str) != Some("reverts"));
+                }
+                // The simulation's own "expected to fail" notice is the same
+                // fact: a reverting simulation is served withheld (the shape
+                // every shell already draws as nothing, r9-9) — no notice,
+                // no heading — and the look's line is the one note.
+                let reverts = review
+                    .pointer("/simulation/kind")
+                    .and_then(Value::as_str)
+                    .is_some_and(|k| k == "reverts");
+                if reverts {
+                    if let Some(object) = review.as_object_mut() {
+                        object.insert(
+                            "simulation".to_owned(),
+                            serde_json::to_value(multisig_review::sim_withheld())
+                                .unwrap_or(Value::Null),
+                        );
+                        object.insert("movesTitleKey".to_owned(), Value::Null);
+                    }
+                }
+            }
+            (key.clone(), review)
+        })
+        .collect()
+}
+
+/// r12-1: why it would fail for want of funds — `have` and `need` as
+/// [`crate::multisig_rules::amount::Amount`]s: in the token's decimals and
+/// symbol (the registry's, else its contract's own answer, read here), or
+/// said "decimals unknown" with the base units. Never base units a shell
+/// has to scale (Android and iOS read 18 for Arc's 6-decimal USDC).
+async fn shortfall(
+    io: &Io<Event>,
+    chain_id: u64,
+    token: Option<&str>,
+    have: u128,
+    need: u128,
+) -> Value {
+    use crate::multisig_rules::amount;
+    let read = match token {
+        Some(t)
+            if u32::try_from(chain_id)
+                .ok()
+                .and_then(|c| crate::app::token_registry::registry_token(c, t))
+                .is_none() =>
+        {
+            super::multisig_outside::reading::read_these(
+                io,
+                chain_id,
+                vec![t.to_ascii_lowercase()],
+                Some(REVIEW_READ_MS),
+            )
+            .await
+        }
+        _ => BTreeMap::new(),
+    };
+    let facts = TokenFacts::of(chain_id, token, &read);
+    let say = |units: u128| {
+        amount::of(
+            &units.to_string(),
+            chain_id,
+            token,
+            facts.symbol.as_deref(),
+            facts.decimals,
+        )
+    };
+    json!({"kind": "short", "token": token.map(str::to_ascii_lowercase), "have": say(have), "need": say(need)})
+}
+
 async fn call_refusal(io: &Io<Event>, input: &ExecutionInput) -> Option<Value> {
     let tx = &input.item.tx;
     if tx.operation != 0 {
@@ -3772,7 +3877,7 @@ async fn look(io: &Io<Event>, input: &ExecutionInput) -> Preview {
         if let Some(have) = have {
             if have < need {
                 return Preview::Fails(
-                    json!({"kind": "short", "token": token, "have": have.to_string(), "need": need.to_string()}),
+                    shortfall(io, input.chain_id, token.as_deref(), have, need).await,
                 );
             }
         }

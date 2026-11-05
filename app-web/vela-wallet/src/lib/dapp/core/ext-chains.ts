@@ -26,6 +26,7 @@ import {
 import { getBuiltinBundlerUrl } from '$lib/services/rpc-pool-endpoints';
 import { networkSpace } from '$lib/network-space/network-space.svelte';
 import { ACCOUNT_CHAINS_KEY, CHAINS_KEY } from '../keys';
+import type { BalanceView } from '$lib/core/generated/BalanceView';
 
 /** One chain, as the worker needs it. */
 export interface ExtChainEntry {
@@ -246,6 +247,26 @@ export async function setExtAccountChains(address: string, ids: number[]): Promi
 		// Best-effort, like the catalog; the next change tries again.
 		lastLives.delete(key);
 	}
+}
+
+/**
+ * r9/r10/r12: where the balance view's account lives — a multisig's own
+ * networks (`ownChains`), then where it holds something (in the holdings'
+ * order), then where this device's transactions were (`recent`) — or `null`
+ * while the view knows nothing (no round settled and nothing restored), so a
+ * page that has not read the holdings never says the account lives nowhere.
+ * The wallet page's effect and the request sheet's own read (r12) both store
+ * this, never their own reading of the view.
+ */
+export function accountLivesOn(
+	view: BalanceView,
+	ownChains: readonly number[] = [],
+	recent: readonly number[] = []
+): number[] | null {
+	if (view.address === null) return null;
+	const held = view.tokens.filter((t) => !t.spam && Number(t.balance) > 0).map((t) => t.chain_id);
+	if (view.last_refreshed_at_ms === null && held.length === 0) return null;
+	return [...ownChains, ...held, ...recent];
 }
 
 /** Test seam: forget what was published, so the next publish is observable. */

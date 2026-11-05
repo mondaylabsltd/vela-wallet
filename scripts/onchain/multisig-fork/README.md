@@ -24,6 +24,15 @@ npx playwright test -c playwright.onchain.config.ts
 scripts/onchain/multisig-fork/down.sh
 ```
 
+Give the web suite and vela-core's `multisig_fork` test a harness each
+(`down.sh && up.sh` between them). The core test sends from the fixture
+accounts' addresses (`anvil_impersonateAccount`), which gives them a nonce,
+and the fork then refuses to create their counterfactual accounts (AA13
+"initCode failed": CREATE2 onto an address with a nonce) — every web test
+that deploys one fails for the harness's reason, not the wallet's. And the
+web suite spends the sponsor's five records per owner a day, after which the
+core test's create is not recorded.
+
 A second harness beside a running one takes other ports — up.sh and the
 Playwright harness read the same names (`FORK_PORT`, `UNREAD_PORT`,
 `GENESIS_PORT`, `RELAY_PORT`, `PEERCONNECT_PORT`), with its own `STATE`;

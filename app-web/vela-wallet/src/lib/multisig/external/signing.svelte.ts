@@ -20,6 +20,11 @@ export interface ExternalRequest {
 	owners: string[];
 	/** Send this transaction instead of signing (`null`: an approval). */
 	send?: OutsideSendTx | null;
+	/**
+	 * r12: the multisig's genesis, handed on to the session as the core gave
+	 * it — the page reviews a multisig deployed nowhere from it.
+	 */
+	genesis?: unknown;
 	/** How the ask ended, as the session machine says it. */
 	settle(outcome: OutsideSessionOutcome): void;
 	/** The sheet could not be shown at all. */
@@ -46,6 +51,7 @@ class ExternalSigning {
 				safeTxHash: request.safeTxHash,
 				owners: request.owners,
 				send: request.send,
+				...(request.genesis ? { genesis: request.genesis } : {}),
 				settle: (outcome) => {
 					if (this.request === mine) this.request = null;
 					resolve(outcome);

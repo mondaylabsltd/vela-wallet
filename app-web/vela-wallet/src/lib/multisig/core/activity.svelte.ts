@@ -21,8 +21,7 @@ import {
 	memberActionTitle,
 	memberWho,
 	shortenAddress,
-	tokenInfo,
-	UNREAD_TOKEN
+	tokenInfo
 } from './display';
 import { checksumAddress } from '$lib/core/kernels';
 import { readMemberChanges } from './kernel';
@@ -30,7 +29,7 @@ import { names } from './names.svelte';
 import { provenanceNote, type ProvenanceNote } from '$lib/services/token-provenance';
 import { proposals, type ProposalItem } from './proposals.svelte';
 import { whyText } from './execution-words';
-import { blockOf as wordedBlock, type TokenWords } from '../shell/proposal-failure';
+import { blockOf as wordedBlock } from '../shell/proposal-failure';
 import { nativeSymbol } from '$lib/services/networks';
 import type { MultisigStanding } from '../generated/MultisigStanding';
 import type { MultisigWaitingNote } from '../generated/MultisigWaitingNote';
@@ -115,10 +114,10 @@ interface Drawn {
 
 /** A member as a row names it: the name this device knows, and the short address. */
 const who = (address: string) => memberWho(address, names.label(address));
+/** r12-8: the name a member change gives an address (the core's title rule names it). */
+const label = (address: string) => names.label(address);
 
 class WaitingRows {
-	/** A `short` look's token, worded once read (symbol, decimals). */
-	#tokens = $state<Record<string, TokenWords>>({});
 	/** Titles and amounts are read from the chain (a token's symbol): kept once read. */
 	#drawn = $state<Record<string, Drawn>>({});
 	/** The chain index's names of the networks this device lacks, once read. */
@@ -153,7 +152,7 @@ class WaitingRows {
 			}
 		}
 		void Promise.all([
-			actionTitle(m, item.chainId, action, item.nonce, who),
+			actionTitle(m, item.chainId, action, item.nonce, label),
 			action?.kind === 'transfer'
 				? tokenInfo(item.chainId, action.token).catch(() => null)
 				: // A call's own coin, so a read title keeps what the call sends.
@@ -192,18 +191,8 @@ class WaitingRows {
 	follow(m: MultisigMessages, multisigAddress: string | null = null): void {
 		for (const item of proposals.open) this.#draw(m, item, multisigAddress);
 		// r4-5: what is ready the machine looks at as it would run (each poll),
-		// so the row never says "Ready to execute" for one that cannot; a
-		// `short` look's token is worded here (its symbol and decimals).
-		for (const item of proposals.open) {
-			const block = standingOf(item);
-			if (block?.kind !== 'blocked' || block.block.kind !== 'fails') continue;
-			const why = block.block.why as { kind?: string; token?: string | null } | null;
-			const token = why?.kind === 'short' ? (why.token ?? null) : undefined;
-			if (!token || this.#tokens[token.toLowerCase()]) continue;
-			void tokenInfo(item.chainId, token)
-				.catch(() => UNREAD_TOKEN)
-				.then((info) => (this.#tokens = { ...this.#tokens, [token.toLowerCase()]: info }));
-		}
+		// so the row never says "Ready to execute" for one that cannot. r12-1:
+		// a `short` look carries its amounts in the core's words.
 		for (const missing of proposals.missing) {
 			if (this.#asked.has(missing.chainId)) continue;
 			this.#asked.add(missing.chainId);
@@ -232,7 +221,7 @@ class WaitingRows {
 				id: proposalRowId(item),
 				kind: 'sent',
 				// r11-6: a member change is named with the names as they stand.
-				title: memberActionTitle(m, item.review.action, who) ?? drawn?.title ?? '…',
+				title: memberActionTitle(m, item.review.action, label) ?? drawn?.title ?? '…',
 				// r4D-13: ONE word about where it stands, so the line fits two
 				// lines on a 320-wide phone. "Ready to execute" already says every
 				// approval is in, "Needs your approval" is the one thing to do,
@@ -240,7 +229,7 @@ class WaitingRows {
 				// ("1/2 approved"), which says "waiting for others" by itself.
 				subtitle: [
 					drawn?.source,
-					standing(m, item, this.#tokens),
+					standing(m, item),
 					// r4b-6: proposals at one number — only one of them can run.
 					item.sameNonce.length > 0 ? m.status.conflict : null,
 					// r4a-1: the rule it meets and the one it leaves.
@@ -358,11 +347,7 @@ function standingOf(item: ProposalItem): MultisigStanding | null {
  * others"; a ready one that cannot run here says why ("Can't run now — the
  * multisig holds 0.28 USDC, and this needs 0.5 USDC").
  */
-function standing(
-	m: MultisigMessages,
-	item: ProposalItem,
-	tokens: Record<string, TokenWords>
-): string {
+function standing(m: MultisigMessages, item: ProposalItem): string {
 	const said = standingOf(item);
 	switch (said?.kind) {
 		case 'unsent':
@@ -382,15 +367,8 @@ function standing(
 			if (said.block.kind === 'nobodyPays') {
 				return fillTemplate(m.status.cannotRun, { reason: m.status.nobodyPays });
 			}
-			const why = said.block.why as { kind?: string; token?: string | null } | null;
-			const token =
-				why?.kind === 'short'
-					? why.token
-						? (tokens[why.token.toLowerCase()] ?? null)
-						: { symbol: nativeSymbol(item.chainId), decimals: 18 }
-					: null;
 			return fillTemplate(m.status.cannotRun, {
-				reason: whyText(m, wordedBlock(said.block.why, token))
+				reason: whyText(m, wordedBlock(said.block.why))
 			});
 		}
 		default:

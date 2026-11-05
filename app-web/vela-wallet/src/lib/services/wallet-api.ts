@@ -344,8 +344,12 @@ export async function fetchTokens(
 			// wallet, and nothing ever re-read it (Send's retry-once rule could
 			// not see the round had reached nothing). Only a complete round
 			// may be held, the rule the fee-signal cache keeps too.
+			// r12-3: and a partial round is never fresh at all. It kept the
+			// previous complete round's time, so for that round's five minutes
+			// every non-forced read (a focus, the poll) was a hit that said
+			// "every chain answered" over the chain that had just failed.
 			tokenCache.set(cacheKey, {
-				fetchedAt: partial ? (cached?.fetchedAt ?? 0) : Date.now(),
+				fetchedAt: partial ? 0 : Date.now(),
 				tokens
 			});
 		}

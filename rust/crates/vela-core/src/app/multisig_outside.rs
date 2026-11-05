@@ -207,6 +207,26 @@ pub struct SafeTxRequest {
     pub safe: String,
     #[cfg_attr(feature = "bindings", ts(type = "unknown"))]
     pub tx: SafeTx,
+    /// r12: the multisig's genesis as Vela sent it beside the request (the
+    /// request object's `genesis` member) — kept only when the core derives
+    /// `safe` from it ([`genesis_for`]): a fact the page checks, never a
+    /// claim. With it, a multisig deployed nowhere yet and recorded with no
+    /// service (one imported from a Safe{Wallet} export) is reviewed — its
+    /// members are the genesis's — instead of read as "Couldn't read this
+    /// transaction" with "Sign with …" shut for ever.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "bindings", ts(type = "unknown", optional))]
+    pub genesis: Option<Genesis>,
+}
+
+/// r12: `genesis` (a request's `genesis` member) when the core derives
+/// `safe` from it — never otherwise.
+pub fn genesis_for(safe: &str, genesis: Option<&Value>) -> Option<Genesis> {
+    let g: Genesis = serde_json::from_value(genesis?.clone()).ok()?;
+    multisig::genesis_address(&g)
+        .ok()
+        .filter(|a| same_address(a, safe))
+        .map(|_| g)
 }
 
 const SAFE_TX_FIELDS: [&str; 10] = [
@@ -334,7 +354,12 @@ pub fn read_safe_tx_request(typed: &Value) -> Option<SafeTxRequest> {
             return None;
         }
     }
-    Some(SafeTxRequest { chain_id, safe, tx })
+    Some(SafeTxRequest {
+        chain_id,
+        safe,
+        tx,
+        genesis: None,
+    })
 }
 
 /// A `personal_sign` answer over a safeTxHash as Safe reads its `eth_sign`
@@ -2662,6 +2687,42 @@ pub mod page {
         reading: bool,
     }
 
+    /// r12 (the review-state merge's regression): Vela's request for the
+    /// very transaction the link names is the same SafeTx (its key is the
+    /// same safeTxHash), so a review the link read is that request's review
+    /// too. It was read a second time instead — each page refresh read the
+    /// unreviewed requests first, one after another — and the request's
+    /// "Sign with …" stayed on "Reading the transaction…" past the person's
+    /// patience. A review read once is never waited for again: the link's
+    /// ready review is the request's.
+    fn adopt_link_review(s: &mut PageState) {
+        let Some((hash, view)) = s
+            .link
+            .as_ref()
+            .map(|l| l.safe_tx_hash.to_ascii_lowercase())
+            .zip(s.loaded.as_ref().map(|l| l.view.clone()))
+        else {
+            return;
+        };
+        if !view.review_state.is_ready() || view.review.is_none() {
+            return;
+        }
+        let Some(read) = s.request_reads.get_mut(&hash) else {
+            return;
+        };
+        let Some(shown) = read.shown.as_mut() else {
+            return;
+        };
+        if shown.review_state.is_ready() && shown.review.is_some() {
+            return;
+        }
+        shown.review = view.review.clone();
+        shown.review_state = ReviewState::Ready;
+        if read.tx.is_none() {
+            read.tx = Some(view);
+        }
+    }
+
     impl PageState {
         fn view_tx(&self) -> Option<&OutsideTxView> {
             self.loaded.as_ref().map(|l| &l.view)
@@ -2895,7 +2956,7 @@ pub mod page {
         Fallback { session: String, id: String },
         Switch { session: String, id: String },
         Accounts { session: String },
-        Read { request: SafeTxRequest },
+        Read { request: Box<SafeTxRequest> },
     }
 
     impl crux_core::App for OutsidePage {
@@ -3334,6 +3395,7 @@ pub mod page {
                     }
                     s.loaded = Some(Loaded { view, again: false });
                     s.load = OutsideLoad::Ready;
+                    adopt_link_review(&mut s);
                     used
                 }
             }
@@ -3561,7 +3623,9 @@ pub mod page {
             entry.reading = true;
             entry.request = Some(request.clone());
         }
-        let genesis = verified_genesis(io, &service, &request.safe).await;
+        let genesis = verified_genesis(io, &service, &request.safe)
+            .await
+            .or_else(|| request.genesis.clone());
         let (chain_id, safe, tx) = (request.chain_id, request.safe.clone(), request.tx.clone());
         let read = multisig::review(chain_id, &safe, &tx).ok();
         let tokens = match &read {
@@ -3591,25 +3655,41 @@ pub mod page {
                 chain_nonce,
             })
         };
-        // Its title and hashes at once; the review once it is gathered.
-        lock(st).request_reads.insert(
-            hash.clone(),
-            RequestRead {
-                genesis: genesis.clone(),
-                tx: None,
-                shown: shown(None, ReviewState::Loading, None),
-                tokens: tokens.clone(),
-                request: Some(request.clone()),
-                reading: true,
-            },
-        );
+        // Its title and hashes at once; the review once it is gathered —
+        // at once too when the link already read this very transaction.
+        {
+            let mut s = lock(st);
+            s.request_reads.insert(
+                hash.clone(),
+                RequestRead {
+                    genesis: genesis.clone(),
+                    tx: None,
+                    shown: shown(None, ReviewState::Loading, None),
+                    tokens: tokens.clone(),
+                    request: Some(request.clone()),
+                    reading: true,
+                },
+            );
+            adopt_link_review(&mut s);
+            let adopted = s
+                .request_reads
+                .get_mut(&hash)
+                .filter(|r| r.shown.as_ref().is_some_and(|x| x.review_state.is_ready()));
+            if let Some(read) = adopted {
+                read.reading = false;
+                return;
+            }
+        }
         let link = TxLink {
             chain_id,
             safe: safe.to_ascii_lowercase(),
             safe_tx_hash: hash.clone(),
             for_members: Vec::new(),
         };
-        let (view, (review, state), chain_nonce) =
+        // §12: the whole read is bounded (the mailbox, the members, the
+        // review): "Reading the transaction…" ends within REVIEW_TIMEOUT_MS,
+        // ready or failed with its reason — never a spinner for ever.
+        let read = review_state::bounded(io, async {
             match read_link(io, &service, &seen, &done, &link).await {
                 Ok(view) => {
                     let review = (view.review.clone(), view.review_state.clone());
@@ -3631,9 +3711,27 @@ pub mod page {
                         None,
                     ),
                 },
-            };
+            }
+        })
+        .await;
+        let (view, (review, state), chain_nonce) = match read {
+            Ok(read) => read,
+            Err(failed) => (None, (None, failed), None),
+        };
         let shown = shown(review, state, chain_nonce);
-        lock(st).request_reads.insert(
+        let mut s = lock(st);
+        // The link may have read it meanwhile: a ready review is not unsaid
+        // by this read's failure.
+        let kept_ready = s
+            .request_reads
+            .get(&hash)
+            .and_then(|r| r.shown.clone())
+            .filter(|x| x.review_state.is_ready() && x.review.is_some());
+        let shown = match (kept_ready, shown) {
+            (Some(ready), Some(now)) if !now.review_state.is_ready() => Some(ready),
+            (_, now) => now,
+        };
+        s.request_reads.insert(
             hash,
             RequestRead {
                 genesis,
@@ -3644,6 +3742,7 @@ pub mod page {
                 reading: false,
             },
         );
+        adopt_link_review(&mut s);
     }
 
     fn service_detail(e: &ServiceFail) -> String {
@@ -4572,7 +4671,7 @@ pub mod page {
                     Out::Fallback { session, id } => fallback(&io, &st, &session, &id).await,
                     Out::Switch { session, id } => switch(&io, &st, &session, &id).await,
                     Out::Accounts { session } => connect_approved(&io, &st, &session).await,
-                    Out::Read { request } => read_request(&io, &st, request).await,
+                    Out::Read { request } => read_request(&io, &st, *request).await,
                 }
             }
         })
@@ -4928,7 +5027,10 @@ pub mod page {
         };
         let list = params.as_array().cloned().unwrap_or_default();
         if method == "eth_signTypedData_v4" {
-            entry.safe_tx = list.get(1).and_then(read_safe_tx_request);
+            entry.safe_tx = list.get(1).and_then(read_safe_tx_request).map(|mut r| {
+                r.genesis = genesis_for(&r.safe, o.get("genesis"));
+                r
+            });
         }
         if method == "eth_sendTransaction" {
             let t = list.first().cloned().unwrap_or(Value::Null);
@@ -5014,7 +5116,9 @@ pub mod page {
             }
         }
         if let Some(request) = s.entry_mut(&session, &id).and_then(|e| e.safe_tx.clone()) {
-            outs.push(Out::Read { request });
+            outs.push(Out::Read {
+                request: Box::new(request),
+            });
         }
         s.queue.push((session, id));
         outs
@@ -5489,6 +5593,12 @@ pub mod session {
         /// Send this transaction instead of signing (`None`: an approval).
         #[serde(default)]
         pub send: Option<SendTx>,
+        /// r12: the multisig's genesis, sent beside the signing request so
+        /// the page can review a multisig no service records and no chain
+        /// holds yet (it checks the address derives from it).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "bindings", ts(type = "unknown", optional))]
+        pub genesis: Option<Genesis>,
     }
 
     #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -5830,13 +5940,26 @@ pub mod session {
                 self.fail(Failure::BadSignature);
                 return Vec::new();
             };
-            self.next_request(
+            let genesis = request
+                .genesis
+                .as_ref()
+                .and_then(|g| serde_json::to_value(g).ok());
+            let mut out = self.next_request(
                 Call::Sign,
                 "eth_signTypedData_v4",
                 json!([owner, typed.to_string()]),
-            )
-            .into_iter()
-            .collect()
+            );
+            // r12: beside the request, the multisig's genesis (the page
+            // derives the address from it before it believes a word).
+            if let (Some(Out::Send { message, .. }), Some(g)) = (out.as_mut(), genesis) {
+                message["genesis"] = g;
+                if let Some(id) = message.get("id").and_then(Value::as_str).map(str::to_owned) {
+                    if let Some((_, kept)) = self.pending.get_mut(&id) {
+                        *kept = message.clone();
+                    }
+                }
+            }
+            out.into_iter().collect()
         }
 
         fn signers_among(&self, list: &[String]) -> Vec<String> {

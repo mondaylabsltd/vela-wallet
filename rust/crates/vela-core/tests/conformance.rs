@@ -41,11 +41,13 @@ struct Case {
 /// Vector files beside the corpus that are not suites: each has its own
 /// runner, which every shell replays by name (r9-17's incoming scan,
 /// `app_incoming_scan.rs`; r10-1's balance stamp, `app_balance_dashboard.rs`;
-/// r9 S4's new site's chain, `site_start_chain_vectors.rs`).
-const OWN_RUNNER_FILES: [&str; 3] = [
+/// r9 S4's new site's chain, `site_start_chain_vectors.rs`; r12-3's pool
+/// signal, `app_balance_dashboard.rs`).
+const OWN_RUNNER_FILES: [&str; 4] = [
     "incoming-scan.json",
     "balance-stamp.json",
     "site-start-chain.json",
+    "balance-pool-unreached.json",
 ];
 
 /// The corpus is seven suites, discovered by scanning the directory. Every runner

@@ -514,9 +514,17 @@ async function signElsewhere(
 ): Promise<string[]> {
 	const link = (await vela.getByTestId('external-link').textContent())!.trim();
 	const ctx = await browser.newContext({ viewport: { width: 430, height: 900 } });
+	// r12: the page reads the request's review itself (§12: nothing is signed
+	// until it is read) — from the harness's service and the fork, as an
+	// outside owner's browser reads the real ones. Without them it read the
+	// public service and the public Gnosis, where this multisig is nowhere,
+	// and "Sign with …" waited on a review that could not be read there.
+	await useHarness(ctx);
 	await withInjectedWallet(ctx, owner);
 	const page = await ctx.newPage();
 	const thrown = errors(page);
+	await page.goto(new URL('/robots.txt', link).href);
+	await seedNetwork(page);
 	await page.goto(link);
 	await page.getByRole('button', { name: 'Connect', exact: true }).click({ timeout: 30_000 });
 	// r4C-7: reviewed on the page first; the wallet is asked on the tap.

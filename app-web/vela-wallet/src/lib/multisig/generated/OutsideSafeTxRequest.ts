@@ -3,4 +3,14 @@
 /**
  * A SafeTx an `eth_signTypedData_v4` request asks for, as the core read it.
  */
-export type OutsideSafeTxRequest = { chainId: number, safe: string, tx: unknown, };
+export type OutsideSafeTxRequest = { chainId: number, safe: string, tx: unknown, 
+/**
+ * r12: the multisig's genesis as Vela sent it beside the request (the
+ * request object's `genesis` member) — kept only when the core derives
+ * `safe` from it ([`genesis_for`]): a fact the page checks, never a
+ * claim. With it, a multisig deployed nowhere yet and recorded with no
+ * service (one imported from a Safe{Wallet} export) is reviewed — its
+ * members are the genesis's — instead of read as "Couldn't read this
+ * transaction" with "Sign with …" shut for ever.
+ */
+genesis?: unknown, };

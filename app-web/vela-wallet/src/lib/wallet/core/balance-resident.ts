@@ -30,6 +30,7 @@
  * would type-check against a native module that does not exist.
  */
 
+import { onPoolOutOfReach } from '$lib/services/rpc-pool';
 import { getItem } from '$lib/services/storage';
 
 import { toApiToken } from './balance-executor';
@@ -192,6 +193,11 @@ export function ensureBalanceDashboard() {
 		// only to give `start()` an event so the pristine view is committed (the
 		// frame `INITIAL_VIEW` already mirrors).
 		session.start({ type: 'app_focused' });
+		// r12-3: the pool's lost networks, as the core says them — a warm
+		// outage is read again and named within a read's bound.
+		onPoolOutOfReach((chainIds) =>
+			session?.dispatch({ type: 'pool_unreached', chain_ids: chainIds })
+		);
 		// The boot-time privacy read, once per process. The core's first-write-wins
 		// rule makes a toggle that races this read win, so it is safe to be slow;
 		// "key missing" and "read failed" collapse to `hidden: false`, exactly as

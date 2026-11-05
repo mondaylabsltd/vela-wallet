@@ -1,6 +1,6 @@
 # Multisig machines — the API the shells drive
 
-2026-10-31 · W9 (§9: round 10, 2026-11-01; §12: the review state, 2026-11-05). For the native lanes (desktop, Android, iOS) and the web.
+2026-10-31 · W9 (§9: round 10, 2026-11-01; §12: the review state, 2026-11-05; §13: round 12, 2026-11-05). For the native lanes (desktop, Android, iOS) and the web.
 
 **The rule (owner, binding):** one core for the multisig's business rules and
 logic on every platform. A shell keeps only its UI and its I/O: it dispatches
@@ -849,3 +849,122 @@ timeout, the keys) — replayed by Rust (`app_multisig_review_state.rs`), the
 web (`core/review-door.test.ts`), the desktop, Android and iOS. Machine
 tests: `tests/app_multisig_review_state.rs`, and the outside page's in
 `tests/app_multisig_outside.rs`.
+
+## 13. Round 12 — amounts said, outages named, one title, one fee row
+
+All additive (a new event, new view fields with serde defaults, new link-door
+rules, a new module) except two wire shapes: the multisig shortfall's `have` /
+`need` (strings → objects, r12-1, deliberately so no shell can scale them by a
+guess) and the Rust struct literal of `RpcPoolView` (one more field). Each
+rule has a shared vector the native shells replay.
+
+### 13.1 Amounts carry how they are said (r12-1)
+
+| Was | Now |
+| --- | --- |
+| a shortfall `why = {kind: "short", token: <address>, have: "<base units>", need: "<base units>"}`; Android / iOS read `why.token.decimals ?? 18` (the token is an address string), so Arc Testnet's 0.01 USDC (6-decimal interface `0x3600…`) read "needs <0.000001" | `have` and `need` are `MultisigAmount` (`multisig_rules::amount::Amount`): `{base_units, token, said}`, `said` = `{kind: "known", text, number, symbol, decimals}` (draw `text`, "0.01 USDC") or `{kind: "decimals_unknown", key, raw}` (draw the corpus key `home.multisig.review.reading.decimalsUnknown` with `{{raw}}`). Decimals and symbol: the registry first, else the token contract's own answer (read by the look), never 18. `token` stays the address (lowercase), or null for the network's coin. |
+| each shell scaling base units with its own formatter | the core's text (`format_units`). Door `amount.of {base_units, chain_id, token?, symbol?, decimals?}` for any amount a shell has in base units. |
+
+Where: `previews[...].why`, `actions["execute:…"]` `stopped.preview.why`,
+`standings[...]` `blocked.fails.why` (the home's "Can't run now — …"). Shell
+work: draw `said`; delete any `?: 18` / `?? 18` for these. Vector
+`tests/vectors/multisig/amounts.json` (through the door; Rust
+`multisig_rules::amount::tests`). Generated TS `MultisigAmount`,
+`MultisigAmountSaid`.
+
+### 13.2 A network that does not answer is never a confident zero (r12-2, r12-3)
+
+**r12-2, found.** The web's balance machine cannot say "Live · listening for
+payments" while any network is in `failed_chain_ids` (`live_key` needs
+`!partial`), so the round said every network answered — and for the web it
+had. On the round's host, `rpc.soneium.org`, `mainnet.unichain.org` and
+`forno.celo.org` hang for a DIRECT connection, but answer in under a second
+through the macOS system proxy, which the browser (and the iOS simulator)
+use. The Android emulator went through the harness proxy and the desktop
+through `VELA_DEV_PROXY`, both direct out: they could not reach the three and
+said so. Reproduced on this host (curl `--noproxy` hangs 8 s; Playwright
+Chromium answers in 0.7 s). The cold rule held; the web's warm path did not
+(below), and that is the same "Live over a silent network" shape.
+
+**r12-3, found.** After one complete round, nothing the web reads is forced:
+the 10-minute poll, focus and account switch are non-forced, and the shell's
+token cache (five minutes) answered them with "every network answered" (no
+`onFailedChains` on a hit) — the core then cleared `failed_chain_ids`, reset
+the recovery reads and kept "Live". A partial round was also stored under the
+previous complete round's time, so the cache stayed "fresh" over a network
+that had just failed. The pool knew (the incoming scan and the native-balance
+watch read through it and recorded the network unreached); nothing told the
+balance machine. Android had no token cache, so every read reached the
+network.
+
+| Was | Now |
+| --- | --- |
+| a cache-answered settle (`read_at_ms` set) replaced `failed_chain_ids` with its own `[]` | it never clears a network the machine knows it could not read, nor a doubted one (`suspect`): those stay, the round stays partial, the recovery reads stay armed — no "Live" over them. |
+| the pool's failures stayed in the pool | NEW `RpcPoolView.out_of_reach_chains` (the chain notice's own set: `failed_chains` ∪ `unreached_chains` − `rate_limited_chains`) and NEW balance event `pool_unreached {chain_ids}` — send it whenever that set changes. A network newly in it that the shown account is read on (asked by its last round; for an account said to live somewhere, one of its networks) and that the home does not say yet is read again AT ONCE, forced past the shell's cache. A round already out, or an app away, owes it: the read runs when that round settles, or at the next focus (forced). Before the account's first round settles, nothing extra is read. |
+| (web) a partial round cached under the previous complete round's time | `fetchedAt: 0` — a partial round is never fresh. |
+
+Shell work (iOS, desktop, Android): subscribe to the pool's view and send
+`pool_unreached {chain_ids: view.out_of_reach_chains}` to the balance
+machine on every change (the web: `rpc-pool.ts` `onPoolOutOfReach` →
+`balance-resident.ts`). A shell with a token cache of its own must answer a
+`fetch_tokens {force: true}` from the network. Vectors
+`tests/vectors/balance-pool-unreached.json` (machine steps: `event`,
+`answer`, `expect {fetch: {force} | null, unreachable: [ids], live}`;
+Rust `the_pool_unreached_vectors_hold`). Web e2e
+`e2e/home-unanswered.e2e.ts`: nodes that hang (never fulfilled, not a 500) —
+three from the start (said, never Live), and Ethereum going silent in a warm
+session (named without a reload; red without the fix).
+
+### 13.3 One title for a member change (r12-8)
+
+| Was | Now |
+| --- | --- |
+| Activity froze an executed member change's title when the row was written — the language and names of that moment ("Add 0xD40086…de130b" on a zh page) — while the sheet said "Add Dana Local (…)" | link-door rule `names.change {action, labels}` → `{key, params, count?}` or null: `home.multisig.change.{add, remove, replace}` with each member as `names.who(address, labels[lowercase])`, or `home.multisig.action.changeThreshold` with `count` (say its plural form). `labels` = the accounts machine's `member_labels` (a sheet: the name typed for the member there, else that). Fill it in the page's language when the row is DRAWN. |
+
+Shell work: the Activity row of an executed member change keeps the action
+(the web: `LocalTransaction.multisigChange`) and is worded by this rule when
+it is drawn (the web re-titles stored rows when the page's words or
+`member_labels` change: `rewordMemberRows`); the sheet's title uses the same
+rule. Vector `tests/vectors/multisig/member-titles.json` (Rust
+`names::tests::the_member_title_vectors_hold`).
+
+### 13.4 S4 — one note, one fee row
+
+| Was | Now |
+| --- | --- |
+| proposal #0: "expected to fail" (the review's `Concern::Reverts`) beside "This would fail if executed now: …" (the look's `fails`) | `ProposalsView.reviews` drops the review's `reverts` concern for a proposal whose look (`previews`, or `actions` `stopped`) says `fails`, and serves a reverting `simulation` withheld (`kind: "withheld"`, no `notice_key`, `movesTitleKey` null — the shape every shell already draws as nothing, r9-9): the look's line, with its reason, is the one note (`multisig_proposals::one_note_per_failure`). Nothing for a shell to do; a shell guard that hid the simulation's notice beside a failing look can go. |
+| confirm fee "~0.12" (Android, iOS) vs "0.12" (web, desktop) | `fee.row {quoted}` (link door; `fee_policy::confirm_fee_row`) → `{label_key, amount_prefix}`: the amount is the fee signed and charged (r11-8), drawn bare after `amount_prefix` (empty — never "~"); `label_key` `send.estFeeLabel`, or `send.feeTokenEstimate` when `quoted` is false. Vector `tests/vectors/fee/confirm-row.json`. |
+
+### 13.5 The web, the extension, the page (no native change)
+
+- **The extension's new-site network (the third time).** The stored
+  `vela.ext.accountChains` was right and late: an account funded on Arc
+  Testnet seconds before a connect had no page that had read its holdings
+  since; the side panel booted at the click, resolved the start chain once
+  before its own balance round ended (Sepolia), and the grant kept it. Now
+  the panel reads the account's holdings first (bounded, 8 s) and stores
+  where it lives (one helper, `accountLivesOn`), and a new site's consent
+  follows the stored inputs (`watchStartChain`) until Connect — the request
+  window too. `e2e/extension-site-start.e2e.ts` reproduces the round
+  headless (late funds, a slow node, the real side panel; red without the
+  fix) and runs in `ci.yml`'s `web` job on every pull request
+  (`docs/ci/test-loops.md`).
+- **The signing page (r12-7).** Every short address is `names.short`'s form:
+  EIP-55, `0x` + 6, `…`, 6 (was 4+4 in whatever case it was handed,
+  "0x3e9b…692d"). Page **987ccbcc** (first in `BUILD_ALLOWED`; `LAUNCH`
+  unchanged; deploy `dist/` first).
+- S4: "Open #n" and the fee's Retry in neutral link ink (the danger red is
+  Reject's); a space before every "·" (Svelte 5 drops whitespace at the start
+  of a tag: "R12 Alice· On this device", "e56405· Needs 2 of 4"); the outside
+  page no longer prints a changed member's full address twice (the party
+  list skips the members `MemberChangeRule` draws).
+
+### 13.6 Two onchain regressions, fixed (coordinator, round 12)
+
+| Was | Now |
+| --- | --- |
+| /connect: Vela's request for a multisig deployed nowhere and recorded with no service (imported from a Safe{Wallet} export) sat on "Reading the transaction…", then "Couldn't read this transaction" — the review-state merge rightly shut "Sign with …" until the review is read, and the page could never learn the members (before it, it was signed on no review) | NEW `OutsideSessionRequest.genesis` (optional): Vela sends the multisig's genesis beside the signing request (the WalletPair request object's `genesis` member). The page keeps it only when the core derives the address from it (`multisig_outside::genesis_for`; `OutsideSafeTxRequest.genesis`) and reviews from it. A forged one is not believed. A shell that rebuilds the session request field by field must carry `genesis` (the web's external sheet did not). |
+| a request for the link's own transaction was read a second time | it takes the link's ready review at once; a request's whole read is bounded by `REVIEW_TIMEOUT_MS` (ready, or failed with its reason) |
+| "Approve and execute" stuck on "Executing…" in the onchain suite | the harness, not the wallet: the core fork test gives the fixture accounts a nonce (`anvil_impersonateAccount`), after which their counterfactual accounts cannot be created on that fork (AA13). Each suite now gets a harness of its own (`nightly.yml`, the harness README). |
+
+Tests: `tests/app_multisig_outside.rs` (`a_request_for_a_multisig_nobody_records_is_reviewed_from_the_genesis_vela_sends`, `a_genesis_that_is_not_the_multisigs_is_not_believed`, `the_session_sends_the_genesis_beside_its_request`, `a_request_for_the_links_own_transaction_takes_the_links_ready_review`), `tests/app_multisig_outside_propose.rs`; the 14 onchain tests on a fresh harness.

@@ -2038,6 +2038,7 @@ fn request() -> SessionRequest {
         tx: t,
         owners: vec![addr(SEED_B)],
         send: None,
+        genesis: None,
     }
 }
 
@@ -3538,4 +3539,184 @@ fn a_link_review_that_times_out_offers_nothing_to_sign() {
     let v = sut.view().tx.unwrap();
     assert_eq!(v.review_state, ReviewState::Ready);
     assert!(v.can_approve(&addr(SEED_B)));
+}
+
+// ---------------------------------------------------------------------------
+// r12: Vela's request for a multisig deployed nowhere and recorded with no
+// service (imported from a Safe{Wallet} export) — the review-state merge
+// shut its "Sign with …" for ever ("Reading the transaction…", then
+// "Couldn't read this transaction"): the page had no way to know who its
+// members are. Vela sends its genesis beside the request; the page believes
+// it only when the core derives the multisig's address from it.
+// ---------------------------------------------------------------------------
+
+fn typed_request_with_genesis(
+    id: &str,
+    account: &str,
+    safe: &str,
+    t: &SafeTx,
+    genesis: &Value,
+) -> Value {
+    let typed = multisig::safe_tx_typed_data(CHAIN, safe, t).unwrap();
+    json!({
+        "id": id,
+        "method": "eth_signTypedData_v4",
+        "params": [account, typed.to_string()],
+        "origin": ORIGIN,
+        "genesis": genesis
+    })
+}
+
+#[test]
+fn a_request_for_a_multisig_nobody_records_is_reviewed_from_the_genesis_vela_sends() {
+    use vela_core::app::multisig_review_state::{self as rs, ReviewState};
+    let member = addr(MEMBER_SEED);
+    let mut w = World {
+        wallet: Some(WalletSim::holding(&[MEMBER_SEED], CHAIN)),
+        ..World::default()
+    };
+    // Deployed nowhere, no record with the service.
+    let g = world::genesis(&[&addr(SEED_A), &member], 2, "0x05");
+    let t = tx("0x0");
+    let (mut sut, room, session) = joined(&mut w, vec![member.clone()]);
+    let genesis = serde_json::to_value(&g.genesis).unwrap();
+    w.peer.deliver(
+        &room,
+        typed_request_with_genesis("r1", &member, &g.address, &t, &genesis),
+    );
+    settle_ready(&mut sut, &mut w, 20_000);
+    let shown = sut.view().request_review.expect("reviewed");
+    assert_eq!(shown.review_state, ReviewState::Ready, "{shown:?}");
+    assert!(shown.review.is_some());
+    assert!(rs::door(Some(&shown.review_state), shown.review.as_ref()).enabled);
+    run(
+        &mut sut,
+        &mut w,
+        page::Event::AnswerRequest {
+            session,
+            id: "r1".into(),
+            go: true,
+        },
+    );
+    assert_eq!(wallet(&mut w).calls_of("eth_signTypedData_v4"), 1);
+}
+
+#[test]
+fn a_genesis_that_is_not_the_multisigs_is_not_believed() {
+    use vela_core::app::multisig_review_state::{self as rs, ReviewState};
+    let member = addr(MEMBER_SEED);
+    let mut w = World {
+        wallet: Some(WalletSim::holding(&[MEMBER_SEED], CHAIN)),
+        ..World::default()
+    };
+    let real = world::genesis(&[&addr(SEED_A), &member], 2, "0x05");
+    // Another multisig's genesis (the attacker's members), sent for this one.
+    let other = world::genesis(&[&addr(SEED_STRANGER), &member], 1, "0x06");
+    let t = tx("0x0");
+    let (mut sut, room, session) = joined(&mut w, vec![member.clone()]);
+    let forged = serde_json::to_value(&other.genesis).unwrap();
+    w.peer.deliver(
+        &room,
+        typed_request_with_genesis("r1", &member, &real.address, &t, &forged),
+    );
+    settle_ready(&mut sut, &mut w, 20_000);
+    let shown = sut.view().request_review.expect("its title and hashes");
+    assert_eq!(
+        shown.review_state,
+        ReviewState::failed(rs::REASON_UNREADABLE)
+    );
+    assert!(!rs::door(Some(&shown.review_state), shown.review.as_ref()).enabled);
+    run(
+        &mut sut,
+        &mut w,
+        page::Event::AnswerRequest {
+            session,
+            id: "r1".into(),
+            go: true,
+        },
+    );
+    assert_eq!(
+        wallet(&mut w).calls_of("eth_signTypedData_v4"),
+        0,
+        "never blind"
+    );
+}
+
+#[test]
+fn the_session_sends_the_genesis_beside_its_request() {
+    let mut w = World::default();
+    let g = world::genesis(&[&addr(SEED_A), &addr(SEED_B)], 2, "0x05");
+    let t = tx("0x0");
+    let request = SessionRequest {
+        chain_id: CHAIN,
+        safe: g.address.clone(),
+        safe_tx_hash: hash_of(&g.address, &t),
+        tx: t,
+        owners: vec![addr(SEED_B)],
+        send: None,
+        genesis: Some(g.genesis.clone()),
+    };
+    let sent = serde_json::to_value(&request).unwrap();
+    assert_eq!(sent["genesis"], serde_json::to_value(&g.genesis).unwrap());
+    // A page reading it keeps the genesis only for the address it derives.
+    assert_eq!(
+        vela_core::app::multisig_outside::genesis_for(&g.address, Some(&sent["genesis"])),
+        Some(g.genesis.clone())
+    );
+    assert_eq!(
+        vela_core::app::multisig_outside::genesis_for(SAFE, Some(&sent["genesis"])),
+        None
+    );
+    let _ = &mut w;
+}
+
+/// r12: Vela's request for the very transaction the page's link already
+/// read is that read's review — ready at once, never read (and waited for)
+/// a second time.
+#[test]
+fn a_request_for_the_links_own_transaction_takes_the_links_ready_review() {
+    use vela_core::app::multisig_review_state::ReviewState;
+    let member = addr(MEMBER_SEED);
+    let mut w = with_wallet(&[MEMBER_SEED]);
+    let t = tx("0x3");
+    w.mailbox = vec![stored(
+        SAFE,
+        &t,
+        vec![approval_by(SEED_A, &hash_of(SAFE, &t))],
+    )];
+    let mut sut = opened(&mut w, link_to(SAFE, &t));
+    assert_eq!(
+        sut.view().tx.expect("the link read").review_state,
+        ReviewState::Ready
+    );
+    run(
+        &mut sut,
+        &mut w,
+        page::Event::Join {
+            invite: "wss://relay#invite".into(),
+            members: vec![member.clone()],
+        },
+    );
+    let room = format!("room-{}", w.peer.next);
+    let session = sut.view().sessions.last().unwrap().id.clone();
+    w.peer.deliver(&room, connect_request("c1"));
+    settle_ready(&mut sut, &mut w, 20_000);
+    run(
+        &mut sut,
+        &mut w,
+        page::Event::AnswerConnect {
+            session,
+            approve: true,
+        },
+    );
+    // The chain goes quiet: a second read could not gather anything.
+    w.silent.insert(CHAIN);
+    w.peer.deliver(&room, typed_request("r1", &member, &t));
+    settle_ready(&mut sut, &mut w, 20_000);
+    let shown = sut.view().request_review.expect("reviewed");
+    assert_eq!(shown.review_state, ReviewState::Ready);
+    assert!(
+        shown.review.is_some(),
+        "the link's review, not a second read"
+    );
 }

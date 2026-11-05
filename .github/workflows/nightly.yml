@@ -242,14 +242,16 @@ jobs:
           # An empty secret must not reach up.sh as an empty URL.
           [ -n "$FORK_URL" ] || unset FORK_URL
           STATE="$FORK_STATE" scripts/onchain/multisig-fork/up.sh
-      - name: vela-core against the fork (multisig_fork)
-        if: steps.gate.outputs.ready == 'true'
-        working-directory: rust
-        env:
-          VELA_MULTISIG_FORK: '1'
-        run: cargo test -p vela-core --features crux,dev-fixtures --test multisig_fork -- --ignored --nocapture
+      # Each suite gets a harness of its own (r12). The core's fork test sends
+      # from the fixture accounts' addresses (`anvil_impersonateAccount`),
+      # which gives them a nonce: after it, their counterfactual accounts can
+      # no longer be created on that fork (CREATE2 onto an address with a
+      # nonce: AA13), and every web test that deploys one fails. And the web
+      # suite spends the service sponsor's five records per owner a day, so
+      # the core test's own create is not recorded after it. The web suite
+      # runs first; the harness is then started again for the core test.
       - name: The web wallet against the fork (e2e/onchain)
-        if: steps.gate.outputs.ready == 'true' && !cancelled()
+        if: steps.gate.outputs.ready == 'true'
         working-directory: app-web/vela-wallet
         run: |
           pnpm run sync:wasm
@@ -261,9 +263,27 @@ jobs:
           pnpm exec playwright test -c playwright.onchain.config.ts --reporter=list,junit
         env:
           PLAYWRIGHT_JUNIT_OUTPUT_NAME: ${{ runner.temp }}/e2e-onchain.xml
+      - name: A fresh harness for the core's own test
+        if: steps.gate.outputs.ready == 'true' && !cancelled()
+        env:
+          GENESIS_REPO: ${{ github.workspace }}/_services/safe-genesis-registry
+          PEERCONNECT_REPO: ${{ github.workspace }}/_services/peerconnect
+          FORK_URL: ${{ secrets.GNOSIS_FORK_RPC_URL }}
+        run: |
+          [ -n "$FORK_URL" ] || unset FORK_URL
+          STATE="$FORK_STATE" scripts/onchain/multisig-fork/down.sh
+          STATE="$FORK_STATE-core" scripts/onchain/multisig-fork/up.sh
+      - name: vela-core against the fork (multisig_fork)
+        if: steps.gate.outputs.ready == 'true' && !cancelled()
+        working-directory: rust
+        env:
+          VELA_MULTISIG_FORK: '1'
+        run: cargo test -p vela-core --features crux,dev-fixtures --test multisig_fork -- --ignored --nocapture
       - name: Stop the harness
         if: always() && steps.gate.outputs.ready == 'true'
-        run: STATE="$FORK_STATE" scripts/onchain/multisig-fork/down.sh
+        run: |
+          STATE="$FORK_STATE" scripts/onchain/multisig-fork/down.sh || true
+          STATE="$FORK_STATE-core" scripts/onchain/multisig-fork/down.sh || true
       - name: Keep the logs and screenshots
         if: always() && steps.gate.outputs.ready == 'true'
         uses: actions/upload-artifact@v4
@@ -271,6 +291,7 @@ jobs:
           name: multisig-fork
           path: |
             ${{ env.FORK_STATE }}/*.log
+            ${{ env.FORK_STATE }}-core/*.log
             ${{ runner.temp }}/e2e-onchain.xml
             app-web/vela-wallet/e2e/onchain/.results
             app-web/vela-wallet/e2e/onchain/.shots
