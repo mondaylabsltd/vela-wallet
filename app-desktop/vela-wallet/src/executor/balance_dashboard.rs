@@ -633,6 +633,25 @@ pub fn start_ticks(cx: &mut App) {
         reason = "a ten-minute constant in f64 ms is exactly representable"
     )]
     let period = Duration::from_millis(AUTO_REFRESH_MS as u64);
+    // r12-3: the pool's out-of-reach set, to the balance machine whenever it
+    // moved (`pool_unreached`) — looked at every second, from whatever read
+    // found it (the incoming scan, a send, a balance read). The machine
+    // decides what to read again; this only carries the set.
+    cx.spawn(async move |cx| {
+        loop {
+            cx.background_executor()
+                .timer(Duration::from_millis(OUT_OF_REACH_LOOK_MS))
+                .await;
+            if let Some(chain_ids) = crate::executor::pool::take_out_of_reach_change() {
+                crate::diag::vlog!("balances", "pool out of reach: {chain_ids:?}");
+                let balance = cx.update(resident::resident::<BalanceDashboard>);
+                balance.update(cx, |resident, cx| {
+                    resident.dispatch(Event::PoolUnreached { chain_ids }, cx);
+                });
+            }
+        }
+    })
+    .detach();
     cx.spawn(async move |cx| {
         loop {
             cx.background_executor().timer(period).await;
@@ -771,6 +790,34 @@ pub fn refresh(cx: &mut App) {
         },
         cx,
     );
+}
+
+/// How often the pool's out-of-reach set is looked at for a change (r12-3).
+const OUT_OF_REACH_LOOK_MS: u64 = 1_000;
+
+/// When the balances are read again after a send was handed off (R12 S4),
+/// in ms from the hand-off: once the operation has had time to land, and
+/// once more for a slow bundle.
+pub const AFTER_SEND_READS_MS: [u64; 2] = [5_000, 15_000];
+
+/// A send left this account (R12 S4): Assets kept the figure from before it
+/// while the sent row was pending — the tracker's `HoldingsMoved` comes with
+/// the receipt, and a receipt held (or a window not painting) left the
+/// figure the pre-send one for minutes. The chain is read again, forced, at
+/// [`AFTER_SEND_READS_MS`] — what it says then is what Assets says, never a
+/// figure the shell worked out.
+pub fn after_send(cx: &mut App) {
+    cx.spawn(async move |cx| {
+        let mut waited = 0;
+        for at in AFTER_SEND_READS_MS {
+            cx.background_executor()
+                .timer(Duration::from_millis(at.saturating_sub(waited)))
+                .await;
+            waited = at;
+            cx.update(refresh);
+        }
+    })
+    .detach();
 }
 
 /// The read the PERSON asked for — the hero's "↻ Updated <ago>" (issue 462),

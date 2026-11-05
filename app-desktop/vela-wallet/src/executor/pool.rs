@@ -325,6 +325,41 @@ pub fn rate_limited_chains() -> Vec<u32> {
     answer.recv().unwrap_or_default()
 }
 
+/// r12-3: the pool's chains out of reach (`RpcPoolView.out_of_reach_chains`,
+/// the core's one set: failed or unreached, never only rate limited) — the
+/// last one said, and a change not yet handed to the balance machine.
+static OUT_OF_REACH: std::sync::Mutex<(Vec<u32>, Option<Vec<u32>>)> =
+    std::sync::Mutex::new((Vec::new(), None));
+
+/// The pool thread, after every message: a set that moved is kept for
+/// [`take_out_of_reach_change`].
+fn note_out_of_reach(chains: &[u32]) {
+    let mut now = chains.to_vec();
+    now.sort_unstable();
+    now.dedup();
+    let mut kept = OUT_OF_REACH
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if kept.0 != now {
+        kept.0.clone_from(&now);
+        kept.1 = Some(now);
+    }
+}
+
+/// The out-of-reach set, when it changed since the last call (r12-3): what
+/// the balance machine hears as `pool_unreached` — it re-reads, forced, a
+/// network the account is read on that has just gone out of reach. A warm
+/// outage aged "Updated now" over failed reads before: the home's poll is
+/// ten minutes.
+#[must_use]
+pub fn take_out_of_reach_change() -> Option<Vec<u32>> {
+    OUT_OF_REACH
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .1
+        .take()
+}
+
 /// The chains whose whole RPC pool failed on the last attempt (`RpcPoolView.
 /// failed_chains`; spec 079 US4) — the rate-limited ones among them too, which
 /// a caller subtracts with [`rate_limited_chains`]. Cleared by the next usable
@@ -724,6 +759,9 @@ fn run(rx: &std::sync::mpsc::Receiver<Message>, workers: &Sender<Message>) {
     drain(&mut host, pending, &mut inflight, &mut queries, workers);
 
     loop {
+        // r12-3: the chains out of reach, as the view says them now, kept
+        // for the balance machine's `pool_unreached` when the set moved.
+        note_out_of_reach(&host.view().out_of_reach_chains);
         // 083 H6: a read whose endpoint has been silent for `HEDGE_AFTER`
         // asks the next one. The wait below wakes for the earliest such read.
         hedge_due_reads(|| host.view(), &mut inflight, &mut |work| {
