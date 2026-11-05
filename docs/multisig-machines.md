@@ -1605,6 +1605,73 @@ Tests: `app_send_fee_cover.rs`
 typed when the fee drops (Max is the way to send everything); the
 multi-token sweep's 2× reserve is a separate rule, unchanged.
 
+### 19.10 §16 end to end on Safari (r14-1's proof)
+
+Proven on an iOS 26.2 simulator (iPhone 17 Pro, its own Face ID) against
+local services only: the fork harness (Gnosis fork, the genesis service
+from `sgr-mailbox`, the local relay) and the local signing page (dist,
+64363925, front of `BUILD_ALLOWED`). `SafariRouteDeviceTests`
+`test07_createMultisigFromTheHeader` (header switcher → Add account →
+Create multisig) and `test08_createMultisigFromSettings` (Settings → Switch
+account → Create multisig) each create a 1-of-1 multisig from the Safari
+extension's wallet tab: the hand-off card, the page's "Prove multisig
+membership" card (name, address, "this account", "Needs 1 of 1"), the
+simulator passkey, "Multisig created" / "Shared", and the multisig in front
+on the home and listed in the switcher; the genesis records reached the
+local service and its registry on the fork. A clean run (erased simulator,
+tests 01, 02, 07, 08) passed. Runner: `app-ios/scripts/safari-route-e2e.sh`
+(loopback only; links are never opened with `simctl openurl` on an https
+URL). Not covered: zh, the deployed page, a 1-of-2, anything on chain beyond
+the counterfactual record. Found (minor, open): on Safari iOS 26 the tall
+Create sheet opens with "Next" under Safari's floating bottom bar until the
+sheet is scrolled once.
+
+### 19.11 The Android lane's three hand-offs (§20 "left open")
+
+- **The newest link open supersedes one in flight (core).** Link opens run
+  side by side in the accounts machine, so an older open whose lookup was
+  slower could land after a newer one, take its stand and switch the
+  multisig shown behind its sheet. **Decision:** every open takes a number
+  (`LinkState.seq`, bumped by `open`, `open_proposal`, Try again and a
+  network added); after each wait an open that is no longer the newest stops
+  — it says nothing, keeps nothing, switches nothing, opens nothing. Test:
+  `the_newest_link_supersedes_an_open_still_in_flight`. Android's sheet guard
+  stays as a shell detail; the account behind the sheet is now the core's
+  on every shell.
+- **The fee signed is the fee shown (core).** Execute re-quoted a look older
+  than `PREVIEW_FRESH_MS` at the press and signed that quote (r14-9's 0.0972
+  under "≈0.098172"). **Decision:** a new quote whose fee differs from the
+  look on screen signs nothing: `ActionState::Failed {fee_moved_detail}`
+  (`{kind: "fee_moved", amount, chainId, executor}` — the shape Android's
+  `ShownFee` already wrote, so its words read the core's answer unchanged),
+  the new look is kept, and the next press inside the window signs exactly
+  it. A stop rather than a confirm step: the sheet already draws the new
+  look, and one more press on what is shown is the honest confirm. Every
+  shell says "That didn't go through: Network fee ≈ {new}, paid by {name}"
+  with existing words (web `ExecutionFeeMovedError`, desktop
+  `ShellFailure::FeeMoved`, iOS `failureText`, Android as before); the
+  trusted page executes through the same core path. Test:
+  `an_execution_never_signs_a_fee_other_than_the_one_shown`. Android's shell
+  guard may now be retired by its lane; it agrees with the core.
+- **iOS r14-10.** `CameraScanner.Refusal.actionLabelKey`: a camera refused
+  for good says `onboarding.create.openSettings` on the button that opens
+  Settings (the scan sheet and Explore's scanner), as Android does.
+
+### 19.12 Left open
+
+- Android Settings → Switch account still offers only Create / Sign in
+  (recipe in 19.5); Android's add sheet relabels Add as Try again only once
+  its lane reads `view.add.retry`.
+- iOS composite subtitles that hold an address with other text
+  (`MultisigSettingsSheet`, `MultisigAddSheet`, the home card's proposal
+  title) and desktop `multisig_add.rs`' row: short forms there can still be
+  wrapped after their "…". Android rows: reported to its lane.
+- `ImportOutcome` has no busy mapping yet (a rate-limited import says
+  "unavailable").
+- The Safari Create sheet's "Next" under the floating bar (19.10).
+- Desktop's fee-moved line names the executor by its short address (the
+  failure words have no view of the member labels there).
+
 ## 20. Round 14 Android fixes
 
 Round 14's Android findings (r14-2, r14-3, r14-6, r14-9, r14-10), fixed in
