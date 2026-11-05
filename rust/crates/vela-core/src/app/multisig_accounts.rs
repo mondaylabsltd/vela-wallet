@@ -58,6 +58,10 @@ pub const RECORD_RETRY_MS: f64 = 60_000.0;
 pub const LANDING_MS: f64 = 10.0 * 60_000.0;
 /// How long one network's read of an address is waited for when looking a multisig up.
 pub const LOOKUP_READ_MS: u32 = 4_000;
+/// r14-5: how long an add waits before asking a rate-limiting network once
+/// more. The pool's own passes back off up to 1.5 s each, so a limit that
+/// outlasted them is given a few seconds more — never more than one pause.
+pub const RATE_LIMIT_PAUSE_MS: u64 = 3_000;
 /// A multisig's networks are looked for at most this often on one device.
 pub const DISCOVER_EVERY_MS: f64 = 60.0 * 60.0 * 1000.0;
 /// How many per-network mailbox reads are out at once (an older service).
@@ -447,6 +451,24 @@ pub enum AddOutcome {
         #[cfg_attr(feature = "bindings", ts(type = "unknown[]"))]
         findings: Vec<Value>,
     },
+    /// r14-5: `chain_id`'s nodes answered the reads it needs only with
+    /// "slow down" (HTTP 429), still so after one pause: nothing was added,
+    /// and the network is named as busy, not out of reach.
+    Busy {
+        #[cfg_attr(feature = "bindings", ts(type = "number"))]
+        chain_id: u64,
+    },
+}
+
+impl AddOutcome {
+    /// r14-5: a read that did not come back, so asking again can change it
+    /// — the shells offer Try again for it (`AddView::retry`).
+    pub fn offers_retry(&self) -> bool {
+        matches!(
+            self,
+            Self::Busy { .. } | Self::Unavailable | Self::Unchecked | Self::Unverified { .. }
+        )
+    }
 }
 
 /// What importing one exported Safe came to (`ImportOutcome`).
@@ -640,6 +662,10 @@ pub struct AddView {
     pub phase: Phase,
     pub address: Option<String>,
     pub outcome: Option<AddOutcome>,
+    /// r14-5: the outcome is a read that did not come back
+    /// ([`AddOutcome::offers_retry`]): the sheet's Add says Try again.
+    #[serde(default)]
+    pub retry: bool,
     /// What [`Event::Find`] read, not kept.
     #[cfg_attr(feature = "bindings", ts(type = "unknown"))]
     pub found: Option<MultisigAccount>,
@@ -1757,7 +1783,7 @@ impl App for MultisigAccounts {
                     let chain_ids = chain_ids.unwrap_or_else(|| lock(&st).lookup_chains());
                     let wait_ms = wait_ms.unwrap_or(2000);
                     let found =
-                        find_multisig(&io, &st, &address, &chain_ids, network, 1, wait_ms).await;
+                        find_patiently(&io, &st, &address, &chain_ids, network, 1, wait_ms).await;
                     let mut s = lock(&st);
                     s.add.phase = Phase::Done;
                     match found {
@@ -2110,7 +2136,10 @@ impl App for MultisigAccounts {
                     })
                     .collect::<Vec<_>>(),
             ),
-            add: s.add.clone(),
+            add: AddView {
+                retry: s.add.outcome.as_ref().is_some_and(AddOutcome::offers_retry),
+                ..s.add.clone()
+            },
             import: s.import.clone(),
             backup: s.backup.clone(),
             share_again: s.share_again.clone(),
@@ -2996,7 +3025,7 @@ async fn find_multisig(
             return Found::No(if unread.is_empty() {
                 AddOutcome::NotFound
             } else {
-                AddOutcome::Unchecked
+                busy_or(io, &unread, AddOutcome::Unchecked)
             });
         };
         match service
@@ -3064,6 +3093,18 @@ async fn find_multisig(
     }
     let findings = match vet_authority(io, address, &genesis, &used, &where_).await {
         Vetted::Ok(f) => f,
+        // r14-5: a check the network would not answer, because it was
+        // rate-limiting, is said as busy.
+        Vetted::No(AddOutcome::Unverified { chain_id }) => {
+            return Found::No(busy_or(
+                io,
+                &[chain_id],
+                AddOutcome::Unverified { chain_id },
+            ))
+        }
+        Vetted::No(AddOutcome::Unavailable) => {
+            return Found::No(busy_or(io, &used, AddOutcome::Unavailable))
+        }
         Vetted::No(outcome) => return Found::No(outcome),
     };
     let Ok((owners, threshold)) = multisig::genesis_members(&genesis) else {
@@ -3084,6 +3125,39 @@ async fn find_multisig(
         findings: None,
     };
     Found::Account(Box::new(account), findings)
+}
+
+/// r14-5: a read that could not be made, said for what it was — one of
+/// `chains` whose nodes answered only "slow down" is busy, never "couldn't
+/// reach" or "couldn't check".
+fn busy_or(io: &Io<Event>, chains: &[u64], otherwise: AddOutcome) -> AddOutcome {
+    let limited = io.rate_limited();
+    chains
+        .iter()
+        .find(|id| limited.contains(id))
+        .map_or(otherwise, |&chain_id| AddOutcome::Busy { chain_id })
+}
+
+/// [`find_multisig`], asked once more after [`RATE_LIMIT_PAUSE_MS`] when a
+/// network was rate-limiting its reads (r14-5): a limit is a short wait,
+/// not a failure — bounded, then named ([`AddOutcome::Busy`]).
+async fn find_patiently(
+    io: &Io<Event>,
+    st: &Shared<State>,
+    address: &str,
+    chain_ids: &[u64],
+    network: Option<u64>,
+    waits: u32,
+    wait_ms: u64,
+) -> Found {
+    io.forget_rate_limits();
+    let found = find_multisig(io, st, address, chain_ids, network, waits, wait_ms).await;
+    if !matches!(found, Found::No(AddOutcome::Busy { .. })) {
+        return found;
+    }
+    io.wait(RATE_LIMIT_PAUSE_MS).await;
+    io.forget_rate_limits();
+    find_multisig(io, st, address, chain_ids, network, waits, wait_ms).await
 }
 
 /// Keep what [`find_multisig`] read, in the list (not shown).
@@ -3129,7 +3203,7 @@ async fn add_multisig(
         return AddOutcome::Added { address: existing };
     }
     let chain_ids = lock(st).lookup_chains();
-    let kept = match find_multisig(io, st, address, &chain_ids, network, 1, 2000).await {
+    let kept = match find_patiently(io, st, address, &chain_ids, network, 1, 2000).await {
         Found::Account(account, findings) if findings.is_empty() => {
             keep_multisig(io, st, &account, Vec::new()).await
         }

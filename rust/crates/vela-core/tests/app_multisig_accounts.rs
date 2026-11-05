@@ -467,6 +467,110 @@ fn a_deployed_safe_whose_state_cannot_be_read_is_unavailable() {
     assert_eq!(sut.view().add.outcome, Some(AddOutcome::Unavailable));
 }
 
+/// r14-5: every node of the network answering "slow down" (HTTP 429), as the
+/// shell's pool reports it.
+fn rate_limited(on: u64) -> world::RpcHook {
+    Box::new(move |chain, _, _| {
+        (chain == on).then(
+            || vela_core::app::multisig_shell::MultisigShellResult::RpcUnanswered {
+                detail: format!(
+                    "{}: every node of chain {on} answered HTTP 429",
+                    vela_core::app::multisig_shell::RATE_LIMITED_DETAIL
+                ),
+            },
+        )
+    })
+}
+
+/// r14-5: a network rate-limiting every read an add needs is waited out
+/// once (a bounded pause), then named — busy, with Try again — and nothing
+/// is added. Never a silent return, never "couldn't reach the service".
+#[test]
+fn a_network_rate_limiting_the_add_is_named_busy_after_one_pause() {
+    let g = genesis(&[A], 1, "0x1c");
+    let mut world = World::default();
+    world.record(&g.address, &g.genesis, false);
+    world.deploy(8453, &g.address, DeployedSafe::clean(&[A], 1));
+    world.rpc_hooks.push(rate_limited(8453));
+    let mut sut = started(&mut world, vec![8453]);
+    let before = world.now;
+    run(&mut sut, &mut world, add(&g.address, Some(8453), false));
+    let view = sut.view();
+    assert_eq!(view.add.outcome, Some(AddOutcome::Busy { chain_id: 8453 }));
+    assert!(view.add.retry, "Try again is offered");
+    assert_eq!(view.add.phase, Phase::Done);
+    assert!(world.stored_accounts().is_empty(), "nothing added");
+    let lookups = world
+        .rpc_log
+        .iter()
+        .filter(|(c, m, p)| {
+            *c == 8453 && m == "eth_getCode" && p[0].as_str() == Some(g.address.as_str())
+        })
+        .count();
+    assert_eq!(
+        lookups, 2,
+        "asked once more after the pause, not again and again"
+    );
+    assert!(
+        world.now - before >= vela_core::app::multisig_accounts::RATE_LIMIT_PAUSE_MS as f64,
+        "the second ask waited the pause"
+    );
+}
+
+/// r14-5: a limit that lifts during the pause is no failure: the second ask
+/// adds it, and the person never saw a thing go wrong.
+#[test]
+fn a_rate_limit_that_lifts_within_the_pause_adds() {
+    let g = genesis(&[A], 1, "0x1d");
+    let mut world = World::default();
+    world.record(&g.address, &g.genesis, false);
+    world.deploy(8453, &g.address, DeployedSafe::clean(&[A], 1));
+    // Limited until the first ask has failed: every read before the second
+    // lookup of the address itself.
+    let mut lookups = 0;
+    let address = g.address.clone();
+    let mut limit = rate_limited(8453);
+    world.rpc_hooks.push(Box::new(move |chain, method, params| {
+        if chain == 8453 && method == "eth_getCode" && params[0].as_str() == Some(address.as_str())
+        {
+            lookups += 1;
+        }
+        if lookups >= 2 {
+            return None;
+        }
+        limit(chain, method, params)
+    }));
+    let mut sut = started(&mut world, vec![8453]);
+    run(&mut sut, &mut world, add(&g.address, Some(8453), false));
+    assert_eq!(
+        sut.view().add.outcome,
+        Some(AddOutcome::Added {
+            address: g.address.clone()
+        })
+    );
+    assert!(!sut.view().add.retry);
+    assert_eq!(world.stored_accounts().len(), 1);
+}
+
+/// r14-5: a network that does not answer at all (no limit said) keeps its
+/// own words — busy is only for the nodes that said "slow down".
+#[test]
+fn a_silent_network_is_not_called_busy() {
+    let mut world = World::default();
+    world.silent.insert(8453);
+    let mut sut = started(&mut world, vec![100, 8453]);
+    run(
+        &mut sut,
+        &mut world,
+        add("0x00000000000000000000000000000000000000cf", None, false),
+    );
+    assert_eq!(sut.view().add.outcome, Some(AddOutcome::Unchecked));
+    assert!(
+        sut.view().add.retry,
+        "a read that did not come back is retried"
+    );
+}
+
 /// r4b-13: an unknown address is "not found" within a few seconds — its
 /// record asked for once more, not four times.
 #[test]

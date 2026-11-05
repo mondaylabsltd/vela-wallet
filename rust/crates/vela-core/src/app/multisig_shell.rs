@@ -571,6 +571,40 @@ impl RpcFail {
             Self::Error { message, .. } | Self::Unanswered(message) => message.clone(),
         }
     }
+
+    /// r14-5: no answer because the network's nodes are limiting how often
+    /// they are asked (HTTP 429, "rate limit") — busy, not down. A node's
+    /// own error is an answer (the pool already failed over any "slow
+    /// down"), so only an unanswered call can say it.
+    pub fn rate_limited(&self) -> bool {
+        match self {
+            Self::Unanswered(detail) => rate_limited_detail(detail),
+            Self::Error { .. } => false,
+        }
+    }
+}
+
+/// r14-5: what a shell puts at the head of `rpc_unanswered.detail` when its
+/// pool gave up because the nodes it asked answered only "slow down" (the
+/// pool's `Failed { rate_limited: true }`). The core reads it with
+/// [`rate_limited_detail`]; a shell that does not say it is read as a
+/// network that did not answer.
+pub const RATE_LIMITED_DETAIL: &str = "rate-limited";
+
+/// r14-5: whether an unanswered call's `detail` says the nodes were
+/// rate-limiting: [`RATE_LIMITED_DETAIL`], or the words a node or a pool
+/// uses for it.
+pub fn rate_limited_detail(detail: &str) -> bool {
+    let d = detail.to_ascii_lowercase();
+    [
+        RATE_LIMITED_DETAIL,
+        "rate limited",
+        "rate limit",
+        "too many requests",
+        "http 429",
+    ]
+    .iter()
+    .any(|w| d.contains(w))
 }
 
 /// An HTTP answer, or nothing.
@@ -587,19 +621,38 @@ pub enum HttpAnswer {
 /// The shell, as an async command sees it. Cheap to clone.
 pub struct Io<Ev: Send + 'static> {
     ctx: CommandContext<MultisigEffect, Ev>,
+    /// r14-5: the networks whose nodes answered this command's reads only
+    /// with "slow down" ([`RpcFail::rate_limited`]) — shared by its clones,
+    /// so a flow names the true cause of a read it could not make.
+    limited: Shared<BTreeSet<u64>>,
 }
 
 impl<Ev: Send + 'static> Clone for Io<Ev> {
     fn clone(&self) -> Self {
         Self {
             ctx: self.ctx.clone(),
+            limited: self.limited.clone(),
         }
     }
 }
 
 impl<Ev: Send + 'static> Io<Ev> {
     pub fn new(ctx: CommandContext<MultisigEffect, Ev>) -> Self {
-        Self { ctx }
+        Self {
+            ctx,
+            limited: Arc::default(),
+        }
+    }
+
+    /// r14-5: the networks that rate-limited a read of this command since
+    /// it began (or since [`Io::forget_rate_limits`]), ascending.
+    pub fn rate_limited(&self) -> Vec<u64> {
+        lock(&self.limited).iter().copied().collect()
+    }
+
+    /// r14-5: counted again from now (the reads asked anew after a pause).
+    pub fn forget_rate_limits(&self) {
+        lock(&self.limited).clear();
     }
 
     /// Ask the shell, and wait for its answer.
@@ -686,7 +739,7 @@ impl<Ev: Send + 'static> Io<Ev> {
         params: Value,
         bound_ms: Option<u32>,
     ) -> Result<Value, RpcFail> {
-        match self
+        let answer = match self
             .ask(MultisigOperation::Rpc {
                 chain_id,
                 method: method.to_owned(),
@@ -707,7 +760,11 @@ impl<Ev: Send + 'static> Io<Ev> {
             }),
             MultisigShellResult::RpcUnanswered { detail } => Err(RpcFail::Unanswered(detail)),
             other => Err(RpcFail::Unanswered(format!("unexpected answer {other:?}"))),
+        };
+        if answer.as_ref().is_err_and(RpcFail::rate_limited) {
+            lock(&self.limited).insert(chain_id);
         }
+        answer
     }
 
     /// `eth_call` at `latest`: its return data.
@@ -2135,6 +2192,44 @@ pub async fn judge<Ev: Send + 'static>(
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
+
+    /// r14-5: every shell's word for a pool that gave up on nodes answering
+    /// only "slow down" reads as rate-limited; a node that did not answer,
+    /// or answered an error, does not.
+    #[test]
+    fn each_shells_rate_limited_detail_is_read_as_one() {
+        for limited in [
+            // desktop
+            "rate-limited: every node of chain 5042002 answered only with a rate limit (HTTP 429)",
+            // web (`PoolFailedError.rateLimited`)
+            "rate-limited: PoolFailedError: All RPC endpoints failed for chain 5042002",
+            // iOS and Android
+            "every node of 5042002 is rate limiting",
+            "HTTP 429 Too Many Requests",
+        ] {
+            assert!(
+                RpcFail::Unanswered(limited.to_owned()).rate_limited(),
+                "{limited}"
+            );
+        }
+        for down in [
+            "no node of 5042002 answered",
+            "no answer in 4294 ms",
+            "Failed { rate_limited: false }",
+            "PoolFailedError: All RPC endpoints failed for chain 5042002",
+        ] {
+            assert!(
+                !RpcFail::Unanswered(down.to_owned()).rate_limited(),
+                "{down}"
+            );
+        }
+        assert!(!RpcFail::Error {
+            code: Some(-32005),
+            message: "rate limit".to_owned(),
+            data: None
+        }
+        .rate_limited());
+    }
 
     #[test]
     fn an_empty_member_answer_is_unread_not_needs_zero() {
