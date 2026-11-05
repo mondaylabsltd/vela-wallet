@@ -4562,14 +4562,28 @@ pub(crate) fn ms_label(theme: &Theme, text: &str) -> Div {
         .child(text.to_owned())
 }
 
+/// A fact row: its name, and its value on the right. A long value wraps
+/// under itself (r12 zh/dark: "Can't run now — …" ran past the column's
+/// edge and was cut), never pushing the name off or leaving the sheet.
 fn ms_kv(theme: &Theme, key: &str, value: &str) -> Div {
     div()
         .flex()
         .justify_between()
         .gap(px(12.))
         .text_size(theme::text_row_sub())
-        .child(div().text_color(theme.fg_subtle).child(key.to_owned()))
-        .child(div().text_color(theme.fg_base).child(value.to_owned()))
+        .child(
+            div()
+                .flex_shrink_0()
+                .text_color(theme.fg_subtle)
+                .child(key.to_owned()),
+        )
+        .child(
+            div()
+                .min_w_0()
+                .text_right()
+                .text_color(theme.fg_base)
+                .child(value.to_owned()),
+        )
 }
 
 fn ms_mono_kv(theme: &Theme, key: &str, value: &str) -> Div {
