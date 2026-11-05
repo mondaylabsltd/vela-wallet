@@ -96,7 +96,8 @@ fn boot(address: &str) -> Sut {
             Op::FetchTokens {
                 address: address.to_owned(),
                 force: false,
-                pull: false
+                pull: false,
+                generation: 1,
             },
         ]
     );
@@ -470,6 +471,7 @@ fn slow_chains_keep_their_last_value_mid_refresh() {
     });
     sut.dispatch(Event::ChainAssetsArrived {
         address: ADDR_A.to_owned(),
+        generation: 1,
         tokens: vec![token(1, "ETH", "15", Some(1.0))],
     });
     let view = sut.view();
@@ -507,6 +509,7 @@ fn the_figure_only_rises_while_loading_and_unpriced_waits_for_settle() {
     });
     sut.dispatch(Event::ChainAssetsArrived {
         address: ADDR_A.to_owned(),
+        generation: 1,
         tokens: vec![token(1, "ETH", "50", Some(1.0))],
     });
     assert_eq!(
@@ -516,10 +519,12 @@ fn the_figure_only_rises_while_loading_and_unpriced_waits_for_settle() {
     );
     sut.dispatch(Event::ChainAssetsArrived {
         address: ADDR_A.to_owned(),
+        generation: 1,
         tokens: vec![token(56, "BNB", "40", Some(1.0))],
     });
     sut.dispatch(Event::ChainAssetsArrived {
         address: ADDR_A.to_owned(),
+        generation: 1,
         tokens: vec![token(137, "MATIC", "5", None)],
     });
     let view = sut.view();
@@ -562,6 +567,7 @@ fn a_cold_first_load_shows_what_it_has_and_only_grows() {
     // skeleton stays, never a $0.00.
     sut.dispatch(Event::ChainAssetsArrived {
         address: ADDR_A.to_owned(),
+        generation: 1,
         tokens: vec![token(137, "MYSTERY", "5", None)],
     });
     let view = sut.view();
@@ -570,6 +576,7 @@ fn a_cold_first_load_shows_what_it_has_and_only_grows() {
     assert_eq!(view.tokens.len(), 1, "the list streams");
     sut.dispatch(Event::ChainAssetsArrived {
         address: ADDR_A.to_owned(),
+        generation: 1,
         tokens: vec![token(1, "ETH", "50", Some(1.0))],
     });
     let view = sut.view();
@@ -577,6 +584,7 @@ fn a_cold_first_load_shows_what_it_has_and_only_grows() {
     assert_eq!(view.display_total_usd, Some(50.0), "shown at once");
     sut.dispatch(Event::ChainAssetsArrived {
         address: ADDR_A.to_owned(),
+        generation: 1,
         tokens: vec![token(56, "BNB", "40", Some(1.0))],
     });
     assert_eq!(sut.view().display_total_usd, Some(90.0), "grew");
@@ -584,6 +592,7 @@ fn a_cold_first_load_shows_what_it_has_and_only_grows() {
     // does not step down before the settle.
     sut.dispatch(Event::ChainAssetsArrived {
         address: ADDR_A.to_owned(),
+        generation: 1,
         tokens: vec![token(1, "ETH", "20", Some(1.0))],
     });
     let view = sut.view();
@@ -653,6 +662,7 @@ fn a_send_lowers_the_figure_even_with_an_unpriced_token_held() {
     });
     sut.dispatch(Event::ChainAssetsArrived {
         address: ADDR_A.to_owned(),
+        generation: 1,
         tokens: vec![
             token(1, "ETH", "60", Some(1.0)),
             token(1, "MYSTERY", "5", None),
@@ -811,7 +821,113 @@ fn stale_account_results_are_dropped_by_construction() {
     // A's stream arrives late → address tag drops it.
     sut.dispatch(Event::ChainAssetsArrived {
         address: ADDR_A.to_owned(),
+        generation: 1,
         tokens: vec![token(1, "ETH", "9", Some(1.0))],
+    });
+    assert!(sut.view().tokens.is_empty());
+}
+
+/// The generation a fetch now outstanding reads for (D3).
+fn fetch_generation(sut: &Sut) -> u32 {
+    sut.outstanding()
+        .into_iter()
+        .filter_map(|op| match op {
+            Op::FetchTokens { generation, .. } => Some(generation),
+            _ => None,
+        })
+        .next_back()
+        .expect("a fetch is out")
+}
+
+/// Real-device pass 2, D3: the member's fetch was out when the multisig was
+/// switched to, and iOS labelled each of its snapshots with the account in
+/// FRONT (the multisig). The core took them on the address alone: the
+/// member's $2.4M was drawn under the multisig, kept as its rows, and
+/// survived a relaunch. A snapshot now paints only the fetch it came from —
+/// the generation is the core's own, whatever address a shell writes on it.
+#[test]
+fn another_accounts_snapshot_never_paints_the_account_in_front_whatever_its_label() {
+    const MULTISIG: &str = "0x1111111111111111111111111111111111111111";
+    // The member is in front first (the launch's fallback), its fetch out.
+    let mut sut = boot(ADDR_A);
+    let member_gen = fetch_generation(&sut);
+    // The multisig is switched to before the member's fetch lands.
+    sut.dispatch(Event::AccountChanged {
+        address: MULTISIG.to_owned(),
+    });
+    let multisig_gen = fetch_generation(&sut);
+    assert_ne!(member_gen, multisig_gen);
+    // The member's snapshot, mislabelled with the multisig's address: dropped.
+    sut.dispatch(Event::ChainAssetsArrived {
+        address: MULTISIG.to_owned(),
+        generation: member_gen,
+        tokens: vec![token(1, "ETH", "999.98", Some(2400.0))],
+    });
+    let view = sut.view();
+    assert_eq!(view.address.as_deref(), Some(MULTISIG));
+    assert!(
+        view.tokens.is_empty(),
+        "the member's money is never the multisig's"
+    );
+    assert_eq!(view.display_total_usd, None);
+    // The multisig's own snapshot paints.
+    sut.dispatch(Event::ChainAssetsArrived {
+        address: MULTISIG.to_owned(),
+        generation: multisig_gen,
+        tokens: vec![token(100, "xDAI", "99.75", Some(1.0))],
+    });
+    assert_eq!(sut.view().tokens.len(), 1);
+    assert_eq!(sut.view().tokens[0].balance, "99.75");
+    // A late member snapshot after the multisig's round settled: dropped
+    // too — it never joins the multisig's rows (nor the rows it keeps).
+    sut.resolve_matching(
+        |op| matches!(op, Op::ReadBalanceCache { address } if address == MULTISIG),
+        Res::CachedTotalLoaded {
+            address: MULTISIG.to_owned(),
+            usd: None,
+        },
+    );
+    sut.resolve_matching(
+        |op| matches!(op, Op::FetchTokens { address, .. } if address == MULTISIG),
+        settled(
+            MULTISIG,
+            vec![token(100, "xDAI", "99.75", Some(1.0))],
+            vec![],
+            vec![],
+        ),
+    );
+    sut.dispatch(Event::ChainAssetsArrived {
+        address: MULTISIG.to_owned(),
+        generation: member_gen,
+        tokens: vec![token(1, "ETH", "999.98", Some(2400.0))],
+    });
+    let view = sut.view();
+    assert_eq!(view.tokens.len(), 1);
+    assert_eq!(view.tokens[0].symbol, "xDAI");
+    assert_eq!(view.display_total_usd, Some(99.75));
+}
+
+/// D3, a relaunch: the rows kept for the member are never restored as the
+/// multisig's, and a switch of space is a new generation too — the other
+/// space's stream never paints this one.
+#[test]
+fn a_relaunch_and_a_space_switch_keep_each_accounts_rows_its_own() {
+    const MULTISIG: &str = "0x1111111111111111111111111111111111111111";
+    // Relaunch on the multisig: the member's kept rows, handed by mistake.
+    let mut sut = boot(MULTISIG);
+    sut.dispatch(Event::HoldingsRestored {
+        address: ADDR_A.to_owned(),
+        tokens: vec![token(1, "ETH", "999.98", Some(2400.0))],
+    });
+    assert!(sut.view().tokens.is_empty());
+    // A space switch: the stream of the round before it is dropped.
+    let before = fetch_generation(&sut);
+    sut.dispatch(Event::SpaceChanged);
+    assert_ne!(fetch_generation(&sut), before);
+    sut.dispatch(Event::ChainAssetsArrived {
+        address: MULTISIG.to_owned(),
+        generation: before,
+        tokens: vec![token(1, "ETH", "1", Some(2400.0))],
     });
     assert!(sut.view().tokens.is_empty());
 }
@@ -881,7 +997,8 @@ fn three_silent_retries_then_notice() {
             vec![Op::FetchTokens {
                 address: ADDR_A.to_owned(),
                 force: true,
-                pull: false
+                pull: false,
+                generation: 1,
             }],
             "round {round} at {expected_ms}ms"
         );
@@ -1279,7 +1396,8 @@ fn manual_pull_forces_past_the_ttl_and_drives_the_spinner() {
         vec![Op::FetchTokens {
             address: ADDR_A.to_owned(),
             force: true,
-            pull: true
+            pull: true,
+            generation: 1,
         }]
     );
     assert!(sut.view().refreshing);
@@ -1518,7 +1636,8 @@ fn polls_never_run_backgrounded_but_focus_reloads() {
         vec![Op::FetchTokens {
             address: ADDR_A.to_owned(),
             force: false,
-            pull: false
+            pull: false,
+            generation: 1,
         }]
     );
 }
@@ -1557,7 +1676,8 @@ fn fix_resolved_removes_the_chain_and_reloads() {
         vec![Op::FetchTokens {
             address: ADDR_A.to_owned(),
             force: false,
-            pull: false
+            pull: false,
+            generation: 1,
         }]
     );
     let view = sut.view();
@@ -1707,7 +1827,8 @@ fn a_network_that_comes_back_leaves_the_list_live() {
         vec![Op::FetchTokens {
             address: ADDR_A.to_owned(),
             force: true,
-            pull: false
+            pull: false,
+            generation: 1,
         }]
     );
     assert!(!sut.view().refreshing, "no pull spinner for the list");
@@ -1773,7 +1894,8 @@ fn an_open_list_keeps_reading_until_it_closes_or_empties() {
         vec![Op::FetchTokens {
             address: ADDR_A.to_owned(),
             force: true,
-            pull: false
+            pull: false,
+            generation: 1,
         }]
     );
 
@@ -3222,6 +3344,7 @@ fn restored_rows_open_the_list_and_the_figure_is_their_sum() {
 
     sut.dispatch(Event::ChainAssetsArrived {
         address: ADDR_A.to_owned(),
+        generation: 1,
         tokens: vec![token(GNOSIS, "xDAI", "4.4787", Some(1.0))],
     });
     let view = sut.view();
@@ -3251,6 +3374,7 @@ fn without_restored_rows_the_cold_figure_still_only_rises() {
     });
     sut.dispatch(Event::ChainAssetsArrived {
         address: ADDR_A.to_owned(),
+        generation: 1,
         tokens: vec![token(GNOSIS, "xDAI", "2", Some(1.0))],
     });
     assert_eq!(sut.view().display_total_usd, Some(5.0));
@@ -3268,6 +3392,7 @@ fn restored_rows_never_replace_an_answer() {
     });
     sut.dispatch(Event::ChainAssetsArrived {
         address: ADDR_A.to_owned(),
+        generation: 1,
         tokens: vec![token(GNOSIS, "xDAI", "2", Some(1.0))],
     });
     sut.dispatch(Event::HoldingsRestored {
@@ -3403,7 +3528,8 @@ fn a_switch_of_space_starts_over_for_the_same_account() {
             Op::FetchTokens {
                 address: ADDR_A.to_owned(),
                 force: true,
-                pull: false
+                pull: false,
+                generation: 2,
             },
         ]
     );
@@ -3474,7 +3600,8 @@ fn an_outage_is_read_again_with_backoff_until_it_ends() {
             vec![Op::FetchTokens {
                 address: ADDR_A.to_owned(),
                 force: true,
-                pull: false
+                pull: false,
+                generation: 1,
             }],
             "step {step}: a quiet forced read"
         );
@@ -3677,7 +3804,8 @@ fn the_wallet_home_reads_what_a_noted_account_deferred() {
         vec![Op::FetchTokens {
             address: ADDR_A.to_owned(),
             force: false,
-            pull: false
+            pull: false,
+            generation: 1,
         }]
     );
     assert_eq!(sut.view().display_total_usd, Some(42.0));
@@ -3703,7 +3831,8 @@ fn a_noted_account_is_read_once_its_balance_is_shown() {
         ops.contains(&Op::FetchTokens {
             address: ADDR_A.to_owned(),
             force: false,
-            pull: false
+            pull: false,
+            generation: 1,
         }),
         "{ops:?}"
     );
@@ -3724,7 +3853,8 @@ fn a_noted_account_is_read_once_its_balance_is_shown() {
         vec![Op::FetchTokens {
             address: ADDR_A.to_owned(),
             force: true,
-            pull: false
+            pull: false,
+            generation: 1,
         }]
     );
     // From then on a focus reads again, as it always did.
@@ -3732,7 +3862,8 @@ fn a_noted_account_is_read_once_its_balance_is_shown() {
     assert!(sut.dispatch(Event::AppFocused).contains(&Op::FetchTokens {
         address: ADDR_A.to_owned(),
         force: false,
-        pull: false
+        pull: false,
+        generation: 1,
     }));
 }
 
@@ -3754,7 +3885,8 @@ fn another_account_changed_after_a_note_is_the_full_reset() {
             Op::FetchTokens {
                 address: ADDR_B.to_owned(),
                 force: false,
-                pull: false
+                pull: false,
+                generation: 2,
             },
         ]
     );
