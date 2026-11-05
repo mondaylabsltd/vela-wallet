@@ -97,6 +97,11 @@ pub fn send_end(proposed: &Proposed) -> ProposeEnd {
                 cancelled: false,
                 reason: Some(SendProposeFailure::MailboxDown),
             },
+            // r13-3: the network did not answer the reads it is built from.
+            Some(ActionState::Unread { .. }) => ProposeEnd::Failed {
+                cancelled: false,
+                reason: Some(SendProposeFailure::ChainDown),
+            },
             _ => ProposeEnd::Failed {
                 cancelled: false,
                 reason: offline.then_some(SendProposeFailure::Offline),

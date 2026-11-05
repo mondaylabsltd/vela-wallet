@@ -610,7 +610,13 @@ impl MultisigHost {
         let screen = self.machines.take_screen();
         for item in screen {
             match item {
-                Screen::ActivityRows(rows) => write_rows(rows),
+                // r13-7: written, then the page's feed reads its store again
+                // — the first load no longer misses an executed send until
+                // the window is focused again.
+                Screen::ActivityRows(rows) => {
+                    write_rows(rows);
+                    self.screen.push(Screen::ActivityRows(Vec::new()));
+                }
                 other => self.screen.push(other),
             }
         }
@@ -871,21 +877,19 @@ fn reword_member_rows() {
 /// (the web's `executionRows`): which rows is the core's plan; a token's
 /// symbol and decimals are read here. On a thread: the reads are the
 /// chain's.
+/// r13-7: written before the page's feed is told to read its store again
+/// (`Screen::ActivityRows`) — a handful of rows, once per execution found.
 fn write_rows(rows: Vec<Value>) {
-    let _ = std::thread::Builder::new()
-        .name("vela-multisig-rows".to_owned())
-        .spawn(move || {
-            let worded = super::activity::worded_rows(&rows);
-            if worded.is_empty() {
-                return;
-            }
-            let _ = storage::update_list(crate::executor::activity_feed::TX_KEY, |stored| {
-                for row in &worded {
-                    let id = row.get("id").cloned();
-                    stored.retain(|r| r.get("id") != id.as_ref());
-                    stored.push(row.clone());
-                }
-                true
-            });
-        });
+    let worded = super::activity::worded_rows(&rows);
+    if worded.is_empty() {
+        return;
+    }
+    let _ = storage::update_list(crate::executor::activity_feed::TX_KEY, |stored| {
+        for row in &worded {
+            let id = row.get("id").cloned();
+            stored.retain(|r| r.get("id") != id.as_ref());
+            stored.push(row.clone());
+        }
+        true
+    });
 }

@@ -272,7 +272,10 @@ impl WalletPage {
                     Screen::OutsideSession => {
                         this.multisig.session = true;
                     }
-                    Screen::Activated(_) | Screen::ActivityRows(_) => {}
+                    // r13-7: rows written for executions found elsewhere —
+                    // the feed reads its store again now.
+                    Screen::ActivityRows(_) => crate::executor::activity_feed::focus_tick(cx),
+                    Screen::Activated(_) => {}
                 }
             }
             this.multisig.tokens = host.read(cx).machines().proposals_view.tokens.clone();
@@ -2714,6 +2717,14 @@ impl WalletPage {
             }
             ActionState::Cancelled => reason("passkeyClosed"),
             ActionState::MailboxUnreadable => words::t(loc, "proposal.mailboxDown"),
+            // r13-3: the read the core names (the network, or both).
+            ActionState::Unread { reason_key } => words::tv(
+                loc,
+                reason_key
+                    .strip_prefix("home.multisig.")
+                    .unwrap_or(reason_key),
+                &[("network", &network(chain_id))],
+            ),
             ActionState::NoMemberHere => words::t(loc, "proposal.notMember"),
             ActionState::SigningRefused { .. } | ActionState::SigningBlocked => {
                 words::t(loc, "review.blocked")
@@ -4736,6 +4747,14 @@ pub(crate) fn no_item_lines(
             LinkedStand::NotInMailbox => words::t(loc, "proposal.notInMailbox"),
             LinkedStand::NotFound => words::t(loc, "proposal.notFound"),
             LinkedStand::Unreadable => cant_check(),
+            // r13-3: not read in time — the read still out, named.
+            LinkedStand::Failed => linked.reason_key.as_deref().map_or_else(cant_check, |key| {
+                words::tv(
+                    loc,
+                    key.strip_prefix("home.multisig.").unwrap_or(key),
+                    &[("network", &network())],
+                )
+            }),
             LinkedStand::Reading | LinkedStand::Found => words::t(loc, "proposal.opening"),
         }];
         if linked.preview {
@@ -4830,6 +4849,8 @@ mod tests {
             item: None,
             members: None,
             stale: false,
+            reason_key: None,
+            retry: false,
         };
         assert_eq!(
             super::no_item_lines(
