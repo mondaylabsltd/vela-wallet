@@ -413,13 +413,27 @@ struct RecoveryNudge {
     /// Networks whose last call went unanswered (not rate limited).
     private(set) var down: Set<Int> = []
     private(set) var nudged: [Int: Double] = [:]
+    /// r12-3: when each network's going down last read the balance — apart
+    /// from `nudged`, so a network back a moment later still reads again.
+    private(set) var downNudged: [Int: Double] = [:]
 
     mutating func observe(
         _ chainId: Int, reached: Bool, unreadable: Set<Int>, home: Set<Int> = [], refreshing: Bool, nowMs: Double
     ) -> Bool {
         guard reached else {
-            down.insert(chainId)
-            return false
+            // r12-3: a network the account lives on going down while the
+            // balance last read it fine — the home said only an ageing
+            // "Updated 2m" for minutes (its poll is ten). The balance reads
+            // once, on the edge: the core's own read then fails, and its
+            // unreachable list says "Can't reach Arc Testnet". Never again
+            // while it stays down, never while a round is out, never for a
+            // network already said, and once a minute at most.
+            let wentDown = down.insert(chainId).inserted
+            guard wentDown, home.isEmpty || home.contains(chainId), !unreadable.contains(chainId), !refreshing,
+                  nowMs - (downNudged[chainId] ?? -.infinity) >= Self.gapMs
+            else { return false }
+            downNudged[chainId] = nowMs
+            return true
         }
         let cameBack = down.remove(chainId) != nil && (home.isEmpty || home.contains(chainId))
         guard cameBack || unreadable.contains(chainId), !refreshing,
