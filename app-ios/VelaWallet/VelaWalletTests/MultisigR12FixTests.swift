@@ -101,6 +101,23 @@ struct MultisigR12FixTests {
         #expect(said == "the multisig holds 0 base units · decimals unknown, and this needs 10000 base units · decimals unknown", "\(said)")
     }
 
+    // MARK: - r12-8: one title for a member change
+
+    @Test func aMemberChangeIsTitledByTheCoresOneRule() {
+        let dana = "0xD400866e00B055B20752a826CD5C89b811de130b"
+        let add = MsJSON(any: ["kind": "addOwner", "owner": dana, "threshold": "2"])
+        var named = words
+        named.labels = [dana.lowercased(): "Dana Local"]
+        #expect(named.memberChangeTitle(add) == "Add Dana Local (0xD40086…de130b)")
+        #expect(named.actionTitleNow(chainId: 100, action: add, nonce: "1") == "Add Dana Local (0xD40086…de130b)")
+        let zh = MsWords(loc: Loc(overrideTag: "zh", preferredLanguages: []), hub: nil, labels: [dana.lowercased(): "Dana Local"])
+        let said = zh.memberChangeTitle(add) ?? ""
+        #expect(!said.hasPrefix("Add") && said.contains("Dana Local"), "\(said)")
+        let one = MsJSON(any: ["kind": "changeThreshold", "threshold": "1"])
+        #expect(words.memberChangeTitle(one) == "Require 1 approval")
+        #expect(words.memberChangeTitle(MsJSON(any: ["kind": "rename", "name": "x"])) == nil)
+    }
+
     // MARK: - S4: Activity before the first scan
 
     @Test func activityIsLoadingUntilItsFirstScanIsBack() throws {

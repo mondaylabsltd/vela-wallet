@@ -185,6 +185,12 @@ final class MultisigHub {
     private func accountsMoved() {
         let had = accountsView.accounts.count
         accountsView = accounts.accountsView
+        // r12-8: a member's name landing (the index, an invite) re-titles the
+        // executed member changes in Activity, as the sheet says them.
+        if loaded, rowLabels != accountsView.memberLabels {
+            rowLabels = accountsView.memberLabels
+            rewordMemberRows()
+        }
         askIndex(accountsView.indexWanted)
         // r9-8: the first multisig created, added, opened from an invite or
         // found as a member here — there is now something to say: the
@@ -804,6 +810,12 @@ final class MultisigHub {
                     base["decimals"] = decimals
                     base["type"] = "dapp_tx"
                     base["intent"] = await executedTitle(e, chainId: chainId, hash: hash)
+                    // r12-8: a member change keeps its action, so its row is
+                    // titled again in the page's words and the names as they
+                    // stand (`rewordMemberRows`), never frozen as written.
+                    if let action = e["action"] as? [String: Any], Self.isMemberChange(action) {
+                        base["multisigChange"] = action
+                    }
                     base["dappSummary"] = [
                         "action": "call", "calls": row["calls"] ?? 1, "contract": row["contract"] ?? "",
                     ]
@@ -822,6 +834,40 @@ final class MultisigHub {
             notifier?.executed(title: title, body: loc.t("home.multisig.proposal.executed"), chainId: chainId, safeTxHash: hash)
         }
     }
+
+    static func isMemberChange(_ action: [String: Any]?) -> Bool {
+        ["addOwner", "removeOwner", "swapOwner", "changeThreshold"].contains(action?["kind"] as? String ?? "")
+    }
+
+    /// r12-8: every executed member change's Activity row titled again by
+    /// the core's one rule (`names.change`) in this page's language and with
+    /// the names as they stand now — the sheet's title, on Activity too (the
+    /// web's `rewordMemberRows`). A row is rewritten only when its title
+    /// changed; rows written before r12 carry no action and keep theirs.
+    /// Answers how many changed.
+    @discardableResult
+    func rewordMemberRows() -> Int {
+        let words = MsWords(loc: loc, hub: self)
+        var changed = 0
+        var rows = TxRecords.load(store: shelf)
+        for (i, row) in rows.enumerated() {
+            guard (row["id"] as? String)?.hasPrefix("multisig:") == true,
+                  let action = row["multisigChange"] as? [String: Any],
+                  let title = words.memberChangeTitle(MsJSON(any: action)),
+                  title != row["intent"] as? String
+            else { continue }
+            rows[i]["intent"] = title
+            changed += 1
+        }
+        if changed > 0 {
+            shelf.writeList(VelaStore.Key.transactionHistory, rows)
+            onRecorded?()
+        }
+        return changed
+    }
+
+    /// The labels the member rows were last titled with (`rewordMemberRows`).
+    @ObservationIgnored private var rowLabels: [String: String]?
 
     /// An executed proposal's title for Activity and its notification: a
     /// contract call as the core reads its bytes ("Approve · USDC", r10-8 —

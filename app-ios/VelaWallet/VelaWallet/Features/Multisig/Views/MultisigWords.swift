@@ -293,18 +293,24 @@ struct MsWords {
             return t(allTransfers ? "action.batch" : "action.batchCalls", ["total": String(calls.count)])
         case "cancel":
             return t("action.cancel", ["nonce": nonce])
-        case "addOwner":
-            return t("change.add", ["member": who(action["owner"]?.string ?? "")])
-        case "removeOwner":
-            return t("change.remove", ["member": who(action["owner"]?.string ?? "")])
-        case "swapOwner":
-            return t("change.replace", [
-                "old": who(action["oldOwner"]?.string ?? ""), "new": who(action["newOwner"]?.string ?? ""),
-            ])
-        case "changeThreshold":
-            // "Require 1 approval" — the corpus's plural family (r9).
-            let threshold = action["threshold"]?.string ?? ""
-            return t("action.changeThreshold", count: Int(threshold) ?? 0, ["threshold": threshold, "count": threshold])
+        case "addOwner", "removeOwner", "swapOwner", "changeThreshold":
+            // r12-8: the core's one title rule (`names.change`), the same on
+            // a sheet and on an Activity row.
+            if let title = memberChangeTitle(action) { return title }
+            switch action.kind {
+            case "addOwner":
+                return t("change.add", ["member": who(action["owner"]?.string ?? "")])
+            case "removeOwner":
+                return t("change.remove", ["member": who(action["owner"]?.string ?? "")])
+            case "swapOwner":
+                return t("change.replace", [
+                    "old": who(action["oldOwner"]?.string ?? ""), "new": who(action["newOwner"]?.string ?? ""),
+                ])
+            default:
+                // "Require 1 approval" — the corpus's plural family (r9).
+                let threshold = action["threshold"]?.string ?? ""
+                return t("action.changeThreshold", count: Int(threshold) ?? 0, ["threshold": threshold, "count": threshold])
+            }
         case "rename":
             return t("action.rename", ["name": action["name"]?.string ?? ""])
         case "call":
@@ -323,6 +329,29 @@ struct MsWords {
         guard let action else { return nil }
         if action.kind == "transfer" || action.kind == "call" { return action["to"]?.string }
         return nil
+    }
+
+    /// r12-8: a member change's title by the core's one rule (link door
+    /// `names.change {action, labels}` → `{key, params, count?}`), each
+    /// member named by `names.who` with the core's labels (`member_labels`),
+    /// worded in this page's language when it is drawn. `nil`: not a member
+    /// change, or a core without the rule.
+    func memberChangeTitle(_ action: MsJSON?) -> String? {
+        guard let action, !action.isNull else { return nil }
+        // The core's labels (`member_labels`: kept, index, this device's own
+        // names); this device's own names only where it has none yet.
+        let labels = localNames.merging((labels ?? hub?.accountsView.memberLabels) ?? [:]) { _, core in core }
+        guard let answer = MsRules.call("names.change", ["action": action.any, "labels": labels]) as? [String: Any],
+              let key = answer["key"] as? String
+        else { return nil }
+        let params = (answer["params"] as? [String: Any] ?? [:]).mapValues { "\($0)" }
+        let said: String
+        if let count = answer["count"].flatMap({ ($0 as? String).flatMap(Int.init) ?? ($0 as? NSNumber)?.intValue }) {
+            said = loc.t(key, count: count, vars: params)
+        } else {
+            said = loc.t(key, vars: params)
+        }
+        return said == key ? nil : said
     }
 
     // MARK: - A row's one word (`standings`)
