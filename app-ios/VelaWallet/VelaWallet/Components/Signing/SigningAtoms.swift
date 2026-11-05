@@ -356,13 +356,12 @@ struct SigningRowsView: View {
                     Spacer(minLength: Tokens.Space.s8)
                     Group {
                         if row.mono {
-                            AddressTextView(row.value, alignment: .trailing)
+                            AddressTextView(row.value, role: Typography.monoSmall.scaled(textScale), alignment: .trailing)
                         } else {
                             Text(verbatim: row.value)
+                                .typeRole(Typography.label.scaled(textScale))
                         }
                     }
-                    .typeRole((row.mono ? Typography.monoSmall : Typography.label)
-                        .scaled(textScale))
                     .foregroundStyle(row.valueTone.color(theme))
                     .multilineTextAlignment(.trailing)
                 }
@@ -392,8 +391,7 @@ struct SigningPartyRow: View {
                         .typeRole(Typography.rowTitle.literal.scaled(textScale))
                         .foregroundStyle(theme.fgBase)
                     if let address {
-                        AddressTextView(address)
-                            .typeRole(Typography.monoSmall.scaled(textScale))
+                        AddressTextView(address, role: Typography.monoSmall.scaled(textScale))
                             .foregroundStyle(theme.fgMuted)
                     }
                 }

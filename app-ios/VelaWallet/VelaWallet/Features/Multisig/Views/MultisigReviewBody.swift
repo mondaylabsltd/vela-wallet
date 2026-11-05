@@ -259,8 +259,7 @@ struct MsReviewBody: View {
                     .typeRole(Typography.fieldLabel.scaled(textScale))
                     .foregroundStyle(theme.fgBase)
             }
-            AddressTextView(MsRules.eip55(address))
-                .typeRole(Typography.monoSmall.scaled(textScale))
+            AddressTextView(MsRules.eip55(address), role: Typography.monoSmall.scaled(textScale))
                 .foregroundStyle(theme.fgBase)
                 .textSelection(.enabled)
             if !tags.isEmpty {

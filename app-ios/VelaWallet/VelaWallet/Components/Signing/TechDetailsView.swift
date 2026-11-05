@@ -65,8 +65,7 @@ struct TechDetailsView: View {
                                 Text(verbatim: "\(identity.role) · \(identity.name)")
                                     .typeRole(Typography.rowSub.scaled(textScale))
                                     .foregroundStyle(theme.fgSubtle)
-                                AddressTextView(identity.address)
-                                    .typeRole(Typography.monoSmall.scaled(textScale))
+                                AddressTextView(identity.address, role: Typography.monoSmall.scaled(textScale))
                                     .foregroundStyle(theme.fgBase)
                             }
                             Spacer(minLength: Tokens.Space.s8)

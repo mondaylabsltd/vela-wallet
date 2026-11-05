@@ -93,8 +93,7 @@ struct MsRow: View {
                     .typeRole(Typography.label.scaled(textScale))
                     .foregroundStyle(theme.fgSubtle)
                 // An address or hash breaks only between its halves (r13).
-                AddressTextView(value)
-                    .typeRole((mono ? Typography.monoSmall : Typography.body).scaled(textScale))
+                AddressTextView(value, role: (mono ? Typography.monoSmall : Typography.body).scaled(textScale))
                     .foregroundStyle(theme.fgBase)
                     .textSelection(.enabled)
             }

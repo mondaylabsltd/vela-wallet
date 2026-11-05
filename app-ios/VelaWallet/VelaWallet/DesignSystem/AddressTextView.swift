@@ -12,31 +12,55 @@
 //  (`VelaAddressText`): a full address is two unbreakable halves
 //  (`AddressText.halves`) side by side where the width holds them, else the
 //  second under the first; a short form is one unbreakable line; anything else
-//  (a name, a link, calldata) wraps as text does. Font and colour come from the
-//  caller's modifiers, as they would for a `Text`.
+//  (a name, a link, calldata) wraps as text does. The type role is handed in
+//  (`typeRole`/`monoRole` are `Text`-only) and drawn on every piece; colour and
+//  selection come from the caller's modifiers.
 //
 
 import SwiftUI
 
 struct AddressTextView: View {
+    /// The face each piece is drawn in — a `Text`'s own role modifiers,
+    /// applied to every piece (they are `Text`-only).
+    enum Face {
+        case type(TypeRole)
+        case mono(MonoTypeRole)
+    }
+
     let text: String
+    let face: Face
     var alignment: HorizontalAlignment = .leading
 
-    init(_ text: String, alignment: HorizontalAlignment = .leading) {
+    init(_ text: String, role: TypeRole, alignment: HorizontalAlignment = .leading) {
         self.text = text
+        self.face = .type(role)
         self.alignment = alignment
+    }
+
+    init(_ text: String, mono: MonoTypeRole, alignment: HorizontalAlignment = .leading) {
+        self.text = text
+        self.face = .mono(mono)
+        self.alignment = alignment
+    }
+
+    @ViewBuilder
+    private func piece(_ part: String) -> some View {
+        switch face {
+        case .type(let role): Text(verbatim: part).typeRole(role)
+        case .mono(let role): Text(verbatim: part).monoRole(role)
+        }
     }
 
     var body: some View {
         if let (head, tail) = AddressText.halves(text) {
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 0) {
-                    Text(verbatim: head)
-                    Text(verbatim: tail)
+                    piece(head)
+                    piece(tail)
                 }
                 VStack(alignment: alignment, spacing: 0) {
-                    Text(verbatim: head)
-                    Text(verbatim: tail)
+                    piece(head)
+                    piece(tail)
                 }
             }
             .lineLimit(1)
@@ -44,11 +68,11 @@ struct AddressTextView: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(Text(verbatim: text))
         } else if AddressText.isShortForm(text) {
-            Text(verbatim: text)
+            piece(text)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
         } else {
-            Text(verbatim: text)
+            piece(text)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }

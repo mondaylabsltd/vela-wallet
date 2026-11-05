@@ -129,8 +129,7 @@ struct MultisigAddSheet: View {
                             Text(verbatim: line).typeRole(Typography.rowSub.scaled(textScale)).foregroundStyle(theme.fgBase)
                         }
                         if let address {
-                            AddressTextView(MsRules.eip55(address))
-                                .typeRole(Typography.monoSmall.scaled(textScale))
+                            AddressTextView(MsRules.eip55(address), role: Typography.monoSmall.scaled(textScale))
                                 .foregroundStyle(theme.fgMuted)
                         }
                     }
