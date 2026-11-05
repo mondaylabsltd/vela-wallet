@@ -365,7 +365,7 @@ const seenSuites = [];
 // tests, the extension twin). Named one by one, so a new file without a `suite`
 // fails here instead of being skipped unseen.
 const OTHER_RUNNERS = new Map([
-  ['balance-pool-unreached.json', 'app_balance_dashboard.rs, PoolUnreachedVectorsTest.kt'],
+  ['balance-pool-unreached.json', 'app_balance_dashboard.rs, PoolUnreachedVectorsTest.kt, R13NativeAdoptionTests.swift, desktop balance_dashboard.rs'],
   ['balance-stamp.json', 'app_balance_dashboard.rs, R10CoreVectorsTest.kt, R10CoreAdoptionTests.swift'],
   ['incoming-scan.json', 'app_incoming_scan.rs, R10CoreVectorsTest.kt, R10CoreAdoptionTests.swift'],
   ['site-start-chain.json', 'site_start_chain_vectors.rs, dapp/protocol.test.ts'],
