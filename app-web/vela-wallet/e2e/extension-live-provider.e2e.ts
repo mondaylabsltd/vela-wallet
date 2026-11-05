@@ -11,6 +11,7 @@
  */
 import { createServer, type Server } from 'node:http';
 import { readFileSync } from 'node:fs';
+import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import {
@@ -26,8 +27,11 @@ import {
 } from './extension-helpers';
 
 const APP_ROOT = join(import.meta.dirname, '..');
-const DAPP_PORT = 8817;
-const NODE_PORT = 8818;
+// Ports the system picks when the servers start (`listen(0)`): a fixed pair
+// collided whenever two workers ran this describe (a retry, --repeat-each),
+// and one EADDRINUSE then failed every test after it.
+let DAPP_PORT = 0;
+let NODE_PORT = 0;
 const FIXTURE_ONE = '0xD400866e00B055B20752a826CD5C89b811de130b';
 
 interface AskResult {
@@ -47,7 +51,12 @@ function serveDApp(): Promise<Server> {
 		res.setHeader('content-type', 'text/html; charset=utf-8');
 		res.end(html);
 	});
-	return new Promise((resolve) => server.listen(DAPP_PORT, () => resolve(server)));
+	return new Promise((resolve) =>
+		server.listen(0, () => {
+			DAPP_PORT = (server.address() as AddressInfo).port;
+			resolve(server);
+		})
+	);
 }
 
 /** A JSON-RPC node that remembers what it was asked. */
@@ -75,7 +84,12 @@ function serveNode(seen: { method: string; params: unknown }[]): Promise<Server>
 			}
 		});
 	});
-	return new Promise((resolve) => server.listen(NODE_PORT, () => resolve(server)));
+	return new Promise((resolve) =>
+		server.listen(0, () => {
+			NODE_PORT = (server.address() as AddressInfo).port;
+			resolve(server);
+		})
+	);
 }
 
 async function closeServer(server: Server): Promise<void> {
@@ -164,8 +178,9 @@ test.describe('a provider a dApp can use', () => {
 		node = await serveNode(seen);
 	});
 	test.afterAll(async () => {
-		await closeServer(dapp);
-		await closeServer(node);
+		// A server that never started has nothing to close.
+		if (dapp) await closeServer(dapp);
+		if (node) await closeServer(node);
 	});
 
 	test('switches chain per site, and the site hears chainChanged', async () => {
