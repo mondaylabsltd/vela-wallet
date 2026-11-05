@@ -67,6 +67,60 @@ fn is_short_form(text: &str) -> bool {
         && !text.contains(char::is_whitespace)
 }
 
+/// The end (byte index) of a short form starting at `at`: `0x`, two or
+/// more hex digits, "…" or "...", two or more hex digits — the core's 6+6
+/// (`names.short`), its 6+4, and the three-dot form a decoded call uses (the
+/// web's `addressRuns` pattern). A whole address has no ellipsis.
+fn short_form_end(text: &str, at: usize) -> Option<usize> {
+    if !text.get(at..)?.starts_with("0x") {
+        return None;
+    }
+    let hex_run = |from: usize| {
+        text[from..]
+            .bytes()
+            .take_while(u8::is_ascii_hexdigit)
+            .count()
+    };
+    let head = hex_run(at + 2);
+    if head < 2 {
+        return None;
+    }
+    let after = at + 2 + head;
+    let dots = ["…", "..."]
+        .iter()
+        .find(|d| text[after..].starts_with(**d))?
+        .len();
+    let tail = hex_run(after + dots);
+    (tail >= 2).then_some(after + dots + tail)
+}
+
+/// Where the short address forms in `text` lie (byte ranges, in order) —
+/// r14-11a: each is one unbreakable run inside a line of other words
+/// (`ui::prose` breaks around them, never inside: [`breaks_a_short_form`]).
+#[must_use]
+pub fn short_form_spans(text: &str) -> Vec<std::ops::Range<usize>> {
+    let mut spans = Vec::new();
+    let mut at = 0;
+    while at < text.len() {
+        if let Some(end) = short_form_end(text, at) {
+            spans.push(at..end);
+            at = end;
+        } else {
+            at += text[at..].chars().next().map_or(1, char::len_utf8);
+        }
+    }
+    spans
+}
+
+/// Whether a line starting at byte `at` would cut a short form in two —
+/// after its "…" (Unicode's break) or before it (gpui's).
+#[must_use]
+pub fn breaks_a_short_form(text: &str, at: usize) -> bool {
+    short_form_spans(text)
+        .iter()
+        .any(|span| span.start < at && at < span.end)
+}
+
 #[cfg(test)]
 mod tests {
     use super::address_halves;
@@ -89,5 +143,41 @@ mod tests {
         let hash = format!("0x{}", "ab".repeat(32));
         let (h, t) = address_halves(&hash).expect("split");
         assert_eq!((h.len(), t.len()), (34, 32));
+    }
+
+    /// r14-11a: the short forms inside a line are found whole, and no break
+    /// may fall inside one — not after its "…", not before it.
+    #[test]
+    fn a_short_form_inside_a_line_is_one_unbreakable_run() {
+        use super::{breaks_a_short_form, short_form_spans};
+        let line = "0x777E98…61875a · 2 of 3 · Gnosis";
+        assert_eq!(short_form_spans(line), vec![0.."0x777E98…61875a".len()]);
+        let ellipsis = line.find('…').unwrap_or_default();
+        assert!(breaks_a_short_form(line, ellipsis), "before its \"…\"");
+        assert!(
+            breaks_a_short_form(line, ellipsis + '…'.len_utf8()),
+            "after it"
+        );
+        assert!(breaks_a_short_form(line, 2));
+        // Around it, the line breaks as text does.
+        assert!(!breaks_a_short_form(line, 0));
+        let gnosis = line.find("Gnosis").unwrap_or_default();
+        assert!(!breaks_a_short_form(line, gnosis));
+        // Glued to its brackets (a member named in a title), and in a CJK
+        // line with no spaces: the span is the address alone.
+        let title = "Add Ana (0x88cCA0…266894)";
+        let open = title.find("0x").unwrap_or_default();
+        assert_eq!(
+            short_form_spans(title),
+            vec![open..open + "0x88cCA0…266894".len()]
+        );
+        let zh = "添加成员0x88cCA0…266894为签名人";
+        let at = zh.find("0x").unwrap_or_default();
+        assert_eq!(short_form_spans(zh), vec![at..at + "0x88cCA0…266894".len()]);
+        // The three-dot form a decoded call uses is a short form too.
+        assert_eq!(short_form_spans("to 0xabcd...ef01").len(), 1);
+        // A whole address, and text with no address, hold none.
+        assert!(short_form_spans("0x777E989C821a7F1b031696f044a2fF114261875a").is_empty());
+        assert!(short_form_spans("Nothing here… 2 of 3").is_empty());
     }
 }

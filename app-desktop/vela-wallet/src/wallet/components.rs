@@ -1454,7 +1454,10 @@ pub fn title_in_parts(
         .font_weight(gpui::FontWeight::SEMIBOLD)
         .text_color(theme.fg_base);
     let Some(parts) = parts else {
-        return title.child(whole.clone());
+        // r14-11a: a member named in a multisig title ("Add Ana
+        // (0x88cCA0…266894)") keeps its short form whole (`ui::prose`; plain
+        // text is drawn exactly as before).
+        return title.child(crate::ui::prose(whole.clone()));
     };
     // A word space of the title's face, between two parts on one line —
     // and none before a part that starts a line, which a gap never draws.

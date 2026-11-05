@@ -56,7 +56,9 @@ const PAIRED: [char; 3] = ['—', '…', '‥'];
 /// - a line never opens with a closing mark ([`NO_LINE_START`]);
 /// - a line never ends on an opening mark ([`NO_LINE_END`]);
 /// - glue holds both its neighbours ([`GLUE`]);
-/// - a doubled dash or ellipsis is not split.
+/// - a doubled dash or ellipsis is not split;
+/// - a short address form (`0x777E98…61875a`) is one run: no break inside
+///   it, before its "…" or after (r14-11a, [`crate::ui::short_form_spans`]).
 ///
 /// `false` for an index that is not a character boundary inside the text —
 /// there is no break there to forbid.
@@ -74,6 +76,7 @@ pub fn forbidden_break(text: &str, at: usize) -> bool {
         || GLUE.contains(&before)
         || GLUE.contains(&after)
         || (before == after && PAIRED.contains(&after))
+        || crate::ui::breaks_a_short_form(text, at)
 }
 
 /// Whether `text` has anything the rule could forbid — the fast path's
@@ -88,7 +91,7 @@ pub fn needs_care(text: &str) -> bool {
                 || NO_LINE_END.contains(c)
                 || GLUE.contains(&c)
                 || PAIRED.contains(&c))
-    })
+    }) || !crate::ui::short_form_spans(text).is_empty()
 }
 
 /// Whether any wrap in `lines` is a forbidden one.
@@ -419,6 +422,30 @@ mod tests {
         let dash = "列表中——名称";
         assert!(forbidden_break(dash, before(dash, "——") + "—".len()));
         assert!(!forbidden_break(dash, before(dash, "——")));
+    }
+
+    /// r14-11a: a short address form inside a line is never broken — not
+    /// after its "…" (Unicode's break, a CJK line's), not before it (gpui's),
+    /// and not inside a three-dot form; the line breaks around it.
+    #[test]
+    fn a_short_address_is_never_broken_inside_a_line() {
+        let line = "0x777E98…61875a · 2 of 3 · Gnosis";
+        let after = before(line, "…") + "…".len();
+        assert!(forbidden_break(line, after), "after its \"…\"");
+        assert!(forbidden_break(line, before(line, "…")), "before it");
+        assert!(!forbidden_break(line, before(line, "·")));
+        let zh = "已添加成员0x88cCA0…266894。";
+        assert!(forbidden_break(zh, before(zh, "266894")));
+        assert!(
+            !forbidden_break(zh, before(zh, "0x")),
+            "the whole address may move to the next line"
+        );
+        // The three-dot form: "." is a Latin word's in gpui, not in the rule.
+        let call = "Calls 0xabcd...ef01 with 2 arguments";
+        assert!(needs_care(call), "a short form is looked at");
+        assert!(forbidden_break(call, before(call, "ef01")));
+        assert!(forbidden_break(call, before(call, "...")));
+        assert!(!forbidden_break(call, before(call, "with")));
     }
 
     /// The fast path: English prose has nothing for the rule to say, so it

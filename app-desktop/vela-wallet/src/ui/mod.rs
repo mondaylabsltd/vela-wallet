@@ -23,7 +23,7 @@ mod windowed;
 
 pub use a11y::Accessible;
 pub use ack_row::ack_row;
-pub use address::address_text;
+pub use address::{address_text, breaks_a_short_form, short_form_spans};
 pub use button::{
     ButtonState, ButtonVariant, vela_button, vela_button_opts, vela_button_state, welcome_cta,
     welcome_cta_state,

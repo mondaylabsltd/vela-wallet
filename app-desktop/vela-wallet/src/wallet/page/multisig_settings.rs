@@ -111,7 +111,8 @@ fn heading(theme: &Theme, text: String) -> Div {
         .text_size(theme::text_row_title())
         .font_weight(gpui::FontWeight::SEMIBOLD)
         .text_color(theme.fg_base)
-        .child(text)
+        // r14-11a: "Replace 0x88cCA0…266894" — the short form whole.
+        .child(crate::ui::prose(text))
 }
 
 fn muted(theme: &Theme, text: String) -> Div {
@@ -1090,11 +1091,11 @@ impl WalletPage {
                             .text_size(theme::text_row_sub())
                             .font_weight(gpui::FontWeight::SEMIBOLD)
                             .text_color(theme.fg_base)
-                            .child(words::tv(
+                            .child(crate::ui::prose(words::tv(
                                 loc,
                                 "members.changeReplace",
                                 &[("old", &name), ("new", &new)],
-                            )),
+                            ))),
                     );
                 }
             }
@@ -1542,7 +1543,7 @@ impl WalletPage {
                             .text_size(theme::text_row_sub())
                             .font_weight(gpui::FontWeight::SEMIBOLD)
                             .text_color(theme.fg_base)
-                            .child(title),
+                            .child(crate::ui::prose(title)),
                     )
                     .child(parts),
             );
@@ -1629,7 +1630,7 @@ impl WalletPage {
                     None => words::t(loc, "add.unavailable"),
                     Some(detail) => {
                         let chain = row.account.chain_ids.first().copied().unwrap_or(100);
-                        self.ms_failure_words(detail, chain)
+                        self.ms_failure_words(detail, chain, cx)
                     }
                 };
                 col = col.child(error_line(theme, said));
@@ -1994,7 +1995,7 @@ impl WalletPage {
                     ended if ended.declined() => {}
                     Proposed::Ended { state, .. } => {
                         this.multisig.settings.rename_failure =
-                            state.map(|s| this.ms_rename_failure(&s, chain_id));
+                            state.map(|s| this.ms_rename_failure(&s, chain_id, cx));
                     }
                 }
                 cx.notify();
@@ -2005,7 +2006,7 @@ impl WalletPage {
     }
 
     /// Why a rename did not go, in the web's words for it.
-    fn ms_rename_failure(&self, state: &ActionState, chain_id: u64) -> String {
+    fn ms_rename_failure(&self, state: &ActionState, chain_id: u64, cx: &App) -> String {
         let loc = &self.loc;
         let net = network(chain_id);
         match state {
@@ -2017,7 +2018,9 @@ impl WalletPage {
                 words::tv(loc, "authority.signUnchecked", &[("network", &net)])
             }
             ActionState::SigningBlocked => words::t(loc, "review.blocked"),
-            other => self.ms_action_words(other, chain_id).unwrap_or_default(),
+            other => self
+                .ms_action_words(other, chain_id, cx)
+                .unwrap_or_default(),
         }
     }
 
@@ -2088,7 +2091,7 @@ impl WalletPage {
                                     state: Some(state), ..
                                 } = &ended
                                 {
-                                    let reason = this.ms_change_failure(state, chain_id);
+                                    let reason = this.ms_change_failure(state, chain_id, cx);
                                     let net = network(chain_id);
                                     this.multisig.settings.failure = Some(words::tv(
                                         &this.loc,
@@ -2138,12 +2141,14 @@ impl WalletPage {
     }
 
     /// Why one network's member change did not go (`proposeChange`'s words).
-    fn ms_change_failure(&self, state: &ActionState, chain_id: u64) -> String {
+    fn ms_change_failure(&self, state: &ActionState, chain_id: u64, cx: &App) -> String {
         match state {
             ActionState::Refused { reason } => mw::refusal_of(reason)
                 .map_or_else(|| reason.clone(), |r| mw::refusal_text(&self.loc, &r)),
             ActionState::MailboxUnreadable => words::t(&self.loc, "proposal.mailboxDown"),
-            other => self.ms_action_words(other, chain_id).unwrap_or_default(),
+            other => self
+                .ms_action_words(other, chain_id, cx)
+                .unwrap_or_default(),
         }
     }
 }

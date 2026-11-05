@@ -482,19 +482,6 @@ impl WalletPage {
     /// How a member is named here: this device's account, the name the
     /// multisig keeps, else its short address (the core's `names.label`).
     fn ms_member_name(&self, address: &str, account: Option<&MultisigAccount>, cx: &App) -> String {
-        // r9-12: one name per member, the core's (`member_labels`: kept, the
-        // passkey index, its own name, the short address) — the same on
-        // every platform, never picked here.
-        if let Some(label) = ms_host::booted(cx).and_then(|host| {
-            host.read(cx)
-                .machines()
-                .accounts_view
-                .member_labels
-                .get(&address.to_ascii_lowercase())
-                .cloned()
-        }) {
-            return label;
-        }
         let own = session::view(cx)
             .accounts
             .iter()
@@ -505,12 +492,15 @@ impl WalletPage {
                 .find(|(k, _)| same(k, address))
                 .and_then(|(_, info)| info.name.clone())
         });
-        // The core's one naming rule (`names.label`), through the link door.
-        let args = serde_json::json!({"address": address, "own": own, "kept": kept});
-        vela_core::multisig_link::call_json("names.label", &args.to_string())
-            .ok()
-            .and_then(|text| serde_json::from_str::<String>(&text).ok())
-            .unwrap_or_else(|| words::short(address))
+        match ms_host::booted(cx) {
+            Some(host) => member_label(
+                Some(&host.read(cx).machines().accounts_view.member_labels),
+                address,
+                own,
+                kept,
+            ),
+            None => member_label(None, address, own, kept),
+        }
     }
 
     // -- opening and closing the sheet -------------------------------------
@@ -1778,7 +1768,8 @@ impl WalletPage {
                         .text_size(theme::text_panel_title())
                         .font_weight(gpui::FontWeight::BOLD)
                         .text_color(theme.fg_base)
-                        .child(heading),
+                        // r14-11a: a member's short form, whole.
+                        .child(crate::ui::prose(heading)),
                 )
                 .child(ms_kv(
                     theme,
@@ -1890,7 +1881,7 @@ impl WalletPage {
             if let Some(text) = view
                 .actions
                 .get(&action)
-                .and_then(|state| self.ms_action_words(state, chain_id))
+                .and_then(|state| self.ms_action_words(state, chain_id, cx))
             {
                 body = body.child(ms_note(theme, &text, Tone::Caution));
             }
@@ -2769,7 +2760,7 @@ impl WalletPage {
     }
 
     /// What the last press came to, when it did not go (`ActionState`).
-    fn ms_action_words(&self, state: &ActionState, chain_id: u64) -> Option<String> {
+    fn ms_action_words(&self, state: &ActionState, chain_id: u64, cx: &App) -> Option<String> {
         let loc = &self.loc;
         let reason = |key: &str| words::t(loc, &format!("proposal.reason.{key}"));
         Some(match state {
@@ -2822,7 +2813,7 @@ impl WalletPage {
                     )],
                 ),
             },
-            ActionState::Failed { detail } => self.ms_failure_words(detail, chain_id),
+            ActionState::Failed { detail } => self.ms_failure_words(detail, chain_id, cx),
             ActionState::NoOutsideSigner => words::tv(
                 loc,
                 "proposal.failed",
@@ -2831,43 +2822,12 @@ impl WalletPage {
         })
     }
 
-    /// A shell failure (`live::ShellFailure`) or the core's own words.
-    pub(crate) fn ms_failure_words(&self, detail: &str, chain_id: u64) -> String {
-        use crate::multisig::live::{ShellFailure, read_failure};
-        let loc = &self.loc;
-        let reason = |key: &str| words::t(loc, &format!("proposal.reason.{key}"));
-        match read_failure(detail) {
-            Some(ShellFailure::Passkey {
-                timed_out: true, ..
-            }) => reason("passkeyTimedOut"),
-            Some(ShellFailure::Passkey { failure, .. }) if failure == "cancelled" => {
-                reason("passkeyClosed")
-            }
-            Some(ShellFailure::Passkey { .. }) => reason("passkeyMissing"),
-            Some(ShellFailure::NotSent) => words::t(loc, "proposal.notSent"),
-            Some(ShellFailure::CannotPay { need, have }) => {
-                let info = words::token_info(chain_id, None);
-                words::tv(
-                    loc,
-                    "proposal.whyShort",
-                    &[
-                        ("have", &words::amount_words(loc, &have, &info)),
-                        ("need", &words::amount_words(loc, &need, &info)),
-                    ],
-                )
-            }
-            // r14-9: the fee moved since the press — nothing signed; said with
-            // the new figure in its fee line's own words, so the next press is
-            // on it.
-            Some(ShellFailure::FeeMoved {
-                amount, executor, ..
-            }) => fee_moved_words(loc, &amount, &words::short(&executor), chain_id),
-            Some(ShellFailure::Unknown { message }) => {
-                words::tv(loc, "proposal.failed", &[("reason", &message)])
-            }
-            Some(_) => reason("unknown"),
-            None => words::tv(loc, "proposal.failed", &[("reason", detail)]),
-        }
+    /// A shell failure (`live::ShellFailure`) or the core's own words
+    /// ([`failure_words`]), a member named as the fee line names one.
+    pub(crate) fn ms_failure_words(&self, detail: &str, chain_id: u64, cx: &App) -> String {
+        failure_words(&self.loc, detail, chain_id, &|a: &str| {
+            self.ms_member_name(a, None, cx)
+        })
     }
 
     // -- the review ---------------------------------------------------------
@@ -3028,7 +2988,7 @@ impl WalletPage {
                                 .text_size(theme::text_row_sub())
                                 .font_weight(gpui::FontWeight::SEMIBOLD)
                                 .text_color(theme.fg_base)
-                                .child(line.clone()),
+                                .child(crate::ui::prose(line.clone())),
                         )
                         .children(whole.into_iter().map(|a| {
                             div()
@@ -3409,7 +3369,7 @@ impl WalletPage {
                             .text_size(theme::text_row_sub())
                             .font_weight(gpui::FontWeight::SEMIBOLD)
                             .text_color(ink(*t))
-                            .child(title.clone()),
+                            .child(crate::ui::prose(title.clone())),
                     )
                     .child(rows(r))
                     .into_any_element()
@@ -3472,7 +3432,14 @@ impl WalletPage {
                 .items_center()
                 .gap(px(8.))
                 .text_size(theme::text_row_sub())
-                .child(div().min_w(px(0.)).text_color(theme.fg_base).child(name))
+                // r14-11a: "0x88cCA0…266894 · This device" — the short
+                // form whole.
+                .child(
+                    div()
+                        .min_w(px(0.))
+                        .text_color(theme.fg_base)
+                        .child(crate::ui::prose(name)),
+                )
                 .child(div().flex_none().child(state))
         };
         let quiet = |text: String| {
@@ -3540,7 +3507,7 @@ impl WalletPage {
                         .pt(px(4.))
                         .text_size(theme::text_label())
                         .text_color(theme.fg_subtle)
-                        .child(facts.join(" · ")),
+                        .child(crate::ui::prose(facts.join(" · "))),
                 );
             } else {
                 col = col.child(
@@ -3930,7 +3897,7 @@ impl WalletPage {
                     .id(ElementId::from(("ms-step", i)))
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_muted)
-                    .child(text),
+                    .child(crate::ui::prose(text)),
             );
         }
         col
@@ -4247,7 +4214,7 @@ impl WalletPage {
                     .text_size(theme::text_row_title())
                     .font_weight(gpui::FontWeight::SEMIBOLD)
                     .text_color(theme.fg_base)
-                    .child(self.ms_title(&item, account.as_ref(), cx)),
+                    .child(crate::ui::prose(self.ms_title(&item, account.as_ref(), cx))),
             )
             .child(ms_kv(
                 theme,
@@ -4302,7 +4269,7 @@ impl WalletPage {
             && let Some(text) = view
                 .actions
                 .get("propose")
-                .and_then(|state| self.ms_action_words(state, item.chain_id))
+                .and_then(|state| self.ms_action_words(state, item.chain_id, cx))
         {
             body = body.child(ms_note(theme, &text, Tone::Caution));
         }
@@ -4829,6 +4796,72 @@ pub(crate) fn link_offers_try_again(linked: Option<&ms_proposals::flows::LinkedV
 }
 
 /// r14-9: "That didn't go through: Network fee ≈ {new}, paid by {name}".
+/// A member's one name (r9-12): the core's (`member_labels`: kept, the
+/// passkey index, its own name, the short address) — the same on every
+/// platform, never picked here; else the core's one naming rule
+/// (`names.label`) over this device's `own` name and the multisig's `kept`
+/// one, through the link door.
+pub(crate) fn member_label(
+    labels: Option<&BTreeMap<String, String>>,
+    address: &str,
+    own: Option<String>,
+    kept: Option<String>,
+) -> String {
+    if let Some(label) = labels.and_then(|l| l.get(&address.to_ascii_lowercase())) {
+        return label.clone();
+    }
+    let args = serde_json::json!({"address": address, "own": own, "kept": kept});
+    vela_core::multisig_link::call_json("names.label", &args.to_string())
+        .ok()
+        .and_then(|text| serde_json::from_str::<String>(&text).ok())
+        .unwrap_or_else(|| words::short(address))
+}
+
+/// A shell failure (`live::ShellFailure`) or the core's own words; a member
+/// it names (the executor a moved fee would have charged) is said by
+/// `name`, the fee line's own naming (`ms_member_name`).
+pub(crate) fn failure_words(
+    loc: &crate::loc::Loc,
+    detail: &str,
+    chain_id: u64,
+    name: &dyn Fn(&str) -> String,
+) -> String {
+    use crate::multisig::live::{ShellFailure, read_failure};
+    let reason = |key: &str| words::t(loc, &format!("proposal.reason.{key}"));
+    match read_failure(detail) {
+        Some(ShellFailure::Passkey {
+            timed_out: true, ..
+        }) => reason("passkeyTimedOut"),
+        Some(ShellFailure::Passkey { failure, .. }) if failure == "cancelled" => {
+            reason("passkeyClosed")
+        }
+        Some(ShellFailure::Passkey { .. }) => reason("passkeyMissing"),
+        Some(ShellFailure::NotSent) => words::t(loc, "proposal.notSent"),
+        Some(ShellFailure::CannotPay { need, have }) => {
+            let info = words::token_info(chain_id, None);
+            words::tv(
+                loc,
+                "proposal.whyShort",
+                &[
+                    ("have", &words::amount_words(loc, &have, &info)),
+                    ("need", &words::amount_words(loc, &need, &info)),
+                ],
+            )
+        }
+        // r14-9: the fee moved since the press — nothing signed; said with
+        // the new figure in its fee line's own words (the executor named as
+        // that line names it), so the next press is on it.
+        Some(ShellFailure::FeeMoved {
+            amount, executor, ..
+        }) => fee_moved_words(loc, &amount, &name(&executor), chain_id),
+        Some(ShellFailure::Unknown { message }) => {
+            words::tv(loc, "proposal.failed", &[("reason", &message)])
+        }
+        Some(_) => reason("unknown"),
+        None => words::tv(loc, "proposal.failed", &[("reason", detail)]),
+    }
+}
+
 pub(crate) fn fee_moved_words(
     loc: &crate::loc::Loc,
     amount: &str,
@@ -4953,6 +4986,42 @@ mod tests {
         let line = super::fee_moved_words(&loc, &amount, "Ana", chain_id);
         assert!(line.contains("0.0972"), "{line}");
         assert!(line.contains("Ana"), "{line}");
+    }
+
+    /// §19.12: the fee-moved line names the executor as the fee line does —
+    /// the core's member label (`member_labels`, then `names.label`) — never
+    /// by a short address the fee line above it does not use.
+    #[test]
+    fn a_fee_that_moved_names_its_executor_by_the_cores_member_label() {
+        let executor = "0x00000000000000000000000000000000000000A1";
+        let detail = vela_core::app::multisig_proposals::fee_moved_detail(
+            100,
+            executor,
+            97_200_000_000_000_000,
+        );
+        let loc = crate::loc::Loc::for_tag("en");
+        let labels =
+            std::collections::BTreeMap::from([(executor.to_ascii_lowercase(), "Ana".to_owned())]);
+        let line = super::failure_words(&loc, &detail, 100, &|a: &str| {
+            super::member_label(Some(&labels), a, None, None)
+        });
+        assert!(line.contains("0.0972"), "{line}");
+        assert!(line.contains("Ana"), "the core's label: {line}");
+        assert!(
+            !line.contains(&super::words::short(executor)),
+            "never the short address: {line}"
+        );
+        // The same name the fee line reads, through the same rule.
+        assert_eq!(
+            super::member_label(Some(&labels), executor, None, None),
+            "Ana"
+        );
+        // No label in the core's view: the core's `names.label` (its own
+        // name here), not a shell's pick.
+        assert_eq!(
+            super::member_label(None, executor, Some("Mine".into()), None),
+            "Mine"
+        );
     }
 
     #[test]
