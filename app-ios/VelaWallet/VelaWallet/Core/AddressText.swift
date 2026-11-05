@@ -49,6 +49,33 @@ enum AddressText {
         return text.dropFirst(2).allSatisfy(\.isHexDigit)
     }
 
+    /// Hex longer than this is split in two (a 6+6 short form never is).
+    private static let splitFrom = 24
+    /// Longer hex (calldata) wraps as text does: two halves would not fit.
+    private static let splitUpTo = 66
+
+    /// Where a full address (or a hash) may break across lines: between its
+    /// two halves only — `0x` + half the hex | the other half, 22 + 20 for an
+    /// address. The desktop's rule (`ui/address.rs`) and Android's
+    /// (`AddressBreaks`); `nil` when `text` is drawn whole (r13: a member's
+    /// last five digits alone on a line).
+    static func halves(_ text: String) -> (String, String)? {
+        guard text.hasPrefix("0x") || text.hasPrefix("0X") else { return nil }
+        guard (splitFrom...splitUpTo).contains(text.count) else { return nil }
+        let hex = text.dropFirst(2)
+        guard hex.allSatisfy(\.isHexDigit) else { return nil }
+        let mid = text.index(text.startIndex, offsetBy: 2 + (hex.count + 1) / 2)
+        return (String(text[..<mid]), String(text[mid...]))
+    }
+
+    /// `0x777E98…61875a`: hex, an ellipsis, hex — and nothing that could wrap.
+    static func isShortForm(_ text: String) -> Bool {
+        text.count <= splitFrom + 4
+            && (text.hasPrefix("0x") || text.hasPrefix("0X"))
+            && text.contains("\u{2026}")
+            && !text.contains(where: \.isWhitespace)
+    }
+
     /// The mock's two mono lines: the address split in half, never mid-byte.
     ///
     /// Lives here rather than beside its first caller because spec 051 needed a

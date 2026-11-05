@@ -638,7 +638,7 @@ fn render_keys(host: &FlowHost<'_>) -> Div {
                         .flex_none()
                         .mt(px(6.))
                         .rounded_full()
-                        .bg(theme.accent),
+                        .bg(theme.warning_base),
                 )
                 .child(
                     div()
@@ -964,7 +964,7 @@ fn add_disclosure(host: &FlowHost<'_>, heading: SharedString, open: bool) -> Sta
     let theme = host.theme;
     let enabled = host.view.can_add_key;
     let tint = if enabled {
-        theme.accent
+        theme.fg_base
     } else {
         theme.fg_muted
     };
@@ -1170,7 +1170,7 @@ fn render_progress(host: &FlowHost<'_>) -> Div {
                 .child("✓")
                 .into_any_element()
         } else if index == active {
-            spinner(theme.accent, px(FLOW_GAP_MD), px(theme::SPINNER_STROKE))
+            spinner(theme.fg_base, px(FLOW_GAP_MD), px(theme::SPINNER_STROKE))
         } else {
             div()
                 .text_size(theme::text_row_meta())

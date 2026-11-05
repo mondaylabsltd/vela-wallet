@@ -156,6 +156,7 @@ fun AddressCard(
                         color = colors.fgMuted,
                         fontFamily = VelaMonoFontFamily,
                         fontSize = VelaTextSize.sm,
+                        softWrap = false,
                         maxLines = 1,
                     )
                 }
@@ -1088,6 +1089,10 @@ fun RecipientField(
                                 color = colors.fgBase,
                                 fontFamily = VelaMonoFontFamily,
                                 fontSize = VelaTextSize.base,
+                                // One of the address's two fixed lines: never
+                                // a third one cut from it.
+                                softWrap = false,
+                                maxLines = 1,
                             )
                         }
                 }

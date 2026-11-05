@@ -229,7 +229,7 @@ fn place_icon(place: KeyMethod) -> Icon {
 }
 
 /// A quiet text action under a line — "Try again", "Trust this version" —
-/// in the one accent, as the sheet's own inline actions are.
+/// in the ink, as the sheet's own inline actions are.
 fn line_action(
     theme: &Theme,
     icons: &mut IconCache,
@@ -246,8 +246,8 @@ fn line_action(
         .cursor_pointer()
         .text_size(theme::text_row_sub())
         .font_weight(FontWeight::MEDIUM)
-        .text_color(theme.accent)
-        .child(icon_img(icons, icon, false, theme.accent, 12.))
+        .text_color(theme.fg_base)
+        .child(icon_img(icons, icon, false, theme.fg_base, 12.))
         .child(label)
         .on_click(on_click)
 }
@@ -397,7 +397,7 @@ pub fn handoff_facts(
 /// until both the request and the page may go.
 ///
 /// D7: the sheet's own palette — the eye sits in a neutral well, not a
-/// tinted chip; the one accent is the pill Open.
+/// tinted chip; the one accent is the pill Open (the web's `value`).
 pub fn handoff_card(
     theme: &Theme,
     icons: &mut IconCache,
@@ -409,7 +409,7 @@ pub fn handoff_card(
     let ready = model.opens && on_open.is_some();
     let open = vela_button_state(
         "handoff-open",
-        ButtonVariant::Primary,
+        ButtonVariant::Value,
         model.open_label.clone(),
         ButtonState::from_enabled(ready),
         theme,
@@ -541,7 +541,7 @@ pub fn waiting_card(
                     div()
                         .size(px(TOUCH_DISC / 2.4))
                         .rounded_full()
-                        .bg(theme.accent),
+                        .bg(theme.fg_base),
                 ),
         )
         .child(title(

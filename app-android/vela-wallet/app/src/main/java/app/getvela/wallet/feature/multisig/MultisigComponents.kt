@@ -38,6 +38,8 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.TextUnit
+import app.getvela.wallet.core.designsystem.components.AddressBreaks
+import app.getvela.wallet.core.designsystem.components.VelaAddressText
 import app.getvela.wallet.core.designsystem.components.VelaIcons
 import app.getvela.wallet.core.designsystem.components.VelaModalSheet
 import app.getvela.wallet.core.designsystem.components.VelaTextField
@@ -80,6 +82,19 @@ fun MsText(
     color: Color = VelaTheme.colors.fgBase,
     maxLines: Int = Int.MAX_VALUE,
 ) {
+    // An address (full, short, a hash) never breaks where the line ran out:
+    // the shared rule draws it (r13: a lone `e130b` under a member).
+    if (AddressBreaks.isAddressLike(text)) {
+        VelaAddressText(
+            text = text,
+            modifier = modifier,
+            color = color,
+            fontSize = type.size,
+            fontWeight = type.weight,
+            fontFamily = if (type.mono) VelaMonoFontFamily else VelaFontFamily,
+        )
+        return
+    }
     Text(
         text = text,
         modifier = modifier,

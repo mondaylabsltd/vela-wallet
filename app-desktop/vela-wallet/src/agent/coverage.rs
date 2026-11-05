@@ -832,6 +832,7 @@ const CALLS: &[(&str, Place)] = &[
         "webview::show",
         View("the page's view placed, shown or hidden"),
     ),
+    ("session::accounts_unreadable", Machine("a read")),
     ("session::add_account", Later(ONBOARD)),
     ("session::add_account_cancelled", Later(ONBOARD)),
     ("session::adding_account", Machine("a read")),

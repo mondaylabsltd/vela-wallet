@@ -1205,7 +1205,7 @@ impl WalletPage {
                 .child(
                     crate::ui::vela_button_state(
                         "ms-set-change-propose",
-                        crate::ui::ButtonVariant::Primary,
+                        crate::ui::ButtonVariant::Value,
                         words::t(loc, "send.propose").into(),
                         state,
                         theme,
@@ -1470,14 +1470,14 @@ impl WalletPage {
                     .rounded(px(999.))
                     .border_1()
                     .border_color(if on {
-                        theme.accent
+                        theme.fg_base
                     } else if hinted {
                         theme.outline_strong
                     } else {
                         theme.divider
                     })
                     .text_size(theme::text_row_sub())
-                    .text_color(if on { theme.accent } else { theme.fg_base })
+                    .text_color(theme.fg_base)
                     .cursor_pointer()
                     .hover(|el| el.bg(theme.bg_sunken))
                     .child(label)
@@ -1769,7 +1769,7 @@ impl WalletPage {
                         .child(
                             crate::ui::vela_button_state(
                                 "ms-set-rename-propose",
-                                crate::ui::ButtonVariant::Primary,
+                                crate::ui::ButtonVariant::Value,
                                 words::t(loc, "send.propose").into(),
                                 state,
                                 theme,

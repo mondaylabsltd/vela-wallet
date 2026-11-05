@@ -82,7 +82,7 @@ fn source_color(theme: &Theme, tone: Tone) -> Hsla {
 fn tone_color(theme: &Theme, tone: Tone) -> Hsla {
     match tone {
         Tone::Neutral => theme.fg_base,
-        Tone::Accent => theme.accent,
+        Tone::Accent => theme.fg_base,
         Tone::Success => theme.success_base,
         Tone::Caution => theme.warning_base,
         Tone::Danger => theme.error_base,
@@ -579,7 +579,7 @@ fn block_inner(
                     .rounded_full()
                     .border_1()
                     .border_color(if selected {
-                        theme.accent
+                        theme.fg_base
                     } else {
                         theme.outline_strong
                     })
@@ -587,11 +587,7 @@ fn block_inner(
                     .items_center()
                     .opacity(if disabled { 0.45 } else { 1.0 })
                     .text_size(theme::text_row_sub())
-                    .text_color(if selected {
-                        theme.accent
-                    } else {
-                        theme.fg_base
-                    })
+                    .text_color(theme.fg_base)
                     .child(chip_label.clone());
                 // Stateful only when it is a control. A gallery chip stays the
                 // element the drawn scenarios have always rendered.
@@ -1421,7 +1417,13 @@ pub fn fee(
                             .child(option.fee.clone()),
                     );
                 if option.selected {
-                    row = row.child(icon_img(icons, Icon::Check, false, theme.accent, 14.));
+                    row = row.child(icon_img(
+                        icons,
+                        Icon::Check,
+                        false,
+                        theme.selected_ink(),
+                        14.,
+                    ));
                 }
                 let action = on_pick.next().flatten().filter(|_| !option.insufficient);
                 col = col.child(crate::flows::panels::clickable(
@@ -1541,7 +1543,7 @@ pub fn funding_check_button(
     action: Option<crate::flows::panels::Click>,
 ) -> Div {
     let state = armed(action.is_some());
-    crate::flows::panels::cta_button("signing-funding-check", theme, label, state, action)
+    crate::flows::panels::ink_cta_button("signing-funding-check", theme, label, state, action)
 }
 
 /// A confirm the core armed is enabled; one it shut is drawn shut.

@@ -259,10 +259,8 @@ struct MsReviewBody: View {
                     .typeRole(Typography.fieldLabel.scaled(textScale))
                     .foregroundStyle(theme.fgBase)
             }
-            Text(verbatim: MsRules.eip55(address))
-                .typeRole(Typography.monoSmall.scaled(textScale))
+            AddressTextView(MsRules.eip55(address), role: Typography.monoSmall.scaled(textScale))
                 .foregroundStyle(theme.fgBase)
-                .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
             if !tags.isEmpty {
                 MsChip(text: tags.joined(separator: " · "), tone: r["lookalike"].map { $0.isNull ? .warning : .danger } ?? .warning)

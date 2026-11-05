@@ -1397,7 +1397,7 @@ impl WalletPage {
             callout: None,
             note: None,
             // The safe answer is the easy one: Deny is the sheet's answer,
-            // on top and in the accent; Allow is the quiet one under it.
+            // on top and in the ink; Allow is the quiet one under it.
             confirm: self.agent_text("settings.agent.deny"),
             cancel: Some(self.agent_text("settings.agent.allow")),
             danger: false,

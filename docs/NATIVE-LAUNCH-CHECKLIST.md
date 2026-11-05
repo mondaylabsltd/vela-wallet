@@ -137,18 +137,20 @@ second accidental registration.
 
 ## C. Small code follow-ups I deferred (low severity)
 
-- **Camera "Open Settings" escape** — when a user *permanently* denies camera,
-  the "Grant permission" button can't re-prompt. **Done on iOS**: the scanner's
-  grant button calls `UIApplication.openSettingsURLString` when
+- **~~Camera "Open Settings" escape~~** — done on both. When a user
+  *permanently* denies camera, the "Grant permission" button can't re-prompt,
+  so it opens the app's page in Settings instead. **iOS**: the scanner's grant
+  button calls `UIApplication.openSettingsURLString` when
   `camera.refusal == .denied` (`App/RootView.swift`,
-  `Features/Explore/ExploreScreen.swift`), under the label
-  `componentsUi.scanner.grantPermission` — which, like
-  `onboarding.create.openSettings`, is translated in all 15 locales. **Still
-  open on Android**: `VelaNavHost.kt` renders the same label with
-  `componentsUi.scanner.grantPermission`, but nothing anywhere in
-  `app-android/` starts `Settings.ACTION_APPLICATION_DETAILS_SETTINGS`, so a
-  permanent denial is still a dead end. The translation already exists, so this
-  is a Kotlin-only change. (User can still close the scanner via the X / Back.)
+  `Features/Explore/ExploreScreen.swift`). **Android** (polish-anddesk): the
+  same button, under the same translated label
+  `componentsUi.scanner.grantPermission`, opens
+  `Settings.ACTION_APPLICATION_DETAILS_SETTINGS` (`core/platform/AppSettings.kt`)
+  once the app has asked and `shouldShowRequestPermissionRationale` says the
+  system will not show its dialog again (`feature/scan/CameraRefusal.kt`); after
+  a first refusal it still asks. Back from Settings, the scanner reads the
+  permission again on resume. Tests: `CameraRefusalTest` (unit) and
+  `ScanCameraRefusalTest` (device).
 - **~~iOS `isSupported()`~~** — moot: that was a native-module API of the Expo
   tree. The SwiftUI shell has no such function; availability is decided by the
   per-method matrix from spec 019.

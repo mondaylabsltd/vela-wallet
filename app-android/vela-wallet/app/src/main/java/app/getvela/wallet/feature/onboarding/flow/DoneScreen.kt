@@ -33,6 +33,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.times
 import app.getvela.wallet.core.designsystem.components.VelaAddressStrip
+import app.getvela.wallet.core.designsystem.components.VelaAddressText
 import app.getvela.wallet.core.designsystem.components.VelaIcons
 import app.getvela.wallet.core.designsystem.components.VelaPrimaryButton
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
@@ -43,7 +44,6 @@ import app.getvela.wallet.core.designsystem.tokens.VelaBorder
 import app.getvela.wallet.core.designsystem.tokens.VelaFontWeight
 import app.getvela.wallet.core.designsystem.tokens.VelaIconSize
 import app.getvela.wallet.core.designsystem.tokens.VelaLeading
-import app.getvela.wallet.core.designsystem.tokens.VelaMonoFontFamily
 import app.getvela.wallet.core.designsystem.tokens.VelaRadius
 import app.getvela.wallet.core.designsystem.tokens.VelaSizing
 import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
@@ -271,10 +271,9 @@ private fun DoneAddress(address: String, copyLabel: String, copiedLabel: String)
                 .background(colors.borderBase),
         )
         Spacer(modifier = Modifier.height(VelaSpacing.lg))
-        Text(
+        VelaAddressText(
             text = if (copied) copiedLabel else address,
             color = if (copied) colors.successBase else colors.fgMuted,
-            fontFamily = VelaMonoFontFamily,
             fontWeight = VelaFontWeight.medium,
             fontSize = VelaTextSize.base,
             lineHeight = VelaLeading.normal * VelaTextSize.base,

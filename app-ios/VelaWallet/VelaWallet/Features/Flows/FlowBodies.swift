@@ -103,11 +103,9 @@ struct FundAddressView: View {
             Text(verbatim: model.label)
                 .typeRole(Typography.rowSub.scaled(textScale))
                 .foregroundStyle(theme.fgMuted)
-            Text(verbatim: model.address)
-                .monoRole(Typography.monoAddress.scaled(textScale))
+            AddressTextView(model.address, mono: Typography.monoAddress.scaled(textScale))
                 .foregroundStyle(theme.fgBase)
                 .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
             VelaButton(title: copied ? model.copied : model.copy, kind: .secondary, action: copy)
                 .padding(.top, Tokens.Space.s4)
         }

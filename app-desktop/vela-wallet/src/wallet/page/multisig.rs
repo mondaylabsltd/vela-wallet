@@ -725,7 +725,9 @@ impl WalletPage {
                 crate::wallet::live::shorten_address(&address),
                 flags.join(" · ")
             );
-            let name_colour = if active { theme.accent } else { theme.fg_base };
+            // The ink, as every row's (the web's `.name.active`): the
+            // check marks the shown one, never the accent.
+            let name_colour = theme.selected_ink();
             let mut pick = div()
                 .id(ElementId::from((prefix, i)))
                 .a11y_button(SharedString::from(format!("{name}, {sub}")))
@@ -769,7 +771,7 @@ impl WalletPage {
                     &mut self.icons,
                     Icon::Check,
                     false,
-                    theme.accent,
+                    theme.selected_ink(),
                     18.,
                 ));
             }
@@ -2598,7 +2600,7 @@ impl WalletPage {
                             ))
                             .child(crate::ui::vela_button(
                                 "ms-reject-confirm",
-                                crate::ui::ButtonVariant::Primary,
+                                crate::ui::ButtonVariant::Danger,
                                 words::t(&loc, "proposal.reject").into(),
                                 theme,
                                 cx.listener(move |this, _, _, cx| {
@@ -4525,7 +4527,7 @@ pub(crate) fn value_variant(sign: SignRule) -> crate::ui::ButtonVariant {
     if sign.anyway {
         crate::ui::ButtonVariant::Danger
     } else {
-        crate::ui::ButtonVariant::Primary
+        crate::ui::ButtonVariant::Value
     }
 }
 
@@ -5035,7 +5037,7 @@ mod tests {
         ));
         assert!(matches!(
             value_variant(plain),
-            crate::ui::ButtonVariant::Primary
+            crate::ui::ButtonVariant::Value
         ));
         for theme in [Theme::light(), Theme::dark()] {
             assert_ne!(theme.error_fill, theme.accent);

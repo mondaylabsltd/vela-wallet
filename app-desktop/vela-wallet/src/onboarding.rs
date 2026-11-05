@@ -773,6 +773,14 @@ impl OnboardingPage {
                     .child(crate::ui::prose(subtitle))
             });
 
+        // DESKTOP-1: this computer holds account records it cannot read. Not
+        // a clean sign-out, so it does not look like one — and nothing was
+        // written over them: signing in again rebuilds the account beside
+        // them.
+        if !self.adding && crate::session::accounts_unreadable(cx) {
+            top = top.child(unreadable_notice(&self.loc, theme));
+        }
+
         // The registry is unreachable. Sign-in stays attemptable — the CORE
         // decides that, not this screen — so this only says so, and offers the
         // surface that can fix it. It belongs to the copy block: hung off the
@@ -1805,6 +1813,32 @@ fn transport_words(
         ),
         _ => loc.t("onboarding.common.networkBody"),
     }
+}
+
+/// DESKTOP-1: stored accounts this computer cannot read — the sentence the
+/// web's storage prompt says (spec 048), as a line under the welcome's copy:
+/// the two ways out it names, signing in again, are the buttons beneath it.
+fn unreadable_notice(loc: &crate::loc::Loc, theme: &Theme) -> Stateful<Div> {
+    div()
+        .id("accounts-unreadable")
+        .flex()
+        .flex_col()
+        .gap(px(4.))
+        .text_size(theme::text_flow_caption())
+        .line_height(theme::line_height_body())
+        .child(
+            div()
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(theme.warning_base)
+                .child(crate::ui::prose(
+                    loc.t("onboarding.storage.unreadableTitle"),
+                )),
+        )
+        .child(
+            div()
+                .text_color(theme.fg_muted)
+                .child(crate::ui::prose(loc.t("onboarding.storage.unreadableBody"))),
+        )
 }
 
 #[cfg(test)]

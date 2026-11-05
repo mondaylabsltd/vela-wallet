@@ -97,8 +97,11 @@ pub fn seed_wallets() -> usize {
     if !active() || std::env::var("VELA_PARALLEL_SEED").as_deref() != Ok("1") {
         return 0;
     }
-    let storage_has_wallets =
-        crate::executor::storage::load_accounts().map_or(true, |accounts| !accounts.is_empty());
+    // A record this build cannot read is a wallet too (DESKTOP-1, ANDROID-8):
+    // a store holding one is never seeded, and an unreadable store neither.
+    let storage_has_wallets = crate::executor::storage::read_accounts().map_or(true, |stored| {
+        !stored.accounts.is_empty() || stored.unreadable > 0
+    });
     if storage_has_wallets {
         return 0;
     }
