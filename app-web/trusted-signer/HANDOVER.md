@@ -1,7 +1,7 @@
 # 交接：可信签名器页面
 
 > **第十二轮（2026-11-05）：短地址只有一种写法。** 新版本 **987ccbcc**（`BUILD_ALLOWED` 第一位，LAUNCH 不变）。
-> 本页所有短地址改用 vela-core `names::short_address` 的写法：EIP-55 大小写、`0x` + 6 位、`…`、6 位（`0x3e9b…692d` → `0x3E9B…`6+6）。
+> 本页所有短地址改用 vela-core `names::short_address` 的写法：EIP-55 大小写、`0x` + 6 位、`…`、6 位（以前的 `0x3e9b…692d` 现在写成 6+6 的 EIP-55 形式）。
 > 以前是 4+4、照传入的大小写原样截断；4+4 的仿冒地址是 2^32 的搜索，6+6 是 2^48。`plain-send-test`、`multisig-test`、`provenance-test` 的期望值随之更新；22 个套件全过。部署顺序同上：`dist/` 先上线。
 
 > **第十轮（2026-11-01）：多签的钱是多签的；成员变更写出前后。** 新版本 **797489e6**（`BUILD_ALLOWED` 第一位，LAUNCH 不变）。
