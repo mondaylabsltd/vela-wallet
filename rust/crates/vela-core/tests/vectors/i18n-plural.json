@@ -125,6 +125,20 @@
    }
   },
   {
+   "name": "en/home.multisig.action.changeThreshold/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Require 0 approvals"
+   }
+  },
+  {
    "name": "en/home.multisig.create.thresholdSpare/0",
    "fn": "i18n_t",
    "input": {
@@ -178,6 +192,20 @@
    },
    "expect": {
     "value": "0 waiting for a member who can pay"
+   }
+  },
+  {
+   "name": "en/home.multisig.proposal.rejectHint/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Rejecting proposes a cancellation at the same number; it needs 0 approvals too, and whichever is executed first wins."
    }
   },
   {
@@ -374,6 +402,20 @@
    }
   },
   {
+   "name": "en/home.multisig.action.changeThreshold/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Require 1 approval"
+   }
+  },
+  {
    "name": "en/home.multisig.create.thresholdSpare/1",
    "fn": "i18n_t",
    "input": {
@@ -427,6 +469,20 @@
    },
    "expect": {
     "value": "1 waiting for a member who can pay"
+   }
+  },
+  {
+   "name": "en/home.multisig.proposal.rejectHint/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Rejecting proposes a cancellation at the same number; it needs 1 approval too, and whichever is executed first wins."
    }
   },
   {
@@ -623,6 +679,20 @@
    }
   },
   {
+   "name": "en/home.multisig.action.changeThreshold/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Require 2 approvals"
+   }
+  },
+  {
    "name": "en/home.multisig.create.thresholdSpare/2",
    "fn": "i18n_t",
    "input": {
@@ -676,6 +746,20 @@
    },
    "expect": {
     "value": "2 waiting for a member who can pay"
+   }
+  },
+  {
+   "name": "en/home.multisig.proposal.rejectHint/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Rejecting proposes a cancellation at the same number; it needs 2 approvals too, and whichever is executed first wins."
    }
   },
   {
@@ -872,6 +956,20 @@
    }
   },
   {
+   "name": "en/home.multisig.action.changeThreshold/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Require 3 approvals"
+   }
+  },
+  {
    "name": "en/home.multisig.create.thresholdSpare/3",
    "fn": "i18n_t",
    "input": {
@@ -925,6 +1023,20 @@
    },
    "expect": {
     "value": "3 waiting for a member who can pay"
+   }
+  },
+  {
+   "name": "en/home.multisig.proposal.rejectHint/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Rejecting proposes a cancellation at the same number; it needs 3 approvals too, and whichever is executed first wins."
    }
   },
   {
@@ -1121,6 +1233,20 @@
    }
   },
   {
+   "name": "en/home.multisig.action.changeThreshold/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Require 5 approvals"
+   }
+  },
+  {
    "name": "en/home.multisig.create.thresholdSpare/5",
    "fn": "i18n_t",
    "input": {
@@ -1174,6 +1300,20 @@
    },
    "expect": {
     "value": "5 waiting for a member who can pay"
+   }
+  },
+  {
+   "name": "en/home.multisig.proposal.rejectHint/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Rejecting proposes a cancellation at the same number; it needs 5 approvals too, and whichever is executed first wins."
    }
   },
   {
@@ -1370,6 +1510,20 @@
    }
   },
   {
+   "name": "en/home.multisig.action.changeThreshold/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Require 11 approvals"
+   }
+  },
+  {
    "name": "en/home.multisig.create.thresholdSpare/11",
    "fn": "i18n_t",
    "input": {
@@ -1423,6 +1577,20 @@
    },
    "expect": {
     "value": "11 waiting for a member who can pay"
+   }
+  },
+  {
+   "name": "en/home.multisig.proposal.rejectHint/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Rejecting proposes a cancellation at the same number; it needs 11 approvals too, and whichever is executed first wins."
    }
   },
   {
@@ -1619,6 +1787,20 @@
    }
   },
   {
+   "name": "en/home.multisig.action.changeThreshold/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Require 21 approvals"
+   }
+  },
+  {
    "name": "en/home.multisig.create.thresholdSpare/21",
    "fn": "i18n_t",
    "input": {
@@ -1672,6 +1854,20 @@
    },
    "expect": {
     "value": "21 waiting for a member who can pay"
+   }
+  },
+  {
+   "name": "en/home.multisig.proposal.rejectHint/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Rejecting proposes a cancellation at the same number; it needs 21 approvals too, and whichever is executed first wins."
    }
   },
   {
@@ -1868,6 +2064,20 @@
    }
   },
   {
+   "name": "en/home.multisig.action.changeThreshold/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Require 101 approvals"
+   }
+  },
+  {
    "name": "en/home.multisig.create.thresholdSpare/101",
    "fn": "i18n_t",
    "input": {
@@ -1921,6 +2131,20 @@
    },
    "expect": {
     "value": "101 waiting for a member who can pay"
+   }
+  },
+  {
+   "name": "en/home.multisig.proposal.rejectHint/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Rejecting proposes a cancellation at the same number; it needs 101 approvals too, and whichever is executed first wins."
    }
   },
   {
@@ -2117,6 +2341,20 @@
    }
   },
   {
+   "name": "en/home.multisig.action.changeThreshold/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Require 1000000 approvals"
+   }
+  },
+  {
    "name": "en/home.multisig.create.thresholdSpare/1000000",
    "fn": "i18n_t",
    "input": {
@@ -2170,6 +2408,20 @@
    },
    "expect": {
     "value": "1000000 waiting for a member who can pay"
+   }
+  },
+  {
+   "name": "en/home.multisig.proposal.rejectHint/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Rejecting proposes a cancellation at the same number; it needs 1000000 approvals too, and whichever is executed first wins."
    }
   },
   {
@@ -2378,6 +2630,20 @@
    }
   },
   {
+   "name": "zh/home.multisig.action.changeThreshold/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "改为需 0 位批准"
+   }
+  },
+  {
    "name": "zh/home.multisig.create.thresholdSpare/0",
    "fn": "i18n_t",
    "input": {
@@ -2431,6 +2697,20 @@
    },
    "expect": {
     "value": "0 笔在等能付网络费的成员"
+   }
+  },
+  {
+   "name": "zh/home.multisig.proposal.rejectHint/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "拒绝会在同一序号上发起一笔作废交易，同样需要 0 位批准，先执行的那笔生效。"
    }
   },
   {
@@ -2627,6 +2907,20 @@
    }
   },
   {
+   "name": "zh/home.multisig.action.changeThreshold/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "改为需 1 位批准"
+   }
+  },
+  {
    "name": "zh/home.multisig.create.thresholdSpare/1",
    "fn": "i18n_t",
    "input": {
@@ -2680,6 +2974,20 @@
    },
    "expect": {
     "value": "1 笔在等能付网络费的成员"
+   }
+  },
+  {
+   "name": "zh/home.multisig.proposal.rejectHint/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "拒绝会在同一序号上发起一笔作废交易，同样需要 1 位批准，先执行的那笔生效。"
    }
   },
   {
@@ -2876,6 +3184,20 @@
    }
   },
   {
+   "name": "zh/home.multisig.action.changeThreshold/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "改为需 2 位批准"
+   }
+  },
+  {
    "name": "zh/home.multisig.create.thresholdSpare/2",
    "fn": "i18n_t",
    "input": {
@@ -2929,6 +3251,20 @@
    },
    "expect": {
     "value": "2 笔在等能付网络费的成员"
+   }
+  },
+  {
+   "name": "zh/home.multisig.proposal.rejectHint/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "拒绝会在同一序号上发起一笔作废交易，同样需要 2 位批准，先执行的那笔生效。"
    }
   },
   {
@@ -3125,6 +3461,20 @@
    }
   },
   {
+   "name": "zh/home.multisig.action.changeThreshold/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "改为需 3 位批准"
+   }
+  },
+  {
    "name": "zh/home.multisig.create.thresholdSpare/3",
    "fn": "i18n_t",
    "input": {
@@ -3178,6 +3528,20 @@
    },
    "expect": {
     "value": "3 笔在等能付网络费的成员"
+   }
+  },
+  {
+   "name": "zh/home.multisig.proposal.rejectHint/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "拒绝会在同一序号上发起一笔作废交易，同样需要 3 位批准，先执行的那笔生效。"
    }
   },
   {
@@ -3374,6 +3738,20 @@
    }
   },
   {
+   "name": "zh/home.multisig.action.changeThreshold/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "改为需 5 位批准"
+   }
+  },
+  {
    "name": "zh/home.multisig.create.thresholdSpare/5",
    "fn": "i18n_t",
    "input": {
@@ -3427,6 +3805,20 @@
    },
    "expect": {
     "value": "5 笔在等能付网络费的成员"
+   }
+  },
+  {
+   "name": "zh/home.multisig.proposal.rejectHint/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "拒绝会在同一序号上发起一笔作废交易，同样需要 5 位批准，先执行的那笔生效。"
    }
   },
   {
@@ -3623,6 +4015,20 @@
    }
   },
   {
+   "name": "zh/home.multisig.action.changeThreshold/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "改为需 11 位批准"
+   }
+  },
+  {
    "name": "zh/home.multisig.create.thresholdSpare/11",
    "fn": "i18n_t",
    "input": {
@@ -3676,6 +4082,20 @@
    },
    "expect": {
     "value": "11 笔在等能付网络费的成员"
+   }
+  },
+  {
+   "name": "zh/home.multisig.proposal.rejectHint/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "拒绝会在同一序号上发起一笔作废交易，同样需要 11 位批准，先执行的那笔生效。"
    }
   },
   {
@@ -3872,6 +4292,20 @@
    }
   },
   {
+   "name": "zh/home.multisig.action.changeThreshold/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "改为需 21 位批准"
+   }
+  },
+  {
    "name": "zh/home.multisig.create.thresholdSpare/21",
    "fn": "i18n_t",
    "input": {
@@ -3925,6 +4359,20 @@
    },
    "expect": {
     "value": "21 笔在等能付网络费的成员"
+   }
+  },
+  {
+   "name": "zh/home.multisig.proposal.rejectHint/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "拒绝会在同一序号上发起一笔作废交易，同样需要 21 位批准，先执行的那笔生效。"
    }
   },
   {
@@ -4121,6 +4569,20 @@
    }
   },
   {
+   "name": "zh/home.multisig.action.changeThreshold/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "改为需 101 位批准"
+   }
+  },
+  {
    "name": "zh/home.multisig.create.thresholdSpare/101",
    "fn": "i18n_t",
    "input": {
@@ -4174,6 +4636,20 @@
    },
    "expect": {
     "value": "101 笔在等能付网络费的成员"
+   }
+  },
+  {
+   "name": "zh/home.multisig.proposal.rejectHint/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "拒绝会在同一序号上发起一笔作废交易，同样需要 101 位批准，先执行的那笔生效。"
    }
   },
   {
@@ -4370,6 +4846,20 @@
    }
   },
   {
+   "name": "zh/home.multisig.action.changeThreshold/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "改为需 1000000 位批准"
+   }
+  },
+  {
    "name": "zh/home.multisig.create.thresholdSpare/1000000",
    "fn": "i18n_t",
    "input": {
@@ -4423,6 +4913,20 @@
    },
    "expect": {
     "value": "1000000 笔在等能付网络费的成员"
+   }
+  },
+  {
+   "name": "zh/home.multisig.proposal.rejectHint/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "拒绝会在同一序号上发起一笔作废交易，同样需要 1000000 位批准，先执行的那笔生效。"
    }
   },
   {
@@ -4631,6 +5135,20 @@
    }
   },
   {
+   "name": "zh-TW/home.multisig.action.changeThreshold/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "改為需 0 位核准"
+   }
+  },
+  {
    "name": "zh-TW/home.multisig.create.thresholdSpare/0",
    "fn": "i18n_t",
    "input": {
@@ -4684,6 +5202,20 @@
    },
    "expect": {
     "value": "0 筆在等能付網路費的成員"
+   }
+  },
+  {
+   "name": "zh-TW/home.multisig.proposal.rejectHint/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "拒絕會在同一序號上發起一筆作廢交易，同樣需要 0 位核准，先執行的那筆生效。"
    }
   },
   {
@@ -4880,6 +5412,20 @@
    }
   },
   {
+   "name": "zh-TW/home.multisig.action.changeThreshold/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "改為需 1 位核准"
+   }
+  },
+  {
    "name": "zh-TW/home.multisig.create.thresholdSpare/1",
    "fn": "i18n_t",
    "input": {
@@ -4933,6 +5479,20 @@
    },
    "expect": {
     "value": "1 筆在等能付網路費的成員"
+   }
+  },
+  {
+   "name": "zh-TW/home.multisig.proposal.rejectHint/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "拒絕會在同一序號上發起一筆作廢交易，同樣需要 1 位核准，先執行的那筆生效。"
    }
   },
   {
@@ -5129,6 +5689,20 @@
    }
   },
   {
+   "name": "zh-TW/home.multisig.action.changeThreshold/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "改為需 2 位核准"
+   }
+  },
+  {
    "name": "zh-TW/home.multisig.create.thresholdSpare/2",
    "fn": "i18n_t",
    "input": {
@@ -5182,6 +5756,20 @@
    },
    "expect": {
     "value": "2 筆在等能付網路費的成員"
+   }
+  },
+  {
+   "name": "zh-TW/home.multisig.proposal.rejectHint/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "拒絕會在同一序號上發起一筆作廢交易，同樣需要 2 位核准，先執行的那筆生效。"
    }
   },
   {
@@ -5378,6 +5966,20 @@
    }
   },
   {
+   "name": "zh-TW/home.multisig.action.changeThreshold/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "改為需 3 位核准"
+   }
+  },
+  {
    "name": "zh-TW/home.multisig.create.thresholdSpare/3",
    "fn": "i18n_t",
    "input": {
@@ -5431,6 +6033,20 @@
    },
    "expect": {
     "value": "3 筆在等能付網路費的成員"
+   }
+  },
+  {
+   "name": "zh-TW/home.multisig.proposal.rejectHint/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "拒絕會在同一序號上發起一筆作廢交易，同樣需要 3 位核准，先執行的那筆生效。"
    }
   },
   {
@@ -5627,6 +6243,20 @@
    }
   },
   {
+   "name": "zh-TW/home.multisig.action.changeThreshold/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "改為需 5 位核准"
+   }
+  },
+  {
    "name": "zh-TW/home.multisig.create.thresholdSpare/5",
    "fn": "i18n_t",
    "input": {
@@ -5680,6 +6310,20 @@
    },
    "expect": {
     "value": "5 筆在等能付網路費的成員"
+   }
+  },
+  {
+   "name": "zh-TW/home.multisig.proposal.rejectHint/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "拒絕會在同一序號上發起一筆作廢交易，同樣需要 5 位核准，先執行的那筆生效。"
    }
   },
   {
@@ -5876,6 +6520,20 @@
    }
   },
   {
+   "name": "zh-TW/home.multisig.action.changeThreshold/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "改為需 11 位核准"
+   }
+  },
+  {
    "name": "zh-TW/home.multisig.create.thresholdSpare/11",
    "fn": "i18n_t",
    "input": {
@@ -5929,6 +6587,20 @@
    },
    "expect": {
     "value": "11 筆在等能付網路費的成員"
+   }
+  },
+  {
+   "name": "zh-TW/home.multisig.proposal.rejectHint/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "拒絕會在同一序號上發起一筆作廢交易，同樣需要 11 位核准，先執行的那筆生效。"
    }
   },
   {
@@ -6125,6 +6797,20 @@
    }
   },
   {
+   "name": "zh-TW/home.multisig.action.changeThreshold/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "改為需 21 位核准"
+   }
+  },
+  {
    "name": "zh-TW/home.multisig.create.thresholdSpare/21",
    "fn": "i18n_t",
    "input": {
@@ -6178,6 +6864,20 @@
    },
    "expect": {
     "value": "21 筆在等能付網路費的成員"
+   }
+  },
+  {
+   "name": "zh-TW/home.multisig.proposal.rejectHint/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "拒絕會在同一序號上發起一筆作廢交易，同樣需要 21 位核准，先執行的那筆生效。"
    }
   },
   {
@@ -6374,6 +7074,20 @@
    }
   },
   {
+   "name": "zh-TW/home.multisig.action.changeThreshold/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "改為需 101 位核准"
+   }
+  },
+  {
    "name": "zh-TW/home.multisig.create.thresholdSpare/101",
    "fn": "i18n_t",
    "input": {
@@ -6427,6 +7141,20 @@
    },
    "expect": {
     "value": "101 筆在等能付網路費的成員"
+   }
+  },
+  {
+   "name": "zh-TW/home.multisig.proposal.rejectHint/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "拒絕會在同一序號上發起一筆作廢交易，同樣需要 101 位核准，先執行的那筆生效。"
    }
   },
   {
@@ -6623,6 +7351,20 @@
    }
   },
   {
+   "name": "zh-TW/home.multisig.action.changeThreshold/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "改為需 1000000 位核准"
+   }
+  },
+  {
    "name": "zh-TW/home.multisig.create.thresholdSpare/1000000",
    "fn": "i18n_t",
    "input": {
@@ -6676,6 +7418,20 @@
    },
    "expect": {
     "value": "1000000 筆在等能付網路費的成員"
+   }
+  },
+  {
+   "name": "zh-TW/home.multisig.proposal.rejectHint/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "拒絕會在同一序號上發起一筆作廢交易，同樣需要 1000000 位核准，先執行的那筆生效。"
    }
   },
   {
@@ -6884,6 +7640,20 @@
    }
   },
   {
+   "name": "zh-HK/home.multisig.action.changeThreshold/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "改為需 0 位批准"
+   }
+  },
+  {
    "name": "zh-HK/home.multisig.create.thresholdSpare/0",
    "fn": "i18n_t",
    "input": {
@@ -6937,6 +7707,20 @@
    },
    "expect": {
     "value": "0 筆在等能付網絡費的成員"
+   }
+  },
+  {
+   "name": "zh-HK/home.multisig.proposal.rejectHint/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "拒絕會在同一序號上發起一筆作廢交易，同樣需要 0 位批准，先執行的那筆生效。"
    }
   },
   {
@@ -7133,6 +7917,20 @@
    }
   },
   {
+   "name": "zh-HK/home.multisig.action.changeThreshold/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "改為需 1 位批准"
+   }
+  },
+  {
    "name": "zh-HK/home.multisig.create.thresholdSpare/1",
    "fn": "i18n_t",
    "input": {
@@ -7186,6 +7984,20 @@
    },
    "expect": {
     "value": "1 筆在等能付網絡費的成員"
+   }
+  },
+  {
+   "name": "zh-HK/home.multisig.proposal.rejectHint/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "拒絕會在同一序號上發起一筆作廢交易，同樣需要 1 位批准，先執行的那筆生效。"
    }
   },
   {
@@ -7382,6 +8194,20 @@
    }
   },
   {
+   "name": "zh-HK/home.multisig.action.changeThreshold/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "改為需 2 位批准"
+   }
+  },
+  {
    "name": "zh-HK/home.multisig.create.thresholdSpare/2",
    "fn": "i18n_t",
    "input": {
@@ -7435,6 +8261,20 @@
    },
    "expect": {
     "value": "2 筆在等能付網絡費的成員"
+   }
+  },
+  {
+   "name": "zh-HK/home.multisig.proposal.rejectHint/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "拒絕會在同一序號上發起一筆作廢交易，同樣需要 2 位批准，先執行的那筆生效。"
    }
   },
   {
@@ -7631,6 +8471,20 @@
    }
   },
   {
+   "name": "zh-HK/home.multisig.action.changeThreshold/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "改為需 3 位批准"
+   }
+  },
+  {
    "name": "zh-HK/home.multisig.create.thresholdSpare/3",
    "fn": "i18n_t",
    "input": {
@@ -7684,6 +8538,20 @@
    },
    "expect": {
     "value": "3 筆在等能付網絡費的成員"
+   }
+  },
+  {
+   "name": "zh-HK/home.multisig.proposal.rejectHint/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "拒絕會在同一序號上發起一筆作廢交易，同樣需要 3 位批准，先執行的那筆生效。"
    }
   },
   {
@@ -7880,6 +8748,20 @@
    }
   },
   {
+   "name": "zh-HK/home.multisig.action.changeThreshold/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "改為需 5 位批准"
+   }
+  },
+  {
    "name": "zh-HK/home.multisig.create.thresholdSpare/5",
    "fn": "i18n_t",
    "input": {
@@ -7933,6 +8815,20 @@
    },
    "expect": {
     "value": "5 筆在等能付網絡費的成員"
+   }
+  },
+  {
+   "name": "zh-HK/home.multisig.proposal.rejectHint/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "拒絕會在同一序號上發起一筆作廢交易，同樣需要 5 位批准，先執行的那筆生效。"
    }
   },
   {
@@ -8129,6 +9025,20 @@
    }
   },
   {
+   "name": "zh-HK/home.multisig.action.changeThreshold/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "改為需 11 位批准"
+   }
+  },
+  {
    "name": "zh-HK/home.multisig.create.thresholdSpare/11",
    "fn": "i18n_t",
    "input": {
@@ -8182,6 +9092,20 @@
    },
    "expect": {
     "value": "11 筆在等能付網絡費的成員"
+   }
+  },
+  {
+   "name": "zh-HK/home.multisig.proposal.rejectHint/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "拒絕會在同一序號上發起一筆作廢交易，同樣需要 11 位批准，先執行的那筆生效。"
    }
   },
   {
@@ -8378,6 +9302,20 @@
    }
   },
   {
+   "name": "zh-HK/home.multisig.action.changeThreshold/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "改為需 21 位批准"
+   }
+  },
+  {
    "name": "zh-HK/home.multisig.create.thresholdSpare/21",
    "fn": "i18n_t",
    "input": {
@@ -8431,6 +9369,20 @@
    },
    "expect": {
     "value": "21 筆在等能付網絡費的成員"
+   }
+  },
+  {
+   "name": "zh-HK/home.multisig.proposal.rejectHint/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "拒絕會在同一序號上發起一筆作廢交易，同樣需要 21 位批准，先執行的那筆生效。"
    }
   },
   {
@@ -8627,6 +9579,20 @@
    }
   },
   {
+   "name": "zh-HK/home.multisig.action.changeThreshold/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "改為需 101 位批准"
+   }
+  },
+  {
    "name": "zh-HK/home.multisig.create.thresholdSpare/101",
    "fn": "i18n_t",
    "input": {
@@ -8680,6 +9646,20 @@
    },
    "expect": {
     "value": "101 筆在等能付網絡費的成員"
+   }
+  },
+  {
+   "name": "zh-HK/home.multisig.proposal.rejectHint/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "拒絕會在同一序號上發起一筆作廢交易，同樣需要 101 位批准，先執行的那筆生效。"
    }
   },
   {
@@ -8876,6 +9856,20 @@
    }
   },
   {
+   "name": "zh-HK/home.multisig.action.changeThreshold/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "改為需 1000000 位批准"
+   }
+  },
+  {
    "name": "zh-HK/home.multisig.create.thresholdSpare/1000000",
    "fn": "i18n_t",
    "input": {
@@ -8929,6 +9923,20 @@
    },
    "expect": {
     "value": "1000000 筆在等能付網絡費的成員"
+   }
+  },
+  {
+   "name": "zh-HK/home.multisig.proposal.rejectHint/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "拒絕會在同一序號上發起一筆作廢交易，同樣需要 1000000 位批准，先執行的那筆生效。"
    }
   },
   {
@@ -9137,6 +10145,20 @@
    }
   },
   {
+   "name": "ja/home.multisig.action.changeThreshold/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "承認を 0 人に変更"
+   }
+  },
+  {
    "name": "ja/home.multisig.create.thresholdSpare/0",
    "fn": "i18n_t",
    "input": {
@@ -9190,6 +10212,20 @@
    },
    "expect": {
     "value": "0 件が支払えるメンバー待ち"
+   }
+  },
+  {
+   "name": "ja/home.multisig.proposal.rejectHint/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "拒否すると、同じ番号で取り消し取引を提案します。これにも 0 人の承認が必要で、先に実行された方が有効になります。"
    }
   },
   {
@@ -9386,6 +10422,20 @@
    }
   },
   {
+   "name": "ja/home.multisig.action.changeThreshold/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "承認を 1 人に変更"
+   }
+  },
+  {
    "name": "ja/home.multisig.create.thresholdSpare/1",
    "fn": "i18n_t",
    "input": {
@@ -9439,6 +10489,20 @@
    },
    "expect": {
     "value": "1 件が支払えるメンバー待ち"
+   }
+  },
+  {
+   "name": "ja/home.multisig.proposal.rejectHint/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "拒否すると、同じ番号で取り消し取引を提案します。これにも 1 人の承認が必要で、先に実行された方が有効になります。"
    }
   },
   {
@@ -9635,6 +10699,20 @@
    }
   },
   {
+   "name": "ja/home.multisig.action.changeThreshold/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "承認を 2 人に変更"
+   }
+  },
+  {
    "name": "ja/home.multisig.create.thresholdSpare/2",
    "fn": "i18n_t",
    "input": {
@@ -9688,6 +10766,20 @@
    },
    "expect": {
     "value": "2 件が支払えるメンバー待ち"
+   }
+  },
+  {
+   "name": "ja/home.multisig.proposal.rejectHint/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "拒否すると、同じ番号で取り消し取引を提案します。これにも 2 人の承認が必要で、先に実行された方が有効になります。"
    }
   },
   {
@@ -9884,6 +10976,20 @@
    }
   },
   {
+   "name": "ja/home.multisig.action.changeThreshold/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "承認を 3 人に変更"
+   }
+  },
+  {
    "name": "ja/home.multisig.create.thresholdSpare/3",
    "fn": "i18n_t",
    "input": {
@@ -9937,6 +11043,20 @@
    },
    "expect": {
     "value": "3 件が支払えるメンバー待ち"
+   }
+  },
+  {
+   "name": "ja/home.multisig.proposal.rejectHint/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "拒否すると、同じ番号で取り消し取引を提案します。これにも 3 人の承認が必要で、先に実行された方が有効になります。"
    }
   },
   {
@@ -10133,6 +11253,20 @@
    }
   },
   {
+   "name": "ja/home.multisig.action.changeThreshold/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "承認を 5 人に変更"
+   }
+  },
+  {
    "name": "ja/home.multisig.create.thresholdSpare/5",
    "fn": "i18n_t",
    "input": {
@@ -10186,6 +11320,20 @@
    },
    "expect": {
     "value": "5 件が支払えるメンバー待ち"
+   }
+  },
+  {
+   "name": "ja/home.multisig.proposal.rejectHint/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "拒否すると、同じ番号で取り消し取引を提案します。これにも 5 人の承認が必要で、先に実行された方が有効になります。"
    }
   },
   {
@@ -10382,6 +11530,20 @@
    }
   },
   {
+   "name": "ja/home.multisig.action.changeThreshold/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "承認を 11 人に変更"
+   }
+  },
+  {
    "name": "ja/home.multisig.create.thresholdSpare/11",
    "fn": "i18n_t",
    "input": {
@@ -10435,6 +11597,20 @@
    },
    "expect": {
     "value": "11 件が支払えるメンバー待ち"
+   }
+  },
+  {
+   "name": "ja/home.multisig.proposal.rejectHint/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "拒否すると、同じ番号で取り消し取引を提案します。これにも 11 人の承認が必要で、先に実行された方が有効になります。"
    }
   },
   {
@@ -10631,6 +11807,20 @@
    }
   },
   {
+   "name": "ja/home.multisig.action.changeThreshold/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "承認を 21 人に変更"
+   }
+  },
+  {
    "name": "ja/home.multisig.create.thresholdSpare/21",
    "fn": "i18n_t",
    "input": {
@@ -10684,6 +11874,20 @@
    },
    "expect": {
     "value": "21 件が支払えるメンバー待ち"
+   }
+  },
+  {
+   "name": "ja/home.multisig.proposal.rejectHint/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "拒否すると、同じ番号で取り消し取引を提案します。これにも 21 人の承認が必要で、先に実行された方が有効になります。"
    }
   },
   {
@@ -10880,6 +12084,20 @@
    }
   },
   {
+   "name": "ja/home.multisig.action.changeThreshold/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "承認を 101 人に変更"
+   }
+  },
+  {
    "name": "ja/home.multisig.create.thresholdSpare/101",
    "fn": "i18n_t",
    "input": {
@@ -10933,6 +12151,20 @@
    },
    "expect": {
     "value": "101 件が支払えるメンバー待ち"
+   }
+  },
+  {
+   "name": "ja/home.multisig.proposal.rejectHint/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "拒否すると、同じ番号で取り消し取引を提案します。これにも 101 人の承認が必要で、先に実行された方が有効になります。"
    }
   },
   {
@@ -11129,6 +12361,20 @@
    }
   },
   {
+   "name": "ja/home.multisig.action.changeThreshold/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "承認を 1000000 人に変更"
+   }
+  },
+  {
    "name": "ja/home.multisig.create.thresholdSpare/1000000",
    "fn": "i18n_t",
    "input": {
@@ -11182,6 +12428,20 @@
    },
    "expect": {
     "value": "1000000 件が支払えるメンバー待ち"
+   }
+  },
+  {
+   "name": "ja/home.multisig.proposal.rejectHint/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "拒否すると、同じ番号で取り消し取引を提案します。これにも 1000000 人の承認が必要で、先に実行された方が有効になります。"
    }
   },
   {
@@ -11390,6 +12650,20 @@
    }
   },
   {
+   "name": "ko/home.multisig.action.changeThreshold/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "승인 0명 필요로 변경"
+   }
+  },
+  {
    "name": "ko/home.multisig.create.thresholdSpare/0",
    "fn": "i18n_t",
    "input": {
@@ -11443,6 +12717,20 @@
    },
    "expect": {
     "value": "0건이 수수료를 낼 수 있는 멤버를 기다리는 중"
+   }
+  },
+  {
+   "name": "ko/home.multisig.proposal.rejectHint/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "거부하면 같은 번호로 취소 거래를 제안합니다. 취소에도 0명의 승인이 필요하며, 먼저 실행된 쪽이 적용됩니다."
    }
   },
   {
@@ -11639,6 +12927,20 @@
    }
   },
   {
+   "name": "ko/home.multisig.action.changeThreshold/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "승인 1명 필요로 변경"
+   }
+  },
+  {
    "name": "ko/home.multisig.create.thresholdSpare/1",
    "fn": "i18n_t",
    "input": {
@@ -11692,6 +12994,20 @@
    },
    "expect": {
     "value": "1건이 수수료를 낼 수 있는 멤버를 기다리는 중"
+   }
+  },
+  {
+   "name": "ko/home.multisig.proposal.rejectHint/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "거부하면 같은 번호로 취소 거래를 제안합니다. 취소에도 1명의 승인이 필요하며, 먼저 실행된 쪽이 적용됩니다."
    }
   },
   {
@@ -11888,6 +13204,20 @@
    }
   },
   {
+   "name": "ko/home.multisig.action.changeThreshold/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "승인 2명 필요로 변경"
+   }
+  },
+  {
    "name": "ko/home.multisig.create.thresholdSpare/2",
    "fn": "i18n_t",
    "input": {
@@ -11941,6 +13271,20 @@
    },
    "expect": {
     "value": "2건이 수수료를 낼 수 있는 멤버를 기다리는 중"
+   }
+  },
+  {
+   "name": "ko/home.multisig.proposal.rejectHint/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "거부하면 같은 번호로 취소 거래를 제안합니다. 취소에도 2명의 승인이 필요하며, 먼저 실행된 쪽이 적용됩니다."
    }
   },
   {
@@ -12137,6 +13481,20 @@
    }
   },
   {
+   "name": "ko/home.multisig.action.changeThreshold/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "승인 3명 필요로 변경"
+   }
+  },
+  {
    "name": "ko/home.multisig.create.thresholdSpare/3",
    "fn": "i18n_t",
    "input": {
@@ -12190,6 +13548,20 @@
    },
    "expect": {
     "value": "3건이 수수료를 낼 수 있는 멤버를 기다리는 중"
+   }
+  },
+  {
+   "name": "ko/home.multisig.proposal.rejectHint/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "거부하면 같은 번호로 취소 거래를 제안합니다. 취소에도 3명의 승인이 필요하며, 먼저 실행된 쪽이 적용됩니다."
    }
   },
   {
@@ -12386,6 +13758,20 @@
    }
   },
   {
+   "name": "ko/home.multisig.action.changeThreshold/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "승인 5명 필요로 변경"
+   }
+  },
+  {
    "name": "ko/home.multisig.create.thresholdSpare/5",
    "fn": "i18n_t",
    "input": {
@@ -12439,6 +13825,20 @@
    },
    "expect": {
     "value": "5건이 수수료를 낼 수 있는 멤버를 기다리는 중"
+   }
+  },
+  {
+   "name": "ko/home.multisig.proposal.rejectHint/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "거부하면 같은 번호로 취소 거래를 제안합니다. 취소에도 5명의 승인이 필요하며, 먼저 실행된 쪽이 적용됩니다."
    }
   },
   {
@@ -12635,6 +14035,20 @@
    }
   },
   {
+   "name": "ko/home.multisig.action.changeThreshold/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "승인 11명 필요로 변경"
+   }
+  },
+  {
    "name": "ko/home.multisig.create.thresholdSpare/11",
    "fn": "i18n_t",
    "input": {
@@ -12688,6 +14102,20 @@
    },
    "expect": {
     "value": "11건이 수수료를 낼 수 있는 멤버를 기다리는 중"
+   }
+  },
+  {
+   "name": "ko/home.multisig.proposal.rejectHint/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "거부하면 같은 번호로 취소 거래를 제안합니다. 취소에도 11명의 승인이 필요하며, 먼저 실행된 쪽이 적용됩니다."
    }
   },
   {
@@ -12884,6 +14312,20 @@
    }
   },
   {
+   "name": "ko/home.multisig.action.changeThreshold/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "승인 21명 필요로 변경"
+   }
+  },
+  {
    "name": "ko/home.multisig.create.thresholdSpare/21",
    "fn": "i18n_t",
    "input": {
@@ -12937,6 +14379,20 @@
    },
    "expect": {
     "value": "21건이 수수료를 낼 수 있는 멤버를 기다리는 중"
+   }
+  },
+  {
+   "name": "ko/home.multisig.proposal.rejectHint/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "거부하면 같은 번호로 취소 거래를 제안합니다. 취소에도 21명의 승인이 필요하며, 먼저 실행된 쪽이 적용됩니다."
    }
   },
   {
@@ -13133,6 +14589,20 @@
    }
   },
   {
+   "name": "ko/home.multisig.action.changeThreshold/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "승인 101명 필요로 변경"
+   }
+  },
+  {
    "name": "ko/home.multisig.create.thresholdSpare/101",
    "fn": "i18n_t",
    "input": {
@@ -13186,6 +14656,20 @@
    },
    "expect": {
     "value": "101건이 수수료를 낼 수 있는 멤버를 기다리는 중"
+   }
+  },
+  {
+   "name": "ko/home.multisig.proposal.rejectHint/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "거부하면 같은 번호로 취소 거래를 제안합니다. 취소에도 101명의 승인이 필요하며, 먼저 실행된 쪽이 적용됩니다."
    }
   },
   {
@@ -13382,6 +14866,20 @@
    }
   },
   {
+   "name": "ko/home.multisig.action.changeThreshold/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "승인 1000000명 필요로 변경"
+   }
+  },
+  {
    "name": "ko/home.multisig.create.thresholdSpare/1000000",
    "fn": "i18n_t",
    "input": {
@@ -13435,6 +14933,20 @@
    },
    "expect": {
     "value": "1000000건이 수수료를 낼 수 있는 멤버를 기다리는 중"
+   }
+  },
+  {
+   "name": "ko/home.multisig.proposal.rejectHint/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "거부하면 같은 번호로 취소 거래를 제안합니다. 취소에도 1000000명의 승인이 필요하며, 먼저 실행된 쪽이 적용됩니다."
    }
   },
   {
@@ -13643,6 +15155,20 @@
    }
   },
   {
+   "name": "vi/home.multisig.action.changeThreshold/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Yêu cầu 0 lượt duyệt"
+   }
+  },
+  {
    "name": "vi/home.multisig.create.thresholdSpare/0",
    "fn": "i18n_t",
    "input": {
@@ -13696,6 +15222,20 @@
    },
    "expect": {
     "value": "0 giao dịch chờ một thành viên trả được phí"
+   }
+  },
+  {
+   "name": "vi/home.multisig.proposal.rejectHint/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Từ chối là đề xuất hủy với cùng số thứ tự; việc hủy cũng cần 0 lượt duyệt, và giao dịch nào được thực thi trước sẽ có hiệu lực."
    }
   },
   {
@@ -13892,6 +15432,20 @@
    }
   },
   {
+   "name": "vi/home.multisig.action.changeThreshold/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Yêu cầu 1 lượt duyệt"
+   }
+  },
+  {
    "name": "vi/home.multisig.create.thresholdSpare/1",
    "fn": "i18n_t",
    "input": {
@@ -13945,6 +15499,20 @@
    },
    "expect": {
     "value": "1 giao dịch chờ một thành viên trả được phí"
+   }
+  },
+  {
+   "name": "vi/home.multisig.proposal.rejectHint/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Từ chối là đề xuất hủy với cùng số thứ tự; việc hủy cũng cần 1 lượt duyệt, và giao dịch nào được thực thi trước sẽ có hiệu lực."
    }
   },
   {
@@ -14141,6 +15709,20 @@
    }
   },
   {
+   "name": "vi/home.multisig.action.changeThreshold/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Yêu cầu 2 lượt duyệt"
+   }
+  },
+  {
    "name": "vi/home.multisig.create.thresholdSpare/2",
    "fn": "i18n_t",
    "input": {
@@ -14194,6 +15776,20 @@
    },
    "expect": {
     "value": "2 giao dịch chờ một thành viên trả được phí"
+   }
+  },
+  {
+   "name": "vi/home.multisig.proposal.rejectHint/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Từ chối là đề xuất hủy với cùng số thứ tự; việc hủy cũng cần 2 lượt duyệt, và giao dịch nào được thực thi trước sẽ có hiệu lực."
    }
   },
   {
@@ -14390,6 +15986,20 @@
    }
   },
   {
+   "name": "vi/home.multisig.action.changeThreshold/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Yêu cầu 3 lượt duyệt"
+   }
+  },
+  {
    "name": "vi/home.multisig.create.thresholdSpare/3",
    "fn": "i18n_t",
    "input": {
@@ -14443,6 +16053,20 @@
    },
    "expect": {
     "value": "3 giao dịch chờ một thành viên trả được phí"
+   }
+  },
+  {
+   "name": "vi/home.multisig.proposal.rejectHint/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Từ chối là đề xuất hủy với cùng số thứ tự; việc hủy cũng cần 3 lượt duyệt, và giao dịch nào được thực thi trước sẽ có hiệu lực."
    }
   },
   {
@@ -14639,6 +16263,20 @@
    }
   },
   {
+   "name": "vi/home.multisig.action.changeThreshold/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Yêu cầu 5 lượt duyệt"
+   }
+  },
+  {
    "name": "vi/home.multisig.create.thresholdSpare/5",
    "fn": "i18n_t",
    "input": {
@@ -14692,6 +16330,20 @@
    },
    "expect": {
     "value": "5 giao dịch chờ một thành viên trả được phí"
+   }
+  },
+  {
+   "name": "vi/home.multisig.proposal.rejectHint/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Từ chối là đề xuất hủy với cùng số thứ tự; việc hủy cũng cần 5 lượt duyệt, và giao dịch nào được thực thi trước sẽ có hiệu lực."
    }
   },
   {
@@ -14888,6 +16540,20 @@
    }
   },
   {
+   "name": "vi/home.multisig.action.changeThreshold/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Yêu cầu 11 lượt duyệt"
+   }
+  },
+  {
    "name": "vi/home.multisig.create.thresholdSpare/11",
    "fn": "i18n_t",
    "input": {
@@ -14941,6 +16607,20 @@
    },
    "expect": {
     "value": "11 giao dịch chờ một thành viên trả được phí"
+   }
+  },
+  {
+   "name": "vi/home.multisig.proposal.rejectHint/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Từ chối là đề xuất hủy với cùng số thứ tự; việc hủy cũng cần 11 lượt duyệt, và giao dịch nào được thực thi trước sẽ có hiệu lực."
    }
   },
   {
@@ -15137,6 +16817,20 @@
    }
   },
   {
+   "name": "vi/home.multisig.action.changeThreshold/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Yêu cầu 21 lượt duyệt"
+   }
+  },
+  {
    "name": "vi/home.multisig.create.thresholdSpare/21",
    "fn": "i18n_t",
    "input": {
@@ -15190,6 +16884,20 @@
    },
    "expect": {
     "value": "21 giao dịch chờ một thành viên trả được phí"
+   }
+  },
+  {
+   "name": "vi/home.multisig.proposal.rejectHint/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Từ chối là đề xuất hủy với cùng số thứ tự; việc hủy cũng cần 21 lượt duyệt, và giao dịch nào được thực thi trước sẽ có hiệu lực."
    }
   },
   {
@@ -15386,6 +17094,20 @@
    }
   },
   {
+   "name": "vi/home.multisig.action.changeThreshold/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Yêu cầu 101 lượt duyệt"
+   }
+  },
+  {
    "name": "vi/home.multisig.create.thresholdSpare/101",
    "fn": "i18n_t",
    "input": {
@@ -15439,6 +17161,20 @@
    },
    "expect": {
     "value": "101 giao dịch chờ một thành viên trả được phí"
+   }
+  },
+  {
+   "name": "vi/home.multisig.proposal.rejectHint/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Từ chối là đề xuất hủy với cùng số thứ tự; việc hủy cũng cần 101 lượt duyệt, và giao dịch nào được thực thi trước sẽ có hiệu lực."
    }
   },
   {
@@ -15635,6 +17371,20 @@
    }
   },
   {
+   "name": "vi/home.multisig.action.changeThreshold/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Yêu cầu 1000000 lượt duyệt"
+   }
+  },
+  {
    "name": "vi/home.multisig.create.thresholdSpare/1000000",
    "fn": "i18n_t",
    "input": {
@@ -15688,6 +17438,20 @@
    },
    "expect": {
     "value": "1000000 giao dịch chờ một thành viên trả được phí"
+   }
+  },
+  {
+   "name": "vi/home.multisig.proposal.rejectHint/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Từ chối là đề xuất hủy với cùng số thứ tự; việc hủy cũng cần 1000000 lượt duyệt, và giao dịch nào được thực thi trước sẽ có hiệu lực."
    }
   },
   {
@@ -15896,6 +17660,20 @@
    }
   },
   {
+   "name": "id/home.multisig.action.changeThreshold/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Wajibkan 0 persetujuan"
+   }
+  },
+  {
    "name": "id/home.multisig.create.thresholdSpare/0",
    "fn": "i18n_t",
    "input": {
@@ -15949,6 +17727,20 @@
    },
    "expect": {
     "value": "0 menunggu anggota yang bisa membayar"
+   }
+  },
+  {
+   "name": "id/home.multisig.proposal.rejectHint/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Menolak berarti mengusulkan pembatalan dengan nomor yang sama; pembatalan juga perlu 0 persetujuan, dan yang dieksekusi lebih dulu yang berlaku."
    }
   },
   {
@@ -16145,6 +17937,20 @@
    }
   },
   {
+   "name": "id/home.multisig.action.changeThreshold/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Wajibkan 1 persetujuan"
+   }
+  },
+  {
    "name": "id/home.multisig.create.thresholdSpare/1",
    "fn": "i18n_t",
    "input": {
@@ -16198,6 +18004,20 @@
    },
    "expect": {
     "value": "1 menunggu anggota yang bisa membayar"
+   }
+  },
+  {
+   "name": "id/home.multisig.proposal.rejectHint/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Menolak berarti mengusulkan pembatalan dengan nomor yang sama; pembatalan juga perlu 1 persetujuan, dan yang dieksekusi lebih dulu yang berlaku."
    }
   },
   {
@@ -16394,6 +18214,20 @@
    }
   },
   {
+   "name": "id/home.multisig.action.changeThreshold/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Wajibkan 2 persetujuan"
+   }
+  },
+  {
    "name": "id/home.multisig.create.thresholdSpare/2",
    "fn": "i18n_t",
    "input": {
@@ -16447,6 +18281,20 @@
    },
    "expect": {
     "value": "2 menunggu anggota yang bisa membayar"
+   }
+  },
+  {
+   "name": "id/home.multisig.proposal.rejectHint/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Menolak berarti mengusulkan pembatalan dengan nomor yang sama; pembatalan juga perlu 2 persetujuan, dan yang dieksekusi lebih dulu yang berlaku."
    }
   },
   {
@@ -16643,6 +18491,20 @@
    }
   },
   {
+   "name": "id/home.multisig.action.changeThreshold/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Wajibkan 3 persetujuan"
+   }
+  },
+  {
    "name": "id/home.multisig.create.thresholdSpare/3",
    "fn": "i18n_t",
    "input": {
@@ -16696,6 +18558,20 @@
    },
    "expect": {
     "value": "3 menunggu anggota yang bisa membayar"
+   }
+  },
+  {
+   "name": "id/home.multisig.proposal.rejectHint/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Menolak berarti mengusulkan pembatalan dengan nomor yang sama; pembatalan juga perlu 3 persetujuan, dan yang dieksekusi lebih dulu yang berlaku."
    }
   },
   {
@@ -16892,6 +18768,20 @@
    }
   },
   {
+   "name": "id/home.multisig.action.changeThreshold/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Wajibkan 5 persetujuan"
+   }
+  },
+  {
    "name": "id/home.multisig.create.thresholdSpare/5",
    "fn": "i18n_t",
    "input": {
@@ -16945,6 +18835,20 @@
    },
    "expect": {
     "value": "5 menunggu anggota yang bisa membayar"
+   }
+  },
+  {
+   "name": "id/home.multisig.proposal.rejectHint/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Menolak berarti mengusulkan pembatalan dengan nomor yang sama; pembatalan juga perlu 5 persetujuan, dan yang dieksekusi lebih dulu yang berlaku."
    }
   },
   {
@@ -17141,6 +19045,20 @@
    }
   },
   {
+   "name": "id/home.multisig.action.changeThreshold/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Wajibkan 11 persetujuan"
+   }
+  },
+  {
    "name": "id/home.multisig.create.thresholdSpare/11",
    "fn": "i18n_t",
    "input": {
@@ -17194,6 +19112,20 @@
    },
    "expect": {
     "value": "11 menunggu anggota yang bisa membayar"
+   }
+  },
+  {
+   "name": "id/home.multisig.proposal.rejectHint/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Menolak berarti mengusulkan pembatalan dengan nomor yang sama; pembatalan juga perlu 11 persetujuan, dan yang dieksekusi lebih dulu yang berlaku."
    }
   },
   {
@@ -17390,6 +19322,20 @@
    }
   },
   {
+   "name": "id/home.multisig.action.changeThreshold/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Wajibkan 21 persetujuan"
+   }
+  },
+  {
    "name": "id/home.multisig.create.thresholdSpare/21",
    "fn": "i18n_t",
    "input": {
@@ -17443,6 +19389,20 @@
    },
    "expect": {
     "value": "21 menunggu anggota yang bisa membayar"
+   }
+  },
+  {
+   "name": "id/home.multisig.proposal.rejectHint/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Menolak berarti mengusulkan pembatalan dengan nomor yang sama; pembatalan juga perlu 21 persetujuan, dan yang dieksekusi lebih dulu yang berlaku."
    }
   },
   {
@@ -17639,6 +19599,20 @@
    }
   },
   {
+   "name": "id/home.multisig.action.changeThreshold/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Wajibkan 101 persetujuan"
+   }
+  },
+  {
    "name": "id/home.multisig.create.thresholdSpare/101",
    "fn": "i18n_t",
    "input": {
@@ -17692,6 +19666,20 @@
    },
    "expect": {
     "value": "101 menunggu anggota yang bisa membayar"
+   }
+  },
+  {
+   "name": "id/home.multisig.proposal.rejectHint/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Menolak berarti mengusulkan pembatalan dengan nomor yang sama; pembatalan juga perlu 101 persetujuan, dan yang dieksekusi lebih dulu yang berlaku."
    }
   },
   {
@@ -17888,6 +19876,20 @@
    }
   },
   {
+   "name": "id/home.multisig.action.changeThreshold/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Wajibkan 1000000 persetujuan"
+   }
+  },
+  {
    "name": "id/home.multisig.create.thresholdSpare/1000000",
    "fn": "i18n_t",
    "input": {
@@ -17941,6 +19943,20 @@
    },
    "expect": {
     "value": "1000000 menunggu anggota yang bisa membayar"
+   }
+  },
+  {
+   "name": "id/home.multisig.proposal.rejectHint/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Menolak berarti mengusulkan pembatalan dengan nomor yang sama; pembatalan juga perlu 1000000 persetujuan, dan yang dieksekusi lebih dulu yang berlaku."
    }
   },
   {
@@ -18150,6 +20166,20 @@
    }
   },
   {
+   "name": "tr/home.multisig.action.changeThreshold/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 onay iste"
+   }
+  },
+  {
    "name": "tr/home.multisig.create.thresholdSpare/0",
    "fn": "i18n_t",
    "input": {
@@ -18203,6 +20233,20 @@
    },
    "expect": {
     "value": "0 işlem ücreti ödeyebilecek bir üyeyi bekliyor"
+   }
+  },
+  {
+   "name": "tr/home.multisig.proposal.rejectHint/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Reddetmek, aynı numarayla bir iptal önerir; o da 0 onay ister ve önce yürütülen geçerli olur."
    }
   },
   {
@@ -18399,6 +20443,20 @@
    }
   },
   {
+   "name": "tr/home.multisig.action.changeThreshold/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 onay iste"
+   }
+  },
+  {
    "name": "tr/home.multisig.create.thresholdSpare/1",
    "fn": "i18n_t",
    "input": {
@@ -18452,6 +20510,20 @@
    },
    "expect": {
     "value": "1 işlem ücreti ödeyebilecek bir üyeyi bekliyor"
+   }
+  },
+  {
+   "name": "tr/home.multisig.proposal.rejectHint/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Reddetmek, aynı numarayla bir iptal önerir; o da 1 onay ister ve önce yürütülen geçerli olur."
    }
   },
   {
@@ -18648,6 +20720,20 @@
    }
   },
   {
+   "name": "tr/home.multisig.action.changeThreshold/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 onay iste"
+   }
+  },
+  {
    "name": "tr/home.multisig.create.thresholdSpare/2",
    "fn": "i18n_t",
    "input": {
@@ -18701,6 +20787,20 @@
    },
    "expect": {
     "value": "2 işlem ücreti ödeyebilecek bir üyeyi bekliyor"
+   }
+  },
+  {
+   "name": "tr/home.multisig.proposal.rejectHint/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Reddetmek, aynı numarayla bir iptal önerir; o da 2 onay ister ve önce yürütülen geçerli olur."
    }
   },
   {
@@ -18897,6 +20997,20 @@
    }
   },
   {
+   "name": "tr/home.multisig.action.changeThreshold/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 onay iste"
+   }
+  },
+  {
    "name": "tr/home.multisig.create.thresholdSpare/3",
    "fn": "i18n_t",
    "input": {
@@ -18950,6 +21064,20 @@
    },
    "expect": {
     "value": "3 işlem ücreti ödeyebilecek bir üyeyi bekliyor"
+   }
+  },
+  {
+   "name": "tr/home.multisig.proposal.rejectHint/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Reddetmek, aynı numarayla bir iptal önerir; o da 3 onay ister ve önce yürütülen geçerli olur."
    }
   },
   {
@@ -19146,6 +21274,20 @@
    }
   },
   {
+   "name": "tr/home.multisig.action.changeThreshold/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 onay iste"
+   }
+  },
+  {
    "name": "tr/home.multisig.create.thresholdSpare/5",
    "fn": "i18n_t",
    "input": {
@@ -19199,6 +21341,20 @@
    },
    "expect": {
     "value": "5 işlem ücreti ödeyebilecek bir üyeyi bekliyor"
+   }
+  },
+  {
+   "name": "tr/home.multisig.proposal.rejectHint/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Reddetmek, aynı numarayla bir iptal önerir; o da 5 onay ister ve önce yürütülen geçerli olur."
    }
   },
   {
@@ -19395,6 +21551,20 @@
    }
   },
   {
+   "name": "tr/home.multisig.action.changeThreshold/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 onay iste"
+   }
+  },
+  {
    "name": "tr/home.multisig.create.thresholdSpare/11",
    "fn": "i18n_t",
    "input": {
@@ -19448,6 +21618,20 @@
    },
    "expect": {
     "value": "11 işlem ücreti ödeyebilecek bir üyeyi bekliyor"
+   }
+  },
+  {
+   "name": "tr/home.multisig.proposal.rejectHint/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Reddetmek, aynı numarayla bir iptal önerir; o da 11 onay ister ve önce yürütülen geçerli olur."
    }
   },
   {
@@ -19644,6 +21828,20 @@
    }
   },
   {
+   "name": "tr/home.multisig.action.changeThreshold/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 onay iste"
+   }
+  },
+  {
    "name": "tr/home.multisig.create.thresholdSpare/21",
    "fn": "i18n_t",
    "input": {
@@ -19697,6 +21895,20 @@
    },
    "expect": {
     "value": "21 işlem ücreti ödeyebilecek bir üyeyi bekliyor"
+   }
+  },
+  {
+   "name": "tr/home.multisig.proposal.rejectHint/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Reddetmek, aynı numarayla bir iptal önerir; o da 21 onay ister ve önce yürütülen geçerli olur."
    }
   },
   {
@@ -19893,6 +22105,20 @@
    }
   },
   {
+   "name": "tr/home.multisig.action.changeThreshold/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 onay iste"
+   }
+  },
+  {
    "name": "tr/home.multisig.create.thresholdSpare/101",
    "fn": "i18n_t",
    "input": {
@@ -19946,6 +22172,20 @@
    },
    "expect": {
     "value": "101 işlem ücreti ödeyebilecek bir üyeyi bekliyor"
+   }
+  },
+  {
+   "name": "tr/home.multisig.proposal.rejectHint/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Reddetmek, aynı numarayla bir iptal önerir; o da 101 onay ister ve önce yürütülen geçerli olur."
    }
   },
   {
@@ -20142,6 +22382,20 @@
    }
   },
   {
+   "name": "tr/home.multisig.action.changeThreshold/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 onay iste"
+   }
+  },
+  {
    "name": "tr/home.multisig.create.thresholdSpare/1000000",
    "fn": "i18n_t",
    "input": {
@@ -20195,6 +22449,20 @@
    },
    "expect": {
     "value": "1000000 işlem ücreti ödeyebilecek bir üyeyi bekliyor"
+   }
+  },
+  {
+   "name": "tr/home.multisig.proposal.rejectHint/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Reddetmek, aynı numarayla bir iptal önerir; o da 1000000 onay ister ve önce yürütülen geçerli olur."
    }
   },
   {
@@ -20405,6 +22673,20 @@
    }
   },
   {
+   "name": "es-MX/home.multisig.action.changeThreshold/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Exigir 0 aprobaciones"
+   }
+  },
+  {
    "name": "es-MX/home.multisig.create.thresholdSpare/0",
    "fn": "i18n_t",
    "input": {
@@ -20458,6 +22740,20 @@
    },
    "expect": {
     "value": "0 esperan a un miembro que pueda pagar"
+   }
+  },
+  {
+   "name": "es-MX/home.multisig.proposal.rejectHint/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Rechazar propone una cancelación con el mismo número; también necesita 0 aprobaciones, y gana la que se ejecute primero."
    }
   },
   {
@@ -20654,6 +22950,20 @@
    }
   },
   {
+   "name": "es-MX/home.multisig.action.changeThreshold/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Exigir 1 aprobación"
+   }
+  },
+  {
    "name": "es-MX/home.multisig.create.thresholdSpare/1",
    "fn": "i18n_t",
    "input": {
@@ -20707,6 +23017,20 @@
    },
    "expect": {
     "value": "1 espera a un miembro que pueda pagar"
+   }
+  },
+  {
+   "name": "es-MX/home.multisig.proposal.rejectHint/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Rechazar propone una cancelación con el mismo número; también necesita 1 aprobación, y gana la que se ejecute primero."
    }
   },
   {
@@ -20903,6 +23227,20 @@
    }
   },
   {
+   "name": "es-MX/home.multisig.action.changeThreshold/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Exigir 2 aprobaciones"
+   }
+  },
+  {
    "name": "es-MX/home.multisig.create.thresholdSpare/2",
    "fn": "i18n_t",
    "input": {
@@ -20956,6 +23294,20 @@
    },
    "expect": {
     "value": "2 esperan a un miembro que pueda pagar"
+   }
+  },
+  {
+   "name": "es-MX/home.multisig.proposal.rejectHint/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Rechazar propone una cancelación con el mismo número; también necesita 2 aprobaciones, y gana la que se ejecute primero."
    }
   },
   {
@@ -21152,6 +23504,20 @@
    }
   },
   {
+   "name": "es-MX/home.multisig.action.changeThreshold/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Exigir 3 aprobaciones"
+   }
+  },
+  {
    "name": "es-MX/home.multisig.create.thresholdSpare/3",
    "fn": "i18n_t",
    "input": {
@@ -21205,6 +23571,20 @@
    },
    "expect": {
     "value": "3 esperan a un miembro que pueda pagar"
+   }
+  },
+  {
+   "name": "es-MX/home.multisig.proposal.rejectHint/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Rechazar propone una cancelación con el mismo número; también necesita 3 aprobaciones, y gana la que se ejecute primero."
    }
   },
   {
@@ -21401,6 +23781,20 @@
    }
   },
   {
+   "name": "es-MX/home.multisig.action.changeThreshold/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Exigir 5 aprobaciones"
+   }
+  },
+  {
    "name": "es-MX/home.multisig.create.thresholdSpare/5",
    "fn": "i18n_t",
    "input": {
@@ -21454,6 +23848,20 @@
    },
    "expect": {
     "value": "5 esperan a un miembro que pueda pagar"
+   }
+  },
+  {
+   "name": "es-MX/home.multisig.proposal.rejectHint/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Rechazar propone una cancelación con el mismo número; también necesita 5 aprobaciones, y gana la que se ejecute primero."
    }
   },
   {
@@ -21650,6 +24058,20 @@
    }
   },
   {
+   "name": "es-MX/home.multisig.action.changeThreshold/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Exigir 11 aprobaciones"
+   }
+  },
+  {
    "name": "es-MX/home.multisig.create.thresholdSpare/11",
    "fn": "i18n_t",
    "input": {
@@ -21703,6 +24125,20 @@
    },
    "expect": {
     "value": "11 esperan a un miembro que pueda pagar"
+   }
+  },
+  {
+   "name": "es-MX/home.multisig.proposal.rejectHint/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Rechazar propone una cancelación con el mismo número; también necesita 11 aprobaciones, y gana la que se ejecute primero."
    }
   },
   {
@@ -21899,6 +24335,20 @@
    }
   },
   {
+   "name": "es-MX/home.multisig.action.changeThreshold/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Exigir 21 aprobaciones"
+   }
+  },
+  {
    "name": "es-MX/home.multisig.create.thresholdSpare/21",
    "fn": "i18n_t",
    "input": {
@@ -21952,6 +24402,20 @@
    },
    "expect": {
     "value": "21 esperan a un miembro que pueda pagar"
+   }
+  },
+  {
+   "name": "es-MX/home.multisig.proposal.rejectHint/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Rechazar propone una cancelación con el mismo número; también necesita 21 aprobaciones, y gana la que se ejecute primero."
    }
   },
   {
@@ -22148,6 +24612,20 @@
    }
   },
   {
+   "name": "es-MX/home.multisig.action.changeThreshold/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Exigir 101 aprobaciones"
+   }
+  },
+  {
    "name": "es-MX/home.multisig.create.thresholdSpare/101",
    "fn": "i18n_t",
    "input": {
@@ -22201,6 +24679,20 @@
    },
    "expect": {
     "value": "101 esperan a un miembro que pueda pagar"
+   }
+  },
+  {
+   "name": "es-MX/home.multisig.proposal.rejectHint/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Rechazar propone una cancelación con el mismo número; también necesita 101 aprobaciones, y gana la que se ejecute primero."
    }
   },
   {
@@ -22397,6 +24889,20 @@
    }
   },
   {
+   "name": "es-MX/home.multisig.action.changeThreshold/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Exigir 1000000 aprobaciones"
+   }
+  },
+  {
    "name": "es-MX/home.multisig.create.thresholdSpare/1000000",
    "fn": "i18n_t",
    "input": {
@@ -22450,6 +24956,20 @@
    },
    "expect": {
     "value": "1000000 esperan a un miembro que pueda pagar"
+   }
+  },
+  {
+   "name": "es-MX/home.multisig.proposal.rejectHint/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Rechazar propone una cancelación con el mismo número; también necesita 1000000 aprobaciones, y gana la que se ejecute primero."
    }
   },
   {
@@ -22660,6 +25180,20 @@
    }
   },
   {
+   "name": "pt-BR/home.multisig.action.changeThreshold/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Exigir 0 aprovação"
+   }
+  },
+  {
    "name": "pt-BR/home.multisig.create.thresholdSpare/0",
    "fn": "i18n_t",
    "input": {
@@ -22713,6 +25247,20 @@
    },
    "expect": {
     "value": "0 aguarda um membro que possa pagar"
+   }
+  },
+  {
+   "name": "pt-BR/home.multisig.proposal.rejectHint/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Rejeitar propõe um cancelamento com o mesmo número; ele também precisa de 0 aprovação, e vale o que for executado primeiro."
    }
   },
   {
@@ -22909,6 +25457,20 @@
    }
   },
   {
+   "name": "pt-BR/home.multisig.action.changeThreshold/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Exigir 1 aprovação"
+   }
+  },
+  {
    "name": "pt-BR/home.multisig.create.thresholdSpare/1",
    "fn": "i18n_t",
    "input": {
@@ -22962,6 +25524,20 @@
    },
    "expect": {
     "value": "1 aguarda um membro que possa pagar"
+   }
+  },
+  {
+   "name": "pt-BR/home.multisig.proposal.rejectHint/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Rejeitar propõe um cancelamento com o mesmo número; ele também precisa de 1 aprovação, e vale o que for executado primeiro."
    }
   },
   {
@@ -23158,6 +25734,20 @@
    }
   },
   {
+   "name": "pt-BR/home.multisig.action.changeThreshold/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Exigir 2 aprovações"
+   }
+  },
+  {
    "name": "pt-BR/home.multisig.create.thresholdSpare/2",
    "fn": "i18n_t",
    "input": {
@@ -23211,6 +25801,20 @@
    },
    "expect": {
     "value": "2 aguardam um membro que possa pagar"
+   }
+  },
+  {
+   "name": "pt-BR/home.multisig.proposal.rejectHint/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Rejeitar propõe um cancelamento com o mesmo número; ele também precisa de 2 aprovações, e vale o que for executado primeiro."
    }
   },
   {
@@ -23407,6 +26011,20 @@
    }
   },
   {
+   "name": "pt-BR/home.multisig.action.changeThreshold/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Exigir 3 aprovações"
+   }
+  },
+  {
    "name": "pt-BR/home.multisig.create.thresholdSpare/3",
    "fn": "i18n_t",
    "input": {
@@ -23460,6 +26078,20 @@
    },
    "expect": {
     "value": "3 aguardam um membro que possa pagar"
+   }
+  },
+  {
+   "name": "pt-BR/home.multisig.proposal.rejectHint/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Rejeitar propõe um cancelamento com o mesmo número; ele também precisa de 3 aprovações, e vale o que for executado primeiro."
    }
   },
   {
@@ -23656,6 +26288,20 @@
    }
   },
   {
+   "name": "pt-BR/home.multisig.action.changeThreshold/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Exigir 5 aprovações"
+   }
+  },
+  {
    "name": "pt-BR/home.multisig.create.thresholdSpare/5",
    "fn": "i18n_t",
    "input": {
@@ -23709,6 +26355,20 @@
    },
    "expect": {
     "value": "5 aguardam um membro que possa pagar"
+   }
+  },
+  {
+   "name": "pt-BR/home.multisig.proposal.rejectHint/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Rejeitar propõe um cancelamento com o mesmo número; ele também precisa de 5 aprovações, e vale o que for executado primeiro."
    }
   },
   {
@@ -23905,6 +26565,20 @@
    }
   },
   {
+   "name": "pt-BR/home.multisig.action.changeThreshold/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Exigir 11 aprovações"
+   }
+  },
+  {
    "name": "pt-BR/home.multisig.create.thresholdSpare/11",
    "fn": "i18n_t",
    "input": {
@@ -23958,6 +26632,20 @@
    },
    "expect": {
     "value": "11 aguardam um membro que possa pagar"
+   }
+  },
+  {
+   "name": "pt-BR/home.multisig.proposal.rejectHint/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Rejeitar propõe um cancelamento com o mesmo número; ele também precisa de 11 aprovações, e vale o que for executado primeiro."
    }
   },
   {
@@ -24154,6 +26842,20 @@
    }
   },
   {
+   "name": "pt-BR/home.multisig.action.changeThreshold/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Exigir 21 aprovações"
+   }
+  },
+  {
    "name": "pt-BR/home.multisig.create.thresholdSpare/21",
    "fn": "i18n_t",
    "input": {
@@ -24207,6 +26909,20 @@
    },
    "expect": {
     "value": "21 aguardam um membro que possa pagar"
+   }
+  },
+  {
+   "name": "pt-BR/home.multisig.proposal.rejectHint/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Rejeitar propõe um cancelamento com o mesmo número; ele também precisa de 21 aprovações, e vale o que for executado primeiro."
    }
   },
   {
@@ -24403,6 +27119,20 @@
    }
   },
   {
+   "name": "pt-BR/home.multisig.action.changeThreshold/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Exigir 101 aprovações"
+   }
+  },
+  {
    "name": "pt-BR/home.multisig.create.thresholdSpare/101",
    "fn": "i18n_t",
    "input": {
@@ -24456,6 +27186,20 @@
    },
    "expect": {
     "value": "101 aguardam um membro que possa pagar"
+   }
+  },
+  {
+   "name": "pt-BR/home.multisig.proposal.rejectHint/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Rejeitar propõe um cancelamento com o mesmo número; ele também precisa de 101 aprovações, e vale o que for executado primeiro."
    }
   },
   {
@@ -24652,6 +27396,20 @@
    }
   },
   {
+   "name": "pt-BR/home.multisig.action.changeThreshold/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Exigir 1000000 aprovações"
+   }
+  },
+  {
    "name": "pt-BR/home.multisig.create.thresholdSpare/1000000",
    "fn": "i18n_t",
    "input": {
@@ -24705,6 +27463,20 @@
    },
    "expect": {
     "value": "1000000 aguardam um membro que possa pagar"
+   }
+  },
+  {
+   "name": "pt-BR/home.multisig.proposal.rejectHint/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Rejeitar propõe um cancelamento com o mesmo número; ele também precisa de 1000000 aprovações, e vale o que for executado primeiro."
    }
   },
   {
@@ -24915,6 +27687,20 @@
    }
   },
   {
+   "name": "fr/home.multisig.action.changeThreshold/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Exiger 0 approbation"
+   }
+  },
+  {
    "name": "fr/home.multisig.create.thresholdSpare/0",
    "fn": "i18n_t",
    "input": {
@@ -24968,6 +27754,20 @@
    },
    "expect": {
     "value": "0 attend un membre qui peut payer"
+   }
+  },
+  {
+   "name": "fr/home.multisig.proposal.rejectHint/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Rejeter propose une annulation au même numéro ; elle exige aussi 0 approbation, et la première exécutée l’emporte."
    }
   },
   {
@@ -25164,6 +27964,20 @@
    }
   },
   {
+   "name": "fr/home.multisig.action.changeThreshold/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Exiger 1 approbation"
+   }
+  },
+  {
    "name": "fr/home.multisig.create.thresholdSpare/1",
    "fn": "i18n_t",
    "input": {
@@ -25217,6 +28031,20 @@
    },
    "expect": {
     "value": "1 attend un membre qui peut payer"
+   }
+  },
+  {
+   "name": "fr/home.multisig.proposal.rejectHint/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Rejeter propose une annulation au même numéro ; elle exige aussi 1 approbation, et la première exécutée l’emporte."
    }
   },
   {
@@ -25413,6 +28241,20 @@
    }
   },
   {
+   "name": "fr/home.multisig.action.changeThreshold/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Exiger 2 approbations"
+   }
+  },
+  {
    "name": "fr/home.multisig.create.thresholdSpare/2",
    "fn": "i18n_t",
    "input": {
@@ -25466,6 +28308,20 @@
    },
    "expect": {
     "value": "2 attendent un membre qui peut payer"
+   }
+  },
+  {
+   "name": "fr/home.multisig.proposal.rejectHint/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Rejeter propose une annulation au même numéro ; elle exige aussi 2 approbations, et la première exécutée l’emporte."
    }
   },
   {
@@ -25662,6 +28518,20 @@
    }
   },
   {
+   "name": "fr/home.multisig.action.changeThreshold/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Exiger 3 approbations"
+   }
+  },
+  {
    "name": "fr/home.multisig.create.thresholdSpare/3",
    "fn": "i18n_t",
    "input": {
@@ -25715,6 +28585,20 @@
    },
    "expect": {
     "value": "3 attendent un membre qui peut payer"
+   }
+  },
+  {
+   "name": "fr/home.multisig.proposal.rejectHint/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Rejeter propose une annulation au même numéro ; elle exige aussi 3 approbations, et la première exécutée l’emporte."
    }
   },
   {
@@ -25911,6 +28795,20 @@
    }
   },
   {
+   "name": "fr/home.multisig.action.changeThreshold/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Exiger 5 approbations"
+   }
+  },
+  {
    "name": "fr/home.multisig.create.thresholdSpare/5",
    "fn": "i18n_t",
    "input": {
@@ -25964,6 +28862,20 @@
    },
    "expect": {
     "value": "5 attendent un membre qui peut payer"
+   }
+  },
+  {
+   "name": "fr/home.multisig.proposal.rejectHint/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Rejeter propose une annulation au même numéro ; elle exige aussi 5 approbations, et la première exécutée l’emporte."
    }
   },
   {
@@ -26160,6 +29072,20 @@
    }
   },
   {
+   "name": "fr/home.multisig.action.changeThreshold/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Exiger 11 approbations"
+   }
+  },
+  {
    "name": "fr/home.multisig.create.thresholdSpare/11",
    "fn": "i18n_t",
    "input": {
@@ -26213,6 +29139,20 @@
    },
    "expect": {
     "value": "11 attendent un membre qui peut payer"
+   }
+  },
+  {
+   "name": "fr/home.multisig.proposal.rejectHint/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Rejeter propose une annulation au même numéro ; elle exige aussi 11 approbations, et la première exécutée l’emporte."
    }
   },
   {
@@ -26409,6 +29349,20 @@
    }
   },
   {
+   "name": "fr/home.multisig.action.changeThreshold/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Exiger 21 approbations"
+   }
+  },
+  {
    "name": "fr/home.multisig.create.thresholdSpare/21",
    "fn": "i18n_t",
    "input": {
@@ -26462,6 +29416,20 @@
    },
    "expect": {
     "value": "21 attendent un membre qui peut payer"
+   }
+  },
+  {
+   "name": "fr/home.multisig.proposal.rejectHint/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Rejeter propose une annulation au même numéro ; elle exige aussi 21 approbations, et la première exécutée l’emporte."
    }
   },
   {
@@ -26658,6 +29626,20 @@
    }
   },
   {
+   "name": "fr/home.multisig.action.changeThreshold/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Exiger 101 approbations"
+   }
+  },
+  {
    "name": "fr/home.multisig.create.thresholdSpare/101",
    "fn": "i18n_t",
    "input": {
@@ -26711,6 +29693,20 @@
    },
    "expect": {
     "value": "101 attendent un membre qui peut payer"
+   }
+  },
+  {
+   "name": "fr/home.multisig.proposal.rejectHint/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Rejeter propose une annulation au même numéro ; elle exige aussi 101 approbations, et la première exécutée l’emporte."
    }
   },
   {
@@ -26907,6 +29903,20 @@
    }
   },
   {
+   "name": "fr/home.multisig.action.changeThreshold/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Exiger 1000000 approbations"
+   }
+  },
+  {
    "name": "fr/home.multisig.create.thresholdSpare/1000000",
    "fn": "i18n_t",
    "input": {
@@ -26960,6 +29970,20 @@
    },
    "expect": {
     "value": "1000000 attendent un membre qui peut payer"
+   }
+  },
+  {
+   "name": "fr/home.multisig.proposal.rejectHint/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Rejeter propose une annulation au même numéro ; elle exige aussi 1000000 approbations, et la première exécutée l’emporte."
    }
   },
   {
@@ -27169,6 +30193,20 @@
    }
   },
   {
+   "name": "de/home.multisig.action.changeThreshold/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 Genehmigungen verlangen"
+   }
+  },
+  {
    "name": "de/home.multisig.create.thresholdSpare/0",
    "fn": "i18n_t",
    "input": {
@@ -27222,6 +30260,20 @@
    },
    "expect": {
     "value": "0 warten auf ein Mitglied, das zahlen kann"
+   }
+  },
+  {
+   "name": "de/home.multisig.proposal.rejectHint/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Ablehnen schlägt eine Stornierung mit derselben Nummer vor; auch sie braucht 0 Genehmigungen, und die zuerst ausgeführte gilt."
    }
   },
   {
@@ -27418,6 +30470,20 @@
    }
   },
   {
+   "name": "de/home.multisig.action.changeThreshold/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 Genehmigung verlangen"
+   }
+  },
+  {
    "name": "de/home.multisig.create.thresholdSpare/1",
    "fn": "i18n_t",
    "input": {
@@ -27471,6 +30537,20 @@
    },
    "expect": {
     "value": "1 wartet auf ein Mitglied, das zahlen kann"
+   }
+  },
+  {
+   "name": "de/home.multisig.proposal.rejectHint/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Ablehnen schlägt eine Stornierung mit derselben Nummer vor; auch sie braucht 1 Genehmigung, und die zuerst ausgeführte gilt."
    }
   },
   {
@@ -27667,6 +30747,20 @@
    }
   },
   {
+   "name": "de/home.multisig.action.changeThreshold/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 Genehmigungen verlangen"
+   }
+  },
+  {
    "name": "de/home.multisig.create.thresholdSpare/2",
    "fn": "i18n_t",
    "input": {
@@ -27720,6 +30814,20 @@
    },
    "expect": {
     "value": "2 warten auf ein Mitglied, das zahlen kann"
+   }
+  },
+  {
+   "name": "de/home.multisig.proposal.rejectHint/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Ablehnen schlägt eine Stornierung mit derselben Nummer vor; auch sie braucht 2 Genehmigungen, und die zuerst ausgeführte gilt."
    }
   },
   {
@@ -27916,6 +31024,20 @@
    }
   },
   {
+   "name": "de/home.multisig.action.changeThreshold/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 Genehmigungen verlangen"
+   }
+  },
+  {
    "name": "de/home.multisig.create.thresholdSpare/3",
    "fn": "i18n_t",
    "input": {
@@ -27969,6 +31091,20 @@
    },
    "expect": {
     "value": "3 warten auf ein Mitglied, das zahlen kann"
+   }
+  },
+  {
+   "name": "de/home.multisig.proposal.rejectHint/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Ablehnen schlägt eine Stornierung mit derselben Nummer vor; auch sie braucht 3 Genehmigungen, und die zuerst ausgeführte gilt."
    }
   },
   {
@@ -28165,6 +31301,20 @@
    }
   },
   {
+   "name": "de/home.multisig.action.changeThreshold/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 Genehmigungen verlangen"
+   }
+  },
+  {
    "name": "de/home.multisig.create.thresholdSpare/5",
    "fn": "i18n_t",
    "input": {
@@ -28218,6 +31368,20 @@
    },
    "expect": {
     "value": "5 warten auf ein Mitglied, das zahlen kann"
+   }
+  },
+  {
+   "name": "de/home.multisig.proposal.rejectHint/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Ablehnen schlägt eine Stornierung mit derselben Nummer vor; auch sie braucht 5 Genehmigungen, und die zuerst ausgeführte gilt."
    }
   },
   {
@@ -28414,6 +31578,20 @@
    }
   },
   {
+   "name": "de/home.multisig.action.changeThreshold/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 Genehmigungen verlangen"
+   }
+  },
+  {
    "name": "de/home.multisig.create.thresholdSpare/11",
    "fn": "i18n_t",
    "input": {
@@ -28467,6 +31645,20 @@
    },
    "expect": {
     "value": "11 warten auf ein Mitglied, das zahlen kann"
+   }
+  },
+  {
+   "name": "de/home.multisig.proposal.rejectHint/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Ablehnen schlägt eine Stornierung mit derselben Nummer vor; auch sie braucht 11 Genehmigungen, und die zuerst ausgeführte gilt."
    }
   },
   {
@@ -28663,6 +31855,20 @@
    }
   },
   {
+   "name": "de/home.multisig.action.changeThreshold/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 Genehmigungen verlangen"
+   }
+  },
+  {
    "name": "de/home.multisig.create.thresholdSpare/21",
    "fn": "i18n_t",
    "input": {
@@ -28716,6 +31922,20 @@
    },
    "expect": {
     "value": "21 warten auf ein Mitglied, das zahlen kann"
+   }
+  },
+  {
+   "name": "de/home.multisig.proposal.rejectHint/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Ablehnen schlägt eine Stornierung mit derselben Nummer vor; auch sie braucht 21 Genehmigungen, und die zuerst ausgeführte gilt."
    }
   },
   {
@@ -28912,6 +32132,20 @@
    }
   },
   {
+   "name": "de/home.multisig.action.changeThreshold/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 Genehmigungen verlangen"
+   }
+  },
+  {
    "name": "de/home.multisig.create.thresholdSpare/101",
    "fn": "i18n_t",
    "input": {
@@ -28965,6 +32199,20 @@
    },
    "expect": {
     "value": "101 warten auf ein Mitglied, das zahlen kann"
+   }
+  },
+  {
+   "name": "de/home.multisig.proposal.rejectHint/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Ablehnen schlägt eine Stornierung mit derselben Nummer vor; auch sie braucht 101 Genehmigungen, und die zuerst ausgeführte gilt."
    }
   },
   {
@@ -29161,6 +32409,20 @@
    }
   },
   {
+   "name": "de/home.multisig.action.changeThreshold/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 Genehmigungen verlangen"
+   }
+  },
+  {
    "name": "de/home.multisig.create.thresholdSpare/1000000",
    "fn": "i18n_t",
    "input": {
@@ -29214,6 +32476,20 @@
    },
    "expect": {
     "value": "1000000 warten auf ein Mitglied, das zahlen kann"
+   }
+  },
+  {
+   "name": "de/home.multisig.proposal.rejectHint/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Ablehnen schlägt eine Stornierung mit derselben Nummer vor; auch sie braucht 1000000 Genehmigungen, und die zuerst ausgeführte gilt."
    }
   },
   {
@@ -29425,6 +32701,20 @@
    }
   },
   {
+   "name": "ru/home.multisig.action.changeThreshold/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Требовать 0 одобрений"
+   }
+  },
+  {
    "name": "ru/home.multisig.create.thresholdSpare/0",
    "fn": "i18n_t",
    "input": {
@@ -29478,6 +32768,20 @@
    },
    "expect": {
     "value": "0 ждут участника, который может заплатить"
+   }
+  },
+  {
+   "name": "ru/home.multisig.proposal.rejectHint/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Отклонение предлагает отмену с тем же номером; ей тоже нужно 0 одобрений, и действует та, что выполнена первой."
    }
   },
   {
@@ -29674,6 +32978,20 @@
    }
   },
   {
+   "name": "ru/home.multisig.action.changeThreshold/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Требовать 1 одобрение"
+   }
+  },
+  {
    "name": "ru/home.multisig.create.thresholdSpare/1",
    "fn": "i18n_t",
    "input": {
@@ -29727,6 +33045,20 @@
    },
    "expect": {
     "value": "1 ждёт участника, который может заплатить"
+   }
+  },
+  {
+   "name": "ru/home.multisig.proposal.rejectHint/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Отклонение предлагает отмену с тем же номером; ей тоже нужно 1 одобрение, и действует та, что выполнена первой."
    }
   },
   {
@@ -29923,6 +33255,20 @@
    }
   },
   {
+   "name": "ru/home.multisig.action.changeThreshold/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Требовать 2 одобрения"
+   }
+  },
+  {
    "name": "ru/home.multisig.create.thresholdSpare/2",
    "fn": "i18n_t",
    "input": {
@@ -29976,6 +33322,20 @@
    },
    "expect": {
     "value": "2 ждут участника, который может заплатить"
+   }
+  },
+  {
+   "name": "ru/home.multisig.proposal.rejectHint/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Отклонение предлагает отмену с тем же номером; ей тоже нужно 2 одобрения, и действует та, что выполнена первой."
    }
   },
   {
@@ -30172,6 +33532,20 @@
    }
   },
   {
+   "name": "ru/home.multisig.action.changeThreshold/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Требовать 3 одобрения"
+   }
+  },
+  {
    "name": "ru/home.multisig.create.thresholdSpare/3",
    "fn": "i18n_t",
    "input": {
@@ -30225,6 +33599,20 @@
    },
    "expect": {
     "value": "3 ждут участника, который может заплатить"
+   }
+  },
+  {
+   "name": "ru/home.multisig.proposal.rejectHint/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Отклонение предлагает отмену с тем же номером; ей тоже нужно 3 одобрения, и действует та, что выполнена первой."
    }
   },
   {
@@ -30421,6 +33809,20 @@
    }
   },
   {
+   "name": "ru/home.multisig.action.changeThreshold/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Требовать 5 одобрений"
+   }
+  },
+  {
    "name": "ru/home.multisig.create.thresholdSpare/5",
    "fn": "i18n_t",
    "input": {
@@ -30474,6 +33876,20 @@
    },
    "expect": {
     "value": "5 ждут участника, который может заплатить"
+   }
+  },
+  {
+   "name": "ru/home.multisig.proposal.rejectHint/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Отклонение предлагает отмену с тем же номером; ей тоже нужно 5 одобрений, и действует та, что выполнена первой."
    }
   },
   {
@@ -30670,6 +34086,20 @@
    }
   },
   {
+   "name": "ru/home.multisig.action.changeThreshold/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Требовать 11 одобрений"
+   }
+  },
+  {
    "name": "ru/home.multisig.create.thresholdSpare/11",
    "fn": "i18n_t",
    "input": {
@@ -30723,6 +34153,20 @@
    },
    "expect": {
     "value": "11 ждут участника, который может заплатить"
+   }
+  },
+  {
+   "name": "ru/home.multisig.proposal.rejectHint/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Отклонение предлагает отмену с тем же номером; ей тоже нужно 11 одобрений, и действует та, что выполнена первой."
    }
   },
   {
@@ -30919,6 +34363,20 @@
    }
   },
   {
+   "name": "ru/home.multisig.action.changeThreshold/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Требовать 21 одобрение"
+   }
+  },
+  {
    "name": "ru/home.multisig.create.thresholdSpare/21",
    "fn": "i18n_t",
    "input": {
@@ -30972,6 +34430,20 @@
    },
    "expect": {
     "value": "21 ждёт участника, который может заплатить"
+   }
+  },
+  {
+   "name": "ru/home.multisig.proposal.rejectHint/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Отклонение предлагает отмену с тем же номером; ей тоже нужно 21 одобрение, и действует та, что выполнена первой."
    }
   },
   {
@@ -31168,6 +34640,20 @@
    }
   },
   {
+   "name": "ru/home.multisig.action.changeThreshold/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Требовать 101 одобрение"
+   }
+  },
+  {
    "name": "ru/home.multisig.create.thresholdSpare/101",
    "fn": "i18n_t",
    "input": {
@@ -31221,6 +34707,20 @@
    },
    "expect": {
     "value": "101 ждёт участника, который может заплатить"
+   }
+  },
+  {
+   "name": "ru/home.multisig.proposal.rejectHint/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Отклонение предлагает отмену с тем же номером; ей тоже нужно 101 одобрение, и действует та, что выполнена первой."
    }
   },
   {
@@ -31417,6 +34917,20 @@
    }
   },
   {
+   "name": "ru/home.multisig.action.changeThreshold/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Требовать 1000000 одобрений"
+   }
+  },
+  {
    "name": "ru/home.multisig.create.thresholdSpare/1000000",
    "fn": "i18n_t",
    "input": {
@@ -31470,6 +34984,20 @@
    },
    "expect": {
     "value": "1000000 ждут участника, который может заплатить"
+   }
+  },
+  {
+   "name": "ru/home.multisig.proposal.rejectHint/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Отклонение предлагает отмену с тем же номером; ей тоже нужно 1000000 одобрений, и действует та, что выполнена первой."
    }
   },
   {
@@ -31680,6 +35208,20 @@
    }
   },
   {
+   "name": "it/home.multisig.action.changeThreshold/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Richiedi 0 approvazioni"
+   }
+  },
+  {
    "name": "it/home.multisig.create.thresholdSpare/0",
    "fn": "i18n_t",
    "input": {
@@ -31733,6 +35275,20 @@
    },
    "expect": {
     "value": "0 attendono un membro che possa pagare"
+   }
+  },
+  {
+   "name": "it/home.multisig.proposal.rejectHint/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Rifiutare propone un annullamento con lo stesso numero; anche questo richiede 0 approvazioni, e vale quella eseguita per prima."
    }
   },
   {
@@ -31929,6 +35485,20 @@
    }
   },
   {
+   "name": "it/home.multisig.action.changeThreshold/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Richiedi 1 approvazione"
+   }
+  },
+  {
    "name": "it/home.multisig.create.thresholdSpare/1",
    "fn": "i18n_t",
    "input": {
@@ -31982,6 +35552,20 @@
    },
    "expect": {
     "value": "1 attende un membro che possa pagare"
+   }
+  },
+  {
+   "name": "it/home.multisig.proposal.rejectHint/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Rifiutare propone un annullamento con lo stesso numero; anche questo richiede 1 approvazione, e vale quella eseguita per prima."
    }
   },
   {
@@ -32178,6 +35762,20 @@
    }
   },
   {
+   "name": "it/home.multisig.action.changeThreshold/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Richiedi 2 approvazioni"
+   }
+  },
+  {
    "name": "it/home.multisig.create.thresholdSpare/2",
    "fn": "i18n_t",
    "input": {
@@ -32231,6 +35829,20 @@
    },
    "expect": {
     "value": "2 attendono un membro che possa pagare"
+   }
+  },
+  {
+   "name": "it/home.multisig.proposal.rejectHint/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Rifiutare propone un annullamento con lo stesso numero; anche questo richiede 2 approvazioni, e vale quella eseguita per prima."
    }
   },
   {
@@ -32427,6 +36039,20 @@
    }
   },
   {
+   "name": "it/home.multisig.action.changeThreshold/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Richiedi 3 approvazioni"
+   }
+  },
+  {
    "name": "it/home.multisig.create.thresholdSpare/3",
    "fn": "i18n_t",
    "input": {
@@ -32480,6 +36106,20 @@
    },
    "expect": {
     "value": "3 attendono un membro che possa pagare"
+   }
+  },
+  {
+   "name": "it/home.multisig.proposal.rejectHint/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Rifiutare propone un annullamento con lo stesso numero; anche questo richiede 3 approvazioni, e vale quella eseguita per prima."
    }
   },
   {
@@ -32676,6 +36316,20 @@
    }
   },
   {
+   "name": "it/home.multisig.action.changeThreshold/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Richiedi 5 approvazioni"
+   }
+  },
+  {
    "name": "it/home.multisig.create.thresholdSpare/5",
    "fn": "i18n_t",
    "input": {
@@ -32729,6 +36383,20 @@
    },
    "expect": {
     "value": "5 attendono un membro che possa pagare"
+   }
+  },
+  {
+   "name": "it/home.multisig.proposal.rejectHint/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Rifiutare propone un annullamento con lo stesso numero; anche questo richiede 5 approvazioni, e vale quella eseguita per prima."
    }
   },
   {
@@ -32925,6 +36593,20 @@
    }
   },
   {
+   "name": "it/home.multisig.action.changeThreshold/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Richiedi 11 approvazioni"
+   }
+  },
+  {
    "name": "it/home.multisig.create.thresholdSpare/11",
    "fn": "i18n_t",
    "input": {
@@ -32978,6 +36660,20 @@
    },
    "expect": {
     "value": "11 attendono un membro che possa pagare"
+   }
+  },
+  {
+   "name": "it/home.multisig.proposal.rejectHint/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Rifiutare propone un annullamento con lo stesso numero; anche questo richiede 11 approvazioni, e vale quella eseguita per prima."
    }
   },
   {
@@ -33174,6 +36870,20 @@
    }
   },
   {
+   "name": "it/home.multisig.action.changeThreshold/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Richiedi 21 approvazioni"
+   }
+  },
+  {
    "name": "it/home.multisig.create.thresholdSpare/21",
    "fn": "i18n_t",
    "input": {
@@ -33227,6 +36937,20 @@
    },
    "expect": {
     "value": "21 attendono un membro che possa pagare"
+   }
+  },
+  {
+   "name": "it/home.multisig.proposal.rejectHint/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Rifiutare propone un annullamento con lo stesso numero; anche questo richiede 21 approvazioni, e vale quella eseguita per prima."
    }
   },
   {
@@ -33423,6 +37147,20 @@
    }
   },
   {
+   "name": "it/home.multisig.action.changeThreshold/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Richiedi 101 approvazioni"
+   }
+  },
+  {
    "name": "it/home.multisig.create.thresholdSpare/101",
    "fn": "i18n_t",
    "input": {
@@ -33476,6 +37214,20 @@
    },
    "expect": {
     "value": "101 attendono un membro che possa pagare"
+   }
+  },
+  {
+   "name": "it/home.multisig.proposal.rejectHint/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Rifiutare propone un annullamento con lo stesso numero; anche questo richiede 101 approvazioni, e vale quella eseguita per prima."
    }
   },
   {
@@ -33672,6 +37424,20 @@
    }
   },
   {
+   "name": "it/home.multisig.action.changeThreshold/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.action.changeThreshold",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Richiedi 1000000 approvazioni"
+   }
+  },
+  {
    "name": "it/home.multisig.create.thresholdSpare/1000000",
    "fn": "i18n_t",
    "input": {
@@ -33725,6 +37491,20 @@
    },
    "expect": {
     "value": "1000000 attendono un membro che possa pagare"
+   }
+  },
+  {
+   "name": "it/home.multisig.proposal.rejectHint/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.proposal.rejectHint",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Rifiutare propone un annullamento con lo stesso numero; anche questo richiede 1000000 approvazioni, e vale quella eseguita per prima."
    }
   },
   {
