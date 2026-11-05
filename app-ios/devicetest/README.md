@@ -9,7 +9,7 @@ which installs beside it:
 cd app-ios/VelaWallet
 xcodebuild build-for-testing -project VelaWallet.xcodeproj -scheme VelaWallet \
   -configuration Debug -destination id=<udid> -derivedDataPath /tmp/vela-dt \
-  VELA_BUNDLE_ID_SUFFIX=.devicetest \
+  VELA_BUNDLE_ID_SUFFIX=.devicetest INFOPLIST_KEY_CFBundleDisplayName="Vela Test" \
   CODE_SIGN_ENTITLEMENTS="$PWD/../devicetest/VelaWallet.devicetest.entitlements"
 xcrun devicectl device install app --device <id> \
   /tmp/vela-dt/Build/Products/Debug-iphoneos/VelaWallet.app
@@ -22,6 +22,7 @@ xcrun devicectl device install app --device <id> \
 | UI test runner | `app.getvela.VelaWalletUITests.xctrunner` | `app.getvela.VelaWalletUITests.devicetest.xctrunner` |
 | entitlements | associated domains, app group | none (`VelaWallet.devicetest.entitlements`) |
 | signing | explicit App ID profile | the team's wildcard development profile; nothing registered |
+| name (home screen, Settings, Safari → Extensions) | Vela Wallet | Vela Test (the display-name override above) |
 
 What the device-test build gives up, and why that is right:
 
@@ -52,6 +53,15 @@ The Debug-only doors work as on a simulator (`DevLaunchInputs`,
 `VELA_DEV_MULTISIG_POLL`, `PerfSeed` — which seeds on a phone for this id
 only). `VelaWalletUITests/DeviceHandUITests` is a hand for driving the app on
 the phone from the Mac (it refuses any runner but the `.devicetest` one).
+
+**Tell the two apart.** Without the display-name override both apps — and
+both Safari extensions — are called "Vela Wallet", and Settings → Apps →
+Safari → Extensions lists them side by side. Settings names each row by its
+bundle id (`app.getvela.VelaWallet.devicetest.SafariExtension`): drive it by
+that, never by the label. Safari keeps an extension's switch and website
+access after the app is uninstalled and restores them on the next install
+(real-device pass 2 found an earlier pass's "Other websites: Allow" waiting), so turn
+the extension off and its sites back to "Ask" before uninstalling.
 
 Afterwards: `xcrun devicectl device uninstall app --device <id>
 app.getvela.VelaWallet.devicetest` (and the `.devicetest.xctrunner`).
