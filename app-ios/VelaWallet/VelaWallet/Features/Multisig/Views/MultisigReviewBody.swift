@@ -20,6 +20,9 @@ struct MsReviewBody: View {
     /// A finished transaction: nothing is re-checked, only what was signed
     /// (its fields and hashes) is drawn — the web's `past`.
     var past = false
+    /// r12 S4: the look says it would fail, in its own line under Execute —
+    /// the simulation's "expected to fail" would say the same fact twice.
+    var lookFails = false
     /// A token's symbol and decimals, read once for the moves.
     @State private var tokens: [String: (symbol: String, decimals: Int?)] = [:]
     @State private var techOpen = false
@@ -115,10 +118,13 @@ struct MsReviewBody: View {
 
     /// The core's `simulation` in the verdict's place — never "No asset
     /// changes" for a simulation the core withheld.
-    static func movesSaid(_ review: MsJSON) -> MovesSaid {
+    static func movesSaid(_ review: MsJSON, lookFails: Bool = false) -> MovesSaid {
         guard let sim = review["simulation"] else { return .nothing }
         switch sim["kind"]?.string {
         case "withheld":
+            return .nothing
+        case "reverts" where lookFails:
+            // r12 S4: one note per failure — the look's.
             return .nothing
         case "deltas":
             if !(sim["deltas"]?.array ?? []).isEmpty { return .deltas }
@@ -134,7 +140,7 @@ struct MsReviewBody: View {
     @ViewBuilder private var moves: some View {
         let sim = review["simulation"]
         let deltas = sim?["deltas"]?.array ?? []
-        switch Self.movesSaid(review) {
+        switch Self.movesSaid(review, lookFails: lookFails) {
         case .nothing:
             EmptyView()
         case .deltas:

@@ -358,6 +358,11 @@ struct MsProposalModel {
 
     func preview(for executor: String) -> MsJSON? { view.preview(item, executor: executor) }
 
+    /// r12 S4: a look here says it would fail (an executor's preview) —
+    /// the look's line, with its reason, is the one note (the core's
+    /// `one_note_per_failure`); the review's own "expected to fail" goes.
+    var lookFails: Bool { canExecute.contains { preview(for: $0)?.kind == "fails" } }
+
     /// The fee line under Execute, for `executor`.
     func feeLine(for executor: String) -> (text: String, tone: MsNote.Tone)? {
         guard let preview = preview(for: executor) else { return (words.t("proposal.feeChecking"), .neutral) }
@@ -855,7 +860,8 @@ struct MultisigProposalSheet: View {
     @ViewBuilder private func reviewPart(_ model: MsProposalModel) -> some View {
         switch model.reviewState {
         case .ready(let review):
-            MsReviewBody(review: review, chainId: chainId, words: words, past: model.past)
+            MsReviewBody(review: review, chainId: chainId, words: words, past: model.past,
+                         lookFails: model.lookFails)
         case .loading, .failed:
             if !model.past {
                 MsReviewPending(door: model.door, words: words, tryAgain: reviewAgain)

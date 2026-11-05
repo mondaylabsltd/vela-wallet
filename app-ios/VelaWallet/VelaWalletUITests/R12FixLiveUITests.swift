@@ -294,6 +294,9 @@ final class R12FixLiveUITests: XCTestCase {
             .matching(NSPredicate(format: "label CONTAINS[c] %@ OR label CONTAINS[c] %@", "would fail", "expected to fail"))
             .allElementsBoundByIndex.map(\.label)
         print("R12-1 #0 fail notes: \(Set(notes))")
+        // S4 (one note per failure): the look's line is the one note —
+        // never "expected to fail" beside "would fail if executed now".
+        XCTAssertFalse(notes.contains { $0.contains("expected to fail") }, "two notes for one fact: \(Set(notes))")
     }
 
     // MARK: - zh / dark
