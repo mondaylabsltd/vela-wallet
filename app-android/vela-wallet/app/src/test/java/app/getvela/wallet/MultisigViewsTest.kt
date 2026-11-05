@@ -16,6 +16,7 @@ import app.getvela.wallet.feature.multisig.waitingNote
 import app.getvela.wallet.feature.multisig.core.MsAccountsView
 import app.getvela.wallet.feature.multisig.core.MsPhase
 import app.getvela.wallet.feature.multisig.core.MsProposalsView
+import app.getvela.wallet.feature.multisig.core.MsRules
 import app.getvela.wallet.feature.multisig.core.MultisigShellFailure
 import app.getvela.wallet.feature.multisig.core.arr
 import app.getvela.wallet.feature.multisig.core.get
@@ -87,7 +88,7 @@ class MultisigViewsTest {
           "review":{"action":{"kind":"transfer","to":"$bob","amount":"1500000000000000000","token":null},"sign":{"allowed":true,"anyway":false}}}],
          "chains":[{"chainId":100,"members":{"deployed":true,"owners":["$alice","$bob","$carol"],"threshold":2,"nonce":"3"},"items":[],"mailbox":true}],
          "presence":{"${safe.lowercase()}":{"needs_you":1,"ready":2,"waiting_payer":0,"first":{"chain_id":100,"safe_tx_hash":"$hash"},"needs_you_keys":["100:${hash.lowercase()}"],"ready_keys":["100:0xr1","100:0xr2"],"read_at":10}},
-         "standings":{"100:$hash":{"kind":"blocked","block":{"kind":"fails","why":{"kind":"short","token":{"symbol":"XDAI","decimals":18},"have":"280000000000000000","need":"500000000000000000"}}}},
+         "standings":{"100:$hash":{"kind":"blocked","block":{"kind":"fails","why":{"kind":"short","token":null,"have":$HAVE,"need":$NEED}}}},
          "signers":{"100:$hash":{"rows":[{"owner":"$bob","kind":"vela"},{"owner":"$carol","kind":"wallet"}],"in_vela":["$bob"],"outside":["$carol"],"either":[],"contract":[],"enough":true}},
          "waiting_parts":{"${safe.lowercase()}":[{"kind":"needsYou","count":1},{"kind":"ready","count":2}]},
          "banner":{"parts":[{"kind":"needsYou","count":1},{"kind":"ready","count":2}],"first":{"chain_id":100,"safe_tx_hash":"$hash"}},
@@ -185,7 +186,20 @@ class MultisigViewsTest {
         val w = words()
         val view = MsProposalsView.of(json(proposalsJson()))
         val line = w.standing(view.standing(view.items.single()), view.items.single())
-        assertEquals("Can’t run now — the multisig holds 0.28 XDAI, and this needs 0.5 XDAI", line)
+        assertEquals("Can’t run now — the multisig holds 0.28 xDAI, and this needs 0.5 xDAI", line)
+    }
+
+    /**
+     * r12-1 (core §13.1): the shortfall's `have` / `need` are the core's
+     * `MultisigAmount` — the fixture's two are what the link door's
+     * `amount.of` answers for Gnosis's coin, so it cannot drift from the core.
+     */
+    @Test
+    fun the_shortfall_fixture_is_the_cores_amount_shape() {
+        for ((units, fixture) in listOf("280000000000000000" to HAVE, "500000000000000000" to NEED)) {
+            val door = MsRules.call("amount.of", mapOf("base_units" to units, "chain_id" to 100))
+            assertEquals(json(fixture), door)
+        }
     }
 
     @Test
@@ -349,5 +363,11 @@ class MultisigViewsTest {
         notifier.executed("Send 1.5 XDAI", 100, hash, away = true)
         assertEquals(MultisigNotifier.Channel.Executed, posted.last().channel)
         assertTrue(JSONObject(store.values[MultisigNotifier.STATE_KEY]!!).has("approved"))
+    }
+
+    private companion object {
+        /** r12-1: the shortfall's amounts as the core hands them (`MultisigAmount`): Gnosis's coin, 0.28 and 0.5. */
+        const val HAVE = """{"base_units":"280000000000000000","token":null,"said":{"kind":"known","text":"0.28 xDAI","number":"0.28","symbol":"xDAI","decimals":18}}"""
+        const val NEED = """{"base_units":"500000000000000000","token":null,"said":{"kind":"known","text":"0.5 xDAI","number":"0.5","symbol":"xDAI","decimals":18}}"""
     }
 }
