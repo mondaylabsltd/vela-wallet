@@ -35,9 +35,17 @@ test('a wallet stored by the retired client opens', async ({ page }) => {
 	await page.goto('/en/wallet');
 	await expect(page.getByText('Old Client Wallet').first()).toBeVisible({ timeout: 15_000 });
 	await expect(page).toHaveURL(/\/en\/wallet$/);
-	// §18 item 2: a read writes nothing back — the core reads both spellings.
-	const stored = await page.evaluate(() => window.localStorage.getItem('vela.accounts'));
-	expect(stored).toBe(JSON.stringify([EXPO_ACCOUNT]));
+	// §18 item 2: the shell's read writes nothing back; the session's own save
+	// (the core migrating the record) rewrites it in the current spelling,
+	// through the core's `stored_accounts` upsert, by id.
+	await expect
+		.poll(async () =>
+			page.evaluate(() => {
+				const list = JSON.parse(window.localStorage.getItem('vela.accounts') ?? '[]');
+				return [list.length, 'public_key_hex' in list[0], 'publicKeyHex' in list[0]];
+			})
+		)
+		.toEqual([1, true, false]);
 });
 
 test('an unreadable account list says so instead of hanging', async ({ page }) => {
