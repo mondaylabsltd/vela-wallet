@@ -1355,9 +1355,11 @@ pub fn key_value_row(
 // -- ToggleRow ----------------------------------------------------------------
 
 /// The switch's track and knob (spec 091) — the app's first switch, so it is
-/// drawn here: a 36×20 pill, the knob at the end it is set to, the accent when
-/// on and the strong border colour when off. The knob is the inverse ink —
-/// white in both palettes, as a label on the accent is.
+/// drawn here: a 36×20 pill, the knob at the end it is set to, the base ink
+/// when on and the strong border colour when off; the knob is the page's own
+/// colour (the web's `Switch`, Android's). r13: it wore the accent when on —
+/// in the dark palette an orange pill beside every setting — and the accent
+/// is only for what moves value or signs; a selected state is neutral.
 const SWITCH_W: f32 = 36.;
 const SWITCH_H: f32 = 20.;
 const SWITCH_KNOB: f32 = 16.;
@@ -1380,7 +1382,7 @@ pub fn toggle_row(
         .h(px(SWITCH_H))
         .rounded_full()
         .bg(if on {
-            theme.accent
+            theme.fg_base
         } else {
             theme.border_strong
         })
@@ -1392,7 +1394,7 @@ pub fn toggle_row(
             div()
                 .size(px(SWITCH_KNOB))
                 .rounded_full()
-                .bg(theme.fg_inverse)
+                .bg(theme.bg_base)
                 .shadow(crate::ui::dialog::shadow_lg()),
         );
     let hover = theme.bg_sunken;
