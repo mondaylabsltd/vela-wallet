@@ -1732,7 +1732,9 @@ impl WalletPage {
             }
             // r13-3: a link not read in time offers Try again (iOS, the web)
             // — the machine's `retry`, which starts the link's bound again.
-            if link_offers_try_again(linked.as_ref()) {
+            if link_offers_try_again(linked.as_ref())
+                || missing_offers_try_again(&view, linked.as_ref(), account.is_some(), chain_id)
+            {
                 body = body.child(div().pt(px(4.)).child(crate::ui::vela_button(
                     "ms-proposal-open-retry",
                     crate::ui::ButtonVariant::Secondary,
@@ -2153,16 +2155,22 @@ impl WalletPage {
                 Tone::Caution,
                 false,
             ),
-            // §3.5: it would deploy from a genesis the core does not find
-            // verified here — Vela won't sign for it.
-            Some(Look::Refused(_)) => (
-                format!(
-                    "{} {}",
-                    words::t(&loc, "authority.refusedTitle"),
-                    words::t(&loc, "authority.refusedBody")
-                ),
+            // §3.5: it would deploy from a genesis the core read and
+            // refused here — said with the core's reasons.
+            Some(Look::Refused(look)) => (
+                crate::multisig::findings::deploy_words(&loc, look, item.chain_id)
+                    .unwrap_or_default(),
                 Tone::Danger,
                 false,
+            ),
+            // r14-4: its setup could not be checked here (the network did
+            // not answer for the Safe contracts) — never said as a finding;
+            // "Check again" reads it again.
+            Some(Look::Unverified(look)) => (
+                crate::multisig::findings::deploy_words(&loc, look, item.chain_id)
+                    .unwrap_or_default(),
+                Tone::Caution,
+                true,
             ),
             Some(Look::Spent) => (words::t(&loc, "proposal.doneNote"), Tone::Neutral, false),
             Some(Look::Unpriced) => (words::t(&loc, "proposal.feeUnpriced"), Tone::Neutral, true),
@@ -2799,6 +2807,12 @@ impl WalletPage {
             ActionState::Stopped { preview } => match preview.get("kind").and_then(Value::as_str) {
                 Some("unpriced") => words::t(loc, "proposal.feeUnpriced"),
                 Some("unchecked") => words::t(loc, "proposal.feeUnchecked"),
+                // r14-4: a setup not checked, or read and refused — in the
+                // core's distinction, never "would fail".
+                Some("unverified" | "refused") => {
+                    crate::multisig::findings::deploy_words(loc, preview, chain_id)
+                        .unwrap_or_default()
+                }
                 _ => words::tv(
                     loc,
                     "proposal.wouldFail",
@@ -2929,7 +2943,11 @@ impl WalletPage {
             .flex()
             .flex_col()
             .gap(px(8.))
-            .child(ms_note(theme, &loc.t(reason), Tone::Caution))
+            .child(ms_note(
+                theme,
+                &crate::multisig::sheet::failed_reason_words(&loc, reason, &network(chain_id)),
+                Tone::Caution,
+            ))
             .child(ms_note(
                 theme,
                 &loc.t(review_state::BLOCKED_KEY),
@@ -4841,21 +4859,45 @@ pub(crate) fn no_item_lines(
         }
         return lines;
     }
-    if view.loading {
-        return vec![words::t(loc, "proposal.opening")];
-    }
-    if !multisig_shown {
+    if !multisig_shown && !view.loading {
         return vec![words::t(loc, "proposal.notHere")];
     }
-    if view.unreadable.contains(&chain_id) {
-        return vec![cant_check()];
-    }
-    match view.chains.iter().find(|c| c.chain_id == chain_id) {
-        Some(chain) if chain.mailbox => vec![words::t(loc, "proposal.notInMailbox")],
-        Some(_) => vec![words::t(loc, "proposal.notFound")],
-        // Its network is not one the multisig shown is read on.
-        None => vec![words::t(loc, "proposal.notHere")],
-    }
+    // §18 (b), round 14: without a link, the core's rule — a multisig
+    // service that did not answer is said as that (with Try again), never
+    // "it hasn't been shared with the members yet".
+    let said = missing_said(view, chain_id);
+    vec![words::tv(
+        loc,
+        said.key.strip_prefix("home.multisig.").unwrap_or(&said.key),
+        &[("network", &network())],
+    )]
+}
+
+/// §18 (b): the core's words for a sheet opened without a link whose
+/// transaction is not in the list (`multisig_review_state::missing_said`).
+fn missing_said(
+    view: &ms_proposals::ProposalsView,
+    chain_id: u64,
+) -> vela_core::app::multisig_review_state::MissingSaid {
+    vela_core::app::multisig_review_state::missing_said(
+        view.loading,
+        view.unreadable.contains(&chain_id),
+        view.chains
+            .iter()
+            .find(|c| c.chain_id == chain_id)
+            .map(|c| c.mailbox),
+    )
+}
+
+/// §18 (b): a sheet opened without a link offers Try again (the proposals
+/// machine's `retry`) when the core says its read did not come back.
+pub(crate) fn missing_offers_try_again(
+    view: &ms_proposals::ProposalsView,
+    linked: Option<&ms_proposals::flows::LinkedView>,
+    multisig_shown: bool,
+    chain_id: u64,
+) -> bool {
+    linked.is_none() && multisig_shown && missing_said(view, chain_id).retry
 }
 
 #[cfg(test)]
@@ -4910,10 +4952,18 @@ mod tests {
             chains: vec![chain(false)],
             ..ProposalsView::default()
         };
+        // §18 (b), round 14: the multisig service did not answer — said as
+        // that, with Try again; never "it hasn't been shared yet".
         assert_eq!(
             super::no_item_lines(&loc, &unread, None, true, 100),
-            vec![t("proposal.notFound")]
+            vec![t("proposal.unread.linkService")]
         );
+        assert_ne!(
+            super::no_item_lines(&loc, &unread, None, true, 100)[0],
+            t("proposal.notFound")
+        );
+        assert!(super::missing_offers_try_again(&unread, None, true, 100));
+        assert!(!super::missing_offers_try_again(&read, None, true, 100));
         let down = ProposalsView {
             unreadable: vec![100],
             ..ProposalsView::default()

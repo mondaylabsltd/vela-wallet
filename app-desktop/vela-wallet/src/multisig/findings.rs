@@ -63,6 +63,43 @@ pub fn finding_words(loc: &Loc, finding: &Value, fallback: &str) -> String {
     }
 }
 
+/// r14-4: what an execution's look says of deploying the multisig on
+/// `chain_id`, by the core's own distinction: `unverified` — its Safe
+/// contracts could not be read, so Vela won't deploy it there YET (nothing
+/// wrong was found: never "won't use this multisig"); `refused` — its setup
+/// was read and refused: "won't deploy it", and each reason the core named.
+/// `None` for any other look.
+#[must_use]
+pub fn deploy_words(loc: &Loc, look: &Value, chain_id: u64) -> Option<String> {
+    let net = network(chain_id);
+    match look.get("kind").and_then(Value::as_str)? {
+        "unverified" => Some(words::tv(
+            loc,
+            "authority.deployUnverified",
+            &[("network", &net)],
+        )),
+        "refused" => {
+            let reasons: Vec<Value> = look
+                .pointer("/authority/reasons")
+                .and_then(Value::as_array)
+                .map(|rs| {
+                    rs.iter()
+                        .map(|r| serde_json::json!({"from": "genesis", "chainId": chain_id, "reason": r}))
+                        .collect()
+                })
+                .unwrap_or_default();
+            let mut lines = vec![words::tv(
+                loc,
+                "authority.deployRefused",
+                &[("network", &net)],
+            )];
+            lines.extend(finding_lines(loc, &reasons, &net));
+            Some(lines.join(" "))
+        }
+        _ => None,
+    }
+}
+
 /// Every finding's line, each once.
 #[must_use]
 pub fn finding_lines(loc: &Loc, findings: &[Value], fallback: &str) -> Vec<String> {
@@ -94,6 +131,31 @@ mod tests {
         assert!(line.contains("0xee"), "{line}");
         assert!(line.contains("module"), "{line}");
         assert!(!line.contains("home.multisig"), "{line}");
+    }
+
+    /// Round 14 (r14-4): with the network refusing, the sheet said "Vela
+    /// won't use this multisig Its setup could give control of its funds to
+    /// someone other than its members…" of a setup that was never read —
+    /// a finding asserted from a failed read (and a missing period). An
+    /// unread setup says it could not be checked; only a setup read and
+    /// refused says why Vela won't deploy it.
+    #[test]
+    fn an_unread_setup_is_never_said_as_a_finding() {
+        let loc = Loc::for_tag("en");
+        let unread =
+            json!({"kind": "unverified", "authority": {"kind": "unknown", "unread": ["0x41"]}});
+        let line = deploy_words(&loc, &unread, 5_042_002).unwrap();
+        assert!(line.contains("couldn't check"), "{line}");
+        assert!(!line.contains("won't use this multisig"), "{line}");
+        assert!(!line.contains("give control"), "{line}");
+        let refused = json!({"kind": "refused", "authority": {"kind": "refused", "reasons": [{"kind": "module", "address": "0xee"}]}});
+        let line = deploy_words(&loc, &refused, 5_042_002).unwrap();
+        assert!(
+            line.starts_with("Vela won't deploy this multisig on"),
+            "{line}"
+        );
+        assert!(line.contains("0xee"), "{line}");
+        assert!(deploy_words(&loc, &json!({"kind": "priced"}), 1).is_none());
     }
 
     #[test]

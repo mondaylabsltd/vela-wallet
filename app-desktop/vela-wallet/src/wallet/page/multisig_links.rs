@@ -101,7 +101,10 @@ pub(crate) fn take_stand(stand: &LinkStand) -> (LinkTake, bool) {
             false,
         ),
         LinkStand::Preview { link, .. } => (LinkTake::Preview(link.multisig.clone()), true),
-        LinkStand::Failed { link, reason } => (
+        // §18 (c): a lookup that did not come back is retryable by the
+        // core's rule (`LinkStand::Failed.retry`, `AddOutcome::offers_retry`):
+        // the add sheet's Add says Try again for it.
+        LinkStand::Failed { link, reason, .. } => (
             LinkTake::Add {
                 text: link.multisig.clone(),
                 link: None,
@@ -521,6 +524,7 @@ mod tests {
         let (take, _) = take_stand(&LinkStand::Failed {
             link: proposal(),
             reason: AddOutcome::NotFound,
+            retry: false,
         });
         assert!(matches!(
             take,
