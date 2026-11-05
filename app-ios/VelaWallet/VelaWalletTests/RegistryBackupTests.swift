@@ -348,6 +348,7 @@ struct RegistryBackupTests {
         let store = AccountStore(defaults: UserDefaults(suiteName: UUID().uuidString)!)
         await store.saveAccount([
             "id": "cred-page", "address": address, "name": "Mine",
+            "created_at_iso": "2026-01-01T00:00:00Z",
             "public_key_hex": madeOnAPage,
             "keys": [
                 [

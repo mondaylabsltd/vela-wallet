@@ -136,7 +136,7 @@ class PasskeyDeadlineTest {
         val accounts = AccountStore(FakeStore())
         runBlocking {
             accounts.saveAccount(
-                JSONObject().put("id", CREDENTIAL).put("address", SAFE).put("public_key_hex", KEY).put(
+                JSONObject().put("id", CREDENTIAL).put("address", SAFE).put("public_key_hex", KEY).put("created_at_iso", "2026-01-01T00:00:00Z").put(
                     "keys",
                     JSONArray().put(JSONObject().put("credential_id", CREDENTIAL).put("public_key_hex", KEY).put("name", "Key 1").put("transports", "internal")),
                 ),

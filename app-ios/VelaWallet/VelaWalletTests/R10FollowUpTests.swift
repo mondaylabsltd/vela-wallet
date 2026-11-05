@@ -194,6 +194,7 @@ struct R10FollowUpTests {
         }
         await store.saveAccount([
             "id": "cred-1", "address": golden, "name": "Interleave",
+            "created_at_iso": "2026-01-01T00:00:00Z",
             "public_key_hex": "04" + String(repeating: "11", count: 64),
             "keys": [key(1, "Parallel One"), key(2, "Parallel Two"), key(3, "Interleave")],
         ])
