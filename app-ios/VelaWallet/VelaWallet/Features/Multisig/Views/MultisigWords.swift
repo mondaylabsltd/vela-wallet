@@ -485,6 +485,9 @@ struct MsWords {
             switch state["preview"]?["kind"]?.string {
             case "unpriced": return t("proposal.feeUnpriced")
             case "unchecked": return t("proposal.feeUnchecked")
+            // r14-4: a setup not checked is said as that, never as a finding.
+            case "unverified": return t("authority.deployUnverified", ["network": network(chainId)])
+            case "refused": return deployRefused(state["preview"]?["authority"], chainId: chainId)
             default:
                 return t("proposal.wouldFail", ["reason": whyFails(state["preview"]?["why"] ?? state["preview"], chainId: chainId)])
             }
@@ -550,6 +553,18 @@ struct MsWords {
     }
 
     // MARK: - Authority findings (§3.5)
+
+    /// r14-4: a deploy the core read and refused on `chainId` (the look's
+    /// `refused`, its `authority {kind: refused, reasons}`): "Vela won't
+    /// deploy this multisig on X:" and each reason once.
+    func deployRefused(_ authority: MsJSON?, chainId: Int) -> String {
+        var lines = [t("authority.deployRefused", ["network": network(chainId)])]
+        for reason in authority?["reasons"]?.array ?? [] {
+            let line = finding(.object(["chainId": .number(Double(chainId)), "reason": reason]))
+            if !lines.contains(line) { lines.append(line) }
+        }
+        return lines.joined(separator: " ")
+    }
 
     /// One finding (`{from: 'genesis', chainId, reason}` or `{from: 'chain',
     /// chainId, risk}`), in words.

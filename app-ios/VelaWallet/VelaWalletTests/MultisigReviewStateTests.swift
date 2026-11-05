@@ -80,7 +80,7 @@ struct MultisigReviewStateTests {
     /// (the on-demand multisig catalog, copied from `assets/i18n/multisig`).
     @Test func theStateWordsAreInEveryLocale() throws {
         let keys = try #require(try Self.vectors()["keys"] as? [String])
-        #expect(keys.count == 7)
+        #expect(keys.count == 8) // r14-13: + chainUnread
         for tag in Loc.supported {
             let loc = Loc(overrideTag: tag, preferredLanguages: [])
             for key in keys {
@@ -90,6 +90,24 @@ struct MultisigReviewStateTests {
         }
         #expect(loc.t("home.multisig.review.state.loading") == "Reading the transaction…")
         #expect(loc.t("home.multisig.review.state.tryAgain") == "Try again")
+    }
+
+    /// Round 14 (r14-13): a review whose network answered none of its reads
+    /// is failed — never "… anyway" — said with the network's name, and
+    /// §18 (b): a sheet opened without a link whose service did not answer
+    /// says so, with Try again (the core's `review.missing`).
+    @Test func aReviewItsNetworkNeverAnsweredIsFailedWithItsNetworkNamed() throws {
+        let door = MsRules.reviewDoor(
+            state: MsJSON(any: ["kind": "failed", "reason_key": "home.multisig.review.state.chainUnread"]),
+            review: nil
+        )
+        #expect(!door.enabled && door.retry)
+        let words = MsWords(loc: Loc(overrideTag: "en", preferredLanguages: []), hub: nil)
+        let line = MsReviewPending.failedLine(door, words: words, network: "Arc Testnet")
+        #expect(line.hasPrefix("Couldn't reach Arc Testnet to read this transaction."), "\(line)")
+        let missing = MsRules.missingSaid(loading: false, unreadable: false, mailbox: false)
+        #expect(missing.key == "proposal.unread.linkService" && missing.retry)
+        #expect(MsRules.missingSaid(loading: false, unreadable: false, mailbox: true).retry == false)
     }
 
     // MARK: - The draft sheet ("Propose and approve", "Approve and execute")

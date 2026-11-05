@@ -333,10 +333,14 @@ struct MsLinkStand: Decodable, Equatable {
     var keptBefore: Bool
     var kept: Bool
     var reason: MsJSON?
+    /// §18 (c), round 14: a failed lookup that did not come back — the
+    /// core offers Try again (`retry_link`).
+    var retry: Bool
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: MsKey.self)
         kind = c.soft(MsKey("kind"), "")
+        retry = c.soft(MsKey("retry"), false)
         link = c.soft(MsKey("link"))
         text = c.soft(MsKey("text"))
         fault = c.soft(MsKey("fault"))

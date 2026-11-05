@@ -324,6 +324,14 @@ struct MultisigLinkStandSheet: View {
                 }
             case "failed":
                 MsNote(text: failedLine, tone: .warning, identifier: "multisig.link.failed")
+                // §18 (c): a lookup that did not come back — the core says
+                // whether to offer Try again; it opens the same link again.
+                if stand?.retry == true {
+                    VelaButton(title: words.t("review.state.tryAgain"), kind: .secondary) {
+                        hub.send(["type": "retry_link"])
+                    }
+                    .accessibilityIdentifier("multisig.link.retry")
+                }
             case "kept":
                 MsNote(text: words.t("proposal.previewNote"), identifier: "multisig.link.kept")
             default:
