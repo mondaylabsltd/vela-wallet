@@ -275,6 +275,29 @@ private fun FirstStep(title: String, note: String?, done: Boolean, tag: String, 
     }
 }
 
+/**
+ * Settings → Switch account's multisig part (r14-1 parity, §21): the header
+ * switcher's own section — every multisig here, Create multisig and Add
+ * multisig — each action closing the Settings sheet first ([close]), then
+ * opening the same flow the header opens (one sheet at a time). The web's
+ * phone Settings, iOS Settings and the desktop's do the same.
+ */
+@Composable
+fun MultisigSwitchAccountSection(hub: MultisigHub, words: MultisigWords, close: () -> Unit) {
+    val haptic = app.getvela.wallet.core.platform.rememberVelaHaptic()
+    MultisigSwitcherSection(
+        hub = hub,
+        words = words,
+        onSelect = { address ->
+            haptic(app.getvela.wallet.core.platform.VelaHaptic.Select)
+            hub.activate(address)
+            close()
+        },
+        onCreate = { close(); hub.sheet.value = MultisigSheet.Create },
+        onAdd = { close(); hub.sheet.value = MultisigSheet.Add() },
+    )
+}
+
 /** The switcher's multisig section: every multisig here, with its rule and what waits on it; Create and Add. */
 @Composable
 fun MultisigSwitcherSection(

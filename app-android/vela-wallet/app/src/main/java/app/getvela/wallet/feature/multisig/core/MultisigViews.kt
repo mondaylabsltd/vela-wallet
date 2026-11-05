@@ -183,11 +183,14 @@ data class MsAddView(
     val outcome: JsonElement? = null,
     val found: JsonElement? = null,
     val ens: JsonElement? = null,
+    /** r14-5: the outcome is a read that did not come back (`AddOutcome::offers_retry`) — Add says Try again. */
+    val retry: Boolean = false,
 ) {
     companion object {
         fun of(e: JsonElement?) = MsAddView(
             phase = MsPhase.of(e["phase"].str),
             address = e["address"].str,
+            retry = e["retry"].bool ?: false,
             outcome = e["outcome"],
             found = e["found"],
             ens = e["ens"],
@@ -200,13 +203,19 @@ data class MsImportView(
     val error: String? = null,
     val busy: String? = null,
     val outcomes: Map<String, JsonElement> = emptyMap(),
+    /** r14 leftovers: the Safes (lowercase) whose import is a read that did not come back (`ImportOutcome::offers_retry`). */
+    val retry: List<String> = emptyList(),
 ) {
+    /** Whether [address]'s row offers Try again — the core's word, never the shell's. */
+    fun offersRetry(address: String): Boolean = address.lowercase() in retry
+
     companion object {
         fun of(e: JsonElement?) = MsImportView(
             safes = e["safes"].arr,
             error = e["error"].str,
             busy = e["busy"].str,
             outcomes = e["outcomes"].obj,
+            retry = e["retry"].arr.mapNotNull { it.str?.lowercase() },
         )
     }
 }

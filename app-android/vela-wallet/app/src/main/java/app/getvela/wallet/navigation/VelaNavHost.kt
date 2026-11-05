@@ -3138,6 +3138,17 @@ fun VelaNavHost(
                         },
                         onAccountPrimary = { navController.push(VelaDestinations.CREATE) },
                         onAccountSecondary = { navController.push(VelaDestinations.WELCOME) },
+                        // r14-1 parity (§21): Switch account offers the multisigs and
+                        // Create / Add multisig, as the header's switcher does; the
+                        // multisig sheets draw over every route (MultisigAppLayer).
+                        multisigSection = { close ->
+                            val hub = application.container.multisig
+                            val msAccounts by hub.accountsView.collectAsStateWithLifecycle()
+                            val words = remember(strings, msAccounts, session.accounts) {
+                                app.getvela.wallet.feature.multisig.MultisigWiring.words(application.container, hub)
+                            }
+                            app.getvela.wallet.feature.multisig.MultisigSwitchAccountSection(hub, words, close)
+                        },
                         onSelectTab = selectFromPushed,
                         // The way out of a signed-in wallet, on the row a person
                         // would look for it.

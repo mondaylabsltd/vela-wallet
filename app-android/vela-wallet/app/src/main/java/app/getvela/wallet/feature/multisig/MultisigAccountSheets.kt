@@ -549,6 +549,32 @@ fun KindChoice(words: MultisigWords, choice: MsKindChoice?, onPick: (String?) ->
 }
 
 /**
+ * The add sheet's press (r14-5): "Try again" once the outcome said is a read
+ * that did not come back ([retry], the core's `view.add.retry`) and is still
+ * on screen ([failed]); "Add" otherwise.
+ */
+internal fun addPressLabel(words: MultisigWords, retry: Boolean, failed: Boolean): String =
+    if (retry && failed) words.t("review.state.tryAgain") else words.t("add.add")
+
+/**
+ * One exported Safe's import, in words — the core's outcome as it said it:
+ * a network that only said "slow down" is named busy (r14 leftovers), never
+ * "unavailable"; `null` for nothing said yet.
+ */
+internal fun importStatus(words: MultisigWords, outcome: JsonElement?): String? = outcome?.let {
+    when (it.kind) {
+        "imported" -> words.t("import.imported")
+        "notDeployed" -> words.t("import.notDeployed")
+        "refused" -> words.t("authority.refusedFlag")
+        "highRisk" -> words.t("authority.riskFlag")
+        "busy" -> words.t("add.busy", "network" to words.network(it["chain_id"].int ?: 0))
+        "unverified" -> words.t("authority.unverified", "network" to words.network(it["chain_id"].int ?: 0))
+        "notFound", "unavailable", "unsupported" -> words.t("add.${it.kind}")
+        else -> words.t("add.unavailable")
+    }
+}
+
+/**
  * Adding a multisig (M1) — the web's `AddMultisigSheet`, on the accounts
  * machine: by its address, from an invite (its networks and its members'
  * labels ride along; nothing is added until the person's Add), or imported
@@ -583,6 +609,9 @@ fun MultisigAddSheet(
     var refused by remember { mutableStateOf<List<JsonElement>?>(null) }
     var risky by remember { mutableStateOf<List<JsonElement>?>(null) }
     var busy by remember { mutableStateOf(false) }
+    // r14-5: the outcome said is a read that did not come back — the core's
+    // `view.add.retry` — so Add reads Try again (web, iOS, desktop alike).
+    var retry by remember { mutableStateOf(false) }
     val picked = remember { mutableStateListOf<String>() }
     // The invite as the accounts machine keeps it (`invite`): the networks
     // this device has, the first it lacks and its name. Adding its multisig
@@ -619,6 +648,7 @@ fun MultisigAddSheet(
             "notFound", "unavailable", "unsupported", "notMultisig", "unchecked" -> failure = words.t("add.${outcome.kind}")
             else -> failure = words.t("add.unavailable")
         }
+        retry = failure != null && MsAccountsView.of(hub.accounts.view.value).add.retry
     }
     // r9-16: an invite (or a transaction) link pasted here is read by the
     // core's link reading (`ScannedLink`, `carriedLinkHash`) and opens in the
@@ -638,7 +668,7 @@ fun MultisigAddSheet(
             "checksum" -> { failure = words.t("send.invalidChecksum"); return }
             else -> { failure = words.t("send.invalidAddress"); return }
         }
-        busy = true; failure = null; refused = null
+        busy = true; failure = null; refused = null; retry = false
         if (!acceptRisks) risky = null
         // The person's pick when asked; an invite's own network is the machine's.
         val named = if (choosing) chosen else null
@@ -687,6 +717,7 @@ fun MultisigAddSheet(
             val pasted = typed.length - address.length > 1
             address = typed
             failure = null
+            retry = false
             // A link pasted whole opens at once; one typed key by key is read
             // on Add (a half-typed `#ms=` is not a link yet).
             if (pasted) openedAsLink(typed)
@@ -710,7 +741,7 @@ fun MultisigAddSheet(
             }
         }
         VelaPrimaryButton(
-            text = words.t("add.add"),
+            text = addPressLabel(words, retry = retry, failed = failure != null),
             onClick = { add(false) },
             modifier = Modifier.fillMaxWidth().testTag("multisig.add.add"),
             enabled = address.isNotBlank() && !(choosing && chosen == null) && !busy,
@@ -729,16 +760,11 @@ fun MultisigAddSheet(
                     val already = view.row(a) != null
                     val outcome = view.importing.outcomes[a.lowercase()] ?: view.importing.outcomes[a]
                     val deployed = safe["chains"].arr.any { it["deployed"].bool == true }
-                    val status = if (already) words.t("import.already") else outcome?.let {
-                        when (it.kind) {
-                            "imported" -> words.t("import.imported")
-                            "notDeployed" -> words.t("import.notDeployed")
-                            "refused" -> words.t("authority.refusedFlag")
-                            "highRisk" -> words.t("authority.riskFlag")
-                            else -> words.t("add.${it.kind ?: "unavailable"}")
-                        }
-                    }
+                    val status = if (already) words.t("import.already") else importStatus(words, outcome)
                     val on = a in picked
+                    // r14 leftovers: a read that did not come back (busy, unavailable,
+                    // unverified) offers Try again — the core's `import.retry`.
+                    val tryAgain = !already && view.importing.offersRetry(a)
                     Row(
                         Modifier.fillMaxWidth().toggleable(value = on || already, enabled = !already, role = Role.Checkbox) { if (on) picked.remove(a) else picked.add(a) }
                             .padding(vertical = VelaSpacing.sm).testTag("multisig.import.safe"),
@@ -749,6 +775,13 @@ fun MultisigAddSheet(
                             MsText(listOfNotNull(MultisigWords.short(a), if (deployed) null else words.t("import.undeployed"), status).joinToString(" · "), MsType.Sub, color = colors.fgSubtle)
                         }
                         Switch(checked = on || already, onCheckedChange = null, enabled = !already, colors = SwitchDefaults.colors(checkedTrackColor = colors.fgBase))
+                    }
+                    if (tryAgain) {
+                        MsTextButton(
+                            words.t("review.state.tryAgain"),
+                            enabled = view.importing.busy == null,
+                            tag = "multisig.import.retry",
+                        ) { hub.send(ev("import", "address" to a, "accept_risks" to false)) }
                     }
                 }
                 VelaPrimaryButton(

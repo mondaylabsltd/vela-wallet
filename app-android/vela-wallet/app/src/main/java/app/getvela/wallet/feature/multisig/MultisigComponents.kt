@@ -31,6 +31,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.text
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -95,9 +97,13 @@ fun MsText(
         )
         return
     }
+    // r14 leftovers (§21): a short form inside prose (a subtitle's
+    // `0x777E98…61875a · Not shared`, a member change) is drawn whole — never
+    // a line ending at its "…". A reader and a test read the plain text.
+    val drawn = AddressBreaks.wholeShortForms(text)
     Text(
-        text = text,
-        modifier = modifier,
+        text = drawn,
+        modifier = if (drawn == text) modifier else modifier.clearAndSetSemantics { this.text = AnnotatedString(text) },
         color = color,
         fontFamily = if (type.mono) VelaMonoFontFamily else VelaFontFamily,
         fontWeight = type.weight,

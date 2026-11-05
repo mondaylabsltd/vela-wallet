@@ -285,6 +285,13 @@ data class SettingsActions(
     val onDebugModeRevealed: () -> Unit = {},
     /** Spec 091: the revealed debug-mode switch, turned. */
     val onDebugMode: (on: Boolean) -> Unit = {},
+    /**
+     * r14-1 parity (§21): Switch account's multisig part — every multisig
+     * here, Create multisig and Add multisig, as the header's switcher draws
+     * it (web, iOS, desktop alike). [close] closes the sheet first: one sheet
+     * at a time. `null` draws none (the galleries).
+     */
+    val multisigSection: (@Composable (close: () -> Unit) -> Unit)? = null,
 )
 
 /**
@@ -476,6 +483,7 @@ fun SettingsRoute(
         onAccountSelect = { index -> actions.onAccountSelect(index); overlay = SettingsOverlay.None },
         onAccountPrimary = actions.onAccountPrimary,
         onAccountSecondary = actions.onAccountSecondary,
+        accountsMultisig = actions.multisigSection?.let { section -> @Composable { section { overlay = SettingsOverlay.None } } },
         onRpcFixField = actions.onRpcFixField,
         onRpcFixPrimary = {
             // Save & Retry keeps the sheet up to show the probe's answer;
@@ -630,6 +638,8 @@ fun SettingsScreen(
     onAccountSelect: (Int) -> Unit = {},
     onAccountPrimary: () -> Unit = {},
     onAccountSecondary: () -> Unit = {},
+    /** r14-1 parity: Switch account's multisigs, Create and Add (the sheet closes first). */
+    accountsMultisig: (@Composable () -> Unit)? = null,
     onRpcFixField: (String) -> Unit = {},
     onRpcFixPrimary: () -> Unit = {},
     onVenuePick: (String) -> Unit = {},
@@ -791,6 +801,7 @@ fun SettingsScreen(
                 onAccountSelect = onAccountSelect,
                 onAccountPrimary = onAccountPrimary,
                 onAccountSecondary = onAccountSecondary,
+                accountsMultisig = accountsMultisig,
                 onRpcFixField = onRpcFixField,
                 onRpcFixPrimary = onRpcFixPrimary,
                 editingPage = editingPage,
@@ -1623,6 +1634,8 @@ internal fun SettingsSheet(
     onAccountSelect: (Int) -> Unit = {},
     onAccountPrimary: () -> Unit = {},
     onAccountSecondary: () -> Unit = {},
+    /** r14-1 parity: Switch account's multisigs, Create and Add (the sheet closes first). */
+    accountsMultisig: (@Composable () -> Unit)? = null,
     onRpcFixField: (String) -> Unit = {},
     onRpcFixPrimary: () -> Unit = {},
     editingPage: String? = null,
@@ -1684,7 +1697,10 @@ internal fun SettingsSheet(
                 .padding(bottom = VelaSpacing.xl3),
         ) {
             when (overlay) {
-                SettingsOverlay.Accounts -> AccountsSheetBody(model.accountsSheet, onSelect = onAccountSelect, onPrimary = onAccountPrimary, onSecondary = onAccountSecondary)
+                SettingsOverlay.Accounts -> {
+                    AccountsSheetBody(model.accountsSheet, onSelect = onAccountSelect, onPrimary = onAccountPrimary, onSecondary = onAccountSecondary)
+                    accountsMultisig?.invoke()
+                }
                 SettingsOverlay.SignOut -> ConfirmSheetBody(
                     model.signOutSheet,
                     onConfirm = onSignOut,

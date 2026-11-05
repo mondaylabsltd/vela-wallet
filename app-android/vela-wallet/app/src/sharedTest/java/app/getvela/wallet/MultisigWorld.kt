@@ -225,8 +225,18 @@ class MultisigWorld(private val canonicalCode: (String) -> String) : MultisigShe
      */
     @Volatile var hang: kotlinx.coroutines.CompletableDeferred<Unit>? = null
 
+    /**
+     * r14 leftovers: the networks whose every node answers "slow down" (HTTP
+     * 429) — said as the app's pool says it ([app.getvela.wallet.feature.multisig.core.MultisigLive]).
+     */
+    @Volatile var rateLimited: Set<Int> = emptySet()
+
     override suspend fun rpc(chainId: Int, method: String, params: JsonElement): MultisigRpcReply {
         hang?.await()
+        if (chainId in rateLimited) {
+            synchronized(this) { rpcLog += Triple(chainId, method, params) }
+            return MultisigRpcReply.Unanswered("every node of $chainId is rate limiting")
+        }
         return answer(chainId, method, params)
     }
 
