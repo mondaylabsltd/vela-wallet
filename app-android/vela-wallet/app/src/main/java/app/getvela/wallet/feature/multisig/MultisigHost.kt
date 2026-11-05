@@ -65,37 +65,41 @@ fun MultisigHost(hub: MultisigHub, context: MultisigHostContext) {
     val outside by hub.outsideSession.collectAsStateWithLifecycle()
     val accounts by hub.accountsView.collectAsStateWithLifecycle()
     val words = context.words
-    val close = { hub.sheet.value = null }
+    // r14-2: a sheet closes only itself. A sheet's dismissal can land after
+    // another sheet took its place (a link arriving as the person swipes the
+    // last one away, a Back pressed just before a link): closing "whatever is
+    // open" then closed the NEW sheet and dropped its link.
+    fun closeOf(s: MultisigSheet): () -> Unit = { hub.sheet.compareAndSet(s, null) }
     when (val s = sheet) {
         null -> Unit
         MultisigSheet.Create -> MultisigCreateSheet(
             hub, words, context.accounts, context.contacts, context.spaceNetworks, context.otherSpaceName,
-            onClose = close,
-            onCreated = { close(); context.askNotifications() },
+            onClose = closeOf(s),
+            onCreated = { closeOf(s)(); context.askNotifications() },
             onInvite = { hub.sheet.value = MultisigSheet.Invite(it) },
         )
         is MultisigSheet.Add -> MultisigAddSheet(
             hub, words, invite = null, prefill = s.prefill, spaceNetworks = context.spaceNetworks,
-            onClose = close,
-            onAdded = { close(); context.askNotifications() },
+            onClose = closeOf(s),
+            onAdded = { closeOf(s)(); context.askNotifications() },
         )
         MultisigSheet.Link -> if (accounts.link?.kind == "invite") {
             MultisigAddSheet(
                 hub, words, invite = accounts.link, prefill = null, spaceNetworks = context.spaceNetworks,
                 // An invite's sheet closed: the invite (waiting for its network, or not) is let go — the machine's record.
-                onClose = { hub.send(app.getvela.wallet.feature.multisig.core.ev("drop_link")); close() },
-                onAdded = { hub.send(app.getvela.wallet.feature.multisig.core.ev("close_link")); close(); context.askNotifications() },
+                onClose = { if (hub.sheet.value == s) { hub.send(app.getvela.wallet.feature.multisig.core.ev("drop_link")); closeOf(s)() } },
+                onAdded = { hub.send(app.getvela.wallet.feature.multisig.core.ev("close_link")); closeOf(s)(); context.askNotifications() },
                 onAddNetwork = context.onAddNetwork,
             )
         } else {
-            MultisigLinkStandSheet(hub, words, onClose = close, onAddNetwork = context.onAddNetwork)
+            MultisigLinkStandSheet(hub, words, onClose = closeOf(s), onAddNetwork = context.onAddNetwork, isCurrent = { hub.sheet.value == s })
         }
-        is MultisigSheet.Invite -> MultisigInviteSheet(hub, words, s.address, context.origin, context.locale, onClose = close)
-        is MultisigSheet.Settings -> MultisigSettingsSheet(hub, words, s.address, onClose = close, onOpen = { hub.sheet.value = it }, onRemoved = close)
-        is MultisigSheet.Members -> MultisigMembersSheet(hub, words, s.address, onClose = { hub.sheet.value = MultisigSheet.Settings(s.address) })
+        is MultisigSheet.Invite -> MultisigInviteSheet(hub, words, s.address, context.origin, context.locale, onClose = closeOf(s))
+        is MultisigSheet.Settings -> MultisigSettingsSheet(hub, words, s.address, onClose = closeOf(s), onOpen = { hub.sheet.value = it }, onRemoved = closeOf(s))
+        is MultisigSheet.Members -> MultisigMembersSheet(hub, words, s.address, onClose = { hub.sheet.compareAndSet(s, MultisigSheet.Settings(s.address)) })
         is MultisigSheet.Proposal -> MultisigProposalSheet(
             hub, s.chainId, s.safeTxHash, words, context.origin, context.locale, context.tokenInfo, context.explorerTx,
-            onClose = close, onAddNetwork = context.onAddNetwork,
+            onClose = closeOf(s), onAddNetwork = context.onAddNetwork, isCurrent = { hub.sheet.value == s },
         )
         is MultisigSheet.Review -> MultisigDraftReviewSheet(hub, words, context.tokenInfo)
         is MultisigSheet.Dapp -> MultisigDappSheet(hub, s.id, context)
@@ -142,11 +146,13 @@ fun MultisigDappSheet(hub: MultisigHub, id: String, context: MultisigHostContext
         answered && done != null -> MultisigProposalSheet(
             hub, done.first, done.second, words, context.origin, context.locale, context.tokenInfo, context.explorerTx,
             onClose = { if (hub.sheet.value == MultisigSheet.Dapp(id)) hub.sheet.value = null },
+            isCurrent = { hub.sheet.value == MultisigSheet.Dapp(id) },
         )
         answered -> Unit
         !hash.isNullOrEmpty() -> MultisigProposalSheet(
             hub, held["chain_id"].int ?: 0, hash, words, context.origin, context.locale, context.tokenInfo, context.explorerTx,
             onClose = leave,
+            isCurrent = { hub.sheet.value == MultisigSheet.Dapp(id) },
             siteNote = when {
                 held["method"].str == "wallet_sendCalls" -> words.t("proposal.siteFollows", "host" to host)
                 held["told"].bool == true -> words.t("proposal.siteTold", "host" to host)

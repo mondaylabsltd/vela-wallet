@@ -219,7 +219,18 @@ class MultisigWorld(private val canonicalCode: (String) -> String) : MultisigShe
         return jo("status" to status, "proposal" to proposal)
     }
 
-    override suspend fun rpc(chainId: Int, method: String, params: JsonElement): MultisigRpcReply = synchronized(this) {
+    /**
+     * r14: every node hangs while this is set — a read waits until it is
+     * completed (the network back) or its caller gives up, as a hung node.
+     */
+    @Volatile var hang: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+
+    override suspend fun rpc(chainId: Int, method: String, params: JsonElement): MultisigRpcReply {
+        hang?.await()
+        return answer(chainId, method, params)
+    }
+
+    private fun answer(chainId: Int, method: String, params: JsonElement): MultisigRpcReply = synchronized(this) {
         rpcLog += Triple(chainId, method, params)
         fun ok(v: Any?) = MultisigRpcReply.Result(jsonOf(v))
         when (method) {
@@ -286,7 +297,10 @@ class MultisigWorld(private val canonicalCode: (String) -> String) : MultisigShe
         return true
     }
 
-    override fun nowMs(): Double = System.currentTimeMillis().toDouble()
+    /** r14-9: the machines' clock, moved on by a test (a look grown stale). */
+    @Volatile var skewMs = 0.0
+
+    override fun nowMs(): Double = System.currentTimeMillis().toDouble() + skewMs
 
     private var randomSeed = 7
     override fun random(bytes: Int): ByteArray = synchronized(this) {
@@ -313,6 +327,7 @@ class MultisigWorld(private val canonicalCode: (String) -> String) : MultisigShe
             onSend?.let { land(it) }
             onSend = null
             sent += Triple(op.chain_id.toInt(), op.from, op.calls)
+            sentFees += op.fee
         }
         return MultisigShellResult.CallsSent("0x" + "ab".repeat(32), null)
     }
@@ -331,9 +346,15 @@ class MultisigWorld(private val canonicalCode: (String) -> String) : MultisigShe
     /** Executors (lowercase) whose fee look the relay refuses — they cannot pay here. */
     val quoteRefusedFor: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
+    /** r14-9: the fee the relay quotes now (the gas price moves). */
+    @Volatile var quoteAmount = "0x1"
+
+    /** What each execution's operation carried as its fee (`send_calls.fee`). */
+    val sentFees = java.util.concurrent.CopyOnWriteArrayList<JsonElement>()
+
     override suspend fun quoteCalls(op: MultisigOperation.QuoteCalls): MultisigShellResult =
         if (op.from.lowercase() in quoteRefusedFor) MultisigShellResult.QuoteFailed("the relay quotes nothing for ${op.from}")
-        else MultisigShellResult.Quoted(jo("kind" to "quoted", "fee" to jo("token" to null, "amount" to "0x1"), "totalGas" to "0x1", "executorDeployed" to true))
+        else MultisigShellResult.Quoted(jo("kind" to "quoted", "fee" to jo("token" to null, "amount" to quoteAmount), "totalGas" to "0x1", "executorDeployed" to true))
 
     override suspend fun simulate(op: MultisigOperation.Simulate): String? = null
 

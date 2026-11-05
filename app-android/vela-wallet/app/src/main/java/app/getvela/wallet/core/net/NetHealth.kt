@@ -25,6 +25,12 @@ import uniffi.vela_core_uniffi.netHealthStep
  * server is not a missing network).
  */
 object NetHealth {
+    /**
+     * r14-3: while offline, how often the home reads again — the only way
+     * back is an answered call, and nothing else may ask for minutes.
+     */
+    const val OFFLINE_PROBE_MS = 10_000L
+
     private val _online = MutableStateFlow(true)
     val online: StateFlow<Boolean> = _online
 
