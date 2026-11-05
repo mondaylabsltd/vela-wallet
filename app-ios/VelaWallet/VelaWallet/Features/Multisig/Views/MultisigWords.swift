@@ -366,10 +366,13 @@ struct MsWords {
         case "short":
             let facts = shortFacts(why, chainId: chainId)
             func amount(_ key: String) -> String {
-                // A figure is base units — a string, or the core's amount
-                // `{raw, decimals}` with its own decimals.
                 let value = why[key]
-                let raw = value?["raw"]?.string ?? value?.string ?? "0"
+                // The core's amount (`MultisigAmount`, r12-1): its `said` is
+                // the words — "0.01 USDC", or the base units with "decimals
+                // unknown" — decimals and symbol resolved by the core.
+                if let said = Self.said(value?["said"], loc: loc) { return said }
+                // An older core: base units, a string, in the facts it gave.
+                let raw = value?["base_units"]?.string ?? value?["raw"]?.string ?? value?.string ?? "0"
                 var own = facts
                 if let decimals = value?["decimals"]?.int { own.decimals = decimals }
                 return self.amount(raw, own)
@@ -382,6 +385,23 @@ struct MsWords {
             return t("proposal.whyRevertsPlain")
         default:
             return t("proposal.uncheckedReason")
+        }
+    }
+
+    /// A `MultisigAmount.said` in words: `known` its `text`; a token whose
+    /// decimals nobody could read, the corpus's `key` with `{{raw}}`; `nil`
+    /// for no `said` at all.
+    static func said(_ said: MsJSON?, loc: Loc) -> String? {
+        guard let said, !said.isNull else { return nil }
+        switch said.kind {
+        case "known":
+            return said["text"]?.string
+        case "decimals_unknown":
+            let key = said["key"]?.string ?? "home.multisig.review.reading.decimalsUnknown"
+            let text = loc.t(key, vars: ["raw": said["raw"]?.string ?? ""])
+            return text == key ? nil : text
+        default:
+            return nil
         }
     }
 

@@ -172,7 +172,16 @@ struct MultisigViewsTests {
     }
 
     @Test func whyItWouldFailIsSaidWithTheCoresFigures() {
-        let short = MsJSON(any: ["kind": "short", "have": "280000", "need": "500000", "token": ["symbol": "USDC", "decimals": 6]])
+        // r12-1: the core's amounts (`MultisigAmount`), each said by the core.
+        func amount(_ units: String, _ text: String) -> [String: Any] {
+            ["base_units": units, "token": "0x3600000000000000000000000000000000000000",
+             "said": ["kind": "known", "text": text, "number": text.split(separator: " ").first.map(String.init) ?? "",
+                      "symbol": "USDC", "decimals": 6]]
+        }
+        let short = MsJSON(any: [
+            "kind": "short", "token": "0x3600000000000000000000000000000000000000",
+            "have": amount("280000", "0.28 USDC"), "need": amount("500000", "0.5 USDC"),
+        ])
         #expect(words.whyFails(short, chainId: 100) == "the multisig holds 0.28 USDC, and this needs 0.5 USDC")
         #expect(words.whyFails(MsJSON(any: ["kind": "reverts", "reason": "GS013"]), chainId: 100).contains("GS013"))
         #expect(words.whyFails(MsJSON(any: ["kind": "reverts"]), chainId: 100) == words.t("proposal.whyRevertsPlain"))

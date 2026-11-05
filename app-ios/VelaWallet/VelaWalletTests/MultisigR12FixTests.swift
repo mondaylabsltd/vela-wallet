@@ -81,6 +81,26 @@ struct MultisigR12FixTests {
         #expect(CustomTokens.fromWire(["chain_id": 100, "contract_address": Self.usdc])["decimals"] == nil)
     }
 
+    @Test func aShortfallDrawsTheCoresSaidAmounts() {
+        let known = MsJSON(any: [
+            "kind": "short", "token": Self.usdc,
+            "have": ["base_units": "0", "token": Self.usdc,
+                     "said": ["kind": "known", "text": "0 USDC", "number": "0", "symbol": "USDC", "decimals": 6]],
+            "need": ["base_units": "10000", "token": Self.usdc,
+                     "said": ["kind": "known", "text": "0.01 USDC", "number": "0.01", "symbol": "USDC", "decimals": 6]],
+        ])
+        #expect(words.whyFails(known, chainId: 5_042_002) == "the multisig holds 0 USDC, and this needs 0.01 USDC")
+        let unknown = MsJSON(any: [
+            "kind": "short", "token": Self.usdc,
+            "have": ["base_units": "0", "token": Self.usdc,
+                     "said": ["kind": "decimals_unknown", "key": "home.multisig.review.reading.decimalsUnknown", "raw": "0"]],
+            "need": ["base_units": "10000", "token": Self.usdc,
+                     "said": ["kind": "decimals_unknown", "key": "home.multisig.review.reading.decimalsUnknown", "raw": "10000"]],
+        ])
+        let said = words.whyFails(unknown, chainId: 5_042_002)
+        #expect(said == "the multisig holds 0 base units · decimals unknown, and this needs 10000 base units · decimals unknown", "\(said)")
+    }
+
     // MARK: - S4: Activity before the first scan
 
     @Test func activityIsLoadingUntilItsFirstScanIsBack() throws {
