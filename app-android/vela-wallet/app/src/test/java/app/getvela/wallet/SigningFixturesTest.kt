@@ -261,7 +261,7 @@ class SigningFixturesTest {
         assertEquals(en.t("componentsUi.signing.confirmBlock.previousPending"), held.confirmBlockLine)
 
         val provisional = row(SigningScreenState.CS46)
-        assertTrue("the switched figure stays: ${provisional.value}", provisional.value.startsWith("~") && provisional.value.contains("USDC"))
+        assertTrue("the switched figure stays: ${provisional.value}", provisional.value.contains("USDC"))
         assertTrue("with the measuring sign", provisional.measuring && provisional.refreshing)
         assertFalse(board(SigningScreenState.CS46).confirmEnabled)
         val settled = row(SigningScreenState.CS47)

@@ -294,7 +294,7 @@ class SigningFeeCoinTest {
         val row = app.getvela.wallet.feature.signing.SigningLive.feeModel(app.getvela.wallet.feature.signing.core.ClearSigningView(), provisional, ctx)
             as app.getvela.wallet.feature.signing.FeeModel.OnChain
         assertTrue("the switched figure is drawn as it is: $provisional", provisional.fee != null)
-        assertTrue("the figure stays on screen: ${row.value}", row.value.startsWith("~") && row.value.contains("pUSD"))
+        assertTrue("the figure stays on screen: ${row.value}", row.value.contains("pUSD"))
         assertTrue("with the measuring sign", row.measuring && row.refreshing)
         val gate = app.getvela.wallet.feature.signing.SigningLive.confirmState(
             c.signJson.value!!, c.guardJson.value!!, c.clearJson.value!!, c.feeJson.value, null,

@@ -474,8 +474,8 @@ class SigningLiveTest {
         assertEquals(strings.t(I18nKeys.Flows.FEE_SPEED_LABEL), control.label)
         assertEquals(strings.t(I18nKeys.Flows.GAS_TIER_FAST), control.value)
         assertEquals(listOf("fast", "standard", "slow"), control.options.map { it.id })
-        // Each option in its row's own words, minus the row's "~".
-        assertEquals(fee.value, "~" + control.options[0].value)
+        // Each option in its row's own words — the confirm's fee drawn bare (the core's `fee.row`).
+        assertEquals(fee.value, control.options[0].value)
         assertEquals("…", control.options[1].value)
         assertTrue(control.options[2].value, control.options[2].value.startsWith("0.001 XDAI"))
         assertEquals("1 ~ 2 gwei", control.options[0].gasPrice)
@@ -501,7 +501,7 @@ class SigningLiveTest {
         // Its own figure lands: the row and the confirm follow.
         val landed = FeeView(fee = estimate(FeeTier.Slow, "1000000000000000"), confirm_fee_ready = true)
         val settled = SigningLive.model(drawn, request(params), sign, clear, GuardView(), landed, ctx, speed = picked)
-        assertTrue((settled.fee as FeeModel.OnChain).value.startsWith("~0.001 XDAI"))
+        assertTrue((settled.fee as FeeModel.OnChain).value.startsWith("0.001 XDAI"))
         assertTrue(settled.confirmEnabled)
     }
 
