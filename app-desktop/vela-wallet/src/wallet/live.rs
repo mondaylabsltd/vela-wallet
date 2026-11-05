@@ -2006,6 +2006,47 @@ mod tests {
         assert_eq!(line(Vec::new()), "");
     }
 
+    /// r13-7 (§17): a multisig's Activity over no rows says what its
+    /// history is (`ProposalsView.history`, the web's `multisigHistory`):
+    /// being read — skeletons, never "No activity yet"; not read — the
+    /// panel's line with Try again; read — the home as it is. Rows stay.
+    #[test]
+    fn a_multisigs_history_decides_its_empty_activity() {
+        use vela_core::app::multisig_proposals::HistoryStand;
+        let s = strings();
+        let empty = HomeActivity::Empty {
+            title: s.empty_activity_title.clone(),
+            caption: s.empty_activity_caption.clone(),
+        };
+        let history = |stand| MultisigHistory {
+            stand,
+            unread_text: "Couldn't read this multisig's history on Arc Testnet".into(),
+            retry_text: "Try again".into(),
+        };
+        assert_eq!(
+            with_multisig_history(empty.clone(), Some(&history(HistoryStand::Reading))),
+            HomeActivity::Loading
+        );
+        assert_eq!(
+            with_multisig_history(empty.clone(), Some(&history(HistoryStand::Unread))),
+            HomeActivity::Unread {
+                title: "Couldn't read this multisig's history on Arc Testnet".into(),
+                retry: "Try again".into(),
+            }
+        );
+        assert_eq!(
+            with_multisig_history(empty.clone(), Some(&history(HistoryStand::Read))),
+            empty
+        );
+        assert_eq!(with_multisig_history(empty.clone(), None), empty);
+        for stand in [HistoryStand::Reading, HistoryStand::Unread] {
+            assert_eq!(
+                with_multisig_history(HomeActivity::Rows, Some(&history(stand))),
+                HomeActivity::Rows
+            );
+        }
+    }
+
     /// Spec 082 RD10 / RG5 (T073): the home's Activity — rows, skeletons
     /// while nothing has been ruled, else the core's empty line: the plain one
     /// with its caption, or the network's own with none under a chain filter.
@@ -4540,6 +4581,43 @@ pub enum HomeActivity {
         title: SharedString,
         caption: SharedString,
     },
+    /// r13-7: a multisig's history that could not be read — said as that
+    /// (the panel's line), with Try again; never "No activity yet".
+    Unread {
+        title: SharedString,
+        retry: SharedString,
+    },
+}
+
+/// r13-7: where the shown multisig's history stands (the core's
+/// `ProposalsView.history`), with the words its Activity says when it could
+/// not be read.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MultisigHistory {
+    pub stand: vela_core::app::multisig_proposals::HistoryStand,
+    pub unread_text: SharedString,
+    pub retry_text: SharedString,
+}
+
+/// r13-7 (the web's `withLiveWallet` `multisigHistory`): a multisig's
+/// Activity over no rows says what its history is — being read (skeletons,
+/// never "No activity yet"), or not read (the panel's line, with Try
+/// again). Read, rows, or no multisig: as it is.
+#[must_use]
+pub fn with_multisig_history(
+    state: HomeActivity,
+    history: Option<&MultisigHistory>,
+) -> HomeActivity {
+    use vela_core::app::multisig_proposals::HistoryStand;
+    match (state, history) {
+        (HomeActivity::Rows, _) => HomeActivity::Rows,
+        (_, Some(history)) if history.stand == HistoryStand::Reading => HomeActivity::Loading,
+        (_, Some(history)) if history.stand == HistoryStand::Unread => HomeActivity::Unread {
+            title: history.unread_text.clone(),
+            retry: history.retry_text.clone(),
+        },
+        (state, _) => state,
+    }
 }
 
 /// The home Activity's state. Which empty line is the core's

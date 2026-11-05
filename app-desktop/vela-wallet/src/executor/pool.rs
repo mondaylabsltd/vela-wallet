@@ -325,38 +325,81 @@ pub fn rate_limited_chains() -> Vec<u32> {
     answer.recv().unwrap_or_default()
 }
 
-/// r12-3: the pool's chains out of reach (`RpcPoolView.out_of_reach_chains`,
-/// the core's one set: failed or unreached, never only rate limited) — the
-/// last one said, and a change not yet handed to the balance machine.
-static OUT_OF_REACH: std::sync::Mutex<(Vec<u32>, Option<Vec<u32>>)> =
-    std::sync::Mutex::new((Vec::new(), None));
+/// What the balance machine hears of the pool (`pool_unreached {chain_ids,
+/// silent}`): its chains out of reach (r12-3, `RpcPoolView.
+/// out_of_reach_chains`, the core's one set: failed or unreached, never only
+/// rate limited) and, of them, the SILENT ones (r13-4, `silent_chains`:
+/// three different nodes said nothing at all for 5 s, nothing answered
+/// since) — named at once, as the web names them.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PoolLoss {
+    pub chain_ids: Vec<u32>,
+    pub silent: Vec<u32>,
+}
 
-/// The pool thread, after every message: a set that moved is kept for
-/// [`take_out_of_reach_change`].
-fn note_out_of_reach(chains: &[u32]) {
-    let mut now = chains.to_vec();
-    now.sort_unstable();
-    now.dedup();
-    let mut kept = OUT_OF_REACH
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    if kept.0 != now {
-        kept.0.clone_from(&now);
-        kept.1 = Some(now);
+/// The last [`PoolLoss`] said, and a change not yet handed on.
+#[derive(Debug)]
+struct OutOfReach {
+    said: PoolLoss,
+    change: Option<PoolLoss>,
+}
+
+impl OutOfReach {
+    const fn new() -> Self {
+        Self {
+            said: PoolLoss {
+                chain_ids: Vec::new(),
+                silent: Vec::new(),
+            },
+            change: None,
+        }
+    }
+
+    /// The pool's sets now; kept as a change when either moved.
+    fn note(&mut self, chains: &[u32], silent: &[u32]) {
+        let sorted = |ids: &[u32]| {
+            let mut ids = ids.to_vec();
+            ids.sort_unstable();
+            ids.dedup();
+            ids
+        };
+        let now = PoolLoss {
+            chain_ids: sorted(chains),
+            silent: sorted(silent),
+        };
+        if self.said != now {
+            self.said.clone_from(&now);
+            self.change = Some(now);
+        }
+    }
+
+    fn take(&mut self) -> Option<PoolLoss> {
+        self.change.take()
     }
 }
 
-/// The out-of-reach set, when it changed since the last call (r12-3): what
-/// the balance machine hears as `pool_unreached` — it re-reads, forced, a
-/// network the account is read on that has just gone out of reach. A warm
-/// outage aged "Updated now" over failed reads before: the home's poll is
-/// ten minutes.
-#[must_use]
-pub fn take_out_of_reach_change() -> Option<Vec<u32>> {
+/// The pool's loss as last said to the balance machine.
+static OUT_OF_REACH: std::sync::Mutex<OutOfReach> = std::sync::Mutex::new(OutOfReach::new());
+
+/// The pool thread, after every message: sets that moved are kept for
+/// [`take_out_of_reach_change`].
+fn note_out_of_reach(chains: &[u32], silent: &[u32]) {
     OUT_OF_REACH
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .1
+        .note(chains, silent);
+}
+
+/// The pool's loss, when it changed since the last call (r12-3, r13-4): what
+/// the balance machine hears as `pool_unreached` — it re-reads, forced, a
+/// network the account is read on that has just gone out of reach, and
+/// names a silent one at once. A warm outage aged "Updated now" over failed
+/// reads before: the home's poll is ten minutes.
+#[must_use]
+pub fn take_out_of_reach_change() -> Option<PoolLoss> {
+    OUT_OF_REACH
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
         .take()
 }
 
@@ -761,8 +804,12 @@ fn run(rx: &std::sync::mpsc::Receiver<Message>, workers: &Sender<Message>) {
 
     loop {
         // r12-3: the chains out of reach, as the view says them now, kept
-        // for the balance machine's `pool_unreached` when the set moved.
-        note_out_of_reach(&host.view().out_of_reach_chains);
+        // for the balance machine's `pool_unreached` when the set moved —
+        // r13-4: with the silent ones, named at once.
+        {
+            let view = host.view();
+            note_out_of_reach(&view.out_of_reach_chains, &view.silent_chains);
+        }
         // 083 H6: a read whose endpoint has been silent for `HEDGE_AFTER`
         // asks the next one. The wait below wakes for the earliest such read.
         hedge_due_reads(|| host.view(), &mut inflight, &mut |work| {
@@ -1823,6 +1870,35 @@ fn stored_array(key: &str, chain_id: u32, field: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// r13-4 (§17): the pool hands the balance machine its silent networks
+    /// beside the out-of-reach ones — said again when a network already out
+    /// of reach goes silent, never twice for one change.
+    #[test]
+    fn the_pools_loss_carries_its_silent_networks() {
+        let mut kept = OutOfReach::new();
+        kept.note(&[100], &[]);
+        assert_eq!(
+            kept.take(),
+            Some(PoolLoss {
+                chain_ids: vec![100],
+                silent: vec![]
+            })
+        );
+        kept.note(&[100], &[]);
+        assert_eq!(kept.take(), None, "nothing moved");
+        kept.note(&[100], &[100]);
+        assert_eq!(
+            kept.take(),
+            Some(PoolLoss {
+                chain_ids: vec![100],
+                silent: vec![100]
+            }),
+            "gone silent: said again, as silent"
+        );
+        kept.note(&[130, 100, 100], &[100]);
+        assert_eq!(kept.take().map(|loss| loss.chain_ids), Some(vec![100, 130]));
+    }
 
     /// A one-connection HTTP proxy on loopback that reads the CONNECT and
     /// answers it with `reply` — or closes with no reply at all when `reply`

@@ -647,19 +647,18 @@ pub fn start_ticks(cx: &mut App) {
             cx.background_executor()
                 .timer(Duration::from_millis(OUT_OF_REACH_LOOK_MS))
                 .await;
-            if let Some(chain_ids) = crate::executor::pool::take_out_of_reach_change() {
-                crate::diag::vlog!("balances", "pool out of reach: {chain_ids:?}");
+            if let Some(loss) = crate::executor::pool::take_out_of_reach_change() {
+                crate::diag::vlog!(
+                    "balances",
+                    "pool out of reach: {:?}, silent {:?}",
+                    loss.chain_ids,
+                    loss.silent
+                );
                 let balance = cx.update(resident::resident::<BalanceDashboard>);
                 balance.update(cx, |resident, cx| {
-                    // r13-4: no `silent` yet here — a lost network is read
-                    // again (the web names a silent one at once).
-                    resident.dispatch(
-                        Event::PoolUnreached {
-                            chain_ids,
-                            silent: Vec::new(),
-                        },
-                        cx,
-                    );
+                    // r13-4: a SILENT network is named at once — the web's
+                    // timing, not a second read's 18 s later.
+                    resident.dispatch(pool_unreached(loss), cx);
                 });
             }
         }
@@ -808,6 +807,16 @@ pub fn refresh(cx: &mut App) {
 /// How often the pool's out-of-reach set is looked at for a change (r12-3).
 const OUT_OF_REACH_LOOK_MS: u64 = 1_000;
 
+/// r12-3 / r13-4: the pool's loss as the balance machine hears it — its
+/// out-of-reach networks and, of them, the silent ones (the web's
+/// `pool_unreached {chain_ids, silent}`).
+fn pool_unreached(loss: crate::executor::pool::PoolLoss) -> Event {
+    Event::PoolUnreached {
+        chain_ids: loss.chain_ids,
+        silent: loss.silent,
+    }
+}
+
 /// When the balances are read again after a send was handed off (R12 S4),
 /// in ms from the hand-off: once the operation has had time to land, and
 /// once more for a slow bundle.
@@ -912,6 +921,94 @@ mod tests {
                         stamp.as_f64(),
                         "{name}, step {i}"
                     );
+                }
+            }
+        }
+    }
+
+    /// r13-4 (§17): `balance-pool-unreached.json` replayed through this
+    /// shell's host, every `pool_unreached` carried as the pool hands it on
+    /// ([`crate::executor::pool::PoolLoss`] → [`pool_unreached`]) — a silent
+    /// network named at once, a merely lost one only read again.
+    #[test]
+    fn the_pool_unreached_vectors_hold_through_the_pools_loss() {
+        use crate::core_host::{CoreHost, Pending};
+        use crate::executor::pool::PoolLoss;
+        const VECTORS: &str = include_str!(
+            "../../../../rust/crates/vela-core/tests/vectors/balance-pool-unreached.json"
+        );
+        let file: Value = serde_json::from_str(VECTORS).unwrap_or(Value::Null);
+        let cases = file["cases"].as_array().cloned().unwrap_or_default();
+        assert!(
+            cases
+                .iter()
+                .any(|c| c["name"].as_str().unwrap_or_default().starts_with("r13-4")),
+            "the silent cases are read"
+        );
+        let ids = |v: &Value| -> Vec<u32> {
+            v.as_array()
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|x| x.as_u64().and_then(|x| u32::try_from(x).ok()))
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        for case in cases {
+            let name = case["name"].as_str().unwrap_or_default().to_owned();
+            let address = case["address"].as_str().unwrap_or_default().to_owned();
+            let mut host = CoreHost::<BalanceDashboard>::new();
+            let mut out: Vec<Pending<BalanceOperation>> =
+                host.dispatch(Event::AccountChanged { address });
+            for (i, step) in case["steps"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+                .iter()
+                .enumerate()
+            {
+                if let Some(event) = step.get("event") {
+                    let event: Event = if event["type"] == "pool_unreached" {
+                        pool_unreached(PoolLoss {
+                            chain_ids: ids(&event["chain_ids"]),
+                            silent: ids(&event["silent"]),
+                        })
+                    } else {
+                        serde_json::from_value(event.clone())
+                            .unwrap_or_else(|e| unreachable!("{name} step {i}: {e}"))
+                    };
+                    out.extend(host.dispatch(event));
+                } else {
+                    let answer: BalanceShellResult = serde_json::from_value(step["answer"].clone())
+                        .unwrap_or_else(|e| unreachable!("{name} step {i}: {e}"));
+                    let fetch = matches!(answer, BalanceShellResult::FetchSettled { .. });
+                    let at = out
+                        .iter()
+                        .position(|p| {
+                            if fetch {
+                                matches!(p.operation, BalanceOperation::FetchTokens { .. })
+                            } else {
+                                matches!(p.operation, BalanceOperation::ReadBalanceCache { .. })
+                            }
+                        })
+                        .unwrap_or_else(|| unreachable!("{name} step {i}: nothing to answer"));
+                    let id = out.remove(at).id;
+                    out.extend(host.resolve(id, answer));
+                }
+                let Some(expect) = step.get("expect") else {
+                    continue;
+                };
+                let view = host.view();
+                if let Some(want) = expect.get("unreachable") {
+                    let got: Vec<u32> = view
+                        .unreachable_networks
+                        .iter()
+                        .map(|n| n.chain_id)
+                        .collect();
+                    assert_eq!(got, ids(want), "{name}, step {i}: unreachable");
+                }
+                if let Some(live) = expect.get("live").and_then(Value::as_bool) {
+                    assert_eq!(view.live_key.is_some(), live, "{name}, step {i}: live");
                 }
             }
         }
