@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-oRK3U6YbMfkMG2rYHhGWQ0N9+87hgTD5IF7n9egoFhc='; style-src 'sha256-IvjEd3Od02b8rk0e1KtXxPCSfUrwsnqsHIkMkYUW80A='; img-src data:; font-src data:; base-uri 'none'; form-action 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-sF/jn/n5XCBY9srWSBEiPF+sIwY8hzTRtGxG3z1xMX0='; style-src 'sha256-IvjEd3Od02b8rk0e1KtXxPCSfUrwsnqsHIkMkYUW80A='; img-src data:; font-src data:; base-uri 'none'; form-action 'none'" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Vela</title>
     <style>
@@ -1742,6 +1742,8 @@ window.VelaCS.i18n.register('en', {
   // decimals are unknown in its base units; one approval said as one.
   'button.msApproveAnyway': "Approve anyway",
   'warn.msAppAnyway': "Vela’s check of this transaction found a danger this page can’t verify (for example, that it would fail): approve only if you’re sure.",
+  'button.msExecuteAnyway': "Execute anyway",
+  'warn.msAppAnywayExec': "Vela’s check of this transaction found a danger this page can’t verify (for example, that it would fail, or that what it changes couldn’t be checked): execute only if you’re sure.",
   'value.baseUnitsUnknown': "base units · decimals unknown",
   'sentence.msAddOwnerOne': "{owner} becomes a member, and {threshold} approval will be needed.",
   'sentence.msRemoveOwnerOne': "{owner} stops being a member, and {threshold} approval will be needed.",
@@ -2166,6 +2168,8 @@ window.VelaCS.i18n.register('zh', {
   // decimals are unknown in its base units; one approval said as one.
   'button.msApproveAnyway': "仍然批准",
   'warn.msAppAnyway': "Vela 的检查发现了本页无法核实的风险（例如执行会失败）：只有在确定时才批准。",
+  'button.msExecuteAnyway': "仍然执行",
+  'warn.msAppAnywayExec': "Vela 的检查发现了本页无法核实的风险（例如执行会失败，或无法核对它会改变什么）：只有在确定时才执行。",
   'value.baseUnitsUnknown': "个最小单位 · 小数位未知",
   'sentence.msAddOwnerOne': "{owner} 成为成员，之后需要 {threshold} 个批准。",
   'sentence.msRemoveOwnerOne': "{owner} 不再是成员，之后需要 {threshold} 个批准。",
@@ -2569,6 +2573,8 @@ window.VelaCS.i18n.register('zh-TW', {
   // decimals are unknown in its base units; one approval said as one.
   'button.msApproveAnyway': "仍然核准",
   'warn.msAppAnyway': "Vela 的檢查發現了本頁無法核實的風險（例如執行會失敗）：只有在確定時才核准。",
+  'button.msExecuteAnyway': "仍然執行",
+  'warn.msAppAnywayExec': "Vela 的檢查發現了本頁無法核實的風險（例如執行會失敗，或無法核對它會改變什麼）：只有在確定時才執行。",
   'value.baseUnitsUnknown': "個最小單位 · 小數位未知",
   'sentence.msAddOwnerOne': "{owner} 成為成員，之後需要 {threshold} 個核准。",
   'sentence.msRemoveOwnerOne': "{owner} 不再是成員，之後需要 {threshold} 個核准。",
@@ -2972,6 +2978,8 @@ window.VelaCS.i18n.register('zh-HK', {
   // decimals are unknown in its base units; one approval said as one.
   'button.msApproveAnyway': "仍然批准",
   'warn.msAppAnyway': "Vela 嘅檢查發現咗本頁無法核實嘅風險（例如執行會失敗）：確定先好批准。",
+  'button.msExecuteAnyway': "仍然執行",
+  'warn.msAppAnywayExec': "Vela 嘅檢查發現咗本頁無法核實嘅風險（例如執行會失敗，或者無法核對佢會改變乜嘢）：確定先好執行。",
   'value.baseUnitsUnknown': "個最小單位 · 小數位未知",
   'sentence.msAddOwnerOne': "{owner} 成為成員，之後需要 {threshold} 個批准。",
   'sentence.msRemoveOwnerOne': "{owner} 唔再係成員，之後需要 {threshold} 個批准。",
@@ -3373,6 +3381,8 @@ window.VelaCS.i18n.register('ja', {
   // decimals are unknown in its base units; one approval said as one.
   'button.msApproveAnyway': "それでも承認",
   'warn.msAppAnyway': "Vela の確認で、このページでは検証できない危険が見つかりました（例：実行が失敗する）。確信がある場合のみ承認してください。",
+  'button.msExecuteAnyway': "それでも実行",
+  'warn.msAppAnywayExec': "Vela の確認で、このページでは検証できない危険が見つかりました（例：実行が失敗する、または何が変わるかを確認できなかった）。確信がある場合のみ実行してください。",
   'value.baseUnitsUnknown': "基本単位 · 小数点以下の桁数不明",
   'sentence.msAddOwnerOne': "{owner} がメンバーになり、承認は {threshold} 件必要になります。",
   'sentence.msRemoveOwnerOne': "{owner} がメンバーでなくなり、承認は {threshold} 件必要になります。",
@@ -3774,6 +3784,8 @@ window.VelaCS.i18n.register('ko', {
   // decimals are unknown in its base units; one approval said as one.
   'button.msApproveAnyway': "그래도 승인",
   'warn.msAppAnyway': "Vela의 확인에서 이 페이지가 검증할 수 없는 위험이 발견되었습니다(예: 실패할 거래). 확실할 때만 승인하세요.",
+  'button.msExecuteAnyway': "그래도 실행",
+  'warn.msAppAnywayExec': "Vela의 확인에서 이 페이지가 검증할 수 없는 위험이 발견되었습니다(예: 실패할 거래, 또는 무엇이 바뀌는지 확인하지 못함). 확실할 때만 실행하세요.",
   'value.baseUnitsUnknown': "기본 단위 · 소수 자릿수 모름",
   'sentence.msAddOwnerOne': "{owner} 님이 멤버가 되고, 승인이 {threshold}개 필요해집니다.",
   'sentence.msRemoveOwnerOne': "{owner} 님이 더 이상 멤버가 아니며, 승인이 {threshold}개 필요해집니다.",
@@ -4175,6 +4187,8 @@ window.VelaCS.i18n.register('vi', {
   // decimals are unknown in its base units; one approval said as one.
   'button.msApproveAnyway': "Vẫn phê duyệt",
   'warn.msAppAnyway': "Kiểm tra của Vela phát hiện một nguy cơ mà trang này không thể xác minh (ví dụ: giao dịch sẽ thất bại): chỉ phê duyệt nếu bạn chắc chắn.",
+  'button.msExecuteAnyway': "Vẫn thực hiện",
+  'warn.msAppAnywayExec': "Kiểm tra của Vela phát hiện một nguy cơ mà trang này không thể xác minh (ví dụ: giao dịch sẽ thất bại, hoặc không kiểm tra được nó thay đổi gì): chỉ thực hiện nếu bạn chắc chắn.",
   'value.baseUnitsUnknown': "đơn vị cơ sở · không rõ số thập phân",
   'sentence.msAddOwnerOne': "{owner} trở thành thành viên, và sẽ cần {threshold} phê duyệt.",
   'sentence.msRemoveOwnerOne': "{owner} không còn là thành viên, và sẽ cần {threshold} phê duyệt.",
@@ -4576,6 +4590,8 @@ window.VelaCS.i18n.register('id', {
   // decimals are unknown in its base units; one approval said as one.
   'button.msApproveAnyway': "Tetap setujui",
   'warn.msAppAnyway': "Pemeriksaan Vela menemukan bahaya yang tidak bisa diverifikasi halaman ini (misalnya, transaksi akan gagal): setujui hanya jika Anda yakin.",
+  'button.msExecuteAnyway': "Tetap jalankan",
+  'warn.msAppAnywayExec': "Pemeriksaan Vela menemukan bahaya yang tidak bisa diverifikasi halaman ini (misalnya, transaksi akan gagal, atau apa yang diubahnya tidak bisa diperiksa): jalankan hanya jika Anda yakin.",
   'value.baseUnitsUnknown': "unit dasar · desimal tidak diketahui",
   'sentence.msAddOwnerOne': "{owner} menjadi anggota, dan {threshold} persetujuan akan dibutuhkan.",
   'sentence.msRemoveOwnerOne': "{owner} tidak lagi menjadi anggota, dan {threshold} persetujuan akan dibutuhkan.",
@@ -4977,6 +4993,8 @@ window.VelaCS.i18n.register('tr', {
   // decimals are unknown in its base units; one approval said as one.
   'button.msApproveAnyway': "Yine de onayla",
   'warn.msAppAnyway': "Vela’nın kontrolü bu sayfanın doğrulayamadığı bir tehlike buldu (örneğin başarısız olacağı): yalnızca eminsen onayla.",
+  'button.msExecuteAnyway': "Yine de yürüt",
+  'warn.msAppAnywayExec': "Vela’nın kontrolü bu sayfanın doğrulayamadığı bir tehlike buldu (örneğin başarısız olacağı ya da neyi değiştirdiğinin kontrol edilemediği): yalnızca eminsen yürüt.",
   'value.baseUnitsUnknown': "temel birim · ondalık sayısı bilinmiyor",
   'sentence.msAddOwnerOne': "{owner} üye olur ve {threshold} onay gerekir.",
   'sentence.msRemoveOwnerOne': "{owner} artık üye değildir ve {threshold} onay gerekir.",
@@ -5378,6 +5396,8 @@ window.VelaCS.i18n.register('es-MX', {
   // decimals are unknown in its base units; one approval said as one.
   'button.msApproveAnyway': "Aprobar de todos modos",
   'warn.msAppAnyway': "La revisión de Vela encontró un peligro que esta página no puede verificar (por ejemplo, que fallaría): aprueba solo si estás seguro.",
+  'button.msExecuteAnyway': "Ejecutar de todos modos",
+  'warn.msAppAnywayExec': "La revisión de Vela encontró un peligro que esta página no puede verificar (por ejemplo, que fallaría o que no se pudo verificar qué cambia): ejecuta solo si estás seguro.",
   'value.baseUnitsUnknown': "unidades base · decimales desconocidos",
   'sentence.msAddOwnerOne': "{owner} se vuelve miembro y se necesitará {threshold} aprobación.",
   'sentence.msRemoveOwnerOne': "{owner} deja de ser miembro y se necesitará {threshold} aprobación.",
@@ -5779,6 +5799,8 @@ window.VelaCS.i18n.register('pt-BR', {
   // decimals are unknown in its base units; one approval said as one.
   'button.msApproveAnyway': "Aprovar mesmo assim",
   'warn.msAppAnyway': "A verificação da Vela encontrou um perigo que esta página não consegue verificar (por exemplo, que ela falharia): aprove só se tiver certeza.",
+  'button.msExecuteAnyway': "Executar mesmo assim",
+  'warn.msAppAnywayExec': "A verificação da Vela encontrou um perigo que esta página não consegue verificar (por exemplo, que ela falharia ou que não foi possível verificar o que ela muda): execute só se tiver certeza.",
   'value.baseUnitsUnknown': "unidades base · casas decimais desconhecidas",
   'sentence.msAddOwnerOne': "{owner} passa a ser membro, e será necessária {threshold} aprovação.",
   'sentence.msRemoveOwnerOne': "{owner} deixa de ser membro, e será necessária {threshold} aprovação.",
@@ -6182,6 +6204,8 @@ window.VelaCS.i18n.register('fr', {
   // decimals are unknown in its base units; one approval said as one.
   'button.msApproveAnyway': "Approuver quand même",
   'warn.msAppAnyway': "La vérification de Vela a trouvé un danger que cette page ne peut pas vérifier (par exemple, qu’elle échouerait) : n’approuvez que si vous êtes sûr.",
+  'button.msExecuteAnyway': "Exécuter quand même",
+  'warn.msAppAnywayExec': "La vérification de Vela a trouvé un danger que cette page ne peut pas vérifier (par exemple, qu’elle échouerait, ou que ce qu’elle modifie n’a pas pu être vérifié) : n’exécutez que si vous êtes sûr.",
   'value.baseUnitsUnknown': "unités de base · décimales inconnues",
   'sentence.msAddOwnerOne': "{owner} devient membre, et {threshold} approbation sera requise.",
   'sentence.msRemoveOwnerOne': "{owner} n’est plus membre, et {threshold} approbation sera requise.",
@@ -6585,6 +6609,8 @@ window.VelaCS.i18n.register('de', {
   // decimals are unknown in its base units; one approval said as one.
   'button.msApproveAnyway': "Trotzdem freigeben",
   'warn.msAppAnyway': "Velas Prüfung dieser Transaktion hat eine Gefahr gefunden, die diese Seite nicht überprüfen kann (zum Beispiel, dass sie fehlschlagen würde): Gib nur frei, wenn du sicher bist.",
+  'button.msExecuteAnyway': "Trotzdem ausführen",
+  'warn.msAppAnywayExec': "Velas Prüfung dieser Transaktion hat eine Gefahr gefunden, die diese Seite nicht überprüfen kann (zum Beispiel, dass sie fehlschlagen würde oder dass sich nicht prüfen ließ, was sie ändert): Führe sie nur aus, wenn du sicher bist.",
   'value.baseUnitsUnknown': "Basiseinheiten · Dezimalstellen unbekannt",
   'sentence.msAddOwnerOne': "{owner} wird Mitglied, und es wird {threshold} Freigabe benötigt.",
   'sentence.msRemoveOwnerOne': "{owner} ist kein Mitglied mehr, und es wird {threshold} Freigabe benötigt.",
@@ -6988,6 +7014,8 @@ window.VelaCS.i18n.register('ru', {
   // decimals are unknown in its base units; one approval said as one.
   'button.msApproveAnyway': "Всё равно одобрить",
   'warn.msAppAnyway': "Проверка Vela нашла опасность, которую эта страница проверить не может (например, что транзакция не пройдёт): одобряйте, только если уверены.",
+  'button.msExecuteAnyway': "Всё равно исполнить",
+  'warn.msAppAnywayExec': "Проверка Vela нашла опасность, которую эта страница проверить не может (например, что транзакция не пройдёт или что не удалось проверить, что она меняет): исполняйте, только если уверены.",
   'value.baseUnitsUnknown': "базовых единиц · число знаков неизвестно",
   'sentence.msAddOwnerOne': "{owner} становится участником, и понадобится одобрений: {threshold}.",
   'sentence.msRemoveOwnerOne': "{owner} перестаёт быть участником, и понадобится одобрений: {threshold}.",
@@ -7389,6 +7417,8 @@ window.VelaCS.i18n.register('it', {
   // decimals are unknown in its base units; one approval said as one.
   'button.msApproveAnyway': "Approva comunque",
   'warn.msAppAnyway': "Il controllo di Vela ha trovato un pericolo che questa pagina non può verificare (per esempio, che fallirebbe): approva solo se sei sicuro.",
+  'button.msExecuteAnyway': "Esegui comunque",
+  'warn.msAppAnywayExec': "Il controllo di Vela ha trovato un pericolo che questa pagina non può verificare (per esempio, che fallirebbe o che non è stato possibile verificare cosa cambia): esegui solo se sei sicuro.",
   'value.baseUnitsUnknown': "unità base · decimali sconosciuti",
   'sentence.msAddOwnerOne': "{owner} diventa membro e servirà {threshold} approvazione.",
   'sentence.msRemoveOwnerOne': "{owner} non è più membro e servirà {threshold} approvazione.",
@@ -10324,6 +10354,8 @@ window.VelaCS = window.VelaCS || {};
 
   function confirmKey(view) {
     if (view.refuse) return 'button.cannotSign';
+    // D1: an execution the app's one review asks "… anyway" for.
+    if (view.intentKey === 'intent.msExecute' && view.anyway) return 'button.msExecuteAnyway';
     return CONFIRM[view.intentKey] || 'button.sign';
   }
 
@@ -11328,6 +11360,8 @@ window.VelaCS = window.VelaCS || {};
       safeTxHash: typeof claim.safeTxHash === 'string' && /^0x[0-9a-fA-F]{64}$/.test(claim.safeTxHash)
         ? claim.safeTxHash.toLowerCase() : null,
       threshold: threshold,
+      // D1: the app's one review asks for "… anyway".
+      anyway: claim.anyway === true,
     };
   }
 
@@ -11469,6 +11503,18 @@ window.VelaCS = window.VelaCS || {};
       view.tech = techFor('execTransaction · SafeTx', null, tx.data, {
         addresses: [{ roleKey: 'field.multisig', name: shortAddress(multisig), address: multisig }],
       });
+    }
+
+    // D1 (the approval's r9-10, for the executor): "… anyway" exactly where
+    // the app's one review asks for it (`context.multisig.anyway` — a danger
+    // this page cannot check, or neither of the app's safety checks read),
+    // in the danger style, never the plain accent "Execute".
+    if (!view.refuse && claim.anyway) {
+      if (rank(view.risk) < rank('danger')) {
+        raise(view, 'danger');
+        view.warnings.push({ tone: 'danger', key: 'warn.msAppAnywayExec' });
+      }
+      view.anyway = true;
     }
     return view;
   }

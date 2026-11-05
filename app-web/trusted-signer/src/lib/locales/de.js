@@ -384,6 +384,8 @@ window.VelaCS.i18n.register('de', {
   // decimals are unknown in its base units; one approval said as one.
   'button.msApproveAnyway': "Trotzdem freigeben",
   'warn.msAppAnyway': "Velas Prüfung dieser Transaktion hat eine Gefahr gefunden, die diese Seite nicht überprüfen kann (zum Beispiel, dass sie fehlschlagen würde): Gib nur frei, wenn du sicher bist.",
+  'button.msExecuteAnyway': "Trotzdem ausführen",
+  'warn.msAppAnywayExec': "Velas Prüfung dieser Transaktion hat eine Gefahr gefunden, die diese Seite nicht überprüfen kann (zum Beispiel, dass sie fehlschlagen würde oder dass sich nicht prüfen ließ, was sie ändert): Führe sie nur aus, wenn du sicher bist.",
   'value.baseUnitsUnknown': "Basiseinheiten · Dezimalstellen unbekannt",
   'sentence.msAddOwnerOne': "{owner} wird Mitglied, und es wird {threshold} Freigabe benötigt.",
   'sentence.msRemoveOwnerOne': "{owner} ist kein Mitglied mehr, und es wird {threshold} Freigabe benötigt.",

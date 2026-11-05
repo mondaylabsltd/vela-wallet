@@ -405,6 +405,8 @@ window.VelaCS.i18n.register('zh', {
   // decimals are unknown in its base units; one approval said as one.
   'button.msApproveAnyway': "仍然批准",
   'warn.msAppAnyway': "Vela 的检查发现了本页无法核实的风险（例如执行会失败）：只有在确定时才批准。",
+  'button.msExecuteAnyway': "仍然执行",
+  'warn.msAppAnywayExec': "Vela 的检查发现了本页无法核实的风险（例如执行会失败，或无法核对它会改变什么）：只有在确定时才执行。",
   'value.baseUnitsUnknown': "个最小单位 · 小数位未知",
   'sentence.msAddOwnerOne': "{owner} 成为成员，之后需要 {threshold} 个批准。",
   'sentence.msRemoveOwnerOne': "{owner} 不再是成员，之后需要 {threshold} 个批准。",

@@ -382,6 +382,8 @@ window.VelaCS.i18n.register('vi', {
   // decimals are unknown in its base units; one approval said as one.
   'button.msApproveAnyway': "Vẫn phê duyệt",
   'warn.msAppAnyway': "Kiểm tra của Vela phát hiện một nguy cơ mà trang này không thể xác minh (ví dụ: giao dịch sẽ thất bại): chỉ phê duyệt nếu bạn chắc chắn.",
+  'button.msExecuteAnyway': "Vẫn thực hiện",
+  'warn.msAppAnywayExec': "Kiểm tra của Vela phát hiện một nguy cơ mà trang này không thể xác minh (ví dụ: giao dịch sẽ thất bại, hoặc không kiểm tra được nó thay đổi gì): chỉ thực hiện nếu bạn chắc chắn.",
   'value.baseUnitsUnknown': "đơn vị cơ sở · không rõ số thập phân",
   'sentence.msAddOwnerOne': "{owner} trở thành thành viên, và sẽ cần {threshold} phê duyệt.",
   'sentence.msRemoveOwnerOne': "{owner} không còn là thành viên, và sẽ cần {threshold} phê duyệt.",

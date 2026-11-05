@@ -382,6 +382,8 @@ window.VelaCS.i18n.register('ko', {
   // decimals are unknown in its base units; one approval said as one.
   'button.msApproveAnyway': "그래도 승인",
   'warn.msAppAnyway': "Vela의 확인에서 이 페이지가 검증할 수 없는 위험이 발견되었습니다(예: 실패할 거래). 확실할 때만 승인하세요.",
+  'button.msExecuteAnyway': "그래도 실행",
+  'warn.msAppAnywayExec': "Vela의 확인에서 이 페이지가 검증할 수 없는 위험이 발견되었습니다(예: 실패할 거래, 또는 무엇이 바뀌는지 확인하지 못함). 확실할 때만 실행하세요.",
   'value.baseUnitsUnknown': "기본 단위 · 소수 자릿수 모름",
   'sentence.msAddOwnerOne': "{owner} 님이 멤버가 되고, 승인이 {threshold}개 필요해집니다.",
   'sentence.msRemoveOwnerOne': "{owner} 님이 더 이상 멤버가 아니며, 승인이 {threshold}개 필요해집니다.",

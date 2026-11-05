@@ -384,6 +384,8 @@ window.VelaCS.i18n.register('ru', {
   // decimals are unknown in its base units; one approval said as one.
   'button.msApproveAnyway': "Всё равно одобрить",
   'warn.msAppAnyway': "Проверка Vela нашла опасность, которую эта страница проверить не может (например, что транзакция не пройдёт): одобряйте, только если уверены.",
+  'button.msExecuteAnyway': "Всё равно исполнить",
+  'warn.msAppAnywayExec': "Проверка Vela нашла опасность, которую эта страница проверить не может (например, что транзакция не пройдёт или что не удалось проверить, что она меняет): исполняйте, только если уверены.",
   'value.baseUnitsUnknown': "базовых единиц · число знаков неизвестно",
   'sentence.msAddOwnerOne': "{owner} становится участником, и понадобится одобрений: {threshold}.",
   'sentence.msRemoveOwnerOne': "{owner} перестаёт быть участником, и понадобится одобрений: {threshold}.",

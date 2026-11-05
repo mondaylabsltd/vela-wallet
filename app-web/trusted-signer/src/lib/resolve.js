@@ -1509,6 +1509,8 @@ window.VelaCS = window.VelaCS || {};
 
   function confirmKey(view) {
     if (view.refuse) return 'button.cannotSign';
+    // D1: an execution the app's one review asks "… anyway" for.
+    if (view.intentKey === 'intent.msExecute' && view.anyway) return 'button.msExecuteAnyway';
     return CONFIRM[view.intentKey] || 'button.sign';
   }
 
@@ -2513,6 +2515,8 @@ window.VelaCS = window.VelaCS || {};
       safeTxHash: typeof claim.safeTxHash === 'string' && /^0x[0-9a-fA-F]{64}$/.test(claim.safeTxHash)
         ? claim.safeTxHash.toLowerCase() : null,
       threshold: threshold,
+      // D1: the app's one review asks for "… anyway".
+      anyway: claim.anyway === true,
     };
   }
 
@@ -2654,6 +2658,18 @@ window.VelaCS = window.VelaCS || {};
       view.tech = techFor('execTransaction · SafeTx', null, tx.data, {
         addresses: [{ roleKey: 'field.multisig', name: shortAddress(multisig), address: multisig }],
       });
+    }
+
+    // D1 (the approval's r9-10, for the executor): "… anyway" exactly where
+    // the app's one review asks for it (`context.multisig.anyway` — a danger
+    // this page cannot check, or neither of the app's safety checks read),
+    // in the danger style, never the plain accent "Execute".
+    if (!view.refuse && claim.anyway) {
+      if (rank(view.risk) < rank('danger')) {
+        raise(view, 'danger');
+        view.warnings.push({ tone: 'danger', key: 'warn.msAppAnywayExec' });
+      }
+      view.anyway = true;
     }
     return view;
   }

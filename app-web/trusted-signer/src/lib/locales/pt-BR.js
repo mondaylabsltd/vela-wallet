@@ -382,6 +382,8 @@ window.VelaCS.i18n.register('pt-BR', {
   // decimals are unknown in its base units; one approval said as one.
   'button.msApproveAnyway': "Aprovar mesmo assim",
   'warn.msAppAnyway': "A verificação da Vela encontrou um perigo que esta página não consegue verificar (por exemplo, que ela falharia): aprove só se tiver certeza.",
+  'button.msExecuteAnyway': "Executar mesmo assim",
+  'warn.msAppAnywayExec': "A verificação da Vela encontrou um perigo que esta página não consegue verificar (por exemplo, que ela falharia ou que não foi possível verificar o que ela muda): execute só se tiver certeza.",
   'value.baseUnitsUnknown': "unidades base · casas decimais desconhecidas",
   'sentence.msAddOwnerOne': "{owner} passa a ser membro, e será necessária {threshold} aprovação.",
   'sentence.msRemoveOwnerOne': "{owner} deixa de ser membro, e será necessária {threshold} aprovação.",

@@ -562,6 +562,29 @@ const aliceSigned = [passkeyApproval(ALICE.address, ALICE.genesis)];
 }
 
 {
+  // D1 (real-device pass 2): the app's one review asks "… anyway" for the
+  // execution (neither its state-change check nor its simulation read, or a
+  // danger) — the executor's card says "Execute anyway", in the danger fill,
+  // with why; with no word from the app, a plain "Execute".
+  const calls = ms('executionCalls', {
+    plan: { multisig: MS, deployMultisig: null, deployOwners: [], tx: pay, approvals: aliceSigned, executor: EXECUTOR },
+  });
+  const asked = executionRequest(calls, aboutOf(pay, { anyway: true }));
+  const v = ns.resolve(asked.intent, asked.context);
+  check('D1: the app asks "anyway" — "Execute anyway", said why', !v.refuse && v.anyway &&
+    v.confirmKey === 'button.msExecuteAnyway' && warned(v, 'warn.msAppAnywayExec') && v.risk === 'danger',
+    JSON.stringify([v.confirmKey, v.risk, v.warnings.map((w) => w.key)]));
+  check('D1: …in the danger fill, never the accent', hasClass(ns.render(v, {}), 'confirm-anyway'));
+  const plainReq = executionRequest(calls, aboutOf(pay));
+  const plain = ns.resolve(plainReq.intent, plainReq.context);
+  check('D1: no word from the app — a plain "Execute"', plain.confirmKey === 'button.msExecute' && !plain.anyway);
+  // A hash the app got wrong is still refused, "anyway" or not.
+  const wrong = executionRequest(calls, aboutOf(pay, { anyway: true, safeTxHash: '0x' + '11'.repeat(32) }));
+  const refused = ns.resolve(wrong.intent, wrong.context);
+  check('D1: "anyway" never opens a refusal', refused.refuse && refused.confirmKey === 'button.cannotSign');
+}
+
+{
   // The first execution: it deploys the multisig and Alice's account first.
   const calls = [deployLeg(team.genesis), deployLeg(ALICE.genesis), execLeg(pay, aliceSigned)];
   const { intent, context } = executionRequest(calls, aboutOf(pay));
@@ -952,7 +975,9 @@ const sample = ['intent.msApprove', 'refuse.msHashMismatch', 'refuse.msDelegateC
   // round 10: the multisig's coins; a member change before → after
   // (`value.msCountChange` is "{before} → {after}" in every language)
   'sentence.approveMs', 'sentence.approveUnlimitedMs', 'warn.unlimitedMs', 'warn.approveAllMs', 'warn.nativeValueMs',
-  'field.msMembers', 'value.msApprovalsChange', 'warn.msMembersClaimOff'];
+  'field.msMembers', 'value.msApprovalsChange', 'warn.msMembersClaimOff',
+  // D1: the executor's "… anyway"
+  'button.msExecuteAnyway', 'warn.msAppAnywayExec'];
 for (const key of sample) english[key] = ns.i18n.t(key, { claimed: 'A', computed: 'B', nonce: '7', fn: 'f' });
 for (const locale of LOCALES) {
   ns.i18n.setLocale(locale);

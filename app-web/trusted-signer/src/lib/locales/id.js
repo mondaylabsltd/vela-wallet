@@ -382,6 +382,8 @@ window.VelaCS.i18n.register('id', {
   // decimals are unknown in its base units; one approval said as one.
   'button.msApproveAnyway': "Tetap setujui",
   'warn.msAppAnyway': "Pemeriksaan Vela menemukan bahaya yang tidak bisa diverifikasi halaman ini (misalnya, transaksi akan gagal): setujui hanya jika Anda yakin.",
+  'button.msExecuteAnyway': "Tetap jalankan",
+  'warn.msAppAnywayExec': "Pemeriksaan Vela menemukan bahaya yang tidak bisa diverifikasi halaman ini (misalnya, transaksi akan gagal, atau apa yang diubahnya tidak bisa diperiksa): jalankan hanya jika Anda yakin.",
   'value.baseUnitsUnknown': "unit dasar · desimal tidak diketahui",
   'sentence.msAddOwnerOne': "{owner} menjadi anggota, dan {threshold} persetujuan akan dibutuhkan.",
   'sentence.msRemoveOwnerOne': "{owner} tidak lagi menjadi anggota, dan {threshold} persetujuan akan dibutuhkan.",

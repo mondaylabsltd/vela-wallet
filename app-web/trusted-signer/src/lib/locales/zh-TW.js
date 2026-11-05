@@ -384,6 +384,8 @@ window.VelaCS.i18n.register('zh-TW', {
   // decimals are unknown in its base units; one approval said as one.
   'button.msApproveAnyway': "仍然核准",
   'warn.msAppAnyway': "Vela 的檢查發現了本頁無法核實的風險（例如執行會失敗）：只有在確定時才核准。",
+  'button.msExecuteAnyway': "仍然執行",
+  'warn.msAppAnywayExec': "Vela 的檢查發現了本頁無法核實的風險（例如執行會失敗，或無法核對它會改變什麼）：只有在確定時才執行。",
   'value.baseUnitsUnknown': "個最小單位 · 小數位未知",
   'sentence.msAddOwnerOne': "{owner} 成為成員，之後需要 {threshold} 個核准。",
   'sentence.msRemoveOwnerOne': "{owner} 不再是成員，之後需要 {threshold} 個核准。",
