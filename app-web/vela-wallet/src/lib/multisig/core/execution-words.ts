@@ -7,7 +7,7 @@ import { feeAmountText } from '$lib/flows/fee-line';
 import { fillTemplate } from '$lib/i18n/fill';
 import type { MultisigMessages } from '../messages';
 import type { ExecutionBlock, ExecutionPreview } from './execution';
-import { formatUnits } from './units';
+import type { MultisigAmount } from '../generated/MultisigAmount';
 
 /**
  * r5reg-15: how many decimals a fee reads in — the wallet's own fee
@@ -24,12 +24,24 @@ export function feeCoin(amount: bigint, symbol: string): string {
 	return symbol ? `${text} ${symbol}` : text;
 }
 
+/**
+ * r12-1: an amount as the core says it — its `text` ("0.01 USDC"), or, when
+ * nobody said the token's decimals, its base units with "decimals unknown".
+ * Nothing here scales base units.
+ */
+export function amountText(m: MultisigMessages, amount: MultisigAmount): string {
+	return amount.said.kind === 'known'
+		? amount.said.text
+		: fillTemplate(m.review.reading.decimalsUnknown, { raw: amount.said.raw });
+}
+
 /** "the multisig holds 0.28 USDC, and this needs 0.5 USDC" / the network's reason. */
 export function whyText(m: MultisigMessages, why: ExecutionBlock): string {
 	if (why.kind === 'short') {
-		const amount = (v: bigint) =>
-			`${why.decimals === null ? v.toString() : formatUnits(v, why.decimals)}${why.symbol ? ` ${why.symbol}` : ''}`;
-		return fillTemplate(m.proposal.whyShort, { have: amount(why.have), need: amount(why.need) });
+		return fillTemplate(m.proposal.whyShort, {
+			have: amountText(m, why.have),
+			need: amountText(m, why.need)
+		});
 	}
 	return why.reason
 		? fillTemplate(m.proposal.whyReverts, { reason: why.reason })

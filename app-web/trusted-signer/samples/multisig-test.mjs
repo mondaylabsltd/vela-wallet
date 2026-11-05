@@ -538,8 +538,8 @@ const aliceSigned = [passkeyApproval(ALICE.address, ALICE.genesis)];
   check('…what the multisig sends, in the token\'s units: 0.05 USDC (Arc\'s own coin behind 0x3600…)',
     v.hero && v.hero.amount && v.hero.amount.text === '0.05' && v.hero.amount.symbol === 'USDC',
     v.hero && v.hero.amount && v.hero.amount.text + ' ' + v.hero.amount.symbol);
-  check('…said as the multisig\'s: "The multisig sends 0.05 USDC to 0x6813…BA69"',
-    v.sentence && v.sentence.key === 'sentence.msSends' && v.sentence.params.to.toLowerCase() === '0x6813…ba69');
+  check('…said as the multisig\'s: "The multisig sends 0.05 USDC to 0x6813Eb…1cBA69"',
+    v.sentence && v.sentence.key === 'sentence.msSends' && v.sentence.params.to.toLowerCase() === '0x6813eb…1cba69');
   check('…"Executes multisig transaction #7"', v.lead && v.lead.key === 'sentence.msExecute' && v.lead.params.nonce === '7');
   check('…its safeTxHash, computed by the page = vela-core\'s, matching the app\'s',
     v.multisig && v.multisig.hashMatches && v.multisig.hashes.safeTxHash === ms('safeTxHash', { chainId: CHAIN, safe: MS, tx: pay }));
@@ -557,7 +557,7 @@ const aliceSigned = [passkeyApproval(ALICE.address, ALICE.genesis)];
   ns.i18n.setLocale('en');
   const text = ns.render(v, {}).textContent;
   check('…the card says it in words', text.includes('Executes multisig transaction #7:') &&
-    text.toLowerCase().includes('the multisig sends 0.05 usdc to 0x6813…ba69.') && text.includes('2 of 2') &&
+    text.toLowerCase().includes('the multisig sends 0.05 usdc to 0x6813eb…1cba69.') && text.includes('2 of 2') &&
     text.includes(v.multisig.hashes.safeTxHash) && text.includes('Execute'), text.slice(0, 400));
 }
 

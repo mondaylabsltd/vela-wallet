@@ -38,8 +38,9 @@
 	import { session } from '$lib/session/core/session.svelte';
 	import { hostLabel } from '$lib/dapp/host';
 	import { publishExtSnapshot } from '$lib/dapp/core/ext-cache';
-	import { publishExtChains } from '$lib/dapp/core/ext-chains';
-	import { getOriginChain } from '$lib/dapp/grants';
+	import { accountLivesOn, publishExtChains, setExtAccountChains } from '$lib/dapp/core/ext-chains';
+	import { getOriginChain, originHasOwnChain, watchStartChain } from '$lib/dapp/grants';
+	import { balanceView, rereadHoldings } from '$lib/wallet/core/balance-resident';
 	import { approve, evaluate, type RequestStage } from '$lib/dapp/request';
 	import { signRequest } from '$lib/signing/core/sign-resident.svelte';
 	import { AskerGoneError, type ClaimPhase, type SubmitClaim } from '$lib/signing/core/sign-types';
@@ -95,6 +96,12 @@
 	const HANDOFF_GRACE_MS = 6000;
 	/** How long an answered request window waits for the worker before closing itself. */
 	const WINDOW_CLOSE_BACKSTOP_MS = 5000;
+	/**
+	 * r12: how long a new site's sheet waits for the panel's holdings read
+	 * before it says a network — past it, the sheet opens on what is known
+	 * and follows the holdings when they land (`watchStartChain`).
+	 */
+	const START_HOLDINGS_WAIT_MS = 8000;
 
 	let request = $state<ExtensionRequest | null>(null);
 	let stage = $state<RequestStage>({ kind: 'loading' });
@@ -258,7 +265,7 @@
 					}),
 					publishExtChains()
 				]);
-				chainId = await getOriginChain(incoming.origin, snapshot?.chain_id ?? 0);
+				chainId = await startChainFor(incoming, snapshot);
 			} catch (error) {
 				await notShown(incoming, error);
 				return;
@@ -307,6 +314,64 @@
 		await answerNotShown(incoming.rid);
 		leave();
 	}
+
+	/**
+	 * The chain `incoming` is asked on. A site with a network of its own (its
+	 * switch, its grant) is on it. A NEW site starts where the account lives
+	 * (`site_start_chain_for`), and r12 found that input stale: an account
+	 * funded on Arc Testnet a few seconds before the connect was asked on
+	 * Sepolia, because no page had read its holdings since the money came and
+	 * the grant then kept Sepolia for good. The panel IS the wallet page, so it
+	 * reads the account's holdings first (bounded) and stores where it lives;
+	 * the window, which reads none, follows the wallet page's write while the
+	 * sheet is open (`followStart`).
+	 */
+	async function startChainFor(
+		incoming: ExtensionRequest,
+		snapshot: Awaited<ReturnType<typeof publishExtSnapshot>>
+	): Promise<number> {
+		const fallback = snapshot?.chain_id ?? 0;
+		const address = snapshot?.address ?? '';
+		if (mode === 'panel' && address && !(await originHasOwnChain(incoming.origin))) {
+			await readWhereItLives(address);
+		}
+		return getOriginChain(incoming.origin, fallback);
+	}
+
+	/** One holdings round for `address` (bounded), then where it lives, stored as the wallet page stores it. */
+	async function readWhereItLives(address: string): Promise<void> {
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		await Promise.race([
+			rereadHoldings(address),
+			new Promise<void>((resolve) => (timer = setTimeout(resolve, START_HOLDINGS_WAIT_MS)))
+		]);
+		clearTimeout(timer);
+		const view = balanceView();
+		if (view.address === null || view.address.toLowerCase() !== address.toLowerCase()) return;
+		const active = multisig.active;
+		const own = active && active.address.toLowerCase() === address.toLowerCase() ? active : null;
+		const lives = accountLivesOn(view, own?.chainIds ?? [], multisig.view?.recent_networks ?? []);
+		if (lives) await setExtAccountChains(view.address, lives);
+	}
+
+	/**
+	 * r12: while a new site's consent is open, its network follows where the
+	 * account lives — holdings landing in the wallet page, the network last
+	 * used — until Connect is pressed (the grant then keeps it).
+	 */
+	$effect(() => {
+		if (stage.kind !== 'consent' || !request) return;
+		const asked = request;
+		let own: boolean | null = null;
+		return watchStartChain(() => {
+			void (async () => {
+				own ??= await originHasOwnChain(asked.origin);
+				if (own || request !== asked || stage.kind !== 'consent' || busy) return;
+				const next = await getOriginChain(asked.origin, chainId);
+				if (request === asked && stage.kind === 'consent' && !busy && next > 0) chainId = next;
+			})();
+		});
+	});
 
 	/** Ask the core about `incoming` and carry out what it says. */
 	async function proceed(incoming: ExtensionRequest): Promise<void> {

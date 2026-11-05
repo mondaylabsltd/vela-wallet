@@ -11,6 +11,8 @@ export * from './MultisigAccountsView';
 export * from './MultisigActionState';
 export * from './MultisigAddOutcome';
 export * from './MultisigAddView';
+export * from './MultisigAmount';
+export * from './MultisigAmountSaid';
 export * from './MultisigApprovalRoute';
 export * from './MultisigApprovalRow';
 export * from './MultisigBackupState';

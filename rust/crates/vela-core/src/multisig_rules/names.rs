@@ -28,6 +28,9 @@
 //! The shell keeps the passkey index’s answers (its I/O and its reactive
 //! cache) and asks here: `names.label`, `names.kind`, `names.short`.
 
+use std::collections::BTreeMap;
+
+use serde::Serialize;
 use serde_json::Value;
 
 use super::{arg, to_json};
@@ -89,6 +92,63 @@ pub fn who(address: &str, label: Option<&str>) -> String {
     }
 }
 
+/// A member change's one title (r12-8), for Activity rows and sheets alike:
+/// the corpus key and its parameters, each member named by [`who`] with
+/// `labels[lowercase address]` (the accounts machine's `member_labels`, or
+/// the name the sheet knows — the same map). The shell words it in the
+/// page's own language at the moment it draws it — never a title frozen in
+/// the language and with the names of the moment it was written ("Add
+/// 0xD40086…de130b" on a zh Activity, "Add Dana Local (…)" on the sheet).
+/// `count` is set for a threshold: say the key's plural form for it
+/// (`_one` / `_other`). `None` for anything that is not a member change.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct ChangeTitle {
+    pub key: &'static str,
+    pub params: BTreeMap<&'static str, String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub count: Option<String>,
+}
+
+pub fn change_title(
+    action: &crate::multisig::Action,
+    labels: &BTreeMap<String, String>,
+) -> Option<ChangeTitle> {
+    use crate::multisig::Action;
+    let name = |address: &str| {
+        who(
+            address,
+            labels
+                .get(&address.to_ascii_lowercase())
+                .map(String::as_str),
+        )
+    };
+    let one = |key: &'static str, k: &'static str, v: String| ChangeTitle {
+        key,
+        params: BTreeMap::from([(k, v)]),
+        count: None,
+    };
+    Some(match action {
+        Action::AddOwner { owner, .. } => one("home.multisig.change.add", "member", name(owner)),
+        Action::RemoveOwner { owner, .. } => {
+            one("home.multisig.change.remove", "member", name(owner))
+        }
+        Action::SwapOwner {
+            old_owner,
+            new_owner,
+        } => ChangeTitle {
+            key: "home.multisig.change.replace",
+            params: BTreeMap::from([("old", name(old_owner)), ("new", name(new_owner))]),
+            count: None,
+        },
+        Action::ChangeThreshold { threshold } => ChangeTitle {
+            key: "home.multisig.action.changeThreshold",
+            params: BTreeMap::from([("count", threshold.clone())]),
+            count: Some(threshold.clone()),
+        },
+        _ => return None,
+    })
+}
+
 /// What a member is, as far as this device can tell: a Vela account (one
 /// of this device’s own, or the passkey index holds it), else what a
 /// multisig here keeps it as, else `None` — not known (the index’s silence
@@ -121,6 +181,16 @@ pub fn call(name: &str, args: &Value) -> Result<String, CoreError> {
             text("registered")?.as_deref(),
         )),
         "kind" => to_json(&kind(flag("own")?, flag("vela")?, text("kept")?.as_deref())),
+        "change" => {
+            let action: crate::multisig::Action = arg(args, "action")?;
+            let labels: Option<BTreeMap<String, String>> = arg(args, "labels")?;
+            let labels: BTreeMap<String, String> = labels
+                .unwrap_or_default()
+                .into_iter()
+                .map(|(k, v)| (k.to_ascii_lowercase(), v))
+                .collect();
+            to_json(&change_title(&action, &labels))
+        }
         other => Err(CoreError::Multisig(format!(
             "unknown names method: {other}"
         ))),
@@ -163,6 +233,22 @@ mod tests {
             "0x3C44Cd…4293BC",
             "a blank name is none"
         );
+    }
+
+    /// r12-8: the member-change title vectors, through the door.
+    #[test]
+    fn the_member_title_vectors_hold() {
+        let path = format!(
+            "{}/tests/vectors/multisig/member-titles.json",
+            env!("CARGO_MANIFEST_DIR")
+        );
+        let v: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        let cases = v["cases"].as_array().unwrap();
+        assert!(cases.len() >= 6);
+        for case in cases {
+            let got: Value = serde_json::from_str(&call("change", &case["args"]).unwrap()).unwrap();
+            assert_eq!(got, case["expect"], "{}", case["name"]);
+        }
     }
 
     /// The shared vectors every shell replays through the door (r10).

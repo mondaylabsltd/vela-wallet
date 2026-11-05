@@ -4,6 +4,7 @@
  * decides; these are the shapes the sheet and the home word it in, and the
  * errors a stopped execution is said through. Nothing here reads or decides.
  */
+import type { MultisigAmount } from '../generated/MultisigAmount';
 import type { QuotedInBandFee } from '$lib/services/safe-transaction';
 import type { GenesisRefusedError } from './refusal';
 import type { Call } from './kernel';
@@ -11,7 +12,12 @@ import type { Call } from './kernel';
 /** Why an execution would fail if it were sent now. */
 export type ExecutionBlock =
 	/** The multisig holds less of a coin than the transaction spends. */
-	| { kind: 'short'; symbol: string; decimals: number | null; have: bigint; need: bigint }
+	/**
+	 * r12-1: `have` / `need` as the core says them (`MultisigAmount`): in the
+	 * token's decimals and symbol, or "decimals unknown" with base units —
+	 * never scaled here.
+	 */
+	| { kind: 'short'; have: MultisigAmount; need: MultisigAmount }
 	/** It reverts when it runs; the reason the chain or relay gave, if any. */
 	| { kind: 'reverts'; reason: string | null };
 

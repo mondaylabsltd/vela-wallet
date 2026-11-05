@@ -8,7 +8,8 @@
 import { fillTemplate } from '$lib/i18n/fill';
 import type { LocalTransaction } from '$lib/services/transactions-model';
 import type { MultisigMessages } from '../messages';
-import { actionTitle, shortenAddress, tokenInfo, UNREAD_TOKEN } from './display';
+import { actionTitle, memberActionTitle, shortenAddress, tokenInfo, UNREAD_TOKEN } from './display';
+import { names } from './names.svelte';
 import type { Action } from './kernel';
 import { executedRowId } from './row-id';
 import { plainUnits } from './units';
@@ -28,6 +29,47 @@ export function useRecordWords(m: MultisigMessages): void {
 		cancelTitle = m.action.cancel;
 		void rewordCancelRows(m.action.cancel).catch(() => {});
 	}
+	void rewordMemberRows(m).catch(() => {});
+}
+
+/** A member change: its rows are titled by the core's one rule (r12-8). */
+const isMemberChange = (action: Action | null): boolean =>
+	action?.kind === 'addOwner' ||
+	action?.kind === 'removeOwner' ||
+	action?.kind === 'swapOwner' ||
+	action?.kind === 'changeThreshold';
+
+/** r12-8: the name a row gives a member — the accounts machine's (`names.label`). */
+const label = (address: string): string => names.label(address);
+
+/**
+ * r12-8: every executed member change's row titled again by the core's one
+ * rule (`names.change`) in `m`'s language and with the names as they stand
+ * now — the sheet's title, on Activity too. A row is rewritten only when
+ * its title changed. The rows written before r12 carry no action and keep
+ * theirs.
+ */
+export function rewordMemberRows(m: MultisigMessages): Promise<number> {
+	// One at a time, in the order asked: a language switch and a name landing
+	// at once must not interleave and leave the older words last.
+	const run = rewording.then(() => rewordMemberRowsNow(m));
+	rewording = run.catch(() => 0);
+	return run;
+}
+
+let rewording: Promise<number> = Promise.resolve(0);
+
+async function rewordMemberRowsNow(m: MultisigMessages): Promise<number> {
+	const { loadTransactions, updateTransaction } = await import('$lib/services/records');
+	let changed = 0;
+	for (const row of await loadTransactions()) {
+		if (!row.id.startsWith('multisig:') || !row.multisigChange) continue;
+		const title = memberActionTitle(m, row.multisigChange as Action, label);
+		if (!title || title === row.intent) continue;
+		await updateTransaction(row.id, { intent: title });
+		changed += 1;
+	}
+	return changed;
 }
 
 /** The fallback a cancellation row was titled with before the page's words were in. */
@@ -76,7 +118,7 @@ async function titleOf(e: Executed): Promise<string> {
 		return fillTemplate(cancelTitle, { nonce: e.nonce });
 	}
 	if (!words) return '';
-	return actionTitle(words, e.chainId, e.action, BigInt(e.nonce)).catch(() => '');
+	return actionTitle(words, e.chainId, e.action, BigInt(e.nonce), label).catch(() => '');
 }
 
 const coin = (chainId: number, token: string | null) =>
@@ -121,6 +163,7 @@ export async function executionRows(e: Executed): Promise<LocalTransaction[]> {
 			decimals: places,
 			type: 'dapp_tx',
 			intent: await titleOf(e),
+			...(isMemberChange(e.action) ? { multisigChange: e.action } : {}),
 			dappSummary: { action: 'call', calls: row.calls, contract: row.contract }
 		});
 	}

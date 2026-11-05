@@ -169,7 +169,7 @@ const oneInchSwap = (recipient, min = 10n ** 18n, dst = DAI, src = USDC) =>
   const v3gnosis = blindV3(100);
   const v3main = blindV3(1);
   check('the Uniswap V3 router\'s address on Gnosis is not named "Uniswap V3 Router"',
-    !sheetText(v3gnosis.sheet).includes('Uniswap') && v3gnosis.view.hero.subParams.contract === '0x68b3…fc45',
+    !sheetText(v3gnosis.sheet).includes('Uniswap') && v3gnosis.view.hero.subParams.contract === '0x68b346…65Fc45',
     v3gnosis.view.hero.subParams.contract);
   check('…on Ethereum it is', v3main.view.hero.subParams.contract === 'Uniswap V3 Router');
   check('registry.contract is per chain', ns.registry.contract(UNI_V3, 1) && !ns.registry.contract(UNI_V3, 100) &&
@@ -188,7 +188,7 @@ const oneInchSwap = (recipient, min = 10n ** 18n, dst = DAI, src = USDC) =>
   const away = sign({ to: SDAI, data: call('deposit(uint256,address)', [10n ** 18n, THIEF]) }, 1);
   check('…shares to an address that is not this account: "Goes to an address that is not this account"',
     away.view.risk === 'danger' && warned(away.view, 'warn.notThisAccount') &&
-    away.sheet.find('warning-text').some((n) => n.textContent === t('warn.notThisAccount', { to: '0x0000…dbad' })));
+    away.sheet.find('warning-text').some((n) => n.textContent === t('warn.notThisAccount', { to: '0x000000…baDbad' })));
 }
 
 // --- 4. a simulation is the requester's ------------------------------------------
@@ -220,8 +220,8 @@ const oneInchSwap = (recipient, min = 10n ** 18n, dst = DAI, src = USDC) =>
 // --- 5. a minimum of nothing, said on the real router too --------------------------
 {
   const { view, sheet } = sign({ to: ONEINCH, data: oneInchSwap(THIEF, 1n) }, 1);
-  check('1inch\'s router, output to a stranger: not "you receive" but "goes to 0x0000…dbad, not to this account"',
-    view.sentence.key === 'sentence.swapElsewhere' && view.sentence.params.to === '0x0000…dbad');
+  check('1inch\'s router, output to a stranger: not "you receive" but "goes to 0x000000…baDbad, not to this account"',
+    view.sentence.key === 'sentence.swapElsewhere' && view.sentence.params.to === '0x000000…baDbad');
   check('…a danger line, and the card is red', !!warned(view, 'warn.notThisAccount') && view.risk === 'danger');
   check('…the 1-wei minimum is spelled out exactly', warned(view, 'warn.dustMinimum') &&
     warned(view, 'warn.dustMinimum').params.amount === '0.000000000000000001 DAI' &&

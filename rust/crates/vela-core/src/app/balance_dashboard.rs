@@ -956,6 +956,17 @@ pub enum Event {
         address: String,
         chain_ids: Vec<u32>,
     },
+    /// r12-3: the networks the RPC pool now finds out of reach — its view's
+    /// `failed_chains` ∪ `unreached_chains`, less `rate_limited_chains` (the
+    /// pool's own chain-notice rule) — sent whenever that set changes, from
+    /// whatever read found it (the incoming scan, a native-balance watch, a
+    /// send). A network newly in it that the shown account is read on and
+    /// the home does not already say is read again at once, forced past the
+    /// shell's cache ([`pool_unreached`]): a warm outage is named within one
+    /// read's bound, never left to age "Updated 1m → 4m" until a reload.
+    PoolUnreached {
+        chain_ids: Vec<u32>,
+    },
     /// Internal: an effect resolved. `attempt` is the account generation
     /// captured when the request was made; an older attempt belongs to a
     /// previous account and is dropped — this IS the `addressRef` check
@@ -1081,6 +1092,14 @@ pub struct Model {
     switcher_pinned_total: Option<Option<f64>>,
     switcher_pending: u32,
     switcher_balances: Vec<BalanceCacheEntry>,
+    /// r12-3: the pool's last word ([`Event::PoolUnreached`]).
+    pool_unreached: BTreeSet<u32>,
+    /// r12-3: the networks the last settled round asked (`read_chain_ids`)
+    /// — the ones the shown account is read on.
+    asked_chain_ids: BTreeSet<u32>,
+    /// r12-3: a pool signal arrived while a round was out or the app was
+    /// away; the next settle or focus reads again, forced.
+    pool_reread_pending: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -1356,7 +1375,10 @@ impl App for BalanceDashboard {
             Event::AppFocused => {
                 model.backgrounded = false;
                 if model.address.is_some() && !model.read_deferred {
-                    begin_fetch(model, false, false)
+                    // r12-3: a network the pool lost while the app was away
+                    // is read past the shell's cache.
+                    let force = std::mem::take(&mut model.pool_reread_pending);
+                    begin_fetch(model, force, false)
                 } else {
                     Command::done()
                 }
@@ -1439,6 +1461,7 @@ impl App for BalanceDashboard {
                 );
                 Command::done()
             }
+            Event::PoolUnreached { chain_ids } => pool_unreached(model, chain_ids),
             Event::SpaceChanged => {
                 let Some(address) = model.address.clone() else {
                     return Command::done();
@@ -1633,6 +1656,10 @@ fn reset_for(
     model.suspect_chain_ids.clear();
     model.recover_timer = None;
     model.recover_step = 0;
+    // r12-3: the pool's word is the device's and stands; what the round
+    // asked, and a re-read owed for it, were the previous account's.
+    model.asked_chain_ids.clear();
+    model.pool_reread_pending = false;
 
     // The fetch issued below is out from this moment (#188): the figure only
     // rises from the cached total (seeded into `last_settled_total` when it
@@ -1696,6 +1723,38 @@ fn holdings_restored(
     sort_by_usd_desc(&mut model.tokens);
     model.rows_whole = true;
     render()
+}
+
+/// r12-3 ([`Event::PoolUnreached`]): the pool lost a network the shown
+/// account is read on, and the home does not say it yet — read again now,
+/// forced (the shell's cache would answer "every network answered"). A
+/// round already out, or an app away, owes it the read on its settle or
+/// focus. Before the account's first round settles nothing is owed: that
+/// round reads every network anyway.
+fn pool_unreached(model: &mut Model, chain_ids: Vec<u32>) -> Command<BalanceEffect, Event> {
+    let now: BTreeSet<u32> = chain_ids.into_iter().collect();
+    let fresh: Vec<u32> = now.difference(&model.pool_unreached).copied().collect();
+    model.pool_unreached = now;
+    if model.address.is_none() || !model.bootstrapped || model.read_deferred {
+        return Command::done();
+    }
+    if !fresh.iter().any(|id| pool_loss_unsaid(model, *id)) {
+        return Command::done();
+    }
+    if model.fetch_in_flight || model.backgrounded {
+        model.pool_reread_pending = true;
+        return Command::done();
+    }
+    begin_fetch(model, true, false)
+}
+
+/// A network the pool finds out of reach that the home would say for the
+/// shown account (asked by its rounds; for an account said to live
+/// somewhere, one of its networks — [`said_home`]) and does not say yet.
+fn pool_loss_unsaid(model: &Model, chain_id: u32) -> bool {
+    model.asked_chain_ids.contains(&chain_id)
+        && !model.failed_chain_ids.contains(&chain_id)
+        && said_home(model).is_none_or(|home| home.contains(&chain_id))
 }
 
 fn begin_fetch(model: &mut Model, force: bool, pull: bool) -> Command<BalanceEffect, Event> {
@@ -1852,8 +1911,33 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
             // home-14: a chain that answered "nothing" for what it held when
             // last read is doubted once — its last rows stand — and believed
             // when the next read says the same.
-            let doubted =
+            // r12-2/r12-3: rows the shell's cache answered (`read_at_ms`) are
+            // no network's word now. They never clear a network the machine
+            // knows it could not read, nor a doubted one: a cache hit used to
+            // settle "every network answered" — "Live · listening for
+            // payments" over a network that was not answering, the recovery
+            // reads reset — until the cache aged out or a reload.
+            let from_cache = read_at_ms.is_some();
+            let failed_chain_ids: Vec<u32> = if from_cache {
+                let mut known: Vec<u32> = model
+                    .failed_chain_ids
+                    .iter()
+                    .copied()
+                    .filter(|id| !failed_chain_ids.contains(id))
+                    .collect();
+                known.extend(failed_chain_ids);
+                known
+            } else {
+                failed_chain_ids
+            };
+            let kept_doubt: BTreeSet<u32> = if from_cache {
+                model.suspect_chain_ids.clone()
+            } else {
+                BTreeSet::new()
+            };
+            let mut doubted =
                 doubt_vanished_holdings(model, &mut live, &failed_chain_ids, &read_chain_ids);
+            doubted.extend(kept_doubt);
             sort_by_usd_desc(&mut live);
             // r10-1: the networks the stamp speaks for, as known BEFORE this
             // round forgets anything: where it lives, where it held something
@@ -1865,6 +1949,7 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
                 .chain(doubted.iter().copied())
                 .collect();
             remember_reads(model, &live, &unanswered, &read_chain_ids);
+            model.asked_chain_ids = read_chain_ids.iter().copied().collect();
             model.suspect_chain_ids = doubted;
             model.tokens = live;
             model.failed_chain_ids = failed_chain_ids;
@@ -1974,6 +2059,15 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
             model.last_round_answered = true;
             arm_list_recheck(model, &mut operations);
             arm_recovery(model, &mut operations, !model.failed_chain_ids.is_empty());
+            // r12-3: the pool lost a network while this round was out, and
+            // this round did not say it: read again, forced, once.
+            if std::mem::take(&mut model.pool_reread_pending) && !model.backgrounded {
+                let owed: Vec<u32> = model.pool_unreached.iter().copied().collect();
+                if owed.iter().any(|id| pool_loss_unsaid(model, *id)) {
+                    let reread = begin_fetch(model, true, false);
+                    return Command::all(vec![requests(model, operations), reread]);
+                }
+            }
             requests(model, operations)
         }
 

@@ -603,6 +603,36 @@ pub enum FeeGasOutcome {
     Refused,
 }
 
+/// r12 S4: the confirm's fee row, one rule for every shell. The amount is
+/// the fee that is signed and charged (r11-8: priced = charged), so it is
+/// drawn bare — "0.12 USDC", never "~0.12" (Android and iOS prefixed "~",
+/// the web and the desktop did not). The label is the only word that says
+/// what kind of figure it is: the relay's quote, or an estimate the chain's
+/// gas price may still move (`quoted == false`). Door: `fee.row {quoted}`
+/// (`multisigLinkCall` / `multisig_link_call`). Vectors:
+/// `tests/vectors/fee/confirm-row.json`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct ConfirmFeeRow {
+    /// The row's label: `send.estFeeLabel` ("Est. Fee"), or
+    /// `send.feeTokenEstimate` ("Estimated fee") for a fee not quoted.
+    pub label_key: &'static str,
+    /// What goes before the amount: nothing. On the wire so a shell draws
+    /// the core's mark, never its own.
+    pub amount_prefix: &'static str,
+}
+
+#[must_use]
+pub fn confirm_fee_row(quoted: bool) -> ConfirmFeeRow {
+    ConfirmFeeRow {
+        label_key: if quoted {
+            "send.estFeeLabel"
+        } else {
+            "send.feeTokenEstimate"
+        },
+        amount_prefix: "",
+    }
+}
+
 /// What a failed `eth_estimateUserOperationGas` tells the fee machine
 /// (r11-8) — ONE rule, so every shell hands the machine the same outcome for
 /// the same relay answer. `error_json`: the JSON-RPC `error` member as it

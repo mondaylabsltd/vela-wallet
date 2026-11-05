@@ -26,7 +26,9 @@
 # Deliberately NOT included (they run in nightly.yml — nightly, and on demand
 # with `gh workflow run nightly.yml` — non-blocking until each has a
 # proven-stable record on a runner; see docs/ci/test-loops.md):
-#   - app-web's Playwright e2e (`pnpm test:e2e`) on chromium, firefox, webkit;
+#   - app-web's Playwright e2e (`pnpm test:e2e`) on chromium, firefox, webkit
+#     — all but one spec: `e2e/extension-site-start.e2e.ts` runs in `web`
+#     (r12, a regression three rounds running);
 #   - the trusted-signer page suites (app-web/trusted-signer/samples);
 #   - the multisig fork suite (web onchain + vela-core's multisig_fork);
 #   - Android macrobenchmarks, iOS PerfTests, the desktop perf harness.
@@ -260,6 +262,23 @@ jobs:
         run: |
           npm ci --prefix scripts --no-audit --no-fund
           node scripts/ci/assert-test-results.mjs --platform web --junit "$RUNNER_TEMP/vitest-junit.xml"
+      # r12: a new site starts where the account lives — regressed three
+      # rounds running (r9, r10, r12), so its e2e gates every PR instead of
+      # waiting for the nightly. The real Chrome extension (built above),
+      # headless (`--headless=new`, no display): an account funded on Arc
+      # Testnet after the wallet last read it, a slow node, the side panel;
+      # it reproduces r12's "Network Sepolia" without the fix. The site is
+      # the extension's own pages plus a local dApp, so the preview here is
+      # only the config's web server, started from the bundle built above
+      # rather than built a second time.
+      - name: The extension starts a new site where the account lives (e2e, required)
+        run: |
+          node e2e/preview.mjs 4173 > "$RUNNER_TEMP/preview.log" 2>&1 &
+          for _ in $(seq 1 90); do curl -sf -o /dev/null http://localhost:4173/ && break; sleep 1; done
+          pnpm exec playwright test --project=chromium e2e/extension-site-start.e2e.ts --reporter=list
+      - name: Keep the preview's log
+        if: failure()
+        run: cat "$RUNNER_TEMP/preview.log" || true
 
   # The marketing site + API worker, moved under app-web/ with the rest of the
   # web surfaces (2026-08-12). It deploys by hand (`bun run deploy`), so nothing

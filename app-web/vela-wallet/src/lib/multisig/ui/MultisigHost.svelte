@@ -28,7 +28,7 @@
 	import { proposals } from '../core/proposals.svelte';
 	import type { MultisigReviewOut } from '../core/kernel';
 	import { proposalsHost } from '../shell/proposals-host.svelte';
-	import { useRecordWords } from '../core/records';
+	import { rewordMemberRows, useRecordWords } from '../core/records';
 	import { multisig, type MultisigAccount } from '../core/store.svelte';
 	import { names } from '../core/names.svelte';
 	import { multisigUi } from '../core/ui.svelte';
@@ -107,6 +107,18 @@
 	// member on every platform — has the index's names to choose from.
 	$effect(() => {
 		if ((multisig.view?.index_wanted.length ?? 0) > 0) names.askWanted();
+	});
+
+	// r12-8: a member's name landing (the index, an invite) re-titles the
+	// executed member changes in Activity, as the sheet says them.
+	const labelsKey = $derived(JSON.stringify(multisig.view?.member_labels ?? {}));
+	$effect(() => {
+		void labelsKey;
+		void rewordMemberRows(m)
+			.then((changed) => {
+				if (changed > 0) onchanged?.();
+			})
+			.catch(() => {});
 	});
 
 	onMount(() => {

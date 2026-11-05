@@ -72,7 +72,7 @@
 	import { payPrefill } from '$lib/pay/link';
 	import { takeKeptPay } from '$lib/pay/kept';
 	import { preferences } from '$lib/services/preferences.svelte';
-	import { publishExtChains, setExtAccountChains } from '$lib/dapp/core/ext-chains';
+	import { accountLivesOn, publishExtChains, setExtAccountChains } from '$lib/dapp/core/ext-chains';
 	import { networkSpace } from '$lib/network-space/network-space.svelte';
 	import { chainName, subscribeNetworks } from '$lib/services/networks';
 	import { ownNodes } from '$lib/services/own-node.svelte';
@@ -1770,15 +1770,10 @@
 		const view = balance.view;
 		const address = view.address;
 		if (address === null) return;
-		const held = view.tokens.filter((t) => !t.spam && Number(t.balance) > 0).map((t) => t.chain_id);
-		if (view.last_refreshed_at_ms === null && held.length === 0) return;
 		const active = multisig.active;
 		const own = active && active.address.toLowerCase() === address.toLowerCase() ? active : null;
-		void setExtAccountChains(address, [
-			...(own?.chainIds ?? []),
-			...held,
-			...(multisig.view?.recent_networks ?? [])
-		]);
+		const lives = accountLivesOn(view, own?.chainIds ?? [], multisig.view?.recent_networks ?? []);
+		if (lives) void setExtAccountChains(address, lives);
 	});
 
 	// What an already-connected site may be told (the worker's snapshot), a

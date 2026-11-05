@@ -28,14 +28,22 @@ describe('r11-6: one title rule for a member', () => {
 		expect(memberWho(INTERLEAVE, '  ')).toBe('0x88cCA0…266894');
 	});
 
-	it('names a member change with the names as they stand now', () => {
-		const add = { kind: 'addOwner', owner: INTERLEAVE, threshold: 2 } as unknown as Action;
-		let label: string | null = null;
-		const who = (a: string) => memberWho(a, label);
-		expect(memberActionTitle(m, add, who)).toBe('Add 0x88cCA0…266894');
-		label = 'Interleave'; // the passkey index answered
-		expect(memberActionTitle(m, add, who)).toBe('Add Interleave (0x88cCA0…266894)');
+	it('names a member change with the names as they stand now (the core’s names.change, r12-8)', () => {
+		const add = { kind: 'addOwner', owner: INTERLEAVE, threshold: '2' } as unknown as Action;
+		let known: string | null = null;
+		const label = () => known;
+		expect(memberActionTitle(m, add, label)).toBe('Add 0x88cCA0…266894');
+		known = 'Interleave'; // the passkey index answered
+		expect(memberActionTitle(m, add, label)).toBe('Add Interleave (0x88cCA0…266894)');
 		const send = { kind: 'transfer', token: null, to: INTERLEAVE, amount: '1' } as Action;
-		expect(memberActionTitle(m, send, who)).toBeNull();
+		expect(memberActionTitle(m, send, label)).toBeNull();
+	});
+
+	it('r12-8: the same rule in the page’s language — a zh page says 添加, never the English it was written in', () => {
+		const zh = { ...m, change: { ...m.change, add: '添加 {{member}}' } } as MultisigMessages;
+		const add = { kind: 'addOwner', owner: INTERLEAVE, threshold: '2' } as unknown as Action;
+		expect(memberActionTitle(zh, add, () => 'Interleave')).toBe(
+			'添加 Interleave (0x88cCA0…266894)'
+		);
 	});
 });

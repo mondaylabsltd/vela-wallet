@@ -47,6 +47,14 @@ own_only_chains: Array<number>,
  */
 own_node_unreached_chains: Array<number>, 
 /**
+ * r12-3: the chain notice's own set — `failed_chains` ∪
+ * `unreached_chains`, less `rate_limited_chains` — sorted ascending.
+ * Hand it to the balance machine as `pool_unreached {chain_ids}`
+ * whenever it changes: a network the pool lost in a warm session is
+ * read again and named, never left to age behind the shell's cache.
+ */
+out_of_reach_chains: Array<number>, 
+/**
  * Per routed call, the endpoints its current pass has still to try, in
  * the order it will try them (the endpoint it is waiting on is already
  * off the list). For a shell that asks the next endpoint early — the

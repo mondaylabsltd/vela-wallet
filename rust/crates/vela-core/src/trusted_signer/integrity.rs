@@ -61,6 +61,10 @@
 /// Every entry is a page published at `sign.getvela.app/b/<hash>/sign.html`.
 /// An empty set would open nothing were it enforced — see [`ENFORCE`].
 pub const BUILD_ALLOWED: &[&str] = &[
+    // 797489e6's page, round 12 (r12-7): every short address is THE short
+    // form (`names::short_address`): EIP-55, `0x` + 6, `…`, 6 — never the
+    // 4+4 lowercase "0x3e9b…692d". Not LAUNCH.
+    "987ccbcc59116e06e7939d5cd4d10ac622538b6e4deb993db8ba7d407e410f86",
     // 344aacd2's page, round 10: a multisig's coins are the multisig's ("all
     // of the multisig's USDC", never "all of your USDC"; "The multisig sends
     // …"); a member change reads before → after against the members and

@@ -11,6 +11,7 @@
 
 use crate::CoreError;
 
+pub mod amount;
 mod calls;
 pub mod names;
 pub mod networks;
@@ -22,6 +23,17 @@ pub fn call_json(method: &str, args: &serde_json::Value) -> Option<Result<String
     let (area, name) = method.split_once('.')?;
     match area {
         "relay" => Some(relay::call(name, args)),
+        "amount" => Some(amount::call(name, args)),
+        // r12 S4: not the multisig's alone — the confirm's fee row, through
+        // the one door every shell already has.
+        "fee" => Some(match name {
+            "row" => arg::<Option<bool>>(args, "quoted").and_then(|quoted| {
+                to_json(&crate::app::fee_policy::confirm_fee_row(
+                    quoted.unwrap_or(true),
+                ))
+            }),
+            other => Err(CoreError::Multisig(format!("fee.{other}: no such rule"))),
+        }),
         "calls" => Some(calls::call(name, args)),
         "networks" => Some(networks::call(name, args)),
         "names" => Some(names::call(name, args)),

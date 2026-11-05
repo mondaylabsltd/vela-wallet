@@ -114,6 +114,33 @@ export function getOwnNodeUnreachedChains(): readonly number[] {
 	return latestView?.own_node_unreached_chains ?? [];
 }
 
+/**
+ * r12-3: who hears the pool's out-of-reach networks (the core's
+ * `out_of_reach_chains`) each time that set changes — the balance machine,
+ * which reads a lost network again at once (`pool_unreached`).
+ */
+const outOfReachListeners = new Set<(chainIds: number[]) => void>();
+let lastOutOfReach = '';
+
+/** Listen for the pool's out-of-reach networks; told the current set at once. Returns the unsubscribe. */
+export function onPoolOutOfReach(listener: (chainIds: number[]) => void): () => void {
+	outOfReachListeners.add(listener);
+	const now = latestView?.out_of_reach_chains;
+	if (now && now.length > 0) listener([...now]);
+	return () => outOfReachListeners.delete(listener);
+}
+
+function noteOutOfReach(view: RpcPoolView): void {
+	const ids = view.out_of_reach_chains ?? [];
+	const key = ids.join(',');
+	if (key === lastOutOfReach) return;
+	lastOutOfReach = key;
+	// Never from inside the pool core's own dispatch: the next task.
+	setTimeout(() => {
+		for (const listener of [...outOfReachListeners]) listener([...ids]);
+	}, 0);
+}
+
 /** Fault-injected chains, apart from the projected sets (the view is a full
  *  replacement on every push and would erase a folded-in fault). */
 const faultFailedChains = new Set<number>();
@@ -303,6 +330,7 @@ function ensureReady(): Promise<void> {
 				onView: (view: RpcPoolView) => {
 					latestView = view;
 					coreFailedChains = view.failed_chains;
+					noteOutOfReach(view);
 					coreRateLimitedChains = view.rate_limited_chains;
 					noteOwnNodes(
 						view.fallback_chains ?? [],
