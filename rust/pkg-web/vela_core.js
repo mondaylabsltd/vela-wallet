@@ -7569,6 +7569,78 @@ export function storageRecordsIn(value) {
 }
 
 /**
+ * §18 item 2: the stored account list (`vela.accounts`) as this build reads
+ * it (`stored_accounts::read`): `raw` as stored (`undefined`: nothing) →
+ * `{accounts, unreadable, unreadable_at}` — the records the core reads,
+ * exactly as stored, and how many it cannot (kept, and said).
+ * @param {string | null} [raw]
+ * @returns {string}
+ */
+export function storedAccountsRead(raw) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        var ptr0 = isLikeNone(raw) ? 0 : passStringToWasm0(raw, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len0 = WASM_VECTOR_LEN;
+        const ret = wasm.storedAccountsRead(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * §18 item 2: drop the record `by_json` names (`{"id": …}` or `{"address":
+ * …}`), every other kept as it was; `null` for anything else.
+ * @param {string | null | undefined} raw
+ * @param {string} by_json
+ * @returns {string}
+ */
+export function storedAccountsRemove(raw, by_json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        var ptr0 = isLikeNone(raw) ? 0 : passStringToWasm0(raw, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(by_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.storedAccountsRemove(ptr0, len0, ptr1, len1);
+        deferred3_0 = ret[0];
+        deferred3_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * §18 item 2: upsert a stored account record by `id`, every record this
+ * build cannot read kept as it was: `{stored, before, after, replaced,
+ * unreadable_kept}`, or `null` (a record with no `id`).
+ * @param {string | null | undefined} raw
+ * @param {string} account_json
+ * @returns {string}
+ */
+export function storedAccountsUpsert(raw, account_json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        var ptr0 = isLikeNone(raw) ? 0 : passStringToWasm0(raw, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(account_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.storedAccountsUpsert(ptr0, len0, ptr1, len1);
+        deferred3_0 = ret[0];
+        deferred3_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
  * @param {Uint8Array} data
  * @returns {string}
  */

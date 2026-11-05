@@ -22456,6 +22456,49 @@ public func networkLivesElsewhere(argsJson: String) -> String  {
 })
 }
 /**
+ * §18 item 2: the stored account list (`vela.accounts`) as this build reads
+ * it — `stored_accounts::read`: `raw` as stored (`None`: nothing) → `{accounts,
+ * unreadable, unreadable_at}`, the records the core reads exactly as stored
+ * and how many it cannot (kept, and said). The wasm twin is
+ * `storedAccountsRead`.
+ */
+public func storedAccountsRead(raw: String?) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_stored_accounts_read(
+        FfiConverterOptionString.lower(raw),uniffiCallStatus
+    )
+})
+}
+/**
+ * §18 item 2: drop the record `by_json` names (`{"id": …}` or `{"address":
+ * …}`), every other kept as it was — the same answer as the upsert's.
+ */
+public func storedAccountsRemove(raw: String?, byJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_stored_accounts_remove(
+        FfiConverterOptionString.lower(raw),
+        FfiConverterString.lower(byJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * §18 item 2: upsert a stored account record by `id`, every record this
+ * build cannot read kept as it was — `{stored, before, after, replaced,
+ * unreadable_kept}` (store `stored`, log the counts), or `null`: a record
+ * with no `id`, nothing to write.
+ */
+public func storedAccountsUpsert(raw: String?, accountJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_stored_accounts_upsert(
+        FfiConverterOptionString.lower(raw),
+        FfiConverterString.lower(accountJson),uniffiCallStatus
+    )
+})
+}
+/**
  * Where a multisig member's approval goes — [`signing_route`] for
  * `vela_multisigApprove` (`trusted_signer::approval::approval_route`), as
  * the same JSON. `None` for a record this build cannot read.
@@ -23854,6 +23897,15 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_network_lives_elsewhere() != 39770) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_stored_accounts_read() != 18188) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_stored_accounts_remove() != 38702) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_stored_accounts_upsert() != 47035) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_multisig_approval_route() != 29971) {
