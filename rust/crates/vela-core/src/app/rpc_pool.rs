@@ -1228,6 +1228,13 @@ pub struct RpcPoolView {
     /// nothing went to another node, so the person's node is the whole story.
     #[serde(default)]
     pub own_node_unreached_chains: Vec<u32>,
+    /// r12-3: the chain notice's own set — `failed_chains` ∪
+    /// `unreached_chains`, less `rate_limited_chains` — sorted ascending.
+    /// Hand it to the balance machine as `pool_unreached {chain_ids}`
+    /// whenever it changes: a network the pool lost in a warm session is
+    /// read again and named, never left to age behind the shell's cache.
+    #[serde(default)]
+    pub out_of_reach_chains: Vec<u32>,
     /// Per routed call, the endpoints its current pass has still to try, in
     /// the order it will try them (the endpoint it is waiting on is already
     /// off the list). For a shell that asks the next endpoint early — the
@@ -1355,6 +1362,12 @@ impl App for RpcPool {
                     (model.failed_chains.contains(chain) || model.unreached_chains.contains(chain))
                         && !model.rate_limited_chains.contains(chain)
                 })
+                .collect(),
+            out_of_reach_chains: model
+                .failed_chains
+                .union(&model.unreached_chains)
+                .filter(|chain| !model.rate_limited_chains.contains(chain))
+                .copied()
                 .collect(),
             pending_urls: model
                 .calls

@@ -460,6 +460,7 @@ describe('hedged reads (perf-6)', () => {
 				fallback_chains: [],
 				own_only_chains: [],
 				own_node_unreached_chains: [],
+				out_of_reach_chains: [],
 				pending_urls: { c1: [NEXT] }
 			}),
 			answerEarly: (callId, url) => early.push({ callId, url })
@@ -534,6 +535,7 @@ describe('hedged reads (perf-6)', () => {
 					fallback_chains: [],
 					own_only_chains: [],
 					own_node_unreached_chains: [],
+					out_of_reach_chains: [],
 					pending_urls: { c1: [NEXT, THIRD] }
 				}),
 				answerEarly: (callId, url) => early.push({ callId, url })

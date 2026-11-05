@@ -3827,3 +3827,77 @@ fn the_stamp_rule_counts_only_the_home_networks() {
     assert!(!stamp_moves(&arc, &[], &[5_042_002]));
     assert!(stamp_moves(&arc, &[], &[]));
 }
+
+/// r12-2 / r12-3: the pool's failure signal and the shell's cache, through
+/// the shared vectors every shell replays (`tests/vectors/balance-pool-unreached.json`).
+#[test]
+fn the_pool_unreached_vectors_hold() {
+    let path = format!(
+        "{}/tests/vectors/balance-pool-unreached.json",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let v: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let cases = v["cases"].as_array().unwrap();
+    assert!(cases.len() >= 7);
+    for case in cases {
+        let name = case["name"].as_str().unwrap();
+        let address = case["address"].as_str().unwrap();
+        let mut sut = boot(address);
+        for (i, step) in case["steps"].as_array().unwrap().iter().enumerate() {
+            if let Some(event) = step.get("event") {
+                let event: Event = serde_json::from_value(event.clone()).unwrap();
+                sut.dispatch(event);
+            } else {
+                let answer: Res = serde_json::from_value(step["answer"].clone()).unwrap();
+                let fetch = matches!(answer, Res::FetchSettled { .. });
+                sut.resolve_matching(
+                    |op| {
+                        if fetch {
+                            matches!(op, Op::FetchTokens { .. })
+                        } else {
+                            matches!(op, Op::ReadBalanceCache { .. })
+                        }
+                    },
+                    answer,
+                );
+            }
+            let Some(expect) = step.get("expect") else {
+                continue;
+            };
+            if let Some(fetch) = expect.get("fetch") {
+                let out = sut.outstanding().into_iter().find_map(|op| match op {
+                    Op::FetchTokens { force, .. } => Some(force),
+                    _ => None,
+                });
+                assert_eq!(
+                    out,
+                    fetch.get("force").and_then(serde_json::Value::as_bool),
+                    "{name}, step {i}: fetch"
+                );
+            }
+            let view = sut.view();
+            if let Some(unreachable) = expect.get("unreachable") {
+                let ids: Vec<u64> = view
+                    .unreachable_networks
+                    .iter()
+                    .map(|n| u64::from(n.chain_id))
+                    .collect();
+                let want: Vec<u64> = unreachable
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|id| id.as_u64().unwrap())
+                    .collect();
+                assert_eq!(ids, want, "{name}, step {i}: unreachable");
+            }
+            if let Some(live) = expect.get("live") {
+                assert_eq!(
+                    view.live_key.is_some(),
+                    live.as_bool().unwrap(),
+                    "{name}, step {i}: live"
+                );
+            }
+        }
+    }
+}
