@@ -596,6 +596,31 @@ pub(crate) fn stored_request(id: &str) -> Option<String> {
     (!text.trim().is_empty()).then_some(text)
 }
 
+/// R12 S4: the accounts (lowercased) whose first incoming scan has come
+/// back in this process. Before it an empty feed is not "No activity yet":
+/// the chains have not been asked what came in, and the home says it is
+/// still looking. Kept per account — a switch to one never scanned is a
+/// first look again. Loading versus empty is the shell's (`FeedView`'s
+/// `home_empty_key` doc); this is the fact it is decided from.
+static SCANNED: std::sync::Mutex<std::collections::BTreeSet<String>> =
+    std::sync::Mutex::new(std::collections::BTreeSet::new());
+
+/// Whether `address`'s first incoming scan has come back (R12 S4).
+#[must_use]
+pub fn scanned(address: &str) -> bool {
+    SCANNED
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .contains(&address.to_ascii_lowercase())
+}
+
+fn note_scanned(address: &str) {
+    SCANNED
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .insert(address.to_ascii_lowercase());
+}
+
 /// Every stored row, as the core reads it. Crate-visible so the sign
 /// executor's test can prove the row it writes is the one Activity draws
 /// (083 H2).
@@ -646,8 +671,10 @@ impl Machine for ActivityFeed {
                     crate::executor::now_ms()
                 ));
                 let address = address.clone();
-                Answer::Blocking(Box::new(move || FeedShellResult::SyncCompleted {
-                    new_count: sync_received(&address),
+                Answer::Blocking(Box::new(move || {
+                    let new_count = sync_received(&address);
+                    note_scanned(&address);
+                    FeedShellResult::SyncCompleted { new_count }
                 }))
             }
 

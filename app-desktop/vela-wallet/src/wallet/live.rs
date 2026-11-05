@@ -2022,19 +2022,38 @@ mod tests {
         });
         let narrowed = host.view();
         for feed in [&all, &narrowed] {
-            assert_eq!(home_activity(true, true, feed, &s), HomeActivity::Rows);
-            assert_eq!(home_activity(true, false, feed, &s), HomeActivity::Rows);
-            assert_eq!(home_activity(false, true, feed, &s), HomeActivity::Loading);
+            assert_eq!(
+                home_activity(true, true, true, feed, &s),
+                HomeActivity::Rows
+            );
+            assert_eq!(
+                home_activity(true, false, true, feed, &s),
+                HomeActivity::Rows
+            );
+            assert_eq!(
+                home_activity(true, false, false, feed, &s),
+                HomeActivity::Rows
+            );
+            assert_eq!(
+                home_activity(false, true, true, feed, &s),
+                HomeActivity::Loading
+            );
+            // R12 S4: the first scan not back yet — still looking, never
+            // "No activity yet".
+            assert_eq!(
+                home_activity(false, false, false, feed, &s),
+                HomeActivity::Loading
+            );
         }
         assert_eq!(
-            home_activity(false, false, &all, &s),
+            home_activity(false, false, true, &all, &s),
             HomeActivity::Empty {
                 title: s.empty_activity_title.clone(),
                 caption: s.empty_activity_caption.clone(),
             }
         );
         assert_eq!(
-            home_activity(false, false, &narrowed, &s),
+            home_activity(false, false, true, &narrowed, &s),
             HomeActivity::Empty {
                 title: s.empty_activity_network.clone(),
                 caption: SharedString::default(),
@@ -4525,19 +4544,22 @@ pub enum HomeActivity {
 
 /// The home Activity's state. Which empty line is the core's
 /// (`FeedView.home_empty_key`, from the filter the page told it); loading
-/// versus empty is the shell's, from `BalanceView.balance_unknown` — the
-/// iPhone's rows / loading / empty (`WalletLive.swift:88-103`).
+/// versus empty is the shell's, from `BalanceView.balance_unknown` and
+/// whether the account's first incoming scan is back (`scanned`, R12 S4:
+/// "No activity yet" before the chains were asked was a claim nobody had
+/// checked) — the iPhone's rows / loading / empty.
 #[must_use]
 pub fn home_activity(
     has_rows: bool,
     balance_unknown: bool,
+    scanned: bool,
     feed: &FeedView,
     s: &WalletStrings,
 ) -> HomeActivity {
     if has_rows {
         return HomeActivity::Rows;
     }
-    if balance_unknown {
+    if balance_unknown || !scanned {
         return HomeActivity::Loading;
     }
     match feed.home_empty_key.as_str() {
