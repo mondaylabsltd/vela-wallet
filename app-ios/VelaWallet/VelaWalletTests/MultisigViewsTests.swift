@@ -173,9 +173,9 @@ struct MultisigViewsTests {
 
     @Test func whyItWouldFailIsSaidWithTheCoresFigures() {
         let short = MsJSON(any: ["kind": "short", "have": "280000", "need": "500000", "token": ["symbol": "USDC", "decimals": 6]])
-        #expect(words.whyFails(short) == "the multisig holds 0.28 USDC, and this needs 0.5 USDC")
-        #expect(words.whyFails(MsJSON(any: ["kind": "reverts", "reason": "GS013"])).contains("GS013"))
-        #expect(words.whyFails(MsJSON(any: ["kind": "reverts"])) == words.t("proposal.whyRevertsPlain"))
+        #expect(words.whyFails(short, chainId: 100) == "the multisig holds 0.28 USDC, and this needs 0.5 USDC")
+        #expect(words.whyFails(MsJSON(any: ["kind": "reverts", "reason": "GS013"]), chainId: 100).contains("GS013"))
+        #expect(words.whyFails(MsJSON(any: ["kind": "reverts"]), chainId: 100) == words.t("proposal.whyRevertsPlain"))
     }
 
     @Test func everyActionFailureIsSaidOrSilentAsTheWebSaysIt() {

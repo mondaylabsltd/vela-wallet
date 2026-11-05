@@ -259,7 +259,7 @@ struct MsProposalModel {
             out.append((words.t("proposal.renameUndeployed", ["network": words.network(chainId)]), .warning, "renameUndeployed"))
         }
         if standing?.kind == "blocked" {
-            out.append((words.t("status.cannotRun", ["reason": words.blockReason(standing?["block"])]), .warning, "blocked"))
+            out.append((words.t("status.cannotRun", ["reason": words.blockReason(standing?["block"], chainId: chainId)]), .warning, "blocked"))
         }
         if let entry = outboxEntry {
             // r8-16: on its way now is no warning — nothing was refused.
@@ -366,15 +366,15 @@ struct MsProposalModel {
             let fee = preview["fee"]
             let amount = fee?["amount"]?.string ?? "0"
             let symbol = words.symbol(chainId)
-            let feeText = "\(MsRules.formatUnits(amount, decimals: 18)) \(symbol)"
+            let feeText = "\(MsRules.formatUnits(amount, decimals: MsWords.coinDecimals)) \(symbol)"
             if preview["canPay"]?.bool == false {
                 return (words.t("proposal.cannotPay", [
                     "name": words.label(executor), "symbol": symbol, "fee": feeText,
-                    "balance": "\(MsRules.formatUnits(preview["balance"]?.string ?? "0", decimals: 18)) \(symbol)",
+                    "balance": "\(MsRules.formatUnits(preview["balance"]?.string ?? "0", decimals: MsWords.coinDecimals)) \(symbol)",
                 ]), .warning)
             }
             return (words.t("proposal.feeLine", ["fee": feeText, "name": words.label(executor)]), .neutral)
-        case "fails": return (words.t("proposal.wouldFail", ["reason": words.whyFails(preview["why"])]), .danger)
+        case "fails": return (words.t("proposal.wouldFail", ["reason": words.whyFails(preview["why"], chainId: chainId)]), .danger)
         case "unpriced": return (words.t("proposal.feeUnpriced"), .warning)
         case "unchecked": return (words.t("proposal.feeUnchecked"), .warning)
         case "refused": return (words.t("authority.deployUnverified", ["network": words.network(chainId)]), .danger)
@@ -438,7 +438,7 @@ struct MsProposalModel {
         if setup["executor"]?.bool == true { lines.append(words.t("proposal.setupExecutor", ["name": words.label(executor)])) }
         guard !lines.isEmpty else { return [] }
         let head = setup["amount"]?.string.map {
-            words.t("proposal.feeSetup", ["network": words.network(chainId), "amount": "\(MsRules.formatUnits($0, decimals: 18)) \(words.symbol(chainId))"])
+            words.t("proposal.feeSetup", ["network": words.network(chainId), "amount": words.coinAmount($0, chainId: chainId)])
         } ?? words.t("proposal.feeSetupPlain", ["network": words.network(chainId)])
         return [head] + lines
     }

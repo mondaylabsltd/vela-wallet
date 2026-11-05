@@ -1039,7 +1039,7 @@ enum SigningLive {
         func tone(_ delta: String) -> SigningTone { delta.hasPrefix("-") ? .neutral : .success }
         switch judgment {
         case .native(let delta):
-            guard let text = SimDeltas.deltaText(delta, decimals: 18) else { return nil }
+            guard let text = SimDeltas.deltaText(delta, decimals: ChainCatalog.coinDecimals) else { return nil }
             return BalanceDeltaRow(symbol: context.nativeSymbol, delta: text, tone: tone(delta))
         case .erc20Trusted(_, let delta, let symbol, let decimals, _):
             guard let text = SimDeltas.deltaText(delta, decimals: decimals) else { return nil }

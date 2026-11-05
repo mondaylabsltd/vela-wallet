@@ -715,7 +715,7 @@ final class SignExecutor {
             to = leg?["to"] as? String ?? ""
             value = requestedValueHex(method: method, first: first)
             symbol = nativeSymbol
-            decimals = 18
+            decimals = ChainCatalog.coinDecimals
         case "sign_typed_data":
             kind = "sign_typed_data"
         default:

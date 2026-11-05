@@ -77,8 +77,11 @@ enum CustomTokens {
     /// chain, and a core that carried it could disagree with the settings
     /// screen about what a network is called.
     static func toWire(_ stored: [String: Any]) -> [String: Any]? {
+        // r12-1: a record with no decimals is not a token the core can
+        // count — never one read in 18 assumed.
         guard let contract = stored["contractAddress"] as? String, !contract.isEmpty,
-              let chainId = (stored["chainId"] as? NSNumber)?.intValue
+              let chainId = (stored["chainId"] as? NSNumber)?.intValue,
+              let decimals = (stored["decimals"] as? NSNumber)?.intValue
         else { return nil }
         return [
             "id": stored["id"] as? String ?? id(chainId: chainId, contract: contract),
@@ -86,7 +89,7 @@ enum CustomTokens {
             "contract_address": contract,
             "symbol": stored["symbol"] as? String ?? "",
             "name": stored["name"] as? String ?? "",
-            "decimals": (stored["decimals"] as? NSNumber)?.intValue ?? 18,
+            "decimals": decimals,
         ]
     }
 
@@ -94,15 +97,17 @@ enum CustomTokens {
     static func fromWire(_ wire: [String: Any]) -> [String: Any] {
         let chainId = (wire["chain_id"] as? NSNumber)?.intValue ?? 0
         let contract = wire["contract_address"] as? String ?? ""
-        return [
+        var stored: [String: Any] = [
             "id": wire["id"] as? String ?? id(chainId: chainId, contract: contract),
             "chainId": chainId,
             "contractAddress": contract,
             "symbol": wire["symbol"] as? String ?? "",
             "name": wire["name"] as? String ?? "",
-            "decimals": (wire["decimals"] as? NSNumber)?.intValue ?? 18,
             "networkName": wire["network_name"] as? String
                 ?? ChainCatalog.meta(chainId)?.displayName ?? "",
         ]
+        // r12-1: kept only as the core said them — never 18 written for it.
+        if let decimals = (wire["decimals"] as? NSNumber)?.intValue { stored["decimals"] = decimals }
+        return stored
     }
 }

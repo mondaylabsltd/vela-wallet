@@ -359,13 +359,16 @@ final class BalanceExecutor {
     private func customTokens(chainId: Int) -> [CustomTokenRef] {
         store.readList(VelaStore.Key.customTokens).compactMap { stored in
             guard (stored["chainId"] as? NSNumber)?.intValue == chainId,
-                  let address = stored["contractAddress"] as? String, !address.isEmpty
+                  let address = stored["contractAddress"] as? String, !address.isEmpty,
+                  // r12-1: a token whose decimals were never recorded is
+                  // not read in 18 assumed.
+                  let decimals = (stored["decimals"] as? NSNumber)?.intValue
             else { return nil }
             return CustomTokenRef(
                 address: address,
                 symbol: stored["symbol"] as? String ?? "",
                 name: stored["name"] as? String ?? "",
-                decimals: (stored["decimals"] as? NSNumber)?.intValue ?? 18,
+                decimals: decimals,
                 chainId: chainId
             )
         }

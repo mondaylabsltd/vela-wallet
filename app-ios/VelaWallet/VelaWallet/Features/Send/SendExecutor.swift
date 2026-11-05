@@ -918,7 +918,11 @@ final class SendExecutor {
             "toName": record["to_name"].flatMap { $0 is NSNull ? nil : $0 } ?? NSNull(),
             "value": record["value"] as? String ?? "",
             "symbol": record["symbol"] as? String ?? "",
-            "decimals": (record["decimals"] as? NSNumber)?.intValue ?? 18,
+            // r12-1: the record's own; one without (never written by the
+            // core) says the decimals its decimal `value` is written in —
+            // never 18 assumed.
+            "decimals": (record["decimals"] as? NSNumber)?.intValue
+                ?? (record["value"] as? String ?? "").split(separator: ".").dropFirst().first.map(\.count) ?? 0,
             "logoUrls": record["logo_urls"] as? [String] ?? [],
             "chainId": (record["chain_id"] as? NSNumber)?.intValue ?? 0,
             // SECONDS. Writing milliseconds puts every send in the year 57000

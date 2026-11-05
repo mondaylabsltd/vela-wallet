@@ -51,6 +51,13 @@ struct ChainMeta {
 
 enum ChainCatalog {
 
+    /// A network's own coin is counted in the EVM's unit, wei — 18 decimals
+    /// by the protocol, on every chain here (the core's `BUILTIN_CHAINS`
+    /// say the same). r12-1: this is the shell's ONLY 18. A token's decimals
+    /// are read (the core's facts, the contract, the record) or unknown —
+    /// never this figure as a default.
+    static let coinDecimals = 18
+
     static let chains: [ChainMeta] = [
         ChainMeta(id: "ethereum", displayName: "Ethereum", chainId: 1,
                   apiNetworkId: "eth-mainnet", nativeSymbol: "ETH", isL2: false,

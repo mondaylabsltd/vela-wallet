@@ -778,18 +778,30 @@ final class MultisigHub {
                 if row["kind"] as? String == "send" {
                     let token = row["token"] as? String
                     let info = await tokenInfo(chainId: chainId, token: token)
-                    base["value"] = MsRules.plainUnits(row["amount"] as? String ?? "0", decimals: info.decimals)
-                    base["symbol"] = info.symbol
-                    base["decimals"] = info.decimals
+                    let amount = row["amount"] as? String ?? "0"
+                    if let decimals = info.decimals {
+                        base["value"] = MsRules.plainUnits(amount, decimals: decimals)
+                        base["symbol"] = info.symbol
+                        base["decimals"] = decimals
+                    } else {
+                        // r12-1: decimals nobody read — the base units as
+                        // they are, said so beside the symbol, never a
+                        // figure in decimals assumed.
+                        base["value"] = amount
+                        let unknown = MsWords(loc: loc, hub: self).t("review.reading.decimalsUnknown", ["raw": ""])
+                        base["symbol"] = [unknown.trimmingCharacters(in: .whitespaces), info.symbol].joined(separator: " ")
+                        base["decimals"] = 0
+                    }
                     if let token { base["token"] = token }
                     base["type"] = "send"
                 } else {
                     let sends = row["sends"] as? String ?? "0"
                     let info = await tokenInfo(chainId: chainId, token: nil)
+                    let decimals = info.decimals ?? MsWords.coinDecimals
                     let some = sends != "0" && !sends.isEmpty
-                    base["value"] = some ? MsRules.plainUnits(sends, decimals: info.decimals) : "0"
+                    base["value"] = some ? MsRules.plainUnits(sends, decimals: decimals) : "0"
                     base["symbol"] = some ? info.symbol : ""
-                    base["decimals"] = info.decimals
+                    base["decimals"] = decimals
                     base["type"] = "dapp_tx"
                     base["intent"] = await executedTitle(e, chainId: chainId, hash: hash)
                     base["dappSummary"] = [
@@ -826,10 +838,11 @@ final class MultisigHub {
     }
 
     /// A token's symbol and decimals: the chain's coin from the catalogue,
-    /// an ERC-20's from the chain.
-    func tokenInfo(chainId: Int, token: String?) async -> (symbol: String, decimals: Int) {
+    /// an ERC-20's from the chain. `decimals` nil: nobody read them (r12-1:
+    /// never 18, never 0, assumed).
+    func tokenInfo(chainId: Int, token: String?) async -> (symbol: String, decimals: Int?) {
         guard let token, !token.isEmpty else {
-            return (ChainCatalog.meta(chainId)?.nativeSymbol ?? "ETH", 18)
+            return (ChainCatalog.meta(chainId)?.nativeSymbol ?? "ETH", MsWords.coinDecimals)
         }
         // r8-2: the core's facts first (its registry, else the contract).
         let facts = proposalsView.tokens["\(chainId):\(token.lowercased())"]
@@ -839,9 +852,9 @@ final class MultisigHub {
         if let meta = await tokens?.resolve(chainId: chainId, addresses: [token])[token.lowercased()] {
             return (meta.symbol, meta.decimals)
         }
-        // Nobody read its decimals: its base units as they are — never a
-        // figure in 18 decimals assumed (r8-2).
-        return (AddressText.short(token), 0)
+        // Nobody read its decimals: said so — never a figure in 18
+        // decimals assumed (r8-2, r12-1).
+        return (AddressText.short(token), nil)
     }
 }
 

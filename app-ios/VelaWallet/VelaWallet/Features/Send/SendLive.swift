@@ -954,7 +954,7 @@ enum SendLive {
         switch estimate.feeAsset {
         case .native:
             let symbol = networks.meta(estimate.chainId)?.nativeSymbol ?? ""
-            return "\(feeFromBase(estimate.totalWei, decimals: 18)) \(symbol)"
+            return "\(feeFromBase(estimate.totalWei, decimals: ChainCatalog.coinDecimals)) \(symbol)"
         case .erc20(_, let decimals, let amount, let symbol):
             return "\(feeFromBase(amount, decimals: decimals)) \(symbol ?? "TOKEN")"
         }
@@ -1050,8 +1050,9 @@ enum SendLive {
     /// shell formats it. Android's first cut printed `5000000000000000000 XDAI`
     /// on a phone; this is where that does not happen again.
     static func formWarning(_ view: SendViewWire, loc: Loc) -> String? {
-        if let issue = view.sameAssetFeeIssue {
-            let decimals = view.selectedToken?.decimals ?? 18
+        // r12-1: the figures are in the selected token's own decimals —
+        // never 18 assumed when none is selected (there is no issue then).
+        if let issue = view.sameAssetFeeIssue, let decimals = view.selectedToken?.decimals {
             // The asset list's figures (spec 078), not 18-digit remainders:
             // "you have" is the balance on the token card above, digit for
             // digit. The most that can be sent is rounded DOWN — typed back,
