@@ -387,6 +387,7 @@
         "notMultisig": "This address isn't a multisig Vela can read.",
         "chooseNetwork": "Nothing says which network this multisig is used on yet. Choose its network, then tap Add.",
         "unchecked": "No record of this address yet, and some networks didn't answer in time — so Vela can't say whether it's a multisig. Try again.",
+        "busy": "{{network}}'s nodes are busy — they're limiting how often Vela can ask — so Vela couldn't check this multisig yet. Nothing was added. Try again in a moment.",
         "badInvite": "This invite link is damaged — part of it is missing or was changed on the way. Ask for the link again, or enter the multisig's address.",
         "badChecksum": "This invite's address doesn't match its checksum — ask for a new link.",
         "usedOn": "Used on {{networks}}",
@@ -795,7 +796,8 @@
           "unreadable": "Couldn't read this transaction.",
           "gone": "This transaction is no longer in the list.",
           "tryAgain": "Try again",
-          "unchecked": "Vela couldn't check what this transaction changes."
+          "unchecked": "Vela couldn't check what this transaction changes.",
+          "chainUnread": "Couldn't reach {{network}} to read this transaction."
         }
       },
       "notify": {

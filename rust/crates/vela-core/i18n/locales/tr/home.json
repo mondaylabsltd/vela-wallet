@@ -387,6 +387,7 @@
         "notMultisig": "Bu adres Vela’nın okuyabildiği bir çoklu imza değil.",
         "chooseNetwork": "Bu multisig'in hangi ağda kullanıldığı henüz belli değil. Ağını seçin, sonra Ekle'ye dokunun.",
         "unchecked": "Bu adres için henüz kayıt yok ve bazı ağlar zamanında yanıt vermedi; bu yüzden Vela bunun bir çoklu imza olup olmadığını söyleyemiyor. Tekrar dene.",
+        "busy": "{{network}} düğümleri meşgul — Vela'nın ne sıklıkla sorabileceğini sınırlıyorlar — bu yüzden Vela bu çoklu imzayı henüz kontrol edemedi. Hiçbir şey eklenmedi. Birazdan tekrar dene.",
         "badInvite": "Bu davet bağlantısı bozuk — bir kısmı eksik ya da yolda değişmiş. Bağlantıyı yeniden isteyin veya multisig'in adresini girin.",
         "badChecksum": "Bu davetteki adres, sağlama toplamıyla uyuşmuyor — yeni bir bağlantı isteyin.",
         "usedOn": "Kullanıldığı ağ: {{networks}}",
@@ -795,7 +796,8 @@
           "unreadable": "Bu işlem okunamadı.",
           "gone": "Bu işlem artık listede değil.",
           "tryAgain": "Tekrar dene",
-          "unchecked": "Vela bu işlemin neyi değiştirdiğini kontrol edemedi."
+          "unchecked": "Vela bu işlemin neyi değiştirdiğini kontrol edemedi.",
+          "chainUnread": "Bu işlemi okumak için {{network}} ağına ulaşılamadı."
         }
       },
       "notify": {

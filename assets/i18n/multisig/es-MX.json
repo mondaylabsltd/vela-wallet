@@ -319,6 +319,7 @@
     "notMultisig": "Esta dirección no es una multifirma que Vela pueda leer.",
     "chooseNetwork": "Aún no se sabe en qué red se usa este multisig. Elige su red y luego toca Agregar.",
     "unchecked": "Aún no hay registro de esta dirección y algunas redes no respondieron a tiempo, así que Vela no puede decir si es una multifirma. Inténtalo de nuevo.",
+    "busy": "Los nodos de {{network}} están ocupados —están limitando cuántas veces puede preguntar Vela—, así que Vela aún no pudo verificar esta multifirma. No se agregó nada. Inténtalo de nuevo en un momento.",
     "badInvite": "Este enlace de invitación está dañado: falta una parte o se modificó en el camino. Pide el enlace de nuevo o escribe la dirección del multisig.",
     "badChecksum": "La dirección de esta invitación no coincide con su suma de verificación: pide un enlace nuevo.",
     "usedOn": "Se usa en {{networks}}",
@@ -727,7 +728,8 @@
      "unreadable": "No se pudo leer esta transacción.",
      "gone": "Esta transacción ya no está en la lista.",
      "tryAgain": "Intentar de nuevo",
-     "unchecked": "Vela no pudo verificar qué cambia esta transacción."
+     "unchecked": "Vela no pudo verificar qué cambia esta transacción.",
+     "chainUnread": "No se pudo conectar con {{network}} para leer esta transacción."
     }
    },
    "notify": {
