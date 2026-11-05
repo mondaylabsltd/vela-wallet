@@ -666,6 +666,8 @@ export interface MultisigMessages {
 		chooseNetwork: string;
 		/** r4b-13: no record, and a network did not answer in time — not said as "none". */
 		unchecked: string;
+		/** r14-5: `{{network}}`'s nodes rate-limited the add's reads — busy, not down. */
+		busy: string;
 		/** r4b-13: the invite link is damaged. */
 		badLink: string;
 		/** r4b-13: an invite that does not read, said at once. */
@@ -1476,6 +1478,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		notMultisig: '',
 		chooseNetwork: '',
 		unchecked: '',
+		busy: '',
 		badLink: '',
 		badInvite: '',
 		badChecksum: '',

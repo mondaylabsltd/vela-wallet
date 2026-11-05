@@ -277,7 +277,10 @@
 					reason === 'added' ||
 					reason === 'chooseNetwork'
 						? null
-						: m.add[reason];
+						: stand.reason.kind === 'busy'
+							? // r14-5: its network's nodes were rate-limiting — named.
+								fillTemplate(m.add.busy, { network: chainName(stand.reason.chain_id) })
+							: m.add[reason];
 				multisigUi.open({ kind: 'add' });
 				break;
 			}

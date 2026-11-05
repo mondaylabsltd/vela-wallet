@@ -3,4 +3,4 @@
 /**
  * Why a multisig was not added as it stands (`AddOutcome`).
  */
-export type MultisigAddOutcome = { "kind": "added", address: string, } | { "kind": "notFound" } | { "kind": "unavailable" } | { "kind": "unsupported" } | { "kind": "notMultisig" } | { "kind": "chooseNetwork" } | { "kind": "unchecked" } | { "kind": "refused", findings: unknown[], } | { "kind": "unverified", chain_id: number, } | { "kind": "highRisk", findings: unknown[], };
+export type MultisigAddOutcome = { "kind": "added", address: string, } | { "kind": "notFound" } | { "kind": "unavailable" } | { "kind": "unsupported" } | { "kind": "notMultisig" } | { "kind": "chooseNetwork" } | { "kind": "unchecked" } | { "kind": "refused", findings: unknown[], } | { "kind": "unverified", chain_id: number, } | { "kind": "highRisk", findings: unknown[], } | { "kind": "busy", chain_id: number, };

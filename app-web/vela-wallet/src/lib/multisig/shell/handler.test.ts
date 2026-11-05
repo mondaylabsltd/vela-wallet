@@ -138,6 +138,23 @@ describe('the multisig shell', () => {
 		expect(thrown.type).toBe('rpc_unanswered');
 		const late = await run(deps({ rpc: () => new Promise(() => {}) }), op(10));
 		expect(late.type).toBe('rpc_unanswered');
+		// r14-5: a pool that gave up on nodes answering only "slow down" says
+		// so in the core's word; one that could not reach them does not.
+		const limited = await run(
+			deps({
+				rpc: async () => {
+					throw Object.assign(new Error('All RPC endpoints failed for chain 100'), {
+						rateLimited: true
+					});
+				}
+			}),
+			op(null)
+		);
+		expect(limited).toEqual({
+			type: 'rpc_unanswered',
+			detail: 'rate-limited: Error: All RPC endpoints failed for chain 100'
+		});
+		expect(thrown).toEqual({ type: 'rpc_unanswered', detail: 'Error: pool gave up' });
 	});
 
 	it('reads and writes the store; no storage is said, never thrown', async () => {
