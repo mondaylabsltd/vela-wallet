@@ -81,6 +81,21 @@ export class ExecutorCannotPayError extends Error {
 	}
 }
 
+/**
+ * r14-9: the core quoted the execution again at the press and its fee is not
+ * the one the sheet said — nothing was signed. `amount` is the new fee (the
+ * sheet's fee line shows it now); the next press signs exactly it.
+ */
+export class ExecutionFeeMovedError extends Error {
+	constructor(
+		readonly amount: bigint,
+		readonly executor: string
+	) {
+		super('the network fee moved since the press: nothing was signed');
+		this.name = 'ExecutionFeeMovedError';
+	}
+}
+
 /** It would fail if sent now (see {@link ExecutionBlock}): nothing was signed. */
 export class ExecutionWouldFailError extends Error {
 	constructor(readonly why: ExecutionBlock) {

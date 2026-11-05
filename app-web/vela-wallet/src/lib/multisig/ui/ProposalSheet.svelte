@@ -86,6 +86,7 @@
 	import ProvenanceNoteView from '$lib/flows/ui/ProvenanceNote.svelte';
 	import ProposalTimeline from './ProposalTimeline.svelte';
 	import {
+		ExecutionFeeMovedError,
 		ExecutionSpentError,
 		ExecutionUncheckedError,
 		ExecutionUnpricedError,
@@ -749,6 +750,16 @@
 		if (error instanceof ExecutionWouldFailError) {
 			return fillTemplate(m.proposal.wouldFail, { reason: whyText(m, error.why) });
 		}
+		// r14-9: the fee moved since the press — nothing signed; said with the
+		// new figure (its fee line's own words), so the next press is on it.
+		if (error instanceof ExecutionFeeMovedError) {
+			return fillTemplate(m.proposal.failed, {
+				reason: fillTemplate(m.proposal.feeLine, {
+					fee: feeCoin(error.amount, nativeSymbol(chainId)),
+					name: names.label(error.executor)
+				})
+			});
+		}
 		if (error instanceof ExecutionUnpricedError) return m.proposal.unpricedReason;
 		if (error instanceof ExecutionUncheckedError) return m.proposal.uncheckedReason;
 		if (error instanceof MailboxUnreadableError) {
@@ -840,6 +851,7 @@
 		return (
 			error instanceof ExecutorCannotPayError ||
 			error instanceof ExecutionWouldFailError ||
+			error instanceof ExecutionFeeMovedError ||
 			error instanceof NoOutsideSignerError ||
 			error instanceof SigningRefusedError ||
 			error instanceof SigningBlockedError ||

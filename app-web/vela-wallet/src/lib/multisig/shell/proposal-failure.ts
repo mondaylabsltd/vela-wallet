@@ -26,6 +26,7 @@ import {
 	SigningUncheckedError
 } from '../core/gate.svelte';
 import {
+	ExecutionFeeMovedError,
 	ExecutionSpentError,
 	ExecutionUncheckedError,
 	ExecutionUnpricedError,
@@ -190,6 +191,8 @@ export function detailError(detail: string): Error {
 			return Object.assign(new Error('the relay never took it'), { name: 'UserOpNotSentError' });
 		case 'cannot_pay':
 			return new ExecutorCannotPayError(big(shell.need), big(shell.have));
+		case 'fee_moved':
+			return new ExecutionFeeMovedError(big(shell.amount), shell.executor);
 		case 'unknown':
 			return new Error(shell.message);
 	}

@@ -2856,6 +2856,12 @@ impl WalletPage {
                     ],
                 )
             }
+            // r14-9: the fee moved since the press — nothing signed; said with
+            // the new figure in its fee line's own words, so the next press is
+            // on it.
+            Some(ShellFailure::FeeMoved {
+                amount, executor, ..
+            }) => fee_moved_words(loc, &amount, &words::short(&executor), chain_id),
             Some(ShellFailure::Unknown { message }) => {
                 words::tv(loc, "proposal.failed", &[("reason", &message)])
             }
@@ -4822,6 +4828,31 @@ pub(crate) fn link_offers_try_again(linked: Option<&ms_proposals::flows::LinkedV
     linked.is_some_and(|l| l.retry)
 }
 
+/// r14-9: "That didn't go through: Network fee ≈ {new}, paid by {name}".
+pub(crate) fn fee_moved_words(
+    loc: &crate::loc::Loc,
+    amount: &str,
+    name: &str,
+    chain_id: u64,
+) -> String {
+    let info = words::token_info(chain_id, None);
+    words::tv(
+        loc,
+        "proposal.failed",
+        &[(
+            "reason",
+            &words::tv(
+                loc,
+                "proposal.feeLine",
+                &[
+                    ("fee", &words::amount_words(loc, amount, &info)),
+                    ("name", name),
+                ],
+            ),
+        )],
+    )
+}
+
 pub(crate) fn no_item_lines(
     loc: &crate::loc::Loc,
     view: &ms_proposals::ProposalsView,
@@ -4902,6 +4933,28 @@ pub(crate) fn missing_offers_try_again(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn an_execution_whose_fee_moved_says_the_new_fee_and_nothing_signed() {
+        // r14-9 (the core's rule): the failure the core hands back is read
+        // as the fee that moved, and said in the fee line's own words.
+        let detail = vela_core::app::multisig_proposals::fee_moved_detail(
+            100,
+            "0x00000000000000000000000000000000000000a1",
+            97_200_000_000_000_000,
+        );
+        let Some(crate::multisig::live::ShellFailure::FeeMoved {
+            amount, chain_id, ..
+        }) = crate::multisig::live::read_failure(&detail)
+        else {
+            panic!("{detail}");
+        };
+        assert_eq!((amount.as_str(), chain_id), ("97200000000000000", 100));
+        let loc = crate::loc::Loc::for_tag("en");
+        let line = super::fee_moved_words(&loc, &amount, "Ana", chain_id);
+        assert!(line.contains("0.0972"), "{line}");
+        assert!(line.contains("Ana"), "{line}");
+    }
+
     #[test]
     fn a_sheet_with_no_transaction_says_what_is_true() {
         use vela_core::app::multisig_proposals::flows::{LinkedStand, LinkedView};

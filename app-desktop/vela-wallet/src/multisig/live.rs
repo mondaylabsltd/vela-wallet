@@ -57,6 +57,15 @@ pub enum ShellFailure {
         need: String,
         have: String,
     },
+    /// r14-9 (the core's rule, `multisig_proposals::fee_moved_detail`): the
+    /// execution was quoted again at the press and its fee is not the one
+    /// shown — nothing was signed. `amount`: the new fee (decimal).
+    FeeMoved {
+        amount: String,
+        #[serde(rename = "chainId")]
+        chain_id: u64,
+        executor: String,
+    },
     Unknown {
         message: String,
     },

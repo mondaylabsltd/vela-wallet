@@ -153,6 +153,24 @@ describe('the fee line (r4-7)', () => {
 	});
 });
 
+describe('an execution whose fee moved since the press (r14-9, the core rule)', () => {
+	it('reads the core’s `fee_moved` as nothing signed, with the new figure', async () => {
+		const { detailError } = await import('../shell/proposal-failure');
+		const { ExecutionFeeMovedError } = await import('./execution');
+		const error = detailError(
+			JSON.stringify({
+				kind: 'fee_moved',
+				amount: '97200000000000000',
+				chainId: 5042002,
+				executor: ALICE
+			})
+		);
+		expect(error).toBeInstanceOf(ExecutionFeeMovedError);
+		expect((error as InstanceType<typeof ExecutionFeeMovedError>).amount).toBe(97200000000000000n);
+		expect((error as InstanceType<typeof ExecutionFeeMovedError>).executor).toBe(ALICE);
+	});
+});
+
 describe('a deploy the core could not check is never said as refused (r14-4)', () => {
 	it('reads `unverified` as the unknown authority, and `refused` as the refusal', async () => {
 		const { previewOf } = await import('../shell/proposal-failure');
