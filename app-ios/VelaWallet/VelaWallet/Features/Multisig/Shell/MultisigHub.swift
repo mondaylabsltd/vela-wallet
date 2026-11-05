@@ -531,6 +531,9 @@ final class MultisigHub {
             return ["type": "propose_failed", "cancelled": true, "reason": NSNull()]
         case "mailboxUnreadable":
             return ["type": "propose_failed", "cancelled": false, "reason": "mailbox_down"]
+        case "unread":
+            // r13-3: the network did not answer the reads it is built from.
+            return ["type": "propose_failed", "cancelled": false, "reason": "chain_down"]
         case "failed" where MultisigShellFailure.read(settled?["detail"]?.string)?["kind"] as? String == "passkey"
             && MultisigShellFailure.read(settled?["detail"]?.string)?["failure"] as? String == "cancelled":
             return ["type": "propose_failed", "cancelled": true, "reason": NSNull()]
@@ -649,16 +652,35 @@ final class MultisigHub {
         }
         let params = (try? JSONSerialization.jsonObject(with: Data(paramsJson.utf8), options: [.fragmentsAllowed])) ?? []
         dappAnswers[id] = answer
-        proposals.dispatch([
+        let event: [String: Any] = [
             "type": "dapp_request", "id": id, "account": record, "method": method, "params": params,
             "origin": origin, "chain_id": max(0, chainId), "limit_ms": NSNull(),
-        ])
+        ]
+        dappEvents[id] = event
+        proposals.dispatch(event)
         sheet = .dapp(id: id)
+    }
+
+    /// r13-3: the request as it was asked — read again on Try again.
+    @ObservationIgnored private var dappEvents: [String: [String: Any]] = [:]
+
+    /// r13-3: Try again after the reads before its draft failed (the core
+    /// named which): the same request, drafted anew.
+    func dappRetry(_ id: String) {
+        guard let event = dappEvents[id] else { return }
+        proposals.dispatch(event)
+    }
+
+    /// r13-3: Try again on a link's transaction not read in time (the
+    /// machine's `retry`, which starts its bound again).
+    func retryLinked() {
+        proposals.dispatch(["type": "retry"])
     }
 
     /// The person left the request (declined, closed, read the refusal):
     /// the machine answers the site as it stands.
     func dappLeave(_ id: String) {
+        dappEvents.removeValue(forKey: id)
         proposals.dispatch(["type": "dapp_leave", "id": id])
     }
 

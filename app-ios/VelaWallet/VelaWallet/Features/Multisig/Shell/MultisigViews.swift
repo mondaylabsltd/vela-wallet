@@ -603,9 +603,15 @@ struct MsLinkedView: Decodable, Equatable {
     var item: MsProposalItem?
     var members: MsChainMembers?
     var stale: Bool
+    /// r13-3: what a `failed` / `unreadable` / `notFound` stand says (the
+    /// core's key), and whether it offers Try again.
+    var reasonKey: String?
+    var retry: Bool
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: MsKey.self)
+        reasonKey = c.soft(MsKey("reason_key"))
+        retry = c.soft(MsKey("retry"), false)
         safe = c.soft(MsKey("safe"), "")
         chainId = c.soft(MsKey("chain_id"), 0)
         safeTxHash = c.soft(MsKey("safe_tx_hash"), "")
