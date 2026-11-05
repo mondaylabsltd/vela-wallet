@@ -1075,3 +1075,145 @@ Send's figures, a relaunch); Android `BalanceMachineTest`.
   waits for the multisig machine to name it, and drawing before that is
   exactly the member's figure under the multisig's name (S3, D3). The gate
   stays.
+
+## 15. Round 13 web/core fixes — a hung read is bounded and named; a home claims nothing of a space it does not live in
+
+Decided under the owner's rules (honest, recoverable states; nothing spins
+without a bound; a failure names its true cause, with Try again; one core).
+All additive (new events, view fields with serde defaults, enum variants)
+except the Rust struct literals of `LinkedView` (two more fields) and the
+behaviour of the RPC pool during an outage (below).
+
+### 15.1 r13-4 (S3) — a network whose nodes hang is out of reach after three of them
+
+**Found.** A warm session on Mainnet with every node of Soneium, Unichain
+and Celo hung (taking the connection, saying nothing): nothing read them for
+326 s (the account held nothing there; the scan plan does not include them;
+the shell's token cache answered), then 187 s and ~100 hung requests across
+~25 endpoints before "Can't reach 3 networks". The cause was the pool: a
+network was `unreached` only after ONE call had swept its whole list (RF1),
+and a call walks its endpoints one at a time, 8 s each (1.5 s hedge) — 25
+endpoints, three passes, every call; a hang was never kept from the wire.
+The balance machine then read again (`pool_unreached`) and waited its own
+18 s deadline.
+
+| Was | Now |
+| --- | --- |
+| `unreached_chains` after one call's first pass failed on transport at every endpoint | after `UNREACHED_AFTER_ENDPOINTS` = 3 DIFFERENT endpoints failed on transport (a hang, a refusal) with no answer of any kind from the chain between them — from any calls; a pool smaller than three needs all of them. An answer (a result, an error, a 429) empties the count. RF1 stays. |
+| every read of an out-of-reach chain swept every endpoint, three passes | the circuit breaker's half-open probe: ONE read at a time probes the chain, on at most `OUTAGE_PROBE_ENDPOINTS` = 2 endpoints (best score first; cooldowns rotate them) in a single pass; any other read of it meanwhile fails at once with nothing on the wire (`failed`, not delivered). The read that found the outage stops after a probe's worth. A usable answer clears the chain as before. Writes (anything not a hedged read) are never refused this way. |
+| `pool_unreached` read again, forced, and named the network when that read failed (+18 s) | it names it AT ONCE (the network joins `failed_chain_ids`: no "Live" over it) — the pool's word is a read's own: several nodes said nothing, nothing answered since — and the forced read owed confirms it or unsays it (`pool_said`; a cache's answer does neither). |
+
+Timeline now: a hung read at T; three silent endpoints by ~T + 17.5 s (8 + 1.5
++ 8); named then. The web shell already hands the core what it needs
+(`timeout` vs `network` / `not_connected` outcomes, `latency_ms`, `now_ms`);
+its endpoint skipper stays as a transport detail. The 326 s before the first
+hung read is not a read that hung: nothing asked those networks (the
+account holds nothing there, and their state was the cache's) — out of this
+fix's scope; the 10-minute poll and the cache rules of §13.2 bound it.
+
+Tests: `app_rpc_pool.rs` (`a_hung_chain_with_many_endpoints_is_unreached_after_three_silent_endpoints`,
+`an_answer_between_silent_endpoints_starts_the_count_again`,
+`an_unreached_chain_is_probed_by_one_read_on_two_endpoints`,
+`a_write_during_an_outage_still_goes_out`; RF1's test now also says the read
+that found it ends there); vector `balance-pool-unreached.json` (+ "named at
+once, on the pool's word … unsaid when that read answers"); web e2e
+`home-unanswered.e2e.ts` r13-4 (every node of Ethereum hangs in a warm
+session — named < 35 s after the first hung request, < 25 hung requests).
+
+### 15.2 r13-3 (S3) — the step before a review has the review's discipline
+
+**Found.** Before a draft (send's "Propose and approve", a site's
+`eth_sendTransaction`) or a link's transaction exists, the reads it waits
+for had no bound — the 40 s / 48 s were the pool giving up — and a chain
+read that failed was said as the service's ("Couldn't read this multisig's
+waiting transactions"): `draft()` folded `Err(ChainUnavailable)` and
+`mailbox == false` into `MailboxUnreadable`. iOS's cold link sat on "Opening
+the transaction…" (`LinkedStand::Reading`, no bound, no Try again).
+
+| Where | Now |
+| --- | --- |
+| a draft (`draft`, `dapp_request`) | the members' read (the network) and the waiting list (the service) read side by side, bounded by `OPEN_TIMEOUT_MS` = 25 s (`multisig_review_state`; below the review's 40 s, above one hung node plus a hedge). Failed or still out at the bound, the read is named: `ActionState::Unread {reason_key}` — `home.multisig.proposal.unread.chain` (the network; `{{network}}`), `.both` (network and service: most likely the connection); the service alone keeps `MailboxUnreadable` (`proposal.mailboxDown`). A delegatecall's code read that fails is the network's, never "has no code". Try again = propose again (send's CTA, the site's sheet's Retry). |
+| send | `SendProposeFailure::ChainDown` → `SendTxErrorKey::ChainUnreachable` ("Couldn't reach {{network}}, so nothing was signed or sent.") |
+| a link's transaction (`open_linked`) | bounded by `OPEN_TIMEOUT_MS`: still reading then → `LinkedStand::Failed` with `LinkedView.reason_key` (`proposal.unread.linkChain` / `.linkService` / `.linkBoth`: the read still out, from the machine's own count of reads out, `ReadOut`) and `retry`. `unreadable` and `notFound` carry their key and `retry` too. The proposals `retry` starts the link's bound again (a preview's transaction is read again). The reads go on: it opens when they come. |
+| the accounts machine's link open | its multisig lookup and member read bounded by the same deadline (past it: `AddOutcome::Unchecked`; the member read falls back to the founding members, as a failed read always did). |
+
+Link door: `review.opening {chain, service, link?}` → the key (or null).
+Words: `home.multisig.proposal.unread.{chain, both, linkChain, linkService,
+linkBoth}` (15 locales; pin 690). Tests: `tests/app_multisig_opening.rs`
+(the network hung / refused, the service hung, both, Try again, a site's
+request, a link hung → failed → Try again → found); web
+`multisig/core/opening.test.ts`.
+
+Shells: web — the send's line (`chain_down`), `ProposalSheet` (the site's
+draft and a link's `failed` with Try again, `proposal-open-failed`),
+settings' rename and member changes; iOS — `actionFailure` (`unread`),
+`proposeFromSend` (`chain_down`), the link's `failed` with Try again, the
+site's sheet now says a failed draft with Retry and Decline (it spun for
+ever); desktop — `ms_action_words` (`Unread`), the link's `Failed`, send's
+`ChainDown`; Android — the words (`unread`, the link's `failed`), minimally
+(another lane is on its shells; its send wiring still maps only
+`mailbox_down`, so an unread draft there says the generic line: open).
+
+### 15.3 r13-7 (S3) — a new multisig's first history read is honest while it runs
+
+**Found.** The history (what it executed, found by `ExecutionSuccess`) was
+read in a phase no view showed: nothing said "being read", so the wallet tab
+said "No activity yet" while the side panel's read failed and said
+"Couldn't read this multisig's history". The read failed on its first
+window a node did not answer (a freshly booted pool — the side panel's) and
+on a node's "limited to a 10,000 range", which this module read as 10 blocks
+(the smallest number in it) and ran out of windows. Desktop wrote the rows
+on a thread and never told its feed: the first load missed the executed
+send until the window was focused again.
+
+| Was | Now |
+| --- | --- |
+| no state for the history | `ProposalsView.history` = `reading` (its first read on this page is out) → `read` / `unread`; once read it stays read; `retry` reads an unread one again. |
+| one unanswered window: unreadable | asked again twice (2 s, 4 s) first |
+| the module's own range parser | the pool's one reading (`rpc_pool::get_logs_range_cap`, ruling 8) |
+| (web) "No activity yet" whatever the history | Activity is `loading` while the history is `reading`; `unread`: its empty state says the panel's `historyUnreadable` line, never "No activity yet" |
+| (desktop) rows written in the background, feed not told | written, then `activity_feed::focus_tick` |
+
+Tests: `app_multisig_opening.rs` (`a_new_multisigs_history_is_reading_until_its_first_read_ends`,
+`a_window_unanswered_once_is_asked_again_before_the_history_is_unread`,
+`a_range_limit_written_with_a_comma_narrows_to_its_width`,
+`an_unread_first_history_is_read_on_retry`); web `live-elsewhere.test.ts`.
+Open: iOS and Android draw their Activity from the balance and scan alone
+(no `history` read yet) — the field is there for them.
+
+### 15.4 r13-1 (S2) — a home claims nothing of a space its account does not live in
+
+**Found.** The natives each had their own copy of the rule (r10-4, r11-3:
+Android `OtherSpace`, iOS `WalletLive.livesElsewhere`, desktop
+`network_space::lives_elsewhere`); the web had none, so an Arc-only multisig
+with Mainnet in front read "$0.00 · Live · listening for payments", "No
+activity yet", "Deposit your first asset".
+
+Now the core owns it: `network_space::lives_elsewhere(chain_ids, here,
+other, front) -> Option<Elsewhere {chain_ids, space, line_key,
+heading_key, switch_key}>` — none of its networks in the space in front
+(`here`: the person's lists), its networks of the other space; wasm
+`networkLivesElsewhere`. Vector `tests/vectors/multisig/other-space.json`
+(Rust `other_space_vectors.rs`, web `opening.test.ts`). The web home (and
+the extension's, the same components) draws the note "Used on Arc Testnet ·
+Testnet space" with the switch (`set_network_space`) at the top of the
+multisig's card, the other space's heading in the figure's place, and no
+status line, no refresh, no empty state (`WalletLiveInputs.elsewhere`).
+Open: the natives keep their shell copies of the rule (they agree with the
+vector's cases); moving them onto a uniffi export is the next native round.
+
+### 15.5 Smaller
+
+- **Safari extension, no wallet on a connect.** The request tab sat on
+  "Preparing wallet…" while it booted the wasm core, read the network lists
+  and published the snapshot — reads that need a wallet — before it said
+  there was none. Now, in the window, a signed-out session is said at once
+  (Create / I have a wallet / Cancel, `request-no-wallet`) — even before the
+  request detail is read — and the request is read when somebody signs in.
+  Chrome: the same window code (its side panel already went to Welcome).
+- **D9 (dev harness).** A passkey's relying party is a domain, never an IP
+  address: the local trusted page on `127.0.0.1` showed the browser's raw
+  `SecurityError`, and its passkeys would not be `localhost`'s. One loopback
+  origin — `localhost`, same port: the core's `signer_url`, the app's
+  `loopbackPage` and the Safari `dev-seed.js` all canonicalise `127.x` and
+  `[::1]` to it.
