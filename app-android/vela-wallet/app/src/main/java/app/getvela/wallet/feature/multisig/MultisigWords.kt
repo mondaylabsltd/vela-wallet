@@ -171,6 +171,9 @@ class MultisigWords(
      */
     fun actionTitle(chainId: Int, action: JsonElement?, nonce: String, token: Pair<String, Int?>? = null): String {
         if (action.isNullish) return t("action.unsupported")
+        // r12-8 (core §13): a member change is titled by the core's ONE rule
+        // (`names.change`) — the sheet and Activity alike — never worded here.
+        memberChangeTitle(action)?.let { return it }
         return when (action.kind) {
             "transfer" -> {
                 val raw = action["amount"].str ?: "0"
@@ -205,6 +208,22 @@ class MultisigWords(
             }
             else -> t("action.unsupported")
         }
+    }
+
+    /**
+     * r12-8: a member change's title as the core words it (`names.change
+     * {action, labels}` → `{key, params, count?}`), each member named by
+     * `names.who` with the accounts machine's labels; `null` for anything
+     * else, or from a core without the rule.
+     */
+    internal fun memberChangeTitle(action: JsonElement?): String? {
+        if (action.kind !in setOf("addOwner", "removeOwner", "swapOwner", "changeThreshold")) return null
+        val labels = localNames + accounts.memberLabels
+        val said = MsRules.call("names.change", mapOf("action" to action, "labels" to labels)) ?: return null
+        val key = said["key"].str ?: return null
+        val params = (said["params"] as? kotlinx.serialization.json.JsonObject)?.mapNotNull { (k, v) -> v.str?.let { k to it } }.orEmpty()
+        val count = said["count"].str?.toIntOrNull() ?: said["count"].int
+        return if (count != null) strings.t(key, count) else raw(key, *params.toTypedArray())
     }
 
     // -- a row's one word (`standings`) ----------------------------------------------
