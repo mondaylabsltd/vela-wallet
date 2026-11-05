@@ -209,6 +209,7 @@ pub fn wallet_header(
                 // "xiaoxiao · Key 1" and "… Key 2" to the same "xiaoxiao ·
                 // K…", and the END of a name is what tells two apart.
                 div()
+                    .relative()
                     .min_w(px(0.))
                     .text_size(theme::text_section())
                     .font_weight(gpui::FontWeight::BOLD)
@@ -216,7 +217,9 @@ pub fn wallet_header(
                     .line_height(gpui::relative(1.2))
                     .line_clamp(2)
                     .text_ellipsis()
-                    .child(name),
+                    .child(name)
+                    // r14-11b: a layout pass reads how many lines it took.
+                    .children(crate::dev_probe::mark("wallet-header-name")),
             )
             .child(div().flex_none().child(icon_img(
                 icons,
@@ -284,7 +287,9 @@ fn space_label(theme: &Theme, label: SharedString, testnet: bool) -> Stateful<Di
         .text_size(theme::text_label())
         .font_weight(gpui::FontWeight::SEMIBOLD)
         .text_color(fg)
+        .relative()
         .child(label)
+        .children(crate::dev_probe::mark("wallet-header-space"))
 }
 
 /// `line-height: normal` for Plus Jakarta Sans (its hhea 1038 + 222 over
