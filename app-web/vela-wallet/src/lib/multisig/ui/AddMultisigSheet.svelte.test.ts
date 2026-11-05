@@ -342,7 +342,7 @@ describe('an invite (r4D-4)', () => {
 	});
 
 	it('a network this device lacks is said in ONE sentence, the network named (r13-6)', async () => {
-		const link = { multisig: SAFE, chainIds: [5042002] };
+		const link = { multisig: SAFE, chainIds: [5042002], members: [] };
 		io.invite = { link, on_device: [], missing: 5042002, missing_name: 'Arc Testnet' };
 		const screen = render(AddMultisigSheet, {
 			props: {
