@@ -8,6 +8,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.test.ComposeUiTestFlags
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -380,10 +381,14 @@ class MultisigFlowDeviceTest {
             safeTxHash = hash, txHash = "0x" + "cd".repeat(32), userOpHash = "0x" + "ab".repeat(32),
         )
         tap("multisig.proposal.execute", 90_000)
-        // "Executed": its own line, or the sheet's executed note (whichever the sheet says it with).
+        // "Executed": its own line, the sheet's executed note, or — said once
+        // (r12 S4) — the heading's chip (whichever the sheet says it with).
+        val executedWord = strings.t("home.multisig.proposal.executed")
         compose.waitUntil(90_000) {
             listOf("multisig.proposal.executed", "multisig.proposal.note.executed")
-                .any { compose.onAllNodesWithTag(it, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+                .any { compose.onAllNodesWithTag(it, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() } ||
+                compose.onAllNodes(hasTestTag("multisig.proposal.status") and (hasText(executedWord) or hasAnyDescendant(hasText(executedWord))), useUnmergedTree = true)
+                    .fetchSemanticsNodes().isNotEmpty()
         }
         assertEquals("one user operation: the deployment, then execTransaction", 1, world.sent.size)
         assertTrue(world.sent.single().third.size >= 2)

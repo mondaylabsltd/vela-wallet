@@ -59,7 +59,7 @@ fun MultisigReviewBody(
     review: JsonElement,
     chainId: Int,
     words: MultisigWords,
-    tokenInfo: suspend (Int, String) -> Pair<String, Int>,
+    tokenInfo: suspend (Int, String) -> Pair<String, Int?>,
     /**
      * S4 (r9): it ran. What it does stays (the reading, its recipients, its
      * member change, the hashes); what was judged BEFORE it ran — whether it
@@ -69,7 +69,7 @@ fun MultisigReviewBody(
      */
     executed: Boolean = false,
 ) {
-    val tokens = remember { mutableStateMapOf<String, Pair<String, Int>>() }
+    val tokens = remember { mutableStateMapOf<String, Pair<String, Int?>>() }
     val tokenAddresses = review["simulation"]["deltas"].arr.mapNotNull { it["token"].str }
     LaunchedEffect(tokenAddresses) {
         for (token in tokenAddresses) {
@@ -90,7 +90,10 @@ fun MultisigReviewBody(
         }
         Reading(review, chainId, words)
         if (!executed) Moves(review, chainId, words, tokens)
-        Recipients(review, words)
+        // r12 S4 (the web's r5reg-15 `drawnParties`): an address the reading
+        // names already is said once — its row there wears what the review
+        // knows of it — never "To 0x3e9b…" and then "To 0x3e9b…" again.
+        Recipients(review, words, drawn = readingAddresses(readingLines(review, chainId, words)))
         MemberChanges(review, words, network)
         if (!executed) StateGuard(review, words, network)
         Technical(review, words)
@@ -366,7 +369,11 @@ private fun Reading(review: JsonElement, chainId: Int, words: MultisigWords) {
                         MsType.RowTitle,
                         color = if (line.tone == MsTone.Danger) colors.errorBase else colors.fgBase,
                     )
-                    for ((k, v) in line.details) MsRow(k, v, mono = v.startsWith("0x"))
+                    for ((k, v) in line.details) {
+                        MsRow(k, v, mono = v.startsWith("0x"))
+                        // What the review knows of this party, on its one row.
+                        recipientOf(review, v)?.let { RecipientCues(it, words) }
+                    }
                 }
             }
         }
@@ -404,7 +411,7 @@ internal fun movesSaid(review: JsonElement): MovesSaid {
 }
 
 @Composable
-private fun Moves(review: JsonElement, chainId: Int, words: MultisigWords, tokens: Map<String, Pair<String, Int>>) {
+private fun Moves(review: JsonElement, chainId: Int, words: MultisigWords, tokens: Map<String, Pair<String, Int?>>) {
     val deltas = review["simulation"]["deltas"].arr
     val colors = VelaTheme.colors
     when (val said = movesSaid(review)) {
@@ -425,23 +432,67 @@ private fun Moves(review: JsonElement, chainId: Int, words: MultisigWords, token
     }
 }
 
-internal fun deltaText(delta: JsonElement, chainId: Int, words: MultisigWords, tokens: Map<String, Pair<String, Int>>): String {
+internal fun deltaText(delta: JsonElement, chainId: Int, words: MultisigWords, tokens: Map<String, Pair<String, Int?>>): String {
     val raw = delta["delta"].str ?: "0"
     val negative = raw.startsWith("-")
     val magnitude = raw.removePrefix("-")
     val token = delta["token"].str?.takeIf { it.isNotEmpty() }
-    val (symbol, decimals) = if (token != null) tokens[token.lowercase()] ?: (MultisigWords.short(token) to 18) else words.symbol(chainId) to 18
+    // r12-1: a token's own decimals, never 18 assumed — unknown (not read
+    // yet, or its contract did not say) is the base units, "decimals unknown".
+    val (symbol, decimals) = if (token != null) tokens[token.lowercase()] ?: (MultisigWords.short(token) to null) else words.symbol(chainId) to MsRules.COIN_DECIMALS
+    val figure = if (decimals == null) words.t("review.reading.decimalsUnknown", "raw" to magnitude) else MsRules.formatUnits(magnitude, decimals)
     // r11 S4: signed the one way money is signed in Vela (the core's U+2212 / "+").
-    return "${uniffi.vela_core_uniffi.signedAmountText(MsRules.formatUnits(magnitude, decimals), negative)} $symbol"
+    return "${uniffi.vela_core_uniffi.signedAmountText(figure, negative)} $symbol"
 }
 
 /** r11 S4: the heading over what moves — the review's key; the signing sheet's own before a core that names it. */
 internal fun movesTitleKey(review: JsonElement): String =
     review["movesTitleKey"].str ?: review["moves_title_key"].str ?: "componentsUi.signing.balanceChangesTitle"
 
+/** r12 S4: every address the reading's rows draw (lowercased) — the review's recipients say each once. */
+internal fun readingAddresses(lines: List<ReadingLine>): Set<String> =
+    lines.flatMap { line -> line.details.map { it.second } }
+        .filter { ADDRESS.matches(it) }
+        .map { it.lowercase() }
+        .toSet()
+
+/** The review's recipient row for [address], when [address] is one. */
+internal fun recipientOf(review: JsonElement, address: String): JsonElement? =
+    if (!ADDRESS.matches(address)) null
+    else review["recipients"].arr.firstOrNull { it["address"].str.equals(address, ignoreCase = true) }
+
+/** The recipients the review names that the reading did not draw already. */
+internal fun recipientsLeft(review: JsonElement, drawn: Set<String>): List<JsonElement> =
+    review["recipients"].arr.filter { (it["address"].str ?: "").lowercase() !in drawn }
+
+private val ADDRESS = Regex("^0x[0-9a-fA-F]{40}$")
+
+/** A recipient's name and cue, under the reading's row that names it. */
 @Composable
-private fun Recipients(review: JsonElement, words: MultisigWords) {
-    val list = review["recipients"].arr
+private fun RecipientCues(r: JsonElement, words: MultisigWords) {
+    val address = r["address"].str.orEmpty()
+    val name = words.localName(address) ?: words.keptName(address) ?: r["known"]["label"].str
+    if (name != null && !name.equals(address, ignoreCase = true)) MsText(name, MsType.Field)
+    recipientChip(r, words)?.let { (text, tone) -> MsChip(text, tone = tone) }
+}
+
+/** A recipient's one chip: its tags (warning; danger for a look-alike), else whose it is. */
+internal fun recipientChip(r: JsonElement, words: MultisigWords): Pair<String, MsTone>? {
+    val tags = buildList {
+        if (r["firstTimeCue"].bool == true) add(words.raw("componentsUi.signing.firstTimeTag"))
+        if (r["contractCue"].bool == true) add(words.raw("componentsUi.signing.contractTag"))
+    }
+    if (tags.isNotEmpty()) return tags.joinToString(" · ") to (if (r["lookalike"].isNullish) MsTone.Warning else MsTone.Danger)
+    return when {
+        r["known"]["kind"].str == "own" -> words.t("review.knownOwn") to MsTone.Neutral
+        r["known"]["kind"].str == "member" && r["role"].str != "member" -> words.t("review.knownMember") to MsTone.Neutral
+        else -> null
+    }
+}
+
+@Composable
+private fun Recipients(review: JsonElement, words: MultisigWords, drawn: Set<String> = emptySet()) {
+    val list = recipientsLeft(review, drawn)
     if (list.isEmpty()) return
     val colors = VelaTheme.colors
     Column(Modifier.fillMaxWidth()) {
@@ -455,23 +506,11 @@ private fun Recipients(review: JsonElement, words: MultisigWords) {
             }
             val label = r["call"].int?.let { "${words.t("review.callNumber", "n" to it.toString())} · $role" } ?: role
             val name = words.localName(address) ?: words.keptName(address) ?: r["known"]["label"].str
-            val tags = buildList {
-                if (r["firstTimeCue"].bool == true) add(words.raw("componentsUi.signing.firstTimeTag"))
-                if (r["contractCue"].bool == true) add(words.raw("componentsUi.signing.contractTag"))
-            }
-            val whose = when {
-                r["known"]["kind"].str == "own" -> words.t("review.knownOwn")
-                r["known"]["kind"].str == "member" && r["role"].str != "member" -> words.t("review.knownMember")
-                else -> null
-            }
             Column(Modifier.fillMaxWidth().padding(vertical = VelaSpacing.md).testTag("multisig.review.recipient"), verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs)) {
                 MsText(label, MsType.Label, color = colors.fgSubtle)
                 if (name != null && !name.equals(address, ignoreCase = true)) MsText(name, MsType.Field)
                 MsText(MsRules.eip55(address), MsType.Mono)
-                when {
-                    tags.isNotEmpty() -> MsChip(tags.joinToString(" · "), tone = if (r["lookalike"].isNullish) MsTone.Warning else MsTone.Danger)
-                    whose != null -> MsChip(whose)
-                }
+                recipientChip(r, words)?.let { (text, tone) -> MsChip(text, tone = tone) }
             }
         }
     }
@@ -593,7 +632,7 @@ private fun Technical(review: JsonElement, words: MultisigWords) {
 fun MultisigDraftReviewSheet(
     hub: MultisigHub,
     words: MultisigWords,
-    tokenInfo: suspend (Int, String) -> Pair<String, Int>,
+    tokenInfo: suspend (Int, String) -> Pair<String, Int?>,
     siteNote: String? = null,
     onWithdraw: (() -> Unit)? = null,
     /** A site's transaction (M5): one its proposer's approval makes ready is proposed and executed in one press. */

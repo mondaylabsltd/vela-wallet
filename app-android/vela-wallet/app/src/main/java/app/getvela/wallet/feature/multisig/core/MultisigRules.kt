@@ -66,6 +66,16 @@ object MsRules {
 
     // -- amounts --------------------------------------------------------------
 
+    /**
+     * r12-1: the network's OWN coin is counted in wei — the EVM's unit for a
+     * transaction's `value`, a gas fee and a balance (the core's
+     * `TokenFacts::native`). Only ever for the coin: a token's decimals are
+     * its facts (the core's, else its contract's `decimals()`), and a token
+     * whose decimals nobody said is worded in base units, "decimals unknown"
+     * — never this.
+     */
+    const val COIN_DECIMALS = 18
+
     /** Base units as the page says them (`1,234.5`; `<0.000001`). */
     fun formatUnits(amount: String, decimals: Int): String =
         string("formatUnits", mapOf("amount" to amount, "decimals" to decimals)) ?: amount

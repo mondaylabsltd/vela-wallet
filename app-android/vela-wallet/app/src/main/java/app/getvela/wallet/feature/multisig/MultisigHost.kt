@@ -42,7 +42,7 @@ data class MultisigHostContext(
     val otherSpaceName: String,
     val origin: String,
     val locale: String,
-    val tokenInfo: suspend (Int, String) -> Pair<String, Int>,
+    val tokenInfo: suspend (Int, String) -> Pair<String, Int?>,
     val explorerTx: (Int, String) -> String?,
     val onAddNetwork: (Int) -> Unit,
     val onFund: () -> Unit,

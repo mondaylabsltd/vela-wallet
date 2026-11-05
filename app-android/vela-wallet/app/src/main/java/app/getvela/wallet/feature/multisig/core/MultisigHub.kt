@@ -73,7 +73,8 @@ class MultisigHub(
     /** Executed rows to the Activity store; `true` when stored. */
     private val writeRows: suspend (List<org.json.JSONObject>) -> Boolean = { true },
     /** A token's symbol and decimals (`null` token: the chain's coin). */
-    private val tokenInfo: suspend (chainId: Int, token: String?) -> Pair<String, Int> = { _, _ -> "ETH" to 18 },
+    /** A token's symbol and decimals (`null` decimals: nobody said them); the coin's for `null`. */
+    private val tokenInfo: suspend (chainId: Int, token: String?) -> Pair<String, Int?> = { _, token -> if (token == null) "ETH" to MsRules.COIN_DECIMALS else app.getvela.wallet.core.format.ShortAddress.of(token) to null },
     /** The proposal's own title, in words (the activity row's `intent`, a notification's title). */
     var titleOf: suspend (chainId: Int, action: JsonElement?, nonce: String) -> String = { _, _, _ -> "" },
     cores: Triple<CoreBridge, CoreBridge, CoreBridge>? = null,
@@ -676,12 +677,17 @@ class MultisigHub(
                 if (row.kind == "send") {
                     val token = row["token"].str
                     val (symbol, decimals) = tokenInfo(chainId, token)
-                    base.put("value", MsRules.plainUnits(row["amount"].str ?: "0", decimals))
-                        .put("symbol", symbol).put("decimals", decimals).put("type", "send")
+                    // r12-1: decimals nobody said are never 18: the row keeps
+                    // the base units as they are (0 places), under the token's
+                    // own name — an exact figure, never a guessed one.
+                    val amount = row["amount"].str ?: "0"
+                    base.put("value", if (decimals == null) amount else MsRules.plainUnits(amount, decimals))
+                        .put("symbol", symbol).put("decimals", decimals ?: 0).put("type", "send")
                     if (token != null) base.put("token", token)
                 } else {
                     val sends = row["sends"].str ?: "0"
-                    val (symbol, decimals) = tokenInfo(chainId, null)
+                    val (symbol, coin) = tokenInfo(chainId, null)
+                    val decimals = coin ?: MsRules.COIN_DECIMALS
                     val some = sends.isNotEmpty() && sends != "0"
                     base.put("value", if (some) MsRules.plainUnits(sends, decimals) else "0")
                         .put("symbol", if (some) symbol else "").put("decimals", decimals).put("type", "dapp_tx")

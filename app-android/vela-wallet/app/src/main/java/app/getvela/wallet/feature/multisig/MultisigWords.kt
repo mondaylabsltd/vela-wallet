@@ -169,13 +169,13 @@ class MultisigWords(
      * transfer of a token says the symbol [token] gives (`null`: the chain's
      * coin when it is one, else the amount alone).
      */
-    fun actionTitle(chainId: Int, action: JsonElement?, nonce: String, token: Pair<String, Int>? = null): String {
+    fun actionTitle(chainId: Int, action: JsonElement?, nonce: String, token: Pair<String, Int?>? = null): String {
         if (action.isNullish) return t("action.unsupported")
         return when (action.kind) {
             "transfer" -> {
                 val raw = action["amount"].str ?: "0"
                 val address = action["token"].str
-                if (address == null) return t("action.send", "amount" to MsRules.formatUnits(raw, 18), "symbol" to symbol(chainId)).trim()
+                if (address == null) return t("action.send", "amount" to MsRules.formatUnits(raw, MsRules.COIN_DECIMALS), "symbol" to symbol(chainId)).trim()
                 // r8-2: a token's amount is worded with ITS decimals — the core's
                 // facts, else the caller's — and never with 18 assumed: unknown
                 // decimals say the base units and that they are unknown.
@@ -201,7 +201,7 @@ class MultisigWords(
             "call" -> {
                 val value = action["value"].str ?: "0"
                 if (value == "0" || value.isEmpty()) t("action.call")
-                else t("action.callWithValue", "amount" to MsRules.formatUnits(value, 18), "symbol" to symbol(chainId))
+                else t("action.callWithValue", "amount" to MsRules.formatUnits(value, MsRules.COIN_DECIMALS), "symbol" to symbol(chainId))
             }
             else -> t("action.unsupported")
         }
@@ -215,7 +215,7 @@ class MultisigWords(
         "queued" -> t("status.queued")
         "ready" -> t("status.ready")
         "yourTurn" -> t("status.yourTurn")
-        "blocked" -> t("status.cannotRun", "reason" to blockReason(standing["block"]))
+        "blocked" -> t("status.cannotRun", "reason" to blockReason(standing["block"], item.chainId))
         "progress" -> t(
             "status.progress",
             "approved" to (standing["approved"].str ?: item.approved.toString()),
@@ -234,26 +234,54 @@ class MultisigWords(
             .joinToString(" · ")
 
     /** Why a ready transaction cannot run now (`MultisigReadyBlock`). */
-    fun blockReason(block: JsonElement?): String {
+    fun blockReason(block: JsonElement?, chainId: Int): String {
         if (block == null) return ""
         if (block.kind == "nobodyPays") return t("status.nobodyPays")
-        return whyFails(block["why"])
+        return whyFails(block["why"], chainId)
     }
 
-    /** `short` (token, have, need) or `reverts` (reason). */
-    fun whyFails(why: JsonElement?): String {
+    /**
+     * `short` (token, have, need) or `reverts` (reason). r12-1: a shortfall's
+     * amounts are worded in the token's OWN decimals — the core's facts on the
+     * shortfall (`token` as `OutsideTokenFacts`), else the facts the core read
+     * for the review (`tokens`), else, for the network's coin, its wei — and
+     * never with 18 assumed for a token: one whose decimals nobody said is
+     * said in base units, "decimals unknown" (0.01 USDC read "<0.000001").
+     */
+    fun whyFails(why: JsonElement?, chainId: Int): String {
         if (why == null) return t("proposal.uncheckedReason")
         return when (why.kind) {
             "short" -> {
-                val decimals = why["token"]["decimals"].int ?: 18
-                val symbol = why["token"]["symbol"].str.orEmpty()
-                fun amount(key: String) = "${MsRules.formatUnits(why[key].str ?: "0", decimals)} $symbol".trim()
+                val (symbol, decimals) = shortfallUnit(why["token"], chainId)
+                fun amount(key: String): String {
+                    val raw = why[key].str ?: "0"
+                    val figure = if (decimals == null) t("review.reading.decimalsUnknown", "raw" to raw) else MsRules.formatUnits(raw, decimals)
+                    return "$figure $symbol".trim()
+                }
                 t("proposal.whyShort", "have" to amount("have"), "need" to amount("need"))
             }
             "reverts" -> why["reason"].str?.takeIf { it.isNotEmpty() }?.let { t("proposal.whyReverts", "reason" to it) }
                 ?: t("proposal.whyRevertsPlain")
             else -> t("proposal.uncheckedReason")
         }
+    }
+
+    /**
+     * r12-1: the symbol and decimals a shortfall is said in. [token] is the
+     * core's facts (an object: token, symbol, decimals), or — from a core
+     * before them — the token's address (`null`: the network's coin).
+     * `null` decimals: nobody said them.
+     */
+    internal fun shortfallUnit(token: JsonElement?, chainId: Int): Pair<String, Int?> {
+        val given = token as? kotlinx.serialization.json.JsonObject
+        val address = if (given != null) given["token"].str else token.str
+        if (address.isNullOrBlank()) {
+            val symbol = given?.get("symbol").str?.takeIf { it.isNotBlank() } ?: symbol(chainId)
+            return symbol to (given?.get("decimals").int ?: MsRules.COIN_DECIMALS)
+        }
+        val facts = given ?: tokenFacts(chainId, address)
+        val symbol = facts?.get("symbol").str?.takeIf { it.isNotBlank() } ?: short(address)
+        return symbol to facts?.get("decimals").int
     }
 
     // -- why an action did not go (`MultisigActionState`) ----------------------------
@@ -273,7 +301,7 @@ class MultisigWords(
             // r11-9: what stopped it is its look's own kind — "would fail" only
             // for a look that says it fails, never for one that could not price
             // or check it ("This would fail…: it couldn't be checked").
-            "stopped" -> stoppedLine(state["preview"])
+            "stopped" -> stoppedLine(state["preview"], chainId)
             "noOutsideSigner" -> t("proposal.failed", "reason" to t("proposal.noOutsideSigner"))
             "failed" -> failureText(state["detail"].str)
             else -> t("proposal.reason.unknown")
@@ -281,10 +309,10 @@ class MultisigWords(
     }
 
     /** r11-9: an execution its look stopped, in the look's own words (`MultisigPreview` kind). */
-    fun stoppedLine(preview: JsonElement?): String = when (preview.kind) {
+    fun stoppedLine(preview: JsonElement?, chainId: Int): String = when (preview.kind) {
         "unpriced" -> t("proposal.feeUnpriced")
         "unchecked" -> t("proposal.feeUnchecked")
-        else -> t("proposal.wouldFail", "reason" to whyFails(preview["why"] ?: preview?.takeIf { it.kind == "short" || it.kind == "reverts" }))
+        else -> t("proposal.wouldFail", "reason" to whyFails(preview["why"] ?: preview?.takeIf { it.kind == "short" || it.kind == "reverts" }, chainId))
     }
 
     /** r11-9: a look that only could not price or check it is a warning, never a failure. */
@@ -366,10 +394,7 @@ class MultisigWords(
         /** "0xd9c79C…a20432": short, in its EIP-55 case. */
         fun short(address: String): String =
             // r11-6: THE short form is the core's (`names.short`, 6+6 EIP-55).
-            MsRules.string("names.short", mapOf("address" to address)) ?: run {
-                val checksummed = MsRules.eip55(address)
-                if (checksummed.length > 14) "${checksummed.take(8)}…${checksummed.takeLast(6)}" else checksummed
-            }
+            app.getvela.wallet.core.format.ShortAddress.of(address)
 
         /** Keep [Wire] reachable for callers that decode a view part here. */
         internal val json get() = Wire.json
