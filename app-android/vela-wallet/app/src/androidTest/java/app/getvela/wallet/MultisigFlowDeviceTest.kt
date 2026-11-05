@@ -225,6 +225,13 @@ class MultisigFlowDeviceTest {
         }
         runCatching { node(tag).performScrollTo() }
         node(tag).performClick()
+        // This world answers neither of the review's safety checks (no
+        // `debug_traceCall`, no probe, no simulation), so since r13-2 the core
+        // lets a signature through only "… anyway", with its confirmation —
+        // which the person would press, and so does the test.
+        compose.waitForIdle()
+        val anyway = compose.onAllNodesWithTag("multisig.sign.anywayConfirm")
+        if (anyway.fetchSemanticsNodes().isNotEmpty()) anyway[0].performClick()
         compose.waitForIdle()
     }
 
