@@ -3,12 +3,16 @@
  * origin this shell now serves. Reading it must not strand the person, and
  * the list must be rewritten once in the current spelling.
  */
+import '$lib/i18n/wasm-init.server';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
 	loadAccounts,
 	loadAccountsForRestore,
 	normaliseAccount,
+	readStoredAccounts,
+	removeAccount,
 	saveAccount,
+	storedUnreadable,
 	STORAGE_KEYS
 } from './storage';
 
@@ -65,7 +69,7 @@ describe('loadAccounts', () => {
 		(globalThis as { localStorage?: Storage }).localStorage = storage;
 	});
 
-	it('reads the retired client’s spelling and rewrites the list once', () => {
+	it('reads the retired client’s spelling, and writes nothing back (§18 item 2)', () => {
 		storage.setItem(
 			STORAGE_KEYS.accounts,
 			JSON.stringify([EXPO_WITH_KEYS, EXPO_WITHOUT_KEYS, CURRENT])
@@ -76,12 +80,11 @@ describe('loadAccounts', () => {
 			{ credential_id: 'cred-1', public_key_hex: '04ab', name: 'Ann', transports: '' }
 		]);
 		expect(accounts[1].keys).toEqual([]);
-		expect(accounts[2]).toBe(loadAccounts()[2] === accounts[2] ? accounts[2] : accounts[2]);
-		const rewritten = JSON.parse(storage.getItem(STORAGE_KEYS.accounts) ?? '[]');
-		expect(rewritten[0].public_key_hex).toBe('04ab');
-		expect(rewritten[0].publicKeyHex).toBeUndefined();
-		expect(rewritten[1].keys).toEqual([]);
-		expect(rewritten[2]).toEqual(CURRENT);
+		// A read never writes: a respelled list written from it once dropped
+		// every record it could not read. The core reads both spellings.
+		expect(storage.getItem(STORAGE_KEYS.accounts)).toBe(
+			JSON.stringify([EXPO_WITH_KEYS, EXPO_WITHOUT_KEYS, CURRENT])
+		);
 	});
 
 	it('leaves a current list untouched', () => {
@@ -152,11 +155,56 @@ describe('loadAccountsForRestore', () => {
 	});
 
 	it('throws for a list that is there and cannot be read, and writes nothing', () => {
-		for (const damaged of ['{not json', 'null', '"a string"', '{"a":1}', '[{"name":"x"}]']) {
+		for (const damaged of ['{not json', '"a string"', '{"a":1}', '[{"name":"x"}]']) {
 			storage.setItem(STORAGE_KEYS.accounts, damaged);
 			expect(() => loadAccountsForRestore(), damaged).toThrow();
 			expect(storage.getItem(STORAGE_KEYS.accounts), damaged).toBe(damaged);
 		}
+	});
+});
+
+/**
+ * §18 item 2 (the desktop's DESKTOP-1, on the web): a stored record this
+ * browser cannot read is counted and said, and KEPT byte for byte on every
+ * write — never a shorter list written back — and signing in is the way back.
+ * The rule is the core's (`stored_accounts`, through wasm).
+ */
+describe('a stored record this browser cannot read', () => {
+	let storage: MemoryStorage;
+	beforeEach(() => {
+		storage = new MemoryStorage();
+		(globalThis as { localStorage?: Storage }).localStorage = storage;
+	});
+	/** Its key's id is a number; its `\/` would not survive a JSON round trip. */
+	const BAD =
+		'{"id":"x","address":"0x00000000000000000000000000000000000000Cc","keys":[{"credential_id":7}],"note":"a\\/b"}';
+
+	it('costs only itself on the restore, and is counted', () => {
+		storage.setItem(STORAGE_KEYS.accounts, `[${BAD},${JSON.stringify(CURRENT)}]`);
+		expect(loadAccountsForRestore()).toEqual([CURRENT]);
+		expect(storedUnreadable()).toBe(1);
+	});
+
+	it('is kept as stored through a save and a removal', () => {
+		storage.setItem(STORAGE_KEYS.accounts, `[${JSON.stringify(CURRENT)},${BAD}]`);
+		saveAccount(EXPO_WITHOUT_KEYS as never);
+		const saved = storage.getItem(STORAGE_KEYS.accounts) ?? '';
+		expect(saved).toContain(BAD);
+		expect(readStoredAccounts().map((a) => a.id)).toEqual(['cred-3', 'cred-2']);
+		removeAccount('0x2222222222222222222222222222222222222222');
+		removeAccount('0x1111111111111111111111111111111111111111');
+		expect(storage.getItem(STORAGE_KEYS.accounts)).toBe(`[${BAD}]`);
+		expect(storedUnreadable()).toBe(1);
+	});
+
+	it('a value that is no list is kept when signing in writes the account', () => {
+		storage.setItem(STORAGE_KEYS.accounts, '{"a":1}');
+		expect(() => loadAccountsForRestore()).toThrow();
+		// The way back: the passkey's sign-in writes its record — beside it.
+		saveAccount(CURRENT as never);
+		expect(storage.getItem(STORAGE_KEYS.accounts)).toBe(`[{"a":1},${JSON.stringify(CURRENT)}]`);
+		expect(loadAccountsForRestore()).toEqual([CURRENT]);
+		expect(storedUnreadable()).toBe(1);
 	});
 });
 

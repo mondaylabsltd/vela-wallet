@@ -788,6 +788,8 @@ object WalletLive {
         strings: VelaStrings,
         /** ob-2 (P2.4): the wallets saved here whose registration has not landed (`SessionView.unsynced`). */
         unsynced: List<app.getvela.wallet.feature.onboarding.core.SessionUnsynced> = emptyList(),
+        /** §18 item 2: stored records this device cannot read (`AccountStore.unreadable`). */
+        unreadable: Int = 0,
     ): AccountsSheetModel {
         val owed = unsynced.map { it.address.lowercase() }.toSet()
         val money = Money.of(currency, strings.language)
@@ -830,6 +832,8 @@ object WalletLive {
             remove = strings.t(I18nKeys.SettingsUi.ACCOUNT_REMOVE),
             removeBody = strings.t(I18nKeys.SettingsUi.ACCOUNT_REMOVE_BODY),
             removeCancel = strings.t(I18nKeys.Settings.SIGN_OUT_CANCEL),
+            // §18 item 2: what cannot be read is said under the list, kept as stored.
+            unreadable = if (unreadable > 0) strings.t(I18nKeys.Storage.DEVICE_UNREADABLE_TITLE) else null,
         )
     }
 

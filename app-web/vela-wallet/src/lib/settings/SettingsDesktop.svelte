@@ -344,7 +344,8 @@
 						remove: model.account.remove,
 						removeNamed: model.account.removeNamed,
 						removeBody: model.account.removeBody,
-						removeCancel: model.account.removeCancel
+						removeCancel: model.account.removeCancel,
+						unreadable: model.account.unreadable
 					}}
 					layout="inline"
 					onselect={onaccountselect}

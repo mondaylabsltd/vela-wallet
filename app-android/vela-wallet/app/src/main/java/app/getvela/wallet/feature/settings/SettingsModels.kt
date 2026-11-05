@@ -461,6 +461,11 @@ data class AccountsSheetModel(
     val remove: String = "",
     val removeBody: String = "",
     val removeCancel: String = "",
+    /**
+     * §18 item 2 (the desktop's DESKTOP-1): stored accounts this device cannot
+     * read, said under the list — never left out of it in silence. `null`: none.
+     */
+    val unreadable: String? = null,
 )
 
 /** ST3 / ST13b / ST16 share this; only the tone and the callout differ. */

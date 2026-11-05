@@ -211,6 +211,9 @@ struct AccountsSheetModel {
     var remove: String = ""
     var removeBody: String = ""
     var removeCancel: String = ""
+    /// §18 item 2: stored accounts this device cannot read, said under the
+    /// list (the desktop's DESKTOP-1). `nil`: none.
+    var unreadable: String? = nil
 }
 
 /// ST3 / ST13b / ST16 share this; only the tone and the callout differ.

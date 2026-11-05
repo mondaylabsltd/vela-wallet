@@ -18,6 +18,7 @@
 	 * dialog on the desktop, the desktop rule for every phone 弹框.
 	 */
 	import { onMount } from 'svelte';
+	import { storedUnreadable } from '$lib/onboarding/core/storage';
 	import AccountsSheetBody from '$lib/settings/ui/AccountsSheetBody.svelte';
 	import Dialog from '$lib/settings/ui/Dialog.svelte';
 	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
@@ -78,7 +79,9 @@
 		noValue: networkSpace.testnet,
 		// ms-24: a row the core is still reading is drawn as loading.
 		loading: balance.view.switcher.loading,
-		unsynced: view.unsynced
+		unsynced: view.unsynced,
+		// §18 item 2: a stored record this browser cannot read, said under the list.
+		unreadable: storedUnreadable()
 	}));
 
 	const sheet = $derived.by(() => {

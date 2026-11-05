@@ -19,6 +19,13 @@
 
 enum I18nKeys {
 
+    /// §18 item 2: stored accounts this device cannot read — device-neutral
+    /// words (the web's pair says "this browser"), the desktop's pair.
+    enum Storage {
+        static let deviceUnreadableTitle = "onboarding.storage.deviceUnreadableTitle"
+        static let deviceUnreadableBody = "onboarding.storage.deviceUnreadableBody"
+    }
+
     enum Welcome {
         static let tagline = "onboarding.welcome.desktopTagline"
         static let createWallet = "onboarding.welcome.createWallet"

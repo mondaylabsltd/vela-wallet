@@ -1123,6 +1123,36 @@ pub fn network_lives_elsewhere(args_json: &str) -> String {
     vela_core::app::network_space::lives_elsewhere_json(args_json)
 }
 
+/// §18 item 2: the stored account list (`vela.accounts`) as this build reads
+/// it (`stored_accounts::read`): `raw` as stored (`undefined`: nothing) →
+/// `{accounts, unreadable, unreadable_at}` — the records the core reads,
+/// exactly as stored, and how many it cannot (kept, and said).
+#[wasm_bindgen(js_name = storedAccountsRead)]
+#[must_use]
+#[allow(clippy::needless_pass_by_value)]
+pub fn stored_accounts_read(raw: Option<String>) -> String {
+    vela_core::app::stored_accounts::read_json(raw.as_deref())
+}
+
+/// §18 item 2: upsert a stored account record by `id`, every record this
+/// build cannot read kept as it was: `{stored, before, after, replaced,
+/// unreadable_kept}`, or `null` (a record with no `id`).
+#[wasm_bindgen(js_name = storedAccountsUpsert)]
+#[must_use]
+#[allow(clippy::needless_pass_by_value)]
+pub fn stored_accounts_upsert(raw: Option<String>, account_json: &str) -> String {
+    vela_core::app::stored_accounts::upsert_json(raw.as_deref(), account_json)
+}
+
+/// §18 item 2: drop the record `by_json` names (`{"id": …}` or `{"address":
+/// …}`), every other kept as it was; `null` for anything else.
+#[wasm_bindgen(js_name = storedAccountsRemove)]
+#[must_use]
+#[allow(clippy::needless_pass_by_value)]
+pub fn stored_accounts_remove(raw: Option<String>, by_json: &str) -> String {
+    vela_core::app::stored_accounts::remove_json(raw.as_deref(), by_json)
+}
+
 /// The chain a site with no chain of its own starts on (dapp-17):
 /// `network_space::site_start_chain` — the space's chain ids in the list's
 /// order, and the chain the person last put a site on there (`undefined`:

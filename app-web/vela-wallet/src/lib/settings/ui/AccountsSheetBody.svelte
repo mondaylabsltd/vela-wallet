@@ -132,6 +132,13 @@
 	{@render more?.()}
 </ul>
 
+{#if sheet.unreadable}
+	<!-- §18 item 2 (the desktop's DESKTOP-1): a stored account this browser
+	     cannot read is said under the list, never left out of it in silence.
+	     It is kept as stored. -->
+	<p class="unreadable" role="status" data-testid="accounts-unreadable">{sheet.unreadable}</p>
+{/if}
+
 {#if actions}
 	{@render actions()}
 {:else}
@@ -142,6 +149,12 @@
 {/if}
 
 <style>
+	.unreadable {
+		margin: var(--space-lg) 0 0;
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		color: var(--color-warning-base);
+	}
+
 	.summary {
 		margin: 0 0 var(--space-lg);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));

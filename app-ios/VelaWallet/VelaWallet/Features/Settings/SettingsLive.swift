@@ -574,7 +574,9 @@ enum SettingsLive {
         hidden: Bool = false,
         display: WalletLive.Display,
         on model: SettingsScreenModel,
-        loc: Loc
+        loc: Loc,
+        /// §18 item 2: stored records this device cannot read (`AccountStore.unreadable`).
+        unreadable: Int = 0
     ) -> SettingsScreenModel {
         guard session.hasWallet else { return model }
         let k = I18nKeys.SettingsUi.self
@@ -610,6 +612,9 @@ enum SettingsLive {
         copy.accountsSheet.remove = loc.t(I18nKeys.SettingsUi.accountRemove)
         copy.accountsSheet.removeBody = loc.t(I18nKeys.SettingsUi.accountRemoveBody)
         copy.accountsSheet.removeCancel = loc.t("settings.signOut.cancel")
+        // §18 item 2 (the desktop's DESKTOP-1): a stored account this device
+        // cannot read is said under the list, never left out in silence.
+        copy.accountsSheet.unreadable = unreadable > 0 ? loc.t(I18nKeys.Storage.deviceUnreadableTitle) : nil
         copy.accountsSheet.summary =
             // A plural family (final note F15): the count chooses the form,
             // in the core — "1 account · ", "2 accounts · ". Passed as a

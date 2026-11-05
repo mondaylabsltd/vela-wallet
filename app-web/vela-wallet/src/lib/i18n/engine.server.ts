@@ -833,7 +833,8 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			removeNamed: k('settings.account.removeNamed'),
 			removeBody: k('settings.account.removeBody'),
 			cancel: k('common.cancel'),
-			syncing: k('home.syncingLine')
+			syncing: k('home.syncingLine'),
+			unreadable: k('onboarding.storage.unreadableTitle')
 		},
 		signOut: {
 			button: k('settings.signOut.button'),

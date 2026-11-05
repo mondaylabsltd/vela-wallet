@@ -454,6 +454,11 @@ export interface SettingsMessages {
 		cancel: string;
 		/** ob-2: under a row saved here that has not synced yet — the home's line. */
 		syncing: string;
+		/**
+		 * §18 item 2: under the list, when a stored account record this browser
+		 * cannot read is kept (the desktop's DESKTOP-1 line, in the web's words).
+		 */
+		unreadable: string;
 	};
 	signOut: {
 		button: string;

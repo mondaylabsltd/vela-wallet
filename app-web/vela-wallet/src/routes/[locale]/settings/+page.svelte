@@ -28,6 +28,7 @@
 	 */
 	import CoreWaiting from '$lib/ui/CoreWaiting.svelte';
 	import { onMount } from 'svelte';
+	import { storedUnreadable } from '$lib/onboarding/core/storage';
 	import { replaceUrl } from '$lib/ui/history';
 	import { goto } from '$app/navigation';
 	import { STAY_QUERY } from '$lib/intro/gate';
@@ -720,7 +721,9 @@
 			noValue: networkSpace.testnet,
 			// ms-24: a row the core is still reading is drawn as loading.
 			loading: balance.view.switcher.loading,
-			unsynced: view.unsynced
+			unsynced: view.unsynced,
+			// §18 item 2: a stored record this browser cannot read, said under the list.
+			unreadable: storedUnreadable()
 		};
 	});
 

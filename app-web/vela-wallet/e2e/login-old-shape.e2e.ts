@@ -1,6 +1,9 @@
 /**
  * Spec 048: a wallet the retired client stored at this origin — camelCase
  * records — still opens; an unreadable list says so instead of hanging.
+ * §18 item 2: what cannot be read is kept as stored, and one record that
+ * cannot be read beside a good one opens the good one and is said under the
+ * account switcher's list.
  */
 import { expect, test } from '@playwright/test';
 
@@ -32,11 +35,9 @@ test('a wallet stored by the retired client opens', async ({ page }) => {
 	await page.goto('/en/wallet');
 	await expect(page.getByText('Old Client Wallet').first()).toBeVisible({ timeout: 15_000 });
 	await expect(page).toHaveURL(/\/en\/wallet$/);
-	const rewritten = await page.evaluate(() =>
-		JSON.parse(window.localStorage.getItem('vela.accounts') ?? '[]')
-	);
-	expect(rewritten[0].public_key_hex).toBeDefined();
-	expect(rewritten[0].publicKeyHex).toBeUndefined();
+	// §18 item 2: a read writes nothing back — the core reads both spellings.
+	const stored = await page.evaluate(() => window.localStorage.getItem('vela.accounts'));
+	expect(stored).toBe(JSON.stringify([EXPO_ACCOUNT]));
 });
 
 test('an unreadable account list says so instead of hanging', async ({ page }) => {
@@ -53,4 +54,33 @@ test('an unreadable account list says so instead of hanging', async ({ page }) =
 	await expect(page.getByRole('alertdialog').or(page.getByRole('dialog'))).toBeVisible({
 		timeout: 5_000
 	});
+	// Kept as stored, byte for byte.
+	expect(await page.evaluate(() => window.localStorage.getItem('vela.accounts'))).toBe(
+		'[{"id":"x","address":"0x1","keys":[{"credential_id":7}]}]'
+	);
+});
+
+test('one record it cannot read opens the others and is said under the switcher', async ({
+	page
+}) => {
+	const bad = '{"id":"x","address":"0x1","keys":[{"credential_id":7}],"note":"a\\/b"}';
+	await page.addInitScript(
+		([account, bad]) => {
+			window.localStorage.setItem('vela.intro.seen', String(Date.now()));
+			if (window.localStorage.getItem('vela.accounts') === null) {
+				window.localStorage.setItem('vela.accounts', `[${bad},${JSON.stringify(account)}]`);
+				window.localStorage.setItem('vela.activeAccountIndex', '0');
+			}
+		},
+		[EXPO_ACCOUNT, bad] as const
+	);
+	await page.goto('/en/wallet');
+	await expect(page.getByText('Old Client Wallet').first()).toBeVisible({ timeout: 15_000 });
+	await page
+		.getByRole('button', { name: /Old Client Wallet/ })
+		.first()
+		.click();
+	await expect(page.getByRole('dialog').getByTestId('accounts-unreadable')).toBeVisible();
+	const stored = await page.evaluate(() => window.localStorage.getItem('vela.accounts'));
+	expect(stored).toContain(bad);
 });

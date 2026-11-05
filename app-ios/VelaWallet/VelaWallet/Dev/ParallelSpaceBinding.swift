@@ -170,6 +170,13 @@ final class ParallelSpaceBinding: ParallelSpaceProvider {
         let inFront = Self.realAccount(
             in: await accounts.loadAccounts(), at: await accounts.loadActiveIndex(), fixtureIds: ids
         )
+        // §18 item 2: a stored record this device cannot read refuses the
+        // space (the desktop's and Android's seeds refuse the same) — it is
+        // kept, and the space would hide the notice that says so.
+        if await accounts.unreadable > 0 {
+            print("[vela-wallet] parallel space: refused — a stored account record cannot be read")
+            return
+        }
         if !alreadyInside || inFront != nil {
             store.writeString(Self.returnToKey, inFront)
         }

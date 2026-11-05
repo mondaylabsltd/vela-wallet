@@ -1750,7 +1750,14 @@ struct RootView: View {
                 }
             }
         } else {
-            WelcomeScreen(loc: loc, model: model, signingIn: onboarding.loginView.busy)
+            WelcomeScreen(
+                loc: loc, model: model, signingIn: onboarding.loginView.busy,
+                // §18 item 2: stored accounts this device cannot read, said.
+                accountsUnreadable: StoredAccountsNotice.shown(
+                    sessionUnreadable: session.view.accountsUnreadable ?? false,
+                    storedUnreadable: StoredAccountsWatch.shared.unreadable
+                )
+            )
         }
     }
 
@@ -4266,7 +4273,9 @@ struct RootView: View {
             hidden: wallet.balance?.switcher.hidden ?? false,
             display: WalletLive.Display.live(settings.currency, language: loc.resolvedLanguage),
             on: model,
-            loc: loc
+            loc: loc,
+            // §18 item 2: stored records this device cannot read, said under the list.
+            unreadable: StoredAccountsWatch.shared.unreadable
         )
         // Asked of the chain for THIS wallet, or still being asked (spec 062).
         let backedUp = backupCheck.flatMap {
