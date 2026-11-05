@@ -360,6 +360,8 @@ pub struct World {
     pub cancel_passkey: bool,
     pub risk_signs: bool,
     pub passkeys: Vec<(String, String)>,
+    /// What each passkey prompt was for (`PasskeyPurpose`, as JSON), in order.
+    pub passkey_purposes: Vec<Value>,
     pub risks_asked: Vec<Value>,
     pub sent: Vec<(u64, String, Vec<Value>)>,
     /// What each sent user operation was for, in order.
@@ -420,6 +422,7 @@ impl Default for World {
             cancel_passkey: false,
             risk_signs: true,
             passkeys: Vec::new(),
+            passkey_purposes: Vec::new(),
             risks_asked: Vec::new(),
             sent: Vec::new(),
             purposes: Vec::new(),
@@ -897,8 +900,14 @@ impl World {
                 }
             }
             Op::Passkey {
-                owner, challenge, ..
-            } => self.passkey(owner, challenge),
+                owner,
+                challenge,
+                purpose,
+                ..
+            } => {
+                self.passkey_purposes.push(json!(purpose));
+                self.passkey(owner, challenge)
+            }
             Op::AskRisk { findings, .. } => {
                 self.risks_asked.push(json!(findings));
                 Res::RiskAnswered {

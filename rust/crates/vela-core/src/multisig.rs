@@ -556,6 +556,29 @@ fn genesis_with_salt(
     })
 }
 
+/// §16: a genesis read back as a multisig Vela creates ([`multisig_genesis`],
+/// any name): its members, threshold and address — or an error for anything
+/// else. The members and threshold are read from the setup, the genesis is
+/// written again from them with its salt nonce, and the factory, singleton
+/// and setup must be byte for byte the ones given: Safe's v1.4.1 factory,
+/// the L2 singleton, the CompatibilityFallbackHandler, no setup hook, no
+/// module, no payment, members a multisig can have and a threshold between
+/// one and their number. The trusted page reads a member's owner proof by
+/// this rule (`lib/multisig.js` `ownerProof`), case for case.
+pub fn vela_multisig_of(g: &Genesis) -> Result<MultisigGenesis, CoreError> {
+    let (owners, threshold) = genesis_members(g)?;
+    let mut rebuilt = genesis_with_salt(&owners, threshold, quantity(&g.salt_nonce)?)?;
+    let same_address = |a: &str, b: &str| addr(a).ok() == addr(b).ok();
+    if !same_address(&rebuilt.genesis.factory, &g.factory)
+        || !same_address(&rebuilt.genesis.singleton, &g.singleton)
+        || unhex(&rebuilt.genesis.initializer)? != unhex(&g.initializer)?
+    {
+        return Err(err("not a multisig as Vela creates one"));
+    }
+    rebuilt.genesis.name.clone_from(&g.name);
+    Ok(rebuilt)
+}
+
 /// A Vela account's own genesis, from its founding keys (`keys[0]` first, as
 /// the account stores them).
 pub fn vela_account_genesis(keys: &[WalletKey]) -> Result<(String, Genesis), CoreError> {
@@ -3453,6 +3476,17 @@ pub fn call_json(method: &str, args_json: &str) -> Result<String, CoreError> {
         "sponsorChallenge" => out(serde_json::json!(sponsor_challenge(&arg::<String>(
             &args, "multisig"
         )?)?)),
+        // §16: an owner proof's params, read as the trusted page reads them.
+        "ownerProofRead" => out(crate::trusted_signer::owner_proof::read_json(
+            &args.get("params").cloned().unwrap_or(serde_json::Value::Null),
+        )),
+        "ownerProofParams" => out(crate::trusted_signer::owner_proof::params(
+            &arg::<String>(&args, "multisig")?,
+            &arg::<String>(&args, "member")?,
+            &arg(&args, "genesis")?,
+            &arg::<Vec<u64>>(&args, "chainIds")?,
+        )),
+        "velaMultisigOf" => out(json(&vela_multisig_of(&arg(&args, "genesis")?)?)),
         "approvalFromAssertion" => out(json(&approval_from_assertion(
             &arg::<Vec<KeyArg>>(&args, "keys")?
                 .into_iter()

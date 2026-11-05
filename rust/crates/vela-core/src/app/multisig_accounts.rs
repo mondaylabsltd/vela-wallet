@@ -2342,15 +2342,19 @@ async fn record(
     ))
 }
 
-/// `owner` asks the service to record `multisig`: one passkey prompt.
+/// `owner` asks the service to record `multisig` (created from `genesis`
+/// for `chain_ids`): one passkey prompt — or, where the owner reviews and
+/// signs on a trusted page, the page, handed the genesis to read (§16).
 /// `None`: the person closed it.
 async fn sign_owner_proof(
     io: &Io<Event>,
     owner: &LocalAccount,
     multisig_address: &str,
-    chain_id: u64,
+    genesis: &Genesis,
+    chain_ids: &[u64],
 ) -> Result<Option<OwnerProof>, String> {
     let challenge = multisig::sponsor_challenge(multisig_address).map_err(|e| e.to_string())?;
+    let chain_id = chain_ids.first().copied().unwrap_or(REGISTRY_HOME_CHAIN_ID);
     let answer = io
         .ask(MultisigOperation::Passkey {
             owner: owner.address.clone(),
@@ -2358,6 +2362,12 @@ async fn sign_owner_proof(
             challenge,
             purpose: PasskeyPurpose::Record {
                 multisig: multisig_address.to_owned(),
+                params: crate::trusted_signer::owner_proof::params(
+                    multisig_address,
+                    &owner.address,
+                    genesis,
+                    chain_ids,
+                ),
             },
         })
         .await;
@@ -2416,7 +2426,15 @@ async fn create(io: &Io<Event>, st: &Shared<State>, choice: CreateChoice) {
             Ok(d) => d,
             Err(e) => return fail(st, e.to_string()),
         };
-    let proof = match sign_owner_proof(io, &creator, &draft.address, choice.chain_id).await {
+    let proof = match sign_owner_proof(
+        io,
+        &creator,
+        &draft.address,
+        &draft.genesis,
+        &[choice.chain_id],
+    )
+    .await
+    {
         Ok(Some(p)) => p,
         Ok(None) => {
             lock(st).create.phase = Phase::Cancelled;
@@ -2605,16 +2623,19 @@ async fn share_again(
     let (Some(account), Some(owner)) = (account, owner) else {
         return (Phase::Failed, None);
     };
-    let chain = account
-        .chain_ids
-        .first()
-        .copied()
-        .unwrap_or(REGISTRY_HOME_CHAIN_ID);
-    let proof = match sign_owner_proof(io, &owner, &account.address, chain).await {
-        Ok(Some(p)) => p,
-        Ok(None) => return (Phase::Cancelled, None),
-        Err(detail) => return (Phase::Failed, Some(detail)),
+    // Its networks, for the page (the app's word there); the service's home
+    // chain for an account that names none, as before.
+    let chains = if account.chain_ids.is_empty() {
+        vec![REGISTRY_HOME_CHAIN_ID]
+    } else {
+        account.chain_ids.clone()
     };
+    let proof =
+        match sign_owner_proof(io, &owner, &account.address, &account.genesis, &chains).await {
+            Ok(Some(p)) => p,
+            Ok(None) => return (Phase::Cancelled, None),
+            Err(detail) => return (Phase::Failed, Some(detail)),
+        };
     let recorded = record(
         io,
         &service,

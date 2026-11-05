@@ -119,12 +119,24 @@ fn created_and_recorded_on_the_index_chain() {
         },
     );
     let drafted = sut.view().create.draft_address.clone().unwrap();
+    let c_name = c.name.clone();
     run(&mut sut, &mut world, Event::Create { choice: c });
     let view = sut.view();
     assert_eq!(view.create.phase, Phase::Done, "{:?}", view.create);
     assert_eq!(world.passkeys.len(), 1, "one passkey prompt");
     let address = view.create.address.clone().unwrap();
     assert_eq!(address, drafted, "the address the review showed");
+    // §16: the proof carries what a trusted page reads it from — the
+    // genesis — and the page's reading of it is this multisig, this creator,
+    // and exactly the challenge the passkey was asked for.
+    let purpose = &world.passkey_purposes[0];
+    assert_eq!(purpose["kind"], "record");
+    let reading = vela_core::trusted_signer::owner_proof::read(&purpose["params"]).unwrap();
+    assert_eq!(reading.multisig, address);
+    assert!(reading.member.eq_ignore_ascii_case(&world.passkeys[0].0));
+    assert_eq!(reading.challenge, world.passkeys[0].1);
+    assert_eq!(reading.threshold, 2);
+    assert_eq!(reading.name.as_deref(), Some(c_name.as_str()));
     assert_eq!(view.active.as_deref(), Some(address.as_str()));
     assert!(world.notices.contains(&Notice::Activated {
         address: Some(address.clone())
@@ -640,6 +652,14 @@ fn an_owners_passkey_shares_it_again() {
         Phase::Done
     );
     assert_eq!(world.passkeys.len(), 1);
+    // §16: a page reads this multisig, this owner, its networks and the
+    // challenge asked for from the params the proof carries.
+    let reading =
+        vela_core::trusted_signer::owner_proof::read(&world.passkey_purposes[0]["params"]).unwrap();
+    assert_eq!(reading.multisig, g.address);
+    assert_eq!(reading.challenge, world.passkeys[0].1);
+    assert_eq!(reading.chain_ids, vec![8453]);
+    assert_eq!(reading.owners.len(), 2);
     assert_eq!(world.imports[0]["chainId"], 100);
     assert_eq!(world.imports[0]["genesis"]["name"], "Quiet Harbor");
     assert_eq!(world.stored_accounts()[0]["shared"], true);

@@ -92,7 +92,18 @@ pub enum PasskeyPurpose {
     },
     /// The proof asking the genesis service to record a new multisig
     /// (`sponsor_challenge`).
-    Record { multisig: String },
+    Record {
+        multisig: String,
+        /// §16: the request's params for a trusted page
+        /// (`trusted_signer::owner_proof::params`, method
+        /// `vela_multisigCreate`) — the multisig, the member, its genesis and
+        /// networks — which the page reads itself: it derives the address,
+        /// the members, the rule and the challenge from the genesis. A shell
+        /// hands it over verbatim; `null` from an older machine.
+        #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(type = "unknown"))]
+        params: serde_json::Value,
+    },
 }
 
 /// One call an account sends (an executor's user operation, a backup's
