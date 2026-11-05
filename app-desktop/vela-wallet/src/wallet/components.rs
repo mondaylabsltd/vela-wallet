@@ -183,10 +183,12 @@ pub fn wallet_header(
             .on_click(on_identicon);
     }
     // r13 S4: the 6+6 broke over two lines ("0x777E98 / …61875a") beside
-    // the space label, and kept on one line it ran under it: the column was
-    // narrower than the address. The space label now sits on the NAME's
-    // line (the name shrinks, then ellipsizes, before it), so the address
-    // line has the column's whole width and is never broken.
+    // the space label: the address is never broken (`address_text`).
+    // r14-11b: on the NAME's line the label squeezed the name instead, and
+    // "R14 Team" broke over two lines. As the web's `WalletHeader`: the name
+    // has the column's whole width — nothing beside it but its chevron — and
+    // the space label goes with the address, on its line when they fit,
+    // under it when they do not (`flex_wrap`), never into either.
     let on_account = on_account.map(std::rc::Rc::new);
     let target = |id: &'static str, el: Div| {
         let el = el.id(id);
@@ -231,12 +233,14 @@ pub fn wallet_header(
             .text_size(theme::text_label())
             .text_color(theme.fg_subtle),
     );
-    let name_row = div()
+    let facts = div()
         .flex()
+        .flex_wrap()
         .items_center()
-        .gap(px(8.))
+        .gap_x(px(8.))
+        .gap_y(px(4.))
         .min_w(px(0.))
-        .child(name_target)
+        .child(address_target)
         .when_some(space, |row, (label, testnet, on_space)| {
             row.child(space_label(theme, label, testnet).on_click(on_space))
         });
@@ -246,8 +250,8 @@ pub fn wallet_header(
         .flex_1()
         .gap(px(2.))
         .min_w(px(0.))
-        .child(name_row)
-        .child(address_target);
+        .child(name_target)
+        .child(facts);
     div()
         .flex()
         .items_center()
@@ -257,10 +261,10 @@ pub fn wallet_header(
         .child(account)
 }
 
-/// The header's network-space label (spec 105): a pill at the row's end, its
-/// own width — the name beside it shrinks, the label does not. Quiet in the
-/// mainnet space; the warning's wash and border in the testnet space, which
-/// must be unmistakable.
+/// The header's network-space label (spec 105): a pill after the address,
+/// its own width (r14-11b: never beside the name). Quiet in the mainnet
+/// space; the warning's wash and border in the testnet space, which must be
+/// unmistakable.
 fn space_label(theme: &Theme, label: SharedString, testnet: bool) -> Stateful<Div> {
     let (bg, border, fg) = if testnet {
         (theme.warning_soft, theme.warning_border, theme.fg_base)
@@ -270,7 +274,6 @@ fn space_label(theme: &Theme, label: SharedString, testnet: bool) -> Stateful<Di
     div()
         .id("wallet-header-space")
         .flex_none()
-        .ml_auto()
         .px(px(8.))
         .py(px(2.))
         .rounded_full()
