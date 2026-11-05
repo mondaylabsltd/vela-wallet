@@ -769,13 +769,22 @@ fun MultisigAddSheet(
  * the web wallet".
  */
 @Composable
-fun MultisigLinkStandSheet(hub: MultisigHub, words: MultisigWords, onClose: () -> Unit, onAddNetwork: ((Int) -> Unit)?) {
+fun MultisigLinkStandSheet(
+    hub: MultisigHub,
+    words: MultisigWords,
+    onClose: () -> Unit,
+    onAddNetwork: ((Int) -> Unit)?,
+    /** r14-2: this sheet is still the one open — a late dismissal never closes the link that replaced it. */
+    isCurrent: () -> Boolean = { true },
+) {
     val view by hub.accountsView.collectAsStateWithLifecycle()
     val stand = view.link
     val close = {
-        // The person closed the missing-network sheet: the waiting link is dropped (W9).
-        if (stand?.kind == "missingNetwork") hub.send(ev("drop_link")) else hub.send(ev("close_link"))
-        onClose()
+        if (isCurrent()) {
+            // The person closed the missing-network sheet: the waiting link is dropped (W9).
+            if (stand?.kind == "missingNetwork") hub.send(ev("drop_link")) else hub.send(ev("close_link"))
+            onClose()
+        }
     }
     MsSheet(if (stand?.kind == "invite") words.t("add.title") else words.t("proposal.title"), words.raw("common.done"), onClose = close, tag = "multisig.link") {
         when (stand?.kind) {

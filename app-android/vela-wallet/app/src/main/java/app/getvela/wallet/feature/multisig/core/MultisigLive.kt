@@ -54,6 +54,8 @@ sealed class MultisigShellFailure {
     data object NotSent : MultisigShellFailure()
     data class CannotPay(val need: String, val have: String) : MultisigShellFailure()
     data class Unknown(val message: String) : MultisigShellFailure()
+    /** r14-9: the execution's fee is not the one the person pressed on — nothing signed; [amount] is the new one. */
+    data class FeeMoved(val amount: String, val chainId: Long, val executor: String) : MultisigShellFailure()
 
     val detail: String
         get() = when (this) {
@@ -64,6 +66,7 @@ sealed class MultisigShellFailure {
             NotSent -> JSONObject().put("kind", "not_sent")
             is CannotPay -> JSONObject().put("kind", "cannot_pay").put("need", need).put("have", have)
             is Unknown -> JSONObject().put("kind", "unknown").put("message", message)
+            is FeeMoved -> JSONObject().put("kind", "fee_moved").put("amount", amount).put("chainId", chainId).put("executor", executor)
         }.toString()
 
     companion object {

@@ -40,6 +40,7 @@ import app.getvela.wallet.core.platform.VelaHaptic
 import app.getvela.wallet.core.platform.rememberVelaHaptic
 import app.getvela.wallet.feature.flows.components.QrCard
 import app.getvela.wallet.feature.multisig.core.MultisigHub
+import app.getvela.wallet.feature.multisig.core.ShownFee
 import app.getvela.wallet.feature.multisig.core.get
 import app.getvela.wallet.feature.multisig.core.str
 import app.getvela.wallet.feature.multisig.core.ev
@@ -78,6 +79,12 @@ fun MultisigProposalSheet(
     onAddNetwork: ((Int) -> Unit)? = null,
     /** A site's request (M5): what the site is told, and when. */
     siteNote: String? = null,
+    /**
+     * r14-2: this sheet is still the one open. Its dismissal can land after
+     * a newer link's sheet took its place; it then closes nothing — never
+     * the newer sheet, never its link (`close_linked`).
+     */
+    isCurrent: () -> Boolean = { true },
 ) {
     val view by hub.proposalsView.collectAsStateWithLifecycle()
     val accounts by hub.accountsView.collectAsStateWithLifecycle()
@@ -92,6 +99,10 @@ fun MultisigProposalSheet(
     // its review, signers and history asked once.
     DisposableEffect(chainId, safeTxHash) {
         val release = hub.watch()
+        // r14-6: a review read before this sheet opened (a minute ago, before
+        // the network went) is read again from the start — "Reading the
+        // transaction…", every sign button shut, until the core says.
+        hub.reviewOnOpen(chainId, safeTxHash)
         hub.sendProposal(ev("timeline", "chain_id" to chainId, "safe_tx_hash" to safeTxHash))
         hub.sendProposal(ev("refresh", "fresh" to false))
         // §3.5: who can act for it on this network, read once a session (the
@@ -160,9 +171,12 @@ fun MultisigProposalSheet(
         lookRound += 1
         onPauseOrDispose { }
     }
-    LaunchedEffect(chainId, safeTxHash, item?.status, item?.approved, lookRound) {
+    // r14-6: a network that answers again asks at once (the hub's word).
+    val reachedAgain by hub.reachedAgain.collectAsStateWithLifecycle()
+    LaunchedEffect(chainId, safeTxHash, item?.status, item?.approved, lookRound, reachedAgain) {
         var asked = false
         var auto = 0
+        var lastAuto = 0L
         while (true) {
             // A ready one's executors, and a member whose approval would
             // complete it (the machine's `approve_execute` reads that look).
@@ -173,11 +187,15 @@ fun MultisigProposalSheet(
                 // "Approve and execute" with its fee said first — its look asked too.
                 val oneShort = if (current.approved + 1 >= current.threshold) current.canApprove else emptyList()
                 val executors = (current.canExecute + oneShort).distinctBy { it.lowercase() }
-                val now = executors.filter { e -> !asked || LookAsk.timerAsks(v.preview(current, e).kind, auto) }
+                val clock = System.currentTimeMillis()
+                val now = executors.filter { e -> !asked || LookAsk.timerAsks(v.preview(current, e).kind, auto, clock - lastAuto) }
                 for (e in now) {
                     hub.sendProposal(ev("preview", "chain_id" to chainId, "safe_tx_hash" to current.safeTxHash, "executor" to e))
                 }
-                if (asked && now.isNotEmpty()) auto += 1
+                if (asked && now.isNotEmpty()) {
+                    auto += 1
+                    lastAuto = clock
+                }
                 asked = true
             }
             delay(LookAsk.ASK_EVERY_MS)
@@ -185,8 +203,10 @@ fun MultisigProposalSheet(
     }
 
     val close = {
-        if (hub.proposalsView.value.linked != null) hub.sendProposal(ev("close_linked"))
-        onClose()
+        if (isCurrent()) {
+            if (hub.proposalsView.value.linked != null) hub.sendProposal(ev("close_linked"))
+            onClose()
+        }
     }
     val approving = item?.let { view.action("approve:${it.safeTxHash}").kind == "working" } ?: false
     val executingNow = item?.let { view.action("execute:${it.safeTxHash}").kind == "working" || it.executing } ?: false
@@ -293,6 +313,8 @@ fun MultisigProposalSheet(
                     onConfirm = {
                         val owner = chosen ?: return@MsSignButton
                         haptic(VelaHaptic.Press)
+                        // r14-9: the fee on screen as it was pressed — the one signed, or nothing is.
+                        if (oneTap) ShownFee.pressed(chainId, owner, pricedFee(model.preview(owner)))
                         scope.launch {
                             fun settledOf(v: JsonObject, what: String): JsonElement? {
                                 val s = (v["actions"] as? JsonObject)?.entries?.firstOrNull { it.key.equals("$what:${item.safeTxHash}", ignoreCase = true) }?.value
@@ -326,6 +348,14 @@ fun MultisigProposalSheet(
                 // machine's look for this member (`previews`), as Execute's.
                 if (oneTap && chosen != null) {
                     model.feeLineBeside(chosen, model.executeFailure)?.let { (text, tone) -> MsNote(text, tone = tone, tag = "multisig.proposal.oneTapFee") }
+                    // r14-6: a fee that could not be worked out or checked offers
+                    // Check again here too (the web's), as under Execute.
+                    if (LookAsk.offersCheckAgain(model.preview(chosen).kind)) {
+                        MsTextButton(words.t("proposal.feeRetry"), tag = "multisig.proposal.oneTapFeeRetry") {
+                            hub.sendProposal(ev("preview", "chain_id" to chainId, "safe_tx_hash" to item.safeTxHash, "executor" to chosen))
+                            lookRound += 1
+                        }
+                    }
                 } else if (chosen != null) {
                     // r10 S4: theirs would complete it, but the one press is not
                     // offered — said why (can't pay the fee, would fail), never
@@ -354,6 +384,8 @@ fun MultisigProposalSheet(
                     words = words,
                     onConfirm = {
                         haptic(VelaHaptic.Press)
+                        // r14-9: the fee on screen as it was pressed — the one signed, or nothing is.
+                        ShownFee.pressed(chainId, chosen, pricedFee(model.preview(chosen)))
                         hub.sendProposal(ev("execute", "chain_id" to chainId, "safe_tx_hash" to item.safeTxHash, "executor" to chosen))
                     },
                     modifier = Modifier.fillMaxWidth().testTag("multisig.proposal.execute"),
@@ -366,7 +398,7 @@ fun MultisigProposalSheet(
                     lookRound += 1
                 }
                 val look = model.preview(chosen).kind
-                if (look == "unpriced" || look == "unchecked") {
+                if (LookAsk.offersCheckAgain(look)) {
                     MsTextButton(words.t("proposal.feeRetry"), tag = "multisig.proposal.feeRetry") {
                         hub.sendProposal(ev("preview", "chain_id" to chainId, "safe_tx_hash" to item.safeTxHash, "executor" to chosen))
                         // "Check again": the timer's few asks are the person's again.
@@ -579,9 +611,26 @@ internal object LookAsk {
     const val ASK_EVERY_MS = 4_000L
     const val AUTO_LIMIT = 4
 
-    fun timerAsks(kind: String?, autoAsked: Int): Boolean =
-        autoAsked < AUTO_LIMIT && (kind == null || kind == "unpriced" || kind == "unchecked")
+    /**
+     * r14-6: past its first few asks, a look that still has not priced it is
+     * asked again this often — the network may be back (a fee line said
+     * "Couldn't check whether it would run" for minutes after Arc answered
+     * again). A priced look still stands (r13 S4): only what could not be
+     * said is asked again.
+     */
+    const val SLOW_EVERY_MS = 20_000L
+
+    fun timerAsks(kind: String?, autoAsked: Int, sinceLastAutoMs: Long = 0L): Boolean =
+        (kind == null || kind == "unpriced" || kind == "unchecked") &&
+            (autoAsked < AUTO_LIMIT || sinceLastAutoMs >= SLOW_EVERY_MS)
+
+    /** r14-6: a fee line that could not be worked out or checked offers "Check again" — beside Execute and beside the one press. */
+    fun offersCheckAgain(kind: String?): Boolean = kind == "unpriced" || kind == "unchecked"
 }
+
+/** r14-9: the fee a priced look says (`fee.amount`), as the machine wrote it; `null` for a look that said none. */
+internal fun pricedFee(preview: JsonElement?): String? =
+    preview?.takeIf { it.kind == "priced" }?.get("fee")?.get("amount")?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
 
 /** How soon a review that could not read the chain is asked again (the web's `REVIEW_RETRY_MS`). */
 internal const val REVIEW_RETRY_MS = 5_000L
