@@ -28,6 +28,7 @@ use serde_json::Value;
 use vela_core::app::activity_feed::{ActivityFeed, Event as FeedEvent};
 use vela_core::app::balance_dashboard::{BalanceDashboard, BalanceView};
 use vela_core::app::network_admin::{BUILTIN_CHAINS, NetCustomNetwork};
+pub use vela_core::app::network_space::Elsewhere;
 use vela_core::app::network_space::{KEY, NetworkSpace, chain_is_testnet};
 use vela_core::app::shown_networks::{self, NetShownNetworks};
 
@@ -112,19 +113,25 @@ pub fn in_other_space(chain_id: u32) -> bool {
     })
 }
 
-/// r10-4: where an account used on `chain_ids` lives, when it is not in
-/// the space in front — none of them is in it, and these are in the other
-/// one. Empty when one of them is here, or it names none: nothing to say.
+/// r10-4, r13-1: where an account used on `chain_ids` lives, when it is not
+/// in the space in front — the core's rule
+/// ([`network_space::lives_elsewhere`](vela_core::app::network_space::lives_elsewhere),
+/// the shared vector `vectors/multisig/other-space.json`), over the person's
+/// lists of the space in front and of the other one (a network they took
+/// off is in neither). `None`: nothing to say.
 #[must_use]
-pub fn lives_elsewhere(chain_ids: &[u32]) -> Vec<u32> {
-    if chain_ids.is_empty() || chain_ids.iter().any(|id| in_space(*id)) {
-        return Vec::new();
+pub fn lives_elsewhere(chain_ids: &[u32]) -> Option<Elsewhere> {
+    if chain_ids.is_empty() {
+        return None;
     }
-    chain_ids
+    let all: Vec<u32> = all_networks().into_iter().map(|(id, _)| id).collect();
+    let here: Vec<u32> = all.iter().copied().filter(|id| in_space(*id)).collect();
+    let other: Vec<u32> = all
         .iter()
         .copied()
         .filter(|id| in_other_space(*id))
-        .collect()
+        .collect();
+    vela_core::app::network_space::lives_elsewhere(chain_ids, &here, &other, current())
 }
 
 /// `ids` without the other space's chains, nor a Vela network out of the
@@ -322,13 +329,24 @@ mod tests {
     #[test]
     fn an_account_of_the_other_space_says_where_it_lives() {
         with_temp_state("space-lives-elsewhere", || {
-            assert_eq!(lives_elsewhere(&[5_042_002]), [5_042_002]);
-            assert!(lives_elsewhere(&[5_042_002, 100]).is_empty());
-            assert!(lives_elsewhere(&[100]).is_empty());
-            assert!(lives_elsewhere(&[]).is_empty());
+            // r13-1: the core's answer, keys and all — no copy of the rule here.
+            let arc = lives_elsewhere(&[5_042_002]).expect("lives in the testnet space");
+            assert_eq!(arc.chain_ids, [5_042_002]);
+            assert_eq!(arc.space, NetworkSpace::Testnet);
+            assert_eq!(arc.line_key, "home.multisig.add.usedOn");
+            assert_eq!(arc.heading_key, "networkSpace.headingTestnet");
+            assert_eq!(arc.switch_key, "networkSpace.toTestnet");
+            assert!(lives_elsewhere(&[5_042_002, 100]).is_none());
+            assert!(lives_elsewhere(&[100]).is_none());
+            assert!(lives_elsewhere(&[]).is_none());
+            // A network Vela does not have is on no list: never named.
+            assert!(lives_elsewhere(&[777_777]).is_none());
             assert!(storage::write_value(KEY, json!("testnet")).is_ok());
-            assert!(lives_elsewhere(&[5_042_002]).is_empty());
-            assert_eq!(lives_elsewhere(&[100, 8453]), [100, 8453]);
+            assert!(lives_elsewhere(&[5_042_002]).is_none());
+            let base = lives_elsewhere(&[100, 8453]).expect("lives in the mainnet space");
+            assert_eq!(base.chain_ids, [100, 8453]);
+            assert_eq!(base.space, NetworkSpace::Mainnet);
+            assert_eq!(base.switch_key, "networkSpace.toMainnet");
         });
     }
 

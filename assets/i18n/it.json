@@ -1052,6 +1052,8 @@
   "storage": {
    "unreadableTitle": "I dati del wallet in questo browser non sono leggibili",
    "unreadableBody": "L'elenco dei wallet salvato ha una forma che questa versione non può leggere. Accedi di nuovo per ricostruirlo dalla tua passkey, oppure azzera la copia di questo browser. Il wallet in sé è intatto: vive sulla chain, dietro la tua passkey.",
+   "deviceUnreadableTitle": "I dati del wallet su questo dispositivo non sono leggibili",
+   "deviceUnreadableBody": "L'elenco dei wallet salvato ha una forma che questa versione non può leggere. Accedi di nuovo per ricostruirlo dalla tua passkey. Il wallet in sé è intatto: vive sulla chain, dietro la tua passkey.",
    "signInAgain": "Accedi di nuovo",
    "resetCopy": "Azzera la copia di questo browser"
   }

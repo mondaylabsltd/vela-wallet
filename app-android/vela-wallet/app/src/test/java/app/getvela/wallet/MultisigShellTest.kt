@@ -405,6 +405,34 @@ class MultisigShellTest {
         assertEquals(1, answers.size)
     }
 
+    /**
+     * r13-3 on Android (docs/multisig-machines.md §17): a site's transaction
+     * whose reads before its draft failed is said as the core names it, and
+     * Try again asks the SAME request again ([MultisigHub.dappRetry], iOS's
+     * `dappRetry`, the web's `dapp.retry`) — the sheet spun for ever before.
+     */
+    @Test
+    fun a_sites_draft_whose_reads_failed_is_said_and_asked_again_on_try_again() = runBlocking {
+        val ports = FakePorts()
+        val safe = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
+        ports.store["vela.multisigAccounts"] = """[{"address":"$safe","owners":["0xD400866e00B055B20752a826CD5C89b811de130b","0x031d7D57c99CAF891e1C250554691Fd12D84772b"],"threshold":2,"chainIds":[100],"recorded":true,"addedMs":1,"genesis":{"factory":"0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67","singleton":"0x41675C099F32341bf84BFc5382aF534df5C7461a","saltNonce":"0x1","initializer":"0x","name":"Treasury"}}]"""
+        val rpcAsked = java.util.concurrent.atomic.AtomicInteger()
+        ports.rpcAnswer = { _, _, _ -> rpcAsked.incrementAndGet(); MultisigRpcReply.Unanswered("the network is down") }
+        val hub = hub(ports)
+        withTimeout(20_000) { hub.boot() }
+        val tx = jsonOf(listOf(mapOf("from" to safe, "to" to "0x031d7D57c99CAF891e1C250554691Fd12D84772b", "value" to "0x1")))
+        hub.dappRequest("tab-1:7", safe, "eth_sendTransaction", tx, "https://app.example", 100) { }
+        val failed = setOf("unread", "mailboxUnreadable")
+        withTimeout(40_000) { while (hub.proposalsView.value.action("propose").kind !in failed) delay(50) }
+        val before = rpcAsked.get()
+        hub.dappRetry("tab-1:7")
+        withTimeout(20_000) { while (rpcAsked.get() == before) delay(20) }
+        assertTrue("the same request was asked again", rpcAsked.get() > before)
+        // Declined: the machine answers the site, and the request is forgotten here.
+        hub.dappLeave("tab-1:7")
+        hub.dappRetry("tab-1:7")
+    }
+
     @Test
     fun a_batch_status_is_the_machines_body_and_is_then_let_go() = runBlocking {
         val ports = FakePorts()

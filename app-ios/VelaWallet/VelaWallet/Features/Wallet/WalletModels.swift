@@ -236,6 +236,9 @@ enum SectionMode {
 struct SectionEmptyModel {
     let title: String
     let caption: String
+    /// r13-7: a Try again under the line, when what is empty is a read that
+    /// failed (a multisig's history not read) — its words; nil: none.
+    var retry: String? = nil
 }
 
 struct SectionModel {

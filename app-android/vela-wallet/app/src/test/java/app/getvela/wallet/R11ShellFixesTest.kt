@@ -159,17 +159,21 @@ class R11ShellFixesTest {
     fun a_multisig_used_only_in_the_other_space_says_where_it_lives() {
         val mainnet = listOf(1, 100, 8453)
         val testnet = listOf(5042002, 11155111)
-        val elsewhere = app.getvela.wallet.feature.multisig.OtherSpace.livesElsewhere(listOf(5042002), here = mainnet, other = testnet)
-        assertEquals(listOf(5042002), elsewhere)
+        val front = app.getvela.wallet.feature.settings.core.NetworkSpace.Mainnet
+        // r13-1: the rule is the core's (`network_lives_elsewhere`); the line is drawn from its keys.
+        val elsewhere = requireNotNull(app.getvela.wallet.feature.multisig.OtherSpace.livesElsewhere(listOf(5042002), here = mainnet, other = testnet, front = front))
+        assertEquals(listOf(5042002), elsewhere.chain_ids)
+        assertEquals(app.getvela.wallet.feature.settings.core.NetworkSpace.Testnet, elsewhere.target)
         assertEquals(
             "Used on Arc Testnet · Testnet space",
-            app.getvela.wallet.feature.multisig.OtherSpace.line(words(), elsewhere, strings.t(app.getvela.wallet.core.i18n.I18nKeys.NetworkSpace.HEADING_TESTNET)),
+            app.getvela.wallet.feature.multisig.OtherSpace.line(words(), elsewhere, strings.t(elsewhere.heading_key)),
         )
+        assertEquals("Switch to the testnet space", strings.t(elsewhere.switch_key))
         // One of its networks is here: the home as it is.
-        assertTrue(app.getvela.wallet.feature.multisig.OtherSpace.livesElsewhere(listOf(5042002, 100), here = mainnet, other = testnet).isEmpty())
+        assertNull(app.getvela.wallet.feature.multisig.OtherSpace.livesElsewhere(listOf(5042002, 100), here = mainnet, other = testnet, front = front))
         // A network in neither list (taken off the person's lists): nothing to switch to.
-        assertTrue(app.getvela.wallet.feature.multisig.OtherSpace.livesElsewhere(listOf(777), here = mainnet, other = testnet).isEmpty())
-        assertTrue(app.getvela.wallet.feature.multisig.OtherSpace.livesElsewhere(emptyList(), here = mainnet, other = testnet).isEmpty())
+        assertNull(app.getvela.wallet.feature.multisig.OtherSpace.livesElsewhere(listOf(777), here = mainnet, other = testnet, front = front))
+        assertNull(app.getvela.wallet.feature.multisig.OtherSpace.livesElsewhere(emptyList(), here = mainnet, other = testnet, front = front))
     }
 
     // -- r11-7: a dead RPC in the testnet space ------------------------------------------------

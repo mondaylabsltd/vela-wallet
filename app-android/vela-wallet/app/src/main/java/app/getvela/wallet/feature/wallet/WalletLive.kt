@@ -70,6 +70,34 @@ object WalletLive {
     /** The hero's mask, one glyph wider (`privacy::BALANCE_MASK`). */
     const val BALANCE_MASK = "••••••"
 
+    /**
+     * r13-7: where the shown multisig's history stands (the core's
+     * `ProposalsView.history`: `reading` / `read` / `unread`), with the words
+     * its Activity says when it could not be read — the panel's line, and
+     * Try again.
+     */
+    data class MultisigHistory(val stand: String, val unreadText: String, val retryText: String)
+
+    /**
+     * r13-7 (the web's `withLiveWallet` `multisigHistory`): a multisig's
+     * Activity over no rows says what its history is — being read (loading,
+     * never "No activity yet"), or not read (the panel's line with Try again,
+     * never "No activity yet"). Read, or rows already there: the home as it is.
+     */
+    fun withMultisigHistory(model: WalletHomeModel, history: MultisigHistory?): WalletHomeModel {
+        if (history == null || model.activityGroups.isNotEmpty()) return model
+        return when (history.stand) {
+            "reading" -> model.copy(activitySection = model.activitySection.copy(mode = SectionMode.Loading))
+            "unread" -> model.copy(
+                activitySection = model.activitySection.copy(
+                    mode = SectionMode.Empty,
+                    empty = EmptyStateModel(title = history.unreadText, caption = "", retry = history.retryText),
+                ),
+            )
+            else -> model
+        }
+    }
+
     // A masked amount written WITH its unit ("•••• xDAI") is the core's own
     // function — `maskedAmount(unit)`, the export of `privacy::masked_amount`
     // — called wherever a coin amount is drawn hidden: a holdings row (home

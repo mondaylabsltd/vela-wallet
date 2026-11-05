@@ -295,6 +295,8 @@
     "storage": {
       "unreadableTitle": "Không đọc được dữ liệu ví trong trình duyệt này",
       "unreadableBody": "Danh sách ví đã lưu có dạng mà phiên bản này không đọc được. Đăng nhập lại để dựng lại từ passkey của bạn, hoặc đặt lại bản sao trong trình duyệt này. Bản thân ví không bị ảnh hưởng: nó nằm trên chuỗi, sau passkey của bạn.",
+      "deviceUnreadableTitle": "Không đọc được dữ liệu ví trên thiết bị này",
+      "deviceUnreadableBody": "Danh sách ví đã lưu có dạng mà phiên bản này không đọc được. Đăng nhập lại để dựng lại từ passkey của bạn. Bản thân ví không bị ảnh hưởng: nó nằm trên chuỗi, sau passkey của bạn.",
       "signInAgain": "Đăng nhập lại",
       "resetCopy": "Đặt lại bản sao trong trình duyệt này"
     }

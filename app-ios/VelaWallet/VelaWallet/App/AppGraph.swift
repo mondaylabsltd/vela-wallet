@@ -325,7 +325,8 @@ final class AppGraph {
         }
         // r12-3: the chains out of reach, to the balance machine — its rule
         // re-reads a home network that has just gone out of reach.
-        pool.onOutOfReach = { [weak wallet] chainIds in wallet?.poolUnreached(chainIds) }
+        // r13-4: and of them the silent ones, named at once (as the web).
+        pool.onOutOfReach = { [weak wallet] chainIds, silent in wallet?.poolUnreached(chainIds, silent: silent) }
         netWatch.onCameBack = { [weak browserController, weak wallet, weak activityStore] in
             // r9-17: back online — the core scans at once.
             activityStore?.online()

@@ -792,20 +792,23 @@ class WalletController(
         // watch or a send may be the read that lost one, and the home must not
         // stay "Live" over it. The leading empty set is the machine's own
         // starting word, so it is not said.
+        // r13-4: and of them the SILENT ones, which the core names at once —
+        // the web's `onPoolOutOfReach` (the same two sets, on either change).
         scope.launch {
-            pool.view.map { it.out_of_reach_chains }.distinctUntilChanged().dropWhile { it.isEmpty() }.collect(::poolUnreached)
+            pool.view.map(::poolUnreachedOf).distinctUntilChanged().dropWhile { it.chain_ids.isEmpty() }.collect(::poolUnreached)
         }
     }
 
     /**
      * r12-3 (core §13.2, `pool_unreached`): the networks the RPC pool finds
-     * out of reach now. The core reads again at once, forced, a network the
-     * shown account is read on that the home does not say yet — or owes it
-     * to the round already out, or to the next focus.
+     * out of reach now, and (r13-4) of them the silent ones. The core reads
+     * again at once, forced, a network the shown account is read on that the
+     * home does not say yet — or owes it to the round already out, or to the
+     * next focus — and names a silent one at once.
      */
-    fun poolUnreached(chainIds: List<Int>) {
-        VelaLog.event("balance", "pool unreached", "chains" to chainIds)
-        balanceHost.dispatch(BalanceEvent.PoolUnreached(chainIds), BalanceEvent.serializer())
+    fun poolUnreached(event: BalanceEvent.PoolUnreached) {
+        VelaLog.event("balance", "pool unreached", "chains" to event.chain_ids, "silent" to event.silent)
+        balanceHost.dispatch(event, BalanceEvent.serializer())
     }
 
     /**
@@ -1109,21 +1112,29 @@ class WalletController(
     /** Spec 093: a dApp record's stored request, read by id when its technical details open. */
     suspend fun storedRequest(id: String): String? = feedExecutor.storedRequest(id)
 
-    private companion object {
+    companion object {
+        /**
+         * r12-3 / r13-4: what the balance machine hears of the pool's view —
+         * its out-of-reach networks and, of them, the silent ones (the web's
+         * `pool_unreached {chain_ids, silent}`). Pure.
+         */
+        fun poolUnreachedOf(view: RpcPoolView): BalanceEvent.PoolUnreached =
+            BalanceEvent.PoolUnreached(chain_ids = view.out_of_reach_chains, silent = view.silent_chains)
+
         /** An interaction is said to the core at most this often (the cadence's active window is two minutes). */
-        const val INTERACTION_SAID_MS = 5_000L
+        private const val INTERACTION_SAID_MS = 5_000L
         /** r13 S4: a landed multisig execution's balances are read again this long after the first read. */
-        const val LANDED_REREAD_MS = 6_000L
+        private const val LANDED_REREAD_MS = 6_000L
         /**
          * How long a receipt scan waits for the balance read that tells it
          * which chains to watch. Long enough for a dozen chains on a phone
          * connection, short enough that a stalled read does not hold the scan
          * open — it proceeds with what it knows, and the next tick asks again.
          */
-        const val HELD_CHAINS_WAIT_MS = 12_000L
+        private const val HELD_CHAINS_WAIT_MS = 12_000L
 
         /** The residents' tick (web `TICK_MS`, desktop `TICK`). */
-        const val TRACKER_TICK_MS = 3_000L
+        private const val TRACKER_TICK_MS = 3_000L
     }
 }
 

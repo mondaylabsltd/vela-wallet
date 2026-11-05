@@ -297,6 +297,8 @@
     "storage": {
       "unreadableTitle": "Les données du portefeuille de ce navigateur sont illisibles",
       "unreadableBody": "La liste de portefeuilles enregistrée a une forme que cette version ne peut pas lire. Reconnectez-vous pour la reconstruire depuis votre passkey, ou réinitialisez la copie de ce navigateur. Le portefeuille lui-même est intact : il vit sur la chaîne, derrière votre passkey.",
+      "deviceUnreadableTitle": "Les données du portefeuille sur cet appareil sont illisibles",
+      "deviceUnreadableBody": "La liste de portefeuilles enregistrée a une forme que cette version ne peut pas lire. Reconnectez-vous pour la reconstruire depuis votre passkey. Le portefeuille lui-même est intact : il vit sur la chaîne, derrière votre passkey.",
       "signInAgain": "Se reconnecter",
       "resetCopy": "Réinitialiser la copie de ce navigateur"
     }

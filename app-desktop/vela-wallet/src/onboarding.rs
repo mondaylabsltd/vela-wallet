@@ -1815,9 +1815,16 @@ fn transport_words(
     }
 }
 
+/// DESKTOP-1: the stored-accounts notice's title — device-neutral words (r13
+/// native adoption): the web's pair says "this browser".
+pub(crate) const UNREADABLE_TITLE: &str = "onboarding.storage.deviceUnreadableTitle";
+/// …and its body: sign in again to rebuild the list; no browser copy to reset.
+pub(crate) const UNREADABLE_BODY: &str = "onboarding.storage.deviceUnreadableBody";
+
 /// DESKTOP-1: stored accounts this computer cannot read — the sentence the
-/// web's storage prompt says (spec 048), as a line under the welcome's copy:
-/// the two ways out it names, signing in again, are the buttons beneath it.
+/// web's storage prompt says (spec 048), in device-neutral words, as a line
+/// under the welcome's copy: the way out it names, signing in again, is the
+/// buttons beneath it.
 fn unreadable_notice(loc: &crate::loc::Loc, theme: &Theme) -> Stateful<Div> {
     div()
         .id("accounts-unreadable")
@@ -1830,14 +1837,12 @@ fn unreadable_notice(loc: &crate::loc::Loc, theme: &Theme) -> Stateful<Div> {
             div()
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(theme.warning_base)
-                .child(crate::ui::prose(
-                    loc.t("onboarding.storage.unreadableTitle"),
-                )),
+                .child(crate::ui::prose(loc.t(UNREADABLE_TITLE))),
         )
         .child(
             div()
                 .text_color(theme.fg_muted)
-                .child(crate::ui::prose(loc.t("onboarding.storage.unreadableBody"))),
+                .child(crate::ui::prose(loc.t(UNREADABLE_BODY))),
         )
 }
 
@@ -1896,5 +1901,32 @@ mod endpoint_rule {
     #[test]
     fn never_during_the_create_journey() {
         assert!(!endpoint_should_auto_open(true, false, false, true));
+    }
+}
+
+#[cfg(test)]
+mod unreadable_words {
+    /// r13 native adoption (DESKTOP-1): the stored-accounts notice is said
+    /// in words that fit a computer — never "this browser's wallet data", nor
+    /// a browser copy to reset, which this app has neither of.
+    #[test]
+    fn the_unreadable_notice_names_no_browser() {
+        for (language, browser) in [("en", "browser"), ("zh", "浏览器"), ("ja", "ブラウザ")]
+        {
+            let loc = crate::loc::Loc::for_language(language);
+            for key in [super::UNREADABLE_TITLE, super::UNREADABLE_BODY] {
+                let said = loc.t(key);
+                assert!(
+                    !said.is_empty() && !said.contains(key),
+                    "{language} {key}: {said}"
+                );
+                assert!(!said.contains(browser), "{language} {key}: {said}");
+            }
+        }
+        let en = crate::loc::Loc::for_language("en");
+        assert_eq!(
+            en.t(super::UNREADABLE_TITLE).to_string(),
+            "Wallet data on this device can't be read"
+        );
     }
 }

@@ -37,13 +37,20 @@ struct MultisigR11FixTests {
 
     // MARK: - r11-3
 
-    @Test func aMultisigOfTheOtherSpaceLivesElsewhere() {
+    @Test func aMultisigOfTheOtherSpaceLivesElsewhere() throws {
         let mainnet = [1, 10, 100, 8453]
-        let known = mainnet + [11_155_111, 5_042_002]
-        #expect(WalletLive.livesElsewhere(chainIds: [5_042_002], here: mainnet, known: known) == [5_042_002])
-        #expect(WalletLive.livesElsewhere(chainIds: [5_042_002, 100], here: mainnet, known: known).isEmpty,
+        let testnet = [11_155_111, 5_042_002]
+        // r13-1: the core's answer, its keys and the space the switch goes to.
+        let arc = try #require(WalletLive.livesElsewhere(chainIds: [5_042_002], here: mainnet, other: testnet, front: .mainnet))
+        #expect(arc.chainIds == [5_042_002])
+        #expect(arc.target == .testnet)
+        #expect(MultisigHomeCard.otherSpaceLine(arc, words: MsWords(loc: loc, hub: nil)) == "Used on Arc Testnet · Testnet space")
+        #expect(loc.t(arc.switchKey) == "Switch to the testnet space")
+        #expect(WalletLive.livesElsewhere(chainIds: [5_042_002, 100], here: mainnet, other: testnet, front: .mainnet) == nil,
                 "one network here: it lives here")
-        #expect(WalletLive.livesElsewhere(chainIds: [], here: mainnet, known: known).isEmpty)
+        #expect(WalletLive.livesElsewhere(chainIds: [777], here: mainnet, other: testnet, front: .mainnet) == nil,
+                "a network on no list is never named")
+        #expect(WalletLive.livesElsewhere(chainIds: [], here: mainnet, other: testnet, front: .mainnet) == nil)
     }
 
     @Test func itsHomeSaysNoFalseZeroStampOrEmptyState() {

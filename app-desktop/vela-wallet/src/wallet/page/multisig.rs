@@ -1209,14 +1209,12 @@ impl WalletPage {
         Some(card)
     }
 
-    /// r10-4 / r11: the networks of the other space the multisig shown
-    /// lives on, when none of its networks is in the space in front (its
-    /// record's `chain_ids`; which space a network is in is the core's
-    /// word). Empty for a Vela account, or a multisig used here.
-    pub(crate) fn multisig_elsewhere(&self, cx: &App) -> Vec<u32> {
-        let Some(row) = self.shown_multisig(cx) else {
-            return Vec::new();
-        };
+    /// r10-4 / r11 / r13-1: where the multisig shown lives when none of its
+    /// networks (its record's `chain_ids`) is in the space in front — the
+    /// core's rule ([`crate::network_space::lives_elsewhere`]). `None` for a
+    /// Vela account, or a multisig used here.
+    pub(crate) fn multisig_elsewhere(&self, cx: &App) -> Option<crate::network_space::Elsewhere> {
+        let row = self.shown_multisig(cx)?;
         let ids: Vec<u32> = row
             .account
             .chain_ids
@@ -1226,45 +1224,84 @@ impl WalletPage {
         crate::network_space::lives_elsewhere(&ids)
     }
 
+    /// The proposals machine's `retry` (r13-3, r13-7): what could not be
+    /// read — the waiting list, a link's transaction, an unread history — is
+    /// read again.
+    pub(crate) fn ms_retry(&mut self, cx: &mut Context<Self>) {
+        let host = self.ms_host(cx);
+        host.update(cx, |host, cx| {
+            host.proposals(ms_proposals::Event::Retry, cx)
+        });
+        cx.notify();
+    }
+
+    /// r13-7: the shown multisig's history (`ProposalsView.history`), for
+    /// the home's Activity — only once the proposals machine follows it (the
+    /// web's `multisigHistory`). The unread line names the network the
+    /// history could not be read on.
+    pub(crate) fn multisig_history(
+        &mut self,
+        cx: &mut Context<Self>,
+    ) -> Option<crate::wallet::live::MultisigHistory> {
+        let row = self.shown_multisig(cx)?;
+        let host = self.ms_host(cx);
+        let machines = host.read(cx).machines();
+        let view = &machines.proposals_view;
+        if !view
+            .followed
+            .as_deref()
+            .is_some_and(|f| same(f, &row.account.address))
+        {
+            return None;
+        }
+        let stand = view.history;
+        let chain = view
+            .history_unreadable
+            .first()
+            .or_else(|| row.account.chain_ids.first())
+            .copied();
+        let loc = self.ms_loc();
+        let unread_text = words::tv(
+            &loc,
+            "panel.historyUnreadable",
+            &[("network", &chain.map(network).unwrap_or_default())],
+        );
+        Some(crate::wallet::live::MultisigHistory {
+            stand,
+            unread_text: unread_text.into(),
+            retry_text: self.loc.t("common.tryAgain"),
+        })
+    }
+
     /// r10-4: a multisig shown from the space it does not live in — used
     /// only on networks of the other space — reads as empty here ("$0.00",
     /// "Deposit your first asset"): where it lives is said, with the switch
-    /// there (the create sheet's way, r7-9). Its networks are its record's
-    /// (`chain_ids`); which space a network is in is the core's word.
+    /// there (the create sheet's way, r7-9). What is said, and where the
+    /// switch goes, is the core's answer (r13-1: its keys and its space).
     pub(crate) fn multisig_other_space(
         &mut self,
         theme: &Theme,
         cx: &mut Context<Self>,
     ) -> Option<Div> {
-        let elsewhere = self.multisig_elsewhere(cx);
-        if elsewhere.is_empty() {
-            return None;
-        }
+        let elsewhere = self.multisig_elsewhere(cx)?;
         let loc = self.ms_loc();
-        let testnet = crate::network_space::testnet();
-        let (to, heading, switch) = if testnet {
-            (
-                NetworkSpace::Mainnet,
-                "networkSpace.headingMainnet",
-                "networkSpace.toMainnet",
-            )
-        } else {
-            (
-                NetworkSpace::Testnet,
-                "networkSpace.headingTestnet",
-                "networkSpace.toTestnet",
-            )
-        };
+        let to: NetworkSpace = elsewhere.space;
+        let switch = elsewhere.switch_key.clone();
         let networks = loc.list(
             &elsewhere
+                .chain_ids
                 .iter()
                 .map(|id| network(u64::from(*id)))
                 .collect::<Vec<_>>(),
         );
+        let line_key = elsewhere
+            .line_key
+            .strip_prefix("home.multisig.")
+            .unwrap_or(&elsewhere.line_key);
         let line = format!(
             "{} · {}",
-            words::tv(&loc, "add.usedOn", &[("networks", &networks)]),
-            self.loc.t(heading)
+            words::tv(&loc, line_key, &[("networks", &networks)]),
+            self.loc.t(&elsewhere.heading_key)
         );
         Some(
             div()
@@ -1302,7 +1339,7 @@ impl WalletPage {
                 .child(crate::ui::vela_button(
                     "ms-other-space-switch",
                     crate::ui::ButtonVariant::Secondary,
-                    self.loc.t(switch),
+                    self.loc.t(&switch),
                     theme,
                     // A switch of space moves no value: the person's press,
                     // through the same intent the space dialog answers with.
@@ -1689,6 +1726,17 @@ impl WalletPage {
                         .text_color(theme.fg_subtle)
                         .child(line),
                 );
+            }
+            // r13-3: a link not read in time offers Try again (iOS, the web)
+            // — the machine's `retry`, which starts the link's bound again.
+            if link_offers_try_again(linked.as_ref()) {
+                body = body.child(div().pt(px(4.)).child(crate::ui::vela_button(
+                    "ms-proposal-open-retry",
+                    crate::ui::ButtonVariant::Secondary,
+                    words::t(&loc, "review.state.tryAgain").into(),
+                    theme,
+                    cx.listener(|this, _, _, cx| this.ms_retry(cx)),
+                )));
             }
             return Some((title, body, None));
         };
@@ -4736,6 +4784,12 @@ fn ms_execution_words(loc: &Loc, execution: &Value) -> Option<String> {
 /// multisig): it belongs to a multisig not shown here; its mailbox read and
 /// the transaction not in it: said as that; its network unreadable: said
 /// as that.
+/// r13-3: a link's transaction not read in time (`LinkedStand::Failed`)
+/// offers Try again — as iOS and the web draw it. Pure.
+pub(crate) fn link_offers_try_again(linked: Option<&ms_proposals::flows::LinkedView>) -> bool {
+    linked.is_some_and(|l| l.stand == ms_proposals::flows::LinkedStand::Failed)
+}
+
 pub(crate) fn no_item_lines(
     loc: &crate::loc::Loc,
     view: &ms_proposals::ProposalsView,
@@ -4856,6 +4910,21 @@ mod tests {
             reason_key: None,
             retry: false,
         };
+        // r13-3 (§17): a link not read in time offers Try again; one still
+        // being read, or answered, does not.
+        assert!(super::link_offers_try_again(Some(&linked(
+            LinkedStand::Failed,
+            false
+        ))));
+        for stand in [
+            LinkedStand::Reading,
+            LinkedStand::Found,
+            LinkedStand::NotFound,
+            LinkedStand::NotInMailbox,
+        ] {
+            assert!(!super::link_offers_try_again(Some(&linked(stand, false))));
+        }
+        assert!(!super::link_offers_try_again(None));
         assert_eq!(
             super::no_item_lines(
                 &loc,

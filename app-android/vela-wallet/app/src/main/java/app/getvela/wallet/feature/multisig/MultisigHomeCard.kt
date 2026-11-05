@@ -178,19 +178,56 @@ fun MultisigHomeCard(
 }
 
 /**
- * r11-3 (the desktop's r10-4): where a multisig shown from the space it does
- * not live in lives — none of its networks is in the space in front and
- * these are in the other one. Empty: one of them is here, or it names none.
- * Which space a network is in is the core's word (`network_space_chain_ids`,
- * [app.getvela.wallet.feature.settings.core.NetworkSpaces]). Pure.
+ * The core's word on where an account used on some networks lives when none
+ * of them is in the space in front (`network_space::lives_elsewhere`, uniffi
+ * `network_lives_elsewhere`; r13-1): its networks of the other space, that
+ * space, and the keys of the note's line, the other space's heading and the
+ * switch. Decoded as the core writes it.
+ */
+@kotlinx.serialization.Serializable
+data class Elsewhere(
+    val chain_ids: List<Int> = emptyList(),
+    val space: String = "",
+    val line_key: String = "",
+    val heading_key: String = "",
+    val switch_key: String = "",
+) {
+    /** The space it lives in: where the switch goes. */
+    val target: app.getvela.wallet.feature.settings.core.NetworkSpace
+        get() = app.getvela.wallet.feature.settings.core.NetworkSpace.of(space)
+}
+
+/**
+ * r11-3, r13-1: where a multisig shown from the space it does not live in
+ * lives. The rule is the core's (`network_lives_elsewhere`, the shared vector
+ * `vectors/multisig/other-space.json`); this shell keeps no copy of it. Which
+ * space a network is in is the core's word too (`network_space_chain_ids`,
+ * [app.getvela.wallet.feature.settings.core.NetworkSpaces]): `here` and
+ * `other` are the person's lists of the space in front and of the other one.
  */
 object OtherSpace {
-    fun livesElsewhere(chainIds: List<Int>, here: Collection<Int>, other: Collection<Int>): List<Int> =
-        if (chainIds.isEmpty() || chainIds.any { it in here }) emptyList() else chainIds.filter { it in other }
+    /** The core's answer, or null: nothing to say (or a core that could not answer — the home as it is). */
+    fun livesElsewhere(
+        chainIds: List<Int>,
+        here: Collection<Int>,
+        other: Collection<Int>,
+        front: app.getvela.wallet.feature.settings.core.NetworkSpace,
+    ): Elsewhere? {
+        if (chainIds.isEmpty()) return null
+        return runCatching {
+            val args = org.json.JSONObject()
+                .put("chain_ids", org.json.JSONArray(chainIds))
+                .put("here", org.json.JSONArray(here.toList()))
+                .put("other", org.json.JSONArray(other.toList()))
+                .put("front", front.wire)
+            val answer = uniffi.vela_core_uniffi.networkLivesElsewhere(args.toString())
+            if (answer.trim() == "null") null else app.getvela.wallet.core.crux.Wire.json.decodeFromString(Elsewhere.serializer(), answer)
+        }.getOrNull()
+    }
 
-    /** "Used on Arc Testnet · Testnet space": the record's networks, then the space they are in. */
-    fun line(words: MultisigWords, elsewhere: List<Int>, heading: String): String =
-        "${words.t("add.usedOn", "networks" to words.list(elsewhere.map(words::network)))} · $heading"
+    /** "Used on Arc Testnet · Testnet space": the line's key over its networks, then the other space's heading. */
+    fun line(words: MultisigWords, elsewhere: Elsewhere, heading: String): String =
+        "${words.t(elsewhere.line_key.removePrefix("home.multisig."), "networks" to words.list(elsewhere.chain_ids.map(words::network)))} · $heading"
 }
 
 /**

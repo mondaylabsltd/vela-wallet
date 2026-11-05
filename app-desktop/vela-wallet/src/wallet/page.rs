@@ -4426,7 +4426,7 @@ impl WalletPage {
         // r11 (r10-4's body): a multisig used only in the other space — its
         // note says where its money and its history are, so no "No activity
         // yet" nor "Deposit your first asset" is said here.
-        let elsewhere = self.identity.is_some() && !self.multisig_elsewhere(cx).is_empty();
+        let elsewhere = self.identity.is_some() && self.multisig_elsewhere(cx).is_some();
         self.keep_hero_clock(cx);
         // Phase 4 (`VELA_PERF`): the frame a signed-in home first reaches the
         // screen, and the frame its figure does — from the stored rows, or
@@ -4561,6 +4561,11 @@ impl WalletPage {
                 &resident::resident::<ActivityFeed>(cx).read(cx).shared(),
                 &self.strings,
             );
+            // r13-7: a multisig's Activity says what its history is — being
+            // read, or not read (with Try again) — never "No activity yet"
+            // over either.
+            let history = self.multisig_history(cx);
+            let state = wallet_live::with_multisig_history(state, history.as_ref());
             match state {
                 wallet_live::HomeActivity::Rows => {}
                 wallet_live::HomeActivity::Loading => {
@@ -4569,7 +4574,33 @@ impl WalletPage {
                         .child(skeleton_row(theme))
                         .child(skeleton_row(theme));
                 }
-                wallet_live::HomeActivity::Empty { .. } if elsewhere => {}
+                wallet_live::HomeActivity::Empty { .. }
+                | wallet_live::HomeActivity::Unread { .. }
+                    if elsewhere => {}
+                wallet_live::HomeActivity::Unread { title, retry } => {
+                    activity_col = activity_col.child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .items_center()
+                            .child(empty_state(
+                                theme,
+                                &mut self.icons,
+                                Icon::Inbox,
+                                title,
+                                SharedString::default(),
+                            ))
+                            .child(crate::ui::vela_button(
+                                "home-activity-retry",
+                                crate::ui::ButtonVariant::Secondary,
+                                retry,
+                                theme,
+                                // The proposals machine's `retry`: an unread
+                                // history is read again (the card's note's).
+                                cx.listener(|this, _, _, cx| this.ms_retry(cx)),
+                            )),
+                    );
+                }
                 wallet_live::HomeActivity::Empty { title, caption } => {
                     activity_col = activity_col.child(empty_state(
                         theme,
@@ -5691,13 +5722,9 @@ impl WalletPage {
         // space holds nothing HERE — not "$0.00", and no "Updated now" for
         // networks it never lived on. The figure's place names the space its
         // money is in; the note below says where and offers the switch.
-        if !self.multisig_elsewhere(cx).is_empty() {
-            let heading = if crate::network_space::testnet() {
-                "networkSpace.headingMainnet"
-            } else {
-                "networkSpace.headingTestnet"
-            };
-            model = wallet_live::no_value(model, self.loc.t(heading), None);
+        // r13-1: the heading is the core's (`Elsewhere.heading_key`).
+        if let Some(elsewhere) = self.multisig_elsewhere(cx) {
+            model = wallet_live::no_value(model, self.loc.t(&elsewhere.heading_key), None);
             model.updated = None;
         }
         model
@@ -10614,7 +10641,7 @@ impl WalletPage {
                 .text_size(theme::text_label())
                 .text_color(theme.warning_base)
                 .child(crate::ui::prose(
-                    self.loc.t("onboarding.storage.unreadableTitle"),
+                    self.loc.t(crate::onboarding::UNREADABLE_TITLE),
                 ))
         });
 

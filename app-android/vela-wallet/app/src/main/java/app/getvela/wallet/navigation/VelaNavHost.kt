@@ -2347,6 +2347,26 @@ fun VelaNavHost(
                                         sync = WalletLive.syncLine(session.unsynced, session.address, strings, syncRounds),
                                     ),
                                 )
+                            }.let { home ->
+                                // r13-7: a multisig's Activity says what its history is —
+                                // being read, or not read (with Try again) — never "No
+                                // activity yet" over either; once the proposals machine
+                                // follows it (the web's `multisigHistory`).
+                                val row = shownMultisig
+                                val followed = row != null && multisigProposals.followed.equals(row.account.address, ignoreCase = true)
+                                if (row == null || !followed) {
+                                    home
+                                } else {
+                                    val chainId = multisigProposals.historyUnreadable.firstOrNull() ?: row.account.chainIds.firstOrNull()
+                                    WalletLive.withMultisigHistory(
+                                        home,
+                                        WalletLive.MultisigHistory(
+                                            stand = multisigProposals.history,
+                                            unreadText = msWords.t("panel.historyUnreadable", "network" to (chainId?.let(msWords::network) ?: "")),
+                                            retryText = strings.t("common.tryAgain"),
+                                        ),
+                                    )
+                                }
                             }
                         // Phase 4: the app is fully drawn (TTFD, `reportFullyDrawn`) once the
                         // home stands on something — the last-known rows or a chain's
@@ -2359,6 +2379,9 @@ fun VelaNavHost(
                         WalletScreen(
                             model = homeModel,
                             onSyncRetry = { application.container.session.syncPending() },
+                            // r13-7: a multisig's history not read, read again (the
+                            // proposals machine's `retry`, as the card's note does).
+                            onActivityRetry = if (shownMultisig == null) null else ({ multisigHub.sendProposal(app.getvela.wallet.feature.multisig.core.ev("retry")) }),
                             // Native multisig: the multisig shown's own lines.
                             multisigCard = shownMultisig?.let { row ->
                                 {
@@ -2377,23 +2400,22 @@ fun VelaNavHost(
                             // r11-3: a multisig whose networks are all in the other
                             // space — said, with the switch, in place of a false "$0.00".
                             otherSpace = shownMultisig?.let { row ->
+                                // r13-1: the core's rule (`network_lives_elsewhere`), never a copy.
                                 val elsewhere = app.getvela.wallet.feature.multisig.OtherSpace.livesElsewhere(
                                     row.account.chainIds,
                                     here = app.getvela.wallet.feature.settings.core.NetworkSpaces.chainIds(space, allNetworks.networks),
                                     other = app.getvela.wallet.feature.settings.core.NetworkSpaces.chainIds(space.other, allNetworks.networks),
+                                    front = space,
                                 )
-                                if (elsewhere.isEmpty()) {
+                                if (elsewhere == null) {
                                     null
                                 } else {
                                     {
                                         app.getvela.wallet.feature.multisig.MultisigOtherSpaceNote(
-                                            line = app.getvela.wallet.feature.multisig.OtherSpace.line(
-                                                msWords, elsewhere,
-                                                strings.t(if (space.testnet) I18nKeys.NetworkSpace.HEADING_MAINNET else I18nKeys.NetworkSpace.HEADING_TESTNET),
-                                            ),
-                                            switchLabel = strings.t(if (space.testnet) I18nKeys.NetworkSpace.TO_MAINNET else I18nKeys.NetworkSpace.TO_TESTNET),
+                                            line = app.getvela.wallet.feature.multisig.OtherSpace.line(msWords, elsewhere, strings.t(elsewhere.heading_key)),
+                                            switchLabel = strings.t(elsewhere.switch_key),
                                             // A switch of space moves no value: the person's press, as the space sheet answers.
-                                            onSwitch = { agent.person(intent("set_network_space", "space" to space.other.wire)) },
+                                            onSwitch = { agent.person(intent("set_network_space", "space" to elsewhere.target.wire)) },
                                         )
                                     }
                                 }

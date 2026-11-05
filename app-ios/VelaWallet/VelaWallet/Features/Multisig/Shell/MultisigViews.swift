@@ -633,6 +633,11 @@ struct MsProposalsView: Decodable, Equatable {
     var cachedAt: Double?
     var unreadable: [Int] = []
     var historyUnreadable: [Int] = []
+    /// r13-7: where the followed multisig's history stands on this page —
+    /// `reading` (its first read is out: the home's Activity is loading,
+    /// never "No activity yet"), `read`, or `unread` (said, with Try again).
+    /// A view from a core that does not say it reads as `read`.
+    var history = "read"
     var offline = false
     var readAt: Double?
     var loading = false
@@ -686,6 +691,7 @@ struct MsProposalsView: Decodable, Equatable {
         cachedAt = c.soft(MsKey("cached_at"))
         unreadable = c.soft(MsKey("unreadable"), [])
         historyUnreadable = c.soft(MsKey("history_unreadable"), [])
+        history = c.soft(MsKey("history"), "read")
         offline = c.soft(MsKey("offline"), false)
         readAt = c.soft(MsKey("read_at"))
         loading = c.soft(MsKey("loading"), false)

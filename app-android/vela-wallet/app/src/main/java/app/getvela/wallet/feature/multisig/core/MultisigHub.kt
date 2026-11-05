@@ -581,20 +581,36 @@ class MultisigHub(
             return
         }
         dappAnswers[id] = answer
-        proposals.dispatch(
-            ev(
-                "dapp_request", "id" to id, "account" to rec, "method" to method, "params" to params,
-                "origin" to origin, "chain_id" to maxOf(0, chainId), "limit_ms" to null,
-            ),
+        val event = ev(
+            "dapp_request", "id" to id, "account" to rec, "method" to method, "params" to params,
+            "origin" to origin, "chain_id" to maxOf(0, chainId), "limit_ms" to null,
         )
+        dappEvents[id] = event
+        proposals.dispatch(event)
         sheet.value = MultisigSheet.Dapp(id)
     }
 
+    /** r13-3: each held request as it was asked — asked again on Try again. */
+    private val dappEvents = java.util.concurrent.ConcurrentHashMap<String, JsonObject>()
+
+    /**
+     * r13-3 (iOS `dappRetry`, the web's `dapp.retry`): Try again after the
+     * reads before its draft failed (the core named which) — the same
+     * request, drafted anew. A request already left asks nothing.
+     */
+    fun dappRetry(id: String) {
+        dappEvents[id]?.let(proposals::dispatch)
+    }
+
     /** The person left the request (declined, closed, read the refusal): the machine answers the site as it stands. */
-    fun dappLeave(id: String) = proposals.dispatch(ev("dapp_leave", "id" to id))
+    fun dappLeave(id: String) {
+        dappEvents.remove(id)
+        proposals.dispatch(ev("dapp_leave", "id" to id))
+    }
 
     /** The page behind a held request is gone (already answered): its sheet goes, the machine lets it go. */
     fun dappGone(id: String) {
+        dappEvents.remove(id)
         dappAnswers.remove(id)
         if (sheet.value == MultisigSheet.Dapp(id)) sheet.value = null
         proposals.dispatch(ev("dapp_leave", "id" to id))
@@ -621,6 +637,7 @@ class MultisigHub(
             val held = view.dapp[id] ?: continue
             val result = held["answer"] ?: continue
             if (dappAnswers.remove(id) == null) continue
+            dappEvents.remove(id)
             held["safe_tx_hash"].str?.takeIf { it.isNotEmpty() }?.let { dappProposed[id] = (held["chain_id"].int ?: 0) to it }
             // An error the site was not told of takes the sheet with it.
             if (result["error"] != null && held["told"].bool != true && sheet.value == MultisigSheet.Dapp(id)) sheet.value = null

@@ -160,9 +160,22 @@ fun MultisigDappSheet(hub: MultisigHub, id: String, context: MultisigHostContext
         held != null && view.draft != null -> MultisigDraftReviewSheet(hub, words, context.tokenInfo, siteNote = words.t("proposal.siteAsks", "host" to host), onWithdraw = leave, fromSite = true)
         else -> MsSheet(words.t("proposal.title"), words.raw("common.done"), onClose = leave, tag = "multisig.dapp") {
             MsNote(words.t("proposal.siteAsks", "host" to host))
-            Row(Modifier.testTag("multisig.dapp.opening"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
-                CircularProgressIndicator(color = VelaTheme.colors.fgMuted, strokeWidth = VelaSpacing.xs)
-                MsText(words.t("proposal.opening"), MsType.Body, color = VelaTheme.colors.fgMuted)
+            // r13-3: the reads before its draft failed (bounded by the core) —
+            // why, Try again and Decline (iOS, the web); never a spinner for ever.
+            val failure = held?.let { words.actionFailure(view.action("propose"), it["chain_id"].int ?: 0) }
+            if (failure != null) {
+                MsNote(failure, tone = MsTone.Warning, tag = "multisig.dapp.failed")
+                app.getvela.wallet.core.designsystem.components.VelaSecondaryButton(
+                    words.t("external.retry"), { hub.dappRetry(id) }, Modifier.fillMaxWidth().testTag("multisig.dapp.retry"),
+                )
+                app.getvela.wallet.core.designsystem.components.VelaSecondaryButton(
+                    words.t("external.decline"), { leave() }, Modifier.fillMaxWidth().testTag("multisig.dapp.decline"),
+                )
+            } else {
+                Row(Modifier.testTag("multisig.dapp.opening"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
+                    CircularProgressIndicator(color = VelaTheme.colors.fgMuted, strokeWidth = VelaSpacing.xs)
+                    MsText(words.t("proposal.opening"), MsType.Body, color = VelaTheme.colors.fgMuted)
+                }
             }
         }
     }

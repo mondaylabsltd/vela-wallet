@@ -194,7 +194,10 @@ fun MultisigProposalSheet(
     MsSheet(words.t("proposal.title"), words.raw("common.done"), onClose = close, dismissible = !approving && !executingNow, tag = "multisig.proposal") {
         siteNote?.let { MsNote(it, tag = "multisig.proposal.site") }
         if (item == null) {
-            LinkedState(view.linked?.stand, view.linked?.preview == true, chainId, words, view.linked?.reasonKey)
+            LinkedState(
+                view.linked?.stand, view.linked?.preview == true, chainId, words, view.linked?.reasonKey,
+                onTryAgain = if (LinkedStands.offersTryAgain(view.linked)) ({ hub.sendProposal(ev("retry")) }) else null,
+            )
             // ms-21: no member here — the person may follow it on this device (kept, not shown).
             val linked = view.linked
             if (linked?.preview == true && !accounts.accounts.any { it.account.address.equals(linked.safe, ignoreCase = true) }) {
@@ -494,12 +497,35 @@ private fun ActionFailure(lines: List<MsLine>, words: MultisigWords, onRetry: ()
     }
 }
 
+/** r13-3: what a linked transaction's stand offers. Pure. */
+object LinkedStands {
+    /**
+     * A link not read in time (`failed`) offers Try again, as iOS and the
+     * web do — the machine's `retry`, which starts the link's bound again.
+     */
+    fun offersTryAgain(linked: app.getvela.wallet.feature.multisig.core.MsLinkedView?): Boolean =
+        linked?.stand == "failed"
+}
+
 /** Where a linked transaction stands before its item reads. */
 @Composable
-private fun LinkedState(stand: String?, preview: Boolean, chainId: Int, words: MultisigWords, reasonKey: String? = null) {
+private fun LinkedState(
+    stand: String?,
+    preview: Boolean,
+    chainId: Int,
+    words: MultisigWords,
+    reasonKey: String? = null,
+    onTryAgain: (() -> Unit)? = null,
+) {
     when (stand) {
-        // r13-3: not read in time — the read still out, named, never "Opening…" for ever.
-        "failed" -> MsNote(words.unreadText(reasonKey ?: "proposal.unread.linkChain", chainId), tone = MsTone.Warning, tag = "multisig.proposal.openFailed")
+        // r13-3: not read in time — the read still out, named, with Try again;
+        // never "Opening…" for ever.
+        "failed" -> {
+            MsNote(words.unreadText(reasonKey ?: "proposal.unread.linkChain", chainId), tone = MsTone.Warning, tag = "multisig.proposal.openFailed")
+            onTryAgain?.let { retry ->
+                VelaSecondaryButton(words.t("review.state.tryAgain"), retry, Modifier.fillMaxWidth().testTag("multisig.proposal.openRetry"))
+            }
+        }
         "notInMailbox" -> MsNote(words.t("proposal.notInMailbox"), tone = MsTone.Warning, tag = "multisig.proposal.notInMailbox")
         "notFound" -> MsNote(words.t("proposal.notFound"), tone = MsTone.Warning, tag = "multisig.proposal.notFound")
         "unreadable" -> MsNote(words.t("proposal.cantCheck", "network" to words.network(chainId)), tone = MsTone.Warning)

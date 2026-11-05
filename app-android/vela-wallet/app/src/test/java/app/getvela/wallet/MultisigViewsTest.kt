@@ -179,6 +179,34 @@ class MultisigViewsTest {
         assertEquals(w.raw("componentsUi.signing.trustedSignerMismatch"), w.failureText(MultisigShellFailure.PageSignFailed("mismatch").detail))
         assertNull(w.actionFailure(json("""{"kind":"working"}"""), 100))
         assertEquals(w.t("proposal.mailboxDown"), w.actionFailure(json("""{"kind":"mailboxUnreadable"}"""), 100))
+        // r13-3: the read before a draft that failed is named — the network, or both.
+        assertEquals(
+            w.t("proposal.unread.chain", "network" to w.network(100)),
+            w.actionFailure(json("""{"kind":"unread","reason_key":"home.multisig.proposal.unread.chain"}"""), 100),
+        )
+    }
+
+    /**
+     * r13-3 (§17): a link's transaction not read in time carries the core's
+     * `retry` — the sheet's Try again (`multisig.proposal.openRetry`) is drawn
+     * from it, and sends the machine's `retry`.
+     */
+    @Test
+    fun a_failed_links_retry_is_read_from_the_view() {
+        val failed = app.getvela.wallet.feature.multisig.core.MsLinkedView.of(
+            json("""{"safe":"0x1","chain_id":100,"safe_tx_hash":"0x2","preview":false,"stand":"failed","reason_key":"home.multisig.proposal.unread.linkChain","retry":true}"""),
+        )
+        assertEquals("failed", failed.stand)
+        assertTrue(failed.retry)
+        assertTrue(app.getvela.wallet.feature.multisig.LinkedStands.offersTryAgain(failed))
+        val reading = app.getvela.wallet.feature.multisig.core.MsLinkedView.of(json("""{"stand":"reading"}"""))
+        assertFalse(reading.retry)
+        assertFalse(app.getvela.wallet.feature.multisig.LinkedStands.offersTryAgain(reading))
+        val w = words()
+        assertEquals(
+            w.t("proposal.unread.linkChain", "network" to w.network(100)),
+            w.unreadText(failed.reasonKey, failed.chainId),
+        )
     }
 
     @Test

@@ -277,8 +277,17 @@ final class WalletStore {
     /// (`pool_unreached`): a network the account is read on that has just
     /// gone out of reach is read again, forced, and its failure is the
     /// home's "Can't reach Arc Testnet". The shell only says the set.
-    func poolUnreached(_ chainIds: [Int]) {
-        core.dispatch(CoreJSON.string(["type": "pool_unreached", "chain_ids": chainIds]))
+    ///
+    /// r13-4: `silent` — of them, the pool's SILENT networks — are named at
+    /// once (no "Live" over them), the forced read confirming or unsaying it:
+    /// the web's timing, not a second read's 18 s later.
+    func poolUnreached(_ chainIds: [Int], silent: [Int] = []) {
+        core.dispatch(Self.poolUnreachedEvent(chainIds, silent: silent))
+    }
+
+    /// The `pool_unreached` event as the core reads it. Pure.
+    static func poolUnreachedEvent(_ chainIds: [Int], silent: [Int]) -> String {
+        CoreJSON.string(["type": "pool_unreached", "chain_ids": chainIds, "silent": silent])
     }
 
     /// r10-1: a network came back — a call to it answered after calls to it

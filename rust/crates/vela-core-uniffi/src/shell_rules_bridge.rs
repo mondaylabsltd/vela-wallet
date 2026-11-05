@@ -66,9 +66,49 @@ pub fn incoming_next_scan_ms(visible: bool, quiet_scans: u32) -> u32 {
     vela_core::app::incoming_scan::next_scan_ms(visible, quiet_scans)
 }
 
+/// r13-1: where an account used on `chain_ids` lives when none of its
+/// networks is in the space in front — `network_space::lives_elsewhere`, the
+/// one rule every home draws its other-space note from (the wasm twin is
+/// `networkLivesElsewhere`, the same JSON). `args_json`: `{chain_ids, here,
+/// other, front}` — `here` / `other` the front space's and the other space's
+/// networks on the person's lists, `front` as stored ("mainnet" /
+/// "testnet"). The answer: an `Elsewhere` (`{chain_ids, space, line_key,
+/// heading_key, switch_key}`), or `null` — nothing to say.
+#[uniffi::export]
+#[must_use]
+#[allow(clippy::needless_pass_by_value)]
+pub fn network_lives_elsewhere(args_json: String) -> String {
+    vela_core::app::network_space::lives_elsewhere_json(&args_json)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// r13-1: the natives' other-space rule is the core's, through this
+    /// export — every case of the shared vector, as Android and iOS replay it.
+    #[test]
+    fn the_other_space_vectors_hold_through_the_export() {
+        let doc: serde_json::Value = serde_json::from_str(include_str!(
+            "../../vela-core/tests/vectors/multisig/other-space.json"
+        ))
+        .unwrap();
+        let cases = doc["cases"].as_array().unwrap();
+        assert!(cases.len() >= 6);
+        for case in cases {
+            let args = serde_json::json!({
+                "chain_ids": case["chain_ids"],
+                "here": case["here"],
+                "other": case["other"],
+                "front": case["front"],
+            });
+            let got: serde_json::Value =
+                serde_json::from_str(&network_lives_elsewhere(args.to_string())).unwrap();
+            assert_eq!(got, case["expect"], "{}", case["name"]);
+        }
+        // Unreadable arguments are nothing to say, never a panic.
+        assert_eq!(network_lives_elsewhere("not json".to_owned()), "null");
+    }
 
     #[test]
     fn the_incoming_scan_exports_are_the_core_rules() {

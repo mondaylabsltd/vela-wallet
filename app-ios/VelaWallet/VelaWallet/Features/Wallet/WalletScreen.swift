@@ -81,6 +81,9 @@ struct WalletScreen: View {
     /// settled (`false`) — the incoming scan's quiet period. Absent in the
     /// gallery.
     var onScrolling: ((Bool) -> Void)?
+    /// r13-7: Activity's Try again — a multisig's history that could not be
+    /// read, read again. Absent in the gallery.
+    var onActivityRetry: (() -> Void)?
     @State private var sheetShown = false
     @State private var viewingIdenticon = false
 
@@ -224,7 +227,8 @@ struct WalletScreen: View {
                 }
             case .empty:
                 if let empty = section.empty {
-                    WalletEmptyState(icon: isActivity ? .inbox : .walletUtility, model: empty)
+                    WalletEmptyState(icon: isActivity ? .inbox : .walletUtility, model: empty,
+                                     onRetry: isActivity ? onActivityRetry : nil)
                 }
             case .loading:
                 let count = isActivity ? WalletGeometry.skeletonActivityRows : WalletGeometry.skeletonAssetRows
