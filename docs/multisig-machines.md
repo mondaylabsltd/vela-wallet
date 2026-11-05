@@ -1306,3 +1306,39 @@ Tests:
   (the published bytes: the web wallet, the Safari relay, evil.example, a lying
   address).
 - Web: `sign-challenge.test.ts` and `handler.test.ts`.
+
+## 17. Round 13 native adoption
+
+Round 13 (§15) moved five rules into the core and adopted them on the web.
+This round adopts them on Android, iOS and the desktop. No shell keeps a copy
+of a rule. Every shell draws the core's states and offers the same ways out.
+Decisions follow best practice and the owner's rules: one core, honest
+states, every failure recoverable.
+
+| Item | Decision | Android | iOS | Desktop |
+| --- | --- | --- | --- | --- |
+| **r13-1, other space** | Export `network_lives_elsewhere(args_json) -> String` through uniffi (`shell_rules_bridge.rs`). It takes and returns the same JSON as the wasm `networkLivesElsewhere`, so the vector replays byte for byte. Each shell draws the note's line, heading, switch and switch target from the answer's keys and `space`. | `OtherSpace.livesElsewhere(…, front)` returns `Elsewhere?` from the core. The filtering copy is deleted. | `WalletLive.livesElsewhere(…, front)` returns `Elsewhere?` from the core. The copy is deleted. The card takes `Elsewhere`. | `network_space::lives_elsewhere` calls the core's function directly, over the person's lists of both spaces. The copy is deleted. |
+| **r13-4, silent networks** | Send the pool view's `silent_chains` beside `out_of_reach_chains` as `pool_unreached {chain_ids, silent}`, on a change to either set (the web's `onPoolOutOfReach`). The natives already sent what the silence rule reads: `timeout` / `network` outcomes and `now_ms`. | `RpcPoolView.silent_chains` is decoded (nothing filled it before). `WalletController.poolUnreachedOf(view)` builds the event. | `RpcPoolViewWire.silentChains`. `onOutOfReach(chainIds, silent)` fires on either change. `WalletStore.poolUnreachedEvent`. | `pool::PoolLoss {chain_ids, silent}` is kept by the pool thread and dispatched by the 1 s look. |
+| **r13-7, history** | Follow the web exactly. The state applies only while the proposals machine follows the shown multisig, and only over no rows. `reading` shows Activity as loading. `unread` shows `panel.historyUnreadable` (naming the first unread network) with **Try again** (`common.tryAgain`), which sends the proposals machine's `retry`. `read` leaves Activity as it is. Unlike the web, the natives put Try again on the Activity empty state itself rather than only in the card's note. That is the honest place, because it is where "No activity yet" used to be. A view from an older core reads as `read`. | `WalletLive.withMultisigHistory`, `EmptyStateModel.retry`, `home.activity.retry` | `WalletLive.withMultisigHistory`, `SectionEmptyModel.retry`, `home.activity.retry` | `with_multisig_history`, `HomeActivity::Unread`, `home-activity-retry` |
+| **r13-3, Try again** | A link's `failed` stand and a site's draft whose reads failed get Try again on every shell, matching iOS and the web. The send's `chain_down` already had it on every shell (`retry_after_error`). | Link `failed`: the note plus `multisig.proposal.openRetry` (`retry`), now that `MsLinkedView.retry` is read. The site's sheet no longer spins for ever: it shows the failure with Retry (`MultisigHub.dappRetry` re-sends the kept `dapp_request`) and Decline. | already done | Link `Failed`: `ms-proposal-open-retry` (`link_offers_try_again`). The site's sheet and send already had it. |
+| **Device-neutral notice** | New `onboarding.storage.deviceUnreadable{Title,Body}` in all 15 locales (pin 2287). The body names no browser copy to reset. | does not show the notice (an unreadable list lands on onboarding) | does not show the notice | DESKTOP-1's welcome notice and switcher line use the new pair (`UNREADABLE_TITLE` / `UNREADABLE_BODY`). |
+
+Tests:
+
+- **Core:** the uniffi crate's `the_other_space_vectors_hold_through_the_export`.
+- **Android (JVM):**
+  - `OtherSpaceVectorsTest` (the vector)
+  - `RpcPoolMachineTest` (three hung nodes become silent and are handed on as silent; one refused node is not)
+  - `MultisigHistoryHomeTest`
+  - `MultisigViewsTest` (link `retry`, `unread` words)
+  - `MultisigShellTest` (a site's failed draft is asked again)
+- **iOS:**
+  - `OtherSpaceVectorsTests`
+  - `R13NativeAdoptionTests` (the pool view, the pool's hand-off, `balance-pool-unreached.json` through the shell's event, the history states)
+- **Desktop:**
+  - `the_pool_unreached_vectors_hold_through_the_pools_loss`
+  - `the_pools_loss_carries_its_silent_networks`
+  - `a_multisigs_history_decides_its_empty_activity`
+  - `link_offers_try_again` (in `a_sheet_with_no_transaction_says_what_is_true`)
+  - `the_unreadable_notice_names_no_browser`
+  - the other-space test, now holding the core's keys
