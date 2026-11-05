@@ -233,12 +233,15 @@
 	});
 	const machineDraftItem = $derived(machineDraft ? itemOf(machineDraft.item) : null);
 	/**
-	 * r13-3: a link's transaction not read within the core's bound — the read
-	 * still out, named (the machine's `linked.reason_key`), with Try again.
+	 * r13-3: a link's transaction whose read failed — not read within the
+	 * core's bound (`failed`), its network silent (`unreadable`) or the
+	 * multisig service silent (`notFound`) — the read named (the machine's
+	 * `linked.reason_key`), with Try again whenever the core offers it
+	 * (`linked.retry`, §18 item 1).
 	 */
 	const linkFailure = $derived.by(() => {
 		const linked = machine?.linked;
-		if (!linked || drafting || linked.stand !== 'failed') return null;
+		if (!linked || drafting || !linked.retry || !linked.reason_key) return null;
 		if (linked.safe_tx_hash.toLowerCase() !== safeTxHash.toLowerCase()) return null;
 		return unreadWords(m.proposal, linked.reason_key, chainName(linked.chain_id));
 	});
@@ -1488,8 +1491,9 @@
 		{/if}
 	{:else if !item}
 		{#if linkFailure}
-			<!-- r13-3: not read in time — which read, and Try again; never an
-			     endless "Opening the transaction…". -->
+			<!-- r13-3 / §18 item 1: a read that failed — which read, and Try
+			     again; never an endless "Opening the transaction…", never
+			     "it hasn't been shared". -->
 			<p class="warn" role="alert" data-testid="proposal-open-failed">{linkFailure}</p>
 			<Button
 				variant="secondary"

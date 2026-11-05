@@ -195,7 +195,7 @@ fun MultisigProposalSheet(
         siteNote?.let { MsNote(it, tag = "multisig.proposal.site") }
         if (item == null) {
             LinkedState(
-                view.linked?.stand, view.linked?.preview == true, chainId, words, view.linked?.reasonKey,
+                view.linked?.stand, view.linked?.preview == true, words, LinkedStands.failure(view.linked, words),
                 onTryAgain = if (LinkedStands.offersTryAgain(view.linked)) ({ hub.sendProposal(ev("retry")) }) else null,
             )
             // ms-21: no member here — the person may follow it on this device (kept, not shown).
@@ -500,11 +500,19 @@ private fun ActionFailure(lines: List<MsLine>, words: MultisigWords, onRetry: ()
 /** r13-3: what a linked transaction's stand offers. Pure. */
 object LinkedStands {
     /**
-     * A link not read in time (`failed`) offers Try again, as iOS and the
-     * web do — the machine's `retry`, which starts the link's bound again.
+     * A link whose read failed — not read in time (`failed`), its network
+     * silent (`unreadable`), the multisig service silent (`notFound`) —
+     * offers Try again whenever the core says so (`retry`, §18 item 1): the
+     * machine's `retry`, which reads it again.
      */
     fun offersTryAgain(linked: app.getvela.wallet.feature.multisig.core.MsLinkedView?): Boolean =
-        linked?.stand == "failed"
+        linked?.retry == true
+
+    /** The core's words for the read that failed (`reason_key`), or `null` when the core offers no Try again. */
+    fun failure(linked: app.getvela.wallet.feature.multisig.core.MsLinkedView?, words: MultisigWords): String? {
+        val key = linked?.reasonKey ?: return null
+        return if (offersTryAgain(linked)) words.unreadText(key, linked.chainId) else null
+    }
 }
 
 /** Where a linked transaction stands before its item reads. */
@@ -512,23 +520,21 @@ object LinkedStands {
 private fun LinkedState(
     stand: String?,
     preview: Boolean,
-    chainId: Int,
     words: MultisigWords,
-    reasonKey: String? = null,
+    failure: String? = null,
     onTryAgain: (() -> Unit)? = null,
 ) {
-    when (stand) {
-        // r13-3: not read in time — the read still out, named, with Try again;
-        // never "Opening…" for ever.
-        "failed" -> {
-            MsNote(words.unreadText(reasonKey ?: "proposal.unread.linkChain", chainId), tone = MsTone.Warning, tag = "multisig.proposal.openFailed")
+    when {
+        // r13-3 / §18 item 1: a read that failed (`failed`, `unreadable`,
+        // `notFound`) — the read named, with Try again; never "Opening…" for
+        // ever, never "it hasn't been shared".
+        failure != null -> {
+            MsNote(failure, tone = MsTone.Warning, tag = "multisig.proposal.openFailed")
             onTryAgain?.let { retry ->
                 VelaSecondaryButton(words.t("review.state.tryAgain"), retry, Modifier.fillMaxWidth().testTag("multisig.proposal.openRetry"))
             }
         }
-        "notInMailbox" -> MsNote(words.t("proposal.notInMailbox"), tone = MsTone.Warning, tag = "multisig.proposal.notInMailbox")
-        "notFound" -> MsNote(words.t("proposal.notFound"), tone = MsTone.Warning, tag = "multisig.proposal.notFound")
-        "unreadable" -> MsNote(words.t("proposal.cantCheck", "network" to words.network(chainId)), tone = MsTone.Warning)
+        stand == "notInMailbox" -> MsNote(words.t("proposal.notInMailbox"), tone = MsTone.Warning, tag = "multisig.proposal.notInMailbox")
         else -> Row(Modifier.testTag("multisig.proposal.opening"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
             CircularProgressIndicator(color = VelaTheme.colors.fgMuted, strokeWidth = VelaSpacing.xs)
             MsText(words.t("proposal.opening"), MsType.Body, color = VelaTheme.colors.fgMuted)
